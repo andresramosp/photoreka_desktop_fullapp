@@ -3,6 +3,8 @@ import { ref, computed } from "vue";
 import { api } from "@/utils/axios";
 import adaptiveInitialSpacing from "@/utils/adaptiveInitialSpacing";
 
+const useAdaptiveSpacing = true;
+
 export function use3DPhotos() {
   // Estado reactivo
   const photos3D = ref([]);
@@ -16,6 +18,8 @@ export function use3DPhotos() {
     { value: "story", label: "Narrative" },
     { value: "context", label: "Context" },
     { value: "visual_accents", label: "Visual Accents" },
+    { value: "visual_aspects", label: "Technical" },
+    { value: "artistic_scores", label: "Scores" },
   ];
 
   // Función para cargar todas las fotos de una vez
@@ -35,10 +39,6 @@ export function use3DPhotos() {
 
   // Función simplificada para cargar todas las fotos
   const loadAllPhotos = async (chunkName, reuseExisting = false) => {
-    console.log("🚀 loadAllPhotos iniciado para chunk:", chunkName, {
-      reuseExisting,
-    });
-
     // Actualizar currentChunk al principio
     currentChunk.value = chunkName;
 
@@ -54,31 +54,37 @@ export function use3DPhotos() {
       );
 
       let adaptedPositions = rawPositions;
-      try {
-        adaptedPositions = adaptiveInitialSpacing(rawPositions, {
-          inflateFactorBase: 1.08, // menor radial global
-          gamma: 1.9,
-          cellSize: 4.2,
-          densityThreshold: 0.1,
-          minSeparation: 5,
-          iterations: 3,
-          enableRelaxation: true,
-          aggressiveness: 1.15,
-          clusterIterations: 2,
-          highDensityThreshold: 0.6,
-          highDensityBoost: 0.4,
-          nnLocalScale: true,
-          nnTarget: 5.4,
-        });
-        console.log("🧩 Adaptive initial spacing aplicado", {
-          total: adaptedPositions.length,
-          sampleBefore: rawPositions.slice(0, 2),
-          sampleAfter: adaptedPositions.slice(0, 2),
-        });
-      } catch (e) {
-        console.warn(
-          "⚠️ Falló adaptiveInitialSpacing, usando posiciones raw",
-          e
+      if (useAdaptiveSpacing) {
+        try {
+          adaptedPositions = adaptiveInitialSpacing(rawPositions, {
+            inflateFactorBase: 1.08, // menor radial global
+            gamma: 1.9,
+            cellSize: 4.2,
+            densityThreshold: 0.1,
+            minSeparation: 5,
+            iterations: 3,
+            enableRelaxation: true,
+            aggressiveness: 1.15,
+            clusterIterations: 2,
+            highDensityThreshold: 0.6,
+            highDensityBoost: 0.4,
+            nnLocalScale: true,
+            nnTarget: 5.4,
+          });
+          console.log("🧩 Adaptive initial spacing aplicado", {
+            total: adaptedPositions.length,
+            sampleBefore: rawPositions.slice(0, 2),
+            sampleAfter: adaptedPositions.slice(0, 2),
+          });
+        } catch (e) {
+          console.warn(
+            "⚠️ Falló adaptiveInitialSpacing, usando posiciones raw",
+            e
+          );
+        }
+      } else {
+        console.log(
+          "⏩ Adaptive initial spacing desactivado, usando posiciones raw"
         );
       }
 

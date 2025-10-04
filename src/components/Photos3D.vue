@@ -13,7 +13,7 @@
     <TresCanvas v-else v-bind="gl" ref="canvasRef">
       <TresPerspectiveCamera
         ref="cameraRef"
-        :position="[0, 0, 150]"
+        :position="[0, 0, 120]"
         :fov="75"
         :aspect="cameraAspect"
         :near="0.1"
@@ -109,6 +109,58 @@
         <!-- Collapsible Filters Container -->
         <div v-if="showMoreFilters" class="filters-container">
           <div class="filters-content">
+            <!-- Text Search Filter -->
+            <div class="filter-item">
+              <div style="display: flex; align-items: center; gap: 4px">
+                <label class="filter-label" style="margin: 0"
+                  >Search by Content</label
+                >
+                <n-tooltip trigger="hover" placement="top">
+                  <template #trigger>
+                    <n-icon
+                      size="12"
+                      style="color: rgba(255, 255, 255, 0.45); cursor: help"
+                    >
+                      <svg viewBox="0 0 24 24">
+                        <path
+                          fill="currentColor"
+                          d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10s10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"
+                        />
+                      </svg>
+                    </n-icon>
+                  </template>
+                  Applies a shallow and approximate text-based search
+                </n-tooltip>
+              </div>
+              <n-input
+                v-model:value="searchQuery"
+                placeholder="Search photos by description..."
+                size="small"
+                :clearable="!isSearching"
+                class="text-search-input"
+                @input="onSearchChange"
+                @clear="clearSearch"
+                @keydown.stop
+              >
+                <template #prefix>
+                  <n-icon size="16">
+                    <svg viewBox="0 0 24 24">
+                      <path
+                        fill="currentColor"
+                        d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14z"
+                      />
+                    </svg>
+                  </n-icon>
+                </template>
+                <template #suffix>
+                  <n-spin
+                    v-if="isSearching"
+                    size="small"
+                    class="search-spinner"
+                  />
+                </template>
+              </n-input>
+            </div>
             <!-- Visual Aspects Filter -->
             <div class="filter-item">
               <label class="filter-label">Visual Aspects</label>
@@ -181,59 +233,6 @@
                   </div>
                 </template>
               </n-tree-select>
-            </div>
-
-            <!-- Text Search Filter -->
-            <div class="filter-item">
-              <div style="display: flex; align-items: center; gap: 4px">
-                <label class="filter-label" style="margin: 0"
-                  >Search by Content</label
-                >
-                <n-tooltip trigger="hover" placement="top">
-                  <template #trigger>
-                    <n-icon
-                      size="12"
-                      style="color: rgba(255, 255, 255, 0.45); cursor: help"
-                    >
-                      <svg viewBox="0 0 24 24">
-                        <path
-                          fill="currentColor"
-                          d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10s10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"
-                        />
-                      </svg>
-                    </n-icon>
-                  </template>
-                  Applies a shallow and approximate text-based search
-                </n-tooltip>
-              </div>
-              <n-input
-                v-model:value="searchQuery"
-                placeholder="Search photos by description..."
-                size="small"
-                :clearable="!isSearching"
-                class="text-search-input"
-                @input="onSearchChange"
-                @clear="clearSearch"
-                @keydown.stop
-              >
-                <template #prefix>
-                  <n-icon size="16">
-                    <svg viewBox="0 0 24 24">
-                      <path
-                        fill="currentColor"
-                        d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14z"
-                      />
-                    </svg>
-                  </n-icon>
-                </template>
-                <template #suffix>
-                  <n-spin
-                    v-if="isSearching"
-                    size="small"
-                    class="search-spinner"
-                  />
-                </template>
-              </n-input>
             </div>
           </div>
         </div>
@@ -482,12 +481,12 @@ const showOctreeDebug = ref(false);
 const octreeDebugGroup = markRaw(new THREE.Group());
 
 // Panel de configuración ocultable
-const showConfigPanel = ref(false);
+const showConfigPanel = ref(true);
 
 // Toggle states for collapsible sections
 const showMoreFilters = ref(false);
 const showDisplayOptions = ref(false);
-const showNavigationControls = ref(false);
+const showNavigationControls = ref(true);
 
 // Filtro de aspectos visuales
 const selectedVisualAspects = ref([]);
@@ -1218,14 +1217,16 @@ const performSearch = async () => {
 
     // Handle direct response from sync endpoint
     if (response.data && response.data.results) {
-      const photos = [];
+      let photos = [];
       Object.entries(response.data.results).forEach(([iter, items]) => {
         photos.push(...items.map((i) => i.photo));
       });
+      // Filtrar solo fotos con totalScore > 0.5
+      photos = photos.filter((photo) => photo.totalScore > 0.5);
       searchResults.value = photos;
 
       console.log(
-        `🔍 Búsqueda textual completada: "${searchQuery.value}" - ${photos.length} resultados`
+        `🔍 Búsqueda textual completada: "${searchQuery.value}" - ${photos.length} resultados (totalScore > 0.5)`
       );
     } else {
       // If no results, show empty array
