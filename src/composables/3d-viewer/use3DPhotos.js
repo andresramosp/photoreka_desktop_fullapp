@@ -9,7 +9,7 @@ export function use3DPhotos() {
   // Estado reactivo
   const photos3D = ref([]);
   const isLoadingPositions = ref(false);
-  const currentChunk = ref("general"); // Chunk seleccionado
+  const currentChunk = ref("general");
   const error = ref(null);
 
   // Opciones de chunks disponibles
