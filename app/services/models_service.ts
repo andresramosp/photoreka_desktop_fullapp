@@ -416,15 +416,6 @@ export default class ModelsService {
     }
   }
 
-  /**
-   * Reduce high-dimensional embeddings to 3D using PCA+TSNE (or other method).
-   * @param {Object} payload - { method, tsne_perplexity, random_state, items }
-   * @returns {Promise<Object>} - { reduced_embeddings: [...] }
-   */
-  @withCache({
-    ttl: 60 * 60 * 24,
-    key: (payload) => `reducedEmbeddings:${payload.userId}:${payload.chunkName}`,
-  })
   async getReducedEmbeddings(payload) {
     try {
       const { data } = await axios.post(

@@ -44,7 +44,7 @@ export default class ThreeDManager {
 
   @withCache({
     ttl: 60 * 60 * 24,
-    key: (payload) => `get3DPhotos:${payload.userId}:${payload.chunkName}`,
+    key: (userId, chunkName, fakeLimit) => `get3DPhotos:${userId}:${chunkName}:${fakeLimit}`,
   })
   public async get3DPhotos(userId: string, chunkName: string, fakeLimit: number = 5000) {
     let photosWithCategory
