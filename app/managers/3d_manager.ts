@@ -1,6 +1,7 @@
 import db from '@adonisjs/lucid/services/db'
 import ModelsService from '#services/models_service'
 import PhotoManager from './photo_manager.js'
+import { withCache } from '../decorators/withCache.js'
 
 export default class ThreeDManager {
   /**
@@ -40,6 +41,11 @@ export default class ThreeDManager {
    * @param fakeLimit - Límite de fotos (default 5000)
    * @returns Array de fotos con coordenadas 3D
    */
+
+  @withCache({
+    ttl: 60 * 60 * 24,
+    key: (payload) => `get3DPhotos:${payload.userId}:${payload.chunkName}`,
+  })
   public async get3DPhotos(userId: string, chunkName: string, fakeLimit: number = 5000) {
     let photosWithCategory
 
