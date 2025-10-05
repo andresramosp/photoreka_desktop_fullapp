@@ -5,12 +5,13 @@ import adaptiveInitialSpacing from "@/utils/adaptiveInitialSpacing";
 
 const useAdaptiveSpacing = true;
 
-export function use3DPhotos() {
+export function use3DPhotos(userId = null) {
   // Estado reactivo
   const photos3D = ref([]);
   const isLoadingPositions = ref(false);
   const currentChunk = ref("general");
   const error = ref(null);
+  const isCatalogMode = Boolean(userId);
 
   // Opciones de chunks disponibles
   const chunkOptions = [
@@ -18,17 +19,33 @@ export function use3DPhotos() {
     { value: "story", label: "Narrative" },
     { value: "context", label: "Context" },
     { value: "visual_accents", label: "Visual Accents" },
-    { value: "visual_aspects", label: "Technical" },
-    { value: "artistic_scores", label: "Scores" },
+    // Si no hay userId, incluir los dos últimos
+    ...(!userId
+      ? [
+          { value: "visual_aspects", label: "Technical" },
+          { value: "artistic_scores", label: "Scores" },
+        ]
+      : []),
   ];
 
   // Función para cargar todas las fotos de una vez
   const loadPhotos = async (chunkName) => {
     try {
-      const response = await api.post("/api/3d/photos", {
-        chunkName,
-        includeVisualAspects: true, // Solicitar información de aspectos visuales
-      });
+      let response;
+
+      if (isCatalogMode) {
+        // Modo catálogo público: endpoint no securizado
+        response = await api.post(`/api/3d/catalog/${userId}`, {
+          chunkName,
+          includeVisualAspects: true,
+        });
+      } else {
+        // Modo autenticado normal
+        response = await api.post("/api/3d/photos", {
+          chunkName,
+          includeVisualAspects: true,
+        });
+      }
 
       return response.data.photos || [];
     } catch (err) {
@@ -181,6 +198,7 @@ export function use3DPhotos() {
     isLoadingPositions,
     currentChunk,
     error,
+    isCatalogMode,
 
     // Opciones
     chunkOptions,

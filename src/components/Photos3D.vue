@@ -47,7 +47,13 @@
     </div>
 
     <!-- Expanded Panel Content -->
-    <div v-if="showConfigPanel" class="control-panel" @click.stop @wheel.stop>
+    <div
+      v-if="showConfigPanel"
+      class="control-panel"
+      @click.stop
+      @wheel.stop
+      :style="{ top: isPlayground ? '15px' : '70px' }"
+    >
       <!-- Close Button (Top Right Corner) -->
       <button class="close-panel-btn-corner" @click="showConfigPanel = false">
         <n-icon>
@@ -117,16 +123,8 @@
                 >
                 <n-tooltip trigger="hover" placement="top">
                   <template #trigger>
-                    <n-icon
-                      size="12"
-                      style="color: rgba(255, 255, 255, 0.45); cursor: help"
-                    >
-                      <svg viewBox="0 0 24 24">
-                        <path
-                          fill="currentColor"
-                          d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10s10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"
-                        />
-                      </svg>
+                    <n-icon size="12" color="#ffffffd1" style="cursor: help">
+                      <InfoCircleFilled />
                     </n-icon>
                   </template>
                   Applies a shallow and approximate text-based search
@@ -196,16 +194,8 @@
                 >
                 <n-tooltip trigger="hover" placement="top">
                   <template #trigger>
-                    <n-icon
-                      size="12"
-                      style="color: rgba(255, 255, 255, 0.45); cursor: help"
-                    >
-                      <svg viewBox="0 0 24 24">
-                        <path
-                          fill="currentColor"
-                          d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10s10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"
-                        />
-                      </svg>
+                    <n-icon size="12" color="#ffffffd1" style="cursor: help">
+                      <InfoCircleFilled />
                     </n-icon>
                   </template>
                   Will include photos above 7 in the selected scores
@@ -261,7 +251,7 @@
 
         <!-- Display Options Content -->
         <div v-if="showDisplayOptions" class="options-container">
-          <div class="control-item">
+          <div v-if="!isPlayground" class="control-item">
             <span class="control-label">Billboarding (Face Camera)</span>
             <n-switch
               v-model:value="useBillboarding"
@@ -313,6 +303,12 @@
               style="margin-bottom: 8px; display: block"
             >
               Performance Mode
+              <span
+                v-if="!hasGPU"
+                style="color: #ff6b6b; font-size: 12px; margin-left: 8px"
+              >
+                (No GPU detected)
+              </span>
             </label>
             <div class="slider-container">
               <n-slider
@@ -326,6 +322,7 @@
                   2: 'Balanced',
                   3: 'Quality',
                 }"
+                :disabled="!hasGPU"
                 class="performance-slider"
                 @click.stop
               />
@@ -376,7 +373,11 @@
     </div>
 
     <!-- Discrete Loading Indicator -->
-    <div v-if="showDiscreteLoader" class="discrete-loader">
+    <div
+      v-if="showDiscreteLoader"
+      class="discrete-loader"
+      :class="{ 'playground-spacing': isPlayground }"
+    >
       <div class="loader-spinner"></div>
       <span class="loader-text">{{ loaderTitle }}</span>
       <span
@@ -397,6 +398,7 @@ import {
   watch,
   markRaw,
   shallowRef,
+  nextTick,
 } from "vue";
 import { TresCanvas } from "@tresjs/core";
 import {
@@ -408,17 +410,14 @@ import {
   NTreeSelect,
   NButton,
 } from "naive-ui";
-import {
-  InfoCircleOutlined,
-  CloseOutlined,
-  SettingOutlined,
-} from "@vicons/antd";
+import { CloseOutlined, SettingOutlined, InfoCircleFilled } from "@vicons/antd";
 import { use3DPhotos } from "@/composables/3d-viewer/use3DPhotos.js";
 import { useFirstPersonControls } from "@/composables//3d-viewer/useFirstPersonControls.js";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useIndexedDBCache } from "@/composables/useIndexedDBCache.js";
 import { useOctree } from "@/composables/3d-viewer/useOctree.js";
+import { useIsMobile } from "@/composables/useIsMobile.js";
 import { api } from "@/utils/axios";
 import * as THREE from "three";
 import pLimit from "p-limit";
@@ -431,11 +430,29 @@ import {
   getMaxVisibleDistance,
 } from "@/composables/lodUtils.js";
 
+// Props
+const props = defineProps({
+  catalogUserId: {
+    type: String,
+    default: null,
+  },
+  isPlayground: {
+    type: Boolean,
+    default: false,
+  },
+});
+
+// Detect mobile device
+const { isMobile } = useIsMobile();
+
 // ===== Debug Flag (wrap noisy logs) =====
 const DEBUG_3D = false; // pon a true temporalmente si quieres verbosidad
 function dlog(...args) {
   if (DEBUG_3D) console.log(...args);
 }
+
+// Initialize showConfigPanel after isMobile is determined
+const showConfigPanel = ref(true); // Will be set correctly in onMounted
 
 // ===== Retry Configuration for 429 Errors =====
 const MAX_RETRIES = 3; // Maximum number of retry attempts for failed downloads
@@ -454,17 +471,18 @@ const error429Stats = ref({
   failed: 0,
 });
 
-// Composable para manejo de fotos 3D
+// Composable para manejo de fotos 3D (pasar userId si está en modo catálogo)
 const {
   photos3D,
   isLoadingPositions,
   currentChunk,
   error,
   chunkOptions,
+  isCatalogMode,
   loadAllPhotos,
   changeChunk,
   reset,
-} = use3DPhotos();
+} = use3DPhotos(props.catalogUserId);
 
 // Referencias del DOM y Three.js
 const containerRef = ref();
@@ -479,9 +497,6 @@ const currentPosition = ref({ x: 0, y: 0, z: 80 });
 // Debug mode for octree visualization
 const showOctreeDebug = ref(false);
 const octreeDebugGroup = markRaw(new THREE.Group());
-
-// Panel de configuración ocultable
-const showConfigPanel = ref(true);
 
 // Toggle states for collapsible sections
 const showMoreFilters = ref(false);
@@ -517,6 +532,7 @@ const originalPositions = ref([]);
 
 // Performance mode: 1 = high-quality, 2 = balanced, 3 = high-performance
 const performanceMode = ref(2); // Default: balanced
+const hasGPU = ref(true); // Track GPU availability
 
 // Animación de transición
 const isTransitioning = ref(false);
@@ -704,6 +720,8 @@ const checkGPUCapabilities = () => {
 
   if (!gl) {
     console.error("❌ WebGL not supported - falling back to CPU rendering");
+    hasGPU.value = false;
+    performanceMode.value = 1; // Force Low performance
     return false;
   }
 
@@ -729,14 +747,18 @@ const checkGPUCapabilities = () => {
 
     if (isSoftwareRenderer) {
       console.warn("⚠️ Software rendering detected - GPU may not be available");
+      hasGPU.value = false;
+      performanceMode.value = 1; // Force Low performance
       return false;
     }
 
     console.log("✅ Hardware-accelerated GPU rendering active");
+    hasGPU.value = true;
     return true;
   }
 
   console.log("✅ WebGL available (GPU info not accessible)");
+  hasGPU.value = true;
   return true;
 };
 
@@ -1724,11 +1746,11 @@ const retryFailedPhotoOnDemand = async (photo) => {
 // 1 = high-quality (0.67x distances), 2 = balanced (1.0x), 3 = high-performance (1.5x)
 const getPerformanceMultiplier = () => {
   switch (performanceMode.value) {
-    case 1: // High Quality
+    case 1: // Low
       return 0.6;
     case 2: // Balanced
       return 1.0;
-    case 3: // High Performance
+    case 3: // Quality
       return 1.5;
     default:
       return 1.0;
@@ -3034,6 +3056,11 @@ let resizeObserver = null;
 // Lifecycle
 onMounted(async () => {
   try {
+    // Initialize showConfigPanel based on mobile detection
+    // Wait a tick to ensure isMobile has been computed
+    await nextTick();
+    showConfigPanel.value = !isMobile.value;
+
     // Initialize IndexedDB
     console.log("💾 Inicializando IndexedDB cache...");
     try {
@@ -3200,10 +3227,33 @@ onUnmounted(() => {
   overflow-x: hidden; /* Prevent horizontal scroll */
   animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: fixed;
-  top: 70px;
   right: 15px;
   z-index: 2000;
   pointer-events: auto;
+}
+
+/* Mobile-specific styles for control panel */
+@media (max-width: 767px) {
+  .control-panel {
+    min-width: 280px;
+    max-width: calc(100vw - 10px);
+    max-height: 80vh;
+    top: 5px;
+    right: 5px;
+    padding: 8px;
+  }
+
+  .control-section {
+    padding: 10px;
+  }
+
+  .section-title {
+    font-size: 13px;
+  }
+
+  .control-label {
+    font-size: 11px;
+  }
 }
 
 .control-section {
@@ -3321,7 +3371,7 @@ onUnmounted(() => {
 
 /* Options Container (for Display Options) */
 .options-container {
-  margin-top: 12px;
+  margin-top: 0px;
   animation: slideDown 0.3s ease-out;
   display: flex;
   flex-direction: column;
@@ -3347,6 +3397,20 @@ onUnmounted(() => {
   transition: all 0.2s ease;
   z-index: 2000;
   pointer-events: auto;
+}
+
+/* Mobile-specific styles for collapsed panel */
+@media (max-width: 767px) {
+  .collapsed-panel {
+    top: 5px;
+    right: 5px;
+    width: 42px;
+    height: 42px;
+  }
+
+  .collapsed-panel .settings-icon {
+    font-size: 18px;
+  }
 }
 
 .collapsed-panel:hover {
@@ -3484,6 +3548,7 @@ onUnmounted(() => {
   font-size: 9px !important;
   white-space: nowrap;
   overflow: visible;
+  color: rgba(255, 255, 255, 0.8) !important;
 }
 
 .radial-slider :deep(.n-slider-mark-text),
@@ -3493,6 +3558,7 @@ onUnmounted(() => {
   transform: translateX(-50%);
   max-width: 60px;
   text-align: center;
+  color: rgba(255, 255, 255, 0.8) !important;
 }
 
 /* Special handling for first and last marks to prevent overflow */
@@ -3640,6 +3706,10 @@ onUnmounted(() => {
   align-items: center;
   gap: var(--spacing-sm, 8px);
   animation: loaderSlideUp 0.3s ease-out;
+}
+
+.discrete-loader.playground-spacing {
+  bottom: 10px;
 }
 
 @keyframes loaderSlideUp {

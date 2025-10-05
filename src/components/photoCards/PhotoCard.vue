@@ -195,7 +195,7 @@ import {
 } from "@vicons/ionicons5";
 
 import { usePhotoScored } from "@/composables/usePhotoScored.js";
-import { InfoCircleOutlined } from "@vicons/antd";
+import { InfoCircleFilled } from "@vicons/antd";
 
 // Photo scoring composable
 const { computePhotoStars, shouldShowLowRelevanceIcon } = usePhotoScored();

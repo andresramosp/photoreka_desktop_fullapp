@@ -1,18 +1,40 @@
 <template>
-  <div class="threed-view">
+  <div class="threed-view" :class="{ 'catalog-mode': isCatalogMode }">
     <!-- Error state -->
 
     <!-- 3D Visualization -->
-    <Photos3D class="photos-3d-component" />
+    <Photos3D
+      class="photos-3d-component"
+      :catalog-user-id="catalogUserId"
+      :is-playground="isPlayground"
+    />
+
+    <!-- Playground Logo - Top Left -->
+    <div v-if="isPlayground" class="playground-logo">
+      <div class="logo-container-playground">
+        <AppLogo :height="50" :showText="false" />
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from "vue";
+import { useRoute } from "vue-router";
 import { usePhotosStore } from "@/stores/photos.js";
 import Photos3D from "@/components/Photos3D.vue";
+import AppLogo from "@/components/AppLogo.vue";
 
-// Store and reactive data
+const route = useRoute();
+
+// Detectar si está en modo catálogo (similar a isPlayground en CanvasView)
+const isCatalogMode = computed(() => route.meta?.playground === true);
+const catalogUserId = computed(() => route.params?.userId || null);
+
+// Computed property para detectar modo playground
+const isPlayground = computed(() => !!catalogUserId.value);
+
+// Store and reactive data (solo para modo autenticado)
 const photosStore = usePhotosStore();
 const error = ref(null);
 
@@ -34,6 +56,11 @@ const retry = async () => {
 };
 
 const loadPhotos = async () => {
+  // Solo cargar fotos del store en modo autenticado
+  if (isCatalogMode.value) {
+    return; // En modo catálogo, Photos3D se encarga de cargar
+  }
+
   try {
     error.value = null;
     await photosStore.getOrFetch(false);
@@ -156,5 +183,22 @@ onMounted(async () => {
 
 .upload-link:active {
   transform: translateY(0);
+}
+
+/* Playground Logo - Top Left */
+.playground-logo {
+  position: absolute;
+  top: 0px;
+  left: 0px;
+  z-index: 1000;
+}
+
+.logo-container-playground {
+  border-radius: 12px;
+  padding: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 </style>

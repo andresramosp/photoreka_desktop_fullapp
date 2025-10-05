@@ -18,7 +18,7 @@
       <n-tooltip trigger="hover" placement="top">
         <template #trigger>
           <n-icon size="14">
-            <InfoCircleOutlined />
+            <InfoCircleFilled />
           </n-icon>
         </template>
         {{ tooltip }}
@@ -43,7 +43,7 @@ import { NIcon, NTooltip } from "naive-ui";
 import { Warning20Filled as WarningIcon } from "@vicons/fluent";
 import { Info20Filled as InfoIcon } from "@vicons/fluent";
 import { CloseCircle } from "@vicons/ionicons5";
-import { InfoCircleOutlined } from "@vicons/antd";
+import { InfoCircleFilled } from "@vicons/antd";
 
 const props = defineProps({
   message: { type: String, required: true },

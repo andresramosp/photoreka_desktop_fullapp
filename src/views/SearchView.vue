@@ -197,13 +197,8 @@
                   <span class="filter-compact-label">Collections</span>
                   <n-tooltip trigger="hover" placement="top">
                     <template #trigger>
-                      <n-icon size="12" style="color: #ffffff73; cursor: help">
-                        <svg viewBox="0 0 24 24">
-                          <path
-                            fill="currentColor"
-                            d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10s10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"
-                          />
-                        </svg>
+                      <n-icon size="12" color="#ffffffd1" style="cursor: help">
+                        <InfoCircleFilled />
                       </n-icon>
                     </template>
                     Only collections with more than 50 photos are available for
@@ -310,13 +305,8 @@
                   <span class="filter-compact-label">Visual scores</span>
                   <n-tooltip trigger="hover" placement="top">
                     <template #trigger>
-                      <n-icon size="12" style="color: #ffffff73; cursor: help">
-                        <svg viewBox="0 0 24 24">
-                          <path
-                            fill="currentColor"
-                            d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10s10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"
-                          />
-                        </svg>
+                      <n-icon size="12" color="#ffffffd1" style="cursor: help">
+                        <InfoCircleFilled />
                       </n-icon>
                     </template>
                     Will include photos above 7 in the selected scores
@@ -936,7 +926,7 @@ import {
   AlbumsOutline,
   CloudDownloadOutline,
 } from "@vicons/ionicons5";
-import { CheckOutlined, TagOutlined } from "@vicons/antd";
+import { CheckOutlined, InfoCircleFilled, TagOutlined } from "@vicons/antd";
 import { MagicWand } from "@vicons/carbon";
 import { usePhotosStore } from "@/stores/photos";
 import { useCanvasStore } from "@/stores/canvas.js";

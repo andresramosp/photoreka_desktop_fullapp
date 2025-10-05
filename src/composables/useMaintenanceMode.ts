@@ -20,7 +20,12 @@ export function useMaintenanceMode() {
   });
 
   // Routes that are exempt from strict maintenance mode
-  const exemptRoutes = ["landing", "canvas-playground", "maintenance"];
+  const exemptRoutes = [
+    "landing",
+    "canvas-playground",
+    "3d-catalog",
+    "maintenance",
+  ];
 
   // Check if a route is exempt from maintenance mode
   const isRouteExempt = (routeName: string | symbol | null | undefined) => {

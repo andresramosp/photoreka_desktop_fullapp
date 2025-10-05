@@ -162,6 +162,20 @@ const router = createRouter({
       },
     },
     {
+      path: "/3d-catalog/:userId",
+      name: "3d-catalog",
+      component: ThreeDView,
+      meta: {
+        requiresGuest: false, // Accessible without authentication
+        playground: true,
+        title: "3D Photo Catalog - Photoreka",
+        description:
+          "Explore photos in an immersive 3D space. Browse and navigate through photo collections in three dimensions.",
+        keywords:
+          "3D photo viewer, photo catalog, 3D gallery, immersive photo browsing",
+      },
+    },
+    {
       path: "/project-builder",
       name: "project-builder",
       component: ProjectBuilderView,

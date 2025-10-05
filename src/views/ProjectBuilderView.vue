@@ -97,7 +97,7 @@
                 <n-tooltip trigger="hover" placement="top">
                   <template #trigger>
                     <n-icon size="12">
-                      <InfoCircleOutlined />
+                      <InfoCircleFilled />
                     </n-icon>
                   </template>
                   Mininum number or photos shown per iteration with the selected
@@ -395,7 +395,7 @@ import { useRouter } from "vue-router";
 
 import { api } from "@/utils/axios";
 import { io } from "socket.io-client";
-import { InfoCircleOutlined } from "@vicons/antd";
+import { InfoCircleFilled } from "@vicons/antd";
 import { useWarmUp } from "@/composables/useWarmUp";
 
 const canvasStore = useCanvasStore();

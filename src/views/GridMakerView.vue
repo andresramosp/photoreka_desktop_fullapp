@@ -354,8 +354,8 @@ defineOptions({
 });
 
 // Grid configuration
-const maxRows = 12;
-const maxCols = 12;
+const maxRows = 8;
+const maxCols = 8;
 
 // Maximum number of passes for iterative gap filling
 const MAX_FILL_PASSES = 20;
