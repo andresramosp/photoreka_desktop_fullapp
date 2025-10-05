@@ -420,7 +420,7 @@ const INITIAL_RETRY_DELAY = 1000; // Initial delay in ms (exponential backoff)
 const RETRY_MULTIPLIER = 2; // Multiplier for exponential backoff
 const MAX_RETRY_DELAY = 10000; // Maximum delay between retries (10 seconds)
 
-const FADE_START_ABSOLUTE = 100; // inicio de reducción de opacidad
+const FADE_START_ABSOLUTE = 80; // inicio de reducción de opacidad
 const FADE_END_ABSOLUTE = 260; // fin de reducción
 
 const MAX_PHOTOS_FOR_BILLBOARD = 5000; // Billboard solo para fotos cercanas
