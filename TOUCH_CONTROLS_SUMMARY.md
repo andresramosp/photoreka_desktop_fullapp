@@ -9,11 +9,13 @@ A complete touch control system for the 3D photo viewer that provides mobile use
 ### New Files Created:
 
 1. **`src/composables/3d-viewer/useTouchControls.js`**
+
    - Core touch controls composable
    - ~500 lines of code
    - Handles all touch gesture detection and camera manipulation
 
 2. **`src/components/TouchControlsHints.vue`**
+
    - Visual guide component for touch gestures
    - Shows interactive hints on first use
    - Includes "Don't show again" option with localStorage
@@ -34,6 +36,7 @@ A complete touch control system for the 3D photo viewer that provides mobile use
 ## Gesture Controls Implemented
 
 ### 1. One Finger Drag → Camera Rotation
+
 - **Desktop equivalent:** Mouse drag with pointer lock
 - **Effect:** Rotates camera (yaw and pitch)
 - **Features:**
@@ -42,6 +45,7 @@ A complete touch control system for the 3D photo viewer that provides mobile use
   - Sensitivity matches mouse (0.003)
 
 ### 2. Two Finger Pinch → Move Forward/Backward
+
 - **Desktop equivalent:** Mouse wheel scroll
 - **Effect:** Moves camera along forward direction
 - **Features:**
@@ -50,6 +54,7 @@ A complete touch control system for the 3D photo viewer that provides mobile use
   - 2x amplification for better control
 
 ### 3. Two Finger Drag → Directional Movement
+
 - **Desktop equivalent:** WASD keys
 - **Effect:** Moves in any direction (left/right/forward/back)
 - **Features:**
@@ -60,24 +65,28 @@ A complete touch control system for the 3D photo viewer that provides mobile use
 ## Key Technical Features
 
 ### Progressive Acceleration
+
 - Matches keyboard acceleration curve exactly
 - Starts at 0.01 units/sec
 - Accelerates to 45 units/sec over 12.5 seconds
 - Uses easeOutCubic for smooth feel
 
 ### Gesture Detection
+
 - Intelligent gesture priority system
 - First gesture to cross deadzone threshold wins
 - Prevents conflicting gestures
 - Smooth transition between gesture types
 
 ### Performance Optimizations
+
 - `touch-action: none` - Disables browser gestures
 - `passive: false` - Prevents default behavior
 - Minimal DOM updates (only camera transforms)
 - Reuses direction vectors (no garbage collection)
 
 ### Browser Compatibility
+
 - ✅ iOS Safari
 - ✅ Chrome Mobile
 - ✅ Firefox Mobile
@@ -108,7 +117,7 @@ Three.js Scene Update
 touchControls.setSpeedProfile({
   initial: 0.01,
   max: 45,
-  accelerateInSeconds: 12.5
+  accelerateInSeconds: 12.5,
 });
 
 // Sensitivity
@@ -125,18 +134,21 @@ touchControls.cleanup();
 ## User Experience Features
 
 ### Visual Hints System
+
 - Shows on first visit (localStorage tracking)
 - Animated gesture demonstrations
 - "Don't show again" checkbox
 - Dismissable overlay with backdrop blur
 
 ### Adaptive UI
+
 - Desktop shows keyboard/mouse instructions
 - Mobile shows touch gesture instructions
 - Control panel adapts to screen size
 - Cursor changes to grab/grabbing on touch devices
 
 ### Accessibility
+
 - Touch-action: none prevents conflicts
 - User-select: none prevents text selection
 - Visual feedback on active gestures
@@ -145,17 +157,21 @@ touchControls.cleanup();
 ## Testing Recommendations
 
 ### Manual Testing
+
 1. **One Finger Rotation:**
+
    - Drag in all directions
    - Test pitch limits (up/down)
    - Verify smooth rotation
 
 2. **Two Finger Pinch:**
+
    - Pinch in/out slowly
    - Pinch in/out quickly
    - Verify forward/backward movement
 
 3. **Two Finger Drag:**
+
    - Drag in 8 directions (N, NE, E, SE, S, SW, W, NW)
    - Test acceleration (hold drag)
    - Verify smooth deceleration on release
@@ -166,6 +182,7 @@ touchControls.cleanup();
    - Rapid touch/release cycles
 
 ### Device Testing
+
 - iPhone (Safari)
 - iPad (Safari)
 - Android phone (Chrome)
@@ -175,11 +192,13 @@ touchControls.cleanup();
 ## Known Limitations
 
 1. **No Up/Down Movement**
+
    - Desktop has F/V keys for vertical movement
    - Touch controls don't implement this (rarely needed)
    - Could be added with 3-finger drag if needed
 
 2. **No "Click to Activate"**
+
    - Desktop requires click for pointer lock
    - Touch controls are always active
    - Could add activation gesture if needed
@@ -192,17 +211,20 @@ touchControls.cleanup();
 ## Future Enhancements
 
 ### Short-term
+
 - [ ] Add haptic feedback (iOS only)
 - [ ] Configurable deadzone thresholds
 - [ ] Custom gesture sensitivity per user
 
 ### Medium-term
+
 - [ ] Gyroscope tilt controls
 - [ ] Three-finger tap to reset camera
 - [ ] Gesture recording/playback
 - [ ] Multi-touch rotation (two-finger twist)
 
 ### Long-term
+
 - [ ] AR mode with device orientation
 - [ ] Voice commands
 - [ ] Gesture customization UI
@@ -222,18 +244,21 @@ touchControls.cleanup();
 ## Performance Metrics
 
 ### Memory Usage
+
 - Minimal overhead (~50KB)
 - No texture/geometry allocation
 - Touch Map cleaned on touchend
 - No memory leaks
 
 ### CPU Usage
+
 - ~1-2% on modern mobile devices
 - Throttled to animation frame rate
 - Efficient vector math (no sqrt when possible)
 - Reused THREE.js vectors
 
 ### Responsiveness
+
 - <16ms gesture detection
 - 60 FPS maintained on mid-range devices
 - Smooth acceleration curves
@@ -258,6 +283,7 @@ touchControls.cleanup();
 ## Support
 
 For issues or questions:
+
 1. Check TOUCH_CONTROLS.md documentation
 2. Test on device (not browser emulator)
 3. Verify touch-action CSS is applied

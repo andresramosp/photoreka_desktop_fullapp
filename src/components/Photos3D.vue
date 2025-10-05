@@ -371,7 +371,7 @@
             <div class="control-tip"><strong>F:</strong> Move up</div>
             <div class="control-tip"><strong>V:</strong> Move down</div>
           </template>
-          
+
           <!-- Touch Controls (Mobile) -->
           <template v-else>
             <div class="control-tip">
@@ -955,18 +955,20 @@ const checkAllTexturesLoaded = async () => {
     navigationBlocked.value = false;
 
     // Activar controles de navegación si existen
-  if (fpControls.value) {
-    console.log("🎮 Activando controles de navegación (desktop) (desktop)...");
-    fpControls.value.setup();
+    if (fpControls.value) {
+      console.log(
+        "🎮 Activando controles de navegación (desktop) (desktop)..."
+      );
+      fpControls.value.setup();
     }
     if (touchControls.value) {
       console.log("📱 Activando controles táctiles (mobile)...");
       touchControls.value.setup();
-  }
-  if (touchControls.value) {
-    console.log("📱 Activando controles táctiles (mobile)...");
-    touchControls.value.setup();
-  }    // Ocultar loader
+    }
+    if (touchControls.value) {
+      console.log("📱 Activando controles táctiles (mobile)...");
+      touchControls.value.setup();
+    } // Ocultar loader
     hideLoader();
   }
 };

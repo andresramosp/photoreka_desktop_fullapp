@@ -4,21 +4,36 @@
       <div class="touch-hints-container" @click.stop>
         <button class="close-btn" @click="dismiss">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path
+              d="M18 6L6 18M6 6l12 12"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
           </svg>
         </button>
-        
+
         <h2 class="hints-title">Touch Controls</h2>
-        
+
         <div class="hints-grid">
           <!-- One Finger Drag -->
           <div class="hint-item">
             <div class="hint-icon">
               <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
-                <circle cx="30" cy="30" r="8" fill="#4A9EFF" opacity="0.3"/>
-                <circle cx="30" cy="30" r="5" fill="#4A9EFF"/>
-                <path d="M30 30 L45 20" stroke="#4A9EFF" stroke-width="2" stroke-dasharray="4 2" opacity="0.6"/>
-                <path d="M42 18 L45 20 L43 23" stroke="#4A9EFF" stroke-width="2"/>
+                <circle cx="30" cy="30" r="8" fill="#4A9EFF" opacity="0.3" />
+                <circle cx="30" cy="30" r="5" fill="#4A9EFF" />
+                <path
+                  d="M30 30 L45 20"
+                  stroke="#4A9EFF"
+                  stroke-width="2"
+                  stroke-dasharray="4 2"
+                  opacity="0.6"
+                />
+                <path
+                  d="M42 18 L45 20 L43 23"
+                  stroke="#4A9EFF"
+                  stroke-width="2"
+                />
               </svg>
             </div>
             <div class="hint-text">
@@ -31,12 +46,32 @@
           <div class="hint-item">
             <div class="hint-icon">
               <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
-                <circle cx="20" cy="30" r="5" fill="#4A9EFF"/>
-                <circle cx="40" cy="30" r="5" fill="#4A9EFF"/>
-                <path d="M20 30 L30 30" stroke="#4A9EFF" stroke-width="2" stroke-dasharray="4 2" opacity="0.6"/>
-                <path d="M40 30 L30 30" stroke="#4A9EFF" stroke-width="2" stroke-dasharray="4 2" opacity="0.6"/>
-                <path d="M18 28 L20 30 L18 32" stroke="#4A9EFF" stroke-width="2"/>
-                <path d="M42 28 L40 30 L42 32" stroke="#4A9EFF" stroke-width="2"/>
+                <circle cx="20" cy="30" r="5" fill="#4A9EFF" />
+                <circle cx="40" cy="30" r="5" fill="#4A9EFF" />
+                <path
+                  d="M20 30 L30 30"
+                  stroke="#4A9EFF"
+                  stroke-width="2"
+                  stroke-dasharray="4 2"
+                  opacity="0.6"
+                />
+                <path
+                  d="M40 30 L30 30"
+                  stroke="#4A9EFF"
+                  stroke-width="2"
+                  stroke-dasharray="4 2"
+                  opacity="0.6"
+                />
+                <path
+                  d="M18 28 L20 30 L18 32"
+                  stroke="#4A9EFF"
+                  stroke-width="2"
+                />
+                <path
+                  d="M42 28 L40 30 L42 32"
+                  stroke="#4A9EFF"
+                  stroke-width="2"
+                />
               </svg>
             </div>
             <div class="hint-text">
@@ -49,10 +84,20 @@
           <div class="hint-item">
             <div class="hint-icon">
               <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
-                <circle cx="25" cy="30" r="5" fill="#4A9EFF"/>
-                <circle cx="35" cy="30" r="5" fill="#4A9EFF"/>
-                <path d="M30 30 L30 15" stroke="#4A9EFF" stroke-width="2" stroke-dasharray="4 2" opacity="0.6"/>
-                <path d="M28 17 L30 15 L32 17" stroke="#4A9EFF" stroke-width="2"/>
+                <circle cx="25" cy="30" r="5" fill="#4A9EFF" />
+                <circle cx="35" cy="30" r="5" fill="#4A9EFF" />
+                <path
+                  d="M30 30 L30 15"
+                  stroke="#4A9EFF"
+                  stroke-width="2"
+                  stroke-dasharray="4 2"
+                  opacity="0.6"
+                />
+                <path
+                  d="M28 17 L30 15 L32 17"
+                  stroke="#4A9EFF"
+                  stroke-width="2"
+                />
               </svg>
             </div>
             <div class="hint-text">
@@ -75,7 +120,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch } from "vue";
 
 const props = defineProps({
   autoShow: {
@@ -84,11 +129,11 @@ const props = defineProps({
   },
   storageKey: {
     type: String,
-    default: 'touch-hints-dismissed',
+    default: "touch-hints-dismissed",
   },
 });
 
-const emit = defineEmits(['dismiss']);
+const emit = defineEmits(["dismiss"]);
 
 const show = ref(false);
 const dontShowAgain = ref(false);
@@ -108,12 +153,12 @@ onMounted(() => {
 
 const dismiss = () => {
   show.value = false;
-  
+
   if (dontShowAgain.value) {
-    localStorage.setItem(props.storageKey, 'true');
+    localStorage.setItem(props.storageKey, "true");
   }
-  
-  emit('dismiss');
+
+  emit("dismiss");
 };
 
 // Expose method to show hints manually
@@ -261,7 +306,7 @@ defineExpose({
 }
 
 .got-it-btn {
-  background: linear-gradient(135deg, #4A9EFF 0%, #357ABD 100%);
+  background: linear-gradient(135deg, #4a9eff 0%, #357abd 100%);
   color: #fff;
   border: none;
   border-radius: 8px;
@@ -298,39 +343,39 @@ defineExpose({
   .touch-hints-container {
     padding: 24px 16px;
   }
-  
+
   .hints-title {
     font-size: 20px;
   }
-  
+
   .hint-item {
     gap: 12px;
     padding: 12px;
   }
-  
+
   .hint-icon {
     width: 50px;
     height: 50px;
   }
-  
+
   .hint-icon svg {
     width: 50px;
     height: 50px;
   }
-  
+
   .hint-text strong {
     font-size: 14px;
   }
-  
+
   .hint-text p {
     font-size: 12px;
   }
-  
+
   .hints-footer {
     flex-direction: column-reverse;
     align-items: stretch;
   }
-  
+
   .got-it-btn {
     width: 100%;
   }

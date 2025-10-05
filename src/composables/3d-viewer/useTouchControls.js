@@ -3,7 +3,7 @@ import * as THREE from "three";
 
 /**
  * Touch controls for 3D navigation - Mobile equivalent to keyboard/mouse controls
- * 
+ *
  * Controls mapping:
  * - One finger drag: Camera rotation (yaw/pitch) - equivalent to mouse movement
  * - Two finger pinch: Move forward/backward - equivalent to mouse wheel
@@ -145,7 +145,10 @@ export function useTouchControls(camera, domElement) {
         const deltaY = touch.clientY - prevTouch.y;
 
         // Apply deadzone
-        if (Math.abs(deltaX) > ROTATION_DEADZONE || Math.abs(deltaY) > ROTATION_DEADZONE) {
+        if (
+          Math.abs(deltaX) > ROTATION_DEADZONE ||
+          Math.abs(deltaY) > ROTATION_DEADZONE
+        ) {
           isRotating = true;
 
           // Update camera rotation (same as mouse movement)
@@ -190,7 +193,9 @@ export function useTouchControls(camera, domElement) {
       // Calculate movement from start position
       const movementX = twoFingerStartPos ? centerX - twoFingerStartPos.x : 0;
       const movementY = twoFingerStartPos ? centerY - twoFingerStartPos.y : 0;
-      const totalMovement = Math.sqrt(movementX * movementX + movementY * movementY);
+      const totalMovement = Math.sqrt(
+        movementX * movementX + movementY * movementY
+      );
 
       // Calculate distance change for pinch
       const distanceChange = currentDistance - lastTouchDistance;
@@ -228,7 +233,7 @@ export function useTouchControls(camera, domElement) {
         const deltaY = movementY / 50;
 
         // Reset simulated keys
-        Object.keys(simulatedKeys.value).forEach(key => {
+        Object.keys(simulatedKeys.value).forEach((key) => {
           simulatedKeys.value[key] = false;
         });
 
@@ -266,14 +271,16 @@ export function useTouchControls(camera, domElement) {
         y: touch1.clientY,
         startX: touches.get(touch1.identifier)?.startX || touch1.clientX,
         startY: touches.get(touch1.identifier)?.startY || touch1.clientY,
-        startTime: touches.get(touch1.identifier)?.startTime || performance.now(),
+        startTime:
+          touches.get(touch1.identifier)?.startTime || performance.now(),
       });
       touches.set(touch2.identifier, {
         x: touch2.clientX,
         y: touch2.clientY,
         startX: touches.get(touch2.identifier)?.startX || touch2.clientX,
         startY: touches.get(touch2.identifier)?.startY || touch2.clientY,
-        startTime: touches.get(touch2.identifier)?.startTime || performance.now(),
+        startTime:
+          touches.get(touch2.identifier)?.startTime || performance.now(),
       });
     }
   };
@@ -284,9 +291,9 @@ export function useTouchControls(camera, domElement) {
 
     // Remove ended touches from map
     const touchIds = Array.from(touches.keys());
-    const activeTouchIds = Array.from(event.touches).map(t => t.identifier);
-    
-    touchIds.forEach(id => {
+    const activeTouchIds = Array.from(event.touches).map((t) => t.identifier);
+
+    touchIds.forEach((id) => {
       if (!activeTouchIds.includes(id)) {
         touches.delete(id);
       }
@@ -304,7 +311,7 @@ export function useTouchControls(camera, domElement) {
       twoFingerStartPos = null;
 
       // Reset all simulated keys
-      Object.keys(simulatedKeys.value).forEach(key => {
+      Object.keys(simulatedKeys.value).forEach((key) => {
         simulatedKeys.value[key] = false;
       });
     } else if (remainingTouches === 1) {
@@ -315,7 +322,7 @@ export function useTouchControls(camera, domElement) {
       twoFingerStartPos = null;
 
       // Reset movement keys
-      Object.keys(simulatedKeys.value).forEach(key => {
+      Object.keys(simulatedKeys.value).forEach((key) => {
         simulatedKeys.value[key] = false;
       });
     }
@@ -421,7 +428,9 @@ export function useTouchControls(camera, domElement) {
     domElement.addEventListener("touchstart", onTouchStart, { passive: false });
     domElement.addEventListener("touchmove", onTouchMove, { passive: false });
     domElement.addEventListener("touchend", onTouchEnd, { passive: false });
-    domElement.addEventListener("touchcancel", onTouchCancel, { passive: false });
+    domElement.addEventListener("touchcancel", onTouchCancel, {
+      passive: false,
+    });
 
     console.log("📱 Touch controls initialized");
   };
@@ -467,7 +476,8 @@ export function useTouchControls(camera, domElement) {
   };
 
   const setSpeedProfile = ({ initial, max, accelerateInSeconds }) => {
-    if (typeof initial === "number" && initial > 0) initialSpeed.value = initial;
+    if (typeof initial === "number" && initial > 0)
+      initialSpeed.value = initial;
     if (typeof max === "number" && max > 0) moveSpeed.value = max;
     if (typeof accelerateInSeconds === "number" && accelerateInSeconds > 0)
       accelerateSeconds.value = accelerateInSeconds;
