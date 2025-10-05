@@ -296,19 +296,17 @@
             </div>
           </div>
 
-          <!-- Performance Mode Slider -->
-          <div class="control-item-full" style="margin-top: 12px">
+          <!-- Performance Mode Slider, solo si GPU -->
+          <div
+            v-if="gpuDetection.hasGPU"
+            class="control-item-full"
+            style="margin-top: 12px"
+          >
             <label
               class="control-label"
               style="margin-bottom: 8px; display: block"
             >
               Performance Mode
-              <span
-                v-if="!hasGPU"
-                style="color: #ff6b6b; font-size: 12px; margin-left: 8px"
-              >
-                (No GPU detected)
-              </span>
             </label>
             <div class="slider-container">
               <n-slider
@@ -322,7 +320,6 @@
                   2: 'Balanced',
                   3: 'Quality',
                 }"
-                :disabled="!hasGPU"
                 class="performance-slider"
                 @click.stop
               />
@@ -391,9 +388,9 @@
       </div>
     </div>
 
-    <!-- Touch Controls Hints (Mobile Only) -->
+    <!-- Touch Controls Hints (Any Touch Device) -->
     <TouchControlsHints
-      v-if="isMobile"
+      v-if="hasTouch"
       :auto-show="true"
       storage-key="photos3d-touch-hints-dismissed"
     />
@@ -446,6 +443,7 @@ import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useIndexedDBCache } from "@/composables/useIndexedDBCache.js";
 import { useOctree } from "@/composables/3d-viewer/useOctree.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
+import { useHasTouch } from "@/composables/useHasTouch.js";
 import { api } from "@/utils/axios";
 import * as THREE from "three";
 import pLimit from "p-limit";
@@ -473,6 +471,9 @@ const props = defineProps({
 // Detect mobile device
 const { isMobile } = useIsMobile();
 
+// Detect touch capabilities (mobile, tablets, touchscreen laptops, etc.)
+const { hasTouch } = useHasTouch();
+
 // ===== Debug Flag (wrap noisy logs) =====
 const DEBUG_3D = false; // pon a true temporalmente si quieres verbosidad
 function dlog(...args) {
@@ -487,9 +488,6 @@ const MAX_RETRIES = 3; // Maximum number of retry attempts for failed downloads
 const INITIAL_RETRY_DELAY = 1000; // Initial delay in ms (exponential backoff)
 const RETRY_MULTIPLIER = 2; // Multiplier for exponential backoff
 const MAX_RETRY_DELAY = 10000; // Maximum delay between retries (10 seconds)
-
-// ===== Fixed Texture Size (728px) =====
-const TEXTURE_SIZE = 728;
 
 // Stats for monitoring 429 errors
 const error429Stats = ref({
@@ -560,7 +558,6 @@ const originalPositions = ref([]);
 
 // Performance mode: 1 = high-quality, 2 = balanced, 3 = high-performance
 const performanceMode = ref(2); // Default: balanced
-const hasGPU = ref(true); // Track GPU availability
 
 // Animación de transición
 const isTransitioning = ref(false);
@@ -591,20 +588,69 @@ const updateCameraAspect = () => {
   }
 };
 
+// GPU detection function - Used for both canvas config and runtime checks
+const detectGPU = () => {
+  try {
+    const canvas = document.createElement("canvas");
+    const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
+
+    if (!gl) {
+      console.error("❌ WebGL not supported - falling back to CPU rendering");
+      return { hasGPU: false, info: null };
+    }
+
+    const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+    if (debugInfo) {
+      const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+      const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+
+      const isSoftwareRenderer =
+        renderer.toLowerCase().includes("software") ||
+        renderer.toLowerCase().includes("microsoft") ||
+        renderer.toLowerCase().includes("llvmpipe") ||
+        renderer.toLowerCase().includes("swiftshader");
+
+      return {
+        hasGPU: !isSoftwareRenderer,
+        info: {
+          vendor,
+          renderer,
+          webglVersion: gl.constructor.name,
+          maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
+          maxVertexAttributes: gl.getParameter(gl.MAX_VERTEX_ATTRIBS),
+          maxFragmentUniforms: gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS),
+        },
+      };
+    }
+
+    return { hasGPU: true, info: null }; // Assume GPU available if can't detect
+  } catch (e) {
+    console.error("❌ Error detecting GPU:", e);
+    return { hasGPU: false, info: null };
+  }
+};
+
+// Early GPU detection for canvas configuration
+const gpuDetection = detectGPU();
+
 // Canvas configuration - Optimized for memory efficiency and context stability
 // IMPORTANTE: NO usar ref() aquí para evitar reactividad que cause re-cargas de fotos
 const gl = {
   clearColor: "#1a1a1a",
   antialias: false, // Disabled for better performance with many textures
-  powerPreference: "high-performance", // Prefer discrete GPU
+  powerPreference: gpuDetection.hasGPU ? "high-performance" : "low-power",
   forceWebGL: true, // Force WebGL over Canvas 2D
   preserveDrawingBuffer: false, // Better performance
   premultipliedAlpha: false, // Better performance
   stencil: false, // Disable stencil buffer to save memory
   depth: true, // Keep depth buffer for proper rendering
-  failIfMajorPerformanceCaveat: true, // Fail if software rendering
-  // Auto-adjust pixel ratio on low-end devices
-  pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+  failIfMajorPerformanceCaveat: false, // Allow software rendering (will detect and adjust)
+  // Lower pixel ratio on devices without GPU (0.75 vs 2.0 = 82% less pixels)
+  pixelRatio: gpuDetection.hasGPU
+    ? Math.min(window.devicePixelRatio || 1, 2)
+    : 0.75,
+  precision: "lowp", // Use low precision shaders for better performance
+  logarithmicDepthBuffer: false,
 };
 
 // Three.js objects - Improved lighting setup
@@ -745,50 +791,24 @@ const directionToCamera = markRaw(new THREE.Vector3());
 
 // GPU verification and capabilities
 const checkGPUCapabilities = () => {
-  const canvas = document.createElement("canvas");
-  const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
-
-  if (!gl) {
-    console.error("❌ WebGL not supported - falling back to CPU rendering");
-    hasGPU.value = false;
+  // Usar la detección inicial que ya se hizo
+  if (!gpuDetection.hasGPU) {
+    console.error("❌ WebGL not supported or software rendering detected");
     performanceMode.value = 1; // Force Low performance
+    console.log("🔧 Configuración de bajo rendimiento aplicada:");
+    console.log("   - performanceMode = 1 (Low)");
+    console.log("   - pixelRatio = 0.75 (configurado al crear canvas)");
+    console.log("   - powerPreference = low-power");
+    console.log("   - LOD distances reducidas (0.6x multiplier)");
+    console.log("   - Máximo de fotos visibles reducido");
     return false;
   }
 
-  const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
-  if (debugInfo) {
-    const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
-    const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
-
-    console.log("🎮 GPU Info:", {
-      vendor,
-      renderer,
-      webglVersion: gl.constructor.name,
-      maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
-      maxVertexAttributes: gl.getParameter(gl.MAX_VERTEX_ATTRIBS),
-      maxFragmentUniforms: gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS),
-    });
-
-    // Check if using software rendering (usually indicates CPU fallback)
-    const isSoftwareRenderer =
-      renderer.toLowerCase().includes("software") ||
-      renderer.toLowerCase().includes("microsoft") ||
-      renderer.toLowerCase().includes("llvmpipe");
-
-    if (isSoftwareRenderer) {
-      console.warn("⚠️ Software rendering detected - GPU may not be available");
-      hasGPU.value = false;
-      performanceMode.value = 1; // Force Low performance
-      return false;
-    }
-
-    console.log("✅ Hardware-accelerated GPU rendering active");
-    hasGPU.value = true;
-    return true;
+  if (gpuDetection.info) {
+    console.log("🎮 GPU Info:", gpuDetection.info);
   }
 
-  console.log("✅ WebGL available (GPU info not accessible)");
-  hasGPU.value = true;
+  console.log("✅ Hardware-accelerated GPU rendering active");
   return true;
 };
 
@@ -3147,8 +3167,14 @@ onMounted(async () => {
     const gpuAvailable = checkGPUCapabilities();
     if (!gpuAvailable) {
       console.warn(
-        "⚠️ GPU acceleration may not be available - performance could be limited"
+        "⚠️ GPU acceleration not available - running in low performance mode"
       );
+
+      // 🎯 Configuración de bajo rendimiento ya aplicada automáticamente:
+      // - performanceMode = 1 (Low) configurado en checkGPUCapabilities()
+      // - LOD multiplier = 0.6x (distancias más cortas, texturas más simples)
+      // - Máximo de fotos visibles reducido por sistema LOD dinámico
+      console.log("✓ Sistema configurado en modo de bajo rendimiento");
     }
 
     // Configurar aspect ratio inicial
