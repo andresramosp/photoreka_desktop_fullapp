@@ -296,9 +296,9 @@
             </div>
           </div>
 
-          <!-- Performance Mode Slider, solo si GPU -->
+          <!-- Performance Mode Slider (oculto en touch/mobile) -->
           <div
-            v-if="gpuDetection.hasGPU"
+            v-if="!hasTouch && !isMobile"
             class="control-item-full"
             style="margin-top: 12px"
           >
@@ -389,11 +389,11 @@
     </div>
 
     <!-- Touch Controls Hints (Any Touch Device) -->
-    <TouchControlsHints
+    <!-- <TouchControlsHints
       v-if="hasTouch"
       :auto-show="true"
       storage-key="photos3d-touch-hints-dismissed"
-    />
+    /> -->
 
     <!-- Discrete Loading Indicator -->
     <div
@@ -557,7 +557,8 @@ const inflateFactor = ref(1);
 const originalPositions = ref([]);
 
 // Performance mode: 1 = high-quality, 2 = balanced, 3 = high-performance
-const performanceMode = ref(2); // Default: balanced
+// En dispositivos touch/mobile, siempre empezar en modo low (3)
+const performanceMode = ref(hasTouch.value || isMobile.value ? 1 : 2);
 
 // Animación de transición
 const isTransitioning = ref(false);
@@ -588,67 +589,19 @@ const updateCameraAspect = () => {
   }
 };
 
-// GPU detection function - Used for both canvas config and runtime checks
-const detectGPU = () => {
-  try {
-    const canvas = document.createElement("canvas");
-    const gl = false;//canvas.getContext("webgl2") || canvas.getContext("webgl");
-
-    if (!gl) {
-      console.error("❌ WebGL not supported - falling back to CPU rendering");
-      return { hasGPU: false, info: null };
-    }
-
-    const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
-    if (debugInfo) {
-      const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
-      const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
-
-      const isSoftwareRenderer =
-        renderer.toLowerCase().includes("software") ||
-        renderer.toLowerCase().includes("microsoft") ||
-        renderer.toLowerCase().includes("llvmpipe") ||
-        renderer.toLowerCase().includes("swiftshader");
-
-      return {
-        hasGPU: !isSoftwareRenderer,
-        info: {
-          vendor,
-          renderer,
-          webglVersion: gl.constructor.name,
-          maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
-          maxVertexAttributes: gl.getParameter(gl.MAX_VERTEX_ATTRIBS),
-          maxFragmentUniforms: gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS),
-        },
-      };
-    }
-
-    return { hasGPU: true, info: null }; // Assume GPU available if can't detect
-  } catch (e) {
-    console.error("❌ Error detecting GPU:", e);
-    return { hasGPU: false, info: null };
-  }
-};
-
-// Early GPU detection for canvas configuration
-const gpuDetection = detectGPU();
-
 // Canvas configuration - Optimized for memory efficiency and context stability
 // IMPORTANTE: NO usar ref() aquí para evitar reactividad que cause re-cargas de fotos
 const gl = {
   clearColor: "#1a1a1a",
   antialias: false, // Disabled for better performance with many textures
-  powerPreference: gpuDetection.hasGPU ? "high-performance" : "low-power",
+  powerPreference: "low-power", // Always use low-power mode
   forceWebGL: true, // Force WebGL over Canvas 2D
   preserveDrawingBuffer: false, // Better performance
   premultipliedAlpha: false, // Better performance
   stencil: false, // Disable stencil buffer to save memory
   depth: true, // Keep depth buffer for proper rendering
-  failIfMajorPerformanceCaveat: false, // Allow software rendering (will detect and adjust)
-  // Lower pixel ratio on devices without GPU (0.75 vs 2.0 = 82% less pixels)
-  pixelRatio: gpuDetection.hasGPU
-    ? Math.min(window.devicePixelRatio || 1, 2)
-    : 0.75,
+  failIfMajorPerformanceCaveat: false, // Allow software rendering
+  pixelRatio: 0.75, // Lower pixel ratio for better performance
   precision: "lowp", // Use low precision shaders for better performance
   logarithmicDepthBuffer: false,
 };
@@ -788,29 +741,6 @@ let cacheValidPosition = { x: 0, y: 0, z: 0 };
 const tempObject = markRaw(new THREE.Object3D());
 const directionToCamera = markRaw(new THREE.Vector3());
 // Quaternions reutilizables para interpolación suave (SLERP)
-
-// GPU verification and capabilities
-const checkGPUCapabilities = () => {
-  // Usar la detección inicial que ya se hizo
-  if (!gpuDetection.hasGPU) {
-    console.error("❌ WebGL not supported or software rendering detected");
-    performanceMode.value = 1; // Force Low performance
-    console.log("🔧 Configuración de bajo rendimiento aplicada:");
-    console.log("   - performanceMode = 1 (Low)");
-    console.log("   - pixelRatio = 0.75 (configurado al crear canvas)");
-    console.log("   - powerPreference = low-power");
-    console.log("   - LOD distances reducidas (0.6x multiplier)");
-    console.log("   - Máximo de fotos visibles reducido");
-    return false;
-  }
-
-  if (gpuDetection.info) {
-    console.log("🎮 GPU Info:", gpuDetection.info);
-  }
-
-  console.log("✅ Hardware-accelerated GPU rendering active");
-  return true;
-};
 
 // Frustum culling - solo renderizar fotos visibles
 const visiblePhotos = ref([]); // SOLO fotos actualmente en el frustum
@@ -3163,19 +3093,11 @@ onMounted(async () => {
       );
     }
 
-    // Verificar capacidades GPU primero
-    const gpuAvailable = checkGPUCapabilities();
-    if (!gpuAvailable) {
-      console.warn(
-        "⚠️ GPU acceleration not available - running in low performance mode"
-      );
-
-      // 🎯 Configuración de bajo rendimiento ya aplicada automáticamente:
-      // - performanceMode = 1 (Low) configurado en checkGPUCapabilities()
-      // - LOD multiplier = 0.6x (distancias más cortas, texturas más simples)
-      // - Máximo de fotos visibles reducido por sistema LOD dinámico
-      console.log("✓ Sistema configurado en modo de bajo rendimiento");
-    }
+    // Configuración siempre en modo low-power (sin GPU detection)
+    console.log("🔧 Configuración de bajo rendimiento aplicada:");
+    console.log("   - pixelRatio = 0.75");
+    console.log("   - powerPreference = low-power");
+    console.log("   - precision = lowp");
 
     // Configurar aspect ratio inicial
     updateCameraAspect();
