@@ -16,8 +16,8 @@
         :position="[0, 0, 120]"
         :fov="75"
         :aspect="cameraAspect"
-        :near="0.1"
-        :far="2000"
+        :near="1"
+        :far="1000"
       />
 
       <!-- Lighting -->
@@ -25,9 +25,6 @@
 
       <!-- LOD Group containing all photo LODs -->
       <primitive :object="lodGroup" />
-
-      <!-- Octree Debug Visualization -->
-      <primitive :object="octreeDebugGroup" />
 
       <!-- Grid helper -->
       <primitive :object="gridHelper" />
@@ -251,29 +248,6 @@
 
         <!-- Display Options Content -->
         <div v-if="showDisplayOptions" class="options-container">
-          <div v-if="!isPlayground" class="control-item">
-            <span class="control-label">Billboarding (Face Camera)</span>
-            <n-switch
-              v-model:value="useBillboarding"
-              @update:value="onBillboardingToggle"
-              size="small"
-              @click.stop
-            />
-          </div>
-
-          <!-- Octree Debug Visualization -->
-          <div class="control-item" v-if="DEBUG_3D">
-            <span class="control-label">Octree Debug (Dev)</span>
-            <n-switch
-              v-model:value="showOctreeDebug"
-              @update:value="onOctreeDebugToggle"
-              size="small"
-              @click.stop
-            />
-          </div>
-
-          <!-- Distance Transparency ahora está pre-establecida en los niveles LOD -->
-
           <!-- Radial Scaling Slider -->
           <div class="control-item-full" style="margin-top: 12px">
             <label
@@ -291,36 +265,6 @@
                 :step="0.1"
                 :marks="{ 1: '1x', 2: '2x', 3: '3x' }"
                 class="radial-slider"
-                @click.stop
-              />
-            </div>
-          </div>
-
-          <!-- Performance Mode Slider (oculto en touch/mobile) -->
-          <div
-            v-if="!hasTouch && !isMobile"
-            class="control-item-full"
-            style="margin-top: 12px"
-          >
-            <label
-              class="control-label"
-              style="margin-bottom: 8px; display: block"
-            >
-              Performance Mode
-            </label>
-            <div class="slider-container">
-              <n-slider
-                v-model:value="performanceMode"
-                @update:value="onPerformanceModeChange"
-                :min="1"
-                :max="3"
-                :step="1"
-                :marks="{
-                  1: 'Low',
-                  2: 'Balanced',
-                  3: 'Quality',
-                }"
-                class="performance-slider"
                 @click.stop
               />
             </div>
@@ -388,13 +332,6 @@
       </div>
     </div>
 
-    <!-- Touch Controls Hints (Any Touch Device) -->
-    <!-- <TouchControlsHints
-      v-if="hasTouch"
-      :auto-show="true"
-      storage-key="photos3d-touch-hints-dismissed"
-    /> -->
-
     <!-- Discrete Loading Indicator -->
     <div
       v-if="showDiscreteLoader"
@@ -420,7 +357,6 @@ import {
   onUnmounted,
   watch,
   markRaw,
-  shallowRef,
   nextTick,
 } from "vue";
 import { TresCanvas } from "@tresjs/core";
@@ -434,7 +370,7 @@ import {
   NButton,
 } from "naive-ui";
 import { CloseOutlined, SettingOutlined, InfoCircleFilled } from "@vicons/antd";
-import TouchControlsHints from "./TouchControlsHints.vue";
+
 import { use3DPhotos } from "@/composables/3d-viewer/use3DPhotos.js";
 import { useFirstPersonControls } from "@/composables//3d-viewer/useFirstPersonControls.js";
 import { useTouchControls } from "@/composables/3d-viewer/useTouchControls.js";
@@ -447,14 +383,9 @@ import { useHasTouch } from "@/composables/useHasTouch.js";
 import { api } from "@/utils/axios";
 import * as THREE from "three";
 import pLimit from "p-limit";
-import {
-  createLODTextures,
-  disposeLODTextures,
-} from "@/composables/3d-viewer/useTextureLOD.js";
-import {
-  getLODConfigurations,
-  getMaxVisibleDistance,
-} from "@/composables/lodUtils.js";
+// (LOD helpers removidos para mipmaps) - import eliminado definitivamente
+// import "@/composables/3d-viewer/useTextureLOD.js"; // Eliminado: no side-effects necesarios
+// getMaxVisibleDistance eliminado: ya no ocultamos por distancia, solo opacity fade
 
 // Props
 const props = defineProps({
@@ -489,6 +420,11 @@ const INITIAL_RETRY_DELAY = 1000; // Initial delay in ms (exponential backoff)
 const RETRY_MULTIPLIER = 2; // Multiplier for exponential backoff
 const MAX_RETRY_DELAY = 10000; // Maximum delay between retries (10 seconds)
 
+const FADE_START_ABSOLUTE = 100; // inicio de reducción de opacidad
+const FADE_END_ABSOLUTE = 260; // fin de reducción
+
+const MAX_PHOTOS_FOR_BILLBOARD = 5000; // Billboard solo para fotos cercanas
+
 // Stats for monitoring 429 errors
 const error429Stats = ref({
   total: 0,
@@ -504,7 +440,7 @@ const {
   currentChunk,
   error,
   chunkOptions,
-  isCatalogMode,
+
   loadAllPhotos,
   changeChunk,
   reset,
@@ -521,8 +457,6 @@ const useBillboarding = ref(true);
 const currentPosition = ref({ x: 0, y: 0, z: 80 });
 
 // Debug mode for octree visualization
-const showOctreeDebug = ref(false);
-const octreeDebugGroup = markRaw(new THREE.Group());
 
 // Toggle states for collapsible sections
 const showMoreFilters = ref(false);
@@ -556,9 +490,7 @@ const initialLoadingPhase = ref(true);
 const inflateFactor = ref(1);
 const originalPositions = ref([]);
 
-// Performance mode: 1 = high-quality, 2 = balanced, 3 = high-performance
-// En dispositivos touch/mobile, siempre empezar en modo low (3)
-const performanceMode = ref(hasTouch.value || isMobile.value ? 1 : 2);
+// (performance mode eliminado)
 
 // Animación de transición
 const isTransitioning = ref(false);
@@ -603,19 +535,17 @@ const gl = {
   failIfMajorPerformanceCaveat: false, // Allow software rendering
   pixelRatio: 0.75, // Lower pixel ratio for better performance
   precision: "lowp", // Use low precision shaders for better performance
-  logarithmicDepthBuffer: false,
+  logarithmicDepthBuffer: true, // Mejor precisión del z-buffer para escenas grandes
+  outputColorSpace: "srgb", // Usar sRGB para mantener colores correctos
 };
 
-// Three.js objects - Improved lighting setup
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
-const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.7);
-directionalLight1.position.set(10, 10, 10);
+// Three.js objects - NO LIGHTS needed for MeshBasicMaterial
+// MeshBasicMaterial is unlit, lights would cause washing/brightening
 
-// Create lights group
+// Create empty lights group (mantener para compatibilidad con código existente)
 // 🎯 markRaw: Objetos Three.js NO deben ser reactivos para mejor performance
 const lightsGroup = markRaw(new THREE.Group());
-lightsGroup.add(ambientLight);
-lightsGroup.add(directionalLight1);
+// NO añadir luces - MeshBasicMaterial no las usa y pueden causar problemas
 
 // Geometry for photo planes - Optimized for GPU
 // 🎯 markRaw: Evita que Vue haga este objeto reactivo (mejora de performance)
@@ -639,33 +569,26 @@ try {
   textureLoader.setCrossOrigin && textureLoader.setCrossOrigin("anonymous");
 } catch (_) {}
 
-// Helper function to dispose LOD object and all its resources
+// Helper function to dispose photo render object (LOD o Mesh simple)
 const disposeLODObject = (lodObject) => {
   if (!lodObject) return;
-
-  // Dispose all meshes and materials in LOD
-  lodObject.traverse((child) => {
-    if (child.isMesh) {
-      if (child.material) {
-        if (child.material.map) {
-          child.material.map.dispose();
+  // Si era un THREE.LOD, recorrer; si es Mesh directo, tratarlo como único hijo
+  if (lodObject.isLOD) {
+    lodObject.traverse((child) => {
+      if (child.isMesh) {
+        if (child.material) {
+          if (child.material.map) child.material.map.dispose();
+          child.material.dispose();
         }
-        child.material.dispose();
       }
-      // Don't dispose geometry as it's shared (planeGeometry)
+    });
+  } else if (lodObject.isMesh) {
+    if (lodObject.material) {
+      if (lodObject.material.map) lodObject.material.map.dispose();
+      lodObject.material.dispose();
     }
-  });
-
-  // Dispose stored textures
-  if (lodObject.userData.lodTextures) {
-    disposeLODTextures(lodObject.userData.lodTextures);
-    lodObject.userData.lodTextures = null;
   }
-
-  // Remove from LOD group
-  if (lodObject.parent) {
-    lodObject.parent.remove(lodObject);
-  }
+  if (lodObject.parent) lodObject.parent.remove(lodObject);
 };
 
 // Fotos con materiales cargados
@@ -691,7 +614,7 @@ const downloadedImagesCache = new Map();
 // IndexedDB Cache
 const {
   initDB,
-  bulkCheckCache,
+
   bulkLoadFromCache,
   bulkCacheImages,
   getCacheStats,
@@ -701,9 +624,9 @@ const {
 const {
   buildOctree,
   queryFrustum,
-  queryRadius,
+
   getStats: getOctreeStats,
-  getAllBounds,
+
   clear: clearOctree,
 } = useOctree(8, 5); // maxObjects=8, maxLevels=5
 const octreeNeedsRebuild = ref(true);
@@ -735,12 +658,6 @@ const reusableSphere = markRaw(new THREE.Sphere());
 // Distance calculation cache
 const distanceCache = new Map();
 let cacheValidPosition = { x: 0, y: 0, z: 0 };
-
-// Reusable objects for billboard calculations
-// 🎯 markRaw: Objetos temporales de cálculo no necesitan reactividad
-const tempObject = markRaw(new THREE.Object3D());
-const directionToCamera = markRaw(new THREE.Vector3());
-// Quaternions reutilizables para interpolación suave (SLERP)
 
 // Frustum culling - solo renderizar fotos visibles
 const visiblePhotos = ref([]); // SOLO fotos actualmente en el frustum
@@ -927,12 +844,6 @@ const checkAllTexturesLoaded = async () => {
   }
 };
 
-// Función para obtener el label del chunk actual
-const getCurrentChunkLabel = () => {
-  const option = chunkOptions.find((opt) => opt.value === currentChunk.value);
-  return option ? option.label : currentChunk.value;
-};
-
 // Computed para las opciones del tree select de aspectos visuales
 const treeSelectOptions = computed(() => {
   return visualAspectsOptions.map((group) => ({
@@ -997,9 +908,10 @@ const applyFilters = () => {
     // Aplicar filtro de búsqueda textual PRIMERO (más restrictivo)
     if (hasSearchFilter && !searchFilteredIds.has(photo.id)) {
       photo.isVisible = false;
-      // Hide LOD object
-      if (photo.lodObject) {
-        photo.lodObject.visible = false;
+      // Ocultar con opacity en lugar de visible
+      if (photo.lodObject && photo.lodObject.material) {
+        photo.lodObject.material.opacity = 0;
+        photo.lodObject.material.transparent = true;
       }
       return;
     }
@@ -1010,9 +922,10 @@ const applyFilters = () => {
       selectedArtisticScores.value.length === 0
     ) {
       photo.isVisible = true;
-      // Show LOD object
-      if (photo.lodObject) {
-        photo.lodObject.visible = true;
+      // Restaurar opacity (applyDistanceFading lo ajustará según distancia)
+      if (photo.lodObject && photo.lodObject.material) {
+        photo.lodObject.material.opacity = 1.0;
+        photo.lodObject.material.transparent = true;
       }
       return;
     }
@@ -1041,7 +954,7 @@ const applyFilters = () => {
         // Pero dentro de cada categoría, solo necesita cumplir UNA opción (OR)
         passesVisualAspects = Array.from(selectedByCategory.entries()).every(
           ([category, aspectsInCategory]) => {
-            const photoAspects = photo.descriptions.visual_aspects[category];
+            const photoAspects = photo.descriptions?.visual_aspects?.[category];
             if (!photoAspects || !Array.isArray(photoAspects)) {
               return false;
             }
@@ -1059,13 +972,13 @@ const applyFilters = () => {
 
     // Filtro de Artistic Scores (score > 7 para cada score seleccionado)
     if (selectedArtisticScores.value.length > 0) {
-      if (!photo.descriptions.artistic_scores) {
+      if (!photo.descriptions?.artistic_scores) {
         passesArtisticScores = false;
       } else {
         // Para pasar el filtro, la foto debe tener TODOS los scores seleccionados con valor > 7
         passesArtisticScores = selectedArtisticScores.value.every(
           (scoreKey) => {
-            const scoreValue = photo.descriptions.artistic_scores[scoreKey];
+            const scoreValue = photo.descriptions?.artistic_scores?.[scoreKey];
             return scoreValue !== undefined && scoreValue > 7;
           }
         );
@@ -1075,9 +988,10 @@ const applyFilters = () => {
     // La foto es visible solo si pasa AMBOS filtros (AND lógico)
     photo.isVisible = passesVisualAspects && passesArtisticScores;
 
-    // Sync LOD object visibility
-    if (photo.lodObject) {
-      photo.lodObject.visible = photo.isVisible;
+    // Sync mesh opacity (no tocar visible)
+    if (photo.lodObject && photo.lodObject.material) {
+      photo.lodObject.material.opacity = photo.isVisible ? 1.0 : 0;
+      photo.lodObject.material.transparent = true;
     }
   });
 
@@ -1158,7 +1072,7 @@ const onVisualAspectsChange = () => {
 
   // Update LOD distances based on new filtered count
   const visibleCount = filteredPhotos.value.length;
-  updateLODDistances(visibleCount);
+  // updateLODDistances eliminado
 
   // 🔧 CRITICAL: Marcar octree para reconstrucción con fotos filtradas
   octreeNeedsRebuild.value = true;
@@ -1177,7 +1091,7 @@ const onArtisticScoresChange = () => {
 
   // Update LOD distances based on new filtered count
   const visibleCount = filteredPhotos.value.length;
-  updateLODDistances(visibleCount);
+  // updateLODDistances eliminado
 
   // 🔧 CRITICAL: Marcar octree para reconstrucción con fotos filtradas
   octreeNeedsRebuild.value = true;
@@ -1253,7 +1167,7 @@ const performSearch = async () => {
 
     // Update LOD distances based on new filtered count
     const visibleCount = filteredPhotos.value.length;
-    updateLODDistances(visibleCount);
+    // updateLODDistances eliminado
 
     // 🔧 CRITICAL: Marcar octree para reconstrucción con fotos filtradas
     octreeNeedsRebuild.value = true;
@@ -1284,7 +1198,7 @@ const clearSearch = () => {
 
   // Update LOD distances based on new filtered count
   const visibleCount = filteredPhotos.value.length;
-  updateLODDistances(visibleCount);
+  // updateLODDistances eliminado
 
   // 🔧 CRITICAL: Marcar octree para reconstrucción con fotos filtradas
   octreeNeedsRebuild.value = true;
@@ -1444,7 +1358,7 @@ const bulkCacheDownloadedImages = async () => {
 
   isCachingImages.value = true;
   loaderStage.value = "caching";
-  loaderTitle.value = "Caching Images";
+  loaderTitle.value = "Caching images";
   loaderSubtitle.value = "Saving images for faster future loads...";
   cachingProgress.value = 0;
 
@@ -1681,168 +1595,79 @@ const downloadImageOnly = async (
   }
 };
 
-// Función para reintentar carga de foto fallida bajo demanda (cuando usuario se acerca)
-const retryFailedPhotoOnDemand = async (photo) => {
-  if (
-    !photo.__downloadError ||
-    !photo.__canRetryOnDemand ||
-    photo.__downloading
-  ) {
-    return false;
+// (getPerformanceMultiplier eliminado)
+
+// Helper: crear un único Mesh con mipmaps simulando LOD previo
+const createLODObject = (imageElement, position) => {
+  // Redimensionar opcional a POT y tamaño máximo
+  const maxSide = 1024; // configurable
+  let source = imageElement;
+  const needsResize =
+    imageElement.width > maxSide || imageElement.height > maxSide;
+  if (needsResize) {
+    const scale = Math.min(
+      maxSide / imageElement.width,
+      maxSide / imageElement.height
+    );
+    const w = Math.round(imageElement.width * scale);
+    const h = Math.round(imageElement.height * scale);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(imageElement, 0, 0, w, h);
+    source = canvas;
   }
 
-  console.log(
-    `🔄 Reintentando carga bajo demanda para foto fallida: ${photo.id}`
-  );
+  const texture = new THREE.Texture(source);
+  texture.needsUpdate = true;
+  texture.generateMipmaps = true;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
 
-  // Marcar que ya intentamos retry bajo demanda para no repetir constantemente
-  photo.__canRetryOnDemand = false;
-  photo.__downloadError = false; // Reset error flag
-  photo.__imageDownloaded = false; // Reset downloaded flag
+  // Usar sRGB color space para mantener colores correctos
+  texture.colorSpace = THREE.SRGBColorSpace;
 
-  // Intentar descargar de nuevo (marcado como retry bajo demanda para evitar bucle infinito)
-  await downloadImageOnly(photo, 0, true);
+  try {
+    texture.anisotropy = 4; // anisotropía moderada
+  } catch (_) {}
 
-  // Si se descargó exitosamente, crear LOD inmediatamente
-  if (photo.__imageDownloaded && !photo.__downloadError) {
-    const imageElement = downloadedImagesCache.get(photo.id);
-    if (imageElement) {
-      try {
-        const visibleCount = filteredPhotos.value.length;
-        const lodObject = createLODObject(
-          imageElement,
-          photo.position,
-          visibleCount
-        );
-
-        if (lodObject) {
-          if (photo.lodObject) {
-            disposeLODObject(photo.lodObject);
-          }
-
-          photo.lodObject = lodObject;
-          photo.__textureLoaded = true;
-          photo.__loading = false;
-
-          // Set initial visibility based on filter state
-          lodObject.visible = photo.isVisible !== false;
-
-          // Add to LOD group
-          lodGroup.add(lodObject);
-
-          return true;
-        }
-      } catch (error) {
-        console.error(
-          `Error creating LOD for retried photo ${photo.id}:`,
-          error
-        );
-        photo.__downloadError = true;
-      }
-    }
-  }
-
-  return false;
-};
-
-// Helper function to get performance multiplier from performanceMode
-// 1 = high-quality (0.67x distances), 2 = balanced (1.0x), 3 = high-performance (1.5x)
-const getPerformanceMultiplier = () => {
-  switch (performanceMode.value) {
-    case 1: // Low
-      return 0.6;
-    case 2: // Balanced
-      return 1.0;
-    case 3: // Quality
-      return 1.5;
-    default:
-      return 1.0;
-  }
-};
-
-// Helper function to create THREE.LOD object for a photo
-// Uses dynamic LOD distances based on the number of visible photos
-const createLODObject = (imageElement, position, visiblePhotoCount = 2000) => {
-  const performanceMultiplier = getPerformanceMultiplier();
-  const lodConfigs = getLODConfigurations(
-    visiblePhotoCount,
-    performanceMultiplier
-  );
-  const lodTextures = createLODTextures(imageElement, lodConfigs);
-
-  if (!lodTextures || lodTextures.length === 0) return null;
-
-  // Create THREE.LOD object
-  const lod = new THREE.LOD();
-  lod.position.set(position[0], position[1], position[2]);
-
-  // Add each LOD level with its mesh
-  lodTextures.forEach(({ material, distance }) => {
-    const mesh = new THREE.Mesh(planeGeometry, material);
-    lod.addLevel(mesh, distance);
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    alphaTest: 0.01, // Bajo para permitir opacidades bajas
+    depthWrite: false,
+    depthTest: true,
+    opacity: 1,
+    side: THREE.FrontSide,
+    toneMapped: false,
   });
 
-  // Store textures for cleanup
-  lod.userData.lodTextures = lodTextures;
+  const mesh = new THREE.Mesh(planeGeometry, material);
+  mesh.position.set(position[0], position[1], position[2]);
 
-  return markRaw(lod);
+  // Ajustar escala para mantener aspect ratio real
+  const targetAspect = source.width / source.height;
+  const baseAspect = 4 / 3; // planeGeometry base
+  if (targetAspect > baseAspect) {
+    mesh.scale.set(targetAspect / baseAspect, 1, 1);
+  } else {
+    mesh.scale.set(1, baseAspect / targetAspect, 1);
+  }
+
+  return markRaw(mesh);
 };
 
-// Helper function to update LOD distances for existing LOD objects
-// This allows dynamic adjustment without recreating textures
-const updateLODDistances = (visiblePhotoCount) => {
-  const performanceMultiplier = getPerformanceMultiplier();
-  const lodConfigs = getLODConfigurations(
-    visiblePhotoCount,
-    performanceMultiplier
-  );
-  const maxVisibleDistance = getMaxVisibleDistance(
-    visiblePhotoCount,
-    performanceMultiplier
-  );
+// (updateLODDistances eliminado)
 
-  console.log(
-    `🔄 Updating LOD distances for ${visiblePhotoCount} visible photos`
-  );
-  console.log(
-    "📏 New LOD distances:",
-    lodConfigs.map((c) => `${c.level}: ${c.distance}m`).join(", ")
-  );
-  console.log(`🌐 Max visible distance: ${maxVisibleDistance}m`);
-
-  let updatedCount = 0;
-
-  photosWithMaterials.value.forEach((photo) => {
-    if (!photo.lodObject) return;
-
-    const lod = photo.lodObject;
-
-    // THREE.LOD stores levels in an array, we need to update the distance for each level
-    // The levels array has objects with { distance, object }
-    if (lod.levels && lod.levels.length > 0) {
-      // Update distances for each level
-      lodConfigs.forEach((config, index) => {
-        if (lod.levels[index]) {
-          lod.levels[index].distance = config.distance;
-        }
-      });
-      updatedCount++;
-    }
-  });
-
-  console.log(`✅ Updated LOD distances for ${updatedCount} photo objects`);
-};
-
-// FASE 2: Crear objetos THREE.LOD desde imágenes descargadas con 3 niveles de calidad
+// FASE 2 (mipmaps): Crear un único Mesh por foto con mipmaps
 const createTexturesInBulk = () => {
   loaderStage.value = "creating";
   loaderTitle.value = "Creating Textures";
   loaderSubtitle.value = "Preparing 3D view...";
   let createdCount = 0;
   let errorCount = 0;
-
-  // Calculate visible photo count for dynamic LOD configuration
-  const visibleCount = filteredPhotos.value.length;
+  const visibleCount = filteredPhotos.value.length; // usado para distancia máx
 
   photosWithMaterials.value.forEach((photo) => {
     if (photo.__downloadError) {
@@ -1857,12 +1682,8 @@ const createTexturesInBulk = () => {
     }
 
     try {
-      // Create THREE.LOD object with dynamic quality levels based on visible photo count
-      const lodObject = createLODObject(
-        imageElement,
-        photo.position,
-        visibleCount
-      );
+      // Crear Mesh con mipmaps
+      const lodObject = createLODObject(imageElement, photo.position);
 
       if (!lodObject) {
         errorCount++;
@@ -1878,20 +1699,21 @@ const createTexturesInBulk = () => {
       photo.__textureLoaded = true;
       photo.__loading = false;
 
-      // Set initial visibility based on filter state and distance
-      // Photos beyond dynamic max visible distance should not be visible at all
-      if (cameraRef.value && photo.isVisible !== false) {
-        const maxVisibleDistance = getMaxVisibleDistance(
-          visibleCount,
-          getPerformanceMultiplier()
-        );
-        const dx = photo.position[0] - cameraRef.value.position.x;
-        const dy = photo.position[1] - cameraRef.value.position.y;
-        const dz = photo.position[2] - cameraRef.value.position.z;
-        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        lodObject.visible = distance <= maxVisibleDistance;
+      // Visibilidad inicial: respetar solo filtros con opacity, nunca tocar visible
+      lodObject.visible = true; // SIEMPRE visible
+
+      if (photo.isVisible === false) {
+        // Si está explícitamente oculta por filtros, usar opacity 0
+        if (lodObject.material) {
+          lodObject.material.opacity = 0;
+          lodObject.material.transparent = true;
+        }
       } else {
-        lodObject.visible = photo.isVisible !== false;
+        // Todas las fotos no filtradas con opacidad completa
+        if (lodObject.material) {
+          lodObject.material.opacity = 1.0;
+          lodObject.material.transparent = true;
+        }
       }
 
       // Add to LOD group
@@ -1904,9 +1726,14 @@ const createTexturesInBulk = () => {
     }
   });
 
-  console.log("✅ LOD objects created:", createdCount, "| Errors:", errorCount);
   console.log(
-    "📊 Photos with LOD:",
+    "✅ Photo meshes (mipmapped) created:",
+    createdCount,
+    "| Errors:",
+    errorCount
+  );
+  console.log(
+    "📊 Photos with mesh:",
     photosWithMaterials.value.filter((p) => p.lodObject).length
   );
   console.log("📊 Visible photos:", visiblePhotos.value.length);
@@ -2137,7 +1964,7 @@ const registerNewPhotos = async (newPhotos) => {
   if (photosToDownload.length > 0 && !props.isPlayground) {
     console.log(`💾 Cacheando ${photosToDownload.length} nuevas imágenes...`);
     loaderStage.value = "caching";
-    loaderTitle.value = "Caching Images";
+    loaderTitle.value = "Caching images";
 
     const imagesToCache = [];
     for (const photo of photosToDownload) {
@@ -2448,60 +2275,8 @@ const onInflateFactorChange = () => {
   updatePhotoEffects(); // Aplica Billboard con distancias pre-calculadas
 };
 
-// Handler para cambio en performance mode
-const onPerformanceModeChange = () => {
-  const visibleCount = filteredPhotos.value.length;
-  console.log(
-    `🎮 Performance mode changed to: ${
-      performanceMode.value
-    } (multiplier: ${getPerformanceMultiplier()}x)`
-  );
-  // Recalcular y actualizar todas las distancias LOD
-  updateLODDistances(visibleCount);
-  // Actualizar fotos visibles con las nuevas distancias
-  updateVisiblePhotos();
-  updatePhotoEffects();
-};
+// (onPerformanceModeChange eliminado)
 
-// Helper function to calculate distance with caching
-const getCachedDistance = (photoId, photoPosition, cameraPosition) => {
-  // Check if cache is still valid (camera hasn't moved significantly)
-  const dx = cameraPosition.x - cacheValidPosition.x;
-  const dy = cameraPosition.y - cacheValidPosition.y;
-  const dz = cameraPosition.z - cacheValidPosition.z;
-  const cameraDistanceMoved = Math.sqrt(dx * dx + dy * dy + dz * dz);
-
-  if (cameraDistanceMoved > CAMERA_MOVE_THRESHOLD) {
-    // Clear cache and update valid position
-    distanceCache.clear();
-    cacheValidPosition = {
-      x: cameraPosition.x,
-      y: cameraPosition.y,
-      z: cameraPosition.z,
-    };
-  }
-
-  // Check if we have cached distance for this photo
-  if (distanceCache.has(photoId)) {
-    return distanceCache.get(photoId);
-  }
-
-  // Calculate and cache distance
-  const distance = Math.sqrt(
-    Math.pow(cameraPosition.x - photoPosition[0], 2) +
-      Math.pow(cameraPosition.y - photoPosition[1], 2) +
-      Math.pow(cameraPosition.z - photoPosition[2], 2)
-  );
-
-  distanceCache.set(photoId, distance);
-  return distance;
-};
-
-// Función para actualizar fotos visibles usando Frustum Culling ESTRICTO con Octree
-// 🎯 OPTIMIZACIÓN: Usa spatial partitioning para evitar checks innecesarios
-// 🚫 DISTANCIA MÁXIMA DINÁMICA: Fotos más allá de getMaxVisibleDistance() son completamente ocultas
-//    (no se renderizan, no consumen recursos, lodObject.visible = false)
-//    La distancia máxima se ajusta según el número de fotos visibles (filtradas)
 const updateVisiblePhotos = () => {
   if (!cameraRef.value || filteredPhotos.value.length === 0) {
     visiblePhotos.value = [];
@@ -2510,12 +2285,6 @@ const updateVisiblePhotos = () => {
 
   const camera = cameraRef.value;
 
-  // Calculate max visible distance based on filtered photo count
-  const maxVisibleDistance = getMaxVisibleDistance(
-    filteredPhotos.value.length,
-    getPerformanceMultiplier()
-  );
-
   // Rebuild octree if needed (after position changes)
   if (octreeNeedsRebuild.value && filteredPhotos.value.length > 0) {
     buildOctree(filteredPhotos.value);
@@ -2523,6 +2292,20 @@ const updateVisiblePhotos = () => {
     const stats = getOctreeStats();
     console.log("🌳 Octree rebuilt for frustum culling:", stats);
   }
+
+  // 🔧 CRÍTICO: Mantener fotos filtradas con opacity=0 en lugar de visible=false
+  // Esto asegura que las fotos filtradas se oculten pero sin usar visible
+  const filteredIds = new Set(filteredPhotos.value.map((p) => p.id));
+  photosWithMaterials.value.forEach((photo) => {
+    if (
+      !filteredIds.has(photo.id) &&
+      photo.lodObject &&
+      photo.lodObject.material
+    ) {
+      photo.lodObject.material.opacity = 0;
+      photo.lodObject.material.transparent = true;
+    }
+  });
 
   // Reutilizar objetos existentes para evitar garbage collection
   reusableMatrix.multiplyMatrices(
@@ -2540,34 +2323,36 @@ const updateVisiblePhotos = () => {
   // �🔥 CRÍTICO: Filtrar SOLO fotos que intersectan con el frustum ACTUAL
   // Verificación final con esfera para mayor precisión
   visiblePhotos.value = candidatePhotos.filter((photo) => {
-    reusableVector3.set(...photo.position);
-    reusableSphere.set(reusableVector3, 2); // Radio de la esfera de la foto
-
-    // 🚫 FILTRO CRÍTICO: Verificar distancia máxima ANTES del frustum check
-    // Fotos más allá de la distancia máxima dinámica NO SE RENDERIZAN (cero recursos)
-    const dx = photo.position[0] - camera.position.x;
-    const dy = photo.position[1] - camera.position.y;
-    const dz = photo.position[2] - camera.position.z;
-    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-
-    if (distance > maxVisibleDistance) {
-      // Ocultar completamente el LOD object
-      if (photo.lodObject) {
-        photo.lodObject.visible = false;
-      }
+    // 🔧 PRIMER CHECK: Respetar filtros - si está explícitamente oculta, skip (opacity ya está en 0)
+    if (photo.isVisible === false) {
       return false;
     }
+
+    reusableVector3.set(...photo.position);
+    reusableSphere.set(reusableVector3, 2); // Radio de la esfera de la foto
 
     // Verificar frustum para fotos dentro del rango visible
     const isInFrustum = reusableFrustum.intersectsSphere(reusableSphere);
 
-    // Actualizar visibilidad del LOD object
-    if (photo.lodObject) {
-      photo.lodObject.visible = isInFrustum;
-    }
+    // TODAS LAS FOTOS SON SIEMPRE VISIBLES - no tocar visible en absoluto
+    // La opacidad se controla en applyDistanceFading
 
     return isInFrustum;
   });
+
+  // 🔍 DEBUG: Log para verificar filtrado
+  if (
+    frameCounter % 60 === 0 &&
+    (selectedVisualAspects.value.length > 0 ||
+      selectedArtisticScores.value.length > 0)
+  ) {
+    console.log("🔍 updateVisiblePhotos:", {
+      candidatePhotos: candidatePhotos.length,
+      filteredOut: candidatePhotos.filter((p) => p.isVisible === false).length,
+      visiblePhotos: visiblePhotos.value.length,
+      totalPhotos: photosWithMaterials.value.length,
+    });
+  }
 
   // Actualizar cache de fotos con texturas cargadas
   visiblePhotos.value.forEach((photo) => {
@@ -2603,87 +2388,6 @@ const updateVisiblePhotos = () => {
       return (a?.__priority || 0) - (b?.__priority || 0);
     });
   }
-
-  // Actualizar visualización debug del octree si está activada
-  if (showOctreeDebug.value) {
-    updateOctreeDebugVisualization();
-  }
-};
-
-// Función para visualizar los bounds del Octree (debug)
-const updateOctreeDebugVisualization = () => {
-  // Limpiar visualización anterior
-  while (octreeDebugGroup.children.length > 0) {
-    const child = octreeDebugGroup.children[0];
-    if (child.geometry) child.geometry.dispose();
-    if (child.material) child.material.dispose();
-    octreeDebugGroup.remove(child);
-  }
-
-  if (!showOctreeDebug.value) return;
-
-  // Obtener todos los bounds del octree
-  const bounds = getAllBounds();
-
-  // Crear wireframe boxes para cada bound
-  const material = new THREE.LineBasicMaterial({
-    color: 0x00ff00,
-    opacity: 0.3,
-    transparent: true,
-  });
-
-  bounds.forEach((box) => {
-    const size = new THREE.Vector3();
-    const center = new THREE.Vector3();
-    box.getSize(size);
-    box.getCenter(center);
-
-    const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
-    const edges = new THREE.EdgesGeometry(geometry);
-    const line = new THREE.LineSegments(edges, material.clone());
-    line.position.copy(center);
-
-    octreeDebugGroup.add(line);
-    geometry.dispose();
-    edges.dispose();
-  });
-
-  console.log(`🐛 Octree debug: Visualizando ${bounds.length} bounds`);
-};
-
-// Handler para toggle de debug del octree
-const onOctreeDebugToggle = () => {
-  if (showOctreeDebug.value) {
-    updateOctreeDebugVisualization();
-  } else {
-    // Limpiar visualización
-    while (octreeDebugGroup.children.length > 0) {
-      const child = octreeDebugGroup.children[0];
-      if (child.geometry) child.geometry.dispose();
-      if (child.material) child.material.dispose();
-      octreeDebugGroup.remove(child);
-    }
-  }
-};
-
-// Función para calcular rotación billboard (mirar cámara) - optimizada
-const calculateBillboardRotation = (photoPosition, cameraPosition) => {
-  tempObject.position.set(...photoPosition);
-
-  // Reutilizar vector existente
-  directionToCamera.set(
-    cameraPosition.x - photoPosition[0],
-    cameraPosition.y - photoPosition[1],
-    cameraPosition.z - photoPosition[2]
-  );
-
-  tempObject.lookAt(
-    tempObject.position.x + directionToCamera.x,
-    tempObject.position.y + directionToCamera.y,
-    tempObject.position.z + directionToCamera.z
-  );
-
-  return [tempObject.rotation.x, tempObject.rotation.y, tempObject.rotation.z];
 };
 
 // 🚀 NUEVA: Calcular distancias para todas las fotos visibles UNA SOLA VEZ por frame
@@ -2717,8 +2421,10 @@ const updatePhotoEffects = () => {
   // Ordenar por distancia una sola vez
   photosWithDistances.sort((a, b) => a.distSq - b.distSq);
 
-  // Aplicar billboarding (la opacidad ya está establecida en los materiales LOD)
+  // Aplicar billboarding
   if (useBillboarding.value) updateBillboardRotations(photosWithDistances);
+
+  // El fading ya se aplica cada frame en el loop principal, no hace falta aquí
 };
 
 // Función para actualizar rotaciones billboard
@@ -2754,15 +2460,48 @@ const updateBillboardRotations = (photosWithDistances) => {
   });
 };
 
-// 🎯 Límite máximo de fotos para procesar Billboard (efecto visual menor)
-// LOD se aplica SIEMPRE a todas las fotos (es necesario para performance)
-// Opacidad está pre-establecida en cada nivel LOD (no requiere cálculo por frame)
-const MAX_PHOTOS_FOR_BILLBOARD = 2000; // Billboard solo para fotos cercanas
+// Parámetros de fading simplificados
 
-// Handler para cambio de billboarding
-const onBillboardingToggle = () => {
-  if (useBillboarding.value) {
-    updatePhotoEffects(); // Aplica Billboard con distancias pre-calculadas
+const applyDistanceFading = (photosWithDistances) => {
+  if (!cameraRef.value) return;
+  // IMPORTANTE: procesar TODAS las fotos con lodObject, no solo visibles en frustum
+  // porque fotos lejanas/ocultas también necesitan fade para no verse opacas al girar
+  const allPhotosToFade = photosWithMaterials.value.filter((p) => p.lodObject);
+  if (allPhotosToFade.length === 0) return;
+
+  // Simplificado: usar distancias absolutas fijas para fading
+  const fadeStart = FADE_START_ABSOLUTE;
+  const fadeEnd = FADE_END_ABSOLUTE;
+  const fadeRange = Math.max(1, fadeEnd - fadeStart);
+
+  const cameraPos = cameraRef.value.position;
+
+  for (const photo of allPhotosToFade) {
+    // Calcular distancia para todas las fotos, no usar precalculada de visibles
+    const dx = photo.position[0] - cameraPos.x;
+    const dy = photo.position[1] - cameraPos.y;
+    const dz = photo.position[2] - cameraPos.z;
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+    const mesh = photo.lodObject.isLOD ? null : photo.lodObject;
+    if (!mesh || !mesh.material) continue;
+
+    // 🔧 CRÍTICO: Respetar filtros - ocultar con opacity si está filtrada
+    if (photo.isVisible === false) {
+      mesh.material.opacity = 0;
+      mesh.material.transparent = true;
+    } else {
+      // Aplicar transparencia basada en distancia
+      if (distance < fadeStart) {
+        mesh.material.opacity = 1.0;
+      } else if (distance >= fadeEnd) {
+        mesh.material.opacity = 0.05; // Opacidad muy baja en lugar de ocultar
+      } else {
+        const fadeProgress = (distance - fadeStart) / fadeRange;
+        mesh.material.opacity = Math.max(0.05, 1.0 - fadeProgress);
+      }
+      mesh.material.transparent = true;
+    }
   }
 };
 
@@ -2864,7 +2603,7 @@ const animate = () => {
       // Update LOD levels based on camera position (THREE.LOD.update())
       if (cameraRef.value) {
         visiblePhotos.value.forEach((photo) => {
-          if (photo.lodObject) {
+          if (photo.lodObject && photo.lodObject.isLOD) {
             photo.lodObject.update(cameraRef.value);
           }
         });
@@ -2883,6 +2622,12 @@ const animate = () => {
         if (useBillboarding.value)
           updateBillboardRotations(photosWithDistances);
       }
+    }
+
+    // Aplicar fading SIEMPRE cada frame (no throttled) para respuesta inmediata
+    // La función ahora procesa todas las fotos internamente
+    if (cameraRef.value && photosWithMaterials.value.length > 0) {
+      applyDistanceFading();
     }
   }
 
@@ -3220,12 +2965,6 @@ onUnmounted(() => {
 
   // Limpiar octree y su visualización debug
   clearOctree();
-  while (octreeDebugGroup.children.length > 0) {
-    const child = octreeDebugGroup.children[0];
-    if (child.geometry) child.geometry.dispose();
-    if (child.material) child.material.dispose();
-    octreeDebugGroup.remove(child);
-  }
 
   // Limpiar objetos LOD
   photosWithMaterials.value.forEach((photo) => {
@@ -3597,21 +3336,18 @@ onUnmounted(() => {
 }
 
 .radial-slider,
-.lod-slider,
-.performance-slider {
+.lod-slider {
   width: 100%;
 }
 
 /* Adjust n-slider mark labels to be smaller and prevent overflow */
 .radial-slider :deep(.n-slider-marks),
-.lod-slider :deep(.n-slider-marks),
-.performance-slider :deep(.n-slider-marks) {
+.lod-slider :deep(.n-slider-marks) {
   padding: 0 2px; /* Add small padding to marks container */
 }
 
 .radial-slider :deep(.n-slider-mark),
-.lod-slider :deep(.n-slider-mark),
-.performance-slider :deep(.n-slider-mark) {
+.lod-slider :deep(.n-slider-mark) {
   font-size: 9px !important;
   white-space: nowrap;
   overflow: visible;
@@ -3619,8 +3355,7 @@ onUnmounted(() => {
 }
 
 .radial-slider :deep(.n-slider-mark-text),
-.lod-slider :deep(.n-slider-mark-text),
-.performance-slider :deep(.n-slider-mark-text) {
+.lod-slider :deep(.n-slider-mark-text) {
   font-size: 9px !important;
   transform: translateX(-50%);
   max-width: 60px;
@@ -3630,15 +3365,13 @@ onUnmounted(() => {
 
 /* Special handling for first and last marks to prevent overflow */
 .radial-slider :deep(.n-slider-mark:first-child .n-slider-mark-text),
-.lod-slider :deep(.n-slider-mark:first-child .n-slider-mark-text),
-.performance-slider :deep(.n-slider-mark:first-child .n-slider-mark-text) {
+.lod-slider :deep(.n-slider-mark:first-child .n-slider-mark-text) {
   transform: translateX(0);
   text-align: left;
 }
 
 .radial-slider :deep(.n-slider-mark:last-child .n-slider-mark-text),
-.lod-slider :deep(.n-slider-mark:last-child .n-slider-mark-text),
-.performance-slider :deep(.n-slider-mark:last-child .n-slider-mark-text) {
+.lod-slider :deep(.n-slider-mark:last-child .n-slider-mark-text) {
   transform: translateX(-100%);
   text-align: right;
 }
@@ -3821,7 +3554,6 @@ onUnmounted(() => {
   color: var(--primary-color, #3b82f6);
   font-size: var(--font-size-sm, 14px);
   font-weight: var(--font-weight-semibold, 600);
-  min-width: 35px;
   white-space: nowrap;
 }
 
