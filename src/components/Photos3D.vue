@@ -354,23 +354,49 @@
 
         <!-- Navigation Controls Content -->
         <div v-if="showNavigationControls" class="controls-info">
-          <div class="control-tip">
-            <strong>Click on stage:</strong> Activate camera controls
-          </div>
-          <div class="control-tip">
-            <strong>Escape:</strong> Return to normal mouse
-          </div>
-          <div class="control-tip">
-            <strong>WASD:</strong> Navigate forward/back/left/right
-          </div>
-          <div class="control-tip">
-            <strong>Wheel:</strong> Accelerate movement speed
-          </div>
-          <div class="control-tip"><strong>F:</strong> Move up</div>
-          <div class="control-tip"><strong>V:</strong> Move down</div>
+          <!-- Desktop Controls -->
+          <template v-if="!isMobile">
+            <div class="control-tip">
+              <strong>Click on stage:</strong> Activate camera controls
+            </div>
+            <div class="control-tip">
+              <strong>Escape:</strong> Return to normal mouse
+            </div>
+            <div class="control-tip">
+              <strong>WASD:</strong> Navigate forward/back/left/right
+            </div>
+            <div class="control-tip">
+              <strong>Wheel:</strong> Accelerate movement speed
+            </div>
+            <div class="control-tip"><strong>F:</strong> Move up</div>
+            <div class="control-tip"><strong>V:</strong> Move down</div>
+          </template>
+          
+          <!-- Touch Controls (Mobile) -->
+          <template v-else>
+            <div class="control-tip">
+              <strong>One finger drag:</strong> Rotate camera view
+            </div>
+            <div class="control-tip">
+              <strong>Two finger pinch:</strong> Move forward/backward
+            </div>
+            <div class="control-tip">
+              <strong>Two finger drag:</strong> Move left/right/forward/back
+            </div>
+            <div class="control-tip">
+              <strong>Tip:</strong> Combine gestures for smooth navigation
+            </div>
+          </template>
         </div>
       </div>
     </div>
+
+    <!-- Touch Controls Hints (Mobile Only) -->
+    <TouchControlsHints
+      v-if="isMobile"
+      :auto-show="true"
+      storage-key="photos3d-touch-hints-dismissed"
+    />
 
     <!-- Discrete Loading Indicator -->
     <div
@@ -411,8 +437,10 @@ import {
   NButton,
 } from "naive-ui";
 import { CloseOutlined, SettingOutlined, InfoCircleFilled } from "@vicons/antd";
+import TouchControlsHints from "./TouchControlsHints.vue";
 import { use3DPhotos } from "@/composables/3d-viewer/use3DPhotos.js";
 import { useFirstPersonControls } from "@/composables//3d-viewer/useFirstPersonControls.js";
+import { useTouchControls } from "@/composables/3d-viewer/useTouchControls.js";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useIndexedDBCache } from "@/composables/useIndexedDBCache.js";
@@ -542,8 +570,10 @@ const TRANSITION_DURATION = 1500; // 1.5 segundos
 // Valor local del selector para evitar conflictos con v-model
 const selectedChunk = ref(null);
 
-// First Person Controls
+// First Person Controls (keyboard/mouse)
 const fpControls = ref(null);
+// Touch Controls (mobile)
+const touchControls = ref(null);
 let animationId = null;
 
 // Aspect ratio dinámico para evitar problemas de resize
@@ -925,12 +955,18 @@ const checkAllTexturesLoaded = async () => {
     navigationBlocked.value = false;
 
     // Activar controles de navegación si existen
-    if (fpControls.value) {
-      console.log("🎮 Activando controles de navegación...");
-      fpControls.value.setup();
+  if (fpControls.value) {
+    console.log("🎮 Activando controles de navegación (desktop) (desktop)...");
+    fpControls.value.setup();
     }
-
-    // Ocultar loader
+    if (touchControls.value) {
+      console.log("📱 Activando controles táctiles (mobile)...");
+      touchControls.value.setup();
+  }
+  if (touchControls.value) {
+    console.log("📱 Activando controles táctiles (mobile)...");
+    touchControls.value.setup();
+  }    // Ocultar loader
     hideLoader();
   }
 };
@@ -2795,8 +2831,15 @@ const animate = () => {
   else if (frameTime > 26 && dynamicBatch > MIN_BATCH) dynamicBatch--;
 
   // Bloquear controles durante fase de descarga inicial
-  if (fpControls.value && !navigationBlocked.value) {
-    fpControls.value.update();
+  if (!navigationBlocked.value) {
+    // Update keyboard/mouse controls
+    if (fpControls.value) {
+      fpControls.value.update();
+    }
+    // Update touch controls on mobile
+    if (touchControls.value && isMobile.value) {
+      touchControls.value.update();
+    }
   }
 
   // Actualizar transición de posiciones si está activa
@@ -2939,36 +2982,58 @@ const startDownloadLoop = () => {
 // Inicializar controles FPS
 const initFirstPersonControls = () => {
   if (!cameraRef.value || !containerRef.value) {
-    console.warn("Camera or container not available for FPS controls");
+    console.warn("Camera or container not available for controls");
     return;
   }
 
   const camera = cameraRef.value;
   const domElement = containerRef.value;
 
-  fpControls.value = useFirstPersonControls(camera, domElement);
+  // Initialize appropriate controls based on device type
+  if (isMobile.value) {
+    console.log("📱 Initializing touch controls for mobile device");
+    touchControls.value = useTouchControls(camera, domElement);
 
-  // Solo activar controles si no estamos en fase de descarga bloqueada
-  if (!navigationBlocked.value) {
-    fpControls.value.setup();
+    // Solo activar controles si no estamos en fase de descarga bloqueada
+    if (!navigationBlocked.value) {
+      touchControls.value.setup();
+    }
+
+    // Configure touch controls (same profile as keyboard controls)
+    touchControls.value.setSpeedProfile({
+      initial: 0.01,
+      max: 45,
+      accelerateInSeconds: 12.5,
+    });
+    touchControls.value.setAccelerationRate(5);
+    touchControls.value.setWorldScale(2);
+    touchControls.value.setTouchSensitivity(0.0025);
+  } else {
+    console.log("🖱️ Initializing keyboard/mouse controls for desktop");
+    fpControls.value = useFirstPersonControls(camera, domElement);
+
+    // Solo activar controles si no estamos en fase de descarga bloqueada
+    if (!navigationBlocked.value) {
+      fpControls.value.setup();
+    }
+
+    fpControls.value.setSpeedProfile({
+      initial: 0.01, // control fino inicial
+      max: 45, // velocidad tope (ajustable)
+      accelerateInSeconds: 12.5,
+    });
+    // Bajar aceleración lineal para que accelerateInSeconds tenga efecto
+    fpControls.value.setAccelerationRate(5); // de 60 → 5 (mucho más suave)
+    // Ajustar escalado global si el espacio es muy grande
+    fpControls.value.setWorldScale(2); // duplica desplazamiento efectivo
+    // Sensibilidad de ratón
+    fpControls.value.setMouseSensitivity(0.0025);
+    // Factor de velocidad de rueda del ratón más lento
+    fpControls.value.setWheelSpeedFactor(0.15); // 15% = mucho más lento
+    // Activar debug temporalmente para verificar
+    fpControls.value.toggleDebug(true);
+    setTimeout(() => fpControls.value.toggleDebug(false), 5000);
   }
-
-  fpControls.value.setSpeedProfile({
-    initial: 0.01, // control fino inicial
-    max: 45, // velocidad tope (ajustable)
-    accelerateInSeconds: 12.5,
-  });
-  // Bajar aceleración lineal para que accelerateInSeconds tenga efecto
-  fpControls.value.setAccelerationRate(5); // de 60 → 5 (mucho más suave)
-  // Ajustar escalado global si el espacio es muy grande
-  fpControls.value.setWorldScale(2); // duplica desplazamiento efectivo
-  // Sensibilidad de ratón
-  fpControls.value.setMouseSensitivity(0.0025);
-  // Factor de velocidad de rueda del ratón más lento
-  fpControls.value.setWheelSpeedFactor(0.15); // 15% = mucho más lento
-  // Activar debug temporalmente para verificar
-  fpControls.value.toggleDebug(true);
-  setTimeout(() => fpControls.value.toggleDebug(false), 5000);
 
   // Iniciar loop de animación
   animate();
@@ -3153,7 +3218,13 @@ onUnmounted(() => {
     resizeObserver = null;
   }
 
-  // Limpiar controles FPS
+  // Limpiar controles FPS y touch
+  if (fpControls.value) {
+    fpControls.value.cleanup();
+  }
+  if (touchControls.value) {
+    touchControls.value.cleanup();
+  }
 
   // Cancelar animaciones
   if (animationId) {
@@ -3199,10 +3270,25 @@ onUnmounted(() => {
   position: relative;
   background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
   cursor: crosshair;
+  /* Touch-specific optimizations */
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .photos-3d-container:fullscreen {
   cursor: none;
+}
+
+/* Mobile-specific cursor - use grab cursor for touch devices */
+@media (hover: none) and (pointer: coarse) {
+  .photos-3d-container {
+    cursor: grab;
+  }
+  .photos-3d-container:active {
+    cursor: grabbing;
+  }
 }
 
 .ui-overlay {
