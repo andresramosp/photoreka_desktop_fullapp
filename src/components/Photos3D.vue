@@ -876,13 +876,17 @@ const checkAllTexturesLoaded = async () => {
     );
 
     // Solo cachear las que NO vinieron de cache (las recién descargadas)
-    if (downloaded > 0) {
+    if (downloaded > 0 && !props.isPlayground) {
       console.log(`💾 Cacheando ${downloaded} imágenes nuevas...`);
       await bulkCacheDownloadedImages();
     } else {
-      console.log(
-        `✅ Todas las imágenes vinieron de cache, saltando fase de cacheo`
-      );
+      if (props.isPlayground) {
+        console.log(`⚠️ Cacheo deshabilitado en modo playground`);
+      } else {
+        console.log(
+          `✅ Todas las imágenes vinieron de cache, saltando fase de cacheo`
+        );
+      }
     }
 
     console.log("🎨 Creando texturas en bulk...");
@@ -1430,6 +1434,14 @@ const updateTransitionPositions = (currentTime) => {
   }
 }; // Nueva fase: Cachear todas las imágenes descargadas en IndexedDB
 const bulkCacheDownloadedImages = async () => {
+  // Skip caching if isPlayground
+  if (props.isPlayground) {
+    console.log(`⚠️ Cacheo deshabilitado en modo playground`);
+    isCachingImages.value = false;
+    cachingProgress.value = 100;
+    return;
+  }
+
   isCachingImages.value = true;
   loaderStage.value = "caching";
   loaderTitle.value = "Caching Images";
@@ -1499,7 +1511,10 @@ const bulkCacheDownloadedImages = async () => {
 
   console.log(`💾 Cacheando ${imagesToCache.length} imágenes en IndexedDB...`);
 
-  if (imagesToCache.length > 0) {
+  // Skip caching if isPlayground
+  if (props.isPlayground) {
+    console.log(`⚠️ Cacheo deshabilitado en modo playground`);
+  } else if (imagesToCache.length > 0) {
     try {
       const result = await bulkCacheImages(imagesToCache);
       console.log(
@@ -1949,6 +1964,12 @@ const loadImagesFromCache = async (photos) => {
 
   console.log(`🔍 Cargando fotos desde cache para ${photoIds.length} fotos...`);
 
+  // Skip cache if isPlayground
+  if (props.isPlayground) {
+    console.log(`⚠️ Cache deshabilitado en modo playground`);
+    return new Map();
+  }
+
   try {
     // Load cached images in bulk (devuelve solo los que existen)
     const cachedBlobs = await bulkLoadFromCache(photoIds);
@@ -2033,8 +2054,14 @@ const registerNewPhotos = async (newPhotos) => {
   const photoIds = newPhotos.map((p) => p.id);
   console.log(`🔍 Cargando fotos desde cache para ${photoIds.length} fotos...`);
 
-  // Cargar blobs desde cache en bulk (devuelve solo los que existen)
-  const cachedBlobs = await bulkLoadFromCache(photoIds);
+  // Skip cache if isPlayground
+  let cachedBlobs = new Map();
+  if (props.isPlayground) {
+    console.log(`⚠️ Cache deshabilitado en modo playground`);
+  } else {
+    // Cargar blobs desde cache en bulk (devuelve solo los que existen)
+    cachedBlobs = await bulkLoadFromCache(photoIds);
+  }
   console.log(`✅ Cargadas ${cachedBlobs.size} imágenes desde cache`);
 
   // Convertir blobs a HTMLImageElements y guardar en downloadedImagesCache
@@ -2107,7 +2134,7 @@ const registerNewPhotos = async (newPhotos) => {
   }
 
   // ===== PASO 3: Cachear las nuevas descargas =====
-  if (photosToDownload.length > 0) {
+  if (photosToDownload.length > 0 && !props.isPlayground) {
     console.log(`💾 Cacheando ${photosToDownload.length} nuevas imágenes...`);
     loaderStage.value = "caching";
     loaderTitle.value = "Caching Images";
@@ -2146,6 +2173,10 @@ const registerNewPhotos = async (newPhotos) => {
         `✅ Cacheo completado: ${result.success} exitosos, ${result.failed} fallidos`
       );
     }
+  } else if (photosToDownload.length > 0 && props.isPlayground) {
+    console.log(
+      `⚠️ Cacheo deshabilitado en modo playground (${photosToDownload.length} imágenes descargadas)`
+    );
   }
 
   // ===== PASO 4: Crear texturas =====
@@ -3791,7 +3822,6 @@ onUnmounted(() => {
   font-size: var(--font-size-sm, 14px);
   font-weight: var(--font-weight-semibold, 600);
   min-width: 35px;
-  text-align: right;
   white-space: nowrap;
 }
 
