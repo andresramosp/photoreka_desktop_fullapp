@@ -592,7 +592,7 @@ const updateCameraAspect = () => {
 const detectGPU = () => {
   try {
     const canvas = document.createElement("canvas");
-    const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
+    const gl = false;//canvas.getContext("webgl2") || canvas.getContext("webgl");
 
     if (!gl) {
       console.error("❌ WebGL not supported - falling back to CPU rendering");
