@@ -342,11 +342,50 @@ export default class ThreeDManager {
       })
     }
 
+    // Obtener tags filtrados para cada foto
+    let tagsMap = new Map()
+    if (photoIdsForDescriptions.length > 0) {
+      const tagsResult = await db.rawQuery(
+        `
+        SELECT 
+          tp.photo_id,
+          tp.id as tag_photo_id,
+          tp.category,
+          tp.area,
+          t.id as tag_id,
+          t.name as tag_name,
+          t.group as tag_group
+        FROM tags_photos tp
+        JOIN tags t ON tp.tag_id = t.id
+        WHERE tp.photo_id = ANY(:photoIds)
+          AND tp.category IN ('context_story', 'visual_accents', 'artistic_scores')
+          AND t.group IN (  'person','animals','objects','toponym', 'symbols','abstract concept','artistic_scores')
+        ORDER BY tp.photo_id, tp.id
+      `,
+        { photoIds: photoIdsForDescriptions }
+      )
+
+      // Agrupar tags por photo_id
+      tagsResult.rows.forEach((row: any) => {
+        if (!tagsMap.has(row.photo_id)) {
+          tagsMap.set(row.photo_id, [])
+        }
+        tagsMap.get(row.photo_id).push({
+          id: row.tag_photo_id,
+          category: row.category,
+          area: row.area,
+          name: row.tag_name,
+          group: row.tag_group,
+        })
+      })
+    }
+
     const photos3D = reducedVectors
       .map((reduced: any) => {
         const photoData = photosMap.get(parseInt(reduced.id))
         if (!photoData) return null
         const descriptions = descriptionsMap.get(photoData.id) || {}
+        const tags = tagsMap.get(photoData.id) || []
         return {
           id: photoData.id,
           originalFileName: photoData.originalFileName,
@@ -354,6 +393,7 @@ export default class ThreeDManager {
           chunk: photoData.chunk,
           coordinates: reduced.embedding_3d,
           descriptions,
+          tags,
         }
       })
       .filter(Boolean)
