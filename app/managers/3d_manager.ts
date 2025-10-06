@@ -358,8 +358,8 @@ export default class ThreeDManager {
         FROM tags_photos tp
         JOIN tags t ON tp.tag_id = t.id
         WHERE tp.photo_id = ANY(:photoIds)
-          AND tp.category IN ('context_story', 'visual_accents', 'artistic_scores')
-          AND t.group IN (  'person','animals','objects','toponym', 'symbols','abstract concept','artistic_scores')
+          AND tp.category IN ('context_story', 'visual_accents')
+          AND t.group IN (  'person','animals','objects','toponym', 'symbols','abstract concept')
         ORDER BY tp.photo_id, tp.id
       `,
         { photoIds: photoIdsForDescriptions }
