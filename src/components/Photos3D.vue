@@ -339,11 +339,7 @@
     </div>
 
     <!-- Discrete Loading Indicator -->
-    <div
-      v-if="showDiscreteLoader"
-      class="discrete-loader"
-      :class="{ 'playground-spacing': isPlayground }"
-    >
+    <div v-if="showDiscreteLoader" class="discrete-loader">
       <div class="loader-spinner"></div>
       <span class="loader-text">{{ loaderTitle }}</span>
       <span
@@ -3608,25 +3604,22 @@ onUnmounted(() => {
 
 /* Discrete Loader */
 .discrete-loader {
-  position: absolute;
-  bottom: 80px;
+  position: fixed;
+  bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--bg-container, rgba(26, 26, 31, 0.9));
-  backdrop-filter: blur(8px);
+  background: var(--bg-container, rgba(26, 26, 31, 0.95));
+  backdrop-filter: blur(12px);
   border-radius: var(--radius-md, 8px);
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15));
   box-shadow: var(--shadow-md);
   padding: var(--spacing-sm, 8px) var(--spacing-md, 12px);
-  z-index: 1500;
+  z-index: 9999;
   display: flex;
   align-items: center;
   gap: var(--spacing-sm, 8px);
   animation: loaderSlideUp 0.3s ease-out;
-}
-
-.discrete-loader.playground-spacing {
-  bottom: 10px;
+  max-width: 90vw;
 }
 
 @keyframes loaderSlideUp {

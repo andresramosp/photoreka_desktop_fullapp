@@ -51,12 +51,6 @@ const hasPhotos = computed(() => {
   return photos.length > 0;
 });
 
-// Methods
-const retry = async () => {
-  error.value = null;
-  await loadPhotos();
-};
-
 const loadPhotos = async () => {
   // Solo cargar fotos del store en modo autenticado
   if (isCatalogMode.value) {

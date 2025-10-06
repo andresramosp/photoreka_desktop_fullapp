@@ -5,7 +5,8 @@ import adaptiveInitialSpacing from "@/utils/adaptiveInitialSpacing";
 
 const useAdaptiveSpacing = true;
 
-export function use3DPhotos(userId = null) {
+// lowPerformance: si es true limita a 500 fotos priorizando mayor aesthetic_quality
+export function use3DPhotos(userId = null, lowPerformance = false) {
   // Estado reactivo
   const photos3D = ref([]);
   const isLoadingPositions = ref(false);
@@ -65,8 +66,21 @@ export function use3DPhotos(userId = null) {
     try {
       const photos = await loadPhotos(chunkName);
 
+      // Filtrado para modo lowPerformance
+      let workingPhotos = photos;
+      if (lowPerformance && photos.length > 500) {
+        const getScore = (p) =>
+          p?.descriptions?.artistic_scores?.aesthetic_quality ?? -Infinity;
+        workingPhotos = [...photos]
+          .sort((a, b) => getScore(b) - getScore(a))
+          .slice(0, 500);
+        console.log(
+          `⚡ LowPerformance activo: filtradas ${photos.length} -> ${workingPhotos.length} (top aesthetic_quality)`
+        );
+      }
+
       // Extract raw coordinates for adaptive spacing
-      const rawPositions = photos.map(
+      const rawPositions = workingPhotos.map(
         (p) => p.coordinates || p.position || p.coords || [0, 0, 0]
       );
 
@@ -105,15 +119,16 @@ export function use3DPhotos(userId = null) {
         );
       }
 
-      if (reuseExisting && photos3D.value.length > 0) {
+      // Si lowPerformance está activo, no reutilizamos (dataset puede cambiar tamaño significativamente)
+      if (reuseExisting && photos3D.value.length > 0 && !lowPerformance) {
         // Modo reutilización: actualizar solo las coordenadas de las fotos existentes
         console.log(
-          `♻️ Actualizando coordenadas de ${photos.length} fotos existentes`
+          `♻️ Actualizando coordenadas de ${workingPhotos.length} fotos existentes`
         );
 
         // Crear un mapa de ID -> nuevas coordenadas
         const coordsMap = new Map();
-        photos.forEach((photo, idx) => {
+        workingPhotos.forEach((photo, idx) => {
           coordsMap.set(
             photo.id,
             adaptedPositions[idx] || photo.coordinates || [0, 0, 0]
@@ -134,7 +149,7 @@ export function use3DPhotos(userId = null) {
         });
       } else {
         // Modo normal: reemplazar todas las fotos
-        const processedPhotos = photos.map((photo, idx) => {
+        const processedPhotos = workingPhotos.map((photo, idx) => {
           const newPos = adaptedPositions[idx];
           return {
             ...photo,
@@ -207,5 +222,6 @@ export function use3DPhotos(userId = null) {
     loadAllPhotos,
     changeChunk,
     reset,
+    lowPerformance,
   };
 }
