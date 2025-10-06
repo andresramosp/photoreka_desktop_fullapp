@@ -1662,48 +1662,18 @@ let textureCreationRunning = false;
 let lastFrameCreationTime = 0;
 let adaptiveBatch = 0;
 
-// LRU de texturas activas para evitar crecer sin límite
-const activeTexturesLRU = new Map(); // id -> texture
-const MAX_ACTIVE_TEXTURES_MOBILE = 950; // ajustar tras medir
-const MAX_ACTIVE_TEXTURES_DESKTOP = 3500;
-
-function touchLRU(photoId, texture) {
-  if (!texture) return;
-  if (activeTexturesLRU.has(photoId)) activeTexturesLRU.delete(photoId);
-  activeTexturesLRU.set(photoId, texture);
-}
-
-function enforceTextureBudget() {
-  const limit = isMobile.value
-    ? MAX_ACTIVE_TEXTURES_MOBILE
-    : MAX_ACTIVE_TEXTURES_DESKTOP;
-  while (activeTexturesLRU.size > limit) {
-    const [oldId, tex] = activeTexturesLRU.entries().next().value;
-    activeTexturesLRU.delete(oldId);
-    try {
-      tex.dispose();
-    } catch (_) {}
-    const p = photosWithMaterials.value.find((ph) => ph.id === oldId);
-    if (p) {
-      p.__textureLoaded = false;
-      if (p.lodObject && p.lodObject.material) {
-        p.lodObject.material.map = null; // fallback invisible/opacity via lógica existente
-        p.lodObject.material.needsUpdate = true;
-      }
-    }
-  }
-}
+// (LRU eliminado: mantenemos toda textura creada; rely on downscaled sizes for memory control)
 
 const CONFIG_CREATION = {
   mobileBase: 4,
-  desktopBase: 80, // ↑ Mucho más agresivo en desktop para carga casi-bulk
-  maxBatchDesktop: 200, // ↑ Sin límite práctico en desktop potente
+  desktopBase: 500, // ↑ Mucho más agresivo en desktop para carga casi-bulk
+  maxBatchDesktop: 1000, // ↑ Sin límite práctico en desktop potente
   maxBatchMobile: 18,
   minBatch: 2,
   targetFrameMs: 16.6,
   upperFrameMs: 28,
   frameBudgetMsMobile: 5.5,
-  frameBudgetMsDesktop: 25, // ↑ Permite gastar más tiempo por frame en desktop
+  frameBudgetMsDesktop: 100, // ↑ Permite gastar más tiempo por frame en desktop
 };
 
 const getBaseBatch = () =>
@@ -1735,6 +1705,53 @@ function startTextureCreationLoop() {
   loaderStage.value = "creating";
   loaderTitle.value = "Creating Textures";
   loaderSubtitle.value = "Preparing 3D view...";
+
+  // =============================
+  // 🚀 Desktop Bulk Mode (sin steps)
+  // Petición del usuario: en desktop crear TODAS las texturas de golpe, sin loop incremental.
+  // useLowPerformance => true en móvil o dispositivos táctiles (heurística ya definida arriba).
+  // Si NO es low performance, hacemos bulk completo ignorando presupuestos de frame.
+  if (!useLowPerformance.value) {
+    try {
+      let created = 0;
+      while (textureCreationQueue.length) {
+        const photo = textureCreationQueue.shift();
+        if (!photo) continue;
+        const imageElement = downloadedImagesCache.get(photo.id);
+        if (!imageElement) continue;
+        try {
+          const lodObject = createLODObject(imageElement, photo.position);
+          if (photo.lodObject) disposeLODObject(photo.lodObject);
+          photo.lodObject = lodObject;
+          photo.__textureLoaded = true;
+          photo.__loading = false;
+          lodObject.visible = true;
+          if (photo.isVisible === false && lodObject.material) {
+            lodObject.material.opacity = 0;
+            lodObject.material.transparent = true;
+          }
+          lodGroup.add(lodObject);
+          // Liberar imagen original para ahorrar memoria
+          photo.__imageElement = undefined;
+          downloadedImagesCache.delete(photo.id);
+          created++;
+        } catch (err) {
+          console.warn("Texture creation error (bulk)", photo.id, err);
+        }
+      }
+      updateLoadingProgress();
+      console.log(
+        `🧩 Bulk desktop texture creation completada (${created} texturas)`
+      );
+    } finally {
+      textureCreationRunning = false;
+      // Verificar fases y limpiar
+      checkAllTexturesLoaded();
+      updateVisiblePhotos();
+      updatePhotoEffects();
+    }
+    return; // Salimos: no ejecutamos el modo incremental
+  }
 
   const step = (ts) => {
     const start = performance.now();
@@ -1773,10 +1790,7 @@ function startTextureCreationLoop() {
           lodObject.material.transparent = true;
         }
         lodGroup.add(lodObject);
-        // Registrar en LRU
-        if (lodObject.material && lodObject.material.map) {
-          touchLRU(photo.id, lodObject.material.map);
-        }
+        // (LRU removed: no tracking needed)
         // Liberar imagen original
         photo.__imageElement = undefined;
         downloadedImagesCache.delete(photo.id);
@@ -1800,8 +1814,7 @@ function startTextureCreationLoop() {
       updatePhotoEffects();
     }
 
-    // Aplicar budget tras cada frame de creación
-    enforceTextureBudget();
+    // (LRU removed: no texture budget enforcement)
   };
 
   requestAnimationFrame(step);
@@ -2449,6 +2462,19 @@ const updateVisiblePhotos = () => {
   visiblePhotos.value.forEach((photo) => {
     if (photo.__textureLoaded) {
       cachedPhotosSet.add(photo.id);
+    }
+  });
+
+  // Rehidratar: cualquier foto visible que fue evictada y cuya imagen ya está en cache
+  visiblePhotos.value.forEach((photo) => {
+    if (
+      photo.__evicted &&
+      !photo.__textureLoaded &&
+      downloadedImagesCache.has(photo.id) &&
+      !textureCreationQueue.includes(photo)
+    ) {
+      enqueueTexture(photo);
+      photo.__evicted = false;
     }
   });
 
