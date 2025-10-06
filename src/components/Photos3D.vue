@@ -1585,10 +1585,12 @@ const downloadImageOnly = async (
 
 // (getPerformanceMultiplier eliminado)
 
-// Helper: crear un único Mesh con mipmaps simulando LOD previo
+// Helper: crear un único Mesh (sin mipmaps en móvil para ahorrar VRAM)
 const createLODObject = (imageElement, position) => {
-  // Redimensionar opcional a POT y tamaño máximo (menor en móviles para ahorrar memoria)
-  const maxSide = isMobile.value ? 512 : 1024; // ↓ móviles: reduce VRAM/heap ~75%
+  // Ajuste dinámico adicional: si hay muchas fotos en móvil, bajar más
+  let maxSide = isMobile.value ? 512 : 1024;
+  if (isMobile.value && photosWithMaterials.value.length > 1500) maxSide = 384;
+  if (isMobile.value && photosWithMaterials.value.length > 2500) maxSide = 320;
   let source = imageElement;
   const needsResize =
     imageElement.width > maxSide || imageElement.height > maxSide;
@@ -1609,15 +1611,21 @@ const createLODObject = (imageElement, position) => {
 
   const texture = new THREE.Texture(source);
   texture.needsUpdate = true;
-  texture.generateMipmaps = true;
-  texture.minFilter = THREE.LinearMipmapLinearFilter;
-  texture.magFilter = THREE.LinearFilter;
+  if (isMobile.value) {
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+  } else {
+    texture.generateMipmaps = true;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+  }
 
   // Usar sRGB color space para mantener colores correctos
   texture.colorSpace = THREE.SRGBColorSpace;
 
   try {
-    texture.anisotropy = 4; // anisotropía moderada
+    texture.anisotropy = isMobile.value ? 1 : 4; // reducir en móvil
   } catch (_) {}
 
   const material = new THREE.MeshBasicMaterial({
@@ -1653,6 +1661,38 @@ const textureCreationQueue = [];
 let textureCreationRunning = false;
 let lastFrameCreationTime = 0;
 let adaptiveBatch = 0;
+
+// LRU de texturas activas para evitar crecer sin límite
+const activeTexturesLRU = new Map(); // id -> texture
+const MAX_ACTIVE_TEXTURES_MOBILE = 950; // ajustar tras medir
+const MAX_ACTIVE_TEXTURES_DESKTOP = 3500;
+
+function touchLRU(photoId, texture) {
+  if (!texture) return;
+  if (activeTexturesLRU.has(photoId)) activeTexturesLRU.delete(photoId);
+  activeTexturesLRU.set(photoId, texture);
+}
+
+function enforceTextureBudget() {
+  const limit = isMobile.value
+    ? MAX_ACTIVE_TEXTURES_MOBILE
+    : MAX_ACTIVE_TEXTURES_DESKTOP;
+  while (activeTexturesLRU.size > limit) {
+    const [oldId, tex] = activeTexturesLRU.entries().next().value;
+    activeTexturesLRU.delete(oldId);
+    try {
+      tex.dispose();
+    } catch (_) {}
+    const p = photosWithMaterials.value.find((ph) => ph.id === oldId);
+    if (p) {
+      p.__textureLoaded = false;
+      if (p.lodObject && p.lodObject.material) {
+        p.lodObject.material.map = null; // fallback invisible/opacity via lógica existente
+        p.lodObject.material.needsUpdate = true;
+      }
+    }
+  }
+}
 
 const CONFIG_CREATION = {
   mobileBase: 4,
@@ -1731,6 +1771,10 @@ function startTextureCreationLoop() {
           lodObject.material.transparent = true;
         }
         lodGroup.add(lodObject);
+        // Registrar en LRU
+        if (lodObject.material && lodObject.material.map) {
+          touchLRU(photo.id, lodObject.material.map);
+        }
         // Liberar imagen original
         photo.__imageElement = undefined;
         downloadedImagesCache.delete(photo.id);
@@ -1753,6 +1797,9 @@ function startTextureCreationLoop() {
       updateVisiblePhotos();
       updatePhotoEffects();
     }
+
+    // Aplicar budget tras cada frame de creación
+    enforceTextureBudget();
   };
 
   requestAnimationFrame(step);
@@ -1766,6 +1813,17 @@ function enqueueInitialTexturesBulk() {
     }
   });
   if (textureCreationQueue.length) startTextureCreationLoop();
+}
+
+// Listener de pérdida de contexto WebGL (diagnóstico de saturación)
+if (typeof window !== "undefined") {
+  window.addEventListener(
+    "webglcontextlost",
+    (e) => {
+      console.warn("⚠️ WebGL context lost: posible saturación de VRAM", e);
+    },
+    { capture: true }
+  );
 }
 
 // (updateLODDistances eliminado)
