@@ -6,7 +6,7 @@ import adaptiveInitialSpacing from "@/utils/adaptiveInitialSpacing";
 const useAdaptiveSpacing = true;
 
 // lowPerformance: si es true limita a 500 fotos priorizando mayor aesthetic_quality
-export function use3DPhotos(userId = null, lowPerformance = false) {
+export function use3DPhotos(userId = null) {
   // Estado reactivo
   const photos3D = ref([]);
   const isLoadingPositions = ref(false);
@@ -56,7 +56,7 @@ export function use3DPhotos(userId = null, lowPerformance = false) {
   };
 
   // Función simplificada para cargar todas las fotos
-  const loadAllPhotos = async (chunkName, reuseExisting = false) => {
+  const loadAllPhotos = async (chunkName, lowPerformance = false) => {
     // Actualizar currentChunk al principio
     currentChunk.value = chunkName;
 
@@ -119,50 +119,19 @@ export function use3DPhotos(userId = null, lowPerformance = false) {
         );
       }
 
-      // Si lowPerformance está activo, no reutilizamos (dataset puede cambiar tamaño significativamente)
-      if (reuseExisting && photos3D.value.length > 0 && !lowPerformance) {
-        // Modo reutilización: actualizar solo las coordenadas de las fotos existentes
-        console.log(
-          `♻️ Actualizando coordenadas de ${workingPhotos.length} fotos existentes`
-        );
+      const processedPhotos = workingPhotos.map((photo, idx) => {
+        const newPos = adaptedPositions[idx];
+        return {
+          ...photo,
+          // Guardar también coordenadas transformadas para consistencia futura
+          position: newPos,
+          coordinates: newPos,
+          rawCoordinates: photo.coordinates || [0, 0, 0], // por si se requiere debug
+        };
+      });
 
-        // Crear un mapa de ID -> nuevas coordenadas
-        const coordsMap = new Map();
-        workingPhotos.forEach((photo, idx) => {
-          coordsMap.set(
-            photo.id,
-            adaptedPositions[idx] || photo.coordinates || [0, 0, 0]
-          );
-        });
-
-        // Actualizar las fotos existentes con las nuevas coordenadas
-        photos3D.value = photos3D.value.map((existingPhoto) => {
-          const newCoords = coordsMap.get(existingPhoto.id);
-          if (newCoords) {
-            return {
-              ...existingPhoto,
-              position: newCoords,
-              coordinates: newCoords,
-            };
-          }
-          return existingPhoto;
-        });
-      } else {
-        // Modo normal: reemplazar todas las fotos
-        const processedPhotos = workingPhotos.map((photo, idx) => {
-          const newPos = adaptedPositions[idx];
-          return {
-            ...photo,
-            // Guardar también coordenadas transformadas para consistencia futura
-            position: newPos,
-            coordinates: newPos,
-            rawCoordinates: photo.coordinates || [0, 0, 0], // por si se requiere debug
-          };
-        });
-
-        console.log(`📸 Cargadas ${processedPhotos.length} fotos`);
-        photos3D.value = processedPhotos;
-      }
+      console.log(`📸 Cargadas ${processedPhotos.length} fotos`);
+      photos3D.value = processedPhotos;
 
       console.log(`Carga completa: ${photos3D.value.length} fotos`);
     } catch (err) {
@@ -222,6 +191,5 @@ export function use3DPhotos(userId = null, lowPerformance = false) {
     loadAllPhotos,
     changeChunk,
     reset,
-    lowPerformance,
   };
 }

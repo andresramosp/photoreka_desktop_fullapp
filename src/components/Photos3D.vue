@@ -439,7 +439,7 @@ const {
   loadAllPhotos,
   changeChunk,
   reset,
-} = use3DPhotos(props.catalogUserId, useLowPerformance.value);
+} = use3DPhotos(props.catalogUserId);
 
 // Referencias del DOM y Three.js
 const containerRef = ref();
@@ -1661,10 +1661,10 @@ let adaptiveBatch = 0;
 // (LRU eliminado: mantenemos toda textura creada; rely on downscaled sizes for memory control)
 
 const CONFIG_CREATION = {
-  mobileBase: 4,
+  mobileBase: 50,
   desktopBase: 500, // ↑ Mucho más agresivo en desktop para carga casi-bulk
   maxBatchDesktop: 1000, // ↑ Sin límite práctico en desktop potente
-  maxBatchMobile: 18,
+  maxBatchMobile: 200,
   minBatch: 2,
   targetFrameMs: 16.6,
   upperFrameMs: 28,
@@ -2650,7 +2650,7 @@ const retryLoad = async () => {
   reset();
   showLoader();
   loaderTitle.value = "Building stage";
-  await loadAllPhotos(currentChunk.value);
+  await loadAllPhotos(currentChunk.value, useLowPerformance.value);
 };
 
 // Función de animación
@@ -3016,7 +3016,7 @@ onMounted(async () => {
       currentChunk.value = initialChunk;
     }
     loaderTitle.value = "Building stage";
-    await loadAllPhotos(initialChunk);
+    await loadAllPhotos(initialChunk, useLowPerformance.value);
 
     // Inicializar controles después de un pequeño delay
     setTimeout(() => {
