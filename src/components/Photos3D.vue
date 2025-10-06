@@ -402,9 +402,6 @@ const props = defineProps({
 // Detect mobile device
 const { isMobile } = useIsMobile();
 
-// Detect touch capabilities (mobile, tablets, touchscreen laptops, etc.)
-const { hasTouch } = useHasTouch();
-
 // ===== Debug Flag (wrap noisy logs) =====
 const DEBUG_3D = false; // pon a true temporalmente si quieres verbosidad
 function dlog(...args) {
@@ -420,8 +417,8 @@ const INITIAL_RETRY_DELAY = 1000; // Initial delay in ms (exponential backoff)
 const RETRY_MULTIPLIER = 2; // Multiplier for exponential backoff
 const MAX_RETRY_DELAY = 10000; // Maximum delay between retries (10 seconds)
 
-const FADE_START_ABSOLUTE = 50; // inicio de reducción de opacidad
-const FADE_END_ABSOLUTE = 200; // fin de reducción
+const FADE_START_ABSOLUTE = 40; // inicio de reducción de opacidad
+const FADE_END_ABSOLUTE = 180; // fin de reducción
 
 const MAX_PHOTOS_FOR_BILLBOARD = 5000; // Billboard solo para fotos cercanas
 
@@ -526,7 +523,7 @@ const updateCameraAspect = () => {
 const gl = {
   clearColor: "#1a1a1a",
   antialias: false, // Disabled for better performance with many textures
-  powerPreference: "low-power", // Always use low-power mode
+  powerPreference: "high-performance", // Prioriza GPU dedicada para máximo rendimiento
   forceWebGL: true, // Force WebGL over Canvas 2D
   preserveDrawingBuffer: false, // Better performance
   premultipliedAlpha: false, // Better performance
