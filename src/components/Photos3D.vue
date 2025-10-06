@@ -794,7 +794,7 @@ const checkAllTexturesLoaded = async () => {
       }
     }
 
-    console.log("🎨 Creando texturas en bulk...");
+    console.log("🎨 Preparando creación incremental de texturas...");
     cachePhaseComplete.value = true;
 
     // 🔧 CRÍTICO: Solo crear texturas si NO existen LOD objects
@@ -804,8 +804,8 @@ const checkAllTexturesLoaded = async () => {
     );
 
     if (needsTextureCreation) {
-      console.log("🎨 Creando LOD objects para fotos sin texturas...");
-      createTexturesInBulk();
+      console.log("🎨 Encolando creación incremental de texturas...");
+      enqueueInitialTexturesBulk();
     } else {
       console.log("✅ LOD objects ya existen, saltando creación de texturas");
     }
@@ -1587,8 +1587,8 @@ const downloadImageOnly = async (
 
 // Helper: crear un único Mesh con mipmaps simulando LOD previo
 const createLODObject = (imageElement, position) => {
-  // Redimensionar opcional a POT y tamaño máximo
-  const maxSide = 1024; // configurable
+  // Redimensionar opcional a POT y tamaño máximo (menor en móviles para ahorrar memoria)
+  const maxSide = isMobile.value ? 512 : 1024; // ↓ móviles: reduce VRAM/heap ~75%
   let source = imageElement;
   const needsResize =
     imageElement.width > maxSide || imageElement.height > maxSide;
@@ -1646,90 +1646,129 @@ const createLODObject = (imageElement, position) => {
   return markRaw(mesh);
 };
 
-// (updateLODDistances eliminado)
+// ===========================
+// 🔄 CREACIÓN INCREMENTAL DE TEXTURAS
+// ===========================
+const textureCreationQueue = [];
+let textureCreationRunning = false;
+let lastFrameCreationTime = 0;
+let adaptiveBatch = 0;
 
-// FASE 2 (mipmaps): Crear un único Mesh por foto con mipmaps
-const createTexturesInBulk = () => {
+const CONFIG_CREATION = {
+  mobileBase: 4,
+  desktopBase: 10,
+  maxBatchDesktop: 48,
+  maxBatchMobile: 18,
+  minBatch: 2,
+  targetFrameMs: 16.6,
+  upperFrameMs: 28,
+  frameBudgetMsMobile: 5.5,
+  frameBudgetMsDesktop: 9,
+};
+
+const getBaseBatch = () =>
+  isMobile.value ? CONFIG_CREATION.mobileBase : CONFIG_CREATION.desktopBase;
+const getMaxBatch = () =>
+  isMobile.value
+    ? CONFIG_CREATION.maxBatchMobile
+    : CONFIG_CREATION.maxBatchDesktop;
+const getFrameBudget = () =>
+  isMobile.value
+    ? CONFIG_CREATION.frameBudgetMsMobile
+    : CONFIG_CREATION.frameBudgetMsDesktop;
+
+function enqueueTexture(photo) {
+  if (!photo) return;
+  if (photo.__textureLoaded) return;
+  if (photo.__downloadError) return;
+  if (!downloadedImagesCache.get(photo.id)) return; // no image available
+  // Evitar duplicados
+  if (!textureCreationQueue.includes(photo)) textureCreationQueue.push(photo);
+}
+
+function startTextureCreationLoop() {
+  if (textureCreationRunning) return;
+  textureCreationRunning = true;
+  adaptiveBatch = getBaseBatch();
   loaderStage.value = "creating";
   loaderTitle.value = "Creating Textures";
   loaderSubtitle.value = "Preparing 3D view...";
-  let createdCount = 0;
-  let errorCount = 0;
-  const visibleCount = filteredPhotos.value.length; // usado para distancia máx
 
-  photosWithMaterials.value.forEach((photo) => {
-    if (photo.__downloadError) {
-      errorCount++;
-      return;
+  const step = (ts) => {
+    const start = performance.now();
+    const frameBudget = getFrameBudget();
+    let created = 0;
+
+    // Auto-tune batch basado en frameTime previo
+    if (lastFrameCreationTime) {
+      if (lastFrameCreationTime < 12 && adaptiveBatch < getMaxBatch())
+        adaptiveBatch++;
+      else if (
+        lastFrameCreationTime > CONFIG_CREATION.upperFrameMs &&
+        adaptiveBatch > CONFIG_CREATION.minBatch
+      )
+        adaptiveBatch--;
     }
 
-    const imageElement = downloadedImagesCache.get(photo.id);
-    if (!imageElement) {
-      errorCount++;
-      return;
-    }
-
-    try {
-      // Crear Mesh con mipmaps
-      const lodObject = createLODObject(imageElement, photo.position);
-
-      if (!lodObject) {
-        errorCount++;
-        return;
-      }
-
-      // Dispose old LOD if exists
-      if (photo.lodObject) {
-        disposeLODObject(photo.lodObject);
-      }
-
-      photo.lodObject = lodObject;
-      photo.__textureLoaded = true;
-      photo.__loading = false;
-
-      // Visibilidad inicial: respetar solo filtros con opacity, nunca tocar visible
-      lodObject.visible = true; // SIEMPRE visible
-
-      if (photo.isVisible === false) {
-        // Si está explícitamente oculta por filtros, usar opacity 0
-        if (lodObject.material) {
+    while (
+      textureCreationQueue.length &&
+      created < adaptiveBatch &&
+      performance.now() - start < frameBudget
+    ) {
+      const photo = textureCreationQueue.shift();
+      if (!photo) break;
+      const imageElement = downloadedImagesCache.get(photo.id);
+      if (!imageElement) continue;
+      try {
+        const lodObject = createLODObject(imageElement, photo.position);
+        if (photo.lodObject) disposeLODObject(photo.lodObject);
+        photo.lodObject = lodObject;
+        photo.__textureLoaded = true;
+        photo.__loading = false;
+        lodObject.visible = true;
+        if (photo.isVisible === false && lodObject.material) {
           lodObject.material.opacity = 0;
           lodObject.material.transparent = true;
         }
-      } else {
-        // Todas las fotos no filtradas con opacidad completa
-        if (lodObject.material) {
-          lodObject.material.opacity = 1.0;
-          lodObject.material.transparent = true;
-        }
+        lodGroup.add(lodObject);
+        // Liberar imagen original
+        photo.__imageElement = undefined;
+        downloadedImagesCache.delete(photo.id);
+        created++;
+      } catch (err) {
+        console.warn("Texture creation error", photo.id, err);
       }
+    }
 
-      // Add to LOD group
-      lodGroup.add(lodObject);
+    // Actualizar progreso (usa fotos con __textureLoaded como criterio en fase creación)
+    updateLoadingProgress();
+    lastFrameCreationTime = performance.now() - start;
 
-      createdCount++;
-    } catch (error) {
-      console.error(`Error creating LOD for photo ${photo.id}:`, error);
-      errorCount++;
+    if (textureCreationQueue.length) {
+      requestAnimationFrame(step);
+    } else {
+      textureCreationRunning = false;
+      // Verificar si ya terminamos toda la fase de creación
+      checkAllTexturesLoaded();
+      updateVisiblePhotos();
+      updatePhotoEffects();
+    }
+  };
+
+  requestAnimationFrame(step);
+}
+
+function enqueueInitialTexturesBulk() {
+  // Encolar todas las fotos cuya imagen ya está descargada pero sin textura
+  photosWithMaterials.value.forEach((p) => {
+    if (p.__imageDownloaded && !p.__textureLoaded && !p.__downloadError) {
+      enqueueTexture(p);
     }
   });
+  if (textureCreationQueue.length) startTextureCreationLoop();
+}
 
-  console.log(
-    "✅ Photo meshes (mipmapped) created:",
-    createdCount,
-    "| Errors:",
-    errorCount
-  );
-  console.log(
-    "📊 Photos with mesh:",
-    photosWithMaterials.value.filter((p) => p.lodObject).length
-  );
-  console.log("📊 Visible photos:", visiblePhotos.value.length);
-  console.log("📊 Photos to render:", photosToRender.value.length);
-
-  updateVisiblePhotos();
-  updatePhotoEffects();
-};
+// (updateLODDistances eliminado)
 
 // Nueva función para encolar TODAS las fotos no cacheadas (sin filtro de frustum)
 const enqueueAllNonCachedPhotos = (photos) => {
@@ -2031,8 +2070,8 @@ const registerNewPhotos = async (newPhotos) => {
 
   applyFilters();
 
-  // Crear texturas inmediatamente (no encolar para descarga)
-  createTexturesInBulk();
+  // Encolar texturas iniciales (creación incremental)
+  enqueueInitialTexturesBulk();
 
   // Reactivar navegación
   navigationBlocked.value = false;
@@ -2166,6 +2205,7 @@ const updatePhotosPositions = async (newPhotos) => {
     if (!downloadLoopId) {
       startDownloadLoop();
     }
+    // Cuando termine descarga se encolarán texturas en checkAllTexturesLoaded()
   } else {
     console.log("✅ No hay fotos nuevas por descargar, solo recolocando");
     // Asegurar que el loader esté oculto
