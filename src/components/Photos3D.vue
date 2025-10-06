@@ -331,9 +331,7 @@
                   <div class="keyboard-key">S</div>
                   <div class="keyboard-key">D</div>
                 </div>
-                <span class="control-text"
-                  >Navigate forward/back/left/right</span
-                >
+                <span class="control-text">Forward/back/left/right</span>
               </div>
             </div>
 
@@ -3137,7 +3135,7 @@ onMounted(async () => {
       currentChunk.value = initialChunk;
     }
     loaderTitle.value = "Building stage";
-    // await loadAllPhotos(initialChunk);
+    await loadAllPhotos(initialChunk);
 
     // Inicializar controles después de un pequeño delay
     setTimeout(() => {
