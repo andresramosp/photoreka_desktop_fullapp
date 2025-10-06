@@ -37,6 +37,9 @@
       class="collapsed-panel"
       @click="showConfigPanel = true"
       @click.stop
+      @touchstart.stop
+      @touchmove.stop
+      @touchend.stop
     >
       <n-icon class="settings-icon">
         <SettingOutlined />
@@ -49,6 +52,9 @@
       class="control-panel"
       @click.stop
       @wheel.stop
+      @touchstart.stop
+      @touchmove.stop
+      @touchend.stop
       :style="{ top: isPlayground ? '15px' : '70px' }"
     >
       <!-- Close Button (Top Right Corner) -->
