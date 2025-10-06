@@ -12,7 +12,9 @@
     <!-- Playground Logo - Top Left -->
     <div v-if="isPlayground" class="playground-logo">
       <div class="logo-container-playground">
-        <AppLogo :height="50" :showText="false" />
+        <a href="/" target="_blank" rel="noopener noreferrer">
+          <AppLogo :height="50" :showText="false" />
+        </a>
       </div>
     </div>
   </div>
