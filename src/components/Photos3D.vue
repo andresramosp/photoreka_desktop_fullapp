@@ -4022,14 +4022,12 @@ onUnmounted(() => {
 .floating-tag {
   display: inline-block;
   padding: 4px 10px;
-  font-size: 10px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.95);
+  font-size: 11px;
+  color: white;
   background: var(--tag-color);
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3),
-    0 0 20px color-mix(in srgb, var(--tag-color) 40%, transparent);
+
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
   white-space: nowrap;
   backdrop-filter: blur(8px);

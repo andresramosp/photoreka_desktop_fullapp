@@ -17,7 +17,7 @@ export function useFloatingTags(camera, photos, octree = null) {
     enabled: true, // Activar/desactivar sistema de tags
     detectionRadius: 15, // Radio de la esfera de detección en unidades del mundo
     updateInterval: 100, // Intervalo de actualización en ms (reducido para más responsividad)
-    maxTagsToShow: 9, // Máximo número de tags únicos a mostrar
+    maxTagsToShow: 10, // Máximo número de tags únicos a mostrar
     minPhotoCount: 1, // Mínimo de fotos para mostrar un tag
     maxPhotoCount: 10, // Número de fotos para intensidad máxima
   });
