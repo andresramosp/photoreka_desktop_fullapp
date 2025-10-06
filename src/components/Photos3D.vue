@@ -296,7 +296,7 @@
         <!-- Navigation Controls Content -->
         <div v-if="showNavigationControls" class="controls-info">
           <!-- Desktop Controls -->
-          <template v-if="!isMobile">
+          <template v-if="!hasTouch">
             <div class="control-tip">
               <strong>Click on stage:</strong> Activate camera controls
             </div>
@@ -370,6 +370,7 @@ import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useIndexedDBCache } from "@/composables/useIndexedDBCache.js";
 import { useOctree } from "@/composables/3d-viewer/useOctree.js";
+import { useHasTouch } from "@/composables/useHasTouch.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { api } from "@/utils/axios";
 import * as THREE from "three";
@@ -390,8 +391,12 @@ const props = defineProps({
   },
 });
 
-// Detect mobile device
+// Detect mobile device for UI adjustments
 const { isMobile } = useIsMobile();
+// Detect touch capability for controls
+const { hasTouch } = useHasTouch();
+// Unified low performance heuristic (mobile OR touch device such as light tablet)
+const useLowPerformance = computed(() => isMobile.value || hasTouch.value);
 
 // ===== Debug Flag (wrap noisy logs) =====
 const DEBUG_3D = false; // pon a true temporalmente si quieres verbosidad
@@ -815,19 +820,15 @@ const checkAllTexturesLoaded = async () => {
 
     // Activar controles de navegación si existen
     if (fpControls.value) {
-      console.log(
-        "🎮 Activando controles de navegación (desktop) (desktop)..."
-      );
+      console.log("🎮 Activando controles de navegación (keyboard/mouse)...");
       fpControls.value.setup();
     }
     if (touchControls.value) {
-      console.log("📱 Activando controles táctiles (mobile)...");
+      console.log("📱 Activando controles táctiles (touch)...");
       touchControls.value.setup();
     }
-    if (touchControls.value) {
-      console.log("📱 Activando controles táctiles (mobile)...");
-      touchControls.value.setup();
-    } // Ocultar loader
+
+    // Ocultar loader
     hideLoader();
   }
 };
@@ -1587,10 +1588,12 @@ const downloadImageOnly = async (
 
 // Helper: crear un único Mesh (sin mipmaps en móvil para ahorrar VRAM)
 const createLODObject = (imageElement, position) => {
-  // Ajuste dinámico adicional: si hay muchas fotos en móvil, bajar más
-  let maxSide = isMobile.value ? 512 : 1024;
-  if (isMobile.value && photosWithMaterials.value.length > 1500) maxSide = 384;
-  if (isMobile.value && photosWithMaterials.value.length > 2500) maxSide = 320;
+  // Ajuste dinámico adicional: si hay muchas fotos en dispositivo low perf (móvil o touch), bajar más
+  let maxSide = useLowPerformance.value ? 512 : 1024;
+  if (useLowPerformance.value && photosWithMaterials.value.length > 1500)
+    maxSide = 384;
+  if (useLowPerformance.value && photosWithMaterials.value.length > 2500)
+    maxSide = 320;
   let source = imageElement;
   const needsResize =
     imageElement.width > maxSide || imageElement.height > maxSide;
@@ -1611,7 +1614,7 @@ const createLODObject = (imageElement, position) => {
 
   const texture = new THREE.Texture(source);
   texture.needsUpdate = true;
-  if (isMobile.value) {
+  if (useLowPerformance.value) {
     texture.generateMipmaps = false;
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
@@ -1625,7 +1628,7 @@ const createLODObject = (imageElement, position) => {
   texture.colorSpace = THREE.SRGBColorSpace;
 
   try {
-    texture.anisotropy = isMobile.value ? 1 : 4; // reducir en móvil
+    texture.anisotropy = useLowPerformance.value ? 1 : 4; // reducir en low performance
   } catch (_) {}
 
   const material = new THREE.MeshBasicMaterial({
@@ -1707,13 +1710,15 @@ const CONFIG_CREATION = {
 };
 
 const getBaseBatch = () =>
-  isMobile.value ? CONFIG_CREATION.mobileBase : CONFIG_CREATION.desktopBase;
+  useLowPerformance.value
+    ? CONFIG_CREATION.mobileBase
+    : CONFIG_CREATION.desktopBase;
 const getMaxBatch = () =>
-  isMobile.value
+  useLowPerformance.value
     ? CONFIG_CREATION.maxBatchMobile
     : CONFIG_CREATION.maxBatchDesktop;
 const getFrameBudget = () =>
-  isMobile.value
+  useLowPerformance.value
     ? CONFIG_CREATION.frameBudgetMsMobile
     : CONFIG_CREATION.frameBudgetMsDesktop;
 
@@ -2136,6 +2141,9 @@ const registerNewPhotos = async (newPhotos) => {
 
   if (fpControls.value) {
     fpControls.value.setup();
+  }
+  if (touchControls.value) {
+    touchControls.value.setup();
   }
 
   hideLoader();
@@ -2644,8 +2652,8 @@ const animate = () => {
     if (fpControls.value) {
       fpControls.value.update();
     }
-    // Update touch controls on mobile
-    if (touchControls.value && isMobile.value) {
+    // Update touch controls if available
+    if (touchControls.value) {
       touchControls.value.update();
     }
   }
@@ -2803,9 +2811,9 @@ const initFirstPersonControls = () => {
   const camera = cameraRef.value;
   const domElement = containerRef.value;
 
-  // Initialize appropriate controls based on device type
-  if (isMobile.value) {
-    console.log("📱 Initializing touch controls for mobile device");
+  // Initialize appropriate controls based on touch capability
+  if (hasTouch.value) {
+    console.log("📱 Initializing touch controls for touch-enabled device");
     touchControls.value = useTouchControls(camera, domElement);
 
     // Solo activar controles si no estamos en fase de descarga bloqueada
@@ -2823,7 +2831,7 @@ const initFirstPersonControls = () => {
     touchControls.value.setWorldScale(2);
     touchControls.value.setTouchSensitivity(0.0025);
   } else {
-    console.log("🖱️ Initializing keyboard/mouse controls for desktop");
+    console.log("🖱️ Initializing keyboard/mouse controls for non-touch device");
     fpControls.value = useFirstPersonControls(camera, domElement);
 
     // Solo activar controles si no estamos en fase de descarga bloqueada

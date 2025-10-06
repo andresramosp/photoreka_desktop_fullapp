@@ -152,8 +152,9 @@ export function useTouchControls(camera, domElement) {
           isRotating = true;
 
           // Update camera rotation (same as mouse movement)
-          touchState.value.yaw -= deltaX * touchState.value.sensitivity;
-          touchState.value.pitch -= deltaY * touchState.value.sensitivity;
+          // Invert rotation direction on both axes as requested
+          touchState.value.yaw += deltaX * touchState.value.sensitivity;
+          touchState.value.pitch += deltaY * touchState.value.sensitivity;
 
           // Limit pitch to prevent flipping
           touchState.value.pitch = Math.max(
