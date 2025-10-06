@@ -415,8 +415,14 @@ const INITIAL_RETRY_DELAY = 1000; // Initial delay in ms (exponential backoff)
 const RETRY_MULTIPLIER = 2; // Multiplier for exponential backoff
 const MAX_RETRY_DELAY = 10000; // Maximum delay between retries (10 seconds)
 
-const FADE_START_ABSOLUTE = 40; // inicio de reducción de opacidad
-const FADE_END_ABSOLUTE = 180; // fin de reducción
+// 🎯 Sistema de fade basado en densidad DIRECCIONAL (muro de niebla hacia adelante)
+const FORWARD_CHECK_DISTANCE = 80; // Profundidad del segmento hacia adelante para medir densidad
+const FORWARD_CONE_ANGLE = 60; // Ángulo del cono en grados (60° = cono amplio)
+const DENSITY_MIN_PHOTOS = 5; // Mínimo de fotos delante para empezar a aplicar fade
+const DENSITY_MAX_PHOTOS = 40; // Número de fotos delante para fade completo
+const FADE_START_DISTANCE = 20; // Distancia donde empieza el fade (cuando hay densidad)
+const FADE_END_DISTANCE = 200; // Distancia donde termina el fade
+const DENSITY_SMOOTHING = 0.17; // Factor de suavizado para cambios de densidad (0-1, menor = más suave)
 
 const MAX_PHOTOS_FOR_BILLBOARD = 5000; // Billboard solo para fotos cercanas
 
@@ -428,7 +434,7 @@ const error429Stats = ref({
   failed: 0,
 });
 
-// Composable para manejo de fotos 3D (pasar userId si está en modo catálogo)
+// Composable para manejo de fotos 3D (pasar userId si está en modo catálogo y lowPerformance)
 const {
   photos3D,
   isLoadingPositions,
@@ -439,7 +445,7 @@ const {
   loadAllPhotos,
   changeChunk,
   reset,
-} = use3DPhotos(props.catalogUserId);
+} = use3DPhotos(props.catalogUserId, useLowPerformance.value);
 
 // Referencias del DOM y Three.js
 const containerRef = ref();
@@ -482,7 +488,7 @@ const loadingProgress = ref(0);
 const initialLoadingPhase = ref(true);
 
 // Escaleo radial
-const inflateFactor = ref(1);
+const inflateFactor = ref(2);
 const originalPositions = ref([]);
 
 // (performance mode eliminado)
@@ -653,6 +659,9 @@ const reusableSphere = markRaw(new THREE.Sphere());
 // Distance calculation cache
 const distanceCache = new Map();
 let cacheValidPosition = { x: 0, y: 0, z: 0 };
+
+// Densidad local con smoothing (para fade basado en densidad)
+let currentDensityFactor = 0; // 0 = no hay fotos cerca, 1 = máxima densidad
 
 // Frustum culling - solo renderizar fotos visibles
 const visiblePhotos = ref([]); // SOLO fotos actualmente en el frustum
@@ -2573,24 +2582,80 @@ const updateBillboardRotations = (photosWithDistances) => {
   });
 };
 
-// Parámetros de fading simplificados
+// 🎯 Sistema de fade basado en densidad DIRECCIONAL
+// Mide el "muro de niebla" hacia adelante para ajustar el fade
 
-const applyDistanceFading = (photosWithDistances) => {
+const applyDistanceFading = () => {
   if (!cameraRef.value) return;
   // IMPORTANTE: procesar TODAS las fotos con lodObject, no solo visibles en frustum
   // porque fotos lejanas/ocultas también necesitan fade para no verse opacas al girar
   const allPhotosToFade = photosWithMaterials.value.filter((p) => p.lodObject);
   if (allPhotosToFade.length === 0) return;
 
-  // Simplificado: usar distancias absolutas fijas para fading
-  const fadeStart = FADE_START_ABSOLUTE;
-  const fadeEnd = FADE_END_ABSOLUTE;
-  const fadeRange = Math.max(1, fadeEnd - fadeStart);
+  const camera = cameraRef.value;
+  const cameraPos = camera.position;
 
-  const cameraPos = cameraRef.value.position;
+  // PASO 1: Obtener vector de dirección de la cámara (hacia dónde miras)
+  // Three.js camera mira hacia -Z en su espacio local
+  const forwardVector = new THREE.Vector3(0, 0, -1);
+  forwardVector.applyQuaternion(camera.quaternion);
+  forwardVector.normalize();
+
+  // PASO 2: Contar fotos en el cono hacia adelante ("muro de niebla")
+  let forwardPhotosCount = 0;
+  const cosHalfAngle = Math.cos((FORWARD_CONE_ANGLE * Math.PI) / 180 / 2);
 
   for (const photo of allPhotosToFade) {
-    // Calcular distancia para todas las fotos, no usar precalculada de visibles
+    // Vector desde cámara a foto
+    const dx = photo.position[0] - cameraPos.x;
+    const dy = photo.position[1] - cameraPos.y;
+    const dz = photo.position[2] - cameraPos.z;
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+    // Skip fotos muy lejanas o muy cercanas
+    if (distance < 1 || distance > FORWARD_CHECK_DISTANCE) continue;
+
+    // Vector normalizado hacia la foto
+    const toPhotoX = dx / distance;
+    const toPhotoY = dy / distance;
+    const toPhotoZ = dz / distance;
+
+    // Producto punto: mide si la foto está en la dirección de vista
+    const dotProduct =
+      forwardVector.x * toPhotoX +
+      forwardVector.y * toPhotoY +
+      forwardVector.z * toPhotoZ;
+
+    // Si dotProduct > cosHalfAngle, la foto está dentro del cono
+    if (dotProduct >= cosHalfAngle) {
+      forwardPhotosCount++;
+    }
+  }
+
+  // PASO 3: Calcular factor de densidad (0 = sin muro, 1 = muro denso)
+  // Con transición linear suavizada entre DENSITY_MIN_PHOTOS y DENSITY_MAX_PHOTOS
+  let targetDensityFactor = 0;
+  if (forwardPhotosCount <= DENSITY_MIN_PHOTOS) {
+    targetDensityFactor = 0; // Sin fade si hay pocas fotos delante
+  } else if (forwardPhotosCount >= DENSITY_MAX_PHOTOS) {
+    targetDensityFactor = 1; // Fade completo si hay muro denso
+  } else {
+    // Interpolación linear entre mínimo y máximo
+    targetDensityFactor =
+      (forwardPhotosCount - DENSITY_MIN_PHOTOS) /
+      (DENSITY_MAX_PHOTOS - DENSITY_MIN_PHOTOS);
+  }
+
+  // PASO 4: Suavizar cambios de densidad (smoothing)
+  currentDensityFactor =
+    currentDensityFactor * (1 - DENSITY_SMOOTHING) +
+    targetDensityFactor * DENSITY_SMOOTHING;
+
+  // PASO 5: Aplicar fade solo si hay densidad significativa delante
+  const fadeRange = Math.max(1, FADE_END_DISTANCE - FADE_START_DISTANCE);
+
+  for (const photo of allPhotosToFade) {
+    // Calcular distancia para todas las fotos
     const dx = photo.position[0] - cameraPos.x;
     const dy = photo.position[1] - cameraPos.y;
     const dz = photo.position[2] - cameraPos.z;
@@ -2604,17 +2669,35 @@ const applyDistanceFading = (photosWithDistances) => {
       mesh.material.opacity = 0;
       mesh.material.transparent = true;
     } else {
-      // Aplicar transparencia basada en distancia
-      if (distance < fadeStart) {
-        mesh.material.opacity = 1.0;
-      } else if (distance >= fadeEnd) {
-        mesh.material.opacity = 0.05; // Opacidad muy baja en lugar de ocultar
+      // Calcular opacidad base según distancia
+      let baseOpacity = 1.0;
+      if (distance < FADE_START_DISTANCE) {
+        baseOpacity = 1.0;
+      } else if (distance >= FADE_END_DISTANCE) {
+        baseOpacity = 0.05; // Opacidad muy baja en lugar de ocultar
       } else {
-        const fadeProgress = (distance - fadeStart) / fadeRange;
-        mesh.material.opacity = Math.max(0.05, 1.0 - fadeProgress);
+        const fadeProgress = (distance - FADE_START_DISTANCE) / fadeRange;
+        baseOpacity = Math.max(0.05, 1.0 - fadeProgress);
       }
+
+      // Aplicar fade solo proporcionalmente a la densidad DELANTE
+      // Si densityFactor = 0 (no hay muro), opacity = 1.0 siempre
+      // Si densityFactor = 1 (muro denso), opacity = baseOpacity
+      const finalOpacity =
+        baseOpacity * currentDensityFactor + 1.0 * (1 - currentDensityFactor);
+
+      mesh.material.opacity = finalOpacity;
       mesh.material.transparent = true;
     }
+  }
+
+  // Debug: log densidad cada 60 frames
+  if (frameCounter % 60 === 0 && forwardPhotosCount > 0) {
+    console.log(
+      `📊 Muro de niebla: ${forwardPhotosCount} fotos delante en ${FORWARD_CHECK_DISTANCE}u (ángulo ${FORWARD_CONE_ANGLE}°), factor: ${currentDensityFactor.toFixed(
+        2
+      )}`
+    );
   }
 };
 
@@ -2650,7 +2733,7 @@ const retryLoad = async () => {
   reset();
   showLoader();
   loaderTitle.value = "Building stage";
-  await loadAllPhotos(currentChunk.value, useLowPerformance.value);
+  await loadAllPhotos(currentChunk.value);
 };
 
 // Función de animación
@@ -3016,7 +3099,7 @@ onMounted(async () => {
       currentChunk.value = initialChunk;
     }
     loaderTitle.value = "Building stage";
-    await loadAllPhotos(initialChunk, useLowPerformance.value);
+    await loadAllPhotos(initialChunk);
 
     // Inicializar controles después de un pequeño delay
     setTimeout(() => {

@@ -6,8 +6,6 @@ import { ref, onMounted, onUnmounted } from "vue";
  * @returns {Object} { hasTouch: Ref<boolean> }
  */
 export function useHasTouch() {
-  const hasTouch = ref(false);
-
   const checkHasTouch = () => {
     // Check multiple ways to detect touch capability
     const hasTouchScreen =
@@ -15,17 +13,24 @@ export function useHasTouch() {
       navigator.maxTouchPoints > 0 ||
       navigator.msMaxTouchPoints > 0;
 
-    hasTouch.value = hasTouchScreen;
+    return hasTouchScreen;
+  };
+
+  // 🔧 CRÍTICO: Inicializar inmediatamente para que el valor esté disponible desde el primer uso
+  const hasTouch = ref(checkHasTouch());
+
+  const updateHasTouch = () => {
+    hasTouch.value = checkHasTouch();
   };
 
   onMounted(() => {
-    checkHasTouch();
+    updateHasTouch();
     // Touch capability doesn't change, but we add a listener just in case
-    window.addEventListener("resize", checkHasTouch);
+    window.addEventListener("resize", updateHasTouch);
   });
 
   onUnmounted(() => {
-    window.removeEventListener("resize", checkHasTouch);
+    window.removeEventListener("resize", updateHasTouch);
   });
 
   return {

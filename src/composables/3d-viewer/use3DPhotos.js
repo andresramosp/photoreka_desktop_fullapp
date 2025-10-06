@@ -5,14 +5,15 @@ import adaptiveInitialSpacing from "@/utils/adaptiveInitialSpacing";
 
 const useAdaptiveSpacing = true;
 
-// lowPerformance: si es true limita a 500 fotos priorizando mayor aesthetic_quality
-export function use3DPhotos(userId = null) {
+// lowPerformance: si es true limita a 750 fotos priorizando mayor aesthetic_quality
+export function use3DPhotos(userId = null, lowPerformanceMode = false) {
   // Estado reactivo
   const photos3D = ref([]);
   const isLoadingPositions = ref(false);
   const currentChunk = ref("general");
   const error = ref(null);
   const isCatalogMode = Boolean(userId);
+  const lowPerformance = ref(lowPerformanceMode); // Guardar configuración de performance
 
   // Opciones de chunks disponibles
   const chunkOptions = [
@@ -56,7 +57,7 @@ export function use3DPhotos(userId = null) {
   };
 
   // Función simplificada para cargar todas las fotos
-  const loadAllPhotos = async (chunkName, lowPerformance = false) => {
+  const loadAllPhotos = async (chunkName) => {
     // Actualizar currentChunk al principio
     currentChunk.value = chunkName;
 
@@ -68,7 +69,7 @@ export function use3DPhotos(userId = null) {
 
       // Filtrado para modo lowPerformance
       let workingPhotos = photos;
-      if (lowPerformance && photos.length > 750) {
+      if (lowPerformance.value && photos.length > 750) {
         const getScore = (p) =>
           p?.descriptions?.artistic_scores?.aesthetic_quality ?? -Infinity;
         workingPhotos = [...photos]
@@ -149,6 +150,7 @@ export function use3DPhotos(userId = null) {
       currentChunk: currentChunk.value,
       hasExistingPhotos: photos3D.value.length > 0,
       willSkip: newChunk === currentChunk.value,
+      lowPerformance: lowPerformance.value,
     });
 
     // Solo saltar si realmente es el mismo valor Y ya tenemos fotos cargadas
@@ -159,14 +161,11 @@ export function use3DPhotos(userId = null) {
       return;
     }
 
-    // Decidir si reutilizar fotos existentes
-    const shouldReuseExisting = photos3D.value.length > 0;
-
     console.log("🚀 Ejecutando loadAllPhotos para chunk:", newChunk, {
-      reuseExisting: shouldReuseExisting,
+      lowPerformance: lowPerformance.value,
     });
 
-    await loadAllPhotos(newChunk, shouldReuseExisting);
+    await loadAllPhotos(newChunk);
     console.log("✅ changeChunk completado para chunk:", newChunk);
   };
 
