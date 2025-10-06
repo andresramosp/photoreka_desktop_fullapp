@@ -275,6 +275,48 @@
               />
             </div>
           </div>
+
+          <!-- Detection Radius Slider -->
+          <div class="control-item-full" style="margin-top: 12px">
+            <label
+              class="control-label"
+              style="margin-bottom: 8px; display: block"
+            >
+              Tags Detection Radius
+            </label>
+            <div class="slider-container">
+              <n-slider
+                v-model:value="floatingTagsSystem.config.detectionRadius"
+                :min="20"
+                :max="150"
+                :step="10"
+                :marks="{ 20: '20', 50: '50', 100: '100', 150: '150' }"
+                class="radial-slider"
+                @click.stop
+              />
+            </div>
+          </div>
+
+          <!-- Max Tags Slider -->
+          <div class="control-item-full" style="margin-top: 12px">
+            <label
+              class="control-label"
+              style="margin-bottom: 8px; display: block"
+            >
+              Max Tags to Show
+            </label>
+            <div class="slider-container">
+              <n-slider
+                v-model:value="floatingTagsSystem.config.maxTagsToShow"
+                :min="5"
+                :max="30"
+                :step="5"
+                :marks="{ 5: '5', 15: '15', 30: '30' }"
+                class="radial-slider"
+                @click.stop
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -388,6 +430,29 @@
       </div>
     </div>
 
+    <!-- Floating Tags Display (individual floating tags) -->
+    <div
+      v-if="
+        floatingTagsSystem &&
+        floatingTagsSystem.config.enabled &&
+        floatingTagsSystem.activeTags.length > 0
+      "
+      class="floating-tags-wrapper"
+    >
+      <div
+        v-for="(tag, index) in floatingTagsSystem.activeTags"
+        :key="`${tag.category}_${tag.name}`"
+        class="floating-tag"
+        :style="{
+          '--tag-color': tag.color,
+          '--tag-index': index,
+          opacity: 0.7 + tag.intensity * 0.3,
+        }"
+      >
+        {{ tag.name }}
+      </div>
+    </div>
+
     <!-- Discrete Loading Indicator -->
     <div v-if="showDiscreteLoader" class="discrete-loader">
       <div class="loader-spinner"></div>
@@ -418,6 +483,7 @@ import { CloseOutlined, SettingOutlined, InfoCircleFilled } from "@vicons/antd";
 import { use3DPhotos } from "@/composables/3d-viewer/use3DPhotos.js";
 import { useFirstPersonControls } from "@/composables//3d-viewer/useFirstPersonControls.js";
 import { useTouchControls } from "@/composables/3d-viewer/useTouchControls.js";
+import { useFloatingTags } from "@/composables/3d-viewer/useFloatingTags.js";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useIndexedDBCache } from "@/composables/useIndexedDBCache.js";
@@ -512,6 +578,7 @@ const currentPosition = ref({ x: 0, y: 0, z: 80 });
 // Toggle states for collapsible sections
 const showMoreFilters = ref(false);
 const showDisplayOptions = ref(false);
+const showFloatingTagsOptions = ref(false);
 const showNavigationControls = ref(true);
 
 // Filtro de aspectos visuales
@@ -675,12 +742,16 @@ const {
 const {
   buildOctree,
   queryFrustum,
+  queryRadius,
 
   getStats: getOctreeStats,
 
   clear: clearOctree,
 } = useOctree(8, 5); // maxObjects=8, maxLevels=5
 const octreeNeedsRebuild = ref(true);
+
+// Floating Tags System - pasamos cameraRef en lugar de camera para que sea reactivo
+const floatingTagsSystem = ref(null); // Se inicializará después de que la cámara esté lista
 
 // Cache statistics
 const cacheStats = ref({ totalImages: 0 });
@@ -2420,6 +2491,18 @@ const onInflateFactorChange = () => {
   updatePhotoEffects(); // Aplica Billboard con distancias pre-calculadas
 };
 
+// Toggle floating tags system
+const toggleFloatingTags = () => {
+  if (floatingTagsSystem.value) {
+    floatingTagsSystem.value.config.enabled =
+      !floatingTagsSystem.value.config.enabled;
+    console.log(
+      "🏷️ Floating tags:",
+      floatingTagsSystem.value.config.enabled ? "enabled" : "disabled"
+    );
+  }
+};
+
 // (onPerformanceModeChange eliminado)
 
 const updateVisiblePhotos = () => {
@@ -2995,6 +3078,25 @@ const initFirstPersonControls = () => {
     setTimeout(() => fpControls.value.toggleDebug(false), 5000);
   }
 
+  // Inicializar sistema de tags flotantes
+  console.log("🏷️ Inicializando sistema de tags flotantes");
+  floatingTagsSystem.value = useFloatingTags(
+    cameraRef,
+    photos3D,
+    queryRadius // Pasar la función correcta del octree
+  );
+
+  // Iniciar el loop de actualización de tags
+  floatingTagsSystem.value.startUpdateLoop();
+
+  // Desactivar debug después de 10 segundos para no saturar la consola
+  setTimeout(() => {
+    if (floatingTagsSystem.value) {
+      floatingTagsSystem.value.disableDebug();
+      console.log("🏷️ Debug de tags flotantes desactivado");
+    }
+  }, 10000);
+
   // Iniciar loop de animación
   animate();
 };
@@ -3184,6 +3286,13 @@ onUnmounted(() => {
     touchControls.value.cleanup();
   }
 
+  // Limpiar sistema de tags flotantes
+  if (floatingTagsSystem.value) {
+    floatingTagsSystem.value.stopUpdateLoop();
+    floatingTagsSystem.value.reset();
+    floatingTagsSystem.value = null;
+  }
+
   // Cancelar animaciones
   if (animationId) {
     cancelAnimationFrame(animationId);
@@ -3333,6 +3442,35 @@ onUnmounted(() => {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   font-weight: var(--font-weight-medium, 500);
+}
+
+/* Toggle Button Styles */
+.toggle-btn {
+  padding: 4px 12px;
+  border-radius: 12px;
+  border: none;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.toggle-btn:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+  transform: scale(1.05);
+}
+
+.toggle-btn.active {
+  background-color: #2563eb;
+  color: white;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
+}
+
+.toggle-btn.active:hover {
+  background-color: #1d4ed8;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.5);
 }
 
 /* Toggle Section Styles */
@@ -3861,6 +3999,88 @@ onUnmounted(() => {
   50% {
     opacity: 0.7;
     transform: scale(1.1);
+  }
+}
+
+/* ============================================ */
+/* Floating Tags Display - Scattered Style */
+/* ============================================ */
+
+.floating-tags-wrapper {
+  position: absolute;
+  bottom: 80px;
+  left: 20px;
+  max-width: 400px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: flex-start;
+  pointer-events: none;
+  z-index: 1500;
+}
+
+.floating-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  background: var(--tag-color);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3),
+    0 0 20px color-mix(in srgb, var(--tag-color) 40%, transparent);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  user-select: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: tagPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation-delay: calc(var(--tag-index) * 0.05s);
+}
+
+@keyframes tagPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Solo animación de entrada, sin flotación continua */
+.floating-tag {
+  animation: tagPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation-delay: calc(var(--tag-index) * 0.05s);
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 767px) {
+  .floating-tags-wrapper {
+    bottom: 10px;
+    left: 10px;
+    max-width: calc(100vw - 20px);
+    gap: 5px;
+  }
+
+  .floating-tag {
+    font-size: 9px;
+    padding: 3px 8px;
+  }
+}
+
+/* Tablet adjustments */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .floating-tags-wrapper {
+    max-width: 350px;
+  }
+
+  .floating-tag {
+    font-size: 9px;
+    padding: 3px 9px;
   }
 }
 </style>
