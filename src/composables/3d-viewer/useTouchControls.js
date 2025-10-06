@@ -238,30 +238,24 @@ export function useTouchControls(camera, domElement) {
           simulatedKeys.value[key] = false;
         });
 
-        // Map movement to WASD-like controls
+        // Map movement to left/right and up/down (no inversion)
         const threshold = 0.3; // Minimum movement to trigger
 
         // Horizontal movement (left/right)
         if (Math.abs(deltaX) > threshold) {
           if (deltaX > 0) {
-            simulatedKeys.value.right = true;
+            simulatedKeys.value.left = true; // Desinvertido: derecha mueve left
           } else {
-            simulatedKeys.value.left = true;
+            simulatedKeys.value.right = true; // Izquierda mueve right
           }
         }
 
-        // Vertical movement (forward/backward or up/down)
+        // Vertical movement (up/down)
         if (Math.abs(deltaY) > threshold) {
-          // If moving more horizontally than vertically, treat as forward/backward
-          if (Math.abs(deltaX) > Math.abs(deltaY)) {
-            // Horizontal dominant - already handled above
+          if (deltaY > 0) {
+            simulatedKeys.value.down = true; // Arrastrar hacia abajo mueve down
           } else {
-            // Vertical dominant - move forward/backward
-            if (deltaY < 0) {
-              simulatedKeys.value.forward = true;
-            } else {
-              simulatedKeys.value.backward = true;
-            }
+            simulatedKeys.value.up = true; // Arrastrar hacia arriba mueve up
           }
         }
       }
@@ -303,6 +297,14 @@ export function useTouchControls(camera, domElement) {
     const remainingTouches = event.touches.length;
     touchState.value.activeTouches = remainingTouches;
 
+    // Helper: reset only movement speeds (left/right/up/down)
+    const resetMovementSpeeds = () => {
+      ["left", "right", "up", "down"].forEach((key) => {
+        currentSpeeds.value[key] = 0;
+        simulatedKeys.value[key] = false;
+      });
+    };
+
     // Reset gesture states when touches end
     if (remainingTouches === 0) {
       touchState.value.isActive = false;
@@ -311,9 +313,10 @@ export function useTouchControls(camera, domElement) {
       isTwoFingerMoving = false;
       twoFingerStartPos = null;
 
-      // Reset all simulated keys
+      // Reset all simulated keys and all speeds
       Object.keys(simulatedKeys.value).forEach((key) => {
         simulatedKeys.value[key] = false;
+        currentSpeeds.value[key] = 0;
       });
     } else if (remainingTouches === 1) {
       // Transitioned from 2+ fingers to 1 finger
@@ -322,10 +325,8 @@ export function useTouchControls(camera, domElement) {
       isRotating = false;
       twoFingerStartPos = null;
 
-      // Reset movement keys
-      Object.keys(simulatedKeys.value).forEach((key) => {
-        simulatedKeys.value[key] = false;
-      });
+      // Reset only movement keys and speeds (deja rotación intacta)
+      resetMovementSpeeds();
     }
   };
 

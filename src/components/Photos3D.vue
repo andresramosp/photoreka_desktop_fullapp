@@ -439,7 +439,7 @@ const {
   loadAllPhotos,
   changeChunk,
   reset,
-} = use3DPhotos(props.catalogUserId);
+} = use3DPhotos(props.catalogUserId, useLowPerformance.value);
 
 // Referencias del DOM y Three.js
 const containerRef = ref();
@@ -1582,7 +1582,7 @@ const downloadImageOnly = async (
 // Helper: crear un único Mesh (sin mipmaps en móvil para ahorrar VRAM)
 const createLODObject = (imageElement, position) => {
   // Ajuste dinámico adicional: si hay muchas fotos en dispositivo low perf (móvil o touch), bajar más
-  let maxSide = useLowPerformance.value ? 128 : 1024;
+  let maxSide = useLowPerformance.value ? 256 : 1024;
   // if (useLowPerformance.value && photosWithMaterials.value.length > 1500)
   //   maxSide = 128;
   // if (useLowPerformance.value && photosWithMaterials.value.length > 2500)
