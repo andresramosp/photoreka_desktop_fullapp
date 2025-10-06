@@ -357,8 +357,8 @@ const secondSectionOptions = computed(() => {
       icon: createIconWithIndicator(SearchIcon, "#60b6d4"), // Info color for search functionality
     },
     {
-      label: createMenuLabel("3D View"),
-      key: "3d-view",
+      label: createMenuLabel("3D Atlas"),
+      key: "atlas",
       disabled: isBlocked,
       comingSoon: false,
       props: isBlocked

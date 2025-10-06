@@ -360,15 +360,7 @@ import {
   nextTick,
 } from "vue";
 import { TresCanvas } from "@tresjs/core";
-import {
-  NTooltip,
-  NSwitch,
-  NSelect,
-  NIcon,
-  NSlider,
-  NTreeSelect,
-  NButton,
-} from "naive-ui";
+import { NTooltip, NSelect, NIcon, NSlider, NTreeSelect } from "naive-ui";
 import { CloseOutlined, SettingOutlined, InfoCircleFilled } from "@vicons/antd";
 
 import { use3DPhotos } from "@/composables/3d-viewer/use3DPhotos.js";
@@ -379,7 +371,6 @@ import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useIndexedDBCache } from "@/composables/useIndexedDBCache.js";
 import { useOctree } from "@/composables/3d-viewer/useOctree.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
-import { useHasTouch } from "@/composables/useHasTouch.js";
 import { api } from "@/utils/axios";
 import * as THREE from "three";
 import pLimit from "p-limit";

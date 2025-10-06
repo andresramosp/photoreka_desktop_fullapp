@@ -9,6 +9,7 @@
             route.name === 'canvas-playground' ||
             route.name === 'free-framer' ||
             route.name === '3d-catalog' ||
+            route.name === 'shared-atlas' ||
             route.name === 'terms' ||
             route.name === 'maintenance'
           "
