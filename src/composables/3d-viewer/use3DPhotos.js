@@ -68,12 +68,12 @@ export function use3DPhotos(userId = null, lowPerformance = false) {
 
       // Filtrado para modo lowPerformance
       let workingPhotos = photos;
-      if (lowPerformance && photos.length > 500) {
+      if (lowPerformance && photos.length > 750) {
         const getScore = (p) =>
           p?.descriptions?.artistic_scores?.aesthetic_quality ?? -Infinity;
         workingPhotos = [...photos]
           .sort((a, b) => getScore(b) - getScore(a))
-          .slice(0, 500);
+          .slice(0, 750);
         console.log(
           `⚡ LowPerformance activo: filtradas ${photos.length} -> ${workingPhotos.length} (top aesthetic_quality)`
         );
