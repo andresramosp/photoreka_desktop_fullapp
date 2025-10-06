@@ -119,7 +119,7 @@
         <div v-if="showMoreFilters" class="filters-container">
           <div class="filters-content">
             <!-- Text Search Filter -->
-            <div class="filter-item">
+            <div v-if="!isPlayground" class="filter-item">
               <div style="display: flex; align-items: center; gap: 4px">
                 <label class="filter-label" style="margin: 0"
                   >Search by Content</label
@@ -304,34 +304,86 @@
           <!-- Desktop Controls -->
           <template v-if="!hasTouch">
             <div class="control-tip">
-              <strong>Click on stage:</strong> Activate camera controls
+              <div class="control-icon-group">
+                <span class="control-icon-text">🖱️</span>
+                <span class="control-text"
+                  >Click on stage to activate camera controls</span
+                >
+              </div>
             </div>
             <div class="control-tip">
-              <strong>Escape:</strong> Return to normal mouse
+              <div class="control-icon-group">
+                <span class="control-icon-text">🖱️⚙️</span>
+                <span class="control-text">Accelerate movement speed</span>
+              </div>
             </div>
             <div class="control-tip">
-              <strong>WASD:</strong> Navigate forward/back/left/right
+              <div class="control-icon-group">
+                <div class="keyboard-key">Esc</div>
+                <span class="control-text">Return to normal mouse</span>
+              </div>
             </div>
             <div class="control-tip">
-              <strong>Wheel:</strong> Accelerate movement speed
+              <div class="control-icon-group">
+                <div class="keyboard-keys-group">
+                  <div class="keyboard-key">W</div>
+                  <div class="keyboard-key">A</div>
+                  <div class="keyboard-key">S</div>
+                  <div class="keyboard-key">D</div>
+                </div>
+                <span class="control-text"
+                  >Navigate forward/back/left/right</span
+                >
+              </div>
             </div>
-            <div class="control-tip"><strong>F:</strong> Move up</div>
-            <div class="control-tip"><strong>V:</strong> Move down</div>
+
+            <div class="control-tip">
+              <div class="control-icon-group">
+                <div class="keyboard-key">F</div>
+                <span class="control-text">Move up</span>
+              </div>
+            </div>
+            <div class="control-tip">
+              <div class="control-icon-group">
+                <div class="keyboard-key">V</div>
+                <span class="control-text">Move down</span>
+              </div>
+            </div>
           </template>
 
           <!-- Touch Controls (Mobile) -->
           <template v-else>
             <div class="control-tip">
-              <strong>One finger drag:</strong> Rotate camera view
+              <div class="control-icon-group">
+                <span class="control-icon-text">☝️</span>
+                <span class="control-text"
+                  >One finger drag to rotate camera view</span
+                >
+              </div>
             </div>
             <div class="control-tip">
-              <strong>Two finger pinch:</strong> Move forward/backward
+              <div class="control-icon-group">
+                <span class="control-icon-text">🤏</span>
+                <span class="control-text"
+                  >Two finger pinch to move forward/backward</span
+                >
+              </div>
             </div>
             <div class="control-tip">
-              <strong>Two finger drag:</strong> Move left/right/forward/back
+              <div class="control-icon-group">
+                <span class="control-icon-text">✌️</span>
+                <span class="control-text"
+                  >Two finger drag to move left/right/forward/back</span
+                >
+              </div>
             </div>
             <div class="control-tip">
-              <strong>Tip:</strong> Combine gestures for smooth navigation
+              <div class="control-icon-group">
+                <span class="control-icon-text">💡</span>
+                <span class="control-text"
+                  >Combine gestures for smooth navigation</span
+                >
+              </div>
             </div>
           </template>
         </div>
@@ -3085,7 +3137,7 @@ onMounted(async () => {
       currentChunk.value = initialChunk;
     }
     loaderTitle.value = "Building stage";
-    await loadAllPhotos(initialChunk);
+    // await loadAllPhotos(initialChunk);
 
     // Inicializar controles después de un pequeño delay
     setTimeout(() => {
@@ -3580,7 +3632,7 @@ onUnmounted(() => {
 }
 
 .control-tip {
-  margin: var(--spacing-xs) 0;
+  margin: var(--spacing-sm) 0;
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
   line-height: 1.4;
@@ -3593,6 +3645,66 @@ onUnmounted(() => {
 .control-tip strong {
   color: var(--text-primary);
   font-weight: var(--font-weight-semibold, 600);
+}
+
+/* Control Icons and Keys */
+.control-icon-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.control-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  color: rgba(59, 130, 246, 0.85);
+  filter: drop-shadow(0 0 1px rgba(59, 130, 246, 0.25));
+}
+
+.control-icon-text {
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.control-text {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.keyboard-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 2px 5px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.12),
+    rgba(255, 255, 255, 0.04)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
+  text-shadow: 0 0.5px 0.5px rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
+}
+
+.keyboard-keys-group {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
 }
 
 /* Animations for panel */
