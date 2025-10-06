@@ -45,7 +45,7 @@ const ThreeDViewController = () => import('#controllers/3dview_controller')
 router.post('/api/landing/request', [LandingController, 'request'])
 
 // 3D Visualization public endpoint (no auth required)
-router.post('/api/3d/catalog/:userId', [ThreeDViewController, 'get3DPhotosByUserId'])
+router.post('/api/3d/catalog/:id', [ThreeDViewController, 'get3DPhotosByIdOrUsername'])
 
 // Endpoints health (sin auth)
 router.get('/api/analyzer/health/user', [AnalyzerController, 'healthForUser'])

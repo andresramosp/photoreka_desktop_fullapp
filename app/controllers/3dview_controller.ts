@@ -28,17 +28,37 @@ export default class ThreeDViewController {
   }
 
   /**
-   * Endpoint público para obtener fotos con coordenadas 3D por userId
-   * Params: { userId }
+   * Endpoint público para obtener fotos con coordenadas 3D por userId (numérico) o username (alfanumérico, parte antes de la @ en el email)
+   * Params: { id } // puede ser userId (numérico) o username (alfanumérico)
    * Body: { chunkName }
    */
-  public async get3DPhotosByUserId({ request, response, params }: HttpContext) {
+  public async get3DPhotosByIdOrUsername({ request, response, params }: HttpContext) {
     try {
-      const { userId } = params
+      const { id } = params
       const { chunkName } = request.body()
 
-      if (!userId) {
-        return response.badRequest({ message: 'El parámetro userId es requerido' })
+      if (!id) {
+        return response.badRequest({ message: 'El parámetro id es requerido' })
+      }
+
+      let userId: string
+      if (/^\d+$/.test(id)) {
+        // Es numérico, se asume userId
+        userId = id
+      } else {
+        // Es alfanumérico, buscar por username (parte antes de la @ en el email)
+        const User = (await import('../models/user.js')).default
+        // Compatibilidad con PostgreSQL: usar POSITION y SUBSTRING
+        const user = await User.query()
+          .whereRaw("LOWER(SUBSTRING(email FROM 1 FOR POSITION('@' IN email) - 1)) = ?", [
+            id.toLowerCase(),
+          ])
+          .first()
+
+        if (!user) {
+          return response.notFound({ message: 'Usuario no encontrado' })
+        }
+        userId = user.id.toString()
       }
 
       const threeDManager = new ThreeDManager()
@@ -46,7 +66,7 @@ export default class ThreeDViewController {
 
       return response.ok(result)
     } catch (error) {
-      console.error('Error en get3DPhotosByUserId:', error)
+      console.error('Error en get3DPhotosByIdOrUsername:', error)
       return response.internalServerError({
         message: 'Error generando visualización 3D de fotos',
         error: error.message,
