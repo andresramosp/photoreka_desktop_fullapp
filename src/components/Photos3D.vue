@@ -1048,15 +1048,6 @@ const filteredPhotos = computed(() => {
   return photosWithMaterials.value.filter((photo) => photo.isVisible !== false);
 });
 
-// 🔧 Computed para fotos que realmente se deben renderizar (filtrar las ocultas por LOD)
-const photosToRender = computed(() => {
-  // SOLO renderizar fotos con texturas LOD COMPLETAMENTE cargadas
-  // Esto evita ver rectángulos vacíos durante la carga
-  return visiblePhotos.value.filter(
-    (photo) => photo.__textureLoaded && photo.lodObject
-  );
-});
-
 // Handler para cambio en filtro de aspectos visuales
 const onVisualAspectsChange = () => {
   console.log(
@@ -1595,11 +1586,11 @@ const downloadImageOnly = async (
 // Helper: crear un único Mesh (sin mipmaps en móvil para ahorrar VRAM)
 const createLODObject = (imageElement, position) => {
   // Ajuste dinámico adicional: si hay muchas fotos en dispositivo low perf (móvil o touch), bajar más
-  let maxSide = useLowPerformance.value ? 512 : 1024;
-  if (useLowPerformance.value && photosWithMaterials.value.length > 1500)
-    maxSide = 384;
-  if (useLowPerformance.value && photosWithMaterials.value.length > 2500)
-    maxSide = 320;
+  let maxSide = useLowPerformance.value ? 128 : 1024;
+  // if (useLowPerformance.value && photosWithMaterials.value.length > 1500)
+  //   maxSide = 128;
+  // if (useLowPerformance.value && photosWithMaterials.value.length > 2500)
+  //   maxSide = 320;
   let source = imageElement;
   const needsResize =
     imageElement.width > maxSide || imageElement.height > maxSide;
@@ -1705,14 +1696,14 @@ function enforceTextureBudget() {
 
 const CONFIG_CREATION = {
   mobileBase: 4,
-  desktopBase: 10,
-  maxBatchDesktop: 48,
+  desktopBase: 80, // ↑ Mucho más agresivo en desktop para carga casi-bulk
+  maxBatchDesktop: 200, // ↑ Sin límite práctico en desktop potente
   maxBatchMobile: 18,
   minBatch: 2,
   targetFrameMs: 16.6,
   upperFrameMs: 28,
   frameBudgetMsMobile: 5.5,
-  frameBudgetMsDesktop: 9,
+  frameBudgetMsDesktop: 25, // ↑ Permite gastar más tiempo por frame en desktop
 };
 
 const getBaseBatch = () =>
