@@ -13,7 +13,7 @@
     <TresCanvas v-else v-bind="gl" ref="canvasRef">
       <TresPerspectiveCamera
         ref="cameraRef"
-        :position="[0, 0, 120]"
+        :position="[0, 0, 250]"
         :fov="75"
         :aspect="cameraAspect"
         :near="1"
@@ -558,7 +558,7 @@ planeGeometry.attributes.normal.setUsage(THREE.StaticDrawUsage);
 
 // Grid helper
 // 🎯 markRaw: Grid helper tampoco necesita ser reactivo
-const gridHelper = markRaw(new THREE.GridHelper(200, 40));
+const gridHelper = markRaw(new THREE.GridHelper(400, 40));
 gridHelper.position.y = -50;
 
 // Group for LOD objects
@@ -1957,8 +1957,6 @@ const loadImagesFromCache = async (photos) => {
 
     // Update cache stats
     cacheStats.value = await getCacheStats();
-
-    return cached.size;
   } catch (error) {
     console.error("❌ Error cargando desde cache:", error);
     return 0;
@@ -2172,7 +2170,6 @@ const registerNewPhotos = async (newPhotos) => {
 
 // ✨ Nueva función optimizada para cambios de chunk que reutiliza texturas
 const updatePhotosPositions = async (newPhotos) => {
-  const byId = new Map(newPhotos.map((p) => [p.id, p]));
   const existingById = new Map(photosWithMaterials.value.map((p) => [p.id, p]));
 
   // Guardar start positions para animación (solo de las que persisten)
@@ -2267,18 +2264,7 @@ const updatePhotosPositions = async (newPhotos) => {
     downloadPhaseComplete.value = false;
     cachePhaseComplete.value = false;
 
-    // Intentar cargar desde cache primero
-    const cachedCount = await loadImagesFromCache(toTexture);
-
-    if (cachedCount > 0) {
-      console.log(
-        `⚡ ${cachedCount} fotos cargadas desde cache en cambio de chunk`
-      );
-      loaderStage.value = "downloading";
-      loaderSubtitle.value = `Loading ${
-        toTexture.length - cachedCount
-      } remaining photos...`;
-    }
+    await loadImagesFromCache(toTexture);
 
     enqueueAllNonCachedPhotos(toTexture);
 

@@ -57,7 +57,7 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
   };
 
   // Función simplificada para cargar todas las fotos
-  const loadAllPhotos = async (chunkName) => {
+  const loadAllPhotos = async (chunkName, reuseExisting = false) => {
     // Actualizar currentChunk al principio
     currentChunk.value = chunkName;
 
@@ -120,19 +120,50 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
         );
       }
 
-      const processedPhotos = workingPhotos.map((photo, idx) => {
-        const newPos = adaptedPositions[idx];
-        return {
-          ...photo,
-          // Guardar también coordenadas transformadas para consistencia futura
-          position: newPos,
-          coordinates: newPos,
-          rawCoordinates: photo.coordinates || [0, 0, 0], // por si se requiere debug
-        };
-      });
+      // Modo reutilización: actualizar solo las coordenadas de las fotos existentes si ya están cargadas
+      if (reuseExisting && photos3D.value.length > 0) {
+        // Modo reutilización: actualizar solo las coordenadas de las fotos existentes
+        console.log(
+          `♻️ Actualizando coordenadas de ${workingPhotos.length} fotos existentes`
+        );
 
-      console.log(`📸 Cargadas ${processedPhotos.length} fotos`);
-      photos3D.value = processedPhotos;
+        // Crear un mapa de ID -> nuevas coordenadas
+        const coordsMap = new Map();
+        workingPhotos.forEach((photo, idx) => {
+          coordsMap.set(
+            photo.id,
+            adaptedPositions[idx] || photo.coordinates || [0, 0, 0]
+          );
+        });
+
+        // Actualizar las fotos existentes con las nuevas coordenadas
+        photos3D.value = photos3D.value.map((existingPhoto) => {
+          const newCoords = coordsMap.get(existingPhoto.id);
+          if (newCoords) {
+            return {
+              ...existingPhoto,
+              position: newCoords,
+              coordinates: newCoords,
+            };
+          }
+          return existingPhoto;
+        });
+      } else {
+        // Modo normal: reemplazar todas las fotos
+        const processedPhotos = workingPhotos.map((photo, idx) => {
+          const newPos = adaptedPositions[idx];
+          return {
+            ...photo,
+            // Guardar también coordenadas transformadas para consistencia futura
+            position: newPos,
+            coordinates: newPos,
+            rawCoordinates: photo.coordinates || [0, 0, 0], // por si se requiere debug
+          };
+        });
+
+        console.log(`📸 Cargadas ${processedPhotos.length} fotos`);
+        photos3D.value = processedPhotos;
+      }
 
       console.log(`Carga completa: ${photos3D.value.length} fotos`);
     } catch (err) {
@@ -161,11 +192,15 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
       return;
     }
 
+    // Decidir si reutilizar fotos existentes
+    const shouldReuseExisting = photos3D.value.length > 0;
+
     console.log("🚀 Ejecutando loadAllPhotos para chunk:", newChunk, {
+      reuseExisting: shouldReuseExisting,
       lowPerformance: lowPerformance.value,
     });
 
-    await loadAllPhotos(newChunk);
+    await loadAllPhotos(newChunk, shouldReuseExisting);
     console.log("✅ changeChunk completado para chunk:", newChunk);
   };
 
