@@ -42,7 +42,7 @@ export default class ThreeDViewController {
       }
 
       const threeDManager = new ThreeDManager()
-      const result = await threeDManager.get3DPhotos(userId, chunkName, 750)
+      const result = await threeDManager.get3DPhotos(userId, chunkName)
 
       return response.ok(result)
     } catch (error) {
