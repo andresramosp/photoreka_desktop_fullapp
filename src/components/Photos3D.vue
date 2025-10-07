@@ -458,6 +458,7 @@
         floatingTagsSystem.activeTags.length > 0
       "
       class="floating-tags-wrapper"
+      :style="{ bottom: isPlayground ? '15px' : '80px' }"
     >
       <div
         v-for="(tag, index) in floatingTagsSystem.activeTags"
@@ -4037,7 +4038,6 @@ onUnmounted(() => {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 80px;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
