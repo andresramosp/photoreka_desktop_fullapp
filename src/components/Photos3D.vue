@@ -4044,7 +4044,6 @@ onUnmounted(() => {
   align-items: flex-start;
   pointer-events: none;
   z-index: 1500;
-  opacity: 0.8;
 }
 
 .floating-tag {
@@ -4052,10 +4051,9 @@ onUnmounted(() => {
   padding: 4px 10px;
   font-size: 11px;
   color: white;
-  background: var(--tag-color);
+  position: relative;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.2);
-
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
   white-space: nowrap;
   backdrop-filter: blur(8px);
@@ -4064,6 +4062,19 @@ onUnmounted(() => {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   animation: tagPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
   animation-delay: calc(var(--tag-index) * 0.05s);
+}
+
+.floating-tag::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--tag-color);
+  border-radius: 12px;
+  opacity: 0.7;
+  z-index: -1;
 }
 
 @keyframes tagPop {
