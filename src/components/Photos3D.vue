@@ -276,6 +276,26 @@
             </div>
           </div>
 
+          <!-- Floating Tags Toggle -->
+          <div
+            class="control-item"
+            style="
+              margin-top: 12px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            "
+          >
+            <label class="control-label" style="margin: 0"
+              >Show Floating Tags</label
+            >
+            <n-switch
+              v-model:value="floatingTagsSystem.config.enabled"
+              size="small"
+              @click.stop
+            />
+          </div>
+
           <!-- Detection Radius Slider -->
           <div class="control-item-full" style="margin-top: 12px">
             <label
@@ -477,7 +497,14 @@ import {
   nextTick,
 } from "vue";
 import { TresCanvas } from "@tresjs/core";
-import { NTooltip, NSelect, NIcon, NSlider, NTreeSelect } from "naive-ui";
+import {
+  NTooltip,
+  NSelect,
+  NIcon,
+  NSlider,
+  NTreeSelect,
+  NSwitch,
+} from "naive-ui";
 import { CloseOutlined, SettingOutlined, InfoCircleFilled } from "@vicons/antd";
 
 import { use3DPhotos } from "@/composables/3d-viewer/use3DPhotos.js";
@@ -4008,15 +4035,16 @@ onUnmounted(() => {
 
 .floating-tags-wrapper {
   position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   bottom: 80px;
-  left: 20px;
-  max-width: 400px;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   align-items: flex-start;
   pointer-events: none;
   z-index: 1500;
+  opacity: 0.8;
 }
 
 .floating-tag {
