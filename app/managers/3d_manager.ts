@@ -353,7 +353,7 @@ export default class ThreeDManager {
           tp.category,
           tp.area,
           t.id as tag_id,
-          t.name as tag_name,
+          t.name as tag_name, 
           t.group as tag_group
         FROM tags_photos tp
         JOIN tags t ON tp.tag_id = t.id
