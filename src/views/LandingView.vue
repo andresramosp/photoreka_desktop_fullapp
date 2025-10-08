@@ -527,6 +527,7 @@ import {
   LogInOutline,
   ChevronDownOutline,
   StopOutline,
+  CubeOutline,
 } from "@vicons/ionicons5";
 import { Workspace } from "@vicons/carbon";
 import AppLogo from "@/components/AppLogo.vue";
@@ -604,7 +605,7 @@ const videoTabs = ref([
   },
   {
     title: "3D Atlas",
-    icon: CameraOutline,
+    icon: CubeOutline,
     videoUrl: new URL("@/assets/videos/atlas_1.mp4", import.meta.url).href, // local video
     speed: 1.2,
   },
