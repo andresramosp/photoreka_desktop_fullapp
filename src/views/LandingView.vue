@@ -603,6 +603,12 @@ const videoTabs = ref([
     speed: 1.2,
   },
   {
+    title: "3D Atlas",
+    icon: CameraOutline,
+    videoUrl: new URL("@/assets/videos/atlas_1.mp4", import.meta.url).href, // local video
+    speed: 1.2,
+  },
+  {
     title: "Explorer",
     icon: SearchOutline,
     videoUrl: new URL("@/assets/videos/explorer_1.mp4", import.meta.url).href, // local video
