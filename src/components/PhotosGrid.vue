@@ -265,6 +265,9 @@
     <PhotoInfoDialog
       v-model="showPhotoInfoDialog"
       :selected-photo="selectedDialogPhoto"
+      :all-photos="displayedPhotos"
+      :current-photo-index="currentPhotoIndex"
+      @photo-navigate="handlePhotoNavigate"
     />
     <DuplicatePhotosDialog
       v-model="showDuplicatesDialog"
@@ -934,11 +937,28 @@ const handleSelectAll = () => {
   }
 };
 
+// Computed for current photo index in displayed photos
+const currentPhotoIndex = computed(() => {
+  if (!selectedDialogPhoto.value) return -1;
+  return displayedPhotos.value.findIndex(
+    (photo) => photo.id === selectedDialogPhoto.value.id
+  );
+});
+
 // Photo actions
 const showPhotoInfo = async (photo) => {
   const fullPhoto = await photosStore.fetchPhoto(photo.id);
   selectedDialogPhoto.value = fullPhoto;
   showPhotoInfoDialog.value = true;
+};
+
+// Handle photo navigation in dialog
+const handlePhotoNavigate = async (newIndex) => {
+  if (newIndex < 0 || newIndex >= displayedPhotos.value.length) return;
+
+  const photo = displayedPhotos.value[newIndex];
+  const fullPhoto = await photosStore.fetchPhoto(photo.id);
+  selectedDialogPhoto.value = fullPhoto;
 };
 
 const showDuplicates = (duplicates) => {

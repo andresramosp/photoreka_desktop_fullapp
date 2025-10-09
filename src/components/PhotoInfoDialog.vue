@@ -835,29 +835,79 @@
     :mask-closable="true"
     :show-icon="false"
     :closable="false"
-    :style="{ padding: '0', background: 'transparent' }"
+    :style="{ padding: '0' }"
     transform-origin="center"
   >
     <div class="fullscreen-container" @click="closeFullscreen">
       <div class="fullscreen-content">
-        <img
-          :src="
-            selectedPhoto?.originalUrl ||
-            selectedPhoto?.url ||
-            selectedPhoto?.thumbnailUrl
-          "
-          :alt="selectedPhoto?.filename || selectedPhoto?.name || 'Photo'"
-          class="fullscreen-photo"
-          @error="handleImageError"
-          @click="closeFullscreen"
-        />
+        <!-- Navigation Arrow Left -->
+        <n-button
+          v-if="hasPreviousPhoto"
+          class="nav-arrow nav-arrow-left"
+          size="large"
+          circle
+          type="primary"
+          @click.stop="goToPreviousPhoto"
+          :disabled="isTransitioning"
+          title="Previous photo (←)"
+        >
+          <template #icon>
+            <n-icon size="24">
+              <ChevronBack />
+            </n-icon>
+          </template>
+        </n-button>
+
+        <!-- Photo with transition -->
+        <transition
+          :name="slideDirection === 'next' ? 'slide-left' : 'slide-right'"
+          mode="out-in"
+        >
+          <img
+            :key="selectedPhoto?.id"
+            :src="
+              selectedPhoto?.originalUrl ||
+              selectedPhoto?.url ||
+              selectedPhoto?.thumbnailUrl
+            "
+            :alt="selectedPhoto?.filename || selectedPhoto?.name || 'Photo'"
+            class="fullscreen-photo"
+            @error="handleImageError"
+            @click="closeFullscreen"
+          />
+        </transition>
+
+        <!-- Navigation Arrow Right -->
+        <n-button
+          v-if="hasNextPhoto"
+          class="nav-arrow nav-arrow-right"
+          size="large"
+          circle
+          type="primary"
+          @click.stop="goToNextPhoto"
+          :disabled="isTransitioning"
+          title="Next photo (→)"
+        >
+          <template #icon>
+            <n-icon size="24">
+              <ChevronForward />
+            </n-icon>
+          </template>
+        </n-button>
+
+        <!-- Photo Counter -->
+        <!-- <div v-if="photoCounter" class="photo-counter">
+          {{ photoCounter }}
+        </div> -->
+
+        <!-- Close Button -->
         <n-button
           class="close-fullscreen-btn"
           size="large"
           circle
           type="primary"
           @click.stop="closeFullscreen"
-          title="Close fullscreen"
+          title="Close fullscreen (Esc)"
         >
           <template #icon>
             <n-icon size="20">
@@ -871,7 +921,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import {
   NModal,
   NIcon,
@@ -902,6 +952,8 @@ import {
   CreateOutline as EditIcon,
   WalkOutline,
   CloseOutline as CloseIcon,
+  ChevronBackOutline as ChevronBack,
+  ChevronForwardOutline as ChevronForward,
 } from "@vicons/ionicons5";
 import { FullscreenOutlined } from "@vicons/material";
 import { Trophy20Regular as ScoresIcon } from "@vicons/fluent";
@@ -921,9 +973,17 @@ const props = defineProps({
     type: Object,
     default: null,
   },
+  allPhotos: {
+    type: Array,
+    default: () => [],
+  },
+  currentPhotoIndex: {
+    type: Number,
+    default: -1,
+  },
 });
 
-const emit = defineEmits(["update:modelValue"]);
+const emit = defineEmits(["update:modelValue", "photo-navigate"]);
 
 const message = useMessage();
 const { downloadPhoto } = usePhotoDownload();
@@ -956,6 +1016,110 @@ const isSavingNotes = ref(false);
 
 const showCustomWeights = ref(false);
 const showFullscreenPhoto = ref(false);
+
+// Navigation state and logic
+const isTransitioning = ref(false);
+const slideDirection = ref("next"); // 'next' or 'prev'
+
+// Computed properties for navigation
+const hasPreviousPhoto = computed(() => {
+  return props.allPhotos?.length > 0 && props.currentPhotoIndex > 0;
+});
+
+const hasNextPhoto = computed(() => {
+  return (
+    props.allPhotos?.length > 0 &&
+    props.currentPhotoIndex < props.allPhotos.length - 1
+  );
+});
+
+const photoCounter = computed(() => {
+  if (!props.allPhotos?.length || props.currentPhotoIndex < 0) return "";
+  return `${props.currentPhotoIndex + 1} / ${props.allPhotos.length}`;
+});
+
+// Navigation methods
+const goToPreviousPhoto = () => {
+  if (!hasPreviousPhoto.value || isTransitioning.value) return;
+  isTransitioning.value = true;
+  slideDirection.value = "prev";
+  emit("photo-navigate", props.currentPhotoIndex - 1);
+  setTimeout(() => {
+    isTransitioning.value = false;
+  }, 400);
+};
+
+const goToNextPhoto = () => {
+  if (!hasNextPhoto.value || isTransitioning.value) return;
+  isTransitioning.value = true;
+  slideDirection.value = "next";
+  emit("photo-navigate", props.currentPhotoIndex + 1);
+  setTimeout(() => {
+    isTransitioning.value = false;
+  }, 400);
+};
+
+// Keyboard navigation
+const handleKeyDown = (e) => {
+  if (!showFullscreenPhoto.value) return;
+
+  if (e.key === "ArrowLeft") {
+    e.preventDefault();
+    goToPreviousPhoto();
+  } else if (e.key === "ArrowRight") {
+    e.preventDefault();
+    goToNextPhoto();
+  } else if (e.key === "Escape") {
+    closeFullscreen();
+  }
+};
+
+// Preload next/previous images for smooth transitions
+const preloadImage = (photoIndex) => {
+  if (!props.allPhotos?.[photoIndex]) return;
+
+  const photo = props.allPhotos[photoIndex];
+  const img = new Image();
+  img.src = photo.originalUrl || photo.url || photo.thumbnailUrl;
+};
+
+// Watch for fullscreen changes to preload adjacent images
+watch(showFullscreenPhoto, (isFullscreen) => {
+  if (isFullscreen && props.currentPhotoIndex >= 0) {
+    // Preload next and previous images
+    if (hasNextPhoto.value) {
+      preloadImage(props.currentPhotoIndex + 1);
+    }
+    if (hasPreviousPhoto.value) {
+      preloadImage(props.currentPhotoIndex - 1);
+    }
+  }
+});
+
+// Watch for photo index changes to preload adjacent images
+watch(
+  () => props.currentPhotoIndex,
+  (newIndex) => {
+    if (showFullscreenPhoto.value && newIndex >= 0) {
+      // Preload next and previous images
+      if (hasNextPhoto.value) {
+        preloadImage(newIndex + 1);
+      }
+      if (hasPreviousPhoto.value) {
+        preloadImage(newIndex - 1);
+      }
+    }
+  }
+);
+
+// Lifecycle hooks for keyboard listeners
+onMounted(() => {
+  window.addEventListener("keydown", handleKeyDown);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("keydown", handleKeyDown);
+});
 
 // Function to show custom weight controls
 const showCustomControls = () => {
@@ -2592,6 +2756,132 @@ if (typeof window !== "undefined") {
 @media (max-height: 600px) {
   .fullscreen-container {
     padding: 20px;
+  }
+}
+
+/* Photo transition animations - Slide effect */
+/* Slide to the left (next photo) */
+.slide-left-enter-active,
+.slide-left-leave-active {
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+}
+
+.slide-left-enter-from {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+.slide-left-leave-to {
+  transform: translateX(-100%);
+  opacity: 0;
+}
+
+/* Slide to the right (previous photo) */
+.slide-right-enter-active,
+.slide-right-leave-active {
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+}
+
+.slide-right-enter-from {
+  transform: translateX(-100%);
+  opacity: 0;
+}
+
+.slide-right-leave-to {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+/* Navigation Arrows */
+.nav-arrow {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10001;
+  background: rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(8px);
+  border: 2px solid rgba(255, 255, 255, 0.2) !important;
+  width: 56px;
+  height: 56px;
+  transition: all 0.3s ease;
+  opacity: 0.7;
+  color: white !important;
+}
+
+.nav-arrow:hover:not(:disabled) {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.8) !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+  transform: translateY(-50%) scale(1.1);
+}
+
+.nav-arrow:active:not(:disabled) {
+  transform: translateY(-50%) scale(0.95);
+}
+
+.nav-arrow:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.nav-arrow-left {
+  left: 24px;
+}
+
+.nav-arrow-right {
+  right: 24px;
+}
+
+/* Photo Counter */
+.photo-counter {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  z-index: 10001;
+  user-select: none;
+  -webkit-user-select: none;
+  letter-spacing: 0.5px;
+}
+
+/* Responsive for navigation arrows */
+@media (max-width: 768px) {
+  .nav-arrow {
+    width: 48px;
+    height: 48px;
+  }
+
+  .nav-arrow-left {
+    left: 12px;
+  }
+
+  .nav-arrow-right {
+    right: 12px;
+  }
+
+  .photo-counter {
+    bottom: 20px;
+    font-size: 12px;
+    padding: 8px 16px;
+  }
+}
+
+@media (max-height: 600px) {
+  .nav-arrow {
+    width: 44px;
+    height: 44px;
+  }
+
+  .photo-counter {
+    bottom: 16px;
   }
 }
 
