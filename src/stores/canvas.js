@@ -355,6 +355,7 @@ export const useCanvasStore = defineStore("canvas", {
 export const expansionTypeOptions = [
   { label: "General", value: "embedding" },
   { label: "Narrative", value: "story", basicOnly: false },
+  { label: "Visual accents", value: "visual_accents", basicOnly: false },
   { label: "Context", value: "context", basicOnly: false },
   { label: "Chromatic", value: "chromatic" },
   { label: "Tags", value: "tags", basicOnly: false },
