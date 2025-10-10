@@ -59,6 +59,9 @@ export default class SearchPhotoService {
       case 'context':
         scored = await this.scoreSemantic(query, candidateIds, anchors, ['context'])
         break
+      case 'visual_accents':
+        scored = await this.scoreSemantic(query, candidateIds, anchors, ['visual_accents'])
+        break
       case 'embedding':
         scored = await this.scoreEmbedding(query, candidateIds, anchors)
         break
