@@ -704,65 +704,6 @@
                 </span>
               </span>
             </div>
-            <!-- Action buttons (show when photos are selected) -->
-            <div v-if="localSelectedPhotoIds.length > 0" class="action-buttons">
-              <n-tooltip trigger="hover" placement="bottom">
-                <template #trigger>
-                  <n-button
-                    type="info"
-                    size="small"
-                    @click="handleDownloadMultiple"
-                    :disabled="
-                      localSelectedPhotoIds.length === 0 || isDownloading
-                    "
-                    :loading="isDownloading"
-                  >
-                    <template #icon>
-                      <n-icon>
-                        <CloudDownloadOutline />
-                      </n-icon>
-                    </template>
-                  </n-button>
-                </template>
-                <span>Download selected photos</span>
-              </n-tooltip>
-
-              <n-tooltip trigger="hover" placement="bottom">
-                <template #trigger>
-                  <n-button
-                    type="info"
-                    size="small"
-                    @click="handleAddToCollection"
-                    :disabled="localSelectedPhotoIds.length === 0"
-                  >
-                    <template #icon>
-                      <n-icon>
-                        <AlbumsOutline />
-                      </n-icon>
-                    </template>
-                  </n-button>
-                </template>
-                <span>Add selected photos to a collection</span>
-              </n-tooltip>
-
-              <n-tooltip trigger="hover" placement="bottom">
-                <template #trigger>
-                  <n-button
-                    type="info"
-                    size="small"
-                    @click="openToolSelector"
-                    :disabled="localSelectedPhotoIds.length === 0"
-                  >
-                    <template #icon>
-                      <n-icon>
-                        <MagicWand />
-                      </n-icon>
-                    </template>
-                  </n-button>
-                </template>
-                <span>Take selected photos to a tool</span>
-              </n-tooltip>
-            </div>
           </div>
 
           <div class="controls-right">
@@ -882,6 +823,76 @@
       @tool-selected="handleToolSelected"
       @close="closeToolSelector"
     />
+
+    <!-- Floating Action Bar (show when photos are selected) -->
+    <Transition name="floating-bar">
+      <div v-if="localSelectedPhotoIds.length > 0" class="floating-action-bar">
+        <div class="floating-action-content">
+          <div class="selected-count">
+            <span>{{ localSelectedPhotoIds.length }} selected</span>
+          </div>
+
+          <div class="floating-action-buttons">
+            <n-tooltip placement="top" trigger="hover">
+              <template #trigger>
+                <n-button
+                  type="info"
+                  size="medium"
+                  @click="handleDownloadMultiple"
+                  :disabled="
+                    localSelectedPhotoIds.length === 0 || isDownloading
+                  "
+                  :loading="isDownloading"
+                >
+                  <template #icon>
+                    <n-icon>
+                      <CloudDownloadOutline />
+                    </n-icon>
+                  </template>
+                </n-button>
+              </template>
+              <span>Download selected photos</span>
+            </n-tooltip>
+
+            <n-tooltip placement="top" trigger="hover">
+              <template #trigger>
+                <n-button
+                  type="info"
+                  size="medium"
+                  @click="handleAddToCollection"
+                  :disabled="localSelectedPhotoIds.length === 0"
+                >
+                  <template #icon>
+                    <n-icon>
+                      <AlbumsOutline />
+                    </n-icon>
+                  </template>
+                </n-button>
+              </template>
+              <span>Add selected photos to a collection</span>
+            </n-tooltip>
+
+            <n-tooltip placement="top" trigger="hover">
+              <template #trigger>
+                <n-button
+                  type="info"
+                  size="medium"
+                  @click="openToolSelector"
+                  :disabled="localSelectedPhotoIds.length === 0"
+                >
+                  <template #icon>
+                    <n-icon>
+                      <MagicWand />
+                    </n-icon>
+                  </template>
+                </n-button>
+              </template>
+              <span>Take selected photos to a tool</span>
+            </n-tooltip>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -2027,14 +2038,6 @@ const filterSummaryText = computed(() => {
   font-weight: 500;
 }
 
-/* Action buttons (inline with grid controls) */
-.action-buttons {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: 24px;
-}
-
 /* Controls right container */
 .controls-right {
   display: flex;
@@ -2604,5 +2607,102 @@ const filterSummaryText = computed(() => {
 .controls-left {
   display: flex;
   align-items: center;
+}
+
+/* Floating Action Bar */
+.floating-action-bar {
+  position: fixed;
+  top: 75px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background: rgba(30, 30, 30, 0.95);
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  padding: 12px 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.floating-action-content {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.selected-count {
+  font-size: 14px;
+  font-weight: 600;
+  color: #8b5cf6;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.floating-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Transition animations */
+.floating-bar-enter-active,
+.floating-bar-leave-active {
+  transition: all 0.3s ease;
+}
+
+.floating-bar-enter-from {
+  opacity: 0;
+  transform: translateX(-50%) translateY(20px);
+}
+
+.floating-bar-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(20px);
+}
+
+/* Responsive adjustments for floating bar */
+@media (max-width: 768px) {
+  .floating-action-bar {
+    bottom: 20px;
+    left: 16px;
+    right: 16px;
+    transform: none;
+    padding: 10px 16px;
+  }
+
+  .floating-action-content {
+    gap: 12px;
+  }
+
+  .selected-count {
+    font-size: 13px;
+  }
+
+  .floating-action-buttons {
+    gap: 6px;
+  }
+}
+
+@media (max-width: 480px) {
+  .floating-action-bar {
+    bottom: 16px;
+    left: 12px;
+    right: 12px;
+  }
+
+  .floating-action-content {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .selected-count {
+    width: 100%;
+    text-align: center;
+  }
+
+  .floating-action-buttons {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
 }
 </style>

@@ -23,89 +23,6 @@
           </span>
         </div>
 
-        <!-- Action buttons (show when photos are selected) -->
-        <div v-if="selectedPhotoIds.length > 0" class="action-buttons">
-          <n-tooltip placement="bottom" trigger="hover">
-            <template #trigger>
-              <n-button
-                type="error"
-                size="small"
-                @click="handleDeleteMultiple"
-                :disabled="selectedPhotoIds.length === 0"
-                :loading="isDeletingPhotos"
-              >
-                <template #icon v-if="!isDeletingPhotos">
-                  <n-icon>
-                    <svg viewBox="0 0 24 24">
-                      <path
-                        fill="currentColor"
-                        d="M9 3v1H4v2h1v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6h1V4h-5V3H9M7 6h10v13H7V6Z"
-                      />
-                    </svg>
-                  </n-icon>
-                </template>
-              </n-button>
-            </template>
-            <span>Delete selected photos</span>
-          </n-tooltip>
-          <n-tooltip placement="bottom" trigger="hover">
-            <template #trigger>
-              <n-button
-                type="info"
-                size="small"
-                @click="handleDownloadMultiple"
-                :disabled="selectedPhotoIds.length === 0 || isDownloading"
-                :loading="isDownloading"
-              >
-                <template #icon>
-                  <n-icon> <CloudDownloadOutline /> </n-icon>
-                </template>
-              </n-button>
-            </template>
-            <span>Download selected photos</span>
-          </n-tooltip>
-          <n-tooltip
-            v-if="displayAddToCollection"
-            placement="bottom"
-            trigger="hover"
-          >
-            <template #trigger>
-              <n-button
-                type="info"
-                size="small"
-                @click="handleAddToCollection"
-                :disabled="selectedPhotoIds.length === 0"
-              >
-                <template #icon>
-                  <n-icon>
-                    <AlbumsOutline />
-                  </n-icon>
-                </template>
-              </n-button>
-            </template>
-            <span>Add selected photos to a collection</span>
-          </n-tooltip>
-
-          <n-tooltip
-            placement="bottom"
-            trigger="hover"
-            v-if="displayMoveToTool"
-          >
-            <template #trigger>
-              <n-button
-                type="info"
-                size="small"
-                @click="openToolSelector"
-                :disabled="selectedPhotoIds.length === 0"
-              >
-                <template #icon>
-                  <n-icon> <MagicWand /> </n-icon>
-                </template>
-              </n-button>
-            </template>
-            <span>Take selected photos to a tool</span>
-          </n-tooltip>
-        </div>
         <div class="duplicates-controls-container">
           <!-- Review Duplicates Button -->
           <n-tooltip placement="bottom" trigger="hover">
@@ -325,6 +242,98 @@
         </div>
       </template>
     </n-modal>
+
+    <!-- Floating Action Bar (show when photos are selected) -->
+    <Transition name="floating-bar">
+      <div v-if="selectedPhotoIds.length > 0" class="floating-action-bar">
+        <div class="floating-action-content">
+          <div class="selected-count">
+            <span>{{ selectedPhotoIds.length }} selected</span>
+          </div>
+
+          <div class="floating-action-buttons">
+            <n-tooltip placement="top" trigger="hover">
+              <template #trigger>
+                <n-button
+                  type="error"
+                  size="medium"
+                  @click="handleDeleteMultiple"
+                  :disabled="selectedPhotoIds.length === 0"
+                  :loading="isDeletingPhotos"
+                >
+                  <template #icon v-if="!isDeletingPhotos">
+                    <n-icon>
+                      <svg viewBox="0 0 24 24">
+                        <path
+                          fill="currentColor"
+                          d="M9 3v1H4v2h1v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6h1V4h-5V3H9M7 6h10v13H7V6Z"
+                        />
+                      </svg>
+                    </n-icon>
+                  </template>
+                </n-button>
+              </template>
+              <span>Delete selected photos</span>
+            </n-tooltip>
+
+            <n-tooltip placement="top" trigger="hover">
+              <template #trigger>
+                <n-button
+                  type="info"
+                  size="medium"
+                  @click="handleDownloadMultiple"
+                  :disabled="selectedPhotoIds.length === 0 || isDownloading"
+                  :loading="isDownloading"
+                >
+                  <template #icon>
+                    <n-icon> <CloudDownloadOutline /> </n-icon>
+                  </template>
+                </n-button>
+              </template>
+              <span>Download selected photos</span>
+            </n-tooltip>
+
+            <n-tooltip
+              v-if="displayAddToCollection"
+              placement="top"
+              trigger="hover"
+            >
+              <template #trigger>
+                <n-button
+                  type="info"
+                  size="medium"
+                  @click="handleAddToCollection"
+                  :disabled="selectedPhotoIds.length === 0"
+                >
+                  <template #icon>
+                    <n-icon>
+                      <AlbumsOutline />
+                    </n-icon>
+                  </template>
+                </n-button>
+              </template>
+              <span>Add selected photos to a collection</span>
+            </n-tooltip>
+
+            <n-tooltip placement="top" trigger="hover" v-if="displayMoveToTool">
+              <template #trigger>
+                <n-button
+                  type="info"
+                  size="medium"
+                  @click="openToolSelector"
+                  :disabled="selectedPhotoIds.length === 0"
+                >
+                  <template #icon>
+                    <n-icon> <MagicWand /> </n-icon>
+                  </template>
+                </n-button>
+              </template>
+              <span>Take selected photos to a tool</span>
+            </n-tooltip>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -1072,12 +1081,6 @@ const handleToolSelected = async (toolId) => {
   gap: 12px;
 }
 
-.action-buttons {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .results-info-base {
   display: flex;
   align-items: center;
@@ -1255,6 +1258,103 @@ const handleToolSelected = async (toolId) => {
   .photo-grid-base.grid-cols-8,
   .photo-grid-base.grid-cols-10 {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Floating Action Bar */
+.floating-action-bar {
+  position: fixed;
+  top: 75px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background: rgba(30, 30, 30, 0.95);
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  padding: 12px 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.floating-action-content {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.selected-count {
+  font-size: 14px;
+  font-weight: 600;
+  color: #8b5cf6;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.floating-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Transition animations */
+.floating-bar-enter-active,
+.floating-bar-leave-active {
+  transition: all 0.3s ease;
+}
+
+.floating-bar-enter-from {
+  opacity: 0;
+  transform: translateX(-50%) translateY(20px);
+}
+
+.floating-bar-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(20px);
+}
+
+/* Responsive adjustments for floating bar */
+@media (max-width: 768px) {
+  .floating-action-bar {
+    bottom: 20px;
+    left: 16px;
+    right: 16px;
+    transform: none;
+    padding: 10px 16px;
+  }
+
+  .floating-action-content {
+    gap: 12px;
+  }
+
+  .selected-count {
+    font-size: 13px;
+  }
+
+  .floating-action-buttons {
+    gap: 6px;
+  }
+}
+
+@media (max-width: 480px) {
+  .floating-action-bar {
+    bottom: 16px;
+    left: 12px;
+    right: 12px;
+  }
+
+  .floating-action-content {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .selected-count {
+    width: 100%;
+    text-align: center;
+  }
+
+  .floating-action-buttons {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
   }
 }
 </style>
