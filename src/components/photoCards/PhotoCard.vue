@@ -177,6 +177,17 @@
           <CheckCircleIcon />
         </n-icon>
       </div>
+
+      <!-- Delete button (top-right corner) -->
+      <div
+        v-if="props.showDeleteButton"
+        class="delete-button"
+        @click.stop="handleDelete"
+      >
+        <n-icon size="16" color="#ffffff">
+          <TrashIcon />
+        </n-icon>
+      </div>
     </div>
   </div>
 </template>
@@ -192,6 +203,7 @@ import {
   CheckmarkCircleOutline as CheckCircleIcon,
   HelpCircleOutline as HelpIcon,
   InformationCircleOutline as InfoIcon,
+  TrashOutline as TrashIcon,
 } from "@vicons/ionicons5";
 
 import { usePhotoScored } from "@/composables/usePhotoScored.js";
@@ -242,6 +254,7 @@ interface Props {
   computedStars?: number; // Pre-computed stars (0-3)
   showLowRelevanceIcon?: boolean; // Pre-computed low relevance indicator
   showInfoButton?: boolean; // Control visibility of info button
+  showDeleteButton?: boolean; // Control visibility of delete button
 }
 
 interface Emits {
@@ -249,6 +262,7 @@ interface Emits {
   (e: "info", photo: Photo): void;
   (e: "move-to-selection", photoId: string): void; // For curation mode
   (e: "move-to-curation", photoId: string): void; // For selection mode
+  (e: "delete", photoId: string): void; // For deleting individual photos
 }
 
 const props = withDefaults(defineProps<Props & { isThinking?: boolean }>(), {
@@ -357,6 +371,10 @@ const moveToSelection = () => {
 
 const moveToCuration = () => {
   emit("move-to-curation", props.photo.id);
+};
+
+const handleDelete = () => {
+  emit("delete", props.photo.id);
 };
 
 const handleMouseEnter = () => {
@@ -648,6 +666,33 @@ const handleMouseLeave = () => {
   align-items: center;
   justify-content: center;
   z-index: 4;
+}
+
+/* Delete button */
+.delete-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background-color: rgba(239, 68, 68, 0.9);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s ease;
+}
+
+.photo-card:hover .delete-button {
+  opacity: 1;
+}
+
+.delete-button:hover {
+  background-color: rgba(239, 68, 68, 1);
+  transform: scale(1.1);
 }
 
 .photo-card-info.selected {

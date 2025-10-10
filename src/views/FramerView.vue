@@ -4,69 +4,8 @@
 
   <!-- Desktop/tablet layout -->
   <div v-else class="framer-container view-container">
-    <!-- Welcome state (only in non-playground mode) -->
-    <div v-if="!hasSelectedPhotos && !isPlaygroundMode" class="empty-state">
-      <div class="empty-content">
-        <div class="empty-icon">
-          <n-icon :size="48">
-            <SquareOutline />
-          </n-icon>
-        </div>
-        <h2 class="empty-title">Create Beautiful Frames</h2>
-        <p class="empty-description">
-          Transform your photos with professional frames. Perfect for social
-          media, prints, and presentations.
-        </p>
-
-        <div class="instructions-list">
-          <div class="instruction-item">
-            <n-icon :size="20">
-              <ImageIcon />
-            </n-icon>
-            <span>Add photos from your catalog to get started</span>
-          </div>
-          <div class="instruction-item">
-            <n-icon :size="20">
-              <GridIcon />
-            </n-icon>
-            <span>Choose from various frame styles and aspect ratios</span>
-          </div>
-          <div class="instruction-item">
-            <n-icon :size="20">
-              <SpeedometerIcon />
-            </n-icon>
-            <span>Adjust margins and spacing with precision controls</span>
-          </div>
-          <div class="instruction-item">
-            <n-icon :size="20">
-              <DownloadIcon />
-            </n-icon>
-            <span>Download individually or process in batches</span>
-          </div>
-        </div>
-
-        <div class="report-actions">
-          <n-button
-            type="primary"
-            size="large"
-            class="generate-button"
-            @click="openPhotoDialog"
-            :loading="isProcessingFiles"
-            :disabled="isProcessingFiles"
-          >
-            <template #icon>
-              <n-icon>
-                <AddIcon />
-              </n-icon>
-            </template>
-            {{ isProcessingFiles ? "Processing..." : "Add Photos" }}
-          </n-button>
-        </div>
-      </div>
-    </div>
-
     <!-- Main framer interface -->
-    <div v-if="hasSelectedPhotos || isPlaygroundMode" class="framer-interface">
+    <div class="framer-interface">
       <!-- Main content area -->
       <div class="framer-content">
         <!-- Left sidebar with frame options -->
@@ -255,6 +194,27 @@
             <h4>Selected Photos</h4>
             <div class="strip-actions">
               <n-button
+                @click="toggleSelectAll"
+                quaternary
+                type="primary"
+                size="tiny"
+                :disabled="selectedPhotos.length === 0"
+              >
+                <template #icon>
+                  <n-icon>
+                    <CheckIcon
+                      v-if="selectedPhotoIds.size === selectedPhotos.length"
+                    />
+                    <CheckIcon v-else />
+                  </n-icon>
+                </template>
+                {{
+                  selectedPhotoIds.size === selectedPhotos.length
+                    ? "Unselect All"
+                    : "Select All"
+                }}
+              </n-button>
+              <n-button
                 @click="clearAllPhotos"
                 quaternary
                 type="error"
@@ -265,7 +225,7 @@
                     <TrashIcon />
                   </n-icon>
                 </template>
-                Clear All
+                Clear
               </n-button>
             </div>
           </div>
@@ -301,8 +261,10 @@
               :show-stars="false"
               :show-tags="false"
               :show-return-button="false"
+              :show-delete-button="true"
               @select="selectPhoto"
               @move-to-curation="removePhoto"
+              @delete="removePhoto"
               class="framer-photo-card"
             />
           </div>
@@ -315,6 +277,24 @@
           <h4>Selected Photos</h4>
           <div class="strip-actions">
             <span class="photo-count">{{ selectedPhotos.length }} photos</span>
+            <n-button
+              @click="toggleSelectAll"
+              quaternary
+              type="primary"
+              size="small"
+              :disabled="selectedPhotos.length === 0"
+            >
+              <template #icon>
+                <n-icon>
+                  <CheckIcon />
+                </n-icon>
+              </template>
+              {{
+                selectedPhotoIds.size === selectedPhotos.length
+                  ? "Unselect All"
+                  : "Select All"
+              }}
+            </n-button>
             <n-button
               @click="clearAllPhotos"
               quaternary
@@ -362,8 +342,10 @@
             :show-stars="false"
             :show-tags="false"
             :show-return-button="false"
+            :show-delete-button="true"
             @select="selectPhoto"
             @move-to-curation="removePhoto"
+            @delete="removePhoto"
             class="framer-photo-card mobile-card"
           />
         </div>
@@ -399,7 +381,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useRoute } from "vue-router";
 
 defineOptions({
@@ -875,6 +857,19 @@ const removePhoto = (photoId) => {
   }
 };
 
+const toggleSelectAll = () => {
+  if (selectedPhotoIds.value.size === selectedPhotos.value.length) {
+    // If all are selected, unselect all
+    selectedPhotoIds.value.clear();
+  } else {
+    // Otherwise, select all
+    selectedPhotoIds.value.clear();
+    selectedPhotos.value.forEach((photo) => {
+      selectedPhotoIds.value.add(photo.id);
+    });
+  }
+};
+
 const clearAllPhotos = () => {
   selectedPhotos.value = [];
   currentPhoto.value = null;
@@ -933,14 +928,8 @@ const onImageError = () => {
   message.error("Failed to load image");
 };
 
-// Initialize
-onMounted(async () => {
-  // Ensure photos are loaded (only in authenticated mode)
-  if (!isPlaygroundMode.value && photosStore.photos?.length === 0) {
-    await photosStore.getOrFetch(false);
-  }
-
-  // Check for photos to add from other views (via sessionStorage)
+// Function to process photos from sessionStorage
+const processPhotosFromSessionStorage = () => {
   const photosToAddData = sessionStorage.getItem("framer_photos_to_add");
   if (photosToAddData) {
     try {
@@ -952,6 +941,7 @@ onMounted(async () => {
           .filter(Boolean);
 
         if (photoObjects.length > 0) {
+          // Add new photos to existing ones (accumulate instead of replace)
           selectedPhotos.value.push(...photoObjects);
 
           // Auto-select first photo if none selected
@@ -965,6 +955,12 @@ onMounted(async () => {
           if (!selectedFrame.value) {
             selectedFrame.value = allFrames.value[0];
           }
+
+          message.success(
+            `Added ${photoObjects.length} photo${
+              photoObjects.length > 1 ? "s" : ""
+            } to Framer`
+          );
         }
       }
 
@@ -975,10 +971,30 @@ onMounted(async () => {
       sessionStorage.removeItem("framer_photos_to_add");
     }
   }
+};
+
+// Initialize
+onMounted(async () => {
+  // Ensure photos are loaded (only in authenticated mode)
+  if (!isPlaygroundMode.value && photosStore.photos?.length === 0) {
+    await photosStore.getOrFetch(false);
+  }
+
+  // Check for photos to add from other views (via sessionStorage)
+  processPhotosFromSessionStorage();
 
   // Add window resize listener for mobile detection
   window.addEventListener("resize", updateWindowWidth);
 });
+
+// Watch for route changes to detect when coming back to framer with new photos
+watch(
+  () => route.fullPath,
+  () => {
+    // Check sessionStorage whenever route changes
+    processPhotosFromSessionStorage();
+  }
+);
 
 onUnmounted(() => {
   window.removeEventListener("resize", updateWindowWidth);
@@ -1607,7 +1623,9 @@ onUnmounted(() => {
 .strip-actions {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
+  flex-direction: row;
+  align-content: center;
+  justify-content: center;
 }
 
 .strip-header h4 {

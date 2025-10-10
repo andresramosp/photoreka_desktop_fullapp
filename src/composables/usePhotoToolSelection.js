@@ -123,12 +123,6 @@ export function usePhotoToolSelection(customTools = null) {
 
       // Navigate to framer
       await router.push("/framer");
-
-      message.success(
-        `Added ${photosToAdd.length} photo${
-          photosToAdd.length > 1 ? "s" : ""
-        } to Framer`
-      );
     } catch (error) {
       console.error("Error taking photos to framer:", error);
       message.error("Failed to add photos to Framer");
