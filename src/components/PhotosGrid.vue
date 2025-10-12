@@ -122,21 +122,6 @@
             </n-icon>
           </n-button>
         </div>
-
-        <!-- Select All button (always visible) -->
-        <n-button type="default" size="small" @click="handleSelectAll">
-          <template #icon>
-            <n-icon>
-              <svg viewBox="0 0 24 24">
-                <path
-                  fill="currentColor"
-                  d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"
-                />
-              </svg>
-            </n-icon>
-          </template>
-          {{ allSelected ? "Deselect All" : "Select All" }}
-        </n-button>
       </div>
     </div>
 
@@ -243,97 +228,20 @@
       </template>
     </n-modal>
 
-    <!-- Floating Action Bar (show when photos are selected) -->
-    <Transition name="floating-bar">
-      <div v-if="selectedPhotoIds.length > 0" class="floating-action-bar">
-        <div class="floating-action-content">
-          <div class="selected-count">
-            <span>{{ selectedPhotoIds.length }} selected</span>
-          </div>
-
-          <div class="floating-action-buttons">
-            <n-tooltip placement="top" trigger="hover">
-              <template #trigger>
-                <n-button
-                  type="error"
-                  size="medium"
-                  @click="handleDeleteMultiple"
-                  :disabled="selectedPhotoIds.length === 0"
-                  :loading="isDeletingPhotos"
-                >
-                  <template #icon v-if="!isDeletingPhotos">
-                    <n-icon>
-                      <svg viewBox="0 0 24 24">
-                        <path
-                          fill="currentColor"
-                          d="M9 3v1H4v2h1v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6h1V4h-5V3H9M7 6h10v13H7V6Z"
-                        />
-                      </svg>
-                    </n-icon>
-                  </template>
-                </n-button>
-              </template>
-              <span>Delete selected photos</span>
-            </n-tooltip>
-
-            <n-tooltip placement="top" trigger="hover">
-              <template #trigger>
-                <n-button
-                  type="info"
-                  size="medium"
-                  @click="handleDownloadMultiple"
-                  :disabled="selectedPhotoIds.length === 0 || isDownloading"
-                  :loading="isDownloading"
-                >
-                  <template #icon>
-                    <n-icon> <CloudDownloadOutline /> </n-icon>
-                  </template>
-                </n-button>
-              </template>
-              <span>Download selected photos</span>
-            </n-tooltip>
-
-            <n-tooltip
-              v-if="displayAddToCollection"
-              placement="top"
-              trigger="hover"
-            >
-              <template #trigger>
-                <n-button
-                  type="info"
-                  size="medium"
-                  @click="handleAddToCollection"
-                  :disabled="selectedPhotoIds.length === 0"
-                >
-                  <template #icon>
-                    <n-icon>
-                      <AlbumsOutline />
-                    </n-icon>
-                  </template>
-                </n-button>
-              </template>
-              <span>Add selected photos to a collection</span>
-            </n-tooltip>
-
-            <n-tooltip placement="top" trigger="hover" v-if="displayMoveToTool">
-              <template #trigger>
-                <n-button
-                  type="info"
-                  size="medium"
-                  @click="openToolSelector"
-                  :disabled="selectedPhotoIds.length === 0"
-                >
-                  <template #icon>
-                    <n-icon> <MagicWand /> </n-icon>
-                  </template>
-                </n-button>
-              </template>
-              <span>Take selected photos to a tool</span>
-            </n-tooltip>
-          </div>
-        </div>
-      </div>
-    </Transition>
+    <!-- Floating Action Bar -->
+    <FloatingActionBar
+      :selected-count="selectedPhotoIds.length"
+      :show-delete="true"
+      :show-add-to-collection="displayAddToCollection"
+      :show-move-to-tool="displayMoveToTool"
+      :is-deleting="isDeletingPhotos"
+      :is-downloading="isDownloading"
+      @clear-selection="clearAllSelections"
+      @delete="handleDeleteMultiple"
+      @download="handleDownloadMultiple"
+      @add-to-collection="handleAddToCollection"
+      @move-to-tool="openToolSelector"
+    />
   </div>
 </template>
 
@@ -366,6 +274,7 @@ import DuplicatePhotosDialog from "./DuplicatePhotosDialog.vue";
 import CollectionModal from "./CollectionModal.vue";
 import PhotosGridControls from "./PhotosGridControls.vue";
 import PhotoToolSelector from "./PhotoToolSelector.vue";
+import FloatingActionBar from "./FloatingActionBar.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
@@ -1258,103 +1167,6 @@ const handleToolSelected = async (toolId) => {
   .photo-grid-base.grid-cols-8,
   .photo-grid-base.grid-cols-10 {
     grid-template-columns: 1fr;
-  }
-}
-
-/* Floating Action Bar */
-.floating-action-bar {
-  position: fixed;
-  top: 75px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1000;
-  background: rgba(30, 30, 30, 0.95);
-  backdrop-filter: blur(12px);
-  border-radius: 16px;
-  padding: 12px 24px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
-}
-
-.floating-action-content {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-
-.selected-count {
-  font-size: 14px;
-  font-weight: 600;
-  color: #8b5cf6;
-  padding: 0 8px;
-  white-space: nowrap;
-}
-
-.floating-action-buttons {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* Transition animations */
-.floating-bar-enter-active,
-.floating-bar-leave-active {
-  transition: all 0.3s ease;
-}
-
-.floating-bar-enter-from {
-  opacity: 0;
-  transform: translateX(-50%) translateY(20px);
-}
-
-.floating-bar-leave-to {
-  opacity: 0;
-  transform: translateX(-50%) translateY(20px);
-}
-
-/* Responsive adjustments for floating bar */
-@media (max-width: 768px) {
-  .floating-action-bar {
-    bottom: 20px;
-    left: 16px;
-    right: 16px;
-    transform: none;
-    padding: 10px 16px;
-  }
-
-  .floating-action-content {
-    gap: 12px;
-  }
-
-  .selected-count {
-    font-size: 13px;
-  }
-
-  .floating-action-buttons {
-    gap: 6px;
-  }
-}
-
-@media (max-width: 480px) {
-  .floating-action-bar {
-    bottom: 16px;
-    left: 12px;
-    right: 12px;
-  }
-
-  .floating-action-content {
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .selected-count {
-    width: 100%;
-    text-align: center;
-  }
-
-  .floating-action-buttons {
-    width: 100%;
-    justify-content: center;
-    flex-wrap: wrap;
   }
 }
 </style>
