@@ -138,6 +138,7 @@ const getKeepAliveComponents = () => {
     "ProjectBuilderView",
     "FramerView",
     "GridMakerView",
+    "3DView",
   ];
 
   // Debug: log components being kept alive

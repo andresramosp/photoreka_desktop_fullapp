@@ -369,7 +369,15 @@
               <div class="control-icon-group">
                 <span class="control-icon-text">🖱️</span>
                 <span class="control-text"
-                  >Click on stage to activate camera controls</span
+                  >Right-click on stage to activate camera controls</span
+                >
+              </div>
+            </div>
+            <div class="control-tip">
+              <div class="control-icon-group">
+                <span class="control-icon-text">👆</span>
+                <span class="control-text"
+                  >Left-click on photos to select/deselect</span
                 >
               </div>
             </div>
@@ -474,6 +482,54 @@
       </div>
     </div>
 
+    <!-- Selected Photos Container -->
+    <div v-if="selectedPhotos.length > 0" class="selected-photos-container">
+      <div class="selected-photos-header">
+        <span class="selected-count">{{ selectedPhotos.length }} selected</span>
+        <FixedActionBar
+          :selectedCount="selectedPhotos.length"
+          :showDelete="false"
+          :showAddToCollection="!isPlayground"
+          :showMoveToTool="!isPlayground"
+          :isDownloading="isDownloading"
+          @download="handleDownloadPhotos"
+          @add-to-collection="handleAddToCollection"
+          @move-to-tool="handleMoveToTool"
+        />
+        <button
+          @click="clearSelection"
+          class="clear-selection-btn"
+          title="Clear selection"
+        >
+          <n-icon size="14">
+            <CloseOutlined />
+          </n-icon>
+        </button>
+      </div>
+      <div class="selected-photos-list">
+        <div
+          v-for="photo in selectedPhotos"
+          :key="photo.id"
+          class="selected-photo-item"
+        >
+          <img
+            :src="photo.thumbnailUrl || photo.url || photo.originalUrl"
+            :alt="photo.id"
+            class="selected-photo-thumb"
+          />
+          <button
+            @click="removeSelectedPhoto(photo.id)"
+            class="remove-photo-btn"
+            title="Remove from selection"
+          >
+            <n-icon size="12">
+              <CloseOutlined />
+            </n-icon>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Discrete Loading Indicator -->
     <div v-if="showDiscreteLoader" class="discrete-loader">
       <div class="loader-spinner"></div>
@@ -484,6 +540,25 @@
         >{{ loadingProgress }}%</span
       >
     </div>
+
+    <!-- Collection Modal -->
+    <CollectionModal
+      :show="showCollectionModal"
+      :photo-count="selectedPhotoIds.length"
+      :photo-ids="selectedPhotoIds"
+      @add-to-collection="handleCollectionAdded"
+      @cancel="handleCollectionModalCancel"
+    />
+
+    <!-- Photo Tool Selector Modal -->
+    <PhotoToolSelector
+      :show="showToolSelector"
+      :photo-count="selectedPhotoIds.length"
+      :tools="availableTools"
+      :is-processing="isProcessingTool"
+      @tool-selected="handleToolSelected"
+      @close="closeToolSelector"
+    />
   </div>
 </template>
 
@@ -505,9 +580,14 @@ import {
   NSlider,
   NTreeSelect,
   NSwitch,
+  useMessage,
 } from "naive-ui";
 import { CloseOutlined, SettingOutlined, InfoCircleFilled } from "@vicons/antd";
+import { useRouter } from "vue-router";
 
+import FixedActionBar from "@/components/3d-atlas/FixedActionBar.vue";
+import CollectionModal from "@/components/CollectionModal.vue";
+import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import { use3DPhotos } from "@/composables/3d-viewer/use3DPhotos.js";
 import { useFirstPersonControls } from "@/composables//3d-viewer/useFirstPersonControls.js";
 import { useTouchControls } from "@/composables/3d-viewer/useTouchControls.js";
@@ -518,6 +598,8 @@ import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useHasTouch } from "@/composables/useHasTouch.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
+import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
+import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { api } from "@/utils/axios";
 import * as THREE from "three";
 // (LOD helpers removidos para mipmaps) - import eliminado definitivamente
@@ -535,6 +617,19 @@ const props = defineProps({
     default: false,
   },
 });
+
+// Initialize composables and utilities
+const message = useMessage();
+const router = useRouter();
+const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
+const {
+  isProcessing: isProcessingTool,
+  showToolSelector,
+  availableTools,
+  takeToTool,
+  openToolSelector,
+  closeToolSelector,
+} = usePhotoToolSelection();
 
 // Detect mobile device for UI adjustments
 const { isMobile } = useIsMobile();
@@ -615,7 +710,7 @@ const currentPosition = ref({ x: 0, y: 0, z: 80 });
 // Toggle states for collapsible sections
 const showMoreFilters = ref(false);
 const showDisplayOptions = ref(false);
-const showFloatingTagsOptions = ref(false);
+
 const showNavigationControls = ref(true);
 
 // Filtro de aspectos visuales
@@ -630,14 +725,27 @@ const isSearching = ref(false);
 const searchResults = ref([]);
 let searchTimeout = null;
 
+// Sistema de selección de fotos
+const selectedPhotos = ref([]);
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let touchStartPos = null;
+const TOUCH_MOVE_THRESHOLD = 10; // pixels
+
+// Modal states for actions
+const showCollectionModal = ref(false);
+
+// Computed para selectedPhotoIds (compatible con composables)
+const selectedPhotoIds = computed(() => selectedPhotos.value.map((p) => p.id));
+
+// Sistema de hover para fotos
+const hoveredPhoto = ref(null);
+const originalHoverMaterial = ref(null);
+
 // Loader discreto con progreso
 const showDiscreteLoader = ref(true);
 // Fase inicial: reducimos trabajo por frame hasta que se cargue suficiente
 const initialLoadingPhase = ref(true);
-
-// Animación de transición (animationStartTime viene del effectsManager, pero lo mantenemos local)
-const animationStartTime = ref(0);
-const TRANSITION_DURATION = 1500; // 1.5 segundos
 
 // Valor local del selector para evitar conflictos con v-model
 const selectedChunk = ref(null);
@@ -666,7 +774,7 @@ const updateCameraAspect = () => {
 // Canvas configuration - Optimized for memory efficiency and context stability
 // IMPORTANTE: NO usar ref() aquí para evitar reactividad que cause re-cargas de fotos
 const gl = {
-  clearColor: "#1a1a1a",
+  clearColor: "#000000",
   antialias: false, // Disabled for better performance with many textures
   powerPreference: "high-performance", // Prioriza GPU dedicada para máximo rendimiento
   forceWebGL: true, // Force WebGL over Canvas 2D
@@ -1909,6 +2017,319 @@ const startDownloadLoop = () => {
   downloadLoopId = requestAnimationFrame(downloadLoop);
 };
 
+// Funciones para manejo de selección de fotos
+const handleTouchStart = (event) => {
+  if (event.touches.length === 1) {
+    const touch = event.touches[0];
+    touchStartPos = { x: touch.clientX, y: touch.clientY };
+  }
+};
+
+// Función para manejar el hover sobre fotos
+const handleMouseMove = (event) => {
+  // Solo aplicar hover si no es dispositivo táctil
+  if (hasTouch.value || !cameraRef.value || !containerRef.value) return;
+
+  // Calcular coordenadas del mouse normalizadas (-1 to +1)
+  const rect = containerRef.value.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  // Actualizar raycaster
+  raycaster.setFromCamera(mouse, cameraRef.value);
+
+  // Obtener solo los meshes de las fotos VISIBLES (no filtradas)
+  const photoMeshes = [];
+  photosWithMaterials.value.forEach((photo) => {
+    // Solo considerar fotos visibles (no filtradas y con opacity > 0)
+    if (photo.isVisible === false) return;
+    if (photo.lodObject?.material?.opacity === 0) return;
+
+    if (photo.lodObject) {
+      if (photo.lodObject.isLOD) {
+        // Si es LOD, obtener el mesh actual visible
+        photo.lodObject.traverse((child) => {
+          if (child.isMesh && child.name !== "hoverBorder") {
+            // Ignorar bordes de hover
+            photoMeshes.push({ mesh: child, photo });
+          }
+        });
+      } else if (photo.lodObject.isMesh) {
+        // Si es mesh directo
+        photoMeshes.push({ mesh: photo.lodObject, photo });
+      }
+    }
+  });
+
+  // Detectar intersecciones
+  const intersects = raycaster.intersectObjects(
+    photoMeshes.map((pm) => pm.mesh)
+  );
+
+  if (intersects.length > 0) {
+    // Hay una foto bajo el cursor
+    const hoveredMesh = intersects[0].object;
+    const hoveredPhotoData = photoMeshes.find((pm) => pm.mesh === hoveredMesh);
+
+    // Cambiar cursor a pointer
+    if (containerRef.value) {
+      containerRef.value.style.cursor = "pointer";
+    }
+
+    if (
+      hoveredPhotoData &&
+      hoveredPhotoData.photo.id !== hoveredPhoto.value?.id
+    ) {
+      // Restaurar foto anterior si existe
+      clearPhotoHover();
+
+      // Aplicar hover a la nueva foto
+      hoveredPhoto.value = hoveredPhotoData.photo;
+
+      // Crear un borde brillante añadiendo un plano ligeramente más grande detrás
+      if (hoveredPhotoData.photo.lodObject) {
+        // Crear geometría para el borde (ligeramente más grande)
+        const borderGeometry = new THREE.PlaneGeometry(4.15, 3.15);
+        // Obtener el color de la variable CSS --primary-color-hover
+        let cssHoverColor = getComputedStyle(document.documentElement)
+          .getPropertyValue("--warning-color-hover")
+          .trim();
+        // Convertir a número hexadecimal para Three.js
+        let borderColor = 0xffffff;
+        if (/^#([0-9a-fA-F]{6})$/.test(cssHoverColor)) {
+          borderColor = parseInt(cssHoverColor.replace("#", ""), 16);
+        }
+        const borderMaterial = new THREE.MeshBasicMaterial({
+          color: borderColor,
+          transparent: true,
+          opacity: 0.4,
+          depthTest: true,
+          depthWrite: false,
+        });
+        const borderMesh = new THREE.Mesh(borderGeometry, borderMaterial);
+
+        // Posicionar el borde justo detrás de la foto
+        borderMesh.position.z = -0.01;
+        borderMesh.name = "hoverBorder";
+
+        // Añadir el borde como hijo del LOD object
+        hoveredPhotoData.photo.lodObject.add(borderMesh);
+      }
+    }
+  } else {
+    // No hay foto bajo el cursor
+    // Restaurar cursor
+    if (containerRef.value) {
+      containerRef.value.style.cursor = "default";
+    }
+    clearPhotoHover();
+  }
+};
+
+// Función para limpiar el efecto hover
+const clearPhotoHover = () => {
+  if (hoveredPhoto.value && hoveredPhoto.value.lodObject) {
+    // Buscar y eliminar el borde de hover
+    const borderMesh =
+      hoveredPhoto.value.lodObject.getObjectByName("hoverBorder");
+    if (borderMesh) {
+      // Limpiar geometría y material
+      if (borderMesh.geometry) borderMesh.geometry.dispose();
+      if (borderMesh.material) borderMesh.material.dispose();
+      // Remover del padre
+      hoveredPhoto.value.lodObject.remove(borderMesh);
+    }
+  }
+
+  hoveredPhoto.value = null;
+  originalHoverMaterial.value = null;
+};
+const handlePhotoClick = (event) => {
+  if (!cameraRef.value || !containerRef.value) return;
+
+  console.log("🖱️ Click detectado, tipo:", event.type);
+
+  // Para touch, verificar que no fue un drag
+  if (event.type === "touchend") {
+    if (!touchStartPos) return;
+
+    const touch = event.changedTouches[0];
+    const deltaX = Math.abs(touch.clientX - touchStartPos.x);
+    const deltaY = Math.abs(touch.clientY - touchStartPos.y);
+
+    // Si se movió mucho, considerarlo un drag, no un tap
+    if (deltaX > TOUCH_MOVE_THRESHOLD || deltaY > TOUCH_MOVE_THRESHOLD) {
+      touchStartPos = null;
+      return;
+    }
+    touchStartPos = null;
+  }
+
+  // Calcular coordenadas del mouse/touch normalizadas (-1 to +1)
+  const rect = containerRef.value.getBoundingClientRect();
+
+  let clientX, clientY;
+  if (event.type === "touchend") {
+    const touch = event.changedTouches[0];
+    clientX = touch.clientX;
+    clientY = touch.clientY;
+  } else {
+    clientX = event.clientX;
+    clientY = event.clientY;
+  }
+
+  mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+
+  // Actualizar raycaster
+  raycaster.setFromCamera(mouse, cameraRef.value);
+
+  // Obtener solo los meshes de las fotos VISIBLES (no filtradas)
+  const photoMeshes = [];
+  photosWithMaterials.value.forEach((photo) => {
+    // Solo considerar fotos visibles (no filtradas y con opacity > 0)
+    if (photo.isVisible === false) return;
+    if (photo.lodObject?.material?.opacity === 0) return;
+
+    if (photo.lodObject) {
+      if (photo.lodObject.isLOD) {
+        // Si es LOD, obtener el mesh actual visible
+        photo.lodObject.traverse((child) => {
+          if (child.isMesh && child.name !== "hoverBorder") {
+            // Ignorar bordes de hover
+            photoMeshes.push({ mesh: child, photo });
+          }
+        });
+      } else if (photo.lodObject.isMesh) {
+        // Si es mesh directo
+        photoMeshes.push({ mesh: photo.lodObject, photo });
+      }
+    }
+  });
+
+  // Detectar intersecciones
+  const intersects = raycaster.intersectObjects(
+    photoMeshes.map((pm) => pm.mesh)
+  );
+
+  if (intersects.length > 0) {
+    // Click en una foto - seleccionar/deseleccionar
+    console.log("📸 Click en foto detectado");
+    event.preventDefault();
+    event.stopPropagation();
+
+    const clickedMesh = intersects[0].object;
+    const clickedPhotoData = photoMeshes.find((pm) => pm.mesh === clickedMesh);
+
+    if (clickedPhotoData) {
+      togglePhotoSelection(clickedPhotoData.photo);
+    }
+  } else {
+    console.log(
+      "🌌 Click en el vacío (no se activa cámara con click izquierdo)"
+    );
+  }
+  // No hacer nada si click en el vacío con botón izquierdo
+};
+
+// Manejador para click derecho (activar cámara)
+const handleRightClick = (event) => {
+  event.preventDefault(); // Prevenir menú contextual
+  console.log("🖱️ Right-click detectado, activando cámara...");
+
+  if (!hasTouch.value && fpControls.value) {
+    fpControls.value.requestPointerLock();
+  }
+};
+
+const togglePhotoSelection = (photo) => {
+  const index = selectedPhotos.value.findIndex((p) => p.id === photo.id);
+
+  if (index !== -1) {
+    // Ya está seleccionada, deseleccionar
+    selectedPhotos.value.splice(index, 1);
+    console.log(`📸 Foto deseleccionada: ${photo.id}`);
+  } else {
+    // No está seleccionada, seleccionar
+    selectedPhotos.value.push(photo);
+    console.log(`📸 Foto seleccionada: ${photo.id}`);
+  }
+};
+
+const removeSelectedPhoto = (photoId) => {
+  const index = selectedPhotos.value.findIndex((p) => p.id === photoId);
+  if (index !== -1) {
+    selectedPhotos.value.splice(index, 1);
+  }
+};
+
+const clearSelection = () => {
+  selectedPhotos.value = [];
+  console.log("🗑️ Selección limpiada");
+};
+
+// Event handlers for FixedActionBar actions
+const handleDownloadPhotos = async () => {
+  try {
+    console.log(
+      "� Download action triggered for",
+      selectedPhotos.value.length,
+      "photos"
+    );
+
+    if (selectedPhotos.value.length === 1) {
+      // Download single photo directly (not as ZIP)
+      await downloadPhoto(selectedPhotos.value[0]);
+    } else {
+      // Download multiple photos as ZIP
+      await downloadPhotosZip(selectedPhotos.value);
+    }
+  } catch (error) {
+    console.error("Download photos failed:", error);
+    message.error("Error downloading photos");
+  }
+};
+
+const handleAddToCollection = () => {
+  if (selectedPhotoIds.value.length > 0) {
+    console.log(
+      "� Add to collection action triggered for",
+      selectedPhotos.value.length,
+      "photos"
+    );
+    showCollectionModal.value = true;
+  }
+};
+
+const handleCollectionAdded = (data) => {
+  console.log("✅ Photos added to collection:", data);
+  message.success(
+    `Added ${selectedPhotoIds.value.length} photos to collection`
+  );
+  // Mantener selección después de agregar a colección
+};
+
+const handleCollectionModalCancel = () => {
+  showCollectionModal.value = false;
+};
+
+const handleMoveToTool = () => {
+  if (selectedPhotoIds.value.length > 0) {
+    console.log(
+      "🪄 Move to tool action triggered for",
+      selectedPhotos.value.length,
+      "photos"
+    );
+    openToolSelector();
+  }
+};
+
+const handleToolSelected = async (toolId) => {
+  // No pasar clearSelection para mantener la selección
+  await takeToTool(toolId, selectedPhotoIds.value, () => {});
+  closeToolSelector();
+};
+
 // Inicializar controles FPS
 const initFirstPersonControls = () => {
   if (!cameraRef.value || !containerRef.value) {
@@ -2126,6 +2547,28 @@ onMounted(async () => {
     loaderTitle.value = "Building stage";
     await loadAllPhotos(initialChunk);
 
+    // Añadir event listeners para selección de fotos ANTES de inicializar controles
+    // para que tengan prioridad
+    if (containerRef.value) {
+      // Para dispositivos táctiles
+      if (hasTouch.value) {
+        containerRef.value.addEventListener("touchstart", handleTouchStart, {
+          passive: true,
+        });
+        containerRef.value.addEventListener("touchend", handlePhotoClick, {
+          passive: false,
+        });
+      } else {
+        // Para dispositivos de escritorio
+        containerRef.value.addEventListener("click", handlePhotoClick);
+        containerRef.value.addEventListener("contextmenu", handleRightClick);
+        containerRef.value.addEventListener("mousemove", handleMouseMove, {
+          passive: true,
+        });
+      }
+      console.log("🖱️ Event listeners de selección inicializados");
+    }
+
     // Inicializar controles después de un pequeño delay
     setTimeout(() => {
       initFirstPersonControls();
@@ -2163,6 +2606,21 @@ onUnmounted(() => {
   if (resizeObserver) {
     resizeObserver.disconnect();
     resizeObserver = null;
+  }
+
+  // Limpiar efecto hover activo
+  clearPhotoHover();
+
+  // Limpiar event listeners de selección de fotos
+  if (containerRef.value) {
+    if (hasTouch.value) {
+      containerRef.value.removeEventListener("touchstart", handleTouchStart);
+      containerRef.value.removeEventListener("touchend", handlePhotoClick);
+    } else {
+      containerRef.value.removeEventListener("click", handlePhotoClick);
+      containerRef.value.removeEventListener("contextmenu", handleRightClick);
+      containerRef.value.removeEventListener("mousemove", handleMouseMove);
+    }
   }
 
   // Limpiar controles FPS y touch
@@ -2217,12 +2675,13 @@ onUnmounted(() => {
   height: 100vh;
   position: relative;
   background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-  cursor: crosshair;
+  cursor: default; /* Default cursor, changes to pointer on photo hover */
   /* Touch-specific optimizations */
   touch-action: none;
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
+  transition: cursor 0.1s ease;
 }
 
 .photos-3d-container:fullscreen {
@@ -2886,6 +3345,167 @@ onUnmounted(() => {
   50% {
     opacity: 0.7;
     transform: scale(1.1);
+  }
+}
+
+/* ============================================ */
+/* Selected Photos Container */
+/* ============================================ */
+
+.selected-photos-container[data-v-a2447bcd] {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  background: rgba(26, 26, 31, 0.95);
+  backdrop-filter: blur(12px);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  padding: 10px;
+  width: 287px;
+  z-index: 1500;
+  pointer-events: auto;
+  animation: slideInFromLeft-a2447bcd 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideInFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.selected-photos-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.selected-count {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.clear-selection-btn {
+  background: rgba(255, 82, 82, 0.2);
+  border: 1px solid rgba(255, 82, 82, 0.3);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  color: #ff5252;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.clear-selection-btn:hover {
+  background: rgba(255, 82, 82, 0.3);
+  border-color: rgba(255, 82, 82, 0.5);
+}
+
+.selected-photos-list {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0;
+  max-width: 100%;
+}
+
+.selected-photos-list::-webkit-scrollbar {
+  height: 6px;
+}
+
+.selected-photos-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.selected-photos-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.selected-photos-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.selected-photo-item {
+  position: relative;
+  flex-shrink: 0;
+  width: 60px;
+  height: 60px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 2px solid rgba(100, 181, 246, 0.5);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.selected-photo-item:hover {
+  transform: scale(1.05);
+  border-color: rgba(100, 181, 246, 0.8);
+}
+
+.selected-photo-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.remove-photo-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: white;
+  transition: all 0.2s ease;
+  opacity: 0;
+}
+
+.selected-photo-item:hover .remove-photo-btn {
+  opacity: 1;
+}
+
+.remove-photo-btn:hover {
+  background: rgba(255, 82, 82, 0.9);
+  border-color: rgba(255, 82, 82, 0.5);
+}
+
+/* Mobile adjustments for selected photos */
+@media (max-width: 767px) {
+  .selected-photos-container {
+    left: 5px;
+    max-width: calc(100vw - 10px);
+    padding: 8px;
+  }
+
+  .selected-photo-item {
+    width: 50px;
+    height: 50px;
+  }
+
+  .remove-photo-btn {
+    opacity: 1; /* Always visible on mobile */
   }
 }
 

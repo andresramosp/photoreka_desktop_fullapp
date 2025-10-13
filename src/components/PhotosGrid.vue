@@ -259,14 +259,7 @@ import {
   useMessage,
   NTooltip,
 } from "naive-ui";
-import {
-  AlbumsOutline,
-  CloudDownloadOutline,
-  DuplicateOutline,
-  EyeOutline,
-  RepeatOutline,
-  WarningOutline,
-} from "@vicons/ionicons5";
+import { DuplicateOutline } from "@vicons/ionicons5";
 import { useRouter } from "vue-router";
 import PhotoCardHub from "./photoCards/PhotoCardHub.vue";
 import PhotoInfoDialog from "./PhotoInfoDialog.vue";
@@ -842,18 +835,6 @@ onUnmounted(() => {
     container.removeEventListener("scroll", handleScroll);
   }
 });
-
-// Selection functions
-const handleSelectAll = () => {
-  const shouldDeselectAll = allSelected.value;
-  const photoIds = displayedPhotos.value.map((photo) => photo.id);
-
-  if (shouldDeselectAll) {
-    deselectAllPhotos(photoIds);
-  } else {
-    selectAllPhotos(photoIds);
-  }
-};
 
 // Computed for current photo index in displayed photos
 const currentPhotoIndex = computed(() => {

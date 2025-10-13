@@ -355,7 +355,8 @@ export function useFirstPersonControls(camera, domElement) {
     document.addEventListener("pointerlockerror", onPointerLockError);
 
     if (domElement) {
-      domElement.addEventListener("click", requestPointerLock);
+      // NOTE: Click listener removed - handled externally for photo selection
+      // domElement.addEventListener("click", requestPointerLock);
       domElement.addEventListener("mousemove", onMouseMove);
       domElement.addEventListener("wheel", onWheel, { passive: false });
     }
@@ -369,7 +370,8 @@ export function useFirstPersonControls(camera, domElement) {
     document.removeEventListener("pointerlockerror", onPointerLockError);
 
     if (domElement) {
-      domElement.removeEventListener("click", requestPointerLock);
+      // NOTE: Click listener removed - handled externally for photo selection
+      // domElement.removeEventListener("click", requestPointerLock);
       domElement.removeEventListener("mousemove", onMouseMove);
       domElement.removeEventListener("wheel", onWheel);
     }
