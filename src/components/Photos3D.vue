@@ -512,15 +512,14 @@ import { use3DPhotos } from "@/composables/3d-viewer/use3DPhotos.js";
 import { useFirstPersonControls } from "@/composables//3d-viewer/useFirstPersonControls.js";
 import { useTouchControls } from "@/composables/3d-viewer/useTouchControls.js";
 import { useFloatingTags } from "@/composables/3d-viewer/useFloatingTags.js";
+import { usePhotoTextureManager } from "@/composables/3d-viewer/usePhotoTextureManager.js";
+import { use3DPhotoEffects } from "@/composables/3d-viewer/use3DPhotoEffects.js";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
-import { useIndexedDBCache } from "@/composables/useIndexedDBCache.js";
-import { useOctree } from "@/composables/3d-viewer/useOctree.js";
 import { useHasTouch } from "@/composables/useHasTouch.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { api } from "@/utils/axios";
 import * as THREE from "three";
-import pLimit from "p-limit";
 // (LOD helpers removidos para mipmaps) - import eliminado definitivamente
 // import "@/composables/3d-viewer/useTextureLOD.js"; // Eliminado: no side-effects necesarios
 // getMaxVisibleDistance eliminado: ya no ocultamos por distancia, solo opacity fade
@@ -553,31 +552,7 @@ function dlog(...args) {
 // Initialize showConfigPanel after isMobile is determined
 const showConfigPanel = ref(true); // Will be set correctly in onMounted
 
-// ===== Retry Configuration for 429 Errors =====
-const MAX_RETRIES = 3; // Maximum number of retry attempts for failed downloads
-const INITIAL_RETRY_DELAY = 1000; // Initial delay in ms (exponential backoff)
-const RETRY_MULTIPLIER = 2; // Multiplier for exponential backoff
-const MAX_RETRY_DELAY = 10000; // Maximum delay between retries (10 seconds)
-
 // 🎯 Sistema de fade basado en densidad DIRECCIONAL (muro de niebla hacia adelante)
-const FORWARD_CHECK_DISTANCE = 80; // Profundidad del segmento hacia adelante para medir densidad
-const FORWARD_CONE_ANGLE = 60; // Ángulo del cono en grados (60° = cono amplio)
-const DENSITY_MIN_PHOTOS = 5; // Mínimo de fotos delante para empezar a aplicar fade
-const DENSITY_MAX_PHOTOS = 40; // Número de fotos delante para fade completo
-const FADE_START_DISTANCE = 20; // Distancia donde empieza el fade (cuando hay densidad)
-const FADE_END_DISTANCE = 200; // Distancia donde termina el fade
-const DENSITY_SMOOTHING = 0.17; // Factor de suavizado para cambios de densidad (0-1, menor = más suave)
-
-const MAX_PHOTOS_FOR_BILLBOARD = 5000; // Billboard solo para fotos cercanas
-
-// Stats for monitoring 429 errors
-const error429Stats = ref({
-  total: 0,
-  retried: 0,
-  recovered: 0,
-  failed: 0,
-});
-
 // Composable para manejo de fotos 3D (pasar userId si está en modo catálogo y lowPerformance)
 const {
   photos3D,
@@ -585,11 +560,49 @@ const {
   currentChunk,
   error,
   chunkOptions,
-
   loadAllPhotos,
   changeChunk,
   reset,
 } = use3DPhotos(props.catalogUserId, useLowPerformance.value);
+
+// 🆕 Composable para gestión de texturas
+const textureManager = usePhotoTextureManager(
+  useLowPerformance.value,
+  props.isPlayground
+);
+
+// 🆕 Composable para efectos visuales
+const effectsManager = use3DPhotoEffects();
+
+// Extraer las propiedades que necesitamos de los composables
+const {
+  textureQueue,
+  downloadedImagesCache,
+  totalPhotosToLoad,
+  loadedPhotosCount,
+  loadingProgress,
+  error429Stats,
+  cacheStats,
+  cachedPhotoIds,
+  loaderStage,
+  loaderTitle,
+  loaderSubtitle,
+  initDB,
+  getCacheStats,
+  bulkCacheImages,
+  limitTexture,
+} = textureManager;
+
+const {
+  visiblePhotos,
+  isTransitioning,
+  inflateFactor,
+  originalPositions,
+  useBillboarding,
+  octreeNeedsRebuild,
+  queryRadius,
+  clearOctree,
+} = effectsManager;
 
 // Referencias del DOM y Three.js
 const containerRef = ref();
@@ -597,11 +610,7 @@ const canvasRef = ref();
 const cameraRef = ref();
 
 // Estado del componente
-const useBillboarding = ref(true);
-// Nota: Distance opacity ahora está pre-establecida en cada nivel LOD (no requiere toggle)
 const currentPosition = ref({ x: 0, y: 0, z: 80 });
-
-// Debug mode for octree visualization
 
 // Toggle states for collapsible sections
 const showMoreFilters = ref(false);
@@ -623,23 +632,10 @@ let searchTimeout = null;
 
 // Loader discreto con progreso
 const showDiscreteLoader = ref(true);
-const loaderTitle = ref("");
-const loaderSubtitle = ref("Preparing your photo collection...");
-const loaderStage = ref("loading"); // 'loading' | 'downloading' | 'caching' | 'creating'
-const totalPhotosToLoad = ref(0);
-const loadedPhotosCount = ref(0);
-const loadingProgress = ref(0);
 // Fase inicial: reducimos trabajo por frame hasta que se cargue suficiente
 const initialLoadingPhase = ref(true);
 
-// Escaleo radial
-const inflateFactor = ref(2);
-const originalPositions = ref([]);
-
-// (performance mode eliminado)
-
-// Animación de transición
-const isTransitioning = ref(false);
+// Animación de transición (animationStartTime viene del effectsManager, pero lo mantenemos local)
 const animationStartTime = ref(0);
 const TRANSITION_DURATION = 1500; // 1.5 segundos
 
@@ -740,52 +736,16 @@ const disposeLODObject = (lodObject) => {
 // Fotos con materiales cargados
 const photosWithMaterials = ref([]);
 
-// Cola de texturas pendientes (IDs) y control dinámico de batch
-const textureQueue = ref([]);
+// Variables locales para gestión de colas (todavía usadas en processTextureQueue)
 const queuedIds = new Set();
-const scheduledDownloads = new Set(); // evita doble scheduling mientras p-limit gestiona
-let dynamicBatch = 4; // tamaño inicial
+const scheduledDownloads = new Set();
+let dynamicBatch = 4;
 const MIN_BATCH = 2;
 const MAX_BATCH = 10;
-// Límite de concurrencia de descargas simultáneas - Reducido para estabilidad
-const MAX_CONCURRENT_DOWNLOADS = 12;
-// Modo: pre-scheduling de toda la cola (true) o incremental por frame (false)
 const FULL_QUEUE_SCHEDULING = true;
-// Limitador de concurrencia usando p-limit
-const limitTexture = pLimit(MAX_CONCURRENT_DOWNLOADS);
-
-// Map para almacenar imágenes descargadas (imageId -> HTMLImageElement)
-const downloadedImagesCache = new Map();
-
-// IndexedDB Cache
-const {
-  initDB,
-
-  bulkLoadFromCache,
-  bulkCacheImages,
-  getCacheStats,
-} = useIndexedDBCache();
-
-// Octree for spatial partitioning
-const {
-  buildOctree,
-  queryFrustum,
-  queryRadius,
-
-  getStats: getOctreeStats,
-
-  clear: clearOctree,
-} = useOctree(8, 5); // maxObjects=8, maxLevels=5
-const octreeNeedsRebuild = ref(true);
 
 // Floating Tags System - pasamos cameraRef en lugar de camera para que sea reactivo
-const floatingTagsSystem = ref(null); // Se inicializará después de que la cámara esté lista
-
-// Cache statistics
-const cacheStats = ref({ totalImages: 0 });
-const cachedPhotoIds = ref(new Set());
-const isCachingImages = ref(false);
-const cachingProgress = ref(0);
+const floatingTagsSystem = ref(null);
 
 // Control de navegación durante carga inicial
 const navigationBlocked = ref(false);
@@ -794,93 +754,25 @@ const cachePhaseComplete = ref(false);
 
 // Performance optimization: throttling variables
 let frameCounter = 0;
-const THROTTLE_INTERVAL = 7; // Execute heavy operations every N frames
+const THROTTLE_INTERVAL = 7;
 let lastCameraPosition = { x: 0, y: 0, z: 0 };
-const CAMERA_MOVE_THRESHOLD = 0.8; // Minimum movement to trigger updates
-
-// Reusable THREE.js objects to avoid garbage collection
-// 🎯 markRaw: Objetos reutilizables no necesitan tracking reactivo
-const reusableFrustum = markRaw(new THREE.Frustum());
-const reusableMatrix = markRaw(new THREE.Matrix4());
-const reusableVector3 = markRaw(new THREE.Vector3());
-const reusableSphere = markRaw(new THREE.Sphere());
+const CAMERA_MOVE_THRESHOLD = 0.8;
 
 // Distance calculation cache
 const distanceCache = new Map();
 let cacheValidPosition = { x: 0, y: 0, z: 0 };
 
-// Densidad local con smoothing (para fade basado en densidad)
-let currentDensityFactor = 0; // 0 = no hay fotos cerca, 1 = máxima densidad
-
-// Frustum culling - solo renderizar fotos visibles
-const visiblePhotos = ref([]); // SOLO fotos actualmente en el frustum
-const cachedPhotosSet = new Set(); // IDs de fotos con texturas cargadas (para evitar recargas)
-
 // Función para limpiar la cola de texturas de fotos ya cargadas
 const cleanTextureQueue = () => {
-  const initialQueueLength = textureQueue.value.length;
-  if (initialQueueLength === 0) return 0;
-
-  // Filtrar solo las fotos que realmente necesitan descarga
-  const validIds = textureQueue.value.filter((id) => {
-    const photo = photosWithMaterials.value.find((p) => p.id === id);
-    return photo && !photo.__imageDownloaded && !photo.__downloading;
-  });
-
-  // Limpiar IDs que ya no son válidos del Set
-  textureQueue.value.forEach((id) => {
-    const photo = photosWithMaterials.value.find((p) => p.id === id);
-    if (!photo || photo.__imageDownloaded) {
-      queuedIds.delete(id);
-    }
-  });
-
-  textureQueue.value = validIds;
-  const cleanedCount = initialQueueLength - validIds.length;
-
-  if (cleanedCount > 0) {
-    console.log(
-      `🧼 cleanTextureQueue: Limpiados ${cleanedCount} elementos obsoletos de la cola`
-    );
-  }
-
-  return cleanedCount;
+  return textureManager.cleanTextureQueue(photosWithMaterials.value);
 };
 
 // Función para actualizar el progreso de carga
 const updateLoadingProgress = () => {
-  if (totalPhotosToLoad.value === 0) {
-    loadedPhotosCount.value = 0;
-    loadingProgress.value = 0;
-    return;
-  }
-
-  // Durante fase de descarga, contar imágenes descargadas
-  // Después de bulk creation, contar texturas cargadas
-  const loadedPhotos = downloadPhaseComplete.value
-    ? photosWithMaterials.value.filter((photo) => photo.__textureLoaded)
-    : photosWithMaterials.value.filter((photo) => photo.__imageDownloaded);
-
-  loadedPhotosCount.value = loadedPhotos.length;
-
-  const progress = Math.round(
-    (loadedPhotosCount.value / totalPhotosToLoad.value) * 100
+  textureManager.updateLoadingProgress(
+    photosWithMaterials.value,
+    downloadPhaseComplete.value
   );
-  loadingProgress.value = Math.min(progress, 100);
-  dlog("📊 Progreso de carga:", {
-    loaded: loadedPhotosCount.value,
-    total: totalPhotosToLoad.value,
-    progress: loadingProgress.value + "%",
-  });
-
-  if (
-    initialLoadingPhase.value &&
-    (loadingProgress.value >= 80 ||
-      (textureQueue.value.length === 0 && !isLoadingPositions.value))
-  ) {
-    initialLoadingPhase.value = false;
-    dlog("🚀 Finaliza initialLoadingPhase (threshold alcanzado)");
-  }
 };
 
 // Función para verificar si todas las texturas están cargadas
@@ -1347,256 +1239,9 @@ const clearSearch = () => {
   updatePhotoEffects();
 };
 
-// Función de easing para animaciones suaves
-const easeInOutCubic = (t) => {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-};
-
-// Variable para almacenar las posiciones target de la animación actual
-let animationTargetPositions = [];
-// Variable para almacenar las posiciones originales pendientes de actualizar
-let pendingOriginalPositionsUpdate = null;
-
-// Función para animar la transición entre posiciones
-const animatePositionTransition = (
-  fromPositions,
-  toPositions,
-  newOriginalPositions = null
-) => {
-  if (fromPositions.length !== toPositions.length) {
-    console.warn("⚠️ Número diferente de posiciones en la transición:", {
-      from: fromPositions.length,
-      to: toPositions.length,
-    });
-
-    // 🔧 SOLUCIÓN: Ajustar arrays para que tengan la misma longitud
-    const minLength = Math.min(fromPositions.length, toPositions.length);
-    const adjustedFromPositions = fromPositions.slice(0, minLength);
-    const adjustedToPositions = toPositions.slice(0, minLength);
-
-    // Llamar recursivamente con arrays ajustados
-    return animatePositionTransition(
-      adjustedFromPositions,
-      adjustedToPositions,
-      newOriginalPositions
-    );
-  }
-
-  if (fromPositions.length === 0) {
-    console.warn("⚠️ No hay posiciones para animar");
-    return;
-  }
-
-  // Guardar posiciones target para la animación
-  animationTargetPositions = [...toPositions]; // Hacer copia profunda
-
-  // Guardar posiciones originales pendientes para actualizar al final de la animación
-  pendingOriginalPositionsUpdate = newOriginalPositions;
-
-  isTransitioning.value = true;
-  animationStartTime.value = performance.now();
-};
-
-// Función para actualizar las posiciones durante la animación
-const updateTransitionPositions = (currentTime) => {
-  if (!isTransitioning.value || animationTargetPositions.length === 0) {
-    // Log solo una vez para evitar spam
-    if (isTransitioning.value && animationTargetPositions.length === 0) {
-      console.warn(
-        "⚠️ updateTransitionPositions: isTransitioning=true pero no hay animationTargetPositions"
-      );
-    }
-    return;
-  }
-
-  const elapsed = currentTime - animationStartTime.value;
-  const progress = Math.min(elapsed / TRANSITION_DURATION, 1);
-  const easedProgress = easeInOutCubic(progress);
-
-  // Interpolar posiciones para cada foto (usar la longitud mínima por seguridad)
-  const maxIndex = Math.min(
-    photosWithMaterials.value.length,
-    animationTargetPositions.length
-  );
-
-  for (let index = 0; index < maxIndex; index++) {
-    const photo = photosWithMaterials.value[index];
-    const targetPos = animationTargetPositions[index];
-    const startPos = photo.transitionStartPosition || photo.position;
-
-    // Interpolar cada componente
-    photo.position = [
-      startPos[0] + (targetPos[0] - startPos[0]) * easedProgress,
-      startPos[1] + (targetPos[1] - startPos[1]) * easedProgress,
-      startPos[2] + (targetPos[2] - startPos[2]) * easedProgress,
-    ];
-
-    // Sync LOD object position
-    if (photo.lodObject) {
-      photo.lodObject.position.set(
-        photo.position[0],
-        photo.position[1],
-        photo.position[2]
-      );
-    }
-  }
-
-  // Finalizar animación
-  if (progress >= 1) {
-    isTransitioning.value = false;
-
-    // Asegurar posiciones finales exactas
-    const maxFinalIndex = Math.min(
-      photosWithMaterials.value.length,
-      animationTargetPositions.length
-    );
-    for (let index = 0; index < maxFinalIndex; index++) {
-      photosWithMaterials.value[index].position = [
-        ...animationTargetPositions[index],
-      ];
-    }
-
-    // 🔧 Actualizar originalPositions AHORA que terminó la animación
-    if (pendingOriginalPositionsUpdate) {
-      originalPositions.value = pendingOriginalPositionsUpdate;
-      console.log("✅ originalPositions actualizado después de la animación");
-    }
-
-    // Limpiar propiedades temporales
-    photosWithMaterials.value.forEach((photo) => {
-      delete photo.transitionStartPosition;
-    });
-
-    // Limpiar referencias
-    animationTargetPositions = [];
-    pendingOriginalPositionsUpdate = null;
-
-    // Forzar actualización de matrices de cámara ANTES de frustum culling
-    if (cameraRef.value) {
-      cameraRef.value.updateMatrixWorld(true);
-      cameraRef.value.updateProjectionMatrix();
-    }
-
-    // Limpiar cache de distancias para forzar recálculo
-    distanceCache.clear();
-
-    // Marcar octree para reconstrucción después de cambios de posición
-    octreeNeedsRebuild.value = true;
-
-    updateVisiblePhotos();
-    updatePhotoEffects(); // Aplica Billboard con distancias pre-calculadas
-
-    // 🚨 Ocultar loader "Building stage" cuando termine la animación de reposicionamiento
-    hideLoader();
-  }
-}; // Nueva fase: Cachear todas las imágenes descargadas en IndexedDB
+// Delegar al textureManager
 const bulkCacheDownloadedImages = async () => {
-  // Skip caching if isPlayground
-  if (props.isPlayground) {
-    console.log(`⚠️ Cacheo deshabilitado en modo playground`);
-    isCachingImages.value = false;
-    cachingProgress.value = 100;
-    return;
-  }
-
-  isCachingImages.value = true;
-  loaderStage.value = "caching";
-  loaderTitle.value = "Caching images";
-  loaderSubtitle.value = "Saving images for faster future loads...";
-  cachingProgress.value = 0;
-
-  const imagesToCache = [];
-
-  // Debug: contar fotos por estado
-  const totalPhotos = photosWithMaterials.value.length;
-  const downloadedPhotos = photosWithMaterials.value.filter(
-    (p) => p.__imageDownloaded
-  ).length;
-  const withImageElement = photosWithMaterials.value.filter(
-    (p) => p.__imageElement
-  ).length;
-  const withErrors = photosWithMaterials.value.filter(
-    (p) => p.__downloadError
-  ).length;
-
-  console.log(`📊 Estado antes de cachear:`, {
-    total: totalPhotos,
-    downloaded: downloadedPhotos,
-    withImageElement: withImageElement,
-    errors: withErrors,
-    eligibleForCache: photosWithMaterials.value.filter(
-      (p) => p.__imageDownloaded && !p.__downloadError && p.__imageElement
-    ).length,
-  });
-
-  // Preparar datos para cacheo en bulk - SOLO las que NO vienen de cache
-  for (const photo of photosWithMaterials.value) {
-    // 🎯 Skip fotos que ya vienen de cache (no necesitan re-cachearse)
-    if (photo.__fromCache) {
-      continue;
-    }
-
-    if (
-      photo.__imageDownloaded &&
-      !photo.__downloadError &&
-      photo.__imageElement
-    ) {
-      try {
-        // Convert HTMLImageElement to Blob
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        canvas.width = photo.__imageElement.width;
-        canvas.height = photo.__imageElement.height;
-        ctx.drawImage(photo.__imageElement, 0, 0);
-
-        const blob = await new Promise((resolve) => {
-          canvas.toBlob((b) => resolve(b), "image/jpeg", 0.95);
-        });
-
-        if (blob) {
-          imagesToCache.push({
-            id: photo.id,
-            blob: blob,
-            url: photo.__imageUrl,
-          });
-        }
-      } catch (error) {
-        console.warn(`⚠️ Error preparing image ${photo.id} for cache:`, error);
-      }
-    }
-  }
-
-  console.log(`💾 Cacheando ${imagesToCache.length} imágenes en IndexedDB...`);
-
-  // Skip caching if isPlayground
-  if (props.isPlayground) {
-    console.log(`⚠️ Cacheo deshabilitado en modo playground`);
-  } else if (imagesToCache.length > 0) {
-    try {
-      const result = await bulkCacheImages(imagesToCache);
-      console.log(
-        `✅ Cacheo completado: ${result.success} exitosos, ${result.failed} fallidos`
-      );
-
-      // Update cache stats
-      cacheStats.value = await getCacheStats();
-      console.log(
-        `📊 Total de imágenes en cache después de guardar: ${cacheStats.value.totalImages}`
-      );
-
-      // Add newly cached IDs to set
-      imagesToCache.forEach(({ id }) => cachedPhotoIds.value.add(id));
-    } catch (error) {
-      console.error("❌ Error durante cacheo en bulk:", error);
-    }
-  } else {
-    console.warn(
-      `⚠️ No hay imágenes elegibles para cachear de ${photosWithMaterials.value.length} fotos totales`
-    );
-  }
-
-  isCachingImages.value = false;
-  cachingProgress.value = 100;
+  return textureManager.bulkCacheDownloadedImages(photosWithMaterials.value);
 };
 
 // Función para configurar el loader
@@ -1606,7 +1251,6 @@ const setupLoaderForPhotos = async (photos) => {
   totalPhotosToLoad.value = photos.length;
   loadedPhotosCount.value = 0;
   loadingProgress.value = 0;
-  cachingProgress.value = 0;
 
   loaderStage.value = "loading";
   loaderTitle.value = "Loading photos";
@@ -1624,368 +1268,42 @@ const showLoader = () => {
   console.log("⏳ Mostrando loader discreto");
 };
 
-// FASE 1: Solo descargar imágenes sin crear texturas Three.js
-const downloadImageOnly = async (
+// Delegar a textureManager
+const downloadImageOnly = (
   photoObj,
   retryCount = 0,
   isOnDemandRetry = false
 ) => {
-  if (photoObj.__imageDownloaded || photoObj.__downloading) return;
-  photoObj.__downloading = true;
-  const imageUrl =
-    photoObj.thumbnailUrl || photoObj.url || photoObj.originalUrl;
-
-  if (!imageUrl) {
-    photoObj.__downloading = false;
-    photoObj.__imageDownloaded = true;
-    photoObj.__downloadError = true;
-    return;
-  }
-
-  try {
-    // Descargar imagen SIN crear textura Three.js
-    const imageElement = await new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload = () => resolve(img);
-      img.onerror = (error) => reject(error);
-      img.src = imageUrl;
-    });
-
-    if (!imageElement) {
-      throw new Error("Image element is null");
-    }
-
-    // 🔑 CRÍTICO: Guardar imagen ORIGINAL sin redimensionar para poder crear
-    // texturas de diferentes resoluciones (ULTRA, FULL, REDUCED) sin pérdida de calidad
-    downloadedImagesCache.set(photoObj.id, imageElement);
-
-    // Store image metadata for bulk caching later
-    photoObj.__imageElement = imageElement;
-    photoObj.__imageUrl = imageUrl;
-
-    photoObj.__imageDownloaded = true;
-    photoObj.__downloadError = false;
-    photoObj.__canCreateTexture = true; // Marcar que está lista para crear textura en bulk
-    photoObj.__retryCount = undefined; // Limpiar contador de reintentos si existía
-
-    // Si esta foto se recuperó después de un error 429, actualizar stats
-    if (photoObj.__had429Error) {
-      error429Stats.value.recovered++;
-      console.log(
-        `✅ Foto recuperada después de error 429 (retry ${retryCount}):`,
-        photoObj.id
-      );
-      photoObj.__had429Error = false;
-    }
-
-    // Actualizar progreso
-    updateLoadingProgress();
-  } catch (e) {
-    // Detectar error 429 (Too Many Requests)
-    const is429Error =
-      e.message?.includes("429") ||
-      e.toString().includes("429") ||
-      e.status === 429;
-
-    if (is429Error) {
-      error429Stats.value.total++;
-      photoObj.__had429Error = true;
-      console.warn(
-        `⚠️ Error 429 detectado para foto ${photoObj.id} (intento ${
-          retryCount + 1
-        }/${MAX_RETRIES})`
-      );
-    }
-
-    // Intentar retry si no hemos alcanzado el máximo y es un error recuperable
-    if (retryCount < MAX_RETRIES && (is429Error || !e.message)) {
-      error429Stats.value.retried++;
-      photoObj.__retryCount = retryCount + 1;
-
-      // Calcular delay con backoff exponencial
-      const delay = Math.min(
-        INITIAL_RETRY_DELAY * Math.pow(RETRY_MULTIPLIER, retryCount),
-        MAX_RETRY_DELAY
-      );
-
-      console.log(
-        `🔄 Reintentando descarga en ${delay}ms... (intento ${retryCount + 1})`
-      );
-
-      // Esperar y reintentar
-      await new Promise((resolve) => setTimeout(resolve, delay));
-      photoObj.__downloading = false; // Reset flag antes de retry
-      return downloadImageOnly(photoObj, retryCount + 1, isOnDemandRetry);
-    }
-
-    // Si llegamos aquí, falló definitivamente
-    console.warn(
-      `❌ Fallo definitivo descarga imagen (${retryCount} reintentos):`,
-      imageUrl,
-      e
-    );
-    error429Stats.value.failed++;
-    photoObj.__imageDownloaded = true;
-    photoObj.__downloadError = true;
-    // Solo permitir retry bajo demanda si NO es ya un retry bajo demanda (evita bucle infinito)
-    if (!isOnDemandRetry) {
-      photoObj.__canRetryOnDemand = true;
-    }
-    updateLoadingProgress();
-  } finally {
-    photoObj.__downloading = false;
-  }
+  return textureManager.downloadImageOnly(
+    photoObj,
+    retryCount,
+    isOnDemandRetry
+  );
 };
 
-// (getPerformanceMultiplier eliminado)
-
-// Helper: crear un único Mesh (sin mipmaps en móvil para ahorrar VRAM)
+// Delegar a textureManager
 const createLODObject = (imageElement, position) => {
-  // Ajuste dinámico adicional: si hay muchas fotos en dispositivo low perf (móvil o touch), bajar más
-  let maxSide = useLowPerformance.value ? 256 : 1024;
-  // if (useLowPerformance.value && photosWithMaterials.value.length > 1500)
-  //   maxSide = 128;
-  // if (useLowPerformance.value && photosWithMaterials.value.length > 2500)
-  //   maxSide = 320;
-  let source = imageElement;
-  const needsResize =
-    imageElement.width > maxSide || imageElement.height > maxSide;
-  if (needsResize) {
-    const scale = Math.min(
-      maxSide / imageElement.width,
-      maxSide / imageElement.height
+  return textureManager.createLODObject(imageElement, position);
+};
+
+// Delegar creación de texturas al textureManager
+const enqueueInitialTexturesBulk = () => {
+  const count = textureManager.enqueueInitialTexturesBulk(
+    photosWithMaterials.value
+  );
+  if (count > 0) {
+    textureManager.startTextureCreationLoop(
+      lodGroup,
+      photosWithMaterials.value,
+      () => {
+        updateLoadingProgress();
+        checkAllTexturesLoaded();
+        updateVisiblePhotos();
+        updatePhotoEffects();
+      }
     );
-    const w = Math.round(imageElement.width * scale);
-    const h = Math.round(imageElement.height * scale);
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(imageElement, 0, 0, w, h);
-    source = canvas;
   }
-
-  const texture = new THREE.Texture(source);
-  texture.needsUpdate = true;
-  if (useLowPerformance.value) {
-    texture.generateMipmaps = false;
-    texture.minFilter = THREE.LinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-  } else {
-    texture.generateMipmaps = true;
-    texture.minFilter = THREE.LinearMipmapLinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-  }
-
-  // Usar sRGB color space para mantener colores correctos
-  texture.colorSpace = THREE.SRGBColorSpace;
-
-  try {
-    texture.anisotropy = useLowPerformance.value ? 1 : 4; // reducir en low performance
-  } catch (_) {}
-
-  const material = new THREE.MeshBasicMaterial({
-    map: texture,
-    transparent: true,
-    alphaTest: 0.01, // Bajo para permitir opacidades bajas
-    depthWrite: false,
-    depthTest: true,
-    opacity: 1,
-    side: THREE.FrontSide,
-    toneMapped: false,
-  });
-
-  const mesh = new THREE.Mesh(planeGeometry, material);
-  mesh.position.set(position[0], position[1], position[2]);
-
-  // Ajustar escala para mantener aspect ratio real
-  const targetAspect = source.width / source.height;
-  const baseAspect = 4 / 3; // planeGeometry base
-  if (targetAspect > baseAspect) {
-    mesh.scale.set(targetAspect / baseAspect, 1, 1);
-  } else {
-    mesh.scale.set(1, baseAspect / targetAspect, 1);
-  }
-
-  return markRaw(mesh);
 };
-
-// ===========================
-// 🔄 CREACIÓN INCREMENTAL DE TEXTURAS
-// ===========================
-const textureCreationQueue = [];
-let textureCreationRunning = false;
-let lastFrameCreationTime = 0;
-let adaptiveBatch = 0;
-
-// (LRU eliminado: mantenemos toda textura creada; rely on downscaled sizes for memory control)
-
-const CONFIG_CREATION = {
-  mobileBase: 50,
-  desktopBase: 500, // ↑ Mucho más agresivo en desktop para carga casi-bulk
-  maxBatchDesktop: 1000, // ↑ Sin límite práctico en desktop potente
-  maxBatchMobile: 200,
-  minBatch: 2,
-  targetFrameMs: 16.6,
-  upperFrameMs: 28,
-  frameBudgetMsMobile: 5.5,
-  frameBudgetMsDesktop: 100, // ↑ Permite gastar más tiempo por frame en desktop
-};
-
-const getBaseBatch = () =>
-  useLowPerformance.value
-    ? CONFIG_CREATION.mobileBase
-    : CONFIG_CREATION.desktopBase;
-const getMaxBatch = () =>
-  useLowPerformance.value
-    ? CONFIG_CREATION.maxBatchMobile
-    : CONFIG_CREATION.maxBatchDesktop;
-const getFrameBudget = () =>
-  useLowPerformance.value
-    ? CONFIG_CREATION.frameBudgetMsMobile
-    : CONFIG_CREATION.frameBudgetMsDesktop;
-
-function enqueueTexture(photo) {
-  if (!photo) return;
-  if (photo.__textureLoaded) return;
-  if (photo.__downloadError) return;
-  if (!downloadedImagesCache.get(photo.id)) return; // no image available
-  // Evitar duplicados
-  if (!textureCreationQueue.includes(photo)) textureCreationQueue.push(photo);
-}
-
-function startTextureCreationLoop() {
-  if (textureCreationRunning) return;
-  textureCreationRunning = true;
-  adaptiveBatch = getBaseBatch();
-  loaderStage.value = "creating";
-  loaderTitle.value = "Creating Textures";
-  loaderSubtitle.value = "Preparing 3D view...";
-
-  // =============================
-  // 🚀 Desktop Bulk Mode (sin steps)
-  // Petición del usuario: en desktop crear TODAS las texturas de golpe, sin loop incremental.
-  // useLowPerformance => true en móvil o dispositivos táctiles (heurística ya definida arriba).
-  // Si NO es low performance, hacemos bulk completo ignorando presupuestos de frame.
-  if (!useLowPerformance.value) {
-    try {
-      let created = 0;
-      while (textureCreationQueue.length) {
-        const photo = textureCreationQueue.shift();
-        if (!photo) continue;
-        const imageElement = downloadedImagesCache.get(photo.id);
-        if (!imageElement) continue;
-        try {
-          const lodObject = createLODObject(imageElement, photo.position);
-          if (photo.lodObject) disposeLODObject(photo.lodObject);
-          photo.lodObject = lodObject;
-          photo.__textureLoaded = true;
-          photo.__loading = false;
-          lodObject.visible = true;
-          if (photo.isVisible === false && lodObject.material) {
-            lodObject.material.opacity = 0;
-            lodObject.material.transparent = true;
-          }
-          lodGroup.add(lodObject);
-          // Liberar imagen original para ahorrar memoria
-          photo.__imageElement = undefined;
-          downloadedImagesCache.delete(photo.id);
-          created++;
-        } catch (err) {
-          console.warn("Texture creation error (bulk)", photo.id, err);
-        }
-      }
-      updateLoadingProgress();
-      console.log(
-        `🧩 Bulk desktop texture creation completada (${created} texturas)`
-      );
-    } finally {
-      textureCreationRunning = false;
-      // Verificar fases y limpiar
-      checkAllTexturesLoaded();
-      updateVisiblePhotos();
-      updatePhotoEffects();
-    }
-    return; // Salimos: no ejecutamos el modo incremental
-  }
-
-  const step = (ts) => {
-    const start = performance.now();
-    const frameBudget = getFrameBudget();
-    let created = 0;
-
-    // Auto-tune batch basado en frameTime previo
-    if (lastFrameCreationTime) {
-      if (lastFrameCreationTime < 12 && adaptiveBatch < getMaxBatch())
-        adaptiveBatch++;
-      else if (
-        lastFrameCreationTime > CONFIG_CREATION.upperFrameMs &&
-        adaptiveBatch > CONFIG_CREATION.minBatch
-      )
-        adaptiveBatch--;
-    }
-
-    while (
-      textureCreationQueue.length &&
-      created < adaptiveBatch &&
-      performance.now() - start < frameBudget
-    ) {
-      const photo = textureCreationQueue.shift();
-      if (!photo) break;
-      const imageElement = downloadedImagesCache.get(photo.id);
-      if (!imageElement) continue;
-      try {
-        const lodObject = createLODObject(imageElement, photo.position);
-        if (photo.lodObject) disposeLODObject(photo.lodObject);
-        photo.lodObject = lodObject;
-        photo.__textureLoaded = true;
-        photo.__loading = false;
-        lodObject.visible = true;
-        if (photo.isVisible === false && lodObject.material) {
-          lodObject.material.opacity = 0;
-          lodObject.material.transparent = true;
-        }
-        lodGroup.add(lodObject);
-        // (LRU removed: no tracking needed)
-        // Liberar imagen original
-        photo.__imageElement = undefined;
-        downloadedImagesCache.delete(photo.id);
-        created++;
-      } catch (err) {
-        console.warn("Texture creation error", photo.id, err);
-      }
-    }
-
-    // Actualizar progreso (usa fotos con __textureLoaded como criterio en fase creación)
-    updateLoadingProgress();
-    lastFrameCreationTime = performance.now() - start;
-
-    if (textureCreationQueue.length) {
-      requestAnimationFrame(step);
-    } else {
-      textureCreationRunning = false;
-      // Verificar si ya terminamos toda la fase de creación
-      checkAllTexturesLoaded();
-      updateVisiblePhotos();
-      updatePhotoEffects();
-    }
-
-    // (LRU removed: no texture budget enforcement)
-  };
-
-  requestAnimationFrame(step);
-}
-
-function enqueueInitialTexturesBulk() {
-  // Encolar todas las fotos cuya imagen ya está descargada pero sin textura
-  photosWithMaterials.value.forEach((p) => {
-    if (p.__imageDownloaded && !p.__textureLoaded && !p.__downloadError) {
-      enqueueTexture(p);
-    }
-  });
-  if (textureCreationQueue.length) startTextureCreationLoop();
-}
 
 // Listener de pérdida de contexto WebGL (diagnóstico de saturación)
 if (typeof window !== "undefined") {
@@ -1999,121 +1317,6 @@ if (typeof window !== "undefined") {
 }
 
 // (updateLODDistances eliminado)
-
-// Nueva función para encolar TODAS las fotos no cacheadas (sin filtro de frustum)
-const enqueueAllNonCachedPhotos = (photos) => {
-  if (!photos || photos.length === 0) return 0;
-
-  let enqueuedCount = 0;
-  const cameraPos = cameraRef.value?.position || { x: 0, y: 0, z: 0 };
-
-  photos.forEach((photo) => {
-    if (
-      !photo.__imageDownloaded &&
-      !photo.__downloading &&
-      !queuedIds.has(photo.id) &&
-      !scheduledDownloads.has(photo.id)
-    ) {
-      // Pre-calcular prioridad por distancia al cuadrado (sin sqrt)
-      const dx = photo.position[0] - cameraPos.x;
-      const dy = photo.position[1] - cameraPos.y;
-      const dz = photo.position[2] - cameraPos.z;
-      photo.__priority = dx * dx + dy * dy + dz * dz;
-      textureQueue.value.push(photo.id);
-      queuedIds.add(photo.id);
-      enqueuedCount++;
-    }
-  });
-
-  // Ordenar cola por prioridad si agregamos elementos
-  if (enqueuedCount > 0 && textureQueue.value.length > 1) {
-    textureQueue.value.sort((aId, bId) => {
-      const a = photosWithMaterials.value.find((p) => p.id === aId);
-      const b = photosWithMaterials.value.find((p) => p.id === bId);
-      return (a?.__priority || 0) - (b?.__priority || 0);
-    });
-  }
-
-  dlog(`📋 Encoladas ${enqueuedCount} fotos no cacheadas para carga`);
-  return enqueuedCount;
-};
-
-// Nueva función: Cargar imágenes desde cache antes de descargar
-const loadImagesFromCache = async (photos) => {
-  loaderStage.value = "loading";
-  loaderTitle.value = "Loading photos";
-  loaderSubtitle.value = "Checking local storage...";
-
-  const photoIds = photos.map((p) => p.id);
-
-  console.log(`🔍 Cargando fotos desde cache para ${photoIds.length} fotos...`);
-
-  // Skip cache if isPlayground
-  if (props.isPlayground) {
-    console.log(`⚠️ Cache deshabilitado en modo playground`);
-    return new Map();
-  }
-
-  try {
-    // Load cached images in bulk (devuelve solo los que existen)
-    const cachedBlobs = await bulkLoadFromCache(photoIds);
-
-    console.log(`✅ Cargadas ${cachedBlobs.size} imágenes desde cache`);
-
-    if (cachedBlobs.size > 0) {
-      loaderSubtitle.value = `Loading ${cachedBlobs.size} photos from cache...`;
-      cachedPhotoIds.value = new Set(cachedBlobs.keys());
-
-      // Convert Blobs to HTMLImageElements and store in cache
-      let loadedFromCache = 0;
-      for (const [photoId, blob] of cachedBlobs.entries()) {
-        try {
-          const imageUrl = URL.createObjectURL(blob);
-          const img = await new Promise((resolve, reject) => {
-            const image = new Image();
-            image.onload = () => {
-              URL.revokeObjectURL(imageUrl);
-              resolve(image);
-            };
-            image.onerror = reject;
-            image.src = imageUrl;
-          });
-
-          downloadedImagesCache.set(photoId, img);
-
-          // Mark photo as downloaded from cache
-          const photo = photos.find((p) => p.id === photoId);
-          if (photo) {
-            photo.__imageDownloaded = true;
-            photo.__downloadError = false;
-            photo.__canCreateTexture = true;
-            photo.__fromCache = true;
-            photo.__imageElement = img;
-            photo.__imageUrl =
-              photo.thumbnailUrl || photo.url || photo.originalUrl; // For potential re-caching
-          }
-
-          loadedFromCache++;
-        } catch (error) {
-          console.warn(`⚠️ Error loading cached image ${photoId}:`, error);
-          // Remove from cached set if loading fails
-          cachedPhotoIds.value.delete(photoId);
-        }
-      }
-
-      console.log(
-        `✅ ${loadedFromCache} imágenes cargadas exitosamente desde cache`
-      );
-      updateLoadingProgress();
-    }
-
-    // Update cache stats
-    cacheStats.value = await getCacheStats();
-  } catch (error) {
-    console.error("❌ Error cargando desde cache:", error);
-    return 0;
-  }
-};
 
 // Integración nueva: Inicializar foto con placeholder y encolar su ID
 const registerNewPhotos = async (newPhotos) => {
@@ -2129,21 +1332,7 @@ const registerNewPhotos = async (newPhotos) => {
   showLoader();
 
   // ===== PASO 1: Buscar en cache y cargar en bulk =====
-  loaderStage.value = "loading";
-  loaderTitle.value = "Loading photos";
-  loaderSubtitle.value = "Checking local storage...";
-
-  const photoIds = newPhotos.map((p) => p.id);
-  console.log(`🔍 Cargando fotos desde cache para ${photoIds.length} fotos...`);
-
-  // Skip cache if isPlayground
-  let cachedBlobs = new Map();
-  if (props.isPlayground) {
-    console.log(`⚠️ Cache deshabilitado en modo playground`);
-  } else {
-    // Cargar blobs desde cache en bulk (devuelve solo los que existen)
-    cachedBlobs = await bulkLoadFromCache(photoIds);
-  }
+  const cachedBlobs = await textureManager.loadImagesFromCache(newPhotos);
   console.log(`✅ Cargadas ${cachedBlobs.size} imágenes desde cache`);
 
   // Convertir blobs a HTMLImageElements y guardar en downloadedImagesCache
@@ -2293,7 +1482,7 @@ const registerNewPhotos = async (newPhotos) => {
   photosWithMaterials.value = [...photosWithMaterials.value, ...prepared];
 
   if (inflateFactor.value !== 1.0) {
-    applyRadialScaling();
+    effectsManager.applyRadialScaling(photosWithMaterials.value);
   }
 
   applyFilters();
@@ -2395,10 +1584,14 @@ const updatePhotosPositions = async (newPhotos) => {
   // Marcar octree para reconstrucción después de la animación
   octreeNeedsRebuild.value = true;
 
-  // Animar
-  animatePositionTransition(
+  // Animar usando effectsManager
+  effectsManager.animatePositionTransition(
+    photosWithMaterials.value,
     startPositions,
-    calculateScaledPositions(targetPositions, inflateFactor.value),
+    effectsManager.calculateScaledPositions(
+      targetPositions,
+      inflateFactor.value
+    ),
     pendingOriginalPositions // Pasar las nuevas posiciones originales para actualizar al final
   );
 
@@ -2415,10 +1608,13 @@ const updatePhotosPositions = async (newPhotos) => {
 
     // No tocar loaderStage/loaderTitle ni navigationBlocked en este flujo
     // Cargamos desde cache lo que exista, sin cambiar UI
-    await loadImagesFromCache(toTexture);
+    await textureManager.loadImagesFromCache(toTexture);
 
     // Encolar las que falten para descarga de red
-    enqueueAllNonCachedPhotos(toTexture);
+    textureManager.enqueueAllNonCachedPhotos(
+      toTexture,
+      cameraRef.value?.position
+    );
 
     // Iniciar loop mínimo de descarga si no está corriendo
     if (!downloadLoopId) {
@@ -2436,84 +1632,9 @@ const updatePhotosPositions = async (newPhotos) => {
   // El LOD se actualizará automáticamente al finalizar la animación en updateTransitionPositions()
 };
 
-// Función para calcular posiciones escaladas sin modificar el estado
-const calculateScaledPositions = (positions, scaleFactor) => {
-  console.log("📏 calculateScaledPositions:", {
-    inputLength: positions.length,
-    scaleFactor,
-    samplePositions: positions.slice(0, 2),
-  });
-
-  if (positions.length === 0) {
-    console.warn("⚠️ calculateScaledPositions: array de posiciones vacío");
-    return [];
-  }
-
-  // Calcular centroide de las posiciones
-  const centroid = [
-    positions.reduce((sum, pos) => sum + pos[0], 0) / positions.length,
-    positions.reduce((sum, pos) => sum + pos[1], 0) / positions.length,
-    positions.reduce((sum, pos) => sum + pos[2], 0) / positions.length,
-  ];
-
-  // Aplicar escaleo radial y devolver nuevas posiciones
-  const scaledPositions = positions.map((originalPos) => {
-    const vector = [
-      originalPos[0] - centroid[0],
-      originalPos[1] - centroid[1],
-      originalPos[2] - centroid[2],
-    ];
-
-    return [
-      centroid[0] + vector[0] * scaleFactor,
-      centroid[1] + vector[1] * scaleFactor,
-      centroid[2] + vector[2] * scaleFactor,
-    ];
-  });
-
-  console.log("📏 Posiciones escaladas (sample):", scaledPositions.slice(0, 2));
-  return scaledPositions;
-};
-
-// Función para aplicar escaleo radial
-const applyRadialScaling = () => {
-  if (
-    photosWithMaterials.value.length === 0 ||
-    originalPositions.value.length === 0
-  )
-    return;
-
-  // 🔧 NO aplicar escalado durante una transición de animación
-  // Esto evita que los LOD objects salten a posiciones incorrectas
-  if (isTransitioning.value) {
-    console.log("⏸️ Escalado radial pospuesto: animación en curso");
-    return;
-  }
-
-  // Usar la función de cálculo y aplicar al estado
-  const scaledPositions = calculateScaledPositions(
-    originalPositions.value,
-    inflateFactor.value
-  );
-
-  photosWithMaterials.value.forEach((photo, index) => {
-    if (index >= scaledPositions.length) return;
-    photo.position = scaledPositions[index];
-
-    // Sync LOD object position
-    if (photo.lodObject) {
-      photo.lodObject.position.set(
-        photo.position[0],
-        photo.position[1],
-        photo.position[2]
-      );
-    }
-  });
-};
-
 // Handler para cambio en el slider de escaleo
 const onInflateFactorChange = () => {
-  applyRadialScaling();
+  effectsManager.applyRadialScaling(photosWithMaterials.value);
   // Marcar octree para reconstrucción después de escalado radial
   octreeNeedsRebuild.value = true;
   updateVisiblePhotos();
@@ -2532,112 +1653,35 @@ const toggleFloatingTags = () => {
   }
 };
 
-// (onPerformanceModeChange eliminado)
-
+// Delegar a effectsManager
 const updateVisiblePhotos = () => {
-  if (!cameraRef.value || filteredPhotos.value.length === 0) {
-    visiblePhotos.value = [];
-    return;
-  }
-
-  const camera = cameraRef.value;
-
-  // Rebuild octree if needed (after position changes)
-  if (octreeNeedsRebuild.value && filteredPhotos.value.length > 0) {
-    buildOctree(filteredPhotos.value);
-    octreeNeedsRebuild.value = false;
-    const stats = getOctreeStats();
-    console.log("🌳 Octree rebuilt for frustum culling:", stats);
-  }
-
-  // 🔧 CRÍTICO: Mantener fotos filtradas con opacity=0 en lugar de visible=false
-  // Esto asegura que las fotos filtradas se oculten pero sin usar visible
-  const filteredIds = new Set(filteredPhotos.value.map((p) => p.id));
-  photosWithMaterials.value.forEach((photo) => {
-    if (
-      !filteredIds.has(photo.id) &&
-      photo.lodObject &&
-      photo.lodObject.material
-    ) {
-      photo.lodObject.material.opacity = 0;
-      photo.lodObject.material.transparent = true;
-    }
-  });
-
-  // Reutilizar objetos existentes para evitar garbage collection
-  reusableMatrix.multiplyMatrices(
-    camera.projectionMatrix,
-    camera.matrixWorldInverse
+  effectsManager.updateVisiblePhotos(
+    cameraRef.value,
+    photosWithMaterials.value,
+    filteredPhotos.value
   );
-  reusableFrustum.setFromProjectionMatrix(reusableMatrix);
 
-  // � OPTIMIZACIÓN OCTREE: Query solo objetos en nodos relevantes
-  const candidatePhotos =
-    filteredPhotos.value.length > 100
-      ? queryFrustum(reusableFrustum)
-      : filteredPhotos.value;
+  // Lógica adicional específica del componente (encolado de texturas)
+  if (!cameraRef.value || visiblePhotos.value.length === 0) return;
 
-  // �🔥 CRÍTICO: Filtrar SOLO fotos que intersectan con el frustum ACTUAL
-  // Verificación final con esfera para mayor precisión
-  visiblePhotos.value = candidatePhotos.filter((photo) => {
-    // 🔧 PRIMER CHECK: Respetar filtros - si está explícitamente oculta, skip (opacity ya está en 0)
-    if (photo.isVisible === false) {
-      return false;
-    }
+  const cameraPos = cameraRef.value.position;
 
-    reusableVector3.set(...photo.position);
-    reusableSphere.set(reusableVector3, 2); // Radio de la esfera de la foto
-
-    // Verificar frustum para fotos dentro del rango visible
-    const isInFrustum = reusableFrustum.intersectsSphere(reusableSphere);
-
-    // TODAS LAS FOTOS SON SIEMPRE VISIBLES - no tocar visible en absoluto
-    // La opacidad se controla en applyDistanceFading
-
-    return isInFrustum;
-  });
-
-  // Actualizar cache de fotos con texturas cargadas
-  visiblePhotos.value.forEach((photo) => {
-    if (photo.__textureLoaded) {
-      cachedPhotosSet.add(photo.id);
-    }
-  });
-
-  // Rehidratar: cualquier foto visible que fue evictada y cuya imagen ya está en cache
+  // Rehidratar fotos evictadas
   visiblePhotos.value.forEach((photo) => {
     if (
       photo.__evicted &&
       !photo.__textureLoaded &&
-      downloadedImagesCache.has(photo.id) &&
-      !textureCreationQueue.includes(photo)
+      downloadedImagesCache.has(photo.id)
     ) {
-      enqueueTexture(photo);
+      textureManager.enqueueTexture(photo);
       photo.__evicted = false;
     }
   });
 
-  // Encolar para carga real SOLO las que están visibles, no cargadas, y necesitan descarga de red
-  const cameraPos = camera.position;
-  visiblePhotos.value.forEach((photo) => {
-    if (
-      !photo.__imageDownloaded &&
-      !photo.__downloading &&
-      !queuedIds.has(photo.id) &&
-      !scheduledDownloads.has(photo.id)
-    ) {
-      // Pre-calcular prioridad por distancia al cuadrado (sin sqrt)
-      const dx = photo.position[0] - cameraPos.x;
-      const dy = photo.position[1] - cameraPos.y;
-      const dz = photo.position[2] - cameraPos.z;
-      photo.__priority = dx * dx + dy * dy + dz * dz;
-      textureQueue.value.push(photo.id);
-      queuedIds.add(photo.id);
-    }
-  });
+  // Encolar fotos visibles para descarga
+  textureManager.enqueueAllNonCachedPhotos(visiblePhotos.value, cameraPos);
 
-  // Reintento bajo demanda (silencioso) para fotos con fallo definitivo previo (e.g., 429)
-  // Cuando una foto fallida entra en el frustum y permite retry, programar UN reintento sin usar el loader
+  // Reintento bajo demanda para errores 429
   let onDemandScheduled = 0;
   const MAX_ONDEMAND_RETRIES_PER_FRAME = 3;
   for (const photo of visiblePhotos.value) {
@@ -2648,10 +1692,9 @@ const updateVisiblePhotos = () => {
       !photo.__downloading &&
       !scheduledDownloads.has(photo.id)
     ) {
-      // Evitar rehacer scheduling continuo en cada frame
       photo.__canRetryOnDemand = false;
       scheduledDownloads.add(photo.id);
-      limitTexture(() => downloadImageOnly(photo, 0, true))
+      downloadImageOnly(photo, 0, true)
         .catch(() => {})
         .finally(() => {
           scheduledDownloads.delete(photo.id);
@@ -2659,204 +1702,33 @@ const updateVisiblePhotos = () => {
       onDemandScheduled++;
     }
   }
-
-  // Ordenar cola global una vez tras inserciones (small optimization)
-  if (textureQueue.value.length > 1) {
-    textureQueue.value.sort((aId, bId) => {
-      const a = photosWithMaterials.value.find((p) => p.id === aId);
-      const b = photosWithMaterials.value.find((p) => p.id === bId);
-      return (a?.__priority || 0) - (b?.__priority || 0);
-    });
-  }
 };
 
-// 🚀 NUEVA: Calcular distancias para todas las fotos visibles UNA SOLA VEZ por frame
-// Esto evita recalcular distancias múltiples veces en LOD y Billboard
-// Nota: La opacidad ya está pre-establecida en cada nivel LOD
+// Delegar a effectsManager
 const calculateDistancesForVisiblePhotos = (cameraPosition) => {
-  return visiblePhotos.value.map((photo) => {
-    const distSq =
-      Math.pow(cameraPosition.x - photo.position[0], 2) +
-      Math.pow(cameraPosition.y - photo.position[1], 2) +
-      Math.pow(cameraPosition.z - photo.position[2], 2);
-
-    return {
-      photo,
-      distSq,
-      distance: Math.sqrt(distSq), // Calcular una sola vez
-    };
-  });
+  return effectsManager.calculateDistancesForVisiblePhotos(cameraPosition);
 };
 
-// 🎯 Helper: Actualizar Billboard con cálculo de distancias integrado
-// Usar esta función cuando se llame fuera del loop principal
-// Nota: La opacidad ya está pre-establecida en cada nivel LOD, no necesita cálculo
+// Delegar a effectsManager
 const updatePhotoEffects = () => {
-  if (!cameraRef.value || visiblePhotos.value.length === 0) return;
-
-  const photosWithDistances = calculateDistancesForVisiblePhotos(
-    cameraRef.value.position
-  );
-
-  // Ordenar por distancia una sola vez
-  photosWithDistances.sort((a, b) => a.distSq - b.distSq);
-
-  // Aplicar billboarding
-  if (useBillboarding.value) updateBillboardRotations(photosWithDistances);
-
-  // El fading ya se aplica cada frame en el loop principal, no hace falta aquí
+  effectsManager.updatePhotoEffects(cameraRef.value);
 };
 
-// Función para actualizar rotaciones billboard
-// 🎯 OPTIMIZADO: Usa distancias pre-calculadas y aplica solo a fotos cercanas
-// (fotos lejanas son pequeñas, no se nota tanto la rotación)
+// Delegar a effectsManager
 const updateBillboardRotations = (photosWithDistances) => {
-  if (!cameraRef.value || photosWithDistances.length === 0) return;
-
-  const camera = cameraRef.value;
-  const cameraPosition = camera.position;
-
-  // 🎯 Solo aplicar billboard a fotos cercanas si hay muchas
-  // (optimización visual: fotos lejanas son tan pequeñas que no se nota)
-  let photosToProcess = photosWithDistances;
-
-  if (photosWithDistances.length > MAX_PHOTOS_FOR_BILLBOARD) {
-    // Ya vienen ordenadas por distancia, solo tomar las N más cercanas
-    photosToProcess = photosWithDistances.slice(0, MAX_PHOTOS_FOR_BILLBOARD);
-
-    dlog(
-      `🎨 Billboard: Procesando ${photosToProcess.length}/${photosWithDistances.length} fotos cercanas`
-    );
-  }
-
-  // 🚀 Billboard directo: aplicar lookAt() sin interpolación
-  // Es el método más eficiente y suave (sin retraso)
-  photosToProcess.forEach(({ photo }) => {
-    if (!photo.lodObject) return;
-
-    // Aplicar lookAt() directamente al LOD object
-    // Three.js optimiza esto internamente
-    photo.lodObject.lookAt(cameraPosition);
-  });
+  effectsManager.updateBillboardRotations(
+    photosWithDistances,
+    cameraRef.value?.position
+  );
 };
 
-// 🎯 Sistema de fade basado en densidad DIRECCIONAL
-// Mide el "muro de niebla" hacia adelante para ajustar el fade
-
+// Delegar a effectsManager
 const applyDistanceFading = () => {
-  if (!cameraRef.value) return;
-  // IMPORTANTE: procesar TODAS las fotos con lodObject, no solo visibles en frustum
-  // porque fotos lejanas/ocultas también necesitan fade para no verse opacas al girar
-  const allPhotosToFade = photosWithMaterials.value.filter((p) => p.lodObject);
-  if (allPhotosToFade.length === 0) return;
-
-  const camera = cameraRef.value;
-  const cameraPos = camera.position;
-
-  // PASO 1: Obtener vector de dirección de la cámara (hacia dónde miras)
-  // Three.js camera mira hacia -Z en su espacio local
-  const forwardVector = new THREE.Vector3(0, 0, -1);
-  forwardVector.applyQuaternion(camera.quaternion);
-  forwardVector.normalize();
-
-  // PASO 2: Contar fotos en el cono hacia adelante ("muro de niebla")
-  let forwardPhotosCount = 0;
-  const cosHalfAngle = Math.cos((FORWARD_CONE_ANGLE * Math.PI) / 180 / 2);
-
-  for (const photo of allPhotosToFade) {
-    // Vector desde cámara a foto
-    const dx = photo.position[0] - cameraPos.x;
-    const dy = photo.position[1] - cameraPos.y;
-    const dz = photo.position[2] - cameraPos.z;
-    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-
-    // Skip fotos muy lejanas o muy cercanas
-    if (distance < 1 || distance > FORWARD_CHECK_DISTANCE) continue;
-
-    // Vector normalizado hacia la foto
-    const toPhotoX = dx / distance;
-    const toPhotoY = dy / distance;
-    const toPhotoZ = dz / distance;
-
-    // Producto punto: mide si la foto está en la dirección de vista
-    const dotProduct =
-      forwardVector.x * toPhotoX +
-      forwardVector.y * toPhotoY +
-      forwardVector.z * toPhotoZ;
-
-    // Si dotProduct > cosHalfAngle, la foto está dentro del cono
-    if (dotProduct >= cosHalfAngle) {
-      forwardPhotosCount++;
-    }
-  }
-
-  // PASO 3: Calcular factor de densidad (0 = sin muro, 1 = muro denso)
-  // Con transición linear suavizada entre DENSITY_MIN_PHOTOS y DENSITY_MAX_PHOTOS
-  let targetDensityFactor = 0;
-  if (forwardPhotosCount <= DENSITY_MIN_PHOTOS) {
-    targetDensityFactor = 0; // Sin fade si hay pocas fotos delante
-  } else if (forwardPhotosCount >= DENSITY_MAX_PHOTOS) {
-    targetDensityFactor = 1; // Fade completo si hay muro denso
-  } else {
-    // Interpolación linear entre mínimo y máximo
-    targetDensityFactor =
-      (forwardPhotosCount - DENSITY_MIN_PHOTOS) /
-      (DENSITY_MAX_PHOTOS - DENSITY_MIN_PHOTOS);
-  }
-
-  // PASO 4: Suavizar cambios de densidad (smoothing)
-  currentDensityFactor =
-    currentDensityFactor * (1 - DENSITY_SMOOTHING) +
-    targetDensityFactor * DENSITY_SMOOTHING;
-
-  // PASO 5: Aplicar fade solo si hay densidad significativa delante
-  const fadeRange = Math.max(1, FADE_END_DISTANCE - FADE_START_DISTANCE);
-
-  for (const photo of allPhotosToFade) {
-    // Calcular distancia para todas las fotos
-    const dx = photo.position[0] - cameraPos.x;
-    const dy = photo.position[1] - cameraPos.y;
-    const dz = photo.position[2] - cameraPos.z;
-    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-
-    const mesh = photo.lodObject.isLOD ? null : photo.lodObject;
-    if (!mesh || !mesh.material) continue;
-
-    // 🔧 CRÍTICO: Respetar filtros - ocultar con opacity si está filtrada
-    if (photo.isVisible === false) {
-      mesh.material.opacity = 0;
-      mesh.material.transparent = true;
-    } else {
-      // Calcular opacidad base según distancia
-      let baseOpacity = 1.0;
-      if (distance < FADE_START_DISTANCE) {
-        baseOpacity = 1.0;
-      } else if (distance >= FADE_END_DISTANCE) {
-        baseOpacity = 0.05; // Opacidad muy baja en lugar de ocultar
-      } else {
-        const fadeProgress = (distance - FADE_START_DISTANCE) / fadeRange;
-        baseOpacity = Math.max(0.05, 1.0 - fadeProgress);
-      }
-
-      // Aplicar fade solo proporcionalmente a la densidad DELANTE
-      // Si densityFactor = 0 (no hay muro), opacity = 1.0 siempre
-      // Si densityFactor = 1 (muro denso), opacity = baseOpacity
-      const finalOpacity =
-        baseOpacity * currentDensityFactor + 1.0 * (1 - currentDensityFactor);
-
-      mesh.material.opacity = finalOpacity;
-      mesh.material.transparent = true;
-    }
-  }
-
-  // Debug: log densidad cada 60 frames
-  if (frameCounter % 60 === 0 && forwardPhotosCount > 0) {
-    console.log(
-      `📊 Muro de niebla: ${forwardPhotosCount} fotos delante en ${FORWARD_CHECK_DISTANCE}u (ángulo ${FORWARD_CONE_ANGLE}°), factor: ${currentDensityFactor.toFixed(
-        2
-      )}`
-    );
-  }
+  effectsManager.applyDistanceFading(
+    cameraRef.value,
+    photosWithMaterials.value,
+    frameCounter
+  );
 };
 
 // Handler para cambio de chunk
@@ -2922,7 +1794,28 @@ const animate = () => {
 
   // Actualizar transición de posiciones si está activa
   if (isTransitioning.value) {
-    updateTransitionPositions(frameStart);
+    const transitionCompleted = effectsManager.updateTransitionPositions(
+      photosWithMaterials.value,
+      frameStart
+    );
+
+    // Si la transición terminó, actualizar visibilidad y efectos, y ocultar loader
+    if (transitionCompleted) {
+      // Forzar actualización de matrices de cámara ANTES de frustum culling
+      if (cameraRef.value) {
+        cameraRef.value.updateMatrixWorld(true);
+        cameraRef.value.updateProjectionMatrix();
+      }
+
+      // Limpiar cache de distancias para forzar recálculo
+      distanceCache.clear();
+
+      updateVisiblePhotos();
+      updatePhotoEffects();
+
+      // 🚨 Ocultar loader "Building stage" cuando termine la animación de reposicionamiento
+      hideLoader();
+    }
   }
 
   // Actualizar posición actual
@@ -2988,60 +1881,11 @@ const animate = () => {
   }
 
   // Procesar cola de descargas (siempre, incluso durante bloqueo)
-  processTextureQueue();
+  textureManager.processTextureQueue(photosWithMaterials.value, () => {
+    checkAllTexturesLoaded();
+  });
 
   animationId = requestAnimationFrame(animate);
-};
-
-// Procesador de cola usando p-limit: enqueuea tareas (opcionalmente toda la cola) respetando prioridad ya calculada
-const processTextureQueue = () => {
-  if (textureQueue.value.length === 0) return;
-
-  // Limpieza ligera de elementos inválidos / ya descargados al frente
-  while (textureQueue.value.length) {
-    const idFront = textureQueue.value[0];
-    const objFront = photosWithMaterials.value.find((p) => p.id === idFront);
-    if (!objFront || objFront.__imageDownloaded) {
-      textureQueue.value.shift();
-      queuedIds.delete(idFront);
-      continue;
-    }
-    break;
-  }
-
-  if (textureQueue.value.length === 0) return;
-
-  const toSchedule = FULL_QUEUE_SCHEDULING
-    ? textureQueue.value.length
-    : Math.min(dynamicBatch, textureQueue.value.length);
-
-  // Nota: p-limit mantiene su propia cola; aquí simplemente pre-programamos en orden de prioridad.
-  for (let i = 0; i < toSchedule; i++) {
-    const id = textureQueue.value.shift();
-    queuedIds.delete(id);
-    const photoObj = photosWithMaterials.value.find((p) => p.id === id);
-    if (
-      !photoObj ||
-      photoObj.__imageDownloaded ||
-      photoObj.__downloading ||
-      scheduledDownloads.has(id)
-    )
-      continue;
-    scheduledDownloads.add(id);
-    limitTexture(() => downloadImageOnly(photoObj))
-      .catch(() => {})
-      .finally(() => {
-        scheduledDownloads.delete(id);
-        // Cuando terminen todas las tareas pendientes y la cola esté vacía, verificar loader
-        if (textureQueue.value.length === 0) {
-          // microtask para esperar a que otras finalizaciones entren
-          queueMicrotask(() => checkAllTexturesLoaded());
-        } else if (!FULL_QUEUE_SCHEDULING) {
-          // En modo incremental, intenta seguir drenando sin esperar al próximo frame
-          queueMicrotask(() => processTextureQueue());
-        }
-      });
-  }
 };
 
 // Loop mínimo solo para descargas (sin eventos Three.js)
@@ -3049,7 +1893,9 @@ let downloadLoopId = null;
 const startDownloadLoop = () => {
   const downloadLoop = () => {
     // Solo procesar cola de descargas, sin eventos Three.js
-    processTextureQueue();
+    textureManager.processTextureQueue(photosWithMaterials.value, () => {
+      checkAllTexturesLoaded();
+    });
 
     // Continuar mientras esté bloqueada la navegación
     if (navigationBlocked.value) {
