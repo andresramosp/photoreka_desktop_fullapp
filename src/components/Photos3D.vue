@@ -1485,6 +1485,9 @@ const updateTransitionPositions = (currentTime) => {
 
     updateVisiblePhotos();
     updatePhotoEffects(); // Aplica Billboard con distancias pre-calculadas
+
+    // 🚨 Ocultar loader "Building stage" cuando termine la animación de reposicionamiento
+    hideLoader();
   }
 }; // Nueva fase: Cachear todas las imágenes descargadas en IndexedDB
 const bulkCacheDownloadedImages = async () => {
@@ -2404,28 +2407,26 @@ const updatePhotosPositions = async (newPhotos) => {
     (p) => !p.__imageDownloaded && !p.__downloading
   );
 
-  // Solo mostrar loader y bloquear navegación si hay fotos nuevas que descargar
+  // Descarga silenciosa bajo demanda: NO mostrar loader ni bloquear navegación
   if (toTexture.length > 0) {
-    console.log(`🔄 Hay ${toTexture.length} fotos nuevas por descargar`);
-    await setupLoaderForPhotos(toTexture);
-    showLoader();
-    navigationBlocked.value = true;
-    downloadPhaseComplete.value = false;
-    cachePhaseComplete.value = false;
+    console.log(
+      `🔄 (silencioso) ${toTexture.length} fotos nuevas por descargar`
+    );
 
+    // No tocar loaderStage/loaderTitle ni navigationBlocked en este flujo
+    // Cargamos desde cache lo que exista, sin cambiar UI
     await loadImagesFromCache(toTexture);
 
+    // Encolar las que falten para descarga de red
     enqueueAllNonCachedPhotos(toTexture);
 
     // Iniciar loop mínimo de descarga si no está corriendo
     if (!downloadLoopId) {
       startDownloadLoop();
     }
-    // Cuando termine descarga se encolarán texturas en checkAllTexturesLoaded()
+    // Al terminar, la creación de texturas ocurrirá en checkAllTexturesLoaded()
   } else {
     console.log("✅ No hay fotos nuevas por descargar, solo recolocando");
-    // Asegurar que el loader esté oculto
-    hideLoader();
   }
 
   applyFilters();
@@ -2596,20 +2597,6 @@ const updateVisiblePhotos = () => {
     return isInFrustum;
   });
 
-  // 🔍 DEBUG: Log para verificar filtrado
-  if (
-    frameCounter % 60 === 0 &&
-    (selectedVisualAspects.value.length > 0 ||
-      selectedArtisticScores.value.length > 0)
-  ) {
-    console.log("🔍 updateVisiblePhotos:", {
-      candidatePhotos: candidatePhotos.length,
-      filteredOut: candidatePhotos.filter((p) => p.isVisible === false).length,
-      visiblePhotos: visiblePhotos.value.length,
-      totalPhotos: photosWithMaterials.value.length,
-    });
-  }
-
   // Actualizar cache de fotos con texturas cargadas
   visiblePhotos.value.forEach((photo) => {
     if (photo.__textureLoaded) {
@@ -2648,6 +2635,30 @@ const updateVisiblePhotos = () => {
       queuedIds.add(photo.id);
     }
   });
+
+  // Reintento bajo demanda (silencioso) para fotos con fallo definitivo previo (e.g., 429)
+  // Cuando una foto fallida entra en el frustum y permite retry, programar UN reintento sin usar el loader
+  let onDemandScheduled = 0;
+  const MAX_ONDEMAND_RETRIES_PER_FRAME = 3;
+  for (const photo of visiblePhotos.value) {
+    if (onDemandScheduled >= MAX_ONDEMAND_RETRIES_PER_FRAME) break;
+    if (
+      photo.__downloadError &&
+      photo.__canRetryOnDemand &&
+      !photo.__downloading &&
+      !scheduledDownloads.has(photo.id)
+    ) {
+      // Evitar rehacer scheduling continuo en cada frame
+      photo.__canRetryOnDemand = false;
+      scheduledDownloads.add(photo.id);
+      limitTexture(() => downloadImageOnly(photo, 0, true))
+        .catch(() => {})
+        .finally(() => {
+          scheduledDownloads.delete(photo.id);
+        });
+      onDemandScheduled++;
+    }
+  }
 
   // Ordenar cola global una vez tras inserciones (small optimization)
   if (textureQueue.value.length > 1) {
@@ -2850,13 +2861,15 @@ const applyDistanceFading = () => {
 
 // Handler para cambio de chunk
 const onChunkChange = async (newValue) => {
-  // 🚨 MOSTRAR LOADER INMEDIATAMENTE antes de la llamada a la API
+  // 🚨 SIEMPRE mostrar loader "Building stage" mientras el backend calcula posiciones
+  // Este loader se ocultará automáticamente cuando lleguen las fotos y terminen de procesarse
   loaderTitle.value = "Building stage";
   loadingProgress.value = 0;
   showLoader();
 
   // Si no hay fotos existentes, hacer limpieza completa
-  if (photosWithMaterials.value.length === 0) {
+  const isFirstLoad = photosWithMaterials.value.length === 0;
+  if (isFirstLoad) {
     console.log("🧹 Primera carga: limpieza completa");
     visiblePhotos.value = [];
     originalPositions.value = [];
