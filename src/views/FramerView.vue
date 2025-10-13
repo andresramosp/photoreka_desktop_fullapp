@@ -398,9 +398,6 @@ import { useFramedPhotoDownload } from "@/composables/useFramedPhotoDownload.js"
 import { useImageProcessing } from "@/composables/useImageProcessing.js";
 import { NButton, NIcon, NSlider, NSpin } from "naive-ui";
 
-// SEO: Canonical link
-import { useHead } from "@vueuse/head";
-
 // Icons
 import {
   SquareOutline,
@@ -431,19 +428,7 @@ const photosStore = usePhotosStore();
 const message = useMessage();
 const { downloadFramedPhoto, downloadFramedPhotosZip, isDownloading } =
   useFramedPhotoDownload();
-const { resizeWithStepDown } = useImageProcessing();
-
-// Set canonical link for SEO según modo
-useHead({
-  link: [
-    {
-      rel: "canonical",
-      href: isPlaygroundMode.value
-        ? "https://www.photoreka.com/free-framer"
-        : "https://www.photoreka.com/framer",
-    },
-  ],
-});
+const { resizeWithStepDown, loadImage } = useImageProcessing();
 
 // Playground mode detection
 const isPlaygroundMode = computed(() => route.meta?.playground === true);
