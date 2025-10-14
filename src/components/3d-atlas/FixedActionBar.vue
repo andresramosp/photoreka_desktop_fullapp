@@ -6,7 +6,7 @@
         <template #trigger>
           <n-button
             type="info"
-            size="small"
+            size="tiny"
             @click="$emit('download')"
             :disabled="selectedCount === 0 || isDownloading"
             :loading="isDownloading"
@@ -26,7 +26,7 @@
         <template #trigger>
           <n-button
             type="info"
-            size="small"
+            size="tiny"
             @click="$emit('add-to-collection')"
             :disabled="selectedCount === 0"
           >
@@ -45,7 +45,7 @@
         <template #trigger>
           <n-button
             type="info"
-            size="small"
+            size="tiny"
             @click="$emit('move-to-tool')"
             :disabled="selectedCount === 0"
           >

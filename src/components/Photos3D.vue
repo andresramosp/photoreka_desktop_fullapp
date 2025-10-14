@@ -485,23 +485,28 @@
     <!-- Selected Photos Container -->
     <div v-if="selectedPhotos.length > 0" class="selected-photos-container">
       <div class="selected-photos-header">
-        <span class="selected-count">{{ selectedPhotos.length }} selected</span>
-        <FixedActionBar
-          :selectedCount="selectedPhotos.length"
-          :showDelete="false"
-          :showAddToCollection="!isPlayground"
-          :showMoveToTool="!isPlayground"
-          :isDownloading="isDownloading"
-          @download="handleDownloadPhotos"
-          @add-to-collection="handleAddToCollection"
-          @move-to-tool="handleMoveToTool"
-        />
+        <div class="header-left-group">
+          <span class="selected-count"
+            >{{ selectedPhotos.length }} selected</span
+          >
+          <FixedActionBar
+            :selectedCount="selectedPhotos.length"
+            :showDelete="false"
+            :showAddToCollection="!isPlayground"
+            :showMoveToTool="!isPlayground"
+            :isDownloading="isDownloading"
+            @download="handleDownloadPhotos"
+            @add-to-collection="handleAddToCollection"
+            @move-to-tool="handleMoveToTool"
+          />
+        </div>
         <button
           @click="clearSelection"
           class="clear-selection-btn"
           title="Clear selection"
+          size="tiny"
         >
-          <n-icon size="14">
+          <n-icon size="11">
             <CloseOutlined />
           </n-icon>
         </button>
@@ -2092,7 +2097,7 @@ const handleMouseMove = (event) => {
         const borderGeometry = new THREE.PlaneGeometry(4.15, 3.15);
         // Obtener el color de la variable CSS --primary-color-hover
         let cssHoverColor = getComputedStyle(document.documentElement)
-          .getPropertyValue("--warning-color-hover")
+          .getPropertyValue("--secondary-color-hover")
           .trim();
         // Convertir a número hexadecimal para Three.js
         let borderColor = 0xffffff;
@@ -3352,7 +3357,7 @@ onUnmounted(() => {
 /* Selected Photos Container */
 /* ============================================ */
 
-.selected-photos-container[data-v-a2447bcd] {
+.selected-photos-container {
   position: absolute;
   left: 10px;
   top: 10px;
@@ -3389,11 +3394,20 @@ onUnmounted(() => {
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.header-left-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
 .selected-count {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.8);
   font-weight: 500;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .clear-selection-btn {
