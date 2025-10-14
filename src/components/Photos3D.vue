@@ -83,20 +83,20 @@
 
       <!-- More Filters Toggle -->
       <div class="control-section">
-        <div class="section-toggle" @click="showMoreFilters = !showMoreFilters">
+        <div class="section-toggle" @click="toggleMoreFilters">
           <span class="section-toggle-label">Search filters</span>
           <div class="section-toggle-indicators">
             <span
               v-if="
                 selectedVisualAspects.length > 0 ||
-                selectedArtisticScores.length > 0 ||
+                Object.keys(artisticScoreFilters).length > 0 ||
                 searchResults.length > 0
               "
               class="active-indicator"
             >
               {{
                 selectedVisualAspects.length +
-                selectedArtisticScores.length +
+                Object.keys(artisticScoreFilters).length +
                 (searchResults.length > 0 ? 1 : 0)
               }}
             </span>
@@ -189,43 +189,86 @@
               </n-tree-select>
             </div>
 
-            <!-- Artistic Scores Filter -->
+            <!-- Artistic Scores Filter (Collapsible) -->
             <div class="filter-item">
-              <div style="display: flex; align-items: center; gap: 4px">
-                <label class="filter-label" style="margin: 0"
-                  >Visual Scores</label
-                >
-                <n-tooltip trigger="hover" placement="top">
-                  <template #trigger>
-                    <n-icon size="12" color="#ffffffd1" style="cursor: help">
-                      <InfoCircleFilled />
-                    </n-icon>
-                  </template>
-                  Will include photos above 7 in the selected scores
-                </n-tooltip>
-              </div>
-              <n-tree-select
-                v-model:value="selectedArtisticScores"
-                multiple
-                clearable
-                placeholder="Any"
-                :options="createArtisticScoresTreeOptions()"
-                :max-tag-count="2"
-                class="aspects-select"
-                :disabled="showDiscreteLoader"
-                size="small"
-                check-strategy="child"
-                :show-path="false"
-                expand-on-click
-                @update:value="onArtisticScoresChange"
-                @click.stop
+              <div
+                class="scores-toggle"
+                @click="showArtisticScores = !showArtisticScores"
               >
-                <template #empty>
-                  <div style="padding: 8px; color: #888; font-size: 12px">
-                    No artistic scores found
+                <div style="display: flex; align-items: center; gap: 4px">
+                  <span class="scores-toggle-label">Visual Scores</span>
+                  <n-tooltip trigger="hover" placement="top">
+                    <template #trigger>
+                      <n-icon size="12" color="#ffffffd1" style="cursor: help">
+                        <InfoCircleFilled />
+                      </n-icon>
+                    </template>
+                    Filter photos by minimum score threshold (1-10)
+                  </n-tooltip>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <button
+                    v-if="Object.keys(artisticScoreFilters).length > 0"
+                    @click.stop="clearArtisticScores"
+                    class="clear-scores-btn"
+                    title="Clear all scores"
+                  >
+                    <n-icon size="12">
+                      <CloseOutlined />
+                    </n-icon>
+                  </button>
+                  <n-icon
+                    size="12"
+                    class="toggle-icon"
+                    :class="{ rotated: showArtisticScores }"
+                  >
+                    <svg viewBox="0 0 24 24">
+                      <path
+                        fill="currentColor"
+                        d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+                      />
+                    </svg>
+                  </n-icon>
+                </div>
+              </div>
+
+              <!-- Collapsible Scores Content -->
+              <div v-if="showArtisticScores" class="artistic-scores-sliders">
+                <div
+                  v-for="(group, groupKey) in artisticScoresGroups"
+                  :key="groupKey"
+                  class="score-group"
+                >
+                  <div class="score-group-header">{{ group.label }}</div>
+                  <div
+                    v-for="criterion in group.criteria"
+                    :key="criterion.value"
+                    class="score-slider-item"
+                  >
+                    <div class="score-slider-header">
+                      <span class="score-slider-label">{{
+                        criterion.label
+                      }}</span>
+                      <span
+                        v-if="artisticScoreFilters[criterion.value]"
+                        class="score-slider-value"
+                      >
+                        ≥ {{ artisticScoreFilters[criterion.value] }}
+                      </span>
+                    </div>
+                    <n-slider
+                      v-model:value="artisticScoreFilters[criterion.value]"
+                      :min="1"
+                      :max="10"
+                      :step="0.5"
+                      :disabled="showDiscreteLoader"
+                      @update:value="onArtisticScoresChange"
+                      @click.stop
+                      class="score-slider"
+                    />
                   </div>
-                </template>
-              </n-tree-select>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -233,10 +276,7 @@
 
       <!-- Display Options Toggle -->
       <div class="control-section">
-        <div
-          class="section-toggle"
-          @click="showDisplayOptions = !showDisplayOptions"
-        >
+        <div class="section-toggle" @click="toggleDisplayOptions">
           <span class="section-toggle-label">Display Options</span>
           <n-icon
             size="12"
@@ -342,10 +382,7 @@
 
       <!-- Navigation Controls Toggle -->
       <div class="control-section">
-        <div
-          class="section-toggle"
-          @click="showNavigationControls = !showNavigationControls"
-        >
+        <div class="section-toggle" @click="toggleNavigationControls">
           <span class="section-toggle-label">Navigation Controls</span>
           <n-icon
             size="12"
@@ -715,14 +752,42 @@ const currentPosition = ref({ x: 0, y: 0, z: 80 });
 // Toggle states for collapsible sections
 const showMoreFilters = ref(false);
 const showDisplayOptions = ref(false);
+const showArtisticScores = ref(false);
 
 const showNavigationControls = ref(true);
+
+// Funciones para toggles excluyentes
+const toggleMoreFilters = () => {
+  showMoreFilters.value = !showMoreFilters.value;
+  if (showMoreFilters.value) {
+    showDisplayOptions.value = false;
+    showNavigationControls.value = false;
+  }
+};
+
+const toggleDisplayOptions = () => {
+  showDisplayOptions.value = !showDisplayOptions.value;
+  if (showDisplayOptions.value) {
+    showMoreFilters.value = false;
+    showNavigationControls.value = false;
+  }
+};
+
+const toggleNavigationControls = () => {
+  showNavigationControls.value = !showNavigationControls.value;
+  if (showNavigationControls.value) {
+    showMoreFilters.value = false;
+    showDisplayOptions.value = false;
+  }
+};
 
 // Filtro de aspectos visuales
 const selectedVisualAspects = ref([]);
 
-// Filtro de artistic scores
-const selectedArtisticScores = ref([]);
+// Filtro de artistic scores - Nuevo sistema con sliders
+const { artisticScores } = useArtisticScores();
+const artisticScoresGroups = artisticScores;
+const artisticScoreFilters = ref({});
 
 // Filtro de búsqueda textual
 const searchQuery = ref("");
@@ -1017,24 +1082,6 @@ const treeSelectOptions = computed(() => {
   }));
 });
 
-// Computed para las opciones del tree select de artistic scores
-const createArtisticScoresTreeOptions = () => {
-  const { artisticScores } = useArtisticScores();
-
-  return Object.entries(artisticScores).map(([groupKey, group]) => ({
-    label: group.label,
-    key: groupKey,
-    disabled: false,
-    checkable: false,
-    children: group.criteria.map((criterion) => ({
-      label: criterion.label,
-      key: criterion.value,
-      disabled: false,
-      checkable: true,
-    })),
-  }));
-};
-
 // Create a mapping from visual aspect values to their categories
 const createVisualAspectCategoryMap = () => {
   const categoryMap = new Map();
@@ -1074,10 +1121,8 @@ const applyFilters = () => {
     }
 
     // Si no hay filtros de aspectos ni scores, mostrar foto
-    if (
-      selectedVisualAspects.value.length === 0 &&
-      selectedArtisticScores.value.length === 0
-    ) {
+    const hasScoreFilters = Object.keys(artisticScoreFilters.value).length > 0;
+    if (selectedVisualAspects.value.length === 0 && !hasScoreFilters) {
       photo.isVisible = true;
       // Restaurar opacity (applyDistanceFading lo ajustará según distancia)
       if (photo.lodObject && photo.lodObject.material) {
@@ -1127,16 +1172,16 @@ const applyFilters = () => {
       }
     }
 
-    // Filtro de Artistic Scores (score > 7 para cada score seleccionado)
-    if (selectedArtisticScores.value.length > 0) {
+    // Filtro de Artistic Scores - Nuevo sistema con umbrales por slider
+    if (hasScoreFilters) {
       if (!photo.descriptions?.artistic_scores) {
         passesArtisticScores = false;
       } else {
-        // Para pasar el filtro, la foto debe tener TODOS los scores seleccionados con valor > 7
-        passesArtisticScores = selectedArtisticScores.value.every(
-          (scoreKey) => {
+        // Para pasar el filtro, la foto debe cumplir TODOS los umbrales configurados
+        passesArtisticScores = Object.entries(artisticScoreFilters.value).every(
+          ([scoreKey, threshold]) => {
             const scoreValue = photo.descriptions?.artistic_scores?.[scoreKey];
-            return scoreValue !== undefined && scoreValue > 7;
+            return scoreValue !== undefined && scoreValue >= threshold;
           }
         );
       }
@@ -1164,8 +1209,9 @@ const applyFilters = () => {
   if (selectedVisualAspects.value.length > 0) {
     filterInfo.push(`${selectedVisualAspects.value.length} visual aspects`);
   }
-  if (selectedArtisticScores.value.length > 0) {
-    filterInfo.push(`${selectedArtisticScores.value.length} artistic scores`);
+  const activeScoreFilters = Object.keys(artisticScoreFilters.value).length;
+  if (activeScoreFilters > 0) {
+    filterInfo.push(`${activeScoreFilters} artistic scores`);
   }
   if (hasSearchFilter) {
     filterInfo.push(
@@ -1183,8 +1229,7 @@ const applyFilters = () => {
 
   // Debug adicional: mostrar algunas fotos que NO pasaron el filtro
   if (
-    (selectedVisualAspects.value.length > 0 ||
-      selectedArtisticScores.value.length > 0) &&
+    (selectedVisualAspects.value.length > 0 || activeScoreFilters > 0) &&
     hiddenCount > 0
   ) {
     const hiddenExamples = photosWithMaterials.value
@@ -1233,7 +1278,7 @@ const onVisualAspectsChange = () => {
 const onArtisticScoresChange = () => {
   console.log(
     "🔄 onArtisticScoresChange triggered:",
-    selectedArtisticScores.value
+    artisticScoreFilters.value
   );
   applyFilters();
 
@@ -1246,6 +1291,12 @@ const onArtisticScoresChange = () => {
 
   updateVisiblePhotos();
   updatePhotoEffects(); // Aplica Billboard con distancias pre-calculadas
+};
+
+// Función para limpiar todos los filtros de scores
+const clearArtisticScores = () => {
+  artisticScoreFilters.value = {};
+  onArtisticScoresChange();
 };
 
 // Search functionality - Similar a PhotosDialog.vue
@@ -2759,8 +2810,7 @@ onUnmounted(() => {
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  min-width: 300px;
-  max-width: 350px;
+  width: 350px;
   max-height: 85vh;
   overflow-y: auto;
   overflow-x: hidden; /* Prevent horizontal scroll */
@@ -2935,6 +2985,106 @@ onUnmounted(() => {
   font-size: 12px;
   color: var(--text-secondary);
   font-weight: 500;
+}
+
+/* Artistic Scores Sliders Container */
+.artistic-scores-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-right: 8px;
+  padding-left: 8px;
+  margin-top: 12px;
+  animation: slideDown 0.3s ease-out;
+}
+
+.scores-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  padding: 8px 0;
+  transition: opacity 0.2s ease;
+}
+
+.scores-toggle:hover {
+  opacity: 0.8;
+}
+
+.scores-toggle-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.score-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.score-group-header {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.score-slider-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.score-slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 16px;
+}
+
+.score-slider-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 400;
+}
+
+.score-slider-value {
+  font-size: 10px;
+  color: rgba(59, 130, 246, 0.9);
+  font-weight: 600;
+  background: rgba(59, 130, 246, 0.15);
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+
+.score-slider {
+  margin: 0 !important;
+}
+
+/* Clear scores button */
+.clear-scores-btn {
+  background: rgba(239, 68, 68, 0.15);
+  border: none;
+  border-radius: 4px;
+  padding: 2px 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+}
+
+.clear-scores-btn:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.clear-scores-btn .n-icon {
+  color: rgba(239, 68, 68, 0.9);
 }
 
 /* Options Container (for Display Options) */
