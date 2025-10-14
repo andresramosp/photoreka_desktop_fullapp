@@ -443,15 +443,6 @@ export function use3DPhotoEffects() {
         mesh.material.transparent = true;
       }
     }
-
-    // Debug log
-    if (frameCounter % 60 === 0 && forwardPhotosCount > 0) {
-      console.log(
-        `📊 Muro de niebla: ${forwardPhotosCount} fotos delante en ${FORWARD_CHECK_DISTANCE}u (ángulo ${FORWARD_CONE_ANGLE}°), factor: ${currentDensityFactor.toFixed(
-          2
-        )}`
-      );
-    }
   };
 
   /**

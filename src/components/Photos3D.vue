@@ -747,6 +747,9 @@ const selectedPhotoIds = computed(() => selectedPhotos.value.map((p) => p.id));
 const hoveredPhoto = ref(null);
 const originalHoverMaterial = ref(null);
 
+// Handler para limpiar hover al salir del modo cámara
+let handlePointerLockChange = null;
+
 // Loader discreto con progreso
 const showDiscreteLoader = ref(true);
 // Fase inicial: reducimos trabajo por frame hasta que se cargue suficiente
@@ -1984,6 +1987,11 @@ const animate = () => {
         if (useBillboarding.value)
           updateBillboardRotations(photosWithDistances);
       }
+
+      // Actualizar hover basado en crosshair si estamos en modo cámara (no touch)
+      if (!hasTouch.value && fpControls.value?.mouseState?.isPointerLocked) {
+        updatePhotoHover(0, 0); // Centro de la pantalla
+      }
     }
 
     // Aplicar fading SIEMPRE cada frame (no throttled) para respuesta inmediata
@@ -2030,17 +2038,13 @@ const handleTouchStart = (event) => {
   }
 };
 
-// Función para manejar el hover sobre fotos
-const handleMouseMove = (event) => {
-  // Solo aplicar hover si no es dispositivo táctil
-  if (hasTouch.value || !cameraRef.value || !containerRef.value) return;
+// Función compartida para detectar hover (usada por mouse y crosshair)
+const updatePhotoHover = (normalizedX, normalizedY) => {
+  if (!cameraRef.value || !containerRef.value) return;
 
-  // Calcular coordenadas del mouse normalizadas (-1 to +1)
-  const rect = containerRef.value.getBoundingClientRect();
-  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-  // Actualizar raycaster
+  // Actualizar raycaster con las coordenadas proporcionadas
+  mouse.x = normalizedX;
+  mouse.y = normalizedY;
   raycaster.setFromCamera(mouse, cameraRef.value);
 
   // Obtener solo los meshes de las fotos VISIBLES (no filtradas)
@@ -2072,12 +2076,12 @@ const handleMouseMove = (event) => {
   );
 
   if (intersects.length > 0) {
-    // Hay una foto bajo el cursor
+    // Hay una foto bajo el cursor/crosshair
     const hoveredMesh = intersects[0].object;
     const hoveredPhotoData = photoMeshes.find((pm) => pm.mesh === hoveredMesh);
 
-    // Cambiar cursor a pointer
-    if (containerRef.value) {
+    // Cambiar cursor a pointer (solo si no estamos en modo cámara)
+    if (containerRef.value && !fpControls.value?.mouseState?.isPointerLocked) {
       containerRef.value.style.cursor = "pointer";
     }
 
@@ -2122,13 +2126,27 @@ const handleMouseMove = (event) => {
       }
     }
   } else {
-    // No hay foto bajo el cursor
-    // Restaurar cursor
-    if (containerRef.value) {
+    // No hay foto bajo el cursor/crosshair
+    // Restaurar cursor (solo si no estamos en modo cámara)
+    if (containerRef.value && !fpControls.value?.mouseState?.isPointerLocked) {
       containerRef.value.style.cursor = "default";
     }
     clearPhotoHover();
   }
+};
+
+// Función para manejar el hover sobre fotos con el mouse
+const handleMouseMove = (event) => {
+  // Solo aplicar hover si no es dispositivo táctil Y no estamos en modo cámara
+  if (hasTouch.value || !cameraRef.value || !containerRef.value) return;
+  if (fpControls.value?.mouseState?.isPointerLocked) return; // En modo cámara, el crosshair se encarga
+
+  // Calcular coordenadas del mouse normalizadas (-1 to +1)
+  const rect = containerRef.value.getBoundingClientRect();
+  const normalizedX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  const normalizedY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  updatePhotoHover(normalizedX, normalizedY);
 };
 
 // Función para limpiar el efecto hover
@@ -2153,6 +2171,15 @@ const handlePhotoClick = (event) => {
   if (!cameraRef.value || !containerRef.value) return;
 
   console.log("🖱️ Click detectado, tipo:", event.type);
+
+  // Si estamos en modo cámara, usar la foto con hover activa
+  if (fpControls.value?.mouseState?.isPointerLocked && hoveredPhoto.value) {
+    console.log("📸 Click en modo cámara - seleccionando foto con hover");
+    event.preventDefault();
+    event.stopPropagation();
+    togglePhotoSelection(hoveredPhoto.value);
+    return;
+  }
 
   // Para touch, verificar que no fue un drag
   if (event.type === "touchend") {
@@ -2375,8 +2402,8 @@ const initFirstPersonControls = () => {
 
     fpControls.value.setSpeedProfile({
       initial: 0.01, // control fino inicial
-      max: 45, // velocidad tope (ajustable)
-      accelerateInSeconds: 12.5,
+      max: 80, // velocidad tope (ajustable)
+      accelerateInSeconds: 8,
     });
     // Bajar aceleración lineal para que accelerateInSeconds tenga efecto
     fpControls.value.setAccelerationRate(5); // de 60 → 5 (mucho más suave)
@@ -2574,6 +2601,15 @@ onMounted(async () => {
       console.log("🖱️ Event listeners de selección inicializados");
     }
 
+    // Listener para limpiar hover cuando sales del modo cámara
+    handlePointerLockChange = () => {
+      if (!document.pointerLockElement) {
+        // Salimos del modo cámara - limpiar hover del crosshair
+        clearPhotoHover();
+      }
+    };
+    document.addEventListener("pointerlockchange", handlePointerLockChange);
+
     // Inicializar controles después de un pequeño delay
     setTimeout(() => {
       initFirstPersonControls();
@@ -2615,6 +2651,11 @@ onUnmounted(() => {
 
   // Limpiar efecto hover activo
   clearPhotoHover();
+
+  // Limpiar listener de pointer lock
+  if (handlePointerLockChange) {
+    document.removeEventListener("pointerlockchange", handlePointerLockChange);
+  }
 
   // Limpiar event listeners de selección de fotos
   if (containerRef.value) {

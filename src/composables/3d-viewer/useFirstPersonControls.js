@@ -23,7 +23,7 @@ export function useFirstPersonControls(camera, domElement) {
   // Configuración de movimiento simple: velocidad inicial + aceleración
   // Parámetros ajustables
   // Velocidad máxima (unidades/seg). Aumentada para desplazamientos largos.
-  const moveSpeed = ref(60.0); // elevar para pruebas
+  const moveSpeed = ref(160.0); // elevar para pruebas
   const initialSpeed = ref(2); // valor claramente visible
   const accelerationRate = ref(60.0); // usada solo si curva custom
   const accelerateSeconds = ref(0.8); // llegar rápido al máximo
