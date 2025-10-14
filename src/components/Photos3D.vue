@@ -737,6 +737,7 @@ const {
   originalPositions,
   useBillboarding,
   octreeNeedsRebuild,
+  isCameraMoving,
   queryRadius,
   clearOctree,
 } = effectsManager;
@@ -1271,7 +1272,6 @@ const onVisualAspectsChange = () => {
   octreeNeedsRebuild.value = true;
 
   updateVisiblePhotos();
-  updatePhotoEffects(); // Aplica Billboard con distancias pre-calculadas
 };
 
 // Handler para cambio en filtro de artistic scores
@@ -1282,15 +1282,12 @@ const onArtisticScoresChange = () => {
   );
   applyFilters();
 
-  // Update LOD distances based on new filtered count
-  const visibleCount = filteredPhotos.value.length;
   // updateLODDistances eliminado
 
   // 🔧 CRITICAL: Marcar octree para reconstrucción con fotos filtradas
   octreeNeedsRebuild.value = true;
 
   updateVisiblePhotos();
-  updatePhotoEffects(); // Aplica Billboard con distancias pre-calculadas
 };
 
 // Función para limpiar todos los filtros de scores
@@ -1372,7 +1369,6 @@ const performSearch = async () => {
     octreeNeedsRebuild.value = true;
 
     updateVisiblePhotos();
-    updatePhotoEffects();
   } catch (error) {
     console.error("❌ Error searching photos:", error);
     searchResults.value = [];
@@ -1403,7 +1399,6 @@ const clearSearch = () => {
   octreeNeedsRebuild.value = true;
 
   updateVisiblePhotos();
-  updatePhotoEffects();
 };
 
 // Delegar al textureManager
@@ -1466,7 +1461,6 @@ const enqueueInitialTexturesBulk = () => {
         updateLoadingProgress();
         checkAllTexturesLoaded();
         updateVisiblePhotos();
-        updatePhotoEffects();
       }
     );
   }
@@ -1673,7 +1667,6 @@ const registerNewPhotos = async (newPhotos) => {
   octreeNeedsRebuild.value = true;
 
   updateVisiblePhotos();
-  updatePhotoEffects();
 };
 
 // ✨ Nueva función optimizada para cambios de chunk que reutiliza texturas
@@ -1793,7 +1786,6 @@ const updatePhotosPositions = async (newPhotos) => {
   }
 
   applyFilters();
-  updatePhotoEffects(); // Aplica Billboard con distancias pre-calculadas
 
   // ⚠️ NOTA: NO actualizamos LOD aquí porque las posiciones están en transición
   // El LOD se actualizará automáticamente al finalizar la animación en updateTransitionPositions()
@@ -1805,7 +1797,6 @@ const onInflateFactorChange = () => {
   // Marcar octree para reconstrucción después de escalado radial
   octreeNeedsRebuild.value = true;
   updateVisiblePhotos();
-  updatePhotoEffects(); // Aplica Billboard con distancias pre-calculadas
 };
 
 // Toggle floating tags system
@@ -1877,11 +1868,6 @@ const calculateDistancesForVisiblePhotos = (cameraPosition) => {
 };
 
 // Delegar a effectsManager
-const updatePhotoEffects = () => {
-  effectsManager.updatePhotoEffects(cameraRef.value);
-};
-
-// Delegar a effectsManager
 const updateBillboardRotations = (photosWithDistances) => {
   effectsManager.updateBillboardRotations(
     photosWithDistances,
@@ -1889,11 +1875,11 @@ const updateBillboardRotations = (photosWithDistances) => {
   );
 };
 
-// Delegar a effectsManager
+// Delegar a effectsManager - OPTIMIZADO: usar solo fotos visibles
 const applyDistanceFading = () => {
   effectsManager.applyDistanceFading(
     cameraRef.value,
-    photosWithMaterials.value,
+    visiblePhotos.value, // ✅ Solo fotos visibles (~200) en lugar de todas (~2000)
     frameCounter
   );
 };
@@ -1978,7 +1964,6 @@ const animate = () => {
       distanceCache.clear();
 
       updateVisiblePhotos();
-      updatePhotoEffects();
 
       // 🚨 Ocultar loader "Building stage" cuando termine la animación de reposicionamiento
       hideLoader();
@@ -2027,6 +2012,9 @@ const animate = () => {
 
       // Calcular distancias UNA SOLA VEZ para todo el frame
       if (visiblePhotos.value.length > 0 && cameraRef.value) {
+        // 🎯 Detectar si la cámara está en movimiento (para billboarding adaptativo)
+        effectsManager.updateCameraMovementState(cameraRef.value);
+
         const photosWithDistances = calculateDistancesForVisiblePhotos(
           cameraRef.value.position
         );
@@ -2048,9 +2036,13 @@ const animate = () => {
       }
     }
 
-    // Aplicar fading SIEMPRE cada frame (no throttled) para respuesta inmediata
-    // La función ahora procesa todas las fotos internamente
-    if (cameraRef.value && photosWithMaterials.value.length > 0) {
+    // 🎯 OPTIMIZACIÓN CRÍTICA: Throttle de fading (cada 3 frames = ~20 FPS)
+    // Procesar solo fotos visibles en lugar de todas (2000+ → ~200)
+    if (
+      frameCounter % 3 === 0 &&
+      cameraRef.value &&
+      visiblePhotos.value.length > 0
+    ) {
       applyDistanceFading();
     }
   }
@@ -2557,7 +2549,6 @@ watch(
     );
     applyFilters();
     updateVisiblePhotos();
-    updatePhotoEffects(); // Usa helper que calcula distancias internamente
   },
   { deep: true }
 );

@@ -22,7 +22,12 @@ const DENSITY_MAX_PHOTOS = 40;
 const FADE_START_DISTANCE = 20;
 const FADE_END_DISTANCE = 200;
 const DENSITY_SMOOTHING = 0.17;
-const MAX_PHOTOS_FOR_BILLBOARD = 1500;
+const MAX_PHOTOS_FOR_BILLBOARD = 650; // Límite durante movimiento
+const MAX_PHOTOS_FOR_BILLBOARD_STATIC = 2000; // Límite cuando está quieto
+
+// ===== Configuración de detección de movimiento =====
+const CAMERA_IDLE_THRESHOLD = 0.01; // Umbral de movimiento para considerar cámara quieta
+const CAMERA_IDLE_TIME = 300; // Milisegundos sin movimiento para considerar cámara quieta
 
 // ===== Configuración de transiciones =====
 const TRANSITION_DURATION = 1500; // 1.5 segundos
@@ -44,6 +49,12 @@ export function use3DPhotoEffects() {
 
   // ===== Billboarding =====
   const useBillboarding = ref(true);
+
+  // ===== Detección de movimiento de cámara =====
+  const isCameraMoving = ref(false);
+  let lastCameraPosition = new THREE.Vector3();
+  let lastCameraRotation = new THREE.Quaternion();
+  let lastMovementTime = 0;
 
   // ===== Octree =====
   const {
@@ -312,6 +323,41 @@ export function use3DPhotoEffects() {
   };
 
   /**
+   * Detectar si la cámara está en movimiento
+   */
+  const updateCameraMovementState = (camera) => {
+    if (!camera) return;
+
+    const currentTime = performance.now();
+    const currentPosition = camera.position.clone();
+    const currentRotation = camera.quaternion.clone();
+
+    // Calcular diferencias de posición y rotación
+    const positionDelta = currentPosition.distanceTo(lastCameraPosition);
+    const rotationDelta = 1 - Math.abs(lastCameraRotation.dot(currentRotation));
+
+    // Detectar movimiento significativo
+    const hasMovement =
+      positionDelta > CAMERA_IDLE_THRESHOLD ||
+      rotationDelta > CAMERA_IDLE_THRESHOLD;
+
+    if (hasMovement) {
+      lastMovementTime = currentTime;
+      isCameraMoving.value = true;
+    } else {
+      // Verificar si ha pasado suficiente tiempo sin movimiento
+      const timeSinceLastMovement = currentTime - lastMovementTime;
+      if (timeSinceLastMovement > CAMERA_IDLE_TIME) {
+        isCameraMoving.value = false;
+      }
+    }
+
+    // Actualizar estado anterior
+    lastCameraPosition.copy(currentPosition);
+    lastCameraRotation.copy(currentRotation);
+  };
+
+  /**
    * Calcular distancias para todas las fotos visibles
    */
   const calculateDistancesForVisiblePhotos = (cameraPosition) => {
@@ -331,14 +377,31 @@ export function use3DPhotoEffects() {
 
   /**
    * Actualizar rotaciones billboard
+   * - Si la cámara está en movimiento: limita a MAX_PHOTOS_FOR_BILLBOARD para mejor rendimiento
+   * - Si la cámara está quieta: limita a MAX_PHOTOS_FOR_BILLBOARD_STATIC para mejor calidad
    */
   const updateBillboardRotations = (photosWithDistances, cameraPosition) => {
     if (!cameraPosition || photosWithDistances.length === 0) return;
 
     let photosToProcess = photosWithDistances;
 
-    if (photosWithDistances.length > MAX_PHOTOS_FOR_BILLBOARD) {
-      photosToProcess = photosWithDistances.slice(0, MAX_PHOTOS_FOR_BILLBOARD);
+    // 🎯 Aplicar límite según estado de movimiento
+    if (isCameraMoving.value) {
+      // Durante movimiento: límite más restrictivo
+      if (photosWithDistances.length > MAX_PHOTOS_FOR_BILLBOARD) {
+        photosToProcess = photosWithDistances.slice(
+          0,
+          MAX_PHOTOS_FOR_BILLBOARD
+        );
+      }
+    } else {
+      // Cámara quieta: límite más generoso
+      if (photosWithDistances.length > MAX_PHOTOS_FOR_BILLBOARD_STATIC) {
+        photosToProcess = photosWithDistances.slice(
+          0,
+          MAX_PHOTOS_FOR_BILLBOARD_STATIC
+        );
+      }
     }
 
     photosToProcess.forEach(({ photo }) => {
@@ -348,16 +411,19 @@ export function use3DPhotoEffects() {
   };
 
   /**
-   * Aplicar fade basado en densidad direccional
+   * 🚀 OPTIMIZADO: Aplicar fade basado en densidad direccional
+   * - Usa solo fotos visibles (pasadas como parámetro)
+   * - Calcula distancias UNA SOLA VEZ
+   * - Cache de vector forward
    */
   const applyDistanceFading = (
     camera,
-    photosWithMaterials,
+    visiblePhotos, // ✅ Ya filtradas por frustum culling (~200 en lugar de ~2000)
     frameCounter = 0
   ) => {
     if (!camera) return;
 
-    const allPhotosToFade = photosWithMaterials.filter((p) => p.lodObject);
+    const allPhotosToFade = visiblePhotos.filter((p) => p.lodObject);
     if (allPhotosToFade.length === 0) return;
 
     const cameraPos = camera.position;
@@ -367,16 +433,24 @@ export function use3DPhotoEffects() {
     forwardVector.applyQuaternion(camera.quaternion);
     forwardVector.normalize();
 
-    // Contar fotos en el cono hacia adelante
-    let forwardPhotosCount = 0;
+    // 🎯 OPTIMIZACIÓN: Pre-calcular distancias UNA SOLA VEZ
+    const photosWithDistances = [];
     const cosHalfAngle = Math.cos((FORWARD_CONE_ANGLE * Math.PI) / 180 / 2);
 
     for (const photo of allPhotosToFade) {
       const dx = photo.position[0] - cameraPos.x;
       const dy = photo.position[1] - cameraPos.y;
       const dz = photo.position[2] - cameraPos.z;
-      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const distanceSq = dx * dx + dy * dy + dz * dz;
+      const distance = Math.sqrt(distanceSq);
 
+      photosWithDistances.push({ photo, distance, dx, dy, dz });
+    }
+
+    // Contar fotos en el cono hacia adelante (usando distancias pre-calculadas)
+    let forwardPhotosCount = 0;
+
+    for (const { photo, distance, dx, dy, dz } of photosWithDistances) {
       if (distance < 1 || distance > FORWARD_CHECK_DISTANCE) continue;
 
       const toPhotoX = dx / distance;
@@ -410,15 +484,10 @@ export function use3DPhotoEffects() {
       currentDensityFactor * (1 - DENSITY_SMOOTHING) +
       targetDensityFactor * DENSITY_SMOOTHING;
 
-    // Aplicar fade
+    // 🎯 OPTIMIZACIÓN: Aplicar fade reutilizando distancias pre-calculadas
     const fadeRange = Math.max(1, FADE_END_DISTANCE - FADE_START_DISTANCE);
 
-    for (const photo of allPhotosToFade) {
-      const dx = photo.position[0] - cameraPos.x;
-      const dy = photo.position[1] - cameraPos.y;
-      const dz = photo.position[2] - cameraPos.z;
-      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-
+    for (const { photo, distance } of photosWithDistances) {
       const mesh = photo.lodObject.isLOD ? null : photo.lodObject;
       if (!mesh || !mesh.material) continue;
 
@@ -448,18 +517,6 @@ export function use3DPhotoEffects() {
   /**
    * Actualizar efectos de fotos (billboard + fading)
    */
-  const updatePhotoEffects = (camera) => {
-    if (!camera || visiblePhotos.value.length === 0) return;
-
-    const photosWithDistances = calculateDistancesForVisiblePhotos(
-      camera.position
-    );
-
-    photosWithDistances.sort((a, b) => a.distSq - b.distSq);
-
-    if (useBillboarding.value)
-      updateBillboardRotations(photosWithDistances, camera.position);
-  };
 
   /**
    * Resetear estado
@@ -475,6 +532,10 @@ export function use3DPhotoEffects() {
     originalPositions.value = [];
     octreeNeedsRebuild.value = true;
     currentDensityFactor = 0;
+    isCameraMoving.value = false;
+    lastCameraPosition.set(0, 0, 0);
+    lastCameraRotation.set(0, 0, 0, 1);
+    lastMovementTime = 0;
     clearOctree();
   };
 
@@ -486,6 +547,7 @@ export function use3DPhotoEffects() {
     originalPositions,
     useBillboarding,
     octreeNeedsRebuild,
+    isCameraMoving,
 
     // Métodos de transición
     animatePositionTransition,
@@ -499,10 +561,12 @@ export function use3DPhotoEffects() {
     updateVisiblePhotos,
     calculateDistancesForVisiblePhotos,
 
+    // Métodos de detección de movimiento
+    updateCameraMovementState,
+
     // Métodos de efectos visuales
     updateBillboardRotations,
     applyDistanceFading,
-    updatePhotoEffects,
 
     // Métodos de Octree
     queryRadius,
