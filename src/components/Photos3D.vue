@@ -2038,9 +2038,12 @@ const animate = () => {
         if (useBillboarding.value)
           updateBillboardRotations(photosWithDistances);
       }
+    }
 
-      // Actualizar hover basado en crosshair si estamos en modo cámara (no touch)
-      if (!hasTouch.value && fpControls.value?.mouseState?.isPointerLocked) {
+    // 🚀 OPTIMIZACIÓN: Throttle más agresivo para hover (cada 5 frames en lugar de cada frame)
+    // Actualizar hover basado en crosshair si estamos en modo cámara (no touch)
+    if (!hasTouch.value && fpControls.value?.mouseState?.isPointerLocked) {
+      if (frameCounter % 5 === 0) {
         updatePhotoHover(0, 0); // Centro de la pantalla
       }
     }
@@ -2098,9 +2101,10 @@ const updatePhotoHover = (normalizedX, normalizedY) => {
   mouse.y = normalizedY;
   raycaster.setFromCamera(mouse, cameraRef.value);
 
-  // Obtener solo los meshes de las fotos VISIBLES (no filtradas)
+  // 🚀 OPTIMIZACIÓN: Solo considerar fotos VISIBLES (ya filtradas por frustum culling)
+  // En lugar de recorrer todas photosWithMaterials (2000+), usar solo visiblePhotos (~100-300)
   const photoMeshes = [];
-  photosWithMaterials.value.forEach((photo) => {
+  visiblePhotos.value.forEach((photo) => {
     // Solo considerar fotos visibles (no filtradas y con opacity > 0)
     if (photo.isVisible === false) return;
     if (photo.lodObject?.material?.opacity === 0) return;
@@ -2267,9 +2271,10 @@ const handlePhotoClick = (event) => {
   // Actualizar raycaster
   raycaster.setFromCamera(mouse, cameraRef.value);
 
-  // Obtener solo los meshes de las fotos VISIBLES (no filtradas)
+  // 🚀 OPTIMIZACIÓN: Solo considerar fotos VISIBLES (ya filtradas por frustum culling)
+  // En lugar de recorrer todas photosWithMaterials (2000+), usar solo visiblePhotos (~100-300)
   const photoMeshes = [];
-  photosWithMaterials.value.forEach((photo) => {
+  visiblePhotos.value.forEach((photo) => {
     // Solo considerar fotos visibles (no filtradas y con opacity > 0)
     if (photo.isVisible === false) return;
     if (photo.lodObject?.material?.opacity === 0) return;

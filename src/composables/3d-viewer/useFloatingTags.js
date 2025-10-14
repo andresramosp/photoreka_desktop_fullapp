@@ -16,7 +16,7 @@ export function useFloatingTags(camera, photos, octree = null) {
   const config = ref({
     enabled: true, // Activar/desactivar sistema de tags
     detectionRadius: 15, // Radio de la esfera de detección en unidades del mundo
-    updateInterval: 100, // Intervalo de actualización en ms (reducido para más responsividad)
+    updateInterval: 300, // 🚀 OPTIMIZACIÓN: Aumentado de 100ms a 300ms para reducir overhead
     maxTagsToShow: 6, // Máximo número de tags únicos a mostrar
     minPhotoCount: 1, // Mínimo de fotos para mostrar un tag
     maxPhotoCount: 10, // Número de fotos para intensidad máxima
@@ -224,16 +224,6 @@ export function useFloatingTags(camera, photos, octree = null) {
     try {
       const cameraPosition = camera.value.position;
 
-      if (DEBUG_TAGS) {
-        console.log(
-          `🏷️ Actualizando tags desde posición: [${cameraPosition.x.toFixed(
-            1
-          )}, ${cameraPosition.y.toFixed(1)}, ${cameraPosition.z.toFixed(
-            1
-          )}], radio: ${config.value.detectionRadius}`
-        );
-      }
-
       // 1. Encontrar fotos cercanas
       const nearbyPhotos = findNearbyPhotos(
         cameraPosition,
@@ -321,12 +311,14 @@ export function useFloatingTags(camera, photos, octree = null) {
       });
     }
 
+    // 🚀 OPTIMIZACIÓN: Usar setInterval en lugar de RAF para reducir overhead
+    // Tags no necesitan actualización en cada frame (60fps), con ~300ms es suficiente
     const loop = () => {
       updateActiveTags();
-      updateAnimationFrame = requestAnimationFrame(loop);
     };
 
-    updateAnimationFrame = requestAnimationFrame(loop);
+    // Cambiar de RAF (60fps) a interval (3-4 actualizaciones por segundo)
+    updateAnimationFrame = setInterval(loop, config.value.updateInterval);
   }
 
   /**
@@ -334,7 +326,7 @@ export function useFloatingTags(camera, photos, octree = null) {
    */
   function stopUpdateLoop() {
     if (updateAnimationFrame) {
-      cancelAnimationFrame(updateAnimationFrame);
+      clearInterval(updateAnimationFrame); // Cambiar de cancelAnimationFrame a clearInterval
       updateAnimationFrame = null;
     }
   }

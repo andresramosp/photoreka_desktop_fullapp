@@ -233,7 +233,7 @@ export function usePhotoTextureManager(
    * Crear LOD object (mesh con textura Three.js)
    */
   const createLODObject = (imageElement, position) => {
-    let maxSide = useLowPerformance ? 256 : 1024;
+    let maxSide = useLowPerformance ? 256 : 768;
     let source = imageElement;
     const needsResize =
       imageElement.width > maxSide || imageElement.height > maxSide;
@@ -256,20 +256,18 @@ export function usePhotoTextureManager(
     const texture = new THREE.Texture(source);
     texture.needsUpdate = true;
 
-    if (useLowPerformance) {
-      texture.generateMipmaps = false;
-      texture.minFilter = THREE.LinearFilter;
-      texture.magFilter = THREE.LinearFilter;
-    } else {
-      texture.generateMipmaps = true;
-      texture.minFilter = THREE.LinearMipmapLinearFilter;
-      texture.magFilter = THREE.LinearFilter;
-    }
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+
+    //  texture.generateMipmaps = true;
+    //     texture.minFilter = THREE.LinearMipmapLinearFilter;
+    //     texture.magFilter = THREE.LinearFilter;
 
     texture.colorSpace = THREE.SRGBColorSpace;
 
     try {
-      texture.anisotropy = useLowPerformance ? 1 : 4;
+      texture.anisotropy = 1;
     } catch (_) {}
 
     const material = new THREE.MeshBasicMaterial({
@@ -277,7 +275,7 @@ export function usePhotoTextureManager(
       transparent: true,
       alphaTest: 0.01,
       depthWrite: false,
-      depthTest: true,
+      depthTest: false,
       opacity: 1,
       side: THREE.FrontSide,
       toneMapped: false,
