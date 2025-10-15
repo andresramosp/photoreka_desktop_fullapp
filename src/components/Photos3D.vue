@@ -2039,7 +2039,12 @@ const animate = () => {
 
     // 🚀 OPTIMIZACIÓN: Throttle más agresivo para hover (cada 5 frames en lugar de cada frame)
     // Actualizar hover basado en crosshair si estamos en modo cámara (no touch)
-    if (!hasTouch.value && fpControls.value?.mouseState?.isPointerLocked) {
+    // Deshabilitar hover en modo playground
+    if (
+      !hasTouch.value &&
+      fpControls.value?.mouseState?.isPointerLocked &&
+      !props.isPlayground
+    ) {
       if (frameCounter % 5 === 0) {
         updatePhotoHover(0, 0); // Centro de la pantalla
       }
@@ -2096,6 +2101,11 @@ const handleTouchStart = (event) => {
 // Función compartida para detectar hover (usada por mouse y crosshair)
 const updatePhotoHover = (normalizedX, normalizedY) => {
   if (!cameraRef.value || !containerRef.value) return;
+
+  // Deshabilitar hover en modo playground
+  if (props.isPlayground) {
+    return;
+  }
 
   // Actualizar raycaster con las coordenadas proporcionadas
   mouse.x = normalizedX;
@@ -2196,6 +2206,9 @@ const handleMouseMove = (event) => {
   // Solo aplicar hover si no es dispositivo táctil Y no estamos en modo cámara
   if (hasTouch.value || !cameraRef.value || !containerRef.value) return;
   if (fpControls.value?.mouseState?.isPointerLocked) return; // En modo cámara, el crosshair se encarga
+
+  // Deshabilitar hover en modo playground
+  if (props.isPlayground) return;
 
   // Calcular coordenadas del mouse normalizadas (-1 to +1)
   const rect = containerRef.value.getBoundingClientRect();
