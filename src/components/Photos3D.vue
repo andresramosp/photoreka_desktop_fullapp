@@ -409,7 +409,7 @@
                 >
               </div>
             </div>
-            <div class="control-tip">
+            <div v-if="!isPlayground" class="control-tip">
               <div class="control-icon-group">
                 <span class="control-icon-text">👆</span>
                 <span class="control-text"

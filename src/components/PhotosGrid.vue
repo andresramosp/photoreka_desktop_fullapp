@@ -476,27 +476,9 @@ const setGridColumns = (columns) => {
   gridColumns.value = columns;
 };
 
-// Sorting functions
-const toggleSortByQuality = () => {
-  sortByQuality.value = !sortByQuality.value;
-  if (!sortByQuality.value) {
-    // Reset to all criteria when disabled
-    selectedCriteria.value = availableCriteria.map((c) => c.value);
-  }
-};
-
-const toggleSortOrder = () => {
-  sortOrder.value = sortOrder.value === "desc" ? "asc" : "desc";
-};
-
 // Basic sort order toggle
 const toggleBasicSortOrder = () => {
   basicSortOrder.value = basicSortOrder.value === "desc" ? "asc" : "desc";
-};
-
-// Clear basic sort
-const clearBasicSort = () => {
-  basicSortActive.value = false;
 };
 
 // Handle basic sort selection change
