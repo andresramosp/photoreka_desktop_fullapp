@@ -40,7 +40,6 @@
       @touchstart.stop
       @touchmove.stop
       @touchend.stop
-      :style="{ top: isPlayground ? '15px' : '70px' }"
     >
       <n-icon class="settings-icon">
         <SettingOutlined />
@@ -56,7 +55,6 @@
       @touchstart.stop
       @touchmove.stop
       @touchend.stop
-      :style="{ top: isPlayground ? '15px' : '70px' }"
     >
       <!-- Close Button (Top Right Corner) -->
       <button class="close-panel-btn-corner" @click="showConfigPanel = false">
@@ -504,7 +502,6 @@
         floatingTagsSystem.activeTags.length > 0
       "
       class="floating-tags-wrapper"
-      :style="{ bottom: isPlayground ? '15px' : '80px' }"
     >
       <div
         v-for="(tag, index) in floatingTagsSystem.activeTags"
@@ -2842,6 +2839,7 @@ onUnmounted(() => {
   animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: fixed;
   right: 15px;
+  top: 15px;
   z-index: 2000;
   pointer-events: auto;
 }
@@ -3123,7 +3121,7 @@ onUnmounted(() => {
 /* Collapsed Panel (Small Corner Button) */
 .collapsed-panel {
   position: fixed;
-  top: 70px;
+  top: 15px;
   right: 15px;
   width: 48px;
   height: 48px;
@@ -3746,6 +3744,7 @@ onUnmounted(() => {
 .floating-tags-wrapper {
   position: absolute;
   left: 50%;
+  bottom: 10px;
   transform: translateX(-50%);
   display: flex;
   flex-wrap: wrap;

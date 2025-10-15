@@ -977,8 +977,10 @@ onMounted(async () => {
 <style scoped>
 .grid-maker-container {
   padding: var(--spacing-2xl);
-
   margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .grid-maker-header {

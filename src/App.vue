@@ -36,11 +36,19 @@
             has-sider
             style="height: 100vh"
             class="app-layout"
+            :style="{
+              '--total-header-offset': showDashboardHeader ? '112px' : '48px',
+            }"
           >
             <DashboardSidebar />
             <n-layout class="main-layout">
-              <DashboardHeader />
-              <n-layout-content class="main-content">
+              <DashboardHeader v-if="showDashboardHeader" />
+              <n-layout-content
+                class="main-content"
+                :style="{
+                  height: showDashboardHeader ? 'calc(100vh - 64px)' : '100vh',
+                }"
+              >
                 <router-view v-slot="{ Component, route }">
                   <KeepAlive :include="getKeepAliveComponents()">
                     <component :is="Component" />
@@ -51,7 +59,13 @@
           </n-layout>
 
           <!-- Mobile Layout -->
-          <div v-else class="mobile-layout">
+          <div
+            v-else
+            class="mobile-layout"
+            :style="{
+              '--total-header-offset': showDashboardHeader ? '112px' : '48px',
+            }"
+          >
             <!-- Mobile sidebar overlay - completely separate from layout -->
             <DashboardSidebar
               :mobile-menu-open="mobileMenuOpen"
@@ -60,8 +74,16 @@
 
             <!-- Main mobile content -->
             <div class="mobile-content">
-              <DashboardHeader @toggle-mobile-menu="toggleMobileMenu" />
-              <div class="main-content mobile-main-content">
+              <DashboardHeader
+                v-if="showDashboardHeader"
+                @toggle-mobile-menu="toggleMobileMenu"
+              />
+              <div
+                class="main-content mobile-main-content"
+                :style="{
+                  height: showDashboardHeader ? 'calc(100vh - 64px)' : '100vh',
+                }"
+              >
                 <router-view v-slot="{ Component, route }">
                   <KeepAlive :include="getKeepAliveComponents()">
                     <component :is="Component" />
@@ -120,6 +142,25 @@ import OnboardingSlider from "./components/OnboardingSlider.vue";
 import WelcomeModal from "./components/WelcomeModal.vue";
 import ConfettiEffect from "./components/ConfettiEffect.vue";
 
+// List of route names where DashboardHeader should be visible
+const allowedHeaderViews = [
+  "dashboard",
+  "collections",
+  "collection-detail",
+  "photo-hub",
+  // "search",
+  // "project-builder",
+  // "profile",
+  // "settings",
+  // Add more route names as needed
+];
+
+const showDashboardHeader = computed(() => {
+  if (!route.name) return false;
+  return allowedHeaderViews.some(
+    (prefix) => typeof route.name === "string" && route.name.startsWith(prefix)
+  );
+});
 const photosStore = usePhotosStore();
 
 const route = useRoute();
@@ -306,7 +347,6 @@ const onOnboardingFinish = () => {
 
 .main-content {
   background-color: #101014;
-  height: calc(100vh - 64px);
   overflow: auto;
   transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }

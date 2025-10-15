@@ -1764,7 +1764,7 @@ onUnmounted(() => {
 .canvas-container {
   position: relative;
   width: 100%;
-  height: calc(100vh - 64px); /* Subtract header height */
+  height: calc(100vh); /* Subtract header height */
   overflow: hidden;
   background: var(--bg-canvas, #1a1a1a);
   touch-action: none; /* Disable default touch behaviors */
