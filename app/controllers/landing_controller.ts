@@ -13,7 +13,7 @@ const requestAccessValidator = vine.compile(
 
 export default class LandingController {
   /**
-   * Enviar email usando Mailjet (reutilizable, compatible con adjuntos)
+   * Enviar email usando SMTP de GoDaddy (reutilizable, compatible con adjuntos)
    */
   async sendEmail({
     from,
@@ -28,31 +28,40 @@ export default class LandingController {
     body: string
     attachments?: any[]
   }) {
-    // Usar SendGrid
-    const sgMailModule = await import('@sendgrid/mail')
-    const sgMail = sgMailModule.default
-    const apiKey = process.env.SENDGRID_API_KEY
-    if (!apiKey) {
-      throw new Error('SENDGRID_API_KEY no está definido en las variables de entorno')
+    const nodemailer = await import('nodemailer')
+
+    // Validar que las variables de entorno estén configuradas
+    const smtpHost = process.env.SMTP_HOST || 'smtpout.secureserver.net'
+    const smtpPort = parseInt(process.env.SMTP_PORT || '465')
+    const smtpUser = process.env.SMTP_USER
+    const smtpPass = process.env.SMTP_PASS
+
+    if (!smtpUser || !smtpPass) {
+      throw new Error('SMTP_USER y SMTP_PASS deben estar definidos en las variables de entorno')
     }
-    sgMail.setApiKey(apiKey)
 
-    // Adjuntos en formato SendGrid
-    const sgAttachments = attachments.map((attachment) => ({
-      content: attachment.content.toString('base64'),
-      filename: attachment.filename,
-      type: attachment.contentType,
-      disposition: 'attachment',
-    }))
+    // Configurar el transporter de Nodemailer
+    const transporter = nodemailer.default.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465, // true para puerto 465, false para otros puertos
+      auth: {
+        user: smtpUser,
+        pass: smtpPass,
+      },
+    })
 
-    const msg = {
-      to,
-      from,
-      subject,
+    // Preparar el email
+    const mailOptions = {
+      from: from,
+      to: to,
+      subject: subject,
       html: body,
-      attachments: sgAttachments.length > 0 ? sgAttachments : undefined,
+      attachments: attachments.length > 0 ? attachments : undefined,
     }
-    return sgMail.send(msg)
+
+    // Enviar el email
+    return transporter.sendMail(mailOptions)
   }
   /**
    * Manejar solicitudes de acceso desde la landing page
@@ -73,7 +82,7 @@ export default class LandingController {
 
       // Usar el método reutilizable para enviar el email
       await this.sendEmail({
-        from: 'andreschennai@gmail.com', //'request@photoreka.com',
+        from: 'hello@photoreka.com',
         to: 'andreschennai@gmail.com',
         subject: `Nueva solicitud de acceso - ${payload.email}`,
         body: emailContent,
