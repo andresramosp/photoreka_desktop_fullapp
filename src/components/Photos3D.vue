@@ -520,7 +520,16 @@
     </div>
 
     <!-- Selected Photos Container -->
-    <div v-if="selectedPhotos.length > 0" class="selected-photos-container">
+    <div
+      v-if="selectedPhotos.length > 0 && !isPlayground"
+      class="selected-photos-container"
+      @click.stop
+      @mousedown.stop
+      @mouseup.stop
+      @touchstart.stop
+      @touchend.stop
+      @touchmove.stop
+    >
       <div class="selected-photos-header">
         <div class="header-left-group">
           <span class="selected-count"
@@ -2217,6 +2226,12 @@ const clearPhotoHover = () => {
 const handlePhotoClick = (event) => {
   if (!cameraRef.value || !containerRef.value) return;
 
+  // Deshabilitar selección de fotos en modo playground
+  if (props.isPlayground) {
+    console.log("🎮 Selección de fotos deshabilitada en modo playground");
+    return;
+  }
+
   console.log("🖱️ Click detectado, tipo:", event.type);
 
   // Si estamos en modo cámara, usar la foto con hover activa
@@ -3778,9 +3793,11 @@ onUnmounted(() => {
 @media (max-width: 767px) {
   .floating-tags-wrapper {
     bottom: 10px;
-    left: 10px;
+    left: 50%;
+    transform: translateX(-50%);
     max-width: calc(100vw - 20px);
     gap: 5px;
+    justify-content: center;
   }
 
   .floating-tag {
