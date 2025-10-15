@@ -40,6 +40,7 @@
       @touchstart.stop
       @touchmove.stop
       @touchend.stop
+      :style="{ top: isPlayground ? '15px' : '70px' }"
     >
       <n-icon class="settings-icon">
         <SettingOutlined />
