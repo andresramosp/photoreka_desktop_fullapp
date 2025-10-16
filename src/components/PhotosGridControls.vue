@@ -1,6 +1,6 @@
 <template>
   <div class="photos-grid-controls">
-    <!-- Visual Aspects Filters Section -->
+    <!-- Search Filters Section -->
     <div class="filters-section">
       <div class="filters-header" @click="toggleFiltersPanel">
         <div class="filters-header-left">
@@ -12,7 +12,7 @@
           >
             <Camera20Regular />
           </n-icon>
-          <h4 class="filters-title">Visual Filters</h4>
+          <h4 class="filters-title">Search Filters</h4>
           <span
             v-if="hasActiveFilters && !isFiltersPanelExpanded"
             class="active-filters-badge"
@@ -32,6 +32,24 @@
       </div>
 
       <div v-show="isFiltersPanelExpanded" class="filters-content">
+        <!-- Filename Search Row -->
+        <div class="filename-search-row">
+          <n-input
+            v-model:value="filenameSearch"
+            placeholder="Search by filename..."
+            clearable
+            size="small"
+            @update:value="handleFilenameSearchChange"
+          >
+            <template #prefix>
+              <n-icon>
+                <Search20Regular />
+              </n-icon>
+            </template>
+          </n-input>
+        </div>
+
+        <!-- Visual Aspects Filters Grid -->
         <div class="filters-grid">
           <div
             v-for="aspectGroup in visualAspectsOptions"
@@ -292,6 +310,7 @@ import {
   NModal,
   NTag,
   NTooltip,
+  NInput,
 } from "naive-ui";
 import {
   Book20Regular,
@@ -301,6 +320,7 @@ import {
   Location20Regular,
   PaintBrush20Regular,
   RoadCone20Regular,
+  Search20Regular,
   Settings20Regular,
   Trophy20Regular,
 } from "@vicons/fluent";
@@ -315,6 +335,7 @@ const emit = defineEmits([
   "genre-change",
   "sorting-type-change",
   "custom-weights-change",
+  "filename-search-change",
 ]);
 
 const props = defineProps({
@@ -323,6 +344,9 @@ const props = defineProps({
     default: false,
   },
 });
+
+// Filename Search
+const filenameSearch = ref("");
 
 // Visual Aspects Filters
 const selectedFilters = ref({});
@@ -518,6 +542,10 @@ const handleCriteriaChange = () => {
   emit("criteria-change", selectedCriteria.value);
 };
 
+const handleFilenameSearchChange = (value) => {
+  emit("filename-search-change", value);
+};
+
 // Watchers to emit changes
 watch(
   sortingType,
@@ -590,7 +618,7 @@ watch(
   margin-bottom: 24px;
 }
 
-/* Visual Aspects Filters Styles */
+/* Search Filters Styles */
 .filters-section {
   background-color: #1a1a1f;
   border-radius: 8px;
@@ -652,6 +680,14 @@ watch(
 .filters-content {
   border-top: 1px solid #2c2c32;
   padding: 16px;
+}
+
+.filename-search-row {
+  margin-bottom: 16px;
+}
+
+.filename-search-row :deep(.n-input) {
+  max-width: 400px;
 }
 
 .filters-grid {

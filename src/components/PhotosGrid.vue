@@ -11,6 +11,7 @@
       @genre-change="handleGenreChange"
       @sorting-type-change="handleSortingTypeChange"
       @custom-weights-change="handleCustomWeightsChange"
+      @filename-search-change="handleFilenameSearchChange"
     />
 
     <!-- Grid Controls -->
@@ -339,6 +340,7 @@ const isLoadingMore = ref(false);
 
 // State for filters and sorting (managed by PhotosGridControls)
 const selectedFilters = ref({});
+const filenameSearch = ref("");
 const sortingType = ref("none"); // 'none', 'criteria' or 'genre'
 const selectedCriteria = ref([]);
 const selectedGenre = ref("street");
@@ -544,6 +546,10 @@ const handleCustomWeightsChange = (newWeights) => {
   customWeights.value = newWeights;
 };
 
+const handleFilenameSearchChange = (searchValue) => {
+  filenameSearch.value = searchValue;
+};
+
 // Handle review duplicates (preprocess and check)
 const handleReviewDuplicates = async () => {
   isCheckingDuplicates.value = true;
@@ -617,6 +623,15 @@ function groupDuplicates(photos) {
 // Filter and sort ALL photos (without pagination limit)
 const filteredAndSortedPhotos = computed(() => {
   let filtered = props.photos;
+
+  // Apply filename search filter
+  if (filenameSearch.value && filenameSearch.value.trim() !== "") {
+    const searchTerm = filenameSearch.value.toLowerCase().trim();
+    filtered = filtered.filter((photo) => {
+      const filename = (photo.originalFileName || "").toLowerCase();
+      return filename.includes(searchTerm);
+    });
+  }
 
   // Apply visual aspects filters
   const hasActiveFilters = Object.values(selectedFilters.value).some(
@@ -770,6 +785,7 @@ const resetPagination = () => {
 watch(
   [
     selectedFilters,
+    filenameSearch,
     sortingType,
     selectedCriteria,
     selectedGenre,
