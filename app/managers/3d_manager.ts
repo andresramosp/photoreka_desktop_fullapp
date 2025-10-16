@@ -43,7 +43,8 @@ export default class ThreeDManager {
    */
 
   @withCache({
-    ttl: 60 * 60 * 24,
+    ttl: 60 * 60,
+    provider: 'redis',
     key: (userId, chunkName, fakeLimit) => `get3DPhotos:${userId}:${chunkName}:${fakeLimit}`,
   })
   public async get3DPhotos(userId: string, chunkName: string, fakeLimit: number = 5000) {
