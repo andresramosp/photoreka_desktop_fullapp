@@ -67,6 +67,15 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
     try {
       const photos = await loadPhotos(chunkName);
 
+      // Check if photos array is empty
+      if (!photos || photos.length === 0) {
+        console.warn("⚠️ No photos received from API");
+        error.value = "Your catalog doesn't have enough photos to be processed";
+        photos3D.value = [];
+        isLoadingPositions.value = false;
+        return;
+      }
+
       // Filtrado para modo lowPerformance
       let workingPhotos = photos;
       if (lowPerformance.value && photos.length > 750) {

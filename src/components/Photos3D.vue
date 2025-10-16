@@ -3,9 +3,9 @@
     <!-- Error Screen -->
     <div v-if="error" class="error-screen">
       <div class="error-content">
-        <h2>Error al cargar la visualización 3D</h2>
+        <h2>Unable to load 3D visualization</h2>
         <p>{{ error }}</p>
-        <button @click="retryLoad" class="retry-btn">Reintentar</button>
+        <button @click="retryLoad" class="retry-btn">Retry</button>
       </div>
     </div>
 
@@ -2562,6 +2562,30 @@ watch(isLoadingPositions, (newIsLoading, oldIsLoading) => {
     );
     // Cuando termine de cargar, verificar si todas las texturas están listas
     checkAllTexturesLoaded();
+  }
+});
+
+// Watcher: manejar errores y ocultar loader
+watch(error, (newError) => {
+  if (newError) {
+    console.error("❌ Error detectado:", newError);
+    // Ocultar loader cuando hay un error
+    showDiscreteLoader.value = false;
+    navigationBlocked.value = false;
+
+    // Mostrar mensaje al usuario
+    if (newError.includes("enough photos")) {
+      message.warning(
+        "Your catalog doesn't have enough photos to be processed. Please upload and process more photos.",
+        {
+          duration: 6000,
+        }
+      );
+    } else {
+      message.error(newError, {
+        duration: 5000,
+      });
+    }
   }
 });
 
