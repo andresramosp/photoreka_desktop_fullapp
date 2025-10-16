@@ -2,7 +2,7 @@
   <n-modal
     v-model:show="visible"
     preset="card"
-    :style="{ maxWidth: '90vw', width: '600px', maxHeight: '90vh' }"
+    :style="{ maxWidth: '92vw', width: '650px', maxHeight: '90vh' }"
     :bordered="false"
     :closable="false"
     :mask-closable="false"
@@ -11,42 +11,106 @@
   >
     <template #header>
       <div class="welcome-header">
-        <h2 class="welcome-title">Welcome to Photoreka</h2>
-        <p class="welcome-subtitle">
+        <div class="logo-container">
+          <!-- <AppLogo :height="60" inline /> -->
+        </div>
+        <h4 class="welcome-title">Welcome to Photoreka</h4>
+        <!-- <p class="welcome-subtitle">
           Your journey with intelligent photo management starts here
-        </p>
+        </p> -->
       </div>
     </template>
 
     <div class="welcome-content">
       <div class="welcome-message">
         <div class="message-text">
-          <p class="main-message">
-            Photoreka is designed to work with large photo collections and
-            bodies of work. To ensure consistent performance, we require a
-            minimum of
-            <strong>{{ MIN_PHOTOS_THRESHOLD }} photos</strong> to unlock the
-            full potential of the platform.
-          </p>
+          <!-- Strict Mode Message -->
+          <template v-if="!ONBOARDING_SOFT">
+            <p class="main-message">
+              Photoreka is designed to work with large photo collections and
+              bodies of work. To ensure consistent performance, we require a
+              minimum of
+              <strong style="color: #f59e0b"
+                >{{ MIN_PHOTOS_THRESHOLD }} photos</strong
+              >
+              to unlock the full potential of the platform.
+            </p>
 
-          <p class="secondary-message">Here's how to get started:</p>
+            <p class="secondary-message">Here's how to get started:</p>
 
-          <ul class="steps-list">
-            <li>Upload your photos to the <strong>Lightbox</strong></li>
-            <li>
-              Watch your progress as you approach
-              {{ MIN_PHOTOS_THRESHOLD }} photos
-            </li>
-            <li>
-              Analyze your first batch of {{ MIN_PHOTOS_THRESHOLD }}+ photos
-            </li>
-            <li>Enjoy unrestricted access with no minimum limits thereafter</li>
-          </ul>
+            <ul class="steps-list no-bullets">
+              <li>Upload your photos to the <strong>Lightbox</strong></li>
+              <li>
+                Watch your progress as you approach
+                {{ MIN_PHOTOS_THRESHOLD }} photos
+              </li>
+              <li>
+                Analyze your first batch of {{ MIN_PHOTOS_THRESHOLD }}+ photos
+              </li>
+              <li>
+                Enjoy unrestricted access with no minimum limits thereafter
+              </li>
+            </ul>
 
-          <p class="final-message">
-            Once you've processed your first {{ MIN_PHOTOS_THRESHOLD }} photos,
-            you can add and process any number of photos without restrictions!
-          </p>
+            <p class="final-message">
+              Once you've processed your first
+              {{ MIN_PHOTOS_THRESHOLD }} photos, you can add and process any
+              number of photos without restrictions!
+            </p>
+          </template>
+
+          <!-- Soft Mode Message -->
+          <template v-else>
+            <p class="main-message">
+              Photoreka is designed to work with large photo collections. For
+              the best experience,
+              <strong>we recommend</strong> starting with at least
+              <strong style="color: #8b5cf6"
+                >{{ MIN_PHOTOS_THRESHOLD }} photos</strong
+              >
+            </p>
+
+            <p class="secondary-message">Here's how to get started:</p>
+
+            <ul class="steps-list">
+              <li>
+                <n-icon
+                  size="20"
+                  color="#2563eb"
+                  style="vertical-align: middle; margin-right: 8px"
+                >
+                  <PhotoOutlined />
+                </n-icon>
+                Import your photos to the Lightbox
+              </li>
+              <li>
+                <n-icon
+                  size="20"
+                  color="#10b981"
+                  style="vertical-align: middle; margin-right: 8px"
+                >
+                  <SearchOutline />
+                </n-icon>
+                Click on Analyze to start processing your photos
+              </li>
+              <li>
+                <n-icon
+                  size="20"
+                  color="#f59e42"
+                  style="vertical-align: middle; margin-right: 8px"
+                >
+                  <SparklesOutline />
+                </n-icon>
+                Once processing is complete, start playing with features right
+                away
+              </li>
+            </ul>
+
+            <p style="margin-top: 25px; margin-bottom: 0px">
+              You can start with any number of photos, but larger collections
+              provide richer insights and better results!
+            </p>
+          </template>
         </div>
       </div>
 
@@ -67,7 +131,10 @@
 <script setup>
 import { computed } from "vue";
 import { NModal, NButton, NIcon } from "naive-ui";
-import { MIN_PHOTOS_THRESHOLD } from "@/stores/photos";
+import { MIN_PHOTOS_THRESHOLD, ONBOARDING_SOFT } from "@/stores/photos";
+import { SearchOutline, SparklesOutline } from "@vicons/ionicons5";
+import { PhotoOutlined } from "@vicons/material";
+import AppLogo from "./AppLogo.vue";
 
 const props = defineProps({
   modelValue: {
@@ -96,6 +163,12 @@ const getStarted = () => {
 
 .welcome-header {
   text-align: center;
+  margin-bottom: var(--spacing-lg);
+}
+
+.logo-container {
+  display: flex;
+  justify-content: center;
   margin-bottom: var(--spacing-lg);
 }
 
@@ -163,7 +236,7 @@ const getStarted = () => {
 .secondary-message {
   font-size: 15px;
   color: var(--text-secondary);
-  margin: 0 0 var(--spacing-md) 0;
+  margin: 0 0 23px 23px;
   font-weight: var(--font-weight-medium);
 }
 
@@ -173,6 +246,13 @@ const getStarted = () => {
   color: var(--text-secondary);
   line-height: var(--line-height-relaxed);
   margin: 0 0 var(--spacing-lg) 0;
+  list-style: none;
+  padding-left: 0;
+}
+
+.no-bullets {
+  list-style: none;
+  padding-left: 0;
 }
 
 .steps-list li {

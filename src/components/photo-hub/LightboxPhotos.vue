@@ -198,36 +198,43 @@
               @click.stop="triggerFileInput"
             >
               <template #icon>
-                <n-icon>
-                  <svg viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"
-                    />
-                  </svg>
-                </n-icon>
+                <n-icon><FolderOpenOutline /> </n-icon>
               </template>
-              Choose Files
+              Import from local files
             </n-button>
-            <!-- <n-button
+            <n-button
               type="default"
               size="large"
               class="google-photos-btn"
-              @click="handleGooglePhotosImport"
-              :loading="isLoadingGooglePhotos"
+              @click.stop="handleGooglePhotosComingSoon"
             >
               <template #icon>
                 <n-icon>
-                  <svg viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7L15 13L13.5 11.5C12.1 10.1 9.9 10.1 8.5 11.5L3 17V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V9ZM5 19L8.5 15.5C9.3 14.7 10.7 14.7 11.5 15.5L13 17L19 11V19H5Z"
-                    />
+                  <!-- Google Photos official SVG icon -->
+                  <svg viewBox="0 0 48 48" width="1em" height="1em">
+                    <g>
+                      <path
+                        fill="#4285F4"
+                        d="M24 24V6.4A17.6 17.6 0 0 1 41.6 24Z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M24 24h17.6A17.6 17.6 0 0 1 24 41.6Z"
+                      />
+                      <path
+                        fill="#FBBC04"
+                        d="M24 24v17.6A17.6 17.6 0 0 1 6.4 24Z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M24 24H6.4A17.6 17.6 0 0 1 24 6.4Z"
+                      />
+                    </g>
                   </svg>
                 </n-icon>
               </template>
               Import from Google Photos
-            </n-button> -->
+            </n-button>
           </div>
           <div class="file-formats">
             <span class="format-text"
@@ -254,12 +261,7 @@
           >
             <template #icon>
               <n-icon>
-                <svg viewBox="0 0 24 24">
-                  <path
-                    fill="currentColor"
-                    d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"
-                  />
-                </svg>
+                <FolderOpenOutline />
               </n-icon>
             </template>
             {{
@@ -268,44 +270,38 @@
                 : "Local Files"
             }}
           </n-button>
-          <!-- <n-button
+          <n-button
             type="default"
             size="medium"
             class="compact-google-photos-btn"
-            @click="handleGooglePhotosImport"
-            :loading="isLoadingGooglePhotos"
+            @click="handleGooglePhotosComingSoon"
           >
             <template #icon>
               <n-icon>
-                <svg viewBox="0 0 24 24">
-                  <path
-                    fill="currentColor"
-                    d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7L15 13L13.5 11.5C12.1 10.1 9.9 10.1 8.5 11.5L3 17V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V9ZM5 19L8.5 15.5C9.3 14.7 10.7 14.7 11.5 15.5L13 17L19 11V19H5Z"
-                  />
+                <svg viewBox="0 0 48 48" width="1em" height="1em">
+                  <g>
+                    <path
+                      fill="#4285F4"
+                      d="M24 24V6.4A17.6 17.6 0 0 1 41.6 24Z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M24 24h17.6A17.6 17.6 0 0 1 24 41.6Z"
+                    />
+                    <path
+                      fill="#FBBC04"
+                      d="M24 24v17.6A17.6 17.6 0 0 1 6.4 24Z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M24 24H6.4A17.6 17.6 0 0 1 24 6.4Z"
+                    />
+                  </g>
                 </svg>
               </n-icon>
             </template>
             Google Photos
           </n-button>
-          <n-button
-            type="default"
-            size="medium"
-            class="compact-google-photos-btn"
-            @click="handleGooglePhotosImportBE"
-            :loading="isLoadingAuthBE"
-          >
-            <template #icon>
-              <n-icon>
-                <svg viewBox="0 0 24 24">
-                  <path
-                    fill="currentColor"
-                    d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7L15 13L13.5 11.5C12.1 10.1 9.9 10.1 8.5 11.5L3 17V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V9ZM5 19L8.5 15.5C9.3 14.7 10.7 14.7 11.5 15.5L13 17L19 11V19H5Z"
-                  />
-                </svg>
-              </n-icon>
-            </template>
-            Google BE
-          </n-button> -->
         </div>
       </div>
     </div>
@@ -340,7 +336,7 @@ import { usePhotosStore } from "@/stores/photos.js";
 import { useUserStore } from "@/stores/userStore.ts";
 import { usePhotoUpload } from "@/composables/usePhotoUpload.js";
 import { useWarmUp } from "@/composables/useWarmUp.js";
-
+import { FolderOpenOutline } from "@vicons/ionicons5";
 import { BookInformation20Regular } from "@vicons/fluent";
 
 import PhotosGrid from "../PhotosGrid.vue";
@@ -561,59 +557,12 @@ async function uploadLocalFiles(event) {
   }
 }
 
+// Handler for Google Photos "coming soon" message
+const handleGooglePhotosComingSoon = () => {
+  message.info("Import from Google Photos is coming soon!");
+};
+
 // Con Picker API, la subida se puede hacer directamente tras triggerGooglePhotos si es necesario
-
-const deletePhoto = async (photoId) => {
-  await photosStore.deletePhotos([photoId]);
-  // Eliminar photoId de los arrays duplicates de las fotos en el store
-  photosStore.lightboxPhotos.forEach((photo) => {
-    if (Array.isArray(photo.duplicates)) {
-      const idx = photo.duplicates.indexOf(photoId);
-      if (idx !== -1) {
-        // Usar updatePhoto para que sea reactivo
-        const newDuplicates = photo.duplicates.filter((id) => id !== photoId);
-        photosStore.updatePhoto(photo.id, {
-          duplicates: newDuplicates,
-          isDuplicate: newDuplicates.length > 0, // o tu lógica para marcar duplicado
-        });
-      }
-    }
-  });
-};
-
-// Action handlers (empty for now as requested)
-const handleDeleteMultiple = () => {
-  const idsToDelete = selectedPhotoIds.value;
-  photosStore.deletePhotos(idsToDelete);
-  // Eliminar idsToDelete de los arrays duplicates de las fotos en el store
-  photosStore.lightboxPhotos.forEach((photo) => {
-    if (Array.isArray(photo.duplicates)) {
-      const newDuplicates = photo.duplicates.filter(
-        (id) => !idsToDelete.includes(id)
-      );
-      if (newDuplicates.length !== photo.duplicates.length) {
-        photosStore.updatePhoto(photo.id, {
-          duplicates: newDuplicates,
-          isDuplicate: newDuplicates.length > 0, // o tu lógica para marcar duplicado
-        });
-      }
-    }
-  });
-};
-
-const showDuplicates = (duplicates) => {
-  selectedDuplicates.value = duplicates;
-  showDuplicatesDialog.value = true;
-};
-
-const togglePhotoSelection = (photoId) => {
-  photosStore.togglePhotoSelection(photoId);
-};
-
-const handleAddToCollection = () => {
-  console.log("Add to collection action for photos:", selectedPhotoIds.value);
-  // TODO: Implement add to collection functionality
-};
 
 const closeAnalyzeDialog = () => {
   showAnalyzeDialog.value = false;

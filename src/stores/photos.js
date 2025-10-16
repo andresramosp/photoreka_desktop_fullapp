@@ -3,6 +3,11 @@
 // Umbral mínimo de fotos requeridas para desbloquear funcionalidades
 export const MIN_PHOTOS_THRESHOLD = 50;
 
+// Modo de onboarding: si true, el umbral actúa como recomendación en vez de requisito estricto
+// false = modo estricto (requiere 50 fotos procesadas para desbloquear herramientas)
+// true = modo suave (herramientas siempre disponibles, 50 fotos es solo una recomendación)
+export const ONBOARDING_SOFT = true;
+
 import { defineStore } from "pinia";
 import { api } from "@/utils/axios";
 import { useUserStore } from "@/stores/userStore.ts";
@@ -72,12 +77,16 @@ export const usePhotosStore = defineStore("photos", {
     allPhotos: (state) => (Array.isArray(state.photos) ? state.photos : []),
 
     appAccessMode: (state) => {
-      // Count processed photos
       const processedCount = state.photos?.filter(
         (photo) => photo.status === "processed"
       ).length;
 
-      // App is unlocked when user has 100+ processed photos
+      // En modo soft, desbloquear con al menos 1 foto procesada
+      if (ONBOARDING_SOFT) {
+        return processedCount >= 1 ? "full" : "blocked";
+      }
+
+      // Modo estricto: App is unlocked when user has MIN_PHOTOS_THRESHOLD+ processed photos
       if (processedCount >= MIN_PHOTOS_THRESHOLD) {
         return "full";
       }
@@ -101,6 +110,7 @@ export const usePhotosStore = defineStore("photos", {
       const checkingDuplicatesCount = state.photos?.filter(
         (photo) => photo.isCheckingDuplicates
       ).length;
+
       // If there are photos currently processing, show processing state
       if (processingCount > 0) {
         return "processing";
@@ -111,7 +121,20 @@ export const usePhotosStore = defineStore("photos", {
         return "processing";
       }
 
-      // If app is already unlocked (≥100 processed photos), always enabled
+      // En modo soft, habilitar el botón si hay al menos 1 foto subida/preprocesada
+      if (ONBOARDING_SOFT) {
+        // Si ya hay fotos procesadas, siempre habilitado
+        if (processedCount >= 1) {
+          return "enabled";
+        }
+        // Si hay al menos 1 foto lista para procesar, habilitar
+        if (uploadedOrPreprocessedCount >= 1) {
+          return "enabled";
+        }
+        return "disabled";
+      }
+
+      // Modo estricto: If app is already unlocked (≥MIN_PHOTOS_THRESHOLD processed photos), always enabled
       if (processedCount >= MIN_PHOTOS_THRESHOLD) {
         return "enabled";
       }
@@ -129,18 +152,23 @@ export const usePhotosStore = defineStore("photos", {
       const processedCount = state.photos?.filter(
         (photo) => photo.status === "processed"
       ).length;
-
-      // If app is already unlocked, always 100% progress
-      if (processedCount >= MIN_PHOTOS_THRESHOLD) {
-        return 100;
-      }
-
-      // Calculate progress based on preprocessed + processed photos toward threshold
       const uploadedOrPreprocessedCount = state.photos?.filter(
         (photo) =>
           photo.status === "preprocessed" || photo.status === "uploaded"
       ).length;
 
+      // En modo soft, no hay requisito de umbral, por lo que no mostramos progreso
+      // Retornamos 100% para que no se muestre la barra de progreso
+      if (ONBOARDING_SOFT) {
+        return 100;
+      }
+
+      // Modo estricto: If app is already unlocked, always 100% progress
+      if (processedCount >= MIN_PHOTOS_THRESHOLD) {
+        return 100;
+      }
+
+      // Calculate progress based on preprocessed + processed photos toward threshold
       const totalProgressPhotos = uploadedOrPreprocessedCount + processedCount;
 
       return Math.min((totalProgressPhotos / MIN_PHOTOS_THRESHOLD) * 100, 100);
