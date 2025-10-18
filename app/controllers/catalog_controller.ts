@@ -81,7 +81,7 @@ export default class CatalogController {
       const {
         fileType,
         originalName: originalFileName,
-        source = 'local',
+        source = { type: 'local' },
         exifData,
       } = request.only(['fileType', 'originalName', 'source', 'exifData'])
 
@@ -99,6 +99,7 @@ export default class CatalogController {
       // Guarda en base de datos
 
       const descriptions: PhotoDescriptions = exifData ? { EXIF: exifData } : {}
+      descriptions.source = source
       const photo = await Photo.create({
         name: key,
         thumbnailName: thumbnailKey,

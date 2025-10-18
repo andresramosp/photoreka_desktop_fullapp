@@ -24,6 +24,7 @@ export type DescriptionType =
   | 'artistic_review'
   | 'artistic_scores'
   | 'EXIF'
+  | 'source'
 export type PhotoDescriptions = Partial<Record<DescriptionType, string | Record<string, any> | any>>
 export type PhotoStatus = 'uploaded' | 'preprocessing' | 'preprocessed' | 'processing' | 'processed'
 
