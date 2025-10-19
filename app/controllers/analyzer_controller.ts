@@ -8,6 +8,7 @@ import Logger from '../utils/logger.js'
 import HealthPhotoService from '#services/health_photo_service'
 import AnalyzerProcess from '#models/analyzer/analyzerProcess'
 import { packages } from '../analyzer_packages.js'
+import UsageService from '#services/usage_service'
 
 const logger = Logger.getInstance('AnalyzerProcess')
 
@@ -61,6 +62,22 @@ export default class AnalyzerController {
           targetUserId,
           isPreprocess
         )
+      }
+
+      // Verificar si el usuario tiene capacidad suficiente para analizar estas fotos
+      if (photos.length > 0) {
+        const usage = await UsageService.getUsage(targetUserId)
+        if (!usage || !usage.analyzedPhotosRemaining) {
+          return response.forbidden({
+            message: 'Has alcanzado el límite de fotos analizadas para tu plan',
+          })
+        }
+
+        if (photos.length > usage.analyzedPhotosRemaining) {
+          return response.forbidden({
+            message: `No tienes suficiente capacidad para analizar ${photos.length} fotos. Te quedan ${usage.analyzedPhotosRemaining} análisis disponibles`,
+          })
+        }
       }
 
       if (photos.length || isGlobal) {
