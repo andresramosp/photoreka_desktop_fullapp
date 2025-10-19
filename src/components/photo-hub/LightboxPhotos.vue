@@ -5,6 +5,8 @@
       :duplicates="selectedDuplicates"
     />
 
+    <LightroomModal v-model="showLightroomModal" />
+
     <n-modal
       v-model:show="showAnalyzeDialog"
       preset="confirm"
@@ -205,6 +207,23 @@
             <n-button
               type="default"
               size="large"
+              class="lightroom-btn"
+              @click.stop="showLightroomModal = true"
+            >
+              <template #icon>
+                <n-icon>
+                  <img
+                    src="/src/assets/onBoarding/lightroom_logo.png"
+                    alt="Lr"
+                    style="width: 1.1em; height: 1.1em"
+                  />
+                </n-icon>
+              </template>
+              Lightroom Plugin
+            </n-button>
+            <n-button
+              type="default"
+              size="large"
               class="google-photos-btn"
               @click.stop="handleGooglePhotosComingSoon"
             >
@@ -233,7 +252,7 @@
                   </svg>
                 </n-icon>
               </template>
-              Import from Google Photos
+              Google Photos
             </n-button>
           </div>
           <div class="file-formats">
@@ -269,6 +288,23 @@
                 ? "Upload Limit Reached"
                 : "Local Files"
             }}
+          </n-button>
+          <n-button
+            type="default"
+            size="large"
+            class="lightroom-btn"
+            @click.stop="showLightroomModal = true"
+          >
+            <template #icon>
+              <n-icon>
+                <img
+                  src="/src/assets/onBoarding/lightroom_logo.png"
+                  alt="Lr"
+                  style="width: 1.1em; height: 1.1em"
+                />
+              </n-icon>
+            </template>
+            Plugin
           </n-button>
           <n-button
             type="default"
@@ -341,6 +377,7 @@ import { BookInformation20Regular } from "@vicons/fluent";
 
 import PhotosGrid from "../PhotosGrid.vue";
 import DuplicatePhotosDialog from "../DuplicatePhotosDialog.vue";
+import LightroomModal from "../LightroomModal.vue";
 
 import { NModal, NCheckbox, NTooltip } from "naive-ui";
 
@@ -374,6 +411,7 @@ const fileInput = ref(null);
 const showDuplicatesDialog = ref(false);
 const selectedDuplicates = ref([]);
 const isDragOver = ref(false);
+const showLightroomModal = ref(false);
 
 // Variable para controlar si ya se activó el warm-up al 75%
 const warmUpTriggeredAt75 = ref(false);
@@ -636,14 +674,19 @@ defineExpose({
   margin-bottom: 24px;
   justify-content: center;
   flex-wrap: wrap;
+  flex-direction: column;
 }
 
 .upload-btn {
-  min-width: 180px;
+  min-width: 120px;
 }
 
 .google-photos-btn {
-  min-width: 220px;
+  min-width: 120px;
+}
+
+.lightroom-btn {
+  min-width: 120px;
 }
 
 .file-formats {
@@ -860,6 +903,18 @@ defineExpose({
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
+  }
+
+  .upload-buttons {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .upload-btn,
+  .google-photos-btn,
+  .lightroom-btn {
+    width: 100%;
+    min-width: unset;
   }
 }
 </style>

@@ -737,7 +737,7 @@ import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import { SaveOutline, CloudDownloadOutline } from "@vicons/ionicons5";
 import { SelectAllFilled } from "@vicons/material";
 import { MagicWand, Workspace } from "@vicons/carbon";
-import logoName from "@/assets/logos/logo_name_sub_white.png";
+import logoName from "@/assets/logos/logo_name_sub_white_center.png";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { useCanvasPersistence } from "@/composables/useCanvasPersistence.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";

@@ -34,7 +34,7 @@
 import { computed } from "vue";
 import { NIcon } from "naive-ui";
 import { CameraOutline } from "@vicons/ionicons5";
-import logoName from "@/assets/logos/logo_name_sub_white.png";
+import logoName from "@/assets/logos/logo_name_sub_white_center.png";
 import logoNameInline from "@/assets/logos/logo_name_white.png";
 
 interface Props {

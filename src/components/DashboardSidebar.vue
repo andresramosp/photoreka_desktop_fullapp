@@ -166,7 +166,7 @@ import type { MenuOption } from "naive-ui";
 import { usePhotosStore } from "@/stores/photos.js";
 
 import { Workspace as CanvasIcon } from "@vicons/carbon";
-import logoName from "@/assets/logos/logo_name_sub_white.png";
+import logoName from "@/assets/logos/logo_name_sub_white_center.png";
 import logoImagoName from "@/assets/logos/logo_imago_white.png";
 
 // Import @vicons icons from ionicons5 for reliability
