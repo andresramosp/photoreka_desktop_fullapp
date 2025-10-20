@@ -54,12 +54,23 @@ export function withCache(options: CacheOptions = {}) {
       console.log(`[withCache] Cache MISS: ${cacheKey}`)
       const result = await originalMethod.apply(this, args)
 
-      if (provider === 'nodecache') {
-        nodeCache.set(cacheKey, result, ttl)
-        console.log(`[withCache] Key stored in nodecache: ${cacheKey}`)
+      // No almacenar en caché si el resultado es vacío (null, undefined, array vacío, objeto vacío)
+      const isEmpty =
+        result === null ||
+        result === undefined ||
+        (Array.isArray(result) && result.length === 0) ||
+        (typeof result === 'object' && !Array.isArray(result) && Object.keys(result).length === 0)
+
+      if (!isEmpty) {
+        if (provider === 'nodecache') {
+          nodeCache.set(cacheKey, result, ttl)
+          console.log(`[withCache] Key stored in nodecache: ${cacheKey}`)
+        } else {
+          await redis.set(cacheKey, JSON.stringify(result), 'EX', ttl)
+          console.log(`[withCache] Key stored in redis: ${cacheKey}`)
+        }
       } else {
-        await redis.set(cacheKey, JSON.stringify(result), 'EX', ttl)
-        console.log(`[withCache] Key stored in redis: ${cacheKey}`)
+        console.log(`[withCache] Result is empty, not caching: ${cacheKey}`)
       }
       return result
     }
