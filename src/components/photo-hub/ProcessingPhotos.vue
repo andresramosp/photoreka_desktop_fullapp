@@ -308,7 +308,7 @@ function getCurrentStageIndex(stage) {
 }
 
 // Mapear proceso
-const mapProcess = (proc, idx = 0) => {
+const mapProcess = (proc, idx = 0, previousJob = null) => {
   // Si está en modo retry_process, ignorar stages y mostrar 'finalizing' hasta que termine
   const isRetry = proc.mode === "retry_process";
   const isFinished = proc.currentStage === "finished";
@@ -324,6 +324,13 @@ const mapProcess = (proc, idx = 0) => {
       : Math.max(0, Math.round((currentStageIdx / totalStages) * 100));
     currentStageLabel = STAGES[currentStageIdx]?.label || "Starting...";
   }
+
+  // Aplicar "high watermark": nunca permitir que el progreso retroceda
+  // Esto maneja el caso de fases ejecutándose en paralelo
+  if (previousJob && previousJob.progressPercent && !isFinished) {
+    progressPercent = Math.max(progressPercent, previousJob.progressPercent);
+  }
+
   return {
     id: proc.id,
     expanded: idx === 0, // El primer tab siempre abierto
@@ -387,7 +394,7 @@ async function loadProcesses() {
     const updated = filtered.map((proc, idx) => {
       const current = processingJobs.value.find((j) => j.id === proc.id);
       // El primer tab (idx 0) siempre abierto, los demás mantienen su estado
-      const mapped = mapProcess(proc, idx);
+      const mapped = mapProcess(proc, idx, current); // Pasar el job anterior para comparar progreso
       if (current && idx !== 0) mapped.expanded = current.expanded;
       return mapped;
     });
