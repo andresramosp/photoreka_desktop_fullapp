@@ -37,7 +37,7 @@ const router = createRouter({
         requiresGuest: false, // Accessible to both guests and authenticated users
         title: "Photoreka - Photo Management and Curation Platform",
         description:
-          "Transform your photos with AI-powered enhancement tools. Create stunning canvases, photo frames, and artistic compositions with Photoreka's free tools.",
+          "Organize and curate your photo library with advanced tools. Search photos using natural language, arrange them on the canvas, and discover related images based on narrative or color similarity. Rank your photos by aesthetic scores and navigate your catalog in 3D.",
         keywords:
           "photo enhancement, AI photo tools, canvas maker, photo frames, image editor, photo culling, photo organizer",
       },
@@ -116,9 +116,9 @@ const router = createRouter({
         playground: true,
         title: "Free Canvas Playground - Photoreka",
         description:
-          "Try our free photo canvas maker without registration. Create artistic compositions and enhance your photos with AI-powered tools.",
+          "Sequence and arrange your photos with Photoreka's canvas tool without registration. Find related images by narrative or color similarity and create stunning photo compositions.",
         keywords:
-          "free canvas maker, photo playground, no registration photo editor, AI photo enhancement",
+          "free canvas maker, photo playground, no registration photo editor, sequence photos, photo arrangement",
       },
     },
     {
@@ -312,7 +312,7 @@ router.afterEach((to) => {
   // Update meta description
   const description =
     (to.meta?.description as string) ||
-    "Transform your photos with AI-powered enhancement tools. Create stunning canvases, photo frames, and artistic compositions with Photoreka.";
+    "Organize and curate your photo library with advanced tools. Search photos using natural language, arrange them on the canvas, and discover related images based on narrative or color similarity. Rank your photos by aesthetic scores and navigate your catalog in 3D.";
   updateMetaTag("name", "description", description);
 
   // Update meta keywords
