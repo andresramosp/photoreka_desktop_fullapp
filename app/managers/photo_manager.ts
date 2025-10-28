@@ -124,7 +124,8 @@ export default class PhotoManager {
     userId: string,
     collections?: string[],
     visualAspects?: string[],
-    artisticScores?: string[]
+    artisticScores?: string[],
+    source?: string
   ): Promise<number[]> {
     let query = Photo.query().where('user_id', userId)
     if (collections && collections.length > 0) {
@@ -140,7 +141,8 @@ export default class PhotoManager {
       !visualAspects || !Array.isArray(visualAspects) || visualAspects.length === 0
     const noArtisticScores =
       !artisticScores || !Array.isArray(artisticScores) || artisticScores.length === 0
-    if (noVisualAspects && noArtisticScores) {
+    const noSource = !source
+    if (noVisualAspects && noArtisticScores && noSource) {
       return photos.map((p) => p.id)
     }
 
@@ -148,6 +150,7 @@ export default class PhotoManager {
       .filter((p) => {
         let visualOk = true
         let artisticOk = true
+        let sourceOk = true
 
         // Filtrado por visual aspects
         if (!noVisualAspects) {
@@ -172,7 +175,13 @@ export default class PhotoManager {
           }
         }
 
-        return visualOk && artisticOk
+        // Filtrado por source type
+        if (!noSource) {
+          const sourceType = p.descriptions?.source?.type
+          sourceOk = sourceType === source
+        }
+
+        return visualOk && artisticOk && sourceOk
       })
       .map((p) => p.id)
   }

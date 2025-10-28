@@ -25,6 +25,7 @@ export default class SearchController {
         visualAspects: query.options.visualAspects,
         artisticScores: query.options.artisticScores,
         cursor: query.options.cursor,
+        source: query.options.source || null,
       })
 
       return response.ok(result)

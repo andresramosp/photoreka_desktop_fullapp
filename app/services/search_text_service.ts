@@ -41,6 +41,7 @@ export type SearchOptions = {
   visualAspects?: string[]
   artisticScores?: string[]
   cursor?: string
+  source?: string
 }
 
 export type SearchTagsOptions = SearchOptions & {
@@ -227,6 +228,7 @@ export default class SearchTextService {
       visualAspects,
       artisticScores,
       cursor,
+      source,
     } = options
 
     if (searchMode === 'curation') {
@@ -237,7 +239,8 @@ export default class SearchTextService {
       userId?.toString(),
       collections && collections.length > 0 ? collections : undefined,
       visualAspects && visualAspects.length > 0 ? visualAspects : undefined,
-      artisticScores && artisticScores.length > 0 ? artisticScores : undefined
+      artisticScores && artisticScores.length > 0 ? artisticScores : undefined,
+      source || undefined
     )
 
     const { structuredResult, useImage, expansionCost } = await this.queryService.structureQuery(
@@ -557,6 +560,7 @@ export default class SearchTextService {
           tags: photo?.tags,
           originalUrl: photo?.originalUrl,
           thumbnailUrl: photo?.thumbnailUrl,
+          originalFileName: photo?.originalFileName,
           ...scoredPhoto,
           //matchingTags: scoredPhoto.matchingTags ? scoredPhoto.matchingTags.map((t) => t.name) : [],
         },
