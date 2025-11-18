@@ -429,6 +429,19 @@ export default class ModelsService {
     }
   }
 
+  async getClusters(payload) {
+    try {
+      const { data } = await axios.post(
+        process.env.PYTHON_API_CPU + '/get_clusters',
+        JSON.stringify(payload)
+      )
+      return data
+    } catch (error) {
+      console.error('Error en getClusters:', error.message, payload)
+      return { clusters: [] }
+    }
+  }
+
   async getHistogramColor(images) {
     try {
       const { data } = await axios.post(process.env.PYTHON_API_CPU + '/color-histograms', {

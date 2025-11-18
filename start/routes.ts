@@ -40,12 +40,19 @@ const LandingController = () => import('#controllers/landing_controller')
 const CollectionsController = () => import('#controllers/collections_controller')
 const UsageController = () => import('#controllers/usage_controller')
 const ThreeDViewController = () => import('#controllers/3dview_controller')
+const PortfolioReviewController = () => import('#controllers/portfolio_review_controller')
 
 // Landing page endpoints (no auth required)
 router.post('/api/landing/request', [LandingController, 'request'])
 
 // 3D Visualization public endpoint (no auth required)
 router.post('/api/3d/catalog/:id', [ThreeDViewController, 'get3DPhotosByIdOrUsername'])
+
+// Portfolio Review public endpoint (no auth required)
+router.get('/api/portfolio-review/:reviewType/user/:userId', [
+  PortfolioReviewController,
+  'getPatternsByUserId',
+])
 
 // Endpoints health (sin auth)
 router.get('/api/analyzer/health/user', [AnalyzerController, 'healthForUser'])
@@ -93,6 +100,9 @@ router
     // 3D Visualization endpoints
     router.post('/api/3d/photos', [ThreeDViewController, 'get3DPhotos'])
     router.get('/api/3d/categories', [ThreeDViewController, 'getAvailableCategories'])
+
+    // Portfolio Review endpoints
+    router.get('/api/portfolio-review/:reviewType', [PortfolioReviewController, 'getPatterns'])
 
     // Usage endpoints
     router.get('/api/usage', [UsageController, 'show'])

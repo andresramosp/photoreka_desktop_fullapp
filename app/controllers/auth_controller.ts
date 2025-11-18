@@ -23,12 +23,10 @@ export default class AuthController {
       const authCode = payload.authCode
 
       // Verificar si el email está en la whitelist o si el authCode es válido
-      if (!WHITELIST_EMAILS.includes(payload.email)) {
-        if (!authCode || !AUTH_CODES.includes(authCode)) {
-          return response.unauthorized({
-            message: 'Unauthorized email for registration. Please request access.',
-          })
-        }
+      if (!authCode || !AUTH_CODES.includes(authCode)) {
+        return response.unauthorized({
+          message: 'Unauthorized email for registration. Please request access.',
+        })
       }
 
       // Verificar si el email ya está registrado
