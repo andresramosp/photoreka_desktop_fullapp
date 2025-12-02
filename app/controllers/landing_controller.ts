@@ -1,5 +1,6 @@
 import { HttpContext } from '@adonisjs/core/http'
 import vine from '@vinejs/vine'
+import MailService from '#services/mail_service'
 
 // Validator para el payload de solicitud de acceso
 const requestAccessValidator = vine.compile(
@@ -12,57 +13,7 @@ const requestAccessValidator = vine.compile(
 )
 
 export default class LandingController {
-  /**
-   * Enviar email usando SMTP de GoDaddy (reutilizable, compatible con adjuntos)
-   */
-  async sendEmail({
-    from,
-    to,
-    subject,
-    body,
-    attachments = [],
-  }: {
-    from: string
-    to: string
-    subject: string
-    body: string
-    attachments?: any[]
-  }) {
-    const nodemailer = await import('nodemailer')
-
-    // Validar que las variables de entorno estén configuradas
-    const smtpHost = process.env.SMTP_HOST || 'smtpout.secureserver.net'
-    const smtpPort = parseInt(process.env.SMTP_PORT || '465')
-    const smtpUser = process.env.SMTP_USER
-    const smtpPass = process.env.SMTP_PASS
-
-    if (!smtpUser || !smtpPass) {
-      throw new Error('SMTP_USER y SMTP_PASS deben estar definidos en las variables de entorno')
-    }
-
-    // Configurar el transporter de Nodemailer
-    const transporter = nodemailer.default.createTransport({
-      host: smtpHost,
-      port: smtpPort,
-      secure: smtpPort === 465, // true para puerto 465, false para otros puertos
-      auth: {
-        user: smtpUser,
-        pass: smtpPass,
-      },
-    })
-
-    // Preparar el email
-    const mailOptions = {
-      from: from,
-      to: to,
-      subject: subject,
-      html: body,
-      attachments: attachments.length > 0 ? attachments : undefined,
-    }
-
-    // Enviar el email
-    return transporter.sendMail(mailOptions)
-  }
+  private mailService = new MailService()
   /**
    * Manejar solicitudes de acceso desde la landing page
    */
@@ -80,8 +31,8 @@ export default class LandingController {
         <p><small>Solicitud recibida el ${new Date().toLocaleString('es-ES')}</small></p>
       `
 
-      // Usar el método reutilizable para enviar el email
-      await this.sendEmail({
+      // Usar el servicio de mail para enviar el email
+      await this.mailService.sendEmail({
         from: 'hello@photoreka.com',
         to: 'andreschennai@gmail.com',
         subject: `Nueva solicitud de acceso - ${payload.email}`,
