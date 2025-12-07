@@ -185,7 +185,7 @@
       </div>
 
       <!-- Grid Actions -->
-      <div class="grid-actions-bottom">
+      <!-- <div class="grid-actions-bottom">
         <n-button @click="exportGrid" type="primary">
           <template #icon>
             <n-icon><DownloadOutline /></n-icon>
@@ -199,7 +199,7 @@
           </template>
           Save as Template
         </n-button>
-      </div>
+      </div> -->
     </div>
 
     <!-- Photo Selection Dialog -->
@@ -966,6 +966,8 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2xl);
+  max-height: 100vh;
+  overflow-y: auto;
 }
 
 .grid-controls {
@@ -977,6 +979,9 @@ onMounted(async () => {
   padding: var(--spacing-lg);
   background-color: var(--bg-surface);
   border-radius: var(--border-radius-lg);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .control-group {
