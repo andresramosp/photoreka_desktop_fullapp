@@ -7,6 +7,7 @@ import {
   PROMPT_PORTFOLIO_CONTEXTUAL_PATTERN,
   PROMPT_PORTFOLIO_GENERAL_PATTERN,
   PROMPT_PORTFOLIO_AESTHETIC_PATTERN,
+  PROMPT_PORTFOLIO_PROGRESSIVE_FUSION,
 } from '../utils/prompts/portfolio_review.js'
 
 export type ReviewType = 'story' | 'context' | 'aesthetic' | 'general' | 'visual_accents'
@@ -32,6 +33,13 @@ interface ClusterPattern {
     thumbnailUrl: string
     description: string
   }>
+}
+
+// Interfaz extendida para acumular datos durante la fusión progresiva
+interface AccumulatedPattern extends ClusterPattern {
+  shortDescription: string // Descripción corta (2 frases) para contexto del LLM
+  mergedClusterIds: string[] // IDs de clusters que se han fusionado en este patrón
+  allPhotoIds: number[] // Todos los IDs de fotos (para evitar duplicados en samplePhotos)
 }
 
 export default class PortfolioReviewManager {
@@ -382,14 +390,71 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
   }
 
   /**
+   * Genera el prompt para fusión progresiva de clusters
+   * Incluye los patrones ya identificados para que el LLM decida si fusionar o crear nuevo
+   */
+  private generateProgressiveFusionPrompt(
+    samplePhotos: any[],
+    reviewType: ReviewType,
+    existingPatterns: AccumulatedPattern[]
+  ): { systemPrompt: string; userMessage: string } {
+    const chunkName = REVIEW_TYPE_TO_CHUNK[reviewType]
+
+    // Mapear ReviewType a los tipos del prompt
+    const reviewTypeMap: Record<ReviewType, 'narrative' | 'contextual' | 'aesthetic' | 'general'> =
+      {
+        story: 'narrative',
+        context: 'contextual',
+        aesthetic: 'aesthetic',
+        visual_accents: 'aesthetic',
+        general: 'general',
+      }
+
+    // Preparar texto de las fotos según el tipo
+    let photosText: string
+    if (chunkName === 'story' || chunkName === 'context') {
+      photosText = samplePhotos
+        .map((photo, idx) => {
+          const relevantChunks = photo.chunks.filter((c: any) => c.category === chunkName)
+          return `Photo ${idx + 1}:
+${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') : 'No description'}`
+        })
+        .join('\n\n')
+    } else {
+      photosText = samplePhotos
+        .map((photo, idx) => `Photo ${idx + 1}: ${photo.originalFileName}`)
+        .join('\n')
+    }
+
+    // Preparar resumen de patrones existentes (usando shortDescription para no saturar)
+    const existingPatternsSummary = existingPatterns.map((p) => ({
+      patternId: p.patternId,
+      title: p.title,
+      shortDescription: p.shortDescription,
+    }))
+
+    return PROMPT_PORTFOLIO_PROGRESSIVE_FUSION(
+      photosText,
+      samplePhotos.length,
+      existingPatternsSummary,
+      reviewTypeMap[reviewType]
+    )
+  }
+
+  /**
    * Método principal: Obtiene patrones del portfolio según el tipo de review
+   * @param useProgressiveFusion - Si true, usa fusión progresiva con LLM. Si false, genera patrones independientes.
    */
   // @withCache({
   //   ttl: 60 * 60 * 2, // Cache por 2 horas
   //   provider: 'redis',
   //   key: (userId, reviewType) => `portfolioReview:${reviewType}:${userId}`,
   // })
-  public async getPatterns(userId: string, reviewType: ReviewType = 'general') {
+  public async getPatterns(
+    userId: string,
+    reviewType: ReviewType = 'general',
+    useProgressiveFusion: boolean = true
+  ) {
     // FASE 1: Obtener embeddings según el tipo de review
     const { vectors, photoMapObject } = await this.getEmbeddingsByReviewType(userId, reviewType)
 
@@ -420,8 +485,8 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       //   pca_components: 5,
 
       method: 'hdbscan',
-      max_clusters: 12,
-      min_cluster_size: 5, // Valor clave para controlar numero de clusters
+      max_clusters: 20,
+      min_cluster_size: 5,
       min_samples: 3,
       dim_reduction_method: 'umap',
       umap_n_components: 15,
@@ -452,55 +517,159 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       }
     }
 
-    // FASE 3 & 4: Muestreo inteligente y análisis con LLM
+    // FASE 3 & 4: Análisis de clusters con LLM
+    const accumulatedPatterns: AccumulatedPattern[] = []
     const patterns: ClusterPattern[] = []
     const totalPhotos = vectors.length
+    const chunkName = REVIEW_TYPE_TO_CHUNK[reviewType]
 
-    for (const cluster of clusters) {
-      // Calcular tamaño de muestra (entre 5 y 15 fotos)
-      const clusterSize = cluster.size
-      const sampleSize = Math.min(15, Math.max(5, Math.floor(clusterSize * 0.1)))
+    // Helper para crear descripción de foto
+    const createPhotoDescription = (photo: any) => {
+      return chunkName === 'story' || chunkName === 'context'
+        ? photo.chunks
+            .filter((c: any) => c.category === chunkName)
+            .map((c: any) => c.chunk)
+            .join(' ') || 'No description'
+        : photo.originalFileName || 'No filename'
+    }
 
-      // Obtener muestra representativa
-      const samplePhotoIds = this.sampleCluster(cluster, sampleSize)
-      const samplePhotos = samplePhotoIds.map((id) => photoMapObject[id]).filter(Boolean)
+    // Helper para crear objeto de foto para samplePhotos
+    const createSamplePhoto = (photo: any) => ({
+      id: photo.id,
+      thumbnailUrl: `https://pub-${process.env.R2_PUBLIC_ID}.r2.dev/${photo.thumbnailName}`,
+      description: createPhotoDescription(photo),
+    })
 
-      // Generar prompt y llamar al LLM
-      const { systemPrompt, userMessage } = this.generateClusterPrompt(samplePhotos, reviewType)
+    if (useProgressiveFusion) {
+      // ============ MODO FUSIÓN PROGRESIVA ============
+      // El LLM decide si cada cluster se fusiona con uno existente o crea uno nuevo
 
-      const llmResponse = await this.modelsService.getGeminiResponse(
-        systemPrompt,
-        [userMessage],
-        'gemini-2.5-flash-lite',
-        { temperature: 0.7, responseType: 'json_object' },
-        true
-      )
+      for (const cluster of clusters) {
+        const clusterSize = cluster.size
+        const sampleSize = Math.min(15, Math.max(5, Math.floor(clusterSize * 0.1)))
 
-      const analysis = llmResponse.result
+        const samplePhotoIds = this.sampleCluster(cluster, sampleSize)
+        const samplePhotos = samplePhotoIds.map((id) => photoMapObject[id]).filter(Boolean)
+        const allClusterPhotoIds = cluster.photo_ids.map((id: string) => parseInt(id))
 
-      // Construir el patrón
-      const chunkName = REVIEW_TYPE_TO_CHUNK[reviewType]
-      const pattern: ClusterPattern = {
-        patternId: `cluster_${cluster.cluster_id}`,
-        title: analysis.title || `Pattern ${cluster.cluster_id + 1}`,
-        description: analysis.description || 'No description available',
-        photoCount: clusterSize,
-        percentage: cluster.percentage, // Porcentaje calculado por Python
-        strength: analysis.strength || 'moderate',
-        samplePhotos: samplePhotos.slice(0, 5).map((photo) => ({
-          id: photo.id,
-          thumbnailUrl: `https://pub-${process.env.R2_PUBLIC_ID}.r2.dev/${photo.thumbnailName}`,
-          description:
-            chunkName === 'story' || chunkName === 'context'
-              ? photo.chunks
-                  .filter((c: any) => c.category === chunkName)
-                  .map((c: any) => c.chunk)
-                  .join(' ') || 'No description'
-              : photo.originalFileName || 'No filename',
-        })),
+        // Generar prompt con contexto de patrones existentes
+        const { systemPrompt, userMessage } = this.generateProgressiveFusionPrompt(
+          samplePhotos,
+          reviewType,
+          accumulatedPatterns
+        )
+
+        const llmResponse = await this.modelsService.getGeminiResponse(
+          systemPrompt,
+          [userMessage],
+          'gemini-2.5-flash-lite',
+          { temperature: 0.7, responseType: 'json_object' },
+          true
+        )
+
+        const analysis = llmResponse.result
+
+        if (analysis.decision === 'merge' && analysis.mergeWithPatternId) {
+          // FUSIONAR con patrón existente
+          const targetPattern = accumulatedPatterns.find(
+            (p) => p.patternId === analysis.mergeWithPatternId
+          )
+
+          if (targetPattern) {
+            targetPattern.photoCount += clusterSize
+            targetPattern.percentage += cluster.percentage
+            targetPattern.mergedClusterIds.push(`cluster_${cluster.cluster_id}`)
+
+            const existingPhotoIds = new Set(targetPattern.allPhotoIds)
+            const newPhotosToAdd = samplePhotos
+              .filter((photo) => !existingPhotoIds.has(photo.id))
+              .slice(0, Math.max(0, 8 - targetPattern.samplePhotos.length))
+
+            for (const photo of newPhotosToAdd) {
+              targetPattern.samplePhotos.push(createSamplePhoto(photo))
+              targetPattern.allPhotoIds.push(photo.id)
+            }
+
+            for (const photoId of allClusterPhotoIds) {
+              if (!existingPhotoIds.has(photoId)) {
+                targetPattern.allPhotoIds.push(photoId)
+              }
+            }
+
+            if (targetPattern.photoCount > totalPhotos * 0.2) {
+              targetPattern.strength = 'strong'
+            } else if (targetPattern.photoCount > totalPhotos * 0.1) {
+              targetPattern.strength = 'moderate'
+            }
+          }
+        } else {
+          // CREAR nuevo patrón
+          const newPattern: AccumulatedPattern = {
+            patternId: `pattern_${accumulatedPatterns.length + 1}`,
+            title: analysis.title || `Pattern ${accumulatedPatterns.length + 1}`,
+            shortDescription:
+              analysis.shortDescription || analysis.description?.slice(0, 150) || 'No description',
+            description: analysis.description || 'No description available',
+            photoCount: clusterSize,
+            percentage: cluster.percentage,
+            strength: analysis.strength || 'moderate',
+            samplePhotos: samplePhotos.slice(0, 5).map(createSamplePhoto),
+            mergedClusterIds: [`cluster_${cluster.cluster_id}`],
+            allPhotoIds: allClusterPhotoIds,
+          }
+
+          accumulatedPatterns.push(newPattern)
+        }
       }
 
-      patterns.push(pattern)
+      // Convertir AccumulatedPattern a ClusterPattern
+      for (const p of accumulatedPatterns) {
+        patterns.push({
+          patternId: p.patternId,
+          title: p.title,
+          description: p.description,
+          photoCount: p.photoCount,
+          percentage: Math.min(100, p.percentage),
+          strength: p.strength,
+          samplePhotos: p.samplePhotos.slice(0, 5),
+        })
+      }
+    } else {
+      // ============ MODO INDEPENDIENTE (sin fusión) ============
+      // Cada cluster genera su propio patrón independiente
+
+      for (const cluster of clusters) {
+        const clusterSize = cluster.size
+        const sampleSize = Math.min(15, Math.max(5, Math.floor(clusterSize * 0.1)))
+
+        const samplePhotoIds = this.sampleCluster(cluster, sampleSize)
+        const samplePhotos = samplePhotoIds.map((id) => photoMapObject[id]).filter(Boolean)
+
+        // Generar prompt sin contexto de patrones previos
+        const { systemPrompt, userMessage } = this.generateClusterPrompt(samplePhotos, reviewType)
+
+        const llmResponse = await this.modelsService.getGeminiResponse(
+          systemPrompt,
+          [userMessage],
+          'gemini-2.5-flash-lite',
+          { temperature: 0.7, responseType: 'json_object' },
+          true
+        )
+
+        const analysis = llmResponse.result
+
+        const pattern: ClusterPattern = {
+          patternId: `cluster_${cluster.cluster_id}`,
+          title: analysis.title || `Pattern ${cluster.cluster_id + 1}`,
+          description: analysis.description || 'No description available',
+          photoCount: clusterSize,
+          percentage: cluster.percentage,
+          strength: analysis.strength || 'moderate',
+          samplePhotos: samplePhotos.slice(0, 5).map(createSamplePhoto),
+        }
+
+        patterns.push(pattern)
+      }
     }
 
     // Ordenar por porcentaje (más prominentes primero)
@@ -512,7 +681,9 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
         totalPhotos,
         clustersFound: clusters.length,
         patternsIdentified: patterns.length,
+        clustersMerged: useProgressiveFusion ? clusters.length - patterns.length : 0,
         reviewType,
+        fusionMode: useProgressiveFusion ? 'progressive' : 'independent',
       },
     }
   }

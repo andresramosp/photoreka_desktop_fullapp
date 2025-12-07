@@ -95,3 +95,74 @@ ${photosList}
 
 Note: These photos have been clustered based on their visual embeddings, indicating they share similar visual patterns or subjects.`,
 })
+
+// Tipo para patrones existentes en la fusión progresiva
+interface ExistingPatternSummary {
+  patternId: string
+  title: string
+  shortDescription: string // Descripción corta (2 frases) para no saturar el contexto
+}
+
+// Prompt para fusión progresiva de clusters
+export const PROMPT_PORTFOLIO_PROGRESSIVE_FUSION = (
+  photosText: string,
+  photoCount: number,
+  existingPatterns: ExistingPatternSummary[],
+  reviewType: 'narrative' | 'contextual' | 'aesthetic' | 'general'
+) => {
+  const reviewTypeDescriptions: Record<string, string> = {
+    narrative: 'narrative patterns, themes, or storytelling approaches',
+    contextual: 'contextual similarities, situations, or settings',
+    aesthetic: 'aesthetic qualities, visual aspects, or stylistic similarities',
+    general: 'visual similarities, subjects, or compositional patterns',
+  }
+
+  const analysisType = reviewTypeDescriptions[reviewType] || reviewTypeDescriptions.general
+
+  const existingPatternsText =
+    existingPatterns.length > 0
+      ? `
+EXISTING PATTERNS ALREADY IDENTIFIED:
+${existingPatterns.map((p, idx) => `${idx + 1}. [${p.patternId}] "${p.title}": ${p.shortDescription}`).join('\n')}
+`
+      : `
+NO EXISTING PATTERNS YET (this is the first cluster being analyzed).
+`
+
+  return {
+    systemPrompt: `You are analyzing patterns in a photography portfolio with PROGRESSIVE CLUSTER FUSION.
+
+Your task is to analyze a new cluster of photos and decide whether it should:
+1. **MERGE** with an existing pattern (if the photos fit conceptually within an already identified pattern)
+2. **CREATE NEW** pattern (if the photos represent a distinct, new pattern)
+
+ANALYSIS TYPE: ${analysisType}
+
+DECISION CRITERIA FOR MERGE:
+- The new cluster shares the same core theme/concept as an existing pattern
+- The photos would naturally belong to the existing pattern's description
+- Merging would strengthen the pattern, not dilute it
+- Be generous with merging - if there's reasonable thematic overlap, merge
+
+DECISION CRITERIA FOR NEW:
+- The cluster represents a clearly distinct theme not covered by existing patterns
+- Merging would create an overly broad or incoherent pattern
+- The photos have unique characteristics that deserve their own category
+
+Return your response in JSON format:
+{
+  "decision": "merge" | "new",
+  "mergeWithPatternId": "pattern_id_here",  // REQUIRED if decision is "merge", use the exact patternId from existing patterns
+  "title": "Pattern Title",                  // REQUIRED if decision is "new" (2-4 catchy words)
+  "shortDescription": "Brief 2-sentence summary",  // REQUIRED if decision is "new" (concise, for context)
+  "description": "Full detailed description",      // REQUIRED if decision is "new" (2-3 detailed sentences)
+  "strength": "strong|moderate|weak"               // REQUIRED if decision is "new"
+}`,
+    userMessage: `${existingPatternsText}
+
+NEW CLUSTER TO ANALYZE (${photoCount} representative photos):
+${photosText}
+
+Analyze these photos and decide: should this cluster MERGE with an existing pattern, or create a NEW pattern?`,
+  }
+}

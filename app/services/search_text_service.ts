@@ -284,13 +284,15 @@ export default class SearchTextService {
       searchMode,
       collections,
       visualAspects,
+      artisticScores,
       cursor,
     } = options
 
     const photoIds = await this.photoManager.getPhotosIdsForSearch(
       userId?.toString(),
       collections && collections.length > 0 ? collections : undefined,
-      visualAspects && visualAspects.length > 0 ? visualAspects : undefined
+      visualAspects && visualAspects.length > 0 ? visualAspects : undefined,
+      artisticScores && artisticScores.length > 0 ? artisticScores : undefined
     )
 
     let embeddingScoredPhotos = await this.scoringService.getScoredPhotosByTags(
