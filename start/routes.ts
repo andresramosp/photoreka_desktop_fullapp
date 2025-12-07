@@ -49,6 +49,9 @@ router.post('/api/landing/request', [LandingController, 'request'])
 // 3D Visualization public endpoint (no auth required)
 router.post('/api/3d/catalog/:id', [ThreeDViewController, 'get3DPhotosByIdOrUsername'])
 
+// Series public endpoint (no auth required)
+router.get('/api/series/by-name/:name', [SeriesController, 'showByName'])
+
 // Portfolio Review public endpoint (no auth required)
 router.get('/api/portfolio-review/:reviewType/user/:userId', [
   PortfolioReviewController,
@@ -100,7 +103,6 @@ router
 
     // Series endpoints
     router.get('/api/series', [SeriesController, 'index'])
-    router.get('/api/series/by-name/:name', [SeriesController, 'showByName'])
     router.get('/api/series/:id', [SeriesController, 'show'])
     router.post('/api/series', [SeriesController, 'store'])
     router.put('/api/series/:id', [SeriesController, 'update'])
