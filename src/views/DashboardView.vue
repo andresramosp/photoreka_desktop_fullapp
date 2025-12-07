@@ -154,7 +154,7 @@
           <p class="action-description">Start a fresh canvas</p>
         </div>
 
-        <!-- <div
+        <div
           class="action-card portfolio-report"
           @click="goToPortfolioReport"
           :class="{ disabled: appAccessMode === 'blocked' }"
@@ -166,7 +166,7 @@
           </div>
           <h3 class="action-title">Portfolio Report</h3>
           <p class="action-description">Analytics & insights</p>
-        </div> -->
+        </div>
       </div>
     </div>
 
