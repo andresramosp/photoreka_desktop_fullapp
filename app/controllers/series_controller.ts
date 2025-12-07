@@ -95,14 +95,25 @@ export default class SeriesController {
   }
 
   /**
-   * Obtener una serie por nombre
+   * Obtener una serie por nombre y username del usuario
    */
-  async showByName({ auth, params, response }: HttpContext) {
+  async showByName({ params, response }: HttpContext) {
     try {
-      await auth.use('api').check()
-      const user = auth.use('api').user! as any
+      const { username, name } = params
       // Decodificar el nombre que puede venir con espacios codificados como %20
-      const seriesName = decodeURIComponent(params.name)
+      const seriesName = decodeURIComponent(name)
+
+      // Buscar usuario por username (parte antes de la @ en el email)
+      const User = (await import('#models/user')).default
+      const user = await User.query()
+        .whereRaw("LOWER(SUBSTRING(email FROM 1 FOR POSITION('@' IN email) - 1)) = ?", [
+          username.toLowerCase(),
+        ])
+        .first()
+
+      if (!user) {
+        return response.notFound('User not found')
+      }
 
       const series = await Series.query()
         .whereRaw('LOWER(name) = ?', [seriesName.toLowerCase()])
