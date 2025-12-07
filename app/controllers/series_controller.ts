@@ -105,7 +105,7 @@ export default class SeriesController {
       const seriesName = decodeURIComponent(params.name)
 
       const series = await Series.query()
-        .where('name', seriesName)
+        .whereRaw('LOWER(name) = ?', [seriesName.toLowerCase()])
         .where('userId', user.id)
         .preload('photos', (query) => {
           query.orderBy('series_photos.order', 'asc')
