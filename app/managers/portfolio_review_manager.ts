@@ -40,6 +40,10 @@ interface AccumulatedPattern extends ClusterPattern {
   shortDescription: string // Descripción corta (2 frases) para contexto del LLM
   mergedClusterIds: string[] // IDs de clusters que se han fusionado en este patrón
   allPhotoIds: number[] // Todos los IDs de fotos (para evitar duplicados en samplePhotos)
+  mergedClustersExamples?: Array<{
+    clusterId: string
+    sampleDescription: string
+  }> // Ejemplo de descripción de foto por cada cluster mergeado
 }
 
 export default class PortfolioReviewManager {
@@ -468,25 +472,18 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       }
     }
 
+    const min_cluster_size = Object.keys(photoMapObject).length * 0.008
+
     // FASE 2: Clustering en espacio de alta dimensión
     const clusterPayload = {
       items: vectors.map((v: any) => ({
         id: v.id.toString(),
         embedding: v.embedding,
       })),
-      //   method: 'hdbscan',
-      //   min_cluster_size: Math.max(15, Math.floor(vectors.length * 0.05)), // Al menos 5% del portfolio o 15 fotos
-      //   metric: 'cosine',
-
-      //   method: 'hdbscan',
-      //   min_cluster_size: 5,
-      //   min_samples: 3,
-      //   metric: 'cosine',
-      //   pca_components: 5,
 
       method: 'hdbscan',
       max_clusters: 20,
-      min_cluster_size: 5,
+      min_cluster_size,
       min_samples: 3,
       dim_reduction_method: 'umap',
       umap_n_components: 15,
@@ -494,14 +491,6 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       umap_min_dist: 0.0,
       umap_spread: 1.0,
       umap_metric: 'cosine',
-      // cluster_selection_epsilon: 0.1, // si no vale un valor global, usarlo para iterar e ir reduciendo numero de clusters
-
-      // cluster_selection_epsilon: 0.1,
-      // umap_n_components: 20,
-      // umap_n_neighbors: 20,
-      // umap_min_dist: 0.5,
-      // umap_spread: 5.0,
-      // umap_metric: 'cosine',
     }
 
     const clusterResult = await this.modelsService.getClusters(clusterPayload)
@@ -580,6 +569,18 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
             targetPattern.percentage += cluster.percentage
             targetPattern.mergedClusterIds.push(`cluster_${cluster.cluster_id}`)
 
+            // Guardar ejemplo de descripción del cluster mergeado para el resumen
+            if (!targetPattern.mergedClustersExamples) {
+              targetPattern.mergedClustersExamples = []
+            }
+            const sampleDescription = samplePhotos[0]
+              ? createPhotoDescription(samplePhotos[0])
+              : 'No description'
+            targetPattern.mergedClustersExamples.push({
+              clusterId: `cluster_${cluster.cluster_id}`,
+              sampleDescription: sampleDescription.slice(0, 200),
+            })
+
             const existingPhotoIds = new Set(targetPattern.allPhotoIds)
             const newPhotosToAdd = samplePhotos
               .filter((photo) => !existingPhotoIds.has(photo.id))
@@ -634,6 +635,30 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
           samplePhotos: p.samplePhotos.slice(0, 5),
         })
       }
+
+      // Mostrar resumen de fusiones
+      console.log('\n========== RESUMEN DE FUSIONES PROGRESIVAS ==========')
+      for (const pattern of accumulatedPatterns) {
+        if (pattern.mergedClusterIds.length > 0) {
+          console.log(`\n📦 Patrón: ${pattern.title}`)
+          console.log(`   Descripción: ${pattern.description}`)
+          console.log(
+            `   Total de fotos: ${pattern.photoCount} (${pattern.percentage.toFixed(1)}%)`
+          )
+          console.log(`   Fuerza: ${pattern.strength}`)
+          console.log(`   Clusters mergeados (${pattern.mergedClusterIds.length}):`)
+
+          if (pattern.mergedClustersExamples && pattern.mergedClustersExamples.length > 0) {
+            for (const cluster of pattern.mergedClustersExamples) {
+              console.log(`     ├─ ${cluster.clusterId}`)
+              console.log(`     │  └─ Ejemplo: "${cluster.sampleDescription}..."`)
+            }
+          }
+          // Mostrar el cluster original del patrón
+          console.log(`     └─ ${pattern.mergedClusterIds[0]} (cluster original del patrón)`)
+        }
+      }
+      console.log('\n===================================================\n')
     } else {
       // ============ MODO INDEPENDIENTE (sin fusión) ============
       // Cada cluster genera su propio patrón independiente
