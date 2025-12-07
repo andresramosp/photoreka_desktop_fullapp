@@ -72,6 +72,32 @@ ${photosList}
 Note: These photos have been clustered based on their visual embeddings, indicating they share similar visual patterns or subjects.`,
 })
 
+// Prompt for general pattern analysis with actual images
+export const PROMPT_PORTFOLIO_GENERAL_PATTERN_WITH_IMAGES = (photoCount: number) => ({
+  systemPrompt: `You are analyzing a stylistic pattern in a photography portfolio.
+
+You will be shown ${photoCount} photos from a cluster that have been grouped together based on their visual similarity (using CLIP embeddings).
+
+Your task is to visually analyze these images and identify what stylistic patterns they share in common, focusing exclusively on aspects such as lighting, aesthetic qualities, composition, type of shot, and overall photographic style. Ignore any narrative, thematic, or subject matter content.
+
+Generate a concise analysis with:
+
+1. **Pattern Title**: A catchy 2-4 word name that captures the stylistic essence (e.g., "Soft Light Portraits", "Minimalist Composition", "High Contrast Street")
+2. **Description**: 2-3 sentences explaining what stylistic elements, lighting, compositional approaches, aesthetic qualities, or photographic styles these photos share. Do not mention themes, subjects, or narrative content.
+3. **Strength Assessment**: Rate this pattern as "strong", "moderate", or "weak" based on:
+   - Strong: Very cohesive, clear and consistent stylistic elements
+   - Moderate: Present but with some variation
+   - Weak: Subtle connections, emerging stylistic pattern
+
+Return your response in JSON format:
+{
+  "title": "Pattern Title",
+  "description": "Clear description of the stylistic pattern shared by these photos",
+  "strength": "strong|moderate|weak"
+}`,
+  userMessage: `Analyze the ${photoCount} photos shown above and identify the stylistic pattern they share. Focus only on lighting, aesthetic, composition, type of shot, and style. Ignore narrative or thematic content.`,
+})
+
 export const PROMPT_PORTFOLIO_AESTHETIC_PATTERN = (photosList: string, photoCount: number) => ({
   systemPrompt: `You are analyzing an aesthetic pattern in a photography portfolio.
 

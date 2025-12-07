@@ -38,6 +38,7 @@ const TagsController = () => import('#controllers/tags_controller')
 const EmbeddingController = () => import('#controllers/embeddings_controller')
 const LandingController = () => import('#controllers/landing_controller')
 const CollectionsController = () => import('#controllers/collections_controller')
+const SeriesController = () => import('#controllers/series_controller')
 const UsageController = () => import('#controllers/usage_controller')
 const ThreeDViewController = () => import('#controllers/3dview_controller')
 const PortfolioReviewController = () => import('#controllers/portfolio_review_controller')
@@ -96,6 +97,18 @@ router
     router.delete('/api/collections/:id', [CollectionsController, 'destroy'])
     router.post('/api/collections/:id/photos', [CollectionsController, 'addPhotos'])
     router.delete('/api/collections/:id/photos', [CollectionsController, 'removePhotos'])
+
+    // Series endpoints
+    router.get('/api/series', [SeriesController, 'index'])
+    router.get('/api/series/by-name/:name', [SeriesController, 'showByName'])
+    router.get('/api/series/:id', [SeriesController, 'show'])
+    router.post('/api/series', [SeriesController, 'store'])
+    router.put('/api/series/:id', [SeriesController, 'update'])
+    router.delete('/api/series/:id', [SeriesController, 'destroy'])
+    router.post('/api/series/:id/photos', [SeriesController, 'addPhotos'])
+    router.delete('/api/series/:id/photos', [SeriesController, 'removePhotos'])
+    router.put('/api/series/:id/order', [SeriesController, 'updateOrder'])
+    router.put('/api/series/:id/move', [SeriesController, 'movePhoto'])
 
     // 3D Visualization endpoints
     router.post('/api/3d/photos', [ThreeDViewController, 'get3DPhotos'])

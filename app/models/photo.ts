@@ -14,6 +14,7 @@ import DescriptionChunk from './descriptionChunk.js'
 import AnalyzerProcess from './analyzer/analyzerProcess.js'
 import DetectionPhoto from './detection_photo.js'
 import Collection from './collection.js'
+import Series from './series.js'
 import EmbeddingService from '#services/embedding_service'
 
 export type DescriptionType =
@@ -91,6 +92,16 @@ export default class Photo extends BaseModel {
     pivotRelatedForeignKey: 'collection_id',
   })
   declare collections: ManyToMany<typeof Collection>
+
+  @manyToMany(() => Series, {
+    pivotTable: 'series_photos',
+    localKey: 'id',
+    pivotForeignKey: 'photo_id',
+    relatedKey: 'id',
+    pivotRelatedForeignKey: 'series_id',
+    pivotColumns: ['order'],
+  })
+  declare series: ManyToMany<typeof Series>
 
   @column()
   declare analyzerProcessId: string // Clave foránea que conecta con AnalyzerProcess

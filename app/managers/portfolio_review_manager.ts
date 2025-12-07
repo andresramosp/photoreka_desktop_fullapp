@@ -1,11 +1,12 @@
 import db from '@adonisjs/lucid/services/db'
 import ModelsService from '#services/models_service'
 import PhotoManager from './photo_manager.js'
+import PhotoImageService from '../services/photo_image_service.js'
 import { withCache } from '../decorators/withCache.js'
 import {
   PROMPT_PORTFOLIO_NARRATIVE_PATTERN,
   PROMPT_PORTFOLIO_CONTEXTUAL_PATTERN,
-  PROMPT_PORTFOLIO_GENERAL_PATTERN,
+  PROMPT_PORTFOLIO_GENERAL_PATTERN_WITH_IMAGES,
   PROMPT_PORTFOLIO_AESTHETIC_PATTERN,
   PROMPT_PORTFOLIO_PROGRESSIVE_FUSION,
 } from '../utils/prompts/portfolio_review.js'
@@ -345,11 +346,12 @@ export default class PortfolioReviewManager {
 
   /**
    * Genera el prompt para que el LLM interprete un cluster
+   * Para el caso 'general', devuelve requiresImages: true para indicar que se deben pasar imágenes reales
    */
   private generateClusterPrompt(
     samplePhotos: any[],
     reviewType: ReviewType
-  ): { systemPrompt: string; userMessage: string } {
+  ): { systemPrompt: string; userMessage: string; requiresImages?: boolean } {
     const chunkName = REVIEW_TYPE_TO_CHUNK[reviewType]
 
     // Para tipos que usan chunks de texto
@@ -384,12 +386,11 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
 
       return PROMPT_PORTFOLIO_AESTHETIC_PATTERN(photosList, samplePhotos.length)
     } else {
-      // Para general y otros casos
-      const photosList = samplePhotos
-        .map((photo, idx) => `Photo ${idx + 1}: ${photo.originalFileName}`)
-        .join('\n')
-
-      return PROMPT_PORTFOLIO_GENERAL_PATTERN(photosList, samplePhotos.length)
+      // Para general: se deben pasar imágenes reales al LLM
+      const { systemPrompt, userMessage } = PROMPT_PORTFOLIO_GENERAL_PATTERN_WITH_IMAGES(
+        samplePhotos.length
+      )
+      return { systemPrompt, userMessage, requiresImages: true }
     }
   }
 
@@ -671,15 +672,66 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
         const samplePhotos = samplePhotoIds.map((id) => photoMapObject[id]).filter(Boolean)
 
         // Generar prompt sin contexto de patrones previos
-        const { systemPrompt, userMessage } = this.generateClusterPrompt(samplePhotos, reviewType)
-
-        const llmResponse = await this.modelsService.getGeminiResponse(
-          systemPrompt,
-          [userMessage],
-          'gemini-2.5-flash-lite',
-          { temperature: 0.7, responseType: 'json_object' },
-          true
+        const { systemPrompt, userMessage, requiresImages } = this.generateClusterPrompt(
+          samplePhotos,
+          reviewType
         )
+
+        let llmResponse: any
+
+        if (requiresImages) {
+          // Para el caso 'general', obtenemos las imágenes reales y las pasamos al LLM
+          const photoImageService = PhotoImageService.getInstance()
+
+          // Crear objetos Photo-like para el servicio de imágenes
+          const photosForImages = samplePhotos.map((photo) => ({
+            id: photo.id,
+            name: photo.name,
+          }))
+
+          // Obtener imágenes válidas de R2
+          const validImages = await photoImageService.getValidPhotosWithImages(
+            photosForImages as any,
+            false
+          )
+
+          if (validImages.length === 0) {
+            console.warn(
+              `No se pudieron obtener imágenes para el cluster ${cluster.cluster_id}, saltando...`
+            )
+            continue
+          }
+
+          // Convertir al formato esperado por Gemini (inlineData)
+          const images = validImages.map(({ base64 }) => ({
+            inlineData: {
+              mimeType: 'image/png',
+              data: base64,
+            },
+          }))
+
+          // Llamar a Gemini con las imágenes reales
+          llmResponse = await this.modelsService.getGeminiResponse(
+            systemPrompt,
+            [...images, userMessage],
+            'gemini-2.5-flash-lite',
+            { temperature: 0.7, responseType: 'json_object' },
+            false // No usar cache para evitar problemas con imágenes grandes
+          )
+
+          // Limpiar las imágenes de memoria
+          images.forEach((img) => (img.inlineData.data = ''))
+          images.length = 0
+        } else {
+          // Para otros tipos, usar solo texto
+          llmResponse = await this.modelsService.getGeminiResponse(
+            systemPrompt,
+            [userMessage],
+            'gemini-2.5-flash-lite',
+            { temperature: 0.7, responseType: 'json_object' },
+            true
+          )
+        }
 
         const analysis = llmResponse.result
 

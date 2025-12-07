@@ -17,7 +17,7 @@ export default class PortfolioReviewController {
       const reviewType = (params.reviewType || 'narrative') as ReviewType
 
       const portfolioReviewManager = new PortfolioReviewManager()
-      const result = await portfolioReviewManager.getPatterns(userId, reviewType, true)
+      const result = await portfolioReviewManager.getPatterns(userId, reviewType, false)
 
       return response.ok(result)
     } catch (error) {
