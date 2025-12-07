@@ -510,7 +510,6 @@ watch(
   font-size: var(--font-size-lg);
   color: var(--text-secondary);
   margin: 0;
-  max-width: 600px;
 }
 
 /* Collections Grid */

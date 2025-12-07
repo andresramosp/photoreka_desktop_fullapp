@@ -174,6 +174,7 @@ import {
   GridOutline as DashboardIcon,
   CameraOutline as PhotoHubIcon,
   AlbumsOutline as CollectionsIcon,
+  ListOutline as SeriesIcon,
   ApertureOutline as StylerIcon,
   SearchOutline as SearchIcon,
   ImagesOutline as CurationIcon,
@@ -246,6 +247,12 @@ const firstSectionOptions = computed(() => [
     key: "collections",
     disabled: appAccessMode.value === "blocked",
     icon: createIconWithIndicator(CollectionsIcon, "#10b981"), // Green color for collections
+  },
+  {
+    label: createMenuLabel("Series", false),
+    key: "series",
+    disabled: appAccessMode.value === "blocked",
+    icon: createIconWithIndicator(SeriesIcon, "#8b5cf6"), // Purple color for series
   },
 ]);
 

@@ -6,6 +6,7 @@ import DashboardView from "../views/DashboardView.vue";
 import CanvasView from "../views/CanvasView.vue";
 import SearchView from "../views/SearchView.vue";
 import CollectionsView from "../views/CollectionsView.vue";
+import SeriesView from "../views/SeriesView.vue";
 import PhotoHubView from "../views/PhotoHubView.vue";
 import ProjectBuilderView from "../views/ProjectBuilderView.vue";
 import FramerView from "../views/FramerView.vue";
@@ -141,6 +142,22 @@ const router = createRouter({
       path: "/collections/:id",
       name: "collection-detail",
       component: CollectionsView,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
+      path: "/series",
+      name: "series",
+      component: SeriesView,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
+      path: "/series/:id",
+      name: "series-detail",
+      component: SeriesView,
       meta: {
         requiresAuth: true,
       },
