@@ -589,17 +589,20 @@ const formatDate = (date) => {
 const copySeriesLink = async () => {
   if (!viewingSeries.value) return;
 
-  const userId = userStore.user?.id;
+  const userEmail = userStore.user?.email;
   const seriesName = viewingSeries.value.name || viewingSeries.value.title;
 
-  if (!userId || !seriesName) {
+  if (!userEmail || !seriesName) {
     message.error("Unable to generate share link");
     return;
   }
 
+  // Extract username from email (part before @)
+  const userName = userEmail.split("@")[0];
+
   // Replace spaces with underscores and encode for URL
-  const urlName = seriesName.replace(/\s+/g, "_");
-  const shareUrl = `${window.location.origin}/series/${userId}/${urlName}`;
+  const urlName = seriesName.replace(/\s+/g, "_").toLowerCase();
+  const shareUrl = `${window.location.origin}/shared-series/${userName}/${urlName}`;
 
   try {
     await navigator.clipboard.writeText(shareUrl);
@@ -660,7 +663,7 @@ const loadPublicSeries = async () => {
 
 onMounted(async () => {
   // Check if this is a public view route
-  if (route.name === "series-public") {
+  if (route.name === "shared-series") {
     isPublicView.value = true;
     await loadPublicSeries();
     return;

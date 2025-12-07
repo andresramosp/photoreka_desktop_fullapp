@@ -163,8 +163,8 @@ const router = createRouter({
       },
     },
     {
-      path: "/series/:userId/:serieName",
-      name: "series-public",
+      path: "/shared-series/:userId/:serieName",
+      name: "shared-series",
       component: SeriesView,
       meta: {
         requiresGuest: false, // Accessible without authentication
