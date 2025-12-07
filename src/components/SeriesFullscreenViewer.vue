@@ -11,7 +11,7 @@
       <div class="fullscreen-content">
         <!-- Navigation Arrow Left -->
         <n-button
-          v-if="hasPreviousPhoto"
+          v-if="hasPreviousPhoto || showingEndScreen"
           class="nav-arrow nav-arrow-left"
           size="large"
           circle
@@ -27,8 +27,17 @@
           </template>
         </n-button>
 
+        <!-- End Screen with Logo (for public view) -->
+        <div v-if="showingEndScreen" class="end-screen" @click.stop>
+          <div class="logo-wrapper">
+            <AppLogo size="large" :height="logoHeight" />
+          </div>
+          <p class="end-screen-text">Thanks for watching!</p>
+        </div>
+
         <!-- Photo with transition -->
         <transition
+          v-else
           :name="slideDirection === 'next' ? 'slide-left' : 'slide-right'"
           mode="out-in"
         >
@@ -48,7 +57,7 @@
 
         <!-- Navigation Arrow Right -->
         <n-button
-          v-if="hasNextPhoto"
+          v-if="hasNextPhoto || (isPublicView && !showingEndScreen)"
           class="nav-arrow nav-arrow-right"
           size="large"
           circle
@@ -65,7 +74,10 @@
         </n-button>
 
         <!-- Photo Counter -->
-        <div v-if="photos.length > 0" class="photo-counter">
+        <div
+          v-if="photos.length > 0 && !showingEndScreen && showCounter"
+          class="photo-counter"
+        >
           {{ currentIndex + 1 }} / {{ photos.length }}
         </div>
 
@@ -91,12 +103,16 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { useRouter } from "vue-router";
 import { NModal, NIcon, NButton } from "naive-ui";
 import {
   CloseOutline,
   ChevronBackOutline,
   ChevronForwardOutline,
 } from "@vicons/ionicons5";
+import AppLogo from "@/components/AppLogo.vue";
+
+const router = useRouter();
 
 const props = defineProps({
   modelValue: {
@@ -111,6 +127,10 @@ const props = defineProps({
     type: Number,
     default: 0,
   },
+  isPublicView: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits(["update:modelValue"]);
@@ -124,6 +144,10 @@ const visible = computed({
 const currentIndex = ref(0);
 const isTransitioning = ref(false);
 const slideDirection = ref("next");
+const showingEndScreen = ref(false);
+const showCounter = ref(true);
+const logoHeight = ref(120);
+let counterHideTimeout = null;
 
 // Computed properties
 const currentPhoto = computed(() => {
@@ -146,7 +170,20 @@ const closeFullscreen = () => {
 };
 
 const goToPreviousPhoto = () => {
-  if (!hasPreviousPhoto.value || isTransitioning.value) return;
+  if (isTransitioning.value) return;
+
+  // If showing end screen, go back to last photo
+  if (showingEndScreen.value) {
+    isTransitioning.value = true;
+    slideDirection.value = "prev";
+    showingEndScreen.value = false;
+    setTimeout(() => {
+      isTransitioning.value = false;
+    }, 400);
+    return;
+  }
+
+  if (!hasPreviousPhoto.value) return;
   isTransitioning.value = true;
   slideDirection.value = "prev";
   currentIndex.value -= 1;
@@ -156,7 +193,35 @@ const goToPreviousPhoto = () => {
 };
 
 const goToNextPhoto = () => {
-  if (!hasNextPhoto.value || isTransitioning.value) return;
+  if (isTransitioning.value) return;
+
+  // Show counter when navigating
+  showCounter.value = true;
+  if (counterHideTimeout) {
+    clearTimeout(counterHideTimeout);
+  }
+  counterHideTimeout = setTimeout(() => {
+    showCounter.value = false;
+  }, 3000);
+
+  // If showing end screen in public view, redirect to home
+  if (showingEndScreen.value && props.isPublicView) {
+    router.push({ name: "landing" });
+    return;
+  }
+
+  // If at last photo and in public view, show end screen
+  if (!hasNextPhoto.value && props.isPublicView && !showingEndScreen.value) {
+    isTransitioning.value = true;
+    slideDirection.value = "next";
+    showingEndScreen.value = true;
+    setTimeout(() => {
+      isTransitioning.value = false;
+    }, 400);
+    return;
+  }
+
+  if (!hasNextPhoto.value) return;
   isTransitioning.value = true;
   slideDirection.value = "next";
   currentIndex.value += 1;
@@ -184,6 +249,21 @@ const handleKeyDown = (e) => {
   }
 };
 
+// Mouse movement handling for counter visibility
+const handleMouseMove = () => {
+  showCounter.value = true;
+
+  // Clear existing timeout
+  if (counterHideTimeout) {
+    clearTimeout(counterHideTimeout);
+  }
+
+  // Set new timeout to hide counter after 3 seconds
+  counterHideTimeout = setTimeout(() => {
+    showCounter.value = false;
+  }, 3000);
+};
+
 // Preload next/previous images for smooth transitions
 const preloadImage = (photoIndex) => {
   if (!props.photos?.[photoIndex]) return;
@@ -197,6 +277,9 @@ watch(visible, (isVisible) => {
   if (isVisible) {
     // Reset to start index when opening
     currentIndex.value = props.startIndex;
+    showingEndScreen.value = false;
+    // Set logo height based on viewport
+    updateLogoHeight();
     // Preload adjacent images
     if (hasNextPhoto.value) {
       preloadImage(currentIndex.value + 1);
@@ -206,6 +289,22 @@ watch(visible, (isVisible) => {
     }
   }
 });
+
+// Update logo height based on viewport width
+const updateLogoHeight = () => {
+  if (window.innerWidth < 768) {
+    logoHeight.value = 100;
+  } else if (window.innerWidth < 1024) {
+    logoHeight.value = 120;
+  } else {
+    logoHeight.value = 140;
+  }
+};
+
+// Listen for resize events
+const handleWindowResize = () => {
+  updateLogoHeight();
+};
 
 // Watch for index changes to preload adjacent images
 watch(currentIndex, (newIndex) => {
@@ -222,10 +321,18 @@ watch(currentIndex, (newIndex) => {
 // Lifecycle hooks for keyboard listeners
 onMounted(() => {
   window.addEventListener("keydown", handleKeyDown);
+  window.addEventListener("mousemove", handleMouseMove);
+  window.addEventListener("resize", handleWindowResize);
+  updateLogoHeight();
 });
 
 onUnmounted(() => {
   window.removeEventListener("keydown", handleKeyDown);
+  window.removeEventListener("mousemove", handleMouseMove);
+  window.removeEventListener("resize", handleWindowResize);
+  if (counterHideTimeout) {
+    clearTimeout(counterHideTimeout);
+  }
 });
 </script>
 
@@ -349,6 +456,42 @@ onUnmounted(() => {
   user-select: none;
   -webkit-user-select: none;
   letter-spacing: 0.5px;
+  transition: opacity 0.3s ease;
+}
+
+/* End Screen Styles */
+.end-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  animation: fadeIn 0.4s ease;
+}
+
+.logo-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.end-screen-text {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 18px;
+  font-weight: 500;
+  margin: 0;
+  letter-spacing: 0.5px;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* Slide Animations */
@@ -412,6 +555,14 @@ onUnmounted(() => {
     bottom: 20px;
     font-size: 12px;
     padding: 8px 16px;
+  }
+
+  .end-screen {
+    gap: 16px;
+  }
+
+  .end-screen-text {
+    font-size: 16px;
   }
 }
 

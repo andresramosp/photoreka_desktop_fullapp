@@ -31,7 +31,7 @@
                     <AddOutline />
                   </n-icon>
                 </template>
-                Añadir Fotos
+                Add Photos
               </n-button>
               <n-button
                 type="error"

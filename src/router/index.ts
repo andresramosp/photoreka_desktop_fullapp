@@ -163,6 +163,20 @@ const router = createRouter({
       },
     },
     {
+      path: "/series/:userId/:serieName",
+      name: "series-public",
+      component: SeriesView,
+      meta: {
+        requiresGuest: false, // Accessible without authentication
+        playground: true,
+        title: "Photo Series - Photoreka",
+        description:
+          "View a curated photo series. Browse through a sequential photo story in fullscreen mode.",
+        keywords:
+          "photo series, photo story, sequential photos, photo gallery, fullscreen viewer",
+      },
+    },
+    {
       path: "/photo-hub",
       name: "photo-hub",
       component: PhotoHubView,

@@ -30,7 +30,12 @@
     </div>
 
     <!-- Photo Strip -->
-    <n-scrollbar v-else x-scrollable class="strip-scrollbar">
+    <div
+      v-else
+      ref="scrollContainer"
+      class="strip-scrollbar"
+      @wheel="handleHorizontalScroll"
+    >
       <draggable
         v-model="localPhotos"
         class="photo-strip"
@@ -56,13 +61,13 @@
           />
         </template>
       </draggable>
-    </n-scrollbar>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch } from "vue";
-import { NButton, NButtonGroup, NIcon, NScrollbar, NEmpty } from "naive-ui";
+import { NButton, NButtonGroup, NIcon, NEmpty } from "naive-ui";
 import { AddOutline } from "@vicons/ionicons5";
 import draggable from "vuedraggable";
 import PhotoSequenceCard from "@/components/PhotoSequenceCard.vue";
@@ -97,6 +102,9 @@ const photoSize = ref("large");
 
 // Local copy of photos for drag & drop
 const localPhotos = ref([]);
+
+// Reference to scroll container for horizontal wheel scroll
+const scrollContainer = ref(null);
 
 // Watch for external photos changes
 watch(
@@ -173,6 +181,13 @@ const onDragEnd = () => {
   // Emit updated photos array
   emit("photos-updated", [...localPhotos.value]);
 };
+
+const handleHorizontalScroll = (event) => {
+  if (!scrollContainer.value) return;
+
+  event.preventDefault();
+  scrollContainer.value.scrollLeft += event.deltaY;
+};
 </script>
 
 <style scoped>
@@ -194,12 +209,34 @@ const onDragEnd = () => {
 
 .strip-scrollbar {
   max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.strip-scrollbar::-webkit-scrollbar {
+  height: 8px;
+}
+
+.strip-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.strip-scrollbar::-webkit-scrollbar-thumb {
+  background: #404045;
+  border-radius: 4px;
+}
+
+.strip-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #505055;
 }
 
 .photo-strip {
   display: flex;
   gap: 24px;
   min-height: 200px;
+  padding-bottom: 15px;
+  user-select: none;
 }
 
 /* Empty State */

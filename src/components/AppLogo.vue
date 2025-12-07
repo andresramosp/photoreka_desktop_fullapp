@@ -24,7 +24,7 @@
           'logo-tiny-image': size === 'tiny',
           'logo-inline-image': inline,
         }"
-        :style="props.height ? { height: props.height + 'px' } : {}"
+        :style="props.height ? { height: props.height + 'px !important' } : {}"
       />
     </div>
   </div>

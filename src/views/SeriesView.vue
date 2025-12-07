@@ -1,7 +1,48 @@
 <template>
   <div class="series-view view-container">
+    <!-- Public View: Loading State -->
+    <div v-if="isPublicView && isLoading" class="public-loading-state">
+      <n-spin size="large">
+        <div class="loading-text">Loading series...</div>
+      </n-spin>
+    </div>
+
+    <!-- Public View: Error State -->
+    <div v-else-if="isPublicView && publicLoadError" class="public-error-state">
+      <div class="error-content">
+        <n-icon size="64" color="#ef4444">
+          <svg viewBox="0 0 24 24">
+            <path
+              fill="currentColor"
+              d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"
+            />
+          </svg>
+        </n-icon>
+        <h2 class="error-title">Series not found</h2>
+        <p class="error-description">
+          The series you're looking for doesn't exist or is not available.
+        </p>
+        <n-button type="primary" @click="router.push({ name: 'landing' })">
+          Go to Home
+        </n-button>
+      </div>
+    </div>
+
+    <!-- Public View: Fullscreen only (minimal UI, fullscreen opens automatically) -->
+    <div v-else-if="isPublicView && viewingSeries" class="public-series-view">
+      <!-- Minimal background while fullscreen is open -->
+      <div class="public-background">
+        <h1 class="public-series-title">
+          {{ viewingSeries.name || viewingSeries.title }}
+        </h1>
+        <p class="public-series-meta">
+          {{ (viewingSeries.photos || []).length }} photos
+        </p>
+      </div>
+    </div>
+
     <!-- Series Detail View (when viewing a specific series) -->
-    <div v-if="showSeriesView && viewingSeries" class="series-detail-view">
+    <div v-else-if="showSeriesView && viewingSeries" class="series-detail-view">
       <!-- Series Header -->
       <div class="series-header">
         <div class="series-header-content">
@@ -46,7 +87,7 @@
                     <AddOutline />
                   </n-icon>
                 </template>
-                Añadir Fotos
+                Add Photos
               </n-button>
               <n-button
                 type="error"
@@ -68,9 +109,23 @@
               </n-button>
             </div>
           </div>
-          <h1 class="series-title">
-            {{ viewingSeries.name || viewingSeries.title }}
-          </h1>
+          <div class="series-title-row">
+            <h1 class="series-title">
+              {{ viewingSeries.name || viewingSeries.title }}
+            </h1>
+            <n-button
+              text
+              class="share-button"
+              @click="copySeriesLink"
+              title="Copy link to clipboard"
+            >
+              <template #icon>
+                <n-icon size="24">
+                  <ShareSocialOutline />
+                </n-icon>
+              </template>
+            </n-button>
+          </div>
           <p class="series-description" v-if="viewingSeries.description">
             {{ viewingSeries.description }}
           </p>
@@ -288,6 +343,7 @@
       v-model="fullscreenViewerVisible"
       :photos="viewingSeries?.photos || []"
       :start-index="0"
+      :is-public-view="isPublicView"
     />
   </div>
 </template>
@@ -310,8 +366,14 @@ import {
   NSpin,
   useMessage,
 } from "naive-ui";
-import { AddOutline, ListOutline, PlayOutline } from "@vicons/ionicons5";
+import {
+  AddOutline,
+  ListOutline,
+  PlayOutline,
+  ShareSocialOutline,
+} from "@vicons/ionicons5";
 import PhotosDialog from "@/components/PhotosDialog.vue";
+import { useUserStore } from "@/stores/userStore";
 import SeriesPhotoStrip from "@/components/SeriesPhotoStrip.vue";
 import SeriesFullscreenViewer from "@/components/SeriesFullscreenViewer.vue";
 import { usePhotosStore } from "@/stores/photos.js";
@@ -322,6 +384,7 @@ const router = useRouter();
 const message = useMessage();
 const photosStore = usePhotosStore();
 const seriesStore = useSeriesStore();
+const userStore = useUserStore();
 
 // State
 const createDialogVisible = ref(false);
@@ -331,6 +394,8 @@ const fullscreenViewerVisible = ref(false);
 const formRef = ref(null);
 const viewingSeries = ref(null); // Series being viewed
 const showSeriesView = ref(false); // Whether to show series view or grid view
+const isPublicView = ref(false); // Whether this is a public anonymous view
+const publicLoadError = ref(false); // Whether there was an error loading the public series
 
 // Form data
 const formData = ref({
@@ -348,6 +413,10 @@ const formRules = {
 
 // Computed para saber si se puede mostrar la grid de series
 const isLoading = computed(() => {
+  // For public view, only check seriesStore loading
+  if (isPublicView.value) {
+    return seriesStore.isLoading;
+  }
   return (
     seriesStore.isLoading ||
     photosStore.isLoading ||
@@ -516,8 +585,36 @@ const formatDate = (date) => {
   return seriesStore.formatDate(date);
 };
 
+// Copy series link to clipboard
+const copySeriesLink = async () => {
+  if (!viewingSeries.value) return;
+
+  const userId = userStore.user?.id;
+  const seriesName = viewingSeries.value.name || viewingSeries.value.title;
+
+  if (!userId || !seriesName) {
+    message.error("Unable to generate share link");
+    return;
+  }
+
+  // Replace spaces with underscores and encode for URL
+  const urlName = seriesName.replace(/\s+/g, "_");
+  const shareUrl = `${window.location.origin}/series/${userId}/${urlName}`;
+
+  try {
+    await navigator.clipboard.writeText(shareUrl);
+    message.success("Link copied to clipboard!");
+  } catch (error) {
+    console.error("Failed to copy link:", error);
+    message.error("Failed to copy link to clipboard");
+  }
+};
+
 // Watch for route changes to update the view
 const updateViewingSeries = () => {
+  // Skip if this is a public view (handled separately)
+  if (isPublicView.value) return;
+
   const id = route.params.id;
   if (id && allSeries.value.length > 0) {
     const series = seriesStore.getSeriesWithFullPhotos(id, photosStore);
@@ -533,7 +630,43 @@ const updateViewingSeries = () => {
   seriesStore.clearCurrentSeries();
 };
 
+// Load public series by name for anonymous users
+const loadPublicSeries = async () => {
+  const { userId, serieName } = route.params;
+  if (!userId || !serieName) {
+    publicLoadError.value = true;
+    return;
+  }
+
+  try {
+    // Replace underscores back to spaces for backend call
+    const decodedName = String(serieName).replace(/_/g, " ");
+    const series = await seriesStore.fetchSeriesByName(userId, decodedName);
+    if (series) {
+      viewingSeries.value = series;
+      showSeriesView.value = true;
+      // Auto-open fullscreen viewer for public view
+      if (series.photos && series.photos.length > 0) {
+        fullscreenViewerVisible.value = true;
+      }
+    } else {
+      publicLoadError.value = true;
+    }
+  } catch (error) {
+    console.error("Error loading public series:", error);
+    publicLoadError.value = true;
+  }
+};
+
 onMounted(async () => {
+  // Check if this is a public view route
+  if (route.name === "series-public") {
+    isPublicView.value = true;
+    await loadPublicSeries();
+    return;
+  }
+
+  // Normal authenticated flow
   try {
     await photosStore.getOrFetch();
     await seriesStore.getOrFetch();
@@ -548,6 +681,14 @@ watch(
   [() => route.params.id, allSeries, () => photosStore.allPhotos],
   updateViewingSeries
 );
+
+// Watch for fullscreen viewer closing in public view to redirect
+watch(fullscreenViewerVisible, (isVisible) => {
+  if (!isVisible && isPublicView.value) {
+    // When user closes fullscreen in public view, redirect to landing
+    router.push({ name: "landing" });
+  }
+});
 </script>
 
 <style scoped>
@@ -788,11 +929,27 @@ watch(
   border-color: #ef4444 !important;
 }
 
+.series-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
 .series-title {
   font-size: var(--font-size-4xl);
   font-weight: var(--font-weight-bold);
   color: var(--text-primary);
-  margin: 0 0 var(--spacing-md) 0;
+  margin: 0;
+}
+
+.share-button {
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+}
+
+.share-button:hover {
+  color: var(--primary-color);
 }
 
 .series-description {
@@ -923,5 +1080,68 @@ watch(
   .series-grid {
     grid-template-columns: repeat(4, 1fr);
   }
+}
+
+/* Public View Styles */
+.public-loading-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background-color: var(--bg-body);
+}
+
+.public-error-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background-color: var(--bg-body);
+}
+
+.error-content {
+  text-align: center;
+  max-width: 400px;
+  padding: var(--spacing-2xl);
+}
+
+.error-title {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  margin: var(--spacing-lg) 0 var(--spacing-md) 0;
+}
+
+.error-description {
+  font-size: var(--font-size-md);
+  color: var(--text-secondary);
+  margin: 0 0 var(--spacing-xl) 0;
+  line-height: 1.5;
+}
+
+.public-series-view {
+  min-height: 100vh;
+  background-color: #000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.public-background {
+  text-align: center;
+  color: white;
+  opacity: 0.7;
+}
+
+.public-series-title {
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.public-series-meta {
+  font-size: var(--font-size-lg);
+  margin: 0;
+  opacity: 0.7;
 }
 </style>
