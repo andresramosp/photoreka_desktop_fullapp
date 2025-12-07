@@ -97,9 +97,10 @@ export default class SeriesController {
   /**
    * Obtener una serie por nombre y username del usuario
    */
-  async showByName({ params, response }: HttpContext) {
+  async showByName({ params, request, response }: HttpContext) {
     try {
-      const { username, name } = params
+      const { name } = params
+      const { userId: username } = request.qs()
       // Decodificar el nombre que puede venir con espacios codificados como %20
       const seriesName = decodeURIComponent(name)
 
