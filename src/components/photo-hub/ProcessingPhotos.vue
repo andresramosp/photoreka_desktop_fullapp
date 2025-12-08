@@ -162,6 +162,7 @@
       :photo-count="selectedJob?.photoCount || 0"
       :photo-ids="selectedJob?.photos?.map((photo) => photo.id) || []"
       @add-to-collection="handleCollectionAdded"
+      @add-to-series="handleCollectionAdded"
       @cancel="cancelCollectionModal"
     />
   </div>

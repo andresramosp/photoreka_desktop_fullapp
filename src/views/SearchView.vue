@@ -812,6 +812,7 @@
       :photo-count="localSelectedPhotoIds.length"
       :photo-ids="localSelectedPhotoIds"
       @add-to-collection="handleCollectionAdded"
+      @add-to-series="handleCollectionAdded"
       @cancel="cancelCollectionModal"
     />
     <!-- Photo Tool Selector Modal -->

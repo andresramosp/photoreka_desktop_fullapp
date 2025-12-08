@@ -349,6 +349,7 @@
       :photo-count="curatedPhotos.length"
       :photo-ids="curatedPhotos.map((photo) => photo.id)"
       @add-to-collection="handleCollectionAdded"
+      @add-to-series="handleCollectionAdded"
       @cancel="cancelCollectionModal"
     />
   </div>

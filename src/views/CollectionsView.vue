@@ -99,11 +99,11 @@
         </n-spin>
       </div>
 
-      <div v-else class="collections-grid">
+      <div v-else class="card-grid">
         <!-- Create New Collection Card (only show when there are existing collections) -->
         <div
           v-if="collections.length > 0"
-          class="collection-card create-card"
+          class="card create-card"
           @click="showCreateDialog"
         >
           <div class="create-preview">
@@ -113,9 +113,9 @@
               </n-icon>
             </div>
           </div>
-          <div class="collection-info">
-            <h3 class="collection-title">Create New Collection</h3>
-            <p class="collection-meta">Start organizing your photos</p>
+          <div class="card-info">
+            <h3 class="card-title">Create New Collection</h3>
+            <p class="card-meta">Start organizing your photos</p>
           </div>
         </div>
 
@@ -123,10 +123,10 @@
         <div
           v-for="collection in collections"
           :key="collection.id"
-          class="collection-card"
+          class="card"
           @click="openCollection(collection)"
         >
-          <div class="collection-preview">
+          <div class="card-preview">
             <div
               v-if="collection.photos && collection.photos.length > 0"
               class="photo-stack"
@@ -149,11 +149,11 @@
               </n-icon>
             </div>
           </div>
-          <div class="collection-info">
-            <h3 class="collection-title">
+          <div class="card-info">
+            <h3 class="card-title">
               {{ collection.name || collection.title }}
             </h3>
-            <p class="collection-meta">
+            <p class="card-meta">
               {{ (collection.photos || []).length }} photos • Updated
               {{ formatDate(collection.updatedAt) }}
             </p>
@@ -485,6 +485,8 @@ watch(
 </script>
 
 <style scoped>
+@import "@/assets/shared-card-styles.scss";
+
 .collections-view {
   padding: var(--spacing-2xl);
   margin: 0 auto;
@@ -525,37 +527,6 @@ watch(
   margin-top: var(--spacing-md);
   color: var(--text-secondary);
   font-size: var(--font-size-md);
-}
-
-.collections-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 24px;
-}
-
-.collection-card {
-  background-color: #18181c;
-  border: 1px solid #2c2c32;
-  border-radius: 16px;
-  padding: 20px;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-}
-
-.collection-card:hover {
-  border-color: #2563eb;
-  transform: translateY(-4px);
-  box-shadow: 0 12px 32px rgba(37, 99, 235, 0.2);
-}
-
-.collection-preview {
-  position: relative;
-  height: 120px;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .photo-stack {
@@ -627,75 +598,7 @@ watch(
   transform: translate(-50%, -50%) rotate(16deg) translateY(-15px) scale(1.05);
 }
 
-.empty-preview {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.collection-info {
-  text-align: center;
-}
-
-.collection-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #ffffffd1;
-  margin: 0 0 8px 0;
-  line-height: 1.3;
-}
-
-.collection-meta {
-  font-size: 14px;
-  color: #ffffff73;
-  margin: 0;
-  line-height: 1.4;
-}
-
-/* Create Card Specific Styles */
-.create-card {
-  border: 2px dashed #2c2c32;
-  background-color: transparent;
-}
-
-.create-card:hover {
-  border-color: #2563eb;
-  background-color: rgba(37, 99, 235, 0.05);
-}
-
-.create-preview {
-  position: relative;
-  height: 120px;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.create-icon {
-  padding: 20px;
-  border-radius: 50%;
-  background-color: rgba(37, 99, 235, 0.1);
-  transition: all 0.3s ease;
-}
-
-.create-card:hover .create-icon {
-  background-color: rgba(37, 99, 235, 0.2);
-  transform: scale(1.1);
-}
-
-/* Create Form */
-.create-form {
-  padding-top: var(--spacing-md);
-}
-
-/* Collection View Styles */
-.collection-view {
-  padding: var(--spacing-2xl);
-  margin: 0 auto;
-  background-color: var(--bg-body);
-}
-
+/* Collections-specific styles */
 .collection-header {
   margin-bottom: var(--spacing-3xl);
 }
@@ -834,20 +737,6 @@ watch(
     font-size: var(--font-size-xs);
   }
 
-  .collections-grid {
-    grid-template-columns: 1fr;
-    gap: 20px;
-  }
-
-  .collection-card {
-    padding: 16px;
-  }
-
-  .collection-preview {
-    height: 100px;
-    margin-bottom: 12px;
-  }
-
   .photo-stack {
     width: 70px;
     height: 70px;
@@ -856,18 +745,6 @@ watch(
   .photo-item {
     width: 50px;
     height: 50px;
-  }
-}
-
-@media (max-width: 1024px) {
-  .collections-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (min-width: 1600px) {
-  .collections-grid {
-    grid-template-columns: repeat(4, 1fr);
   }
 }
 </style>

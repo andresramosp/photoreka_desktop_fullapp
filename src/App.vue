@@ -149,6 +149,7 @@ const allowedHeaderViews = [
   "collections",
   "collection-detail",
   "photo-hub",
+  "series",
   // "search",
   // "project-builder",
   // "profile",

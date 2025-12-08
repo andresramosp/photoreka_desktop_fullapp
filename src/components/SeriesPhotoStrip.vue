@@ -40,7 +40,6 @@
         v-model="localPhotos"
         class="photo-strip"
         item-key="id"
-        handle=".drag-handle"
         ghost-class="drag-ghost"
         chosen-class="drag-chosen"
         drag-class="drag-active"

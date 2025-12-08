@@ -183,6 +183,7 @@
       :photo-count="selectedPhotoIds.length"
       :photo-ids="selectedPhotoIds"
       @add-to-collection="handleCollectionAdded"
+      @add-to-series="handleCollectionAdded"
       @cancel="handleCollectionModalCancel"
     />
 

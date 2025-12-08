@@ -271,6 +271,110 @@
         </div>
       </div>
     </div>
+
+    <!-- Recent Series Section -->
+    <div v-show="false" class="recent-series-section">
+      <h2 class="section-title">Recent series</h2>
+
+      <!-- Loading state -->
+      <div v-if="isLoadingSeries" class="loading-state">
+        <div class="loading-spinner"></div>
+        <p>Loading series...</p>
+      </div>
+
+      <!-- Empty state when blocked OR no series available -->
+      <div
+        v-else-if="appAccessMode === 'blocked' || series.length === 0"
+        class="empty-state"
+      >
+        <div class="empty-state-icon">
+          <n-icon size="64" color="var(--text-tertiary)">
+            <SeriesIcon />
+          </n-icon>
+        </div>
+        <h3 class="empty-state-title">No series yet</h3>
+        <p class="empty-state-description">
+          <router-link
+            v-show="appAccessMode !== 'blocked'"
+            to="/series"
+            class="empty-state-link"
+          >
+            Create your first series
+          </router-link>
+        </p>
+      </div>
+
+      <div v-else class="projects-grid">
+        <div
+          v-for="seriesItem in series"
+          :key="seriesItem.id"
+          class="project-card"
+          @click="openSeries(seriesItem.id)"
+        >
+          <div class="project-preview">
+            <div class="photo-stack">
+              <div class="photo-item photo-1">
+                <div
+                  class="photo-placeholder"
+                  style="
+                    background: linear-gradient(
+                      135deg,
+                      #667eea 0%,
+                      #764ba2 100%
+                    );
+                  "
+                ></div>
+              </div>
+              <div class="photo-item photo-2">
+                <div
+                  class="photo-placeholder"
+                  style="
+                    background: linear-gradient(
+                      135deg,
+                      #f093fb 0%,
+                      #f5576c 100%
+                    );
+                  "
+                ></div>
+              </div>
+              <div class="photo-item photo-3">
+                <div
+                  class="photo-placeholder"
+                  style="
+                    background: linear-gradient(
+                      135deg,
+                      #4facfe 0%,
+                      #00f2fe 100%
+                    );
+                  "
+                ></div>
+              </div>
+              <div class="photo-item photo-4">
+                <div
+                  class="photo-placeholder"
+                  style="
+                    background: linear-gradient(
+                      135deg,
+                      #43e97b 0%,
+                      #38f9d7 100%
+                    );
+                  "
+                ></div>
+              </div>
+            </div>
+          </div>
+          <div class="project-info">
+            <h3 class="project-title">
+              {{ seriesItem.name || seriesItem.title }}
+            </h3>
+            <p class="project-meta">
+              {{ seriesItem.photoCount || 0 }} photos • Last updated
+              {{ formatDate(seriesItem.updatedAt) }}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -283,6 +387,7 @@ defineOptions({
 });
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
+import { useSeriesStore } from "@/stores/series.js";
 import { api } from "@/utils/axios.js"; // Needed for photo insight API call
 import { useMessage } from "naive-ui";
 
@@ -297,12 +402,14 @@ import {
   ChevronBackOutline as ArrowLeftIcon,
   ChevronForwardOutline as ArrowRightIcon,
   AnalyticsOutline as AnalyticsIcon,
+  FilmOutline as SeriesIcon,
 } from "@vicons/ionicons5";
 import { Workspace } from "@vicons/carbon";
 
 const router = useRouter();
 const photosStore = usePhotosStore();
 const collectionsStore = useCollectionsStore();
+const seriesStore = useSeriesStore();
 const message = useMessage();
 
 // Computed collections from store
@@ -317,6 +424,19 @@ const collections = computed(() => {
     .slice(0, 4);
 });
 const isLoadingCollections = computed(() => collectionsStore.isLoading);
+
+// Computed series from store
+const series = computed(() => {
+  // Ordenar por fecha de actualización descendente y tomar solo las 4 más recientes
+  return (seriesStore.allSeries || [])
+    .slice()
+    .sort(
+      (a: { updatedAt: string }, b: { updatedAt: string }) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    )
+    .slice(0, 4);
+});
+const isLoadingSeries = computed(() => seriesStore.isLoading);
 
 // Photo insight state
 interface PhotoInsight {
@@ -345,6 +465,16 @@ const loadCollections = async () => {
   } catch (error) {
     console.error("Error loading collections:", error);
     message.error("Failed to load collections");
+  }
+};
+
+// Load series
+const loadSeries = async () => {
+  try {
+    await seriesStore.getOrFetch();
+  } catch (error) {
+    console.error("Error loading series:", error);
+    message.error("Failed to load series");
   }
 };
 
@@ -430,6 +560,7 @@ watch(
     ) {
       fetchPhotoInsight();
       loadCollections();
+      loadSeries();
     }
   },
   { immediate: true }
@@ -462,6 +593,11 @@ const handleMouseLeave = () => {
 const openProject = (collectionId: string) => {
   // Navigate to collections view with the specific collection ID
   router.push({ name: "collection-detail", params: { id: collectionId } });
+};
+
+const openSeries = (seriesId: string) => {
+  // Navigate to series view with the specific series ID
+  router.push({ name: "series-detail", params: { id: seriesId } });
 };
 
 const goToCatalog = () => {
@@ -1095,6 +1231,11 @@ const formatDate = (date: Date) => {
 
 /* Recent Projects Section */
 .recent-projects-section {
+  margin-top: 48px;
+}
+
+/* Recent Series Section */
+.recent-series-section {
   margin-top: 48px;
 }
 

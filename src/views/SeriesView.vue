@@ -170,11 +170,11 @@
         </n-spin>
       </div>
 
-      <div v-else class="series-grid">
+      <div v-else class="card-grid">
         <!-- Create New Series Card (only show when there are existing series) -->
         <div
           v-if="allSeries.length > 0"
-          class="series-card create-card"
+          class="card create-card"
           @click="showCreateDialog"
         >
           <div class="create-preview">
@@ -184,9 +184,9 @@
               </n-icon>
             </div>
           </div>
-          <div class="series-info">
-            <h3 class="series-card-title">Create New Series</h3>
-            <p class="series-card-meta">Start your photo sequence</p>
+          <div class="card-info">
+            <h3 class="card-title">Create New Series</h3>
+            <p class="card-meta">Start your photo sequence</p>
           </div>
         </div>
 
@@ -194,10 +194,10 @@
         <div
           v-for="series in allSeries"
           :key="series.id"
-          class="series-card"
+          class="card"
           @click="openSeries(series)"
         >
-          <div class="series-preview">
+          <div class="card-preview">
             <div
               v-if="series.photos && series.photos.length > 0"
               class="photo-sequence"
@@ -221,11 +221,11 @@
               </n-icon>
             </div>
           </div>
-          <div class="series-info">
-            <h3 class="series-card-title">
+          <div class="card-info">
+            <h3 class="card-title">
               {{ series.name || series.title }}
             </h3>
-            <p class="series-card-meta">
+            <p class="card-meta">
               {{ (series.photos || []).length }} photos • Updated
               {{ formatDate(series.updatedAt) }}
             </p>
@@ -566,11 +566,7 @@ const deleteSeries = async () => {
   try {
     await seriesStore.deleteSeries(viewingSeries.value.id);
 
-    message.success(
-      `Series "${
-        viewingSeries.value.name || viewingSeries.value.title
-      }" deleted successfully`
-    );
+    message.success(`Series deleted successfully`);
     deleteConfirmationVisible.value = false;
 
     // Redirect back to series list
@@ -695,6 +691,8 @@ watch(fullscreenViewerVisible, (isVisible) => {
 </script>
 
 <style scoped>
+@import "@/assets/shared-card-styles.scss";
+
 .series-view {
   padding: var(--spacing-2xl);
   margin: 0 auto;
@@ -735,37 +733,6 @@ watch(fullscreenViewerVisible, (isVisible) => {
   margin-top: var(--spacing-md);
   color: var(--text-secondary);
   font-size: var(--font-size-md);
-}
-
-.series-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 24px;
-}
-
-.series-card {
-  background-color: #18181c;
-  border: 1px solid #2c2c32;
-  border-radius: 16px;
-  padding: 20px;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-}
-
-.series-card:hover {
-  border-color: #2563eb;
-  transform: translateY(-4px);
-  box-shadow: 0 12px 32px rgba(37, 99, 235, 0.2);
-}
-
-.series-preview {
-  position: relative;
-  height: 120px;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 /* Sequential photo arrangement for series cards */
@@ -819,68 +786,6 @@ watch(fullscreenViewerVisible, (isVisible) => {
 }
 .series-card:hover .sequence-photo.sequence-4 {
   transform: translateY(-6px);
-}
-
-.empty-preview {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.series-info {
-  text-align: center;
-}
-
-.series-card-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #ffffffd1;
-  margin: 0 0 8px 0;
-  line-height: 1.3;
-}
-
-.series-card-meta {
-  font-size: 14px;
-  color: #ffffff73;
-  margin: 0;
-  line-height: 1.4;
-}
-
-/* Create Card Specific Styles */
-.create-card {
-  border: 2px dashed #2c2c32;
-  background-color: transparent;
-}
-
-.create-card:hover {
-  border-color: #2563eb;
-  background-color: rgba(37, 99, 235, 0.05);
-}
-
-.create-preview {
-  position: relative;
-  height: 120px;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.create-icon {
-  padding: 20px;
-  border-radius: 50%;
-  background-color: rgba(37, 99, 235, 0.1);
-  transition: all 0.3s ease;
-}
-
-.create-card:hover .create-icon {
-  background-color: rgba(37, 99, 235, 0.2);
-  transform: scale(1.1);
-}
-
-/* Create Form */
-.create-form {
-  padding-top: var(--spacing-md);
 }
 
 /* Series Detail View Styles */
@@ -1051,20 +956,6 @@ watch(fullscreenViewerVisible, (isVisible) => {
   .delete-button {
     align-self: flex-end;
     font-size: var(--font-size-xs);
-  }
-
-  .series-grid {
-    grid-template-columns: 1fr;
-    gap: 20px;
-  }
-
-  .series-card {
-    padding: 16px;
-  }
-
-  .series-preview {
-    height: 100px;
-    margin-bottom: 12px;
   }
 
   .sequence-photo {

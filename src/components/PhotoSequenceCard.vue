@@ -36,21 +36,14 @@
     </template>
 
     <!-- Photo Cell -->
-    <div v-else class="filled-cell">
+    <div
+      v-else
+      class="filled-cell"
+      :class="{ 'is-draggable': mode === 'series' && draggable }"
+    >
       <!-- Order Badge (Series mode) -->
       <div v-if="mode === 'series' && orderNumber" class="order-badge">
         {{ orderNumber }}
-      </div>
-
-      <!-- Drag Handle (Series mode) -->
-      <div
-        v-if="mode === 'series' && draggable"
-        class="drag-handle"
-        title="Drag to reorder"
-      >
-        <n-icon size="18">
-          <ReorderFour />
-        </n-icon>
       </div>
 
       <!-- Photo Image -->
@@ -63,14 +56,9 @@
 
       <!-- Remove Button Overlay -->
       <div class="cell-overlay">
-        <n-button
-          circle
-          size="small"
-          class="remove-photo-btn"
-          @click.stop="$emit('remove')"
-        >
+        <n-button size="small" @click.stop="$emit('remove')">
           <template #icon>
-            <n-icon><CloseOutline /></n-icon>
+            <n-icon><TrashOutline /></n-icon>
           </template>
         </n-button>
       </div>
@@ -152,7 +140,7 @@ import { computed } from "vue";
 import { NButton, NIcon, NSkeleton, NSpin } from "naive-ui";
 import {
   AddOutline,
-  CloseOutline,
+  TrashOutline,
   ChevronUpOutline,
   ChevronDownOutline,
   ChevronBackOutline,
@@ -331,12 +319,21 @@ const truncatedName = computed(() => {
   width: 100%;
 }
 
+.filled-cell.is-draggable {
+  cursor: grab;
+}
+
+.filled-cell.is-draggable:active {
+  cursor: grabbing;
+}
+
 .cell-photo {
   width: 100%;
   height: 100%;
   object-fit: contain;
   background: #1a1a1a;
   transition: transform 0.3s ease;
+  pointer-events: none;
 }
 
 .photo-sequence-card:hover .cell-photo {
@@ -358,34 +355,6 @@ const truncatedName = computed(() => {
   z-index: 10;
 }
 
-/* Drag Handle (Series) */
-.drag-handle {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  padding: 4px;
-  cursor: grab;
-  color: rgba(255, 255, 255, 0.3);
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 4px;
-  opacity: 0;
-  transition: all 0.2s ease;
-  z-index: 5;
-}
-
-.photo-sequence-card:hover .drag-handle {
-  opacity: 1;
-}
-
-.drag-handle:hover {
-  color: rgba(255, 255, 255, 0.8);
-  background: rgba(0, 0, 0, 0.5);
-}
-
-.drag-handle:active {
-  cursor: grabbing;
-}
-
 /* Remove Button Overlay */
 .cell-overlay {
   position: absolute;
@@ -403,12 +372,12 @@ const truncatedName = computed(() => {
 }
 
 .remove-photo-btn {
-  background-color: rgba(239, 68, 68, 0.9) !important;
-  border: none !important;
+  /* background-color: rgba(239, 68, 68, 0.9) !important; */
+  /* border: none !important;
   color: white !important;
   width: 22px !important;
   height: 22px !important;
-  min-width: 22px !important;
+  min-width: 22px !important; */
 }
 
 .remove-photo-btn:hover {

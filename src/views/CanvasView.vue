@@ -273,7 +273,9 @@
       :show="showCollectionModal"
       :photo-count="selectedPhotosCount"
       :photo-ids="selectedPhotoIds"
+      :photo-positions="selectedPhotoPositions"
       @add-to-collection="handleCollectionAdded"
+      @add-to-series="handleCollectionAdded"
       @cancel="handleCollectionModalCancel"
     />
 
@@ -912,6 +914,22 @@ const selectedPhotoIds = computed(() => {
   return photos.value
     .filter((photo) => photo.selected)
     .map((photo) => photo.id);
+});
+
+// Get selected photo positions for ordering in series (canvas only)
+// Keys are stringified IDs for consistent lookup
+const selectedPhotoPositions = computed(() => {
+  const positions = {};
+  photos.value
+    .filter((photo) => photo.selected)
+    .forEach((photo) => {
+      // Use string key for consistent lookup
+      positions[String(photo.id)] = {
+        x: photo.config.x,
+        y: photo.config.y,
+      };
+    });
+  return positions;
 });
 
 // Computed property to filter expansion options based on basicMode
