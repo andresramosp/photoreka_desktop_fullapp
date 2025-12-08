@@ -272,42 +272,71 @@ const preloadImage = (photoIndex) => {
   img.src = photo.originalUrl || photo.url || photo.thumbnailUrl;
 };
 
-// Hide mobile browser address bar by triggering a minimal scroll
+// Request native fullscreen mode (hides browser UI completely)
+const requestNativeFullscreen = async () => {
+  const element = document.documentElement;
+
+  try {
+    if (element.requestFullscreen) {
+      await element.requestFullscreen();
+    } else if (element.webkitRequestFullscreen) {
+      // Safari/iOS
+      await element.webkitRequestFullscreen();
+    } else if (element.msRequestFullscreen) {
+      // IE11
+      await element.msRequestFullscreen();
+    }
+  } catch (error) {
+    // Fullscreen request failed (user denied or not supported)
+    // Fall back to other methods
+    console.log("Fullscreen API not available or denied:", error);
+  }
+};
+
+// Exit native fullscreen mode
+const exitNativeFullscreen = async () => {
+  try {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      if (document.exitFullscreen) {
+        await document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        await document.webkitExitFullscreen();
+      } else if (document.msExitFullscreen) {
+        await document.msExitFullscreen();
+      }
+    }
+  } catch (error) {
+    console.log("Error exiting fullscreen:", error);
+  }
+};
+
+// Hide mobile browser address bar
 const hideMobileAddressBar = () => {
-  // Only on mobile devices in landscape or portrait
-  const isMobile =
-    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-      navigator.userAgent
-    );
-  if (!isMobile) return;
-
-  // Method 1: Scroll to hide address bar
-  // Save current scroll position
-  const scrollY = window.scrollY;
-
-  // Scroll down slightly then back - this triggers the browser to hide the address bar
-  setTimeout(() => {
-    window.scrollTo(0, 1);
-    setTimeout(() => {
-      window.scrollTo(0, scrollY);
-    }, 50);
-  }, 100);
-
-  // Method 2: Lock body scroll to prevent any scrolling while fullscreen is open
+  // Lock body scroll to prevent any scrolling while fullscreen is open
   document.body.style.overflow = "hidden";
   document.body.style.position = "fixed";
   document.body.style.width = "100%";
   document.body.style.height = "100%";
+  document.body.style.top = `-${window.scrollY}px`;
   document.documentElement.style.overflow = "hidden";
+
+  // Try to request native fullscreen (best experience on mobile)
+  requestNativeFullscreen();
 };
 
 // Restore scroll when closing fullscreen
 const restoreScroll = () => {
+  const scrollY = document.body.style.top;
   document.body.style.overflow = "";
   document.body.style.position = "";
   document.body.style.width = "";
   document.body.style.height = "";
+  document.body.style.top = "";
   document.documentElement.style.overflow = "";
+  window.scrollTo(0, parseInt(scrollY || "0") * -1);
+
+  // Exit native fullscreen if active
+  exitNativeFullscreen();
 };
 
 // Watch for visibility changes

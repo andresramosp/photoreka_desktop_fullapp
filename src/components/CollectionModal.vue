@@ -29,10 +29,6 @@
             <span>Loading collections...</span>
           </div>
 
-          <div v-else-if="collections.length === 0" class="empty-collections">
-            <p>No collections found. Create a collection first.</p>
-          </div>
-
           <div v-else class="collections-list">
             <!-- Create New Collection Button -->
             <div
@@ -52,6 +48,11 @@
                   </div>
                 </div>
               </div>
+            </div>
+
+            <!-- Empty state message -->
+            <div v-if="collections.length === 0" class="empty-list-message">
+              <p>No collections yet. Create your first one above.</p>
             </div>
 
             <!-- Existing Collections -->
@@ -88,10 +89,6 @@
             <span>Loading series...</span>
           </div>
 
-          <div v-else-if="seriesList.length === 0" class="empty-collections">
-            <p>No series found. Create a series first.</p>
-          </div>
-
           <div v-else class="collections-list">
             <!-- Create New Series Button -->
             <div
@@ -111,6 +108,11 @@
                   </div>
                 </div>
               </div>
+            </div>
+
+            <!-- Empty state message -->
+            <div v-if="seriesList.length === 0" class="empty-list-message">
+              <p>No series yet. Create your first one above.</p>
             </div>
 
             <!-- Existing Series -->
@@ -647,6 +649,17 @@ const handleCancel = () => {
   text-align: center;
   padding: 40px 0;
   color: #ffffff73;
+}
+
+.empty-list-message {
+  text-align: center;
+  padding: 24px 16px;
+  color: #ffffff73;
+  font-size: 14px;
+}
+
+.empty-list-message p {
+  margin: 0;
 }
 
 .collections-list {
