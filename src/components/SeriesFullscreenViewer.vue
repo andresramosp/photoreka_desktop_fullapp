@@ -7,12 +7,13 @@
     :style="{ padding: '0' }"
     transform-origin="center"
   >
-    <div class="fullscreen-container" @click="closeFullscreen">
+    <div class="fullscreen-container" @click.self="closeFullscreen">
       <div class="fullscreen-content">
         <!-- Navigation Arrow Left -->
         <n-button
           v-if="hasPreviousPhoto || showingEndScreen"
           class="nav-arrow nav-arrow-left"
+          :class="{ 'hidden-controls': !showControls }"
           size="large"
           circle
           type="primary"
@@ -59,6 +60,7 @@
         <n-button
           v-if="hasNextPhoto || (isPublicView && !showingEndScreen)"
           class="nav-arrow nav-arrow-right"
+          :class="{ 'hidden-controls': !showControls }"
           size="large"
           circle
           type="primary"
@@ -73,10 +75,29 @@
           </template>
         </n-button>
 
+        <!-- Fullscreen Toggle Button (mobile only) -->
+        <n-button
+          class="fullscreen-toggle-btn"
+          :class="{ 'hidden-controls': !showControls }"
+          size="medium"
+          circle
+          type="primary"
+          @click.stop="toggleFullscreen"
+          :title="isInFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'"
+        >
+          <template #icon>
+            <n-icon size="20">
+              <ExpandOutline v-if="!isInFullscreen" />
+              <ContractOutline v-else />
+            </n-icon>
+          </template>
+        </n-button>
+
         <!-- Photo Counter -->
         <div
-          v-if="photos.length > 0 && !showingEndScreen && showCounter"
+          v-if="photos.length > 0 && !showingEndScreen && showControls"
           class="photo-counter"
+          :class="{ 'hidden-controls': !showControls }"
         >
           {{ currentIndex + 1 }} / {{ photos.length }}
         </div>
@@ -84,6 +105,7 @@
         <!-- Close Button -->
         <n-button
           class="close-fullscreen-btn"
+          :class="{ 'hidden-controls': !showControls }"
           size="large"
           circle
           type="primary"
@@ -109,6 +131,8 @@ import {
   CloseOutline,
   ChevronBackOutline,
   ChevronForwardOutline,
+  ExpandOutline,
+  ContractOutline,
 } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
 
@@ -145,9 +169,10 @@ const currentIndex = ref(0);
 const isTransitioning = ref(false);
 const slideDirection = ref("next");
 const showingEndScreen = ref(false);
-const showCounter = ref(true);
+const showControls = ref(true);
 const logoHeight = ref(120);
-let counterHideTimeout = null;
+const isInFullscreen = ref(false);
+let controlsHideTimeout = null;
 
 // Computed properties
 const currentPhoto = computed(() => {
@@ -195,13 +220,13 @@ const goToPreviousPhoto = () => {
 const goToNextPhoto = () => {
   if (isTransitioning.value) return;
 
-  // Show counter when navigating
-  showCounter.value = true;
-  if (counterHideTimeout) {
-    clearTimeout(counterHideTimeout);
+  // Show controls when navigating
+  showControls.value = true;
+  if (controlsHideTimeout) {
+    clearTimeout(controlsHideTimeout);
   }
-  counterHideTimeout = setTimeout(() => {
-    showCounter.value = false;
+  controlsHideTimeout = setTimeout(() => {
+    showControls.value = false;
   }, 3000);
 
   // If showing end screen in public view, redirect to home
@@ -249,18 +274,18 @@ const handleKeyDown = (e) => {
   }
 };
 
-// Mouse movement handling for counter visibility
+// Mouse movement handling for controls visibility
 const handleMouseMove = () => {
-  showCounter.value = true;
+  showControls.value = true;
 
   // Clear existing timeout
-  if (counterHideTimeout) {
-    clearTimeout(counterHideTimeout);
+  if (controlsHideTimeout) {
+    clearTimeout(controlsHideTimeout);
   }
 
-  // Set new timeout to hide counter after 3 seconds
-  counterHideTimeout = setTimeout(() => {
-    showCounter.value = false;
+  // Set new timeout to hide controls after 3 seconds
+  controlsHideTimeout = setTimeout(() => {
+    showControls.value = false;
   }, 3000);
 };
 
@@ -286,9 +311,9 @@ const requestNativeFullscreen = async () => {
       // IE11
       await element.msRequestFullscreen();
     }
+    isInFullscreen.value = true;
   } catch (error) {
     // Fullscreen request failed (user denied or not supported)
-    // Fall back to other methods
     console.log("Fullscreen API not available or denied:", error);
   }
 };
@@ -304,11 +329,23 @@ const exitNativeFullscreen = async () => {
       } else if (document.msExitFullscreen) {
         await document.msExitFullscreen();
       }
+      isInFullscreen.value = false;
     }
   } catch (error) {
     console.log("Error exiting fullscreen:", error);
   }
 };
+
+// Toggle fullscreen on user interaction
+const toggleFullscreen = async () => {
+  if (isInFullscreen.value) {
+    await exitNativeFullscreen();
+  } else {
+    await requestNativeFullscreen();
+  }
+};
+
+// Check if device is mobile and show fullscreen button
 
 // Hide mobile browser address bar
 const hideMobileAddressBar = () => {
@@ -319,9 +356,6 @@ const hideMobileAddressBar = () => {
   document.body.style.height = "100%";
   document.body.style.top = `-${window.scrollY}px`;
   document.documentElement.style.overflow = "hidden";
-
-  // Try to request native fullscreen (best experience on mobile)
-  requestNativeFullscreen();
 };
 
 // Restore scroll when closing fullscreen
@@ -376,6 +410,17 @@ const updateLogoHeight = () => {
 // Listen for resize events
 const handleWindowResize = () => {
   updateLogoHeight();
+  if (visible.value) {
+    checkMobileDevice();
+  }
+};
+
+// Listen for fullscreen changes
+const handleFullscreenChange = () => {
+  const isCurrentlyFullscreen = !!(
+    document.fullscreenElement || document.webkitFullscreenElement
+  );
+  isInFullscreen.value = isCurrentlyFullscreen;
 };
 
 // Watch for index changes to preload adjacent images
@@ -395,6 +440,8 @@ onMounted(() => {
   window.addEventListener("keydown", handleKeyDown);
   window.addEventListener("mousemove", handleMouseMove);
   window.addEventListener("resize", handleWindowResize);
+  document.addEventListener("fullscreenchange", handleFullscreenChange);
+  document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
   updateLogoHeight();
 });
 
@@ -402,8 +449,13 @@ onUnmounted(() => {
   window.removeEventListener("keydown", handleKeyDown);
   window.removeEventListener("mousemove", handleMouseMove);
   window.removeEventListener("resize", handleWindowResize);
-  if (counterHideTimeout) {
-    clearTimeout(counterHideTimeout);
+  document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  document.removeEventListener(
+    "webkitfullscreenchange",
+    handleFullscreenChange
+  );
+  if (controlsHideTimeout) {
+    clearTimeout(controlsHideTimeout);
   }
   // Make sure to restore scroll if component unmounts while visible
   restoreScroll();
@@ -470,9 +522,32 @@ onUnmounted(() => {
   z-index: 10001;
   width: 44px;
   height: 44px;
+  opacity: 1;
 }
 
 .close-fullscreen-btn:hover {
+  background: rgba(255, 255, 255, 0.25) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  transform: scale(1.1);
+}
+
+/* Fullscreen Toggle Button */
+.fullscreen-toggle-btn {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  background: rgba(255, 255, 255, 0.15) !important;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  color: white !important;
+  transition: all 0.3s ease;
+  z-index: 10001;
+  width: 40px;
+  height: 40px;
+  opacity: 1;
+}
+
+.fullscreen-toggle-btn:hover {
   background: rgba(255, 255, 255, 0.25) !important;
   border-color: rgba(255, 255, 255, 0.5) !important;
   transform: scale(1.1);
@@ -498,11 +573,6 @@ onUnmounted(() => {
   opacity: 1;
   background: rgba(0, 0, 0, 0.8) !important;
   border-color: rgba(255, 255, 255, 0.4) !important;
-  /* transform: translateY(-50%) scale(1.1); */
-}
-
-.nav-arrow:active:not(:disabled) {
-  /* transform: translateY(-50%) scale(0.95); */
 }
 
 .nav-arrow:disabled {
@@ -555,6 +625,7 @@ onUnmounted(() => {
   -webkit-user-select: none;
   letter-spacing: 0.5px;
   transition: opacity 0.3s ease;
+  opacity: 1;
 }
 
 /* End Screen Styles */
@@ -636,6 +707,13 @@ onUnmounted(() => {
     height: 35px;
   }
 
+  .fullscreen-toggle-btn {
+    top: 8px;
+    left: 8px;
+    width: 35px;
+    height: 35px;
+  }
+
   .nav-arrow {
     width: 35px;
     height: 35px;
@@ -685,6 +763,13 @@ onUnmounted(() => {
   .photo-counter {
     bottom: 16px;
   }
+}
+
+/* Controls visibility toggle */
+.hidden-controls {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 0.3s ease;
 }
 
 /* Override modal styles for fullscreen */

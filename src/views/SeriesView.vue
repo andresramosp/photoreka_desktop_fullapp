@@ -840,7 +840,7 @@ watch(fullscreenViewerVisible, (isVisible) => {
 .series-title-row {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
+  gap: 5px;
   margin-bottom: var(--spacing-md);
 }
 
@@ -849,11 +849,18 @@ watch(fullscreenViewerVisible, (isVisible) => {
   font-weight: var(--font-weight-bold);
   color: var(--text-primary);
   margin: 0;
+  line-height: 1.2;
 }
 
 .share-button {
   color: var(--text-secondary);
   transition: color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  min-width: 32px;
+  margin-top: 5px;
 }
 
 .share-button:hover {
