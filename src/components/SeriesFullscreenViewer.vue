@@ -343,7 +343,11 @@ onUnmounted(() => {
   top: 0;
   left: 0;
   width: 100vw;
+  /* Use dvh for dynamic viewport, with vh fallback for older browsers */
   height: 100vh;
+  height: 100dvh;
+  /* Alternative: use svh (small viewport height) which always accounts for browser UI */
+  /* height: 100svh; */
   background: rgba(0, 0, 0, 0.95);
   backdrop-filter: blur(10px);
   display: flex;
@@ -353,6 +357,9 @@ onUnmounted(() => {
   cursor: pointer;
   padding: 40px;
   box-sizing: border-box;
+  /* Prevent overscroll/bounce on iOS */
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
 }
 
 .fullscreen-content {
@@ -372,7 +379,6 @@ onUnmounted(() => {
   height: auto;
   object-fit: contain;
   object-position: center;
-  border-radius: var(--radius-md, 8px);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   cursor: default;
 }
@@ -418,11 +424,11 @@ onUnmounted(() => {
   opacity: 1;
   background: rgba(0, 0, 0, 0.8) !important;
   border-color: rgba(255, 255, 255, 0.4) !important;
-  transform: translateY(-50%) scale(1.1);
+  /* transform: translateY(-50%) scale(1.1); */
 }
 
 .nav-arrow:active:not(:disabled) {
-  transform: translateY(-50%) scale(0.95);
+  /* transform: translateY(-50%) scale(0.95); */
 }
 
 .nav-arrow:disabled {
@@ -436,6 +442,24 @@ onUnmounted(() => {
 
 .nav-arrow-right {
   right: 24px;
+}
+
+/* Mobile vertical layout */
+@media (max-width: 768px) and (orientation: portrait) {
+  .nav-arrow {
+    position: fixed;
+    top: auto;
+    bottom: 80px;
+    transform: none;
+  }
+
+  .nav-arrow-left {
+    left: calc(50% - 50px);
+  }
+
+  .nav-arrow-right {
+    right: calc(50% - 50px);
+  }
 }
 
 /* Photo Counter */
@@ -532,23 +556,23 @@ onUnmounted(() => {
   }
 
   .close-fullscreen-btn {
-    top: 15px;
-    right: 15px;
-    width: 40px;
-    height: 40px;
+    top: 8px;
+    right: 8px;
+    width: 35px;
+    height: 35px;
   }
 
   .nav-arrow {
-    width: 48px;
-    height: 48px;
+    width: 35px;
+    height: 35px;
   }
 
   .nav-arrow-left {
-    left: 12px;
+    left: 8px;
   }
 
   .nav-arrow-right {
-    right: 12px;
+    right: 8px;
   }
 
   .photo-counter {
@@ -572,8 +596,16 @@ onUnmounted(() => {
   }
 
   .nav-arrow {
-    width: 44px;
-    height: 44px;
+    width: 35px;
+    height: 35px;
+  }
+
+  .nav-arrow-left {
+    left: 8px;
+  }
+
+  .nav-arrow-right {
+    right: 8px;
   }
 
   .photo-counter {
