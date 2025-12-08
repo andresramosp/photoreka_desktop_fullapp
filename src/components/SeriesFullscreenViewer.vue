@@ -272,6 +272,44 @@ const preloadImage = (photoIndex) => {
   img.src = photo.originalUrl || photo.url || photo.thumbnailUrl;
 };
 
+// Hide mobile browser address bar by triggering a minimal scroll
+const hideMobileAddressBar = () => {
+  // Only on mobile devices in landscape or portrait
+  const isMobile =
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    );
+  if (!isMobile) return;
+
+  // Method 1: Scroll to hide address bar
+  // Save current scroll position
+  const scrollY = window.scrollY;
+
+  // Scroll down slightly then back - this triggers the browser to hide the address bar
+  setTimeout(() => {
+    window.scrollTo(0, 1);
+    setTimeout(() => {
+      window.scrollTo(0, scrollY);
+    }, 50);
+  }, 100);
+
+  // Method 2: Lock body scroll to prevent any scrolling while fullscreen is open
+  document.body.style.overflow = "hidden";
+  document.body.style.position = "fixed";
+  document.body.style.width = "100%";
+  document.body.style.height = "100%";
+  document.documentElement.style.overflow = "hidden";
+};
+
+// Restore scroll when closing fullscreen
+const restoreScroll = () => {
+  document.body.style.overflow = "";
+  document.body.style.position = "";
+  document.body.style.width = "";
+  document.body.style.height = "";
+  document.documentElement.style.overflow = "";
+};
+
 // Watch for visibility changes
 watch(visible, (isVisible) => {
   if (isVisible) {
@@ -280,6 +318,8 @@ watch(visible, (isVisible) => {
     showingEndScreen.value = false;
     // Set logo height based on viewport
     updateLogoHeight();
+    // Try to hide mobile browser address bar
+    hideMobileAddressBar();
     // Preload adjacent images
     if (hasNextPhoto.value) {
       preloadImage(currentIndex.value + 1);
@@ -287,6 +327,9 @@ watch(visible, (isVisible) => {
     if (hasPreviousPhoto.value) {
       preloadImage(currentIndex.value - 1);
     }
+  } else {
+    // Restore scroll when closing
+    restoreScroll();
   }
 });
 
@@ -333,6 +376,8 @@ onUnmounted(() => {
   if (counterHideTimeout) {
     clearTimeout(counterHideTimeout);
   }
+  // Make sure to restore scroll if component unmounts while visible
+  restoreScroll();
 });
 </script>
 
