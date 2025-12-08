@@ -174,6 +174,13 @@ const logoHeight = ref(120);
 const isInFullscreen = ref(false);
 let controlsHideTimeout = null;
 
+// Touch swipe handling
+let touchStartX = 0;
+let touchStartY = 0;
+let touchEndX = 0;
+let touchEndY = 0;
+const swipeThreshold = 50; // Minimum distance in pixels to trigger swipe
+
 // Computed properties
 const currentPhoto = computed(() => {
   return props.photos?.[currentIndex.value] || null;
@@ -358,6 +365,34 @@ const hideMobileAddressBar = () => {
   document.documentElement.style.overflow = "hidden";
 };
 
+// Touch swipe handlers
+const handleTouchStart = (e) => {
+  touchStartX = e.changedTouches[0].screenX;
+  touchStartY = e.changedTouches[0].screenY;
+};
+
+const handleTouchEnd = (e) => {
+  if (!visible.value || isTransitioning.value) return;
+
+  touchEndX = e.changedTouches[0].screenX;
+  touchEndY = e.changedTouches[0].screenY;
+
+  const diffX = touchStartX - touchEndX;
+  const diffY = touchStartY - touchEndY;
+
+  // Only process swipe if horizontal movement is significant
+  // and greater than vertical movement (to avoid interfering with vertical scrolling)
+  if (Math.abs(diffX) > swipeThreshold && Math.abs(diffX) > Math.abs(diffY)) {
+    if (diffX > 0) {
+      // Swipe left - go to next photo
+      goToNextPhoto();
+    } else {
+      // Swipe right - go to previous photo
+      goToPreviousPhoto();
+    }
+  }
+};
+
 // Restore scroll when closing fullscreen
 const restoreScroll = () => {
   const scrollY = document.body.style.top;
@@ -440,6 +475,8 @@ onMounted(() => {
   window.addEventListener("keydown", handleKeyDown);
   window.addEventListener("mousemove", handleMouseMove);
   window.addEventListener("resize", handleWindowResize);
+  window.addEventListener("touchstart", handleTouchStart, false);
+  window.addEventListener("touchend", handleTouchEnd, false);
   document.addEventListener("fullscreenchange", handleFullscreenChange);
   document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
   updateLogoHeight();
@@ -449,6 +486,8 @@ onUnmounted(() => {
   window.removeEventListener("keydown", handleKeyDown);
   window.removeEventListener("mousemove", handleMouseMove);
   window.removeEventListener("resize", handleWindowResize);
+  window.removeEventListener("touchstart", handleTouchStart, false);
+  window.removeEventListener("touchend", handleTouchEnd, false);
   document.removeEventListener("fullscreenchange", handleFullscreenChange);
   document.removeEventListener(
     "webkitfullscreenchange",
