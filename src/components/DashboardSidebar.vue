@@ -26,7 +26,7 @@
         </div>
       </div>
 
-      <!-- First Menu Section: Photo Hub, Collections -->
+      <!-- First Menu Section: Photo Hub -->
       <n-menu
         :collapsed="false"
         :collapsed-width="64"
@@ -40,12 +40,12 @@
       <!-- First Divider -->
       <div class="menu-divider"></div>
 
-      <!-- Second Menu Section: Search, Canvas, Curation -->
+      <!-- Second Menu Section: Collections, Series -->
       <n-menu
         :collapsed="false"
         :collapsed-width="64"
         :collapsed-icon-size="22"
-        :options="secondSectionOptions"
+        :options="collectionsSeriesOptions"
         :value="activeKey"
         @update:value="handleMenuSelect"
         class="sidebar-menu"
@@ -54,12 +54,26 @@
       <!-- Second Divider -->
       <div class="menu-divider"></div>
 
-      <!-- Third Menu Section: Settings, Help -->
+      <!-- Third Menu Section: Search, Canvas, Curation -->
       <n-menu
         :collapsed="false"
         :collapsed-width="64"
         :collapsed-icon-size="22"
-        :options="thirdSectionOptions"
+        :options="thirdSectionToolsOptions"
+        :value="activeKey"
+        @update:value="handleMenuSelect"
+        class="sidebar-menu"
+      />
+
+      <!-- Third Divider -->
+      <div class="menu-divider"></div>
+
+      <!-- Fourth Menu Section: Settings, Help -->
+      <n-menu
+        :collapsed="false"
+        :collapsed-width="64"
+        :collapsed-icon-size="22"
+        :options="fourthSectionOptions"
         :value="activeKey"
         @update:value="handleMenuSelect"
         class="sidebar-menu"
@@ -116,7 +130,7 @@
         </div>
       </div>
 
-      <!-- First Menu Section: Photo Hub, Collections -->
+      <!-- First Menu Section: Photo Hub -->
       <n-menu
         :collapsed="collapsed"
         :collapsed-width="64"
@@ -130,12 +144,12 @@
       <!-- First Divider -->
       <div class="menu-divider" :class="{ collapsed }"></div>
 
-      <!-- Second Menu Section: Search, Canvas, Curation -->
+      <!-- Second Menu Section: Collections, Series -->
       <n-menu
         :collapsed="collapsed"
         :collapsed-width="64"
         :collapsed-icon-size="22"
-        :options="secondSectionOptions"
+        :options="collectionsSeriesOptions"
         :value="activeKey"
         @update:value="handleMenuSelect"
         class="sidebar-menu"
@@ -144,12 +158,26 @@
       <!-- Second Divider -->
       <div class="menu-divider" :class="{ collapsed }"></div>
 
-      <!-- Third Menu Section: Settings, Help -->
+      <!-- Third Menu Section: Search, Canvas, Curation -->
       <n-menu
         :collapsed="collapsed"
         :collapsed-width="64"
         :collapsed-icon-size="22"
-        :options="thirdSectionOptions"
+        :options="thirdSectionToolsOptions"
+        :value="activeKey"
+        @update:value="handleMenuSelect"
+        class="sidebar-menu"
+      />
+
+      <!-- Third Divider -->
+      <div class="menu-divider" :class="{ collapsed }"></div>
+
+      <!-- Fourth Menu Section: Settings, Help -->
+      <n-menu
+        :collapsed="collapsed"
+        :collapsed-width="64"
+        :collapsed-icon-size="22"
+        :options="fourthSectionOptions"
         :value="activeKey"
         @update:value="handleMenuSelect"
         class="sidebar-menu"
@@ -211,7 +239,7 @@ const emit = defineEmits(["close-mobile-menu"]);
 const activeKey = computed(() => route.name as string);
 const appAccessMode = computed(() => photosStore.appAccessMode);
 
-// First section: Photo Hub, Collections
+// First section: Photo Hub only
 const firstSectionOptions = computed(() => [
   {
     label: createMenuLabel("Photo Hub"),
@@ -242,6 +270,10 @@ const firstSectionOptions = computed(() => [
         ]
       ),
   },
+]);
+
+// Second section: Collections, Series
+const collectionsSeriesOptions = computed(() => [
   {
     label: createMenuLabel("Collections", false),
     key: "collections",
@@ -345,8 +377,8 @@ const createMenuLabel = (label: string, isComingSoon = false) => {
     );
 };
 
-// Second section: Explorer, Canvas, Curation, Grids, Styler
-const secondSectionOptions = computed(() => {
+// Third section: Explorer, Canvas, Curation, Grids, Styler
+const thirdSectionToolsOptions = computed(() => {
   const isBlocked = appAccessMode.value === "blocked";
   const isFull = appAccessMode.value === "full";
 
@@ -438,8 +470,8 @@ const secondSectionOptions = computed(() => {
   ];
 });
 
-// Third section: Settings, Help (always enabled)
-const thirdSectionOptions: MenuOption[] = [
+// Fourth section: Settings, Help (always enabled)
+const fourthSectionOptions: MenuOption[] = [
   {
     label: "Settings",
     key: "settings",
@@ -625,14 +657,14 @@ onUnmounted(() => {
 }
 
 .menu-divider {
-  margin: 16px 20px;
+  /* margin: 16px 20px; */
   height: 1px;
   background-color: #2c2c32;
   transition: margin 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .menu-divider.collapsed {
-  margin: 16px 12px;
+  /* margin: 16px 12px; */
 }
 
 .user-profile-section {
