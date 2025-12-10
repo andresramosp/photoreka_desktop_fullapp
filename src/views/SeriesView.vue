@@ -141,11 +141,13 @@
         <SeriesPhotoStrip
           :photos="viewingSeries.photos || []"
           :series-id="route.params.id"
+          :selected-photo-ids="localSelectedPhotoIds"
           @add-photos="showAddPhotosDialog"
           @remove-photo="handleRemovePhoto"
           @reorder="handleReorder"
           @move-photo="handleMovePhoto"
           @photos-updated="handlePhotosUpdated"
+          @select-photo="togglePhotoSelection"
         />
       </div>
     </div>
@@ -345,6 +347,31 @@
       :start-index="0"
       :is-public-view="isPublicView"
     />
+
+    <!-- Floating Action Bar (only show in series detail view) -->
+    <FloatingActionBar
+      v-if="showSeriesView && !isPublicView"
+      :selected-count="localSelectedPhotoIds.length"
+      :show-delete="false"
+      :show-add-to-collection="false"
+      :show-move-to-tool="true"
+      :is-downloading="isDownloading"
+      @clear-selection="localClearAllSelections"
+      @download="handleDownloadMultiple"
+      @delete="handleRemoveSelectedFromSeries"
+      @add-to-collection="handleAddToCollection"
+      @move-to-tool="handleMoveToTool"
+    />
+
+    <!-- Photo Tool Selector Modal -->
+    <PhotoToolSelector
+      :show="showToolSelector"
+      :photo-count="localSelectedPhotoIds.length"
+      :tools="availableTools"
+      :is-processing="isProcessingTool"
+      @tool-selected="handleToolSelected"
+      @close="closeToolSelector"
+    />
   </div>
 </template>
 
@@ -373,11 +400,17 @@ import {
   ShareSocialOutline,
 } from "@vicons/ionicons5";
 import PhotosDialog from "@/components/PhotosDialog.vue";
+import FloatingActionBar from "@/components/FloatingActionBar.vue";
+import CollectionModal from "@/components/CollectionModal.vue";
+import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import { useUserStore } from "@/stores/userStore";
 import SeriesPhotoStrip from "@/components/SeriesPhotoStrip.vue";
 import SeriesFullscreenViewer from "@/components/SeriesFullscreenViewer.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useSeriesStore } from "@/stores/series.js";
+import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection";
+import { usePhotoDownload } from "@/composables/usePhotoDownload";
+import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection";
 
 const route = useRoute();
 const router = useRouter();
@@ -386,9 +419,31 @@ const photosStore = usePhotosStore();
 const seriesStore = useSeriesStore();
 const userStore = useUserStore();
 
+// Local photo selection
+const {
+  selectedPhotosRecord: localSelectedPhotosRecord,
+  selectedPhotoIds: localSelectedPhotoIds,
+  togglePhotoSelection: localTogglePhotoSelection,
+  clearAllSelections: localClearAllSelections,
+} = useLocalPhotoSelection();
+
+// Photo download utilities
+const { downloadPhotosZip, isDownloading } = usePhotoDownload();
+
+// Photo tool selection utilities
+const {
+  isProcessing: isProcessingTool,
+  showToolSelector,
+  availableTools,
+  takeToTool,
+  openToolSelector,
+  closeToolSelector,
+} = usePhotoToolSelection();
+
 // State
 const createDialogVisible = ref(false);
 const photosDialogVisible = ref(false);
+const showCollectionModal = ref(false);
 const deleteConfirmationVisible = ref(false);
 const fullscreenViewerVisible = ref(false);
 const formRef = ref(null);
@@ -548,6 +603,70 @@ const handlePhotosUpdated = (updatedPhotos) => {
     viewingSeries.value.photos = updatedPhotos;
   }
 };
+
+const togglePhotoSelection = (photoId) => {
+  localTogglePhotoSelection(photoId);
+};
+
+const handleDownloadMultiple = async () => {
+  if (localSelectedPhotoIds.value.length === 0) {
+    message.warning("Please select at least one photo to download");
+    return;
+  }
+
+  try {
+    // Get full photo objects from selected IDs
+    const selectedPhotos = viewingSeries.value.photos.filter((photo) =>
+      localSelectedPhotoIds.value.includes(photo.id)
+    );
+
+    await downloadPhotosZip(selectedPhotos);
+    message.success(`Downloaded ${selectedPhotos.length} photo(s)`);
+    localClearAllSelections();
+  } catch (error) {
+    console.error("Error downloading photos:", error);
+    message.error("Failed to download photos");
+  }
+};
+
+const handleRemoveSelectedFromSeries = async () => {
+  if (!viewingSeries.value || localSelectedPhotoIds.value.length === 0) {
+    return;
+  }
+
+  try {
+    await seriesStore.removePhotosFromSeries(
+      viewingSeries.value.id,
+      localSelectedPhotoIds.value
+    );
+    message.success(
+      `Removed ${localSelectedPhotoIds.value.length} photo(s) from series`
+    );
+    localClearAllSelections();
+    await refreshSeries();
+  } catch (error) {
+    console.error("Error removing photos:", error);
+    message.error("Failed to remove photos. Please try again.");
+  }
+};
+
+const handleMoveToTool = () => {
+  if (localSelectedPhotoIds.value.length === 0) {
+    message.warning("Please select at least one photo");
+    return;
+  }
+  openToolSelector();
+};
+
+const handleToolSelected = async (toolId) => {
+  await takeToTool(
+    toolId,
+    localSelectedPhotoIds.value,
+    localClearAllSelections
+  );
+  closeToolSelector();
+};
+
 const openSeries = (series) => {
   router.push({ name: "series-detail", params: { id: series.id } });
 };

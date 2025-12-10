@@ -39,8 +39,33 @@
     <div
       v-else
       class="filled-cell"
-      :class="{ 'is-draggable': mode === 'series' && draggable }"
+      :class="{
+        'is-draggable': mode === 'series' && draggable,
+        'is-selected': isSelected,
+      }"
     >
+      <!-- Selection Checkbox (Series mode) -->
+      <div
+        v-if="mode === 'series' && selectable"
+        class="selection-checkbox"
+        @click.stop="$emit('select', photo.id)"
+      >
+        <n-icon :size="20" :color="isSelected ? '#fff' : '#ffffff73'">
+          <svg v-if="isSelected" viewBox="0 0 24 24">
+            <path
+              fill="currentColor"
+              d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
+            />
+          </svg>
+          <svg v-else viewBox="0 0 24 24">
+            <path
+              fill="currentColor"
+              d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"
+            />
+          </svg>
+        </n-icon>
+      </div>
+
       <!-- Order Badge (Series mode) -->
       <div v-if="mode === 'series' && orderNumber" class="order-badge">
         {{ orderNumber }}
@@ -201,6 +226,14 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  selectable: {
+    type: Boolean,
+    default: false,
+  },
+  isSelected: {
+    type: Boolean,
+    default: false,
+  },
   showName: {
     type: Boolean,
     default: true,
@@ -216,7 +249,7 @@ const props = defineProps({
   },
 });
 
-defineEmits(["add-photo", "remove", "move"]);
+defineEmits(["add-photo", "remove", "move", "select"]);
 
 const cardStyle = computed(() => {
   if (props.size) {
@@ -367,17 +400,39 @@ const truncatedName = computed(() => {
   z-index: 3;
 }
 
-.photo-sequence-card:hover .cell-overlay {
-  opacity: 1;
+/* Selection Checkbox */
+.selection-checkbox {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
 }
 
-.remove-photo-btn {
-  /* background-color: rgba(239, 68, 68, 0.9) !important; */
-  /* border: none !important;
-  color: white !important;
-  width: 22px !important;
-  height: 22px !important;
-  min-width: 22px !important; */
+.selection-checkbox:hover {
+  background: rgba(0, 0, 0, 0.7);
+  transform: scale(1.1);
+}
+
+.filled-cell.is-selected {
+  outline: 3px solid var(--primary-color, #2563eb);
+  outline-offset: -3px;
+}
+
+.filled-cell.is-selected .cell-photo {
+  filter: brightness(0.9);
+}
+
+.photo-sequence-card:hover .cell-overlay {
+  opacity: 1;
 }
 
 .remove-photo-btn:hover {

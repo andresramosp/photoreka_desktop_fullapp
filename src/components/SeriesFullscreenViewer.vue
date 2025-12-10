@@ -75,8 +75,9 @@
           </template>
         </n-button>
 
-        <!-- Fullscreen Toggle Button (mobile only) -->
+        <!-- Fullscreen Toggle Button (mobile only, hidden on iOS) -->
         <n-button
+          v-if="!isIOS"
           class="fullscreen-toggle-btn"
           :class="{ 'hidden-controls': !showControls }"
           size="medium"
@@ -172,6 +173,7 @@ const showingEndScreen = ref(false);
 const showControls = ref(true);
 const logoHeight = ref(120);
 const isInFullscreen = ref(false);
+const isIOS = ref(false);
 let controlsHideTimeout = null;
 
 // Touch swipe handling
@@ -442,12 +444,17 @@ const updateLogoHeight = () => {
   }
 };
 
+// Detect if device is iOS
+const detectiOS = () => {
+  const userAgent = navigator.userAgent.toLowerCase();
+  isIOS.value =
+    /iphone|ipad|ipod/.test(userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+};
+
 // Listen for resize events
 const handleWindowResize = () => {
   updateLogoHeight();
-  if (visible.value) {
-    checkMobileDevice();
-  }
 };
 
 // Listen for fullscreen changes
@@ -472,6 +479,7 @@ watch(currentIndex, (newIndex) => {
 
 // Lifecycle hooks for keyboard listeners
 onMounted(() => {
+  detectiOS();
   window.addEventListener("keydown", handleKeyDown);
   window.addEventListener("mousemove", handleMouseMove);
   window.addEventListener("resize", handleWindowResize);

@@ -53,10 +53,13 @@
             :can-move-left="index > 0"
             :can-move-right="index < localPhotos.length - 1"
             :draggable="true"
+            :selectable="true"
+            :is-selected="selectedPhotoIds.includes(photo.id)"
             :show-name="false"
             :size="currentSize"
             @remove="removePhoto(photo)"
             @move="(dir) => handleMove(index, dir)"
+            @select="handlePhotoSelect"
           />
         </template>
       </draggable>
@@ -80,6 +83,10 @@ const props = defineProps({
     type: [String, Number],
     required: true,
   },
+  selectedPhotoIds: {
+    type: Array,
+    default: () => [],
+  },
 });
 
 const emit = defineEmits([
@@ -88,6 +95,7 @@ const emit = defineEmits([
   "reorder",
   "move-photo",
   "photos-updated",
+  "select-photo",
 ]);
 
 // Size options
@@ -186,6 +194,10 @@ const handleHorizontalScroll = (event) => {
 
   event.preventDefault();
   scrollContainer.value.scrollLeft += event.deltaY;
+};
+
+const handlePhotoSelect = (photoId) => {
+  emit("select-photo", photoId);
 };
 </script>
 
