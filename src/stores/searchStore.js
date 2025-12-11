@@ -141,7 +141,7 @@ export function createArtisticScoresTreeOptions() {
 export const useSearchStore = defineStore("search", () => {
   // Estado global del search
   const activeSearchType = ref("semantic");
-  const searchMode = ref("logical");
+  const searchMode = ref("low_precision");
   const isSearching = ref(false);
   const isLoadingMore = ref(false);
 

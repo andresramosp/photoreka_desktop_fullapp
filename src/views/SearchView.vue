@@ -80,23 +80,22 @@
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
                 <div
-                  class="mode-pill premium-pill"
-                  :class="{ active: searchMode === 'logical' }"
-                  @click="!isSearching && (searchMode = 'logical')"
+                  class="mode-pill"
+                  :class="{ active: searchMode === 'low_precision' }"
+                  @click="!isSearching && (searchMode = 'low_precision')"
                   :aria-disabled="isSearching"
                   :tabindex="isSearching ? -1 : 0"
                   :style="
                     isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
                   "
                 >
-                  <n-icon size="14" class="mode-icon">
-                    <CheckOutlined />
+                  <n-icon size="16" class="mode-icon">
+                    <PencilOutline />
                   </n-icon>
-                  Strict
-                  <div class="premium-indicator-pill"></div>
+                  Fast
                 </div>
               </template>
-              Heavy search that prioritizes logical accuracy
+              Shallow search with basic matching for faster results
             </n-tooltip>
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
@@ -122,22 +121,23 @@
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
                 <div
-                  class="mode-pill"
-                  :class="{ active: searchMode === 'low_precision' }"
-                  @click="!isSearching && (searchMode = 'low_precision')"
+                  class="mode-pill premium-pill"
+                  :class="{ active: searchMode === 'logical' }"
+                  @click="!isSearching && (searchMode = 'logical')"
                   :aria-disabled="isSearching"
                   :tabindex="isSearching ? -1 : 0"
                   :style="
                     isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
                   "
                 >
-                  <n-icon size="16" class="mode-icon">
-                    <PencilOutline />
+                  <n-icon size="14" class="mode-icon">
+                    <CheckOutlined />
                   </n-icon>
-                  Fast
+                  Strict
+                  <div class="premium-indicator-pill"></div>
                 </div>
               </template>
-              Shallow search with basic matching for faster results
+              Heavy search that prioritizes logical accuracy
             </n-tooltip>
           </div>
         </div>
