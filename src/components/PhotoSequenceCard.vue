@@ -255,7 +255,7 @@ const cardStyle = computed(() => {
   if (props.size) {
     return {
       width: `${props.size}px`,
-      height: props.mode === "series" ? "auto" : `${props.size}px`,
+      height: `${props.size}px`,
       minWidth: `${props.size}px`,
     };
   }

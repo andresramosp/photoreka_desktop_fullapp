@@ -143,6 +143,8 @@
           :series-id="route.params.id"
           :selected-photo-ids="localSelectedPhotoIds"
           @add-photos="showAddPhotosDialog"
+          @add-photos-at="handleAddPhotosAt"
+          @suggest-photo-at="handleSuggestPhotoAt"
           @remove-photo="handleRemovePhoto"
           @reorder="handleReorder"
           @move-photo="handleMovePhoto"
@@ -411,6 +413,7 @@ import { useSeriesStore } from "@/stores/series.js";
 import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection";
 import { usePhotoDownload } from "@/composables/usePhotoDownload";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection";
+import { api } from "@/utils/axios";
 
 const route = useRoute();
 const router = useRouter();
@@ -451,6 +454,10 @@ const viewingSeries = ref(null); // Series being viewed
 const showSeriesView = ref(false); // Whether to show series view or grid view
 const isPublicView = ref(false); // Whether this is a public anonymous view
 const publicLoadError = ref(false); // Whether there was an error loading the public series
+
+// When user opens a “hole” between photos, we store the target insert position here.
+// This is the index in the ordered photos array where the new photo(s) should be inserted.
+const pendingInsertIndex = ref(null);
 
 // Form data
 const formData = ref({
@@ -524,7 +531,69 @@ const createSeries = async () => {
 };
 
 const showAddPhotosDialog = () => {
+  pendingInsertIndex.value = null;
   photosDialogVisible.value = true;
+};
+
+const handleAddPhotosAt = (insertIndex) => {
+  pendingInsertIndex.value = insertIndex;
+  photosDialogVisible.value = true;
+};
+
+const handleSuggestPhotoAt = async (payload) => {
+  if (!viewingSeries.value) return;
+
+  const insertIndex =
+    typeof payload === "number" ? payload : payload?.insertIndex;
+  const criteria = typeof payload === "object" ? payload?.criteria : "story";
+  const safeCriteria = criteria || "story";
+
+  const photos = viewingSeries.value.photos || [];
+  const left = insertIndex > 0 ? photos[insertIndex - 1] : null;
+  const right = insertIndex < photos.length ? photos[insertIndex] : null;
+  const anchorIds = [left?.id, right?.id].filter(Boolean);
+
+  if (anchorIds.length === 0) {
+    message.warning("Add at least one neighboring photo first");
+    return;
+  }
+
+  const currentPhotosIds = photos.map((p) => p.id);
+  const loading = message.loading("Getting suggestion...", { duration: 0 });
+
+  try {
+    const response = await api.post(`/api/search/byPhotos`, {
+      anchorIds,
+      currentPhotosIds,
+      criteria: safeCriteria,
+      opposite: false,
+      inverted: false,
+      resultLength: 1,
+    });
+
+    const backendPhotos = Array.isArray(response.data)
+      ? response.data
+      : [response.data];
+    const suggested = backendPhotos[0];
+
+    if (!suggested?.id) {
+      message.error("No suggestion found");
+      return;
+    }
+
+    await seriesStore.insertPhotosAt(
+      viewingSeries.value.id,
+      [suggested.id],
+      insertIndex
+    );
+    message.success("Suggestion added to the series");
+    await refreshSeries();
+  } catch (error) {
+    console.error("Error getting suggestion:", error);
+    message.error("Failed to get suggestion. Please try again.");
+  } finally {
+    loading.destroy();
+  }
 };
 
 const openFullscreenViewer = () => {
@@ -542,7 +611,15 @@ const onPhotosSelected = async (photoIds) => {
   // Only used to add photos to existing series
   if (showSeriesView.value && viewingSeries.value) {
     try {
-      await seriesStore.addPhotosToSeries(viewingSeries.value.id, photoIds);
+      if (pendingInsertIndex.value !== null) {
+        await seriesStore.insertPhotosAt(
+          viewingSeries.value.id,
+          photoIds,
+          pendingInsertIndex.value
+        );
+      } else {
+        await seriesStore.addPhotosToSeries(viewingSeries.value.id, photoIds);
+      }
 
       message.success(
         `Added ${photoIds.length} photo${
@@ -550,6 +627,7 @@ const onPhotosSelected = async (photoIds) => {
         } to the series.`
       );
       photosDialogVisible.value = false;
+      pendingInsertIndex.value = null;
       await refreshSeries();
     } catch (error) {
       console.error("Error adding photos to series:", error);

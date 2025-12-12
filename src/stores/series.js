@@ -221,6 +221,47 @@ export const useSeriesStore = defineStore("series", {
       }
     },
 
+    // Insert photos into a series at a specific position.
+    // Implementation: append via existing endpoint, then re-order.
+    async insertPhotosAt(seriesId, photoIds, insertIndex) {
+      if (!Array.isArray(photoIds) || photoIds.length === 0) return true;
+
+      const current = this.getSeriesById(seriesId);
+      const currentOrderedIds = (current?.photos || [])
+        .slice()
+        .sort((a, b) => (a.order || 0) - (b.order || 0))
+        .map((p) => p.id);
+
+      const safeIndex = Math.min(
+        Math.max(Number(insertIndex) || 0, 0),
+        currentOrderedIds.length
+      );
+
+      // 1) Append (backend sets order)
+      await this.addPhotosToSeries(seriesId, photoIds);
+
+      // 2) Reorder to move the inserted photos into the desired position
+      const updated = this.getSeriesById(seriesId);
+      const updatedOrderedIds = (updated?.photos || [])
+        .slice()
+        .sort((a, b) => (a.order || 0) - (b.order || 0))
+        .map((p) => p.id);
+
+      const actuallyAddedIds = photoIds.filter((id) =>
+        updatedOrderedIds.includes(id)
+      );
+      const baseIds = updatedOrderedIds.filter(
+        (id) => !actuallyAddedIds.includes(id)
+      );
+
+      baseIds.splice(safeIndex, 0, ...actuallyAddedIds);
+
+      const payload = baseIds.map((photoId, order) => ({ photoId, order }));
+      await this.updatePhotoOrder(seriesId, payload);
+
+      return true;
+    },
+
     // Remove photos from series
     async removePhotosFromSeries(seriesId, photoIds) {
       this.isRemovingPhotos = true;
