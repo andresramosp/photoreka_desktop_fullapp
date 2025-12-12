@@ -379,6 +379,89 @@
         </div>
       </div>
 
+      <!-- Tag Beacons Toggle -->
+      <div class="control-section">
+        <div class="section-toggle" @click="toggleTagBeacons">
+          <span class="section-toggle-label">Tag Beacons</span>
+          <n-icon
+            size="12"
+            class="toggle-icon"
+            :class="{ rotated: showTagBeacons }"
+          >
+            <svg viewBox="0 0 24 24">
+              <path
+                fill="currentColor"
+                d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+              />
+            </svg>
+          </n-icon>
+        </div>
+
+        <div
+          v-if="showTagBeacons && tagBeaconsSystem"
+          class="options-container"
+        >
+          <div
+            class="control-item"
+            style="
+              margin-top: 12px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            "
+          >
+            <label class="control-label" style="margin: 0"
+              >Enable Beacons</label
+            >
+            <n-switch
+              v-model:value="tagBeaconsSystem.config.enabled"
+              size="small"
+              @click.stop
+            />
+          </div>
+
+          <div class="control-item-full" style="margin-top: 12px">
+            <label
+              class="control-label"
+              style="margin-bottom: 8px; display: block"
+            >
+              Zone Cell Size
+            </label>
+            <div class="slider-container">
+              <n-slider
+                v-model:value="tagBeaconsSystem.config.cellSize"
+                :min="40"
+                :max="240"
+                :step="10"
+                :marks="{ 40: '40', 120: '120', 240: '240' }"
+                class="radial-slider"
+                @click.stop
+              />
+            </div>
+          </div>
+
+          <div class="control-item-full" style="margin-top: 12px">
+            <label
+              class="control-label"
+              style="margin-bottom: 8px; display: block"
+            >
+              Max Beacons
+            </label>
+            <div class="slider-container">
+              <n-slider
+                v-model:value="tagBeaconsSystem.config.maxBeacons"
+                :min="0"
+                :max="30"
+                :step="1"
+                :marks="{ 0: '0', 10: '10', 20: '20', 30: '30' }"
+                class="radial-slider"
+                @click.stop
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Navigation Controls Toggle -->
       <div class="control-section">
         <div class="section-toggle" @click="toggleNavigationControls">
@@ -517,6 +600,32 @@
       </div>
     </div>
 
+    <!-- Tag Beacons Display (long-distance zone indicators) -->
+    <div
+      v-if="
+        tagBeaconsSystem &&
+        tagBeaconsSystem.config.enabled &&
+        tagBeaconsSystem.visibleBeacons.length > 0
+      "
+      class="tag-beacons-wrapper"
+    >
+      <div
+        v-for="beacon in tagBeaconsSystem.visibleBeacons"
+        :key="beacon.key"
+        class="tag-beacon"
+        :style="{
+          left: beacon.screen.x + 'px',
+          top: beacon.screen.y + 'px',
+          opacity: beacon.opacity,
+          transform: `translate(-50%, -50%) scale(${beacon.scale})`,
+          '--beacon-color': beacon.color,
+        }"
+      >
+        <span class="tag-beacon-label">{{ beacon.name }}</span>
+        <span class="tag-beacon-count">×{{ beacon.count }}</span>
+      </div>
+    </div>
+
     <!-- Selected Photos Container -->
     <div
       v-if="selectedPhotos.length > 0 && !isPlayground"
@@ -643,6 +752,7 @@ import { useFirstPersonControls } from "@/composables//3d-viewer/useFirstPersonC
 import { useTouchControls } from "@/composables/3d-viewer/useTouchControls.js";
 import { useFloatingTags } from "@/composables/3d-viewer/useFloatingTags.js";
 import { usePhotoTextureManager } from "@/composables/3d-viewer/usePhotoTextureManager.js";
+import { useTagBeacons } from "@/composables/3d-viewer/useTagBeacons.js";
 import { use3DPhotoEffects } from "@/composables/3d-viewer/use3DPhotoEffects.js";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
@@ -764,6 +874,7 @@ const showDisplayOptions = ref(false);
 const showArtisticScores = ref(false);
 
 const showNavigationControls = ref(true);
+const showTagBeacons = ref(false);
 
 // Funciones para toggles excluyentes
 const toggleMoreFilters = () => {
@@ -787,6 +898,15 @@ const toggleNavigationControls = () => {
   if (showNavigationControls.value) {
     showMoreFilters.value = false;
     showDisplayOptions.value = false;
+  }
+};
+
+const toggleTagBeacons = () => {
+  showTagBeacons.value = !showTagBeacons.value;
+  if (showTagBeacons.value) {
+    showMoreFilters.value = false;
+    showDisplayOptions.value = false;
+    showNavigationControls.value = false;
   }
 };
 
@@ -936,6 +1056,10 @@ const FULL_QUEUE_SCHEDULING = true;
 
 // Floating Tags System - pasamos cameraRef en lugar de camera para que sea reactivo
 const floatingTagsSystem = ref(null);
+
+// Tag Beacons (señales por zonas) - sistema overlay de larga distancia
+// Ojo: debe ser reactivo porque se usa en template.
+const tagBeaconsSystem = ref(null);
 
 // Control de navegación durante carga inicial
 const navigationBlocked = ref(false);
@@ -1257,12 +1381,20 @@ const applyFilters = () => {
       }));
     console.log("🔍 Ejemplos de fotos ocultas por filtro:", hiddenExamples);
   }
+
+  // Recomputar señales por zona cuando cambian filtros (para que reflejen la "zona caliente")
+  if (tagBeaconsSystem.value) {
+    tagBeaconsSystem.value.recomputeBeacons();
+  }
 };
 
 // Computed para fotos filtradas (solo las marcadas como visibles)
 const filteredPhotos = computed(() => {
   return photosWithMaterials.value.filter((photo) => photo.isVisible !== false);
 });
+
+// Inicializar sistema de beacons de tags (usa fotos filtradas)
+tagBeaconsSystem.value = useTagBeacons(cameraRef, filteredPhotos, containerRef);
 
 // Handler para cambio en filtro de aspectos visuales
 const onVisualAspectsChange = () => {
@@ -2002,6 +2134,13 @@ const animate = () => {
     currentPosition.value = newPosition;
   }
 
+  // Actualizar proyección en pantalla de los beacons (barato, throttled)
+  if (tagBeaconsSystem.value && tagBeaconsSystem.value.config.enabled) {
+    if (cameraPositionChanged || frameCounter % 3 === 0) {
+      tagBeaconsSystem.value.updateScreenPositions();
+    }
+  }
+
   const frustumInterval = initialLoadingPhase.value ? 9 : THROTTLE_INTERVAL;
 
   // Solo ejecutar eventos Three.js si no estamos en fase de descarga bloqueada
@@ -2504,6 +2643,11 @@ const initFirstPersonControls = () => {
   // Iniciar el loop de actualización de tags
   floatingTagsSystem.value.startUpdateLoop();
 
+  // Iniciar el loop de recomputo de señales por zonas (beacons)
+  if (tagBeaconsSystem.value) {
+    tagBeaconsSystem.value.startUpdateLoop();
+  }
+
   // Desactivar debug después de 10 segundos para no saturar la consola
   setTimeout(() => {
     if (floatingTagsSystem.value) {
@@ -2780,6 +2924,13 @@ onUnmounted(() => {
     floatingTagsSystem.value.stopUpdateLoop();
     floatingTagsSystem.value.reset();
     floatingTagsSystem.value = null;
+  }
+
+  // Limpiar sistema de señales por zona
+  if (tagBeaconsSystem.value) {
+    tagBeaconsSystem.value.stopUpdateLoop();
+    tagBeaconsSystem.value.reset();
+    tagBeaconsSystem.value = null;
   }
 
   // Cancelar animaciones
@@ -3853,6 +4004,60 @@ onUnmounted(() => {
   .floating-tag {
     font-size: 9px;
     padding: 3px 9px;
+  }
+}
+
+/* ============================================ */
+/* Tag Beacons Display - Long Distance */
+/* ============================================ */
+
+.tag-beacons-wrapper {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1400;
+}
+
+.tag-beacon {
+  position: absolute;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: white;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+  user-select: none;
+  will-change: transform, opacity;
+}
+
+.tag-beacon::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--beacon-color);
+  border-radius: 12px;
+  opacity: 0.55;
+  z-index: -1;
+}
+
+.tag-beacon-label {
+  font-weight: 600;
+}
+
+.tag-beacon-count {
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+@media (max-width: 767px) {
+  .tag-beacon {
+    font-size: 9px;
+    padding: 3px 8px;
   }
 }
 </style>
