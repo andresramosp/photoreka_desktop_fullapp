@@ -96,7 +96,11 @@ export default class SearchPhotoService {
     const topScored = scoredWithLabels.slice(0, query.resultLength)
     const topIds = topScored.map(({ id }) => id)
 
-    const photos = await this.photoManager.getPhotosByIds(topIds.map(String))
+    const photos = await Photo.query()
+      .whereIn('id', topIds.map(String))
+      .preload('tags', (query) => {
+        query.preload('tag')
+      })
     const photoMap = new Map(photos.map((p) => [p.id, p.serialize()]))
 
     const sortedPhotosWithScore = topScored
