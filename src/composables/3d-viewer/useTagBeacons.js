@@ -16,7 +16,7 @@ export function useTagBeacons(cameraRef, photosRef, containerRef) {
     yOffset: 14, // elevación del beacon respecto al centroide
 
     // Umbrales de visibilidad/selección
-    maxBeacons: 30,
+    maxBeacons: 50,
     // Cuántos tags dominantes mostrar por zona (1 = solo el dominante)
     topTagsPerCell: 1,
     // Separación visual entre tags de la misma zona (en px, apilado vertical)
