@@ -459,6 +459,26 @@
               />
             </div>
           </div>
+
+          <div class="control-item-full" style="margin-top: 12px">
+            <label
+              class="control-label"
+              style="margin-bottom: 8px; display: block"
+            >
+              Merge Same Tag Radius
+            </label>
+            <div class="slider-container">
+              <n-slider
+                v-model:value="tagBeaconsSystem.config.mergeSameTagRadius"
+                :min="0"
+                :max="300"
+                :step="10"
+                :marks="{ 0: '0', 50: '50', 150: '150', 300: '300' }"
+                class="radial-slider"
+                @click.stop
+              />
+            </div>
+          </div>
         </div>
       </div>
 

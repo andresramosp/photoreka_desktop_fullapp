@@ -12,11 +12,13 @@ export function useTagBeacons(cameraRef, photosRef, containerRef) {
     enabled: true,
 
     // Agrupación espacial
-    cellSize: 80, // unidades del mundo (XZ)
+    cellSize: 40, // unidades del mundo (XZ)
     yOffset: 14, // elevación del beacon respecto al centroide
 
     // Umbrales de visibilidad/selección
-    maxBeacons: 15,
+    maxBeacons: 30,
+    // Fusionar beacons iguales cercanos (0 = desactivado)
+    mergeSameTagRadius: 70,
     minPhotosInCell: 5,
     minDominantTagPhotos: 2,
     minDominantShare: 0.1, // dominante / total fotos en celda
@@ -72,6 +74,98 @@ export function useTagBeacons(cameraRef, photosRef, containerRef) {
   function smoothstep(edge0, edge1, x) {
     const t = Math.min(Math.max((x - edge0) / (edge1 - edge0), 0), 1);
     return t * t * (3 - 2 * t);
+  }
+
+  function mergeBeaconsSameTag(beacons) {
+    const radius = Number(config.value.mergeSameTagRadius) || 0;
+    if (!radius || radius <= 0) return beacons;
+
+    const radiusSq = radius * radius;
+    const merged = [];
+
+    // Asumimos que beacons viene ordenado por score desc (los más fuertes primero)
+    for (const b of beacons) {
+      const tagKey = `${b.category || "unknown"}_${b.name}`;
+      const bx = Number(b.worldPosition?.[0]) || 0;
+      const by = Number(b.worldPosition?.[1]) || 0;
+      const bz = Number(b.worldPosition?.[2]) || 0;
+
+      let mergedInto = null;
+      for (const m of merged) {
+        if (m.__tagKey !== tagKey) continue;
+
+        const mx = Number(m.worldPosition?.[0]) || 0;
+        const my = Number(m.worldPosition?.[1]) || 0;
+        const mz = Number(m.worldPosition?.[2]) || 0;
+
+        const dx = bx - mx;
+        const dy = by - my;
+        const dz = bz - mz;
+        const dSq = dx * dx + dy * dy + dz * dz;
+        if (dSq <= radiusSq) {
+          mergedInto = m;
+          break;
+        }
+      }
+
+      if (!mergedInto) {
+        merged.push({
+          ...b,
+          __tagKey: tagKey,
+          __wSum: b.count,
+          __xSum: bx * b.count,
+          __ySum: by * b.count,
+          __zSum: bz * b.count,
+        });
+        continue;
+      }
+
+      // Fusionar: ponderamos la posición por count (votos del tag dominante)
+      mergedInto.__wSum += b.count;
+      mergedInto.__xSum += bx * b.count;
+      mergedInto.__ySum += by * b.count;
+      mergedInto.__zSum += bz * b.count;
+
+      mergedInto.count += b.count;
+      mergedInto.cellPhotoCount += b.cellPhotoCount;
+      mergedInto.share =
+        mergedInto.cellPhotoCount > 0
+          ? mergedInto.count / mergedInto.cellPhotoCount
+          : mergedInto.share;
+
+      const w = mergedInto.__wSum || 1;
+      mergedInto.worldPosition = [
+        mergedInto.__xSum / w,
+        mergedInto.__ySum / w,
+        mergedInto.__zSum / w,
+      ];
+
+      mergedInto.intensity = calculateIntensity(
+        mergedInto.count,
+        config.value.minDominantTagPhotos,
+        config.value.maxPhotoCount
+      );
+      mergedInto.color = getColorByCount(
+        mergedInto.count,
+        config.value.minDominantTagPhotos,
+        config.value.maxPhotoCount
+      );
+      mergedInto.score =
+        mergedInto.count *
+        (0.5 + 0.5 * mergedInto.share) *
+        (1 + 0.02 * mergedInto.cellPhotoCount);
+    }
+
+    // Limpieza de props internas
+    for (const m of merged) {
+      delete m.__tagKey;
+      delete m.__wSum;
+      delete m.__xSum;
+      delete m.__ySum;
+      delete m.__zSum;
+    }
+
+    return merged;
   }
 
   function recomputeBeacons() {
@@ -205,7 +299,11 @@ export function useTagBeacons(cameraRef, photosRef, containerRef) {
     }
 
     beacons.sort((a, b) => b.score - a.score);
-    visibleBeacons.value = beacons.slice(
+
+    const mergedBeacons = mergeBeaconsSameTag(beacons);
+    mergedBeacons.sort((a, b) => b.score - a.score);
+
+    visibleBeacons.value = mergedBeacons.slice(
       0,
       Math.max(0, config.value.maxBeacons || 0)
     );
@@ -314,6 +412,7 @@ export function useTagBeacons(cameraRef, photosRef, containerRef) {
       config.value.enabled,
       config.value.cellSize,
       config.value.maxBeacons,
+      config.value.mergeSameTagRadius,
       config.value.minPhotosInCell,
       config.value.minDominantTagPhotos,
       config.value.minDominantShare,
