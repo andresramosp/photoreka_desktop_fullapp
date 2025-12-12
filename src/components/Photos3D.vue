@@ -451,7 +451,7 @@
               <n-slider
                 v-model:value="tagBeaconsSystem.config.maxBeacons"
                 :min="0"
-                :max="30"
+                :max="50"
                 :step="1"
                 :marks="{
                   0: '0',
