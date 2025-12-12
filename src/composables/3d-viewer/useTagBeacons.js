@@ -17,6 +17,10 @@ export function useTagBeacons(cameraRef, photosRef, containerRef) {
 
     // Umbrales de visibilidad/selección
     maxBeacons: 30,
+    // Cuántos tags dominantes mostrar por zona (1 = solo el dominante)
+    topTagsPerCell: 1,
+    // Separación visual entre tags de la misma zona (en px, apilado vertical)
+    stackPixelOffset: 18,
     // Fusionar beacons iguales cercanos (0 = desactivado)
     mergeSameTagRadius: 70,
     minPhotosInCell: 5,
@@ -24,9 +28,9 @@ export function useTagBeacons(cameraRef, photosRef, containerRef) {
     minDominantShare: 0.1, // dominante / total fotos en celda
 
     // Distancia cámara
-    minDistance: 70, // no mostrar cerca
+    minDistance: 0, // no mostrar cerca
     maxDistance: 1200, // no mostrar ultra-lejos
-    fadeDistance: 160, // suaviza entrada/salida
+    fadeDistance: 100, // suaviza entrada/salida
     avoidNearDistance: 45, // si estás demasiado cerca de la celda, ocultar
 
     // Color/intensidad (misma escala conceptual que floating tags)
@@ -237,65 +241,87 @@ export function useTagBeacons(cameraRef, photosRef, containerRef) {
 
     const beacons = [];
 
+    const topK = Math.max(
+      1,
+      Math.min(6, Number(config.value.topTagsPerCell) || 1)
+    );
+
     for (const cell of cellMap.values()) {
       if (cell.photoCount < config.value.minPhotosInCell) continue;
       if (cell.tagMap.size === 0) continue;
 
-      let best = null;
-      for (const td of cell.tagMap.values()) {
-        const count = td.photoIds.size;
-        if (!best || count > best.count) {
-          best = {
-            id: td.id,
-            name: td.name,
-            category: td.category,
-            count,
-          };
-        }
-      }
+      // Ordenar tags por frecuencia dentro de la celda
+      const rankedTags = Array.from(cell.tagMap.values())
+        .map((td) => ({
+          id: td.id,
+          name: td.name,
+          category: td.category,
+          count: td.photoIds.size,
+        }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, topK);
 
-      if (!best) continue;
-      if (best.count < config.value.minDominantTagPhotos) continue;
-
-      const share = best.count / cell.photoCount;
-      if (share < config.value.minDominantShare) continue;
+      if (rankedTags.length === 0) continue;
 
       const cx = cell.sumX / cell.photoCount;
       const cy = cell.sumY / cell.photoCount + (config.value.yOffset || 0);
       const cz = cell.sumZ / cell.photoCount;
 
-      const intensity = calculateIntensity(
-        best.count,
-        config.value.minDominantTagPhotos,
-        config.value.maxPhotoCount
-      );
+      let anyAdded = false;
+      rankedTags.forEach((tag, index) => {
+        if (!tag) return;
+        if (tag.count < config.value.minDominantTagPhotos) return;
 
-      const color = getColorByCount(
-        best.count,
-        config.value.minDominantTagPhotos,
-        config.value.maxPhotoCount
-      );
+        const share = tag.count / cell.photoCount;
+        if (share < config.value.minDominantShare) return;
 
-      const score =
-        best.count * (0.5 + 0.5 * share) * (1 + 0.02 * cell.photoCount);
+        const intensity = calculateIntensity(
+          tag.count,
+          config.value.minDominantTagPhotos,
+          config.value.maxPhotoCount
+        );
 
-      beacons.push({
-        key: `${cell.cellKey}_${best.category || "unknown"}_${best.name}`,
-        cellKey: cell.cellKey,
-        name: best.name,
-        category: best.category,
-        count: best.count,
-        cellPhotoCount: cell.photoCount,
-        share,
-        intensity,
-        color,
-        score,
-        worldPosition: [cx, cy, cz],
-        screen: { x: 0, y: 0 },
-        opacity: 0,
-        scale: 1,
-        distance: 0,
+        const color = getColorByCount(
+          tag.count,
+          config.value.minDominantTagPhotos,
+          config.value.maxPhotoCount
+        );
+
+        // Penalizar ligeramente por rank para que el dominante se priorice
+        const rank = index + 1;
+        const rankFactor = Math.max(0.55, 1 - (rank - 1) * 0.15);
+
+        const score =
+          tag.count *
+          (0.5 + 0.5 * share) *
+          (1 + 0.02 * cell.photoCount) *
+          rankFactor;
+
+        beacons.push({
+          key: `${cell.cellKey}_${tag.category || "unknown"}_${
+            tag.name
+          }_${rank}`,
+          cellKey: cell.cellKey,
+          name: tag.name,
+          category: tag.category,
+          count: tag.count,
+          cellPhotoCount: cell.photoCount,
+          share,
+          intensity,
+          color,
+          score,
+          rank,
+          stackIndex: index,
+          worldPosition: [cx, cy, cz],
+          screen: { x: 0, y: 0 },
+          opacity: 0,
+          scale: 1,
+          distance: 0,
+        });
+        anyAdded = true;
       });
+
+      if (!anyAdded) continue;
     }
 
     beacons.sort((a, b) => b.score - a.score);
@@ -320,6 +346,8 @@ export function useTagBeacons(cameraRef, photosRef, containerRef) {
     const height = container.clientHeight || 1;
 
     const camPos = camera.position;
+
+    const stackOffset = Number(config.value.stackPixelOffset) || 0;
 
     for (const beacon of visibleBeacons.value) {
       const [x, y, z] = beacon.worldPosition || [0, 0, 0];
@@ -372,13 +400,20 @@ export function useTagBeacons(cameraRef, photosRef, containerRef) {
       }
 
       const sx = (v.x * 0.5 + 0.5) * width;
-      const sy = (-v.y * 0.5 + 0.5) * height;
+      const syBase = (-v.y * 0.5 + 0.5) * height;
+
+      // Apilado de tags de la misma zona para evitar superposición
+      const stackIndex = Number(beacon.stackIndex) || 0;
+      const sy = syBase + (stackOffset > 0 ? stackIndex * stackOffset : 0);
 
       beacon.screen.x = sx;
       beacon.screen.y = sy;
 
-      const baseOpacity = 0.25 + beacon.intensity * 0.65;
-      beacon.opacity = baseOpacity * distanceFactor;
+      // Opacidad base independiente de la intensidad (la intensidad ya se expresa con el color)
+      const baseOpacity = 0.8;
+      const rank = Number(beacon.rank) || 1;
+      const rankAlpha = Math.max(0.85, 1 - (rank - 1) * 0.12);
+      beacon.opacity = baseOpacity * distanceFactor * rankAlpha;
       beacon.scale = 0.9 + beacon.intensity * 0.25;
     }
   }
@@ -412,6 +447,8 @@ export function useTagBeacons(cameraRef, photosRef, containerRef) {
       config.value.enabled,
       config.value.cellSize,
       config.value.maxBeacons,
+      config.value.topTagsPerCell,
+      config.value.stackPixelOffset,
       config.value.mergeSameTagRadius,
       config.value.minPhotosInCell,
       config.value.minDominantTagPhotos,

@@ -465,6 +465,26 @@
               class="control-label"
               style="margin-bottom: 8px; display: block"
             >
+              Top Tags per Zone
+            </label>
+            <div class="slider-container">
+              <n-slider
+                v-model:value="tagBeaconsSystem.config.topTagsPerCell"
+                :min="1"
+                :max="5"
+                :step="1"
+                :marks="{ 1: '1', 2: '2', 3: '3', 4: '4', 5: '5' }"
+                class="radial-slider"
+                @click.stop
+              />
+            </div>
+          </div>
+
+          <div class="control-item-full" style="margin-top: 12px">
+            <label
+              class="control-label"
+              style="margin-bottom: 8px; display: block"
+            >
               Merge Same Tag Radius
             </label>
             <div class="slider-container">
