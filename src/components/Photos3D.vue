@@ -613,6 +613,7 @@
         v-for="beacon in tagBeaconsSystem.visibleBeacons"
         :key="beacon.key"
         class="tag-beacon"
+        @click.stop="flyToBeacon(beacon)"
         :style="{
           left: beacon.screen.x + 'px',
           top: beacon.screen.y + 'px',
@@ -908,6 +909,74 @@ const toggleTagBeacons = () => {
     showDisplayOptions.value = false;
     showNavigationControls.value = false;
   }
+};
+
+// =============================
+// Beacon flight (click-to-fly)
+// =============================
+
+const isBeaconFlying = ref(false);
+const beaconFlightState = ref(null);
+const BEACON_FLY_DURATION_MS = 900; // rápido pero suave
+// En la práctica 130 unidades se siente "demasiado lejos" en muchos layouts.
+// Usamos una aproximación dinámica basada en la distancia inicial.
+const BEACON_FLY_APPROACH_DISTANCE = 0;
+const BEACON_FLY_Y_ABOVE_CENTER = 0; // pequeña elevación para evitar quedar a ras
+
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+const flyToBeacon = (beacon) => {
+  if (!beacon || !cameraRef.value) return;
+  if (!Array.isArray(beacon.worldPosition) || beacon.worldPosition.length < 3)
+    return;
+
+  // Evitar lucha con pointer lock
+  if (document.pointerLockElement && document.exitPointerLock) {
+    try {
+      document.exitPointerLock();
+    } catch (_) {}
+  }
+
+  const cam = cameraRef.value;
+  const startPos = cam.position.clone();
+
+  const yOffset =
+    tagBeaconsSystem.value?.config?.value?.yOffset !== undefined
+      ? Number(tagBeaconsSystem.value.config.value.yOffset) || 0
+      : 0;
+
+  // Centro "real" de la zona (sin yOffset del beacon)
+  const center = new THREE.Vector3(
+    Number(beacon.worldPosition[0]) || 0,
+    (Number(beacon.worldPosition[1]) || 0) - yOffset,
+    Number(beacon.worldPosition[2]) || 0
+  );
+
+  const dir = startPos.clone().sub(center);
+  if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1);
+  dir.normalize();
+
+  // Acercamiento: cuanto más lejos estás, más "buffer" permitimos,
+  // pero siempre acaba bastante cerca del centro.
+  const initialDistance = startPos.distanceTo(center);
+  const dynamicApproach = Math.min(
+    40,
+    Math.max(BEACON_FLY_APPROACH_DISTANCE, initialDistance * 0.02)
+  );
+
+  const targetPos = center.clone().add(dir.multiplyScalar(dynamicApproach));
+  targetPos.y = center.y + BEACON_FLY_Y_ABOVE_CENTER;
+
+  beaconFlightState.value = {
+    startTime: performance.now(),
+    duration: BEACON_FLY_DURATION_MS,
+    from: startPos,
+    to: targetPos,
+    lookAt: center,
+  };
+  isBeaconFlying.value = true;
 };
 
 // Filtro de aspectos visuales
@@ -2073,8 +2142,8 @@ const animate = () => {
   if (frameTime < 14 && dynamicBatch < MAX_BATCH) dynamicBatch++;
   else if (frameTime > 26 && dynamicBatch > MIN_BATCH) dynamicBatch--;
 
-  // Bloquear controles durante fase de descarga inicial
-  if (!navigationBlocked.value) {
+  // Bloquear controles durante fase de descarga inicial (o durante vuelo)
+  if (!navigationBlocked.value && !isBeaconFlying.value) {
     // Update keyboard/mouse controls
     if (fpControls.value) {
       fpControls.value.update();
@@ -2082,6 +2151,31 @@ const animate = () => {
     // Update touch controls if available
     if (touchControls.value) {
       touchControls.value.update();
+    }
+  }
+
+  // Si hay vuelo activo, interpolar cámara aquí
+  if (isBeaconFlying.value && beaconFlightState.value && cameraRef.value) {
+    const now = frameStart;
+    const { startTime, duration, from, to, lookAt } = beaconFlightState.value;
+    const tRaw = duration > 0 ? (now - startTime) / duration : 1;
+    const t = Math.min(Math.max(tRaw, 0), 1);
+    const eased = easeInOutCubic(t);
+
+    cameraRef.value.position.set(
+      from.x + (to.x - from.x) * eased,
+      from.y + (to.y - from.y) * eased,
+      from.z + (to.z - from.z) * eased
+    );
+
+    // Mantener la vista hacia el centro durante el vuelo
+    try {
+      cameraRef.value.lookAt(lookAt);
+    } catch (_) {}
+
+    if (t >= 1) {
+      isBeaconFlying.value = false;
+      beaconFlightState.value = null;
     }
   }
 
@@ -2104,6 +2198,12 @@ const animate = () => {
       distanceCache.clear();
 
       updateVisiblePhotos();
+
+      // Recompute beacons al terminar el re-layout para que no dependan de moverte
+      if (tagBeaconsSystem.value && tagBeaconsSystem.value.config.enabled) {
+        tagBeaconsSystem.value.recomputeBeacons();
+        tagBeaconsSystem.value.updateScreenPositions();
+      }
 
       // 🚨 Ocultar loader "Building stage" cuando termine la animación de reposicionamiento
       hideLoader();
@@ -4033,6 +4133,8 @@ onUnmounted(() => {
   backdrop-filter: blur(8px);
   user-select: none;
   will-change: transform, opacity;
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 .tag-beacon::before {
