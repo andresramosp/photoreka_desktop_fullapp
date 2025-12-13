@@ -613,8 +613,6 @@ const handleSuggestPhotoAt = async (payload) => {
     ...Array.from(discardedForThisGap),
   ];
 
-  const loading = message.loading("Getting suggestion...", { duration: 0 });
-
   try {
     const response = await api.post(`/api/search/byPhotos`, {
       anchorIds,
@@ -654,8 +652,6 @@ const handleSuggestPhotoAt = async (payload) => {
   } catch (error) {
     console.error("Error getting suggestion:", error);
     message.error("Failed to get suggestion. Please try again.");
-  } finally {
-    loading.destroy();
   }
 };
 
