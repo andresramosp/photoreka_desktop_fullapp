@@ -148,6 +148,26 @@
         <n-icon size="12"><BookmarkOutline /></n-icon>
       </div>
 
+      <!-- Refresh Suggestion Button (Series mode, suggested photos only) -->
+      <div
+        v-if="mode === 'series' && isSuggested"
+        class="refresh-suggestion-overlay"
+      >
+        <n-button
+          circle
+          size="large"
+          class="refresh-suggestion-btn"
+          @click.stop="$emit('refresh-suggestion')"
+          :title="`Get new suggestion (${
+            suggestionCriteria || 'same criteria'
+          })`"
+        >
+          <template #icon>
+            <n-icon size="24"><RefreshOutline /></n-icon>
+          </template>
+        </n-button>
+      </div>
+
       <!-- Photo Name (Series mode) -->
       <div
         v-if="mode === 'series' && showName"
@@ -172,6 +192,7 @@ import {
   ChevronForwardOutline,
   BookmarkOutline,
   ReorderFour,
+  RefreshOutline,
 } from "@vicons/ionicons5";
 
 const props = defineProps({
@@ -241,6 +262,15 @@ const props = defineProps({
   maxNameLength: {
     type: Number,
     default: 20,
+  },
+  // Suggestion tracking
+  isSuggested: {
+    type: Boolean,
+    default: false,
+  },
+  suggestionCriteria: {
+    type: String,
+    default: null,
   },
   // Sizing
   size: {
@@ -527,6 +557,45 @@ const truncatedName = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Refresh Suggestion Button (Series, suggested photos only) */
+.refresh-suggestion-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  background: rgba(0, 0, 0, 0.5);
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.filled-cell:hover .refresh-suggestion-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.refresh-suggestion-btn {
+  background: var(--primary-color, #2563eb) !important;
+  border: 2px solid rgba(37, 99, 235, 0.8);
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4);
+  transition: all 0.2s ease;
+  position: relative;
+  z-index: 6;
+}
+
+.refresh-suggestion-btn:hover {
+  /* background: rgba(59, 130, 246, 1) !important;
+  border-color: rgba(59, 130, 246, 1);
+  box-shadow: 0 6px 24px rgba(37, 99, 235, 0.6);
+  transform: scale(1.1) rotate(180deg); */
+}
+
+.refresh-suggestion-btn :deep(.n-icon) {
+  color: white;
 }
 
 /* Photo Name (Series) */

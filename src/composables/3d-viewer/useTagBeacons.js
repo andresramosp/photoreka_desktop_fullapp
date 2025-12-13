@@ -15,7 +15,7 @@ const TAG_BEACON_FILTER_BY_CLUSTER = {
   // Context
   context: {
     category: "context_story",
-    groups: new Set(["toponym", "environment", "weather"]),
+    groups: new Set(["toponym", "environment"]),
   },
 
   // Visual accents

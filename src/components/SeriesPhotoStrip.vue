@@ -37,9 +37,11 @@
       @wheel="handleHorizontalScroll"
     >
       <draggable
-        v-model="localPhotos"
+        v-model="realPhotos"
         class="photo-strip"
+        :class="{ 'drag-disabled': activePlaceholderIndex !== null }"
         item-key="id"
+        :disabled="activePlaceholderIndex !== null"
         ghost-class="drag-ghost"
         chosen-class="drag-chosen"
         drag-class="drag-active"
@@ -47,9 +49,26 @@
         @end="onDragEnd"
       >
         <template #header>
+          <!-- Placeholder at position 0 -->
           <div
+            v-if="activePlaceholderIndex === 0"
+            class="strip-item placeholder-item"
+          >
+            <PlaceholderPhotoCard
+              :size="currentSize"
+              :suggestion-criteria-options="suggestionCriteriaOptions"
+              :is-loading="isPlaceholderLoading"
+              @add="handlePlaceholderAdd"
+              @close="closePlaceholder"
+              @suggest="handlePlaceholderSuggest"
+            />
+            <div class="insertion-gap placeholder-gap"></div>
+          </div>
+
+          <!-- Gap for position 0 when no placeholder -->
+          <div
+            v-else
             class="insertion-gap"
-            :class="{ active: isGapActive(0) }"
             @mouseenter="hoveredGapIndex = 0"
             @mouseleave="hoveredGapIndex = null"
             @mousedown.stop
@@ -60,7 +79,7 @@
               size="tiny"
               circle
               secondary
-              @click.stop="toggleGap(0)"
+              @click.stop="createPlaceholder(0)"
               @mousedown.stop
               aria-label="Insert photo here"
             >
@@ -70,44 +89,60 @@
                 </n-icon>
               </template>
             </n-button>
-
-            <GapMenu
-              :is-active="isGapActive(0)"
-              :show-suggest-submenu="showSuggestSubmenu"
-              :suggestion-criteria="suggestionCriteria"
-              :suggestion-criteria-options="suggestionCriteriaOptions"
-              @add="requestAdd(0)"
-              @close="closeGap"
-              @toggle-suggest="toggleSuggestSubmenu"
-              @select-and-suggest="selectAndSuggest(0, $event)"
-              @click.stop
-              @mousedown.stop
-            />
           </div>
         </template>
         <template #item="{ element: photo, index }">
-          <div
-            class="strip-item"
-            :class="{ inserting: insertingPhotoIds.has(photo.id) }"
-          >
+          <div class="photo-item-container">
+            <!-- Loading Placeholder when refreshing -->
+            <template v-if="isPhotoRefreshing(photo.id)">
+              <PlaceholderPhotoCard
+                :size="currentSize"
+                :suggestion-criteria-options="suggestionCriteriaOptions"
+                :is-loading="true"
+                @add="() => {}"
+                @close="() => {}"
+                @suggest="() => {}"
+              />
+            </template>
+            <!-- Photo Card -->
             <PhotoSequenceCard
+              v-else
               mode="series"
               :photo="photo"
               :can-move-left="index > 0"
-              :can-move-right="index < localPhotos.length - 1"
+              :can-move-right="index < realPhotos.length - 1"
               :draggable="true"
               :selectable="true"
               :is-selected="selectedPhotoIds.includes(photo.id)"
               :show-name="false"
               :size="currentSize"
+              :class="{ inserting: insertingPhotoIds.has(photo.id) }"
+              :is-suggested="!!suggestedPhotosInfo[photo.id]"
+              :suggestion-criteria="suggestedPhotosInfo[photo.id]?.criteria"
               @remove="removePhoto(photo)"
               @move="(dir) => handleMove(index, dir)"
               @select="handlePhotoSelect"
+              @refresh-suggestion="handleRefreshSuggestion(photo.id)"
             />
 
+            <!-- Placeholder after this photo if it matches -->
+            <template v-if="activePlaceholderIndex === index + 1">
+              <div class="insertion-gap placeholder-gap"></div>
+              <PlaceholderPhotoCard
+                :size="currentSize"
+                :suggestion-criteria-options="suggestionCriteriaOptions"
+                :is-loading="isPlaceholderLoading"
+                @add="handlePlaceholderAdd"
+                @close="closePlaceholder"
+                @suggest="handlePlaceholderSuggest"
+              />
+              <div class="insertion-gap placeholder-gap"></div>
+            </template>
+
+            <!-- Regular gap when no placeholder -->
             <div
+              v-else
               class="insertion-gap"
-              :class="{ active: isGapActive(index + 1) }"
               @mouseenter="hoveredGapIndex = index + 1"
               @mouseleave="hoveredGapIndex = null"
               @mousedown.stop
@@ -118,7 +153,7 @@
                 size="tiny"
                 circle
                 secondary
-                @click.stop="toggleGap(index + 1)"
+                @click.stop="createPlaceholder(index + 1)"
                 @mousedown.stop
                 aria-label="Insert photo here"
               >
@@ -128,19 +163,6 @@
                   </n-icon>
                 </template>
               </n-button>
-
-              <GapMenu
-                :is-active="isGapActive(index + 1)"
-                :show-suggest-submenu="showSuggestSubmenu"
-                :suggestion-criteria="suggestionCriteria"
-                :suggestion-criteria-options="suggestionCriteriaOptions"
-                @add="requestAdd(index + 1)"
-                @close="closeGap"
-                @toggle-suggest="toggleSuggestSubmenu"
-                @select-and-suggest="selectAndSuggest(index + 1, $event)"
-                @click.stop
-                @mousedown.stop
-              />
             </div>
           </div>
         </template>
@@ -155,7 +177,7 @@ import { NButton, NButtonGroup, NIcon, NEmpty, NSelect } from "naive-ui";
 import { AddOutline, AddCircleOutline, CloseOutline } from "@vicons/ionicons5";
 import draggable from "vuedraggable";
 import PhotoSequenceCard from "@/components/PhotoSequenceCard.vue";
-import GapMenu from "@/components/GapMenu.vue";
+import PlaceholderPhotoCard from "@/components/PlaceholderPhotoCard.vue";
 
 const props = defineProps({
   photos: {
@@ -170,12 +192,21 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  suggestedPhotosInfo: {
+    type: Object,
+    default: () => ({}),
+  },
+  refreshingPhotoId: {
+    type: [String, Number],
+    default: null,
+  },
 });
 
 const emit = defineEmits([
   "add-photos",
   "add-photos-at",
   "suggest-photo-at",
+  "refresh-suggestion",
   "remove-photo",
   "reorder",
   "move-photo",
@@ -194,8 +225,8 @@ const photoSize = ref("large");
 
 // Hover and insertion UI state
 const hoveredGapIndex = ref(null);
-const activeGapIndex = ref(null);
-const showSuggestSubmenu = ref(false);
+const activePlaceholderIndex = ref(null);
+const isPlaceholderLoading = ref(false);
 
 // Animation state for newly inserted photos
 const insertingPhotoIds = ref(new Set());
@@ -203,19 +234,46 @@ const lastInsertIndex = ref(null);
 const isFirstLoad = ref(true);
 
 // Suggestion criteria (same options as GridMaker)
-const suggestionCriteria = ref("story");
 const suggestionCriteriaOptions = [
-  { label: "Narrative", value: "story" },
-  { label: "Context", value: "context" },
   { label: "General", value: "embedding" },
+  { label: "Context", value: "context" },
+  { label: "Narrative", value: "story" },
+  { label: "Visual accents", value: "visual_accents" },
   { label: "Chromatic", value: "chromatic" },
 ];
 
-// Local copy of photos for drag & drop
+// Local copy of photos for drag & drop (including placeholders)
 const localPhotos = ref([]);
+
+// Helper to identify placeholders
+const isPlaceholder = (item) => item && item.isPlaceholder === true;
+
+// Computed: only real photos for draggable
+const realPhotos = computed({
+  get: () => localPhotos.value.filter((p) => !isPlaceholder(p)),
+  set: (newValue) => {
+    // When drag ends, update localPhotos maintaining placeholder position
+    if (activePlaceholderIndex.value !== null) {
+      const result = [...newValue];
+      result.splice(
+        activePlaceholderIndex.value,
+        0,
+        localPhotos.value.find(isPlaceholder)
+      );
+      localPhotos.value = result;
+    } else {
+      localPhotos.value = newValue;
+    }
+  },
+});
 
 // Reference to scroll container for horizontal wheel scroll
 const scrollContainer = ref(null);
+
+// Computed: Check if a photo is being refreshed
+const isPhotoRefreshing = (photoId) => {
+  return props.refreshingPhotoId === photoId;
+};
 
 // Watch for external photos changes
 watch(
@@ -224,35 +282,75 @@ watch(
     const newPhotosList = newPhotos || [];
     const oldPhotosList = oldPhotos || [];
 
-    // Detect newly added photos (only after first load)
-    if (!isFirstLoad.value && newPhotosList.length > oldPhotosList.length) {
-      const newPhotoIds = newPhotosList
+    // If a photo is being refreshed, keep it in localPhotos even if removed from props
+    let photosToDisplay = [...newPhotosList];
+
+    if (props.refreshingPhotoId) {
+      // Check if the refreshing photo is missing from newPhotos but exists in oldPhotos
+      const refreshingPhotoExists = newPhotosList.some(
+        (p) => p.id === props.refreshingPhotoId
+      );
+      if (!refreshingPhotoExists && oldPhotosList) {
+        const refreshingPhoto = oldPhotosList.find(
+          (p) => p.id === props.refreshingPhotoId
+        );
+        if (refreshingPhoto) {
+          // Find the position where it should be inserted (maintain its original position)
+          const originalIndex = oldPhotosList.findIndex(
+            (p) => p.id === props.refreshingPhotoId
+          );
+          photosToDisplay.splice(originalIndex, 0, refreshingPhoto);
+        }
+      }
+    }
+
+    // If there's an active placeholder and photos changed, it means a photo was added
+    if (
+      activePlaceholderIndex.value !== null &&
+      photosToDisplay.length > oldPhotosList.length
+    ) {
+      // Remove placeholder and replace with real photo
+      const realPhotos = photosToDisplay.filter((p) => !isPlaceholder(p));
+
+      // Mark new photos for animation
+      const newPhotoIds = realPhotos
         .filter((p) => !oldPhotosList.some((op) => op.id === p.id))
         .map((p) => p.id);
 
       if (newPhotoIds.length > 0) {
-        // Mark new photos for animation
         insertingPhotoIds.value = new Set(newPhotoIds);
 
+        // Clear animation state after animation completes
+        setTimeout(() => {
+          insertingPhotoIds.value = new Set();
+        }, 600);
+      }
+
+      // Clear placeholder state
+      activePlaceholderIndex.value = null;
+      isPlaceholderLoading.value = false;
+    }
+
+    // Detect newly added photos (only after first load)
+    if (!isFirstLoad.value && photosToDisplay.length > oldPhotosList.length) {
+      const newPhotoIds = photosToDisplay
+        .filter((p) => !oldPhotosList.some((op) => op.id === p.id))
+        .map((p) => p.id);
+
+      if (newPhotoIds.length > 0) {
         // Determine if added at the end
-        const lastNewPhotoId = newPhotosList[newPhotosList.length - 1]?.id;
+        const lastNewPhotoId = photosToDisplay[photosToDisplay.length - 1]?.id;
         const wasAddedAtEnd = newPhotoIds.includes(lastNewPhotoId);
 
         // Only scroll if photos were added at the end
         if (wasAddedAtEnd) {
-          lastInsertIndex.value = newPhotosList.length - 1;
+          lastInsertIndex.value = photosToDisplay.length - 1;
 
           // Scroll to the last added photo after a brief delay
           setTimeout(() => {
             scrollToPhoto(lastInsertIndex.value);
           }, 100);
         }
-
-        // Clear animation state after animation completes
-        setTimeout(() => {
-          insertingPhotoIds.value = new Set();
-          lastInsertIndex.value = null;
-        }, 600);
       }
     }
 
@@ -261,7 +359,7 @@ watch(
       isFirstLoad.value = false;
     }
 
-    localPhotos.value = [...newPhotosList];
+    localPhotos.value = [...photosToDisplay];
   },
   { immediate: true, deep: true }
 );
@@ -296,41 +394,47 @@ const handleMove = (index, direction) => {
 const movePhotoLeft = (index) => {
   if (index === 0) return;
 
+  const photos = realPhotos.value;
   // Swap locally
-  const temp = localPhotos.value[index];
-  localPhotos.value.splice(index, 1);
-  localPhotos.value.splice(index - 1, 0, temp);
+  const temp = photos[index];
+  const newPhotos = [...photos];
+  newPhotos.splice(index, 1);
+  newPhotos.splice(index - 1, 0, temp);
+  localPhotos.value = newPhotos;
 
   // Emit event to update in backend
   emit("move-photo", temp.id, index - 1);
   // Emit updated photos array
-  emit("photos-updated", [...localPhotos.value]);
+  emit("photos-updated", newPhotos);
 };
 
 const movePhotoRight = (index) => {
-  if (index === localPhotos.value.length - 1) return;
+  const photos = realPhotos.value;
+  if (index === photos.length - 1) return;
 
   // Swap locally
-  const temp = localPhotos.value[index];
-  localPhotos.value.splice(index, 1);
-  localPhotos.value.splice(index + 1, 0, temp);
+  const temp = photos[index];
+  const newPhotos = [...photos];
+  newPhotos.splice(index, 1);
+  newPhotos.splice(index + 1, 0, temp);
+  localPhotos.value = newPhotos;
 
   // Emit event to update in backend
   emit("move-photo", temp.id, index + 1);
   // Emit updated photos array
-  emit("photos-updated", [...localPhotos.value]);
+  emit("photos-updated", newPhotos);
 };
 
 const onDragEnd = () => {
-  // Build the new order array
-  const newOrder = localPhotos.value.map((photo, index) => ({
+  // Build the new order array from real photos only
+  const newOrder = realPhotos.value.map((photo, index) => ({
     photoId: photo.id,
     order: index,
   }));
 
   emit("reorder", newOrder);
   // Emit updated photos array
-  emit("photos-updated", [...localPhotos.value]);
+  emit("photos-updated", [...realPhotos.value]);
 };
 
 const handleHorizontalScroll = (event) => {
@@ -344,43 +448,36 @@ const handlePhotoSelect = (photoId) => {
   emit("select-photo", photoId);
 };
 
-const isGapActive = (gapIndex) => activeGapIndex.value === gapIndex;
+const handleRefreshSuggestion = (photoId) => {
+  emit("refresh-suggestion", photoId);
+};
 
 const shouldShowPlus = (gapIndex) => {
-  // When the hole is open, the plus would get cramped next to the hole content.
-  // Hide it and let the hole be the only interaction.
-  if (isGapActive(gapIndex)) return false;
+  // Don't show plus if there's already a placeholder
+  if (activePlaceholderIndex.value !== null) return false;
   // Only show plus when hovering over this specific gap
   return hoveredGapIndex.value === gapIndex;
 };
 
-// Gap mantiene ancho fijo, el menú se expande con absolute positioning
-
-const toggleGap = (gapIndex) => {
-  activeGapIndex.value = activeGapIndex.value === gapIndex ? null : gapIndex;
-  showSuggestSubmenu.value = false;
+const createPlaceholder = (gapIndex) => {
+  // Just mark the position where placeholder should appear
+  activePlaceholderIndex.value = gapIndex;
 };
 
-const closeGap = () => {
-  activeGapIndex.value = null;
-  showSuggestSubmenu.value = false;
+const closePlaceholder = () => {
+  // Clear placeholder state
+  activePlaceholderIndex.value = null;
+  isPlaceholderLoading.value = false;
 };
 
-const requestAdd = (insertIndex) => {
-  activeGapIndex.value = null;
-  emit("add-photos-at", insertIndex);
+const handlePlaceholderAdd = () => {
+  emit("add-photos-at", activePlaceholderIndex.value);
 };
 
-const toggleSuggestSubmenu = () => {
-  showSuggestSubmenu.value = !showSuggestSubmenu.value;
-};
-
-const selectAndSuggest = (insertIndex, criteria) => {
-  suggestionCriteria.value = criteria;
-  activeGapIndex.value = null;
-  showSuggestSubmenu.value = false;
+const handlePlaceholderSuggest = (criteria) => {
+  isPlaceholderLoading.value = true;
   emit("suggest-photo-at", {
-    insertIndex,
+    insertIndex: activePlaceholderIndex.value,
     criteria,
   });
 };
@@ -402,16 +499,6 @@ const scrollToPhoto = (photoIndex) => {
     behavior: "smooth",
   });
 };
-
-watch(
-  () => props.photos,
-  () => {
-    // If the underlying list changes, close any open hole.
-    activeGapIndex.value = null;
-    showSuggestSubmenu.value = false;
-  },
-  { deep: true }
-);
 </script>
 
 <style scoped>
@@ -462,15 +549,19 @@ watch(
   user-select: none;
 }
 
-.strip-item {
+.photo-item-container {
   display: flex;
   align-items: stretch;
-  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Disable pointer events only for photos when placeholder is active */
+.photo-strip.drag-disabled :deep(.photo-sequence-card) {
+  pointer-events: none;
+  cursor: not-allowed !important;
 }
 
 /* Animation for newly inserted photos */
-.strip-item.inserting {
+:deep(.photo-sequence-card.inserting) {
   animation: slideIn 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -493,6 +584,11 @@ watch(
   position: relative;
   width: 28px;
   align-self: stretch;
+}
+
+.insertion-gap.placeholder-gap {
+  /* Gap after placeholder - no button, just spacing */
+  pointer-events: none;
 }
 
 .gap-plus {

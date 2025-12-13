@@ -142,9 +142,12 @@
           :photos="viewingSeries.photos || []"
           :series-id="route.params.id"
           :selected-photo-ids="localSelectedPhotoIds"
+          :suggested-photos-info="suggestedPhotosInfo"
+          :refreshing-photo-id="refreshingPhotoId"
           @add-photos="showAddPhotosDialog"
           @add-photos-at="handleAddPhotosAt"
           @suggest-photo-at="handleSuggestPhotoAt"
+          @refresh-suggestion="handleRefreshSuggestion"
           @remove-photo="handleRemovePhoto"
           @reorder="handleReorder"
           @move-photo="handleMovePhoto"
@@ -459,6 +462,17 @@ const publicLoadError = ref(false); // Whether there was an error loading the pu
 // This is the index in the ordered photos array where the new photo(s) should be inserted.
 const pendingInsertIndex = ref(null);
 
+// Track discarded photos by gap context (neighboring photos) to avoid re-suggesting them
+// Map: "leftPhotoId-rightPhotoId" -> Set of discarded photoIds
+const discardedPhotosByContext = ref(new Map());
+
+// Track recently suggested photos with their context to identify them when removed
+// Map: photoId -> { insertIndex, leftId, rightId, timestamp }
+const recentlySuggestedPhotos = ref(new Map());
+
+// Track photo being refreshed to show loading state
+const refreshingPhotoId = ref(null);
+
 // Form data
 const formData = ref({
   title: "",
@@ -489,6 +503,15 @@ const isLoading = computed(() => {
 
 // Computed properties for store data
 const allSeries = computed(() => seriesStore.allSeries);
+
+// Computed: Map of suggested photo IDs with their info for the current series
+const suggestedPhotosInfo = computed(() => {
+  const info = {};
+  for (const [photoId, data] of recentlySuggestedPhotos.value.entries()) {
+    info[photoId] = data;
+  }
+  return info;
+});
 
 const refreshSeries = async () => {
   await seriesStore.getOrFetch(true); // Force refresh
@@ -548,9 +571,28 @@ const handleSuggestPhotoAt = async (payload) => {
   const criteria = typeof payload === "object" ? payload?.criteria : "story";
   const safeCriteria = criteria || "story";
 
+  // Allow explicit leftId/rightId to be passed (for refresh scenarios)
+  const explicitLeftId =
+    typeof payload === "object" ? payload?.leftId : undefined;
+  const explicitRightId =
+    typeof payload === "object" ? payload?.rightId : undefined;
+
   const photos = viewingSeries.value.photos || [];
-  const left = insertIndex > 0 ? photos[insertIndex - 1] : null;
-  const right = insertIndex < photos.length ? photos[insertIndex] : null;
+
+  // Use explicit IDs if provided, otherwise calculate from position
+  const left =
+    explicitLeftId !== undefined
+      ? { id: explicitLeftId }
+      : insertIndex > 0
+      ? photos[insertIndex - 1]
+      : null;
+  const right =
+    explicitRightId !== undefined
+      ? { id: explicitRightId }
+      : insertIndex < photos.length
+      ? photos[insertIndex]
+      : null;
+
   const anchorIds = [left?.id, right?.id].filter(Boolean);
 
   if (anchorIds.length === 0) {
@@ -558,7 +600,19 @@ const handleSuggestPhotoAt = async (payload) => {
     return;
   }
 
-  const currentPhotosIds = photos.map((p) => p.id);
+  // Build context key for this gap
+  const contextKey = `${left?.id || "start"}-${right?.id || "end"}`;
+
+  // Get discarded photos for this specific gap context
+  const discardedForThisGap =
+    discardedPhotosByContext.value.get(contextKey) || new Set();
+
+  // Combine current photos in series with discarded photos for this gap
+  const currentPhotosIds = [
+    ...photos.map((p) => p.id),
+    ...Array.from(discardedForThisGap),
+  ];
+
   const loading = message.loading("Getting suggestion...", { duration: 0 });
 
   try {
@@ -581,12 +635,21 @@ const handleSuggestPhotoAt = async (payload) => {
       return;
     }
 
+    // Track this suggestion with its context and criteria
+    recentlySuggestedPhotos.value.set(suggested.id, {
+      insertIndex,
+      leftId: left?.id || null,
+      rightId: right?.id || null,
+      criteria: safeCriteria,
+      timestamp: Date.now(),
+    });
+
     await seriesStore.insertPhotosAt(
       viewingSeries.value.id,
       [suggested.id],
       insertIndex
     );
-    message.success("Suggestion added to the series");
+    // message.success("Suggestion added to the series");
     await refreshSeries();
   } catch (error) {
     console.error("Error getting suggestion:", error);
@@ -636,8 +699,82 @@ const onPhotosSelected = async (photoIds) => {
   }
 };
 
+const handleRefreshSuggestion = async (photoId) => {
+  if (!viewingSeries.value) return;
+
+  const suggestionInfo = recentlySuggestedPhotos.value.get(photoId);
+  if (!suggestionInfo) {
+    message.warning("This photo was not suggested");
+    return;
+  }
+
+  // Mark current photo as discarded
+  const contextKey = `${suggestionInfo.leftId || "start"}-${
+    suggestionInfo.rightId || "end"
+  }`;
+
+  if (!discardedPhotosByContext.value.has(contextKey)) {
+    discardedPhotosByContext.value.set(contextKey, new Set());
+  }
+
+  const discardedSet = discardedPhotosByContext.value.get(contextKey);
+  discardedSet.add(photoId);
+
+  // Remove from tracking
+  recentlySuggestedPhotos.value.delete(photoId);
+
+  // Set refreshing state to show loading placeholder
+  refreshingPhotoId.value = photoId;
+
+  try {
+    // Remove the photo (without refreshing UI yet)
+    await seriesStore.removePhotosFromSeries(viewingSeries.value.id, [photoId]);
+
+    // Request a new suggestion with the same criteria and context
+    await handleSuggestPhotoAt({
+      insertIndex: suggestionInfo.insertIndex,
+      criteria: suggestionInfo.criteria,
+      leftId: suggestionInfo.leftId,
+      rightId: suggestionInfo.rightId,
+    });
+  } catch (error) {
+    console.error("Error refreshing suggestion:", error);
+    message.error("Failed to refresh suggestion. Please try again.");
+    // On error, refresh to restore correct state
+    await refreshSeries();
+  } finally {
+    // Clear refreshing state
+    refreshingPhotoId.value = null;
+  }
+};
+
 const handleRemovePhoto = async (photoId) => {
   if (!viewingSeries.value) return;
+
+  // Check if this photo was recently suggested
+  const suggestionInfo = recentlySuggestedPhotos.value.get(photoId);
+
+  // If it was suggested in the last 5 minutes, mark it as discarded for that gap
+  if (suggestionInfo && Date.now() - suggestionInfo.timestamp < 5 * 60 * 1000) {
+    const contextKey = `${suggestionInfo.leftId || "start"}-${
+      suggestionInfo.rightId || "end"
+    }`;
+
+    // Get or create the discarded set for this context
+    if (!discardedPhotosByContext.value.has(contextKey)) {
+      discardedPhotosByContext.value.set(contextKey, new Set());
+    }
+
+    const discardedSet = discardedPhotosByContext.value.get(contextKey);
+    discardedSet.add(photoId);
+
+    console.log(
+      `Photo ${photoId} marked as discarded for gap context: ${contextKey}`
+    );
+
+    // Remove from recently suggested
+    recentlySuggestedPhotos.value.delete(photoId);
+  }
 
   try {
     await seriesStore.removePhotosFromSeries(viewingSeries.value.id, [photoId]);
@@ -750,6 +887,9 @@ const openSeries = (series) => {
 };
 
 const backToSeries = () => {
+  // Clear suggestion tracking when leaving series detail
+  recentlySuggestedPhotos.value.clear();
+  discardedPhotosByContext.value.clear();
   router.push({ name: "series" });
 };
 
@@ -815,6 +955,11 @@ const updateViewingSeries = () => {
   if (id && allSeries.value.length > 0) {
     const series = seriesStore.getSeriesWithFullPhotos(id, photosStore);
     if (series) {
+      // If switching to a different series, clear tracking
+      if (viewingSeries.value?.id !== series.id) {
+        recentlySuggestedPhotos.value.clear();
+        discardedPhotosByContext.value.clear();
+      }
       viewingSeries.value = series;
       showSeriesView.value = true;
       seriesStore.setCurrentSeries(series);
