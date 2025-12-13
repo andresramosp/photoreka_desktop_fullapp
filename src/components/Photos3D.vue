@@ -652,6 +652,7 @@
       v-if="
         tagBeaconsSystem &&
         tagBeaconsSystem.config.enabled &&
+        !isTransitioning &&
         tagBeaconsSystem.visibleBeacons.length > 0
       "
       class="tag-beacons-wrapper"
@@ -1177,6 +1178,10 @@ const floatingTagsSystem = ref(null);
 // Ojo: debe ser reactivo porque se usa en template.
 const tagBeaconsSystem = ref(null);
 
+// Cluster type efectivo para beacons.
+// Se actualiza SOLO cuando termina el re-layout para evitar cambios visuales prematuros.
+const beaconsClusterType = ref(currentChunk.value);
+
 // Control de navegación durante carga inicial
 const navigationBlocked = ref(false);
 const downloadPhaseComplete = ref(false);
@@ -1510,7 +1515,13 @@ const filteredPhotos = computed(() => {
 });
 
 // Inicializar sistema de beacons de tags (usa fotos filtradas)
-tagBeaconsSystem.value = useTagBeacons(cameraRef, filteredPhotos, containerRef);
+// Pasamos currentChunk para filtrar tags según el tipo de clustering activo.
+tagBeaconsSystem.value = useTagBeacons(
+  cameraRef,
+  filteredPhotos,
+  containerRef,
+  beaconsClusterType
+);
 
 // Handler para cambio en filtro de aspectos visuales
 const onVisualAspectsChange = () => {
@@ -2248,6 +2259,8 @@ const animate = () => {
 
       // Recompute beacons al terminar el re-layout para que no dependan de moverte
       if (tagBeaconsSystem.value && tagBeaconsSystem.value.config.enabled) {
+        // Cambiar el tipo de tag de beacons SOLO cuando las fotos ya están en su sitio
+        beaconsClusterType.value = currentChunk.value;
         tagBeaconsSystem.value.recomputeBeacons();
         tagBeaconsSystem.value.updateScreenPositions();
       }

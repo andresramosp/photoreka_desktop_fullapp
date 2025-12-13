@@ -2,12 +2,79 @@
 import { ref, watch } from "vue";
 import * as THREE from "three";
 
+// Configuración de filtrado de tags para beacons según el cluster type activo.
+// Nota: los valores del cluster type vienen de use3DPhotos():
+// - general | story | context | visual_accents | visual_aspects | artistic_scores
+const TAG_BEACON_FILTER_BY_CLUSTER = {
+  // Narrative
+  story: {
+    category: "context_story",
+    groups: new Set(["person", "animals", "mood"]),
+  },
+
+  // Context
+  context: {
+    category: "context_story",
+    groups: new Set(["toponym", "environment", "weather"]),
+  },
+
+  // Visual accents
+  visual_accents: {
+    category: "visual_accents",
+    groups: null, // cualquiera
+  },
+
+  // Technical
+  visual_aspects: {
+    category: "visual_aspects",
+    groups: null, // cualquiera
+  },
+};
+
+function normalizeKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function resolveClusterType(clusterTypeRefOrValue) {
+  if (
+    clusterTypeRefOrValue &&
+    typeof clusterTypeRefOrValue === "object" &&
+    "value" in clusterTypeRefOrValue
+  ) {
+    return clusterTypeRefOrValue.value;
+  }
+  return clusterTypeRefOrValue;
+}
+
+function isTagAllowedForCluster(tag, clusterType) {
+  const ct = normalizeKey(clusterType);
+  const rule = TAG_BEACON_FILTER_BY_CLUSTER[ct];
+  if (!rule) return true; // general/artistic_scores u otros: no filtrar
+
+  const tagCategory = normalizeKey(tag?.category);
+  if (normalizeKey(rule.category) !== tagCategory) return false;
+
+  if (rule.groups && rule.groups.size > 0) {
+    const tagGroup = normalizeKey(tag?.group);
+    return rule.groups.has(tagGroup);
+  }
+
+  return true;
+}
+
 /**
  * Sistema de "señales"/"beacons" de tags por zonas para navegación a larga distancia.
  * Agrupa fotos en celdas (grid XZ) y elige el tag dominante de cada celda.
  * Renderiza como overlay 2D proyectado (no añade geometría Three.js).
  */
-export function useTagBeacons(cameraRef, photosRef, containerRef) {
+export function useTagBeacons(
+  cameraRef,
+  photosRef,
+  containerRef,
+  clusterTypeRefOrValue = null
+) {
   const config = ref({
     enabled: true,
 
@@ -188,6 +255,8 @@ export function useTagBeacons(cameraRef, photosRef, containerRef) {
 
     const cellMap = new Map();
 
+    const clusterType = resolveClusterType(clusterTypeRefOrValue);
+
     for (const photo of photos) {
       const pos = photo?.position || photo?.coordinates;
       if (!Array.isArray(pos) || pos.length < 3) continue;
@@ -220,7 +289,9 @@ export function useTagBeacons(cameraRef, photosRef, containerRef) {
       cell.sumY += y;
       cell.sumZ += z;
 
-      const tags = extractPhotoTags(photo);
+      const tags = extractPhotoTags(photo).filter((tag) =>
+        isTagAllowedForCluster(tag, clusterType)
+      );
       for (const tag of tags) {
         if (!tag?.name) continue;
         const tagKey = `${tag.category || "unknown"}_${tag.name}`;
@@ -231,6 +302,7 @@ export function useTagBeacons(cameraRef, photosRef, containerRef) {
             id: tag.id,
             name: tag.name,
             category: tag.category,
+            group: tag.group,
             photoIds: new Set(),
           };
           cell.tagMap.set(tagKey, tagData);
@@ -256,6 +328,7 @@ export function useTagBeacons(cameraRef, photosRef, containerRef) {
           id: td.id,
           name: td.name,
           category: td.category,
+          group: td.group,
           count: td.photoIds.size,
         }))
         .sort((a, b) => b.count - a.count)
@@ -304,6 +377,7 @@ export function useTagBeacons(cameraRef, photosRef, containerRef) {
           cellKey: cell.cellKey,
           name: tag.name,
           category: tag.category,
+          group: tag.group,
           count: tag.count,
           cellPhotoCount: cell.photoCount,
           share,
