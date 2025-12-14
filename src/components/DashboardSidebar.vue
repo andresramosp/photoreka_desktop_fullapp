@@ -419,17 +419,16 @@ const thirdSectionToolsOptions = computed(() => {
         : {},
       icon: createIconWithIndicator(CanvasIcon, "#8b5cf6", false, false), // Secondary color for creative tools
     },
-
-    {
-      label: createMenuLabel("Grid Maker"),
-      key: "grid-maker",
-      disabled: isBlocked,
-      comingSoon: false,
-      props: {
-        title: "Coming soon",
-      },
-      icon: createIconWithIndicator(GridIcon, "#15803d", false, false), // Green color for grids
-    },
+    // {
+    //   label: createMenuLabel("Grid Maker"),
+    //   key: "grid-maker",
+    //   disabled: isBlocked,
+    //   comingSoon: false,
+    //   props: {
+    //     title: "Coming soon",
+    //   },
+    //   icon: createIconWithIndicator(GridIcon, "#15803d", false, false), // Green color for grids
+    // },
     {
       label: createMenuLabel("Project Builder"),
       key: "project-builder",
