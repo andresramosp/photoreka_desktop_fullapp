@@ -789,7 +789,7 @@ export default class ScoringService {
 
     const scoredPhotos = matchingPhotos.map((match) => ({
       id: match.id,
-      imageScore: //mapScore(match.proximity),
+      imageScore: mapScore(match.proximity),
     }))
 
     return scoredPhotos
