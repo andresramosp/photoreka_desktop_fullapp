@@ -12,7 +12,7 @@ import type { SearchMode, SearchType } from './search_text_service.js'
 import TagPhotoManager from '../managers/tag_photo_manager.js'
 import TagManager from '../managers/tag_manager.js'
 import TagPhoto from '#models/tag_photo'
-import { EmbeddingStoreService } from './embeddings_store_service.js'
+import { EmbeddingStoreService, EmbeddingType } from './embeddings_store_service.js'
 import NLPService from './nlp_service.js'
 const require = createRequire(import.meta.url)
 const pluralize = require('pluralize')
@@ -23,6 +23,7 @@ interface ScoredPhoto {
   id: number
   tagScore?: number
   descScore?: number
+  imageScore?: number
   totalScore?: number
   matchingTags?: any[]
   matchingChunks?: any[]
@@ -53,15 +54,19 @@ const getWeights = (isCuration: boolean) => {
       tags: true,
       desc: false,
       fullQuery: false,
+      imageVector: true,
       embeddingsTagsThreshold: 0.15,
+      imageEmbeddingThreshold: 0.25,
     },
     semantic: {
-      tags: isCuration ? false : true,
-      desc: true,
-      fullQuery: true,
+      // tags: isCuration ? false : true,
+      // desc: true,
+      // fullQuery: true,
+      imageVector: true,
       embeddingsTagsThreshold: 0.55,
       embeddingsDescsThreshold: 0.17,
       embeddingsFullQueryThreshold: 0.3,
+      imageEmbeddingThreshold: 0.05,
     },
     topological: {
       tags: true,
@@ -103,11 +108,12 @@ export default class ScoringService {
     const typeWeights = weights[searchType] || weights.semantic
 
     return {
-      hasFullQuery:
-        structuredQuery.positive_segments.length > 1 &&
-        (typeWeights.fullQuery || searchType === 'semantic'),
+      hasFullQuery: structuredQuery.positive_segments.length > 1 && typeWeights.fullQuery, // || searchType === 'semantic'
       hasNuances: structuredQuery.nuances_segments?.length > 0,
-      segmentCount: structuredQuery.positive_segments.length,
+      segmentCount:
+        structuredQuery.positive_segments.length && (typeWeights.tags || typeWeights.desc)
+          ? structuredQuery.positive_segments.length
+          : 1,
       searchMode,
     }
   }
@@ -178,7 +184,7 @@ export default class ScoringService {
         ...structuredQuery.nuances_segments,
         structuredQuery.no_prefix,
       ].filter(Boolean),
-      true
+      weights.semantic.imageVector
     )
 
     // Inicializamos solo IDs, no objetos completos
@@ -186,10 +192,12 @@ export default class ScoringService {
       id,
       tagScore: 0,
       descScore: 0,
+      imageScore: 0,
       totalScore: 0,
     }))
 
-    const performFullQuerySearch = structuredQuery.positive_segments.length > 1
+    const performFullQuerySearch =
+      structuredQuery.positive_segments.length > 1 && weights.semantic.fullQuery
 
     const fullQueryPromise: Promise<ScoredPhoto[]> = performFullQuerySearch
       ? this.getScoredPhotoDescBySegment(
@@ -199,6 +207,14 @@ export default class ScoringService {
           searchMode,
           true,
           ['context', 'story', 'visual_accents']
+        )
+      : Promise.resolve([])
+
+    const imageQueryPromise: Promise<ScoredPhoto[]> = weights.semantic.imageVector
+      ? this.getScoredPhotoImageByFullQuery(
+          photoIds,
+          structuredQuery.no_prefix,
+          weights.semantic.imageEmbeddingThreshold
         )
       : Promise.resolve([])
 
@@ -243,17 +259,17 @@ export default class ScoringService {
       return scores
     })()
 
-    const [scoresAfterSegments, fullQueryDescScores, nuancesQueryTagsScore] = await Promise.all([
-      segmentsPromise,
-      fullQueryPromise,
-      nuancesQuery,
-    ])
+    const [scoresAfterSegments, fullQueryDescScores, imageScores, nuancesQueryTagsScore] =
+      await Promise.all([segmentsPromise, fullQueryPromise, imageQueryPromise, nuancesQuery])
 
     let finalScores = this.mergeTagDescScoredPhotos(scoresAfterSegments, [], fullQueryDescScores)
 
     for (let nuanceTagScore of nuancesQueryTagsScore) {
       finalScores = this.mergeTagDescScoredPhotos(finalScores, nuanceTagScore, [])
     }
+
+    // Merge image scores (se añade una sola vez con fullQuery)
+    finalScores = this.mergeImageScores(finalScores, imageScores)
 
     // Nuevo sistema de scoring absoluto
     const searchComposition = this.analyzeSearchComposition(
@@ -339,7 +355,11 @@ export default class ScoringService {
     included = this.nlpService.normalizeTerms(included)
     excluded = this.nlpService.normalizeTerms(excluded)
 
-    await EmbeddingStoreService.calculateEmbeddings([...included, ...excluded])
+    const fullTagQuery = included.join(' ')
+    await EmbeddingStoreService.calculateEmbeddings(
+      [...included, ...excluded],
+      weights.semantic.imageVector
+    )
 
     // Aplicar exclusión directamente a nivel de IDs
     const filteredPhotoIds = await this.filterExcludedPhotoIdsByTags(
@@ -373,7 +393,19 @@ export default class ScoringService {
       return scores
     })()
 
-    const [finalScores] = await Promise.all([includedPromise])
+    const imageQueryPromise: Promise<ScoredPhoto[]> =
+      weights.tags.imageVector && fullTagQuery
+        ? this.getScoredPhotoImageByFullQuery(
+            filteredPhotoIds,
+            fullTagQuery,
+            weights.tags.imageEmbeddingThreshold
+          )
+        : Promise.resolve([])
+
+    const [scoresAfterTags, imageScores] = await Promise.all([includedPromise, imageQueryPromise])
+
+    // Merge image scores
+    const finalScores = this.mergeImageScores(scoresAfterTags, imageScores)
 
     // Nuevo sistema de scoring absoluto para tags
     const tagQueryStructure = {
@@ -568,6 +600,41 @@ export default class ScoringService {
     return Array.from(map.values())
   }
 
+  private mergeImageScores(
+    aggregatedScores: ScoredPhoto[],
+    imageScores: { id: number; imageScore: number; matchingImageSimilarity: number }[]
+  ): ScoredPhoto[] {
+    const map = new Map<number, ScoredPhoto>()
+
+    // Inicia con los scores acumulados previos
+    for (const scored of aggregatedScores) {
+      map.set(scored.id, { ...scored })
+    }
+
+    // Agregar o actualizar con imageScores
+    for (const imageData of imageScores) {
+      const id = imageData.id
+      if (map.has(id)) {
+        const entry = map.get(id)!
+        entry.imageScore = imageData.imageScore
+        entry.totalScore = (entry.totalScore || 0) + imageData.imageScore * 1.5
+      } else {
+        // Crear nueva entrada si no existe
+        map.set(id, {
+          id,
+          tagScore: 0,
+          descScore: 0,
+          imageScore: imageData.imageScore,
+          totalScore: imageData.imageScore,
+          matchingTags: [],
+          matchingChunks: [],
+        })
+      }
+    }
+
+    return Array.from(map.values())
+  }
+
   private async processSegment(
     segment: { name: string; index: number },
     aggregatedScores: ScoredPhoto[],
@@ -683,6 +750,51 @@ export default class ScoringService {
     return scoredPhotos
       .filter((score) => score.descScore > 0)
       .sort((a, b) => b.descScore - a.descScore)
+  }
+
+  // @withCache({
+  //   provider: 'redis',
+  //   ttl: 60 * 30,
+  // })
+  private async getScoredPhotoImageByFullQuery(
+    photoIds: number[],
+    fullQuery: string,
+    embeddingsProximityThreshold: number = 0.25
+  ): Promise<{ id: number; imageScore: number }[]> {
+    const embedding = EmbeddingStoreService.getEmbedding(fullQuery, EmbeddingType.CLIP)
+
+    if (!embedding) {
+      console.warn(
+        `[ScoringService] No se encontró embedding CLIP para la fullQuery '${fullQuery}'`
+      )
+      return []
+    }
+
+    const matchingPhotos = await this.vectorService.findSimilarPhotoToEmbedding(
+      embedding,
+      embeddingsProximityThreshold,
+      photoIds.length,
+      'cosine_similarity',
+      photoIds
+    )
+
+    // Map scores from 0-0.3 to 0-1
+    const mapScore = (score: number) => {
+      const min = 0.1
+      const max = 0.3
+      if (score <= min) return 0
+      if (score >= max) return 1
+      return (score - min) / (max - min)
+    }
+
+    const scoredPhotos = matchingPhotos.map((match) => ({
+      id: match.id,
+      imageScore: mapScore(match.proximity),
+    }))
+
+    return scoredPhotos
+      .filter((score) => score.imageScore > 0)
+      .sort((a, b) => b.imageScore - a.imageScore)
   }
 
   @withCache({

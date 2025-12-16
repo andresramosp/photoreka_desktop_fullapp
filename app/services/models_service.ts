@@ -416,6 +416,18 @@ export default class ModelsService {
     }
   }
 
+  async getCLIPEmbeddingsCPU(tags) {
+    try {
+      const { data } = await axios.post(process.env.PYTHON_API_CPU + '/clip-text-embeddings', {
+        tags,
+      })
+      return data
+    } catch (error) {
+      console.error('Error en getEmbeddings:', error.message, JSON.stringify(tags))
+      return { embeddings: [] }
+    }
+  }
+
   async getReducedEmbeddings(payload) {
     try {
       const { data } = await axios.post(
