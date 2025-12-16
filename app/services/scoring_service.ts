@@ -60,7 +60,7 @@ const getWeights = (isCuration: boolean) => {
     },
     semantic: {
       // tags: isCuration ? false : true,
-      desc: true,
+      // desc: true,
       // fullQuery: true,
       imageVector: true,
       embeddingsTagsThreshold: 0.55,
