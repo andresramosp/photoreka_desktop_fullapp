@@ -780,8 +780,8 @@ export default class ScoringService {
 
     // Map scores from 0-0.3 to 0-1
     const mapScore = (score: number) => {
-      const min = 0.1
-      const max = 0.3
+      const min = 0.15
+      const max = 0.35
       if (score <= min) return 0
       if (score >= max) return 1
       return (score - min) / (max - min)
@@ -789,7 +789,7 @@ export default class ScoringService {
 
     const scoredPhotos = matchingPhotos.map((match) => ({
       id: match.id,
-      imageScore: match.proximity, //mapScore(match.proximity),
+      imageScore: //mapScore(match.proximity),
     }))
 
     return scoredPhotos
