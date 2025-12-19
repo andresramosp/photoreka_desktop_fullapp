@@ -284,7 +284,7 @@ export const packages = [
             name: 'vision_artistic',
             type: 'VisionDescriptionTask',
             model: 'GPT',
-            modelName: 'gpt-5', //'gpt-5-chat-latest',
+            modelName: 'gpt-5.1', //'gpt-5-chat-latest',
             needsImage: true,
             sequential: false,
             prompts: [MESSAGE_ANALYZER_GEMINI_CONTEXT_ARTISTIC_SCORES],

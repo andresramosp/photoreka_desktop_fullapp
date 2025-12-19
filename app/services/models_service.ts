@@ -27,6 +27,7 @@ export type ModelName =
   | 'gpt-4o'
   | 'gpt-4.1'
   | 'gpt-5'
+  | 'gpt-5.1'
   | 'gpt-5-mini'
   | 'gpt-5-nano'
   | 'gpt-5-chat-latest'
@@ -49,6 +50,11 @@ const PRICES = {
     output: 8 / 1_000_000, // USD per output token
   },
   'gpt-5': {
+    input_cache_miss: 1.25 / 1_000_000, // USD per input token
+    input_cache_hit: 0.125 / 1_000_000, // USD per cached input token
+    output: 10 / 1_000_000, // USD per output token
+  },
+  'gpt-5.1': {
     input_cache_miss: 1.25 / 1_000_000, // USD per input token
     input_cache_hit: 0.125 / 1_000_000, // USD per cached input token
     output: 10 / 1_000_000, // USD per output token
@@ -670,7 +676,7 @@ export default class ModelsService {
     let cacheDuration = 60 * 5
     try {
       // Si el modelo es gpt-5, gpt-5-mini o gpt-5-nano (pero NO gpt-5-chat-latest), no pasar temperature y usar max_completion_tokens
-      const isGpt5NonChat = ['gpt-5', 'gpt-5-mini', 'gpt-5-nano'].includes(model)
+      const isGpt5NonChat = ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-5.1'].includes(model)
 
       let payload: any = {
         model,
