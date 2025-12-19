@@ -2,8 +2,9 @@
   <div class="photos-grid-container">
     <!-- Photos Grid Controls -->
     <PhotosGridControls
-      v-if="!props.hiddeControls"
+      v-if="!props.hideControls"
       :basic-sort-active="basicSortActive"
+      :photos="props.photos"
       @filters-change="handleFiltersChange"
       @sorting-change="handleSortingChange"
       @sort-order-change="handleSortOrderChange"
@@ -12,6 +13,7 @@
       @sorting-type-change="handleSortingTypeChange"
       @custom-weights-change="handleCustomWeightsChange"
       @filename-search-change="handleFilenameSearchChange"
+      @time-range-change="handleTimeRangeChange"
     />
 
     <!-- Grid Controls -->
@@ -63,7 +65,6 @@
       </div>
 
       <div class="controls-right">
-        <div class="filter-controls" v-if="!props.collectionId"></div>
         <div class="grid-size-controls grid-size-controls-base">
           <span class="grid-label grid-label-base">Columns:</span>
           <n-button-group>
@@ -297,7 +298,7 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
-  hiddeControls: {
+  hideControls: {
     type: Boolean,
     default: false,
   },
@@ -342,6 +343,7 @@ const isLoadingMore = ref(false);
 // State for filters and sorting (managed by PhotosGridControls)
 const selectedFilters = ref({});
 const filenameSearch = ref("");
+const timeRange = ref(null);
 const sortingType = ref("none"); // 'none', 'criteria' or 'genre'
 const selectedCriteria = ref([]);
 const selectedGenre = ref("street");
@@ -551,6 +553,10 @@ const handleFilenameSearchChange = (searchValue) => {
   filenameSearch.value = searchValue;
 };
 
+const handleTimeRangeChange = (range) => {
+  timeRange.value = range;
+};
+
 // Handle review duplicates (preprocess and check)
 const handleReviewDuplicates = async () => {
   isCheckingDuplicates.value = true;
@@ -631,6 +637,15 @@ const filteredAndSortedPhotos = computed(() => {
     filtered = filtered.filter((photo) => {
       const filename = (photo.originalFileName || "").toLowerCase();
       return filename.includes(searchTerm);
+    });
+  }
+
+  // Apply time range filter
+  if (timeRange.value && timeRange.value.length === 2) {
+    filtered = filtered.filter((photo) => {
+      const photoDate = new Date(photo.descriptions?.EXIF?.dateTaken).getTime();
+      if (isNaN(photoDate)) return false;
+      return photoDate >= timeRange.value[0] && photoDate <= timeRange.value[1];
     });
   }
 
@@ -787,6 +802,7 @@ watch(
   [
     selectedFilters,
     filenameSearch,
+    timeRange,
     sortingType,
     selectedCriteria,
     selectedGenre,

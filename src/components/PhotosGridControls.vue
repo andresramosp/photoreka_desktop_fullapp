@@ -73,6 +73,12 @@
             />
           </div>
         </div>
+
+        <!-- Time Range Filter -->
+        <TimeRangeFilter
+          :photos="photos"
+          @time-range-change="handleTimeRangeChange"
+        />
       </div>
     </div>
 
@@ -301,6 +307,7 @@ import { computed, ref, watch, h } from "vue";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import CustomArtisticWeights from "./CustomArtisticWeights.vue";
+import TimeRangeFilter from "./TimeRangeFilter.vue";
 import {
   NButton,
   NSelect,
@@ -336,12 +343,17 @@ const emit = defineEmits([
   "sorting-type-change",
   "custom-weights-change",
   "filename-search-change",
+  "time-range-change",
 ]);
 
 const props = defineProps({
   basicSortActive: {
     type: Boolean,
     default: false,
+  },
+  photos: {
+    type: Array,
+    default: () => [],
   },
 });
 
@@ -544,6 +556,10 @@ const handleCriteriaChange = () => {
 
 const handleFilenameSearchChange = (value) => {
   emit("filename-search-change", value);
+};
+
+const handleTimeRangeChange = (range) => {
+  emit("time-range-change", range);
 };
 
 // Watchers to emit changes

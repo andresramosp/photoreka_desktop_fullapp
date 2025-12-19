@@ -349,7 +349,7 @@
         :photos="filteredPhotos"
         :displayAddToCollection="false"
         :displayMoveToTool="false"
-        :hiddeControls="true"
+        :hideControls="true"
         @selection-change="handleSelectionChange"
       />
     </div>
