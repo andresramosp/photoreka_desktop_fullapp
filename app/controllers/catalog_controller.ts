@@ -10,7 +10,10 @@ import VectorService from '#services/vector_service'
 import ModelsService from '#services/models_service'
 
 import HealthPhotoService from '#services/health_photo_service'
-import { MESSAGE_PHOTO_INSIGHTS } from '../utils/prompts/descriptions.js'
+import {
+  MESSAGE_PHOTO_INSIGHTS,
+  MESSAGE_PHOTO_INSIGHTS_WITH_SCORES,
+} from '../utils/prompts/descriptions.js'
 import PhotoImageService from '#services/photo_image_service'
 
 const s3 = new S3Client({
@@ -275,16 +278,18 @@ export default class CatalogController {
     }
   }
 
-  public async photoInsight({ response, auth, params }: HttpContext) {
+  public async photoInsight({ response, auth, params, request }: HttpContext) {
     try {
       await auth.use('api').check()
       const user = auth.use('api').user! as any
       const userId = user.id.toString()
 
+      const provider = request.qs().provider || 'gemini'
+      const withScores = request.qs().withScores === 'true'
+
       let photo: Photo
 
       if (params.id) {
-        // Si se proporciona un ID, buscar esa foto específica
         const foundPhoto = await Photo.query()
           .where('id', params.id)
           .where('user_id', userId)
@@ -295,7 +300,6 @@ export default class CatalogController {
         }
         photo = foundPhoto
       } else {
-        // Si no se proporciona ID, seleccionar una foto aleatoria del usuario
         const userPhotos = await Photo.query().where('user_id', userId)
 
         if (userPhotos.length === 0) {
@@ -307,33 +311,59 @@ export default class CatalogController {
       }
 
       const modelsService = new ModelsService()
+      let systemPrompt: string
 
-      const systemPrompt = MESSAGE_PHOTO_INSIGHTS
-
-      const base64 = await PhotoImageService.getInstance().getImageBase64FromR2(photo.name, false)
-
-      const imagePayload = {
-        inlineData: {
-          mimeType: 'image/png',
-          data: base64,
-        },
+      if (withScores && photo.descriptions?.artistic_scores) {
+        systemPrompt = MESSAGE_PHOTO_INSIGHTS_WITH_SCORES(photo.descriptions.artistic_scores)
+      } else {
+        systemPrompt = MESSAGE_PHOTO_INSIGHTS
       }
-
-      const gptResponse = await modelsService.getGeminiResponse(
-        systemPrompt,
-        [imagePayload],
-        'gemini-2.5-flash-lite',
-        {
-          temperature: 0.6,
-        }
-      )
-
-      // Limpiar imagen de memoria
-      imagePayload.inlineData.data = ''
 
       let insights = []
 
-      insights = gptResponse.result || []
+      if (provider === 'gpt') {
+        const imagePayload = [
+          {
+            type: 'image_url',
+            image_url: {
+              url: photo.originalUrl,
+              detail: 'low',
+            },
+          },
+        ]
+
+        const gptResponse = await modelsService.getGPTResponse(
+          systemPrompt,
+          imagePayload,
+          'gpt-5.1',
+          { type: 'json_object' },
+          0.6,
+          false
+        )
+
+        insights = gptResponse.result || []
+      } else {
+        const base64 = await PhotoImageService.getInstance().getImageBase64FromR2(photo.name, false)
+
+        const imagePayload = {
+          inlineData: {
+            mimeType: 'image/png',
+            data: base64,
+          },
+        }
+
+        const geminiResponse = await modelsService.getGeminiResponse(
+          systemPrompt,
+          [imagePayload],
+          'gemini-2.5-flash-lite',
+          {
+            temperature: 0.6,
+          }
+        )
+
+        imagePayload.inlineData.data = ''
+        insights = geminiResponse.result || []
+      }
 
       return response.ok({
         photo: {

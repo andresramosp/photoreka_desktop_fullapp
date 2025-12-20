@@ -10,13 +10,10 @@ import { VisualDetectionTask } from '#models/analyzer/visualDetectionTask'
 import { VisualEmbeddingTask } from '#models/analyzer/visualEmbeddingTask'
 import { GlobalEmbeddingsTagsTask } from '#models/analyzer/globalEmbeddingsTagsTask'
 import {
-  MESSAGE_ANALYZER_GEMINI_CONTEXT_ARTISTIC_SCORES,
+  MESSAGE_ANALYZER_CONTEXT_ARTISTIC_SCORES,
   MESSAGE_ANALYZER_GEMINI_CONTEXT_STORY_ACCENTS,
 } from './utils/prompts/descriptions.js'
-import {
-  MESSAGE_ANALYZER_GPT_TOPOLOGIC_TAGS,
-  MESSAGE_TAGS_TEXT_EXTRACTION,
-} from './utils/prompts/tags.js'
+import { MESSAGE_TAGS_TEXT_EXTRACTION } from './utils/prompts/tags.js'
 import { MESSAGE_ANALYZER_VISUAL_ASPECTS } from './utils/prompts/visual_aspects.js'
 
 /**
@@ -219,10 +216,10 @@ export const packages = [
                 name: 'vision_artistic',
                 type: 'VisionDescriptionTask',
                 model: 'GPT',
-                modelName: 'gpt-5',
+                modelName: 'gpt-5.1',
                 needsImage: true,
                 sequential: false,
-                prompts: [MESSAGE_ANALYZER_GEMINI_CONTEXT_ARTISTIC_SCORES],
+                prompts: [MESSAGE_ANALYZER_CONTEXT_ARTISTIC_SCORES],
                 resolution: 'high',
                 imagesPerRequest: 6,
                 batchAPI: true,
@@ -287,7 +284,7 @@ export const packages = [
             modelName: 'gpt-5.1', //'gpt-5-chat-latest',
             needsImage: true,
             sequential: false,
-            prompts: [MESSAGE_ANALYZER_GEMINI_CONTEXT_ARTISTIC_SCORES],
+            prompts: [MESSAGE_ANALYZER_CONTEXT_ARTISTIC_SCORES],
             resolution: 'high',
             imagesPerRequest: 6,
             batchAPI: true,

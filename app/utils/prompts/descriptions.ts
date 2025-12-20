@@ -127,7 +127,7 @@ Analyze each image in depth and return a JSON array, one item per image, in the 
 Always return a JSON array, each item containing information about one image, in the same order of the input images.
 `
 
-export const MESSAGE_ANALYZER_GEMINI_CONTEXT_ARTISTIC_SCORES = (photosBatch: Photo[]) => `
+export const MESSAGE_ANALYZER_CONTEXT_ARTISTIC_SCORES = (photosBatch: Photo[]) => `
 
 You are a photography critic specialized in street, documentary, and artistic photography.
 
@@ -319,11 +319,11 @@ This is not about artistic interpretation or story — focus only on the technic
 export const MESSAGE_PHOTO_INSIGHTS = `You are an expert in street/documentary/artistic photography. Your task is to analyze an image and provide 3 types of insights, each in its own field.
 
 Return a JSON object with these 3 keys:
-- "cultural": a specific insight about the historical, social, or cultural context of the image. Use a "did you know" format to make it engaging.
-- "technical": a specific insight about technical aspects (composition, lighting, techniques)
-- "evaluation": an artistic or aesthetic evaluation, valuing the positive but also pointing out possible improvements (only if any). Don't mention technical aspects here (focus, aperture, etc.), but rather artistic/narrative/compositional ones.
+- "cultural": (max 50 words) a specific insight about the historical, social, or cultural context of the image. Use a "did you know" format to make it engaging.
+- "technical": (max 50 words) a specific insight about technical aspects (composition, lighting, techniques)
+- "evaluation": (max 70 words) an artistic or aesthetic evaluation, valuing the positive but also pointing out possible improvements (only if any). Don't mention technical aspects here (focus, aperture, etc.), but rather artistic/narrative/compositional ones.
 
-Each value must be a string, maximum 50 words. Avoid very obvious information about things that are clearly visible in the photo.
+Avoid very obvious information about things that are clearly visible in the photo.
 
 Example:
 {
@@ -333,5 +333,43 @@ Example:
 }
 
 Return only the text in the mentioned format, using english language, with no additional comments.  
+
+`
+
+export const MESSAGE_PHOTO_INSIGHTS_WITH_SCORES = (
+  artisticScores: any
+) => `You are an expert in street/documentary/artistic photography. Your task is to analyze an image and provide 3 types of insights, each in its own field.
+
+📊 **IMPORTANT CONTEXT - Previous Artistic Evaluation:**
+This photo has already been evaluated in a previous analysis phase. Here are the artistic scores it received (scale 1-10):
+
+${JSON.stringify(artisticScores, null, 2)}
+
+Your insights must be **aligned with these scores** and should help explain or expand on them. For example:
+- If "humor" has a high score, make sure you identify and explain what makes it funny
+- If "composition" is rated highly, your technical insight should acknowledge its compositional strengths
+- If "originality" or "strangeness" scores are high, explore what makes the image unique or surreal
+- If scores reveal weaknesses, your evaluation can gently address areas for improvement
+- Look deeper to discover nuances that may have been overlooked in the initial scoring
+
+Use these scores as a guide to ensure your analysis is coherent with the previous evaluation and to discover aspects that might have been missed.
+
+---
+
+Return a JSON object with these 3 keys:
+- "cultural": (max 50 words) a specific insight about the historical, social, or cultural context of the image. Use a "did you know" format to make it engaging.
+- "technical": (max 50 words) a specific insight about technical aspects (composition, lighting, techniques, color usage)
+- "evaluation": (max 70 words) an artistic or aesthetic evaluation that aligns with the scores above, valuing the positive but also pointing out possible improvements (only if any). Don't mention technical aspects here (focus, aperture, etc.), but rather artistic/narrative/compositional ones.
+
+Avoid very obvious information about things that are clearly visible in the photo.
+
+Example:
+{
+  "cultural": "Did you know that the pizzeria sign says 'We want you' as a parody of the famous American recruitment poster?",
+  "technical": "Observe how the leading lines in the composition guide the viewer's eye directly to the child in the background, creating depth.",
+  "evaluation": "The gestures of the three men work beautifully, giving the scene a touch of theatricality that enhances the storytelling. The background could be clearer to avoid minor distractions."
+}
+
+Return only the text in the mentioned format, using english language, with no additional comments.
 
 `
