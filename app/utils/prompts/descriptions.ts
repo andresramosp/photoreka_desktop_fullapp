@@ -321,9 +321,11 @@ export const MESSAGE_PHOTO_INSIGHTS = `You are an expert in street/documentary/a
 Return a JSON object with these 3 keys:
 - "cultural": (max 50 words) a specific insight about the historical, social, or cultural context of the image. Use a "did you know" format to make it engaging.
 - "technical": (max 50 words) a specific insight about technical aspects (composition, lighting, techniques)
-- "evaluation": (max 70 words) an artistic or aesthetic evaluation, valuing the positive but also pointing out possible improvements (only if any). Don't mention technical aspects here (focus, aperture, etc.), but rather artistic/narrative/compositional ones.
+- "evaluation": (max 70 words) an artistic or aesthetic evaluation, valuing the positive but also pointing out possible improvements (only if any). Don't mention technical aspects here (focus, aperture, etc.), but rather artistic/narrative/compositional ones. 
 
-Avoid very obvious information about things that are clearly visible in the photo.
+Rules: 
+1. Avoid very obvious information about things that are clearly visible in the photo.
+2. Don't be complacent. If the image does not work well for street/documentary/artistic, explain why.
 
 Example:
 {
