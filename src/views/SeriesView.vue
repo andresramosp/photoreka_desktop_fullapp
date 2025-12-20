@@ -110,9 +110,50 @@
             </div>
           </div>
           <div class="series-title-row">
-            <h1 class="series-title">
-              {{ viewingSeries.name || viewingSeries.title }}
-            </h1>
+            <div v-if="!editingTitle" class="title-display">
+              <h1 class="series-title">
+                {{ viewingSeries.name || viewingSeries.title }}
+              </h1>
+              <n-button
+                v-if="!isPublicView"
+                text
+                class="edit-button"
+                @click="startEditTitle"
+                title="Edit series name"
+              >
+                <template #icon>
+                  <n-icon size="20">
+                    <CreateOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </div>
+            <div v-else class="title-edit">
+              <n-input
+                v-model:value="editedTitle"
+                placeholder="Enter series name..."
+                maxlength="100"
+              />
+              <n-button
+                text
+                class="action-button"
+                @click="saveTitle"
+                :loading="isSavingTitle"
+              >
+                <template #icon>
+                  <n-icon size="20">
+                    <CheckmarkOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+              <n-button text class="action-button" @click="cancelEditTitle">
+                <template #icon>
+                  <n-icon size="20">
+                    <CloseOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </div>
             <n-button
               text
               class="share-button"
@@ -126,9 +167,56 @@
               </template>
             </n-button>
           </div>
-          <p class="series-description" v-if="viewingSeries.description">
-            {{ viewingSeries.description }}
-          </p>
+          <div v-if="!editingDescription" class="description-display">
+            <p class="series-description" v-if="viewingSeries.description">
+              {{ viewingSeries.description }}
+            </p>
+            <n-button
+              v-if="!isPublicView"
+              text
+              class="edit-button"
+              @click="startEditDescription"
+              title="Edit series description"
+            >
+              <template #icon>
+                <n-icon size="20">
+                  <CreateOutline />
+                </n-icon>
+              </template>
+            </n-button>
+          </div>
+          <div v-else class="description-edit">
+            <n-input
+              v-model:value="editedDescription"
+              placeholder="Enter series description (optional)..."
+              maxlength="500"
+            />
+            <div class="description-actions">
+              <n-button
+                text
+                class="action-button"
+                @click="saveDescription"
+                :loading="isSavingDescription"
+              >
+                <template #icon>
+                  <n-icon size="20">
+                    <CheckmarkOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+              <n-button
+                text
+                class="action-button"
+                @click="cancelEditDescription"
+              >
+                <template #icon>
+                  <n-icon size="20">
+                    <CloseOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </div>
+          </div>
           <p class="series-meta">
             {{ (viewingSeries.photos || []).length }} photos • Updated
             {{ formatDate(viewingSeries.updatedAt) }}
@@ -290,7 +378,6 @@
           <n-form-item label="Description" path="description">
             <n-input
               v-model:value="formData.description"
-              type="textarea"
               placeholder="Add a description (optional)..."
               :rows="3"
               maxlength="500"
@@ -403,6 +490,9 @@ import {
   ListOutline,
   PlayOutline,
   ShareSocialOutline,
+  CreateOutline,
+  CheckmarkOutline,
+  CloseOutline,
 } from "@vicons/ionicons5";
 import PhotosDialog from "@/components/PhotosDialog.vue";
 import FloatingActionBar from "@/components/FloatingActionBar.vue";
@@ -457,6 +547,14 @@ const viewingSeries = ref(null); // Series being viewed
 const showSeriesView = ref(false); // Whether to show series view or grid view
 const isPublicView = ref(false); // Whether this is a public anonymous view
 const publicLoadError = ref(false); // Whether there was an error loading the public series
+
+// Edit states for title and description
+const editingTitle = ref(false);
+const editingDescription = ref(false);
+const editedTitle = ref("");
+const editedDescription = ref("");
+const isSavingTitle = ref(false);
+const isSavingDescription = ref(false);
 
 // When user opens a “hole” between photos, we store the target insert position here.
 // This is the index in the ordered photos array where the new photo(s) should be inserted.
@@ -889,6 +987,72 @@ const backToSeries = () => {
   router.push({ name: "series" });
 };
 
+// Edit title methods
+const startEditTitle = () => {
+  editedTitle.value =
+    viewingSeries.value.name || viewingSeries.value.title || "";
+  editingTitle.value = true;
+};
+
+const saveTitle = async () => {
+  if (!viewingSeries.value || !editedTitle.value.trim()) {
+    message.warning("Series name cannot be empty");
+    return;
+  }
+
+  isSavingTitle.value = true;
+  try {
+    await seriesStore.updateSeries(viewingSeries.value.id, {
+      title: editedTitle.value.trim(),
+      description: viewingSeries.value.description,
+    });
+    message.success("Series name updated");
+    editingTitle.value = false;
+    updateViewingSeries();
+  } catch (error) {
+    console.error("Error updating series name:", error);
+    message.error("Failed to update series name");
+  } finally {
+    isSavingTitle.value = false;
+  }
+};
+
+const cancelEditTitle = () => {
+  editingTitle.value = false;
+  editedTitle.value = "";
+};
+
+// Edit description methods
+const startEditDescription = () => {
+  editedDescription.value = viewingSeries.value.description || "";
+  editingDescription.value = true;
+};
+
+const saveDescription = async () => {
+  if (!viewingSeries.value) return;
+
+  isSavingDescription.value = true;
+  try {
+    await seriesStore.updateSeries(viewingSeries.value.id, {
+      title: viewingSeries.value.name || viewingSeries.value.title,
+      description: editedDescription.value.trim() || "",
+    });
+    message.success("Series description updated");
+    editingDescription.value = false;
+    updateViewingSeries();
+  } catch (error) {
+    console.error("Error updating series description:", error);
+    message.error("Failed to update series description");
+  } finally {
+    isSavingDescription.value = false;
+  }
+};
+
+const cancelEditDescription = () => {
+  editingDescription.value = false;
+  editedDescription.value = "";
+};
+
 const showDeleteConfirmation = () => {
   deleteConfirmationVisible.value = true;
 };
@@ -1211,6 +1375,82 @@ watch(fullscreenViewerVisible, (isVisible) => {
   margin: 0 0 var(--spacing-sm) 0;
   max-width: 600px;
   line-height: 1.6;
+}
+
+/* Edit mode styles */
+.title-display {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.title-edit {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.title-edit :deep(.n-input) {
+  max-width: 600px;
+}
+
+.title-edit :deep(.n-input__input) {
+  font-size: var(--font-size-4xl);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.2;
+}
+
+.description-display {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.description-display .series-description {
+  margin: 0;
+}
+
+.description-edit {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+  align-items: flex-start;
+}
+
+.description-edit :deep(.n-input) {
+  max-width: 400px;
+}
+
+.description-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+.edit-button {
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+  flex-shrink: 0;
+  padding: 0;
+  min-width: 32px;
+}
+
+.edit-button:hover {
+  color: var(--primary-color);
+}
+
+.action-button {
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+  padding: 0;
+  min-width: 32px;
+  flex-shrink: 0;
+}
+
+.action-button:hover {
+  color: var(--primary-color);
 }
 
 .series-meta {
