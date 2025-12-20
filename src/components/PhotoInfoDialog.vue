@@ -1493,7 +1493,7 @@ const getInsight = async () => {
       throw new Error("No photo id available");
     }
     const { data } = await api.get(
-      `/api/catalog/photoInsight/${props.selectedPhoto.id}`
+      `/api/catalog/photoInsight/${props.selectedPhoto.id}?provider=gpt&withScores=true`
     );
     if (
       data &&
