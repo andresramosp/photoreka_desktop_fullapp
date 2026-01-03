@@ -13,7 +13,6 @@ import HealthPhotoService from './health_photo_service.js'
 import { has } from 'lodash'
 import { packages } from '../analyzer_packages.js'
 import { VisionDescriptionTask } from '#models/analyzer/visionDescriptionTask'
-import { VisionTopologicalTask } from '#models/analyzer/visionTopologicalTask'
 import { TagTask } from '#models/analyzer/tagTask'
 import { ChunkTask } from '#models/analyzer/chunkTask'
 import { MetadataTask } from '#models/analyzer/metadataTask'
@@ -254,9 +253,6 @@ export default class AnalyzerProcessRunner {
     switch (taskData.type) {
       case 'VisionDescriptionTask':
         task = new VisionDescriptionTask(this.process)
-        break
-      case 'VisionTopologicalTask':
-        task = new VisionTopologicalTask(this.process)
         break
       case 'TagTask':
         task = new TagTask(this.process)

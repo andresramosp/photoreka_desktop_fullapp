@@ -28,17 +28,19 @@ export default class QueryService {
 
   public async structureQuery(query: string, searchMode: SearchMode) {
     const numberOfWords = query.split(' ').length
+    const emptyResult = {
+      structuredResult: {
+        original: query,
+        positive_segments: [query],
+        nuances_segments: [],
+        no_prefix: query,
+      },
+    }
+
     if (numberOfWords > 2 || searchMode == 'curation') {
       return this.structureQueryLLM(query, searchMode)
     } else {
-      return {
-        structuredResult: {
-          original: query,
-          positive_segments: [query],
-          nuances_segments: [],
-          no_prefix: query,
-        },
-      }
+      return emptyResult
     }
   }
 
@@ -66,17 +68,34 @@ export default class QueryService {
   public async structureQueryLLM(query, searchMode: SearchMode) {
     let expansionCost = 0
 
-    const queryStuctureMessage =
-      searchMode == 'curation'
-        ? MESSAGE_QUERY_STRUCTURE_CURATION_IMPLICIT_ONLY
-        : MESSAGE_QUERY_STRUCTURE
-
     // Lanzar ambas promesas en paralelo
     const modelOnePromise = this.modelsService.getGeminiResponse(
       MESSAGE_QUERY_NO_PREFIX_AND_TRANSLATION,
       JSON.stringify({ query }),
       'gemini-2.0-flash'
     )
+
+    const { result: modelOneResult, cost: modelOneCost } = await modelOnePromise
+
+    // Para broad, solo devolver no_prefix y traducción
+    if (searchMode === 'broad') {
+      return {
+        structuredResult: {
+          original: query,
+          positive_segments: [],
+          nuances_segments: [],
+          no_prefix: modelOneResult.no_prefix,
+          translated: modelOneResult.translated,
+        },
+        noPrefixCost: modelOneCost,
+        expansionCost: 0,
+      }
+    }
+
+    const queryStuctureMessage =
+      searchMode == 'curation'
+        ? MESSAGE_QUERY_STRUCTURE_CURATION_IMPLICIT_ONLY
+        : MESSAGE_QUERY_STRUCTURE
 
     // Nueva llamada para metadatos
     const metadataPromise = this.modelsService.getGeminiResponse(
@@ -85,9 +104,7 @@ export default class QueryService {
       'gemini-2.0-flash'
     )
 
-    // Esperar ambas respuestas
-    const [{ result: modelOneResult, cost: modelOneCost }, { result: metadataResult }] =
-      await Promise.all([modelOnePromise, metadataPromise])
+    const { result: metadataResult } = await metadataPromise
 
     // Segunda llamada, depende de modelOneResult
     const { result: modelResult, cost: modelTwoCost } = await this.modelsService.getGeminiResponse(

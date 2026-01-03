@@ -26,8 +26,8 @@ import PhotoImageService from './photo_image_service.js'
 import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
 import { MediaResolution } from '@google/genai'
 
-export type SearchMode = 'logical' | 'flexible' | 'low_precision' | 'curation'
-export type SearchType = 'semantic' | 'tags' | 'topological'
+export type SearchMode = 'precise' | 'adaptive' | 'broad' | 'curation'
+export type SearchType = 'semantic' | 'tags'
 
 export type SearchOptions = {
   searchMode: SearchMode
@@ -47,12 +47,6 @@ export type SearchOptions = {
 export type SearchTagsOptions = SearchOptions & {
   included: string[]
   excluded: string[]
-}
-
-export type SearchTopologicalOptions = SearchOptions & {
-  left: string
-  right: string
-  middle: string
 }
 
 export default class SearchTextService {
@@ -76,7 +70,7 @@ export default class SearchTextService {
     query: string,
     userId: string | number,
     options: SearchOptions = {
-      searchMode: 'logical',
+      searchMode: 'precise',
       pageSize: 18,
       iteration: 1,
     }
@@ -112,7 +106,7 @@ export default class SearchTextService {
     let embeddingScoredPhotos = await this.scoringService.getScoredPhotosByTagsAndDesc(
       photoIds,
       structuredResult,
-      // searchMode == 'curation' ? 'low_precision' : searchMode,
+      // searchMode == 'curation' ? 'broad' : searchMode,
       searchMode,
       userId?.toString()
     )
@@ -215,13 +209,13 @@ export default class SearchTextService {
     query: string,
     userId: string | number,
     options: SearchOptions = {
-      searchMode: 'logical',
+      searchMode: 'precise',
       pageSize: 18,
       iteration: 1,
     }
   ) {
     const {
-      searchMode = 'logical',
+      searchMode = 'precise',
       pageSize = 18,
       iteration = 1,
       collections,
@@ -299,48 +293,6 @@ export default class SearchTextService {
       photoIds,
       included,
       excluded,
-      searchMode,
-      userId?.toString()
-    )
-
-    const { paginatedPhotos, hasMore } = await this.getPaginatedPhotosByCursor(
-      embeddingScoredPhotos,
-      pageSize,
-      cursor
-    )
-
-    return {
-      type: 'search-matches',
-      data: {
-        hasMore,
-        results: {
-          [iteration]: paginatedPhotos,
-        },
-        iteration: iteration,
-      },
-    }
-  }
-
-  public async searchTopologicalSync(
-    query: any,
-    userId: string | number,
-    options: SearchTopologicalOptions
-  ) {
-    const { pageSize, iteration, searchMode, collections, visualAspects, cursor } = options
-
-    const photoIds = await this.photoManager.getPhotosIdsForSearch(
-      userId?.toString(),
-      collections && collections.length > 0 ? collections : undefined,
-      visualAspects && visualAspects.length > 0 ? visualAspects : undefined
-    )
-
-    let embeddingScoredPhotos = await this.scoringService.getScoredPhotosByTopoAreas(
-      photoIds,
-      {
-        left: options.left,
-        right: options.right,
-        middle: options.middle,
-      },
       searchMode,
       userId?.toString()
     )

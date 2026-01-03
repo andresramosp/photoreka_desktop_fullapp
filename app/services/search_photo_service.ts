@@ -126,7 +126,7 @@ export default class SearchPhotoService {
       hasFullQuery: false,
       hasNuances: false,
       segmentCount: query.criteria === 'tags' ? Math.max(1, query.tagIds.length) : 1,
-      searchMode: 'logical', // Por defecto para búsquedas por fotos
+      searchMode: 'precise', // Por defecto para búsquedas por fotos
     }
 
     const thresholds = this.scoringService.getAbsoluteThresholds(composition)

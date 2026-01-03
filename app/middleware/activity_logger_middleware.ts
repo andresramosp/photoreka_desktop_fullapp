@@ -122,7 +122,6 @@ export default class ActivityLoggerMiddleware {
       { pattern: /\/search\/semantic/, type: 'search_text' },
       { pattern: /\/search\/byPhotos/, type: 'search_visual' },
       { pattern: /\/search\/tags/, type: 'search' },
-      { pattern: /\/search\/topological/, type: 'search' },
       {
         pattern: /\/collections.*/,
         type:

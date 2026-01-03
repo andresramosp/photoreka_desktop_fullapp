@@ -48,39 +48,63 @@ export interface SearchComposition {
 const MAX_SIMILAR_TAGS = 1250
 const MAX_SIMILAR_CHUNKS = 850
 
-const getWeights = (isCuration: boolean) => {
-  return {
-    tags: {
-      tags: true,
-      desc: false,
-      fullQuery: false,
-      imageVector: true,
-      embeddingsTagsThreshold: 0.15,
-      imageEmbeddingThreshold: 0.25,
-    },
-    semantic: {
-      // tags: isCuration ? false : true,
-      // desc: true,
-      // fullQuery: true,
-      imageVector: true,
-      embeddingsTagsThreshold: 0.55,
-      embeddingsDescsThreshold: 0.17,
-      embeddingsFullQueryThreshold: 0.3,
-      imageEmbeddingThreshold: 0.05,
-    },
-    topological: {
-      tags: true,
-      desc: false,
-      fullQuery: false,
-      embeddingsTagsThreshold: 0.13,
-    },
-    nuancesTags: {
-      tags: true,
-      desc: false,
-      fullQuery: false,
-      embeddingsTagsThreshold: 0.35,
-    },
-  }
+export type RefineMode = 'entailment' | 'neutral' | 'none'
+
+export interface SearchModeConfig {
+  tagsThreshold: number | null
+  descSegmentThreshold: number | null
+  descFullQueryThreshold: number | null
+  imageThreshold: number | null
+  refineMode: RefineMode
+  nuancesThreshold: number | null
+}
+
+const SEARCH_MODE_CONFIGURATION: Record<SearchMode, SearchModeConfig> = {
+  broad: {
+    tagsThreshold: null,
+    descSegmentThreshold: null,
+    descFullQueryThreshold: null,
+    imageThreshold: 0.15,
+    refineMode: 'none',
+    nuancesThreshold: null,
+  },
+  adaptive: {
+    tagsThreshold: 0.17,
+    descSegmentThreshold: null,
+    descFullQueryThreshold: 0.25,
+    imageThreshold: 0.2,
+    refineMode: 'none',
+    nuancesThreshold: null,
+  },
+  precise: {
+    tagsThreshold: 0.17,
+    descSegmentThreshold: 0.17,
+    descFullQueryThreshold: 0.3,
+    imageThreshold: null,
+    refineMode: 'entailment',
+    nuancesThreshold: null,
+  },
+  curation: {
+    tagsThreshold: null,
+    descSegmentThreshold: null,
+    descFullQueryThreshold: 0.3,
+    imageThreshold: 0.15,
+    refineMode: 'neutral',
+    nuancesThreshold: 0.35,
+  },
+}
+
+// Input normalizado y preparado para scoring
+interface PreparedQuery {
+  positiveSegments: string[]
+  nuancesSegments: string[]
+  fullQuery: string
+  includeVisualAspects: boolean
+}
+
+// Configuración efectiva para una búsqueda específica
+interface EffectiveConfig extends SearchModeConfig {
+  searchInDesc: boolean
 }
 
 export default class ScoringService {
@@ -98,21 +122,88 @@ export default class ScoringService {
     this.nlpService = new NLPService()
   }
 
-  // Métodos para sistema de puntuación absoluta
-  private analyzeSearchComposition(
-    structuredQuery: any,
-    weights: any,
-    searchType: string,
-    searchMode?: SearchMode
-  ): SearchComposition {
-    const typeWeights = weights[searchType] || weights.semantic
+  // ==================== HELPERS DE CONFIGURACIÓN ====================
+
+  private getEffectiveConfig(
+    searchMode: SearchMode,
+    searchType: 'full' | 'tags_only'
+  ): EffectiveConfig {
+    const baseConfig = { ...SEARCH_MODE_CONFIGURATION[searchMode] }
+
+    // Para búsqueda solo por tags, desactivar desc
+    if (searchType === 'tags_only') {
+      return {
+        ...baseConfig,
+        descSegmentThreshold: null,
+        descFullQueryThreshold: null,
+        searchInDesc: false,
+      }
+    }
 
     return {
-      hasFullQuery: structuredQuery.positive_segments.length > 1 && typeWeights.fullQuery, // || searchType === 'semantic'
-      hasNuances: structuredQuery.nuances_segments?.length > 0,
+      ...baseConfig,
+      searchInDesc: baseConfig.descSegmentThreshold !== null,
+    }
+  }
+
+  private prepareQuery(structuredQuery: any): PreparedQuery {
+    return {
+      positiveSegments: this.nlpService.normalizeTerms(structuredQuery.positive_segments),
+      nuancesSegments: structuredQuery.nuances_segments?.length
+        ? this.nlpService.normalizeTerms(structuredQuery.nuances_segments)
+        : [],
+      fullQuery: structuredQuery.no_prefix || '',
+      includeVisualAspects: structuredQuery.include_visual_aspects || false,
+    }
+  }
+
+  private prepareQueryFromTags(included: string[], excluded: string[]): PreparedQuery {
+    return {
+      positiveSegments: this.nlpService.normalizeTerms(included),
+      nuancesSegments: [],
+      fullQuery: this.nlpService.normalizeTerms(included).join(', '),
+      includeVisualAspects: true,
+    }
+  }
+
+  private async prepareEmbeddings(query: PreparedQuery, config: EffectiveConfig): Promise<void> {
+    const terms = [...query.positiveSegments, ...query.nuancesSegments, query.fullQuery].filter(
+      Boolean
+    )
+
+    const needsClipEmbedding = config.imageThreshold !== null
+    await EmbeddingStoreService.calculateEmbeddings(terms, needsClipEmbedding)
+  }
+
+  private initializeScores(photoIds: number[]): ScoredPhoto[] {
+    return photoIds.map((id) => ({
+      id,
+      tagScore: 0,
+      descScore: 0,
+      imageScore: 0,
+      totalScore: 0,
+    }))
+  }
+
+  private getTagsCategories(includeVisualAspects: boolean): string[] {
+    return includeVisualAspects
+      ? ['context_story', 'visual_accents', 'visual_aspects', 'artistic_scores']
+      : ['context_story', 'visual_accents']
+  }
+
+  // ==================== MÉTODOS DE COMPOSICIÓN ====================
+
+  private analyzeSearchComposition(
+    query: PreparedQuery,
+    config: EffectiveConfig,
+    searchMode: SearchMode
+  ): SearchComposition {
+    return {
+      hasFullQuery: query.positiveSegments.length > 1 && config.descFullQueryThreshold !== null,
+      hasNuances: query.nuancesSegments.length > 0,
       segmentCount:
-        structuredQuery.positive_segments.length && (typeWeights.tags || typeWeights.desc)
-          ? structuredQuery.positive_segments.length
+        query.positiveSegments.length && (config.tagsThreshold !== null || config.searchInDesc)
+          ? query.positiveSegments.length
           : 1,
       searchMode,
     }
@@ -120,7 +211,7 @@ export default class ScoringService {
 
   public getAbsoluteThresholds(composition: SearchComposition): MatchThresholds {
     // Modificador para umbrales menos estrictos (configurable)
-    const THRESHOLD_MODIFIER_NON_LOGICAL = 0.7
+    const THRESHOLD_MODIFIER_NON_PRECISE = 0.7
     // Umbrales base normalizados por segmento
     let segmentCount = Math.max(1, composition.segmentCount)
     // Si hay fullQuery, cuenta como 1/4 segmento adicional
@@ -129,9 +220,9 @@ export default class ScoringService {
       segmentCount += 0.25
     }
 
-    // Modificador para searchMode distinto de 'logical'
+    // Modificador para searchMode distinto de 'precise'
     const thresholdModifier =
-      composition.searchMode !== 'logical' ? THRESHOLD_MODIFIER_NON_LOGICAL : 1
+      composition.searchMode !== 'precise' ? THRESHOLD_MODIFIER_NON_PRECISE : 1
 
     // Cada umbral es un porcentaje del máximo posible (segmentCount)
     // El rango total será de 0 a segmentCount
@@ -157,6 +248,8 @@ export default class ScoringService {
     }
   }
 
+  // ==================== MÉTODOS PRINCIPALES DE SCORING ====================
+
   @withCache({
     provider: 'redis',
     ttl: 60 * 5,
@@ -167,129 +260,37 @@ export default class ScoringService {
     searchMode: SearchMode,
     userId: string
   ): Promise<ScoredPhoto[] | undefined> {
-    let weights = getWeights(searchMode == 'curation')
+    // 1. Obtener configuración
+    const config = this.getEffectiveConfig(searchMode, 'full')
 
-    structuredQuery.positive_segments = this.nlpService.normalizeTerms(
-      structuredQuery.positive_segments
-    )
+    // 2. Preparar query (normalizar términos)
+    const query = this.prepareQuery(structuredQuery)
 
-    if (structuredQuery.nuances_segments.length)
-      structuredQuery.nuances_segments = this.nlpService.normalizeTerms(
-        structuredQuery.nuances_segments
-      )
+    // 3. Pre-calcular embeddings necesarios
+    await this.prepareEmbeddings(query, config)
 
-    await EmbeddingStoreService.calculateEmbeddings(
-      [
-        ...structuredQuery.positive_segments,
-        ...structuredQuery.nuances_segments,
-        structuredQuery.no_prefix,
-      ].filter(Boolean),
-      weights.semantic.imageVector
-    )
+    // 4. Inicializar scores
+    const initialScores = this.initializeScores(photoIds)
 
-    // Inicializamos solo IDs, no objetos completos
-    let aggregatedScores: ScoredPhoto[] = photoIds.map((id) => ({
-      id,
-      tagScore: 0,
-      descScore: 0,
-      imageScore: 0,
-      totalScore: 0,
-    }))
+    // 5. Ejecutar en paralelo: segmentos, fullQuery, nuances e image
+    const [segmentScores, fullQueryScores, nuanceScores, imageScores] = await Promise.all([
+      this.processPositiveSegments(initialScores, query, config, userId),
+      this.processFullQuery(photoIds, query, config),
+      this.processNuances(photoIds, query, config, userId),
+      this.processImageSimilarity(photoIds, query.fullQuery, config),
+    ])
 
-    const performFullQuerySearch =
-      structuredQuery.positive_segments.length > 1 && weights.semantic.fullQuery
+    // 6. Merge todos los resultados
+    let finalScores = this.mergeTagDescScoredPhotos(segmentScores, [], fullQueryScores)
 
-    const fullQueryPromise: Promise<ScoredPhoto[]> = performFullQuerySearch
-      ? this.getScoredPhotoDescBySegment(
-          photoIds,
-          { name: structuredQuery.no_prefix, index: -1 },
-          weights.semantic.embeddingsFullQueryThreshold,
-          searchMode,
-          true,
-          ['context', 'story', 'visual_accents']
-        )
-      : Promise.resolve([])
-
-    const imageQueryPromise: Promise<ScoredPhoto[]> = weights.semantic.imageVector
-      ? this.getScoredPhotoImageByFullQuery(
-          photoIds,
-          structuredQuery.no_prefix,
-          weights.semantic.imageEmbeddingThreshold
-        )
-      : Promise.resolve([])
-
-    const performNuancesQuerySearch =
-      structuredQuery.nuances_segments?.length > 0 && searchMode == 'curation'
-
-    const nuancesQuery: Promise<ScoredPhoto[]> = performNuancesQuerySearch
-      ? Promise.all(
-          structuredQuery.nuances_segments.map((nuance_segment, index) =>
-            this.processSegment(
-              { name: nuance_segment, index },
-              aggregatedScores,
-              weights.nuancesTags,
-              searchMode,
-              structuredQuery.include_visual_aspects
-                ? ['context_story', 'visual_accents', 'visual_aspects', 'artistic_scores']
-                : ['context_story', 'visual_accents'],
-              ['context', 'story', 'visual_accents'],
-              [],
-              userId
-            )
-          )
-        )
-      : Promise.resolve([])
-
-    const segmentsPromise = (async () => {
-      let scores = aggregatedScores
-      for (const [index, segment] of structuredQuery.positive_segments.entries()) {
-        scores = await this.processSegment(
-          { name: segment, index },
-          scores,
-          weights.semantic,
-          searchMode,
-          structuredQuery.include_visual_aspects
-            ? ['context_story', 'visual_accents', 'visual_aspects', 'artistic_scores']
-            : ['context_story', 'visual_accents'],
-          ['context', 'story'],
-          [],
-          userId
-        )
-      }
-      return scores
-    })()
-
-    const [scoresAfterSegments, fullQueryDescScores, imageScores, nuancesQueryTagsScore] =
-      await Promise.all([segmentsPromise, fullQueryPromise, imageQueryPromise, nuancesQuery])
-
-    let finalScores = this.mergeTagDescScoredPhotos(scoresAfterSegments, [], fullQueryDescScores)
-
-    for (let nuanceTagScore of nuancesQueryTagsScore) {
-      finalScores = this.mergeTagDescScoredPhotos(finalScores, nuanceTagScore, [])
+    for (const nuanceScore of nuanceScores) {
+      finalScores = this.mergeTagDescScoredPhotos(finalScores, nuanceScore, [])
     }
 
-    // Merge image scores (se añade una sola vez con fullQuery)
     finalScores = this.mergeImageScores(finalScores, imageScores)
 
-    // Nuevo sistema de scoring absoluto
-    const searchComposition = this.analyzeSearchComposition(
-      structuredQuery,
-      weights,
-      'semantic',
-      searchMode
-    )
-    const thresholds = this.getAbsoluteThresholds(searchComposition)
-
-    const filteredSortedScores = finalScores
-      .filter((scores) => scores.totalScore > 0)
-      .sort((a, b) => b.totalScore - a.totalScore)
-      .map((score) => ({
-        ...score,
-        labelScore: this.getLabelScore(score.totalScore, thresholds),
-      }))
-    //.filter((score) => score.labelScore >= 10) // Opcional: filtrar resultados no relevantes
-
-    return filteredSortedScores
+    // 7. Calcular labels y ordenar
+    return this.finalizeScores(finalScores, query, config, searchMode)
   }
 
   // TODO: replantear: tiene
@@ -306,8 +307,8 @@ export default class ScoringService {
       this.findMatchingTagsForSegment(
         { name: tag, index: 1 },
         allTags,
-        0.2,
-        searchMode,
+        0.55,
+        'none',
         photoIds,
         [],
         []
@@ -338,11 +339,10 @@ export default class ScoringService {
     return photoIds.filter((id) => !excludedPhotoIds.includes(id))
   }
 
-  // TODO: userid!!
-  // @withCache({
-  //   provider: 'redis',
-  //   ttl: 120,
-  // })
+  @withCache({
+    provider: 'redis',
+    ttl: 60 * 5,
+  })
   public async getScoredPhotosByTags(
     photoIds: number[],
     included: string[],
@@ -350,175 +350,46 @@ export default class ScoringService {
     searchMode: SearchMode,
     userId: string
   ): Promise<ScoredPhoto[] | undefined> {
-    const weights = getWeights(searchMode == 'curation')
+    // 1. Obtener configuración (tags_only ignora desc)
+    const config = this.getEffectiveConfig(searchMode, 'tags_only')
 
-    included = this.nlpService.normalizeTerms(included)
-    excluded = this.nlpService.normalizeTerms(excluded)
+    // 2. Preparar query desde tags
+    const query = this.prepareQueryFromTags(included, excluded)
+    const normalizedExcluded = this.nlpService.normalizeTerms(excluded)
 
-    const fullTagQuery = included.join(' ')
     await EmbeddingStoreService.calculateEmbeddings(
-      [...included, ...excluded],
-      weights.semantic.imageVector
+      [...query.positiveSegments, ...normalizedExcluded, query.fullQuery],
+      config.imageThreshold !== null
     )
 
-    // Aplicar exclusión directamente a nivel de IDs
-    const filteredPhotoIds = await this.filterExcludedPhotoIdsByTags(
+    // 4. Filtrar excluidos
+    const filteredIds = await this.filterExcludedPhotoIdsByTags(
       photoIds,
-      excluded,
+      normalizedExcluded,
       searchMode,
       userId
     )
 
-    let aggregatedScores: ScoredPhoto[] = filteredPhotoIds.map((id) => ({
+    // 5. Inicializar scores (con pequeño valor para devolver algo si solo hay negativos)
+    const initialScores = filteredIds.map((id) => ({
       id,
       tagScore: 0,
       descScore: 0,
-      totalScore: 0.0001, // Para que devuelva algo si solo hay negativos, sin afectar al score
-    }))
-
-    const includedPromise = (async () => {
-      let scores = aggregatedScores
-      for (const [index, segment] of included.entries()) {
-        scores = await this.processSegment(
-          { name: segment, index },
-          scores,
-          weights.tags,
-          searchMode,
-          ['context_story', 'visual_accents', 'visual_aspects'],
-          ['context', 'story'],
-          [],
-          userId
-        )
-      }
-      return scores
-    })()
-
-    const imageQueryPromise: Promise<ScoredPhoto[]> =
-      weights.tags.imageVector && fullTagQuery
-        ? this.getScoredPhotoImageByFullQuery(
-            filteredPhotoIds,
-            fullTagQuery,
-            weights.tags.imageEmbeddingThreshold
-          )
-        : Promise.resolve([])
-
-    const [scoresAfterTags, imageScores] = await Promise.all([includedPromise, imageQueryPromise])
-
-    // Merge image scores
-    const finalScores = this.mergeImageScores(scoresAfterTags, imageScores)
-
-    // Nuevo sistema de scoring absoluto para tags
-    const tagQueryStructure = {
-      positive_segments: included,
-      nuances_segments: [],
-    }
-    const searchComposition = this.analyzeSearchComposition(tagQueryStructure, weights, 'tags')
-    const thresholds = this.getAbsoluteThresholds(searchComposition)
-
-    const sortedScores = finalScores
-      .filter((scores) => scores.totalScore > 0)
-      .sort((a, b) => b.totalScore - a.totalScore)
-      .map((score) => ({
-        ...score,
-        labelScore: this.getLabelScore(score.totalScore, thresholds),
-      }))
-
-    return sortedScores
-  }
-
-  // TODO: cache
-  // TODO: Probar solo excluir area contraria
-  public async getScoredPhotosByTopoAreas(
-    photoIds: number[],
-    queryByAreas: { left: string; right: string; middle: string },
-    searchMode: SearchMode,
-    userId: string
-  ): Promise<ScoredPhoto[] | undefined> {
-    const weights = getWeights(searchMode == 'curation')
-
-    queryByAreas.left = !!queryByAreas.left
-      ? this.nlpService.normalizeTerms([queryByAreas.left])[0]
-      : null
-    queryByAreas.right = !!queryByAreas.right
-      ? this.nlpService.normalizeTerms([queryByAreas.right])[0]
-      : null
-    queryByAreas.middle = !!queryByAreas.middle
-      ? this.nlpService.normalizeTerms([queryByAreas.middle])[0]
-      : null
-
-    await EmbeddingStoreService.calculateEmbeddings(
-      [queryByAreas.left, queryByAreas.right, queryByAreas.middle].filter(Boolean)
-    )
-
-    let aggregatedScores: ScoredPhoto[] = photoIds.map((id) => ({
-      id,
-      descScore: 0,
-      tagScore: 0,
+      imageScore: 0,
       totalScore: 0.0001,
-      matchingTags: [],
-      matchingChunks: [],
     }))
 
-    const oppositeAreas: { [key: string]: string } = {
-      left: 'right',
-      right: 'left',
-    }
+    // 6. Ejecutar en paralelo: tags e image
+    const [tagScores, imageScores] = await Promise.all([
+      this.processPositiveSegments(initialScores, query, config, userId),
+      this.processImageSimilarity(filteredIds, query.fullQuery, config),
+    ])
 
-    const filledAreas = Object.entries(queryByAreas)
-      .filter(([_, value]) => value?.trim())
-      .map(([area, content]) => ({ area, content }))
+    // 7. Merge image scores
+    const finalScores = this.mergeImageScores(tagScores, imageScores)
 
-    const includedPromise = (async () => {
-      let scores = aggregatedScores
-      for (const [index, { area, content }] of filledAreas.entries()) {
-        const areasToSearch = [area]
-        scores = await this.processSegment(
-          { name: content, index },
-          scores,
-          weights.topological,
-          searchMode,
-          ['context_story', 'visual_accents'],
-          [],
-          areasToSearch,
-          userId
-        )
-      }
-      return scores
-    })()
-
-    const [finalScores] = await Promise.all([includedPromise])
-
-    // Nuevo sistema de scoring absoluto para topológico
-    const topoQueryStructure = {
-      positive_segments: filledAreas.map((a) => a.content),
-      nuances_segments: [],
-    }
-    const searchComposition = this.analyzeSearchComposition(
-      topoQueryStructure,
-      weights,
-      'topological'
-    )
-    const thresholds = this.getAbsoluteThresholds(searchComposition)
-
-    const sortedScores = finalScores
-      .filter((scores) => scores.totalScore > 0)
-      .sort((a, b) => b.totalScore - a.totalScore)
-      .map((score) => ({
-        ...score,
-        labelScore: this.getLabelScore(score.totalScore, thresholds),
-      }))
-
-    const photoModels = await Photo.query().whereIn(
-      'id',
-      sortedScores.map((s) => s.id)
-    )
-
-    const photoMap = new Map(photoModels.map((p) => [p.id, p]))
-
-    return sortedScores.map((score) => ({
-      ...score,
-      photo: photoMap.get(score.id),
-    }))
+    // 8. Calcular labels y ordenar
+    return this.finalizeScores(finalScores, query, config, searchMode)
   }
 
   private mergeTagDescScoredPhotos(
@@ -635,41 +506,154 @@ export default class ScoringService {
     return Array.from(map.values())
   }
 
+  // ==================== MÉTODOS DE PROCESAMIENTO ====================
+
+  private async processPositiveSegments(
+    scores: ScoredPhoto[],
+    query: PreparedQuery,
+    config: EffectiveConfig,
+    userId: string
+  ): Promise<ScoredPhoto[]> {
+    const tagsCategories = this.getTagsCategories(query.includeVisualAspects)
+
+    for (const [index, segment] of query.positiveSegments.entries()) {
+      scores = await this.processSegment(
+        { name: segment, index },
+        scores,
+        {
+          tagsThreshold: config.tagsThreshold,
+          descThreshold: config.descSegmentThreshold,
+          refineMode: config.refineMode,
+        },
+        tagsCategories,
+        ['context', 'story'],
+        userId
+      )
+    }
+    return scores
+  }
+
+  // Versión para ejecución paralela (usa photoIds directamente)
+  private async processFullQuery(
+    photoIds: number[],
+    query: PreparedQuery,
+    config: EffectiveConfig
+  ): Promise<{ id: number; descScore: number; matchingChunks: any[] }[]> {
+    // Solo procesar si hay más de 1 segmento y fullQuery está habilitado
+    if (query.positiveSegments.length <= 1 || config.descFullQueryThreshold === null) {
+      return []
+    }
+
+    return this.getScoredPhotoDescBySegment(
+      photoIds,
+      { name: query.fullQuery, index: -1 },
+      config.descFullQueryThreshold,
+      config.refineMode,
+      true,
+      ['context', 'story', 'visual_accents']
+    )
+  }
+
+  // Versión para ejecución paralela (usa photoIds directamente)
+  private async processNuances(
+    photoIds: number[],
+    query: PreparedQuery,
+    config: EffectiveConfig,
+    userId: string
+  ): Promise<ScoredPhoto[][]> {
+    // Solo procesar si hay nuances Y config lo permite
+    if (config.nuancesThreshold === null || !query.nuancesSegments.length) {
+      return []
+    }
+
+    const tagsCategories = this.getTagsCategories(query.includeVisualAspects)
+    const initialScores = this.initializeScores(photoIds)
+
+    return Promise.all(
+      query.nuancesSegments.map((segment, index) =>
+        this.processSegment(
+          { name: segment, index },
+          initialScores,
+          {
+            tagsThreshold: config.nuancesThreshold,
+            descThreshold: null, // Nuances solo busca en tags
+            refineMode: config.refineMode,
+          },
+          tagsCategories,
+          [],
+          userId
+        )
+      )
+    )
+  }
+
+  // Versión para ejecución paralela (usa photoIds directamente)
+  private async processImageSimilarity(
+    photoIds: number[],
+    fullQuery: string,
+    config: EffectiveConfig
+  ): Promise<{ id: number; imageScore: number }[]> {
+    if (config.imageThreshold === null || !fullQuery) {
+      return []
+    }
+
+    return this.getScoredPhotoImageByFullQuery(photoIds, fullQuery, config.imageThreshold)
+  }
+
+  private finalizeScores(
+    scores: ScoredPhoto[],
+    query: PreparedQuery,
+    config: EffectiveConfig,
+    searchMode: SearchMode
+  ): ScoredPhoto[] {
+    const searchComposition = this.analyzeSearchComposition(query, config, searchMode)
+    const thresholds = this.getAbsoluteThresholds(searchComposition)
+
+    return scores
+      .filter((score) => score.totalScore > 0)
+      .sort((a, b) => b.totalScore - a.totalScore)
+      .map((score) => ({
+        ...score,
+        labelScore: this.getLabelScore(score.totalScore, thresholds),
+      }))
+  }
+
   private async processSegment(
     segment: { name: string; index: number },
     aggregatedScores: ScoredPhoto[],
-    weights: { tags: boolean; desc: boolean; fullQuery: boolean | null },
-    searchMode: SearchMode,
+    config: {
+      tagsThreshold: number | null
+      descThreshold: number | null
+      refineMode: RefineMode
+    },
     tagsCategories: string[],
     descCategories: string[],
-    areas: string[],
     userId: string
   ): Promise<ScoredPhoto[]> {
     const photoIds = aggregatedScores.map((s) => s.id)
 
     const tagPromise =
-      weights.tags && photoIds.length
+      config.tagsThreshold !== null && photoIds.length
         ? this.getScoredPhotoTagsBySegment(
             photoIds,
             segment,
-            weights.embeddingsTagsThreshold,
-            searchMode,
+            config.tagsThreshold,
+            config.refineMode,
             tagsCategories,
-            areas,
+            [],
             userId
           )
         : Promise.resolve([])
 
     const descPromise =
-      weights.desc && photoIds.length
+      config.descThreshold !== null && photoIds.length
         ? this.getScoredPhotoDescBySegment(
             photoIds,
             segment,
-            weights.embeddingsDescsThreshold,
-            searchMode,
+            config.descThreshold,
+            config.refineMode,
             false,
-            descCategories,
-            areas
+            descCategories
           )
         : Promise.resolve([])
 
@@ -685,18 +669,14 @@ export default class ScoringService {
     return updatedScores.filter((score) => matchingSegmentPhotoIds.has(score.id))
   }
 
-  @withCache({
-    provider: 'redis',
-    ttl: 60 * 30,
-  })
   private async getScoredPhotoDescBySegment(
     photoIds: number[],
     segment: { name: string; index: number },
     embeddingsProximityThreshold: number = 0.2,
-    searchMode: SearchMode,
+    refineMode: RefineMode,
     isFullQuery: boolean = false,
     categories: string[],
-    areas: string[]
+    areas: string[] = []
   ): Promise<{ id: number; descScore: number; matchingChunks: any[] }[]> {
     const embedding = EmbeddingStoreService.getEmbedding(segment.name)
 
@@ -716,10 +696,10 @@ export default class ScoringService {
         name: mc.chunk.replace(/\.$/, ''),
         proximity: mc.proximity,
         chunk_id: mc.id,
-        photo_id: mc.photo_id, // asegurarte que viene incluido desde vectorService
+        photo_id: mc.photo_id,
       })),
       'desc',
-      searchMode
+      refineMode
     )
 
     const photoChunkMap = new Map<number, any[]>()
@@ -752,10 +732,10 @@ export default class ScoringService {
       .sort((a, b) => b.descScore - a.descScore)
   }
 
-  // @withCache({
-  //   provider: 'redis',
-  //   ttl: 60 * 30,
-  // })
+  @withCache({
+    provider: 'redis',
+    ttl: 60 * 5,
+  })
   private async getScoredPhotoImageByFullQuery(
     photoIds: number[],
     fullQuery: string,
@@ -797,17 +777,13 @@ export default class ScoringService {
       .sort((a, b) => b.imageScore - a.imageScore)
   }
 
-  @withCache({
-    provider: 'redis',
-    ttl: 60 * 30,
-  })
   private async getScoredPhotoTagsBySegment(
     photoIds: number[],
     segment: { name: string; index: number },
     embeddingsProximityThreshold: number = 0.15,
-    searchMode: SearchMode,
+    refineMode: RefineMode,
     categories?: string[],
-    areas: string[],
+    areas: string[] = [],
     userId: string
   ): Promise<{ id: number; tagScore: number; matchingTags: any[] }[]> {
     let userTags = await this.tagManager.getTagsByUser(userId)
@@ -816,7 +792,7 @@ export default class ScoringService {
       segment,
       userTags,
       embeddingsProximityThreshold,
-      searchMode,
+      refineMode,
       photoIds,
       categories,
       areas
@@ -856,17 +832,12 @@ export default class ScoringService {
     segment: { name: string; index: number },
     userTags,
     embeddingsProximityThreshold: number,
-    searchMode: SearchMode,
+    refineMode: RefineMode,
     photoIds: number[],
     categories: string[],
     areas: string[]
   ) {
-    // 1) Comparación por cadenas
-
-    // TODO: rehacer para que funcione con tag_photo y solo si no hay areas!!
-    // let { lematizedTerm, stringMatches, remainingTags } = this.getStringMatches(segment, userTags)
-
-    // 2) Comparación y ajuste semántico/lógico
+    // Comparación y ajuste semántico/lógico
     const semanticMatches = await this.getSemanticMatches(
       segment.name,
       userTags,
@@ -874,14 +845,10 @@ export default class ScoringService {
       photoIds,
       categories,
       areas,
-      searchMode
+      refineMode
     )
 
-    // Combinar y filtrar duplicados
-    // const allMatches = [...stringMatches, ...semanticMatches]
-    const allMatches = [...semanticMatches]
-
-    return { matchingPhotoTags: allMatches }
+    return { matchingPhotoTags: semanticMatches }
   }
 
   private getStringMatches(segment: { name: string; index: number }, userTags) {
@@ -922,7 +889,7 @@ export default class ScoringService {
     photoIds: number[],
     categories: string[],
     areas: string[],
-    searchMode: SearchMode
+    refineMode: RefineMode
   ) {
     const embedding = EmbeddingStoreService.getEmbedding(term)
 
@@ -942,26 +909,30 @@ export default class ScoringService {
     )
 
     // Ajustar proximidades según inferencia lógica
-    const adjustedSimilarTags = await this.adjustProximities(term, similarTags, 'tag', searchMode)
+    const adjustedSimilarTags = await this.adjustProximities(term, similarTags, 'tag', refineMode)
 
     return adjustedSimilarTags
   }
 
-  public async adjustProximities(term, tags, termsType = 'tag', searchMode: SearchMode) {
-    let result
+  public async adjustProximities(
+    term: string,
+    tags: any[],
+    termsType: 'tag' | 'desc' = 'tag',
+    refineMode: RefineMode
+  ) {
+    const LOGIC_THRESHOLD = 1
 
-    const LOGIC_THRESHOLD = 1.5
-    // Low precision
-    if (searchMode == 'low_precision') {
+    // None: sin ajuste, solo filtrar positivos
+    if (refineMode === 'none') {
       return tags.filter((tag) => tag.proximity > 0)
     }
 
     const adjustedProximitiesByContext =
       await this.modelsService.adjustProximitiesByContextInference(term, tags, termsType, false)
 
-    // Logical
-    if (searchMode == 'logical') {
-      result = adjustedProximitiesByContext
+    // Entailment: filtro estricto basado en logicProximity
+    if (refineMode === 'entailment') {
+      return adjustedProximitiesByContext
         .map((ap) => ({
           ...ap,
           proximity: ap.logicProximity,
@@ -971,29 +942,27 @@ export default class ScoringService {
           ...element,
           proximity: (element.proximity - LOGIC_THRESHOLD) / (2 - LOGIC_THRESHOLD),
         }))
-      return result
-      // Flexible
-    } else {
-      const maxPossible = 1 + Math.log1p(2) // embeddingsProximity max 1, logicProximity max 2
-      result = adjustedProximitiesByContext
-        .map((ap) => {
-          const logicBonus = Math.max(ap.logicProximity, 0)
-          const scaledBonus = Math.log1p(logicBonus)
-          const rawProximity = ap.embeddingsProximity + scaledBonus
-          return {
-            ...ap,
-            rawProximity,
-          }
-        })
-        .filter((element) => element.rawProximity > 0.9)
-        .map((element) => {
-          const normalizedProximity = Math.max(0, Math.min(1, element.rawProximity / maxPossible))
-          return {
-            ...element,
-            proximity: normalizedProximity,
-          }
-        })
-      return result
     }
+
+    // Neutral: bonus logarítmico combinando embeddings y logic
+    const maxPossible = 1 + Math.log1p(2) // embeddingsProximity max 1, logicProximity max 2
+    return adjustedProximitiesByContext
+      .map((ap) => {
+        const logicBonus = Math.max(ap.logicProximity, 0)
+        const scaledBonus = Math.log1p(logicBonus)
+        const rawProximity = ap.embeddingsProximity + scaledBonus
+        return {
+          ...ap,
+          rawProximity,
+        }
+      })
+      .filter((element) => element.rawProximity > 0.9)
+      .map((element) => {
+        const normalizedProximity = Math.max(0, Math.min(1, element.rawProximity / maxPossible))
+        return {
+          ...element,
+          proximity: normalizedProximity,
+        }
+      })
   }
 }

@@ -73,6 +73,70 @@ export class EmbeddingStoreService {
     }
   }
 
+  private static async calculateTextEmbeddings(
+    newTerms: string[],
+    modelsService: ModelsService
+  ): Promise<void> {
+    if (newTerms.length === 0) return
+
+    console.log(
+      `[EmbeddingStoreService] Calculando embeddings Text para ${newTerms.length} nuevos términos...`
+    )
+
+    const { embeddings } = await modelsService.getEmbeddingsCPU(newTerms)
+
+    if (!embeddings || embeddings.length !== newTerms.length) {
+      throw new Error(
+        `[EmbeddingStoreService] Error: Mismatch entre entrada (${newTerms.length}) y embeddings devueltos (${embeddings?.length})`
+      )
+    }
+
+    const pairs = newTerms.map((key, index) => ({
+      key,
+      value: embeddings[index],
+    }))
+
+    this.addEmbeddings(pairs, EmbeddingType.Text)
+
+    console.log(
+      `[EmbeddingStoreService] Embeddings Text calculados y almacenados para claves: [${newTerms.join(
+        ', '
+      )}]`
+    )
+  }
+
+  private static async calculateCLIPEmbeddings(
+    newTermsCLIP: string[],
+    modelsService: ModelsService
+  ): Promise<void> {
+    if (newTermsCLIP.length === 0) return
+
+    console.log(
+      `[EmbeddingStoreService] Calculando embeddings CLIP para ${newTermsCLIP.length} nuevos términos...`
+    )
+
+    const { embeddings: embeddingsCLIP } = await modelsService.getCLIPEmbeddingsCPU(newTermsCLIP)
+
+    if (!embeddingsCLIP || embeddingsCLIP.length !== newTermsCLIP.length) {
+      throw new Error(
+        `[EmbeddingStoreService] Error: Mismatch entre entrada CLIP (${newTermsCLIP.length}) y embeddings devueltos (${embeddingsCLIP?.length})`
+      )
+    }
+
+    const pairsCLIP = newTermsCLIP.map((key, index) => ({
+      key,
+      value: embeddingsCLIP[index],
+    }))
+
+    this.addEmbeddings(pairsCLIP, EmbeddingType.CLIP)
+
+    console.log(
+      `[EmbeddingStoreService] Embeddings CLIP calculados y almacenados para claves: [${newTermsCLIP.join(
+        ', '
+      )}]`
+    )
+  }
+
   public static async calculateEmbeddings(terms: string[], includeCLIP = false): Promise<void> {
     const newTerms = [...new Set(terms.filter((term) => !this.embeddingsMap[term]))]
     const newTermsCLIP = includeCLIP
@@ -88,60 +152,10 @@ export class EmbeddingStoreService {
 
     const modelsService = new ModelsService()
 
-    // Calcular embeddings normales
-    if (newTerms.length > 0) {
-      console.log(
-        `[EmbeddingStoreService] Calculando embeddings Text para ${newTerms.length} nuevos términos...`
-      )
-
-      const { embeddings } = await modelsService.getEmbeddingsCPU(newTerms)
-
-      if (!embeddings || embeddings.length !== newTerms.length) {
-        throw new Error(
-          `[EmbeddingStoreService] Error: Mismatch entre entrada (${newTerms.length}) y embeddings devueltos (${embeddings?.length})`
-        )
-      }
-
-      const pairs = newTerms.map((key, index) => ({
-        key,
-        value: embeddings[index],
-      }))
-
-      this.addEmbeddings(pairs, EmbeddingType.Text)
-
-      console.log(
-        `[EmbeddingStoreService] Embeddings Text calculados y almacenados para claves: [${newTerms.join(
-          ', '
-        )}]`
-      )
-    }
-
-    // Calcular embeddings CLIP si se solicita
-    if (includeCLIP && newTermsCLIP.length > 0) {
-      console.log(
-        `[EmbeddingStoreService] Calculando embeddings CLIP para ${newTermsCLIP.length} nuevos términos...`
-      )
-
-      const { embeddings: embeddingsCLIP } = await modelsService.getCLIPEmbeddingsCPU(newTermsCLIP)
-
-      if (!embeddingsCLIP || embeddingsCLIP.length !== newTermsCLIP.length) {
-        throw new Error(
-          `[EmbeddingStoreService] Error: Mismatch entre entrada CLIP (${newTermsCLIP.length}) y embeddings devueltos (${embeddingsCLIP?.length})`
-        )
-      }
-
-      const pairsCLIP = newTermsCLIP.map((key, index) => ({
-        key,
-        value: embeddingsCLIP[index],
-      }))
-
-      this.addEmbeddings(pairsCLIP, EmbeddingType.CLIP)
-
-      console.log(
-        `[EmbeddingStoreService] Embeddings CLIP calculados y almacenados para claves: [${newTermsCLIP.join(
-          ', '
-        )}]`
-      )
-    }
+    // Calcular embeddings en paralelo
+    await Promise.all([
+      this.calculateTextEmbeddings(newTerms, modelsService),
+      includeCLIP ? this.calculateCLIPEmbeddings(newTermsCLIP, modelsService) : Promise.resolve(),
+    ])
   }
 }

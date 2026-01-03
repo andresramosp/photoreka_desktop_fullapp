@@ -26,7 +26,6 @@ export type StageType =
   | 'tags_visual_accents'
   | 'chunks_context_story_visual_accents'
   | 'visual_color_embedding_task'
-  | 'topological_tags'
   | 'finished'
   | 'failed'
 export type ProcessSheet = {

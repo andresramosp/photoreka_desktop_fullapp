@@ -86,7 +86,6 @@ router
     router.post('/api/search/semantic/stream', [SearchController, 'searchSemanticStream'])
     router.post('/api/search/semantic/sync', [SearchController, 'searchSemanticSync'])
     router.post('/api/search/tags/sync', [SearchController, 'searchByTagsSync'])
-    router.post('/api/search/topological/sync', [SearchController, 'searchTopologicalSync'])
     router.post('/api/search/byPhotos', [SearchController, 'searchByPhotos'])
     router.get('/api/warmUp/:endpointType', [WarmupController, 'warmUp'])
 

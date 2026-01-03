@@ -93,33 +93,6 @@ export default class SearchController {
     }
   }
 
-  public async searchTopologicalSync({ response, request, auth }: HttpContext) {
-    try {
-      const user = auth.use('api').user!
-      const searchService = new SearchTextService()
-
-      const query = request.body()
-
-      const result = await searchService.searchTopologicalSync(query, user.id, {
-        left: query.left,
-        right: query.right,
-        middle: query.middle,
-        pageSize: query.options.pageSize,
-        iteration: query.options.iteration,
-        searchMode: query.options.searchMode,
-        collections: query.options.collections,
-        visualAspects: query.options.visualAspects,
-        artisticScores: query.options.artisticScores,
-        cursor: query.options.cursor,
-      })
-
-      return response.ok(result)
-    } catch (error) {
-      console.error('Error fetching photos:', error)
-      return response.internalServerError({ message: 'Error fetching photos' })
-    }
-  }
-
   public async searchByPhotos({ response, request, auth }: HttpContext) {
     try {
       const user = auth.use('api').user!

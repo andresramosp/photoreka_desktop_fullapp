@@ -4,7 +4,6 @@ import { ChunkTask } from '#models/analyzer/chunkTask'
 import { MetadataTask } from '#models/analyzer/metadataTask'
 import { TagTask } from '#models/analyzer/tagTask'
 import { VisionDescriptionTask } from '#models/analyzer/visionDescriptionTask'
-import { VisionTopologicalTask } from '#models/analyzer/visionTopologicalTask'
 import { VisualColorEmbeddingTask } from '#models/analyzer/visualColorEmbeddingTask'
 import { VisualDetectionTask } from '#models/analyzer/visualDetectionTask'
 import { VisualEmbeddingTask } from '#models/analyzer/visualEmbeddingTask'
@@ -190,20 +189,6 @@ export const packages = [
                 },
                 checks: ['descriptionChunks.any', 'descriptionChunk#*.embedding'],
               },
-              // {
-              //   name: 'topological_tags',
-              //   type: 'VisionTopologicalTask',
-              //   model: 'Gemini',
-              //   modelName: 'gemini-2.5-flash-lite',
-              //   needsImage: true,
-              //   sequential: false,
-              //   resolution: 'low',
-              //   prompts: [MESSAGE_ANALYZER_GPT_TOPOLOGIC_TAGS],
-              //   imagesPerRequest: 1,
-              //   useGuideLines: false,
-              //   promptDependentField: null,
-              //   checks: ['tags.topological'],
-              // },
             ],
           },
           // Sub-etapa: análisis artístico
@@ -375,9 +360,6 @@ export const getTaskList = (
     switch (taskData.type) {
       case 'VisionDescriptionTask':
         task = new VisionDescriptionTask(process)
-        break
-      case 'VisionTopologicalTask':
-        task = new VisionTopologicalTask(process)
         break
       case 'TagTask':
         task = new TagTask(process)
