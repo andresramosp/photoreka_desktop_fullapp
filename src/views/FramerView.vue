@@ -396,6 +396,7 @@ import FrameVisualizer from "@/components/FrameVisualizer.vue";
 import FramerViewMobile from "@/views/FramerViewMobile.vue";
 import { useFramedPhotoDownload } from "@/composables/useFramedPhotoDownload.js";
 import { useImageProcessing } from "@/composables/useImageProcessing.js";
+import { usePhotoQueryParams } from "@/composables/usePhotoQueryParams.js";
 import { NButton, NIcon, NSlider, NSpin } from "naive-ui";
 
 // Icons
@@ -429,6 +430,7 @@ const message = useMessage();
 const { downloadFramedPhoto, downloadFramedPhotosZip, isDownloading } =
   useFramedPhotoDownload();
 const { resizeWithStepDown, loadImage } = useImageProcessing();
+const { getPhotoIdsFromQuery } = usePhotoQueryParams();
 
 // Playground mode detection
 const isPlaygroundMode = computed(() => route.meta?.playground === true);
@@ -982,6 +984,27 @@ onMounted(async () => {
 
   // Check for photos to add from other views (via sessionStorage)
   processPhotosFromSessionStorage();
+
+  // Load photos from query params if present (e.g., ?source=lightroom&ids=123,456)
+  const photoIdsFromQuery = getPhotoIdsFromQuery({
+    clearAfterLoad: true,
+    onReady: async (photoIds) => {
+      if (photoIds.length > 0 && !isPlaygroundMode.value) {
+        await handlePhotosAdded(photoIds);
+        console.log(
+          `✅ Added ${photoIds.length} photos from URL to framer (async)`
+        );
+      }
+    },
+  });
+
+  // Caso sync: si el store ya estaba cargado, añadir las fotos inmediatamente
+  if (photoIdsFromQuery.length > 0 && !isPlaygroundMode.value) {
+    await handlePhotosAdded(photoIdsFromQuery);
+    console.log(
+      `✅ Added ${photoIdsFromQuery.length} photos from URL to framer`
+    );
+  }
 
   // Add window resize listener for mobile detection
   window.addEventListener("resize", updateWindowWidth);

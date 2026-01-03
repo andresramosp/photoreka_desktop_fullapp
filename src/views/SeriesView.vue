@@ -506,6 +506,7 @@ import { useSeriesStore } from "@/stores/series.js";
 import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection";
 import { usePhotoDownload } from "@/composables/usePhotoDownload";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection";
+import { usePhotoQueryParams } from "@/composables/usePhotoQueryParams.js";
 import { api } from "@/utils/axios";
 
 const route = useRoute();
@@ -525,6 +526,9 @@ const {
 
 // Photo download utilities
 const { downloadPhotosZip, isDownloading } = usePhotoDownload();
+
+// Photo query params handling (e.g., ?source=lightroom&ids=123,456)
+const { getPhotoIdsFromQuery } = usePhotoQueryParams();
 
 // Photo tool selection utilities
 const {
@@ -1172,6 +1176,27 @@ onMounted(async () => {
     await photosStore.getOrFetch();
     await seriesStore.getOrFetch();
     updateViewingSeries();
+
+    // Load photos from query params if present (e.g., ?source=lightroom&ids=123,456)
+    const photoIdsFromQuery = getPhotoIdsFromQuery({
+      clearAfterLoad: true,
+      onReady: async (photoIds) => {
+        if (photoIds.length > 0 && viewingSeries.value) {
+          await onPhotosSelected(photoIds);
+          console.log(
+            `✅ Added ${photoIds.length} photos from URL to series (async)`
+          );
+        }
+      },
+    });
+
+    // Caso sync: si el store ya estaba cargado, añadir las fotos inmediatamente
+    if (photoIdsFromQuery.length > 0 && viewingSeries.value) {
+      await onPhotosSelected(photoIdsFromQuery);
+      console.log(
+        `✅ Added ${photoIdsFromQuery.length} photos from URL to series`
+      );
+    }
   } catch (error) {
     console.error("Error loading data:", error);
     message.error("Failed to load series");
