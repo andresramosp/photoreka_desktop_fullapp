@@ -88,7 +88,7 @@ const SEARCH_MODE_CONFIGURATION: Record<SearchMode, SearchModeConfig> = {
     tagsThreshold: null,
     descSegmentThreshold: null,
     descFullQueryThreshold: 0.3,
-    imageThreshold: 0.15,
+    imageThreshold: 0.25,
     refineMode: 'neutral',
     nuancesThreshold: 0.35,
   },
@@ -758,7 +758,7 @@ export default class ScoringService {
       photoIds
     )
 
-    // Map scores from 0-0.3 to 0-1
+    // Map scores from 0.15-0.35 to 0-1
     const mapScore = (score: number) => {
       const min = 0.15
       const max = 0.35
