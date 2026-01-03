@@ -92,10 +92,10 @@
                   <n-icon size="16" class="mode-icon">
                     <GlobeOutline />
                   </n-icon>
-                  Broad
+                  Fast
                 </div>
               </template>
-              Fast and wide search across multiple photo attributes
+              Shallow and wide search for faster results
             </n-tooltip>
 
             <n-tooltip trigger="hover" placement="top">
@@ -116,8 +116,7 @@
                   Adaptive
                 </div>
               </template>
-              Flexible, language-based search for similar and indirect
-              associations
+              Flexible and deep search for similar and indirect associations
             </n-tooltip>
 
             <n-tooltip trigger="hover" placement="top">
