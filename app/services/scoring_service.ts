@@ -70,7 +70,7 @@ const SEARCH_MODE_CONFIGURATION: Record<SearchMode, SearchModeConfig> = {
   },
   adaptive: {
     tagsThreshold: 0.17,
-    descSegmentThreshold: null,
+    descSegmentThreshold: 0.2,
     descFullQueryThreshold: 0.25,
     imageThreshold: 0.2,
     refineMode: 'none',

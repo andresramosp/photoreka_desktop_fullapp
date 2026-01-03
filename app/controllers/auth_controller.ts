@@ -1,5 +1,4 @@
 import User from '#models/user'
-import { WHITELIST_EMAILS } from '#config/whitelist_emails'
 import { EXPIRED_EMAILS } from '#config/expired_emails'
 import { AUTH_CODES } from '#config/auth_codes'
 import {
