@@ -743,6 +743,7 @@ import logoName from "@/assets/logos/logo_name_sub_white_center.png";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { useCanvasPersistence } from "@/composables/useCanvasPersistence.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
+import { usePhotoQueryParams } from "@/composables/usePhotoQueryParams.js";
 import AppLogo from "@/components/AppLogo.vue";
 
 // Define component name for KeepAlive
@@ -763,6 +764,9 @@ const {
   hasSavedCanvas,
   initializeChangeDetection,
 } = useCanvasPersistence();
+
+// Photo query params handling (e.g., ?source=lightroom&ids=123,456)
+const { getPhotoIdsFromQuery } = usePhotoQueryParams();
 
 // Photo tool selection (only Framer available from Canvas)
 const canvasTools = [
@@ -1725,6 +1729,29 @@ onMounted(async () => {
   } catch (error) {
     console.error("Error loading canvas:", error);
     fitStageToPhotos();
+  }
+
+  // Load photos from query params if present (e.g., ?source=lightroom&ids=123,456)
+  // Sigue el mismo patrón que PhotosDialog: obtener photoIds y usar handleAddPhotos
+  const photoIdsFromQuery = getPhotoIdsFromQuery({
+    clearAfterLoad: true,
+    // Callback para cuando el store se cargue después (caso async)
+    onReady: async (photoIds) => {
+      if (photoIds.length > 0) {
+        await handleAddPhotos(photoIds);
+        console.log(
+          `✅ Added ${photoIds.length} photos from URL to canvas (async)`
+        );
+      }
+    },
+  });
+
+  // Caso sync: si el store ya estaba cargado, añadir las fotos inmediatamente
+  if (photoIdsFromQuery.length > 0) {
+    await handleAddPhotos(photoIdsFromQuery);
+    console.log(
+      `✅ Added ${photoIdsFromQuery.length} photos from URL to canvas`
+    );
   }
 
   // Auto-open photos dialog in playground mode

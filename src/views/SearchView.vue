@@ -90,7 +90,7 @@
                   "
                 >
                   <n-icon size="16" class="mode-icon">
-                    <GlobeOutline />
+                    <FlashOutline />
                   </n-icon>
                   Fast
                 </div>
@@ -887,6 +887,7 @@ import {
   SparklesOutline,
   GlobeOutline,
   LocateOutline,
+  FlashOutline,
 } from "@vicons/ionicons5";
 import { CheckOutlined, InfoCircleFilled, TagOutlined } from "@vicons/antd";
 import { MagicWand } from "@vicons/carbon";
