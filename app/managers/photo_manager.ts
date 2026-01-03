@@ -82,6 +82,7 @@ export default class PhotoManager {
         visual_aspects: p.descriptions?.visual_aspects || {},
         artistic_scores: p.descriptions?.artistic_scores || {},
         EXIF: p.descriptions?.EXIF || {},
+        source: p.descriptions?.source || {},
       },
     }))
   }
