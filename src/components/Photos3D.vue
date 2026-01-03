@@ -1597,7 +1597,7 @@ const performSearch = async () => {
       options: {
         iteration: 1,
         pageSize: 100,
-        searchMode: "low_precision",
+        searchMode: "broad",
       },
     };
 
@@ -1613,7 +1613,7 @@ const performSearch = async () => {
         photos.push(...items.map((i) => i.photo));
       });
       // Filtrar solo fotos con totalScore > 0.5
-      photos = photos.filter((photo) => photo.totalScore > 0.5);
+      photos = photos.filter((photo) => photo.totalScore > 0.3);
       searchResults.value = photos;
 
       console.log(

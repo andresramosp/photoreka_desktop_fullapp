@@ -498,7 +498,7 @@ async function performSearch() {
       options: {
         iteration: 1,
         pageSize: 100,
-        searchMode: "low_precision",
+        searchMode: "broad",
       },
     };
 

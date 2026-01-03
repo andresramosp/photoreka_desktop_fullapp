@@ -24,7 +24,7 @@
     <div class="welcome-content">
       <div class="welcome-message">
         <div class="message-text">
-          <!-- Strict Mode Message -->
+          <!-- Precise Mode Message -->
           <template v-if="!ONBOARDING_SOFT">
             <p class="main-message">
               Photoreka is designed to work with large photo collections and

@@ -81,8 +81,8 @@
               <template #trigger>
                 <div
                   class="mode-pill"
-                  :class="{ active: searchMode === 'low_precision' }"
-                  @click="!isSearching && (searchMode = 'low_precision')"
+                  :class="{ active: searchMode === 'broad' }"
+                  @click="!isSearching && (searchMode = 'broad')"
                   :aria-disabled="isSearching"
                   :tabindex="isSearching ? -1 : 0"
                   :style="
@@ -90,19 +90,20 @@
                   "
                 >
                   <n-icon size="16" class="mode-icon">
-                    <PencilOutline />
+                    <GlobeOutline />
                   </n-icon>
-                  Fast
+                  Broad
                 </div>
               </template>
-              Shallow search with basic matching for faster results
+              Fast and wide search across multiple photo attributes
             </n-tooltip>
+
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
                 <div
                   class="mode-pill premium-pill"
-                  :class="{ active: searchMode === 'flexible' }"
-                  @click="!isSearching && (searchMode = 'flexible')"
+                  :class="{ active: searchMode === 'adaptive' }"
+                  @click="!isSearching && (searchMode = 'adaptive')"
                   :aria-disabled="isSearching"
                   :tabindex="isSearching ? -1 : 0"
                   :style="
@@ -110,30 +111,31 @@
                   "
                 >
                   <n-icon size="16" class="mode-icon">
-                    <PencilOutline />
+                    <SparklesOutline />
                   </n-icon>
-                  Flexible
-                  <div class="premium-indicator-pill"></div>
+                  Adaptive
                 </div>
               </template>
-              Adaptive search that finds similar and indirect associations
+              Flexible, language-based search for similar and indirect
+              associations
             </n-tooltip>
+
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
                 <div
                   class="mode-pill premium-pill"
-                  :class="{ active: searchMode === 'logical' }"
-                  @click="!isSearching && (searchMode = 'logical')"
+                  :class="{ active: searchMode === 'precise' }"
+                  @click="!isSearching && (searchMode = 'precise')"
                   :aria-disabled="isSearching"
                   :tabindex="isSearching ? -1 : 0"
                   :style="
                     isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
                   "
                 >
-                  <n-icon size="14" class="mode-icon">
-                    <CheckOutlined />
+                  <n-icon size="15" class="mode-icon">
+                    <LocateOutline />
                   </n-icon>
-                  Strict
+                  Precise
                   <div class="premium-indicator-pill"></div>
                 </div>
               </template>
@@ -774,15 +776,15 @@
         <!-- Load More Button -->
         <div
           class="load-more-container"
-          v-if="hasMoreIterations || shouldShowTryFlexible"
+          v-if="hasMoreIterations || shouldShowTryAdaptive"
         >
           <n-button
             size="large"
-            :loading="isLoadingMore || isBeFlexibleLoading"
+            :loading="isLoadingMore || isBeAdaptiveLoading"
             @click="
-              shouldShowTryFlexible ? handleBeFlexibleClick() : loadMorePhotos()
+              shouldShowTryAdaptive ? handleBeAdaptiveClick() : loadMorePhotos()
             "
-            :type="shouldShowTryFlexible ? 'info' : 'default'"
+            :type="shouldShowTryAdaptive ? 'info' : 'default'"
             class="load-more-button"
           >
             <template #icon>
@@ -795,7 +797,7 @@
                 </svg>
               </n-icon>
             </template>
-            {{ shouldShowTryFlexible ? "Try Flexible" : "Load More Photos" }}
+            {{ shouldShowTryAdaptive ? "Try Adaptive" : "Load More Photos" }}
           </n-button>
         </div>
       </div>
@@ -882,6 +884,10 @@ import {
   PencilOutline,
   AlbumsOutline,
   CloudDownloadOutline,
+  RadioButtonOnOutline,
+  SparklesOutline,
+  GlobeOutline,
+  LocateOutline,
 } from "@vicons/ionicons5";
 import { CheckOutlined, InfoCircleFilled, TagOutlined } from "@vicons/antd";
 import { MagicWand } from "@vicons/carbon";
@@ -991,10 +997,10 @@ const filteredSearchResults = computed(() => {
   );
 });
 
-// Computed para determinar cuándo mostrar el botón "Try Flexible"
-const shouldShowTryFlexible = computed(() => {
+// Computed para determinar cuándo mostrar el botón "Try Adaptive"
+const shouldShowTryAdaptive = computed(() => {
   return (
-    searchMode.value === "logical" &&
+    searchMode.value === "precise" &&
     !hasMoreIterations.value &&
     !isSearching.value &&
     !isLoadingMore.value
@@ -1048,7 +1054,7 @@ const {
 
 // Control de carga y paginación
 const pageSize = computed(() => gridColumns.value * 2); // 2 rows by default
-const isBeFlexibleLoading = ref(false);
+const isBeAdaptiveLoading = ref(false);
 
 // Warm up composable
 import { useWarmUp } from "@/composables/useWarmUp";
@@ -1338,13 +1344,13 @@ function scrollToLast() {
   });
 }
 
-// Función para manejar el click en "Try Flexible"
-async function handleBeFlexibleClick() {
-  isBeFlexibleLoading.value = true;
+// Función para manejar el click en "Try Adaptive"
+async function handleBeAdaptiveClick() {
+  isBeAdaptiveLoading.value = true;
 
   try {
-    // Cambiar a modo flexible
-    searchStore.setSearchMode("flexible");
+    // Cambiar a modo adaptive
+    searchStore.setSearchMode("adaptive");
 
     // Resetear la búsqueda y ejecutar desde 0
     clearSelection();
@@ -1354,10 +1360,10 @@ async function handleBeFlexibleClick() {
     await searchPhotos();
     searchStore.setSearching(false);
   } catch (error) {
-    console.error("Error al cambiar a modo flexible:", error);
+    console.error("Error al cambiar a modo adaptive:", error);
     searchStore.setSearching(false);
   } finally {
-    isBeFlexibleLoading.value = false;
+    isBeAdaptiveLoading.value = false;
   }
 }
 

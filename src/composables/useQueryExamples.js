@@ -4,7 +4,7 @@ import queryExamples from "@/assets/query_examples.json";
 /**
  * Composable para manejar ejemplos rotativos de búsqueda
  * @param {string} searchType - Tipo de búsqueda actual ('semantic', 'tags', 'topological', 'curation')
- * @param {string} searchMode - Modo de búsqueda para semantic ('strict', 'flexible', etc.)
+ * @param {string} searchMode - Modo de búsqueda para semantic ('precise', 'adaptive', etc.)
  * @param {Function} onExampleClick - Función a ejecutar cuando se hace clic en un ejemplo
  */
 export function useQueryExamples(
@@ -21,11 +21,11 @@ export function useQueryExamples(
     const type = searchType.value;
 
     if (type === "semantic") {
-      // Para semantic: usar flexible si está disponible y el modo es flexible
-      if (searchMode.value === "flexible" && queryExamples.flexible?.length) {
-        return queryExamples.flexible;
+      // Para semantic: usar adaptive si está disponible y el modo es adaptive
+      if (searchMode.value === "adaptive" && queryExamples.adaptive?.length) {
+        return queryExamples.adaptive;
       }
-      return queryExamples.logical || [];
+      return queryExamples.precise || [];
     } else if (type === "tags") {
       return queryExamples.tags || [];
     } else if (type === "topological") {

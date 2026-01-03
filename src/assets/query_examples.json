@@ -1,5 +1,5 @@
 {
-  "logical": [
+  "precise": [
     "Three people walking on a snowy street",
     "A dog jumping to catch a frisbee in a park",
     "Photos featuring a chef preparing sushi at a restaurant",
@@ -101,7 +101,7 @@
     "Childhood fairytales retold in modern settings",
     "The border between chaos and harmony"
   ],
-  "flexible": [
+  "adaptive": [
     "A dog running in a park",
     "Mountains covered in snow",
     "People standing together on a street",

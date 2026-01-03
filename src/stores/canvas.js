@@ -40,7 +40,7 @@ async function createPhoto(
       dims = await getImageDimensions(backendPhoto.thumbnailUrl);
     }
 
-    // Escalado flexible: ajusta el tamaño máximo a los valores base, manteniendo el aspect ratio
+    // Escalado adaptive: ajusta el tamaño máximo a los valores base, manteniendo el aspect ratio
     const maxW = HORIZONTAL_PHOTO_WIDTH;
     const maxH = VERTICAL_PHOTO_HEIGHT;
     const aspectRatio = dims.width / dims.height;
