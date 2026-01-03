@@ -65,4 +65,4 @@ try {
   await db.manager.closeAll()
 }
 
-// invalidateCache()
+invalidateCache()
