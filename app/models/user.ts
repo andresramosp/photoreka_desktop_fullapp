@@ -6,6 +6,8 @@ import hash from '@adonisjs/core/services/hash'
 import { DbAccessTokensProvider } from '@adonisjs/auth/access_tokens'
 import type { Usage } from '#services/usage_service'
 
+export type PreferredSource = 'web' | 'lightroom'
+
 const AuthFinder = withAuthFinder(() => hash.use('scrypt'), {
   uids: ['email'],
   passwordColumnName: 'password',
@@ -29,6 +31,9 @@ export default class User extends compose(BaseModel, AuthFinder) {
 
   @column()
   declare usage: Usage | null
+
+  @column()
+  declare preferredSource: PreferredSource
 
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime

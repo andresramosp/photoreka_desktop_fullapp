@@ -1,4 +1,5 @@
 import User from '#models/user'
+import type { PreferredSource } from '#models/user'
 import { EXPIRED_EMAILS } from '#config/expired_emails'
 import { AUTH_CODES } from '#config/auth_codes'
 import {
@@ -46,6 +47,7 @@ export default class AuthController {
         password: payload.password,
         isActive: true,
         usage,
+        preferredSource: payload.preferredSource,
       })
 
       const token = await User.accessTokens.create(user, ['*'])
@@ -57,6 +59,7 @@ export default class AuthController {
           name: user.name,
           email: user.email,
           isActive: user.isActive,
+          preferredSource: user.preferredSource,
           usageTier: tier,
           usage,
         },
@@ -124,6 +127,7 @@ export default class AuthController {
           id: user.id,
           name: user.name,
           email: user.email,
+          preferredSource: user.preferredSource,
           isActive: user.isActive,
         },
         token: token.value!.release(),
@@ -178,6 +182,7 @@ export default class AuthController {
           email: user.email,
           isActive: user.isActive,
           usage,
+          preferredSource: user.preferredSource,
           createdAt: user.createdAt,
           updatedAt: user.updatedAt,
         },
@@ -219,6 +224,7 @@ export default class AuthController {
         user: {
           id: updatedUser.id,
           name: updatedUser.name,
+          preferredSource: updatedUser.preferredSource,
           email: updatedUser.email,
           isActive: updatedUser.isActive,
           updatedAt: updatedUser.updatedAt,

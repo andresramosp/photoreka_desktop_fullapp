@@ -14,6 +14,7 @@ export default class extends BaseSchema {
       table.string('email', 255).notNullable().unique()
       table.string('password', 180).notNullable()
       table.boolean('is_active').defaultTo(true)
+      table.string('preferred_source').defaultTo('web')
       table.timestamp('created_at')
       table.timestamp('updated_at')
     })
