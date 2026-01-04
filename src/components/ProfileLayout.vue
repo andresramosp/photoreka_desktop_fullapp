@@ -3,7 +3,7 @@
     <div class="profile-container">
       <div class="profile-content">
         <div class="profile-header">
-          <AppLogo size="large" />
+          <AppLogo :height="80" />
         </div>
 
         <div class="profile-form-container">
@@ -57,7 +57,7 @@ import AppLogo from "./AppLogo.vue";
   background-color: #1a1a1f;
   border-radius: 16px;
   border: 1px solid #2c2c32;
-  padding: 40px;
+  padding: 30px;
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
   width: 100%;
   /* max-height: calc(100vh - 40px);
@@ -66,7 +66,7 @@ import AppLogo from "./AppLogo.vue";
 
 .profile-header {
   text-align: center;
-  margin-bottom: 24px;
+  margin-bottom: 32px;
 }
 
 .profile-subtitle {

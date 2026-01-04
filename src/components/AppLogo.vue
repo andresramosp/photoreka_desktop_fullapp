@@ -123,9 +123,9 @@ export default {
 }
 
 /* Animation for the camera icon */
-.photoreka-logo:hover .logo-icon {
+/* .photoreka-logo:hover .logo-icon {
   transform: scale(1.05);
-}
+} */
 
 /* Subtle glow effect */
 .logo-icon {

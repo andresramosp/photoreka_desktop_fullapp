@@ -211,6 +211,33 @@ export const useUserStore = defineStore("user", () => {
     }
   };
 
+  const updateProfile = async (
+    profileData: any
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!isAuthenticated.value || !token.value) {
+      return {
+        success: false,
+        error: "User is not authenticated.",
+      };
+    }
+
+    try {
+      const response = await api.put("/api/auth/profile", profileData);
+
+      // Update local user data if successful
+      if (user.value && response.data.user) {
+        user.value = { ...user.value, ...response.data.user };
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.message || "Error updating profile.",
+      };
+    }
+  };
+
   // Initialize auth state
   // Llamar de forma asíncrona para no bloquear la carga
   initAuth();
@@ -223,6 +250,7 @@ export const useUserStore = defineStore("user", () => {
     usageLimits,
     dismissUsageWarning,
     fetchUsage,
+    updateProfile,
     login,
     register,
     loginWithProvider,

@@ -89,6 +89,23 @@
         {{ artisticScore.toFixed(1) }}
       </div>
 
+      <!-- Lightroom source indicator -->
+      <n-tooltip
+        v-if="photo.descriptions?.source?.type === 'lightroom'"
+        trigger="hover"
+        placement="top"
+      >
+        <template #trigger>
+          <div class="lightroom-indicator">
+            <img
+              src="@/assets/onBoarding/lightroom_logo.png"
+              alt="Lightroom"
+              class="lightroom-logo"
+            />
+          </div>
+        </template>
+        Photo synced with Lightroom
+      </n-tooltip>
       <!-- Duplicate indicator in top-left corner when footer is hidden -->
       <n-tooltip
         v-if="photo.isDuplicate && showDuplicate && !showFooter"
@@ -234,6 +251,10 @@ interface PhotoInfo {
   isCheckingDuplicates: boolean;
   descriptions?: {
     artistic_scores?: Record<string, number>;
+    source?: {
+      type?: string;
+      [key: string]: any;
+    };
     [key: string]: any;
   };
 }
@@ -534,6 +555,29 @@ const onImageError = () => {
   text-align: center;
 }
 
+/* Lightroom source indicator */
+.lightroom-indicator {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  border-radius: 6px;
+  padding: 4px;
+  opacity: 0.8;
+  background-color: rgba(49, 168, 240, 0.9);
+  z-index: 4;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lightroom-logo {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
 /* Variantes responsivas para el indicador de selección */
 @container photo-card (max-width: 200px) {
   .selection-indicator {
@@ -552,6 +596,17 @@ const onImageError = () => {
     padding: 3px 6px;
     bottom: 6px;
     left: 6px;
+  }
+
+  .lightroom-indicator {
+    bottom: 6px;
+    right: 6px;
+    padding: 3px;
+  }
+
+  .lightroom-logo {
+    width: 18px;
+    height: 18px;
   }
 }
 
@@ -572,6 +627,17 @@ const onImageError = () => {
     padding: 2px 5px;
     bottom: 4px;
     left: 4px;
+  }
+
+  .lightroom-indicator {
+    bottom: 4px;
+    right: 4px;
+    padding: 2px;
+  }
+
+  .lightroom-logo {
+    width: 16px;
+    height: 16px;
   }
 }
 
@@ -594,6 +660,17 @@ const onImageError = () => {
     bottom: 6px;
     left: 6px;
   }
+
+  .lightroom-indicator {
+    bottom: 6px;
+    right: 6px;
+    padding: 3px;
+  }
+
+  .lightroom-logo {
+    width: 18px;
+    height: 18px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -613,6 +690,17 @@ const onImageError = () => {
     padding: 2px 5px;
     bottom: 4px;
     left: 4px;
+  }
+
+  .lightroom-indicator {
+    bottom: 4px;
+    right: 4px;
+    padding: 2px;
+  }
+
+  .lightroom-logo {
+    width: 16px;
+    height: 16px;
   }
 }
 
