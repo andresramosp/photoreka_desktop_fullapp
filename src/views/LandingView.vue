@@ -130,6 +130,8 @@
         </div>
       </section>
 
+      <!-- Free Tools Mini Section -->
+
       <!-- Features Section -->
       <section class="features-section">
         <div class="floating-header">
@@ -228,37 +230,97 @@
           </p>
         </div> -->
         </div>
+      </section>
 
-        <!-- Free Tools CTA -->
-        <div class="features-cta">
-          <h4 class="features-cta-title">Try our free tools to get started</h4>
-          <!-- <p class="features-cta-subtitle">Try our free tools to get started</p> -->
-          <div class="features-tools">
-            <div class="feature-tool-card" @click="goToPlayground">
-              <div class="tool-icon">
-                <n-icon size="32" color="#8b5cf6">
-                  <Workspace />
-                </n-icon>
-              </div>
-              <h4 class="tool-title">Free Canvas</h4>
-              <p class="tool-description">Combine and sequence photos</p>
+      <section class="free-tools-mini">
+        <div class="free-tools-mini-container">
+          <span class="free-tools-label">You can also try our free tools</span>
+          <div class="free-tools-buttons">
+            <button class="free-tool-btn" @click="goToPlayground">
+              <n-icon size="18" color="#8b5cf6"><Workspace /></n-icon>
+              <span>Canvas</span>
+            </button>
+            <button class="free-tool-btn" @click="goToFreeFramer">
+              <n-icon size="18" color="#f59e0b"><StopOutline /></n-icon>
+              <span>Framer</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Lightroom Plugin Section -->
+      <section class="lightroom-section">
+        <div class="lightroom-container">
+          <div class="lightroom-video-side">
+            <div class="lightroom-video-wrapper">
+              <video
+                class="lightroom-demo-video"
+                :src="lightroomVideoUrl"
+                @loadeddata="onLightroomVideoLoaded"
+                autoplay
+                muted
+                loop
+                playsinline
+              >
+                Your browser does not support the video tag.
+              </video>
             </div>
-            <div class="feature-tool-card" @click="goToFreeFramer">
-              <div class="tool-icon">
-                <n-icon size="32" color="#f59e0b">
-                  <StopOutline />
-                </n-icon>
-              </div>
-              <h4 class="tool-title">Framer</h4>
-              <p class="tool-description">
-                Add all types of frames to your photos
-              </p>
+          </div>
+          <div class="lightroom-info-side">
+            <div class="lightroom-badge">
+              <span class="badge-text">Official Plugin</span>
+            </div>
+            <div class="lightroom-header">
+              <img
+                src="/src/assets/onBoarding/lightroom_logo.png"
+                alt="Adobe Lightroom"
+                class="lightroom-icon"
+              />
+              <h2 class="lightroom-title">Lightroom Integration</h2>
+            </div>
+            <p class="lightroom-description">
+              Seamlessly connect Photoreka with Adobe Lightroom Classic. Sync
+              your catalog, search by natural language directly from Lightroom,
+              and bring the power of intelligent curation to your existing
+              workflow.
+            </p>
+            <ul class="lightroom-features-list">
+              <li>
+                <n-icon size="20" color="#2563eb"><SyncOutline /></n-icon>
+                <span>Direct sync from Lightroom catalog</span>
+              </li>
+              <li>
+                <n-icon size="20" color="#8b5cf6"
+                  ><ChatbubblesOutline
+                /></n-icon>
+                <span>Full natural language integrated</span>
+              </li>
+
+              <li>
+                <n-icon size="20" color="#f59e0b"
+                  ><ShareSocialOutline
+                /></n-icon>
+                <span>One-click photo transfer to Photoreka tools</span>
+              </li>
+              <li>
+                <n-icon size="20" color="#22c55e"><LinkOutline /></n-icon>
+                <span>Compatible with Photoreka web workflow</span>
+              </li>
+            </ul>
+            <div class="lightroom-cta">
+              <n-button type="primary" size="large" @click="goToAuth('signup')">
+                <template #icon>
+                  <n-icon><DownloadOutline /></n-icon>
+                </template>
+                Get the Plugin
+              </n-button>
+              <span class="lightroom-note">Free with Photoreka account</span>
             </div>
           </div>
         </div>
       </section>
       <!-- How It Works Section -->
-      <section class="how-it-works-section">
+      <!-- <section class="how-it-works-section">
         <div class="floating-header">
           <h2 class="floating-title">Photoreka Workflow</h2>
           <p class="floating-description">
@@ -300,11 +362,11 @@
             </div>
           </div>
         </div>
-      </section>
+      </section> -->
 
       <!-- FAQs Section -->
       <section id="faqs" class="faqs-section">
-        <div class="section-container">
+        <div class="section-container" style="margin-top: 50px">
           <div class="faqs-header">
             <h2 class="section-title">Frequently Asked Quesstions</h2>
             <p class="section-subtitle">
@@ -528,6 +590,12 @@ import {
   ChevronDownOutline,
   StopOutline,
   CubeOutline,
+  CheckmarkCircleOutline,
+  DownloadOutline,
+  SyncOutline,
+  ChatbubblesOutline,
+  ShareSocialOutline,
+  LinkOutline,
 } from "@vicons/ionicons5";
 import { Workspace } from "@vicons/carbon";
 import AppLogo from "@/components/AppLogo.vue";
@@ -594,6 +662,14 @@ const faqs = ref([
     hasHtml: true,
   },
 ]);
+
+// Lightroom plugin demo video
+const lightroomVideo = ref({
+  url: new URL("@/assets/videos/lr_plugin.mp4", import.meta.url).href,
+  speed: 2,
+});
+
+const lightroomVideoUrl = lightroomVideo.value.url;
 
 // Video tabs with different use cases
 const videoTabs = ref([
@@ -773,6 +849,15 @@ const onVideoLoaded = () => {
     videoPlayer.value.playbackRate = currentTab.speed || 1.0;
   }
   console.log("Video loaded successfully");
+};
+
+const onLightroomVideoLoaded = () => {
+  // Set playback rate for Lightroom video
+  const lightroomVideoElement = document.querySelector(".lightroom-demo-video");
+  if (lightroomVideoElement) {
+    lightroomVideoElement.playbackRate = lightroomVideo.value.speed || 1.0;
+  }
+  console.log("Lightroom video loaded successfully");
 };
 
 const updateProgress = () => {
@@ -1082,7 +1167,7 @@ if (typeof window !== "undefined") {
 .hero-description {
   font-size: 18px;
   line-height: 1.6;
-  /* color: var(--text-secondary); */
+  color: var(--text-secondary);
   margin-bottom: 30px;
   margin-top: 30px;
   /* font-weight: 200; */
@@ -1235,6 +1320,220 @@ if (typeof window !== "undefined") {
 
 .video-overlay:hover {
   background: rgba(0, 0, 0, 0.6);
+}
+
+/* Free Tools Mini Section */
+.free-tools-mini {
+  background: linear-gradient(
+    180deg,
+    rgba(37, 99, 235, 0.05) 0%,
+    transparent 100%
+  );
+  padding: 20px 0;
+  /* border-bottom: 1px solid var(--border-color); */
+}
+
+.free-tools-mini-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.free-tools-label {
+  font-size: 14px;
+  color: var(--secondary-color);
+  font-weight: 400;
+}
+
+.free-tools-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.free-tool-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 24px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.free-tool-btn:hover {
+  border-color: var(--primary-color);
+  background: rgba(37, 99, 235, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+}
+
+/* Lightroom Plugin Section */
+.lightroom-section {
+  padding: 100px 0;
+  background: linear-gradient(
+    180deg,
+    #0f0f13 0%,
+    rgba(37, 99, 235, 0.03) 50%,
+    #0f0f13 100%
+  );
+  position: relative;
+  overflow: hidden;
+}
+
+.lightroom-section::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(
+    ellipse at 30% 50%,
+    rgba(37, 99, 235, 0.08) 0%,
+    transparent 60%
+  );
+  pointer-events: none;
+}
+
+.lightroom-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 80px;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+
+.lightroom-video-side {
+  position: relative;
+}
+
+.lightroom-video-wrapper {
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 80px rgba(37, 99, 235, 0.15);
+  /* border: 1px solid rgba(255, 255, 255, 0.1); */
+}
+
+.lightroom-video-wrapper::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  background: linear-gradient(
+    135deg,
+    rgba(37, 99, 235, 0.3),
+    rgba(139, 92, 246, 0.3),
+    rgba(37, 99, 235, 0.1)
+  );
+  z-index: -1;
+  padding: 1px;
+}
+
+.lightroom-demo-video {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.lightroom-info-side {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.lightroom-badge {
+  display: inline-flex;
+  align-self: flex-start;
+}
+
+.badge-text {
+  background: linear-gradient(
+    135deg,
+    rgba(37, 99, 235, 0.2),
+    rgba(139, 92, 246, 0.2)
+  );
+  border: 1px solid rgba(37, 99, 235, 0.3);
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary-color);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.lightroom-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.lightroom-icon {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.3));
+}
+
+.lightroom-title {
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.lightroom-description {
+  font-size: 18px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.lightroom-features-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.lightroom-features-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.lightroom-features-list li .n-icon {
+  flex-shrink: 0;
+}
+
+.lightroom-cta {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-top: 8px;
+}
+
+.lightroom-note {
+  font-size: 14px;
+  color: var(--text-tertiary);
 }
 
 /* Sections */
@@ -1853,6 +2152,37 @@ if (typeof window !== "undefined") {
   .simple-footer-container {
     padding: 0 20px;
   }
+
+  /* Lightroom section responsive */
+  .lightroom-container {
+    grid-template-columns: 1fr;
+    gap: 48px;
+  }
+
+  .lightroom-video-side {
+    order: 1;
+  }
+
+  .lightroom-info-side {
+    order: 2;
+    text-align: center;
+    align-items: center;
+  }
+
+  .lightroom-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .lightroom-features-list {
+    align-items: flex-start;
+    max-width: 400px;
+  }
+
+  .lightroom-cta {
+    flex-direction: column;
+    gap: 12px;
+  }
 }
 
 @media (max-width: 768px) {
@@ -2010,6 +2340,35 @@ if (typeof window !== "undefined") {
     width: calc(100% - 32px);
     max-width: 300px;
   }
+
+  /* Lightroom section 768px */
+  .lightroom-section {
+    padding: 60px 0;
+  }
+
+  .lightroom-container {
+    padding: 0 16px;
+    gap: 40px;
+  }
+
+  .lightroom-title {
+    font-size: 28px;
+  }
+
+  .lightroom-description {
+    font-size: 16px;
+  }
+
+  .lightroom-icon {
+    width: 48px;
+    height: 48px;
+  }
+
+  /* Free tools mini 768px */
+  .free-tools-mini-container {
+    padding: 0 16px;
+    gap: 16px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -2080,6 +2439,54 @@ if (typeof window !== "undefined") {
   .feature-tool-card {
     width: calc(100% - 24px);
     padding: 24px 20px;
+  }
+
+  /* Lightroom section 480px */
+  .lightroom-section {
+    padding: 48px 0;
+  }
+
+  .lightroom-container {
+    padding: 0 12px;
+    gap: 32px;
+  }
+
+  .lightroom-title {
+    font-size: 24px;
+  }
+
+  .lightroom-description {
+    font-size: 15px;
+  }
+
+  .lightroom-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .lightroom-features-list li {
+    font-size: 14px;
+  }
+
+  .badge-text {
+    font-size: 11px;
+    padding: 5px 12px;
+  }
+
+  /* Free tools mini 480px */
+  .free-tools-mini-container {
+    flex-direction: column;
+    gap: 12px;
+    padding: 0 12px;
+  }
+
+  .free-tools-label {
+    font-size: 13px;
+  }
+
+  .free-tool-btn {
+    padding: 8px 16px;
+    font-size: 13px;
   }
 }
 
