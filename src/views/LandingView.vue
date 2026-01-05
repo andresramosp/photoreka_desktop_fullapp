@@ -368,7 +368,7 @@
       <section id="faqs" class="faqs-section">
         <div class="section-container" style="margin-top: 50px">
           <div class="faqs-header">
-            <h2 class="section-title">Frequently Asked Quesstions</h2>
+            <h2 class="section-title">Frequently Asked Questions</h2>
             <p class="section-subtitle">
               Find answers to the most common questions about Photoreka
             </p>
@@ -1113,7 +1113,7 @@ if (typeof window !== "undefined") {
 
 /* Hero Section */
 .hero-section {
-  padding: 80px 0 80px;
+  padding: 70px 0 80px;
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -1548,7 +1548,7 @@ if (typeof window !== "undefined") {
 /* Floating Headers */
 .floating-header {
   text-align: center;
-  margin-bottom: 80px;
+  margin-bottom: 60px;
   padding: 0 24px;
 }
 
@@ -1759,7 +1759,7 @@ if (typeof window !== "undefined") {
 }
 
 .section-title {
-  font-size: 40px;
+  font-size: 35px;
   font-weight: 700;
   margin-bottom: 16px;
   color: var(--text-primary);
@@ -2186,12 +2186,20 @@ if (typeof window !== "undefined") {
 }
 
 @media (max-width: 768px) {
+  .hero-section {
+    padding: 20px 0 0px;
+  }
+
   .hero-content {
     gap: 40px;
   }
 
   .hero-title {
     font-size: 40px;
+  }
+
+  .hero-description {
+    font-size: 16px;
   }
 
   .hero-actions {
@@ -2351,6 +2359,31 @@ if (typeof window !== "undefined") {
     gap: 40px;
   }
 
+  .lightroom-video-side {
+    order: 2;
+  }
+
+  .lightroom-info-side {
+    order: 1;
+  }
+
+  .lightroom-badge {
+    display: none;
+  }
+
+  .lightroom-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-direction: row;
+    margin-top: 0;
+    justify-content: center;
+  }
+
+  .lightroom-header .lightroom-title {
+    margin: 0;
+  }
+
   .lightroom-title {
     font-size: 28px;
   }
@@ -2383,6 +2416,10 @@ if (typeof window !== "undefined") {
 
   .floating-header {
     padding: 0 12px;
+  }
+
+  .hero-description {
+    font-size: 14px;
   }
 
   .floating-steps {
