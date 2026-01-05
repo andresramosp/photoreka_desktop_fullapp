@@ -13,6 +13,10 @@ import HealthPhotoService from '#services/health_photo_service'
 import {
   MESSAGE_PHOTO_INSIGHTS,
   MESSAGE_PHOTO_INSIGHTS_WITH_SCORES,
+  MESSAGE_PHOTO_INSIGHT_CULTURAL,
+  MESSAGE_PHOTO_INSIGHT_TECHNICAL,
+  MESSAGE_PHOTO_INSIGHT_ARTISTIC,
+  MESSAGE_PHOTO_INSIGHT_CUSTOM,
 } from '../utils/prompts/descriptions.js'
 import PhotoImageService from '#services/photo_image_service'
 
@@ -377,6 +381,134 @@ export default class CatalogController {
     } catch (error) {
       console.error('Error generando insights de foto:', error)
       return response.internalServerError({ message: 'Error generando insights de la foto' })
+    }
+  }
+
+  public async photoInsightSpecific({ response, auth, params, request }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as any
+      const userId = user.id.toString()
+
+      const provider = request.qs().provider || 'gemini'
+      const insightType = request.qs().type as 'cultural' | 'technical' | 'artistic' | 'custom'
+      const customQuestion = request.qs().question as string | undefined
+
+      // Validación del tipo de insight
+      if (!insightType || !['cultural', 'technical', 'artistic', 'custom'].includes(insightType)) {
+        return response.badRequest({
+          message: 'Tipo de insight inválido. Usa: cultural, technical, artistic o custom',
+        })
+      }
+
+      // Si es custom, se requiere una pregunta
+      if (insightType === 'custom' && !customQuestion) {
+        return response.badRequest({
+          message: 'Para el tipo "custom" debes proporcionar un parámetro "question"',
+        })
+      }
+
+      let photo: Photo
+
+      if (params.id) {
+        const foundPhoto = await Photo.query()
+          .where('id', params.id)
+          .where('user_id', userId)
+          .first()
+
+        if (!foundPhoto) {
+          return response.notFound({ message: 'Foto no encontrada' })
+        }
+        photo = foundPhoto
+      } else {
+        const userPhotos = await Photo.query().where('user_id', userId)
+
+        if (userPhotos.length === 0) {
+          return response.notFound({ message: 'No tienes fotos disponibles' })
+        }
+
+        const randomIndex = Math.floor(Math.random() * userPhotos.length)
+        photo = userPhotos[randomIndex]
+      }
+
+      // Seleccionar el prompt según el tipo
+      const modelsService = new ModelsService()
+      let systemPrompt: string
+
+      switch (insightType) {
+        case 'cultural':
+          systemPrompt = MESSAGE_PHOTO_INSIGHT_CULTURAL
+          break
+        case 'technical':
+          systemPrompt = MESSAGE_PHOTO_INSIGHT_TECHNICAL
+          break
+        case 'artistic':
+          systemPrompt = MESSAGE_PHOTO_INSIGHT_ARTISTIC
+          break
+        case 'custom':
+          systemPrompt = MESSAGE_PHOTO_INSIGHT_CUSTOM(customQuestion!)
+          break
+      }
+
+      let insights = []
+
+      if (provider === 'gpt') {
+        const imagePayload = [
+          {
+            type: 'image_url',
+            image_url: {
+              url: photo.originalUrl,
+              detail: 'low',
+            },
+          },
+        ]
+
+        const gptResponse = await modelsService.getGPTResponse(
+          systemPrompt,
+          imagePayload,
+          'gpt-5.1',
+          { type: 'json_object' },
+          0.6,
+          false
+        )
+
+        insights = gptResponse.result || []
+      } else {
+        const base64 = await PhotoImageService.getInstance().getImageBase64FromR2(photo.name, false)
+
+        const imagePayload = {
+          inlineData: {
+            mimeType: 'image/png',
+            data: base64,
+          },
+        }
+
+        const geminiResponse = await modelsService.getGeminiResponse(
+          systemPrompt,
+          [imagePayload],
+          'gemini-2.5-flash-lite',
+          {
+            temperature: 0.6,
+          }
+        )
+
+        imagePayload.inlineData.data = ''
+        insights = geminiResponse.result || []
+      }
+
+      return response.ok({
+        photo: {
+          id: photo.id,
+          originalFileName: photo.originalFileName,
+          thumbnailUrl: photo.thumbnailUrl,
+          originalUrl: photo.originalUrl,
+        },
+        insightType,
+        ...insights,
+      })
+    } catch (error) {
+      console.error('Error generando insight específico:', error)
+      return response.internalServerError({ message: 'Error generando insight de la foto' })
     }
   }
 }
