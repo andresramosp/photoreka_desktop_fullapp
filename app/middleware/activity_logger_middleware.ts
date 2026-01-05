@@ -116,39 +116,40 @@ export default class ActivityLoggerMiddleware {
     const endpointMap: { pattern: RegExp; type: ActivityType }[] = [
       { pattern: /\/auth\/login/, type: 'login' },
       { pattern: /\/auth\/register/, type: 'register' },
-      { pattern: /\/auth\/logout/, type: 'logout' },
-      { pattern: /\/auth\/profile/, type: 'update_profile' },
-      { pattern: /\/auth\/change-password/, type: 'change_password' },
-      { pattern: /\/search\/semantic/, type: 'search_text' },
-      { pattern: /\/search\/byPhotos/, type: 'search_visual' },
-      { pattern: /\/search\/tags/, type: 'search' },
-      {
-        pattern: /\/collections.*/,
-        type:
-          method === 'POST'
-            ? 'create_collection'
-            : method === 'DELETE'
-              ? 'delete_collection'
-              : 'view_catalog',
-      },
-      {
-        pattern: /\/photos.*/,
-        type:
-          method === 'POST'
-            ? 'upload_photo'
-            : method === 'DELETE'
-              ? 'delete_photo'
-              : 'view_catalog',
-      },
-      {
-        pattern: /\/tags.*/,
-        type:
-          method === 'POST' ? 'create_tag' : method === 'DELETE' ? 'delete_tag' : 'view_catalog',
-      },
-      { pattern: /\/catalog/, type: 'view_catalog' },
-      { pattern: /\/usage/, type: 'view_usage' },
-      { pattern: /\/analyzer/, type: 'analyze_photo' },
-      { pattern: /\/warmup/, type: 'warmup_system' },
+      // DESHABILITADO - Solo se registran login y register
+      // { pattern: /\/auth\/logout/, type: 'logout' },
+      // { pattern: /\/auth\/profile/, type: 'update_profile' },
+      // { pattern: /\/auth\/change-password/, type: 'change_password' },
+      // { pattern: /\/search\/semantic/, type: 'search_text' },
+      // { pattern: /\/search\/byPhotos/, type: 'search_visual' },
+      // { pattern: /\/search\/tags/, type: 'search' },
+      // {
+      //   pattern: /\/collections.*/,
+      //   type:
+      //     method === 'POST'
+      //       ? 'create_collection'
+      //       : method === 'DELETE'
+      //         ? 'delete_collection'
+      //         : 'view_catalog',
+      // },
+      // {
+      //   pattern: /\/photos.*/,
+      //   type:
+      //     method === 'POST'
+      //       ? 'upload_photo'
+      //       : method === 'DELETE'
+      //         ? 'delete_photo'
+      //         : 'view_catalog',
+      // },
+      // {
+      //   pattern: /\/tags.*/,
+      //   type:
+      //     method === 'POST' ? 'create_tag' : method === 'DELETE' ? 'delete_tag' : 'view_catalog',
+      // },
+      // { pattern: /\/catalog/, type: 'view_catalog' },
+      // { pattern: /\/usage/, type: 'view_usage' },
+      // { pattern: /\/analyzer/, type: 'analyze_photo' },
+      // { pattern: /\/warmup/, type: 'warmup_system' },
     ]
 
     for (const { pattern, type } of endpointMap) {
