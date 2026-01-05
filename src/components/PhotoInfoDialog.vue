@@ -750,51 +750,9 @@
                       <SparklesIcon />
                     </n-icon>
                     <p class="placeholder-title">Discover photo insights</p>
-
-                    <div class="preset-buttons">
-                      <n-button
-                        :type="'default'"
-                        size="small"
-                        @click="getSpecificInsight('cultural')"
-                        :disabled="isGeneratingInsight"
-                        class="preset-btn"
-                      >
-                        <template #icon>
-                          <n-icon size="16">
-                            <GlobeOutline />
-                          </n-icon>
-                        </template>
-                        Cultural
-                      </n-button>
-                      <n-button
-                        :type="'default'"
-                        size="small"
-                        @click="getSpecificInsight('technical')"
-                        :disabled="isGeneratingInsight"
-                        class="preset-btn"
-                      >
-                        <template #icon>
-                          <n-icon size="16">
-                            <SettingsOutline />
-                          </n-icon>
-                        </template>
-                        Technical
-                      </n-button>
-                      <n-button
-                        :type="'default'"
-                        size="small"
-                        @click="getSpecificInsight('artistic')"
-                        :disabled="isGeneratingInsight"
-                        class="preset-btn"
-                      >
-                        <template #icon>
-                          <n-icon size="16">
-                            <BrushOutline />
-                          </n-icon>
-                        </template>
-                        Artistic
-                      </n-button>
-                    </div>
+                    <p class="placeholder-subtitle">
+                      Choose a preset topic or ask your own question.
+                    </p>
                   </div>
 
                   <!-- Accumulated insights -->
@@ -806,7 +764,7 @@
                     >
                       <h5 class="description-label">{{ insight.label }}</h5>
                       <div class="description-content">
-                        <p>{{ insight.text }}</p>
+                        <div v-html="insight.text"></div>
                       </div>
                     </div>
                   </div>
@@ -827,11 +785,71 @@
 
                 <!-- Control Panel -->
                 <div class="insights-control-panel">
+                  <div class="preset-buttons">
+                    <n-button
+                      :type="'default'"
+                      size="small"
+                      @click="getSpecificInsight('cultural')"
+                      :disabled="
+                        isGeneratingInsight ||
+                        !insightTypesAvailable.cultural ||
+                        !canUseInsights
+                      "
+                      class="preset-btn"
+                    >
+                      <template #icon>
+                        <n-icon size="16">
+                          <GlobeOutline />
+                        </n-icon>
+                      </template>
+                      Cultural
+                    </n-button>
+                    <n-button
+                      :type="'default'"
+                      size="small"
+                      @click="getSpecificInsight('technical')"
+                      :disabled="
+                        isGeneratingInsight ||
+                        !insightTypesAvailable.technical ||
+                        !canUseInsights
+                      "
+                      class="preset-btn"
+                    >
+                      <template #icon>
+                        <n-icon size="16">
+                          <SettingsOutline />
+                        </n-icon>
+                      </template>
+                      Technical
+                    </n-button>
+                    <n-button
+                      :type="'default'"
+                      size="small"
+                      @click="getSpecificInsight('artistic')"
+                      :disabled="
+                        isGeneratingInsight ||
+                        !insightTypesAvailable.artistic ||
+                        !canUseInsights
+                      "
+                      class="preset-btn"
+                    >
+                      <template #icon>
+                        <n-icon size="16">
+                          <BrushOutline />
+                        </n-icon>
+                      </template>
+                      Artistic
+                    </n-button>
+                  </div>
                   <div class="custom-question-input">
                     <n-input
                       v-model:value="customInsightQuestion"
                       placeholder="Ask anything about this photo..."
-                      :disabled="isGeneratingInsight"
+                      :disabled="
+                        isGeneratingInsight ||
+                        customQuestionsRemaining <= 0 ||
+                        !canUseInsights
+                      "
                       @keydown.enter="submitCustomQuestion"
                       size="small"
                     >
@@ -839,7 +857,10 @@
                         <n-button
                           text
                           :disabled="
-                            !customInsightQuestion.trim() || isGeneratingInsight
+                            !customInsightQuestion.trim() ||
+                            isGeneratingInsight ||
+                            customQuestionsRemaining <= 0 ||
+                            !canUseInsights
                           "
                           @click="submitCustomQuestion"
                           class="send-btn"
@@ -1067,6 +1088,15 @@ const {
   getOrderedArtisticScores,
 } = useArtisticScores();
 
+// Simple session limits (resets on app restart)
+const MAX_QUESTIONS = 3; // Max custom questions per photo
+const MAX_PHOTOS_INSIGHTS = 3; // Max photos that can have insights per session
+
+// Session usage tracking (in-memory, resets on reload)
+const sessionPhotoUsage = ref(new Map()); // photoId -> { types: Set, customQuestions: number }
+const sessionPhotoCount = ref(new Set()); // Set of photoIds that have been used
+const sessionPhotoInsights = ref(new Map()); // photoId -> { insights: [], currentIndex: 0 }
+
 // Reactive state
 const visible = computed({
   get: () => props.modelValue,
@@ -1203,7 +1233,7 @@ const applyGenrePresetWithUI = (genre) => {
   showCustomWeights.value = false; // Hide custom weights when applying preset
 };
 
-// Watch for photo changes and reset data
+// Watch for photo changes and load persistent data
 watch(
   () => props.selectedPhoto,
   (newPhoto) => {
@@ -1215,84 +1245,20 @@ watch(
       photoInsight.value = newPhoto.description || "";
       photoNotes.value = newPhoto.notes || "";
 
-      // Reset insights data when photo changes
-      allPhotoInsights.value = [];
-      currentInsightIndex.value = 0;
+      // Load insights from session storage (persist across dialog openings)
+      if (sessionPhotoInsights.value.has(newPhoto.id)) {
+        const savedData = sessionPhotoInsights.value.get(newPhoto.id);
+        allPhotoInsights.value = savedData.insights;
+        currentInsightIndex.value = savedData.currentIndex;
+      } else {
+        // Initialize empty if first time viewing this photo
+        allPhotoInsights.value = [];
+        currentInsightIndex.value = 0;
+      }
+
       isGeneratingInsight.value = false;
       customInsightQuestion.value = "";
       pendingInsightLabel.value = "";
-
-      // Add mock metadata if missing
-      if (!newPhoto.created_at) {
-        newPhoto.created_at = new Date(
-          Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000
-        ).toISOString();
-      }
-      if (!newPhoto.size) {
-        newPhoto.size = Math.floor(Math.random() * 8000000) + 1500000; // 1.5-8MB
-      }
-      if (!newPhoto.width || !newPhoto.height) {
-        newPhoto.width = 3000 + Math.floor(Math.random() * 3000);
-        newPhoto.height = 2000 + Math.floor(Math.random() * 2000);
-      }
-      if (!newPhoto.location) {
-        const locations = [
-          "San Francisco, CA",
-          "New York, NY",
-          "London, UK",
-          "Tokyo, Japan",
-          "Barcelona, Spain",
-          "Sydney, Australia",
-        ];
-        newPhoto.location =
-          Math.random() > 0.3
-            ? locations[Math.floor(Math.random() * locations.length)]
-            : null;
-      }
-      if (!newPhoto.camera) {
-        const cameras = [
-          "Canon EOS R5",
-          "Sony A7R IV",
-          "Nikon Z9",
-          "Fujifilm X-T5",
-          "Canon EOS R6 Mark II",
-        ];
-        newPhoto.camera = cameras[Math.floor(Math.random() * cameras.length)];
-      }
-      if (!newPhoto.lens) {
-        const lenses = [
-          "RF 24-70mm f/2.8L IS USM",
-          "FE 85mm f/1.4 GM",
-          "NIKKOR Z 50mm f/1.2 S",
-          "XF 35mm f/1.4 R",
-          "RF 16-35mm f/2.8L IS USM",
-        ];
-        newPhoto.lens = lenses[Math.floor(Math.random() * lenses.length)];
-      }
-      if (!newPhoto.focalLength) {
-        newPhoto.focalLength = 24 + Math.floor(Math.random() * 176); // 24-200mm
-      }
-      if (!newPhoto.aperture) {
-        newPhoto.aperture = (1.4 + Math.random() * 4).toFixed(1); // f/1.4 - f/5.4
-      }
-      if (!newPhoto.shutterSpeed) {
-        const speeds = [
-          "1/15",
-          "1/30",
-          "1/60",
-          "1/125",
-          "1/250",
-          "1/500",
-          "1/1000",
-          "1/2000",
-        ];
-        newPhoto.shutterSpeed =
-          speeds[Math.floor(Math.random() * speeds.length)];
-      }
-      if (!newPhoto.iso) {
-        const isos = [100, 200, 400, 800, 1600, 3200, 6400];
-        newPhoto.iso = isos[Math.floor(Math.random() * isos.length)];
-      }
     }
   },
   { immediate: true }
@@ -1535,11 +1501,40 @@ const removeTag = async (tagToRemove) => {
 // Description generation
 const allPhotoInsights = ref([]);
 const currentInsightIndex = ref(0);
-const hasMoreInsights = computed(
-  () =>
-    allPhotoInsights.value.length > 0 &&
-    currentInsightIndex.value < allPhotoInsights.value.length - 1
-);
+
+// Computed properties for insight availability (simple session-based)
+const insightTypesAvailable = computed(() => {
+  if (!props.selectedPhoto?.id)
+    return { cultural: true, technical: true, artistic: true };
+
+  const photoUsage = sessionPhotoUsage.value.get(props.selectedPhoto.id);
+  if (!photoUsage) return { cultural: true, technical: true, artistic: true };
+
+  return {
+    cultural: !photoUsage.types.has("cultural"),
+    technical: !photoUsage.types.has("technical"),
+    artistic: !photoUsage.types.has("artistic"),
+  };
+});
+
+const customQuestionsRemaining = computed(() => {
+  if (!props.selectedPhoto?.id) return MAX_QUESTIONS;
+
+  const photoUsage = sessionPhotoUsage.value.get(props.selectedPhoto.id);
+  const usedQuestions = photoUsage?.customQuestions || 0;
+
+  return Math.max(0, MAX_QUESTIONS - usedQuestions);
+});
+
+const canUseInsights = computed(() => {
+  if (!props.selectedPhoto?.id) return false;
+
+  // If photo already has usage, it's counted
+  if (sessionPhotoUsage.value.has(props.selectedPhoto.id)) return true;
+
+  // Check if we're under the session photo limit
+  return sessionPhotoCount.value.size < MAX_PHOTOS_INSIGHTS;
+});
 
 // Computed property for overall rating - automatically updates when weights change
 const overallRating = computed(() => {
@@ -1577,21 +1572,54 @@ const getSpecificInsight = async (type) => {
     return;
   }
 
+  // Check if this insight type is available
+  const availability = insightTypesAvailable.value;
+  if (!availability[type]) {
+    message.warning(
+      `You've already requested a ${type} insight for this photo in this session`
+    );
+    return;
+  }
+
+  // Check if we can use insights on this photo (session limit)
+  if (!canUseInsights.value) {
+    message.warning(
+      "You've reached your session limit of photos with insights (20 photos)"
+    );
+    return;
+  }
+
   isGeneratingInsight.value = true;
   pendingInsightLabel.value = getInsightLabel(type);
 
   try {
     const { data } = await api.get(
-      `/api/catalog/photoInsightSpecific/${props.selectedPhoto.id}?type=${type}`
+      `/api/catalog/photoInsightSpecific/${props.selectedPhoto.id}?type=${type}&provider=gpt`
     );
 
     if (data && data.insightType) {
       const insightText = data[type] || data.response;
       if (insightText) {
+        // Record usage in session
+        if (!sessionPhotoUsage.value.has(props.selectedPhoto.id)) {
+          sessionPhotoUsage.value.set(props.selectedPhoto.id, {
+            types: new Set(),
+            customQuestions: 0,
+          });
+          sessionPhotoCount.value.add(props.selectedPhoto.id);
+        }
+        sessionPhotoUsage.value.get(props.selectedPhoto.id).types.add(type);
+
         allPhotoInsights.value.push({
           type: type,
           label: getInsightLabel(type),
           text: insightText,
+        });
+
+        // Persist insights for this photo
+        sessionPhotoInsights.value.set(props.selectedPhoto.id, {
+          insights: allPhotoInsights.value,
+          currentIndex: currentInsightIndex.value,
         });
       } else {
         message.warning("No insight content received");
@@ -1618,6 +1646,22 @@ const submitCustomQuestion = async () => {
     return;
   }
 
+  // Check if we have remaining custom questions
+  if (customQuestionsRemaining.value <= 0) {
+    message.warning(
+      "You've reached the limit of custom questions for this photo in this session (5 max)"
+    );
+    return;
+  }
+
+  // Check if we can use insights on this photo (session limit)
+  if (!canUseInsights.value) {
+    message.warning(
+      "You've reached your session limit of photos with insights (20 photos)"
+    );
+    return;
+  }
+
   isGeneratingInsight.value = true;
   pendingInsightLabel.value = getInsightLabel("custom", question);
   const savedQuestion = question;
@@ -1627,14 +1671,32 @@ const submitCustomQuestion = async () => {
     const { data } = await api.get(
       `/api/catalog/photoInsightSpecific/${
         props.selectedPhoto.id
-      }?type=custom&question=${encodeURIComponent(savedQuestion)}`
+      }?type=custom&question=${encodeURIComponent(
+        savedQuestion
+      )}&provider=gpt`
     );
 
     if (data && data.response) {
+      // Record usage in session
+      if (!sessionPhotoUsage.value.has(props.selectedPhoto.id)) {
+        sessionPhotoUsage.value.set(props.selectedPhoto.id, {
+          types: new Set(),
+          customQuestions: 0,
+        });
+        sessionPhotoCount.value.add(props.selectedPhoto.id);
+      }
+      sessionPhotoUsage.value.get(props.selectedPhoto.id).customQuestions++;
+
       allPhotoInsights.value.push({
         type: "custom",
         label: getInsightLabel("custom", savedQuestion),
         text: data.response,
+      });
+
+      // Persist insights for this photo
+      sessionPhotoInsights.value.set(props.selectedPhoto.id, {
+        insights: allPhotoInsights.value,
+        currentIndex: currentInsightIndex.value,
       });
     } else {
       message.warning("No response received");
@@ -2268,7 +2330,6 @@ if (typeof window !== "undefined") {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: var(--spacing-xl) var(--spacing-lg);
   text-align: center;
   min-height: 180px;
   background: var(--bg-surface);
@@ -2287,7 +2348,7 @@ if (typeof window !== "undefined") {
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
-  margin-bottom: var(--spacing-sm);
+  /* margin-bottom: var(--spacing-sm); */
 }
 
 .placeholder-subtitle {
@@ -2353,17 +2414,19 @@ if (typeof window !== "undefined") {
 .preset-buttons {
   display: flex;
   gap: var(--spacing-sm);
-  justify-content: center;
-  flex-wrap: wrap;
+  justify-content: stretch;
+  flex-wrap: nowrap;
+  width: 100%;
 }
 
 .preset-btn {
   flex: 1;
+  min-width: 0;
 }
 
 .preset-btn:hover:not(:disabled) {
-  border-color: var(--primary-color);
-  color: var(--primary-color);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .custom-question-input {
