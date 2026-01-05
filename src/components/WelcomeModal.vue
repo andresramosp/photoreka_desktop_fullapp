@@ -61,18 +61,19 @@
 
           <!-- Soft Mode Message -->
           <template v-else>
-            <p class="main-message">
+            <!-- <p class="main-message">
               Photoreka is designed to work with large photo collections. For
               the best experience,
               <strong>we recommend</strong> starting with at least
               <strong style="color: #8b5cf6"
                 >{{ MIN_PHOTOS_THRESHOLD }} photos</strong
               >
-            </p>
+            </p> -->
 
             <p class="secondary-message">Here's how to get started:</p>
 
-            <ul class="steps-list">
+            <!-- Web User Steps -->
+            <ul v-if="!isLightroomUser" class="steps-list">
               <li>
                 <n-icon
                   size="20"
@@ -106,6 +107,41 @@
               </li>
             </ul>
 
+            <!-- Lightroom User Steps -->
+            <ul v-else class="steps-list">
+              <li>
+                <n-icon
+                  size="20"
+                  color="#2563eb"
+                  style="vertical-align: middle; margin-right: 8px"
+                >
+                  <PhotoOutlined />
+                </n-icon>
+                Download the Lightroom Plugin for Photoreka in the next screen
+              </li>
+              <li>
+                <n-icon
+                  size="20"
+                  color="#10b981"
+                  style="vertical-align: middle; margin-right: 8px"
+                >
+                  <SearchOutline />
+                </n-icon>
+                Follow the instructions to install it on Lightroom
+              </li>
+              <li>
+                <n-icon
+                  size="20"
+                  color="#f59e42"
+                  style="vertical-align: middle; margin-right: 8px"
+                >
+                  <SparklesOutline />
+                </n-icon>
+                Send your first batch of photos using "Analyze Photos" option in
+                Lightroom
+              </li>
+            </ul>
+
             <p style="margin-top: 25px; margin-bottom: 0px">
               You can start with any number of photos, but larger collections
               provide richer insights and better results!
@@ -134,7 +170,10 @@ import { NModal, NButton, NIcon } from "naive-ui";
 import { MIN_PHOTOS_THRESHOLD, ONBOARDING_SOFT } from "@/stores/photos";
 import { SearchOutline, SparklesOutline } from "@vicons/ionicons5";
 import { PhotoOutlined } from "@vicons/material";
+import { useUserStore } from "@/stores/userStore";
 import AppLogo from "./AppLogo.vue";
+
+const userStore = useUserStore();
 
 const props = defineProps({
   modelValue: {
@@ -149,6 +188,11 @@ const visible = computed({
   get: () => props.modelValue,
   set: (value) => emit("update:modelValue", value),
 });
+
+const preferredSource = computed(
+  () => userStore.user?.preferredSource || "web"
+);
+const isLightroomUser = computed(() => preferredSource.value === "lightroom");
 
 const getStarted = () => {
   emit("get-started");

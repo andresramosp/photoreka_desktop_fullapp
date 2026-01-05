@@ -81,7 +81,7 @@
               <h4>Export to Photoreka</h4>
               <p>
                 Select photos, go to <strong>File → Plugin Extras</strong>, and
-                choose <strong>Export to Photoreka</strong> from the options.
+                choose <strong>🚀 Analyze Photos</strong> from the options.
               </p>
             </div>
           </div>

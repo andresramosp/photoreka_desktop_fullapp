@@ -35,7 +35,7 @@
           </div>
           <h3 class="dropzone-title">Import to Lightbox</h3>
           <p class="dropzone-subtitle">
-            Drag and drop your images, or click to browse
+            Drag and drop your images, or use one of the available sources.
           </p>
 
           <div class="upload-buttons">

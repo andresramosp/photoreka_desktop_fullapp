@@ -1,12 +1,12 @@
-import axios from "axios";
+import axios, { type AxiosInstance } from "axios";
 
 // Crear una instancia de axios
-const api = axios.create({
+const api: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_MAIN_API_BASE_URL,
 });
 
 // Crear una instancia de axios para el analyzer
-const api_analyzer = axios.create({
+const api_analyzer: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_ANALYZER_API_BASE_URL,
 });
 

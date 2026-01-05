@@ -7,6 +7,29 @@
 
     <LightroomModal v-model="showLightroomModal" />
 
+    <!-- Source Warning Modal -->
+    <n-modal
+      v-model:show="showSourceWarningModal"
+      preset="dialog"
+      :title="sourceWarningConfig?.title"
+      :closable="false"
+      :style="{ width: '500px' }"
+    >
+      <div style="margin-bottom: 24px">
+        <span style="color: #ffffffd1; line-height: 1.6">
+          {{ sourceWarningConfig?.message }}
+        </span>
+      </div>
+      <template #action>
+        <div style="display: flex; gap: 12px; justify-content: flex-end">
+          <n-button @click="cancelSourceWarning">Cancel</n-button>
+          <n-button type="primary" @click="confirmSourceWarning"
+            >Continue</n-button
+          >
+        </div>
+      </template>
+    </n-modal>
+
     <n-modal
       v-model:show="showAnalyzeDialog"
       preset="confirm"
@@ -188,47 +211,31 @@
             {{
               isUploadDisabled
                 ? uploadDisabledMessage
-                : "Drag and drop your images, or click to browse"
+                : "Drag and drop your images, or click below."
             }}
           </p>
 
           <div v-if="!isUploadDisabled" class="upload-buttons">
             <n-button
-              type="primary"
+              v-for="button in uploadButtons"
+              :key="button.key"
+              :type="button.type"
               size="large"
-              class="upload-btn"
-              @click.stop="triggerFileInput"
+              :class="`${button.key}-btn`"
+              @click.stop="button.action"
             >
               <template #icon>
-                <n-icon><FolderOpenOutline /> </n-icon>
-              </template>
-              Import from local files
-            </n-button>
-            <n-button
-              type="default"
-              size="large"
-              class="lightroom-btn"
-              @click.stop="showLightroomModal = true"
-            >
-              <template #icon>
-                <n-icon>
+                <n-icon v-if="button.icon === 'FolderOpenOutline'">
+                  <FolderOpenOutline />
+                </n-icon>
+                <n-icon v-else-if="button.icon === 'lightroom'">
                   <img
                     src="/src/assets/onBoarding/lightroom_logo.png"
                     alt="Lr"
                     style="width: 1.1em; height: 1.1em"
                   />
                 </n-icon>
-              </template>
-              Lightroom Plugin
-            </n-button>
-            <n-button
-              type="default"
-              size="large"
-              class="google-photos-btn"
-              @click.stop="handleGooglePhotosComingSoon"
-            >
-              <template #icon>
-                <n-icon>
+                <n-icon v-else-if="button.icon === 'google'">
                   <!-- Google Photos official SVG icon -->
                   <svg viewBox="0 0 48 48" width="1em" height="1em">
                     <g>
@@ -252,7 +259,7 @@
                   </svg>
                 </n-icon>
               </template>
-              Google Photos
+              {{ button.label }}
             </n-button>
           </div>
           <div class="file-formats">
@@ -272,48 +279,26 @@
       <div class="">
         <div class="compact-upload-buttons">
           <n-button
-            type="primary"
+            v-for="button in uploadButtons"
+            :key="button.key"
+            :type="button.type"
             size="medium"
-            class="compact-upload-btn"
-            :disabled="isUploadDisabled"
-            @click.stop="triggerFileInput"
+            :class="`compact-${button.key}-btn`"
+            :disabled="isUploadDisabled && button.key === 'local'"
+            @click.stop="button.action"
           >
             <template #icon>
-              <n-icon>
+              <n-icon v-if="button.icon === 'FolderOpenOutline'">
                 <FolderOpenOutline />
               </n-icon>
-            </template>
-            {{
-              isUploadDisabled && photosRemaining <= 0
-                ? "Upload Limit Reached"
-                : "Local Files"
-            }}
-          </n-button>
-          <n-button
-            type="default"
-            size="large"
-            class="lightroom-btn"
-            @click.stop="showLightroomModal = true"
-          >
-            <template #icon>
-              <n-icon>
+              <n-icon v-else-if="button.icon === 'lightroom'">
                 <img
                   src="/src/assets/onBoarding/lightroom_logo.png"
                   alt="Lr"
                   style="width: 1.1em; height: 1.1em"
                 />
               </n-icon>
-            </template>
-            Plugin
-          </n-button>
-          <n-button
-            type="default"
-            size="medium"
-            class="compact-google-photos-btn"
-            @click="handleGooglePhotosComingSoon"
-          >
-            <template #icon>
-              <n-icon>
+              <n-icon v-else-if="button.icon === 'google'">
                 <svg viewBox="0 0 48 48" width="1em" height="1em">
                   <g>
                     <path
@@ -336,7 +321,11 @@
                 </svg>
               </n-icon>
             </template>
-            Google Photos
+            {{
+              isUploadDisabled && photosRemaining <= 0 && button.key === "local"
+                ? "Upload Limit Reached"
+                : button.compactLabel
+            }}
           </n-button>
         </div>
       </div>
@@ -412,6 +401,8 @@ const showDuplicatesDialog = ref(false);
 const selectedDuplicates = ref([]);
 const isDragOver = ref(false);
 const showLightroomModal = ref(false);
+const showSourceWarningModal = ref(false);
+const pendingSourceAction = ref(null);
 
 // Variable para controlar si ya se activó el warm-up al 75%
 const warmUpTriggeredAt75 = ref(false);
@@ -435,6 +426,76 @@ const uploadDisabledMessage = computed(() => {
     return "You have reached your photo upload limit. Please upgrade your plan to upload more photos.";
   }
   return "";
+});
+
+// Source warning message and title based on preferredSource
+const sourceWarningConfig = computed(() => {
+  const preferredSource = userStore.user?.preferredSource || "web";
+
+  if (
+    preferredSource === "lightroom" &&
+    pendingSourceAction.value !== "lightroom"
+  ) {
+    return {
+      title: "Different Export Source",
+      message:
+        "Your main export source is Lightroom. If you add photos from another source, they won't be visible in Lightroom.",
+    };
+  }
+
+  if (preferredSource === "web" && pendingSourceAction.value === "lightroom") {
+    return {
+      title: "Different Export Source",
+      message:
+        "Your export source is web. If you add photos from Lightroom, the photos you've uploaded from web until now won't be visible in Lightroom.",
+    };
+  }
+
+  return null;
+});
+
+// Button configurations based on preferredSource
+const uploadButtons = computed(() => {
+  const preferredSource = userStore.user?.preferredSource || "web";
+
+  const buttons = {
+    local: {
+      key: "local",
+      label: "Import from local files",
+      compactLabel: "Local Files",
+      icon: "FolderOpenOutline",
+      type: preferredSource === "web" ? "primary" : "default",
+      action: () => handleSourceSelection("local", () => triggerFileInput()),
+    },
+    lightroom: {
+      key: "lightroom",
+      label: "Lightroom Plugin",
+      compactLabel: "Plugin",
+      icon: "lightroom",
+      type: preferredSource === "lightroom" ? "primary" : "default",
+      action: () =>
+        handleSourceSelection("lightroom", () => {
+          showLightroomModal.value = true;
+        }),
+    },
+    google: {
+      key: "google",
+      label: "Google Photos",
+      compactLabel: "Google Photos",
+      icon: "google",
+      type: "default",
+      action: () =>
+        handleSourceSelection("google", handleGooglePhotosComingSoon),
+    },
+  };
+
+  // Order buttons based on preferredSource
+  if (preferredSource === "lightroom") {
+    return [buttons.lightroom, buttons.local, buttons.google];
+  }
+
+  // Default order for "web"
+  return [buttons.local, buttons.google, buttons.lightroom];
 });
 
 // Watcher para activar warm-up cuando el progreso llega al 75%
@@ -598,6 +659,45 @@ async function uploadLocalFiles(event) {
 // Handler for Google Photos "coming soon" message
 const handleGooglePhotosComingSoon = () => {
   message.info("Import from Google Photos is coming soon!");
+};
+
+// Handler to check if source warning should be shown
+const handleSourceSelection = (source, callback) => {
+  const preferredSource = userStore.user?.preferredSource || "web";
+
+  // Check if we need to show a warning
+  if (
+    (preferredSource === "lightroom" && source !== "lightroom") ||
+    (preferredSource === "web" && source === "lightroom")
+  ) {
+    pendingSourceAction.value = source;
+    showSourceWarningModal.value = true;
+  } else {
+    // No warning needed, execute directly
+    callback();
+  }
+};
+
+// Confirm source warning and proceed with action
+const confirmSourceWarning = () => {
+  showSourceWarningModal.value = false;
+  const source = pendingSourceAction.value;
+
+  if (source === "local") {
+    fileInput.value?.click();
+  } else if (source === "lightroom") {
+    showLightroomModal.value = true;
+  } else if (source === "google") {
+    handleGooglePhotosComingSoon();
+  }
+
+  pendingSourceAction.value = null;
+};
+
+// Cancel source warning
+const cancelSourceWarning = () => {
+  showSourceWarningModal.value = false;
+  pendingSourceAction.value = null;
 };
 
 // Con Picker API, la subida se puede hacer directamente tras triggerGooglePhotos si es necesario

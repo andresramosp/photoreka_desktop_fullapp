@@ -20,6 +20,7 @@ interface User {
   avatar?: string;
   provider?: "email" | "google" | "facebook";
   usage?: Usage;
+  preferredSource: "web" | "ligthroom";
 }
 
 export const useUserStore = defineStore("user", () => {
@@ -168,6 +169,7 @@ export const useUserStore = defineStore("user", () => {
           photosRemaining: 3788,
           analyzedPhotosRemaining: 789,
         },
+        preferredSource: "web",
       };
 
       localStorage.setItem("auth_token", mockToken);

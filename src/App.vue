@@ -209,6 +209,7 @@ const showConfetti = ref(false);
 // Controla si el usuario ya cerró el WelcomeModal
 const welcomeDismissed = ref(false);
 const showWelcomeModal = computed(() => {
+  // return true;
   // Solo mostrar si el usuario está autenticado, no tiene fotos y no lo ha cerrado manualmente
   return (
     userStore.isAuthenticated &&

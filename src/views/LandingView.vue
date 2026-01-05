@@ -1085,6 +1085,7 @@ if (typeof window !== "undefined") {
   /* color: var(--text-secondary); */
   margin-bottom: 30px;
   margin-top: 30px;
+  /* font-weight: 200; */
 }
 
 .hero-tools-subtitle {
