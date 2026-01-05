@@ -738,55 +738,118 @@
               </div>
             </template>
             <div class="tab-panel-content">
-              <div class="descriptions-section">
-                <div class="custom-description-section">
+              <div class="insights-panel">
+                <!-- Insights Display Area -->
+                <div class="insights-display-area">
+                  <!-- Empty state placeholder -->
                   <div
                     v-if="allPhotoInsights.length === 0 && !isGeneratingInsight"
-                    class="generate-section-centered"
+                    class="insights-placeholder"
                   >
-                    <n-button
-                      type="primary"
-                      size="medium"
-                      @click="getInsight"
-                      class="generate-insight-btn"
+                    <n-icon size="64" class="placeholder-icon">
+                      <SparklesIcon />
+                    </n-icon>
+                    <p class="placeholder-title">Discover photo insights</p>
+
+                    <div class="preset-buttons">
+                      <n-button
+                        :type="'default'"
+                        size="small"
+                        @click="getSpecificInsight('cultural')"
+                        :disabled="isGeneratingInsight"
+                        class="preset-btn"
+                      >
+                        <template #icon>
+                          <n-icon size="16">
+                            <GlobeOutline />
+                          </n-icon>
+                        </template>
+                        Cultural
+                      </n-button>
+                      <n-button
+                        :type="'default'"
+                        size="small"
+                        @click="getSpecificInsight('technical')"
+                        :disabled="isGeneratingInsight"
+                        class="preset-btn"
+                      >
+                        <template #icon>
+                          <n-icon size="16">
+                            <SettingsOutline />
+                          </n-icon>
+                        </template>
+                        Technical
+                      </n-button>
+                      <n-button
+                        :type="'default'"
+                        size="small"
+                        @click="getSpecificInsight('artistic')"
+                        :disabled="isGeneratingInsight"
+                        class="preset-btn"
+                      >
+                        <template #icon>
+                          <n-icon size="16">
+                            <BrushOutline />
+                          </n-icon>
+                        </template>
+                        Artistic
+                      </n-button>
+                    </div>
+                  </div>
+
+                  <!-- Accumulated insights -->
+                  <div v-if="allPhotoInsights.length > 0" class="insights-list">
+                    <div
+                      v-for="(insight, index) in allPhotoInsights"
+                      :key="index"
+                      class="description-item insight-item"
                     >
-                      <template #icon>
-                        <n-icon>
-                          <SparklesIcon />
-                        </n-icon>
+                      <h5 class="description-label">{{ insight.label }}</h5>
+                      <div class="description-content">
+                        <p>{{ insight.text }}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Loading state -->
+                  <div v-if="isGeneratingInsight" class="insight-loading">
+                    <div class="description-item insight-item loading">
+                      <h5 class="description-label">
+                        {{ pendingInsightLabel }}
+                      </h5>
+                      <div class="description-content loading-content">
+                        <n-spin size="small" />
+                        <span class="loading-text">Analyzing image...</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Control Panel -->
+                <div class="insights-control-panel">
+                  <div class="custom-question-input">
+                    <n-input
+                      v-model:value="customInsightQuestion"
+                      placeholder="Ask anything about this photo..."
+                      :disabled="isGeneratingInsight"
+                      @keydown.enter="submitCustomQuestion"
+                      size="small"
+                    >
+                      <template #suffix>
+                        <n-button
+                          text
+                          :disabled="
+                            !customInsightQuestion.trim() || isGeneratingInsight
+                          "
+                          @click="submitCustomQuestion"
+                          class="send-btn"
+                        >
+                          <n-icon size="18">
+                            <SendOutline />
+                          </n-icon>
+                        </n-button>
                       </template>
-                      Get photo insights
-                    </n-button>
-                  </div>
-                  <div
-                    v-else-if="isGeneratingInsight"
-                    class="generating-section"
-                  >
-                    <n-spin size="medium" />
-                    <p class="generating-text">Reviewing the image...</p>
-                  </div>
-                  <div
-                    v-else-if="allPhotoInsights.length > 0"
-                    class="ai-descriptions"
-                  >
-                    <div class="description-item">
-                      <h5 class="description-label">Did you know</h5>
-                      <div class="description-content">
-                        <p>{{ allPhotoInsights[0] }}</p>
-                      </div>
-                    </div>
-                    <div class="description-item" v-if="allPhotoInsights[1]">
-                      <h5 class="description-label">Technical aspect</h5>
-                      <div class="description-content">
-                        <p>{{ allPhotoInsights[1] }}</p>
-                      </div>
-                    </div>
-                    <div class="description-item" v-if="allPhotoInsights[2]">
-                      <h5 class="description-label">Commentary</h5>
-                      <div class="description-content">
-                        <p>{{ allPhotoInsights[2] }}</p>
-                      </div>
-                    </div>
+                    </n-input>
                   </div>
                 </div>
               </div>
@@ -954,6 +1017,10 @@ import {
   CloseOutline as CloseIcon,
   ChevronBackOutline as ChevronBack,
   ChevronForwardOutline as ChevronForward,
+  GlobeOutline,
+  SettingsOutline,
+  BrushOutline,
+  SendOutline,
 } from "@vicons/ionicons5";
 import { FullscreenOutlined } from "@vicons/material";
 import { Trophy20Regular as ScoresIcon } from "@vicons/fluent";
@@ -1011,6 +1078,8 @@ const newTagName = ref("");
 const isAddingTag = ref(false);
 const photoInsight = ref("");
 const isGeneratingInsight = ref(false);
+const pendingInsightLabel = ref("");
+const customInsightQuestion = ref("");
 const photoNotes = ref("");
 const isSavingNotes = ref(false);
 
@@ -1150,6 +1219,8 @@ watch(
       allPhotoInsights.value = [];
       currentInsightIndex.value = 0;
       isGeneratingInsight.value = false;
+      customInsightQuestion.value = "";
+      pendingInsightLabel.value = "";
 
       // Add mock metadata if missing
       if (!newPhoto.created_at) {
@@ -1486,43 +1557,94 @@ const overallRating = computed(() => {
   );
 });
 
-const getInsight = async () => {
-  isGeneratingInsight.value = true;
-  try {
-    if (!props.selectedPhoto?.id) {
-      throw new Error("No photo id available");
-    }
-    const { data } = await api.get(
-      `/api/catalog/photoInsight/${props.selectedPhoto.id}?provider=gpt&withScores=false`
-    );
-    if (
-      data &&
-      typeof data === "object" &&
-      (data.cultural || data.technical || data.evaluation)
-    ) {
-      // Convert object to array for consistent handling
-      const insights = [];
-      if (data.cultural) insights.push(data.cultural);
-      if (data.technical) insights.push(data.technical);
-      if (data.evaluation) insights.push(data.evaluation);
+// Get insight type label for display
+const getInsightLabel = (type, question = null) => {
+  const labels = {
+    cultural: "Cultural Context",
+    technical: "Technical Analysis",
+    artistic: "Artistic Perspective",
+    custom: question
+      ? `Q: ${question.substring(0, 50)}${question.length > 50 ? "..." : ""}`
+      : "Custom Question",
+  };
+  return labels[type] || type;
+};
 
-      allPhotoInsights.value = insights;
-      currentInsightIndex.value = 0;
-      photoInsight.value = insights[0];
+// Get specific insight by type
+const getSpecificInsight = async (type) => {
+  if (!props.selectedPhoto?.id) {
+    message.error("No photo selected");
+    return;
+  }
+
+  isGeneratingInsight.value = true;
+  pendingInsightLabel.value = getInsightLabel(type);
+
+  try {
+    const { data } = await api.get(
+      `/api/catalog/photoInsightSpecific/${props.selectedPhoto.id}?type=${type}`
+    );
+
+    if (data && data.insightType) {
+      const insightText = data[type] || data.response;
+      if (insightText) {
+        allPhotoInsights.value.push({
+          type: type,
+          label: getInsightLabel(type),
+          text: insightText,
+        });
+      } else {
+        message.warning("No insight content received");
+      }
     } else {
-      allPhotoInsights.value = [];
-      currentInsightIndex.value = 0;
-      photoInsight.value = "No insights found for this photo.";
-      message.warning("No insights found");
+      message.warning("No insights found for this photo");
     }
   } catch (error) {
-    message.error("Failed to generate description");
-    photoInsight.value = "Failed to generate description.";
-    allPhotoInsights.value = [];
-    currentInsightIndex.value = 0;
-    console.error("Generate description failed:", error);
+    message.error("Failed to generate insight");
+    console.error("Generate insight failed:", error);
   } finally {
     isGeneratingInsight.value = false;
+    pendingInsightLabel.value = "";
+  }
+};
+
+// Submit custom question
+const submitCustomQuestion = async () => {
+  const question = customInsightQuestion.value.trim();
+  if (!question) return;
+
+  if (!props.selectedPhoto?.id) {
+    message.error("No photo selected");
+    return;
+  }
+
+  isGeneratingInsight.value = true;
+  pendingInsightLabel.value = getInsightLabel("custom", question);
+  const savedQuestion = question;
+  customInsightQuestion.value = "";
+
+  try {
+    const { data } = await api.get(
+      `/api/catalog/photoInsightSpecific/${
+        props.selectedPhoto.id
+      }?type=custom&question=${encodeURIComponent(savedQuestion)}`
+    );
+
+    if (data && data.response) {
+      allPhotoInsights.value.push({
+        type: "custom",
+        label: getInsightLabel("custom", savedQuestion),
+        text: data.response,
+      });
+    } else {
+      message.warning("No response received");
+    }
+  } catch (error) {
+    message.error("Failed to get answer");
+    console.error("Custom question failed:", error);
+  } finally {
+    isGeneratingInsight.value = false;
+    pendingInsightLabel.value = "";
   }
 };
 
@@ -2125,6 +2247,145 @@ if (typeof window !== "undefined") {
 .generating-text {
   margin: 0;
   color: var(--text-secondary);
+}
+
+/* Insights Panel Styles */
+.insights-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 280px;
+}
+
+.insights-display-area {
+  flex: 1;
+  overflow-y: auto;
+  margin-bottom: var(--spacing-md);
+}
+
+.insights-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl) var(--spacing-lg);
+  text-align: center;
+  min-height: 180px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  border: 2px dashed var(--border-color);
+}
+
+.placeholder-icon {
+  color: var(--primary-color);
+  opacity: 0.6;
+  margin-bottom: var(--spacing-md);
+}
+
+.placeholder-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.placeholder-subtitle {
+  margin: var(--spacing-xs) 0 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  max-width: 280px;
+}
+
+.insights-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.insight-item {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.insight-loading {
+  margin-top: var(--spacing-md);
+}
+
+.insight-item.loading .description-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.loading-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-height: 40px;
+}
+
+.loading-text {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.insights-control-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.preset-buttons {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.preset-btn {
+  flex: 1;
+}
+
+.preset-btn:hover:not(:disabled) {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.custom-question-input {
+  width: 100%;
+}
+
+.custom-question-input :deep(.n-input) {
+  background: var(--bg-card);
+}
+
+.send-btn {
+  padding: 0 var(--spacing-xs);
+  color: var(--primary-color);
+  transition: transform 0.2s ease;
+}
+
+.send-btn:hover:not(:disabled) {
+  transform: scale(1.1);
+}
+
+.send-btn:disabled {
+  opacity: 0.4;
 }
 
 .description-display {
