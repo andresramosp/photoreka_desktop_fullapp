@@ -83,7 +83,13 @@
         >
       </div>
     </n-modal>
-    <div v-if="isUploading" class="upload-progress-section">
+    <div
+      v-if="
+        isUploading ||
+        (googlePhotos.isDownloading && googlePhotos.totalToDownload > 0)
+      "
+      class="upload-progress-section"
+    >
       <div class="progress-header">
         <div class="progress-title-container">
           <h3 class="progress-title">
@@ -99,18 +105,22 @@
             class="preprocessing-spinner"
           />
         </div>
-        <span class="progress-count"
+        <span class="progress-count" v-if="googlePhotos.isDownloading">
+          {{ googlePhotos.downloadedCount }}/{{ googlePhotos.totalToDownload }}
+          photos downloaded
+        </span>
+        <span class="progress-count" v-else
           >{{ uploadedCount }}/{{ totalFiles }} photos</span
         >
       </div>
       <n-progress
         type="line"
-        :percentage="overallProgress"
+        :percentage="actualProgress"
         :show-indicator="false"
         class="overall-progress"
       />
       <div class="progress-text">
-        {{ Math.round(overallProgress) }}% complete
+        {{ Math.round(actualProgress) }}% complete
       </div>
     </div>
     <!-- Upload Progress Section -->
@@ -361,8 +371,12 @@ import { usePhotosStore } from "@/stores/photos.js";
 import { useUserStore } from "@/stores/userStore.ts";
 import { usePhotoUpload } from "@/composables/usePhotoUpload.js";
 import { useWarmUp } from "@/composables/useWarmUp.js";
+import { useGooglePhotos } from "@/composables/useGooglePhotos.js";
 import { FolderOpenOutline } from "@vicons/ionicons5";
 import { BookInformation20Regular } from "@vicons/fluent";
+import pLimit from "p-limit";
+import pica from "pica";
+import { api_analyzer, api } from "@/utils/axios";
 
 import PhotosGrid from "../PhotosGrid.vue";
 import DuplicatePhotosDialog from "../DuplicatePhotosDialog.vue";
@@ -384,6 +398,11 @@ const message = useMessage();
 
 // Warm up composable
 const { warmedUp, ensureWarmUp } = useWarmUp();
+
+// Google Photos composable
+const googlePhotos = useGooglePhotos();
+const picaInstance = pica();
+const limit = pLimit(10);
 
 // Composables
 const {
@@ -426,6 +445,14 @@ const uploadDisabledMessage = computed(() => {
     return "You have reached your photo upload limit. Please upgrade your plan to upload more photos.";
   }
   return "";
+});
+
+// Computed property for actual progress (considers Google Photos download)
+const actualProgress = computed(() => {
+  if (googlePhotos.isDownloading.value) {
+    return googlePhotos.downloadProgress.value;
+  }
+  return overallProgress.value;
 });
 
 // Source warning message and title based on preferredSource
@@ -484,8 +511,7 @@ const uploadButtons = computed(() => {
       compactLabel: "Google Photos",
       icon: "google",
       type: "default",
-      action: () =>
-        handleSourceSelection("google", handleGooglePhotosComingSoon),
+      action: () => handleSourceSelection("google", importFromGooglePhotos),
     },
   };
 
@@ -656,10 +682,59 @@ async function uploadLocalFiles(event) {
   }
 }
 
-// Handler for Google Photos "coming soon" message
-const handleGooglePhotosComingSoon = () => {
-  message.info("Import from Google Photos is coming soon!");
-};
+/**
+ * Importa fotos desde Google Photos Picker
+ */
+async function importFromGooglePhotos() {
+  try {
+    // Validar límites antes de abrir el picker
+    const validation = validateUploadLimits(100); // Max 100 photos
+    if (!validation.isValid) {
+      message.error(validation.message);
+      return;
+    }
+
+    // Usar el método importPhotos que maneja selección + descarga
+    const downloadResults = await googlePhotos.importPhotos(100, 5);
+
+    if (!downloadResults || downloadResults.length === 0) {
+      return;
+    }
+
+    const successfulDownloads = downloadResults.filter((r) => r.success);
+
+    if (successfulDownloads.length === 0) {
+      message.warning("No photos were successfully downloaded");
+      return;
+    }
+
+    // Validar límites reales después de la descarga
+    const finalValidation = validateUploadLimits(successfulDownloads.length);
+    if (!finalValidation.isValid) {
+      message.error(finalValidation.message);
+      return;
+    }
+
+    // Trigger warm up
+    ensureWarmUp("image");
+
+    // Process and upload photos using handleUploadFlow
+    await handleUploadFlow(
+      successfulDownloads.map((result) => ({
+        googlePhotoBlob: result.blob,
+        googlePhotoMediaItem: result.mediaItem,
+      })),
+      "google"
+    );
+
+    message.success(
+      `Successfully imported ${successfulDownloads.length} photos from Google Photos`
+    );
+  } catch (error) {
+    console.error("❌ Error importing from Google Photos:", error);
+    message.error("Error importing photos from Google Photos");
+  }
+}
 
 // Handler to check if source warning should be shown
 const handleSourceSelection = (source, callback) => {
@@ -688,7 +763,7 @@ const confirmSourceWarning = () => {
   } else if (source === "lightroom") {
     showLightroomModal.value = true;
   } else if (source === "google") {
-    handleGooglePhotosComingSoon();
+    importFromGooglePhotos();
   }
 
   pendingSourceAction.value = null;

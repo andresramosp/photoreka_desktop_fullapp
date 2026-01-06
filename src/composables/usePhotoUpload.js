@@ -39,9 +39,15 @@ export function usePhotoUpload() {
     let fileName;
 
     if (type === "google") {
-      // Para Google Photos, source es { url, token, name }
-      // file = await downloadGooglePhoto(source.url, source.token);
-      // fileName = source.name;
+      // Para Google Photos, source es { googlePhotoBlob, googlePhotoMediaItem }
+      file = source.googlePhotoBlob;
+      const mediaItem = source.googlePhotoMediaItem;
+      // Obtener el nombre del archivo - soportar ambos formatos
+      const photoData = mediaItem?.mediaFile || mediaItem;
+      fileName =
+        photoData?.filename ||
+        photoData?.name ||
+        `google-photo-${Date.now()}.jpg`;
     } else {
       // Para archivos locales, source es un File object
       file = source;
@@ -239,7 +245,12 @@ export function usePhotoUpload() {
               if (photo) photosToUpload.push(photo);
             })
             .catch((error) => {
-              const fileName = type === "google" ? source.name : source.name;
+              const fileName =
+                type === "google"
+                  ? source.googlePhotoMediaItem?.filename ||
+                    source.googlePhotoMediaItem?.name ||
+                    "unknown"
+                  : source.name;
               console.error(`❌ Failed to upload ${fileName}:`, error);
               failedUploads.push({ file: fileName, error: error.message });
               uploadedCount.value++;

@@ -1,12 +1,28 @@
 <template>
   <div class="sync-tab-content">
     <!-- Upload Progress Section -->
-    <div v-if="isUploading" class="upload-progress-section">
+    <div
+      v-if="
+        isUploading ||
+        (googlePhotos.isDownloading && googlePhotos.totalToDownload > 0)
+      "
+      class="upload-progress-section"
+    >
       <div class="progress-header">
-        <h3 class="progress-title">Uploading Photos</h3>
-        <span class="progress-count"
-          >{{ uploadedCount }}/{{ totalFiles }} photos uploaded</span
-        >
+        <h3 class="progress-title">
+          {{
+            googlePhotos.isDownloading
+              ? "Downloading from Google Photos"
+              : "Uploading Photos"
+          }}
+        </h3>
+        <span class="progress-count" v-if="googlePhotos.isDownloading">
+          {{ googlePhotos.downloadedCount }}/{{ googlePhotos.totalToDownload }}
+          photos downloaded
+        </span>
+        <span class="progress-count" v-else>
+          {{ uploadedCount }}/{{ totalFiles }} photos uploaded
+        </span>
       </div>
       <n-progress
         type="line"
@@ -57,6 +73,25 @@
               </template>
               Choose Files
             </n-button>
+
+            <n-button
+              type="default"
+              size="large"
+              class="upload-btn"
+              @click="importFromGooglePhotos"
+            >
+              <template #icon>
+                <n-icon>
+                  <svg viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zm-8-10c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"
+                    />
+                  </svg>
+                </n-icon>
+              </template>
+              Google Photos
+            </n-button>
           </div>
           <div class="file-formats">
             <span class="format-text"
@@ -89,6 +124,25 @@
             </n-icon>
           </template>
           Add More Photos
+        </n-button>
+
+        <n-button
+          type="default"
+          size="medium"
+          class="compact-upload-btn"
+          @click="importFromGooglePhotos"
+        >
+          <template #icon>
+            <n-icon>
+              <svg viewBox="0 0 24 24">
+                <path
+                  fill="currentColor"
+                  d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zm-8-10c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"
+                />
+              </svg>
+            </n-icon>
+          </template>
+          Google Photos
         </n-button>
       </div>
     </div>
@@ -135,6 +189,7 @@ import pica from "pica";
 import PhotoCardHub from "../photoCards/PhotoCardHub.vue";
 import { NButton, NProgress, NIcon } from "naive-ui";
 import { api_analyzer, api } from "@/utils/axios";
+import { useGooglePhotos } from "@/composables/useGooglePhotos.js";
 
 const props = defineProps({
   selectedIds: {
@@ -146,6 +201,7 @@ const props = defineProps({
 const emit = defineEmits(["update:selectedIds", "photos-added"]);
 
 const photosStore = usePhotosStore();
+const googlePhotos = useGooglePhotos();
 
 const isUploading = ref(false);
 const gridColumns = ref(6);
@@ -173,6 +229,11 @@ const picaInstance = pica();
 const limit = pLimit(10);
 
 const overallProgress = computed(() => {
+  // Si estamos descargando de Google Photos, usar ese progreso
+  if (googlePhotos.isDownloading.value) {
+    return googlePhotos.downloadProgress.value;
+  }
+  // Si estamos subiendo archivos locales
   if (totalFiles.value === 0) return 0;
   return (uploadedCount.value / totalFiles.value) * 100;
 });
@@ -294,6 +355,151 @@ const toggleSelection = (photoId) => {
     selectedIds.value = [...selectedIds.value, photoId];
   }
 };
+
+/**
+ * Importa fotos desde Google Photos Picker
+ */
+async function importFromGooglePhotos() {
+  try {
+    // Usar el método importPhotos que maneja selección + descarga
+    const downloadResults = await googlePhotos.importPhotos(100, 5);
+
+    if (!downloadResults || downloadResults.length === 0) {
+      return;
+    }
+
+    const successfulDownloads = downloadResults.filter((r) => r.success);
+
+    if (successfulDownloads.length === 0) {
+      console.warn("No photos were successfully downloaded");
+      return;
+    }
+
+    // Poner isUploading a true ANTES de procesar para evitar gap en el indicador
+    isUploading.value = true;
+    totalFiles.value = successfulDownloads.length;
+    uploadedCount.value = 0;
+
+    const photosToUpload = [];
+
+    await Promise.all(
+      successfulDownloads.map((result) =>
+        limit(() =>
+          processAndUploadGooglePhoto(result).then((photo) => {
+            if (photo) photosToUpload.push(photo);
+          })
+        )
+      )
+    );
+
+    // Ya no poner isUploading a false aquí, dejarlo true hasta el finally
+    // isUploading.value = false;
+
+    // Set photos to checking duplicates state
+    const photoIds = photosToUpload.map((p) => p.id);
+    photoIds.forEach((id) => {
+      photosStore.updatePhoto(id, { preprocessing: true });
+    });
+
+    await api_analyzer.post(`/api/analyzer`, {
+      packageId: "preprocess",
+      mode: "adding",
+    });
+
+    await photosStore.getOrFetch(true);
+
+    // Remove checking duplicates flag
+    photoIds.forEach((id) => {
+      photosStore.updatePhoto(id, { preprocessing: false, preprocessed: true });
+    });
+
+    // Emit that new photos were added
+    emit("photos-added", photosToUpload);
+  } catch (error) {
+    console.error("❌ Error importing from Google Photos:", error);
+  } finally {
+    isUploading.value = false;
+  }
+}
+
+/**
+ * Procesa y sube una foto de Google Photos (blob ya descargado)
+ * Soporta tanto el formato antiguo (Photos Library) como el nuevo (Picker API)
+ */
+async function processAndUploadGooglePhoto(result) {
+  const { mediaItem, blob, photo } = result;
+
+  // Obtener el nombre del archivo - soportar ambos formatos
+  const photoData = mediaItem || photo;
+  const filename =
+    photoData?.filename ||
+    photoData?.name ||
+    `google-photo-${photoData?.id || Date.now()}.jpg`;
+
+  // Resize the blob (similar to local files)
+  const [resizedBlob, thumbnailBlob] = await Promise.all([
+    resizeImageFromBlob(blob, 1500),
+    resizeImageFromBlob(blob, 800),
+  ]);
+
+  // Get signed URLs from your backend
+  const response = await api.post("/api/catalog/uploadPhoto", {
+    fileType: resizedBlob.type,
+    originalName: filename,
+  });
+  const { uploadUrl, thumbnailUploadUrl, photo: uploadedPhoto } = response.data;
+
+  // Upload to R2
+  await Promise.all([
+    fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": resizedBlob.type },
+      body: resizedBlob,
+    }),
+    fetch(thumbnailUploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": thumbnailBlob.type },
+      body: thumbnailBlob,
+    }),
+  ]);
+
+  uploadedPhoto.status = "preprocessing";
+  uploadedPhoto.isDuplicate = false;
+  photosStore.photos.unshift(uploadedPhoto);
+  uploadedCount.value++;
+
+  return uploadedPhoto;
+}
+
+/**
+ * Redimensiona una imagen desde un Blob
+ */
+async function resizeImageFromBlob(blob, targetWidth) {
+  const img = await loadImageFromBlob(blob);
+  const canvas = document.createElement("canvas");
+  const scale = targetWidth / img.width;
+  canvas.width = targetWidth;
+  canvas.height = img.height * scale;
+
+  await picaInstance.resize(img, canvas);
+  const resizedBlob = await picaInstance.toBlob(canvas, "image/jpeg", 0.9);
+  return resizedBlob;
+}
+
+/**
+ * Carga una imagen desde un Blob
+ */
+function loadImageFromBlob(blob) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(img.src);
+      resolve(img);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(blob);
+  });
+}
 </script>
 
 <style scoped>
