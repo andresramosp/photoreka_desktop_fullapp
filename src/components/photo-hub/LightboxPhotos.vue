@@ -83,13 +83,7 @@
         >
       </div>
     </n-modal>
-    <div
-      v-if="
-        isUploading ||
-        (googlePhotos.isDownloading && googlePhotos.totalToDownload > 0)
-      "
-      class="upload-progress-section"
-    >
+    <div v-if="isAnyOperationInProgress" class="upload-progress-section">
       <div class="progress-header">
         <div class="progress-title-container">
           <h3 class="progress-title">
@@ -105,13 +99,7 @@
             class="preprocessing-spinner"
           />
         </div>
-        <span class="progress-count" v-if="googlePhotos.isDownloading">
-          {{ googlePhotos.downloadedCount }}/{{ googlePhotos.totalToDownload }}
-          photos downloaded
-        </span>
-        <span class="progress-count" v-else
-          >{{ uploadedCount }}/{{ totalFiles }} photos</span
-        >
+        <span class="progress-count">{{ progressCountText }}</span>
       </div>
       <n-progress
         type="line"
@@ -453,6 +441,32 @@ const actualProgress = computed(() => {
     return googlePhotos.downloadProgress.value;
   }
   return overallProgress.value;
+});
+
+// Computed to check if there's any operation in progress
+const isAnyOperationInProgress = computed(() => {
+  // Check if downloading from Google Photos with actual items to download
+  const isDownloadingGooglePhotos =
+    googlePhotos.isDownloading.value && googlePhotos.totalToDownload.value > 0;
+
+  // Check if uploading to Cloudflare with actual files
+  const isUploadingFiles = isUploading.value && totalFiles.value > 0;
+
+  return isDownloadingGooglePhotos || isUploadingFiles;
+});
+
+// Computed for the progress count text
+const progressCountText = computed(() => {
+  if (
+    googlePhotos.isDownloading.value &&
+    googlePhotos.totalToDownload.value > 0
+  ) {
+    return `${googlePhotos.downloadedCount.value}/${googlePhotos.totalToDownload.value} photos`;
+  }
+  if (isUploading.value && totalFiles.value > 0) {
+    return `${uploadedCount.value}/${totalFiles.value} photos`;
+  }
+  return "";
 });
 
 // Source warning message and title based on preferredSource

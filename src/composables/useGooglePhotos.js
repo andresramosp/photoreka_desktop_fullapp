@@ -308,22 +308,11 @@ export function useGooglePhotos() {
       isPickerOpen.value = true;
       error.value = null;
 
-      // Asegurar autorización
-      if (!accessToken.value) {
-        await authorize();
-      }
-
-      // Crear sesión de picker
-      const session = await createPickerSession(maxItems);
-
-      // Abrir la URL del picker en una nueva ventana
-      // NO añadir /autoclose - dejamos que el usuario vea la confirmación
-      // y el polling detecte cuando mediaItemsSet sea true
-      const pickerUrl = session.pickerUri;
-
+      // PASO 1: Abrir popup en blanco SINCRÓNICAMENTE (antes de any await)
+      // Esto es crítico para evitar que el navegador bloquee el popup en PROD
       console.log("🔓 Opening Photos Picker window...");
       pickerWindow = window.open(
-        pickerUrl,
+        "about:blank",
         "GooglePhotosPicker",
         "width=1024,height=768,menubar=no,toolbar=no,location=no,status=no"
       );
@@ -333,6 +322,21 @@ export function useGooglePhotos() {
           "Could not open picker window. Please allow popups for this site."
         );
       }
+
+      // PASO 2: Ahora hacemos los awaits (autorización y crear sesión)
+      // Asegurar autorización
+      if (!accessToken.value) {
+        await authorize();
+      }
+
+      // Crear sesión de picker
+      const session = await createPickerSession(maxItems);
+
+      // PASO 3: Redirigir el popup a la URL real del picker
+      // El popup ya está abierto, así que el navegador no lo bloquea
+      const pickerUrl = session.pickerUri;
+      pickerWindow.location.href = pickerUrl;
+      console.log("✅ Picker window redirected to picker URI");
 
       // Empezar polling para verificar cuando el usuario termine
       const photos = await pollSessionUntilComplete(
