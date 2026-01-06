@@ -98,7 +98,7 @@
         <template #trigger>
           <div class="lightroom-indicator">
             <img
-              src="@/assets/onBoarding/lightroom_logo.png"
+              src="@/assets/logos/lightroom_logo.png"
               alt="Lightroom"
               class="lightroom-logo"
             />

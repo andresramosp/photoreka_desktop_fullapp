@@ -30,7 +30,7 @@
         <!-- Screenshot -->
         <div class="screenshot-container">
           <img
-            src="/src/assets/onBoarding/lightroom_logo.png"
+            src="/src/assets/logos/lightroom_logo.png"
             alt="Lightroom Plugin Screenshot"
             class="plugin-screenshot"
           />

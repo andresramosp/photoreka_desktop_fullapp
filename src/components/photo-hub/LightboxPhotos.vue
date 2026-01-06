@@ -228,33 +228,17 @@
                 </n-icon>
                 <n-icon v-else-if="button.icon === 'lightroom'">
                   <img
-                    src="/src/assets/onBoarding/lightroom_logo.png"
+                    src="/src/assets/logos/lightroom_logo.png"
                     alt="Lr"
                     style="width: 1.1em; height: 1.1em"
                   />
                 </n-icon>
                 <n-icon v-else-if="button.icon === 'google'">
-                  <!-- Google Photos official SVG icon -->
-                  <svg viewBox="0 0 48 48" width="1em" height="1em">
-                    <g>
-                      <path
-                        fill="#4285F4"
-                        d="M24 24V6.4A17.6 17.6 0 0 1 41.6 24Z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M24 24h17.6A17.6 17.6 0 0 1 24 41.6Z"
-                      />
-                      <path
-                        fill="#FBBC04"
-                        d="M24 24v17.6A17.6 17.6 0 0 1 6.4 24Z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M24 24H6.4A17.6 17.6 0 0 1 24 6.4Z"
-                      />
-                    </g>
-                  </svg>
+                  <img
+                    :src="googlePhotosIconUrl"
+                    alt="Google Photos"
+                    style="width: 1em; height: 1em"
+                  />
                 </n-icon>
                 <n-icon v-else-if="button.icon === 'google-locked'">
                   <!-- Candado abierto - indicando desconectado -->
@@ -300,32 +284,17 @@
               </n-icon>
               <n-icon v-else-if="button.icon === 'lightroom'">
                 <img
-                  src="/src/assets/onBoarding/lightroom_logo.png"
+                  src="/src/assets/logos/lightroom_logo.png"
                   alt="Lr"
                   style="width: 1.1em; height: 1.1em"
                 />
               </n-icon>
               <n-icon v-else-if="button.icon === 'google'">
-                <svg viewBox="0 0 48 48" width="1em" height="1em">
-                  <g>
-                    <path
-                      fill="#4285F4"
-                      d="M24 24V6.4A17.6 17.6 0 0 1 41.6 24Z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M24 24h17.6A17.6 17.6 0 0 1 24 41.6Z"
-                    />
-                    <path
-                      fill="#FBBC04"
-                      d="M24 24v17.6A17.6 17.6 0 0 1 6.4 24Z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M24 24H6.4A17.6 17.6 0 0 1 24 6.4Z"
-                    />
-                  </g>
-                </svg>
+                <img
+                  :src="googlePhotosIconUrl"
+                  alt="Google Photos"
+                  style="width: 1em; height: 1em"
+                />
               </n-icon>
               <n-icon v-else-if="button.icon === 'google-locked'">
                 <!-- Candado abierto - indicando desconectado -->
@@ -382,7 +351,7 @@ import { FolderOpenOutline } from "@vicons/ionicons5";
 import { BookInformation20Regular } from "@vicons/fluent";
 import pLimit from "p-limit";
 import pica from "pica";
-import { api_analyzer, api } from "@/utils/axios";
+import googlePhotosIconUrl from "@/assets/logos/google_photos.png";
 
 import PhotosGrid from "../PhotosGrid.vue";
 import DuplicatePhotosDialog from "../DuplicatePhotosDialog.vue";

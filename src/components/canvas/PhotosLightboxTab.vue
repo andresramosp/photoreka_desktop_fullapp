@@ -82,12 +82,11 @@
             >
               <template #icon>
                 <n-icon>
-                  <svg viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zm-8-10c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"
-                    />
-                  </svg>
+                  <img
+                    :src="googlePhotosIconUrl"
+                    alt="Google Photos"
+                    style="width: 1em; height: 1em"
+                  />
                 </n-icon>
               </template>
               Google Photos
@@ -190,6 +189,7 @@ import PhotoCardHub from "../photoCards/PhotoCardHub.vue";
 import { NButton, NProgress, NIcon } from "naive-ui";
 import { api_analyzer, api } from "@/utils/axios";
 import { useGooglePhotos } from "@/composables/useGooglePhotos.js";
+import googlePhotosIconUrl from "@/assets/logos/google_photos.png";
 
 const props = defineProps({
   selectedIds: {

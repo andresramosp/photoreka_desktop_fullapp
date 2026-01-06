@@ -272,7 +272,7 @@
             </div>
             <div class="lightroom-header">
               <img
-                src="/src/assets/onBoarding/lightroom_logo.png"
+                src="/src/assets/logos/lightroom_logo.png"
                 alt="Adobe Lightroom"
                 class="lightroom-icon"
               />
