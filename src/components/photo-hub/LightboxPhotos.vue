@@ -256,6 +256,15 @@
                     </g>
                   </svg>
                 </n-icon>
+                <n-icon v-else-if="button.icon === 'google-locked'">
+                  <!-- Candado abierto - indicando desconectado -->
+                  <svg viewBox="0 0 24 24" width="1em" height="1em">
+                    <path
+                      fill="currentColor"
+                      d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h2c0-1.66 1.34-3 3-3s3 1.34 3 3v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"
+                    />
+                  </svg>
+                </n-icon>
               </template>
               {{ button.label }}
             </n-button>
@@ -316,6 +325,15 @@
                       d="M24 24H6.4A17.6 17.6 0 0 1 24 6.4Z"
                     />
                   </g>
+                </svg>
+              </n-icon>
+              <n-icon v-else-if="button.icon === 'google-locked'">
+                <!-- Candado abierto - indicando desconectado -->
+                <svg viewBox="0 0 24 24" width="1em" height="1em">
+                  <path
+                    fill="currentColor"
+                    d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h2c0-1.66 1.34-3 3-3s3 1.34 3 3v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"
+                  />
                 </svg>
               </n-icon>
             </template>
@@ -523,7 +541,7 @@ const uploadButtons = computed(() => {
       key: "google",
       label: "Google Photos",
       compactLabel: "Google Photos",
-      icon: "google",
+      icon: googlePhotos.isAuthorized.value ? "google" : "google-locked",
       type: "default",
       action: () => handleSourceSelection("google", importFromGooglePhotos),
     },
@@ -550,6 +568,16 @@ watch(overallProgress, (newProgress) => {
     warmUpTriggeredAt75.value = false;
   }
 });
+
+// Watcher para mostrar un aviso de éxito cuando se autoriza Google Photos
+watch(
+  () => googlePhotos.isAuthorized.value,
+  (newValue, oldValue) => {
+    if (newValue && !oldValue) {
+      message.success("Google Photos connected successfully!");
+    }
+  }
+);
 
 const fastModeOverride = ref(true);
 

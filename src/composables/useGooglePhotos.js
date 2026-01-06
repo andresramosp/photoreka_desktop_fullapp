@@ -10,6 +10,54 @@ const SCOPES =
 // Endpoints de la API real de Google Photos Picker
 const PICKER_API_BASE = "https://photospicker.googleapis.com/v1";
 
+// LocalStorage keys
+const TOKEN_STORAGE_KEY = "google_photos_token";
+const TOKEN_EXPIRY_KEY = "google_photos_token_expiry";
+
+/**
+ * Guarda el token y su fecha de expiración en localStorage
+ */
+function saveTokenToStorage(token, expiresIn = 3600) {
+  const expiryTime = Date.now() + expiresIn * 1000; // expiresIn en segundos
+  localStorage.setItem(TOKEN_STORAGE_KEY, token);
+  localStorage.setItem(TOKEN_EXPIRY_KEY, expiryTime.toString());
+  console.log("💾 Token saved to localStorage");
+}
+
+/**
+ * Recupera el token de localStorage si no ha expirado
+ */
+function loadTokenFromStorage() {
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+  const expiry = localStorage.getItem(TOKEN_EXPIRY_KEY);
+
+  if (!token || !expiry) {
+    return null;
+  }
+
+  const expiryTime = parseInt(expiry, 10);
+  const now = Date.now();
+
+  // Verificar si el token ha expirado
+  if (now >= expiryTime) {
+    console.log("⏰ Token expired, clearing storage");
+    clearTokenFromStorage();
+    return null;
+  }
+
+  console.log("✅ Token loaded from localStorage");
+  return token;
+}
+
+/**
+ * Limpia el token del localStorage
+ */
+function clearTokenFromStorage() {
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
+  localStorage.removeItem(TOKEN_EXPIRY_KEY);
+  console.log("🗑️ Token cleared from localStorage");
+}
+
 export function useGooglePhotos() {
   // Estado del composable
   const isInitialized = ref(false);
@@ -28,6 +76,14 @@ export function useGooglePhotos() {
   let tokenClient = null;
   let pollingInterval = null;
   let pickerWindow = null;
+
+  // Intentar cargar token guardado al inicializar
+  const savedToken = loadTokenFromStorage();
+  if (savedToken) {
+    accessToken.value = savedToken;
+    isAuthorized.value = true;
+    console.log("🔄 Restored session from localStorage");
+  }
 
   /**
    * Carga el script de Google Identity Services si no está presente
@@ -148,6 +204,11 @@ export function useGooglePhotos() {
         console.log("✅ Access token received for Photos Picker scope");
         accessToken.value = response.access_token;
         isAuthorized.value = true;
+
+        // Guardar token en localStorage (expiresIn viene en segundos, default 3600 = 1 hora)
+        const expiresIn = response.expires_in || 3600;
+        saveTokenToStorage(response.access_token, expiresIn);
+
         resolve(response.access_token);
       };
 
@@ -308,11 +369,32 @@ export function useGooglePhotos() {
       isPickerOpen.value = true;
       error.value = null;
 
-      // PASO 1: Abrir popup en blanco SINCRÓNICAMENTE (antes de any await)
-      // Esto es crítico para evitar que el navegador bloquee el popup en PROD
-      console.log("🔓 Opening Photos Picker window...");
+      // CRÍTICO: Si no hay token, solo hacer autorización y retornar
+      // El usuario debe hacer click de nuevo después de autorizar
+      if (!accessToken.value) {
+        console.log("🔐 No token found, need authorization first");
+        console.log("⚠️ User will need to click again after authorization");
+
+        await authorize();
+
+        console.log("✅ Authorization complete, token acquired");
+        console.log("💡 User can now click again to open picker");
+
+        // Retornar array vacío indicando que debe intentar de nuevo
+        // El componente debe detectar esto y mostrar mensaje
+        return [];
+      }
+
+      // Ya tenemos token, crear sesión de picker
+      console.log("📝 Creating picker session...");
+      const session = await createPickerSession(maxItems);
+      console.log("✅ Session created:", session.id);
+
+      // Abrir el popup DIRECTAMENTE con la URL real
+      // Como ya tenemos token y sesión, esto es sincrónico desde el click del usuario
+      console.log("� Opening Photos Picker window...");
       pickerWindow = window.open(
-        "about:blank",
+        session.pickerUri,
         "GooglePhotosPicker",
         "width=1024,height=768,menubar=no,toolbar=no,location=no,status=no"
       );
@@ -323,20 +405,7 @@ export function useGooglePhotos() {
         );
       }
 
-      // PASO 2: Ahora hacemos los awaits (autorización y crear sesión)
-      // Asegurar autorización
-      if (!accessToken.value) {
-        await authorize();
-      }
-
-      // Crear sesión de picker
-      const session = await createPickerSession(maxItems);
-
-      // PASO 3: Redirigir el popup a la URL real del picker
-      // El popup ya está abierto, así que el navegador no lo bloquea
-      const pickerUrl = session.pickerUri;
-      pickerWindow.location.href = pickerUrl;
-      console.log("✅ Picker window redirected to picker URI");
+      console.log("✅ Picker window opened successfully");
 
       // Empezar polling para verificar cuando el usuario termine
       const photos = await pollSessionUntilComplete(
@@ -358,6 +427,11 @@ export function useGooglePhotos() {
     } catch (err) {
       console.error("❌ Error in selectPhotos:", err);
       error.value = err.message;
+      // Cerrar popup si quedó abierto tras un error
+      if (pickerWindow && !pickerWindow.closed) {
+        pickerWindow.close();
+      }
+      pickerWindow = null;
       throw err;
     } finally {
       isLoading.value = false;
@@ -699,6 +773,8 @@ export function useGooglePhotos() {
     isAuthorized.value = false;
     selectedPhotos.value = [];
     currentSession.value = null;
+    clearTokenFromStorage();
+    console.log("👋 Signed out from Google Photos");
   }
 
   /**
