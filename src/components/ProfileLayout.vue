@@ -94,12 +94,13 @@ import AppLogo from "./AppLogo.vue";
 
 /* Background decoration */
 .profile-background {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
   z-index: 1;
+  pointer-events: none;
 }
 
 .bg-pattern {
@@ -120,7 +121,6 @@ import AppLogo from "./AppLogo.vue";
     );
   background-size: 800px 800px, 600px 600px;
   background-position: 0 0, 200px 200px;
-  animation: float 20s infinite ease-in-out;
 }
 
 .bg-gradient {
@@ -134,19 +134,6 @@ import AppLogo from "./AppLogo.vue";
     rgba(37, 99, 235, 0.05) 0%,
     transparent 70%
   );
-}
-
-@keyframes float {
-  0%,
-  100% {
-    transform: translate(0, 0) rotate(0deg);
-  }
-  33% {
-    transform: translate(30px, -30px) rotate(1deg);
-  }
-  66% {
-    transform: translate(-20px, 20px) rotate(-1deg);
-  }
 }
 
 /* Responsive design */

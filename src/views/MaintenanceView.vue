@@ -296,7 +296,6 @@ const handleClearBypass = () => {
     rgba(37, 99, 235, 0.08),
     rgba(139, 92, 246, 0.04)
   );
-  animation: float 8s ease-in-out infinite;
 }
 
 .decoration-1 {
@@ -320,19 +319,6 @@ const handleClearBypass = () => {
   height: 100px;
   bottom: 20%;
   left: 20%;
-  animation-delay: -6s;
-}
-
-@keyframes float {
-  0%,
-  100% {
-    transform: translateY(0px) rotate(0deg);
-    opacity: 0.4;
-  }
-  50% {
-    transform: translateY(-15px) rotate(180deg);
-    opacity: 0.7;
-  }
 }
 
 /* Responsive design */

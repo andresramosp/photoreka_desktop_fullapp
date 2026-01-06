@@ -293,7 +293,7 @@
                 <n-icon size="20" color="#8b5cf6"
                   ><ChatbubblesOutline
                 /></n-icon>
-                <span>Full natural language integrated</span>
+                <span>Search by natural language integrated</span>
               </li>
 
               <li>
