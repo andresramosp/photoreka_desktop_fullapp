@@ -364,9 +364,88 @@
         </div>
       </section> -->
 
+      <!-- Data Sources Section -->
+      <section class="data-sources-section">
+        <div class="data-sources-container">
+          <div class="sources-header">
+            <h2 class="sources-title">Connect Your Photos From Anywhere</h2>
+            <p class="sources-description">
+              Photoreka works seamlessly with multiple photo sources. Import
+              your images from wherever they live and start curating
+              immediately.
+            </p>
+          </div>
+          <div class="sources-grid">
+            <!-- Local Files -->
+            <div class="source-card">
+              <div class="source-icon-wrapper">
+                <n-icon size="48" color="#22c55e">
+                  <CloudUploadOutline />
+                </n-icon>
+              </div>
+              <h3 class="source-name">Local Files</h3>
+              <p class="source-description">
+                Upload photos directly from your computer. Supports all major
+                image formats including RAW files.
+              </p>
+              <div class="source-badge available">Available Now</div>
+            </div>
+
+            <!-- Google Photos -->
+            <div class="source-card">
+              <div class="source-icon-wrapper">
+                <img
+                  src="/src/assets/logos/google_photos.png"
+                  alt="Google Photos"
+                  class="source-logo"
+                />
+              </div>
+              <h3 class="source-name">Google Photos</h3>
+              <p class="source-description">
+                Sync your entire Google Photos library with one click. Keep your
+                photos organized across platforms.
+              </p>
+              <div class="source-badge available">Available Now</div>
+            </div>
+
+            <!-- Lightroom -->
+            <div class="source-card">
+              <div class="source-icon-wrapper">
+                <img
+                  src="/src/assets/logos/lightroom_logo.png"
+                  alt="Adobe Lightroom"
+                  class="source-logo"
+                />
+              </div>
+              <h3 class="source-name">Adobe Lightroom</h3>
+              <p class="source-description">
+                Connect directly with your Lightroom Classic catalog through our
+                official plugin.
+              </p>
+              <div class="source-badge available">Available Now</div>
+            </div>
+
+            <!-- Coming Soon -->
+            <div class="source-card coming-soon">
+              <div class="source-icon-wrapper">
+                <n-icon size="48" color="#6b7280">
+                  <LinkOutline />
+                </n-icon>
+              </div>
+              <h3 class="source-name">More Integrations</h3>
+              <p class="source-description">
+                iCloud Photos, Dropbox, OneDrive, and more cloud storage
+                providers coming soon.
+              </p>
+              <div class="source-badge soon">Coming Soon</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- FAQs Section -->
       <section id="faqs" class="faqs-section">
-        <div class="section-container" style="margin-top: 50px">
+        <div class="section-container" style="margin-top: 80px">
           <div class="faqs-header">
             <h2 class="section-title">Frequently Asked Questions</h2>
             <p class="section-subtitle">
@@ -1897,6 +1976,187 @@ if (typeof window !== "undefined") {
   color: var(--text-tertiary);
 }
 
+/* Data Sources Section */
+.data-sources-section {
+  /* padding: 40px 0; */
+  background: linear-gradient(
+    180deg,
+    #0f0f13 0%,
+    rgba(34, 197, 94, 0.03) 50%,
+    #0f0f13 100%
+  );
+  position: relative;
+  overflow: hidden;
+}
+
+.data-sources-section::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(
+    ellipse at 70% 50%,
+    rgba(34, 197, 94, 0.08) 0%,
+    transparent 60%
+  );
+  pointer-events: none;
+}
+
+.data-sources-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  position: relative;
+  z-index: 1;
+}
+
+.sources-header {
+  text-align: center;
+  margin-bottom: 64px;
+}
+
+.sources-title {
+  font-size: 40px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  line-height: 1.2;
+}
+
+.sources-description {
+  font-size: 18px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.sources-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 32px;
+}
+
+.source-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 40px 32px;
+  text-align: center;
+  transition: all 0.4s ease;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.source-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(34, 197, 94, 0.05),
+    rgba(37, 99, 235, 0.05)
+  );
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+
+.source-card:hover::before {
+  opacity: 1;
+}
+
+.source-card:hover {
+  border-color: var(--primary-color);
+  transform: translateY(-8px);
+  box-shadow: 0 20px 40px rgba(34, 197, 94, 0.2);
+}
+
+.source-card.coming-soon {
+  opacity: 1;
+  border-color: rgba(107, 114, 128, 0.3);
+  background: rgba(107, 114, 128, 0.05);
+}
+
+.source-card.coming-soon:hover {
+  border-color: rgba(107, 114, 128, 0.5);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(107, 114, 128, 0.15);
+}
+
+.source-icon-wrapper {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 16px;
+  transition: all 0.4s ease;
+}
+
+.source-card:hover .source-icon-wrapper {
+  transform: scale(1.1);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.source-logo {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.2));
+}
+
+.source-name {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.source-description {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+  flex-grow: 1;
+}
+
+.source-badge {
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.source-badge.available {
+  background: linear-gradient(
+    135deg,
+    rgba(34, 197, 94, 0.2),
+    rgba(37, 99, 235, 0.2)
+  );
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #22c55e;
+}
+
+.source-badge.soon {
+  background: rgba(107, 114, 128, 0.2);
+  border: 1px solid rgba(107, 114, 128, 0.3);
+  color: #9ca3af;
+}
+
 /* FAQs Section */
 .faqs-section {
   padding-bottom: 60px;
@@ -2183,6 +2443,12 @@ if (typeof window !== "undefined") {
     flex-direction: column;
     gap: 12px;
   }
+
+  /* Data sources 1024px */
+  .sources-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+  }
 }
 
 @media (max-width: 768px) {
@@ -2199,7 +2465,7 @@ if (typeof window !== "undefined") {
   }
 
   .hero-description {
-    font-size: 16px;
+    font-size: 17px;
   }
 
   .hero-actions {
@@ -2402,6 +2668,34 @@ if (typeof window !== "undefined") {
     padding: 0 16px;
     gap: 16px;
   }
+
+  /* Data sources 768px */
+  .data-sources-section {
+    padding: 60px 0;
+  }
+
+  .sources-header {
+    margin-bottom: 48px;
+  }
+
+  .sources-title {
+    font-size: 32px;
+  }
+
+  .sources-description {
+    font-size: 16px;
+  }
+
+  .sources-grid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    max-width: 400px;
+    margin: 0 auto;
+  }
+
+  .source-card {
+    padding: 32px 24px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -2419,7 +2713,7 @@ if (typeof window !== "undefined") {
   }
 
   .hero-description {
-    font-size: 14px;
+    font-size: 15px;
   }
 
   .floating-steps {
@@ -2429,6 +2723,33 @@ if (typeof window !== "undefined") {
   .nav-container {
     padding: 0 12px;
     height: 56px;
+  }
+
+  /* Data sources 480px */
+  .sources-grid {
+    padding: 0 16px;
+  }
+
+  .source-card {
+    padding: 28px 20px;
+  }
+
+  .source-icon-wrapper {
+    width: 70px;
+    height: 70px;
+  }
+
+  .source-logo {
+    width: 48px;
+    height: 48px;
+  }
+
+  .source-name {
+    font-size: 18px;
+  }
+
+  .source-description {
+    font-size: 14px;
   }
 
   .simple-footer-container {
