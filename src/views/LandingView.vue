@@ -386,7 +386,7 @@
               <h3 class="source-name">Local Files</h3>
               <p class="source-description">
                 Upload photos directly from your computer. Supports all major
-                image formats including RAW files.
+                image formats (JPEG, PNG, TIFF).
               </p>
               <div class="source-badge available">Available Now</div>
             </div>

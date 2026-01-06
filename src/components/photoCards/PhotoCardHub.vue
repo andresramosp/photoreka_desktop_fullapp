@@ -106,6 +106,23 @@
         </template>
         Photo synced with Lightroom
       </n-tooltip>
+      <!-- Google Photos source indicator -->
+      <n-tooltip
+        v-if="photo.descriptions?.source?.type === 'google'"
+        trigger="hover"
+        placement="top"
+      >
+        <template #trigger>
+          <div class="google-photos-indicator">
+            <img
+              src="@/assets/logos/google_photos.png"
+              alt="Google Photos"
+              class="google-photos-logo"
+            />
+          </div>
+        </template>
+        Photo imported from Google Photos
+      </n-tooltip>
       <!-- Duplicate indicator in top-left corner when footer is hidden -->
       <n-tooltip
         v-if="photo.isDuplicate && showDuplicate && !showFooter"
@@ -578,6 +595,26 @@ const onImageError = () => {
   object-fit: contain;
 }
 
+/* Google Photos source indicator */
+.google-photos-indicator {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  border-radius: 6px;
+  padding: 4px;
+  opacity: 1;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.google-photos-logo {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
 /* Variantes responsivas para el indicador de selección */
 @container photo-card (max-width: 200px) {
   .selection-indicator {
@@ -639,6 +676,17 @@ const onImageError = () => {
     width: 16px;
     height: 16px;
   }
+
+  .google-photos-indicator {
+    bottom: 4px;
+    right: 4px;
+    padding: 2px;
+  }
+
+  .google-photos-logo {
+    width: 16px;
+    height: 16px;
+  }
 }
 
 /* Soporte para navegadores sin container queries - selection indicator */
@@ -671,6 +719,17 @@ const onImageError = () => {
     width: 18px;
     height: 18px;
   }
+
+  .google-photos-indicator {
+    bottom: 6px;
+    right: 6px;
+    padding: 3px;
+  }
+
+  .google-photos-logo {
+    width: 18px;
+    height: 18px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -699,6 +758,17 @@ const onImageError = () => {
   }
 
   .lightroom-logo {
+    width: 16px;
+    height: 16px;
+  }
+
+  .google-photos-indicator {
+    bottom: 4px;
+    right: 4px;
+    padding: 2px;
+  }
+
+  .google-photos-logo {
     width: 16px;
     height: 16px;
   }
