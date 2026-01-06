@@ -467,50 +467,69 @@ export function useGooglePhotos() {
       );
 
       /**
-       * Cuando la ventana se cierra, hacer múltiples reintentos
-       * porque Google puede tardar en actualizar mediaItemsSet
+       * Cuando la ventana se cierra, continuar verificando hasta encontrar las fotos
+       * o hasta que se alcance el timeout general (30 min por defecto)
        */
       const checkAfterWindowClose = async () => {
-        console.log(
-          "🪟 Picker window was closed, checking final state with retries..."
-        );
+        console.log("🪟 Picker window was closed, checking final state...");
         clearInterval(pollingInterval);
         pollingInterval = null;
 
-        // Hacer varios reintentos con delays crecientes
-        const retryDelays = [500, 1000, 2000, 3000, 5000];
+        // Continuar verificando cada 2 segundos hasta encontrar fotos o timeout
+        const checkInterval = 2000; // 2 segundos
+        const maxAttempts = 150; // Máximo 150 intentos (300 segundos total)
+        let attemptCount = 0;
 
-        for (let i = 0; i < retryDelays.length; i++) {
-          await new Promise((r) => setTimeout(r, retryDelays[i]));
+        const checkLoop = async () => {
+          attemptCount++;
+
+          // Verificar si se alcanzó el timeout general
+          if (Date.now() - startTime > timeoutMs) {
+            console.log(
+              "⏰ Timeout reached while waiting for photos after window close"
+            );
+            resolve([]);
+            return;
+          }
+
+          // Verificar si se alcanzó el máximo de intentos después de cerrar
+          if (attemptCount > maxAttempts) {
+            console.log(
+              `❌ User closed picker without selecting (${maxAttempts} attempts exhausted)`
+            );
+            resolve([]);
+            return;
+          }
 
           try {
             console.log(
-              `🔄 Retry ${i + 1}/${
-                retryDelays.length
-              } checking mediaItemsSet...`
+              `🔄 Checking mediaItemsSet (attempt ${attemptCount}/${maxAttempts})...`
             );
             const session = await getSession(sessionId);
 
             if (session.mediaItemsSet) {
               const items = await listMediaItems(sessionId);
               console.log(
-                `📷 ${
-                  items.length
-                } photos selected (after window close, retry ${i + 1})`
+                `📷 ${items.length} photos selected (after window close, attempt ${attemptCount})`
               );
               resolve(items);
               return;
             }
-          } catch (err) {
-            console.error(`Retry ${i + 1} error:`, err);
-          }
-        }
 
-        // Si después de todos los reintentos sigue sin fotos
-        console.log(
-          "❌ User closed picker without selecting (after all retries)"
-        );
-        resolve([]);
+            // Si no hay fotos todavía, esperar y reintentar
+            console.log(
+              `⏳ No photos yet, waiting ${checkInterval}ms before retry...`
+            );
+            setTimeout(checkLoop, checkInterval);
+          } catch (err) {
+            console.error(`Attempt ${attemptCount} error:`, err);
+            // En caso de error, esperar y reintentar (si no hemos alcanzado el máximo)
+            setTimeout(checkLoop, checkInterval);
+          }
+        };
+
+        // Iniciar el primer chequeo después de un breve delay inicial
+        setTimeout(checkLoop, 500);
       };
 
       const checkSession = async () => {
