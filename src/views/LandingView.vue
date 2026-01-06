@@ -1987,6 +1987,7 @@ if (typeof window !== "undefined") {
   );
   position: relative;
   overflow: hidden;
+  padding-bottom: 60px;
 }
 
 .data-sources-section::before {
