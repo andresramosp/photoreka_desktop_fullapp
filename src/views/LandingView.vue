@@ -784,12 +784,6 @@ const videoTabs = ref([
       .href, // local video
     speed: 2,
   },
-  {
-    title: "Grid Maker",
-    icon: AppsOutline,
-    videoUrl: new URL("@/assets/videos/grid_1.mp4", import.meta.url).href, // local video
-    speed: 1.4,
-  },
 ]);
 
 const goToAuth = (mode = "login") => {
