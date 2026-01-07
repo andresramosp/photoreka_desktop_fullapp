@@ -11,28 +11,28 @@ export enum UsageTier {
 
 export const UsageTierLimits: Record<UsageTier, Omit<Usage, 'creditsUsed'>> = {
   [UsageTier.TESTER]: {
-    photosLimit: 5000,
+    photosLimit: 2000,
     analyzedPhotosLimit: 2000,
     creditsAvailable: 100,
   },
   [UsageTier.PROMOTIONAL]: {
     photosLimit: 2000,
-    analyzedPhotosLimit: 500,
+    analyzedPhotosLimit: 2000,
     creditsAvailable: 50,
   },
   [UsageTier.BASIC]: {
     photosLimit: 100,
-    analyzedPhotosLimit: 50,
+    analyzedPhotosLimit: 100,
     creditsAvailable: 1000,
   },
   [UsageTier.PRO]: {
     photosLimit: 1000,
-    analyzedPhotosLimit: 500,
+    analyzedPhotosLimit: 1000,
     creditsAvailable: 10000,
   },
   [UsageTier.PREMIUM]: {
     photosLimit: 10000,
-    analyzedPhotosLimit: 5000,
+    analyzedPhotosLimit: 10000,
     creditsAvailable: 100000,
   },
 }

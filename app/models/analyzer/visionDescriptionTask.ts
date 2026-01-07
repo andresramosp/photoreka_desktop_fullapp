@@ -182,7 +182,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
     let status = 'in_progress'
     let requests: any[] = []
 
-    const isGpt5NonChat = ['gpt-5', 'gpt-5-mini', 'gpt-5-nano'].includes(this.modelName)
+    const isGpt5NonChat = ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-5.1'].includes(this.modelName)
 
     while (attempt < maxRetries && !completed) {
       // Generar requests en cada intento para evitar side effects
