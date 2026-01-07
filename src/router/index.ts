@@ -22,6 +22,8 @@ import LandingView from "../views/LandingView.vue";
 import TermsView from "../views/TermsView.vue";
 import MaintenanceView from "../views/MaintenanceView.vue";
 import ThreeDView from "../views/3DView.vue";
+import ResetPasswordView from "../views/ResetPasswordView.vue";
+import ConfirmEmailView from "../views/ConfirmEmailView.vue";
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -73,6 +75,26 @@ const router = createRouter({
       component: AuthView,
       meta: {
         requiresGuest: true,
+      },
+    },
+
+    {
+      path: "/reset-password",
+      name: "reset-password",
+      component: ResetPasswordView,
+      meta: {
+        requiresGuest: false, // Accessible to both guests and authenticated users
+        layout: false, // Use standalone layout like auth
+      },
+    },
+
+    {
+      path: "/confirm-email",
+      name: "confirm-email",
+      component: ConfirmEmailView,
+      meta: {
+        requiresGuest: false, // Accessible to both guests and authenticated users
+        layout: false, // Use standalone layout like auth
       },
     },
 

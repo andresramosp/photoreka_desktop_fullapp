@@ -240,6 +240,92 @@ export const useUserStore = defineStore("user", () => {
     }
   };
 
+  const confirmEmail = async (
+    token: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      await api.post("/api/auth/confirm-email", { token });
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.message || "Error confirming email.",
+      };
+    }
+  };
+
+  const resendConfirmation = async (
+    email: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      await api.post("/api/auth/resend-confirmation", { email });
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error:
+          error.response?.data?.message ||
+          "Error resending confirmation email.",
+      };
+    }
+  };
+
+  const forgotPassword = async (
+    email: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      await api.post("/api/auth/forgot-password", { email });
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error:
+          error.response?.data?.message ||
+          "Error sending password reset email.",
+      };
+    }
+  };
+
+  const resetPassword = async (
+    token: string,
+    newPassword: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      await api.post("/api/auth/reset-password", { token, newPassword });
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.message || "Error resetting password.",
+      };
+    }
+  };
+
+  const changePassword = async (
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!isAuthenticated.value || !token.value) {
+      return {
+        success: false,
+        error: "User is not authenticated.",
+      };
+    }
+
+    try {
+      await api.post("/api/auth/change-password", {
+        currentPassword,
+        newPassword,
+      });
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.message || "Error changing password.",
+      };
+    }
+  };
+
   // Initialize auth state
   // Llamar de forma asíncrona para no bloquear la carga
   initAuth();
@@ -258,5 +344,10 @@ export const useUserStore = defineStore("user", () => {
     loginWithProvider,
     logout,
     initAuth,
+    confirmEmail,
+    resendConfirmation,
+    forgotPassword,
+    resetPassword,
+    changePassword,
   };
 });

@@ -26,7 +26,7 @@
           class="form-input"
         >
           <template #prefix>
-            <n-icon :component="EmailIcon" />
+            <n-icon :component="MailOutlined" />
           </template>
         </n-input>
       </n-form-item>
@@ -41,7 +41,7 @@
           show-password-on="click"
         >
           <template #prefix>
-            <n-icon :component="LockIcon" />
+            <n-icon :component="LockClosedOutline" />
           </template>
         </n-input>
       </n-form-item>
@@ -50,7 +50,12 @@
         <n-checkbox v-model:checked="rememberMe" class="remember-checkbox">
           Remember me
         </n-checkbox>
-        <n-button text type="primary" class="forgot-password">
+        <n-button
+          text
+          type="primary"
+          class="forgot-password"
+          @click="showForgotPassword = true"
+        >
           Forgot password?
         </n-button>
       </div>
@@ -66,17 +71,8 @@
       </n-button>
     </n-form>
 
-    <div class="form-footer">
-      <span class="footer-text">Don't have an account?</span>
-      <n-button
-        text
-        type="primary"
-        @click="$emit('switch-mode', 'register')"
-        class="switch-button"
-      >
-        Sign up here
-      </n-button>
-    </div>
+    <!-- Forgot Password Dialog -->
+    <ForgotPasswordDialog v-model:show="showForgotPassword" />
   </div>
 </template>
 
@@ -87,51 +83,9 @@ import { useUserStore } from "../stores/userStore";
 import { useMessage } from "naive-ui";
 import type { FormInst, FormRules } from "naive-ui";
 import AuthProviders from "./AuthProviders.vue";
-
-// Icons
-const EmailIcon = () =>
-  h(
-    "svg",
-    {
-      width: "16",
-      height: "16",
-      viewBox: "0 0 24 24",
-      fill: "none",
-      stroke: "currentColor",
-      "stroke-width": "2",
-    },
-    [
-      h("path", {
-        d: "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z",
-      }),
-      h("polyline", { points: "22,6 12,13 2,6" }),
-    ]
-  );
-
-const LockIcon = () =>
-  h(
-    "svg",
-    {
-      width: "16",
-      height: "16",
-      viewBox: "0 0 24 24",
-      fill: "none",
-      stroke: "currentColor",
-      "stroke-width": "2",
-    },
-    [
-      h("rect", {
-        x: "3",
-        y: "11",
-        width: "18",
-        height: "11",
-        rx: "2",
-        ry: "2",
-      }),
-      h("circle", { cx: "12", cy: "16", r: "1" }),
-      h("path", { d: "M7 11V7a5 5 0 0 1 10 0v4" }),
-    ]
-  );
+import ForgotPasswordDialog from "./ForgotPasswordDialog.vue";
+import { MailOutline, LockClosedOutline } from "@vicons/ionicons5";
+import { MailOutlined } from "@vicons/material";
 
 const emit = defineEmits(["switch-mode"]);
 
@@ -141,6 +95,7 @@ const message = useMessage();
 
 const formRef = ref<FormInst | null>(null);
 const rememberMe = ref(false);
+const showForgotPassword = ref(false);
 
 const formData = reactive({
   email: "",
@@ -196,8 +151,6 @@ const handleSubmit = async () => {
 </script>
 
 <script lang="ts">
-import { h } from "vue";
-
 export default {
   name: "LoginForm",
 };
