@@ -2,10 +2,11 @@
    TROVA THEME - CSS VARIABLES BASED ON NAIVE UI THEME
    ========================================================================== */
 
-:root {
+:root,
+[data-theme="dark"] {
   /* ===== PRIMARY COLORS ===== */
   --primary-color: #2563eb;
-  --primary-color-hover: #1d4ed8;
+  --primary-color-hover: #3b82f6;
   --primary-color-pressed: #1e40af;
   --primary-color-suppl: #3b82f6;
 
@@ -60,6 +61,106 @@
   --icon-secondary: #9ca3af;
   --icon-tertiary: #6b7280;
 
+  /* ===== PREMIUM LANDING SPECIFIC (DARK) ===== */
+  --premium-bg: #0a0a0f;
+  --premium-bg-elevated: #111118;
+  --premium-surface: #16161f;
+  --premium-border: rgba(255, 255, 255, 0.08);
+  --premium-text-primary: rgba(255, 255, 255, 0.95);
+  --premium-text-secondary: rgba(255, 255, 255, 0.65);
+  --premium-text-tertiary: rgba(255, 255, 255, 0.45);
+  --premium-primary: #2563eb;
+  --premium-primary-hover: #3b82f6;
+  --premium-accent: #8b5cf6;
+  --premium-gradient-1: #2563eb;
+  --premium-gradient-2: #8b5cf6;
+  --premium-gradient-3: #ec4899;
+  --premium-gradient-bg-1: #0f0f13;
+  --premium-gradient-bg-2: #1a1727;
+  --premium-gradient-text-1: #2563eb;
+  --premium-gradient-text-2: #3b82f6;
+}
+
+[data-theme="light"] {
+  /* ===== PRIMARY COLORS ===== */
+  --primary-color: #1d4ed8;
+  --primary-color-hover: #2563eb;
+  --primary-color-pressed: #1e3a8a;
+  --primary-color-suppl: #3b82f6;
+
+  /* ===== SECONDARY COLORS ===== */
+  --secondary-color: #7c3aed;
+  --secondary-color-hover: #6d28d9;
+  --secondary-color-pressed: #5b21b6;
+
+  /* ===== SUCCESS COLORS ===== */
+  --success-color: #16a34a;
+  --success-color-hover: #15803d;
+  --success-color-pressed: #166534;
+
+  /* ===== WARNING COLORS ===== */
+  --warning-color: #d97706;
+  --warning-color-hover: #b45309;
+  --warning-color-pressed: #92400e;
+
+  /* ===== ERROR COLORS ===== */
+  --error-color: #dc2626;
+  --error-color-hover: #b91c1c;
+  --error-color-pressed: #991b1b;
+
+  /* ===== INFO COLORS ===== */
+  --info-color: #0891b2;
+  --info-color-hover: #0e7490;
+  --info-color-pressed: #155e75;
+
+  /* ===== BACKGROUND COLORS ===== */
+  --bg-body: #ffffff;
+  --bg-container: #f8f9fa;
+  --bg-surface: #ffffff;
+  --bg-surface-hover: #f1f5f9;
+  --bg-card: #ffffff;
+  --bg-overlay: rgba(0, 0, 0, 0.4);
+  --bg-tag: rgba(37, 99, 235, 0.15);
+
+  /* ===== BORDER COLORS ===== */
+  --border-color: rgba(0, 0, 0, 0.1);
+  --border-color-hover: rgba(0, 0, 0, 0.2);
+  --border-color-focus: var(--primary-color);
+
+  /* ===== TEXT COLORS ===== */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #64748b;
+  --text-placeholder: #94a3b8;
+  --text-disabled: #cbd5e1;
+
+  /* ===== ICON COLORS ===== */
+  --icon-primary: #0f172a;
+  --icon-secondary: #64748b;
+  --icon-tertiary: #94a3b8;
+
+  /* ===== PREMIUM LANDING SPECIFIC (LIGHT) ===== */
+  --premium-bg: linear-gradient(135deg, #ffffff 0%, #f0f4ff 40%, #fce7f3 100%);
+  --premium-bg-elevated: #ffffff;
+  --premium-surface: #ffffff;
+  --premium-border: rgba(0, 0, 0, 0.1);
+  --premium-text-primary: #0f172a;
+  --premium-text-secondary: #475569;
+  --premium-text-tertiary: #64748b;
+  --premium-primary: #2563eb;
+  --premium-primary-hover: #1d4ed8;
+  --premium-accent: #7c3aed;
+  --premium-gradient-1: #2563eb;
+  --premium-gradient-2: #7c3aed;
+  --premium-gradient-3: #db2777;
+  --premium-gradient-bg-1: #ffffff;
+  --premium-gradient-bg-2: #0000ff;
+  --premium-gradient-bg-3: #00ffff;
+  --premium-gradient-text-1: #0000ff;
+  --premium-gradient-text-2: #00ffff;
+}
+
+:root {
   /* ===== SHADOWS ===== */
   --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -175,11 +276,11 @@
 }
 
 .section-header {
-  display: flex;
+  /* display: flex; */
   justify-content: space-between;
   align-items: center;
   padding: var(--spacing-lg) var(--spacing-2xl);
-  border-bottom: 1px solid var(--border-color);
+  /* border-bottom: 1px solid var(--border-color); */
 }
 
 .section-content {
@@ -507,12 +608,24 @@
   transition: background 0.2s ease;
 }
 
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+}
+
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
 }
 
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.2);
+}
+
 ::-webkit-scrollbar-thumb:active {
   background: rgba(255, 255, 255, 0.3);
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb:active {
+  background: rgba(0, 0, 0, 0.3);
 }
 
 ::-webkit-scrollbar-corner {
@@ -525,6 +638,10 @@
   scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
 }
 
+[data-theme="light"] * {
+  scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
+}
+
 /* Enhanced scrollbar for specific containers */
 .scrollbar-minimal::-webkit-scrollbar {
   width: 4px;
@@ -535,8 +652,16 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
+[data-theme="light"] .scrollbar-minimal::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.08);
+}
+
 .scrollbar-minimal::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.15);
+}
+
+[data-theme="light"] .scrollbar-minimal::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.15);
 }
 
 /* ===== UTILITIES ===== */

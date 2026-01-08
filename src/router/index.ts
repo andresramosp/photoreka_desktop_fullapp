@@ -19,6 +19,7 @@ import ProfileSelectionView from "../views/ProfileSelectionView.vue";
 import StoragePlanSelectionView from "../views/StoragePlanSelectionView.vue";
 import GridMaker from "../views/GridMakerView.vue";
 import LandingView from "../views/LandingView.vue";
+import LandingViewPremium from "../views/LandingViewPremium.vue";
 import TermsView from "../views/TermsView.vue";
 import MaintenanceView from "../views/MaintenanceView.vue";
 import ThreeDView from "../views/3DView.vue";
@@ -35,10 +36,24 @@ const router = createRouter({
     {
       path: "/",
       name: "landing",
-      component: LandingView,
+      component: LandingViewPremium,
       meta: {
         requiresGuest: false, // Accessible to both guests and authenticated users
         title: "Photoreka - Curation Lab",
+        description:
+          "Organize and curate your photo library with advanced tools. Search photos using natural language, arrange them on the canvas, and discover related images based on narrative or color similarity. Rank your photos by aesthetic scores and navigate your catalog in 3D.",
+        keywords:
+          "photo enhancement, AI photo tools, canvas maker, photo frames, image editor, photo culling, photo organizer",
+      },
+    },
+
+    {
+      path: "/premium",
+      name: "landing-premium",
+      component: LandingViewPremium,
+      meta: {
+        requiresGuest: false, // Accessible to both guests and authenticated users
+        title: "Photoreka - Make full sense of your photographic body of work",
         description:
           "Organize and curate your photo library with advanced tools. Search photos using natural language, arrange them on the canvas, and discover related images based on narrative or color similarity. Rank your photos by aesthetic scores and navigate your catalog in 3D.",
         keywords:

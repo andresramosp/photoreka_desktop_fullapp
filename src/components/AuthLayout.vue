@@ -8,7 +8,7 @@
               layout="horizontal"
               variant="dark"
               :with-claim="true"
-              :height="75"
+              :height="85"
             />
           </router-link>
         </div>

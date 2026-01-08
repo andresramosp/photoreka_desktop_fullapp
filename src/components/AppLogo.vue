@@ -100,8 +100,8 @@ export default {
   width: auto;
   object-fit: contain;
   flex-shrink: 0;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  filter: drop-shadow(0 0 8px rgba(37, 99, 235, 0.3));
+  /* transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  filter: drop-shadow(0 0 8px rgba(37, 99, 235, 0.3)); */
 }
 
 /* ============================
