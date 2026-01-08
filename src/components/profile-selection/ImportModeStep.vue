@@ -16,11 +16,7 @@
           @click="selectMode('web')"
         >
           <div class="mode-icon app-icon">
-            <img
-              src="/src/assets/logos/logo_imago_white.png"
-              alt="Photoreka Web"
-              class="app-logo"
-            />
+            <AppLogo layout="icon" :height="36" />
           </div>
           <h4 class="mode-title">Photoreka Web</h4>
           <p class="mode-description">
@@ -149,6 +145,7 @@
 
 <script setup lang="ts">
 import { InformationCircleOutline } from "@vicons/ionicons5";
+import AppLogo from "@/components/AppLogo.vue";
 
 interface Props {
   selectedMode: "web" | "lightroom" | null;

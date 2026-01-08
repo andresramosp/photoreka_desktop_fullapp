@@ -5,7 +5,7 @@
       <div class="nav-container">
         <div class="nav-brand">
           <div class="logo">
-            <img :src="logoName" alt="Photoreka" class="logo-image" />
+            <AppLogo layout="horizontal" :height="40" />
           </div>
         </div>
         <div class="nav-actions">
@@ -212,7 +212,7 @@
 <script setup>
 import { useRouter } from "vue-router";
 import { NButton } from "naive-ui";
-import logoName from "@/assets/logos/logo_name_white.png";
+import AppLogo from "@/components/AppLogo.vue";
 
 const router = useRouter();
 

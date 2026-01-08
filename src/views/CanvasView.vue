@@ -484,12 +484,7 @@
     <!-- Playground Logo - Top Right -->
     <div v-if="isPlayground" class="canvas-controls playground-logo">
       <div class="logo-container-playground">
-        <!-- <img
-          :src="logoName"
-          alt="Photoreka"
-          class="logo-brand-image-playground"
-        /> -->
-        <AppLogo :height="50" :showText="false" />
+        <AppLogo layout="horizontal" :height="50" />
       </div>
     </div>
 
@@ -739,7 +734,6 @@ import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import { SaveOutline, CloudDownloadOutline } from "@vicons/ionicons5";
 import { SelectAllFilled } from "@vicons/material";
 import { MagicWand, Workspace } from "@vicons/carbon";
-import logoName from "@/assets/logos/logo_name_sub_white_center.png";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { useCanvasPersistence } from "@/composables/useCanvasPersistence.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";

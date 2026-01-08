@@ -14,7 +14,12 @@
             <!-- Logo for playground mode -->
             <div v-if="isPlaygroundMode" class="logo-container">
               <router-link to="/" class="logo-link" aria-label="Inicio">
-                <AppLogo :height="60" />
+                <AppLogo
+                  layout="horizontal"
+                  variant="dark"
+                  :with-claim="true"
+                  :height="75"
+                />
               </router-link>
             </div>
             <!-- Title for authenticated mode -->

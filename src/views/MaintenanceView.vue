@@ -5,7 +5,7 @@
         <!-- Logo -->
         <div class="maintenance-logo">
           <router-link to="/" class="logo-link" aria-label="Home">
-            <img :src="logoName" alt="Photoreka" class="logo-image" />
+            <AppLogo layout="horizontal" :height="50" />
           </router-link>
         </div>
 
@@ -102,7 +102,7 @@ import {
 } from "@vicons/ionicons5";
 import { useRouter } from "vue-router";
 import { useMaintenanceMode } from "@/composables/useMaintenanceMode";
-import logoName from "@/assets/logos/logo_name_white.png";
+import AppLogo from "@/components/AppLogo.vue";
 import { Workspace } from "@vicons/carbon";
 
 const router = useRouter();

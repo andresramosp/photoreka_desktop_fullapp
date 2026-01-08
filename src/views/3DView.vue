@@ -13,7 +13,7 @@
     <div v-if="isPlayground" class="playground-logo">
       <div class="logo-container-playground">
         <a href="/" target="_blank" rel="noopener noreferrer">
-          <AppLogo :height="50" :showText="false" />
+          <AppLogo layout="icon" :height="50" />
         </a>
       </div>
     </div>

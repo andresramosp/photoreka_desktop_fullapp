@@ -10,7 +10,7 @@
         <div class="nav-container">
           <div class="nav-brand">
             <div class="logo">
-              <AppLogo :inline="true" />
+              <AppLogo layout="horizontal" size="small" />
             </div>
           </div>
           <div class="nav-actions">
@@ -1148,7 +1148,7 @@ if (typeof window !== "undefined") {
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 24px;
-  height: 64px;
+  height: 70px;
   display: flex;
   align-items: center;
   justify-content: space-between;

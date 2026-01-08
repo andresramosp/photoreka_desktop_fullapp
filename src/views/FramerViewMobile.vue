@@ -11,7 +11,7 @@
             class="mobile-preview-logo-container"
           >
             <router-link to="/" class="logo-link" aria-label="Inicio">
-              <AppLogo size="tiny" />
+              <AppLogo layout="icon" size="tiny" />
             </router-link>
           </div>
           <!-- Title for authenticated mode -->

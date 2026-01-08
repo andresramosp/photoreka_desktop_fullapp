@@ -118,14 +118,10 @@
       <div class="logo-container">
         <div class="logo clickable-logo" @click="goToDashboard">
           <div v-if="collapsed" class="logo-icon">
-            <img
-              :src="logoImagoName"
-              alt="Photoreka"
-              class="logo-brand-image"
-            />
+            <AppLogo layout="icon" variant="dark" :height="43" />
           </div>
           <div v-if="!collapsed" class="logo-text">
-            <AppLogo :height="43" :showText="true" :inline="true" />
+            <AppLogo layout="horizontal" :height="43" />
           </div>
         </div>
       </div>
@@ -194,8 +190,6 @@ import type { MenuOption } from "naive-ui";
 import { usePhotosStore } from "@/stores/photos.js";
 
 import { Workspace as CanvasIcon } from "@vicons/carbon";
-import logoName from "@/assets/logos/logo_name_sub_white_center.png";
-import logoImagoName from "@/assets/logos/logo_imago_white.png";
 
 // Import @vicons icons from ionicons5 for reliability
 import {
