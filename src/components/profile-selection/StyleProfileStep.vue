@@ -43,14 +43,14 @@
         <div
           class="category-card pro-card"
           :class="{
-            selected: selectedProfiles.includes('street'),
+            selected: selectedProfiles.includes('street-photography'),
             disabled:
               selectedProfiles.length >= 2 &&
-              !selectedProfiles.includes('street') &&
+              !selectedProfiles.includes('street-photography') &&
               !selectedProfiles.includes('general'),
-            expanded: expandedProfile === 'street',
+            expanded: expandedProfile === 'street-photography',
           }"
-          @click="toggleProfile('street')"
+          @click="toggleProfile('street-photography')"
         >
           <div class="category-icon">
             <n-icon size="32">
@@ -199,7 +199,7 @@ const expandedProfile = ref<string | null>(null);
 
 // Profile explanations for all possible combinations
 const profileExplanations = {
-  street: {
+  "street-photography": {
     title: "Street Photography",
     description:
       "Optimized for candid moments and urban life documentation. This profile gives a slight bias to:",
@@ -232,7 +232,7 @@ const profileExplanations = {
       "Unique perspectives and experimental approaches",
     ],
   },
-  "artistic+documentary": {
+  "artistic|documentary": {
     title: "Artistic Documentary Photography",
     description:
       "Storytelling through artistic expression. This dual profile combines:",
@@ -243,7 +243,7 @@ const profileExplanations = {
       "Aesthetic beauty without compromising authenticity",
     ],
   },
-  "artistic+street": {
+  "artistic|street-photography": {
     title: "Street Photography with Artistic Vision",
     description:
       "Creative urban documentation with artistic flair. This dual profile emphasizes:",
@@ -254,7 +254,7 @@ const profileExplanations = {
       "Technical mastery applied to spontaneous situations",
     ],
   },
-  "documentary+street": {
+  "documentary|street-photography": {
     title: "Street & Documentary Photography",
     description:
       "A powerful combination for narrative urban storytelling. This dual profile balances:",
@@ -278,7 +278,7 @@ const currentExplanation = computed(() => {
   const key =
     professionalProfiles.length === 1
       ? professionalProfiles[0]
-      : professionalProfiles.join("+");
+      : professionalProfiles.join("|");
 
   return profileExplanations[key as keyof typeof profileExplanations] || null;
 });

@@ -13,6 +13,15 @@ interface Usage {
   analyzedPhotosRemaining: number;
 }
 
+export type UserProfile =
+  | "general"
+  | "street-photography"
+  | "documentary"
+  | "artistic"
+  | "street-photography|artistic"
+  | "documentary|artistic"
+  | "street-photography|documentary";
+
 interface User {
   id: string;
   email: string;
@@ -213,6 +222,16 @@ export const useUserStore = defineStore("user", () => {
     }
   };
 
+  // Función para traducir array de profiles a UserProfile
+  const translateProfilesToUserProfile = (profiles: string[]): UserProfile => {
+    if (profiles.length === 0) {
+      return "general";
+    }
+
+    // Ordenar alfabéticamente y unir con pipes
+    return profiles.sort().join("|") as UserProfile;
+  };
+
   const updateProfile = async (
     profileData: any
   ): Promise<{ success: boolean; error?: string }> => {
@@ -224,7 +243,15 @@ export const useUserStore = defineStore("user", () => {
     }
 
     try {
-      const response = await api.put("/api/auth/profile", profileData);
+      // Traducir profiles array a UserProfile si existen
+      const translatedData = { ...profileData };
+      if (profileData.profiles && Array.isArray(profileData.profiles)) {
+        translatedData.profiles = translateProfilesToUserProfile(
+          profileData.profiles
+        );
+      }
+
+      const response = await api.put("/api/auth/profile", translatedData);
 
       // Update local user data if successful
       if (user.value && response.data.user) {
