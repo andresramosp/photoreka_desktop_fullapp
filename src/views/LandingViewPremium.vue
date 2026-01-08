@@ -573,14 +573,14 @@ const dataSources = ref([
     comingSoon: false,
   },
   {
-    logo: "/src/assets/logos/google_photos.png",
+    logo: new URL("@/assets/logos/google_photos.png", import.meta.url).href,
     name: "Google Photos",
     description:
       "Sync your entire Google Photos library with one click. Keep your photos organized across platforms.",
     comingSoon: false,
   },
   {
-    logo: "/src/assets/logos/lightroom_logo.png",
+    logo: new URL("@/assets/logos/lightroom_logo.png", import.meta.url).href,
     name: "Adobe Lightroom",
     description:
       "Connect directly with your Lightroom Classic catalog through our official plugin.",
