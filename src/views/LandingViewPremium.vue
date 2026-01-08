@@ -1940,9 +1940,9 @@ if (typeof window !== "undefined") {
     gap: 8px;
   }
 
-  .theme-toggle {
+  /* .theme-toggle {
     display: none;
-  }
+  } */
 
   .hero-section {
     padding: 100px 0 60px;
