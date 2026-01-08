@@ -776,7 +776,7 @@ const onImageError = () => {
 /* Photo footer */
 .photo-footer {
   padding: 9px;
-  background-color: #1a1a1f;
+  background-color: var(--bg-body);
   display: flex;
   border-top: 1px solid #2c2c32;
   align-items: center;

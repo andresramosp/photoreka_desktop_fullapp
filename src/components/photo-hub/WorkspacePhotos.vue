@@ -292,7 +292,7 @@ const navigateToTab = (tabName) => {
   border-radius: 16px;
   padding: 64px 32px;
   text-align: center;
-  background-color: #1a1a1f;
+  background-color: var(--bg-body);
   transition: all 0.3s ease;
 }
 

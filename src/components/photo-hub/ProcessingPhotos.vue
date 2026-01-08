@@ -47,7 +47,7 @@
                         job.status === 'finished' ? '#10b981' : '#f59e0b'
                       "
                       background-color="#2c2c32"
-                      stroke-color="#1a1a1f"
+                      stroke-color="var(--bg-body)"
                       :stroke-width="1"
                       class="progress-compact"
                     />
@@ -586,7 +586,7 @@ function isLastFinishedJob(job) {
 }
 
 .processing-table {
-  background-color: #1a1a1f;
+  /* background-color: var(--bg-body); */
   border-radius: 12px;
   border: 1px solid #2c2c32;
   overflow: hidden;
@@ -630,7 +630,7 @@ function isLastFinishedJob(job) {
 
 .cell-label {
   font-size: 12px;
-  color: #ffffff60;
+  /* color: #ffffff60; */
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -747,7 +747,7 @@ function isLastFinishedJob(job) {
   aspect-ratio: 1;
   border-radius: 6px;
   overflow: hidden;
-  border: 1px solid #2c2c32;
+  border: 1px solid var(--border-color);
   transition: all 0.2s ease;
 }
 

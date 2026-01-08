@@ -154,7 +154,7 @@ export default {
 }
 
 .divider-text {
-  background-color: #1a1a1f;
+  background-color: var(--bg-body);
   padding: 0 16px;
   font-size: 14px;
   color: #ffffff73;

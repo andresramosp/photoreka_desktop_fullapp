@@ -495,7 +495,7 @@ watch(
 /* Photo info */
 .photo-info {
   padding: var(--spacing-md);
-  background-color: #1a1a1f;
+  background-color: var(--bg-body);
   border-top: 1px solid #2c2c32;
 }
 

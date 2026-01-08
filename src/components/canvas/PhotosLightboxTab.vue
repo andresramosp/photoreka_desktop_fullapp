@@ -523,7 +523,7 @@ function loadImageFromBlob(blob) {
   text-align: center;
   cursor: pointer;
   transition: all 0.3s ease;
-  background-color: #1a1a1f;
+  background-color: var(--bg-body);
 }
 
 .upload-dropzone:hover,
@@ -595,7 +595,7 @@ function loadImageFromBlob(blob) {
 
 /* Upload Progress Section */
 .upload-progress-section {
-  background-color: #1a1a1f;
+  background-color: var(--bg-body);
   border-radius: 12px;
   padding: 20px;
   margin-bottom: 16px;

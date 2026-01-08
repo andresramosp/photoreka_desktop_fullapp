@@ -159,7 +159,7 @@ onUnmounted(() => {
 .slider-track {
   width: 100%;
   height: 44px;
-  background: #1a1a1f;
+  background: var(--bg-body);
   border: 1px solid #2c2c32;
   border-radius: 8px;
   position: relative;
@@ -239,7 +239,7 @@ onUnmounted(() => {
 /* Dark theme support */
 @media (prefers-color-scheme: dark) {
   .slider-track {
-    background: #1a1a1f;
+    background: var(--bg-body);
     border-color: #2c2c32;
   }
 }

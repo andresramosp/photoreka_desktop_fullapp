@@ -667,7 +667,7 @@ const handleCancel = () => {
   overflow-y: auto;
   border: 1px solid #2c2c32;
   border-radius: 8px;
-  background-color: #1a1a1f;
+  background-color: var(--bg-body);
 }
 
 .collection-item {

@@ -145,7 +145,7 @@ const updateWeight = (criterion, value) => {
 }
 
 .weights-container::-webkit-scrollbar-track {
-  background: #1a1a1f;
+  background: var(--bg-body);
   border-radius: 3px;
 }
 

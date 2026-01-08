@@ -95,7 +95,7 @@ const handleGoHome = () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: #1a1a1f;
+  background: var(--bg-body);
   z-index: 9999;
   overflow-y: auto;
 }

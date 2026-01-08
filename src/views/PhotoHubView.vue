@@ -437,7 +437,7 @@ onMounted(() => {
 }
 
 .photo-card {
-  background-color: #1a1a1f;
+  background-color: var(--bg-body);
   border-radius: 12px;
   overflow: hidden;
   transition: all 0.2s ease;

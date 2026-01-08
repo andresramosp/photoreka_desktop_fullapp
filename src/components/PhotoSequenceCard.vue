@@ -394,7 +394,7 @@ const truncatedName = computed(() => {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: #1a1a1a;
+  background: var(--bg-surface, #18181c);
   transition: transform 0.3s ease;
   pointer-events: none;
 }

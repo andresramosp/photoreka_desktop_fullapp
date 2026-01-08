@@ -822,7 +822,7 @@ defineExpose({
   padding: 64px 32px;
   text-align: center;
   transition: all 0.3s ease;
-  background-color: #1a1a1f;
+  background-color: var(--bg-body);
 }
 
 .upload-dropzone:hover,
@@ -933,7 +933,7 @@ defineExpose({
 
 /* Upload Progress Section */
 .upload-progress-section {
-  background-color: #1a1a1f;
+  background-color: var(--bg-body);
   border-radius: 12px;
   padding: 24px;
   margin-bottom: 24px;

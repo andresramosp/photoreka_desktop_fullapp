@@ -9,7 +9,7 @@
       size="huge"
       role="dialog"
       aria-modal="true"
-      style="background-color: #1a1a1f; border: 1px solid #2c2c32"
+      style="background-color: var(--bg-body); border: 1px solid #2c2c32"
     >
       <template #header-extra>
         <n-button text @click="isVisible = false">

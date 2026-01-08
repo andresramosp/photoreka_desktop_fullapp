@@ -739,7 +739,7 @@ const formatDate = (date: Date) => {
 }
 
 .action-card {
-  background-color: var(--bg-card);
+  background-color: var(--bg-container);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   transition: var(--transition-normal);
@@ -806,7 +806,9 @@ const formatDate = (date: Date) => {
 }
 
 .did-you-know.has-photo {
-  background-color: #2a2a2a; /* Dark gray background for extra space */
+  background-color: var(
+    --bg-container
+  ); /* Dark gray background for extra space */
 }
 
 .did-you-know.has-photo::before {
@@ -820,7 +822,7 @@ const formatDate = (date: Date) => {
   background-position: center;
   background-repeat: no-repeat;
   background-image: var(--photo-bg);
-  background-color: #2a2a2a; /* Dark gray background for letterboxing */
+  background-color: var(--bg-container);
   border-radius: var(--radius-md);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 1;
@@ -1246,7 +1248,7 @@ const formatDate = (date: Date) => {
 }
 
 .project-card {
-  background-color: #18181c;
+  background-color: var(--bg-container);
   border: 1px solid #2c2c32;
   border-radius: 16px;
   padding: 20px;

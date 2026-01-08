@@ -1671,9 +1671,7 @@ const submitCustomQuestion = async () => {
     const { data } = await api.get(
       `/api/catalog/photoInsightSpecific/${
         props.selectedPhoto.id
-      }?type=custom&question=${encodeURIComponent(
-        savedQuestion
-      )}&provider=gpt`
+      }?type=custom&question=${encodeURIComponent(savedQuestion)}&provider=gpt`
     );
 
     if (data && data.response) {
@@ -2997,7 +2995,7 @@ if (typeof window !== "undefined") {
 
 /* Custom tooltip styling */
 :deep(.n-tooltip__content) {
-  background-color: #1a1a1f !important;
+  background-color: var(--bg-body) !important;
   border: 1px solid #2c2c32 !important;
   border-radius: 8px !important;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important;

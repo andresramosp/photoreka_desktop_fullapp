@@ -187,7 +187,7 @@ defineExpose({
 }
 
 .touch-hints-container {
-  background: linear-gradient(135deg, #1a1a1f 0%, #2d2d35 100%);
+  background: linear-gradient(135deg, var(--bg-body) 0%, #2d2d35 100%);
   border-radius: 16px;
   padding: 32px 24px;
   max-width: 400px;

@@ -406,7 +406,7 @@ const handleMouseLeave = () => {
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: 2px solid transparent;
-  background-color: #2c2c32;
+  background-color: var(--bg-surface);
 }
 
 /* .photo-card:hover {
