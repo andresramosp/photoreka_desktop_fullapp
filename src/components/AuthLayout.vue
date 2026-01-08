@@ -4,12 +4,7 @@
       <div class="auth-content">
         <div class="auth-header">
           <router-link to="/" class="logo-link" aria-label="Inicio">
-            <AppLogo
-              layout="horizontal"
-              variant="dark"
-              :with-claim="true"
-              :height="85"
-            />
+            <AppLogo layout="horizontal" :with-claim="true" :height="85" />
           </router-link>
         </div>
 

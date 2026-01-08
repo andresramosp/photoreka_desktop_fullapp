@@ -135,7 +135,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted, KeepAlive, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { darkTheme } from "naive-ui";
 import { useUserStore } from "./stores/userStore";
 import DashboardSidebar from "./components/DashboardSidebar.vue";
 import DashboardHeader from "./components/DashboardHeader.vue";
@@ -144,6 +143,14 @@ import { usePhotosStore } from "@/stores/photos.js";
 import OnboardingSlider from "./components/OnboardingSlider.vue";
 import WelcomeModal from "./components/WelcomeModal.vue";
 import ConfettiEffect from "./components/ConfettiEffect.vue";
+import { useThemeInit } from "@/composables/useTheme.js";
+
+const route = useRoute();
+const router = useRouter();
+
+// Inicializar tema centralizado
+const { naiveTheme: darkTheme, naiveThemeOverrides: themeOverrides } =
+  useThemeInit();
 
 // List of route names where DashboardHeader should be visible
 const allowedHeaderViews = [
@@ -166,9 +173,6 @@ const showDashboardHeader = computed(() => {
   );
 });
 const photosStore = usePhotosStore();
-
-const route = useRoute();
-const router = useRouter();
 const userStore = useUserStore();
 
 // KeepAlive functionality
@@ -189,14 +193,6 @@ const getKeepAliveComponents = () => {
   // Debug: log components being kept alive
   console.log("KeepAlive components:", keepAliveComponents);
   return keepAliveComponents;
-};
-const themeOverrides = {
-  common: {
-    primaryColor: "#2563eb",
-    primaryColorHover: "#3b82f6",
-    primaryColorPressed: "#1d4ed8",
-    primaryColorSuppl: "#2563eb",
-  },
 };
 
 const mobileMenuOpen = ref(false);

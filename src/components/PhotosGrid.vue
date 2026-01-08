@@ -31,7 +31,7 @@
           <n-tooltip placement="bottom" trigger="hover">
             <template #trigger>
               <n-button
-                type="warning"
+                type="info"
                 size="small"
                 @click="handleReviewDuplicates"
                 :disabled="duplicatesReviewed"

@@ -636,9 +636,9 @@ watch(
 
 /* Search Filters Styles */
 .filters-section {
-  background-color: #1a1a1f;
+  /* background-color: #1a1a1f; */
   border-radius: 8px;
-  border: 1px solid #2c2c32;
+  border: 1px solid var(--border-color);
   overflow: hidden;
 }
 
@@ -652,7 +652,7 @@ watch(
 }
 
 .filters-header:hover {
-  background-color: #202025;
+  /* background-color: #202025; */
 }
 
 .filters-header-left {
@@ -674,13 +674,13 @@ watch(
 .filters-title {
   font-size: 14px;
   font-weight: 500;
-  color: #ffffffd1;
+  /* color: #ffffffd1; */
   margin: 0;
 }
 
 .active-filters-badge {
   background-color: #8b5cf6;
-  color: white;
+  /* color: white; */
   font-size: 11px;
   font-weight: 600;
   padding: 2px 6px;
@@ -694,7 +694,7 @@ watch(
 }
 
 .filters-content {
-  border-top: 1px solid #2c2c32;
+  border: 1px solid var(--border-color);
   padding: 16px;
 }
 
@@ -718,9 +718,8 @@ watch(
 
 /* Quality Sorting Styles */
 .sorting-section {
-  background-color: #1a1a1f;
   border-radius: 8px;
-  border: 1px solid #2c2c32;
+  border: 1px solid var(--border-color);
   overflow: hidden;
 }
 
@@ -734,7 +733,6 @@ watch(
 }
 
 .sorting-header:hover {
-  background-color: #202025;
 }
 
 .sorting-header-left {
@@ -756,7 +754,6 @@ watch(
 .sorting-title {
   font-size: 14px;
   font-weight: 500;
-  color: #ffffffd1;
   margin: 0;
 }
 
@@ -775,7 +772,6 @@ watch(
 
 .active-sorting-badge {
   background-color: #10b981;
-  color: white;
   font-size: 11px;
   font-weight: 600;
   padding: 2px 6px;
@@ -789,7 +785,7 @@ watch(
 }
 
 .sorting-content {
-  border-top: 1px solid #2c2c32;
+  border: 1px solid var(--border-color);
   padding: 16px;
 }
 

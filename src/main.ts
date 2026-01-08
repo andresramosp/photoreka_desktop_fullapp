@@ -38,8 +38,6 @@ import App from "./App.vue";
 import router from "./router";
 import { initializeAuth } from "./authInit";
 
-// Import theme variables and global styles
-import "./assets/theme.css";
 import "./assets/global.scss";
 
 const naive = create({

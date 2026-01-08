@@ -362,7 +362,7 @@ const onImageError = () => {
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: 2px solid transparent;
-  background-color: #2c2c32;
+  background-color: var(--bg-container);
   display: flex;
   flex-direction: column;
 
@@ -388,7 +388,6 @@ const onImageError = () => {
 .photo-container {
   position: relative;
   width: 100%;
-  background-color: #2c2c32;
   flex: 1;
   min-height: 0; /* Allow shrinking */
 }
@@ -399,7 +398,7 @@ const onImageError = () => {
   object-fit: contain;
   object-position: center;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  background-color: #2c2c32;
+  background-color: var(--bg-surface);
 }
 
 /* Note: Photo skeleton styles moved to global.scss */

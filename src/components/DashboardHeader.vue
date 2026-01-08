@@ -52,6 +52,24 @@
             </template>
           </n-button> -->
 
+          <n-button
+            circle
+            quaternary
+            class="header-icon-btn"
+            @click="toggleTheme"
+            :aria-label="`Switch to ${
+              themeMode === 'dark' ? 'light' : 'dark'
+            } mode`"
+          >
+            <template #icon>
+              <n-icon size="20">
+                <component
+                  :is="themeMode === 'dark' ? SunnyOutline : MoonOutline"
+                />
+              </n-icon>
+            </template>
+          </n-button>
+
           <n-dropdown
             :options="userMenuOptions"
             @select="handleUserMenuSelect"
@@ -87,13 +105,19 @@ import {
   MenuOutline,
   PersonOutline as PersonIcon,
   LogOutOutline as LogOutIcon,
+  SunnyOutline,
+  MoonOutline,
 } from "@vicons/ionicons5";
+import { useTheme } from "../composables/useTheme.js";
 
 const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
 const message = useMessage();
 const isMobile = ref(false);
+
+// Theme management
+const { themeMode, toggleTheme } = useTheme();
 
 defineEmits(["toggle-mobile-menu"]);
 

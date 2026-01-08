@@ -684,8 +684,8 @@ function isLastFinishedJob(job) {
 
 /* Expanded Row Content */
 .row-expanded {
-  border-top: 1px solid #2c2c32;
-  background-color: #16161a;
+  border-top: 1px solid;
+
   animation: expandRow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 

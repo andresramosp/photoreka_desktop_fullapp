@@ -304,8 +304,8 @@ const truncatedName = computed(() => {
   position: relative;
   border-radius: var(--border-radius-md, 8px);
   overflow: hidden;
-  background-color: var(--bg-container, #18181c);
-  border: 2px solid var(--border-color, #2c2c32);
+  background-color: var(--bg-container);
+  border: 2px solid var(--border-color);
   transition: all 0.3s ease;
 }
 

@@ -12,6 +12,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { useTheme } from "@/composables/useTheme";
 
 // Nuevos logos (marca)
 import iconDark from "@/assets/logos/marca/icon-dark.png";
@@ -26,24 +27,24 @@ import verticalClaimDark from "@/assets/logos/marca/vertical-claim-dark.png";
 import verticalClaimLight from "@/assets/logos/marca/vertical-claim-light.png";
 
 type LogoLayout = "horizontal" | "vertical" | "icon";
-type LogoVariant = "dark" | "light";
 
 interface Props {
   size?: "normal" | "large" | "small" | "tiny";
   height?: number; // altura en px, prevalece sobre size
   layout?: LogoLayout; // horizontal, vertical o solo icono
-  variant?: LogoVariant; // dark (para fondos oscuros, logo blanco) o light (para fondos claros, logo color)
   withClaim?: boolean; // incluir el claim/tagline
 }
 
 const props = withDefaults(defineProps<Props>(), {
   size: "normal",
   layout: "vertical",
-  variant: "dark",
   withClaim: false,
 });
 
-// Mapa de logos según layout, variant y withClaim
+// Obtener el tema internamente
+const { themeMode } = useTheme();
+
+// Mapa de logos según layout y themeMode
 const logoMap = {
   icon: {
     dark: iconDark,
@@ -72,12 +73,14 @@ const logoMap = {
 };
 
 const logoSrc = computed(() => {
+  const variant = themeMode.value;
+
   if (props.layout === "icon") {
-    return logoMap.icon[props.variant];
+    return logoMap.icon[variant];
   }
 
   const layoutLogos = logoMap[props.layout];
-  const variantLogos = layoutLogos[props.variant];
+  const variantLogos = layoutLogos[variant];
   return props.withClaim ? variantLogos.withClaim : variantLogos.noClaim;
 });
 </script>

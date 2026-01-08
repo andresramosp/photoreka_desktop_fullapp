@@ -12,7 +12,6 @@
               <AppLogo
                 :layout="isMobileDevice() ? 'horizontal' : 'horizontal'"
                 size="small"
-                :variant="themeMode"
               />
             </div>
             <div class="nav-actions">
@@ -401,7 +400,6 @@ import {
   NIcon,
   NConfigProvider,
   NMessageProvider,
-  darkTheme,
   useMessage,
 } from "naive-ui";
 import {
@@ -430,33 +428,23 @@ import MobileNoticeDialog from "@/components/MobileNoticeDialog.vue";
 import MaintenanceBanner from "@/components/MaintenanceBanner.vue";
 import { isMobileDevice } from "@/utils/utils.js";
 import { trackUserAction, trackEvent } from "@/utils/analytics";
+import { useTheme } from "@/composables/useTheme.js";
 
 const router = useRouter();
 const message = useMessage();
 
-// Theme management - PROVISIONAL: solo para esta página
-// El resto de la app siempre usa dark theme
-const themeMode = ref("light");
-const currentTheme = computed(() =>
-  themeMode.value === "dark" ? darkTheme : null
-);
-const themeOverrides = computed(() => ({
-  common: {
-    primaryColor: themeMode.value === "dark" ? "#2563eb" : "#1d4ed8",
-    primaryColorHover: themeMode.value === "dark" ? "#3b82f6" : "#2563eb",
-    primaryColorPressed: themeMode.value === "dark" ? "#1e40af" : "#1e3a8a",
-  },
-}));
+// Theme management - usar sistema centralizado normalmente
+const {
+  naiveTheme: currentTheme,
+  naiveThemeOverrides: themeOverrides,
+  themeMode,
+  toggleTheme: baseToggleTheme,
+} = useTheme();
 
+// Wrapper para toggle con tracking
 const toggleTheme = () => {
-  themeMode.value = themeMode.value === "dark" ? "light" : "dark";
-  document.documentElement.setAttribute("data-theme", themeMode.value);
+  baseToggleTheme();
   trackEvent("theme_toggle", { mode: themeMode.value });
-};
-
-// Función para resetear el tema a dark al salir de la página
-const resetThemeToDark = () => {
-  document.documentElement.setAttribute("data-theme", "dark");
 };
 
 // Video demo management
@@ -894,9 +882,6 @@ const setupScrollAnimations = () => {
 };
 
 onMounted(() => {
-  // Set initial theme
-  document.documentElement.setAttribute("data-theme", themeMode.value);
-
   // Hero is immediately visible
   heroVisible.value = true;
 
@@ -921,15 +906,7 @@ onMounted(() => {
   setupScrollAnimations();
 });
 
-// Resetear el tema a dark cuando se sale de la página
-onBeforeRouteLeave(() => {
-  resetThemeToDark();
-});
-
 onUnmounted(() => {
-  // Asegurar que el tema vuelva a dark al desmontar el componente
-  resetThemeToDark();
-
   if (observer.value) {
     observer.value.disconnect();
     observer.value = null;
@@ -971,42 +948,23 @@ if (typeof window !== "undefined") {
   transition: background 0.3s ease, color 0.3s ease;
 }
 
-[data-theme="light"] .premium-landing {
+.premium-landing {
   background: radial-gradient(
       circle at 20% 30%,
-      var(--premium-gradient-bg-2) 0%,
+      var(--premium-gradient-2) 0%,
       transparent 25%
     ),
     radial-gradient(
-      circle at 80% 60%,
-      var(--premium-gradient-bg-3) 0%,
-      transparent 20%
+      circle at 95% 60%,
+      var(--premium-gradient-3) 0%,
+      transparent 25%
     ),
     radial-gradient(
       circle at 5% 90%,
-      var(--premium-gradient-bg-2) 0%,
+      var(--premium-gradient-2) 0%,
       transparent 20%
     ),
-    var(--premium-gradient-bg-1) !important;
-}
-
-[data-theme="dark"] .premium-landing {
-  background: radial-gradient(
-      circle at 15% 25%,
-      var(--premium-gradient-bg-2) 0%,
-      transparent 30%
-    ),
-    radial-gradient(
-      circle at 85% 70%,
-      var(--premium-gradient-bg-2) 0%,
-      transparent 25%
-    ),
-    radial-gradient(
-      circle at 45% 95%,
-      var(--premium-gradient-bg-2) 0%,
-      transparent 20%
-    ),
-    var(--premium-gradient-bg-1) !important;
+    var(--premium-bg) !important;
 }
 
 /* ========================================================================
@@ -1214,8 +1172,8 @@ if (typeof window !== "undefined") {
 .gradient-text {
   background: linear-gradient(
     135deg,
-    var(--premium-gradient-text-1),
-    var(--premium-gradient-text-2)
+    var(--premium-gradient-2),
+    var(--premium-gradient-3)
   );
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;

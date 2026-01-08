@@ -118,7 +118,7 @@
       <div class="logo-container">
         <div class="logo clickable-logo" @click="goToDashboard">
           <div v-if="collapsed" class="logo-icon">
-            <AppLogo layout="icon" variant="dark" :height="43" />
+            <AppLogo layout="icon" :height="43" />
           </div>
           <div v-if="!collapsed" class="logo-text">
             <AppLogo layout="horizontal" :height="43" />
@@ -236,229 +236,67 @@ const appAccessMode = computed(() => photosStore.appAccessMode);
 // First section: Photo Hub only
 const firstSectionOptions = computed(() => [
   {
-    label: createMenuLabel("Photo Hub"),
-    key: "catalog",
-    // icon: createIconWithIndicator(PhotoHubIcon, "#2563eb"),
-    icon: () =>
-      h(
-        "div",
-        {
-          style:
-            "position: relative; display: flex; align-items: center; justify-content: center;",
-        },
-        [
-          // Use theme primary color variable so the icon follows the app theme
-          h(
-            NIcon,
-            { color: "var(--primary-color)" },
-            { default: () => h(PhotoHubIcon) }
-          ),
-          // Visual indicator when blocked (visible in both collapsed and expanded states)
-          appAccessMode.value === "blocked"
-            ? h("div", {
-                class: "photo-hub-indicator",
-                style:
-                  "position: absolute; top: -2px; right: -2px; width: 8px; height: 8px; background: #22c55e; border-radius: 50%; box-shadow: 0 0 6px #22c55e; animation: pulse 2s infinite;",
-              })
-            : null,
-        ]
-      ),
+    label: "Photo Hub",
+    key: "photo-hub",
+    icon: () => h(NIcon, null, { default: () => h(PhotoHubIcon) }),
   },
 ]);
 
 // Second section: Collections, Series
 const collectionsSeriesOptions = computed(() => [
   {
-    label: createMenuLabel("Collections", false),
+    label: "Collections",
     key: "collections",
     disabled: appAccessMode.value === "blocked",
-    icon: createIconWithIndicator(CollectionsIcon, "#10b981"), // Green color for collections
+    icon: () => h(NIcon, null, { default: () => h(CollectionsIcon) }),
   },
   {
-    label: createMenuLabel("Series", false),
+    label: "Series",
     key: "series",
     disabled: appAccessMode.value === "blocked",
-    icon: createIconWithIndicator(SeriesIcon, "#8b5cf6"), // Purple color for series
+    icon: () => h(NIcon, null, { default: () => h(SeriesIcon) }),
   },
 ]);
-
-// Function to create icon with premium or coming soon indicator
-const createIconWithIndicator = (
-  IconComponent: any,
-  color: string,
-  isPremium = false,
-  isComingSoon = false
-) => {
-  return () =>
-    h(
-      "div",
-      {
-        style:
-          "position: relative; display: flex; align-items: center; justify-content: center;",
-      },
-      [
-        h(
-          NIcon,
-          { color },
-          {
-            default: () => h(IconComponent),
-          }
-        ),
-        // Premium indicator (diamond shape)
-        isPremium
-          ? h("div", {
-              class: "premium-indicator-diamond",
-              style: `
-                position: absolute;
-                top: -4px;
-                right: -4px;
-                width: 8px;
-                height: 8px;
-                background: linear-gradient(135deg, #f59e0b, #d97706);
-                transform: rotate(45deg);
-                box-shadow: 0 0 4px rgba(245, 158, 11, 0.4);
-                border: 1px solid #16161a;
-              `,
-            })
-          : null,
-        // Coming soon indicator (construction icon overlay)
-        isComingSoon
-          ? h(
-              "div",
-              {
-                style: `
-                position: absolute;
-                top: -2px;
-                right: -2px;
-                width: 12px;
-                height: 12px;
-                background: #6b7280;
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                border: 1px solid #16161a;
-                box-shadow: 0 0 4px rgba(107, 114, 128, 0.4);
-              `,
-              },
-              [
-                h(
-                  NIcon,
-                  {
-                    size: 9,
-                    color: "#ffffff",
-                  },
-                  {
-                    default: () => h(ConstructionSharp),
-                  }
-                ),
-              ]
-            )
-          : null,
-      ]
-    );
-};
-
-// Function to create menu label with coming soon styling
-const createMenuLabel = (label: string, isComingSoon = false) => {
-  return () =>
-    h(
-      "span",
-      {
-        style: isComingSoon ? "font-style: italic; opacity: 0.7;" : "",
-      },
-      label
-    );
-};
 
 // Third section: Explorer, Canvas, Curation, Grids, Styler
 const thirdSectionToolsOptions = computed(() => {
   const isBlocked = appAccessMode.value === "blocked";
-  const isFull = appAccessMode.value === "full";
 
   return [
     {
-      label: createMenuLabel("Explorer"),
+      label: "Explorer",
       key: "search",
       disabled: isBlocked,
-      comingSoon: false,
-      props: isBlocked
-        ? {
-            title: "Add photos to your catalog",
-          }
-        : {},
-      icon: createIconWithIndicator(SearchIcon, "#60b6d4"), // Info color for search functionality
+      props: isBlocked ? { title: "Add photos to your catalog" } : {},
+      icon: () => h(NIcon, null, { default: () => h(SearchIcon) }),
     },
     {
-      label: createMenuLabel("3D Atlas"),
+      label: "3D Atlas",
       key: "atlas",
       disabled: isBlocked,
-      comingSoon: false,
-      props: isBlocked
-        ? {
-            title: "Add photos to your catalog",
-          }
-        : {},
-      icon: createIconWithIndicator(CubeIcon, "#8b5cf6", false, false), // Purple color for 3D view
+      props: isBlocked ? { title: "Add photos to your catalog" } : {},
+      icon: () => h(NIcon, null, { default: () => h(CubeIcon) }),
     },
     {
-      label: createMenuLabel("Canvas"),
+      label: "Canvas",
       key: "canvas",
       disabled: isBlocked,
-      comingSoon: false,
-      props: isBlocked
-        ? {
-            title: "Add photos to your catalog",
-          }
-        : {},
-      icon: createIconWithIndicator(CanvasIcon, "#8b5cf6", false, false), // Secondary color for creative tools
+      props: isBlocked ? { title: "Add photos to your catalog" } : {},
+      icon: () => h(NIcon, null, { default: () => h(CanvasIcon) }),
     },
-    // {
-    //   label: createMenuLabel("Grid Maker"),
-    //   key: "grid-maker",
-    //   disabled: isBlocked,
-    //   comingSoon: false,
-    //   props: {
-    //     title: "Coming soon",
-    //   },
-    //   icon: createIconWithIndicator(GridIcon, "#15803d", false, false), // Green color for grids
-    // },
     {
-      label: createMenuLabel("Project Builder"),
+      label: "Project Builder",
       key: "project-builder",
       disabled: isBlocked,
-      comingSoon: false,
-      props: isBlocked
-        ? {
-            title: "Add photos to your catalog",
-          }
-        : {},
-      icon: createIconWithIndicator(CurationIcon, "#f59e0b", true), // Warning color for curation + premium
+      props: isBlocked ? { title: "Add photos to your catalog" } : {},
+      icon: () => h(NIcon, null, { default: () => h(CurationIcon) }),
     },
-
-    // {
-    //   label: createMenuLabel("Reports"),
-    //   key: "portfolio-report",
-    //   disabled: isBlocked,
-    //   comingSoon: false,
-    //   props: isBlocked
-    //     ? {
-    //         title: "Add photos to your catalog",
-    //       }
-    //     : {},
-    //   icon: createIconWithIndicator(AnalyticsIcon, "#06b6d4", false, false), // Cyan color for analytics
-    // },
     {
-      label: createMenuLabel("Framer"),
+      label: "Framer",
       key: "framer",
       disabled: isBlocked,
-      comingSoon: false,
-      props: isBlocked
-        ? {
-            title: "Add photos to your catalog",
-          }
-        : {},
-      icon: createIconWithIndicator(FramerIcon, "#dc2626", false, false), // Red color for framer
+      props: isBlocked ? { title: "Add photos to your catalog" } : {},
+      icon: () => h(NIcon, null, { default: () => h(FramerIcon) }),
     },
   ];
 });
@@ -478,7 +316,7 @@ const fourthSectionOptions: MenuOption[] = [
 ];
 
 const handleMenuSelect = (key: string) => {
-  if (key === "catalog") {
+  if (key === "photo-hub") {
     router.push({ name: "photo-hub", hash: "#catalog" });
   } else {
     router.push({ name: key });
@@ -551,8 +389,6 @@ onUnmounted(() => {
 
 <style scoped>
 .sidebar {
-  background-color: #16161a !important;
-  border-right: 1px solid #2c2c32 !important;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
   z-index: 100 !important;
   overflow: visible !important;
@@ -567,7 +403,7 @@ onUnmounted(() => {
 
 .logo-container {
   padding: 0 16px;
-  border-bottom: 1px solid #2c2c32;
+  border-bottom: 1px solid var(--border-color);
   transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   height: 64px;
   display: flex;
@@ -649,10 +485,29 @@ onUnmounted(() => {
   margin-top: 8px;
 }
 
+/* Aplicar opacidad al fondo del item activo (menú expandido y colapsado) */
+:deep(.n-menu-item.n-menu-item--selected) {
+  position: relative;
+}
+
+:deep(.n-menu-item.n-menu-item--selected::before) {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-color: currentColor;
+  opacity: 0.15;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+:deep(.n-menu-item.n-menu-item--selected:hover::before) {
+  opacity: 0.25;
+}
+
 .menu-divider {
   /* margin: 16px 20px; */
   height: 1px;
-  background-color: #2c2c32;
+  background-color: var(--border-color);
   transition: margin 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -663,7 +518,7 @@ onUnmounted(() => {
 .user-profile-section {
   margin-top: auto;
   padding: 16px;
-  border-top: 1px solid #2c2c32;
+  border-top: 1px solid;
   transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -791,8 +646,7 @@ onUnmounted(() => {
   left: 0;
   width: 240px;
   height: 100vh;
-  background-color: #16161a;
-  border-right: 1px solid #2c2c32;
+
   z-index: 1000;
   box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
   animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -807,34 +661,5 @@ onUnmounted(() => {
   to {
     left: 0;
   }
-}
-
-@keyframes pulse {
-  0% {
-    transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
-  }
-
-  70% {
-    transform: scale(1);
-    box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
-  }
-
-  100% {
-    transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
-  }
-}
-
-.premium-indicator-diamond {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  width: 8px;
-  height: 8px;
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  transform: rotate(45deg);
-  box-shadow: 0 0 4px rgba(245, 158, 11, 0.4);
-  border: 1px solid #16161a;
 }
 </style>

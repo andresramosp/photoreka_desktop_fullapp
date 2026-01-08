@@ -18,7 +18,7 @@ import AuthView from "../views/AuthView.vue";
 import ProfileSelectionView from "../views/ProfileSelectionView.vue";
 import StoragePlanSelectionView from "../views/StoragePlanSelectionView.vue";
 import GridMaker from "../views/GridMakerView.vue";
-import LandingView from "../views/LandingView.vue";
+// import LandingView from "../views/LandingView.vue";
 import LandingViewPremium from "../views/LandingViewPremium.vue";
 import TermsView from "../views/TermsView.vue";
 import MaintenanceView from "../views/MaintenanceView.vue";
