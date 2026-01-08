@@ -527,7 +527,7 @@ const goBack = () => {
   margin: 16px 0 8px 0;
   font-size: 32px;
   font-weight: 700;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   letter-spacing: -0.025em;
 }
 
@@ -542,7 +542,7 @@ const goBack = () => {
   margin: 0 0 8px 0;
   font-size: 20px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .section-subtitle {
@@ -609,7 +609,7 @@ const goBack = () => {
 
 .storage-icon {
   margin-bottom: 16px;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .storage-option-card.selected .storage-icon {
@@ -620,7 +620,7 @@ const goBack = () => {
   margin: 0 0 8px 0;
   font-size: 18px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .storage-photos {
@@ -641,7 +641,7 @@ const goBack = () => {
 .storage-price {
   font-size: 16px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .storage-notes {
@@ -826,7 +826,7 @@ const goBack = () => {
   margin: 0 0 12px 0;
   font-size: 20px;
   font-weight: 700;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .plan-price {
@@ -867,7 +867,7 @@ const goBack = () => {
   align-items: center;
   gap: 12px;
   font-size: 14px;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .feature-item.disabled {
@@ -887,7 +887,7 @@ const goBack = () => {
   margin: 0 0 16px 0;
   font-size: 18px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .summary-details {
@@ -915,7 +915,7 @@ const goBack = () => {
 }
 
 .summary-value {
-  color: #ffffffd1;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 

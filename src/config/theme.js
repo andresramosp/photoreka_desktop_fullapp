@@ -174,6 +174,7 @@ export const darkTheme = {
   textTertiary: "rgba(255, 255, 255, 0.38)",
   textPlaceholder: colors.gray[500],
   textDisabled: "rgba(255, 255, 255, 0.25)",
+  textOnPrimary: "#ffffff",
 
   // Icons
   iconPrimary: "rgba(255, 255, 255, 0.82)",
@@ -256,6 +257,7 @@ export const lightTheme = {
   textTertiary: "#64748b",
   textPlaceholder: "#94a3b8",
   textDisabled: "#cbd5e1",
+  textOnPrimary: "#ffffff",
 
   // Icons
   iconPrimary: "#0f172a",
@@ -420,6 +422,7 @@ export function getThemeCSSVariables(isDark = true) {
     "--text-tertiary": theme.textTertiary,
     "--text-placeholder": theme.textPlaceholder,
     "--text-disabled": theme.textDisabled,
+    "--text-on-primary": theme.textOnPrimary,
 
     // Icons
     "--icon-primary": theme.iconPrimary,

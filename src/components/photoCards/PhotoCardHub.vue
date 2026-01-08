@@ -61,14 +61,14 @@
 
       <!-- Checking duplicates overlay with static clock icon -->
       <div v-if="photo.isCheckingDuplicates" class="processing-overlay">
-        <n-icon size="32" color="#ffffffd1">
+        <n-icon size="32" color="var(--text-secondary)">
           <TimeOutline />
         </n-icon>
       </div>
 
       <!-- Preprocessing overlay with static clock icon -->
       <div v-if="photo.status === 'preprocessing'" class="processing-overlay">
-        <n-icon size="32" color="#ffffffd1">
+        <n-icon size="32" color="var(--text-secondary)">
           <TimeOutline />
         </n-icon>
       </div>
@@ -787,7 +787,7 @@ const onImageError = () => {
 .photo-title {
   font-size: 12px;
   /* font-weight: 500; */
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 0 0 4px 0;
   overflow: hidden;
   text-overflow: ellipsis;

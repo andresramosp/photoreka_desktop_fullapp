@@ -32,7 +32,7 @@ import AppLogo from "./AppLogo.vue";
 .profile-layout {
   position: relative;
   width: 100vw;
-  background-color: #101014;
+  /* background-color: #101014; */
   display: flex;
   align-items: center;
   justify-content: center;

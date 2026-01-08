@@ -16,7 +16,7 @@
       :style="{ width: '500px' }"
     >
       <div style="margin-bottom: 24px">
-        <span style="color: #ffffffd1; line-height: 1.6">
+        <span style="color: var(--text-secondary); line-height: 1.6">
           {{ sourceWarningConfig?.message }}
         </span>
       </div>
@@ -844,7 +844,7 @@ defineExpose({
 .dropzone-title {
   font-size: 24px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 0 0 8px 0;
 }
 
@@ -956,7 +956,7 @@ defineExpose({
 .progress-title {
   font-size: 18px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 0;
 }
 
@@ -1014,7 +1014,7 @@ defineExpose({
 
 .maintenance-subtitle {
   font-size: 16px;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 0 0 32px 0;
   line-height: 1.5;
 }
@@ -1048,7 +1048,7 @@ defineExpose({
 .maintenance-message p {
   margin: 0;
   font-size: 14px;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   line-height: 1.5;
 }
 

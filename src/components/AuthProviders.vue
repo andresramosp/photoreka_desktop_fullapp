@@ -177,7 +177,7 @@ export default {
   font-size: 13px;
   border: 1px solid #2c2c32;
   background-color: #2c2c32 !important;
-  color: #ffffffd1 !important;
+  color: var(--text-secondary) !important;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 

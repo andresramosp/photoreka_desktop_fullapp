@@ -995,7 +995,7 @@ const handleToolSelected = async (toolId) => {
 .results-count-base {
   font-size: 16px;
   font-weight: 500;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .grid-size-controls-base {
@@ -1098,7 +1098,7 @@ const handleToolSelected = async (toolId) => {
 }
 
 .loading-more-container {
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 /* Responsive */

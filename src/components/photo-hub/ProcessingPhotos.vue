@@ -571,7 +571,7 @@ function isLastFinishedJob(job) {
 .section-title {
   font-size: 20px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 0;
 }
 
@@ -638,7 +638,7 @@ function isLastFinishedJob(job) {
 
 .cell-value {
   font-size: 14px;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
@@ -684,7 +684,7 @@ function isLastFinishedJob(job) {
 
 /* Expanded Row Content */
 .row-expanded {
-  border-top: 1px solid;
+  border-top: 1px solid var(--border-color);
 
   animation: expandRow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -714,7 +714,7 @@ function isLastFinishedJob(job) {
 .expanded-title {
   font-size: 16px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .progress-info {
@@ -778,7 +778,7 @@ function isLastFinishedJob(job) {
 .empty-state-title {
   font-size: 20px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 16px 0 8px 0;
 }
 

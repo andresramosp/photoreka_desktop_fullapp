@@ -125,7 +125,11 @@
                 >
                 <n-tooltip trigger="hover" placement="top">
                   <template #trigger>
-                    <n-icon size="12" color="#ffffffd1" style="cursor: help">
+                    <n-icon
+                      size="12"
+                      color="var(--text-secondary)"
+                      style="cursor: help"
+                    >
                       <InfoCircleFilled />
                     </n-icon>
                   </template>
@@ -198,7 +202,11 @@
                   <span class="scores-toggle-label">Visual Scores</span>
                   <n-tooltip trigger="hover" placement="top">
                     <template #trigger>
-                      <n-icon size="12" color="#ffffffd1" style="cursor: help">
+                      <n-icon
+                        size="12"
+                        color="var(--text-secondary)"
+                        style="cursor: help"
+                      >
                         <InfoCircleFilled />
                       </n-icon>
                     </template>

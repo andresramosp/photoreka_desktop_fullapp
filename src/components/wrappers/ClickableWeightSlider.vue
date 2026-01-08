@@ -81,7 +81,7 @@ const fillBackground = computed(() => {
 });
 
 const labelColor = computed(() => {
-  return "#ffffffd1";
+  return "var(--text-secondary)";
 });
 
 const valueColor = computed(() => {
@@ -221,7 +221,7 @@ onUnmounted(() => {
 .slider-label {
   font-size: 13px;
   font-weight: 500;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;

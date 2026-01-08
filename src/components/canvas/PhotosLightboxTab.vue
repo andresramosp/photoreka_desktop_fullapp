@@ -544,7 +544,7 @@ function loadImageFromBlob(blob) {
 .dropzone-title {
   font-size: 20px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 0 0 8px 0;
 }
 
@@ -612,7 +612,7 @@ function loadImageFromBlob(blob) {
 .progress-title {
   font-size: 16px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 0;
 }
 

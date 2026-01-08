@@ -245,7 +245,7 @@ watch(
 .filter-label {
   font-size: 13px;
   font-weight: 500;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .date-display {

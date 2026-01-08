@@ -151,7 +151,7 @@ const downloadPlugin = () => {
 <style scoped>
 /* Lightroom Modal Styles */
 .lightroom-modal-content {
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .modal-header-section {
@@ -198,7 +198,7 @@ const downloadPlugin = () => {
 .installation-steps h3 {
   font-size: 16px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 0 0 16px 0;
 }
 
@@ -234,7 +234,7 @@ const downloadPlugin = () => {
 .step-content h4 {
   font-size: 14px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 0 0 4px 0;
 }
 
@@ -255,7 +255,7 @@ const downloadPlugin = () => {
 }
 
 .step-content strong {
-  color: #ffffffd1;
+  color: var(--text-secondary);
   font-weight: 600;
 }
 

@@ -347,7 +347,7 @@ const onOnboardingFinish = () => {
 }
 
 .main-content {
-  background-color: #101014;
+  /* background-color: #101014; */
   overflow: auto;
   transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -356,7 +356,6 @@ const onOnboardingFinish = () => {
 .mobile-layout {
   position: relative;
   height: 100vh;
-  background-color: #101014;
 }
 
 .mobile-content {
@@ -369,7 +368,7 @@ const onOnboardingFinish = () => {
 .mobile-main-content {
   flex: 1;
   overflow: auto;
-  background-color: #101014;
+  /* background-color: #101014; */
   height: calc(100vh - 64px);
 }
 

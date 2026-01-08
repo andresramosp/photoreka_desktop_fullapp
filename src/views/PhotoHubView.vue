@@ -411,7 +411,7 @@ onMounted(() => {
 .section-title {
   font-size: 20px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 0;
 }
 
@@ -519,7 +519,7 @@ onMounted(() => {
 .photo-name {
   font-size: 14px;
   font-weight: 500;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -569,7 +569,7 @@ onMounted(() => {
 .empty-state-title {
   font-size: 20px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 16px 0 8px 0;
 }
 

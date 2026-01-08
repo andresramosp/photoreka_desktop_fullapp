@@ -39,7 +39,7 @@ defineOptions({
 .empty-title {
   font-size: 24px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 16px 0 8px 0;
 }
 

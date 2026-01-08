@@ -198,7 +198,11 @@
                   <span class="filter-compact-label">Collections</span>
                   <n-tooltip trigger="hover" placement="top">
                     <template #trigger>
-                      <n-icon size="12" color="#ffffffd1" style="cursor: help">
+                      <n-icon
+                        size="12"
+                        color="var(--text-secondary)"
+                        style="cursor: help"
+                      >
                         <InfoCircleFilled />
                       </n-icon>
                     </template>
@@ -306,7 +310,11 @@
                   <span class="filter-compact-label">Visual scores</span>
                   <n-tooltip trigger="hover" placement="top">
                     <template #trigger>
-                      <n-icon size="12" color="#ffffffd1" style="cursor: help">
+                      <n-icon
+                        size="12"
+                        color="var(--text-secondary)"
+                        style="cursor: help"
+                      >
                         <InfoCircleFilled />
                       </n-icon>
                     </template>
@@ -1543,8 +1551,8 @@ const filterSummaryText = computed(() => {
 
 /* Search Toolbar */
 .search-toolbar {
-  background-color: #18181c;
-  border: 1px solid #2c2c32;
+  background-color: var(--bg-container);
+  border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 24px;
   position: sticky;
@@ -1565,7 +1573,7 @@ const filterSummaryText = computed(() => {
   gap: 24px;
   margin-bottom: 10px;
   padding-bottom: 20px;
-  border-bottom: 1px solid #2c2c32;
+  border-bottom: 1px solid var(--border-color);
   overflow: visible;
 }
 
@@ -1587,7 +1595,7 @@ const filterSummaryText = computed(() => {
 .selector-label {
   font-size: 14px;
   font-weight: 500;
-  color: #ffffffd1;
+  color: var(--text-primary);
   white-space: nowrap;
 }
 
@@ -1606,9 +1614,9 @@ const filterSummaryText = computed(() => {
   gap: 6px;
   padding: 8px 14px;
   border-radius: 20px;
-  border: 1px solid #2c2c32;
-  background-color: transparent;
-  color: #ffffff73;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   font-size: 13px;
@@ -1621,17 +1629,18 @@ const filterSummaryText = computed(() => {
 }
 
 .type-pill:hover {
-  border-color: #2563eb;
-  color: #ffffffd1;
+  border-color: var(--primary-color);
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
   transform: translateY(-1px);
 }
 
 .type-pill.active {
-  background-color: #2563eb;
-  border-color: #2563eb;
-  color: #ffffff;
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  color: var(--text-on-primary);
   transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(37, 99, 235, 0.3);
+  box-shadow: 0 4px 8px var(--shadow-primary);
 }
 
 .type-icon {
@@ -1652,9 +1661,9 @@ const filterSummaryText = computed(() => {
   gap: 6px;
   padding: 8px 16px;
   border-radius: 20px;
-  border: 1px solid #2c2c32;
-  background-color: transparent;
-  color: #ffffff73;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   font-size: 13px;
@@ -1673,12 +1682,13 @@ const filterSummaryText = computed(() => {
 .mode-pill:hover {
   border-color: var(--primary-color);
   color: var(--text-primary);
+  background-color: var(--bg-hover);
 }
 
 .mode-pill.active {
   background-color: var(--primary-color);
   border-color: var(--primary-color);
-  color: var(--text-primary);
+  color: var(--text-on-primary);
 }
 
 .mode-icon {
@@ -1691,10 +1701,10 @@ const filterSummaryText = computed(() => {
   right: 4px;
   width: 8px;
   height: 8px;
-  background: linear-gradient(135deg, #f59e0b, #d97706);
+  background: var(--accent-gradient, linear-gradient(135deg, #f59e0b, #d97706));
   transform: rotate(45deg);
-  box-shadow: 0 0 4px rgba(245, 158, 11, 0.4);
-  border: 1px solid #18181c;
+  box-shadow: 0 0 4px var(--shadow-accent);
+  border: 1px solid var(--border-color);
 }
 
 /* Usage Limit Warning Badge */
@@ -1705,17 +1715,17 @@ const filterSummaryText = computed(() => {
 }
 
 .warning-icon {
-  color: #f59e0b;
+  color: var(--warning-color);
   flex-shrink: 0;
 }
 
 .warning-text {
-  color: #f59e0b;
+  color: var(--warning-color);
   white-space: nowrap;
 }
 
 .info-icon {
-  color: #f59e0b;
+  color: var(--warning-color);
   opacity: 0.8;
   cursor: help;
   flex-shrink: 0;
@@ -1724,7 +1734,7 @@ const filterSummaryText = computed(() => {
 .close-badge-btn {
   background: none;
   border: none;
-  color: #f59e0b;
+  color: var(--warning-color);
   cursor: pointer;
   padding: 2px;
   border-radius: 4px;
@@ -1738,7 +1748,7 @@ const filterSummaryText = computed(() => {
 
 .close-badge-btn:hover {
   opacity: 1;
-  background-color: rgba(245, 158, 11, 0.1);
+  background-color: var(--warning-bg-subtle);
   transform: scale(1.1);
 }
 
@@ -1761,14 +1771,14 @@ const filterSummaryText = computed(() => {
 }
 
 .more-filters-toggle:hover {
-  background-color: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.12);
+  background-color: var(--bg-hover);
+  border-color: var(--border-color-hover);
 }
 
 .more-filters-label {
   font-size: 10px;
   font-weight: 500;
-  /* color: #ffffff73; */
+  color: var(--text-secondary);
 }
 
 .more-filters-indicators {
@@ -1779,8 +1789,8 @@ const filterSummaryText = computed(() => {
 
 .active-filters-indicator {
   font-size: 8px;
-  color: #2563eb;
-  background-color: rgba(37, 99, 235, 0.15);
+  color: var(--primary-color);
+  background-color: var(--primary-bg-subtle);
   padding: 1px 3px;
   border-radius: 4px;
   font-weight: 600;
@@ -1789,7 +1799,7 @@ const filterSummaryText = computed(() => {
 }
 
 .toggle-icon {
-  color: #ffffff73;
+  color: var(--text-secondary);
   transition: transform 0.3s ease;
 }
 
@@ -1822,7 +1832,7 @@ const filterSummaryText = computed(() => {
 .filter-compact-label {
   font-size: 11px;
   font-weight: 500;
-  color: #ffffff73;
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
@@ -1834,8 +1844,8 @@ const filterSummaryText = computed(() => {
 
 .filter-compact-count {
   font-size: 9px;
-  color: #2563eb;
-  background-color: rgba(37, 99, 235, 0.15);
+  color: var(--primary-color);
+  background-color: var(--primary-bg-subtle);
   padding: 1px 4px;
   border-radius: 4px;
   font-weight: 600;
@@ -1903,7 +1913,7 @@ const filterSummaryText = computed(() => {
   gap: 8px;
   font-size: 14px;
   font-weight: 500;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .tags-select {
@@ -2006,7 +2016,7 @@ const filterSummaryText = computed(() => {
 .filter-label {
   font-size: 14px;
   font-weight: 500;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
@@ -2021,7 +2031,7 @@ const filterSummaryText = computed(() => {
 }
 
 .filter-applied {
-  color: #ffffff73;
+  /* color: #ffffff73; */
   font-size: 12px;
   margin-left: 4px;
 }
@@ -2051,13 +2061,13 @@ const filterSummaryText = computed(() => {
 .inspiration-title {
   font-size: 32px;
   font-weight: 700;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 0 0 12px 0;
 }
 
 .inspiration-subtitle {
   font-size: 18px;
-  color: #ffffff73;
+  color: var(--text-secondary);
   margin: 0 0 40px 0;
 }
 
@@ -2068,7 +2078,7 @@ const filterSummaryText = computed(() => {
 .examples-title {
   font-size: 20px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 0 0 0 0;
   text-align: center;
 }
@@ -2114,13 +2124,13 @@ const filterSummaryText = computed(() => {
 }
 
 .example-card:hover .example-text {
-  color: #2563eb;
+  color: var(--primary-color);
   transform: scale(1.02);
 }
 
 .example-text {
   font-size: 16px;
-  color: #ffffff73;
+  color: var(--text-secondary);
   line-height: 1.4;
   text-align: center;
   font-style: italic;
@@ -2145,7 +2155,7 @@ const filterSummaryText = computed(() => {
 
 .loading-text {
   font-size: 16px;
-  color: #ffffff73;
+  color: var(--text-secondary);
   margin: 0;
 }
 
@@ -2163,8 +2173,8 @@ const filterSummaryText = computed(() => {
   justify-content: center;
   flex: 1;
   gap: 12px;
-  background-color: #18181c;
-  border: 1px solid #2c2c32;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 40px;
   min-height: 200px;
@@ -2172,13 +2182,13 @@ const filterSummaryText = computed(() => {
 
 .results-text {
   font-size: 18px;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 0;
 }
 
 .results-query {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-secondary);
   margin: 0;
   text-align: center;
 }

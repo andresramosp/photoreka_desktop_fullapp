@@ -468,7 +468,7 @@ onUnmounted(() => {
 .app-name {
   font-size: 18px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   line-height: 1.2;
   white-space: nowrap;
 }
@@ -564,7 +564,7 @@ onUnmounted(() => {
 .user-name {
   font-size: 14px;
   font-weight: 500;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   line-height: 1.2;
   margin-bottom: 2px;
   white-space: nowrap;

@@ -1333,7 +1333,7 @@ const {
 .examples-title {
   font-size: 20px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 0 0 var(--spacing-lg) 0;
   text-align: center;
 }

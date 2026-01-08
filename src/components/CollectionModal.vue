@@ -630,7 +630,7 @@ const handleCancel = () => {
 }
 
 .modal-description {
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin-bottom: 20px;
   margin-top: 16px;
   font-size: 14px;
@@ -724,7 +724,7 @@ const handleCancel = () => {
 .collection-name {
   font-size: 16px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 0;
 }
 

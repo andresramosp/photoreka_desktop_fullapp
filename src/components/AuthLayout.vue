@@ -34,7 +34,7 @@ import AppLogo from "./AppLogo.vue";
 .auth-layout {
   width: 100vw;
   height: 100vh;
-  background-color: #101014;
+  /* background-color: #101014; */
   display: flex;
   align-items: center;
   justify-content: center;

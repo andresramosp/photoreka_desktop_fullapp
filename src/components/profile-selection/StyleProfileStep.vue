@@ -363,7 +363,7 @@ const handleComplete = () => {
   margin: 16px 0 8px 0;
   font-size: 32px;
   font-weight: 700;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   letter-spacing: -0.025em;
 }
 
@@ -383,7 +383,7 @@ const handleComplete = () => {
   margin: 0 0 4px 0;
   font-size: 20px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   text-align: center;
 }
 
@@ -434,7 +434,7 @@ const handleComplete = () => {
 
 .general-card .category-icon {
   margin-bottom: 12px;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .general-card.selected .category-icon {
@@ -495,7 +495,7 @@ const handleComplete = () => {
 
 .category-icon {
   margin-bottom: 12px;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .pro-card.selected .category-icon {
@@ -506,7 +506,7 @@ const handleComplete = () => {
   margin: 0 0 8px 0;
   font-size: 16px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .category-description {
@@ -540,7 +540,7 @@ const handleComplete = () => {
   margin: 0 0 12px 0;
   font-size: 16px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .explanation-content p {

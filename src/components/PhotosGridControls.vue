@@ -674,7 +674,7 @@ watch(
 .filters-title {
   font-size: 14px;
   font-weight: 500;
-  /* color: #ffffffd1; */
+  /* color: var(--text-secondary); */
   margin: 0;
 }
 
@@ -802,7 +802,7 @@ watch(
 }
 
 .sorting-radio {
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .criteria-selection {

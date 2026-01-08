@@ -116,7 +116,7 @@ watch(() => route.query.mode, setModeFromQuery);
 }
 
 .tab-button:hover {
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .tab-button.active {

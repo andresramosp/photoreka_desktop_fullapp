@@ -193,7 +193,7 @@ const handleNext = () => {
   margin: 16px 0 8px 0;
   font-size: 32px;
   font-weight: 700;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   letter-spacing: -0.025em;
 }
 
@@ -245,7 +245,7 @@ const handleNext = () => {
 
 .mode-icon {
   margin-bottom: 8px;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   height: 64px;
   display: flex;
   align-items: center;
@@ -292,7 +292,7 @@ const handleNext = () => {
   margin: 0 0 8px 0;
   font-size: 18px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .mode-description {
@@ -353,7 +353,7 @@ const handleNext = () => {
   margin: 0 0 12px 0;
   font-size: 16px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .explanation-content p {

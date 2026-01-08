@@ -154,7 +154,7 @@ const completeProfile = async () => {
 }
 
 .step.active .step-label {
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .step-line {

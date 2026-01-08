@@ -128,7 +128,7 @@ const navigateToTab = (tabName) => {
 .results-count-base {
   font-size: 16px;
   font-weight: 500;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .grid-size-controls-base {
@@ -308,13 +308,13 @@ const navigateToTab = (tabName) => {
 .empty-state-title {
   font-size: 24px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 0 0 8px 0;
 }
 
 .empty-state-description {
   font-size: 16px;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 0 0 16px 0;
 }
 
