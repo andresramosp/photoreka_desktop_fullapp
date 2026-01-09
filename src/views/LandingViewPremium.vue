@@ -51,23 +51,47 @@
           </div>
           <div class="hero-container">
             <div class="hero-content">
-              <div class="hero-badge" :class="{ visible: heroVisible }">
-                <span
-                  >🎨 Street | Documentary | Conceptual | Abstract |
-                  Landscape</span
-                >
+              <div
+                v-if="isMobileDevice()"
+                class="hero-badge"
+                :class="{ visible: heroVisible }"
+              >
+                <span class="badge-content">
+                  <n-icon size="16"><WalkOutline /></n-icon>Street
+                  <n-icon size="16"><BookOpen16Regular /></n-icon>Documentary
+                  <n-icon size="16"><PaletteOutlined /></n-icon>Artistic
+                  <n-icon size="16"><PersonOutline /></n-icon>Portrait
+                  <n-icon size="16"><ImageOutline /></n-icon>Landscape
+                </span>
               </div>
               <h1 class="hero-title" :class="{ visible: heroVisible }">
                 Make full sense of your
                 <span class="gradient-text"> photographic body of work</span>
               </h1>
+
               <p class="hero-description" :class="{ visible: heroVisible }">
-                🕵️‍♂️ Explore through natural language queries. 🎨 Build series for
-                documentary or conceptual projects. 🎞️ Sequence images by
-                narrative or chromatic similarity. 🏆 Rank your photos by
-                various aesthetic aspects and find the hidden gems in your
-                catalog.
+                <span class="emoji-bullet">🕵️‍♂️</span> Find photos by natural
+                language. <span class="emoji-bullet">🎨</span> Build series for
+                documentary or artistic projects.
+                <span class="emoji-bullet">🎞️</span> Sequence images by
+                narrative or chromatic similarity.
+                <span class="emoji-bullet">🏆</span> Rank your photos by various
+                aesthetic aspects. <span class="emoji-bullet">🌐</span> Browse
+                your catalogue in 3D and gain global insights.
               </p>
+              <div
+                v-if="!isMobileDevice()"
+                class="hero-badge"
+                :class="{ visible: heroVisible }"
+              >
+                <span class="badge-content">
+                  <n-icon size="16"><WalkOutline /></n-icon>Street
+                  <n-icon size="16"><BookOpen16Regular /></n-icon>Documentary
+                  <n-icon size="16"><PaletteOutlined /></n-icon>Artistic
+                  <n-icon size="16"><PersonOutline /></n-icon>Portrait
+                  <n-icon size="16"><ImageOutline /></n-icon>Landscape
+                </span>
+              </div>
               <n-button type="info" size="large" @click="goToAuth('signup')">
                 <template #icon>
                   <n-icon><RocketOutline /></n-icon>
@@ -408,7 +432,6 @@ import {
   SearchOutline,
   ImagesOutline,
   CloudUploadOutline,
-  StopOutline,
   CubeOutline,
   ColorPaletteOutline,
   ChevronDownOutline,
@@ -419,9 +442,12 @@ import {
   LinkOutline,
   SunnyOutline,
   MoonOutline,
+  WalkOutline,
+  PersonOutline,
+  ImageOutline,
 } from "@vicons/ionicons5";
 import { Workspace } from "@vicons/carbon";
-import { Trophy20Regular } from "@vicons/fluent";
+import { BookOpen16Regular, Trophy20Regular } from "@vicons/fluent";
 import AppLogo from "@/components/AppLogo.vue";
 import RequestAccessDialog from "@/components/RequestAccessDialog.vue";
 import MobileNoticeDialog from "@/components/MobileNoticeDialog.vue";
@@ -429,6 +455,7 @@ import MaintenanceBanner from "@/components/MaintenanceBanner.vue";
 import { isMobileDevice } from "@/utils/utils.js";
 import { trackUserAction, trackEvent } from "@/utils/analytics";
 import { useTheme } from "@/composables/useTheme.js";
+import { PaletteOutlined } from "@vicons/material";
 
 const router = useRouter();
 const message = useMessage();
@@ -1119,7 +1146,7 @@ if (typeof window !== "undefined") {
   max-width: 1280px;
   margin: 0 auto;
   padding: 0 32px;
-  padding-top: 64px;
+  padding-top: 75px;
   z-index: 1;
 }
 
@@ -1150,6 +1177,15 @@ if (typeof window !== "undefined") {
 .hero-badge.visible {
   opacity: 1;
   transform: translateY(0);
+}
+
+.badge-content {
+  display: flex;
+  font-size: 13px;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .hero-title {
@@ -1194,6 +1230,13 @@ if (typeof window !== "undefined") {
 .hero-description.visible {
   opacity: 1;
   transform: translateY(0);
+}
+
+.emoji-bullet {
+  display: inline;
+  color: inherit;
+  font-size: inherit;
+  color: var(--premium-primary);
 }
 
 .hero-demo {
