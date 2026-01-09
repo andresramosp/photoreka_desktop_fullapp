@@ -337,31 +337,73 @@ router.beforeEach(async (to, from, next) => {
   const { shouldBlockRoute } = useMaintenanceMode();
 
   // Detectar y consumir token de handoff de Lightroom ANTES de cualquier otra verificación
-  const handoffToken = to.query.lr_handoff as string;
+  let handoffToken: string | null = null;
+  let isFromHash = false;
+
+  // 1. Buscar primero en query string normal
+  if (to.query.lr_handoff && typeof to.query.lr_handoff === "string") {
+    handoffToken = to.query.lr_handoff;
+    isFromHash = false;
+  }
+  // 2. Si no está en query, buscar en el hash (formato: #catalog?lr_handoff=token)
+  else if (to.hash && to.hash.includes("lr_handoff")) {
+    const hashQueryMatch = to.hash.match(/\?(.*)/);
+    if (hashQueryMatch) {
+      const hashParams = new URLSearchParams(hashQueryMatch[1]);
+      const tokenFromHash = hashParams.get("lr_handoff");
+      if (tokenFromHash) {
+        handoffToken = tokenFromHash;
+        isFromHash = true;
+      }
+    }
+  }
+
+  // Si se detectó un token de handoff, procesarlo
   if (handoffToken) {
     try {
-      // Consumir el token de handoff (esto fuerza el login)
       const result = await userStore.consumeHandoff(handoffToken);
 
       if (result.success) {
-        // Remover el parámetro lr_handoff de la URL pero mantener otros parámetros
-        const query = { ...to.query };
-        delete query.lr_handoff;
+        // Construir la nueva navegación sin el parámetro lr_handoff
+        if (isFromHash) {
+          // Limpiar lr_handoff del hash
+          const hashQueryMatch = to.hash.match(/^(#[^?]*)\?(.*)/);
+          let newHash = to.hash;
 
-        // Continuar con la misma ruta pero sin el parámetro lr_handoff
-        next({
-          path: to.path,
-          query,
-          replace: true, // Reemplazar en el historial para evitar que el token quede en la URL
-        });
+          if (hashQueryMatch) {
+            const hashBase = hashQueryMatch[1];
+            const hashParams = new URLSearchParams(hashQueryMatch[2]);
+            hashParams.delete("lr_handoff");
+            const remainingParams = hashParams.toString();
+            newHash = remainingParams
+              ? `${hashBase}?${remainingParams}`
+              : hashBase;
+          }
+
+          next({
+            path: to.path,
+            query: to.query,
+            hash: newHash,
+            replace: true,
+          });
+        } else {
+          // Limpiar lr_handoff de query
+          const newQuery = { ...to.query };
+          delete newQuery.lr_handoff;
+
+          next({
+            path: to.path,
+            query: newQuery,
+            hash: to.hash,
+            replace: true,
+          });
+        }
         return;
       } else {
-        console.error("Error consuming handoff token:", result.error);
-        // Continuar con la navegación normal incluso si falla
+        console.error("Handoff authentication failed:", result.error);
       }
     } catch (error) {
       console.error("Error processing handoff token:", error);
-      // Continuar con la navegación normal incluso si falla
     }
   }
 
