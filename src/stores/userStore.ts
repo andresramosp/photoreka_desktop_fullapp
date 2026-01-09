@@ -353,6 +353,41 @@ export const useUserStore = defineStore("user", () => {
     }
   };
 
+  const consumeHandoff = async (
+    handoffToken: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    isLoading.value = true;
+
+    try {
+      const response = await api.post("/api/auth_lr/consume-handoff", {
+        handoffToken,
+      });
+      const { token: receivedToken } = response.data;
+
+      // Actualizar estado de autenticación
+      token.value = receivedToken;
+      isAuthenticated.value = true;
+      localStorage.setItem("auth_token", receivedToken);
+
+      // Obtener datos del usuario
+      const profileResponse = await api.get("/api/auth/profile");
+      user.value = profileResponse.data.user;
+
+      // Obtener datos de uso
+      await fetchUsage();
+
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error:
+          error.response?.data?.message || "Error consuming handoff token.",
+      };
+    } finally {
+      isLoading.value = false;
+    }
+  };
+
   // Initialize auth state
   // Llamar de forma asíncrona para no bloquear la carga
   initAuth();
@@ -376,5 +411,6 @@ export const useUserStore = defineStore("user", () => {
     forgotPassword,
     resetPassword,
     changePassword,
+    consumeHandoff,
   };
 });

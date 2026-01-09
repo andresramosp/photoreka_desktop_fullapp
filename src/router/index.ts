@@ -332,9 +332,38 @@ const router = createRouter({
 });
 
 // Navigation guards
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore();
   const { shouldBlockRoute } = useMaintenanceMode();
+
+  // Detectar y consumir token de handoff de Lightroom ANTES de cualquier otra verificación
+  const handoffToken = to.query.lr_handoff as string;
+  if (handoffToken) {
+    try {
+      // Consumir el token de handoff (esto fuerza el login)
+      const result = await userStore.consumeHandoff(handoffToken);
+
+      if (result.success) {
+        // Remover el parámetro lr_handoff de la URL pero mantener otros parámetros
+        const query = { ...to.query };
+        delete query.lr_handoff;
+
+        // Continuar con la misma ruta pero sin el parámetro lr_handoff
+        next({
+          path: to.path,
+          query,
+          replace: true, // Reemplazar en el historial para evitar que el token quede en la URL
+        });
+        return;
+      } else {
+        console.error("Error consuming handoff token:", result.error);
+        // Continuar con la navegación normal incluso si falla
+      }
+    } catch (error) {
+      console.error("Error processing handoff token:", error);
+      // Continuar con la navegación normal incluso si falla
+    }
+  }
 
   // Check if bypass is active via URL parameter or localStorage
   const urlBypass = to.query.isMe === "true";
