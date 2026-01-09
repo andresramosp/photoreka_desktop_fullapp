@@ -15,6 +15,7 @@ import archiver from 'archiver'
 import pLimit from 'p-limit'
 import Photo from '#models/photo'
 import WarmupController from '#controllers/warmup_controller'
+import AuthLrController from '#controllers/auth_lr_controller'
 
 // Auth routes (no middleware needed)
 const AuthController = () => import('#controllers/auth_controller')
@@ -34,6 +35,14 @@ router
     router.post('/api/auth/change-password', [AuthController, 'changePassword'])
   })
   .use(middleware.auth())
+
+router
+  .group(() => {
+    router.post('/api/auth_lr/create-handoff', [AuthLrController, 'createHandoff'])
+  })
+  .use(middleware.auth())
+
+router.post('/api/auth_lr/consume-handoff', [AuthLrController, 'consumeHandoff'])
 
 const AnalyzerController = () => import('#controllers/analyzer_controller')
 const CatalogController = () => import('#controllers/catalog_controller')
