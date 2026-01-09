@@ -52,7 +52,7 @@
           <div class="hero-container">
             <div class="hero-content">
               <div
-                v-if="isMobileDevice()"
+                v-if="true"
                 class="hero-badge"
                 :class="{ visible: heroVisible }"
               >
@@ -80,7 +80,7 @@
                 your catalogue in 3D and gain global insights.
               </p>
               <div
-                v-if="!isMobileDevice()"
+                v-if="false"
                 class="hero-badge"
                 :class="{ visible: heroVisible }"
               >
@@ -1146,7 +1146,7 @@ if (typeof window !== "undefined") {
   max-width: 1280px;
   margin: 0 auto;
   padding: 0 32px;
-  padding-top: 75px;
+  padding-top: 64px;
   z-index: 1;
 }
 
