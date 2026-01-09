@@ -2,6 +2,7 @@ import { DateTime } from 'luxon'
 import { BaseModel, column, hasMany } from '@adonisjs/lucid/orm'
 import type { HasMany } from '@adonisjs/lucid/types/relations'
 import Photo from '../photo.js'
+import User, { type UserProfile } from '../user.js'
 import { AnalyzerTask } from './analyzerTask.js'
 import { getTaskList } from '../../analyzer_packages.js'
 import Logger, { LogLevel } from '../../utils/logger.js'
@@ -90,6 +91,8 @@ export default class AnalyzerProcess extends BaseModel {
   @column()
   declare userId: number | null
 
+  declare userProfile: string | null
+
   declare autoRetry: boolean | null
 
   declare maxAttempts: number | null
@@ -122,6 +125,16 @@ export default class AnalyzerProcess extends BaseModel {
   ) {
     this.mode = mode
     this.packageId = this.mode == 'retry_process' ? this.packageId : packageId
+
+    // Cargar el perfil del usuario si está disponible
+    if (userId) {
+      const user = await User.find(userId)
+      this.userProfile = user?.profiles || 'general'
+      logger.info(`Usuario ${userId} con perfil: ${this.userProfile}`)
+    } else {
+      this.userProfile = 'general'
+      logger.info('Sin userId, usando perfil por defecto: general')
+    }
 
     // Obtener la estructura de tareas con grupos paralelos
     const taskStructure = getTaskList(this.packageId, this)

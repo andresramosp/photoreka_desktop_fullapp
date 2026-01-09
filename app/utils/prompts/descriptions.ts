@@ -58,8 +58,8 @@ Minimum lenghts for properties:
 Always return a JSON array, each item containing information about one image, in the same order of the input images.
 `
 
-export const MESSAGE_ANALYZER_GEMINI_CONTEXT_STORY_ACCENTS = (photosBatch: Photo[]) => `
- You are a bot in charge of analyzing photographs and returning diverse and structured information for each photo from a 'street photography' point of view. 
+export const MESSAGE_ANALYZER_GEMINI_CONTEXT_STORY_ACCENTS_STYLE = (style: string) => `
+ You are a bot in charge of analyzing photographs and returning diverse and structured information for each photo from a '${style}' point of view. 
 
  For each image, include following properties:
  
@@ -96,151 +96,61 @@ Minimum lenghts for properties:
 Always return a JSON array, each item containing information about one image, in the same order of the input images.
 `
 
-export const MESSAGE_ANALYZER_GEMINI_CONTEXT_ARTISTIC_REVIEW = (photosBatch: Photo[]) => `
+export const MESSAGE_ANALYZER_GEMINI_CONTEXT_STORY_ACCENTS_GENERAL = () => `
+You are a bot in charge of analyzing photographs and returning structured, meaningful observations adapted to the nature of each image.
 
-You are a photography critic specialized in street, documentary, and artistic photography.
+The photos may vary widely in style (documentary, abstract, portrait, architecture, conceptual, landscape, etc.).  
+Your task is to adapt the emphasis of your analysis according to what the image actually offers.
 
-Analyze each image in depth and return a JSON array, one item per image, in the same order as the input. Each item must have the following structure:
+For each image, include the following properties:
 
-1. "artistic_review":
-  A **detailed and extensive critique** (200-250 words) as if written by a professor in a street photography workshop. 
-   - **Composition and visual structure**: Identify if there is a main *eye catcher* and, if so, describe how it guides the viewer’s attention. Look for geometric patterns (triangles, diagonals, lines, repetitions), *framed subjects*, clear profiles, or strong visual anchors — but only mention them if they are truly present and relevant.
-   - **Color and light**: Evaluate how color and light interact in the scene. If there are repeated tones, striking contrasts, or harmonies, explain how they affect visual coherence. Assess the role of light — natural, hard, soft, lateral, golden hour, etc. — and how it shapes the mood and storytelling, but skip irrelevant details if the light is neutral or unremarkable.
-   - **Narrative and storytelling**: Explore the implicit story, if one emerges: relationships between subjects, expressions, body language, or contextual clues that suggest meaning or emotion. If the image feels more abstract or formal, focus the analysis on its aesthetic or compositional qualities instead.
-   - **Singularity and surreal character**: Determine whether the photo conveys uniqueness or evokes surprise. Note if any surreal, ambiguous, or unexpected element creates intrigue or amazement. If the scene is straightforward, assess its strength in clarity and honesty.
-   - **Metaphorical or symbolic readings**: Consider whether the image suggests possible metaphors, visual symbols, or subtexts that could inspire imaginative interpretations. If present, describe these ideas clearly, while keeping the analysis grounded and avoiding forced associations.
-   - **Technical and artistic aspects**: Discuss focus, sharpness, depth of field, and other technical choices. Highlight when these elements enhance or detract from the visual impact, and omit irrelevant aspects when not significant.
-   - **Authenticity and documentary strength**: Consider the level of spontaneity and authenticity, and whether it aligns with the principles of street or documentary photography.
+1. 'context': describe location, environment, time, or situational framing **only when relevant**.  
+    When it becomes clear, add the country and/or city.
 
+2. 'story': describe actions, relationships, visual tension, or implied narratives **if they exist**.  
+   If no narrative is present, focus instead on visual logic, structure, or intention.
 
-📌 **Output example:**
-\`\`\`json
-[
-  {
-    "artistic_review": "This image captures a rare balance between spontaneity and visual order...",
-    }
-  },
-  // ...
-]
-\`\`\`
+3. 'visual_accents': Here you should pay attention to aspects of the scene that have not been mentioned in the 'story' field but have an impact, either visually or meaningfully. 
+     Typical examples: a striking drawing that contrasts with something in the scene, a sign that says something interesting, 
+     an out-of-place object that makes the scene special, the curious similarity between two people, etc.
 
-Always return a JSON array, each item containing information about one image, in the same order of the input images.
+*Adaptive emphasis rules*
+- You have a **maximum total of 190 words per image**, distributed freely across the three fields.
+  1. 'context': enphasize for documentary or street photos, reduce for abstract or minimalist ones.
+  2. 'story': emphasize for images with people or clear actions, reduce for static or abstract ones.
+  3. 'visual_accents': 4 - 5 elements, depending on the image, dot separated, long tag-style.
+
+*General rules*
+1. IGNORE elements that are super small or require zooming in.
+2. Include only elements you are highly certain about (+90%).
+3. Avoid speculative language or unclear assumptions.
+
+📌 Output format:
+Always return a JSON array, one item per image, in the same order as input.
 `
 
-export const MESSAGE_ANALYZER_CONTEXT_ARTISTIC_SCORES = (photosBatch: Photo[]) => `
-
-You are a photography critic specialized in street, documentary, and artistic photography.
-
-Analyze each image in depth and return a JSON array, one item per image, in the same order as the input. Each item must have the following structure:
-
-12. "artistic_scores":
-   A JSON object with ratings for ten aspects, from **1 to 10**, where:
-  - **1** = Disastrous
-  - **2.5** = Poor
-  - **5** = Aceptable
-  - **7.5** = Remarkable
-  - **10** = Unique / Outstanding
-
-   Fields:
-
-   - aesthetic_quality: Evaluate the beauty of the photo in a visual, aesthetic, and immediate sense, without narrative or thematic considerations. Use the example of pictorial beauty as a starting point. Is the light and color pleasing to the eye? It can be beautiful in both a naive and dramatic sense.
-
-   - composition: Evaluate the compositional harmony, the balance of the elements in the photo, how they are distributed throughout the frame; do they form clear and pleasing patterns, does it make the photo legible, giving the eye a path to follow? Is there a clear eye-catcher that immediately draws the eye and orders the rest of the elements?
-   
-   - storytelling: Are there characters in the photo whose interactions, gestures, and emotions invite us to imagine a story behind them, whether obvious or more symbolic? Evaluate it here as if it were a play. How much of a play is it?
-   
-   - strangeness: Does the photo have a mysterious element that makes it special? Whether it's an everyday situation where something out of place raises an eyebrow, or a scene bathed in strange, dreamlike, surreal light, evaluate how unique or unusual the photo is. 
-
-   - message:  Does the photo convey a powerful message, whether social/human (in documentary/street photography) or more figurative/symbolic (in conceptual photography)? Does it invite reflection on the human condition or the world?
-
-   - humor: Does the photo have a humorous element, whether intentional or accidental? It can be a funny situation, an ironic twist, or a visual pun. Evaluate how effectively the humor is conveyed.
-
-   - visual_games: Does the photo feature visual games, illusions, or paradoxes that create a playful or intriguing effect? This could include reflections, curious juxtapositions, or other elements that challenge the viewer’s perception, much like a magician would
-
-   - candidness: evaluates the spontaneity of the moment captured, whether it feels natural and unposed, and if it aligns with the principles of street photography.
-
-📌 **Output example:**
-\`\`\`json
-[
-  {
-    "artistic_scores": {
-      "aesthetic_quality": x,
-      "composition": x,
-      "storytelling": x,
-      "strangeness": x,
-      "social_message": x
-      "humor": x,
-      "visual_games": x,
-      "candidness": x,
+export const MESSAGE_ANALYZER_GEMINI_CONTEXT_STORY_ACCENTS = (
+  photosBatch: Photo[],
+  userProfile: string = 'general'
+) => {
+  // Mapear perfiles compuestos a estilos individuales
+  const profileToStyle = (profile: string): string => {
+    if (profile === 'general') return 'general'
+    if (profile.includes('|')) {
+      // Para perfiles compuestos, separar con 'and'
+      return profile.split('|').join(' and ')
     }
-  },
-  // ...
-]
-\`\`\`
+    return profile
+  }
 
-Always return a JSON array, each item containing information about one image, in the same order of the input images.
-`
+  const style = profileToStyle(userProfile)
+  if (style !== 'general') {
+    return MESSAGE_ANALYZER_GEMINI_CONTEXT_STORY_ACCENTS_STYLE(style)
+  }
 
-export const MESSAGE_ANALYZER_GEMINI_CONTEXT_ARTISTIC_SCORES_BASE = (photosBatch: Photo[]) => `
-
-You are a photography critic specialized in street, documentary, and artistic photography.
-
-Analyze each image in depth and return a JSON array, one item per image, in the same order as the input. Each item must have the following structure:
-
-12. "artistic_scores":
-   A JSON object with ratings for ten aspects, from **0 to 5**:
-   - **0** = Disastrous
-   - **1** = Needs improvement
-   - **2** = Aceptable
-   - **3** = Good
-   - **4** = Remarkable
-   - **5** = Unique / Outstanding
-
-   Fields:
-
-   - aesthetic_quality: Evaluate the beauty/aesthetics of the image, its visual harmony, the aesthetic pleasure it provides at first glance, intuitively, before even entering into reading other more narrative or technical layers.
-
-   - composition: Evaluate the compositional harmony, the balance of the elements in the photo, how they are distributed throughout the frame; do they form clear and pleasing patterns, does it make the photo legible, giving the eye a path to follow? In this section, DO NOT take into account canonical rules of studio or portrait photography, such as cropped legs or arms, since this is about evaluating balance in a broader sense, applied to candid photography.
-   
-   - lighting: Evaluate the quality of light in the scene, its direction, intensity, color, and how it sculpts the subjects and environment. Consider whether it enhances the mood, depth, and three-dimensionality of the image.
-   
-   - color_usage: Evaluate the use of color in the image. Is it harmonious, or does it jar? Is there any interesting color play (use of complementary colors, repeated color patterns that create continuity), etc.?
-   
-   - emotional_impact: evaluates the emotional impact of the image, the expressiveness of the subjects (if any), whether it conveys any particular mood.
-
-   - storytelling: Are there real characters in the photo that suggest a story through their gestures or interactions? Evaluate the narrative strength, if any
-
-   - candidness: evaluates the spontaneity and authenticity of the moment captured, whether it feels natural and unposed, and if it aligns with the principles of street photography.
-   
-   - originality: evaluates the uniqueness of the image, whether it presents a unique/surreal/unusual moment, or a creative approach to the subject matter.
-
-   - abstract_strength: Evaluate the image's strength in terms of its abstract or formal qualities. Does it stand out for its visual patterns, shapes, colors, or textures that create a compelling aesthetic experience beyond the literal content?
-
-   - documentary_strength: Evaluate the image's strength in terms of its documentary or social message. Does it tell us something about a culture or event that's interesting from a journalistic or travel photography perspective?
-
-📌 **Output example:**
-\`\`\`json
-[
-  {
-    "artistic_scores": {
-      "aesthetic_quality": x,
-      "composition": x,
-      "lighting": x,
-      "color_usage": x,
-      "emotional_impact": x,
-      "storytelling": x,
-      "candidness": x,
-      "originality": x,
-      "documentary_strength": x,
-      "abstract_strength": x,
-    }
-  },
-  // ...
-]
-\`\`\`
-
-Always return a JSON array, each item containing information about one image, in the same order of the input images.
-`
+  // ---- ADAPTIVE / GENERAL PROMPT ----
+  return MESSAGE_ANALYZER_GEMINI_CONTEXT_STORY_ACCENTS_GENERAL()
+}
 
 // TODO: 1) volver a intentar meter arriba con esta desc, 2) darle otra oportunidad a Molmo... con o sin pretrained, a max_crops 8 o 9
 export const MESSAGE_ANALYZER_GPT_VISUAL_ACCENTS = (photosBatch: Photo[]) => `

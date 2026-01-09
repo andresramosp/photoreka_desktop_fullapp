@@ -8,12 +8,10 @@ import { VisualColorEmbeddingTask } from '#models/analyzer/visualColorEmbeddingT
 import { VisualDetectionTask } from '#models/analyzer/visualDetectionTask'
 import { VisualEmbeddingTask } from '#models/analyzer/visualEmbeddingTask'
 import { GlobalEmbeddingsTagsTask } from '#models/analyzer/globalEmbeddingsTagsTask'
-import {
-  MESSAGE_ANALYZER_CONTEXT_ARTISTIC_SCORES,
-  MESSAGE_ANALYZER_GEMINI_CONTEXT_STORY_ACCENTS,
-} from './utils/prompts/descriptions.js'
+import { MESSAGE_ANALYZER_GEMINI_CONTEXT_STORY_ACCENTS } from './utils/prompts/descriptions.js'
 import { MESSAGE_TAGS_TEXT_EXTRACTION } from './utils/prompts/tags.js'
 import { MESSAGE_ANALYZER_VISUAL_ASPECTS } from './utils/prompts/visual_aspects.js'
+import { MESSAGE_ANALYZER_CONTEXT_ARTISTIC_SCORES } from './utils/prompts/visual_scores.js'
 
 /**
  * ESTRUCTURA DE PACKAGES CON STAGES

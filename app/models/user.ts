@@ -7,6 +7,14 @@ import { DbAccessTokensProvider } from '@adonisjs/auth/access_tokens'
 import type { Usage } from '#services/usage_service'
 
 export type PreferredSource = 'web' | 'lightroom'
+export type UserProfile =
+  | 'general'
+  | 'street-photography'
+  | 'documentary'
+  | 'artistic'
+  | 'street-photography|artistic'
+  | 'documentary|artistic'
+  | 'street-photography|documentary'
 
 const AuthFinder = withAuthFinder(() => hash.use('scrypt'), {
   uids: ['email'],
@@ -35,11 +43,38 @@ export default class User extends compose(BaseModel, AuthFinder) {
   @column()
   declare preferredSource: PreferredSource
 
+  @column()
+  declare profiles: UserProfile
+
+  // Email confirmation fields
+  @column.dateTime()
+  declare emailConfirmedAt: DateTime | null
+
+  @column({ serializeAs: null })
+  declare emailConfirmationToken: string | null
+
+  @column.dateTime()
+  declare emailConfirmationSentAt: DateTime | null
+
+  // Password reset fields
+  @column({ serializeAs: null })
+  declare passwordResetToken: string | null
+
+  @column.dateTime()
+  declare passwordResetExpiresAt: DateTime | null
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime
+
+  /**
+   * Check if the user's email is confirmed
+   */
+  get isEmailConfirmed(): boolean {
+    return this.emailConfirmedAt !== null
+  }
 
   static accessTokens = DbAccessTokensProvider.forModel(User, {
     expiresIn: '30 days',

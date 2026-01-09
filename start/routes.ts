@@ -20,6 +20,10 @@ import WarmupController from '#controllers/warmup_controller'
 const AuthController = () => import('#controllers/auth_controller')
 router.post('/api/auth/register', [AuthController, 'register'])
 router.post('/api/auth/login', [AuthController, 'login'])
+router.post('/api/auth/confirm-email', [AuthController, 'confirmEmail'])
+router.post('/api/auth/resend-confirmation', [AuthController, 'resendConfirmation'])
+router.post('/api/auth/forgot-password', [AuthController, 'forgotPassword'])
+router.post('/api/auth/reset-password', [AuthController, 'resetPassword'])
 
 // Protected auth routes (require authentication)
 router

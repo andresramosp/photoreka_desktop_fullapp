@@ -42,5 +42,43 @@ export const updateProfileValidator = vine.compile(
     name: vine.string().minLength(2).maxLength(50).optional(),
     email: vine.string().email().normalizeEmail().optional(),
     preferredSource: vine.enum(['web', 'lightroom']).optional(),
+    profiles: vine.string().optional(),
+  })
+)
+
+/**
+ * Validates the email confirmation payload
+ */
+export const confirmEmailValidator = vine.compile(
+  vine.object({
+    token: vine.string().minLength(20).maxLength(100),
+  })
+)
+
+/**
+ * Validates the forgot password request payload
+ */
+export const forgotPasswordValidator = vine.compile(
+  vine.object({
+    email: vine.string().email().normalizeEmail(),
+  })
+)
+
+/**
+ * Validates the password reset payload
+ */
+export const resetPasswordValidator = vine.compile(
+  vine.object({
+    token: vine.string().minLength(20).maxLength(100),
+    newPassword: vine.string().minLength(8).maxLength(100),
+  })
+)
+
+/**
+ * Validates the resend confirmation email payload
+ */
+export const resendConfirmationValidator = vine.compile(
+  vine.object({
+    email: vine.string().email().normalizeEmail(),
   })
 )

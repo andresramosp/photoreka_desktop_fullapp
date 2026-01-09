@@ -15,6 +15,8 @@ export default class extends BaseSchema {
       table.string('password', 180).notNullable()
       table.boolean('is_active').defaultTo(true)
       table.string('preferred_source').defaultTo('web')
+      table.string('profiles').defaultTo('general')
+
       table.timestamp('created_at')
       table.timestamp('updated_at')
     })

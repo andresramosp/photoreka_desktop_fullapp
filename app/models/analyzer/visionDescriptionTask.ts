@@ -11,7 +11,7 @@ import PhotoImageService from '../../services/photo_image_service.js'
 const logger = Logger.getInstance('AnalyzerProcess', 'VisionDescriptionTask')
 logger.setLevel(LogLevel.DEBUG)
 
-type PromptFunction = (photos: Photo[]) => string
+type PromptFunction = (photos: Photo[], userProfile?: string) => string
 type Prompt = string | PromptFunction
 
 export class VisionDescriptionTask extends AnalyzerTask {
@@ -31,6 +31,8 @@ export class VisionDescriptionTask extends AnalyzerTask {
     this.analyzerProcess = analyzerProcess
     // Limpiar requests fallidos al inicio del proceso
     this.failedRequests = []
+
+    logger.debug(`VisionDescriptionTask usando perfil: ${analyzerProcess.userProfile || 'general'}`)
 
     // const threshold =
     //   analyzerProcess.mode === 'retry_process' ? this.imagesPerRequest * 2 : this.imagesPerRequest
@@ -59,8 +61,13 @@ export class VisionDescriptionTask extends AnalyzerTask {
 
     const processBatch = async (batch: Photo[]) => {
       let response: any
-      const injectedPrompts: any = this.prompts.map((p) => (typeof p === 'function' ? p(batch) : p))
-      logger.debug(`Llamando a ${this.model} para ${batch.length} imágenes...`)
+      const userProfile = this.analyzerProcess.userProfile || 'general'
+      const injectedPrompts: any = this.prompts.map((p) =>
+        typeof p === 'function' ? p(batch, userProfile) : p
+      )
+      logger.debug(
+        `Llamando a ${this.model} para ${batch.length} imágenes con perfil ${userProfile}...`
+      )
 
       try {
         if (this.model === 'GPT' || this.model === 'Qwen' || this.model === 'Gemini') {
@@ -173,7 +180,10 @@ export class VisionDescriptionTask extends AnalyzerTask {
   }
 
   private async processSingleBatch(batchPhotos: Photo[]): Promise<void> {
-    const prompts = this.prompts.map((p) => (typeof p === 'function' ? p(batchPhotos) : p))
+    const userProfile = this.analyzerProcess.userProfile || 'general'
+    const prompts = this.prompts.map((p) =>
+      typeof p === 'function' ? p(batchPhotos, userProfile) : p
+    )
     const imagesPerRequest = this.imagesPerRequest
     const maxRetries = 1
     let attempt = 0

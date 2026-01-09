@@ -3,6 +3,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import crypto from 'crypto'
 import Photo, { PhotoDescriptions } from '#models/photo'
+import User from '#models/user'
 import PhotoManager from '../managers/photo_manager.js'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { invalidateCache } from '../decorators/withCache.js'
@@ -82,8 +83,25 @@ export default class CatalogController {
   public async uploadPhoto({ request, response, auth }: HttpContext) {
     try {
       await auth.use('api').check()
-      const user = auth.use('api').user! as any
-      const userId = user.id.toString()
+      const authUser = auth.use('api').user! as any
+      const userId = authUser.id.toString()
+
+      // Get full user from database to check email confirmation status
+      const user = await User.find(authUser.id)
+      if (!user) {
+        return response.unauthorized({
+          message: 'User not found',
+          code: 'USER_NOT_FOUND',
+        })
+      }
+
+      // Check if email is confirmed
+      if (!user.isEmailConfirmed) {
+        return response.status(403).json({
+          message: 'Please confirm your email address before uploading photos.',
+          code: 'EMAIL_NOT_CONFIRMED',
+        })
+      }
 
       const {
         fileType,
