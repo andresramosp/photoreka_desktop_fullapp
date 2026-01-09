@@ -160,6 +160,7 @@ export const darkTheme = {
   bgSurface: "#2c2c32",
   bgSurfaceHover: "#3c3c42",
   bgCard: "#18181c",
+  bgDeepSurface: "black",
   bgOverlay: "rgba(0, 0, 0, 0.6)",
   bgTag: "rgba(37, 99, 235, 0.7)",
 
@@ -238,13 +239,15 @@ export const lightTheme = {
   accent: colors.cyan[400],
 
   // Backgrounds
-  bgBody: colors.blue[50],
-  bgContainer: colors.blue[100], //"#f8f9fa",
-  bgSurface: "#ffffff",
-  bgSurfaceHover: "#f1f5f9",
-  bgCard: "#ffffff",
+  bgBody: "#F7F8FA",
+  bgContainer: "#F5F7FA",
+  bgDeepSurface: "whitesmoke",
+  bgSurface: "#FFFFFF",
+  bgSurfaceHover: "#F1F5F9",
+  bgCard: "#FFFFFF",
+
   bgOverlay: "rgba(0, 0, 0, 0.4)",
-  bgTag: "rgba(37, 99, 235, 0.15)",
+  bgTag: "rgba(37, 99, 235, 0.12)",
 
   // Borders
   border: "rgba(0, 0, 0, 0.1)",
@@ -319,6 +322,7 @@ export function getNaiveThemeOverrides(isDark = true) {
       cardColor: theme.bgCard,
       modalColor: theme.bgContainer,
       popoverColor: theme.bgContainer,
+      bgDeepSurface: theme.bgDeepSurface,
 
       // Borders
       borderColor: theme.border,
@@ -410,6 +414,10 @@ export function getThemeCSSVariables(isDark = true) {
     "--bg-card": theme.bgCard,
     "--bg-overlay": theme.bgOverlay,
     "--bg-tag": theme.bgTag,
+    "--bg-deep-surface": theme.bgDeepSurface,
+
+    // Canvas
+    "--canvas-dot-color": theme.canvasDotColor,
 
     // Borders
     "--border-color": theme.border,

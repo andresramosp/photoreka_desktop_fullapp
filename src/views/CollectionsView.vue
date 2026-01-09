@@ -514,7 +514,6 @@ watch(
   margin: 0;
 }
 
-/* Collections Grid */
 .loading-state {
   display: flex;
   justify-content: center;
@@ -663,6 +662,7 @@ watch(
   display: flex;
   justify-content: center;
   align-items: center;
+  height: 100%;
   min-height: 400px;
   text-align: center;
 }

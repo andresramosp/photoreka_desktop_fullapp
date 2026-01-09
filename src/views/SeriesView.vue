@@ -1494,6 +1494,7 @@ watch(fullscreenViewerVisible, (isVisible) => {
   display: flex;
   justify-content: center;
   align-items: center;
+  height: 100%;
   min-height: 400px;
   text-align: center;
 }

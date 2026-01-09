@@ -77,7 +77,7 @@
 import PhotoCanvasButton from "./PhotoCanvasButton.vue";
 
 const secondaryColor = getComputedStyle(document.documentElement)
-  .getPropertyValue("--secondary-color")
+  .getPropertyValue("--accent-color")
   .trim();
 
 const props = defineProps({

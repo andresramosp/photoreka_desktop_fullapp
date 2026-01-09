@@ -4,6 +4,7 @@
     :class="{
       'playground-mode': isPlayground,
       'show-dots': toolbarState.showDots,
+      [`bg-${toolbarState.canvasBackground}`]: true,
     }"
   >
     <div
@@ -308,7 +309,7 @@
 
         <n-tooltip placement="bottom" trigger="hover">
           <template #trigger>
-            <n-button @click="handleClearCanvas">
+            <n-button type="primary" secondary @click="handleClearCanvas">
               <template #icon>
                 <n-icon>
                   <ReloadOutline />
@@ -320,7 +321,7 @@
         </n-tooltip>
 
         <div class="config-menu-container" ref="configMenuRef">
-          <n-button @click="openConfig">
+          <n-button secondary type="primary" @click="openConfig">
             <template #icon>
               <n-icon>
                 <svg viewBox="0 0 24 24">
@@ -345,6 +346,22 @@
               <div class="config-item">
                 <span class="config-label">Show Dots</span>
                 <n-switch v-model:value="toolbarState.showDots" />
+              </div>
+              <div class="config-item">
+                <span class="config-label">Background</span>
+                <div class="color-picker-pills">
+                  <button
+                    v-for="option in canvasBackgroundOptions"
+                    :key="option.id"
+                    :class="[
+                      'color-pill',
+                      { active: toolbarState.canvasBackground === option.id },
+                    ]"
+                    :style="{ backgroundColor: option.color }"
+                    :title="option.label"
+                    @click="toolbarState.canvasBackground = option.id"
+                  ></button>
+                </div>
               </div>
             </div>
 
@@ -554,9 +571,9 @@
                 ]"
                 @click="!option.disabled && selectOption(option)"
               >
-                <n-icon class="option-icon">
+                <!-- <n-icon class="option-icon">
                   <component :is="option.icon" />
-                </n-icon>
+                </n-icon> -->
                 <span>{{ option.label }}</span>
               </div>
             </div>
@@ -738,6 +755,7 @@ import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { useCanvasPersistence } from "@/composables/useCanvasPersistence.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { usePhotoQueryParams } from "@/composables/usePhotoQueryParams.js";
+import { useTheme } from "@/composables/useTheme.js";
 import AppLogo from "@/components/AppLogo.vue";
 
 // Define component name for KeepAlive
@@ -800,6 +818,9 @@ const setPhotoRef = (id) => (el) => {
   if (el) photoRefs.value[id] = el;
 };
 
+// Get theme composable
+const { isDarkMode } = useTheme();
+
 const toolbarState = ref({
   mouseMode: "move",
   zoomLevel: 0,
@@ -811,11 +832,20 @@ const toolbarState = ref({
     enabled: true, // New property to enable/disable expansion functionality
   },
   showDots: true, // toggle grid dots background
+  canvasBackground: isDarkMode.value ? "default" : "white", // canvas background color: default, white, navy, forest
   photoOptions: {
     count: 3,
     spreadMode: "perpendicular",
   },
 });
+
+// Canvas background color options
+const canvasBackgroundOptions = [
+  { id: "default", color: "#1a1a1a", label: "Dark" },
+  { id: "white", color: "#f5f5f5", label: "Light" },
+  { id: "navy", color: "#1e3a5f", label: "Navy" },
+  { id: "forest", color: "#2d4a3e", label: "Forest" },
+];
 
 // State
 const basicModeDismissed = ref(false);
@@ -846,7 +876,7 @@ const configMenuRef = ref(null);
 // Dropdown options with SVG icons
 
 const secondaryColor = getComputedStyle(document.documentElement)
-  .getPropertyValue("--secondary-color")
+  .getPropertyValue("--accent-color")
   .trim();
 
 const {
@@ -1913,7 +1943,7 @@ onUnmounted(() => {
 }
 
 .expandable-container.expanded {
-  width: 125px; /* Expanded width to fit text and dropdown arrow */
+  width: 150px; /* Expanded width to fit text and dropdown arrow */
   overflow: visible; /* Allow dropdown to show outside container */
 }
 
@@ -1928,7 +1958,7 @@ onUnmounted(() => {
 }
 
 .button-text {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 500;
   opacity: 0;
   animation: fadeIn 0.2s ease-in 0.1s forwards;
@@ -1952,7 +1982,7 @@ onUnmounted(() => {
   right: 0;
   background: var(--bg-container, rgba(30, 30, 30, 0.95));
   backdrop-filter: blur(12px);
-  border-radius: 12px;
+
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   z-index: 1000;
@@ -1975,9 +2005,9 @@ onUnmounted(() => {
 .dropdown-item {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
+  padding: 12px 8px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-secondary, rgba(255, 255, 255, 0.8));
   transition: all 0.2s ease;
   border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
@@ -2025,7 +2055,7 @@ onUnmounted(() => {
   left: 0;
   background: var(--bg-container, rgba(30, 30, 30, 0.95));
   backdrop-filter: blur(12px);
-  border-radius: 12px;
+  /* border-radius: 12px; */
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   z-index: 1000;
@@ -2114,7 +2144,7 @@ onUnmounted(() => {
   }
 
   .expandable-container.expanded {
-    width: 120px; /* Slightly smaller on tablets */
+    width: 150px; /* Slightly smaller on tablets */
   }
 }
 
@@ -2149,7 +2179,7 @@ onUnmounted(() => {
   }
 
   .expandable-container.expanded {
-    width: 100px; /* Even smaller on mobile */
+    width: 150px; /* Even smaller on mobile */
   }
 
   .button-text {
@@ -2186,17 +2216,82 @@ onUnmounted(() => {
     border-color 0.2s ease;
 }
 
-.canvas-container {
-  background-color: black !important;
+/* Canvas background colors */
+.canvas-container.bg-default {
+  background-color: #1a1a1a !important;
 }
 
-.canvas-container.show-dots {
-  background-color: black !important;
+.canvas-container.bg-white {
+  background-color: #f5f5f5 !important;
+}
+
+.canvas-container.bg-navy {
+  background-color: #1e3a5f !important;
+}
+
+.canvas-container.bg-forest {
+  background-color: #2d4a3e !important;
+}
+
+/* Dots overlay for each background */
+.canvas-container.show-dots.bg-default {
   background-image: radial-gradient(
     circle,
-    rgba(255, 255, 255, 0.11) 1.2px,
+    rgba(255, 255, 255, 0.15) 1.2px,
     transparent 1.2px
   );
   background-size: 45px 45px;
+}
+
+.canvas-container.show-dots.bg-white {
+  background-image: radial-gradient(
+    circle,
+    rgba(0, 0, 0, 0.15) 1.2px,
+    transparent 1.2px
+  );
+  background-size: 45px 45px;
+}
+
+.canvas-container.show-dots.bg-navy {
+  background-image: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.2) 1.2px,
+    transparent 1.2px
+  );
+  background-size: 45px 45px;
+}
+
+.canvas-container.show-dots.bg-forest {
+  background-image: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.2) 1.2px,
+    transparent 1.2px
+  );
+  background-size: 45px 45px;
+}
+
+/* Color picker pills */
+.color-picker-pills {
+  display: flex;
+  gap: 8px;
+}
+
+.color-pill {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.color-pill:hover {
+  transform: scale(1.1);
+}
+
+.color-pill.active {
+  border-color: var(--primary-color, #007bff);
+  box-shadow: 0 0 0 2px var(--primary-color, #007bff);
 }
 </style>
