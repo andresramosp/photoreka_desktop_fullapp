@@ -1316,10 +1316,11 @@ if (typeof window !== "undefined") {
 
 .demo-video-container {
   position: relative;
-  border-radius: 20px;
+  border-radius: 10px;
   overflow: hidden;
   background: #000;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.1);
+  aspect-ratio: 16 / 7.61;
 }
 
 [data-theme="light"] .demo-video-container {
