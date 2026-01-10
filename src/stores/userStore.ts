@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import { defineStore } from "pinia";
 import { api } from "../utils/axios";
 
@@ -38,6 +38,12 @@ export const useUserStore = defineStore("user", () => {
   const token = ref<string | null>(null);
   const user = ref<User | null>(null);
   const isLoading = ref(false);
+
+  // Getter para el shortname (primer nombre del usuario)
+  const userShortName = computed(() => {
+    if (!user.value?.name) return null;
+    return user.value.name.split(" ")[0];
+  });
 
   // Mock usage limits state by section
   const usageLimits = ref({
@@ -399,6 +405,7 @@ export const useUserStore = defineStore("user", () => {
     token,
     user,
     isLoading,
+    userShortName,
     usageLimits,
     dismissUsageWarning,
     fetchUsage,

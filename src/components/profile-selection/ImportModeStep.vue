@@ -200,7 +200,7 @@ const handleNext = () => {
 .profile-subtitle {
   margin: 0 0 24px 0;
   font-size: 16px;
-  color: #ffffff73;
+  color: var(--text-primary);
   font-weight: 400;
 }
 
@@ -298,7 +298,7 @@ const handleNext = () => {
 .mode-description {
   margin: 0 0 16px 0;
   font-size: 13px;
-  color: #ffffff73;
+  color: var(--text-primary);
   line-height: 1.5;
 }
 
@@ -359,7 +359,7 @@ const handleNext = () => {
 .explanation-content p {
   margin: 0 0 16px 0;
   font-size: 14px;
-  color: #ffffff99;
+  color: var(--text-primary);
   line-height: 1.6;
 }
 
@@ -371,13 +371,13 @@ const handleNext = () => {
 
 .explanation-list li {
   font-size: 14px;
-  color: #ffffff99;
+  color: var(--text-primary);
   margin-bottom: 8px;
   padding-left: 4px;
 }
 
 .explanation-list.warning li {
-  color: #ffffff99;
+  color: var(--text-primary);
 }
 
 .warning-note {

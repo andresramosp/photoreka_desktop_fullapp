@@ -253,7 +253,7 @@ onMounted(() => {
 
 .state-message {
   margin: 0 0 24px 0;
-  color: #ffffff99;
+  color: var(--text-primary);
   font-size: 14px;
   line-height: 1.6;
   max-width: 280px;
@@ -276,7 +276,7 @@ onMounted(() => {
 
 .form-description {
   margin: 0;
-  color: #ffffff99;
+  color: var(--text-primary);
   font-size: 14px;
   line-height: 1.6;
 }

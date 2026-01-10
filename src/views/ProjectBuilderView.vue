@@ -1392,7 +1392,7 @@ const {
 
 .example-text {
   font-size: 16px;
-  color: #ffffff73;
+  color: var(--text-primary);
   line-height: 1.4;
   text-align: center;
   font-style: italic;

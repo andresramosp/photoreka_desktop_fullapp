@@ -72,7 +72,7 @@ import AppLogo from "./AppLogo.vue";
 .profile-subtitle {
   margin: 12px 0 0 0;
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   font-weight: 400;
 }
 

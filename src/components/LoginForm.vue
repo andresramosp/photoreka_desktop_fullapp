@@ -165,7 +165,7 @@ export default {
   text-align: center;
   margin-bottom: 16px;
   font-size: 16px;
-  color: #ffffff73;
+  color: var(--text-secondary);
   font-weight: 400;
   line-height: 1.6;
 }
@@ -193,7 +193,7 @@ export default {
 
 .form-input :deep(.n-input__border),
 .form-input :deep(.n-input__state-border) {
-  border-color: #2c2c32;
+  border-color: var(--border-color);
 }
 
 .form-input :deep(.n-input--focus .n-input__border),
@@ -211,7 +211,7 @@ export default {
 
 .remember-checkbox :deep(.n-checkbox__label) {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-secondary);
 }
 
 .forgot-password {
@@ -242,14 +242,14 @@ export default {
   left: 0;
   right: 0;
   height: 1px;
-  background-color: #2c2c32;
+  background-color: var(--border-color);
 }
 
 .divider-text {
   background-color: var(--bg-body);
   padding: 0 16px;
   font-size: 13px;
-  color: #ffffff73;
+  color: var(--text-secondary);
   position: relative;
   z-index: 1;
 }
@@ -265,7 +265,7 @@ export default {
 
 .footer-text {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-secondary);
 }
 
 .switch-button {

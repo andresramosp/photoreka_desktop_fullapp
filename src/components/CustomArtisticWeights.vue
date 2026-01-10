@@ -95,7 +95,7 @@ const updateWeight = (criterion, value) => {
 .weights-subtitle {
   margin: 0;
   font-size: 13px;
-  color: #ffffff73;
+  color: var(--text-primary);
   line-height: 1.4;
 }
 

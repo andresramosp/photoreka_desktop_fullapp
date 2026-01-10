@@ -3171,7 +3171,7 @@ onUnmounted(() => {
 }
 
 .control-panel {
-  background: rgba(26, 26, 31, 0.95);
+  background: var(--bg-container);
   backdrop-filter: blur(12px);
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -3554,7 +3554,7 @@ onUnmounted(() => {
   right: 3px;
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -3919,7 +3919,7 @@ onUnmounted(() => {
   position: absolute;
   left: 10px;
   top: 10px;
-  background: rgba(26, 26, 31, 0.95);
+  background: var(--bg-container);
   backdrop-filter: blur(12px);
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.15);

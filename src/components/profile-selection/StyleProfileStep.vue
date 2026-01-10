@@ -370,7 +370,7 @@ const handleComplete = () => {
 .profile-subtitle {
   margin: 0 0 24px 0;
   font-size: 16px;
-  color: #ffffff73;
+  color: var(--text-primary);
   font-weight: 400;
 }
 
@@ -390,7 +390,7 @@ const handleComplete = () => {
 .section-subtitle {
   margin: 0 0 20px 0;
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   text-align: center;
   font-weight: 400;
 }
@@ -398,7 +398,7 @@ const handleComplete = () => {
 .selection-hint {
   margin: 20px 0 0 0;
   font-size: 13px;
-  color: #ffffff73;
+  color: var(--text-primary);
   text-align: center;
   font-style: italic;
 }
@@ -512,7 +512,7 @@ const handleComplete = () => {
 .category-description {
   margin: 0;
   font-size: 13px;
-  color: #ffffff73;
+  color: var(--text-primary);
   line-height: 1.4;
 }
 
@@ -546,7 +546,7 @@ const handleComplete = () => {
 .explanation-content p {
   margin: 0 0 16px 0;
   font-size: 14px;
-  color: #ffffff99;
+  color: var(--text-primary);
   line-height: 1.6;
 }
 
@@ -558,7 +558,7 @@ const handleComplete = () => {
 
 .explanation-list li {
   font-size: 14px;
-  color: #ffffff99;
+  color: var(--text-primary);
   margin-bottom: 8px;
   padding-left: 4px;
 }

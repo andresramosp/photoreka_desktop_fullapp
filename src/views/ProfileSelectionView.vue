@@ -80,9 +80,7 @@ const completeProfile = async () => {
     const result = await userStore.updateProfile(profilePayload.value);
 
     if (result.success) {
-      message.success(
-        "Profile preferences saved! Now let's set up your storage and plan."
-      );
+      message.success("Profile preferences saved! Now let's sync your photos.");
       router.push({ name: "photo-hub", hash: "#upload" });
     } else {
       message.error(result.error || "Error saving profile preferences.");
@@ -133,7 +131,7 @@ const completeProfile = async () => {
   justify-content: center;
   font-weight: 600;
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   transition: all 0.3s ease;
 }
 
@@ -149,7 +147,7 @@ const completeProfile = async () => {
 
 .step-label {
   font-size: 13px;
-  color: #ffffff73;
+  color: var(--text-primary);
   font-weight: 500;
 }
 

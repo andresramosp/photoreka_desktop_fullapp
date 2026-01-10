@@ -577,7 +577,7 @@ function isLastFinishedJob(job) {
 
 .photo-count {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
 }
 
 /* Processing Table */
@@ -674,7 +674,7 @@ function isLastFinishedJob(job) {
 }
 
 .expand-icon {
-  color: #ffffff73;
+  color: var(--text-primary);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -729,7 +729,7 @@ function isLastFinishedJob(job) {
 
 .progress-text {
   font-size: 12px;
-  color: #ffffff73;
+  color: var(--text-primary);
   min-width: 80px;
 }
 
@@ -783,7 +783,7 @@ function isLastFinishedJob(job) {
 }
 
 .empty-state-description {
-  color: #ffffff73;
+  color: var(--text-primary);
   margin: 0;
 }
 

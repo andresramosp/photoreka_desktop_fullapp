@@ -444,7 +444,7 @@ export function useArtisticScores() {
             ? "#10b981"
             : percentage >= 50
             ? "#f59e0b"
-            : "#ffffff73"
+            : "var(--text-primary)"
         }">${percentage}%</span>`;
         tooltip += `</div>`;
       });

@@ -194,7 +194,7 @@ defineEmits([
 }
 
 .clear-selection-btn {
-  color: #ffffff73;
+  color: var(--text-primary);
   transition: all 0.2s ease;
   padding: 4px;
 }

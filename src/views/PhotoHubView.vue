@@ -456,7 +456,7 @@ onMounted(() => {
 
 .photo-count {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
 }
 
 .photos-grid {
@@ -559,7 +559,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   font-size: 12px;
-  color: #ffffff73;
+  color: var(--text-primary);
 }
 
 .photo-status {
@@ -585,7 +585,7 @@ onMounted(() => {
 
 .upload-text {
   font-size: 12px;
-  color: #ffffff73;
+  color: var(--text-primary);
 }
 
 /* Empty States */
@@ -604,7 +604,7 @@ onMounted(() => {
 
 .empty-state-description {
   font-size: 16px;
-  color: #ffffff73;
+  color: var(--text-primary);
   margin: 0;
 }
 

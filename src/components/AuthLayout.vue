@@ -81,7 +81,7 @@ import AppLogo from "./AppLogo.vue";
 .auth-subtitle {
   margin: 8px 0 0 0;
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-secondary);
   font-weight: 400;
 }
 

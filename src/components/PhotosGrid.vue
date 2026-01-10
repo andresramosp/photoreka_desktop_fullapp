@@ -1006,7 +1006,7 @@ const handleToolSelected = async (toolId) => {
 
 .grid-label-base {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   font-weight: 500;
 }
 
@@ -1018,12 +1018,12 @@ const handleToolSelected = async (toolId) => {
 
 .sort-label-base {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   font-weight: 500;
 }
 
 .sort-order-icon {
-  color: #ffffff73;
+  color: var(--text-primary);
   transition: all 0.2s ease;
   margin-left: 8px;
   opacity: 0.7;
@@ -1092,7 +1092,7 @@ const handleToolSelected = async (toolId) => {
 }
 
 .end-of-results {
-  color: #ffffff73;
+  color: var(--text-primary);
   font-size: 14px;
   opacity: 0.7;
 }

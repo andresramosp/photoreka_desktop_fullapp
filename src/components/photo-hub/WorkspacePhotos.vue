@@ -139,7 +139,7 @@ const navigateToTab = (tabName) => {
 
 .grid-label-base {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   font-weight: 500;
 }
 
@@ -325,7 +325,7 @@ const navigateToTab = (tabName) => {
 
 .steps-list {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   line-height: 1.6;
   padding-left: 20px;
   text-align: left;
@@ -349,6 +349,6 @@ const navigateToTab = (tabName) => {
 
 .step-item {
   text-align: center;
-  color: #ffffff73;
+  color: var(--text-primary);
 }
 </style>

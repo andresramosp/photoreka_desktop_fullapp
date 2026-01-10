@@ -2,7 +2,9 @@
   <div class="dashboard-container view-container">
     <!-- Welcome Section -->
     <div class="welcome-section">
-      <h1 class="welcome-title">Welcome back! 👋</h1>
+      <h1 class="welcome-title">
+        Welcome back, {{ userStore.userShortName }}! 👋
+      </h1>
       <p class="welcome-subtitle">
         Ready to organize and enhance your photos with Photoreka smart tools.
       </p>
@@ -154,7 +156,7 @@
           <p class="action-description">Start a fresh canvas</p>
         </div>
 
-        <div
+        <!-- <div
           class="action-card portfolio-report"
           @click="goToPortfolioReport"
           :class="{ disabled: appAccessMode === 'blocked' }"
@@ -166,7 +168,7 @@
           </div>
           <h3 class="action-title">Portfolio Report</h3>
           <p class="action-description">Analytics & insights</p>
-        </div>
+        </div> -->
       </div>
     </div>
 
@@ -388,6 +390,7 @@ defineOptions({
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useSeriesStore } from "@/stores/series.js";
+import { useUserStore } from "@/stores/userStore.js";
 import { api } from "@/utils/axios.js"; // Needed for photo insight API call
 import { useMessage } from "naive-ui";
 
@@ -410,6 +413,7 @@ const router = useRouter();
 const photosStore = usePhotosStore();
 const collectionsStore = useCollectionsStore();
 const seriesStore = useSeriesStore();
+const userStore = useUserStore();
 const message = useMessage();
 
 // Computed collections from store
@@ -702,7 +706,7 @@ const formatDate = (date: Date) => {
 
 .stat-label {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   font-weight: 500;
 }
 
@@ -739,7 +743,7 @@ const formatDate = (date: Date) => {
 }
 
 .action-card {
-  background-color: var(--bg-container);
+  background-color: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   transition: var(--transition-normal);
@@ -1095,7 +1099,7 @@ const formatDate = (date: Date) => {
 }
 
 .action-description {
-  font-size: var(--font-size-base);
+  font-size: 12px;
   color: var(--text-secondary);
   margin: 0;
   line-height: var(--line-height-normal);
@@ -1248,8 +1252,8 @@ const formatDate = (date: Date) => {
 }
 
 .project-card {
-  background-color: var(--bg-container);
-  border: 1px solid #2c2c32;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 20px;
   cursor: pointer;
@@ -1355,7 +1359,7 @@ const formatDate = (date: Date) => {
 
 .project-meta {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   margin: 0;
   line-height: 1.4;
 }

@@ -323,7 +323,6 @@
               :key="button.key"
               :type="button.type"
               size="large"
-              :class="`${button.key}-btn`"
               @click.stop="button.action"
             >
               <template #icon>
@@ -381,7 +380,6 @@
             :key="button.key"
             :type="button.type"
             size="medium"
-            :class="`compact-${button.key}-btn`"
             :disabled="isUploadDisabled && button.key === 'local'"
             @click.stop="button.action"
           >
@@ -975,7 +973,7 @@ defineExpose({
 
 .dropzone-subtitle {
   font-size: 16px;
-  color: #ffffff73;
+  color: var(--text-primary);
   margin: 0 0 32px 0;
 }
 
@@ -1001,7 +999,7 @@ defineExpose({
 }
 
 .file-formats {
-  color: #ffffff73;
+  color: var(--text-primary);
   font-size: 14px;
 }
 
@@ -1091,7 +1089,7 @@ defineExpose({
 
 .progress-count {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
 }
 
 .overall-progress {
@@ -1100,7 +1098,7 @@ defineExpose({
 
 .progress-text {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   text-align: center;
 }
 
@@ -1160,7 +1158,7 @@ defineExpose({
   align-items: center;
   gap: 12px;
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
 }
 
 .maintenance-message {
@@ -1263,7 +1261,7 @@ defineExpose({
 .first-import-subtitle {
   margin: 0;
   font-size: 16px;
-  color: #ffffff73;
+  color: var(--text-primary);
   font-weight: 400;
 }
 
@@ -1301,7 +1299,7 @@ defineExpose({
 }
 
 .import-card:hover:not(.drag-over) {
-  border-color: #8b5cf6;
+  border-color: var(--accent-color);
   background-color: rgba(139, 92, 246, 0.05);
 }
 
@@ -1341,13 +1339,13 @@ defineExpose({
 .import-card-description {
   margin: 0 0 16px 0;
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   line-height: 1.5;
 }
 
 .first-import-footer {
   text-align: center;
-  color: #ffffff73;
+  color: var(--text-primary);
   font-size: 14px;
 }
 

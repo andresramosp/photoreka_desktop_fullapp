@@ -286,7 +286,7 @@ onMounted(() => {
 
 .state-message {
   margin: 0 0 24px 0;
-  color: #ffffff99;
+  color: var(--text-primary);
   font-size: 14px;
   line-height: 1.6;
   max-width: 280px;
@@ -302,7 +302,7 @@ onMounted(() => {
 
 .resend-description {
   margin: 0 0 20px 0;
-  color: #ffffff99;
+  color: var(--text-primary);
   font-size: 14px;
   line-height: 1.6;
 }
@@ -317,7 +317,7 @@ onMounted(() => {
 
 .resend-success-message {
   margin: 16px 0 24px 0;
-  color: #ffffff99;
+  color: var(--text-primary);
   font-size: 14px;
   line-height: 1.6;
 }

@@ -96,7 +96,7 @@ watch(() => route.query.mode, setModeFromQuery);
 
 .tab-buttons {
   display: flex;
-  background-color: #2c2c32;
+  background-color: var(--bg-surface);
   border-radius: 8px;
   padding: 4px;
   margin-bottom: 16px;
@@ -107,7 +107,7 @@ watch(() => route.query.mode, setModeFromQuery);
   padding: 10px 20px;
   background: none;
   border: none;
-  color: #ffffff73;
+  color: var(--text-secondary);
   font-size: 14px;
   font-weight: 500;
   border-radius: 6px;
@@ -120,9 +120,9 @@ watch(() => route.query.mode, setModeFromQuery);
 }
 
 .tab-button.active {
-  background-color: #2563eb;
-  color: #ffffff;
-  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+  background-color: var(--primary-color);
+  color: var(--text-on-primary);
+  /* box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2); */
 }
 
 .primary-tab {
@@ -130,7 +130,7 @@ watch(() => route.query.mode, setModeFromQuery);
 }
 
 .primary-tab.active {
-  background-color: #2563eb;
+  background-color: var(--primary-color);
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
 }
 

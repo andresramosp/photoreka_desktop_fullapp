@@ -50,7 +50,7 @@
         class="selection-checkbox"
         @click.stop="$emit('select', photo.id)"
       >
-        <n-icon :size="20" :color="isSelected ? '#fff' : '#ffffff73'">
+        <n-icon :size="20" :color="isSelected ? '#fff' : 'var(--text-primary)'">
           <svg v-if="isSelected" viewBox="0 0 24 24">
             <path
               fill="currentColor"

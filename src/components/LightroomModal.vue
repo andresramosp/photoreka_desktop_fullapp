@@ -167,7 +167,7 @@ const downloadPlugin = () => {
 
 .modal-description {
   font-size: 16px;
-  color: #ffffff73;
+  color: var(--text-primary);
   margin: 0;
   line-height: 1.5;
 }
@@ -186,7 +186,7 @@ const downloadPlugin = () => {
 
 .screenshot-caption {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   margin: 0;
   font-style: italic;
 }
@@ -240,7 +240,7 @@ const downloadPlugin = () => {
 
 .step-content p {
   font-size: 12px;
-  color: #ffffff73;
+  color: var(--text-primary);
   margin: 0;
   line-height: 1.5;
 }

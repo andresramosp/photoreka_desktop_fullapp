@@ -150,7 +150,7 @@ const handleClose = () => {
 <style scoped>
 .description {
   margin: 0 0 20px 0;
-  color: #ffffff99;
+  color: var(--text-primary);
   font-size: 14px;
   line-height: 1.6;
 }
@@ -172,7 +172,7 @@ const handleClose = () => {
 
 .success-message {
   margin: 0 0 8px 0;
-  color: #ffffff99;
+  color: var(--text-primary);
   font-size: 14px;
   line-height: 1.6;
 }

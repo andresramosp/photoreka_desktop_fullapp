@@ -1826,7 +1826,7 @@ if (typeof window !== "undefined") {
 .photo-display-centered {
   width: 100%;
   height: 330px;
-  background: var(--bg-surface-hover);
+  background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   overflow: hidden;

@@ -534,7 +534,7 @@ const goBack = () => {
 .storage-plan-subtitle {
   margin: 0 0 24px 0;
   font-size: 16px;
-  color: #ffffff73;
+  color: var(--text-primary);
   font-weight: 400;
 }
 
@@ -548,7 +548,7 @@ const goBack = () => {
 .section-subtitle {
   margin: 0 0 24px 0;
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   font-weight: 400;
 }
 
@@ -633,7 +633,7 @@ const goBack = () => {
 .storage-description {
   margin: 0 0 16px 0;
   font-size: 13px;
-  color: #ffffff73;
+  color: var(--text-primary);
   line-height: 1.4;
   flex: 1;
 }
@@ -845,13 +845,13 @@ const goBack = () => {
 
 .price-period {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
 }
 
 .plan-description {
   margin: 0;
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   line-height: 1.4;
 }
 
@@ -911,7 +911,7 @@ const goBack = () => {
 }
 
 .summary-label {
-  color: #ffffff73;
+  color: var(--text-primary);
 }
 
 .summary-value {
@@ -944,7 +944,7 @@ const goBack = () => {
 
 .back-button {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
 }
 
 /* Responsive design */

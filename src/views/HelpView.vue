@@ -45,7 +45,7 @@ defineOptions({
 
 .empty-description {
   font-size: 16px;
-  color: #ffffff73;
+  color: var(--text-primary);
   margin: 0;
 }
 </style>

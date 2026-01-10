@@ -662,7 +662,7 @@ watch(
 }
 
 .filters-toggle-icon {
-  /* color: #ffffff73; */
+  /* color: var(--text-primary); */
   transition: transform 0.2s ease;
 }
 
@@ -742,7 +742,7 @@ watch(
 }
 
 .sorting-toggle-icon {
-  /* color: #ffffff73; */
+  /* color: var(--text-primary); */
   transition: transform 0.2s ease;
 }
 
@@ -758,7 +758,7 @@ watch(
 }
 
 .sort-order-icon {
-  color: #ffffff73;
+  color: var(--text-primary);
   transition: all 0.2s ease;
   margin-left: 8px;
   opacity: 0.7;
@@ -840,7 +840,7 @@ watch(
 .criteria-label,
 .genre-label {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   font-weight: 500;
 }
 

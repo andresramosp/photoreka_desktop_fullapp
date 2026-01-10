@@ -864,13 +864,7 @@ import {
   nextTick,
 } from "vue";
 import { api } from "@/utils/axios";
-import {
-  NTooltip,
-  NRate,
-  NTreeSelect,
-  useMessage,
-  useNotification,
-} from "naive-ui";
+import { NTooltip, NRate, NTreeSelect } from "naive-ui";
 
 // Componentes e íconos
 import PhotoCard from "@/components/photoCards/PhotoCard.vue";
@@ -2031,7 +2025,7 @@ const filterSummaryText = computed(() => {
 }
 
 .filter-applied {
-  /* color: #ffffff73; */
+  /* color: var(--text-primary); */
   font-size: 12px;
   margin-left: 4px;
 }

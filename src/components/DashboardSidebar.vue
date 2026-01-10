@@ -476,7 +476,7 @@ onUnmounted(() => {
 .app-subtitle {
   font-size: 12px;
   font-weight: 400;
-  color: #ffffff73;
+  color: var(--text-primary);
   line-height: 1.2;
   white-space: nowrap;
 }
@@ -572,7 +572,7 @@ onUnmounted(() => {
 
 .user-email {
   font-size: 12px;
-  color: #ffffff73;
+  color: var(--text-primary);
   line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;

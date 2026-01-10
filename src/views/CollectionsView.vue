@@ -144,7 +144,7 @@
               </div>
             </div>
             <div v-else class="empty-preview">
-              <n-icon size="40" color="#ffffff73">
+              <n-icon size="40" color="var(--text-primary)">
                 <ImagesOutline />
               </n-icon>
             </div>

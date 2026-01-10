@@ -250,7 +250,7 @@ watch(
 
 .date-display {
   font-size: 12px;
-  color: #ffffff73;
+  color: var(--text-primary);
 }
 
 .histogram-container {

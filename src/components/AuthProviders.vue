@@ -13,7 +13,7 @@
         Google
       </n-button>
 
-      <n-button
+      <!-- <n-button
         class="provider-button provider-facebook"
         :loading="isLoading && activeProvider === 'facebook'"
         @click="handleProviderLogin('facebook')"
@@ -23,7 +23,7 @@
           <FacebookIcon />
         </template>
         Facebook
-      </n-button>
+      </n-button> -->
     </div>
   </div>
 </template>
@@ -150,21 +150,21 @@ export default {
   left: 0;
   right: 0;
   height: 1px;
-  background-color: #2c2c32;
+  background-color: var(--bg-body);
 }
 
 .divider-text {
   background-color: var(--bg-body);
   padding: 0 16px;
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-secondary);
   position: relative;
   z-index: 1;
 }
 
 .providers-grid {
   display: grid !important;
-  grid-template-columns: 1fr 1fr !important;
+  grid-template-columns: 1fr !important;
   gap: 8px !important;
   width: 100% !important;
 }
@@ -175,8 +175,7 @@ export default {
   border-radius: 6px;
   font-weight: 500;
   font-size: 13px;
-  border: 1px solid #2c2c32;
-  background-color: #2c2c32 !important;
+  border: 1px solid var(--border-color);
   color: var(--text-secondary) !important;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -204,7 +203,7 @@ export default {
 
 /* Loading state adjustments */
 .provider-button.n-button--loading {
-  background-color: #2c2c32 !important;
+  background-color: var(--bg-surface) !important;
 }
 
 /* Force horizontal layout with deep selectors */

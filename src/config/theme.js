@@ -158,7 +158,7 @@ export const darkTheme = {
   bgBody: "#16161a",
   bgContainer: "#1a1a1f",
   bgSurface: "#2c2c32",
-  bgSurfaceHover: "#3c3c42",
+  bgSurfaceHover: "#11113f",
   bgCard: "#18181c",
   bgDeepSurface: "black",
   bgOverlay: "rgba(0, 0, 0, 0.6)",
@@ -247,7 +247,7 @@ export const lightTheme = {
   bgCard: "#FFFFFF",
 
   bgOverlay: "rgba(0, 0, 0, 0.4)",
-  // bgTag: "rgba(37, 99, 235, 0.12)",
+  bgTag: "rgba(37, 99, 235, 0.12)",
 
   // Borders
   border: "rgba(0, 0, 0, 0.1)",
@@ -360,6 +360,36 @@ export function getNaiveThemeOverrides(isDark = true) {
       itemTextColor: theme.textPrimary,
       itemIconColor: theme.iconSecondary,
     },
+
+    // InternalSelection: {
+    //   // Estos son los colores de los tags que realmente se usan
+    //   color: theme.primary + "20", // Fondo del tag
+    //   textColor: theme.primary, // Texto del tag
+    //   colorActive: theme.primary + "30", // Hover
+    //   border: "1px solid " + theme.primary + "40",
+    //   closeColorHover: theme.primary,
+    //   closeColorPressed: theme.primaryPressed,
+    // },
+    Select: {
+      // fondo del tag
+      multipleItemColor: "red",
+      multipleItemColorHover: theme.primary + "20",
+      multipleItemColorPressed: theme.primary,
+
+      // texto
+      multipleItemTextColor: theme.primary,
+      multipleItemTextColorHover: theme.primary,
+      multipleItemTextColorPressed: "#ffffff",
+
+      // borde / radio
+      multipleItemBorderRadius: "4px",
+
+      // icono de cerrar
+      multipleItemBorderColor: theme.primary,
+      multipleItemIconColor: theme.primary,
+      multipleItemIconColorHover: theme.primaryHover,
+      multipleItemIconColorPressed: theme.primaryPressed,
+    },
   };
 }
 
@@ -413,7 +443,7 @@ export function getThemeCSSVariables(isDark = true) {
     "--bg-surface-hover": theme.bgSurfaceHover,
     "--bg-card": theme.bgCard,
     "--bg-overlay": theme.bgOverlay,
-    // "--bg-tag": theme.bgTag,
+    "--bg-tag": theme.bgTag,
     "--bg-deep-surface": theme.bgDeepSurface,
 
     // Canvas

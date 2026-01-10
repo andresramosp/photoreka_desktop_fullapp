@@ -550,7 +550,7 @@ function loadImageFromBlob(blob) {
 
 .dropzone-subtitle {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   margin: 0 0 24px 0;
 }
 
@@ -567,7 +567,7 @@ function loadImageFromBlob(blob) {
 }
 
 .file-formats {
-  color: #ffffff73;
+  color: var(--text-primary);
   font-size: 12px;
 }
 
@@ -618,7 +618,7 @@ function loadImageFromBlob(blob) {
 
 .progress-count {
   font-size: 12px;
-  color: #ffffff73;
+  color: var(--text-primary);
 }
 
 .overall-progress {
@@ -627,7 +627,7 @@ function loadImageFromBlob(blob) {
 
 .progress-text {
   font-size: 12px;
-  color: #ffffff73;
+  color: var(--text-primary);
   text-align: center;
 }
 

@@ -642,19 +642,19 @@ const handleCancel = () => {
   gap: 12px;
   justify-content: center;
   padding: 40px 0;
-  color: #ffffff73;
+  color: var(--text-primary);
 }
 
 .empty-collections {
   text-align: center;
   padding: 40px 0;
-  color: #ffffff73;
+  color: var(--text-primary);
 }
 
 .empty-list-message {
   text-align: center;
   padding: 24px 16px;
-  color: #ffffff73;
+  color: var(--text-primary);
   font-size: 14px;
 }
 
@@ -712,7 +712,7 @@ const handleCancel = () => {
 }
 
 .create-collection-content .collection-description {
-  color: #ffffff73;
+  color: var(--text-primary);
 }
 
 .collection-info {
@@ -730,7 +730,7 @@ const handleCancel = () => {
 
 .collection-description {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   margin: 0;
 }
 
