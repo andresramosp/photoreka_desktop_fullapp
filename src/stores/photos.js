@@ -18,7 +18,6 @@ export const usePhotosStore = defineStore("photos", {
     photos: null,
     isLoading: false,
     selectedPhotosRecord: {},
-    catalogSingleView: false, // Nuevo modo single view
     showUploadProgress: false, // Controla si se muestra el progreso de subida especial
     duplicatesChecked: false, // Indica si ya se han verificado duplicados
   }),

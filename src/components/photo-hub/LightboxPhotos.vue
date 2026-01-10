@@ -375,51 +375,61 @@
     >
       <div class="">
         <div class="compact-upload-buttons">
-          <n-button
+          <n-tooltip
             v-for="button in uploadButtons"
             :key="button.key"
-            :type="button.type"
-            size="medium"
-            :disabled="isUploadDisabled && button.key === 'local'"
-            @click.stop="button.action"
+            trigger="hover"
+            placement="bottom"
           >
-            <template #icon>
-              <n-icon
-                v-if="button.icon === 'FolderOpen'"
-                color="var(--primary-color)"
+            <template #trigger>
+              <n-button
+                :type="button.type"
+                size="medium"
+                :disabled="isUploadDisabled && button.key === 'local'"
+                @click.stop="button.action"
               >
-                <FolderOpen />
-              </n-icon>
-              <n-icon v-else-if="button.icon === 'lightroom'">
-                <img
-                  src="/src/assets/logos/lightroom_logo.png"
-                  alt="Lr"
-                  style="width: 1.1em; height: 1.1em"
-                />
-              </n-icon>
-              <n-icon v-else-if="button.icon === 'google'">
-                <img
-                  :src="googlePhotosIconUrl"
-                  alt="Google Photos"
-                  style="width: 1em; height: 1em"
-                />
-              </n-icon>
-              <n-icon v-else-if="button.icon === 'google-locked'">
-                <!-- Candado abierto - indicando desconectado -->
-                <svg viewBox="0 0 24 24" width="1em" height="1em">
-                  <path
-                    fill="currentColor"
-                    d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h2c0-1.66 1.34-3 3-3s3 1.34 3 3v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"
-                  />
-                </svg>
-              </n-icon>
+                <template #icon>
+                  <n-icon
+                    v-if="button.icon === 'FolderOpen'"
+                    color="var(--primary-color)"
+                  >
+                    <FolderOpen />
+                  </n-icon>
+                  <n-icon v-else-if="button.icon === 'lightroom'">
+                    <img
+                      src="/src/assets/logos/lightroom_logo.png"
+                      alt="Lr"
+                      style="width: 1.1em; height: 1.1em"
+                    />
+                  </n-icon>
+                  <n-icon v-else-if="button.icon === 'google'">
+                    <img
+                      :src="googlePhotosIconUrl"
+                      alt="Google Photos"
+                      style="width: 1em; height: 1em"
+                    />
+                  </n-icon>
+                  <n-icon v-else-if="button.icon === 'google-locked'">
+                    <!-- Candado abierto - indicando desconectado -->
+                    <svg viewBox="0 0 24 24" width="1em" height="1em">
+                      <path
+                        fill="currentColor"
+                        d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h2c0-1.66 1.34-3 3-3s3 1.34 3 3v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"
+                      />
+                    </svg>
+                  </n-icon>
+                </template>
+                <span class="button-label">{{
+                  isUploadDisabled &&
+                  photosRemaining <= 0 &&
+                  button.key === "local"
+                    ? "Upload Limit Reached"
+                    : button.compactLabel
+                }}</span>
+              </n-button>
             </template>
-            {{
-              isUploadDisabled && photosRemaining <= 0 && button.key === "local"
-                ? "Upload Limit Reached"
-                : button.compactLabel
-            }}
-          </n-button>
+            {{ button.compactLabel }}
+          </n-tooltip>
         </div>
       </div>
     </div>
@@ -1007,6 +1017,12 @@ defineExpose({
   min-width: 120px;
 }
 
+.compact-upload-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .compact-upload-section.compact-drag-over {
   background-color: rgba(139, 92, 246, 0.05);
   border: 2px dashed var(--secondary-color);
@@ -1208,6 +1224,10 @@ defineExpose({
 }
 
 @media (max-width: 768px) {
+  .tab-content {
+    padding: var(--spacing-lg);
+  }
+
   .filter-controls {
     flex-direction: column;
     align-items: flex-start;
@@ -1224,6 +1244,91 @@ defineExpose({
   .lightroom-btn {
     width: 100%;
     min-width: unset;
+  }
+
+  .compact-upload-buttons {
+    flex-direction: row;
+    width: auto;
+    gap: 8px;
+  }
+
+  /* Icon-only buttons on mobile */
+  .compact-upload-buttons .n-button {
+    width: auto;
+    min-width: 44px;
+    padding: 0 12px;
+  }
+
+  /* Hide text label on mobile */
+  .compact-upload-buttons .button-label {
+    display: none;
+  }
+
+  .compact-upload-buttons .n-button .n-icon {
+    font-size: 20px !important;
+    margin: 0 !important;
+  }
+
+  .upload-dropzone {
+    padding: 40px 20px;
+  }
+
+  .dropzone-title {
+    font-size: 20px;
+  }
+
+  .dropzone-subtitle {
+    font-size: 14px;
+    margin-bottom: 24px;
+  }
+
+  .photo-hub-header {
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .photo-hub-title {
+    font-size: 14px;
+  }
+
+  .upload-progress-section {
+    padding: 16px;
+  }
+
+  .progress-title {
+    font-size: 16px;
+  }
+
+  .maintenance-container {
+    padding: 32px 20px;
+  }
+
+  .maintenance-title {
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .tab-content {
+    padding: var(--spacing-md);
+  }
+
+  .upload-dropzone {
+    padding: 32px 16px;
+  }
+
+  .dropzone-title {
+    font-size: 18px;
+  }
+
+  .upload-progress-section {
+    padding: 12px;
+  }
+
+  .progress-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
   }
 }
 

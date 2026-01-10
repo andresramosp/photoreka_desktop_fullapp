@@ -29,46 +29,6 @@
 
     <!-- Tabs Section -->
     <div class="tabs-container">
-      <!-- <template v-if="photosStore.catalogSingleView">
-        <div class="tab-navigation">
-          <button
-            class="tab-button"
-            :class="{ active: activeTab === 'upload' }"
-            @click="setActiveTab('upload')"
-          >
-            <div class="tab-title">
-              <n-icon size="18">
-                <DriveFolderUploadFilled color="var(--info-color)" />
-              </n-icon>
-              Workspace
-            </div>
-          </button>
-          <button
-            class="tab-button"
-            :class="{ active: activeTab === 'processing' }"
-            @click="setActiveTab('processing')"
-          >
-            <n-icon>
-              <InProgress color="var(--primary-color)" />
-            </n-icon>
-            Analyzing Processes
-          </button>
-        </div>
-
-        <div class="tab-content-container">
-          <LightboxPhotos
-            ref="lightboxRef"
-            v-show="activeTab === 'upload'"
-            singleViewMode
-            @on-analyze="analyze"
-          />
-          <ProcessingPhotos
-            v-show="activeTab === 'processing'"
-            :key="'single-view'"
-            @navigate-to-tab="setActiveTab"
-          />
-        </div>
-      </template> -->
       <div class="tab-navigation">
         <button
           class="tab-button"
@@ -620,12 +580,50 @@ onMounted(() => {
     gap: 16px;
   }
 
+  .page-title {
+    font-size: var(--font-size-2xl);
+  }
+
+  .page-subtitle {
+    font-size: var(--font-size-sm);
+  }
+
   .header-actions {
     justify-content: stretch;
   }
 
   .action-btn {
     flex: 1;
+  }
+
+  /* Tabs responsive - scrollable on mobile */
+  .tab-navigation {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+    padding-bottom: 2px; /* Prevent cut-off from scroll */
+  }
+
+  .tab-navigation::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+  }
+
+  .tab-button {
+    flex: 0 0 auto;
+    padding: var(--spacing-sm) var(--spacing-lg);
+    font-size: var(--font-size-base);
+    white-space: nowrap;
+    min-width: fit-content;
+  }
+
+  .tab-title {
+    gap: 6px;
+  }
+
+  .tab-title .n-icon {
+    font-size: 16px !important;
   }
 
   .upload-dropzone {
@@ -652,6 +650,29 @@ onMounted(() => {
     top: 16px;
     right: 16px;
     left: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .photo-hub-container {
+    padding: 12px;
+  }
+
+  .hub-header {
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .tab-button {
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-base); /* 14px - legible on small screens */
+  }
+
+  .tab-title {
+    gap: 5px;
+  }
+
+  .tab-title .n-icon {
+    font-size: 16px !important;
   }
 }
 </style>

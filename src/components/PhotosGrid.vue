@@ -69,7 +69,7 @@
           <span class="grid-label grid-label-base">Columns:</span>
           <n-button-group>
             <n-button
-              v-for="size in [4, 6, 8, 10]"
+              v-for="size in columnOptions"
               :key="size"
               :type="gridColumns === size ? 'primary' : 'default'"
               size="small"
@@ -334,6 +334,34 @@ const filterDuplicates = ref(false);
 const isCheckingDuplicates = ref(false);
 const duplicatesReviewed = ref(false);
 const hasDuplicates = ref(false);
+
+// Responsive state for column options
+const windowWidth = ref(
+  typeof window !== "undefined" ? window.innerWidth : 1200
+);
+
+// Column options based on screen width
+const columnOptions = computed(() => {
+  if (windowWidth.value < 480) {
+    return [1, 2]; // Very small screens: 1 or 2 columns
+  } else if (windowWidth.value < 768) {
+    return [2, 3, 4]; // Mobile: 2, 3, or 4 columns
+  } else {
+    return [4, 6, 8, 10]; // Desktop: original options
+  }
+});
+
+// Adjust gridColumns if current value is not in available options
+watch(
+  columnOptions,
+  (newOptions) => {
+    if (!newOptions.includes(gridColumns.value)) {
+      // Set to the closest available option
+      gridColumns.value = newOptions[Math.min(1, newOptions.length - 1)];
+    }
+  },
+  { immediate: true }
+);
 
 // Infinite scroll state
 const PHOTOS_PER_PAGE = 50; // Número de fotos a cargar por página
@@ -840,7 +868,15 @@ onMounted(() => {
 
     // Debug initial state
   });
+
+  // Add resize listener for responsive column options
+  window.addEventListener("resize", handleResize);
 });
+
+// Handle window resize for responsive columns
+const handleResize = () => {
+  windowWidth.value = window.innerWidth;
+};
 
 onUnmounted(() => {
   const container = document.querySelector(".view-container");
@@ -849,6 +885,9 @@ onUnmounted(() => {
   } else if (container && container.removeEventListener) {
     container.removeEventListener("scroll", handleScroll);
   }
+
+  // Remove resize listener
+  window.removeEventListener("resize", handleResize);
 });
 
 // Computed for current photo index in displayed photos
@@ -1057,6 +1096,14 @@ const handleToolSelected = async (toolId) => {
   gap: 20px;
 }
 
+.photo-grid-base.grid-cols-1 {
+  grid-template-columns: 1fr;
+}
+
+.photo-grid-base.grid-cols-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
 .photo-grid-base.grid-cols-3 {
   grid-template-columns: repeat(3, 1fr);
 }
@@ -1128,10 +1175,20 @@ const handleToolSelected = async (toolId) => {
     gap: 12px;
   }
 
-  .controls-left,
+  .controls-left {
+    width: 100%;
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+
   .controls-right {
     width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .controls-right {
     justify-content: space-between;
+    gap: 12px;
   }
 
   .action-buttons {
@@ -1140,10 +1197,80 @@ const handleToolSelected = async (toolId) => {
   }
 
   .grid-size-controls-base {
+    flex: 1;
+    min-width: fit-content;
+  }
+
+  .sort-controls-base {
+    flex: 1;
+    min-width: fit-content;
+  }
+
+  .results-info-base {
+    width: 100%;
+  }
+
+  .duplicates-controls-container {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  /* On mobile, respect user's column choice from selector */
+  .photo-grid-base {
+    gap: 12px;
+  }
+
+  .photo-grid-base.grid-cols-1 {
+    grid-template-columns: 1fr;
+  }
+
+  .photo-grid-base.grid-cols-2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .photo-grid-base.grid-cols-3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .photo-grid-base.grid-cols-4 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  /* Only force columns for desktop-only options that shouldn't appear on mobile */
+  .photo-grid-base.grid-cols-5,
+  .photo-grid-base.grid-cols-6,
+  .photo-grid-base.grid-cols-8,
+  .photo-grid-base.grid-cols-10 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .grid-controls-base {
+    gap: 10px;
+  }
+
+  .controls-right {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .grid-size-controls-base,
+  .sort-controls-base {
     width: 100%;
     justify-content: space-between;
   }
 
+  .grid-label-base,
+  .sort-label-base {
+    font-size: 13px;
+  }
+
+  .photo-grid-base {
+    gap: 10px;
+  }
+
+  /* On very small screens, max 2 columns */
   .photo-grid-base.grid-cols-3,
   .photo-grid-base.grid-cols-4,
   .photo-grid-base.grid-cols-5,
@@ -1151,18 +1278,6 @@ const handleToolSelected = async (toolId) => {
   .photo-grid-base.grid-cols-8,
   .photo-grid-base.grid-cols-10 {
     grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-  }
-}
-
-@media (max-width: 480px) {
-  .photo-grid-base.grid-cols-3,
-  .photo-grid-base.grid-cols-4,
-  .photo-grid-base.grid-cols-5,
-  .photo-grid-base.grid-cols-6,
-  .photo-grid-base.grid-cols-8,
-  .photo-grid-base.grid-cols-10 {
-    grid-template-columns: 1fr;
   }
 }
 </style>

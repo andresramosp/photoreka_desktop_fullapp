@@ -1,5 +1,11 @@
 <template>
   <div class="dashboard-container view-container">
+    <!-- Mobile Welcome Banner -->
+    <MobileWelcomeBanner
+      :show="shouldShowMobileWelcome"
+      @close="dismissMobileWelcome"
+    />
+
     <!-- Welcome Section -->
     <div class="welcome-section">
       <h1 class="welcome-title">
@@ -16,7 +22,9 @@
 
       <div class="actions-grid">
         <!-- Did you know? Card -->
+        <!-- Daily Eureka Card - Hidden on mobile -->
         <div
+          v-if="!isMobileLimitedMode"
           class="action-card did-you-know"
           :class="{
             disabled:
@@ -142,7 +150,25 @@
           <p class="action-description">Browse your photo catalog</p>
         </div>
 
+        <!-- Explorer Card - Only shown on mobile as replacement for Canvas -->
         <div
+          v-if="isMobileLimitedMode"
+          class="action-card explorer"
+          :class="{ disabled: appAccessMode === 'blocked' }"
+          @click="goToExplorer"
+        >
+          <div class="action-icon">
+            <n-icon size="32">
+              <SearchIcon />
+            </n-icon>
+          </div>
+          <h3 class="action-title">Explorer</h3>
+          <p class="action-description">Search your photos</p>
+        </div>
+
+        <!-- New Canvas Card - Hidden on mobile -->
+        <div
+          v-if="!isMobileLimitedMode"
           class="action-card new-project"
           :class="{ disabled: appAccessMode === 'blocked' }"
           @click="goToCanvas"
@@ -393,6 +419,8 @@ import { useSeriesStore } from "@/stores/series.js";
 import { useUserStore } from "@/stores/userStore.js";
 import { api } from "@/utils/axios.js"; // Needed for photo insight API call
 import { useMessage } from "naive-ui";
+import MobileWelcomeBanner from "@/components/MobileWelcomeBanner.vue";
+import { useMobileWelcome } from "@/composables/useMobileWelcome";
 
 // Import @vicons icons from ionicons5 for reliability
 import {
@@ -406,6 +434,7 @@ import {
   ChevronForwardOutline as ArrowRightIcon,
   AnalyticsOutline as AnalyticsIcon,
   FilmOutline as SeriesIcon,
+  SearchOutline as SearchIcon,
 } from "@vicons/ionicons5";
 import { Workspace } from "@vicons/carbon";
 
@@ -415,6 +444,13 @@ const collectionsStore = useCollectionsStore();
 const seriesStore = useSeriesStore();
 const userStore = useUserStore();
 const message = useMessage();
+
+// Mobile welcome banner
+const { shouldShowMobileWelcome, dismissMobileWelcome, isMobileDevice } =
+  useMobileWelcome();
+
+// Check if in mobile limited mode
+const isMobileLimitedMode = computed(() => isMobileDevice());
 
 // Computed collections from store
 const collections = computed(() => {
@@ -612,6 +648,11 @@ const goToCatalog = () => {
 const goToCanvas = () => {
   // Navigate to photo-hub with catalog tab active
   router.push({ name: "canvas" });
+};
+
+const goToExplorer = () => {
+  // Navigate to search/explorer
+  router.push({ name: "search" });
 };
 
 const goToPlan = () => {

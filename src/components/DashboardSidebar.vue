@@ -12,17 +12,7 @@
     <div v-if="props.mobileMenuOpen" class="mobile-sidebar">
       <div class="logo-container">
         <div class="logo clickable-logo" @click="goToDashboard">
-          <div class="logo-icon">
-            <img
-              :src="logoImagoName"
-              alt="Photoreka"
-              class="logo-brand-image"
-            />
-          </div>
-          <div class="logo-text">
-            <img :src="logoName" alt="Photoreka" class="logo-brand-image" />
-            <div class="app-subtitle">Photo Lab</div>
-          </div>
+          <AppLogo layout="horizontal" :height="43" />
         </div>
       </div>
 
@@ -65,11 +55,12 @@
         class="sidebar-menu"
       />
 
-      <!-- Third Divider -->
-      <div class="menu-divider"></div>
+      <!-- Third Divider (only show if fourth section has items) -->
+      <div v-if="fourthSectionOptions.length > 0" class="menu-divider"></div>
 
-      <!-- Fourth Menu Section: Settings, Help -->
+      <!-- Fourth Menu Section: Settings, Help (hidden on mobile) -->
       <n-menu
+        v-if="fourthSectionOptions.length > 0"
         :collapsed="false"
         :collapsed-width="64"
         :collapsed-icon-size="22"
@@ -188,6 +179,7 @@ import { useRouter, useRoute } from "vue-router";
 import { NIcon } from "naive-ui";
 import type { MenuOption } from "naive-ui";
 import { usePhotosStore } from "@/stores/photos.js";
+import { isMobileDevice } from "@/utils/utils.js";
 
 import { Workspace as CanvasIcon } from "@vicons/carbon";
 
@@ -233,6 +225,9 @@ const emit = defineEmits(["close-mobile-menu"]);
 const activeKey = computed(() => route.name as string);
 const appAccessMode = computed(() => photosStore.appAccessMode);
 
+// Check if we're in mobile limited mode
+const isMobileLimitedMode = computed(() => isMobileDevice());
+
 // First section: Photo Hub only
 const firstSectionOptions = computed(() => [
   {
@@ -259,8 +254,22 @@ const collectionsSeriesOptions = computed(() => [
 ]);
 
 // Third section: Explorer, Canvas, Curation, Grids, Styler
+// On mobile: only show Explorer (search)
 const thirdSectionToolsOptions = computed(() => {
   const isBlocked = appAccessMode.value === "blocked";
+
+  // On mobile, only show Explorer
+  if (isMobileLimitedMode.value) {
+    return [
+      {
+        label: "Explorer",
+        key: "search",
+        disabled: isBlocked,
+        props: isBlocked ? { title: "Add photos to your catalog" } : {},
+        icon: () => h(NIcon, null, { default: () => h(SearchIcon) }),
+      },
+    ];
+  }
 
   return [
     {
@@ -302,18 +311,24 @@ const thirdSectionToolsOptions = computed(() => {
 });
 
 // Fourth section: Settings, Help (always enabled)
-const fourthSectionOptions: MenuOption[] = [
-  {
-    label: "Settings",
-    key: "settings",
-    icon: () => h(NIcon, null, { default: () => h(SettingsIcon) }),
-  },
-  {
-    label: "Help",
-    key: "help",
-    icon: () => h(NIcon, null, { default: () => h(HelpIcon) }),
-  },
-];
+// On mobile, hide Settings and Help from sidebar
+const fourthSectionOptions = computed<MenuOption[]>(() => {
+  if (isMobileLimitedMode.value) {
+    return [];
+  }
+  return [
+    {
+      label: "Settings",
+      key: "settings",
+      icon: () => h(NIcon, null, { default: () => h(SettingsIcon) }),
+    },
+    {
+      label: "Help",
+      key: "help",
+      icon: () => h(NIcon, null, { default: () => h(HelpIcon) }),
+    },
+  ];
+});
 
 const handleMenuSelect = (key: string) => {
   if (key === "photo-hub") {
@@ -641,6 +656,7 @@ onUnmounted(() => {
 
 /* Mobile sidebar */
 .mobile-sidebar {
+  background-color: var(--bg-container);
   position: fixed;
   top: 0;
   left: 0;

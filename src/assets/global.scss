@@ -296,6 +296,10 @@
     align-items: flex-start;
     gap: var(--spacing-lg);
   }
+
+  .photo-hub-header {
+    margin-bottom: 0px !important;
+  }
 }
 
 @media (max-width: 480px) {
@@ -324,6 +328,10 @@
 
   .grid-label-base {
     font-size: var(--font-size-sm);
+  }
+
+  .photo-hub-header {
+    margin-bottom: 0px !important;
   }
 }
 

@@ -70,7 +70,7 @@
               </h1>
 
               <p class="hero-description" :class="{ visible: heroVisible }">
-                Get an intelligent view of your photo archive<br />
+                Get an intelligent view of your photo archive.<br />
                 See how your images relate to each other and understand your
                 work as a whole.
                 <br />Search in natural language, create meaningful sequences,
@@ -395,12 +395,6 @@
           v-model:show="showRequestDialog"
           @success="onRequestSuccess"
         />
-
-        <!-- Mobile Notice Dialog -->
-        <MobileNoticeDialog
-          v-model:show="showMobileNotice"
-          @goHome="onMobileNoticeGoHome"
-        />
       </div>
     </n-message-provider>
   </n-config-provider>
@@ -447,7 +441,6 @@ import { Workspace } from "@vicons/carbon";
 import { BookOpen16Regular, Trophy20Regular } from "@vicons/fluent";
 import AppLogo from "@/components/AppLogo.vue";
 import RequestAccessDialog from "@/components/RequestAccessDialog.vue";
-import MobileNoticeDialog from "@/components/MobileNoticeDialog.vue";
 import MaintenanceBanner from "@/components/MaintenanceBanner.vue";
 import { isMobileDevice } from "@/utils/utils.js";
 import { trackUserAction, trackEvent } from "@/utils/analytics";
@@ -484,7 +477,6 @@ const fallbackTimeout = ref(null);
 
 // Dialog states
 const showRequestDialog = ref(false);
-const showMobileNotice = ref(false);
 const activeFAQ = ref(null);
 
 // Intersection observers for animations
@@ -650,8 +642,6 @@ const goToAuth = (mode = "login") => {
   trackUserAction("navigate_to_auth", "landing_page_premium", mode);
   if (mode === "signup") {
     showRequestDialog.value = true;
-  } else if (mode === "login" && isMobileDevice()) {
-    showMobileNotice.value = true;
   } else {
     router.push({ name: "auth", query: { mode } });
   }
@@ -676,9 +666,6 @@ const goToFreeFramer = () => {
 };
 
 const onRequestSuccess = () => {};
-const onMobileNoticeGoHome = () => {
-  showMobileNotice.value = false;
-};
 
 // Video methods
 const setActiveTab = (index, isAutoSwitch = false) => {
