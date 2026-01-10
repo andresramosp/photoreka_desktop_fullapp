@@ -8,40 +8,57 @@
 import PhotoDeletionService from '#services/photo_deletion_service'
 import logger from '@adonisjs/core/services/logger'
 
+// Helper to parse number from env (handles quotes from Railway)
+function parseEnvNumber(value: string | undefined, defaultValue: number): number {
+  if (!value) return defaultValue
+  // Remove quotes if present
+  const cleaned = value.replace(/^["']|["']$/g, '')
+  const parsed = Number(cleaned)
+  return isNaN(parsed) ? defaultValue : parsed
+}
+
 // Configuration from environment variables
-const DELETION_INTERVAL_HOURS = Number(process.env.PHOTO_DELETION_INTERVAL_HOURS || 24) // Default: daily
-const DELETION_BATCH_SIZE = Number(process.env.PHOTO_DELETION_BATCH_SIZE || 50)
-const DELETION_ENABLED = process.env.PHOTO_DELETION_ENABLED !== 'false' // Default: enabled
+const DELETION_INTERVAL_HOURS = parseEnvNumber(process.env.PHOTO_DELETION_INTERVAL_HOURS, 24)
+const DELETION_BATCH_SIZE = parseEnvNumber(process.env.PHOTO_DELETION_BATCH_SIZE, 50)
+const DELETION_ENABLED = process.env.PHOTO_DELETION_ENABLED?.replace(/^["']|["']$/g, '') !== 'false'
 
 logger.info('[PhotoDeletionScheduler] ========================================')
 logger.info('[PhotoDeletionScheduler] Photo Deletion Scheduler initialized')
 logger.info(`[PhotoDeletionScheduler] Enabled: ${DELETION_ENABLED}`)
 logger.info(`[PhotoDeletionScheduler] Interval: Every ${DELETION_INTERVAL_HOURS} hours`)
 logger.info(`[PhotoDeletionScheduler] Batch size: ${DELETION_BATCH_SIZE}`)
+logger.info(`[PhotoDeletionScheduler] Interval in ms: ${DELETION_INTERVAL_HOURS * 60 * 60 * 1000}`)
 logger.info('[PhotoDeletionScheduler] ========================================')
 
 if (DELETION_ENABLED) {
-  // Execute immediately on startup (optional)
-  if (process.env.PHOTO_DELETION_RUN_ON_STARTUP === 'true') {
-    logger.info('[PhotoDeletionScheduler] Running initial deletion on startup...')
-    PhotoDeletionService.deletePhysically(DELETION_BATCH_SIZE, false).catch((error) => {
-      logger.error('[PhotoDeletionScheduler] Error in startup deletion:', error)
-    })
-  }
-
-  // Schedule periodic execution
-  const intervalMs = 10000 //; DELETION_INTERVAL_HOURS * 60 * 60 * 1000
-  setInterval(async () => {
-    try {
-      logger.info('[PhotoDeletionScheduler] Starting scheduled photo deletion...')
-      await PhotoDeletionService.deletePhysically(DELETION_BATCH_SIZE, false)
-      logger.info('[PhotoDeletionScheduler] Scheduled photo deletion completed')
-    } catch (error) {
-      logger.error('[PhotoDeletionScheduler] Error in scheduled deletion:', error)
+  // Validate interval
+  if (DELETION_INTERVAL_HOURS <= 0) {
+    logger.error(
+      '[PhotoDeletionScheduler] ERROR: Invalid interval hours, must be > 0. Scheduler DISABLED.'
+    )
+  } else {
+    // Execute immediately on startup (optional)
+    if (process.env.PHOTO_DELETION_RUN_ON_STARTUP?.replace(/^["']|["']$/g, '') === 'true') {
+      logger.info('[PhotoDeletionScheduler] Running initial deletion on startup...')
+      PhotoDeletionService.deletePhysically(DELETION_BATCH_SIZE, false).catch((error) => {
+        logger.error('[PhotoDeletionScheduler] Error in startup deletion:', error)
+      })
     }
-  }, intervalMs)
 
-  logger.info(`[PhotoDeletionScheduler] Next execution in ${DELETION_INTERVAL_HOURS} hour(s)`)
+    // Schedule periodic execution
+    const intervalMs = DELETION_INTERVAL_HOURS * 60 * 60 * 1000
+    setInterval(async () => {
+      try {
+        logger.info('[PhotoDeletionScheduler] Starting scheduled photo deletion...')
+        await PhotoDeletionService.deletePhysically(DELETION_BATCH_SIZE, false)
+        logger.info('[PhotoDeletionScheduler] Scheduled photo deletion completed')
+      } catch (error) {
+        logger.error('[PhotoDeletionScheduler] Error in scheduled deletion:', error)
+      }
+    }, intervalMs)
+
+    logger.info(`[PhotoDeletionScheduler] Next execution in ${DELETION_INTERVAL_HOURS} hour(s)`)
+  }
 } else {
   logger.warn('[PhotoDeletionScheduler] Photo deletion scheduler is DISABLED')
   logger.warn('[PhotoDeletionScheduler] Set PHOTO_DELETION_ENABLED=true to enable it')
