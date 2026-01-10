@@ -111,8 +111,11 @@
         {{ Math.round(actualProgress) }}% complete
       </div>
     </div>
-    <!-- Upload Progress Section -->
-    <div class="photo-hub-header">
+    <!-- Upload Progress Section - hidden during first import state -->
+    <div
+      v-if="!isFirstImportState || lightboxPhotos.length > 0"
+      class="photo-hub-header"
+    >
       <n-icon size="18">
         <BookInformation20Regular />
       </n-icon>
@@ -171,9 +174,110 @@
         </div>
       </div>
     </div>
-    <!-- Full Upload Dropzone (show when no photos) -->
+
+    <!-- First Import State - Onboarding continuation -->
     <div
-      v-if="!isMaintenanceMode && lightboxPhotos.length === 0"
+      v-if="
+        !isMaintenanceMode && isFirstImportState && lightboxPhotos.length === 0
+      "
+      class="first-import-section"
+    >
+      <div class="first-import-header">
+        <h1 class="first-import-title">
+          Your Lightbox is ready to get started
+        </h1>
+
+        <!-- <h2 class="first-import-title">Now let's import your first photos</h2> -->
+        <p class="first-import-subtitle">
+          Import your first batch of photos to start exploring Photoreka's
+          features
+        </p>
+      </div>
+
+      <!-- Web-first workflow cards -->
+      <div v-if="preferredSource === 'web'" class="import-cards-grid">
+        <div
+          class="import-card"
+          :class="{ 'drag-over': isDragOver && !isUploadDisabled }"
+          @click="triggerFileInput"
+          @dragover.prevent="!isUploadDisabled && handleDragOver"
+          @dragenter.prevent="!isUploadDisabled && handleDragEnter"
+          @dragleave.prevent="!isUploadDisabled && handleDragLeave"
+          @drop.prevent="handleDrop"
+        >
+          <div class="import-card-icon">
+            <n-icon size="48" color="var(--primary-color)">
+              <FolderOpen />
+            </n-icon>
+          </div>
+          <h4 class="import-card-title">Local Files</h4>
+          <p class="import-card-description">
+            Drag & drop or browse your computer
+          </p>
+          <n-tag type="primary" size="large" round>Recommended</n-tag>
+        </div>
+
+        <div class="import-card" @click="importFromGooglePhotos">
+          <div class="import-card-icon">
+            <img
+              :src="googlePhotosIconUrl"
+              alt="Google Photos"
+              class="google-photos-logo"
+            />
+          </div>
+          <h4 class="import-card-title">Google Photos</h4>
+          <div class="import-card-description">
+            {{
+              googlePhotos.isAuthorized.value
+                ? "Import from your Google Photos library"
+                : "Connect and sync your photos"
+            }}
+          </div>
+          <n-tag
+            v-if="!googlePhotos.isAuthorized.value"
+            type="warning"
+            size="large"
+            round
+          >
+            Disconnected
+          </n-tag>
+          <n-tag v-else type="success" size="large" round> Connected </n-tag>
+        </div>
+      </div>
+
+      <!-- Lightroom-first workflow card -->
+      <div v-else class="import-cards-grid single">
+        <div
+          class="import-card lightroom-card"
+          @click="showLightroomModal = true"
+        >
+          <div class="import-card-icon">
+            <img
+              src="/src/assets/logos/lightroom_logo.png"
+              alt="Adobe Lightroom"
+              class="lightroom-logo"
+            />
+          </div>
+          <h4 class="import-card-title">Official Plugin</h4>
+          <p class="import-card-description">
+            Export photos directly Lightroom Classic
+          </p>
+          <n-tag type="success" size="large" round> See instructions</n-tag>
+        </div>
+      </div>
+
+      <div class="first-import-footer">
+        <span class="format-text"
+          >Supports JPG, PNG and major RAW formats (ARW, RAF, etc.)</span
+        >
+      </div>
+    </div>
+
+    <!-- Full Upload Dropzone (show when no photos and NOT first import state) -->
+    <div
+      v-if="
+        !isMaintenanceMode && !isFirstImportState && lightboxPhotos.length === 0
+      "
       class="upload-section"
     >
       <div
@@ -223,8 +327,11 @@
               @click.stop="button.action"
             >
               <template #icon>
-                <n-icon v-if="button.icon === 'FolderOpenOutline'">
-                  <FolderOpenOutline />
+                <n-icon
+                  v-if="button.icon === 'FolderOpen'"
+                  color="var(--primary-color)"
+                >
+                  <FolderOpen />
                 </n-icon>
                 <n-icon v-else-if="button.icon === 'lightroom'">
                   <img
@@ -279,8 +386,11 @@
             @click.stop="button.action"
           >
             <template #icon>
-              <n-icon v-if="button.icon === 'FolderOpenOutline'">
-                <FolderOpenOutline />
+              <n-icon
+                v-if="button.icon === 'FolderOpen'"
+                color="var(--primary-color)"
+              >
+                <FolderOpen />
               </n-icon>
               <n-icon v-else-if="button.icon === 'lightroom'">
                 <img
@@ -347,7 +457,7 @@ import { useUserStore } from "@/stores/userStore.ts";
 import { usePhotoUpload } from "@/composables/usePhotoUpload.js";
 import { useWarmUp } from "@/composables/useWarmUp.js";
 import { useGooglePhotos } from "@/composables/useGooglePhotos.js";
-import { FolderOpenOutline } from "@vicons/ionicons5";
+import { FolderOpen } from "@vicons/ionicons5";
 import { BookInformation20Regular } from "@vicons/fluent";
 import pLimit from "p-limit";
 import pica from "pica";
@@ -422,6 +532,25 @@ const uploadDisabledMessage = computed(() => {
   return "";
 });
 
+// Computed for preferred source
+const preferredSource = computed(() => {
+  return userStore.user?.preferredSource || "web";
+});
+
+// Computed for first import state - show wizard-style UI when user has never processed photos
+const isFirstImportState = computed(() => {
+  // Don't show first import state while store is loading
+  if (photosStore.isLoading) return false;
+
+  // Don't show if photos array hasn't been initialized yet
+  if (photosStore.photos === null) return false;
+
+  // First import state when user has no processed photos and no workspace photos
+  const hasProcessedPhotos = photosStore.processedPhotos?.length > 0;
+  const hasWorkspacePhotos = photosStore.workspacePhotos?.length > 0;
+  return !hasProcessedPhotos && !hasWorkspacePhotos;
+});
+
 // Computed property for actual progress (considers Google Photos download)
 const actualProgress = computed(() => {
   if (googlePhotos.isDownloading.value) {
@@ -491,8 +620,8 @@ const uploadButtons = computed(() => {
       key: "local",
       label: "Import from local files",
       compactLabel: "Local Files",
-      icon: "FolderOpenOutline",
-      type: preferredSource === "web" ? "primary" : "default",
+      icon: "FolderOpen",
+      type: "default",
       action: () => handleSourceSelection("local", () => triggerFileInput()),
     },
     lightroom: {
@@ -500,7 +629,7 @@ const uploadButtons = computed(() => {
       label: "Lightroom Plugin",
       compactLabel: "Plugin",
       icon: "lightroom",
-      type: preferredSource === "lightroom" ? "primary" : "default",
+      type: "default",
       action: () =>
         handleSourceSelection("lightroom", () => {
           showLightroomModal.value = true;
@@ -603,10 +732,6 @@ const selectedCount = computed(() => {
     ? localSelectedCount.value
     : filteredPhotos.value.length;
 });
-
-// Selection state (keeping existing computed for compatibility)
-const selectedPhotosRecord = computed(() => photosStore.selectedPhotosRecord);
-const selectedPhotoIds = computed(() => photosStore.selectedPhotoIds);
 
 const triggerFileInput = () => {
   if (isUploadDisabled.value) {
@@ -1101,6 +1226,154 @@ defineExpose({
   .lightroom-btn {
     width: 100%;
     min-width: unset;
+  }
+}
+
+/* First Import State - Onboarding continuation styles */
+.first-import-section {
+  margin-top: 24px;
+  margin-bottom: 48px;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.first-import-header {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.first-import-title {
+  margin: 0 0 8px 0;
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: -0.025em;
+}
+
+.first-import-subtitle {
+  margin: 0;
+  font-size: 16px;
+  color: #ffffff73;
+  font-weight: 400;
+}
+
+.import-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  max-width: 700px;
+  margin: 0 auto 32px;
+}
+
+.import-cards-grid.single {
+  grid-template-columns: 1fr;
+  max-width: 350px;
+}
+
+.import-card {
+  background-color: #2c2c32;
+  border: 2px solid #3c3c42;
+  border-radius: 16px;
+  padding: 32px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.import-card:hover {
+  border-color: #4c4c52;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.import-card:hover:not(.drag-over) {
+  border-color: #8b5cf6;
+  background-color: rgba(139, 92, 246, 0.05);
+}
+
+.import-card.drag-over {
+  border-color: #8b5cf6;
+  background-color: rgba(139, 92, 246, 0.1);
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
+}
+
+.import-card-icon {
+  margin-bottom: 16px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.import-card-icon .google-photos-logo {
+  height: 56px;
+  width: auto;
+  object-fit: contain;
+}
+
+.import-card-icon .lightroom-logo {
+  height: 60px;
+  width: auto;
+  object-fit: contain;
+}
+
+.import-card-title {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.import-card-description {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  color: #ffffff73;
+  line-height: 1.5;
+}
+
+.first-import-footer {
+  text-align: center;
+  color: #ffffff73;
+  font-size: 14px;
+}
+
+/* Responsive for first import section */
+@media (max-width: 768px) {
+  .first-import-title {
+    font-size: 24px;
+  }
+
+  .import-cards-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .import-card {
+    padding: 24px 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .first-import-title {
+    font-size: 22px;
+  }
+
+  .import-card-title {
+    font-size: 16px;
   }
 }
 </style>

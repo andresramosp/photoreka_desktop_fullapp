@@ -30,6 +30,7 @@ interface User {
   provider?: "email" | "google" | "facebook";
   usage?: Usage;
   preferredSource: "web" | "ligthroom";
+  isEmailConfirmed: boolean;
 }
 
 export const useUserStore = defineStore("user", () => {
@@ -178,6 +179,7 @@ export const useUserStore = defineStore("user", () => {
           photosRemaining: 3788,
           analyzedPhotosRemaining: 789,
         },
+        isEmailConfirmed: true,
         preferredSource: "web",
       };
 

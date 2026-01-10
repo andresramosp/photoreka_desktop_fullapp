@@ -160,14 +160,18 @@ import UsageIndicators from "@/components/UsageIndicators.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useUserStore } from "@/stores/userStore.ts";
 import { api, api_analyzer } from "@/utils/axios";
-import { useMessage } from "naive-ui";
+import { useMessage, useNotification } from "naive-ui";
 import { ImagesOutline } from "@vicons/ionicons5";
 import { DriveFolderUploadFilled } from "@vicons/material";
 import { InProgress } from "@vicons/carbon";
 
 const photosStore = usePhotosStore();
 const userStore = useUserStore();
+const notification = useNotification();
 const message = useMessage();
+
+// Control para el mensaje de confirmación de email
+const emailConfirmationMessageId = ref(null);
 
 // Reactive state
 const activeTab = ref("upload");
@@ -284,6 +288,31 @@ onMounted(() => {
   updateTabFromHash();
 
   window.addEventListener("hashchange", updateTabFromHash);
+
+  // Watcher para mostrar/ocultar mensaje de confirmación de email
+  watch(
+    () => userStore.user?.isEmailConfirmed,
+    (isEmailConfirmed) => {
+      if (userStore.isAuthenticated && isEmailConfirmed === false) {
+        // Solo mostrar si no hay un mensaje activo
+        if (!emailConfirmationMessageId.value) {
+          emailConfirmationMessageId.value = notification.warning({
+            title: "Confirm your email",
+            content:
+              "Please confirm your email before importing photos. Check your inbox for the confirmation email.",
+            duration: 0,
+            closable: true,
+            onClose: () => {
+              emailConfirmationMessageId.value = null;
+            },
+          });
+        }
+      } else if (emailConfirmationMessageId.value) {
+        emailConfirmationMessageId.value = null;
+      }
+    },
+    { immediate: true }
+  );
 });
 </script>
 
@@ -300,7 +329,7 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: var(--spacing-3xl);
+  margin-bottom: var(--spacing-2xl);
   gap: var(--spacing-2xl);
 }
 

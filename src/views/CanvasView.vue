@@ -841,7 +841,7 @@ const toolbarState = ref({
 
 // Canvas background color options
 const canvasBackgroundOptions = [
-  { id: "default", color: "black", label: "Dark" },
+  { id: "default", color: "#000000", label: "Dark" },
   { id: "white", color: "#f5f5f5", label: "Light" },
   { id: "navy", color: "#1e3a5f", label: "Navy" },
   { id: "forest", color: "#2d4a3e", label: "Forest" },
@@ -2218,7 +2218,7 @@ onUnmounted(() => {
 
 /* Canvas background colors */
 .canvas-container.bg-default {
-  background-color: #1a1a1a !important;
+  background-color: #000000 !important;
 }
 
 .canvas-container.bg-white {

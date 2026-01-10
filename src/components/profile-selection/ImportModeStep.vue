@@ -16,7 +16,7 @@
           @click="selectMode('web')"
         >
           <div class="mode-icon app-icon">
-            <AppLogo layout="icon" :height="36" />
+            <AppLogo layout="icon" :height="60" />
           </div>
           <h4 class="mode-title">Photoreka Web</h4>
           <p class="mode-description">
@@ -297,7 +297,7 @@ const handleNext = () => {
 
 .mode-description {
   margin: 0 0 16px 0;
-  font-size: 14px;
+  font-size: 13px;
   color: #ffffff73;
   line-height: 1.5;
 }

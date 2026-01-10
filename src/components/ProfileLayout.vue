@@ -3,7 +3,7 @@
     <div class="profile-container">
       <div class="profile-content">
         <div class="profile-header">
-          <AppLogo :height="80" />
+          <AppLogo layout="horizontal" :with-claim="false" :height="80" />
         </div>
 
         <div class="profile-form-container">

@@ -48,20 +48,6 @@ const router = createRouter({
     },
 
     {
-      path: "/premium",
-      name: "landing-premium",
-      component: LandingViewPremium,
-      meta: {
-        requiresGuest: false, // Accessible to both guests and authenticated users
-        title: "Photoreka - Make full sense of your photographic body of work",
-        description:
-          "Organize and curate your photo library with advanced tools. Search photos using natural language, arrange them on the canvas, and discover related images based on narrative or color similarity. Rank your photos by aesthetic scores and navigate your catalog in 3D.",
-        keywords:
-          "photo enhancement, AI photo tools, canvas maker, photo frames, image editor, photo culling, photo organizer",
-      },
-    },
-
-    {
       path: "/maintenance",
       name: "maintenance",
       component: MaintenanceView,

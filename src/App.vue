@@ -99,18 +99,6 @@
           <!-- Floating Add Photos Button -->
           <FloatingAddPhotosButton />
 
-          <!-- Welcome Modal for new users -->
-          <WelcomeModal
-            v-model="showWelcomeModal"
-            @get-started="onWelcomeFinish"
-          />
-
-          <!-- Onboarding Slider (for later - after processing 100+ photos) -->
-          <OnboardingSlider
-            v-model="showOnboarding"
-            @finish="onOnboardingFinish"
-          />
-
           <!-- Confetti Effect for first process completion -->
           <ConfettiEffect
             :show="showConfetti"
@@ -140,8 +128,6 @@ import DashboardSidebar from "./components/DashboardSidebar.vue";
 import DashboardHeader from "./components/DashboardHeader.vue";
 import FloatingAddPhotosButton from "./components/FloatingAddPhotosButton.vue";
 import { usePhotosStore } from "@/stores/photos.js";
-import OnboardingSlider from "./components/OnboardingSlider.vue";
-import WelcomeModal from "./components/WelcomeModal.vue";
 import ConfettiEffect from "./components/ConfettiEffect.vue";
 import { useThemeInit } from "@/composables/useTheme.js";
 
@@ -197,9 +183,6 @@ const getKeepAliveComponents = () => {
 
 const mobileMenuOpen = ref(false);
 const isMobile = ref(false);
-
-// Mostrar onboarding después del primer proceso completado
-const showOnboarding = ref(false);
 const showConfetti = ref(false);
 
 // Welcome modal simple con delay para evitar parpadeos
@@ -221,42 +204,10 @@ const onWelcomeFinish = () => {
   console.log("Welcome completed!");
 };
 
-// Chequea si el onboarding ya fue mostrado para este usuario
-const checkShowOnboarding = () => {
-  // El onboarding solo se activa desde triggerFirstProcessOnboarding()
-  // Esta función ya no decide cuándo mostrar el onboarding
-  showOnboarding.value = false;
-};
-
-// Función para mostrar onboarding cuando se completa el primer proceso
-const triggerFirstProcessOnboarding = () => {
-  const userId = userStore.user?.id;
-  if (!userId || !userStore.isAuthenticated) return;
-
-  const onboardingKey = `onboarding_shown_${userId}`;
-  const alreadyShown = localStorage.getItem(onboardingKey) === "true";
-
-  if (!alreadyShown) {
-    // Cerrar welcome modal si está abierto
-    showWelcomeModal.value = false;
-
-    // Primero mostrar el efecto de serpentinas
-    showConfetti.value = true;
-
-    // Después de un pequeño delay, mostrar el onboarding
-    setTimeout(() => {
-      showOnboarding.value = true;
-    }, 1000);
-  }
-};
-
 // Función para ocultar las serpentinas
 const hideConfetti = () => {
   showConfetti.value = false;
 };
-
-// Hacer la función disponible globalmente para ser llamada desde ProcessingPhotos
-window.triggerFirstProcessOnboarding = triggerFirstProcessOnboarding;
 
 const toggleMobileMenu = () => {
   mobileMenuOpen.value = !mobileMenuOpen.value;
@@ -275,7 +226,6 @@ onMounted(() => {
   // Espera a que el usuario esté autenticado antes de cargar las fotos
   if (userStore.isAuthenticated) {
     photosStore.getOrFetch(true);
-    checkShowOnboarding();
   }
 });
 
@@ -289,20 +239,8 @@ watch(
         router.replace("/dashboard");
       }
       photosStore.getOrFetch(true);
-      checkShowOnboarding();
     } else {
-      showOnboarding.value = false;
       showWelcomeModal.value = false;
-    }
-  }
-);
-
-// Watcher para cuando el usuario esté disponible tras login/refresh
-watch(
-  () => userStore.user?.id,
-  (userId) => {
-    if (userStore.isAuthenticated && userId) {
-      checkShowOnboarding();
     }
   }
 );
@@ -320,20 +258,7 @@ watch(
 
 onUnmounted(() => {
   window.removeEventListener("resize", checkIsMobile);
-  // Limpiar función global
-  delete window.triggerFirstProcessOnboarding;
 });
-
-const onOnboardingFinish = () => {
-  showOnboarding.value = false;
-  // Guarda en localStorage que el onboarding ya fue mostrado para este usuario
-  const userId = userStore.user?.id;
-  if (userId) {
-    const onboardingKey = `onboarding_shown_${userId}`;
-    localStorage.setItem(onboardingKey, "true");
-  }
-  console.log("Onboarding completed!");
-};
 </script>
 
 <style scoped>

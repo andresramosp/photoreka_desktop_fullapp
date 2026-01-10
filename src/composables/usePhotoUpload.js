@@ -122,7 +122,12 @@ export function usePhotoUpload() {
   async function handlePostUpload(photosToUpload) {
     // Solo proceder si tenemos fotos exitosas
     if (photosToUpload.length === 0) {
-      message.error("No photos were uploaded successfully.");
+      // Verificar si el email no está confirmado
+      if (!userStore.user?.isEmailConfirmed) {
+        message.error("Please confirm your email before importing photos.");
+      } else {
+        message.error("No photos were uploaded successfully.");
+      }
       return false;
     }
 
@@ -262,10 +267,6 @@ export function usePhotoUpload() {
 
       // Mostrar resumen de la subida
       if (failedUploads.length > 0) {
-        console.warn(
-          `⚠️ Upload completed with ${failedUploads.length} failures:`,
-          failedUploads
-        );
         message.warning(
           `${photosToUpload.length} photos uploaded successfully. ${failedUploads.length} photos failed to upload.`
         );

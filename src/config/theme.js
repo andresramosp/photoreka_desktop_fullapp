@@ -162,7 +162,7 @@ export const darkTheme = {
   bgCard: "#18181c",
   bgDeepSurface: "black",
   bgOverlay: "rgba(0, 0, 0, 0.6)",
-  bgTag: "rgba(37, 99, 235, 0.7)",
+  // bgTag: "rgba(37, 99, 235, 0.7)",
 
   // Borders
   border: "#2c2c32",
@@ -247,7 +247,7 @@ export const lightTheme = {
   bgCard: "#FFFFFF",
 
   bgOverlay: "rgba(0, 0, 0, 0.4)",
-  bgTag: "rgba(37, 99, 235, 0.12)",
+  // bgTag: "rgba(37, 99, 235, 0.12)",
 
   // Borders
   border: "rgba(0, 0, 0, 0.1)",
@@ -413,7 +413,7 @@ export function getThemeCSSVariables(isDark = true) {
     "--bg-surface-hover": theme.bgSurfaceHover,
     "--bg-card": theme.bgCard,
     "--bg-overlay": theme.bgOverlay,
-    "--bg-tag": theme.bgTag,
+    // "--bg-tag": theme.bgTag,
     "--bg-deep-surface": theme.bgDeepSurface,
 
     // Canvas
