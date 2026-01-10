@@ -70,14 +70,11 @@
               </h1>
 
               <p class="hero-description" :class="{ visible: heroVisible }">
-                <span class="emoji-bullet">🕵️‍♂️</span> Find photos by natural
-                language. <span class="emoji-bullet">🎨</span> Build series for
-                documentary or artistic projects.
-                <span class="emoji-bullet">🎞️</span> Sequence images by
-                narrative or chromatic similarity.
-                <span class="emoji-bullet">🏆</span> Rank your photos by various
-                aesthetic aspects. <span class="emoji-bullet">🌐</span> Browse
-                your catalogue in 3D and gain global insights.
+                Get an intelligent view of your photo archive<br />
+                See how your images relate to each other and understand your
+                work as a whole.
+                <br />Search in natural language, create meaningful sequences,
+                and explore your catalog in 3D.
               </p>
               <div
                 v-if="false"
@@ -1146,7 +1143,7 @@ if (typeof window !== "undefined") {
   max-width: 1280px;
   margin: 0 auto;
   padding: 0 32px;
-  padding-top: 64px;
+  padding-top: 70px;
   z-index: 1;
 }
 
@@ -1155,7 +1152,7 @@ if (typeof window !== "undefined") {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 32px;
+  gap: 24px;
 }
 
 .hero-badge {
@@ -1989,7 +1986,7 @@ if (typeof window !== "undefined") {
   } */
 
   .hero-section {
-    padding: 100px 0 60px;
+    padding: 60px 0 60px;
   }
 
   .hero-container,
