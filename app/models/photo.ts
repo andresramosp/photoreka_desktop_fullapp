@@ -7,8 +7,11 @@ import {
   computed,
   hasMany,
   manyToMany,
+  beforeFind,
+  beforeFetch,
 } from '@adonisjs/lucid/orm'
 import type { BelongsTo, HasMany, ManyToMany } from '@adonisjs/lucid/types/relations'
+import type { ModelQueryBuilderContract } from '@adonisjs/lucid/types/model'
 import TagPhoto from './tag_photo.js'
 import DescriptionChunk from './descriptionChunk.js'
 import AnalyzerProcess from './analyzer/analyzerProcess.js'
@@ -35,6 +38,27 @@ export default class Photo extends BaseModel {
 
   @column()
   declare userId: number
+
+  /**
+   * Query scope to exclude soft deleted photos
+   */
+  @beforeFind()
+  public static ignoreDeleted(query: ModelQueryBuilderContract<typeof Photo>) {
+    query.whereNull('deleted_at')
+  }
+
+  @beforeFetch()
+  public static ignoreBatchDeleted(query: ModelQueryBuilderContract<typeof Photo>) {
+    query.whereNull('deleted_at')
+  }
+
+  /**
+   * Soft delete this photo
+   */
+  public async softDelete() {
+    this.deletedAt = DateTime.now()
+    await this.save()
+  }
 
   @column()
   declare descriptions: PhotoDescriptions | null
@@ -68,6 +92,9 @@ export default class Photo extends BaseModel {
 
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime
+
+  @column.dateTime()
+  declare deletedAt: DateTime | null
 
   @hasMany(() => TagPhoto, {
     foreignKey: 'photoId',

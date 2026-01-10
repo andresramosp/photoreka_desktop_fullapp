@@ -49,6 +49,7 @@ export default defineConfig({
     () => import('#start/kernel'),
     () => import('#start/ws'),
     () => import('#start/events'),
+    () => import('#start/photo_deletion_scheduler'),
   ],
 
   /*

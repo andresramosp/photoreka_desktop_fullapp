@@ -258,7 +258,7 @@ export default class PhotoManager {
     console.log('[AnalyzerProcess] [getPhotosForRemakeAll] Fotos obtenidas:', photos.length)
 
     // 2. Borrar todas las fotos del usuario (raw query para velocidad)
-    await db.from('photos').where('user_id', userId).delete()
+    await db.from('photos').where('user_id', userId).whereNull('deleted_at').delete()
     console.log(
       '[AnalyzerProcess] [getPhotosForRemakeAll] Todas las fotos del usuario eliminadas de la base de datos'
     )
@@ -495,9 +495,11 @@ export default class PhotoManager {
     const photos = await Photo.query().whereIn('id', ids)
     if (!photos.length) throw new Error('No photos found')
 
-    // Elimina de golpe con raw query
-    await db.from('photos').whereIn('id', ids).delete()
+    // Marcar fotos como eliminadas (soft delete)
+    const deletedAt = new Date()
+    await db.from('photos').whereIn('id', ids).update({ deleted_at: deletedAt })
 
+    // Eliminar archivos de R2 inmediatamente
     const objectsToDelete: string[] = []
     for (const photo of photos) {
       objectsToDelete.push(photo.name)
@@ -521,6 +523,6 @@ export default class PhotoManager {
     await invalidateCache(`getPhotos_${userId}`)
     await invalidateCache(`getPhotosIdsForSearch${userId}`)
 
-    return { message: 'Photos deleted successfully', ids }
+    return { message: 'Photos marked for deletion', ids, deletedAt }
   }
 }
