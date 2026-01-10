@@ -486,6 +486,7 @@
         <n-button
           :disabled="isSaved"
           @click="handleSaveCanvas"
+          secondary
           :type="hasUnsavedChanges ? 'primary' : 'default'"
           :title="hasUnsavedChanges ? 'Save changes' : 'No changes to save'"
         >
@@ -589,17 +590,8 @@
           <template #trigger>
             <n-button @click="zoomTick(1)" size="small">
               <template #icon>
-                <n-icon>
-                  <svg viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5C16 5.91 13.09 3 9.5 3S3 5.91 3 9.5S5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14z"
-                    />
-                    <path
-                      fill="currentColor"
-                      d="M12 10h-2v2H9v-2H7V9h2V7h1v2h2v1z"
-                    />
-                  </svg>
+                <n-icon color="currentColor">
+                  <AddOutline />
                 </n-icon>
               </template>
             </n-button>
@@ -612,13 +604,7 @@
             <n-button @click="zoomTick(-1)" size="small">
               <template #icon>
                 <n-icon>
-                  <svg viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5C16 5.91 13.09 3 9.5 3S3 5.91 3 9.5S5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14z"
-                    />
-                    <path fill="currentColor" d="M7 9h5v1H7z" />
-                  </svg>
+                  <RemoveOutline />
                 </n-icon>
               </template>
             </n-button>
@@ -631,12 +617,7 @@
             <n-button @click="fitStageToPhotos(0.1)" size="small">
               <template #icon>
                 <n-icon>
-                  <svg viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M9 9H15V15H9V9M11 11V13H13V11H11M2 3H8V5H4V9H2V3M22 3V9H20V5H16V3H22M2 21V15H4V19H8V21H2M22 21H16V19H20V15H22V21Z"
-                    />
-                  </svg>
+                  <ExpandAltOutlined />
                 </n-icon>
               </template>
             </n-button>
@@ -714,6 +695,8 @@ import {
   RefreshOutline,
   ReloadOutline,
   TrashOutline,
+  AddOutline,
+  RemoveOutline,
 } from "@vicons/ionicons5";
 import { usePhotosStore } from "@/stores/photos";
 import {
@@ -757,6 +740,7 @@ import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { usePhotoQueryParams } from "@/composables/usePhotoQueryParams.js";
 import { useTheme } from "@/composables/useTheme.js";
 import AppLogo from "@/components/AppLogo.vue";
+import { ExpandAltOutlined } from "@vicons/antd";
 
 // Define component name for KeepAlive
 defineOptions({
@@ -839,13 +823,34 @@ const toolbarState = ref({
   },
 });
 
-// Canvas background color options
-const canvasBackgroundOptions = [
-  { id: "default", color: "#000000", label: "Dark" },
-  { id: "white", color: "#f5f5f5", label: "Light" },
-  { id: "navy", color: "#1e3a5f", label: "Navy" },
-  { id: "forest", color: "#2d4a3e", label: "Forest" },
-];
+// Canvas background color options - filtered based on current theme
+const canvasBackgroundOptions = computed(() => {
+  const allOptions = [
+    { id: "default", color: "#000000", label: "Dark" },
+    { id: "white", color: "#f5f5f5", label: "Light" },
+    { id: "navy", color: "#1e3a5f", label: "Navy" },
+    { id: "forest", color: "#2d4a3e", label: "Forest" },
+  ];
+
+  // In dark mode, hide the white option; in light mode, hide the default (dark) option
+  if (isDarkMode.value) {
+    return allOptions.filter((opt) => opt.id !== "white");
+  } else {
+    return allOptions.filter((opt) => opt.id !== "default");
+  }
+});
+
+// Watch for theme changes and force valid background color
+watch(isDarkMode, (newIsDarkMode) => {
+  const validIds = newIsDarkMode
+    ? ["default", "navy", "forest"]
+    : ["white", "navy", "forest"];
+
+  // If current background is not valid for the new theme, force to default for that theme
+  if (!validIds.includes(toolbarState.value.canvasBackground)) {
+    toolbarState.value.canvasBackground = newIsDarkMode ? "default" : "white";
+  }
+});
 
 // State
 const basicModeDismissed = ref(false);
@@ -2222,7 +2227,7 @@ onUnmounted(() => {
 }
 
 .canvas-container.bg-white {
-  background-color: #f5f5f5 !important;
+  background-color: #ffffff !important;
 }
 
 .canvas-container.bg-navy {

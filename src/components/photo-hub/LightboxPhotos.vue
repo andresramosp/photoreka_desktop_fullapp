@@ -621,7 +621,7 @@ const uploadButtons = computed(() => {
       label: "Import from local files",
       compactLabel: "Local Files",
       icon: "FolderOpen",
-      type: "default",
+      type: "secondary",
       action: () => handleSourceSelection("local", () => triggerFileInput()),
     },
     lightroom: {
@@ -629,7 +629,7 @@ const uploadButtons = computed(() => {
       label: "Lightroom Plugin",
       compactLabel: "Plugin",
       icon: "lightroom",
-      type: "default",
+      type: "secondary",
       action: () =>
         handleSourceSelection("lightroom", () => {
           showLightroomModal.value = true;
@@ -640,7 +640,7 @@ const uploadButtons = computed(() => {
       label: "Google Photos",
       compactLabel: "Google Photos",
       icon: googlePhotos.isAuthorized.value ? "google" : "google-locked",
-      type: "default",
+      type: "secondary",
       action: () => handleSourceSelection("google", importFromGooglePhotos),
     },
   };
