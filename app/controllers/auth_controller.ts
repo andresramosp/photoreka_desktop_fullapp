@@ -713,6 +713,8 @@ export default class AuthController {
           usage,
           emailConfirmedAt: DateTime.now(), // Google already verified the email
           password: null, // No password for Google users
+          preferredSource: null,
+          profiles: null,
         })
 
         console.log('[Google OAuth] New user created:', user.id)

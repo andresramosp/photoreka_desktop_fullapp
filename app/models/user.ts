@@ -6,7 +6,7 @@ import hash from '@adonisjs/core/services/hash'
 import { DbAccessTokensProvider } from '@adonisjs/auth/access_tokens'
 import type { Usage } from '#services/usage_service'
 
-export type PreferredSource = 'web' | 'lightroom'
+export type PreferredSource = 'web' | 'lightroom' | null
 export type UserProvider = 'email' | 'google'
 export type UserProfile =
   | 'general'
@@ -16,6 +16,7 @@ export type UserProfile =
   | 'street-photography|artistic'
   | 'documentary|artistic'
   | 'street-photography|documentary'
+  | null
 
 const AuthFinder = withAuthFinder(() => hash.use('scrypt'), {
   uids: ['email'],
