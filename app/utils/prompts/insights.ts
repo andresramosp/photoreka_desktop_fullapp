@@ -247,11 +247,11 @@ Output format:
   ...
 ]
 
-### Guidelines:
-  1. These images are already pre-filtered by embeddings, so their relationship with the query is guaranteed to a certain extent. 
-  2. Some photos may not be direct matches but could still provide valuable, metaphorical, or evocative connections to the query. Consider these aspects in your comments.
-  3. If the photo is clearly not aligned with the query, provide at least a comment on the imagen, in the style of 'did you know?' or 'interesting fact'. Never say directly that the photo is not aligned.
-  4. Max length for reasoning: 25 words.
+There are two possible outcomes for each image:
+1. If the image aligns well with the query (in a precise way or in a more metaphorical sense), provide a concise reasoning explaining why it matches.
+2. If the image does not align well with the query, provide an interesting comment or fact about the image instead of a match reasoning.
+
+Max length for reasoning: 25 words.
 
 #### Example 1:
 Input:
@@ -267,7 +267,7 @@ Input:
 Output:
 [
   { "reasoning": "The empty bench by the lake under misty light perfectly embodies solitude and introspection" },
-  { "reasoning": "Not a strict match, but could be that obelisks symbolize a phallic symbol?" },
+  { "reasoning": "Not a strict match, but that tower in the foreground could symbolize a phallic symbol" },
   { "reasoning": "Did you know that obelisks were originally erected in ancient Egypt as monuments to the sun god Ra?" }
 ]
 
