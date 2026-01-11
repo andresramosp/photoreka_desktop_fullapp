@@ -23,9 +23,12 @@
         :style="shouldBlur ? 'filter: blur(8px); transition: filter 0.3s;' : ''"
       />
 
-      <!-- AI Reasoning Tooltip (for curation mode) -->
+      <!-- AI Reasoning Tooltip (for curation mode or default mode with reasoning) -->
       <div
-        v-if="mode === 'curation' && (showTooltip || showAnalyzing)"
+        v-if="
+          (mode === 'curation' || (mode === 'default' && photo.reasoning)) &&
+          (showTooltip || showAnalyzing)
+        "
         class="ai-reasoning-tooltip"
       >
         <p class="reasoning-text">
@@ -81,15 +84,19 @@
         </div>
       </div>
 
-      <!-- Action Buttons (center overlay) - only show when not in curation mode -->
-      <div v-if="showInfoButton" class="action-buttons-overlay">
+      <!-- Action Buttons (center overlay or top-left if reasoning exists) -->
+      <div
+        v-if="showInfoButton"
+        class="action-buttons-overlay"
+        :class="{ 'has-reasoning': photo.reasoning }"
+      >
         <n-button
-          size="medium"
+          :size="photo.reasoning ? 'small' : 'medium'"
           class="action-button info-button"
           @click.stop="showInfo"
         >
           <template #icon>
-            <n-icon>
+            <n-icon :size="photo.reasoning ? 14 : 20">
               <InfoIcon />
             </n-icon>
           </template>
@@ -380,7 +387,11 @@ const handleDelete = () => {
 const handleMouseEnter = () => {
   if (props.mode === "curation") {
     showTooltip.value = true;
-  } else {
+  } else if (props.mode === "default") {
+    // Show reasoning tooltip if photo has reasoning
+    if (props.photo.reasoning) {
+      showTooltip.value = true;
+    }
     // Show hover content for other modes when there are tags to display
     if (tagsToDisplay.value && tagsToDisplay.value.length > 0) {
       showHoverContent.value = true;
@@ -438,30 +449,7 @@ const handleMouseLeave = () => {
   z-index: 2;
 }
 
-/* AI Reasoning Tooltip */
-.ai-reasoning-tooltip {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background-color: transparent;
-  color: white;
-  padding: 16px;
-  border-radius: 6px;
-  font-size: 12px;
-  line-height: 1.4;
-  z-index: 5;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
-  animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  text-align: center;
-  width: 87%;
-  font-weight: 500;
-  background: rgba(0, 0, 0, 0.5);
-}
-
-.reasoning-text {
-  margin: 0;
-}
+/* AI Reasoning Tooltip - styles moved to global.scss */
 
 /* Hover Content Overlay (for chunks and tags) */
 .hover-content-overlay {
@@ -498,11 +486,9 @@ const handleMouseLeave = () => {
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.9);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
   }
 }
 
@@ -534,10 +520,16 @@ const handleMouseLeave = () => {
   left: 50%;
   transform: translate(-50%, -50%);
   opacity: 0;
-  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 3;
   display: flex;
   gap: 8px;
+}
+
+.action-buttons-overlay.has-reasoning {
+  top: 8px;
+  left: 8px;
+  transform: none;
 }
 
 .photo-card:hover .action-buttons-overlay {

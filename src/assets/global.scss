@@ -1061,3 +1061,43 @@
 .no-scroll {
   overflow: hidden;
 }
+
+/* ==========================================================================
+   AI REASONING OVERLAY - Shared across PhotoCard components
+   ========================================================================== */
+
+/* AI Reasoning Tooltip */
+.ai-reasoning-tooltip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: transparent;
+  color: white;
+  padding: 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  z-index: 5;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+  animation: fadeInReasoning 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: center;
+  width: 87%;
+  font-weight: 500;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.reasoning-text {
+  margin: 0;
+}
+
+@keyframes fadeInReasoning {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}

@@ -1491,12 +1491,13 @@ onUnmounted(() => {
 /* Background with checkered pattern when photo is present */
 /* Background with checkered pattern always visible in preview */
 .photo-preview .preview-wrapper {
-  background: linear-gradient(45deg, #f8fafc 25%, transparent 25%),
+  /* background: linear-gradient(45deg, #f8fafc 25%, transparent 25%),
     linear-gradient(-45deg, #f8fafc 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, #f8fafc 75%),
     linear-gradient(-45deg, transparent 75%, #f8fafc 75%);
   background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px; */
+  background-color: var(--bg-container);
 }
 
 .no-photo-preview {

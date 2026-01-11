@@ -174,6 +174,7 @@
 
         <div class="area-actions">
           <n-button
+            secondary
             :loading="isSearching || isLoadingMore || isThinking"
             @click="searchMorePhotos"
             class="search-more-button"
@@ -248,6 +249,7 @@
           <n-button
             @click="moveToCanvas"
             size="large"
+            secondary
             :disabled="curatedPhotos.length == 0"
           >
             <template #icon>
@@ -265,6 +267,7 @@
           <n-button
             @click="handleAddToCollection"
             size="large"
+            secondary
             :disabled="curatedPhotos.length == 0"
           >
             <template #icon>
@@ -1095,6 +1098,7 @@ const {
   overflow-y: auto;
   align-content: start;
   place-items: start;
+  background-color: var(--bg-container);
 }
 
 .photos-grid > * {

@@ -111,7 +111,7 @@
                   "
                 >
                   <n-icon size="16" class="mode-icon">
-                    <SparklesOutline />
+                    <GitBranchOutline />
                   </n-icon>
                   Adaptive
                 </div>
@@ -139,6 +139,34 @@
                 </div>
               </template>
               Heavy search that prioritizes logical accuracy
+            </n-tooltip>
+          </div>
+        </div>
+
+        <!-- Insights Toggle -->
+        <div class="selector-group">
+          <div class="selector-label">Insights:</div>
+          <div class="mode-pills">
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <div
+                  class="mode-pill insights-pill premium-pill"
+                  :class="{ active: withInsights }"
+                  @click="!isSearching && (withInsights = !withInsights)"
+                  :aria-disabled="isSearching"
+                  :tabindex="isSearching ? -1 : 0"
+                  :style="
+                    isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
+                  "
+                >
+                  <n-icon size="16" class="mode-icon">
+                    <SparklesOutline />
+                  </n-icon>
+                  {{ withInsights ? "Enabled" : "Disabled" }}
+                  <div class="premium-indicator-pill"></div>
+                </div>
+              </template>
+              Enhance search results with insights and commentary
             </n-tooltip>
           </div>
         </div>
@@ -864,7 +892,7 @@ import {
   nextTick,
 } from "vue";
 import { api } from "@/utils/axios";
-import { NTooltip, NRate, NTreeSelect } from "naive-ui";
+import { NTooltip, NRate, NTreeSelect, NCheckbox } from "naive-ui";
 
 // Componentes e íconos
 import PhotoCard from "@/components/photoCards/PhotoCard.vue";
@@ -890,6 +918,7 @@ import {
   GlobeOutline,
   LocateOutline,
   FlashOutline,
+  GitBranchOutline,
 } from "@vicons/ionicons5";
 import { CheckOutlined, InfoCircleFilled, TagOutlined } from "@vicons/antd";
 import { MagicWand } from "@vicons/carbon";
@@ -1150,6 +1179,9 @@ const minStarRating = ref(0);
 // Collections filter
 const selectedCollections = ref([]);
 
+// Insights checkbox
+const withInsights = ref(false);
+
 // Filters visibility state
 const showMoreFilters = ref(false);
 
@@ -1294,6 +1326,7 @@ async function searchPhotos() {
       visualAspects: searchStore.selectedVisualAspects,
       artisticScores: searchStore.selectedArtisticScores,
       cursor: currentState.lastCursor, // Add cursor for pagination
+      withInsights: withInsights.value,
     };
 
     let payload;
@@ -1699,6 +1732,13 @@ const filterSummaryText = computed(() => {
   transform: rotate(45deg);
   box-shadow: 0 0 4px var(--shadow-accent);
   border: 1px solid var(--border-color);
+}
+
+/* Insights Toggle Pill */
+.insights-pill {
+  min-width: 75px;
+  justify-content: center;
+  text-align: center;
 }
 
 /* Usage Limit Warning Badge */

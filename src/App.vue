@@ -146,7 +146,8 @@ const allowedHeaderViews = [
   "photo-hub",
   "series",
   "search",
-  // "project-builder",
+  "project-builder",
+  "framer",
   // "profile",
   // "settings",
   // Add more route names as needed
