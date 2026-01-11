@@ -24,6 +24,7 @@ export default class SearchController {
         collections: query.options.collections,
         visualAspects: query.options.visualAspects,
         artisticScores: query.options.artisticScores,
+        withInsights: query.options.withInsights || false,
         cursor: query.options.cursor,
         source: query.options.source || null,
       })
@@ -82,6 +83,7 @@ export default class SearchController {
           visualAspects: query.options.visualAspects,
           artisticScores: query.options.artisticScores,
           cursor: query.options.cursor,
+          withInsights: query.options.withInsights || false,
         },
         user.id
       )

@@ -15,6 +15,7 @@ import PhotoManager from '../managers/photo_manager.js'
 import {
   MESSAGE_SEARCH_MODEL_CREATIVE,
   MESSAGE_SEARCH_MODEL_CREATIVE_SCORED_IMAGE,
+  MESSAGE_SEARCH_MODEL_REFINED_ADAPTIVE_IMAGE,
   MESSAGE_SEARCH_MODEL_STRICT,
 } from '../utils/prompts/insights.js'
 import pLimit from 'p-limit'
@@ -42,6 +43,7 @@ export type SearchOptions = {
   artisticScores?: string[]
   cursor?: string
   source?: string
+  withInsights?: boolean
 }
 
 export type SearchTagsOptions = SearchOptions & {
@@ -204,6 +206,7 @@ export default class SearchTextService {
   /**
    * Versión síncrona/paginada de searchSemantic, sin soporte para 'curation'.
    * Devuelve solo la página correspondiente a la iteración solicitada.
+   * Opcionalmente puede añadir insights si withInsights es true.
    */
   public async searchSemanticSync(
     query: string,
@@ -223,6 +226,7 @@ export default class SearchTextService {
       artisticScores,
       cursor,
       source,
+      withInsights = false,
     } = options
 
     if (searchMode === 'curation') {
@@ -249,11 +253,51 @@ export default class SearchTextService {
       userId?.toString()
     )
 
-    const { paginatedPhotos, hasMore } = await this.getPaginatedPhotosByCursor(
+    let { paginatedPhotos, hasMore } = await this.getPaginatedPhotosByCursor(
       embeddingScoredPhotos,
       pageSize,
       cursor
     )
+
+    let modelCosts = []
+
+    // Si se solicitan insights, procesamos las fotos con el modelo
+    if (withInsights && paginatedPhotos.length > 0) {
+      const batchSize = 1
+      let photoBatches = []
+
+      for (let i = 0; i < paginatedPhotos.length; i += batchSize) {
+        photoBatches.push(paginatedPhotos.slice(i, i + batchSize))
+      }
+
+      const batchPromises = photoBatches.map(async (batch) => {
+        const { modelResult, modelCost } = await this.processBatchInsightsImage(
+          batch,
+          structuredResult,
+          searchMode
+        )
+
+        modelCosts.push(modelCost)
+
+        return batch.map((scoredPhoto, idx) => {
+          const result = modelResult[idx]
+          const reasoning = result?.reasoning || ''
+          const matchScore = result?.matchScore
+
+          return {
+            ...scoredPhoto,
+            photo: {
+              ...scoredPhoto.photo,
+              matchScore,
+              reasoning,
+            },
+          }
+        })
+      })
+
+      const batchResults = await Promise.all(batchPromises)
+      paginatedPhotos = batchResults.flat()
+    }
 
     return {
       type: 'search-matches',
@@ -262,9 +306,10 @@ export default class SearchTextService {
         results: {
           [iteration]: paginatedPhotos,
         },
-        cost: { expansionCost },
+        cost: { expansionCost, modelCosts: modelCosts.length > 0 ? modelCosts : undefined },
         iteration: iteration,
         structuredResult,
+        requireSource: withInsights ? { useImage } : undefined,
       },
     }
   }
@@ -280,6 +325,7 @@ export default class SearchTextService {
       visualAspects,
       artisticScores,
       cursor,
+      withInsights = false,
     } = options
 
     const photoIds = await this.photoManager.getPhotosIdsForSearch(
@@ -297,11 +343,56 @@ export default class SearchTextService {
       userId?.toString()
     )
 
-    const { paginatedPhotos, hasMore } = await this.getPaginatedPhotosByCursor(
+    let { paginatedPhotos, hasMore } = await this.getPaginatedPhotosByCursor(
       embeddingScoredPhotos,
       pageSize,
       cursor
     )
+
+    let modelCosts = []
+
+    // Si se solicitan insights, procesamos las fotos con el modelo
+    if (withInsights && paginatedPhotos.length > 0) {
+      const batchSize = 1
+      let photoBatches = []
+
+      for (let i = 0; i < paginatedPhotos.length; i += batchSize) {
+        photoBatches.push(paginatedPhotos.slice(i, i + batchSize))
+      }
+
+      // Crear un structuredResult basado en los tags
+      const structuredResult = {
+        original: `Tags: ${included.join(', ')}${excluded.length > 0 ? ` (excluding: ${excluded.join(', ')})` : ''}`,
+      }
+
+      const batchPromises = photoBatches.map(async (batch) => {
+        const { modelResult, modelCost } = await this.processBatchInsightsImage(
+          batch,
+          structuredResult,
+          searchMode
+        )
+
+        modelCosts.push(modelCost)
+
+        return batch.map((scoredPhoto, idx) => {
+          const result = modelResult[idx]
+          const reasoning = result?.reasoning || ''
+          const matchScore = result?.matchScore
+
+          return {
+            ...scoredPhoto,
+            photo: {
+              ...scoredPhoto.photo,
+              matchScore,
+              reasoning,
+            },
+          }
+        })
+      })
+
+      const batchResults = await Promise.all(batchPromises)
+      paginatedPhotos = batchResults.flat()
+    }
 
     return {
       type: 'search-matches',
@@ -310,17 +401,33 @@ export default class SearchTextService {
         results: {
           [iteration]: paginatedPhotos,
         },
+        cost: modelCosts.length > 0 ? { modelCosts } : undefined,
         iteration: iteration,
+        requireSource: withInsights ? { useImage: true } : undefined,
       },
     }
   }
 
+  @withCache({
+    provider: 'redis',
+    ttl: 60 * 5,
+    key: (batch, structuredResult, searchMode) => {
+      const photoIds = batch
+        .map((item) => item.photo?.id || item.id)
+        .sort()
+        .join(',')
+      return `processBatchInsightsImage:${searchMode}:${JSON.stringify(structuredResult)}:${photoIds}`
+    },
+  })
   public async processBatchInsightsImage(
     batch: any[],
     structuredResult: any,
     searchMode: SearchMode
   ) {
-    const searchModelMessage = MESSAGE_SEARCH_MODEL_CREATIVE_SCORED_IMAGE
+    const searchModelMessage =
+      searchMode === 'curation'
+        ? MESSAGE_SEARCH_MODEL_CREATIVE_SCORED_IMAGE
+        : MESSAGE_SEARCH_MODEL_REFINED_ADAPTIVE_IMAGE
 
     const imagesPayload = await this.generateImagesPayload(batch.map((cp) => cp.photo))
 
