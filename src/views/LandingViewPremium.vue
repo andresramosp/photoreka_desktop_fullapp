@@ -70,7 +70,9 @@
               </h1>
 
               <p class="hero-description" :class="{ visible: heroVisible }">
-                Get an intelligent view of your photo archive.<br />
+                <strong>Photoreka</strong> is a
+                <strong>Curation Lab</strong> for photographers who care about
+                their archive.<br />
                 See how your images relate to each other and understand your
                 work as a whole.
                 <br />Search in natural language, create meaningful sequences,
