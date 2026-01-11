@@ -248,28 +248,41 @@ Output format:
 ]
 
 There are two possible outcomes for each image:
-1. If the image aligns well with the query (in a precise way or in a more metaphorical sense), provide a concise reasoning explaining why it matches.
+1. If the image aligns somehow with the query (in a precise way or in a more metaphorical sense), provide a reasoning explaining why it matches.
 2. If the image does not align well with the query, provide an interesting comment or fact about the image instead of a match reasoning.
 
-Max length for reasoning: 25 words.
+***Guidelines**:
+1. NEVER say that the image does not match the query or give any other negative feedback. In case the image does not match, always provide an interesting comment or fact about the image.
+1. Max length for reasoning: 30 words.
 
-#### Example 1:
+#### Example 1 (matching):
 Input:
 {
   "query": "photos that convey a sense of solitude and introspection",
   "images": [
     { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64,<base64-encoded-image1>", "detail": "low" } },
-    { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64,<base64-encoded-image2>", "detail": "low" } },
-    { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64,<base64-encoded-image3>", "detail": "low" } }
   ]
 }
 
 Output:
 [
-  { "reasoning": "The empty bench by the lake under misty light perfectly embodies solitude and introspection" },
-  { "reasoning": "Not a strict match, but that tower in the foreground could symbolize a phallic symbol" },
-  { "reasoning": "Did you know that obelisks were originally erected in ancient Egypt as monuments to the sun god Ra?" }
+  { "reasoning": "The empty bench by the lake under misty light perfectly embodies solitude and introspection..." },
 ]
+
+#### Example 2 (not matching):
+Input:
+{
+  "query": "photos featuring animals playing musical instruments",
+  "images": [
+    { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64,<base64-encoded-image1>", "detail": "low" } },
+  ]
+}
+
+Output:
+[
+  { "reasoning": "Did you know that poodles like the ones in the picture are considered very intelligent? ..." },
+]
+
 
 Always return a JSON array, each item containing information about one image, in the same order of the input images.
 `
