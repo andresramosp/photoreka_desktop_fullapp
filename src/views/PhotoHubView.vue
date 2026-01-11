@@ -63,7 +63,7 @@
             <n-icon>
               <InProgress color="var(--primary-color)" />
             </n-icon>
-            Analyzing Processes
+            Analyses
           </div>
         </button>
       </div>

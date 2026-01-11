@@ -36,7 +36,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, nextTick } from "vue";
 import { useRouter } from "vue-router";
 import { useMessage } from "naive-ui";
 import ProfileLayout from "../components/ProfileLayout.vue";
@@ -63,15 +63,32 @@ const profilePayload = computed(() => ({
   profiles: selectedProfiles.value,
 }));
 
+const scrollToTop = async () => {
+  await nextTick();
+  // Scroll en window
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  // Scroll en document.documentElement (Safari en iOS)
+  document.documentElement.scrollTop = 0;
+  // Scroll en document.body (algunos navegadores)
+  document.body.scrollTop = 0;
+  // Scroll en los padres si hay overflow
+  const profileLayout = document.querySelector(".profile-layout");
+  if (profileLayout) {
+    profileLayout.scrollTop = 0;
+  }
+};
+
 const nextStep = () => {
   if (currentStep.value < 2) {
     currentStep.value++;
+    scrollToTop();
   }
 };
 
 const previousStep = () => {
   if (currentStep.value > 1) {
     currentStep.value--;
+    scrollToTop();
   }
 };
 
