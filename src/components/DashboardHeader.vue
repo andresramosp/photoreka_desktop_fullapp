@@ -53,6 +53,7 @@
           </n-button> -->
 
           <n-button
+            v-if="canToggleTheme(false)"
             circle
             quaternary
             class="header-icon-btn"
@@ -117,7 +118,7 @@ const message = useMessage();
 const isMobile = ref(false);
 
 // Theme management
-const { themeMode, toggleTheme } = useTheme();
+const { themeMode, toggleTheme, canToggleTheme } = useTheme();
 
 defineEmits(["toggle-mobile-menu"]);
 

@@ -16,6 +16,7 @@
             </div>
             <div class="nav-actions">
               <button
+                v-if="canToggleTheme(true)"
                 class="theme-toggle"
                 @click="toggleTheme"
                 aria-label="Toggle theme"
@@ -458,6 +459,7 @@ const {
   naiveThemeOverrides: themeOverrides,
   themeMode,
   toggleTheme: baseToggleTheme,
+  canToggleTheme,
 } = useTheme();
 
 // Wrapper para toggle con tracking

@@ -18,6 +18,16 @@ import {
   getThemeCSSVariables,
 } from "@/config/theme.js";
 
+// ========================================================================
+// CONFIGURACIÓN DE TEMA FORZADO
+// ========================================================================
+// Si se setea a "dark" o "light", fuerza ese tema y oculta el toggle
+// Si es null, permite al usuario elegir libremente
+const FORCE_APP_THEME = "dark"; // null | "dark" | "light"
+const FORCE_LANDING_THEME = null; // null | "dark" | "light"
+
+const DEFAULT_THEME = "light";
+
 // Estado global del tema (compartido entre todos los componentes)
 const isDarkMode = ref(true); // Por defecto dark
 const STORAGE_KEY = "photoreka-theme-mode";
@@ -73,7 +83,20 @@ export function useTheme() {
    * Inicializa el tema desde localStorage o preferencia del sistema
    */
   const initTheme = () => {
-    // 1. Intentar cargar desde localStorage
+    // 0. Detectar si estamos en landing
+    const isLanding =
+      window.location.pathname === "/" ||
+      window.location.pathname === "/landing" ||
+      window.location.pathname.includes("/landing");
+
+    // 1. Verificar si hay tema forzado
+    const forcedTheme = isLanding ? FORCE_LANDING_THEME : FORCE_APP_THEME;
+    if (forcedTheme !== null) {
+      setTheme(forcedTheme === "dark", false); // No persistir temas forzados
+      return;
+    }
+
+    // 2. Intentar cargar desde localStorage
     const stored = localStorage.getItem(STORAGE_KEY);
 
     if (stored) {
@@ -81,11 +104,8 @@ export function useTheme() {
       return;
     }
 
-    // 2. Usar preferencia del sistema si no hay nada guardado
-    const prefersDark = window.matchMedia(
-      "(prefers-color-scheme: dark)"
-    ).matches;
-    setTheme(prefersDark);
+    // 3. Forzar dark mode por defecto (ignorar preferencia del sistema)
+    setTheme(DEFAULT_THEME === "dark");
   };
 
   // Computeds para usar en template
@@ -115,6 +135,15 @@ export function useTheme() {
     });
   };
 
+  /**
+   * Verifica si el toggle de tema debe estar visible
+   * @param {boolean} isLanding - true si es landing page
+   */
+  const canToggleTheme = (isLanding = false) => {
+    const forcedTheme = isLanding ? FORCE_LANDING_THEME : FORCE_APP_THEME;
+    return forcedTheme === null;
+  };
+
   return {
     // Estado
     isDarkMode,
@@ -129,6 +158,7 @@ export function useTheme() {
     toggleTheme,
     initTheme,
     watchSystemPreference,
+    canToggleTheme,
   };
 }
 

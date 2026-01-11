@@ -135,8 +135,20 @@ const route = useRoute();
 const router = useRouter();
 
 // Inicializar tema centralizado
-const { naiveTheme: darkTheme, naiveThemeOverrides: themeOverrides } =
-  useThemeInit();
+const {
+  naiveTheme: darkTheme,
+  naiveThemeOverrides: themeOverrides,
+  initTheme,
+} = useThemeInit();
+
+// Re-aplicar tema cuando cambia la ruta (para temas forzados por landing/app)
+watch(
+  () => route.path,
+  () => {
+    initTheme();
+  },
+  { immediate: false }
+);
 
 // List of route names where DashboardHeader should be visible
 const allowedHeaderViews = [
