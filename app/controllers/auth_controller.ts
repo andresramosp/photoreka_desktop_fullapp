@@ -711,7 +711,6 @@ export default class AuthController {
           avatar: googleUser.avatar?.substring(0, 255) ?? null,
           isActive: true,
           usage,
-          preferredSource: 'web',
           emailConfirmedAt: DateTime.now(), // Google already verified the email
           password: null, // No password for Google users
         })
