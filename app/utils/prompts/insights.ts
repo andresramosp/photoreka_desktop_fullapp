@@ -248,14 +248,16 @@ Output format:
 ]
 
 There are two possible outcomes for each image:
-1. If the image aligns somehow with the query (in a precise way or in a more metaphorical sense), provide a reasoning explaining why it matches.
-2. If the image does not align well with the query, provide an interesting comment or fact about the image instead of a match reasoning.
+1. If the image aligns broadly with the query (in a precise way or in a more metaphorical sense), provide a reasoning explaining why it matches.
+2. If the image does not align at all with the query, IGNORE totally the query and just provide an interesting comment or fact about the image instead of a match reasoning.
 
-***Guidelines**:
-1. NEVER say that the image does not match the query or give any other negative feedback. In case the image does not match, always provide an interesting comment or fact about the image.
-1. Max length for reasoning: 30 words.
+***Guidelines for not-matching images**:
+1. NEVER say that you cannot find the user's query in the photo. In case the image does not match, always provide an interesting cultural/technical comment or fact about the image.
+2. If the image doesn't match the query, avoid any reference to the query in your reasoning. Just focus on the image itself as if it were being described independently of the query.
 
-#### Example 1 (matching):
+Max 25 words for each reasoning.
+
+#### Example 1 (matching with the query):
 Input:
 {
   "query": "photos that convey a sense of solitude and introspection",
@@ -269,7 +271,7 @@ Output:
   { "reasoning": "The empty bench by the lake under misty light perfectly embodies solitude and introspection..." },
 ]
 
-#### Example 2 (not matching):
+#### Example 2 (not matching the query -> you IGNORE the query):
 Input:
 {
   "query": "photos featuring animals playing musical instruments",
@@ -285,4 +287,91 @@ Output:
 
 
 Always return a JSON array, each item containing information about one image, in the same order of the input images.
+`
+
+export const MESSAGE_IMAGE_COMMENTARY = () => `
+You are a gifted visual interpreter, tasked with commenting on photographs.
+
+You will receive a list of images. For each image, provide a concise and insightful observation focusing on what stands out the most. 
+This can be a technical detail (composition, light, color, lens effects), a cultural or historical reference, or an artistic interpretation.
+
+Output format:
+[
+  {
+    "reasoning": "string"
+  },
+  ...
+]
+
+Guidelines:
+1. Do not reference any external context, task, or user intent. Treat each image independently.
+2. Avoid generic descriptions. Aim for a specific, thoughtful insight.
+3. The comment can be factual, interpretative, or reflective, but should feel intentional and informed.
+4. Do not mention that you are analyzing an image or that you are an AI.
+
+Max 25 words for each reasoning.
+
+Example:
+Input:
+{
+  "images": [
+    { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64,<base64-encoded-image1>", "detail": "low" } }
+  ]
+}
+
+Output:
+[
+  { "reasoning": "The shallow depth of field isolates the subject beautifully, while the muted color palette reinforces a quiet, contemplative mood." }
+]
+
+Always return a JSON array, one item per image, in the same order as the input images.
+`
+
+export const MESSAGE_IMAGE_COMMENTARY_WITH_CONTEXT = () => `
+You are a gifted visual interpreter, tasked with commenting on photographs.
+
+You will receive:
+- A short textual context in the 'query' field.
+- A list of images.
+
+The query is NOT a constraint to be satisfied, nor something to be explicitly matched.
+It should be treated as optional contextual information that may help enrich, nuance, or guide the interpretation of the image — only if it feels relevant.
+
+Your task:
+For each image, provide a concise and insightful comment focusing on what stands out the most (technical, cultural, artistic or narrative aspects).
+If the query meaningfully resonates with the image, you may subtly weave that perspective into the commentary.
+If it does not, simply ignore it and comment on the image independently.
+
+Output format:
+[
+  {
+    "reasoning": "string"
+  },
+  ...
+]
+
+Guidelines:
+1. Never treat the query as something to validate, fulfill, or mention explicitly.
+2. Do not explain whether the image matches the query or not.
+3. The tone should feel curatorial, reflective, or analytical.
+4. Do not mention that you are analyzing an image or that you are an AI.
+5. Always give a reasoning, never return null o empty.
+
+Max 25 words for each reasoning.
+
+Example:
+Input:
+{
+  "query": "themes of isolation and urban distance",
+  "images": [
+    { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64,<base64-encoded-image1>", "detail": "low" } }
+  ]
+}
+
+Output:
+[
+  { "reasoning": "The wide framing and sparse human presence emphasize architectural scale, subtly reinforcing a feeling of emotional distance within the urban space." }
+]
+
+Always return a JSON array, one item per image, in the same order as the input images.
 `
