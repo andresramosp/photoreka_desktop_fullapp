@@ -25,6 +25,8 @@ import MaintenanceView from "../views/MaintenanceView.vue";
 import ThreeDView from "../views/3DView.vue";
 import ResetPasswordView from "../views/ResetPasswordView.vue";
 import ConfirmEmailView from "../views/ConfirmEmailView.vue";
+import AuthCallback from "../views/AuthCallback.vue";
+import AuthError from "../views/AuthError.vue";
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -96,6 +98,26 @@ const router = createRouter({
       meta: {
         requiresGuest: false, // Accessible to both guests and authenticated users
         layout: false, // Use standalone layout like auth
+      },
+    },
+
+    {
+      path: "/auth/callback",
+      name: "auth-callback",
+      component: AuthCallback,
+      meta: {
+        requiresGuest: false, // Accessible during OAuth flow
+        layout: false, // Use standalone layout
+      },
+    },
+
+    {
+      path: "/auth/error",
+      name: "auth-error",
+      component: AuthError,
+      meta: {
+        requiresGuest: false, // Accessible to show errors
+        layout: false, // Use standalone layout
       },
     },
 

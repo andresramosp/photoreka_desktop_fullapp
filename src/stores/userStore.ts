@@ -31,6 +31,7 @@ interface User {
   usage?: Usage;
   preferredSource: "web" | "ligthroom";
   isEmailConfirmed: boolean;
+  profiles?: UserProfile;
 }
 
 export const useUserStore = defineStore("user", () => {
@@ -156,50 +157,26 @@ export const useUserStore = defineStore("user", () => {
   };
 
   const loginWithProvider = async (
-    provider: "google" | "facebook"
+    provider: "google" | "facebook",
+    mode: "login" | "register" = "login"
   ): Promise<{ success: boolean; error?: string }> => {
-    isLoading.value = true;
+    if (provider === "google") {
+      // Redirigir al backend que maneja OAuth
+      const backendUrl =
+        import.meta.env.VITE_MAIN_API_BASE_URL || "http://localhost:3333";
+      // Pasar el modo para que el backend sepa si es login o registro
+      window.location.href = `${backendUrl}/api/auth/google/redirect?mode=${mode}`;
 
-    try {
-      // Mock social authentication - replace with real OAuth implementation
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      const mockToken = `mock_token_${provider}_${Date.now()}_${Math.random()
-        .toString(36)
-        .substr(2, 9)}`;
-
-      token.value = mockToken;
-      isAuthenticated.value = true;
-      user.value = {
-        id: `user_${provider}_${Date.now()}`,
-        email: `user@${provider === "google" ? "gmail.com" : "facebook.com"}`,
-        name: `${provider === "google" ? "Google" : "Facebook"} User`,
-        provider,
-        usage: {
-          creditsUsed: 0,
-          photosLimit: 5000,
-          creditsAvailable: 100,
-          analyzedPhotosLimit: 2000,
-          photosUsage: 1212,
-          analyzedPhotosUsage: 1211,
-          photosRemaining: 3788,
-          analyzedPhotosRemaining: 789,
-        },
-        isEmailConfirmed: true,
-        preferredSource: "web",
-      };
-
-      localStorage.setItem("auth_token", mockToken);
-
+      // La función retorna pero no se completa aquí
+      // El flujo continúa en el componente AuthCallback
       return { success: true };
-    } catch (error) {
-      return {
-        success: false,
-        error: `Error logging in with ${provider}. Please try again.`,
-      };
-    } finally {
-      isLoading.value = false;
     }
+
+    // Facebook aún no implementado
+    return {
+      success: false,
+      error: "Facebook login not implemented yet",
+    };
   };
 
   const logout = () => {
@@ -361,6 +338,35 @@ export const useUserStore = defineStore("user", () => {
     }
   };
 
+  const processOAuthCallback = async (
+    receivedToken: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    isLoading.value = true;
+
+    try {
+      // Guardar token
+      token.value = receivedToken;
+      isAuthenticated.value = true;
+      localStorage.setItem("auth_token", receivedToken);
+
+      // Obtener perfil del usuario
+      const profileResponse = await api.get("/api/auth/profile");
+      user.value = profileResponse.data.user;
+
+      // Obtener usage
+      await fetchUsage();
+
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.message || "Error processing OAuth login",
+      };
+    } finally {
+      isLoading.value = false;
+    }
+  };
+
   const consumeHandoff = async (
     handoffToken: string
   ): Promise<{ success: boolean; error?: string }> => {
@@ -413,6 +419,7 @@ export const useUserStore = defineStore("user", () => {
     login,
     register,
     loginWithProvider,
+    processOAuthCallback,
     logout,
     initAuth,
     confirmEmail,

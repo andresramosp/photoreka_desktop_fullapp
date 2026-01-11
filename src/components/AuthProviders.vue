@@ -5,12 +5,11 @@
         class="provider-button provider-google"
         :loading="isLoading && activeProvider === 'google'"
         @click="handleProviderLogin('google')"
-        :disabled="true"
       >
         <template #icon>
           <GoogleIcon />
         </template>
-        Google
+        Continue with Google
       </n-button>
 
       <!-- <n-button
@@ -100,8 +99,16 @@ const handleProviderLogin = async (provider: "google" | "facebook") => {
   activeProvider.value = provider;
 
   try {
-    const result = await userStore.loginWithProvider(provider);
+    const result = await userStore.loginWithProvider(provider, props.mode);
 
+    // Si es Google, la redirección ocurre automáticamente
+    // No necesitamos hacer nada más aquí
+    if (provider === "google" && result.success) {
+      // La página se redirigirá al backend OAuth
+      return;
+    }
+
+    // Para otros providers (como Facebook) o si hay error
     if (result.success) {
       if (props.mode === "register") {
         message.success(
@@ -120,10 +127,11 @@ const handleProviderLogin = async (provider: "google" | "facebook") => {
       }
     } else {
       message.error(result.error || "Error logging in");
+      isLoading.value = false;
+      activeProvider.value = null;
     }
   } catch (error) {
     message.error("Unexpected error logging in");
-  } finally {
     isLoading.value = false;
     activeProvider.value = null;
   }

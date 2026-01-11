@@ -14,7 +14,9 @@
             route.name === 'terms' ||
             route.name === 'maintenance' ||
             route.name === 'reset-password' ||
-            route.name === 'confirm-email'
+            route.name === 'confirm-email' ||
+            route.name === 'auth-callback' ||
+            route.name === 'auth-error'
           "
         />
 
