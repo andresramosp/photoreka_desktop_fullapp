@@ -26,6 +26,10 @@ router.post('/api/auth/resend-confirmation', [AuthController, 'resendConfirmatio
 router.post('/api/auth/forgot-password', [AuthController, 'forgotPassword'])
 router.post('/api/auth/reset-password', [AuthController, 'resetPassword'])
 
+// Google OAuth routes (no middleware needed)
+router.get('/api/auth/google/redirect', [AuthController, 'googleRedirect'])
+router.get('/api/auth/google/callback', [AuthController, 'googleCallback'])
+
 // Protected auth routes (require authentication)
 router
   .group(() => {

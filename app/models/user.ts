@@ -7,6 +7,7 @@ import { DbAccessTokensProvider } from '@adonisjs/auth/access_tokens'
 import type { Usage } from '#services/usage_service'
 
 export type PreferredSource = 'web' | 'lightroom'
+export type UserProvider = 'email' | 'google'
 export type UserProfile =
   | 'general'
   | 'street-photography'
@@ -32,7 +33,7 @@ export default class User extends compose(BaseModel, AuthFinder) {
   declare email: string
 
   @column({ serializeAs: null })
-  declare password: string
+  declare password: string | null
 
   @column()
   declare isActive: boolean
@@ -45,6 +46,16 @@ export default class User extends compose(BaseModel, AuthFinder) {
 
   @column()
   declare profiles: UserProfile
+
+  // Google OAuth fields
+  @column()
+  declare googleId: string | null
+
+  @column()
+  declare provider: UserProvider | null
+
+  @column()
+  declare avatar: string | null
 
   // Email confirmation fields
   @column.dateTime()

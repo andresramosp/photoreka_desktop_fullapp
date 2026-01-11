@@ -1,6 +1,6 @@
 import User from '#models/user'
 import { EXPIRED_EMAILS } from '#config/expired_emails'
-import { AUTH_CODES } from '#config/auth_codes'
+import { WHITELIST_EMAILS } from '#config/whitelist_emails'
 import {
   changePasswordValidator,
   createAuthValidator,
@@ -14,6 +14,7 @@ import {
 import { HttpContext } from '@adonisjs/core/http'
 import UsageService, { getDefaultUsageByTier, UsageTier } from '#services/usage_service'
 import MailService from '#services/mail_service'
+import GoogleOAuthService from '#services/google_oauth_service'
 import { DateTime } from 'luxon'
 import crypto from 'crypto'
 import {
@@ -40,6 +41,21 @@ export default class AuthController {
   private getFrontendUrl(): string {
     return process.env.FRONTEND_URL || 'https://www.photoreka.com'
   }
+
+  /**
+   * Check if email is whitelisted or has @photorekatest.com domain
+   */
+  private isEmailAllowed(email: string): boolean {
+    // Check if email is in whitelist
+    if (WHITELIST_EMAILS.includes(email)) {
+      return true
+    }
+    // Check if email has @photorekatest.com domain
+    if (email.endsWith('@photorekatest.com')) {
+      return true
+    }
+    return false
+  }
   /**
    * Register a new user
    */
@@ -47,15 +63,12 @@ export default class AuthController {
     try {
       const payload = await request.validateUsing(createAuthValidator)
 
-      // Obtener authCode del payload validado
-      const authCode = payload.authCode
-
-      // Verificar si el email está en la whitelist o si el authCode es válido
-      // if (!authCode || !AUTH_CODES.includes(authCode)) {
-      //   return response.unauthorized({
-      //     message: 'Unauthorized email for registration. Please request access.',
-      //   })
-      // }
+      // Verificar si el email está en la whitelist o tiene dominio @photorekatest.com
+      if (!this.isEmailAllowed(payload.email)) {
+        return response.unauthorized({
+          message: 'Unauthorized email for registration. Please request access.',
+        })
+      }
 
       // Verificar si el email ya está registrado
       const existingUser = await User.findBy('email', payload.email)
@@ -608,6 +621,130 @@ export default class AuthController {
         message: 'Password reset failed',
         error: error.message,
       })
+    }
+  }
+
+  /**
+   * Redirect to Google OAuth
+   */
+  async googleRedirect({ response }: HttpContext) {
+    try {
+      const googleService = new GoogleOAuthService()
+      const authUrl = googleService.getAuthUrl()
+      return response.redirect(authUrl)
+    } catch (error) {
+      console.error('Error generating Google auth URL:', error)
+      return response.redirect(
+        `${this.getFrontendUrl()}/auth/error?message=Failed to initialize Google authentication`
+      )
+    }
+  }
+
+  /**
+   * Handle Google OAuth callback
+   */
+  async googleCallback({ request, response }: HttpContext) {
+    try {
+      const code = request.input('code')
+      const error = request.input('error')
+
+      // User denied access
+      if (error) {
+        console.log('[Google OAuth] User denied access:', error)
+        return response.redirect(
+          `${this.getFrontendUrl()}/auth/error?message=Google authentication was cancelled`
+        )
+      }
+
+      if (!code) {
+        return response.redirect(
+          `${this.getFrontendUrl()}/auth/error?message=No authorization code received`
+        )
+      }
+
+      // Exchange code for user data
+      const googleService = new GoogleOAuthService()
+      const googleUser = await googleService.getUserData(code)
+
+      console.log('[Google OAuth] User data received:', {
+        email: googleUser.email,
+        name: googleUser.name,
+        googleId: googleUser.googleId,
+      })
+
+      // Find existing user by googleId or email
+      let user = await User.query()
+        .where('googleId', googleUser.googleId)
+        .orWhere('email', googleUser.email)
+        .first()
+
+      if (user) {
+        console.log('[Google OAuth] Existing user found:', user.email)
+
+        // Update Google OAuth fields if not already set
+        if (!user.googleId) {
+          user.googleId = googleUser.googleId
+          user.provider = 'google'
+          user.avatar = googleUser.avatar?.substring(0, 255) ?? null
+          await user.save()
+          console.log('[Google OAuth] Updated existing user with Google OAuth data')
+        }
+      } else {
+        console.log('[Google OAuth] Creating new user')
+
+        // Verificar si el email está en la whitelist o tiene dominio @photorekatest.com
+        if (!this.isEmailAllowed(googleUser.email)) {
+          return response.redirect(
+            `${this.getFrontendUrl()}/auth/error?message=Email not whitelisted. Please request access.`
+          )
+        }
+
+        // Create new user
+        const tier = UsageTier.TESTER
+        const usage = getDefaultUsageByTier(tier)
+
+        user = await User.create({
+          name: googleUser.name,
+          email: googleUser.email,
+          googleId: googleUser.googleId,
+          provider: 'google',
+          avatar: googleUser.avatar?.substring(0, 255) ?? null,
+          isActive: true,
+          usage,
+          preferredSource: 'web',
+          emailConfirmedAt: DateTime.now(), // Google already verified the email
+          password: null, // No password for Google users
+        })
+
+        console.log('[Google OAuth] New user created:', user.id)
+
+        // Send welcome email
+        try {
+          await this.mailService.sendEmail({
+            from: 'Photoreka <hello@photoreka.com>',
+            to: user.email,
+            subject: "Welcome to Photoreka! You're all set 🚀",
+            body: welcomeEmailTemplate(user.name),
+          })
+        } catch (emailError) {
+          console.error('[Google OAuth] Error sending welcome email:', emailError)
+        }
+      }
+
+      // Generate access token
+      const token = await User.accessTokens.create(user, ['*'])
+
+      console.log('[Google OAuth] Access token created, redirecting to frontend')
+
+      // Redirect to frontend with token
+      return response.redirect(
+        `${this.getFrontendUrl()}/auth/callback?token=${token.value!.release()}`
+      )
+    } catch (error) {
+      console.error('[Google OAuth] Callback error:', error)
+      return response.redirect(
+        `${this.getFrontendUrl()}/auth/error?message=Authentication failed. Please try again.`
+      )
     }
   }
 }

@@ -15,6 +15,11 @@ const schema = {
   DB_DATABASE: Env.schema.string(),
   APP_NAME: Env.schema.string(),
   REDIS_URL: Env.schema.string(),
+  GOOGLE_CLIENT_ID: Env.schema.string(),
+  GOOGLE_CLIENT_SECRET: Env.schema.string(),
+  GOOGLE_REDIRECT_URI: Env.schema.string(),
+  GOOGLE_OAUTH_REDIRECT_URI: Env.schema.string(),
+  FRONTEND_URL: Env.schema.string(),
 }
 
 // Fallback env.get() compatible wrapper
