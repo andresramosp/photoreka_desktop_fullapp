@@ -1,29 +1,10 @@
 <template>
-  <div class="photo-hub-container view-container">
+  <div class="sync-area-container view-container">
     <!-- Header Section -->
     <div class="hub-header">
       <div class="header-content">
-        <h1 class="page-title">Photo Hub</h1>
-        <p class="page-subtitle">
-          Synchronize, review, and process your catalog here.
-        </p>
-      </div>
-      <div class="header-actions">
-        <!-- Usage Indicators -->
-        <UsageIndicators />
-        <!-- <n-button type="info" size="large" @click="() => {}">
-          <template #icon>
-            <n-icon>
-              <svg viewBox="0 0 24 24">
-                <path
-                  fill="currentColor"
-                  d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"
-                />
-              </svg>
-            </n-icon>
-          </template>
-          Get more space
-        </n-button> -->
+        <h1 class="page-title">Sync Area</h1>
+        <p class="page-subtitle">Synchronize and process your photos here.</p>
       </div>
     </div>
 
@@ -40,18 +21,6 @@
               <DriveFolderUploadFilled color="var(--info-color)" />
             </n-icon>
             Lightbox
-          </div>
-        </button>
-        <button
-          class="tab-button"
-          :class="{ active: activeTab === 'catalog' }"
-          @click="setActiveTab('catalog')"
-        >
-          <div class="tab-title">
-            <n-icon size="16">
-              <ImagesOutline color="var(--success-color)" />
-            </n-icon>
-            Workspace
           </div>
         </button>
         <button
@@ -75,13 +44,6 @@
             key="lightbox-photos"
             @on-analyze="analyze"
             @selection-change="handleLightboxSelectionChange"
-          />
-        </KeepAlive>
-        <KeepAlive>
-          <WorkspacePhotos
-            v-show="activeTab === 'catalog'"
-            key="workspace-photos"
-            @navigate-to-tab="setActiveTab"
           />
         </KeepAlive>
         <KeepAlive>
@@ -110,18 +72,15 @@
 import { ref, onMounted, watch, computed, KeepAlive } from "vue";
 
 defineOptions({
-  name: "PhotoHubView",
+  name: "SyncAreaView",
 });
-import LightboxPhotos from "@/components/photo-hub/LightboxPhotos.vue";
-import ProcessingPhotos from "@/components/photo-hub/ProcessingPhotos.vue";
-import WorkspacePhotos from "@/components/photo-hub/WorkspacePhotos.vue";
+import LightboxPhotos from "@/components/sync-area/LightboxPhotos.vue";
+import ProcessingPhotos from "@/components/sync-area/ProcessingPhotos.vue";
 import FloatingProcessPhotosButton from "@/components/FloatingProcessPhotosButton.vue";
-import UsageIndicators from "@/components/UsageIndicators.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useUserStore } from "@/stores/userStore.ts";
 import { api, api_analyzer } from "@/utils/axios";
 import { useMessage, useNotification } from "naive-ui";
-import { ImagesOutline } from "@vicons/ionicons5";
 import { DriveFolderUploadFilled } from "@vicons/material";
 import { InProgress } from "@vicons/carbon";
 
@@ -204,10 +163,7 @@ const setActiveTab = (tab) => {
 
 const updateTabFromHash = () => {
   const hash = window.location.hash.replace("#", "");
-  if (
-    ["upload", "processing", "catalog"].includes(hash) &&
-    activeTab.value !== hash
-  ) {
+  if (["upload", "processing"].includes(hash) && activeTab.value !== hash) {
     activeTab.value = hash;
   }
 };
@@ -277,7 +233,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.photo-hub-container {
+.sync-area-container {
   padding: var(--spacing-2xl);
   margin: 0 auto;
   background-color: var(--bg-body);
@@ -570,7 +526,7 @@ onMounted(() => {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .photo-hub-container {
+  .sync-area-container {
     padding: 16px;
   }
 
@@ -654,7 +610,7 @@ onMounted(() => {
 }
 
 @media (max-width: 480px) {
-  .photo-hub-container {
+  .sync-area-container {
     padding: 12px;
   }
 

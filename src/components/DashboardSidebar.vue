@@ -16,7 +16,7 @@
         </div>
       </div>
 
-      <!-- First Menu Section: Photo Hub -->
+      <!-- First Menu Section: Workspace, Sync Area -->
       <n-menu
         :collapsed="false"
         :collapsed-width="64"
@@ -117,7 +117,7 @@
         </div>
       </div>
 
-      <!-- First Menu Section: Photo Hub -->
+      <!-- First Menu Section: Workspace, Sync Area -->
       <n-menu
         :collapsed="collapsed"
         :collapsed-width="64"
@@ -187,11 +187,12 @@ import { Workspace as CanvasIcon } from "@vicons/carbon";
 import {
   GridOutline as DashboardIcon,
   CameraOutline as PhotoHubIcon,
-  AlbumsOutline as CollectionsIcon,
+  FolderOpenOutline as WorkspaceIcon,
+  GridOutline as CollectionsIcon,
   ListOutline as SeriesIcon,
   ApertureOutline as StylerIcon,
   SearchOutline as SearchIcon,
-  ImagesOutline as CurationIcon,
+  FlaskOutline as CurationIcon,
   AnalyticsOutline as AnalyticsIcon,
   CubeOutline as CubeIcon,
   // ColorPaletteOutline as StylerIcon,
@@ -205,6 +206,10 @@ import {
   ConstructOutline as ConstructionIcon,
   ConstructOutline,
   SquareOutline as FramerIcon,
+  LayersOutline,
+  RepeatOutline,
+  SwapHorizontalOutline,
+  CloudUploadOutline,
 } from "@vicons/ionicons5";
 import { ConstructionOutlined, ConstructionSharp } from "@vicons/material";
 import AppLogo from "./AppLogo.vue";
@@ -228,12 +233,17 @@ const appAccessMode = computed(() => photosStore.appAccessMode);
 // Check if we're in mobile limited mode
 const isMobileLimitedMode = computed(() => isMobileDevice());
 
-// First section: Photo Hub only
+// First section: Workspace, Sync Area (Photo Hub)
 const firstSectionOptions = computed(() => [
   {
-    label: "Photo Hub",
-    key: "photo-hub",
-    icon: () => h(NIcon, null, { default: () => h(PhotoHubIcon) }),
+    label: "Workspace",
+    key: "workspace",
+    icon: () => h(NIcon, null, { default: () => h(LayersOutline) }),
+  },
+  {
+    label: "Sync Area",
+    key: "sync-area",
+    icon: () => h(NIcon, null, { default: () => h(CloudUploadOutline) }),
   },
 ]);
 
@@ -262,7 +272,7 @@ const thirdSectionToolsOptions = computed(() => {
   if (isMobileLimitedMode.value) {
     return [
       {
-        label: "Explorer",
+        label: "Search",
         key: "search",
         disabled: isBlocked,
         props: isBlocked ? { title: "Add photos to your catalog" } : {},
@@ -331,8 +341,8 @@ const fourthSectionOptions = computed<MenuOption[]>(() => {
 });
 
 const handleMenuSelect = (key: string) => {
-  if (key === "photo-hub") {
-    router.push({ name: "photo-hub", hash: "#catalog" });
+  if (key === "sync-area") {
+    router.push({ name: "sync-area", hash: "#upload" });
   } else {
     router.push({ name: key });
   }

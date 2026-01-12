@@ -297,7 +297,7 @@
     gap: var(--spacing-lg);
   }
 
-  .photo-hub-header {
+  .sync-area-header {
     margin-bottom: 0px !important;
   }
 }
@@ -330,7 +330,7 @@
     font-size: var(--font-size-sm);
   }
 
-  .photo-hub-header {
+  .sync-area-header {
     margin-bottom: 0px !important;
   }
 }
@@ -383,7 +383,7 @@
 }
 
 /* Catalog Section */
-.photo-hub-header {
+.sync-area-header {
   margin-bottom: 24px;
   display: flex;
   gap: 5px;
@@ -392,7 +392,7 @@
   align-items: center;
 }
 
-.photo-hub-title {
+.sync-area-title {
   font-size: 15px;
   font-weight: 200;
   color: var(--text-primary);

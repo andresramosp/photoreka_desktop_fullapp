@@ -1,123 +1,137 @@
 <template>
   <div class="photos-grid-controls">
-    <!-- Search Filters Section -->
+    <!-- Visual Filters Compact Row -->
     <div class="filters-section">
-      <div class="filters-header" @click="toggleFiltersPanel">
-        <div class="filters-header-left">
-          <n-icon
-            size="16"
-            class="filters-toggle-icon"
-            :color="`var(--primary-color)`"
-            :class="{ expanded: isFiltersPanelExpanded }"
-          >
+      <div
+        v-if="isMobile"
+        class="mobile-section-header"
+        @click="isFiltersExpanded = !isFiltersExpanded"
+      >
+        <div class="header-left">
+          <n-icon size="14" :color="`var(--primary-color)`">
             <Camera20Regular />
           </n-icon>
-          <h4 class="filters-title">Search Filters</h4>
+          <span class="section-title">Visual Filters</span>
           <span
-            v-if="hasActiveFilters && !isFiltersPanelExpanded"
-            class="active-filters-badge"
+            v-if="hasActiveFilters && !isFiltersExpanded"
+            class="active-badge"
           >
             {{ totalActiveFilters }}
           </span>
         </div>
-        <n-button
-          v-if="hasActiveFilters && isFiltersPanelExpanded"
-          quaternary
-          size="small"
-          @click.stop="clearAllFilters"
-          class="clear-filters-btn"
+        <n-icon
+          size="14"
+          class="toggle-icon"
+          :class="{ rotated: isFiltersExpanded }"
         >
-          Clear all filters
-        </n-button>
-      </div>
-
-      <div v-show="isFiltersPanelExpanded" class="filters-content">
-        <!-- Filename Search Row -->
-        <div class="filename-search-row">
-          <n-input
-            v-model:value="filenameSearch"
-            placeholder="Search by filename..."
-            clearable
-            size="small"
-            @update:value="handleFilenameSearchChange"
-          >
-            <template #prefix>
-              <n-icon>
-                <Search20Regular />
-              </n-icon>
-            </template>
-          </n-input>
-        </div>
-
-        <!-- Visual Aspects Filters Grid -->
-        <div class="filters-grid">
-          <div
-            v-for="aspectGroup in visualAspectsOptions"
-            :key="aspectGroup.key"
-            class="filter-group"
-          >
-            <n-select
-              v-model:value="selectedFilters[aspectGroup.key]"
-              multiple
-              :placeholder="`${
-                aspectGroup.label.charAt(0).toUpperCase() +
-                aspectGroup.label.slice(1)
-              }`"
-              :options="aspectGroup.children"
-              :max-tag-count="2"
-              clearable
-              filterable
-              class="filter-select"
-              size="small"
-              @update:value="handleFilterChange"
+          <svg viewBox="0 0 24 24">
+            <path
+              fill="currentColor"
+              d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
             />
-          </div>
+          </svg>
+        </n-icon>
+      </div>
+      <div v-if="!isMobile" class="filters-header-compact">
+        <n-icon size="16" class="section-icon" :color="`var(--primary-color)`">
+          <Camera20Regular />
+        </n-icon>
+        <span class="section-label">Visual aspects</span>
+      </div>
+      <div v-show="!isMobile || isFiltersExpanded" class="filters-row">
+        <div
+          v-for="aspectGroup in visualAspectsOptions"
+          :key="aspectGroup.key"
+          class="filter-item"
+        >
+          <n-select
+            v-model:value="selectedFilters[aspectGroup.key]"
+            multiple
+            :placeholder="`${
+              aspectGroup.label.charAt(0).toUpperCase() +
+              aspectGroup.label.slice(1)
+            }`"
+            :options="aspectGroup.children"
+            :max-tag-count="1"
+            clearable
+            filterable
+            class="filter-select"
+            size="small"
+            @update:value="handleFilterChange"
+          />
         </div>
-
-        <!-- Time Range Filter -->
-        <TimeRangeFilter
-          :photos="photos"
-          @time-range-change="handleTimeRangeChange"
-        />
       </div>
     </div>
 
-    <!-- Quality Sorting Section -->
+    <!-- Sorting Section -->
     <div class="sorting-section">
-      <div class="sorting-header" @click="toggleSortingPanel">
-        <div class="sorting-header-left">
+      <div
+        v-if="isMobile"
+        class="mobile-section-header"
+        @click="isSortingExpanded = !isSortingExpanded"
+      >
+        <div class="header-left">
+          <n-icon size="14" :color="`var(--warning-color)`">
+            <Trophy20Regular />
+          </n-icon>
+          <span class="section-title">Ranking</span>
+          <span
+            v-if="hasActiveSorting && !isSortingExpanded"
+            class="active-badge"
+          >
+            Active
+          </span>
+        </div>
+        <n-icon
+          size="14"
+          class="toggle-icon"
+          :class="{ rotated: isSortingExpanded }"
+        >
+          <svg viewBox="0 0 24 24">
+            <path
+              fill="currentColor"
+              d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+            />
+          </svg>
+        </n-icon>
+      </div>
+      <div v-show="!isMobile || isSortingExpanded" class="sorting-wrapper">
+        <div class="sorting-header-compact">
           <n-icon
             size="16"
+            class="section-icon"
             :color="`var(--warning-color)`"
-            class="sorting-toggle-icon"
-            :class="{ expanded: isSortingPanelExpanded }"
           >
             <Trophy20Regular />
           </n-icon>
-          <h4 class="sorting-title">Rank by Scores</h4>
-
-          <!-- Sort Order Icon (small and discrete) -->
+          <span class="section-label">Rank by</span>
+          <n-radio-group
+            v-model:value="sortingType"
+            size="small"
+            @update:value="handleSortingTypeChange"
+          >
+            <n-radio value="criteria" class="sorting-radio">Criteria</n-radio>
+            <n-radio value="genre" class="sorting-radio">Genre</n-radio>
+          </n-radio-group>
           <n-button
             v-if="hasActiveSorting"
             text
-            size="tiny"
-            @click.stop="toggleSortOrder"
-            class="sort-order-icon"
+            size="small"
+            @click="toggleSortOrder"
+            class="sort-order-btn"
             :title="
               sortOrder === 'desc'
                 ? 'Best First (click for Worst First)'
                 : 'Worst First (click for Best First)'
             "
           >
-            <n-icon size="18">
-              <svg viewBox="0 0 24 24" style="width: 18px; height: 18px">
-                <!-- Desc (Best First) - Sort descending icon -->
+            <n-icon size="16">
+              <svg viewBox="0 0 24 24" style="width: 16px; height: 16px">
                 <path
                   v-if="sortOrder === 'desc'"
                   d="M19,17H22L18,21L14,17H17V3H19V17M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
                   fill="currentColor"
                 />
-                <!-- Asc (Worst First) - Sort ascending icon -->
                 <path
                   v-else
                   d="M19,7H22L18,3L14,7H17V21H19V7M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
@@ -126,149 +140,197 @@
               </svg>
             </n-icon>
           </n-button>
-
-          <span
-            v-if="hasActiveSorting && !isSortingPanelExpanded"
-            class="active-sorting-badge"
+          <n-button
+            v-if="hasActiveSorting"
+            quaternary
+            size="small"
+            @click="clearSorting"
+            class="clear-action-btn"
           >
-            Active
-          </span>
+            Clear
+          </n-button>
         </div>
-        <n-button
-          v-if="hasActiveSorting && isSortingPanelExpanded"
-          quaternary
-          size="small"
-          @click.stop="clearSorting"
-          class="clear-sorting-btn"
-        >
-          Clear sorting
-        </n-button>
-      </div>
 
-      <div v-show="isSortingPanelExpanded" class="sorting-content">
-        <div class="sorting-controls">
-          <!-- Sorting Type Selection -->
-          <div class="sorting-type-selection">
-            <n-radio-group
-              v-model:value="sortingType"
-              @update:value="handleSortingTypeChange"
-            >
-              <!-- <n-radio value="none" class="sorting-radio"> None </n-radio> -->
-              <n-radio value="criteria" class="sorting-radio">
-                Included Criteria
-              </n-radio>
-              <n-radio value="genre" class="sorting-radio">
-                Genre Presets
-              </n-radio>
-            </n-radio-group>
-          </div>
-
-          <!-- Criteria-based Sorting -->
-          <div v-if="sortingType === 'criteria'" class="criteria-selection">
-            <n-select
-              v-model:value="selectedCriteria"
-              multiple
-              :options="availableCriteria"
-              placeholder="Select criteria"
+        <!-- Criteria Selection -->
+        <div v-if="sortingType === 'criteria'" class="criteria-row">
+          <template
+            v-for="[groupKey, group] in Object.entries(artisticScores)"
+            :key="groupKey"
+          >
+            <n-button
+              v-for="criterion in group.criteria"
+              :key="criterion.value"
+              :type="
+                selectedCriteria.includes(criterion.value)
+                  ? groupKey === 'fundamentals'
+                    ? 'primary'
+                    : 'warning'
+                  : 'default'
+              "
               size="small"
-              style="width: 430px"
-              :show-arrow="true"
-              :render-tag="renderCriterionTag"
-              @update:value="handleCriteriaChange"
-            />
-          </div>
+              @click="toggleCriterion(criterion.value)"
+              class="criterion-button"
+            >
+              <template #icon>
+                <n-icon>
+                  <component :is="criterionIcons[criterion.value]" />
+                </n-icon>
+              </template>
+              {{ criterion.label }}
+            </n-button>
+          </template>
+        </div>
 
-          <!-- Genre-based Sorting -->
-          <div v-if="sortingType === 'genre'" class="genre-selection">
-            <div class="genre-buttons">
-              <n-tooltip
-                trigger="hover"
-                placement="bottom"
-                :show-arrow="true"
-                delay="1200"
-              >
-                <template #trigger>
-                  <n-button
-                    :type="selectedGenre === 'street' ? 'primary' : 'default'"
-                    size="small"
-                    @click="handleGenreSelect('street')"
-                    class="genre-button"
-                  >
-                    <template #icon>
-                      <n-icon>
-                        <WalkOutline />
-                      </n-icon>
-                    </template>
-                    Street
-                  </n-button>
-                </template>
-                <div v-html="formatGenreTooltip('street')"></div>
-              </n-tooltip>
-
-              <n-tooltip
-                trigger="hover"
-                placement="bottom"
-                :show-arrow="true"
-                delay="1200"
-              >
-                <template #trigger>
-                  <n-button
-                    :type="
-                      selectedGenre === 'documentary' ? 'primary' : 'default'
-                    "
-                    size="small"
-                    @click="handleGenreSelect('documentary')"
-                    class="genre-button"
-                  >
-                    <template #icon>
-                      <n-icon>
-                        <BookOpen16Regular />
-                      </n-icon>
-                    </template>
-                    Documentary
-                  </n-button>
-                </template>
-                <div v-html="formatGenreTooltip('documentary')"></div>
-              </n-tooltip>
-
-              <n-tooltip
-                trigger="hover"
-                placement="bottom"
-                :show-arrow="true"
-                delay="1200"
-              >
-                <template #trigger>
-                  <n-button
-                    :type="selectedGenre === 'abstract' ? 'primary' : 'default'"
-                    size="small"
-                    @click="handleGenreSelect('abstract')"
-                    class="genre-button"
-                  >
-                    <template #icon>
-                      <n-icon>
-                        <PaletteOutlined />
-                      </n-icon>
-                    </template>
-                    Artistic
-                  </n-button>
-                </template>
-                <div v-html="formatGenreTooltip('abstract')"></div>
-              </n-tooltip>
-
+        <!-- Genre Buttons -->
+        <div v-if="sortingType === 'genre'" class="genre-row">
+          <n-tooltip
+            v-for="genre in genres"
+            :key="genre.value"
+            trigger="hover"
+            placement="bottom"
+            :show-arrow="true"
+            delay="1200"
+          >
+            <template #trigger>
               <n-button
-                :type="selectedGenre === 'custom' ? 'primary' : 'warning'"
+                :type="selectedGenre === genre.value ? 'primary' : 'default'"
                 size="small"
-                @click="handleGenreSelect('custom')"
-                class="genre-button custom-button_"
+                @click="handleGenreSelect(genre.value)"
+                class="genre-button"
+                :class="{ 'custom-button': genre.value === 'custom' }"
               >
                 <template #icon>
                   <n-icon>
-                    <Settings20Regular />
+                    <component :is="genre.icon" />
                   </n-icon>
                 </template>
-                Custom
+                {{ genre.label }}
               </n-button>
+            </template>
+            <div
+              v-if="genre.value !== 'custom'"
+              v-html="formatGenreTooltip(genre.value)"
+            ></div>
+            <div v-else>Customize your own scoring weights</div>
+          </n-tooltip>
+        </div>
+      </div>
+    </div>
+
+    <!-- More Filters Section -->
+    <div class="date-range-section">
+      <div
+        class="date-range-toggle"
+        @click="isDateRangeExpanded = !isDateRangeExpanded"
+      >
+        <span class="date-range-label">More filters</span>
+        <n-icon
+          size="12"
+          class="toggle-icon"
+          :class="{ rotated: isDateRangeExpanded }"
+        >
+          <svg viewBox="0 0 24 24">
+            <path
+              fill="currentColor"
+              d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+            />
+          </svg>
+        </n-icon>
+      </div>
+
+      <!-- Collapsible More Filters -->
+      <div v-if="isDateRangeExpanded" class="date-range-container">
+        <div class="more-filters-content">
+          <!-- Filename Search + Metadata Filters Row -->
+          <div class="metadata-row">
+            <!-- Filename Search -->
+            <div class="filter-wrapper">
+              <label class="filter-label">File name</label>
+              <n-input
+                v-model:value="filenameSearch"
+                placeholder="Filename..."
+                clearable
+                size="small"
+                class="filename-input"
+                @update:value="handleFilenameSearchChange"
+              >
+                <template #prefix>
+                  <n-icon size="14">
+                    <Search20Regular />
+                  </n-icon>
+                </template>
+              </n-input>
             </div>
+
+            <!-- File Type Filter -->
+            <div class="filter-wrapper">
+              <label class="filter-label">File type</label>
+              <n-select
+                disabled
+                v-model:value="selectedFileTypes"
+                multiple
+                placeholder="All types..."
+                :options="fileTypeOptions"
+                size="small"
+                clearable
+                filterable
+                class="compact-select"
+              />
+            </div>
+
+            <!-- ISO Filter -->
+            <div class="filter-wrapper">
+              <label class="filter-label">ISO</label>
+              <n-select
+                v-model:value="selectedISO"
+                multiple
+                disabled
+                placeholder="All ISO..."
+                :options="isoOptions"
+                size="small"
+                clearable
+                filterable
+                class="compact-select"
+              />
+            </div>
+
+            <!-- Flash Filter -->
+            <div class="filter-wrapper">
+              <label class="filter-label">Flash</label>
+              <n-select
+                v-model:value="selectedFlash"
+                disabled
+                placeholder="All states..."
+                :options="flashOptions"
+                size="small"
+                clearable
+                class="compact-select"
+              />
+            </div>
+
+            <!-- Aperture Filter -->
+            <div class="filter-wrapper">
+              <label class="filter-label">Aperture</label>
+              <n-select
+                v-model:value="selectedAperture"
+                disabled
+                multiple
+                placeholder="All f-stops..."
+                :options="apertureOptions"
+                size="small"
+                clearable
+                filterable
+                class="compact-select"
+              />
+            </div>
+          </div>
+
+          <!-- Date Range Filter -->
+          <div class="date-range-wrapper">
+            <TimeRangeFilter
+              :photos="photos"
+              @time-range-change="handleTimeRangeChange"
+            />
           </div>
         </div>
       </div>
@@ -303,9 +365,10 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, h } from "vue";
+import { computed, ref, watch, h, onMounted } from "vue";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
+import { useIsMobile } from "@/composables/useIsMobile.js";
 import CustomArtisticWeights from "./CustomArtisticWeights.vue";
 import TimeRangeFilter from "./TimeRangeFilter.vue";
 import {
@@ -320,19 +383,33 @@ import {
   NInput,
 } from "naive-ui";
 import {
-  Book20Regular,
   BookOpen16Regular,
   Camera20Regular,
-  ChevronRight20Regular,
-  Location20Regular,
-  PaintBrush20Regular,
-  RoadCone20Regular,
   Search20Regular,
   Settings20Regular,
   Trophy20Regular,
+  Sparkle20Regular,
+  Grid20Regular,
+  DocumentBulletList20Regular,
+  StarEmphasis20Regular,
+  Comment20Regular,
+  Emoji20Regular,
+  Eye20Regular,
 } from "@vicons/fluent";
-import { PaletteOutlined } from "@vicons/material";
+import { PaletteOutlined, PersonRound } from "@vicons/material";
 import { Walk, WalkOutline } from "@vicons/ionicons5";
+
+// Icon mapping for criteria
+const criterionIcons = {
+  aesthetic_quality: Sparkle20Regular,
+  composition: Grid20Regular,
+  storytelling: DocumentBulletList20Regular,
+  strangeness: StarEmphasis20Regular,
+  message: Comment20Regular,
+  humor: Emoji20Regular,
+  visual_games: Eye20Regular,
+  candidness: PersonRound,
+};
 
 const emit = defineEmits([
   "filters-change",
@@ -344,7 +421,19 @@ const emit = defineEmits([
   "custom-weights-change",
   "filename-search-change",
   "time-range-change",
+  "file-type-change",
+  "iso-change",
+  "flash-change",
+  "aperture-change",
 ]);
+
+// Genre definitions for rendering
+const genres = [
+  { value: "street", label: "Street", icon: WalkOutline },
+  { value: "documentary", label: "Documentary", icon: BookOpen16Regular },
+  { value: "abstract", label: "Artistic", icon: PaletteOutlined },
+  { value: "custom", label: "Custom", icon: Settings20Regular },
+];
 
 const props = defineProps({
   basicSortActive: {
@@ -357,19 +446,80 @@ const props = defineProps({
   },
 });
 
+// Mobile detection
+const { isMobile } = useIsMobile();
+
 // Filename Search
 const filenameSearch = ref("");
 
+// File Type Filter
+const selectedFileTypes = ref([]);
+const fileTypeOptions = [
+  { label: "JPEG", value: "jpg" },
+  { label: "PNG", value: "png" },
+  { label: "HEIC", value: "heic" },
+  { label: "RAW", value: "raw" },
+  { label: "TIFF", value: "tiff" },
+  { label: "WebP", value: "webp" },
+];
+
+// ISO Filter
+const selectedISO = ref([]);
+const isoOptions = [
+  { label: "100", value: 100 },
+  { label: "200", value: 200 },
+  { label: "400", value: 400 },
+  { label: "800", value: 800 },
+  { label: "1600", value: 1600 },
+  { label: "3200", value: 3200 },
+  { label: "6400", value: 6400 },
+  { label: "12800", value: 12800 },
+];
+
+// Flash Filter
+const selectedFlash = ref(null);
+const flashOptions = [
+  { label: "Off", value: "off" },
+  { label: "On", value: "on" },
+  { label: "Auto", value: "auto" },
+];
+
+// Aperture Filter
+const selectedAperture = ref([]);
+const apertureOptions = [
+  { label: "f/1.0", value: 1.0 },
+  { label: "f/1.4", value: 1.4 },
+  { label: "f/1.8", value: 1.8 },
+  { label: "f/2.0", value: 2.0 },
+  { label: "f/2.8", value: 2.8 },
+  { label: "f/4.0", value: 4.0 },
+  { label: "f/5.6", value: 5.6 },
+  { label: "f/8.0", value: 8.0 },
+  { label: "f/11", value: 11.0 },
+  { label: "f/16", value: 16.0 },
+];
+
 // Visual Aspects Filters
 const selectedFilters = ref({});
-const isFiltersPanelExpanded = ref(false);
+const isFiltersExpanded = ref(true); // Will be set based on mobile on mount
+
+// Date Range Filter
+const isDateRangeExpanded = ref(false);
 
 // Quality Sorting
 const sortingType = ref("criteria"); // 'criteria' or 'genre'
 const selectedCriteria = ref([]); // Start empty (no sorting initially)
 const selectedGenre = ref("street");
 const sortOrder = ref("desc"); // 'asc', 'desc'
-const isSortingPanelExpanded = ref(false);
+const isSortingExpanded = ref(true); // Will be set based on mobile on mount
+
+// Initialize collapsed state for mobile
+onMounted(() => {
+  if (isMobile.value) {
+    isFiltersExpanded.value = false;
+    isSortingExpanded.value = false;
+  }
+});
 
 // Get dynamic criteria from useArtisticScores
 const {
@@ -485,18 +635,22 @@ const hasActiveSorting = computed(() => {
 });
 
 // Functions
-const toggleFiltersPanel = () => {
-  isFiltersPanelExpanded.value = !isFiltersPanelExpanded.value;
-};
-
-const toggleSortingPanel = () => {
-  isSortingPanelExpanded.value = !isSortingPanelExpanded.value;
-};
-
 const clearAllFilters = () => {
   Object.keys(selectedFilters.value).forEach((key) => {
     selectedFilters.value[key] = [];
   });
+};
+
+const toggleCriterion = (criterionValue) => {
+  const index = selectedCriteria.value.indexOf(criterionValue);
+  if (index === -1) {
+    // Add criterion
+    selectedCriteria.value.push(criterionValue);
+  } else {
+    // Remove criterion
+    selectedCriteria.value.splice(index, 1);
+  }
+  handleCriteriaChange();
 };
 
 const handleSortingTypeChange = () => {
@@ -630,265 +784,257 @@ watch(
 .photos-grid-controls {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-/* Search Filters Styles */
-.filters-section {
-  /* background-color: var(--bg-body); */
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-  overflow: hidden;
-}
-
-.filters-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.filters-header:hover {
-  /* background-color: #202025; */
-}
-
-.filters-header-left {
-  display: flex;
-  align-items: center;
   gap: 8px;
-}
-
-.filters-toggle-icon {
-  /* color: var(--text-primary); */
-  transition: transform 0.2s ease;
-}
-
-.filters-toggle-icon.expanded {
-  /* transform: rotate(90deg); */
-  opacity: 1;
-}
-
-.filters-title {
-  font-size: 14px;
-  font-weight: 500;
-  /* color: var(--text-secondary); */
-  margin: 0;
-}
-
-.active-filters-badge {
-  background-color: #8b5cf6;
-  /* color: white; */
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 10px;
-  min-width: 16px;
-  text-align: center;
-}
-
-.clear-filters-btn {
-  color: #8b5cf6;
-}
-
-.filters-content {
-  border: 1px solid var(--border-color);
-  padding: 16px;
-}
-
-.filename-search-row {
   margin-bottom: 16px;
 }
 
-.filename-search-row :deep(.n-input) {
-  max-width: 400px;
+/* Filters Section */
+.filters-section {
+  background-color: var(--bg-body);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
 }
 
-.filters-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+.filters-header-compact {
+  display: flex;
+  align-items: center;
   gap: 12px;
+  padding: 8px 12px;
+  padding-bottom: 4px;
+}
+
+/* Filters Row - Force single row on desktop, flexible on mobile */
+.filters-row {
+  display: grid;
+  grid-template-columns: repeat(11, minmax(0, 1fr)); /* 11 columns forced */
+  gap: 6px;
+  padding: 4px 12px 8px 12px;
+}
+
+.filter-item {
+  min-width: 0;
 }
 
 .filter-select {
   width: 100%;
 }
 
-/* Quality Sorting Styles */
+/* Sorting Section */
 .sorting-section {
-  border-radius: 8px;
+  background-color: var(--bg-body);
   border: 1px solid var(--border-color);
-  overflow: hidden;
+  border-radius: 6px;
+  padding: 8px 12px;
 }
 
-.sorting-header {
+.sorting-wrapper {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.sorting-header:hover {
-}
-
-.sorting-header-left {
-  display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
 }
 
-.sorting-toggle-icon {
-  /* color: var(--text-primary); */
-  transition: transform 0.2s ease;
-}
-
-.sorting-toggle-icon.expanded {
-  /* transform: rotate(90deg); */
-  opacity: 1;
-}
-
-.sorting-title {
-  font-size: 14px;
-  font-weight: 500;
-  margin: 0;
-}
-
-.sort-order-icon {
-  color: var(--text-primary);
-  transition: all 0.2s ease;
-  margin-left: 8px;
-  opacity: 0.7;
-}
-
-.sort-order-icon:hover {
-  color: #8b5cf6;
-  opacity: 1;
-  transform: scale(1.1);
-}
-
-.active-sorting-badge {
-  background-color: #10b981;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 10px;
-  min-width: 16px;
-  text-align: center;
-}
-
-.clear-sorting-btn {
-  color: #10b981;
-}
-
-.sorting-content {
-  border: 1px solid var(--border-color);
-  padding: 16px;
-}
-
-.sorting-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.sorting-type-selection {
+.sorting-header-compact {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.sorting-radio {
+.section-label {
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-secondary);
 }
 
-.criteria-selection {
+.sorting-radio {
+  font-size: 13px;
+}
+
+.sort-order-btn {
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+  opacity: 0.7;
+  padding: 4px;
+}
+
+.sort-order-btn:hover {
+  opacity: 1;
+  color: var(--warning-color);
+  transform: scale(1.05);
+}
+
+/* Criteria and Genre Rows */
+.criteria-row,
+.genre-row {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  padding-top: 4px;
 }
 
-.genre-selection {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+.criteria-select {
+  flex: 1;
+  min-width: 280px;
 }
 
-.genre-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.criterion-button {
+  flex: 1;
+  min-width: 120px;
+  transition: all 0.2s ease;
+  font-size: 13px;
+}
+
+.criterion-button:hover {
+  transform: translateY(-1px);
 }
 
 .genre-button {
-  min-width: 90px;
+  min-width: 100px;
   transition: all 0.2s ease;
+  font-size: 13px;
 }
 
 .genre-button:hover {
   transform: translateY(-1px);
 }
 
-.custom-button {
-  border: 2px dashed #2c2c32 !important;
+.genre-button.custom-button {
+  border: 1px dashed var(--border-color);
 }
 
-.criteria-label,
-.genre-label {
-  font-size: 14px;
-  color: var(--text-primary);
+/* More Filters Section */
+.date-range-section {
+  margin-top: 4px;
+}
+
+.date-range-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.date-range-toggle:hover {
+  background-color: var(--bg-hover);
+}
+
+.date-range-label {
+  font-size: 10px;
   font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.toggle-icon {
+  color: var(--text-secondary);
+  transition: transform 0.3s ease;
+}
+
+.toggle-icon.rotated {
+  transform: rotate(180deg);
+}
+
+.date-range-container {
+  margin-top: 8px;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.more-filters-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 12px;
+  background-color: var(--bg-body);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.metadata-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.date-range-wrapper,
+.filter-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.compact-select {
+  width: 100%;
+}
+
+.filter-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.filename-input {
+  width: 100%;
+  max-width: 400px;
+}
+
+.section-icon {
+  flex-shrink: 0;
+  opacity: 0.8;
 }
 
 /* Responsive */
 @media (max-width: 768px) {
-  .filters-grid {
-    grid-template-columns: 1fr;
+  .filename-input {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .filters-row {
+    grid-template-columns: 1fr; /* Single column in mobile for flexibility */
     gap: 8px;
   }
 
-  .criteria-selection,
-  .genre-selection {
+  .sorting-header-compact {
     flex-direction: column;
     align-items: flex-start;
-    gap: 12px;
+    gap: 8px;
   }
 
-  .genre-buttons {
+  .criteria-select {
     width: 100%;
-    justify-content: center;
+  }
+
+  .genre-row {
+    width: 100%;
   }
 
   .genre-button {
     flex: 1;
-    min-width: 80px;
-  }
-
-  .sorting-type-selection {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-
-  .filters-header,
-  .sorting-header {
-    padding: 10px 12px;
-  }
-
-  .filters-content,
-  .sorting-content {
-    padding: 12px;
+    min-width: 85px;
   }
 }
 
 /* Custom tooltip styling */
 :deep(.n-tooltip__content) {
   background-color: var(--bg-body) !important;
-  border: 1px solid #2c2c32 !important;
+  border: 1px solid var(--border-color) !important;
   border-radius: 8px !important;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important;
   max-width: 280px !important;

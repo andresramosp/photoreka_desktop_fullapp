@@ -233,7 +233,7 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 12px 0;
+  padding-bottom: 12px;
 }
 
 .filter-header {

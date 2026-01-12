@@ -599,7 +599,7 @@ watch(
 
 /* Collections-specific styles */
 .collection-header {
-  margin-bottom: var(--spacing-3xl);
+  margin-bottom: var(--spacing-2xl);
 }
 
 .collection-header-content {

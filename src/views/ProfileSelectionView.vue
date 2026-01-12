@@ -98,7 +98,7 @@ const completeProfile = async () => {
 
     if (result.success) {
       message.success("Profile preferences saved! Now let's sync your photos.");
-      router.push({ name: "photo-hub", hash: "#upload" });
+      router.push({ name: "sync-area", hash: "#upload" });
     } else {
       message.error(result.error || "Error saving profile preferences.");
     }

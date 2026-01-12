@@ -3,11 +3,11 @@
     <div class="processing-section">
       <!-- Processing Jobs Table -->
 
-      <div class="photo-hub-header">
+      <div class="sync-area-header">
         <n-icon size="18">
           <BookInformation20Regular />
         </n-icon>
-        <h3 class="photo-hub-title">
+        <h3 class="sync-area-title">
           Here you can monitor the analysis process for your photos. They will
           appear in your Workspace once the process is complete (up to two
           hours).

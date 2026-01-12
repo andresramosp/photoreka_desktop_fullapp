@@ -2,11 +2,11 @@
   <div class="tab-content">
     <!-- Empty State (when no photos) -->
     <div v-if="processedPhotos.length == 0" class="empty-state-section">
-      <div class="photo-hub-header">
+      <div class="sync-area-header">
         <n-icon size="18">
           <BookInformation20Regular />
         </n-icon>
-        <h3 class="photo-hub-title">
+        <h3 class="sync-area-title">
           Here's your catalog with all the photos processed and ready to be used
           in the all the tools.
         </h3>
@@ -35,7 +35,7 @@
             <div class="step-item">
               3. Click Analyze Photos and follow the process evolution in the
               <button class="tab-link" @click="navigateToTab('processing')">
-                Processing
+                Analyses
               </button>
               tab
             </div>
@@ -48,11 +48,11 @@
     <div v-else class="catalog-section">
       <div class="catalog-photos">
         <!-- Catalog Title -->
-        <div class="photo-hub-header">
+        <div class="sync-area-header">
           <n-icon size="18">
             <BookInformation20Regular />
           </n-icon>
-          <h3 class="photo-hub-title">
+          <h3 class="sync-area-title">
             Here's your catalog with all the photos processed and ready to be
             used in the tools.
           </h3>

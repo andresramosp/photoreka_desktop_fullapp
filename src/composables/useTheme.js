@@ -23,7 +23,7 @@ import {
 // ========================================================================
 // Si se setea a "dark" o "light", fuerza ese tema y oculta el toggle
 // Si es null, permite al usuario elegir libremente
-const FORCE_APP_THEME = "dark"; // null | "dark" | "light"
+const FORCE_APP_THEME = null; //"dark"; // null | "dark" | "light"
 const FORCE_LANDING_THEME = null; // null | "dark" | "light"
 
 const DEFAULT_THEME = "light";

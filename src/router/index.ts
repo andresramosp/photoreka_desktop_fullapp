@@ -7,7 +7,8 @@ import CanvasView from "../views/CanvasView.vue";
 import SearchView from "../views/SearchView.vue";
 import CollectionsView from "../views/CollectionsView.vue";
 import SeriesView from "../views/SeriesView.vue";
-import PhotoHubView from "../views/PhotoHubView.vue";
+import SyncAreaView from "../views/SyncAreaView.vue";
+import WorkspaceView from "../views/WorkspaceView.vue";
 import ProjectBuilderView from "../views/ProjectBuilderView.vue";
 import FramerView from "../views/FramerView.vue";
 import PortfolioReportView from "../views/PortfolioReportView.vue";
@@ -222,9 +223,17 @@ const router = createRouter({
       },
     },
     {
-      path: "/photo-hub",
-      name: "photo-hub",
-      component: PhotoHubView,
+      path: "/sync-area",
+      name: "sync-area",
+      component: SyncAreaView,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
+      path: "/workspace",
+      name: "workspace",
+      component: WorkspaceView,
       meta: {
         requiresAuth: true,
       },

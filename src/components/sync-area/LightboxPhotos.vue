@@ -114,12 +114,12 @@
     <!-- Upload Progress Section - hidden during first import state -->
     <div
       v-if="!isFirstImportState || lightboxPhotos.length > 0"
-      class="photo-hub-header"
+      class="sync-area-header"
     >
       <n-icon size="18">
         <BookInformation20Regular />
       </n-icon>
-      <h3 class="photo-hub-title">Photo upload and preview area.</h3>
+      <h3 class="sync-area-title">Photo upload and preview area.</h3>
     </div>
 
     <!-- Maintenance Mode Section -->
@@ -242,6 +242,24 @@
             Disconnected
           </n-tag>
           <n-tag v-else type="success" size="large" round> Connected </n-tag>
+        </div>
+
+        <div
+          class="import-card lightroom-card"
+          @click="showLightroomModal = true"
+        >
+          <div class="import-card-icon">
+            <img
+              src="/src/assets/logos/lightroom_logo.png"
+              alt="Adobe Lightroom"
+              class="lightroom-logo"
+            />
+          </div>
+          <h4 class="import-card-title">Official Plugin</h4>
+          <p class="import-card-description">
+            Export from LrC and work in the web version
+          </p>
+          <n-tag type="info" size="large" round> See instructions</n-tag>
         </div>
       </div>
 
@@ -1282,12 +1300,12 @@ defineExpose({
     margin-bottom: 24px;
   }
 
-  .photo-hub-header {
+  .sync-area-header {
     align-items: flex-start;
     gap: 8px;
   }
 
-  .photo-hub-title {
+  .sync-area-title {
     font-size: 14px;
   }
 
@@ -1372,9 +1390,9 @@ defineExpose({
 
 .import-cards-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 24px;
-  max-width: 700px;
+  max-width: 900px;
   margin: 0 auto 32px;
 }
 
@@ -1384,8 +1402,8 @@ defineExpose({
 }
 
 .import-card {
-  background-color: #2c2c32;
-  border: 2px solid #3c3c42;
+  background-color: var(--bg-surface);
+  border: 2px solid var(--border-color);
   border-radius: 16px;
   padding: 32px 24px;
   text-align: center;

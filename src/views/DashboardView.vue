@@ -641,12 +641,12 @@ const openSeries = (seriesId: string) => {
 };
 
 const goToCatalog = () => {
-  // Navigate to photo-hub with catalog tab active
-  router.push({ name: "photo-hub", hash: "#catalog" });
+  // Navigate to workspace
+  router.push({ name: "workspace" });
 };
 
 const goToCanvas = () => {
-  // Navigate to photo-hub with catalog tab active
+  // Navigate to sync-area with catalog tab active
   router.push({ name: "canvas" });
 };
 
@@ -656,13 +656,13 @@ const goToExplorer = () => {
 };
 
 const goToPlan = () => {
-  // Navigate to photo-hub with catalog tab active
+  // Navigate to sync-area with catalog tab active
   router.push({ name: "plan" });
 };
 
 const goToUpload = () => {
-  // Navigate to photo-hub with catalog tab active
-  router.push({ name: "photo-hub", hash: "#upload" });
+  // Navigate to sync-area with catalog tab active
+  router.push({ name: "sync-area", hash: "#upload" });
 };
 
 const goToPortfolioReport = () => {

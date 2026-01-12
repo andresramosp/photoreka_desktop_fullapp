@@ -162,6 +162,8 @@ const allowedHeaderViews = [
   "search",
   "project-builder",
   "framer",
+  "workspace",
+  "sync-area",
   // "profile",
   // "settings",
   // Add more route names as needed
@@ -184,7 +186,7 @@ const getKeepAliveComponents = () => {
     "CanvasView",
     "SearchView",
     "CollectionsView",
-    "PhotoHubView",
+    "SyncAreaView",
     "ProjectBuilderView",
     "FramerView",
     "GridMakerView",
