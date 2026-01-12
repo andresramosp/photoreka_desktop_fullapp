@@ -217,14 +217,24 @@ export default class Photo extends BaseModel {
     return finalDetections
   }
 
+  // @computed()
+  // public get thumbnailUrl(): string {
+  //   return `https://pub-${process.env.R2_PUBLIC_ID}.r2.dev/${this.thumbnailName}`
+  // }
+
+  // @computed()
+  // public get originalUrl(): string {
+  //   return `https://pub-${process.env.R2_PUBLIC_ID}.r2.dev/${this.name}`
+  // }
+
   @computed()
   public get thumbnailUrl(): string {
-    return `https://pub-${process.env.R2_PUBLIC_ID}.r2.dev/${this.thumbnailName}`
+    return `https://images.photoreka.com/${this.thumbnailName}`
   }
 
   @computed()
   public get originalUrl(): string {
-    return `https://pub-${process.env.R2_PUBLIC_ID}.r2.dev/${this.name}`
+    return `https://images.photoreka.com/${this.name}`
   }
 
   @computed()
