@@ -134,6 +134,8 @@ import DashboardSidebar from "./components/DashboardSidebar.vue";
 import DashboardHeader from "./components/DashboardHeader.vue";
 import FloatingAddPhotosButton from "./components/FloatingAddPhotosButton.vue";
 import { usePhotosStore } from "@/stores/photos.js";
+import { useCollectionsStore } from "@/stores/collections.js";
+import { useSeriesStore } from "@/stores/series.js";
 import ConfettiEffect from "./components/ConfettiEffect.vue";
 import AppInitLoader from "./components/AppInitLoader.vue";
 import { useThemeInit } from "@/composables/useTheme.js";
@@ -181,6 +183,8 @@ const showDashboardHeader = computed(() => {
   );
 });
 const photosStore = usePhotosStore();
+const collectionsStore = useCollectionsStore();
+const seriesStore = useSeriesStore();
 const userStore = useUserStore();
 
 // La app está lista cuando:
@@ -268,8 +272,13 @@ onMounted(() => {
 // Watcher para cargar fotos cuando el usuario se autentica
 watch(
   () => userStore.isAuthenticated,
-  (isAuth) => {
+  (isAuth, wasAuth) => {
     if (isAuth) {
+      // Resetear todos los stores antes de cargar datos nuevos (limpia datos de sesiones previas)
+      photosStore.resetStore();
+      collectionsStore.resetStore();
+      seriesStore.resetStore();
+      
       // Si el usuario se autentica pero aún está en la página de auth, redirigir inmediatamente
       if (route.name === "auth") {
         router.replace("/dashboard");
@@ -277,6 +286,13 @@ watch(
       // Cargar catálogo inmediatamente cuando se autentica
       photosStore.getOrFetch(true);
     } else {
+      // Usuario se desautenticó - resetear stores
+      if (wasAuth !== undefined) {
+        // Solo si no es la primera ejecución (wasAuth es undefined en immediate)
+        photosStore.resetStore();
+        collectionsStore.resetStore();
+        seriesStore.resetStore();
+      }
       showWelcomeModal.value = false;
       // Si no está autenticado, marcar photosStore como inicializado para no bloquear la app
       photosStore.isInitialized = true;

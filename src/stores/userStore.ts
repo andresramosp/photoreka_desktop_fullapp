@@ -90,6 +90,8 @@ export const useUserStore = defineStore("user", () => {
     password: string
   ): Promise<{ success: boolean; error?: string }> => {
     isLoading.value = true;
+    // Resetear estado de inicialización al hacer login para forzar recarga completa
+    isInitialized.value = false;
 
     try {
       const response = await api.post("/api/auth/login", { email, password });
@@ -105,6 +107,9 @@ export const useUserStore = defineStore("user", () => {
 
       // Fetch usage data after successful login
       await fetchUsage();
+
+      // Marcar como inicializado después de cargar todo
+      isInitialized.value = true;
 
       return { success: true };
     } catch (error: any) {
@@ -124,6 +129,8 @@ export const useUserStore = defineStore("user", () => {
     authCode?: string
   ): Promise<{ success: boolean; error?: string }> => {
     isLoading.value = true;
+    // Resetear estado de inicialización al hacer registro para forzar recarga completa
+    isInitialized.value = false;
 
     try {
       const payload: any = {
@@ -147,6 +154,9 @@ export const useUserStore = defineStore("user", () => {
 
       // Fetch usage data after successful registration
       await fetchUsage();
+
+      // Marcar como inicializado después de cargar todo
+      isInitialized.value = true;
 
       return { success: true };
     } catch (error: any) {
@@ -186,6 +196,7 @@ export const useUserStore = defineStore("user", () => {
     token.value = null;
     isAuthenticated.value = false;
     user.value = null;
+    isInitialized.value = false;
     localStorage.removeItem("auth_token");
   };
 
@@ -345,6 +356,8 @@ export const useUserStore = defineStore("user", () => {
     receivedToken: string
   ): Promise<{ success: boolean; error?: string }> => {
     isLoading.value = true;
+    // Resetear estado de inicialización al hacer OAuth login para forzar recarga completa
+    isInitialized.value = false;
 
     try {
       // Guardar token
@@ -358,6 +371,9 @@ export const useUserStore = defineStore("user", () => {
 
       // Obtener usage
       await fetchUsage();
+
+      // Marcar como inicializado después de cargar todo
+      isInitialized.value = true;
 
       return { success: true };
     } catch (error: any) {

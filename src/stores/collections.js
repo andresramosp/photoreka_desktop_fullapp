@@ -67,6 +67,16 @@ export const useCollectionsStore = defineStore("collections", {
   },
 
   actions: {
+    // Resetear el store completamente (para cambios de usuario)
+    resetStore() {
+      this.collections = null;
+      this.currentCollection = null;
+      this.isLoading = false;
+      this.isCreating = false;
+      this.isDeleting = false;
+      this.isAddingPhotos = false;
+    },
+
     // Main fetch method following photosStore pattern
     async getOrFetch(force = false) {
       // If already loaded and not forcing, return existing data

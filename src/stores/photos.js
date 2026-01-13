@@ -176,6 +176,16 @@ export const usePhotosStore = defineStore("photos", {
   },
 
   actions: {
+    // Resetear el store completamente (para cambios de usuario)
+    resetStore() {
+      this.photos = null;
+      this.isLoading = false;
+      this.isInitialized = false;
+      this.selectedPhotosRecord = {};
+      this.showUploadProgress = false;
+      this.duplicatesChecked = false;
+    },
+
     async getOrFetch(force) {
       if (force || (this.photos?.length === 0 && !this.isLoading)) {
         this.isLoading = true;

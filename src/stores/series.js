@@ -64,6 +64,18 @@ export const useSeriesStore = defineStore("series", {
   },
 
   actions: {
+    // Resetear el store completamente (para cambios de usuario)
+    resetStore() {
+      this.series = null;
+      this.currentSeries = null;
+      this.isLoading = false;
+      this.isCreating = false;
+      this.isDeleting = false;
+      this.isAddingPhotos = false;
+      this.isRemovingPhotos = false;
+      this.isReordering = false;
+    },
+
     // Main fetch method following photosStore pattern
     async getOrFetch(force = false) {
       // If already loaded and not forcing, return existing data
