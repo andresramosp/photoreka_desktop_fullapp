@@ -278,7 +278,7 @@ watch(
       photosStore.resetStore();
       collectionsStore.resetStore();
       seriesStore.resetStore();
-      
+
       // Si el usuario se autentica pero aún está en la página de auth, redirigir inmediatamente
       if (route.name === "auth") {
         router.replace("/dashboard");
