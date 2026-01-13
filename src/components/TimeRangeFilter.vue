@@ -39,6 +39,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
+import { useDebounceFn } from "@vueuse/core";
 import { NSlider, NButton } from "naive-ui";
 
 const props = defineProps({
@@ -220,8 +221,8 @@ const formatTooltip = (value) => {
   return formatDate(value);
 };
 
-// Handle range change
-const handleRangeChange = (value) => {
+// Handle range change with debounce (300ms)
+const emitRangeChange = (value) => {
   // Check if the range is the full range (no filter applied)
   if (value[0] === minTimestamp.value && value[1] === maxTimestamp.value) {
     emit("time-range-change", null);
@@ -229,6 +230,10 @@ const handleRangeChange = (value) => {
     emit("time-range-change", value);
   }
 };
+
+const handleRangeChange = useDebounceFn((value) => {
+  emitRangeChange(value);
+}, 300);
 
 // Clear filter
 const clearFilter = () => {

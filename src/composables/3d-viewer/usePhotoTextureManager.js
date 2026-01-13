@@ -33,6 +33,18 @@ const CONFIG_CREATION = {
   frameBudgetMsDesktop: 100,
 };
 
+// ===== Configuración de LOD dinámico de texturas =====
+const CONFIG_LOD = {
+  lowResSize: 256, // Resolución base para todas las fotos
+  highResSize: 1024, // Resolución alta para fotos cercanas
+  highResCount: 25, // Número de fotos cercanas en alta resolución
+  hysteresisMargin: 10, // Margen para evitar flickering (upgrade a N, downgrade a N+margin)
+  upgradesPerFrame: 3, // Máximo de upgrades por frame (para no saturar)
+  downgradesPerFrame: 5, // Máximo de downgrades por frame
+  ultraCloseDistance: 15, // Distancia para activar ultra-res (originalUrl)
+  ultraCloseHysteresis: 5, // Margen de hysteresis para ultra-res (degrade a distance + hysteresis)
+};
+
 export function usePhotoTextureManager(
   useLowPerformance = false,
   isPlayground = false
@@ -48,6 +60,16 @@ export function usePhotoTextureManager(
   let textureCreationRunning = false;
   let lastFrameCreationTime = 0;
   let adaptiveBatch = 0;
+
+  // ===== Estado de LOD dinámico =====
+  const highResPhotos = new Set(); // IDs de fotos actualmente en alta resolución
+  const lodUpgradeQueue = []; // Cola de fotos pendientes de upgrade
+  const lodDowngradeQueue = []; // Cola de fotos pendientes de downgrade
+
+  // ===== Estado de ultra-resolución (originalUrl) =====
+  let ultraResPhoto = null; // ID de la foto actualmente en ultra-res
+  const ultraResCache = new Map(); // photoId -> { texture, imageElement } para restaurar
+  let ultraResDownloading = false; // Flag para evitar descargas concurrentes
 
   // ===== Control de concurrencia =====
   const MAX_CONCURRENT_DOWNLOADS = 12;
@@ -230,45 +252,67 @@ export function usePhotoTextureManager(
   };
 
   /**
-   * Crear LOD object (mesh con textura Three.js)
+   * Redimensionar imagen a un tamaño máximo dado
    */
-  const createLODObject = (imageElement, position) => {
-    let maxSide = useLowPerformance ? 256 : 768;
-    let source = imageElement;
+  const resizeImage = (imageElement, maxSide) => {
     const needsResize =
       imageElement.width > maxSide || imageElement.height > maxSide;
 
-    if (needsResize) {
-      const scale = Math.min(
-        maxSide / imageElement.width,
-        maxSide / imageElement.height
-      );
-      const w = Math.round(imageElement.width * scale);
-      const h = Math.round(imageElement.height * scale);
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(imageElement, 0, 0, w, h);
-      source = canvas;
+    if (!needsResize) {
+      return {
+        source: imageElement,
+        width: imageElement.width,
+        height: imageElement.height,
+      };
     }
 
+    const scale = Math.min(
+      maxSide / imageElement.width,
+      maxSide / imageElement.height
+    );
+    const w = Math.round(imageElement.width * scale);
+    const h = Math.round(imageElement.height * scale);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(imageElement, 0, 0, w, h);
+    return { source: canvas, width: w, height: h };
+  };
+
+  /**
+   * Crear textura Three.js desde una fuente de imagen
+   */
+  const createTextureFromSource = (source) => {
     const texture = new THREE.Texture(source);
     texture.needsUpdate = true;
-
     texture.generateMipmaps = false;
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
-
-    //  texture.generateMipmaps = true;
-    //     texture.minFilter = THREE.LinearMipmapLinearFilter;
-    //     texture.magFilter = THREE.LinearFilter;
-
     texture.colorSpace = THREE.SRGBColorSpace;
-
     try {
       texture.anisotropy = 1;
     } catch (_) {}
+    return texture;
+  };
+
+  /**
+   * Crear LOD object (mesh con textura Three.js)
+   * @param {HTMLImageElement} imageElement - Imagen original
+   * @param {Array} position - Posición [x, y, z]
+   * @param {string} lodLevel - 'low' o 'high' (default: 'low')
+   */
+  const createLODObject = (imageElement, position, lodLevel = "low") => {
+    // En mobile siempre usar baja resolución
+    const maxSide = useLowPerformance
+      ? CONFIG_LOD.lowResSize
+      : lodLevel === "high"
+      ? CONFIG_LOD.highResSize
+      : CONFIG_LOD.lowResSize;
+
+    const { source, width, height } = resizeImage(imageElement, maxSide);
+
+    const texture = createTextureFromSource(source);
 
     const material = new THREE.MeshBasicMaterial({
       map: texture,
@@ -285,7 +329,7 @@ export function usePhotoTextureManager(
     mesh.position.set(position[0], position[1], position[2]);
 
     // Ajustar escala para mantener aspect ratio
-    const targetAspect = source.width / source.height;
+    const targetAspect = width / height;
     const baseAspect = 4 / 3;
     if (targetAspect > baseAspect) {
       mesh.scale.set(targetAspect / baseAspect, 1, 1);
@@ -293,7 +337,286 @@ export function usePhotoTextureManager(
       mesh.scale.set(1, baseAspect / targetAspect, 1);
     }
 
+    // Guardar nivel de LOD actual en el mesh
+    mesh.userData.lodLevel = lodLevel;
+
     return mesh;
+  };
+
+  /**
+   * Actualizar textura de una foto a una resolución diferente
+   * @param {Object} photo - Objeto foto con lodObject
+   * @param {string} newLodLevel - 'low' o 'high'
+   * @returns {boolean} - true si se actualizó, false si no fue posible
+   */
+  const updatePhotoTexture = (photo, newLodLevel) => {
+    if (!photo || !photo.lodObject) return false;
+
+    // Obtener imagen original del cache
+    const imageElement = downloadedImagesCache.get(photo.id);
+    if (!imageElement) {
+      // Si no hay imagen en cache, no podemos actualizar
+      return false;
+    }
+
+    const currentLevel = photo.lodObject.userData.lodLevel || "low";
+    if (currentLevel === newLodLevel) return false; // Ya está en el nivel correcto
+
+    // En mobile, no hacer upgrades
+    if (useLowPerformance && newLodLevel === "high") return false;
+
+    const maxSide =
+      newLodLevel === "high" ? CONFIG_LOD.highResSize : CONFIG_LOD.lowResSize;
+
+    const { source } = resizeImage(imageElement, maxSide);
+    const newTexture = createTextureFromSource(source);
+
+    // Disponer textura anterior
+    const oldMaterial = photo.lodObject.material;
+    if (oldMaterial && oldMaterial.map) {
+      oldMaterial.map.dispose();
+    }
+
+    // Asignar nueva textura
+    oldMaterial.map = newTexture;
+    oldMaterial.needsUpdate = true;
+    photo.lodObject.userData.lodLevel = newLodLevel;
+
+    return true;
+  };
+
+  /**
+   * Descargar imagen original (originalUrl) para ultra-resolución
+   */
+  const downloadOriginalImage = async (photo, originalUrl) => {
+    try {
+      const imageElement = await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => resolve(img);
+        img.onerror = (error) => reject(error);
+        img.src = originalUrl;
+      });
+      return imageElement;
+    } catch (error) {
+      console.warn(
+        `❌ Error descargando originalUrl para foto ${photo.id}:`,
+        error
+      );
+      return null;
+    }
+  };
+
+  /**
+   * Promocionar foto a ultra-resolución (originalUrl)
+   * @param {Object} photo - Objeto foto
+   * @param {string} originalUrl - URL de la imagen original de máxima calidad
+   */
+  const upgradeToUltraRes = async (photo, originalUrl) => {
+    if (!photo || !photo.lodObject) return false;
+    if (useLowPerformance) return false; // No en mobile
+    if (ultraResDownloading) return false; // Evitar descargas concurrentes
+    if (!originalUrl || originalUrl === photo.__imageUrl) return false; // Ya tiene la original
+
+    ultraResDownloading = true;
+
+    try {
+      // Descargar imagen original
+      const originalImage = await downloadOriginalImage(photo, originalUrl);
+      if (!originalImage) {
+        ultraResDownloading = false;
+        return false;
+      }
+
+      // Guardar textura actual para poder restaurarla
+      const currentMaterial = photo.lodObject.material;
+      if (currentMaterial && currentMaterial.map) {
+        ultraResCache.set(photo.id, {
+          texture: currentMaterial.map,
+          level: photo.lodObject.userData.lodLevel || "high",
+        });
+      }
+
+      // Crear nueva textura en máxima resolución (sin límite de tamaño)
+      const texture = createTextureFromSource(originalImage);
+
+      // Reemplazar textura
+      if (currentMaterial.map && !ultraResCache.has(photo.id)) {
+        currentMaterial.map.dispose();
+      }
+      currentMaterial.map = texture;
+      currentMaterial.needsUpdate = true;
+      photo.lodObject.userData.lodLevel = "ultra";
+      photo.__lodLevel = "ultra";
+
+      ultraResPhoto = photo.id;
+      console.log(`🔥 Ultra-res activado para foto ${photo.id} (originalUrl)`);
+      return true;
+    } catch (error) {
+      console.warn(`❌ Error en upgradeToUltraRes:`, error);
+      return false;
+    } finally {
+      ultraResDownloading = false;
+    }
+  };
+
+  /**
+   * Degradar foto desde ultra-resolución
+   */
+  const downgradeFromUltraRes = (photo) => {
+    if (!photo || !photo.lodObject) return false;
+    if (ultraResPhoto !== photo.id) return false;
+
+    const cached = ultraResCache.get(photo.id);
+    if (!cached) {
+      // No hay textura guardada, volver a crear desde cache
+      const imageElement = downloadedImagesCache.get(photo.id);
+      if (imageElement) {
+        updatePhotoTexture(photo, "high");
+      }
+    } else {
+      // Restaurar textura guardada
+      const currentMaterial = photo.lodObject.material;
+      if (currentMaterial && currentMaterial.map) {
+        currentMaterial.map.dispose();
+      }
+      currentMaterial.map = cached.texture;
+      currentMaterial.needsUpdate = true;
+      photo.lodObject.userData.lodLevel = cached.level;
+      photo.__lodLevel = cached.level;
+      ultraResCache.delete(photo.id);
+    }
+
+    ultraResPhoto = null;
+    console.log(`📉 Ultra-res desactivado para foto ${photo.id}`);
+    return true;
+  };
+
+  /**
+   * Promocionar foto a alta resolución
+   */
+  const upgradeToHighRes = (photo) => {
+    if (updatePhotoTexture(photo, "high")) {
+      highResPhotos.add(photo.id);
+      photo.__lodLevel = "high";
+      return true;
+    }
+    return false;
+  };
+
+  /**
+   * Degradar foto a baja resolución
+   */
+  const downgradeToLowRes = (photo) => {
+    if (updatePhotoTexture(photo, "low")) {
+      highResPhotos.delete(photo.id);
+      photo.__lodLevel = "low";
+      return true;
+    }
+    return false;
+  };
+
+  /**
+   * Actualizar LOD de texturas basado en distancia a cámara
+   * Llamar desde el loop de animación con fotos ordenadas por distancia
+   * @param {Array} sortedPhotosWithDistance - Array de {photo, distance} ordenado de cerca a lejos
+   * @param {Function} getPhotoOriginalUrl - Función para obtener originalUrl de una foto por ID
+   */
+  const updateTextureLODs = (
+    sortedPhotosWithDistance,
+    getPhotoOriginalUrl = null
+  ) => {
+    if (useLowPerformance) return; // En mobile no hacer LOD dinámico
+    if (!sortedPhotosWithDistance || sortedPhotosWithDistance.length === 0)
+      return;
+
+    const highResCount = CONFIG_LOD.highResCount;
+    const hysteresisThreshold = highResCount + CONFIG_LOD.hysteresisMargin;
+
+    let upgrades = 0;
+    let downgrades = 0;
+
+    // 🔥 ULTRA-RES: Verificar si la foto más cercana está MUY cerca
+    const closestEntry = sortedPhotosWithDistance[0];
+    if (
+      closestEntry &&
+      closestEntry.photo &&
+      closestEntry.photo.__textureLoaded
+    ) {
+      const { photo, distance } = closestEntry;
+      const isUltraClose = distance < CONFIG_LOD.ultraCloseDistance;
+      const ultraCloseHysteresisDistance =
+        CONFIG_LOD.ultraCloseDistance + CONFIG_LOD.ultraCloseHysteresis;
+
+      if (isUltraClose && ultraResPhoto !== photo.id && getPhotoOriginalUrl) {
+        // Activar ultra-res para esta foto
+        const originalUrl = getPhotoOriginalUrl(photo.id);
+        if (originalUrl && originalUrl !== photo.__imageUrl) {
+          // Si hay otra foto en ultra-res, degradarla primero
+          if (ultraResPhoto) {
+            const prevPhoto = sortedPhotosWithDistance.find(
+              (p) => p.photo.id === ultraResPhoto
+            );
+            if (prevPhoto) {
+              downgradeFromUltraRes(prevPhoto.photo);
+            }
+          }
+          upgradeToUltraRes(photo, originalUrl);
+        }
+      } else if (
+        ultraResPhoto === photo.id &&
+        distance > ultraCloseHysteresisDistance
+      ) {
+        // Desactivar ultra-res (te alejaste)
+        downgradeFromUltraRes(photo);
+      }
+    } else if (ultraResPhoto && sortedPhotosWithDistance.length > 0) {
+      // La foto ultra-res ya no es la más cercana, degradarla
+      const ultraPhoto = sortedPhotosWithDistance.find(
+        (p) => p.photo.id === ultraResPhoto
+      );
+      if (ultraPhoto) {
+        downgradeFromUltraRes(ultraPhoto.photo);
+      }
+    }
+
+    // Procesar fotos ordenadas por distancia (LOD normal high/low)
+    for (let i = 0; i < sortedPhotosWithDistance.length; i++) {
+      const { photo } = sortedPhotosWithDistance[i];
+      if (!photo || !photo.__textureLoaded) continue;
+      if (photo.id === ultraResPhoto) continue; // Skip foto en ultra-res
+
+      const isInHighResZone = i < highResCount;
+      const isInHysteresisZone = i < hysteresisThreshold;
+      const currentlyHighRes = highResPhotos.has(photo.id);
+
+      if (isInHighResZone && !currentlyHighRes) {
+        // Necesita upgrade
+        if (upgrades < CONFIG_LOD.upgradesPerFrame) {
+          if (upgradeToHighRes(photo)) {
+            upgrades++;
+          }
+        }
+      } else if (!isInHysteresisZone && currentlyHighRes) {
+        // Fuera de zona de hysteresis, necesita downgrade
+        if (downgrades < CONFIG_LOD.downgradesPerFrame) {
+          if (downgradeToLowRes(photo)) {
+            downgrades++;
+          }
+        }
+      }
+    }
+
+    // Log ocasional para debug
+    if (
+      (upgrades > 0 || downgrades > 0 || ultraResPhoto) &&
+      Math.random() < 0.05
+    ) {
+      const ultraMsg = ultraResPhoto ? ` | 🔥 ultra-res: ${ultraResPhoto}` : "";
+      console.log(
+        `🔄 LOD: ${highResPhotos.size} en alta res | +${upgrades} upgrades, -${downgrades} downgrades${ultraMsg}`
+      );
+    }
   };
 
   /**
@@ -344,7 +667,9 @@ export function usePhotoTextureManager(
             }
             lodGroup.add(lodObject);
             photo.__imageElement = undefined;
-            downloadedImagesCache.delete(photo.id);
+            photo.__lodLevel = "low";
+            // NO eliminar del cache: downloadedImagesCache.delete(photo.id);
+            // Mantener imagen original para poder hacer upgrade/downgrade de LOD
             created++;
           } catch (err) {
             console.warn("Texture creation error (bulk)", photo.id, err);
@@ -398,7 +723,12 @@ export function usePhotoTextureManager(
           }
           lodGroup.add(lodObject);
           photo.__imageElement = undefined;
-          downloadedImagesCache.delete(photo.id);
+          photo.__lodLevel = "low";
+          // NO eliminar del cache para permitir LOD dinámico
+          // En mobile sí eliminamos para ahorrar memoria
+          if (useLowPerformance) {
+            downloadedImagesCache.delete(photo.id);
+          }
           created++;
         } catch (err) {
           console.warn("Texture creation error", photo.id, err);
@@ -744,7 +1074,28 @@ export function usePhotoTextureManager(
       recovered: 0,
       failed: 0,
     };
+    // Reset LOD state
+    highResPhotos.clear();
+    lodUpgradeQueue.length = 0;
+    lodDowngradeQueue.length = 0;
+    // Reset ultra-res state
+    ultraResPhoto = null;
+    ultraResCache.forEach((cached) => {
+      if (cached.texture) cached.texture.dispose();
+    });
+    ultraResCache.clear();
+    ultraResDownloading = false;
   };
+
+  /**
+   * Obtener estadísticas de LOD
+   */
+  const getLODStats = () => ({
+    highResCount: highResPhotos.size,
+    ultraResPhotoId: ultraResPhoto,
+    cachedImagesCount: downloadedImagesCache.size,
+    config: { ...CONFIG_LOD },
+  });
 
   /**
    * Actualizar dynamic batch basado en frame time
@@ -788,6 +1139,15 @@ export function usePhotoTextureManager(
     enqueueInitialTexturesBulk,
     startTextureCreationLoop,
     disposeLODObject,
+
+    // Métodos de LOD dinámico
+    updateTextureLODs,
+    upgradeToHighRes,
+    downgradeToLowRes,
+    upgradeToUltraRes,
+    downgradeFromUltraRes,
+    getLODStats,
+    highResPhotos,
 
     // Utilidades
     updateLoadingProgress,

@@ -59,13 +59,18 @@
       <!-- Close Button (Top Right Corner) -->
       <button class="close-panel-btn-corner" @click="showConfigPanel = false">
         <n-icon>
-          <CloseOutlined />
+          <ShareSocialOutline />
         </n-icon>
       </button>
 
       <!-- Clustering Type Section (Always Visible) -->
       <div class="control-section">
-        <h4 class="section-title">Clustering Type</h4>
+        <h4 class="section-title">
+          <n-icon size="16" style="margin-right: 6px; vertical-align: middle">
+            <AppsOutline />
+          </n-icon>
+          Clustering Type
+        </h4>
         <div class="control-item-full">
           <n-select
             :disabled="showDiscreteLoader"
@@ -83,7 +88,12 @@
       <!-- More Filters Toggle -->
       <div class="control-section">
         <div class="section-toggle" @click="toggleMoreFilters">
-          <span class="section-toggle-label">Search filters</span>
+          <div style="display: flex; align-items: center; gap: 6px">
+            <n-icon size="16">
+              <FilterOutlined />
+            </n-icon>
+            <span class="section-toggle-label">Search filters</span>
+          </div>
           <div class="section-toggle-indicators">
             <span
               v-if="
@@ -342,7 +352,12 @@
       <!-- Display Options Toggle -->
       <div class="control-section">
         <div class="section-toggle" @click="toggleDisplayOptions">
-          <span class="section-toggle-label">Display Options</span>
+          <div style="display: flex; align-items: center; gap: 6px">
+            <n-icon size="16">
+              <EyeOutlined />
+            </n-icon>
+            <span class="section-toggle-label">Display Options</span>
+          </div>
           <n-icon
             size="12"
             class="toggle-icon"
@@ -448,7 +463,12 @@
       <!-- Tag Beacons Toggle -->
       <div class="control-section">
         <div class="section-toggle" @click="toggleTagBeacons">
-          <span class="section-toggle-label">Tag Beacons</span>
+          <div style="display: flex; align-items: center; gap: 6px">
+            <n-icon size="16">
+              <TagsOutlined />
+            </n-icon>
+            <span class="section-toggle-label">Tag Beacons</span>
+          </div>
           <n-icon
             size="12"
             class="toggle-icon"
@@ -578,7 +598,12 @@
       <!-- Navigation Controls Toggle -->
       <div class="control-section">
         <div class="section-toggle" @click="toggleNavigationControls">
-          <span class="section-toggle-label">Navigation Controls</span>
+          <div style="display: flex; align-items: center; gap: 6px">
+            <n-icon size="16">
+              <CompassOutlined />
+            </n-icon>
+            <span class="section-toggle-label">Navigation Controls</span>
+          </div>
           <n-icon
             size="12"
             class="toggle-icon"
@@ -856,7 +881,16 @@ import {
   NSwitch,
   useMessage,
 } from "naive-ui";
-import { CloseOutlined, SettingOutlined, InfoCircleFilled } from "@vicons/antd";
+import {
+  CloseOutlined,
+  SettingOutlined,
+  InfoCircleFilled,
+  FilterOutlined,
+  EyeOutlined,
+  TagsOutlined,
+  CompassOutlined,
+
+} from "@vicons/antd";
 import { useRouter } from "vue-router";
 
 import FixedActionBar from "@/components/3d-atlas/FixedActionBar.vue";
@@ -880,6 +914,10 @@ import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { api } from "@/utils/axios";
 import * as THREE from "three";
+import {
+  AppsOutline,
+  ShareSocialOutline,
+} from "@vicons/ionicons5";
 // (LOD helpers removidos para mipmaps) - import eliminado definitivamente
 // import "@/composables/3d-viewer/useTextureLOD.js"; // Eliminado: no side-effects necesarios
 // getMaxVisibleDistance eliminado: ya no ocultamos por distancia, solo opacity fade
@@ -919,6 +957,12 @@ const { hasTouch } = useHasTouch();
 const useLowPerformance = computed(() => isMobile.value || hasTouch.value);
 
 const processedPhotos = computed(() => photosStore.processedPhotos);
+
+// 🔥 Función helper para obtener originalUrl de una foto desde el store
+const getPhotoOriginalUrl = (photoId) => {
+  const photo = photosStore.photos?.find((p) => p.id === photoId);
+  return photo?.originalUrl || null;
+};
 
 // ===== Debug Flag (wrap noisy logs) =====
 const DEBUG_3D = false; // pon a true temporalmente si quieres verbosidad
@@ -2464,6 +2508,15 @@ const animate = () => {
         // Ordenar por distancia una sola vez (de cerca a lejos)
         photosWithDistances.sort((a, b) => a.distSq - b.distSq);
 
+        // 🎯 Actualizar LOD dinámico de texturas (fotos cercanas en alta resolución)
+        // Solo cada 10 frames para no saturar (throttle)
+        if (frameCounter % 10 === 0) {
+          textureManager.updateTextureLODs(
+            photosWithDistances,
+            getPhotoOriginalUrl
+          );
+        }
+
         // Aplicar billboarding (la opacidad ya está en los materiales LOD)
         if (useBillboarding.value)
           updateBillboardRotations(photosWithDistances);
@@ -3354,7 +3407,7 @@ onUnmounted(() => {
   margin: 0 0 var(--spacing-md) 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
 }
 
 .control-item {
