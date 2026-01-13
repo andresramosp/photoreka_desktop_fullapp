@@ -54,7 +54,9 @@
                   height: showDashboardHeader ? 'calc(100vh - 64px)' : '100vh',
                 }"
               >
-                <router-view v-slot="{ Component, route }">
+                <!-- Mostrar loader mientras la app se inicializa (solo en vistas autenticadas) -->
+                <AppInitLoader v-if="!isAppReady" />
+                <router-view v-else v-slot="{ Component, route }">
                   <KeepAlive :include="getKeepAliveComponents()">
                     <component :is="Component" />
                   </KeepAlive>
@@ -89,7 +91,9 @@
                   height: showDashboardHeader ? 'calc(100vh - 64px)' : '100vh',
                 }"
               >
-                <router-view v-slot="{ Component, route }">
+                <!-- Mostrar loader mientras la app se inicializa (solo en vistas autenticadas) -->
+                <AppInitLoader v-if="!isAppReady" />
+                <router-view v-else v-slot="{ Component, route }">
                   <KeepAlive :include="getKeepAliveComponents()">
                     <component :is="Component" />
                   </KeepAlive>
@@ -131,6 +135,7 @@ import DashboardHeader from "./components/DashboardHeader.vue";
 import FloatingAddPhotosButton from "./components/FloatingAddPhotosButton.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import ConfettiEffect from "./components/ConfettiEffect.vue";
+import AppInitLoader from "./components/AppInitLoader.vue";
 import { useThemeInit } from "@/composables/useTheme.js";
 
 const route = useRoute();
@@ -177,6 +182,23 @@ const showDashboardHeader = computed(() => {
 });
 const photosStore = usePhotosStore();
 const userStore = useUserStore();
+
+// La app está lista cuando:
+// 1. userStore.isInitialized es true (se completó initAuth y fetchUsage)
+// 2. Si el usuario está autenticado, photosStore.isInitialized también debe ser true
+const isAppReady = computed(() => {
+  // Primero debe completarse la inicialización del usuario
+  if (!userStore.isInitialized) {
+    return false;
+  }
+
+  // Si el usuario está autenticado, esperar a que el catálogo también esté inicializado
+  if (userStore.isAuthenticated && !photosStore.isInitialized) {
+    return false;
+  }
+
+  return true;
+});
 
 // KeepAlive functionality
 const getKeepAliveComponents = () => {
@@ -240,10 +262,7 @@ const checkIsMobile = () => {
 onMounted(() => {
   checkIsMobile();
   window.addEventListener("resize", checkIsMobile);
-  // Espera a que el usuario esté autenticado antes de cargar las fotos
-  if (userStore.isAuthenticated) {
-    photosStore.getOrFetch(true);
-  }
+  // La carga inicial ya se maneja en el watcher de isAuthenticated
 });
 
 // Watcher para cargar fotos cuando el usuario se autentica
@@ -255,11 +274,15 @@ watch(
       if (route.name === "auth") {
         router.replace("/dashboard");
       }
+      // Cargar catálogo inmediatamente cuando se autentica
       photosStore.getOrFetch(true);
     } else {
       showWelcomeModal.value = false;
+      // Si no está autenticado, marcar photosStore como inicializado para no bloquear la app
+      photosStore.isInitialized = true;
     }
-  }
+  },
+  { immediate: true } // Ejecutar inmediatamente para capturar estado inicial
 );
 
 // Watcher adicional para forzar redirección si el usuario autenticado está en auth

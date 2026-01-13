@@ -39,6 +39,7 @@ export const useUserStore = defineStore("user", () => {
   const token = ref<string | null>(null);
   const user = ref<User | null>(null);
   const isLoading = ref(false);
+  const isInitialized = ref(false); // Indica si la inicialización (auth + profile) está completa
 
   // Getter para el shortname (primer nombre del usuario)
   const userShortName = computed(() => {
@@ -80,6 +81,8 @@ export const useUserStore = defineStore("user", () => {
         localStorage.removeItem("auth_token");
       }
     }
+    // Marcar como inicializado independientemente del resultado
+    isInitialized.value = true;
   };
 
   const login = async (
@@ -411,6 +414,7 @@ export const useUserStore = defineStore("user", () => {
     token,
     user,
     isLoading,
+    isInitialized,
     userShortName,
     usageLimits,
     dismissUsageWarning,

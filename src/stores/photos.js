@@ -17,6 +17,7 @@ export const usePhotosStore = defineStore("photos", {
   state: () => ({
     photos: null,
     isLoading: false,
+    isInitialized: false, // Indica si la carga inicial del catálogo está completa
     selectedPhotosRecord: {},
     showUploadProgress: false, // Controla si se muestra el progreso de subida especial
     duplicatesChecked: false, // Indica si ya se han verificado duplicados
@@ -193,6 +194,7 @@ export const usePhotosStore = defineStore("photos", {
           console.warn("API not available, using mock data:", error.message);
         } finally {
           this.isLoading = false;
+          this.isInitialized = true; // Marcar como inicializado después de la primera carga
         }
       }
       return this.photos;

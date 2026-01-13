@@ -3,15 +3,18 @@
     <!-- Visual Filters Compact Row -->
     <div class="filters-section">
       <div
-        v-if="isMobile"
-        class="mobile-section-header"
+        class="section-header"
         @click="isFiltersExpanded = !isFiltersExpanded"
       >
         <div class="header-left">
-          <n-icon size="14" :color="`var(--primary-color)`">
+          <n-icon
+            size="16"
+            class="section-icon"
+            :color="`var(--primary-color)`"
+          >
             <Camera20Regular />
           </n-icon>
-          <span class="section-title">Visual Filters</span>
+          <span class="section-label">Visual aspects</span>
           <span
             v-if="hasActiveFilters && !isFiltersExpanded"
             class="active-badge"
@@ -32,13 +35,7 @@
           </svg>
         </n-icon>
       </div>
-      <div v-if="!isMobile" class="filters-header-compact">
-        <n-icon size="16" class="section-icon" :color="`var(--primary-color)`">
-          <Camera20Regular />
-        </n-icon>
-        <span class="section-label">Visual aspects</span>
-      </div>
-      <div v-show="!isMobile || isFiltersExpanded" class="filters-row">
+      <div v-show="isFiltersExpanded" class="filters-row">
         <div
           v-for="aspectGroup in visualAspectsOptions"
           :key="aspectGroup.key"
@@ -65,38 +62,8 @@
 
     <!-- Sorting Section -->
     <div class="sorting-section">
-      <div
-        v-if="isMobile"
-        class="mobile-section-header"
-        @click="isSortingExpanded = !isSortingExpanded"
-      >
+      <div class="section-header sorting-header">
         <div class="header-left">
-          <n-icon size="14" :color="`var(--warning-color)`">
-            <Trophy20Regular />
-          </n-icon>
-          <span class="section-title">Ranking</span>
-          <span
-            v-if="hasActiveSorting && !isSortingExpanded"
-            class="active-badge"
-          >
-            Active
-          </span>
-        </div>
-        <n-icon
-          size="14"
-          class="toggle-icon"
-          :class="{ rotated: isSortingExpanded }"
-        >
-          <svg viewBox="0 0 24 24">
-            <path
-              fill="currentColor"
-              d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
-            />
-          </svg>
-        </n-icon>
-      </div>
-      <div v-show="!isMobile || isSortingExpanded" class="sorting-wrapper">
-        <div class="sorting-header-compact">
           <n-icon
             size="16"
             class="section-icon"
@@ -109,6 +76,7 @@
             v-model:value="sortingType"
             size="small"
             @update:value="handleSortingTypeChange"
+            class="inline-radios"
           >
             <n-radio value="criteria" class="sorting-radio">Criteria</n-radio>
             <n-radio value="genre" class="sorting-radio">Genre</n-radio>
@@ -149,8 +117,28 @@
           >
             Clear
           </n-button>
+          <span
+            v-if="hasActiveSorting && !isSortingExpanded"
+            class="active-badge"
+          >
+            Active
+          </span>
         </div>
-
+        <n-icon
+          size="14"
+          class="toggle-icon"
+          :class="{ rotated: isSortingExpanded }"
+          @click="isSortingExpanded = !isSortingExpanded"
+        >
+          <svg viewBox="0 0 24 24">
+            <path
+              fill="currentColor"
+              d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+            />
+          </svg>
+        </n-icon>
+      </div>
+      <div v-show="isSortingExpanded" class="sorting-wrapper">
         <!-- Criteria Selection -->
         <div v-if="sortingType === 'criteria'" class="criteria-row">
           <template
@@ -271,7 +259,7 @@
                 multiple
                 placeholder="All types..."
                 :options="fileTypeOptions"
-                size="small"
+                size="tiny"
                 clearable
                 filterable
                 class="compact-select"
@@ -513,12 +501,25 @@ const selectedGenre = ref("street");
 const sortOrder = ref("desc"); // 'asc', 'desc'
 const isSortingExpanded = ref(true); // Will be set based on mobile on mount
 
-// Initialize collapsed state for mobile
+// Initialize expanded state based on viewport
 onMounted(() => {
-  if (isMobile.value) {
-    isFiltersExpanded.value = false;
-    isSortingExpanded.value = false;
-  }
+  const handleResize = () => {
+    if (window.innerWidth >= 1024) {
+      // Desktop: always expanded
+      isFiltersExpanded.value = true;
+      isSortingExpanded.value = true;
+    } else if (window.innerWidth < 768) {
+      // Mobile: start collapsed
+      isFiltersExpanded.value = false;
+      isSortingExpanded.value = false;
+    }
+  };
+
+  handleResize();
+  window.addEventListener("resize", handleResize);
+
+  // Cleanup
+  return () => window.removeEventListener("resize", handleResize);
 });
 
 // Get dynamic criteria from useArtisticScores
@@ -796,20 +797,62 @@ watch(
   overflow: hidden;
 }
 
-.filters-header-compact {
+/* Unified Section Header */
+.section-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
   padding: 8px 12px;
-  padding-bottom: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  user-select: none;
 }
 
-/* Filters Row - Force single row on desktop, flexible on mobile */
+.section-header:hover {
+  background-color: var(--bg-hover);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.active-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--primary-color);
+  background-color: var(--primary-color-hover);
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+/* Filters Row - Responsive grid */
 .filters-row {
   display: grid;
-  grid-template-columns: repeat(11, minmax(0, 1fr)); /* 11 columns forced */
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 6px;
   padding: 4px 12px 8px 12px;
+}
+
+/* Desktop: force single row */
+@media (min-width: 1200px) {
+  .filters-row {
+    grid-template-columns: repeat(11, minmax(0, 1fr));
+  }
+}
+
+/* Tablet/Medium screens: flexible columns */
+@media (min-width: 768px) and (max-width: 1199px) {
+  .filters-row {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
 }
 
 .filter-item {
@@ -825,26 +868,22 @@ watch(
   background-color: var(--bg-body);
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  padding: 8px 12px;
+  overflow: hidden;
 }
 
 .sorting-wrapper {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding: 4px 12px 8px 12px;
 }
 
-.sorting-header-compact {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.sorting-header {
   flex-wrap: wrap;
 }
 
-.section-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
+.inline-radios {
+  margin-left: 0;
 }
 
 .sorting-radio {
@@ -870,8 +909,24 @@ watch(
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   padding-top: 4px;
+}
+
+/* Desktop: single row */
+@media (min-width: 1024px) {
+  .criteria-row,
+  .genre-row {
+    flex-wrap: nowrap;
+  }
+}
+
+/* Tablet and below: wrap */
+@media (max-width: 1023px) {
+  .criteria-row,
+  .genre-row {
+    flex-wrap: wrap;
+  }
 }
 
 .criteria-select {
@@ -880,7 +935,7 @@ watch(
 }
 
 .criterion-button {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 120px;
   transition: all 0.2s ease;
   font-size: 13px;
@@ -891,6 +946,7 @@ watch(
 }
 
 .genre-button {
+  flex: 1 1 auto;
   min-width: 100px;
   transition: all 0.2s ease;
   font-size: 13px;
@@ -999,35 +1055,78 @@ watch(
   opacity: 0.8;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .filename-input {
-    max-width: 100%;
-    width: 100%;
+/* Mobile styles */
+@media (max-width: 767px) {
+  .section-header {
+    padding: 10px 12px;
+  }
+
+  .section-label {
+    font-size: 12px;
+  }
+
+  .toggle-icon {
+    display: block;
   }
 
   .filters-row {
-    grid-template-columns: 1fr; /* Single column in mobile for flexibility */
+    grid-template-columns: 1fr;
     gap: 8px;
   }
 
-  .sorting-header-compact {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
+  .sorting-header .header-left {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .inline-radios {
+    width: 100%;
+    margin-left: 0;
   }
 
   .criteria-select {
     width: 100%;
   }
 
-  .genre-row {
+  .criterion-button,
+  .genre-button {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+  }
+
+  .filename-input {
+    max-width: 100%;
     width: 100%;
   }
 
-  .genre-button {
-    flex: 1;
-    min-width: 85px;
+  .metadata-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .filter-wrapper {
+    width: 100%;
+  }
+}
+
+/* Desktop: hide toggle icon */
+@media (min-width: 1024px) {
+  .toggle-icon {
+    display: none;
+  }
+
+  .section-header {
+  }
+
+  .section-header:hover {
+    background-color: transparent;
+  }
+
+  /* Allow clicks on interactive elements in sorting header */
+  .sorting-header .header-left,
+  .sorting-header .header-left * {
+    pointer-events: auto;
+    background-color: transparent;
   }
 }
 

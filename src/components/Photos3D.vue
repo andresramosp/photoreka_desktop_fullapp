@@ -89,14 +89,16 @@
               v-if="
                 selectedVisualAspects.length > 0 ||
                 Object.keys(artisticScoreFilters).length > 0 ||
-                searchResults.length > 0
+                searchResults.length > 0 ||
+                timeRangeFilter !== null
               "
               class="active-indicator"
             >
               {{
                 selectedVisualAspects.length +
                 Object.keys(artisticScoreFilters).length +
-                (searchResults.length > 0 ? 1 : 0)
+                (searchResults.length > 0 ? 1 : 0) +
+                (timeRangeFilter !== null ? 1 : 0)
               }}
             </span>
             <n-icon
@@ -118,7 +120,7 @@
         <div v-if="showMoreFilters" class="filters-container">
           <div class="filters-content">
             <!-- Text Search Filter -->
-            <div v-if="!isPlayground" class="filter-item">
+            <!-- <div v-if="!isPlayground" class="filter-item">
               <div style="display: flex; align-items: center; gap: 4px">
                 <label class="filter-label" style="margin: 0"
                   >Search by Content</label
@@ -164,7 +166,7 @@
                   />
                 </template>
               </n-input>
-            </div>
+            </div> -->
             <!-- Visual Aspects Filter -->
             <div class="filter-item">
               <label class="filter-label">Visual Aspects</label>
@@ -275,6 +277,62 @@
                     />
                   </div>
                 </div>
+              </div>
+            </div>
+
+            <!-- Time Range Filter (Collapsible) -->
+            <div class="filter-item">
+              <div
+                class="scores-toggle"
+                @click="showTimeRange = !showTimeRange"
+              >
+                <div style="display: flex; align-items: center; gap: 4px">
+                  <span class="scores-toggle-label">Time Range</span>
+                  <n-tooltip trigger="hover" placement="top">
+                    <template #trigger>
+                      <n-icon
+                        size="12"
+                        color="var(--text-secondary)"
+                        style="cursor: help"
+                      >
+                        <InfoCircleFilled />
+                      </n-icon>
+                    </template>
+                    Filter photos by capture date range
+                  </n-tooltip>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <button
+                    v-if="timeRangeFilter !== null"
+                    @click.stop="clearTimeRange"
+                    class="clear-scores-btn"
+                    title="Clear time range"
+                  >
+                    <n-icon size="12">
+                      <CloseOutlined />
+                    </n-icon>
+                  </button>
+                  <n-icon
+                    size="12"
+                    class="toggle-icon"
+                    :class="{ rotated: showTimeRange }"
+                  >
+                    <svg viewBox="0 0 24 24">
+                      <path
+                        fill="currentColor"
+                        d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+                      />
+                    </svg>
+                  </n-icon>
+                </div>
+              </div>
+
+              <!-- Collapsible Time Range Content -->
+              <div v-if="showTimeRange" class="time-range-container">
+                <TimeRangeFilter
+                  :photos="processedPhotos"
+                  @time-range-change="onTimeRangeChange"
+                />
               </div>
             </div>
           </div>
@@ -804,6 +862,9 @@ import { useRouter } from "vue-router";
 import FixedActionBar from "@/components/3d-atlas/FixedActionBar.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
+import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
+import { usePhotosStore } from "@/stores/photos.js";
+
 import { use3DPhotos } from "@/composables/3d-viewer/use3DPhotos.js";
 import { useFirstPersonControls } from "@/composables//3d-viewer/useFirstPersonControls.js";
 import { useTouchControls } from "@/composables/3d-viewer/useTouchControls.js";
@@ -848,12 +909,16 @@ const {
   closeToolSelector,
 } = usePhotoToolSelection();
 
+const photosStore = usePhotosStore();
+
 // Detect mobile device for UI adjustments
 const { isMobile } = useIsMobile();
 // Detect touch capability for controls
 const { hasTouch } = useHasTouch();
 // Unified low performance heuristic (mobile OR touch device such as light tablet)
 const useLowPerformance = computed(() => isMobile.value || hasTouch.value);
+
+const processedPhotos = computed(() => photosStore.processedPhotos);
 
 // ===== Debug Flag (wrap noisy logs) =====
 const DEBUG_3D = false; // pon a true temporalmente si quieres verbosidad
@@ -929,9 +994,13 @@ const currentPosition = ref({ x: 0, y: 0, z: 80 });
 const showMoreFilters = ref(false);
 const showDisplayOptions = ref(false);
 const showArtisticScores = ref(false);
+const showTimeRange = ref(false);
 
 const showNavigationControls = ref(true);
 const showTagBeacons = ref(false);
+
+// Time range filter state
+const timeRangeFilter = ref(null);
 
 // Funciones para toggles excluyentes
 const toggleMoreFilters = () => {
@@ -1382,6 +1451,30 @@ const applyFilters = () => {
       return;
     }
 
+    // Aplicar filtro de rango temporal
+    if (timeRangeFilter.value !== null) {
+      const photoDate = new Date(photo.descriptions?.EXIF?.dateTaken).getTime();
+      if (isNaN(photoDate)) {
+        // Si no tiene fecha válida, ocultar cuando hay filtro de tiempo
+        photo.isVisible = false;
+        if (photo.lodObject && photo.lodObject.material) {
+          photo.lodObject.material.opacity = 0;
+          photo.lodObject.material.transparent = true;
+        }
+        return;
+      }
+
+      const [minDate, maxDate] = timeRangeFilter.value;
+      if (photoDate < minDate || photoDate > maxDate) {
+        photo.isVisible = false;
+        if (photo.lodObject && photo.lodObject.material) {
+          photo.lodObject.material.opacity = 0;
+          photo.lodObject.material.transparent = true;
+        }
+        return;
+      }
+    }
+
     // Si no hay filtros de aspectos ni scores, mostrar foto
     const hasScoreFilters = Object.keys(artisticScoreFilters.value).length > 0;
     if (selectedVisualAspects.value.length === 0 && !hasScoreFilters) {
@@ -1480,6 +1573,21 @@ const applyFilters = () => {
       `text search: "${searchQuery.value}" (${searchResults.value.length} results)`
     );
   }
+  if (timeRangeFilter.value !== null) {
+    const formatDate = (timestamp) => {
+      const date = new Date(timestamp);
+      return date.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    };
+    filterInfo.push(
+      `time range: ${formatDate(timeRangeFilter.value[0])} - ${formatDate(
+        timeRangeFilter.value[1]
+      )}`
+    );
+  }
 
   if (filterInfo.length > 0) {
     console.log(
@@ -1569,6 +1677,25 @@ const onArtisticScoresChange = () => {
 const clearArtisticScores = () => {
   artisticScoreFilters.value = {};
   onArtisticScoresChange();
+};
+
+// Función para limpiar el filtro de tiempo
+const clearTimeRange = () => {
+  timeRangeFilter.value = null;
+  onTimeRangeChange(null);
+};
+
+// Handler para cambio en filtro de rango temporal
+const onTimeRangeChange = (value) => {
+  console.log("🔄 onTimeRangeChange triggered:", value);
+
+  timeRangeFilter.value = value;
+  applyFilters();
+
+  // 🔧 CRITICAL: Marcar octree para reconstrucción con fotos filtradas
+  octreeNeedsRebuild.value = true;
+
+  updateVisiblePhotos();
 };
 
 // Search functionality - Similar a PhotosDialog.vue
@@ -3363,6 +3490,22 @@ onUnmounted(() => {
   padding-left: 8px;
   margin-top: 12px;
   animation: slideDown 0.3s ease-out;
+}
+
+/* Time Range Container */
+.time-range-container {
+  padding-right: 8px;
+  padding-left: 8px;
+  margin-top: 12px;
+  animation: slideDown 0.3s ease-out;
+}
+
+.time-range-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  text-align: center;
 }
 
 .scores-toggle {

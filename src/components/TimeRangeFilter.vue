@@ -1,5 +1,5 @@
 <template>
-  <div v-if="hasValidPhotos" class="time-range-filter">
+  <div v-if="hasValidPhotos" class="time-range-filter" ref="containerRef">
     <div class="filter-header">
       <span class="filter-label">Time Range</span>
       <span v-if="hasActiveFilter" class="date-display">
@@ -38,7 +38,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import { NSlider, NButton } from "naive-ui";
 
 const props = defineProps({
@@ -52,6 +52,8 @@ const emit = defineEmits(["time-range-change"]);
 
 const internalDateRange = ref(null);
 const histogramRef = ref(null);
+const containerRef = ref(null);
+const isSmallScreen = ref(false);
 
 // Calculate min and max timestamps from photos
 const minTimestamp = computed(() => {
@@ -150,31 +152,66 @@ const isInRange = (timestamp) => {
   return timestamp >= dateRange.value[0] && timestamp <= dateRange.value[1];
 };
 
-// Create marks for the slider (show start, intermediate, middle, intermediate, and end dates)
+// Create marks for the slider - adaptive based on screen size
 const marks = computed(() => {
   if (minTimestamp.value === maxTimestamp.value) return {};
 
   const range = maxTimestamp.value - minTimestamp.value;
-  const quarter1 = minTimestamp.value + range * 0.25;
-  const mid = minTimestamp.value + range * 0.5;
-  const quarter3 = minTimestamp.value + range * 0.75;
+  const marksToShow = isSmallScreen.value ? 3 : 5;
+  const marksObject = {};
 
-  return {
-    [minTimestamp.value]: formatDate(minTimestamp.value),
-    [quarter1]: formatDate(quarter1),
-    [mid]: formatDate(mid),
-    [quarter3]: formatDate(quarter3),
-    [maxTimestamp.value]: formatDate(maxTimestamp.value),
-  };
+  // Always include start and end
+  marksObject[minTimestamp.value] = formatDateCompact(minTimestamp.value);
+
+  if (marksToShow > 2) {
+    // For 3 marks: add middle
+    if (marksToShow === 3) {
+      const mid = minTimestamp.value + range * 0.5;
+      marksObject[mid] = formatDateCompact(mid);
+    }
+    // For 5 marks: add quarter points and middle
+    else if (marksToShow === 5) {
+      const quarter1 = minTimestamp.value + range * 0.25;
+      const mid = minTimestamp.value + range * 0.5;
+      const quarter3 = minTimestamp.value + range * 0.75;
+      marksObject[quarter1] = formatDateCompact(quarter1);
+      marksObject[mid] = formatDateCompact(mid);
+      marksObject[quarter3] = formatDateCompact(quarter3);
+    }
+  }
+
+  marksObject[maxTimestamp.value] = formatDateCompact(maxTimestamp.value);
+
+  return marksObject;
 });
 
-// Format date for display
+// Format date for display (full format)
 const formatDate = (timestamp) => {
   const date = new Date(timestamp);
   return date.toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
+  });
+};
+
+// Format date for slider marks (compact format)
+const formatDateCompact = (timestamp) => {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const isSameYear = date.getFullYear() === now.getFullYear();
+
+  if (isSameYear) {
+    // If same year, omit year for compactness
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+  }
+
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
   });
 };
 
@@ -226,6 +263,24 @@ watch(
   },
   { immediate: true }
 );
+
+// Detect container size for responsive marks
+const checkScreenSize = () => {
+  if (containerRef.value) {
+    // Show 3 marks in containers < 400px wide, 5 marks for wider containers
+    const width = containerRef.value.offsetWidth;
+    isSmallScreen.value = width < 400;
+  }
+};
+
+onMounted(() => {
+  checkScreenSize();
+  window.addEventListener("resize", checkScreenSize);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("resize", checkScreenSize);
+});
 </script>
 
 <style scoped>
@@ -287,22 +342,32 @@ watch(
 :deep(.n-slider) {
   margin-top: 8px;
   margin-bottom: 8px;
-  padding: 0 8px;
+  padding: 0;
+}
+
+:deep(.n-slider-rail) {
+  margin-left: 0;
+  margin-right: 0;
 }
 
 :deep(.n-slider-marks) {
-  font-size: 11px;
+  font-size: 10px;
+  padding: 0;
 }
 
 :deep(.n-slider-mark) {
   white-space: nowrap;
+  font-size: 10px;
+  color: var(--text-secondary);
 }
 
 :deep(.n-slider-mark:first-child) {
   transform: translateX(0) !important;
+  text-align: left;
 }
 
 :deep(.n-slider-mark:last-child) {
   transform: translateX(-100%) !important;
+  text-align: right;
 }
 </style>
