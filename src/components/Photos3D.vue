@@ -59,7 +59,7 @@
       <!-- Close Button (Top Right Corner) -->
       <button class="close-panel-btn-corner" @click="showConfigPanel = false">
         <n-icon>
-          <ShareSocialOutline />
+          <CloseOutlined />
         </n-icon>
       </button>
 
@@ -889,7 +889,6 @@ import {
   EyeOutlined,
   TagsOutlined,
   CompassOutlined,
-
 } from "@vicons/antd";
 import { useRouter } from "vue-router";
 
@@ -914,10 +913,7 @@ import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { api } from "@/utils/axios";
 import * as THREE from "three";
-import {
-  AppsOutline,
-  ShareSocialOutline,
-} from "@vicons/ionicons5";
+import { AppsOutline, ShareSocialOutline } from "@vicons/ionicons5";
 // (LOD helpers removidos para mipmaps) - import eliminado definitivamente
 // import "@/composables/3d-viewer/useTextureLOD.js"; // Eliminado: no side-effects necesarios
 // getMaxVisibleDistance eliminado: ya no ocultamos por distancia, solo opacity fade
