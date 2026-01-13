@@ -337,6 +337,7 @@ export default class ThreeDManager {
               typeof row.descriptions === 'string' ? JSON.parse(row.descriptions) : row.descriptions
             if ('visual_aspects' in desc) filtered.visual_aspects = desc.visual_aspects
             if ('artistic_scores' in desc) filtered.artistic_scores = desc.artistic_scores
+            if ('EXIF' in desc) filtered.EXIF = desc.EXIF
           } catch {}
         }
         descriptionsMap.set(row.id, filtered)
