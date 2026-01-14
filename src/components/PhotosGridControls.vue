@@ -259,7 +259,7 @@
                 multiple
                 placeholder="All types..."
                 :options="fileTypeOptions"
-                size="tiny"
+                size="small"
                 clearable
                 filterable
                 class="compact-select"

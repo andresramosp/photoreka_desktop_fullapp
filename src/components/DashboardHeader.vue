@@ -17,20 +17,7 @@
         </n-button>
 
         <div class="search-container">
-          <n-input
-            disabled
-            placeholder="Search photos, projects, collections..."
-            class="search-input"
-            size="medium"
-            clearable
-            round
-          >
-            <template #prefix>
-              <n-icon :color="'var(--icon-tertiary)'">
-                <SearchIcon />
-              </n-icon>
-            </template>
-          </n-input>
+          <GlobalSearchAutocomplete />
         </div>
       </div>
 
@@ -100,7 +87,6 @@ import { useUserStore } from "../stores/userStore";
 
 // Import @vicons icons from ionicons5 for reliability
 import {
-  SearchOutline as SearchIcon,
   NotificationsOutline as NotificationsIcon,
   SettingsOutline as SettingsIcon,
   MenuOutline,
@@ -110,6 +96,7 @@ import {
   MoonOutline,
 } from "@vicons/ionicons5";
 import { useTheme } from "../composables/useTheme.js";
+import GlobalSearchAutocomplete from "./GlobalSearchAutocomplete.vue";
 
 const route = useRoute();
 const router = useRouter();

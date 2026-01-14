@@ -1,0 +1,764 @@
+<template>
+  <div class="global-search" ref="searchContainerRef">
+    <n-input
+      v-model:value="searchQuery"
+      placeholder="Search photos by name, collections, series, tools..."
+      class="search-input"
+      size="medium"
+      clearable
+      round
+      @focus="handleFocus"
+      @blur="handleBlur"
+      @keydown="handleKeydown"
+      ref="inputRef"
+    >
+      <template #prefix>
+        <n-icon :color="'var(--icon-tertiary)'">
+          <SearchIcon />
+        </n-icon>
+      </template>
+      <template #suffix>
+        <span
+          v-if="searchQuery && searchQuery.length >= 2"
+          class="shortcut-hint"
+        >
+          <kbd>↵</kbd> to select
+        </span>
+      </template>
+    </n-input>
+
+    <!-- Results dropdown -->
+    <Transition name="dropdown">
+      <div
+        v-if="showDropdown && searchQuery.length >= 2"
+        class="search-dropdown"
+        ref="dropdownRef"
+      >
+        <!-- Loading state -->
+        <div v-if="isSearching" class="search-loading">
+          <n-spin size="small" />
+          <span>Searching...</span>
+        </div>
+
+        <!-- No results -->
+        <div
+          v-else-if="!hasResults && searchQuery.length >= 2"
+          class="no-results"
+        >
+          <n-icon size="24" :color="'var(--text-tertiary)'">
+            <SearchIcon />
+          </n-icon>
+          <span>No results found for "{{ searchQuery }}"</span>
+        </div>
+
+        <!-- Results grouped by type -->
+        <div v-else class="results-container">
+          <!-- Tools Section -->
+          <div v-if="searchResults.tools.length > 0" class="results-section">
+            <div class="section-header">
+              <n-icon size="14">
+                <AppsOutline />
+              </n-icon>
+              <span>Tools</span>
+            </div>
+            <div class="section-items">
+              <div
+                v-for="(tool, index) in searchResults.tools"
+                :key="`tool-${tool.id}`"
+                class="result-item tool-item"
+                :class="{ active: isActiveItem('tool', tool.id) }"
+                @click="handleSelectTool(tool)"
+                @mouseenter="setActiveItem('tool', tool.id)"
+              >
+                <div class="item-icon tool-icon">
+                  <n-icon size="18">
+                    <component :is="getToolIcon(tool.icon)" />
+                  </n-icon>
+                </div>
+                <div class="item-content">
+                  <div class="item-name">{{ tool.name }}</div>
+                  <div class="item-description">{{ tool.description }}</div>
+                </div>
+                <n-icon size="14" class="item-arrow">
+                  <ChevronForward />
+                </n-icon>
+              </div>
+            </div>
+          </div>
+
+          <!-- Collections Section -->
+          <div
+            v-if="searchResults.collections.length > 0"
+            class="results-section"
+          >
+            <div class="section-header">
+              <n-icon size="14">
+                <GridOutline />
+              </n-icon>
+              <span>Collections</span>
+            </div>
+            <div class="section-items">
+              <div
+                v-for="collection in searchResults.collections"
+                :key="`collection-${collection.id}`"
+                class="result-item collection-item"
+                :class="{ active: isActiveItem('collection', collection.id) }"
+                @click="handleSelectCollection(collection)"
+                @mouseenter="setActiveItem('collection', collection.id)"
+              >
+                <div class="item-thumbnail">
+                  <img
+                    v-if="collection.coverUrl"
+                    :src="collection.coverUrl"
+                    :alt="collection.name"
+                  />
+                  <div v-else class="placeholder-thumbnail">
+                    <n-icon size="16">
+                      <GridOutline />
+                    </n-icon>
+                  </div>
+                </div>
+                <div class="item-content">
+                  <div class="item-name">{{ collection.name }}</div>
+                  <div class="item-meta">
+                    {{ collection.photoCount }} photos
+                  </div>
+                </div>
+                <n-icon size="14" class="item-arrow">
+                  <ChevronForward />
+                </n-icon>
+              </div>
+            </div>
+          </div>
+
+          <!-- Series Section -->
+          <div v-if="searchResults.series.length > 0" class="results-section">
+            <div class="section-header">
+              <n-icon size="14">
+                <ListOutline />
+              </n-icon>
+              <span>Series</span>
+            </div>
+            <div class="section-items">
+              <div
+                v-for="series in searchResults.series"
+                :key="`series-${series.id}`"
+                class="result-item series-item"
+                :class="{ active: isActiveItem('series', series.id) }"
+                @click="handleSelectSeries(series)"
+                @mouseenter="setActiveItem('series', series.id)"
+              >
+                <div class="item-thumbnail">
+                  <img
+                    v-if="series.coverUrl"
+                    :src="series.coverUrl"
+                    :alt="series.name"
+                  />
+                  <div v-else class="placeholder-thumbnail">
+                    <n-icon size="16">
+                      <ListOutline />
+                    </n-icon>
+                  </div>
+                </div>
+                <div class="item-content">
+                  <div class="item-name">{{ series.name }}</div>
+                  <div class="item-meta">{{ series.photoCount }} photos</div>
+                </div>
+                <n-icon size="14" class="item-arrow">
+                  <ChevronForward />
+                </n-icon>
+              </div>
+            </div>
+          </div>
+
+          <!-- Photos Section -->
+          <div v-if="searchResults.photos.length > 0" class="results-section">
+            <div class="section-header">
+              <n-icon size="14">
+                <ImageOutline />
+              </n-icon>
+              <span>Photos</span>
+            </div>
+            <div class="section-items">
+              <div
+                v-for="photo in searchResults.photos"
+                :key="`photo-${photo.id}`"
+                class="result-item photo-item"
+                :class="{ active: isActiveItem('photo', photo.id) }"
+                @click="handleSelectPhoto(photo)"
+                @mouseenter="setActiveItem('photo', photo.id)"
+              >
+                <div class="item-thumbnail">
+                  <img
+                    v-if="photo.thumbnailUrl"
+                    :src="photo.thumbnailUrl"
+                    :alt="photo.name"
+                  />
+                  <div v-else class="placeholder-thumbnail">
+                    <n-icon size="16">
+                      <ImageOutline />
+                    </n-icon>
+                  </div>
+                </div>
+                <div class="item-content">
+                  <div class="item-name">{{ photo.name }}</div>
+                  <div class="item-meta">
+                    <template v-if="photo.matchedOn === 'tag'">
+                      <n-tag size="tiny" type="info">{{
+                        photo.matchedTag
+                      }}</n-tag>
+                    </template>
+                    <template v-else>
+                      <span class="match-type">Name match</span>
+                    </template>
+                  </div>
+                </div>
+                <n-icon size="14" class="item-arrow">
+                  <ChevronForward />
+                </n-icon>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer hint -->
+        <div v-if="hasResults" class="dropdown-footer">
+          <span><kbd>↑</kbd><kbd>↓</kbd> to navigate</span>
+          <span><kbd>↵</kbd> to select</span>
+          <span><kbd>esc</kbd> to close</span>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- PhotoInfoDialog for showing photo details -->
+    <PhotoInfoDialog v-model="showPhotoDialog" :selectedPhoto="selectedPhoto" />
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
+import { useRouter } from "vue-router";
+import { NIcon, NSpin, NTag } from "naive-ui";
+import {
+  SearchOutline as SearchIcon,
+  AppsOutline,
+  GridOutline,
+  ListOutline,
+  ImageOutline,
+  ChevronForward,
+  CubeOutline,
+  FlaskOutline,
+  SquareOutline,
+  LayersOutline,
+  CloudUploadOutline,
+  SettingsOutline,
+} from "@vicons/ionicons5";
+import { Workspace } from "@vicons/carbon";
+import {
+  useGlobalSearch,
+  type SearchResult,
+  type SearchResultPhoto,
+} from "@/composables/useGlobalSearch";
+import { usePhotosStore } from "@/stores/photos.js";
+import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
+
+const router = useRouter();
+const photosStore = usePhotosStore();
+
+// Search composable
+const {
+  searchQuery,
+  searchResults,
+  hasResults,
+  flatResults,
+  isSearching,
+  clearSearch,
+  ensureDataLoaded,
+} = useGlobalSearch();
+
+// UI state
+const showDropdown = ref(false);
+const activeItemKey = ref<string | null>(null);
+const searchContainerRef = ref<HTMLElement | null>(null);
+const dropdownRef = ref<HTMLElement | null>(null);
+const inputRef = ref<any>(null);
+
+// Photo dialog state
+const showPhotoDialog = ref(false);
+const selectedPhoto = ref<any>(null);
+
+// Icon mapping for tools
+const iconComponents: Record<string, any> = {
+  SearchOutline: SearchIcon,
+  Workspace: Workspace,
+  CubeOutline: CubeOutline,
+  FlaskOutline: FlaskOutline,
+  SquareOutline: SquareOutline,
+  GridOutline: GridOutline,
+  ListOutline: ListOutline,
+  LayersOutline: LayersOutline,
+  CloudUploadOutline: CloudUploadOutline,
+  SettingsOutline: SettingsOutline,
+};
+
+const getToolIcon = (iconName: string) => {
+  return iconComponents[iconName] || SearchIcon;
+};
+
+// Active item helpers
+const getItemKey = (type: string, id: string | number) => `${type}-${id}`;
+
+const isActiveItem = (type: string, id: string | number) => {
+  return activeItemKey.value === getItemKey(type, id);
+};
+
+const setActiveItem = (type: string, id: string | number) => {
+  activeItemKey.value = getItemKey(type, id);
+};
+
+// Get active item index in flat list
+const getActiveIndex = () => {
+  if (!activeItemKey.value) return -1;
+  return flatResults.value.findIndex(
+    (item) => getItemKey(item.type, item.id) === activeItemKey.value
+  );
+};
+
+// Set active item by index
+const setActiveByIndex = (index: number) => {
+  const item = flatResults.value[index];
+  if (item) {
+    activeItemKey.value = getItemKey(item.type, item.id);
+    scrollToActiveItem();
+  }
+};
+
+// Scroll active item into view
+const scrollToActiveItem = () => {
+  nextTick(() => {
+    const activeElement = dropdownRef.value?.querySelector(
+      ".result-item.active"
+    );
+    if (activeElement) {
+      activeElement.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  });
+};
+
+// Handlers
+const handleFocus = () => {
+  showDropdown.value = true;
+  ensureDataLoaded();
+};
+
+const handleBlur = (event: FocusEvent) => {
+  // Delay hiding to allow click events on dropdown items
+  setTimeout(() => {
+    const relatedTarget = event.relatedTarget as HTMLElement;
+    if (
+      !searchContainerRef.value?.contains(relatedTarget) &&
+      !dropdownRef.value?.contains(document.activeElement)
+    ) {
+      showDropdown.value = false;
+      activeItemKey.value = null;
+    }
+  }, 150);
+};
+
+const handleKeydown = (event: KeyboardEvent) => {
+  if (!showDropdown.value || !hasResults.value) return;
+
+  switch (event.key) {
+    case "ArrowDown":
+      event.preventDefault();
+      const nextIndex = getActiveIndex() + 1;
+      if (nextIndex < flatResults.value.length) {
+        setActiveByIndex(nextIndex);
+      } else {
+        setActiveByIndex(0);
+      }
+      break;
+
+    case "ArrowUp":
+      event.preventDefault();
+      const prevIndex = getActiveIndex() - 1;
+      if (prevIndex >= 0) {
+        setActiveByIndex(prevIndex);
+      } else {
+        setActiveByIndex(flatResults.value.length - 1);
+      }
+      break;
+
+    case "Enter":
+      event.preventDefault();
+      if (activeItemKey.value) {
+        const activeItem = flatResults.value[getActiveIndex()];
+        if (activeItem) {
+          handleSelectItem(activeItem);
+        }
+      } else if (flatResults.value.length > 0) {
+        // Select first item if none active
+        handleSelectItem(flatResults.value[0]);
+      }
+      break;
+
+    case "Escape":
+      event.preventDefault();
+      showDropdown.value = false;
+      activeItemKey.value = null;
+      inputRef.value?.blur();
+      break;
+  }
+};
+
+// Selection handlers
+const handleSelectItem = (item: SearchResult) => {
+  switch (item.type) {
+    case "tool":
+      handleSelectTool(item);
+      break;
+    case "collection":
+      handleSelectCollection(item);
+      break;
+    case "series":
+      handleSelectSeries(item);
+      break;
+    case "photo":
+      handleSelectPhoto(item);
+      break;
+  }
+};
+
+const handleSelectTool = (tool: any) => {
+  showDropdown.value = false;
+  clearSearch();
+  router.push(tool.route);
+};
+
+const handleSelectCollection = (collection: any) => {
+  showDropdown.value = false;
+  clearSearch();
+  router.push({ name: "collection-detail", params: { id: collection.id } });
+};
+
+const handleSelectSeries = (series: any) => {
+  showDropdown.value = false;
+  clearSearch();
+  router.push({ name: "series-detail", params: { id: series.id } });
+};
+
+const handleSelectPhoto = async (photo: SearchResultPhoto) => {
+  showDropdown.value = false;
+
+  // Fetch full photo data from API
+  try {
+    const fullPhoto = await photosStore.fetchPhoto(photo.id);
+    if (fullPhoto) {
+      selectedPhoto.value = fullPhoto;
+      showPhotoDialog.value = true;
+    }
+  } catch (error) {
+    console.error("Error fetching photo details:", error);
+  }
+
+  clearSearch();
+};
+
+// Reset active item when results change
+watch(flatResults, () => {
+  if (flatResults.value.length > 0 && !activeItemKey.value) {
+    setActiveByIndex(0);
+  } else if (flatResults.value.length === 0) {
+    activeItemKey.value = null;
+  }
+});
+
+// Click outside handler
+const handleClickOutside = (event: MouseEvent) => {
+  if (
+    searchContainerRef.value &&
+    !searchContainerRef.value.contains(event.target as Node)
+  ) {
+    showDropdown.value = false;
+    activeItemKey.value = null;
+  }
+};
+
+onMounted(() => {
+  document.addEventListener("click", handleClickOutside);
+});
+
+onUnmounted(() => {
+  document.removeEventListener("click", handleClickOutside);
+});
+</script>
+
+<style scoped>
+.global-search {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+  max-width: 800px;
+}
+
+.search-input {
+  width: 100%;
+}
+
+.shortcut-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.shortcut-hint kbd {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 10px;
+  font-family: inherit;
+}
+
+/* Dropdown */
+.search-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  max-height: 480px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+}
+
+/* Transition */
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: all 0.2s ease;
+}
+
+.dropdown-enter-from,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+/* Loading & no results */
+.search-loading,
+.no-results {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-2xl);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+/* Results container */
+.results-container {
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Section */
+.results-section {
+  padding: var(--spacing-sm) 0;
+}
+
+.results-section:not(:last-child) {
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.section-items {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Result item */
+.result-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.result-item:hover,
+.result-item.active {
+  background: var(--bg-hover);
+}
+
+.result-item.active {
+  background: var(--primary-color-opacity-10);
+}
+
+/* Item thumbnail */
+.item-thumbnail {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--bg-elevated);
+}
+
+.item-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.placeholder-thumbnail {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+}
+
+/* Tool icon */
+.item-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tool-icon {
+  background: var(--primary-color-opacity-10);
+  color: var(--primary-color);
+}
+
+/* Item content */
+.item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.item-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-description {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-meta {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.match-type {
+  font-style: italic;
+}
+
+/* Arrow icon */
+.item-arrow {
+  color: var(--text-tertiary);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.result-item:hover .item-arrow,
+.result-item.active .item-arrow {
+  opacity: 1;
+}
+
+/* Footer */
+.dropdown-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xl);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-top: 1px solid var(--border-color-light);
+  background: var(--bg-elevated);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.dropdown-footer span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dropdown-footer kbd {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-family: inherit;
+  min-width: 18px;
+  text-align: center;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .global-search {
+    min-width: 150px;
+    max-width: none;
+  }
+
+  .search-dropdown {
+    max-height: 60vh;
+  }
+
+  .shortcut-hint {
+    display: none;
+  }
+
+  .dropdown-footer {
+    display: none;
+  }
+
+  .item-thumbnail {
+    width: 36px;
+    height: 36px;
+  }
+
+  .item-icon {
+    width: 36px;
+    height: 36px;
+  }
+}
+</style>
