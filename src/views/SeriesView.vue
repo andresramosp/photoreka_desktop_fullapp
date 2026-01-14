@@ -298,15 +298,17 @@
               class="photo-sequence"
             >
               <div
-                v-for="(photo, index) in series.photos.slice(0, 4)"
+                v-for="(photo, index) in series.photos.slice(0, 3)"
                 :key="photo.id"
                 class="sequence-photo"
                 :class="`sequence-${index + 1}`"
               >
-                <div
-                  class="photo-placeholder"
-                  :style="{ background: photo.gradient }"
-                ></div>
+                <img
+                  :src="photo.thumbnailUrl || photo.url"
+                  :alt="photo.title || `Photo ${index + 1}`"
+                  class="photo-thumbnail"
+                  loading="lazy"
+                />
                 <span class="sequence-number">{{ index + 1 }}</span>
               </div>
             </div>
@@ -1279,9 +1281,10 @@ watch(fullscreenViewerVisible, (isVisible) => {
   overflow: hidden;
 }
 
-.sequence-photo .photo-placeholder {
+.photo-thumbnail {
   width: 100%;
   height: 100%;
+  object-fit: cover;
   border-radius: 6px;
 }
 
@@ -1295,23 +1298,21 @@ watch(fullscreenViewerVisible, (isVisible) => {
   font-weight: 600;
   padding: 1px 5px;
   border-radius: 4px;
+  z-index: 1;
 }
 
-/* Hover effects for photo sequence */
-.series-card:hover .sequence-photo {
+/* Hover effects for photo sequence (now with 3 photos) */
+.card:hover .sequence-photo {
   transform: translateY(-4px);
 }
 
-.series-card:hover .sequence-photo.sequence-1 {
+.card:hover .sequence-photo.sequence-1 {
   transform: translateY(-6px);
 }
-.series-card:hover .sequence-photo.sequence-2 {
+.card:hover .sequence-photo.sequence-2 {
   transform: translateY(-4px);
 }
-.series-card:hover .sequence-photo.sequence-3 {
-  transform: translateY(-4px);
-}
-.series-card:hover .sequence-photo.sequence-4 {
+.card:hover .sequence-photo.sequence-3 {
   transform: translateY(-6px);
 }
 

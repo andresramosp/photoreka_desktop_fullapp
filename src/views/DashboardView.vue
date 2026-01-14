@@ -178,8 +178,8 @@
               <Workspace />
             </n-icon>
           </div>
-          <h3 class="action-title">New Canvas</h3>
-          <p class="action-description">Start a fresh canvas</p>
+          <h3 class="action-title">Canvas</h3>
+          <p class="action-description">Continue your work in Canvas</p>
         </div>
 
         <!-- <div
@@ -239,53 +239,30 @@
         >
           <div class="project-preview">
             <div class="photo-stack">
-              <div class="photo-item photo-1">
-                <div
-                  class="photo-placeholder"
-                  style="
-                    background: linear-gradient(
-                      135deg,
-                      #667eea 0%,
-                      #764ba2 100%
-                    );
-                  "
-                ></div>
+              <div
+                v-for="(photo, index) in (collection.photos || []).slice(0, 3)"
+                :key="photo.id"
+                class="photo-item"
+                :class="`photo-${index + 1}`"
+              >
+                <img
+                  :src="photo.thumbnailUrl || photo.url"
+                  :alt="photo.title || 'Photo'"
+                  class="photo-thumbnail"
+                  loading="lazy"
+                />
               </div>
-              <div class="photo-item photo-2">
-                <div
-                  class="photo-placeholder"
-                  style="
-                    background: linear-gradient(
-                      135deg,
-                      #f093fb 0%,
-                      #f5576c 100%
-                    );
-                  "
-                ></div>
-              </div>
-              <div class="photo-item photo-3">
-                <div
-                  class="photo-placeholder"
-                  style="
-                    background: linear-gradient(
-                      135deg,
-                      #4facfe 0%,
-                      #00f2fe 100%
-                    );
-                  "
-                ></div>
-              </div>
-              <div class="photo-item photo-4">
-                <div
-                  class="photo-placeholder"
-                  style="
-                    background: linear-gradient(
-                      135deg,
-                      #43e97b 0%,
-                      #38f9d7 100%
-                    );
-                  "
-                ></div>
+              <!-- Show empty placeholders if less than 3 photos -->
+              <div
+                v-for="index in Math.max(
+                  0,
+                  3 - (collection.photos || []).length
+                )"
+                :key="`placeholder-${index}`"
+                class="photo-item"
+                :class="`photo-${(collection.photos || []).length + index}`"
+              >
+                <div class="photo-placeholder-empty"></div>
               </div>
             </div>
           </div>
@@ -341,53 +318,30 @@
         >
           <div class="project-preview">
             <div class="photo-stack">
-              <div class="photo-item photo-1">
-                <div
-                  class="photo-placeholder"
-                  style="
-                    background: linear-gradient(
-                      135deg,
-                      #667eea 0%,
-                      #764ba2 100%
-                    );
-                  "
-                ></div>
+              <div
+                v-for="(photo, index) in (seriesItem.photos || []).slice(0, 3)"
+                :key="photo.id"
+                class="photo-item"
+                :class="`photo-${index + 1}`"
+              >
+                <img
+                  :src="photo.thumbnailUrl || photo.url"
+                  :alt="photo.title || 'Photo'"
+                  class="photo-thumbnail"
+                  loading="lazy"
+                />
               </div>
-              <div class="photo-item photo-2">
-                <div
-                  class="photo-placeholder"
-                  style="
-                    background: linear-gradient(
-                      135deg,
-                      #f093fb 0%,
-                      #f5576c 100%
-                    );
-                  "
-                ></div>
-              </div>
-              <div class="photo-item photo-3">
-                <div
-                  class="photo-placeholder"
-                  style="
-                    background: linear-gradient(
-                      135deg,
-                      #4facfe 0%,
-                      #00f2fe 100%
-                    );
-                  "
-                ></div>
-              </div>
-              <div class="photo-item photo-4">
-                <div
-                  class="photo-placeholder"
-                  style="
-                    background: linear-gradient(
-                      135deg,
-                      #43e97b 0%,
-                      #38f9d7 100%
-                    );
-                  "
-                ></div>
+              <!-- Show empty placeholders if less than 3 photos -->
+              <div
+                v-for="index in Math.max(
+                  0,
+                  3 - (seriesItem.photos || []).length
+                )"
+                :key="`placeholder-${index}`"
+                class="photo-item"
+                :class="`photo-${(seriesItem.photos || []).length + index}`"
+              >
+                <div class="photo-placeholder-empty"></div>
               </div>
             </div>
           </div>
@@ -1317,74 +1271,7 @@ const formatDate = (date: Date) => {
   justify-content: center;
 }
 
-.photo-stack {
-  position: relative;
-  width: 80px;
-  height: 80px;
-  perspective: 1000px;
-}
-
-.photo-item {
-  position: absolute;
-  width: 60px;
-  height: 60px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-}
-
-.photo-placeholder {
-  width: 100%;
-  height: 100%;
-  border-radius: 8px;
-}
-
-/* Fan arrangement of photos */
-.photo-item.photo-1 {
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(-12deg) translateY(-10px);
-  z-index: 4;
-}
-
-.photo-item.photo-2 {
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(-4deg) translateY(-5px);
-  z-index: 3;
-}
-
-.photo-item.photo-3 {
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(4deg) translateY(-5px);
-  z-index: 2;
-}
-
-.photo-item.photo-4 {
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(12deg) translateY(-10px);
-  z-index: 1;
-}
-
-/* Hover effects for photo stack */
-.project-card:hover .photo-item.photo-1 {
-  transform: translate(-50%, -50%) rotate(-16deg) translateY(-15px) scale(1.05);
-}
-
-.project-card:hover .photo-item.photo-2 {
-  transform: translate(-50%, -50%) rotate(-6deg) translateY(-10px) scale(1.03);
-}
-
-.project-card:hover .photo-item.photo-3 {
-  transform: translate(-50%, -50%) rotate(6deg) translateY(-10px) scale(1.03);
-}
-
-.project-card:hover .photo-item.photo-4 {
-  transform: translate(-50%, -50%) rotate(16deg) translateY(-15px) scale(1.05);
-}
+/* Photo stack styles are in global.scss */
 
 .project-info {
   text-align: center;

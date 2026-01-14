@@ -216,26 +216,32 @@
           @click="openCollection(collection)"
         >
           <div class="card-preview">
-            <div
-              v-if="collection.photos && collection.photos.length > 0"
-              class="photo-stack"
-            >
+            <div class="photo-stack">
               <div
-                v-for="(photo, index) in collection.photos.slice(0, 4)"
+                v-for="(photo, index) in (collection.photos || []).slice(0, 3)"
                 :key="photo.id"
                 class="photo-item"
                 :class="`photo-${index + 1}`"
               >
-                <div
-                  class="photo-placeholder"
-                  :style="{ background: photo.gradient }"
-                ></div>
+                <img
+                  :src="photo.thumbnailUrl || photo.url"
+                  :alt="photo.title || 'Photo'"
+                  class="photo-thumbnail"
+                  loading="lazy"
+                />
               </div>
-            </div>
-            <div v-else class="empty-preview">
-              <n-icon size="40" color="var(--text-primary)">
-                <ImagesOutline />
-              </n-icon>
+              <!-- Show empty placeholders if less than 3 photos -->
+              <div
+                v-for="index in Math.max(
+                  0,
+                  3 - (collection.photos || []).length
+                )"
+                :key="`placeholder-${index}`"
+                class="photo-item"
+                :class="`photo-${(collection.photos || []).length + index}`"
+              >
+                <div class="photo-placeholder-empty"></div>
+              </div>
             </div>
           </div>
           <div class="card-info">
@@ -697,74 +703,7 @@ watch(
   font-size: var(--font-size-md);
 }
 
-.photo-stack {
-  position: relative;
-  width: 80px;
-  height: 80px;
-  perspective: 1000px;
-}
-
-.photo-item {
-  position: absolute;
-  width: 60px;
-  height: 60px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-}
-
-.photo-placeholder {
-  width: 100%;
-  height: 100%;
-  border-radius: 8px;
-}
-
-/* Fan arrangement of photos */
-.photo-item.photo-1 {
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(-12deg) translateY(-10px);
-  z-index: 4;
-}
-
-.photo-item.photo-2 {
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(-4deg) translateY(-5px);
-  z-index: 3;
-}
-
-.photo-item.photo-3 {
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(4deg) translateY(-5px);
-  z-index: 2;
-}
-
-.photo-item.photo-4 {
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(12deg) translateY(-10px);
-  z-index: 1;
-}
-
-/* Hover effects for photo stack */
-.collection-card:hover .photo-item.photo-1 {
-  transform: translate(-50%, -50%) rotate(-16deg) translateY(-15px) scale(1.05);
-}
-
-.collection-card:hover .photo-item.photo-2 {
-  transform: translate(-50%, -50%) rotate(-6deg) translateY(-10px) scale(1.03);
-}
-
-.collection-card:hover .photo-item.photo-3 {
-  transform: translate(-50%, -50%) rotate(6deg) translateY(-10px) scale(1.03);
-}
-
-.collection-card:hover .photo-item.photo-4 {
-  transform: translate(-50%, -50%) rotate(16deg) translateY(-15px) scale(1.05);
-}
+/* Photo stack styles are in global.scss */
 
 .collection-photos {
   width: 100%;
