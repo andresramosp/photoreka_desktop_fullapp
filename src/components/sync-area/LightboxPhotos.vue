@@ -230,7 +230,7 @@
             {{
               googlePhotos.isAuthorized.value
                 ? "Import from your Google Photos library"
-                : "Connect and sync your photos"
+                : "Connect and sync your photos from Google Photos"
             }}
           </div>
           <n-tag
@@ -296,23 +296,23 @@
       v-if="
         !isMaintenanceMode && !isFirstImportState && lightboxPhotos.length === 0
       "
-      class="upload-section"
+      class="empty-state-section"
     >
-      <div class="upload-container">
-        <div class="upload-content">
-          <div class="upload-icon">
+      <div class="empty-state-container">
+        <div class="empty-state-content">
+          <div class="empty-state-icon">
             <n-icon size="48" :color="'var(--primary-color)'">
               <CloudUploadOutline />
             </n-icon>
           </div>
-          <h3 class="upload-title">
+          <h3 class="empty-state-title">
             {{
               isUploadDisabled && photosRemaining <= 0
                 ? "Upload limit reached"
                 : "Your Lightbox is empty"
             }}
           </h3>
-          <p class="upload-subtitle">
+          <p class="empty-state-subtitle upload-subtitle">
             {{
               isUploadDisabled
                 ? uploadDisabledMessage
@@ -946,38 +946,9 @@ defineExpose({
 </script>
 
 <style scoped>
-/* Upload Section */
-.upload-section {
-  margin-bottom: 48px;
-}
-
-.upload-container {
-  border-radius: 16px;
-  padding: 32px 32px;
-  text-align: center;
-  background-color: var(--bg-body);
-}
-
-.upload-content {
-  max-width: 400px;
-  margin: 0 auto;
-}
-
-.upload-icon {
-  margin-bottom: 24px;
-}
-
-.upload-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin: 0 0 8px 0;
-}
-
+/* Upload Section - extends global empty-state classes */
 .upload-subtitle {
-  font-size: 16px;
-  color: var(--text-primary);
-  margin: 0 0 32px 0;
+  margin-bottom: 32px;
 }
 
 .upload-buttons {
@@ -1184,24 +1155,6 @@ defineExpose({
   line-height: 1.5;
 }
 
-/* Upload disabled styles */
-.upload-container.disabled {
-  background-color: var(--bg-surface);
-  opacity: 0.6;
-}
-
-.upload-content.disabled {
-  cursor: not-allowed;
-}
-
-.upload-container.disabled .upload-title {
-  color: var(--text-secondary);
-}
-
-.upload-container.disabled .upload-subtitle {
-  color: var(--text-tertiary);
-}
-
 /* Responsive */
 
 .selected-badge {
@@ -1260,19 +1213,6 @@ defineExpose({
     margin: 0 !important;
   }
 
-  .upload-container {
-    padding: 40px 20px;
-  }
-
-  .upload-title {
-    font-size: 20px;
-  }
-
-  .upload-subtitle {
-    font-size: 14px;
-    margin-bottom: 24px;
-  }
-
   .sync-area-header {
     align-items: flex-start;
     gap: 8px;
@@ -1302,14 +1242,6 @@ defineExpose({
 @media (max-width: 480px) {
   .tab-content {
     padding: var(--spacing-md);
-  }
-
-  .upload-container {
-    padding: 32px 16px;
-  }
-
-  .upload-title {
-    font-size: 18px;
   }
 
   .upload-progress-section {

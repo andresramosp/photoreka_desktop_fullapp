@@ -44,10 +44,10 @@
     <!-- Series Detail View (when viewing a specific series) -->
     <div v-else-if="showSeriesView && viewingSeries" class="series-detail-view">
       <!-- Series Header -->
-      <div class="series-header">
-        <div class="series-header-content">
-          <div class="series-header-actions">
-            <n-button text @click="backToSeries" class="back-button">
+      <div class="detail-header">
+        <div class="detail-header-content">
+          <div class="detail-header-actions">
+            <n-button text @click="backToSeries" class="detail-back-button">
               <template #icon>
                 <n-icon>
                   <svg viewBox="0 0 24 24">
@@ -93,7 +93,7 @@
                 type="error"
                 ghost
                 @click="showDeleteConfirmation"
-                class="delete-button"
+                class="detail-delete-button"
               >
                 <template #icon>
                   <n-icon>
@@ -111,7 +111,7 @@
           </div>
           <div class="series-title-row">
             <div v-if="!editingTitle" class="title-display">
-              <h1 class="series-title">
+              <h1 class="detail-title">
                 {{ viewingSeries.name || viewingSeries.title }}
               </h1>
               <n-button
@@ -168,7 +168,7 @@
             </n-button>
           </div>
           <div v-if="!editingDescription" class="description-display">
-            <p class="series-description" v-if="viewingSeries.description">
+            <p class="detail-description" v-if="viewingSeries.description">
               {{ viewingSeries.description }}
             </p>
             <n-button
@@ -217,7 +217,7 @@
               </n-button>
             </div>
           </div>
-          <p class="series-meta">
+          <p class="detail-meta">
             {{ (viewingSeries.photos || []).length }} photos • Updated
             {{ formatDate(viewingSeries.updatedAt) }}
           </p>
@@ -1317,33 +1317,8 @@ watch(fullscreenViewerVisible, (isVisible) => {
 
 /* Series Detail View Styles */
 .series-detail-view {
-  padding: var(--spacing-2xl);
   margin: 0 auto;
   background-color: var(--bg-body);
-}
-
-.series-header {
-  margin-bottom: var(--spacing-3xl);
-}
-
-.series-header-content {
-  text-align: left;
-}
-
-.series-header-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-lg);
-}
-
-.back-button {
-  color: var(--text-secondary);
-  font-size: var(--font-size-md);
-}
-
-.back-button:hover {
-  color: var(--primary-color);
 }
 
 .play-series-button {
@@ -1355,28 +1330,11 @@ watch(fullscreenViewerVisible, (isVisible) => {
   cursor: not-allowed;
 }
 
-.delete-button {
-  font-size: var(--font-size-sm);
-}
-
-.delete-button:hover {
-  color: #ef4444 !important;
-  border-color: #ef4444 !important;
-}
-
 .series-title-row {
   display: flex;
   align-items: center;
   gap: 5px;
-  margin-bottom: var(--spacing-md);
-}
-
-.series-title {
-  font-size: var(--font-size-4xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
-  margin: 0;
-  line-height: 1.2;
+  margin-bottom: var(--spacing-xs);
 }
 
 .share-button {
@@ -1394,14 +1352,6 @@ watch(fullscreenViewerVisible, (isVisible) => {
   color: var(--primary-color);
 }
 
-.series-description {
-  font-size: var(--font-size-lg);
-  color: var(--text-secondary);
-  margin: 0 0 var(--spacing-sm) 0;
-  max-width: 600px;
-  line-height: 1.6;
-}
-
 /* Edit mode styles */
 .title-display {
   display: flex;
@@ -1413,7 +1363,7 @@ watch(fullscreenViewerVisible, (isVisible) => {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-xs);
 }
 
 .title-edit :deep(.n-input) {
@@ -1430,17 +1380,17 @@ watch(fullscreenViewerVisible, (isVisible) => {
   display: flex;
   align-items: flex-start;
   gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-xs);
 }
 
-.description-display .series-description {
+.description-display .detail-description {
   margin: 0;
 }
 
 .description-edit {
   display: flex;
   gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-xs);
   align-items: flex-start;
 }
 
@@ -1476,12 +1426,6 @@ watch(fullscreenViewerVisible, (isVisible) => {
 
 .action-button:hover {
   color: var(--primary-color);
-}
-
-.series-meta {
-  font-size: var(--font-size-md);
-  color: var(--text-tertiary);
-  margin: 0;
 }
 
 .series-photos {
@@ -1527,27 +1471,6 @@ watch(fullscreenViewerVisible, (isVisible) => {
   padding: var(--spacing-md) var(--spacing-xl);
 }
 
-/* Delete Confirmation Dialog */
-.delete-confirmation {
-  padding: var(--spacing-md) 0;
-}
-
-.delete-confirmation p {
-  margin: 0 0 var(--spacing-md) 0;
-  line-height: 1.5;
-}
-
-.delete-warning {
-  display: flex;
-  align-items: center;
-  padding: var(--spacing-sm) var(--spacing-md);
-  background-color: rgba(245, 166, 35, 0.1);
-  border: 1px solid rgba(245, 166, 35, 0.3);
-  border-radius: 8px;
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-}
-
 /* Mobile Responsive */
 @media (max-width: 768px) {
   .series-view {
@@ -1556,17 +1479,6 @@ watch(fullscreenViewerVisible, (isVisible) => {
 
   .page-title {
     font-size: var(--font-size-3xl);
-  }
-
-  .series-header-actions {
-    flex-direction: column;
-    gap: var(--spacing-sm);
-    align-items: flex-start;
-  }
-
-  .delete-button {
-    align-self: flex-end;
-    font-size: var(--font-size-xs);
   }
 
   .sequence-photo {

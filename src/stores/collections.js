@@ -175,6 +175,53 @@ export const useCollectionsStore = defineStore("collections", {
       }
     },
 
+    // Update collection (name/description)
+    async updateCollection(id, data) {
+      try {
+        const payload = {
+          name: data.title || data.name,
+          description: data.description,
+        };
+
+        await api.put(`/api/collections/${id}`, payload);
+
+        // Update in collections array
+        if (Array.isArray(this.collections)) {
+          const index = this.collections.findIndex(
+            (collection) => String(collection.id) === String(id)
+          );
+          if (index !== -1) {
+            this.collections[index] = {
+              ...this.collections[index],
+              name: payload.name,
+              title: payload.name,
+              description: payload.description,
+              updatedAt: new Date(),
+            };
+          }
+        }
+
+        // Update current collection if it matches
+        if (
+          this.currentCollection &&
+          String(this.currentCollection.id) === String(id)
+        ) {
+          this.currentCollection = {
+            ...this.currentCollection,
+            name: payload.name,
+            title: payload.name,
+            description: payload.description,
+            updatedAt: new Date(),
+          };
+        }
+
+        return true;
+      } catch (error) {
+        console.error("Error updating collection:", error);
+        throw error;
+      }
+    },
+
     // Add photos to collection
     async addPhotosToCollection(collectionId, photoIds) {
       this.isAddingPhotos = true;

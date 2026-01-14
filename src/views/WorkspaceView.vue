@@ -16,17 +16,20 @@
     </div>
 
     <!-- Content Section -->
-    <div class="workspace-content">
+    <div class="workspace-content content-container">
       <!-- Empty State (when no photos) -->
       <div v-if="processedPhotos.length == 0" class="empty-state-section">
         <div class="empty-state-container">
           <div class="empty-state-content">
             <div class="empty-state-icon">
-              <n-icon size="48">
-                <BookInformation20Regular />
+              <n-icon size="48" color="var(--primary-color)">
+                <LayersOutline />
               </n-icon>
             </div>
             <h3 class="empty-state-title">Your workspace is empty</h3>
+            <p class="empty-state-subtitle">
+              Start by uploading and processing your photos.
+            </p>
             <div class="empty-state-steps">
               <div class="step-item">
                 1. Go to
@@ -62,7 +65,7 @@ import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { usePhotosStore } from "@/stores/photos.js";
 import { NIcon } from "naive-ui";
-import { BookInformation20Regular } from "@vicons/fluent";
+import { LayersOutline } from "@vicons/ionicons5";
 import PhotosGrid from "@/components/PhotosGrid.vue";
 import UsageIndicators from "@/components/UsageIndicators.vue";
 
@@ -124,72 +127,14 @@ const navigateToSyncArea = () => {
   flex-shrink: 0;
 }
 
-/* Content Section */
+/* Content Section - local overrides only */
 .workspace-content {
-  background-color: var(--bg-container);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
-  padding: var(--spacing-3xl);
+  /* Inherits from .content-container global class */
 }
 
-/* Empty State Styles */
-.empty-state-section {
-  display: flex;
-  min-height: 500px;
-  flex-direction: column;
-}
-
-.empty-state-container {
-  border: 2px dashed #2c2c32;
-  border-radius: 16px;
-  padding: 64px 32px;
-  text-align: center;
-  background-color: var(--bg-body);
-  transition: all 0.3s ease;
-}
-
-.empty-state-content {
-  max-width: 550px;
-  margin: 0 auto;
-}
-
-.empty-state-icon {
-  margin-bottom: 24px;
-}
-
-.empty-state-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin: 0 0 8px 0;
-}
-
-.empty-state-steps {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.step-item {
-  text-align: center;
-  color: var(--text-primary);
-}
-
-.tab-link {
-  background: none;
-  border: none;
-  color: var(--primary-color);
-  cursor: pointer;
-  text-decoration: underline;
-  font-size: inherit;
-  padding: 0;
-  margin: 0;
-}
-
-.tab-link:hover {
-  color: #a78bfa;
+/* Empty State - extends global .empty-state-subtitle */
+.empty-state-subtitle {
+  margin-bottom: 32px;
 }
 
 /* Catalog Section */
@@ -229,10 +174,6 @@ const navigateToSyncArea = () => {
 
   .workspace-content {
     padding: 16px;
-  }
-
-  .empty-state-container {
-    padding: 48px 24px;
   }
 }
 

@@ -1,5 +1,5 @@
 <template>
-  <div class="tab-content">
+  <div class="tab-content tab-content-container">
     <div class="processing-section">
       <!-- Processing Jobs Table -->
 
@@ -134,24 +134,23 @@
       </div>
 
       <!-- Empty Processing State -->
-      <div v-if="processingJobs.length === 0" class="empty-processing-state">
-        <div class="empty-state-content">
-          <n-icon size="64" color="#6b7280">
-            <svg viewBox="0 0 24 24">
-              <path
-                fill="currentColor"
-                d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10s10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5l1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
-              />
-            </svg>
-          </n-icon>
-          <h3 class="empty-state-title">No photos being processed</h3>
-          <p class="empty-state-description">
-            Upload photos in the
-            <button class="tab-link" @click="navigateToTab('upload')">
-              Lightbox
-            </button>
-            to see them here during processing
-          </p>
+      <div v-if="processingJobs.length === 0" class="empty-state-section">
+        <div class="empty-state-container">
+          <div class="empty-state-content">
+            <div class="empty-state-icon">
+              <n-icon size="48" color="var(--primary-color)">
+                <InProgress />
+              </n-icon>
+            </div>
+            <h3 class="empty-state-title">No photos being processed</h3>
+            <p class="empty-state-subtitle">
+              Upload photos in the
+              <button class="tab-link" @click="navigateToTab('upload')">
+                Lightbox
+              </button>
+              to see them here during processing
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -172,6 +171,7 @@
 import { ref, onMounted, onBeforeUnmount, h, computed } from "vue";
 import { api } from "@/utils/axios";
 import { BookInformation20Regular } from "@vicons/fluent";
+import { InProgress } from "@vicons/carbon";
 import PhotoCardHub from "../photoCards/PhotoCardHub.vue";
 import PieProgress from "../PieProgress.vue";
 import CollectionModal from "../CollectionModal.vue";
@@ -548,16 +548,16 @@ function isLastFinishedJob(job) {
 </script>
 
 <style scoped>
+/* Tab content - local overrides only */
 .tab-content {
-  padding: var(--spacing-3xl);
-  background-color: var(--bg-container);
+  /* Inherits from .tab-content-container global class */
 }
 
 /* Processing Section */
 .processing-section {
-  flex: 1;
   display: flex;
   flex-direction: column;
+  flex: 1;
 }
 
 /* Section Header */
@@ -762,31 +762,6 @@ function isLastFinishedJob(job) {
   object-fit: cover;
 }
 
-/* Empty Processing State */
-.empty-processing-state {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 200px;
-}
-
-.empty-state-content {
-  text-align: center;
-}
-
-.empty-state-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin: 16px 0 8px 0;
-}
-
-.empty-state-description {
-  color: var(--text-primary);
-  margin: 0;
-}
-
 /* Custom Status Badge Colors */
 .status-processing {
   background-color: var(--warning-color) !important;
@@ -802,10 +777,6 @@ function isLastFinishedJob(job) {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .tab-content {
-    padding: 16px;
-  }
-
   /* Processing Table Responsive */
   .row-main {
     grid-template-columns: 1fr;

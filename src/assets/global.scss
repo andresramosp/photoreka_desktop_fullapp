@@ -891,7 +891,7 @@
 }
 
 .empty-state-content {
-  max-width: 400px;
+  // max-width: 400px;
 }
 
 .empty-state-icon {
@@ -1104,4 +1104,241 @@
 
 .n-base-selection {
   font-size: 13px;
+}
+
+/* ==========================================================================
+   CONTENT CONTAINER SYSTEM - Main content wrapper for views/tabs
+   ========================================================================== */
+
+/* Main content container with background, border, padding */
+.content-container {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-container);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  min-height: 70vh;
+  padding: var(--spacing-3xl);
+}
+
+/* Tab content variant - no border/background as parent provides it */
+.tab-content-container {
+  display: flex;
+  flex-direction: column;
+  // padding: var(--spacing-3xl);
+  background-color: var(--bg-container);
+  min-height: 60vh;
+  flex: 1;
+}
+
+@media (max-width: 768px) {
+  .content-container,
+  .tab-content-container {
+    padding: var(--spacing-lg);
+  }
+}
+
+@media (max-width: 480px) {
+  .content-container,
+  .tab-content-container {
+    padding: var(--spacing-md);
+  }
+}
+
+/* ==========================================================================
+   EMPTY STATE SYSTEM - Shared across views and components
+   ========================================================================== */
+
+/* Empty state section wrapper - fills available space */
+.empty-state-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+/* Empty state container - centers content vertically and horizontally */
+.empty-state-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  padding: 64px 32px;
+  text-align: center;
+  background-color: var(--bg-body);
+}
+
+/* Empty state content wrapper */
+.empty-state-content {
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+/* Empty state icon */
+.empty-state-icon {
+  margin-bottom: 24px;
+}
+
+/* Empty state title */
+.empty-state-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0 0 8px 0;
+}
+
+/* Empty state subtitle/description */
+.empty-state-subtitle {
+  font-size: 16px;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* Empty state steps list */
+.empty-state-steps {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 0;
+}
+
+.step-item {
+  text-align: center;
+  color: var(--text-primary);
+  font-size: 16px;
+}
+
+/* Tab link button - for inline navigation links */
+.tab-link {
+  background: none;
+  border: none;
+  color: var(--primary-color);
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: inherit;
+  padding: 0;
+  margin: 0;
+}
+
+.tab-link:hover {
+  color: #a78bfa;
+}
+
+/* Empty state responsive styles */
+@media (max-width: 768px) {
+  .empty-state-container {
+    padding: 40px 20px;
+  }
+
+  .empty-state-title {
+    font-size: 20px;
+  }
+
+  .empty-state-subtitle {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .empty-state-container {
+    padding: 32px 16px;
+  }
+
+  .empty-state-title {
+    font-size: 18px;
+  }
+}
+
+/* ==========================================================================
+   DETAIL VIEW HEADER - Shared styles for Collection/Series detail headers
+   ========================================================================== */
+
+.detail-header {
+  margin-bottom: var(--spacing-lg);
+}
+
+.detail-header-content {
+  text-align: left;
+}
+
+.detail-header-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.detail-back-button {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.detail-back-button:hover {
+  color: var(--primary-color);
+}
+
+.detail-delete-button {
+  font-size: var(--font-size-sm);
+}
+
+.detail-delete-button:hover {
+  color: #ef4444 !important;
+  border-color: #ef4444 !important;
+}
+
+.detail-title {
+  font-size: var(--font-size-4xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-xs) 0;
+  line-height: 1.2;
+}
+
+.detail-description {
+  font-size: var(--font-size-lg);
+  color: var(--text-secondary);
+  margin: 0 0 var(--spacing-xs) 0;
+  max-width: 600px;
+  line-height: 1.6;
+}
+
+.detail-meta {
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+/* Delete Confirmation Dialog */
+.delete-confirmation {
+  padding: var(--spacing-md) 0;
+}
+
+.delete-confirmation p {
+  margin: 0 0 var(--spacing-md) 0;
+  line-height: 1.5;
+}
+
+.delete-warning {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: rgba(245, 166, 35, 0.1);
+  border: 1px solid rgba(245, 166, 35, 0.3);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+/* Mobile Responsive for detail headers */
+@media (max-width: 768px) {
+  .detail-header-actions {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    align-items: flex-start;
+  }
+
+  .detail-delete-button {
+    align-self: flex-end;
+    font-size: var(--font-size-xs);
+  }
 }

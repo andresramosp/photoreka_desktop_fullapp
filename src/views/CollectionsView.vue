@@ -3,10 +3,14 @@
     <!-- Collection View (when viewing a specific collection) -->
     <div v-if="showCollectionView && viewingCollection" class="collection-view">
       <!-- Collection Header -->
-      <div class="collection-header">
-        <div class="collection-header-content">
-          <div class="collection-header-actions">
-            <n-button text @click="backToCollections" class="back-button">
+      <div class="detail-header">
+        <div class="detail-header-content">
+          <div class="detail-header-actions">
+            <n-button
+              text
+              @click="backToCollections"
+              class="detail-back-button"
+            >
               <template #icon>
                 <n-icon>
                   <svg viewBox="0 0 24 24">
@@ -37,7 +41,7 @@
                 type="error"
                 ghost
                 @click="showDeleteConfirmation"
-                class="delete-button"
+                class="detail-delete-button"
               >
                 <template #icon>
                   <n-icon>
@@ -53,16 +57,101 @@
               </n-button>
             </div>
           </div>
-          <h1 class="collection-title">
-            {{ viewingCollection.name || viewingCollection.title }}
-          </h1>
-          <p
-            class="collection-description"
-            v-if="viewingCollection.description"
-          >
-            {{ viewingCollection.description }}
-          </p>
-          <p class="collection-meta">
+          <div class="title-row">
+            <div v-if="!editingTitle" class="title-display">
+              <h1 class="detail-title">
+                {{ viewingCollection.name || viewingCollection.title }}
+              </h1>
+              <n-button
+                text
+                class="edit-button"
+                @click="startEditTitle"
+                title="Edit collection name"
+              >
+                <template #icon>
+                  <n-icon size="20">
+                    <CreateOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </div>
+            <div v-else class="title-edit">
+              <n-input
+                v-model:value="editedTitle"
+                placeholder="Enter collection name..."
+                maxlength="100"
+              />
+              <n-button
+                text
+                class="action-button"
+                @click="saveTitle"
+                :loading="isSavingTitle"
+              >
+                <template #icon>
+                  <n-icon size="20">
+                    <CheckmarkOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+              <n-button text class="action-button" @click="cancelEditTitle">
+                <template #icon>
+                  <n-icon size="20">
+                    <CloseOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </div>
+          </div>
+          <div v-if="!editingDescription" class="description-display">
+            <p class="detail-description" v-if="viewingCollection.description">
+              {{ viewingCollection.description }}
+            </p>
+            <n-button
+              text
+              class="edit-button"
+              @click="startEditDescription"
+              title="Edit collection description"
+            >
+              <template #icon>
+                <n-icon size="20">
+                  <CreateOutline />
+                </n-icon>
+              </template>
+            </n-button>
+          </div>
+          <div v-else class="description-edit">
+            <n-input
+              v-model:value="editedDescription"
+              placeholder="Enter collection description (optional)..."
+              maxlength="500"
+            />
+            <div class="description-actions">
+              <n-button
+                text
+                class="action-button"
+                @click="saveDescription"
+                :loading="isSavingDescription"
+              >
+                <template #icon>
+                  <n-icon size="20">
+                    <CheckmarkOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+              <n-button
+                text
+                class="action-button"
+                @click="cancelEditDescription"
+              >
+                <template #icon>
+                  <n-icon size="20">
+                    <CloseOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </div>
+          </div>
+          <p class="detail-meta">
             {{ (viewingCollection.photos || []).length }} photos • Updated
             {{ formatDate(viewingCollection.updatedAt) }}
           </p>
@@ -287,7 +376,13 @@ import {
   NSpin,
   useMessage,
 } from "naive-ui";
-import { AddOutline, ImagesOutline } from "@vicons/ionicons5";
+import {
+  AddOutline,
+  ImagesOutline,
+  CreateOutline,
+  CheckmarkOutline,
+  CloseOutline,
+} from "@vicons/ionicons5";
 import PhotosDialog from "@/components/PhotosDialog.vue";
 import PhotosGrid from "@/components/PhotosGrid.vue";
 import { usePhotosStore } from "@/stores/photos.js";
@@ -306,6 +401,14 @@ const deleteConfirmationVisible = ref(false);
 const formRef = ref(null);
 const viewingCollection = ref(null); // Collection being viewed
 const showCollectionView = ref(false); // Whether to show collection view or grid view
+
+// Edit states for title and description
+const editingTitle = ref(false);
+const editingDescription = ref(false);
+const editedTitle = ref("");
+const editedDescription = ref("");
+const isSavingTitle = ref(false);
+const isSavingDescription = ref(false);
 
 // Form data
 const formData = ref({
@@ -441,6 +544,72 @@ const deleteCollection = async () => {
     console.error("Error deleting collection:", error);
     message.error("Failed to delete collection. Please try again.");
   }
+};
+
+// Edit title methods
+const startEditTitle = () => {
+  editedTitle.value =
+    viewingCollection.value.name || viewingCollection.value.title || "";
+  editingTitle.value = true;
+};
+
+const saveTitle = async () => {
+  if (!viewingCollection.value || !editedTitle.value.trim()) {
+    message.warning("Collection name cannot be empty");
+    return;
+  }
+
+  isSavingTitle.value = true;
+  try {
+    await collectionsStore.updateCollection(viewingCollection.value.id, {
+      title: editedTitle.value.trim(),
+      description: viewingCollection.value.description,
+    });
+    message.success("Collection name updated");
+    editingTitle.value = false;
+    updateViewingCollection();
+  } catch (error) {
+    console.error("Error updating collection name:", error);
+    message.error("Failed to update collection name");
+  } finally {
+    isSavingTitle.value = false;
+  }
+};
+
+const cancelEditTitle = () => {
+  editingTitle.value = false;
+  editedTitle.value = "";
+};
+
+// Edit description methods
+const startEditDescription = () => {
+  editedDescription.value = viewingCollection.value.description || "";
+  editingDescription.value = true;
+};
+
+const saveDescription = async () => {
+  if (!viewingCollection.value) return;
+
+  isSavingDescription.value = true;
+  try {
+    await collectionsStore.updateCollection(viewingCollection.value.id, {
+      title: viewingCollection.value.name || viewingCollection.value.title,
+      description: editedDescription.value.trim() || "",
+    });
+    message.success("Collection description updated");
+    editingDescription.value = false;
+    updateViewingCollection();
+  } catch (error) {
+    console.error("Error updating collection description:", error);
+    message.error("Failed to update collection description");
+  } finally {
+    isSavingDescription.value = false;
+  }
+};
+
+const cancelEditDescription = () => {
+  editingDescription.value = false;
+  editedDescription.value = "";
 };
 
 const formatDate = (date) => {
@@ -597,63 +766,91 @@ watch(
   transform: translate(-50%, -50%) rotate(16deg) translateY(-15px) scale(1.05);
 }
 
-/* Collections-specific styles */
-.collection-header {
-  margin-bottom: var(--spacing-2xl);
+.collection-photos {
+  width: 100%;
 }
 
-.collection-header-content {
-  text-align: left;
-}
-
-.collection-header-actions {
+/* Edit mode styles */
+.title-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--spacing-lg);
+  gap: 5px;
+  margin-bottom: var(--spacing-xs);
 }
 
-.back-button {
-  color: var(--text-secondary);
-  font-size: var(--font-size-md);
+.title-display {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
-.back-button:hover {
-  color: var(--primary-color);
+.title-edit {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
 }
 
-.delete-button {
-  font-size: var(--font-size-sm);
+.title-edit :deep(.n-input) {
+  max-width: 600px;
 }
 
-.delete-button:hover {
-  color: #ef4444 !important;
-  border-color: #ef4444 !important;
-}
-
-.collection-title {
+.title-edit :deep(.n-input__input) {
   font-size: var(--font-size-4xl);
   font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
-  margin: 0 0 var(--spacing-md) 0;
+  line-height: 1.2;
 }
 
-.collection-description {
-  font-size: var(--font-size-lg);
-  color: var(--text-secondary);
-  margin: 0 0 var(--spacing-sm) 0;
-  max-width: 600px;
-  line-height: 1.6;
+.description-display {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
 }
 
-.collection-meta {
-  font-size: var(--font-size-md);
-  color: var(--text-tertiary);
+.description-display .detail-description {
   margin: 0;
 }
 
-.collection-photos {
-  width: 100%;
+.description-edit {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+  align-items: flex-start;
+}
+
+.description-edit :deep(.n-input) {
+  max-width: 400px;
+}
+
+.description-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+.edit-button {
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+  flex-shrink: 0;
+  padding: 0;
+  min-width: 32px;
+}
+
+.edit-button:hover {
+  color: var(--primary-color);
+}
+
+.action-button {
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+  padding: 0;
+  min-width: 32px;
+  flex-shrink: 0;
+}
+
+.action-button:hover {
+  color: var(--primary-color);
 }
 
 /* Empty Collections State */
@@ -695,27 +892,6 @@ watch(
   padding: var(--spacing-md) var(--spacing-xl);
 }
 
-/* Delete Confirmation Dialog */
-.delete-confirmation {
-  padding: var(--spacing-md) 0;
-}
-
-.delete-confirmation p {
-  margin: 0 0 var(--spacing-md) 0;
-  line-height: 1.5;
-}
-
-.delete-warning {
-  display: flex;
-  align-items: center;
-  padding: var(--spacing-sm) var(--spacing-md);
-  background-color: rgba(245, 166, 35, 0.1);
-  border: 1px solid rgba(245, 166, 35, 0.3);
-  border-radius: 8px;
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-}
-
 /* Mobile Responsive */
 @media (max-width: 768px) {
   .collections-view {
@@ -724,17 +900,6 @@ watch(
 
   .page-title {
     font-size: var(--font-size-3xl);
-  }
-
-  .collection-header-actions {
-    flex-direction: column;
-    gap: var(--spacing-sm);
-    align-items: flex-start;
-  }
-
-  .delete-button {
-    align-self: flex-end;
-    font-size: var(--font-size-xs);
   }
 
   .photo-stack {

@@ -221,7 +221,7 @@ const sizeOptions = [
   { label: "L", value: "large" },
 ];
 
-const photoSize = ref("large");
+const photoSize = ref("medium");
 
 // Hover and insertion UI state
 const hoveredGapIndex = ref(null);
