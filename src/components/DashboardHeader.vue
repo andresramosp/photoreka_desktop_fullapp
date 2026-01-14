@@ -125,11 +125,7 @@ const userMenuOptions = [
   {
     type: "divider",
   },
-  {
-    label: "Profile",
-    key: "profile",
-    icon: () => h(NIcon, null, { default: () => h(PersonIcon) }),
-  },
+
   {
     label: "Settings",
     key: "settings",

@@ -2,7 +2,7 @@
   <div class="global-search" ref="searchContainerRef">
     <n-input
       v-model:value="searchQuery"
-      placeholder="Search photos by name, collections, series, tools..."
+      placeholder="Search photos, collections, series, tools, help..."
       class="search-input"
       size="medium"
       clearable
@@ -219,6 +219,39 @@
               </div>
             </div>
           </div>
+
+          <!-- Help Section -->
+          <div v-if="searchResults.help.length > 0" class="results-section">
+            <div class="section-header">
+              <n-icon size="14">
+                <HelpCircleOutline />
+              </n-icon>
+              <span>Help Topics</span>
+            </div>
+            <div class="section-items">
+              <div
+                v-for="helpItem in searchResults.help"
+                :key="`help-${helpItem.id}`"
+                class="result-item help-item"
+                :class="{ active: isActiveItem('help', helpItem.id) }"
+                @click="handleSelectHelp(helpItem)"
+                @mouseenter="setActiveItem('help', helpItem.id)"
+              >
+                <div class="item-icon help-icon">
+                  <n-icon size="18">
+                    <HelpCircleOutline />
+                  </n-icon>
+                </div>
+                <div class="item-content">
+                  <div class="item-name">{{ helpItem.subtopicTitle }}</div>
+                  <div class="item-description">{{ helpItem.topicTitle }}</div>
+                </div>
+                <n-icon size="14" class="item-arrow">
+                  <ChevronForward />
+                </n-icon>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Footer hint -->
@@ -252,6 +285,7 @@ import {
   LayersOutline,
   CloudUploadOutline,
   SettingsOutline,
+  HelpCircleOutline,
 } from "@vicons/ionicons5";
 import { Workspace } from "@vicons/carbon";
 import {
@@ -299,6 +333,7 @@ const iconComponents: Record<string, any> = {
   LayersOutline: LayersOutline,
   CloudUploadOutline: CloudUploadOutline,
   SettingsOutline: SettingsOutline,
+  HelpCircleOutline: HelpCircleOutline,
 };
 
 const getToolIcon = (iconName: string) => {
@@ -417,6 +452,9 @@ const handleSelectItem = (item: SearchResult) => {
     case "tool":
       handleSelectTool(item);
       break;
+    case "help":
+      handleSelectHelp(item);
+      break;
     case "collection":
       handleSelectCollection(item);
       break;
@@ -433,6 +471,12 @@ const handleSelectTool = (tool: any) => {
   showDropdown.value = false;
   clearSearch();
   router.push(tool.route);
+};
+
+const handleSelectHelp = (helpItem: any) => {
+  showDropdown.value = false;
+  clearSearch();
+  router.push(helpItem.route);
 };
 
 const handleSelectCollection = (collection: any) => {
@@ -653,6 +697,11 @@ onUnmounted(() => {
 .tool-icon {
   background: var(--primary-color-opacity-10);
   color: var(--primary-color);
+}
+
+.help-icon {
+  background: var(--info-color-opacity-10);
+  color: var(--info-color);
 }
 
 /* Item content */

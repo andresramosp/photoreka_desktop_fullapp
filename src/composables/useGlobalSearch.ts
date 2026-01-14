@@ -3,6 +3,7 @@ import { ref, computed, watch } from "vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useSeriesStore } from "@/stores/series.js";
+import helpData from "@/assets/helpData.json";
 import type { Ref } from "vue";
 
 // Types for search results
@@ -42,14 +43,27 @@ export interface SearchResultTool {
   searchTerms?: string[];
 }
 
+export interface SearchResultHelp {
+  type: "help";
+  id: string;
+  topicId: string;
+  subtopicId: string;
+  topicTitle: string;
+  subtopicTitle: string;
+  content: string;
+  route: string;
+}
+
 export type SearchResult =
   | SearchResultPhoto
   | SearchResultCollection
   | SearchResultSeries
-  | SearchResultTool;
+  | SearchResultTool
+  | SearchResultHelp;
 
 export interface GroupedResults {
   tools: SearchResultTool[];
+  help: SearchResultHelp[];
   collections: SearchResultCollection[];
   series: SearchResultSeries[];
   photos: SearchResultPhoto[];
@@ -235,6 +249,24 @@ const APP_TOOLS: SearchResultTool[] = [
     route: "/settings",
     searchTerms: ["config", "preferences", "options", "configure", "setup"],
   },
+  {
+    type: "tool",
+    id: "help",
+    name: "Help",
+    description: "Get help and learn about Photoreka features",
+    icon: "HelpCircleOutline",
+    route: "/help",
+    searchTerms: [
+      "help",
+      "support",
+      "guide",
+      "tutorial",
+      "docs",
+      "documentation",
+      "faq",
+      "questions",
+    ],
+  },
 ];
 
 export function useGlobalSearch() {
@@ -279,6 +311,41 @@ export function useGlobalSearch() {
 
       return false;
     }).slice(0, maxResultsPerCategory.value);
+  };
+
+  // Search help topics
+  const searchHelp = (query: string): SearchResultHelp[] => {
+    if (!query || query.length < 2) return [];
+
+    const results: SearchResultHelp[] = [];
+    const topics = helpData.topics || [];
+
+    for (const topic of topics) {
+      if (results.length >= maxResultsPerCategory.value) break;
+
+      for (const subtopic of topic.subtopics || []) {
+        if (results.length >= maxResultsPerCategory.value) break;
+
+        // Only search in topic title and subtopic title
+        if (
+          matchesQuery(topic.title, query) ||
+          matchesQuery(subtopic.title, query)
+        ) {
+          results.push({
+            type: "help",
+            id: `${topic.id}-${subtopic.id}`,
+            topicId: topic.id,
+            subtopicId: subtopic.id,
+            topicTitle: topic.title,
+            subtopicTitle: subtopic.title,
+            content: subtopic.content,
+            route: `/help?topic=${topic.id}&subtopic=${subtopic.id}`,
+          });
+        }
+      }
+    }
+
+    return results;
   };
 
   // Search collections
@@ -387,6 +454,7 @@ export function useGlobalSearch() {
     if (!query || query.length < 2) {
       return {
         tools: [],
+        help: [],
         collections: [],
         series: [],
         photos: [],
@@ -395,6 +463,7 @@ export function useGlobalSearch() {
 
     return {
       tools: searchTools(query),
+      help: searchHelp(query),
       collections: searchCollections(query),
       series: searchSeries(query),
       photos: searchPhotos(query),
@@ -406,6 +475,7 @@ export function useGlobalSearch() {
     const results = searchResults.value;
     return (
       results.tools.length +
+      results.help.length +
       results.collections.length +
       results.series.length +
       results.photos.length
@@ -423,6 +493,7 @@ export function useGlobalSearch() {
       ...results.collections,
       ...results.series,
       ...results.photos,
+      ...results.help,
     ];
   });
 

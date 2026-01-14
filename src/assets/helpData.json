@@ -1,0 +1,342 @@
+{
+  "topics": [
+    {
+      "id": "getting-started",
+      "title": "Getting Started",
+      "icon": "rocket",
+      "description": "Learn the basics of Photoreka",
+      "subtopics": [
+        {
+          "id": "what-is-photoreka",
+          "title": "What is Photoreka?",
+          "content": "Photoreka is an AI-powered photo management platform that helps you organize, search, and enhance your photo collection. Using advanced AI analysis, Photoreka automatically tags your photos with rich descriptions, making it easy to find exactly what you're looking for.",
+          "image": null
+        },
+        {
+          "id": "first-steps",
+          "title": "Your First Steps",
+          "content": "1. **Connect your photos**: Import photos from Google Photos or upload directly from your device.\n2. **Analyze your photos**: Let our AI analyze your photos to generate smart tags and descriptions.\n3. **Search & Discover**: Use natural language to find photos (e.g., \"sunset at the beach\").\n4. **Create & Share**: Use Canvas to create collages or Framer to prepare photos for social media.",
+          "image": null
+        },
+        {
+          "id": "dashboard-overview",
+          "title": "Dashboard Overview",
+          "content": "Your Dashboard is the central hub where you can:\n- View your recent activity and photo insights\n- Access quick actions for common tasks\n- Monitor your storage usage\n- Get daily \"Eureka\" discoveries about your photos",
+          "image": null
+        }
+      ]
+    },
+    {
+      "id": "importing-photos",
+      "title": "Importing Photos",
+      "icon": "cloud-upload",
+      "description": "How to add photos to your library",
+      "subtopics": [
+        {
+          "id": "google-photos-import",
+          "title": "Import from Google Photos",
+          "content": "Connect your Google Photos account to import your entire library or select specific albums:\n1. Go to **Settings > Connections**\n2. Click **Connect** next to Google Photos\n3. Authorize Photoreka to access your photos\n4. Select albums or photos to import from the Sync Area",
+          "image": null
+        },
+        {
+          "id": "local-upload",
+          "title": "Upload from Device",
+          "content": "Upload photos directly from your computer or mobile device:\n1. Go to **Sync Area > Lightbox**\n2. Click the upload button or drag and drop files\n3. Supported formats: JPG, PNG, WebP, HEIC\n4. Maximum file size: 20MB per photo",
+          "image": null
+        },
+        {
+          "id": "sync-area-explained",
+          "title": "Understanding the Sync Area",
+          "content": "The Sync Area is your photo processing hub with two main sections:\n- **Lightbox**: Where imported photos land before analysis. Review and select photos here.\n- **Analyses**: Track the progress of your photo processing jobs and view completed analyses.",
+          "image": null
+        }
+      ]
+    },
+    {
+      "id": "photo-analysis",
+      "title": "Photo Analysis",
+      "icon": "sparkles",
+      "description": "AI-powered photo understanding",
+      "subtopics": [
+        {
+          "id": "how-analysis-works",
+          "title": "How Analysis Works",
+          "content": "Our AI analyzes your photos to extract:\n- **Descriptive tags**: Objects, scenes, activities, and concepts\n- **Technical metadata**: Camera settings, composition analysis\n- **Emotional context**: Mood, atmosphere, and storytelling elements\n- **Quality scores**: Technical and artistic quality assessment",
+          "image": null
+        },
+        {
+          "id": "starting-analysis",
+          "title": "Starting an Analysis",
+          "content": "To analyze photos:\n1. Select photos in the **Lightbox**\n2. Click the floating **Analyze** button\n3. Wait for processing (typically 2-5 seconds per photo)\n4. View results in your library or the Analyses tab",
+          "image": null
+        },
+        {
+          "id": "analysis-credits",
+          "title": "Analysis Credits",
+          "content": "Each photo analysis consumes credits from your plan:\n- **Free Plan**: Limited monthly analyses\n- **Pro Plan**: Increased monthly quota\n- **Premium Plan**: Unlimited analyses\n\nCheck your remaining credits in Settings > Plans & Storage.",
+          "image": null
+        }
+      ]
+    },
+    {
+      "id": "search",
+      "title": "Search & Discovery",
+      "icon": "search",
+      "description": "Find your photos instantly",
+      "subtopics": [
+        {
+          "id": "natural-language-search",
+          "title": "Natural Language Search",
+          "content": "Search your photos using everyday language:\n- \"Photos of my dog at the park\"\n- \"Sunset beach vacation 2023\"\n- \"Birthday party with friends\"\n- \"Black and white portraits\"\n\nThe AI understands context and finds relevant matches even without exact tag matches.",
+          "image": null
+        },
+        {
+          "id": "tag-search",
+          "title": "Tag-Based Search",
+          "content": "Search by specific tags assigned to your photos:\n1. Switch to **Tags** mode in the search bar\n2. Type a tag name to see suggestions\n3. Click tags to add them to your search\n4. Combine multiple tags for precise results",
+          "image": null
+        },
+        {
+          "id": "search-modes",
+          "title": "Search Modes",
+          "content": "Choose the right search mode for your needs:\n- **Fast Mode**: Quick results using efficient algorithms\n- **Deep Mode**: Thorough search with more comprehensive matching\n- **Precise Mode**: Exact matching for specific requirements",
+          "image": null
+        },
+        {
+          "id": "filters",
+          "title": "Using Filters",
+          "content": "Refine your search results with filters:\n- **Date Range**: Filter by when photos were taken\n- **Collections**: Search within specific albums\n- **Quality**: Filter by technical or artistic scores\n- **Tags**: Include or exclude specific tags",
+          "image": null
+        }
+      ]
+    },
+    {
+      "id": "canvas",
+      "title": "Canvas",
+      "icon": "easel",
+      "description": "Create stunning collages",
+      "subtopics": [
+        {
+          "id": "canvas-basics",
+          "title": "Canvas Basics",
+          "content": "Canvas is your creative workspace for arranging photos:\n- Drag and drop photos onto the canvas\n- Resize and rotate freely\n- Arrange layers with precision\n- Export high-quality images",
+          "image": null
+        },
+        {
+          "id": "adding-photos-canvas",
+          "title": "Adding Photos to Canvas",
+          "content": "Add photos to your canvas in multiple ways:\n1. **Drag from Library**: Open the photos panel and drag photos directly\n2. **Search & Add**: Use the built-in search to find and add photos\n3. **Import**: Upload new photos directly to the canvas",
+          "image": null
+        },
+        {
+          "id": "canvas-tools",
+          "title": "Canvas Tools",
+          "content": "Available tools for editing:\n- **Select Tool**: Click to select, drag to move\n- **Multi-select**: Hold Shift or draw a selection box\n- **Zoom**: Use mouse wheel or pinch gestures\n- **Pan**: Hold Space and drag, or use two fingers\n- **Align**: Auto-align photos to grid or each other",
+          "image": null
+        },
+        {
+          "id": "exporting-canvas",
+          "title": "Exporting Your Creation",
+          "content": "Export your canvas creation:\n1. Click the **Export** button in the toolbar\n2. Choose your preferred resolution\n3. Select format (PNG or JPG)\n4. Download or share directly",
+          "image": null
+        }
+      ]
+    },
+    {
+      "id": "framer",
+      "title": "Framer",
+      "icon": "image",
+      "description": "Prepare photos for social media",
+      "subtopics": [
+        {
+          "id": "framer-overview",
+          "title": "What is Framer?",
+          "content": "Framer helps you prepare photos for social media with perfect aspect ratios:\n- Instagram Posts (1:1, 4:5)\n- Instagram Stories (9:16)\n- Facebook Posts\n- Twitter/X Posts\n- Custom ratios",
+          "image": null
+        },
+        {
+          "id": "using-framer",
+          "title": "Using Framer",
+          "content": "Create perfectly framed photos:\n1. Select a photo from your library\n2. Choose a frame style (aspect ratio)\n3. Adjust margin size and color\n4. Preview and download",
+          "image": null
+        },
+        {
+          "id": "frame-settings",
+          "title": "Frame Settings",
+          "content": "Customize your frame:\n- **Margin Size**: Adjust the border width (0-200px)\n- **Frame Color**: Choose from presets or custom colors\n- **Background**: Solid colors or blur effects\n- **Position**: Center, top, or bottom alignment",
+          "image": null
+        }
+      ]
+    },
+    {
+      "id": "collections",
+      "title": "Collections",
+      "icon": "folder",
+      "description": "Organize your photos",
+      "subtopics": [
+        {
+          "id": "creating-collections",
+          "title": "Creating Collections",
+          "content": "Organize photos into collections:\n1. Go to the **Collections** view\n2. Click **New Collection**\n3. Name your collection\n4. Add photos by dragging or selecting",
+          "image": null
+        },
+        {
+          "id": "managing-collections",
+          "title": "Managing Collections",
+          "content": "Keep your collections organized:\n- **Rename**: Click the collection name to edit\n- **Delete**: Remove collections (photos are not deleted)\n- **Reorder**: Drag and drop to arrange\n- **Share**: Generate shareable links (coming soon)",
+          "image": null
+        }
+      ]
+    },
+    {
+      "id": "account",
+      "title": "Account & Settings",
+      "icon": "settings",
+      "description": "Manage your account",
+      "subtopics": [
+        {
+          "id": "profile-settings",
+          "title": "Profile Settings",
+          "content": "Manage your profile information:\n- Display name\n- Email address\n- Password changes\n- Account preferences",
+          "image": null
+        },
+        {
+          "id": "connections",
+          "title": "Connected Services",
+          "content": "Manage your connected accounts:\n- **Google Photos**: Import and sync your photo library\n- **Instagram**: Coming soon\n- **Dropbox**: Coming soon\n\nConnect or disconnect services in Settings > Connections.",
+          "image": null
+        },
+        {
+          "id": "theme-preferences",
+          "title": "Theme & Display",
+          "content": "Customize your experience:\n- **Dark Mode**: Easier on the eyes, great for low light\n- **Light Mode**: Clean and bright interface\n- **Language**: English (more languages coming soon)",
+          "image": null
+        }
+      ]
+    },
+    {
+      "id": "plans-storage",
+      "title": "Plans & Storage",
+      "icon": "credit-card",
+      "description": "Subscription and usage",
+      "subtopics": [
+        {
+          "id": "available-plans",
+          "title": "Available Plans",
+          "content": "Choose the plan that fits your needs:\n\n**Free Plan**\n- Limited photo storage\n- Basic AI analysis\n- Standard search features\n\n**Pro Plan**\n- Increased storage\n- Priority AI processing\n- Advanced search modes\n\n**Premium Plan**\n- Unlimited storage\n- Unlimited analyses\n- All features unlocked",
+          "image": null
+        },
+        {
+          "id": "storage-usage",
+          "title": "Understanding Storage",
+          "content": "Your storage usage includes:\n- Analyzed photos in your library\n- Photos in the Lightbox awaiting analysis\n\nOriginal high-resolution files are not stored permanently. Only optimized versions for fast loading and AI analysis are kept.",
+          "image": null
+        },
+        {
+          "id": "upgrading",
+          "title": "Upgrading Your Plan",
+          "content": "To upgrade your plan:\n1. Go to **Settings > Plans & Storage**\n2. Click **View Plans**\n3. Select your preferred plan\n4. Complete the payment process\n\nUpgrades are effective immediately.",
+          "image": null
+        }
+      ]
+    },
+    {
+      "id": "privacy-terms",
+      "title": "Privacy & Terms",
+      "icon": "shield",
+      "description": "Your data and rights",
+      "subtopics": [
+        {
+          "id": "data-privacy",
+          "title": "Your Data Privacy",
+          "content": "We take your privacy seriously:\n- **You own your photos**: 100% ownership and copyright retained\n- **No selling**: We never sell, license, or redistribute your images\n- **Encrypted storage**: All data encrypted in transit and at rest\n- **Low-res processing**: Only reduced versions stored for analysis",
+          "image": null
+        },
+        {
+          "id": "ai-processing",
+          "title": "AI Processing Policy",
+          "content": "How we handle AI processing:\n- Images are analyzed, never edited or altered\n- Processing uses secure, paid AI services\n- Third-party providers don't train on your images\n- Temporary transmission only, under strict agreements",
+          "image": null
+        },
+        {
+          "id": "terms-of-use",
+          "title": "Terms of Use",
+          "content": "Key terms to know:\n- You're responsible for content you upload\n- Don't upload content that infringes others' rights\n- We may suspend accounts violating terms\n- See full Terms of Use for complete details",
+          "image": null,
+          "link": {
+            "text": "Read Full Terms",
+            "route": "/terms"
+          }
+        },
+        {
+          "id": "privacy-policy",
+          "title": "Privacy Policy",
+          "content": "Our privacy commitments:\n- Minimal data collection\n- No third-party advertising\n- Right to data deletion\n- Transparent practices",
+          "image": null,
+          "link": {
+            "text": "Read Privacy Policy",
+            "route": "/privacy"
+          }
+        }
+      ]
+    },
+    {
+      "id": "troubleshooting",
+      "title": "Troubleshooting",
+      "icon": "help-circle",
+      "description": "Common issues and solutions",
+      "subtopics": [
+        {
+          "id": "photos-not-loading",
+          "title": "Photos Not Loading",
+          "content": "If photos aren't loading:\n1. Check your internet connection\n2. Try refreshing the page\n3. Clear your browser cache\n4. Ensure Google Photos is connected (if importing)\n5. Check if the photo format is supported",
+          "image": null
+        },
+        {
+          "id": "analysis-stuck",
+          "title": "Analysis Stuck or Failed",
+          "content": "If photo analysis seems stuck:\n1. Check the Analyses tab for status\n2. Large batches may take longer\n3. Try analyzing fewer photos at once\n4. Ensure you have remaining analysis credits\n5. Contact support if issues persist",
+          "image": null
+        },
+        {
+          "id": "search-no-results",
+          "title": "Search Returns No Results",
+          "content": "If searches aren't finding photos:\n1. Ensure photos have been analyzed\n2. Try different search terms\n3. Switch between Natural Language and Tags mode\n4. Use broader or more specific terms\n5. Check if filters are limiting results",
+          "image": null
+        },
+        {
+          "id": "connection-issues",
+          "title": "Google Photos Connection Issues",
+          "content": "If Google Photos won't connect:\n1. Ensure you're signed into Google\n2. Try disconnecting and reconnecting\n3. Check browser popup blockers\n4. Clear cookies and try again\n5. Use a different browser if issues persist",
+          "image": null
+        }
+      ]
+    },
+    {
+      "id": "contact",
+      "title": "Contact & Support",
+      "icon": "mail",
+      "description": "Get help from our team",
+      "subtopics": [
+        {
+          "id": "contact-support",
+          "title": "Contact Support",
+          "content": "Need help? Reach out to us:\n- **Email**: support@photoreka.com\n- **Response time**: Usually within 24 hours\n\nWhen contacting support, please include:\n- Your account email\n- Description of the issue\n- Steps to reproduce (if applicable)\n- Screenshots if helpful",
+          "image": null
+        },
+        {
+          "id": "feature-requests",
+          "title": "Feature Requests",
+          "content": "We love hearing your ideas!\n- Share feature suggestions via email\n- Vote on upcoming features (coming soon)\n- Join our community discussions",
+          "image": null
+        },
+        {
+          "id": "bug-reports",
+          "title": "Report a Bug",
+          "content": "Found a bug? Help us fix it:\n1. Note what you were doing when it occurred\n2. Capture any error messages\n3. Try to reproduce the issue\n4. Send details to support@photoreka.com\n\nWe appreciate detailed bug reports!",
+          "image": null
+        }
+      ]
+    }
+  ]
+}

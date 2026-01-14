@@ -171,7 +171,8 @@ const allowedHeaderViews = [
   "framer",
   "workspace",
   "sync-area",
-  // "profile",
+  "settings",
+  "help",
   // "settings",
   // Add more route names as needed
 ];

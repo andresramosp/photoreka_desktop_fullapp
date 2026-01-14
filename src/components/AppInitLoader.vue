@@ -18,7 +18,7 @@ import { NSpin } from "naive-ui";
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-primary, #0f0f0f);
+  background: var(--bg-body, #0f0f0f);
 }
 
 .loader-content {
