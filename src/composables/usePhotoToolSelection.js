@@ -33,7 +33,7 @@ export function usePhotoToolSelection(customTools = null) {
       id: "3d-atlas",
       name: "3D Atlas",
       description: "Navigate to photo in 3D space",
-      icon: "Globe",
+      icon: "CubeOutline",
       route: "/atlas",
       singlePhotoOnly: true, // This tool only works with a single photo
     },

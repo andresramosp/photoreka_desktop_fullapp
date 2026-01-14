@@ -773,6 +773,14 @@ const canvasTools = [
     icon: "ImageFrame",
     route: "/framer",
   },
+  {
+    id: "3d-atlas",
+    name: "3D Atlas",
+    description: "Navigate to photo in 3D space",
+    icon: "CubeOutline",
+    route: "/atlas",
+    singlePhotoOnly: true, // This tool only works with a single photo
+  },
 ];
 
 const {

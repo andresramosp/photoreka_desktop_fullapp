@@ -19,9 +19,9 @@
           v-for="tool in tools"
           :key="tool.id"
           class="tool-option"
-          :class="{ 
+          :class="{
             processing: isProcessing && selectedTool === tool.id,
-            disabled: isToolDisabled(tool)
+            disabled: isToolDisabled(tool),
           }"
           @click="handleToolSelect(tool)"
         >
@@ -29,14 +29,17 @@
             <n-icon :size="32">
               <Workspace v-if="tool.icon === 'Workspace'" />
               <SquareOutline v-else-if="tool.icon === 'ImageFrame'" />
-              <GlobeOutline v-else-if="tool.icon === 'Globe'" />
+              <CubeOutline v-else-if="tool.icon === 'CubeOutline'" />
             </n-icon>
           </div>
           <div class="tool-info">
             <h4 class="tool-name">{{ tool.name }}</h4>
             <p class="tool-description">
               {{ tool.description }}
-              <span v-if="tool.singlePhotoOnly && photoCount > 1" class="single-photo-warning">
+              <span
+                v-if="tool.singlePhotoOnly && photoCount > 1"
+                class="single-photo-warning"
+              >
                 (Select only 1 photo)
               </span>
             </p>
@@ -65,7 +68,7 @@
 import { ref } from "vue";
 import { NModal, NButton, NIcon, NSpin } from "naive-ui";
 import { Workspace } from "@vicons/carbon";
-import { SquareOutline, GlobeOutline } from "@vicons/ionicons5";
+import { SquareOutline, CubeOutline } from "@vicons/ionicons5";
 
 const props = defineProps({
   show: {
