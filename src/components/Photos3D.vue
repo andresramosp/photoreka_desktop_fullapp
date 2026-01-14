@@ -711,6 +711,37 @@
               </div>
             </div>
           </template>
+
+          <!-- Navigate by Click Toggle -->
+          <div
+            v-if="!isPlayground"
+            class="control-item"
+            style="
+              margin-top: 16px;
+              padding-top: 16px;
+              border-top: 1px solid rgba(255, 255, 255, 0.1);
+            "
+          >
+            <span class="control-label">
+              Navigate by Click
+              <n-tooltip trigger="hover" placement="top">
+                <template #trigger>
+                  <n-icon
+                    size="12"
+                    color="var(--text-secondary)"
+                    style="cursor: help; margin-left: 4px"
+                  >
+                    <InfoCircleFilled />
+                  </n-icon>
+                </template>
+                Click photos to fly to them instead of selecting them
+              </n-tooltip>
+            </span>
+            <n-switch
+              v-model:value="navigateByClick"
+              :disabled="showDiscreteLoader"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -1042,6 +1073,7 @@ const showTimeRange = ref(false);
 
 const showNavigationControls = ref(true);
 const showTagBeacons = ref(false);
+const navigateByClick = ref(false);
 
 // Time range filter state
 const timeRangeFilter = ref(null);
@@ -1150,6 +1182,7 @@ const flyToPhoto = (photoId) => {
 
   const cam = cameraRef.value;
   const startPos = cam.position.clone();
+  const startQuaternion = cam.quaternion.clone();
 
   // Photo center position
   const photoCenter = new THREE.Vector3(
@@ -1158,29 +1191,37 @@ const flyToPhoto = (photoId) => {
     Number(position[2]) || 0
   );
 
-  // Calculate approach direction - photos face toward the camera (positive Z direction)
-  // We want to approach from in front of the photo, so we position the camera
-  // in the positive Z direction relative to the photo
-  const PHOTO_VIEW_DISTANCE = 3; // Distance from the photo to stop (close enough to see details)
+  // Calcular dirección desde la foto hacia la cámara actual
+  const directionFromPhoto = new THREE.Vector3()
+    .subVectors(startPos, photoCenter)
+    .normalize();
 
-  // Calculate target position: in front of the photo
-  // Photos in 3D typically face outward (positive Z), so we approach from +Z
-  const targetPos = photoCenter.clone();
-  targetPos.z += PHOTO_VIEW_DISTANCE; // Position camera in front of the photo
+  // Posición final: a una distancia fija del centro de la foto
+  const VIEW_DISTANCE = 2.5;
+  const targetPos = photoCenter
+    .clone()
+    .add(directionFromPhoto.multiplyScalar(VIEW_DISTANCE));
 
-  // Keep same Y level as photo (or slightly higher for better framing)
-  targetPos.y = photoCenter.y + 0.5;
+  const endQuaternion = new THREE.Quaternion();
 
-  // Flight duration based on distance (longer for farther distances)
+  // Crear matriz de rotación para mirar hacia la foto
+  const matrix = new THREE.Matrix4();
+  matrix.lookAt(targetPos, photoCenter, new THREE.Vector3(0, 1, 0));
+  endQuaternion.setFromRotationMatrix(matrix);
+
+  // Distancia y duración
   const distance = startPos.distanceTo(targetPos);
-  const duration = Math.min(2000, Math.max(800, distance * 15)); // 800ms to 2000ms
+  const duration = Math.max(2000, Math.max(1000, distance * 15));
 
   beaconFlightState.value = {
     startTime: performance.now(),
     duration: duration,
     from: startPos,
     to: targetPos,
-    lookAt: photoCenter,
+    startQuaternion: startQuaternion,
+    endQuaternion: endQuaternion,
+    photoCenter: photoCenter,
+    isSimpleFlight: true,
   };
   isBeaconFlying.value = true;
 
@@ -1257,12 +1298,23 @@ const flyToBeacon = (beacon) => {
   const targetPos = center.clone().add(dir.multiplyScalar(dynamicApproach));
   targetPos.y = center.y + BEACON_FLY_Y_ABOVE_CENTER;
 
+  // Calculate start and end quaternions for smooth rotation
+  const startQuaternion = cam.quaternion.clone();
+
+  // Create a temporary camera to calculate the target rotation
+  const tempCam = new THREE.Camera();
+  tempCam.position.copy(targetPos);
+  tempCam.lookAt(center);
+  const endQuaternion = tempCam.quaternion.clone();
+
   beaconFlightState.value = {
     startTime: performance.now(),
     duration: BEACON_FLY_DURATION_MS,
     from: startPos,
     to: targetPos,
     lookAt: center,
+    startQuaternion: startQuaternion,
+    endQuaternion: endQuaternion,
   };
   isBeaconFlying.value = true;
 };
@@ -2516,21 +2568,50 @@ const animate = () => {
   // Si hay vuelo activo, interpolar cámara aquí
   if (isBeaconFlying.value && beaconFlightState.value && cameraRef.value) {
     const now = frameStart;
-    const { startTime, duration, from, to, lookAt } = beaconFlightState.value;
-    const tRaw = duration > 0 ? (now - startTime) / duration : 1;
+    const state = beaconFlightState.value;
+    const tRaw =
+      state.duration > 0 ? (now - state.startTime) / state.duration : 1;
     const t = Math.min(Math.max(tRaw, 0), 1);
     const eased = easeInOutCubic(t);
 
-    cameraRef.value.position.set(
-      from.x + (to.x - from.x) * eased,
-      from.y + (to.y - from.y) * eased,
-      from.z + (to.z - from.z) * eased
-    );
+    if (
+      state.isSimpleFlight &&
+      state.from &&
+      state.to &&
+      state.startQuaternion &&
+      state.endQuaternion
+    ) {
+      // Vuelo en línea recta + giro progresivo de cámara
 
-    // Mantener la vista hacia el centro durante el vuelo
-    try {
-      cameraRef.value.lookAt(lookAt);
-    } catch (_) {}
+      // Posición: línea recta con easing
+      const currentPos = new THREE.Vector3().lerpVectors(
+        state.from,
+        state.to,
+        eased
+      );
+      cameraRef.value.position.copy(currentPos);
+
+      // Rotación: giro gradual desde orientación inicial hacia encarar la foto
+      // SLERP interpola suavemente entre los dos quaternions
+      cameraRef.value.quaternion.slerpQuaternions(
+        state.startQuaternion,
+        state.endQuaternion,
+        eased
+      );
+    } else if (state.from && state.to) {
+      // Vuelo lineal (fallback para beacons)
+      const currentPos = new THREE.Vector3(
+        state.from.x + (state.to.x - state.from.x) * eased,
+        state.from.y + (state.to.y - state.from.y) * eased,
+        state.from.z + (state.to.z - state.from.z) * eased
+      );
+
+      cameraRef.value.position.copy(currentPos);
+
+      if (state.photoCenter || state.lookAt) {
+        cameraRef.value.lookAt(state.photoCenter || state.lookAt);
+      }
+    }
 
     if (t >= 1) {
       isBeaconFlying.value = false;
@@ -2766,37 +2847,39 @@ const updatePhotoHover = (normalizedX, normalizedY) => {
       // Restaurar foto anterior si existe
       clearPhotoHover();
 
-      // Aplicar hover a la nueva foto
-      hoveredPhoto.value = hoveredPhotoData.photo;
+      // Aplicar hover a la nueva foto (solo si Navigate by Click NO está activo)
+      if (!navigateByClick.value) {
+        hoveredPhoto.value = hoveredPhotoData.photo;
 
-      // Crear un borde brillante añadiendo un plano ligeramente más grande detrás
-      if (hoveredPhotoData.photo.lodObject) {
-        // Crear geometría para el borde (ligeramente más grande)
-        const borderGeometry = new THREE.PlaneGeometry(4.15, 3.15);
-        // Obtener el color de la variable CSS --primary-color-hover
-        let cssHoverColor = getComputedStyle(document.documentElement)
-          .getPropertyValue("--accent-color")
-          .trim();
-        // Convertir a número hexadecimal para Three.js
-        let borderColor = 0xffffff;
-        if (/^#([0-9a-fA-F]{6})$/.test(cssHoverColor)) {
-          borderColor = parseInt(cssHoverColor.replace("#", ""), 16);
+        // Crear un borde brillante añadiendo un plano ligeramente más grande detrás
+        if (hoveredPhotoData.photo.lodObject) {
+          // Crear geometría para el borde (ligeramente más grande)
+          const borderGeometry = new THREE.PlaneGeometry(4.15, 3.15);
+          // Obtener el color de la variable CSS --primary-color-hover
+          let cssHoverColor = getComputedStyle(document.documentElement)
+            .getPropertyValue("--accent-color")
+            .trim();
+          // Convertir a número hexadecimal para Three.js
+          let borderColor = 0xffffff;
+          if (/^#([0-9a-fA-F]{6})$/.test(cssHoverColor)) {
+            borderColor = parseInt(cssHoverColor.replace("#", ""), 16);
+          }
+          const borderMaterial = new THREE.MeshBasicMaterial({
+            color: borderColor,
+            transparent: true,
+            opacity: 1,
+            depthTest: true,
+            depthWrite: false,
+          });
+          const borderMesh = new THREE.Mesh(borderGeometry, borderMaterial);
+
+          // Posicionar el borde justo detrás de la foto
+          borderMesh.position.z = -0.01;
+          borderMesh.name = "hoverBorder";
+
+          // Añadir el borde como hijo del LOD object
+          hoveredPhotoData.photo.lodObject.add(borderMesh);
         }
-        const borderMaterial = new THREE.MeshBasicMaterial({
-          color: borderColor,
-          transparent: true,
-          opacity: 1,
-          depthTest: true,
-          depthWrite: false,
-        });
-        const borderMesh = new THREE.Mesh(borderGeometry, borderMaterial);
-
-        // Posicionar el borde justo detrás de la foto
-        borderMesh.position.z = -0.01;
-        borderMesh.name = "hoverBorder";
-
-        // Añadir el borde como hijo del LOD object
-        hoveredPhotoData.photo.lodObject.add(borderMesh);
       }
     }
   } else {
@@ -2929,7 +3012,7 @@ const handlePhotoClick = (event) => {
   );
 
   if (intersects.length > 0) {
-    // Click en una foto - seleccionar/deseleccionar
+    // Click en una foto - seleccionar/deseleccionar o volar según el modo
     console.log("📸 Click en foto detectado");
     event.preventDefault();
     event.stopPropagation();
@@ -2938,7 +3021,13 @@ const handlePhotoClick = (event) => {
     const clickedPhotoData = photoMeshes.find((pm) => pm.mesh === clickedMesh);
 
     if (clickedPhotoData) {
-      togglePhotoSelection(clickedPhotoData.photo);
+      // Si Navigate by Click está activo, volar a la foto en lugar de seleccionarla
+      if (navigateByClick.value) {
+        console.log("✈️ Volando a foto:", clickedPhotoData.photo.id);
+        flyToPhoto(clickedPhotoData.photo.id);
+      } else {
+        togglePhotoSelection(clickedPhotoData.photo);
+      }
     }
   } else {
     console.log(

@@ -76,7 +76,7 @@ export function useTagBeacons(
   clusterTypeRefOrValue = null
 ) {
   const config = ref({
-    enabled: true,
+    enabled: false,
 
     // Agrupación espacial
     cellSize: 40, // unidades del mundo (XZ)
