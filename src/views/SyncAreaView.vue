@@ -17,8 +17,8 @@
           @click="setActiveTab('upload')"
         >
           <div class="tab-title">
-            <n-icon size="18">
-              <DriveFolderUploadFilled color="var(--info-color)" />
+            <n-icon size="18" :color="'var(--primary-color)'">
+              <CloudUploadOutline />
             </n-icon>
             Lightbox
           </div>
@@ -81,7 +81,7 @@ import { usePhotosStore } from "@/stores/photos.js";
 import { useUserStore } from "@/stores/userStore.ts";
 import { api, api_analyzer } from "@/utils/axios";
 import { useMessage, useNotification } from "naive-ui";
-import { DriveFolderUploadFilled } from "@vicons/material";
+import { CloudUploadOutline } from "@vicons/ionicons5";
 import { InProgress } from "@vicons/carbon";
 
 const photosStore = usePhotosStore();

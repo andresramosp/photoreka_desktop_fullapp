@@ -511,7 +511,7 @@ const videoTabs = ref([
     speed: 1.2,
   },
   {
-    title: "Explorer",
+    title: "Search",
     icon: SearchOutline,
     videoUrl: new URL("@/assets/videos/explorer_1.mp4", import.meta.url).href,
     speed: 1.5,

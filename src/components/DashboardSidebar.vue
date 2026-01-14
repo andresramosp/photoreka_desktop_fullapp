@@ -283,7 +283,7 @@ const thirdSectionToolsOptions = computed(() => {
 
   return [
     {
-      label: "Explorer",
+      label: "Search",
       key: "search",
       disabled: isBlocked,
       props: isBlocked ? { title: "Add photos to your catalog" } : {},

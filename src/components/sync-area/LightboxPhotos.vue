@@ -291,47 +291,32 @@
       </div>
     </div>
 
-    <!-- Full Upload Dropzone (show when no photos and NOT first import state) -->
+    <!-- Empty State Section -->
     <div
       v-if="
         !isMaintenanceMode && !isFirstImportState && lightboxPhotos.length === 0
       "
       class="upload-section"
     >
-      <div
-        class="upload-dropzone"
-        :class="{
-          'drag-over': isDragOver && !isUploadDisabled,
-          disabled: isUploadDisabled,
-        }"
-        @dragover.prevent="!isUploadDisabled && handleDragOver"
-        @dragenter.prevent="!isUploadDisabled && handleDragEnter"
-        @dragleave.prevent="!isUploadDisabled && handleDragLeave"
-        @drop.prevent="handleDrop"
-      >
-        <div class="dropzone-content" @click="triggerFileInput">
+      <div class="upload-container">
+        <div class="upload-content">
           <div class="upload-icon">
-            <n-icon size="48" :color="isUploadDisabled ? '#6b7280' : '#8b5cf6'">
-              <svg viewBox="0 0 24 24">
-                <path
-                  fill="currentColor"
-                  d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"
-                />
-              </svg>
+            <n-icon size="48" :color="'var(--primary-color)'">
+              <CloudUploadOutline />
             </n-icon>
           </div>
-          <h3 class="dropzone-title">
+          <h3 class="upload-title">
             {{
               isUploadDisabled && photosRemaining <= 0
                 ? "Upload limit reached"
                 : "Your Lightbox is empty"
             }}
           </h3>
-          <p class="dropzone-subtitle">
+          <p class="upload-subtitle">
             {{
               isUploadDisabled
                 ? uploadDisabledMessage
-                : "Drag and drop your images, or click below."
+                : "Import your photos using one of the options below."
             }}
           </p>
 
@@ -341,7 +326,7 @@
               :key="button.key"
               :type="button.type"
               size="large"
-              @click.stop="button.action"
+              @click="button.action"
             >
               <template #icon>
                 <n-icon
@@ -365,7 +350,6 @@
                   />
                 </n-icon>
                 <n-icon v-else-if="button.icon === 'google-locked'">
-                  <!-- Candado abierto - indicando desconectado -->
                   <svg viewBox="0 0 24 24" width="1em" height="1em">
                     <path
                       fill="currentColor"
@@ -483,7 +467,7 @@ import { useUserStore } from "@/stores/userStore.ts";
 import { usePhotoUpload } from "@/composables/usePhotoUpload.js";
 import { useWarmUp } from "@/composables/useWarmUp.js";
 import { useGooglePhotos } from "@/composables/useGooglePhotos.js";
-import { FolderOpen } from "@vicons/ionicons5";
+import { FolderOpen, CloudUploadOutline } from "@vicons/ionicons5";
 import { BookInformation20Regular } from "@vicons/fluent";
 import pLimit from "p-limit";
 import pica from "pica";
@@ -967,39 +951,30 @@ defineExpose({
   margin-bottom: 48px;
 }
 
-.upload-dropzone {
-  border: 2px dashed #2c2c32;
+.upload-container {
   border-radius: 16px;
-  padding: 64px 32px;
+  padding: 32px 32px;
   text-align: center;
-  transition: all 0.3s ease;
   background-color: var(--bg-body);
 }
 
-.upload-dropzone:hover,
-.upload-dropzone.drag-over {
-  border-color: var(--secondary-color);
-  background-color: rgba(139, 92, 246, 0.05);
-}
-
-.dropzone-content {
+.upload-content {
   max-width: 400px;
   margin: 0 auto;
-  cursor: pointer;
 }
 
 .upload-icon {
   margin-bottom: 24px;
 }
 
-.dropzone-title {
+.upload-title {
   font-size: 24px;
   font-weight: 600;
   color: var(--text-secondary);
   margin: 0 0 8px 0;
 }
 
-.dropzone-subtitle {
+.upload-subtitle {
   font-size: 16px;
   color: var(--text-primary);
   margin: 0 0 32px 0;
@@ -1210,22 +1185,20 @@ defineExpose({
 }
 
 /* Upload disabled styles */
-.upload-dropzone.disabled {
+.upload-container.disabled {
   background-color: var(--bg-surface);
-  border-color: var(--border-color);
-  cursor: not-allowed;
   opacity: 0.6;
 }
 
-.upload-dropzone.disabled .dropzone-content {
+.upload-content.disabled {
   cursor: not-allowed;
 }
 
-.upload-dropzone.disabled .dropzone-title {
+.upload-container.disabled .upload-title {
   color: var(--text-secondary);
 }
 
-.upload-dropzone.disabled .dropzone-subtitle {
+.upload-container.disabled .upload-subtitle {
   color: var(--text-tertiary);
 }
 
@@ -1287,15 +1260,15 @@ defineExpose({
     margin: 0 !important;
   }
 
-  .upload-dropzone {
+  .upload-container {
     padding: 40px 20px;
   }
 
-  .dropzone-title {
+  .upload-title {
     font-size: 20px;
   }
 
-  .dropzone-subtitle {
+  .upload-subtitle {
     font-size: 14px;
     margin-bottom: 24px;
   }
@@ -1331,11 +1304,11 @@ defineExpose({
     padding: var(--spacing-md);
   }
 
-  .upload-dropzone {
+  .upload-container {
     padding: 32px 16px;
   }
 
-  .dropzone-title {
+  .upload-title {
     font-size: 18px;
   }
 
