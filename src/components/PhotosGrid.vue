@@ -31,7 +31,7 @@
           <n-tooltip placement="bottom" trigger="hover">
             <template #trigger>
               <n-button
-                type="info"
+                type="primary"
                 size="small"
                 @click="handleReviewDuplicates"
                 :disabled="duplicatesReviewed"
@@ -124,7 +124,37 @@
             </n-icon>
           </n-button>
         </div>
+
+        <!-- Select All Button -->
+        <n-button
+          size="small"
+          :type="allSelected ? 'primary' : 'default'"
+          @click="handleSelectAllToggle"
+          class="select-all-btn"
+        >
+          {{ allSelected ? "Deselect All" : "Select All" }}
+        </n-button>
       </div>
+    </div>
+
+    <!-- Select All Banner -->
+    <div v-if="showSelectAllBanner" class="select-all-banner">
+      <span class="banner-text">
+        {{ displayedPhotos.length }} photos selected.
+        <a @click="handleSelectAllFiltered" class="select-all-link">
+          Select all {{ filteredAndSortedPhotos.length }} photos?
+        </a>
+      </span>
+      <n-button
+        text
+        size="tiny"
+        @click="showSelectAllBanner = false"
+        class="banner-close"
+      >
+        <n-icon size="18">
+          <CloseOutline />
+        </n-icon>
+      </n-button>
     </div>
 
     <!-- Photo Grid -->
@@ -262,7 +292,7 @@ import {
   useMessage,
   NTooltip,
 } from "naive-ui";
-import { DuplicateOutline } from "@vicons/ionicons5";
+import { DuplicateOutline, CloseOutline } from "@vicons/ionicons5";
 import { useRouter } from "vue-router";
 import PhotoCardHub from "./photoCards/PhotoCardHub.vue";
 import PhotoInfoDialog from "./PhotoInfoDialog.vue";
@@ -334,6 +364,10 @@ const filterDuplicates = ref(false);
 const isCheckingDuplicates = ref(false);
 const duplicatesReviewed = ref(false);
 const hasDuplicates = ref(false);
+
+// Select all banner state
+const showSelectAllBanner = ref(false);
+const allFilteredSelected = ref(false);
 
 // Responsive state for column options
 const windowWidth = ref(
@@ -487,6 +521,12 @@ watch(
       selectedCount: newSelection.length,
       selectedIds: [...newSelection],
     });
+
+    // Hide banner if selection is cleared
+    if (newSelection.length === 0) {
+      showSelectAllBanner.value = false;
+      allFilteredSelected.value = false;
+    }
   },
   { immediate: true, deep: true }
 );
@@ -535,6 +575,36 @@ const activateBasicSort = () => {
   basicSortActive.value = true;
   // Optionally, you could reset scores sorting here if needed
   // sortingType.value = "none";
+};
+
+// Handle select all toggle
+const handleSelectAllToggle = () => {
+  if (allSelected.value || allFilteredSelected.value) {
+    // Deselect all
+    clearAllSelections();
+    showSelectAllBanner.value = false;
+    allFilteredSelected.value = false;
+  } else {
+    // Select all displayed photos
+    const photoIds = displayedPhotos.value.map((photo) => photo.id);
+    selectAllPhotos(photoIds);
+
+    // Show banner if there are more photos to select
+    if (displayedPhotos.value.length < filteredAndSortedPhotos.value.length) {
+      showSelectAllBanner.value = true;
+      allFilteredSelected.value = false;
+    } else {
+      allFilteredSelected.value = true;
+    }
+  }
+};
+
+// Handle select all filtered photos
+const handleSelectAllFiltered = () => {
+  const photoIds = filteredAndSortedPhotos.value.map((photo) => photo.id);
+  selectAllPhotos(photoIds);
+  allFilteredSelected.value = true;
+  showSelectAllBanner.value = false;
 };
 
 // Handler functions for PhotosGridControls events
@@ -781,6 +851,9 @@ const displayedPhotos = computed(() => {
 
 // Check if all photos are selected
 const allSelected = computed(() => {
+  if (allFilteredSelected.value) {
+    return true;
+  }
   return (
     displayedPhotos.value.length > 0 &&
     displayedPhotos.value.every((photo) => selectedPhotosRecord.value[photo.id])
@@ -843,6 +916,8 @@ watch(
   ],
   () => {
     resetPagination();
+    showSelectAllBanner.value = false;
+    allFilteredSelected.value = false;
   },
   { deep: true }
 );
@@ -1032,7 +1107,6 @@ const handleToolSelected = async (toolId) => {
 }
 
 .results-count-base {
-  font-size: 16px;
   font-weight: 500;
   color: var(--text-secondary);
 }
@@ -1072,6 +1146,52 @@ const handleToolSelected = async (toolId) => {
   color: #8b5cf6;
   opacity: 1;
   transform: scale(1.1);
+}
+
+.select-all-btn {
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
+/* Select All Banner */
+.select-all-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: var(--primary-color);
+  border-radius: 8px;
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.banner-text {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.select-all-link {
+  color: white;
+  text-decoration: underline;
+  cursor: pointer;
+  font-weight: 600;
+  margin-left: 4px;
+  transition: opacity 0.2s ease;
+}
+
+.select-all-link:hover {
+  opacity: 0.85;
+}
+
+.banner-close {
+  color: white;
+  opacity: 0.9;
+  transition: opacity 0.2s ease;
+}
+
+.banner-close:hover {
+  opacity: 1;
 }
 
 .filter-duplicates-container {
@@ -1206,6 +1326,12 @@ const handleToolSelected = async (toolId) => {
     min-width: fit-content;
   }
 
+  .select-all-btn {
+    width: 100%;
+    margin-left: 0;
+    margin-top: 4px;
+  }
+
   .results-info-base {
     width: 100%;
   }
@@ -1261,9 +1387,24 @@ const handleToolSelected = async (toolId) => {
     justify-content: space-between;
   }
 
+  .select-all-btn {
+    width: 100%;
+    margin-left: 0;
+  }
+
   .grid-label-base,
   .sort-label-base {
     font-size: 13px;
+  }
+
+  .select-all-banner {
+    flex-direction: row;
+    padding: 10px 12px;
+  }
+
+  .banner-text {
+    font-size: 13px;
+    flex: 1;
   }
 
   .photo-grid-base {
