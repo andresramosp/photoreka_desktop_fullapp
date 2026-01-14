@@ -19,18 +19,27 @@
           v-for="tool in tools"
           :key="tool.id"
           class="tool-option"
-          :class="{ processing: isProcessing && selectedTool === tool.id }"
-          @click="handleToolSelect(tool.id)"
+          :class="{ 
+            processing: isProcessing && selectedTool === tool.id,
+            disabled: isToolDisabled(tool)
+          }"
+          @click="handleToolSelect(tool)"
         >
           <div class="tool-icon">
             <n-icon :size="32">
               <Workspace v-if="tool.icon === 'Workspace'" />
               <SquareOutline v-else-if="tool.icon === 'ImageFrame'" />
+              <GlobeOutline v-else-if="tool.icon === 'Globe'" />
             </n-icon>
           </div>
           <div class="tool-info">
             <h4 class="tool-name">{{ tool.name }}</h4>
-            <p class="tool-description">{{ tool.description }}</p>
+            <p class="tool-description">
+              {{ tool.description }}
+              <span v-if="tool.singlePhotoOnly && photoCount > 1" class="single-photo-warning">
+                (Select only 1 photo)
+              </span>
+            </p>
           </div>
           <div
             v-if="isProcessing && selectedTool === tool.id"
@@ -56,7 +65,7 @@
 import { ref } from "vue";
 import { NModal, NButton, NIcon, NSpin } from "naive-ui";
 import { Workspace } from "@vicons/carbon";
-import { SquareOutline } from "@vicons/ionicons5";
+import { SquareOutline, GlobeOutline } from "@vicons/ionicons5";
 
 const props = defineProps({
   show: {
@@ -81,11 +90,16 @@ const emit = defineEmits(["close", "tool-selected"]);
 
 const selectedTool = ref(null);
 
-const handleToolSelect = (toolId) => {
-  if (props.isProcessing) return;
+const isToolDisabled = (tool) => {
+  return tool.singlePhotoOnly && props.photoCount > 1;
+};
 
-  selectedTool.value = toolId;
-  emit("tool-selected", toolId);
+const handleToolSelect = (tool) => {
+  if (props.isProcessing) return;
+  if (isToolDisabled(tool)) return;
+
+  selectedTool.value = tool.id;
+  emit("tool-selected", tool.id);
 };
 </script>
 
@@ -132,6 +146,22 @@ const handleToolSelect = (toolId) => {
 .tool-option.processing:hover {
   border-color: var(--border-color);
   background: var(--card-color);
+}
+
+.tool-option.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tool-option.disabled:hover {
+  border-color: var(--border-color);
+  background: var(--card-color);
+}
+
+.single-photo-warning {
+  color: var(--warning-color);
+  font-size: 12px;
+  font-style: italic;
 }
 
 .tool-icon {

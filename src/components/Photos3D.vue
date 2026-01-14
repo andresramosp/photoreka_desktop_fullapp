@@ -911,6 +911,7 @@ import { useHasTouch } from "@/composables/useHasTouch.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
+import { usePhotoQueryParams } from "@/composables/usePhotoQueryParams.js";
 import { api } from "@/utils/axios";
 import * as THREE from "three";
 import { AppsOutline, ShareSocialOutline } from "@vicons/ionicons5";
@@ -942,6 +943,9 @@ const {
   openToolSelector,
   closeToolSelector,
 } = usePhotoToolSelection();
+
+// Photo query params handling (e.g., ?source=lightroom&ids=123)
+const { getPhotoIdsFromQuery } = usePhotoQueryParams();
 
 const photosStore = usePhotosStore();
 
@@ -1088,9 +1092,128 @@ const BEACON_FLY_DURATION_MS = 900; // rápido pero suave
 const BEACON_FLY_APPROACH_DISTANCE = 0;
 const BEACON_FLY_Y_ABOVE_CENTER = 0; // pequeña elevación para evitar quedar a ras
 
+// Pending flight to photo (from external navigation)
+const pendingFlyToPhotoId = ref(null);
+
 function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
+
+/**
+ * Flies the camera to a specific photo by ID, approaching from the front
+ * @param {string|number} photoId - The ID of the photo to fly to
+ * @returns {boolean} - True if flight was initiated, false if photo not found
+ */
+const flyToPhoto = (photoId) => {
+  if (!photoId || !cameraRef.value) {
+    console.warn("🚫 flyToPhoto: Missing photoId or camera");
+    return false;
+  }
+
+  // Find the photo in photosWithMaterials
+  const photo = photosWithMaterials.value.find(
+    (p) => String(p.id) === String(photoId)
+  );
+
+  if (!photo) {
+    console.warn(`🚫 flyToPhoto: Photo ${photoId} not found in 3D scene`);
+    return false;
+  }
+
+  // Get photo position
+  const position =
+    photo.position ||
+    (photo.lodObject?.position
+      ? [
+          photo.lodObject.position.x,
+          photo.lodObject.position.y,
+          photo.lodObject.position.z,
+        ]
+      : null);
+
+  if (!position || !Array.isArray(position)) {
+    console.warn(`🚫 flyToPhoto: Photo ${photoId} has no valid position`);
+    return false;
+  }
+
+  console.log(
+    `🎯 flyToPhoto: Flying to photo ${photoId} at position`,
+    position
+  );
+
+  // Exit pointer lock if active to avoid control conflicts
+  if (document.pointerLockElement && document.exitPointerLock) {
+    try {
+      document.exitPointerLock();
+    } catch (_) {}
+  }
+
+  const cam = cameraRef.value;
+  const startPos = cam.position.clone();
+
+  // Photo center position
+  const photoCenter = new THREE.Vector3(
+    Number(position[0]) || 0,
+    Number(position[1]) || 0,
+    Number(position[2]) || 0
+  );
+
+  // Calculate approach direction - photos face toward the camera (positive Z direction)
+  // We want to approach from in front of the photo, so we position the camera
+  // in the positive Z direction relative to the photo
+  const PHOTO_VIEW_DISTANCE = 3; // Distance from the photo to stop (close enough to see details)
+
+  // Calculate target position: in front of the photo
+  // Photos in 3D typically face outward (positive Z), so we approach from +Z
+  const targetPos = photoCenter.clone();
+  targetPos.z += PHOTO_VIEW_DISTANCE; // Position camera in front of the photo
+
+  // Keep same Y level as photo (or slightly higher for better framing)
+  targetPos.y = photoCenter.y + 0.5;
+
+  // Flight duration based on distance (longer for farther distances)
+  const distance = startPos.distanceTo(targetPos);
+  const duration = Math.min(2000, Math.max(800, distance * 15)); // 800ms to 2000ms
+
+  beaconFlightState.value = {
+    startTime: performance.now(),
+    duration: duration,
+    from: startPos,
+    to: targetPos,
+    lookAt: photoCenter,
+  };
+  isBeaconFlying.value = true;
+
+  console.log(
+    `✈️ Flight initiated: duration=${duration}ms, distance=${distance.toFixed(
+      1
+    )}`
+  );
+  return true;
+};
+
+/**
+ * Attempts to execute pending flight if photos are ready
+ */
+const tryExecutePendingFlight = () => {
+  if (!pendingFlyToPhotoId.value) return;
+
+  // Check if photo is in the scene
+  const photo = photosWithMaterials.value.find(
+    (p) => String(p.id) === String(pendingFlyToPhotoId.value)
+  );
+
+  if (photo && photo.position) {
+    console.log(
+      `🎯 Executing pending flight to photo ${pendingFlyToPhotoId.value}`
+    );
+    // Small delay to ensure scene is fully ready
+    setTimeout(() => {
+      flyToPhoto(pendingFlyToPhotoId.value);
+      pendingFlyToPhotoId.value = null;
+    }, 500);
+  }
+};
 
 const flyToBeacon = (beacon) => {
   if (!beacon || !cameraRef.value) return;
@@ -1434,6 +1557,9 @@ const checkAllTexturesLoaded = async () => {
 
     // Ocultar loader
     hideLoader();
+
+    // Try to execute any pending flight to a specific photo
+    tryExecutePendingFlight();
   }
 };
 
@@ -2649,7 +2775,7 @@ const updatePhotoHover = (normalizedX, normalizedY) => {
         const borderGeometry = new THREE.PlaneGeometry(4.15, 3.15);
         // Obtener el color de la variable CSS --primary-color-hover
         let cssHoverColor = getComputedStyle(document.documentElement)
-          .getPropertyValue("--secondary-color-hover")
+          .getPropertyValue("--accent-color")
           .trim();
         // Convertir a número hexadecimal para Three.js
         let borderColor = 0xffffff;
@@ -2659,7 +2785,7 @@ const updatePhotoHover = (normalizedX, normalizedY) => {
         const borderMaterial = new THREE.MeshBasicMaterial({
           color: borderColor,
           transparent: true,
-          opacity: 0.4,
+          opacity: 1,
           depthTest: true,
           depthWrite: false,
         });
@@ -3092,6 +3218,19 @@ watch(
   { deep: true }
 );
 
+// Watcher para ejecutar vuelo pendiente cuando las fotos se cargan
+watch(
+  () => photosWithMaterials.value.length,
+  (newLength) => {
+    if (newLength > 0 && pendingFlyToPhotoId.value) {
+      // Small delay to ensure positions are set
+      setTimeout(() => {
+        tryExecutePendingFlight();
+      }, 300);
+    }
+  }
+);
+
 // Watcher para sincronizar currentChunk del composable con el selector local
 watch(
   currentChunk,
@@ -3109,6 +3248,32 @@ let resizeObserver = null;
 // Lifecycle
 onMounted(async () => {
   try {
+    console.log("🚀 Photos3D onMounted");
+
+    // Listen for custom event to fly to a specific photo
+    const handleFlyToPhotoEvent = (event) => {
+      const { photoId } = event.detail;
+      console.log("📍 Received atlas:flyToPhoto event", photoId);
+
+      // Wait a bit for photos to be ready if needed
+      setTimeout(() => {
+        const success = flyToPhoto(photoId);
+        if (!success) {
+          console.warn(
+            "⚠️ Failed to fly to photo, will retry when photos load"
+          );
+          pendingFlyToPhotoId.value = photoId;
+        }
+      }, 500);
+    };
+
+    window.addEventListener("atlas:flyToPhoto", handleFlyToPhotoEvent);
+
+    // Store reference to clean up later
+    window._atlasEventCleanup = () => {
+      window.removeEventListener("atlas:flyToPhoto", handleFlyToPhotoEvent);
+    };
+
     // Initialize showConfigPanel based on mobile detection
     // Wait a tick to ensure isMobile has been computed
     await nextTick();
@@ -3165,6 +3330,31 @@ onMounted(async () => {
     loaderTitle.value = "Building stage";
     await loadAllPhotos(initialChunk);
 
+    // Load photo from query params if present (e.g., ?source=lightroom&ids=123)
+    // This allows Lightroom to deep-link directly to a photo in the 3D Atlas
+    const photoIdsFromQuery = getPhotoIdsFromQuery({
+      clearAfterLoad: true,
+      // Callback for when the store loads later (async case)
+      onReady: (photoIds) => {
+        if (photoIds.length > 0) {
+          const photoId = photoIds[0]; // Only fly to the first photo
+          console.log(
+            `📍 [QueryParams] Flying to photo ${photoId} from URL (async)`
+          );
+          // Set as pending - the watcher will handle the flight when photos are ready
+          pendingFlyToPhotoId.value = photoId;
+        }
+      },
+    });
+
+    // Sync case: if store was already loaded, fly to the photo
+    if (photoIdsFromQuery.length > 0) {
+      const photoId = photoIdsFromQuery[0]; // Only fly to the first photo
+      console.log(`📍 [QueryParams] Flying to photo ${photoId} from URL`);
+      // Set as pending - the flight will execute when 3D photos are ready
+      pendingFlyToPhotoId.value = photoId;
+    }
+
     // Añadir event listeners para selección de fotos ANTES de inicializar controles
     // para que tengan prioridad
     if (containerRef.value) {
@@ -3207,6 +3397,12 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  // Clean up atlas event listener
+  if (window._atlasEventCleanup) {
+    window._atlasEventCleanup();
+    delete window._atlasEventCleanup;
+  }
+
   // Clear search timeout on unmount
   if (searchTimeout) {
     clearTimeout(searchTimeout);

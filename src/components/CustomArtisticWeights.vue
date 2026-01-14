@@ -27,8 +27,6 @@
               :step="0.1"
               :label="criterion.label"
               :value-display="modelValue[criterion.value]?.toFixed(1) || '0.0'"
-              :color="'white'"
-              fill-color="linear-gradient(90deg, #8b5cf6, #a855f7)"
             />
           </div>
         </div>

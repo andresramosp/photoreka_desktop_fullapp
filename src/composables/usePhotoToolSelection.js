@@ -29,6 +29,14 @@ export function usePhotoToolSelection(customTools = null) {
       icon: "ImageFrame",
       route: "/framer",
     },
+    {
+      id: "3d-atlas",
+      name: "3D Atlas",
+      description: "Navigate to photo in 3D space",
+      icon: "Globe",
+      route: "/atlas",
+      singlePhotoOnly: true, // This tool only works with a single photo
+    },
   ];
 
   // Use custom tools if provided, otherwise use default tools
@@ -132,8 +140,60 @@ export function usePhotoToolSelection(customTools = null) {
   };
 
   /**
+   * Takes a photo to the 3D Atlas and flies to it
+   * @param {Array} photoIds - Array of photo IDs (only first one will be used)
+   * @param {Function} clearSelections - Function to clear current selections
+   */
+  const takeToAtlas = async (photoIds, clearSelections) => {
+    try {
+      isProcessing.value = true;
+
+      // Only use the first photo for 3D Atlas navigation
+      const targetPhotoId = photoIds[0];
+
+      if (!targetPhotoId) {
+        message.error("No photo selected for 3D navigation");
+        return;
+      }
+
+      // Fetch the photo to ensure it exists
+      await photosStore.fetchPhoto(targetPhotoId);
+      const photo = photosStore.photos.find((p) => p.id == targetPhotoId);
+
+      if (!photo) {
+        message.error("Photo not found");
+        return;
+      }
+
+      // Clear selections before navigating
+      clearSelections();
+
+      // Navigate to 3D Atlas first
+      await router.push("/atlas");
+
+      // Then dispatch custom event with the photo ID
+      // This allows the 3D component to react even if already mounted
+      setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent("atlas:flyToPhoto", {
+            detail: { photoId: targetPhotoId },
+          })
+        );
+        console.log("🚀 Dispatched atlas:flyToPhoto event", targetPhotoId);
+      }, 100);
+
+      message.info("Navigating to photo in 3D space...");
+    } catch (error) {
+      console.error("Error taking photo to 3D Atlas:", error);
+      message.error("Failed to navigate to 3D Atlas");
+    } finally {
+      isProcessing.value = false;
+    }
+  };
+
+  /**
    * Takes photos to a specific tool
-   * @param {string} toolId - The tool to take photos to ('canvas' or 'framer')
+   * @param {string} toolId - The tool to take photos to ('canvas', 'framer', or '3d-atlas')
    * @param {Array} photoIds - Array of photo IDs
    * @param {Function} clearSelections - Function to clear current selections
    */
@@ -149,6 +209,9 @@ export function usePhotoToolSelection(customTools = null) {
         break;
       case "framer":
         await takeToFramer(photoIds, clearSelections);
+        break;
+      case "3d-atlas":
+        await takeToAtlas(photoIds, clearSelections);
         break;
       default:
         message.error(`Unknown tool: ${toolId}`);
@@ -178,6 +241,7 @@ export function usePhotoToolSelection(customTools = null) {
     // Methods
     takeToCanvas,
     takeToFramer,
+    takeToAtlas,
     takeToTool,
     openToolSelector,
     closeToolSelector,
