@@ -345,10 +345,12 @@ const disconnectGooglePhotos = () => {
   message.info("Google Photos disconnected");
 };
 
-// Storage (mock data)
-const photosUsage = ref(847);
-const photosLimit = ref(5000);
-const photosRemaining = computed(() => photosLimit.value - photosUsage.value);
+// Storage (real data from userStore)
+const photosUsage = computed(() => userStore.user?.usage?.photosUsage || 0);
+const photosLimit = computed(() => userStore.user?.usage?.photosLimit || 0);
+const photosRemaining = computed(
+  () => userStore.user?.usage?.photosRemaining || 0
+);
 const uploadPercentage = computed(() => {
   if (photosLimit.value === 0) return 0;
   return Math.min((photosUsage.value / photosLimit.value) * 100, 100);
