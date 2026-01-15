@@ -457,6 +457,34 @@
               />
             </div>
           </div>
+
+          <!-- Tour Pause Duration Slider -->
+          <div class="control-item-full" style="margin-top: 12px">
+            <label
+              class="control-label"
+              style="margin-bottom: 8px; display: block"
+            >
+              Photo Tour Pause Duration
+            </label>
+            <div class="slider-container">
+              <n-slider
+                v-model:value="tourPauseDuration"
+                :min="100"
+                :max="3000"
+                :step="100"
+                :format-tooltip="(value) => `${value / 1000}s`"
+                :marks="{
+                  100: '0.1s',
+                  500: '0.5s',
+                  1000: '1s',
+                  2000: '2s',
+                  3000: '3s',
+                }"
+                class="radial-slider"
+                @click.stop
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -633,9 +661,7 @@
             <div v-if="!isPlayground" class="control-tip">
               <div class="control-icon-group">
                 <span class="control-icon-text">👆</span>
-                <span class="control-text"
-                  >Left-click on photos to select/deselect</span
-                >
+                <span class="control-text">{{ navigationHintText }}</span>
               </div>
             </div>
             <div class="control-tip">
@@ -723,7 +749,7 @@
             "
           >
             <span class="control-label">
-              Navigate by Click
+              Select by click
               <n-tooltip trigger="hover" placement="top">
                 <template #trigger>
                   <n-icon
@@ -734,11 +760,11 @@
                     <InfoCircleFilled />
                   </n-icon>
                 </template>
-                Click photos to fly to them instead of selecting them
+                Click photos to select/deselect them
               </n-tooltip>
             </span>
             <n-switch
-              v-model:value="navigateByClick"
+              v-model:value="selectByClick"
               :disabled="showDiscreteLoader"
             />
           </div>
@@ -1073,7 +1099,7 @@ const showTimeRange = ref(false);
 
 const showNavigationControls = ref(true);
 const showTagBeacons = ref(false);
-const navigateByClick = ref(false);
+const selectByClick = ref(false);
 
 // Time range filter state
 const timeRangeFilter = ref(null);
@@ -1124,14 +1150,14 @@ const BEACON_FLY_DURATION_MS = 900; // rápido pero suave
 const BEACON_FLY_APPROACH_DISTANCE = 0;
 const BEACON_FLY_Y_ABOVE_CENTER = 0; // pequeña elevación para evitar quedar a ras
 
-// Pending flight to photo (from external navigation)
-const pendingFlyToPhotoId = ref(null);
+// Vuelos pendientes (puede ser 1 foto o múltiples para un tour)
+const pendingPhotoFlightIds = ref(null);
 
 // =============================
 // Sequential Photo Tour System
 // =============================
 const photoTourState = ref(null);
-const TOUR_PAUSE_DURATION_MS = 1000; // 3 segundos en cada foto
+const tourPauseDuration = ref(500); // Duración de pausa entre fotos en tour (ms)
 
 function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -1249,6 +1275,12 @@ const startPhotoTour = (photoIds) => {
     return false;
   }
 
+  // Verificar si las fotos están cargadas
+  if (photosWithMaterials.value.length === 0) {
+    console.warn("🚫 startPhotoTour: Photos not loaded yet, will be pending");
+    return false;
+  }
+
   console.log(`🎬 Starting photo tour with ${photoIds.length} photos`);
 
   photoTourState.value = {
@@ -1306,26 +1338,31 @@ const cancelPhotoTour = () => {
 };
 
 /**
- * Attempts to execute pending flight if photos are ready
+ * Attempts to execute pending flight (single photo or tour) if photos are ready
  */
 const tryExecutePendingFlight = () => {
-  if (!pendingFlyToPhotoId.value) return;
+  if (
+    !pendingPhotoFlightIds.value ||
+    pendingPhotoFlightIds.value.length === 0
+  ) {
+    return;
+  }
 
-  // Check if photo is in the scene
-  const photo = photosWithMaterials.value.find(
-    (p) => String(p.id) === String(pendingFlyToPhotoId.value)
+  const photoCount = pendingPhotoFlightIds.value.length;
+  console.log(
+    `🎯 Attempting to execute pending flight with ${photoCount} photo(s)`
   );
 
-  if (photo && photo.position) {
-    console.log(
-      `🎯 Executing pending flight to photo ${pendingFlyToPhotoId.value}`
-    );
-    // Small delay to ensure scene is fully ready
-    setTimeout(() => {
-      flyToPhoto(pendingFlyToPhotoId.value);
-      pendingFlyToPhotoId.value = null;
-    }, 500);
-  }
+  // Agregar delay de 1000ms antes de empezar el vuelo para asegurar que el 3D está listo
+  setTimeout(() => {
+    const success = startPhotoTour(pendingPhotoFlightIds.value);
+    if (success) {
+      console.log(
+        `✅ Pending flight started successfully (${photoCount} photo(s))`
+      );
+      pendingPhotoFlightIds.value = null;
+    }
+  }, 1000);
 };
 
 const flyToBeacon = (beacon) => {
@@ -1417,6 +1454,14 @@ const showCollectionModal = ref(false);
 
 // Computed para selectedPhotoIds (compatible con composables)
 const selectedPhotoIds = computed(() => selectedPhotos.value.map((p) => p.id));
+
+// Computed para texto de navegación dinámico según el modo
+const navigationHintText = computed(() => {
+  if (!selectByClick.value) {
+    return "Left-click on photos to fly to them";
+  }
+  return "Left-click on photos to select/deselect";
+});
 
 // Sistema de hover para fotos
 const hoveredPhoto = ref(null);
@@ -2708,7 +2753,7 @@ const animate = () => {
   ) {
     const pauseElapsed = frameStart - photoTourState.value.pauseStartTime;
 
-    if (pauseElapsed >= TOUR_PAUSE_DURATION_MS) {
+    if (pauseElapsed >= tourPauseDuration.value) {
       // Termina la pausa, continuar con el siguiente
       photoTourState.value.isPaused = false;
       advancePhotoTour();
@@ -2944,7 +2989,7 @@ const updatePhotoHover = (normalizedX, normalizedY) => {
       clearPhotoHover();
 
       // Aplicar hover a la nueva foto (solo si Navigate by Click NO está activo y no estamos volando)
-      if (!navigateByClick.value && !isBeaconFlying.value) {
+      if (selectByClick.value && !isBeaconFlying.value) {
         hoveredPhoto.value = hoveredPhotoData.photo;
 
         // Crear un borde brillante añadiendo un plano ligeramente más grande detrás
@@ -3121,7 +3166,7 @@ const handlePhotoClick = (event) => {
 
     if (clickedPhotoData) {
       // Si Navigate by Click está activo, volar a la foto en lugar de seleccionarla
-      if (navigateByClick.value) {
+      if (!selectByClick.value) {
         console.log("✈️ Volando a foto:", clickedPhotoData.photo.id);
         flyToPhoto(clickedPhotoData.photo.id);
       } else {
@@ -3434,11 +3479,14 @@ watch(
   { deep: true }
 );
 
-// Watcher para ejecutar vuelo pendiente cuando las fotos se cargan
+// Watcher para ejecutar vuelos pendientes (tours o individuales) cuando las fotos se cargan
 watch(
   () => photosWithMaterials.value.length,
   (newLength) => {
-    if (newLength > 0 && pendingFlyToPhotoId.value) {
+    if (
+      newLength > 0 &&
+      (pendingFlyToPhotoId.value || pendingPhotoTourIds.value)
+    ) {
       // Small delay to ensure positions are set
       setTimeout(() => {
         tryExecutePendingFlight();
@@ -3471,8 +3519,9 @@ onMounted(async () => {
       const { photoId } = event.detail;
       console.log("📍 Received atlas:flyToPhoto event", photoId);
 
-      // Cancel any active tour
+      // Cancel any active tour or pending flights
       cancelPhotoTour();
+      pendingPhotoFlightIds.value = null;
 
       // Wait a bit for photos to be ready if needed
       setTimeout(() => {
@@ -3481,7 +3530,8 @@ onMounted(async () => {
           console.warn(
             "⚠️ Failed to fly to photo, will retry when photos load"
           );
-          pendingFlyToPhotoId.value = photoId;
+          // Guardar como array de un solo elemento
+          pendingPhotoFlightIds.value = [photoId];
         }
       }, 500);
     };
@@ -3491,9 +3541,17 @@ onMounted(async () => {
       const { photoIds } = event.detail;
       console.log("🎬 Received atlas:startPhotoTour event", photoIds);
 
+      // Cancel any active tour or pending flights
+      cancelPhotoTour();
+      pendingPhotoFlightIds.value = null;
+
       // Wait a bit for photos to be ready if needed
       setTimeout(() => {
-        startPhotoTour(photoIds);
+        const success = startPhotoTour(photoIds);
+        if (!success) {
+          console.warn("⚠️ Failed to start tour, will retry when photos load");
+          pendingPhotoFlightIds.value = photoIds;
+        }
       }, 500);
     };
 
@@ -3577,7 +3635,7 @@ onMounted(async () => {
             `📍 [QueryParams] Flying to photo ${photoId} from URL (async)`
           );
           // Set as pending - the watcher will handle the flight when photos are ready
-          pendingFlyToPhotoId.value = photoId;
+          pendingPhotoFlightIds.value = [photoId];
         }
       },
     });
@@ -3587,7 +3645,7 @@ onMounted(async () => {
       const photoId = photoIdsFromQuery[0]; // Only fly to the first photo
       console.log(`📍 [QueryParams] Flying to photo ${photoId} from URL`);
       // Set as pending - the flight will execute when 3D photos are ready
-      pendingFlyToPhotoId.value = photoId;
+      pendingPhotoFlightIds.value = [photoId];
     }
 
     // Añadir event listeners para selección de fotos ANTES de inicializar controles
