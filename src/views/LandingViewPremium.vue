@@ -249,7 +249,7 @@
                   </li>
                   <li>
                     <div class="feature-icon-wrapper" style="color: #8b5cf6">
-                      <n-icon size="18"><ChatbubblesOutline /></n-icon>
+                      <n-icon size="28"><ChatbubblesOutline /></n-icon>
                     </div>
                     <span>Search by natural language integrated</span>
                   </li>
@@ -707,7 +707,7 @@ const features = ref([
   },
   {
     icon: Workspace,
-    title: "Interactive Canvas",
+    title: "Canvas",
     description:
       "Create stunning photo layouts and compositions with our intuitive canvas tool. Drag, drop, resize, and arrange your photos to tell your story.",
     color: "#8b5cf6",
@@ -1690,6 +1690,8 @@ if (typeof window !== "undefined") {
   opacity: 0;
   transform: translateY(30px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  position: relative;
+  overflow: hidden;
 }
 
 .feature-card.visible {
@@ -1704,8 +1706,11 @@ if (typeof window !== "undefined") {
 }
 
 .feature-icon {
-  width: 56px;
-  height: 56px;
+  position: absolute;
+  top: -20px;
+  right: -20px;
+  width: 140px;
+  height: 140px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1714,14 +1719,27 @@ if (typeof window !== "undefined") {
     rgba(37, 99, 235, 0.08),
     rgba(139, 92, 246, 0.08)
   );
-  border-radius: 14px;
-  margin-bottom: 20px;
+  border-radius: 24px;
+  opacity: 0.5;
+  z-index: 0;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.feature-card:hover .feature-icon {
+  opacity: 0.7;
+  transform: scale(1.1) rotate(5deg);
+}
+
+.feature-icon :deep(.n-icon) {
+  font-size: 72px !important;
 }
 
 .feature-title {
   font-size: 20px;
   font-weight: 600;
   margin: 0 0 12px 0;
+  position: relative;
+  z-index: 1;
 }
 
 .feature-description {
@@ -1729,6 +1747,8 @@ if (typeof window !== "undefined") {
   line-height: 1.6;
   color: var(--premium-text-secondary);
   margin: 0;
+  position: relative;
+  z-index: 1;
 }
 
 /* ========================================================================
