@@ -503,7 +503,7 @@ const videoTabs = ref([
     icon: CubeOutline,
     videoUrl: new URL("@/assets/videos/atlas_1.mp4", import.meta.url).href,
     speed: 1.5,
-    delaySeconds: 3.7,
+    delaySeconds: 1.2,
     endSeconds: 39, // Puedes poner un número aquí si quieres cortar antes
   },
   {
