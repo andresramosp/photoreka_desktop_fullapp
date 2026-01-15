@@ -356,7 +356,7 @@
                 <div class="tool-visual framer-visual">
                   <div class="tool-screenshot-wrapper">
                     <img
-                      :src="'/src/assets/home/free_framer.png'"
+                      src="/src/assets/home/free_framer.png"
                       alt="Free Framer Screenshot"
                       class="tool-screenshot"
                     />
@@ -472,7 +472,7 @@
                 <div class="tool-visual canvas-visual">
                   <div class="tool-screenshot-wrapper">
                     <img
-                      :src="'/src/assets/home/canvas_playground.png'"
+                      src="/src/assets/home/canvas_playground.png"
                       alt="Canvas Playground Screenshot"
                       class="tool-screenshot"
                     />
