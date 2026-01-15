@@ -1290,7 +1290,7 @@ if (typeof window !== "undefined") {
   justify-content: center;
   gap: 8px;
   padding: 12px 16px;
-  border-radius: 12px;
+  /* border-radius: 12px; */
   background: transparent;
   border: none;
   color: var(--premium-text-secondary);
