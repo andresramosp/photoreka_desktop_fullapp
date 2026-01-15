@@ -241,6 +241,7 @@
           @move-photo="handleMovePhoto"
           @photos-updated="handlePhotosUpdated"
           @select-photo="togglePhotoSelection"
+          @show-info="handleShowPhotoInfo"
         />
       </div>
     </div>
@@ -466,6 +467,12 @@
       @tool-selected="handleToolSelected"
       @close="closeToolSelector"
     />
+
+    <!-- Photo Info Dialog -->
+    <PhotoInfoDialog
+      v-model="photoInfoDialogVisible"
+      :selected-photo="selectedPhotoForInfo"
+    />
   </div>
 </template>
 
@@ -500,6 +507,7 @@ import PhotosDialog from "@/components/PhotosDialog.vue";
 import FloatingActionBar from "@/components/FloatingActionBar.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
+import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
 import { useUserStore } from "@/stores/userStore";
 import SeriesPhotoStrip from "@/components/SeriesPhotoStrip.vue";
 import SeriesFullscreenViewer from "@/components/SeriesFullscreenViewer.vue";
@@ -548,6 +556,8 @@ const photosDialogVisible = ref(false);
 const showCollectionModal = ref(false);
 const deleteConfirmationVisible = ref(false);
 const fullscreenViewerVisible = ref(false);
+const photoInfoDialogVisible = ref(false);
+const selectedPhotoForInfo = ref(null);
 const formRef = ref(null);
 const viewingSeries = ref(null); // Series being viewed
 const showSeriesView = ref(false); // Whether to show series view or grid view
@@ -974,11 +984,20 @@ const handleMoveToTool = () => {
 };
 
 const handleToolSelected = async (toolId) => {
-  await takeToTool(
-    toolId,
-    localSelectedPhotoIds.value,
-    localClearAllSelections
-  );
+  // Para el atlas, ordenar los IDs según el orden de la serie
+  let photoIds = localSelectedPhotoIds.value;
+
+  if (toolId === "3d-atlas" && viewingSeries.value?.photos) {
+    // Filtrar las fotos de la serie manteniendo solo las seleccionadas, en el orden correcto
+    const selectedSet = new Set(photoIds);
+    photoIds = viewingSeries.value.photos
+      .filter((photo) => selectedSet.has(photo.id))
+      .map((photo) => photo.id);
+
+    console.log("🎬 Atlas: IDs ordenados según serie:", photoIds);
+  }
+
+  await takeToTool(toolId, photoIds, localClearAllSelections);
   closeToolSelector();
 };
 
@@ -1082,6 +1101,28 @@ const deleteSeries = async () => {
 
 const formatDate = (date) => {
   return seriesStore.formatDate(date);
+};
+
+// Show photo info dialog
+const handleShowPhotoInfo = async (photoId) => {
+  console.log("[SeriesView] handleShowPhotoInfo called with photoId:", photoId);
+
+  try {
+    // Fetch full photo data from API
+    const fullPhoto = await photosStore.fetchPhoto(photoId);
+    console.log("[SeriesView] Full photo fetched from API:", fullPhoto);
+
+    if (fullPhoto) {
+      selectedPhotoForInfo.value = fullPhoto;
+      photoInfoDialogVisible.value = true;
+    } else {
+      console.error("[SeriesView] Photo not found:", photoId);
+      message.error("Photo not found");
+    }
+  } catch (error) {
+    console.error("[SeriesView] Error fetching photo:", error);
+    message.error("Failed to load photo information");
+  }
 };
 
 // Copy series link to clipboard

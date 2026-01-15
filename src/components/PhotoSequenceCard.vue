@@ -6,6 +6,7 @@
       'is-generating': isGenerating,
       'mode-grid': mode === 'grid',
       'mode-series': mode === 'series',
+      'is-selected': isSelected,
     }"
     :style="cardStyle"
   >
@@ -41,31 +42,12 @@
       class="filled-cell"
       :class="{
         'is-draggable': mode === 'series' && draggable,
-        'is-selected': isSelected,
+        'is-selectable': mode === 'series' && selectable,
       }"
+      @click="
+        mode === 'series' && selectable ? $emit('select', photo.id) : null
+      "
     >
-      <!-- Selection Checkbox (Series mode) -->
-      <div
-        v-if="mode === 'series' && selectable"
-        class="selection-checkbox"
-        @click.stop="$emit('select', photo.id)"
-      >
-        <n-icon :size="20" :color="isSelected ? '#fff' : 'var(--text-primary)'">
-          <svg v-if="isSelected" viewBox="0 0 24 24">
-            <path
-              fill="currentColor"
-              d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
-            />
-          </svg>
-          <svg v-else viewBox="0 0 24 24">
-            <path
-              fill="currentColor"
-              d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"
-            />
-          </svg>
-        </n-icon>
-      </div>
-
       <!-- Order Badge (Series mode) -->
       <div v-if="mode === 'series' && orderNumber" class="order-badge">
         {{ orderNumber }}
@@ -78,6 +60,32 @@
         :alt="photo.name || photo.title || 'Photo'"
         class="cell-photo"
       />
+
+      <!-- Action Buttons Overlay (top-left) - Series mode -->
+      <div
+        v-if="mode === 'series' && selectable"
+        class="action-buttons-overlay"
+      >
+        <n-button
+          size="small"
+          class="action-button info-button"
+          @click.stop="
+            () => {
+              console.log(
+                '[PhotoSequenceCard] Info button clicked, photo.id:',
+                photo.id
+              );
+              $emit('show-info', photo.id);
+            }
+          "
+        >
+          <template #icon>
+            <n-icon>
+              <InformationCircleOutline />
+            </n-icon>
+          </template>
+        </n-button>
+      </div>
 
       <!-- Remove Button Overlay -->
       <div class="cell-overlay">
@@ -193,6 +201,7 @@ import {
   BookmarkOutline,
   ReorderFour,
   RefreshOutline,
+  InformationCircleOutline,
 } from "@vicons/ionicons5";
 
 const props = defineProps({
@@ -279,7 +288,14 @@ const props = defineProps({
   },
 });
 
-defineEmits(["add-photo", "remove", "move", "select"]);
+defineEmits([
+  "add-photo",
+  "remove",
+  "move",
+  "select",
+  "show-info",
+  "refresh-suggestion",
+]);
 
 const cardStyle = computed(() => {
   if (props.size) {
@@ -305,7 +321,7 @@ const truncatedName = computed(() => {
   border-radius: var(--border-radius-md, 8px);
   overflow: hidden;
   background-color: var(--bg-container);
-  border: 2px solid var(--border-color);
+  border: 2px solid transparent;
   transition: all 0.3s ease;
 }
 
@@ -319,11 +335,6 @@ const truncatedName = computed(() => {
 .photo-sequence-card.mode-series {
   aspect-ratio: 1;
   overflow: hidden;
-}
-
-.photo-sequence-card:hover {
-  border-color: var(--border-color-hover, #3c3c42);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 /* Empty Cell */
@@ -382,6 +393,10 @@ const truncatedName = computed(() => {
   width: 100%;
 }
 
+.filled-cell.is-selectable {
+  cursor: pointer;
+}
+
 .filled-cell.is-draggable {
   cursor: grab;
 }
@@ -395,12 +410,7 @@ const truncatedName = computed(() => {
   height: 100%;
   object-fit: contain;
   background: var(--bg-surface, #18181c);
-  transition: transform 0.3s ease;
   pointer-events: none;
-}
-
-.photo-sequence-card:hover .cell-photo {
-  transform: scale(1.02);
 }
 
 /* Order Badge (Series) */
@@ -430,31 +440,45 @@ const truncatedName = computed(() => {
   z-index: 3;
 }
 
-/* Selection Checkbox */
-.selection-checkbox {
+/* Action buttons overlay */
+.action-buttons-overlay {
   position: absolute;
   top: 8px;
   left: 8px;
+  transform: none;
+  opacity: 0;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 3;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  background: rgba(0, 0, 0, 0.5);
-  border-radius: 50%;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
+  gap: 8px;
 }
 
-.selection-checkbox:hover {
-  background: rgba(0, 0, 0, 0.7);
-  transform: scale(1.1);
+.photo-sequence-card:hover .action-buttons-overlay {
+  opacity: 1;
 }
 
-.filled-cell.is-selected {
-  outline: 3px solid var(--primary-color, #2563eb);
-  outline-offset: -3px;
+/* Action button */
+.action-button {
+  border-radius: 8px !important;
+  backdrop-filter: blur(8px);
+  border: none !important;
+  width: 32px;
+  height: 32px;
+  opacity: 0.9;
+  transition: opacity 0.2s ease !important;
+}
+
+.action-button:hover {
+  opacity: 1 !important;
+}
+
+.info-button {
+  background-color: var(--info-color) !important;
+  color: white !important;
+}
+
+.photo-sequence-card.has-photo.is-selected {
+  border-color: var(--secondary-color);
 }
 
 .filled-cell.is-selected .cell-photo {

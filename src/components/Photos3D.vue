@@ -1127,6 +1127,12 @@ const BEACON_FLY_Y_ABOVE_CENTER = 0; // pequeña elevación para evitar quedar a
 // Pending flight to photo (from external navigation)
 const pendingFlyToPhotoId = ref(null);
 
+// =============================
+// Sequential Photo Tour System
+// =============================
+const photoTourState = ref(null);
+const TOUR_PAUSE_DURATION_MS = 1000; // 3 segundos en cada foto
+
 function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
@@ -1231,6 +1237,72 @@ const flyToPhoto = (photoId) => {
     )}`
   );
   return true;
+};
+
+/**
+ * Starts a sequential tour through multiple photos
+ * @param {Array} photoIds - Array of photo IDs to visit in order
+ */
+const startPhotoTour = (photoIds) => {
+  if (!photoIds || photoIds.length === 0) {
+    console.warn("🚫 startPhotoTour: No photo IDs provided");
+    return false;
+  }
+
+  console.log(`🎬 Starting photo tour with ${photoIds.length} photos`);
+
+  photoTourState.value = {
+    photoIds: [...photoIds],
+    currentIndex: 0,
+    isPaused: false,
+    pauseStartTime: null,
+  };
+
+  // Start with the first photo
+  const firstPhotoId = photoIds[0];
+  const success = flyToPhoto(firstPhotoId);
+
+  if (!success) {
+    console.warn("🚫 Failed to start tour - first photo not found");
+    photoTourState.value = null;
+    return false;
+  }
+
+  return true;
+};
+
+/**
+ * Advances to the next photo in the tour
+ */
+const advancePhotoTour = () => {
+  if (!photoTourState.value) return;
+
+  const { photoIds, currentIndex } = photoTourState.value;
+  const nextIndex = currentIndex + 1;
+
+  if (nextIndex >= photoIds.length) {
+    // Tour finished
+    console.log("🎬 Photo tour completed");
+    photoTourState.value = null;
+    return;
+  }
+
+  // Move to next photo
+  photoTourState.value.currentIndex = nextIndex;
+  const nextPhotoId = photoIds[nextIndex];
+
+  console.log(`🎬 Tour: Moving to photo ${nextIndex + 1}/${photoIds.length}`);
+  flyToPhoto(nextPhotoId);
+};
+
+/**
+ * Cancels the current photo tour
+ */
+const cancelPhotoTour = () => {
+  if (photoTourState.value) {
+    console.log("🛑 Photo tour cancelled");
+    photoTourState.value = null;
+  }
 };
 
 /**
@@ -2616,6 +2688,30 @@ const animate = () => {
     if (t >= 1) {
       isBeaconFlying.value = false;
       beaconFlightState.value = null;
+
+      // Si hay un tour activo, iniciar la pausa antes del siguiente vuelo
+      if (photoTourState.value && !photoTourState.value.isPaused) {
+        photoTourState.value.isPaused = true;
+        photoTourState.value.pauseStartTime = performance.now();
+        console.log(
+          `⏸️ Tour paused at photo ${photoTourState.value.currentIndex + 1}`
+        );
+      }
+    }
+  }
+
+  // Manejar el sistema de tour secuencial
+  if (
+    photoTourState.value &&
+    photoTourState.value.isPaused &&
+    !isBeaconFlying.value
+  ) {
+    const pauseElapsed = frameStart - photoTourState.value.pauseStartTime;
+
+    if (pauseElapsed >= TOUR_PAUSE_DURATION_MS) {
+      // Termina la pausa, continuar con el siguiente
+      photoTourState.value.isPaused = false;
+      advancePhotoTour();
     }
   }
 
@@ -2847,8 +2943,8 @@ const updatePhotoHover = (normalizedX, normalizedY) => {
       // Restaurar foto anterior si existe
       clearPhotoHover();
 
-      // Aplicar hover a la nueva foto (solo si Navigate by Click NO está activo)
-      if (!navigateByClick.value) {
+      // Aplicar hover a la nueva foto (solo si Navigate by Click NO está activo y no estamos volando)
+      if (!navigateByClick.value && !isBeaconFlying.value) {
         hoveredPhoto.value = hoveredPhotoData.photo;
 
         // Crear un borde brillante añadiendo un plano ligeramente más grande detrás
@@ -2900,6 +2996,9 @@ const handleMouseMove = (event) => {
 
   // Deshabilitar hover en modo playground
   if (props.isPlayground) return;
+
+  // Deshabilitar hover durante el vuelo a foto
+  if (isBeaconFlying.value) return;
 
   // Calcular coordenadas del mouse normalizadas (-1 to +1)
   const rect = containerRef.value.getBoundingClientRect();
@@ -3155,6 +3254,18 @@ const initFirstPersonControls = () => {
       touchControls.value.setup();
     }
 
+    // Cancelar tour cuando el usuario interactúa
+    domElement.addEventListener(
+      "touchstart",
+      () => {
+        if (photoTourState.value) {
+          cancelPhotoTour();
+          message.info("Tour cancelled");
+        }
+      },
+      { passive: true }
+    );
+
     // Configure touch controls (same profile as keyboard controls)
     touchControls.value.setSpeedProfile({
       initial: 0.01,
@@ -3172,6 +3283,22 @@ const initFirstPersonControls = () => {
     if (!navigationBlocked.value) {
       fpControls.value.setup();
     }
+
+    // Cancelar tour con ESC o cualquier movimiento de teclado
+    const handleKeyDown = (e) => {
+      if (
+        photoTourState.value &&
+        (e.key === "Escape" ||
+          ["w", "a", "s", "d", "f", "v"].includes(e.key.toLowerCase()))
+      ) {
+        cancelPhotoTour();
+        message.info("Tour cancelled");
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    // Guardar para cleanup
+    window._tourCancelKeyHandler = handleKeyDown;
 
     fpControls.value.setSpeedProfile({
       initial: 0.01, // control fino inicial
@@ -3344,6 +3471,9 @@ onMounted(async () => {
       const { photoId } = event.detail;
       console.log("📍 Received atlas:flyToPhoto event", photoId);
 
+      // Cancel any active tour
+      cancelPhotoTour();
+
       // Wait a bit for photos to be ready if needed
       setTimeout(() => {
         const success = flyToPhoto(photoId);
@@ -3356,11 +3486,27 @@ onMounted(async () => {
       }, 500);
     };
 
+    // Listen for custom event to start a photo tour
+    const handleStartPhotoTourEvent = (event) => {
+      const { photoIds } = event.detail;
+      console.log("🎬 Received atlas:startPhotoTour event", photoIds);
+
+      // Wait a bit for photos to be ready if needed
+      setTimeout(() => {
+        startPhotoTour(photoIds);
+      }, 500);
+    };
+
     window.addEventListener("atlas:flyToPhoto", handleFlyToPhotoEvent);
+    window.addEventListener("atlas:startPhotoTour", handleStartPhotoTourEvent);
 
     // Store reference to clean up later
     window._atlasEventCleanup = () => {
       window.removeEventListener("atlas:flyToPhoto", handleFlyToPhotoEvent);
+      window.removeEventListener(
+        "atlas:startPhotoTour",
+        handleStartPhotoTourEvent
+      );
     };
 
     // Initialize showConfigPanel based on mobile detection
@@ -3527,6 +3673,15 @@ onUnmounted(() => {
   if (handlePointerLockChange) {
     document.removeEventListener("pointerlockchange", handlePointerLockChange);
   }
+
+  // Limpiar handler de cancelación de tour
+  if (window._tourCancelKeyHandler) {
+    window.removeEventListener("keydown", window._tourCancelKeyHandler);
+    delete window._tourCancelKeyHandler;
+  }
+
+  // Cancelar tour activo
+  cancelPhotoTour();
 
   // Limpiar event listeners de selección de fotos
   if (containerRef.value) {

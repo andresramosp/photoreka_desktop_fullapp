@@ -32,10 +32,9 @@ export function usePhotoToolSelection(customTools = null) {
     {
       id: "3d-atlas",
       name: "3D Atlas",
-      description: "Navigate to photo in 3D space",
+      description: "Navigate to photos in 3D space",
       icon: "CubeOutline",
       route: "/atlas",
-      singlePhotoOnly: true, // This tool only works with a single photo
     },
   ];
 
@@ -140,28 +139,28 @@ export function usePhotoToolSelection(customTools = null) {
   };
 
   /**
-   * Takes a photo to the 3D Atlas and flies to it
-   * @param {Array} photoIds - Array of photo IDs (only first one will be used)
+   * Takes photos to the 3D Atlas and flies to them sequentially
+   * @param {Array} photoIds - Array of photo IDs to visit in sequence
    * @param {Function} clearSelections - Function to clear current selections
    */
   const takeToAtlas = async (photoIds, clearSelections) => {
     try {
       isProcessing.value = true;
 
-      // Only use the first photo for 3D Atlas navigation
-      const targetPhotoId = photoIds[0];
-
-      if (!targetPhotoId) {
-        message.error("No photo selected for 3D navigation");
+      if (!photoIds || photoIds.length === 0) {
+        message.error("No photos selected for 3D navigation");
         return;
       }
 
-      // Fetch the photo to ensure it exists
-      await photosStore.fetchPhoto(targetPhotoId);
-      const photo = photosStore.photos.find((p) => p.id == targetPhotoId);
+      // Fetch all photos to ensure they exist
+      await Promise.all(photoIds.map((id) => photosStore.fetchPhoto(id)));
 
-      if (!photo) {
-        message.error("Photo not found");
+      const photos = photoIds
+        .map((id) => photosStore.photos.find((p) => p.id == id))
+        .filter(Boolean);
+
+      if (photos.length === 0) {
+        message.error("No valid photos found");
         return;
       }
 
@@ -171,20 +170,31 @@ export function usePhotoToolSelection(customTools = null) {
       // Navigate to 3D Atlas first
       await router.push("/atlas");
 
-      // Then dispatch custom event with the photo ID
-      // This allows the 3D component to react even if already mounted
+      // Dispatch custom event with photo IDs for sequential tour
+      // Single photo = immediate flight, multiple = sequential tour
       setTimeout(() => {
-        window.dispatchEvent(
-          new CustomEvent("atlas:flyToPhoto", {
-            detail: { photoId: targetPhotoId },
-          })
-        );
-        console.log("🚀 Dispatched atlas:flyToPhoto event", targetPhotoId);
+        if (photoIds.length === 1) {
+          window.dispatchEvent(
+            new CustomEvent("atlas:flyToPhoto", {
+              detail: { photoId: photoIds[0] },
+            })
+          );
+          console.log("🚀 Flying to single photo:", photoIds[0]);
+        } else {
+          window.dispatchEvent(
+            new CustomEvent("atlas:startPhotoTour", {
+              detail: { photoIds: photoIds },
+            })
+          );
+          console.log("🎬 Starting photo tour:", photoIds);
+        }
       }, 100);
 
-      message.info("Navigating to photo in 3D space...");
+      const photoText =
+        photoIds.length === 1 ? "photo" : `${photoIds.length} photos`;
+      message.info(`Navigating to ${photoText} in 3D space...`);
     } catch (error) {
-      console.error("Error taking photo to 3D Atlas:", error);
+      console.error("Error taking photos to 3D Atlas:", error);
       message.error("Failed to navigate to 3D Atlas");
     } finally {
       isProcessing.value = false;

@@ -2,17 +2,29 @@
   <div class="series-photo-strip" :class="`size-${photoSize}`">
     <!-- Size Controls -->
     <div class="strip-controls">
-      <span class="size-label">Size:</span>
-      <n-button-group size="small">
+      <div class="strip-controls-left">
+        <span class="size-label">Size:</span>
+        <n-button-group size="small">
+          <n-button
+            v-for="size in sizeOptions"
+            :key="size.value"
+            :type="photoSize === size.value ? 'primary' : 'default'"
+            @click="setPhotoSize(size.value)"
+          >
+            {{ size.label }}
+          </n-button>
+        </n-button-group>
+
+        <!-- Select All Button -->
         <n-button
-          v-for="size in sizeOptions"
-          :key="size.value"
-          :type="photoSize === size.value ? 'primary' : 'default'"
-          @click="setPhotoSize(size.value)"
+          size="small"
+          :type="allSelected ? 'primary' : 'default'"
+          @click="handleSelectAllToggle"
+          class="select-all-btn"
         >
-          {{ size.label }}
+          {{ allSelected ? "Deselect All" : "Select All" }}
         </n-button>
-      </n-button-group>
+      </div>
     </div>
 
     <!-- Empty State -->
@@ -54,6 +66,7 @@
             v-if="activePlaceholderIndex === 0"
             class="strip-item placeholder-item"
           >
+            <div class="insertion-gap placeholder-gap"></div>
             <PlaceholderPhotoCard
               :size="currentSize"
               :suggestion-criteria-options="suggestionCriteriaOptions"
@@ -122,6 +135,7 @@
               @remove="removePhoto(photo)"
               @move="(dir) => handleMove(index, dir)"
               @select="handlePhotoSelect"
+              @show-info="handleShowInfo"
               @refresh-suggestion="handleRefreshSuggestion(photo.id)"
             />
 
@@ -212,6 +226,7 @@ const emit = defineEmits([
   "move-photo",
   "photos-updated",
   "select-photo",
+  "show-info",
 ]);
 
 // Size options
@@ -222,6 +237,9 @@ const sizeOptions = [
 ];
 
 const photoSize = ref("medium");
+
+// Select all state
+const allSelected = ref(false);
 
 // Hover and insertion UI state
 const hoveredGapIndex = ref(null);
@@ -499,6 +517,31 @@ const scrollToPhoto = (photoIndex) => {
     behavior: "smooth",
   });
 };
+
+const handleShowInfo = (photoId) => {
+  console.log(
+    "[SeriesPhotoStrip] handleShowInfo called with photoId:",
+    photoId
+  );
+  emit("show-info", photoId);
+  console.log("[SeriesPhotoStrip] show-info event emitted");
+};
+
+const handleSelectAllToggle = () => {
+  if (allSelected.value) {
+    // Deselect all - emit event for each photo to deselect
+    allSelected.value = false;
+    realPhotos.value.forEach((photo) => {
+      emit("select-photo", photo.id);
+    });
+  } else {
+    // Select all real photos
+    allSelected.value = true;
+    realPhotos.value.forEach((photo) => {
+      emit("select-photo", photo.id);
+    });
+  }
+};
 </script>
 
 <style scoped>
@@ -511,6 +554,12 @@ const scrollToPhoto = (photoIndex) => {
   align-items: center;
   gap: 12px;
   margin-bottom: 20px;
+}
+
+.strip-controls-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .size-label {
@@ -589,6 +638,12 @@ const scrollToPhoto = (photoIndex) => {
 .insertion-gap.placeholder-gap {
   /* Gap after placeholder - no button, just spacing */
   pointer-events: none;
+}
+
+.placeholder-item {
+  display: flex;
+  align-items: center;
+  gap: 0;
 }
 
 .gap-plus {

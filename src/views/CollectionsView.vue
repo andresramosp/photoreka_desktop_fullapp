@@ -714,7 +714,6 @@ watch(
   display: flex;
   align-items: center;
   gap: 5px;
-  margin-bottom: var(--spacing-xs);
 }
 
 .title-display {
