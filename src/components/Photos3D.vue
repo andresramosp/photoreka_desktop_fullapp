@@ -409,6 +409,7 @@ const pendingPhotoFlightIds = ref(null);
 // =============================
 const photoTourState = ref(null);
 const tourPauseDuration = ref(500); // Duración de pausa entre fotos en tour (ms)
+const configPanelStateBeforeTour = ref(null); // Guardar estado del panel antes del tour
 
 function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -479,8 +480,24 @@ const flyToPhoto = (photoId) => {
     .subVectors(startPos, photoCenter)
     .normalize();
 
-  // Posición final: a una distancia fija del centro de la foto
-  const VIEW_DISTANCE = 2.5;
+  // Determinar orientación de la foto (horizontal o vertical)
+  let isVertical = false;
+  if (photo.lodObject && photo.lodObject.isMesh) {
+    const material = photo.lodObject.material;
+    if (material && material.map && material.map.image) {
+      const img = material.map.image;
+      isVertical = img.height > img.width;
+    } else {
+      // Fallback: usar geometría del mesh
+      const geometry = photo.lodObject.geometry;
+      if (geometry && geometry.parameters) {
+        isVertical = geometry.parameters.height > geometry.parameters.width;
+      }
+    }
+  }
+
+  // Posición final: ajustar distancia según orientación de la foto
+  const VIEW_DISTANCE = isVertical ? 4.2 : 2.5;
   const targetPos = photoCenter
     .clone()
     .add(directionFromPhoto.multiplyScalar(VIEW_DISTANCE));
@@ -534,6 +551,10 @@ const startPhotoTour = (photoIds) => {
 
   console.log(`🎬 Starting photo tour with ${photoIds.length} photos`);
 
+  // Guardar estado del config panel y ocultarlo durante el tour
+  configPanelStateBeforeTour.value = showConfigPanel.value;
+  showConfigPanel.value = false;
+
   photoTourState.value = {
     photoIds: [...photoIds],
     currentIndex: 0,
@@ -567,6 +588,12 @@ const advancePhotoTour = () => {
     // Tour finished
     console.log("🎬 Photo tour completed");
     photoTourState.value = null;
+
+    // Restaurar estado del config panel
+    if (configPanelStateBeforeTour.value !== null) {
+      showConfigPanel.value = configPanelStateBeforeTour.value;
+      configPanelStateBeforeTour.value = null;
+    }
     return;
   }
 
@@ -585,6 +612,12 @@ const cancelPhotoTour = () => {
   if (photoTourState.value) {
     console.log("🛑 Photo tour cancelled");
     photoTourState.value = null;
+
+    // Restaurar estado del config panel
+    if (configPanelStateBeforeTour.value !== null) {
+      showConfigPanel.value = configPanelStateBeforeTour.value;
+      configPanelStateBeforeTour.value = null;
+    }
   }
 };
 
@@ -2706,10 +2739,7 @@ watch(
 watch(
   () => photosWithMaterials.value.length,
   (newLength) => {
-    if (
-      newLength > 0 &&
-      (pendingFlyToPhotoId.value || pendingPhotoTourIds.value)
-    ) {
+    if (newLength > 0 && pendingPhotoFlightIds.value) {
       // Small delay to ensure positions are set
       setTimeout(() => {
         tryExecutePendingFlight();
