@@ -100,7 +100,7 @@
               </n-button>
               <!-- Video Demo Section -->
               <div class="hero-demo" :class="{ visible: heroVisible }">
-                <div class="demo-tabs">
+                <div v-if="videoTabs.length > 1" class="demo-tabs">
                   <button
                     v-for="(tab, index) in videoTabs"
                     :key="index"
@@ -506,37 +506,37 @@ const videoTabs = ref([
     delaySeconds: 1.2,
     endSeconds: 39, // Puedes poner un número aquí si quieres cortar antes
   },
-  {
-    title: "Canvas",
-    icon: ColorPaletteOutline,
-    videoUrl: new URL("@/assets/videos/canvas_1.mp4", import.meta.url).href,
-    speed: 1.2,
-    delaySeconds: 0,
-    endSeconds: undefined, // Puedes poner un número aquí si quieres cortar antes
-  },
-  {
-    title: "Search",
-    icon: SearchOutline,
-    videoUrl: new URL("@/assets/videos/explorer_1.mp4", import.meta.url).href,
-    speed: 1.5,
-    delaySeconds: 0,
-  },
-  {
-    title: "Project Builder",
-    icon: ImagesOutline,
-    videoUrl: new URL("@/assets/videos/project_builder_1.mp4", import.meta.url)
-      .href,
-    speed: 2.8,
-    delaySeconds: 0,
-  },
-  {
-    title: "Score Ranking",
-    icon: Trophy20Regular,
-    videoUrl: new URL("@/assets/videos/visual_scores_1.mp4", import.meta.url)
-      .href,
-    speed: 2,
-    delaySeconds: 0,
-  },
+  // {
+  //   title: "Canvas",
+  //   icon: ColorPaletteOutline,
+  //   videoUrl: new URL("@/assets/videos/canvas_1.mp4", import.meta.url).href,
+  //   speed: 1.2,
+  //   delaySeconds: 0,
+  //   endSeconds: undefined, // Puedes poner un número aquí si quieres cortar antes
+  // },
+  // {
+  //   title: "Search",
+  //   icon: SearchOutline,
+  //   videoUrl: new URL("@/assets/videos/explorer_1.mp4", import.meta.url).href,
+  //   speed: 1.5,
+  //   delaySeconds: 0,
+  // },
+  // {
+  //   title: "Project Builder",
+  //   icon: ImagesOutline,
+  //   videoUrl: new URL("@/assets/videos/project_builder_1.mp4", import.meta.url)
+  //     .href,
+  //   speed: 2.8,
+  //   delaySeconds: 0,
+  // },
+  // {
+  //   title: "Score Ranking",
+  //   icon: Trophy20Regular,
+  //   videoUrl: new URL("@/assets/videos/visual_scores_1.mp4", import.meta.url)
+  //     .href,
+  //   speed: 2,
+  //   delaySeconds: 0,
+  // },
 ]);
 
 // Lightroom video
