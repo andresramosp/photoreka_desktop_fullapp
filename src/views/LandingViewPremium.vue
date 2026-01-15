@@ -499,22 +499,27 @@ const faqsVisible = ref(false);
 // Video tabs data
 const videoTabs = ref([
   {
+    title: "3D Atlas",
+    icon: CubeOutline,
+    videoUrl: new URL("@/assets/videos/atlas_1.mp4", import.meta.url).href,
+    speed: 1.5,
+    delaySeconds: 3.7,
+    endSeconds: 39, // Puedes poner un número aquí si quieres cortar antes
+  },
+  {
     title: "Canvas",
     icon: ColorPaletteOutline,
     videoUrl: new URL("@/assets/videos/canvas_1.mp4", import.meta.url).href,
     speed: 1.2,
-  },
-  {
-    title: "3D Atlas",
-    icon: CubeOutline,
-    videoUrl: new URL("@/assets/videos/atlas_1.mp4", import.meta.url).href,
-    speed: 1.2,
+    delaySeconds: 0,
+    endSeconds: undefined, // Puedes poner un número aquí si quieres cortar antes
   },
   {
     title: "Search",
     icon: SearchOutline,
     videoUrl: new URL("@/assets/videos/explorer_1.mp4", import.meta.url).href,
     speed: 1.5,
+    delaySeconds: 0,
   },
   {
     title: "Project Builder",
@@ -522,6 +527,7 @@ const videoTabs = ref([
     videoUrl: new URL("@/assets/videos/project_builder_1.mp4", import.meta.url)
       .href,
     speed: 2.8,
+    delaySeconds: 0,
   },
   {
     title: "Score Ranking",
@@ -529,6 +535,7 @@ const videoTabs = ref([
     videoUrl: new URL("@/assets/videos/visual_scores_1.mp4", import.meta.url)
       .href,
     speed: 2,
+    delaySeconds: 0,
   },
 ]);
 
@@ -741,6 +748,10 @@ const onVideoLoaded = () => {
   if (videoPlayer.value) {
     const currentTab = videoTabs.value[activeTab.value];
     videoPlayer.value.playbackRate = currentTab.speed || 1.0;
+    // Empieza el video en el segundo indicado por delaySeconds (default 0)
+    const delay =
+      typeof currentTab.delaySeconds === "number" ? currentTab.delaySeconds : 0;
+    videoPlayer.value.currentTime = delay;
   }
 };
 
@@ -753,9 +764,29 @@ const onLightroomVideoLoaded = () => {
 
 const updateProgress = () => {
   if (videoPlayer.value) {
+    const currentTab = videoTabs.value[activeTab.value];
+    let end = videoPlayer.value.duration;
+    if (
+      typeof currentTab.endSeconds === "number" &&
+      currentTab.endSeconds > 0 &&
+      currentTab.endSeconds < end
+    ) {
+      end = currentTab.endSeconds;
+    }
     const progress =
-      (videoPlayer.value.currentTime / videoPlayer.value.duration) * 100;
-    videoProgress.value = progress || 0;
+      ((videoPlayer.value.currentTime - (currentTab.delaySeconds || 0)) /
+        (end - (currentTab.delaySeconds || 0))) *
+      100;
+    videoProgress.value = Math.max(0, Math.min(progress, 100)) || 0;
+    // Si llegó al final deseado, disparar onVideoEnded
+    if (
+      typeof currentTab.endSeconds === "number" &&
+      videoPlayer.value.currentTime >= currentTab.endSeconds
+    ) {
+      videoPlayer.value.pause();
+      videoPlayer.value.currentTime = end;
+      onVideoEnded();
+    }
   }
 };
 
@@ -1298,7 +1329,7 @@ if (typeof window !== "undefined") {
 
 .progress {
   height: 100%;
-  background: white;
+  background: var(--premium-accent);
   transition: width 0.1s linear;
 }
 
@@ -1308,7 +1339,7 @@ if (typeof window !== "undefined") {
   overflow: hidden;
   background: #000;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.1);
-  aspect-ratio: 16 / 7.61;
+  /* aspect-ratio: 16 / 7.61; */
 }
 
 [data-theme="light"] .demo-video-container {
