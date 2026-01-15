@@ -133,9 +133,9 @@
                     muted
                     preload="metadata"
                   ></video>
-                  <div
+                  <!-- <div
                     class="video-play-overlay"
-                    v-if="!videoPlaying"
+                    v-if="!videoPlaying && autoPlayTriggered"
                     @click="playVideo"
                   >
                     <div class="play-button">
@@ -143,7 +143,7 @@
                         <PlayCircleOutline />
                       </n-icon>
                     </div>
-                  </div>
+                  </div> -->
                 </div>
               </div>
             </div>
@@ -654,7 +654,7 @@ const videoTabs = ref([
     icon: CubeOutline,
     videoUrl: new URL("@/assets/videos/atlas_1.mp4", import.meta.url).href,
     speed: 1.5,
-    delaySeconds: 1.2,
+    delaySeconds: 2.2,
     endSeconds: 39, // Puedes poner un número aquí si quieres cortar antes
   },
   // {
@@ -998,7 +998,9 @@ const setupIntersectionObserver = () => {
         const finallyVisible = isFullyVisible && isCompletelyInView;
 
         if (finallyVisible && !autoPlayTriggered.value) {
-          startVideoPlayback();
+          setTimeout(() => {
+            startVideoPlayback();
+          }, 750);
         }
       });
     },
@@ -1105,7 +1107,7 @@ onMounted(() => {
       if (!autoPlayTriggered.value) {
         startVideoPlayback();
       }
-    }, 5000);
+    }, 10000);
   });
 
   // Setup scroll animations
