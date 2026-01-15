@@ -335,6 +335,154 @@
           </div>
         </section>
 
+        <!-- Free Tools Section -->
+        <section class="free-tools-section" ref="freeToolsSection">
+          <div class="section-container">
+            <div class="section-header" :class="{ visible: freeToolsVisible }">
+              <div class="tools-badge">
+                <n-icon size="16"><Workspace /></n-icon>
+                <span>Free Forever</span>
+              </div>
+              <h2 class="section-title">Try our free tools</h2>
+              <p class="section-subtitle">
+                No account needed. Start creating and experimenting right now
+                with our professional-grade tools.
+              </p>
+            </div>
+
+            <div class="tools-showcase" :class="{ visible: freeToolsVisible }">
+              <!-- Free Framer Card -->
+              <div class="tool-card tool-card-large tool-card-framer">
+                <div class="tool-visual framer-visual">
+                  <div class="tool-screenshot-wrapper">
+                    <img
+                      :src="'src/assets/home/free_framer.png'"
+                      alt="Free Framer Screenshot"
+                      class="tool-screenshot"
+                    />
+                  </div>
+                </div>
+                <div class="tool-card-content">
+                  <div class="tool-header">
+                    <div
+                      class="tool-icon tool-icon-framer"
+                      style="
+                        background: linear-gradient(
+                          135deg,
+                          #f59e0b 0%,
+                          #f97316 100%
+                        );
+                      "
+                    >
+                      <n-icon size="28"><StopOutline /></n-icon>
+                    </div>
+                    <div class="tool-meta">
+                      <h3 class="tool-title">Free Framer</h3>
+                      <span class="tool-tag">Photo Framing Tool</span>
+                    </div>
+                  </div>
+                  <p class="tool-description">
+                    Add professional frames and borders to your photos
+                    instantly. Perfect for presentations, portfolios, and social
+                    media. Choose from multiple styles and customize colors to
+                    match your vision.
+                  </p>
+                  <ul class="tool-features">
+                    <li>
+                      <n-icon size="16"><ColorPaletteOutline /></n-icon>
+                      <span>Multiple frame styles and borders</span>
+                    </li>
+                    <li>
+                      <n-icon size="16"><ImagesOutline /></n-icon>
+                      <span>Customizable colors and sizes</span>
+                    </li>
+                    <li>
+                      <n-icon size="16"><DownloadOutline /></n-icon>
+                      <span>Batch export photos without limits</span>
+                    </li>
+                  </ul>
+                  <n-button
+                    type="warning"
+                    size="large"
+                    @click="goToFreeFramer"
+                    class="tool-cta"
+                  >
+                    <template #icon>
+                      <n-icon><PlayCircleOutline /></n-icon>
+                    </template>
+                    Try Framer
+                  </n-button>
+                </div>
+              </div>
+              <!-- Canvas Playground Card -->
+              <div class="tool-card tool-card-large">
+                <div class="tool-card-content">
+                  <div class="tool-header">
+                    <div
+                      class="tool-icon"
+                      style="
+                        background: linear-gradient(
+                          135deg,
+                          #8b5cf6 0%,
+                          #6366f1 100%
+                        );
+                      "
+                    >
+                      <n-icon size="32"><Workspace /></n-icon>
+                    </div>
+                    <div class="tool-meta">
+                      <h3 class="tool-title">Canvas Playground</h3>
+                      <span class="tool-tag">Interactive Design Tool</span>
+                    </div>
+                  </div>
+                  <p class="tool-description">
+                    Create stunning photo layouts and compositions with complete
+                    creative freedom. Drag, drop, and arrange your photos to
+                    tell your visual story. With a Photoreka account, find
+                    related images from your collection.
+                  </p>
+                  <ul class="tool-features">
+                    <li>
+                      <n-icon size="16"><ColorPaletteOutline /></n-icon>
+                      <span>Drop unlimited images</span>
+                    </li>
+                    <li>
+                      <n-icon size="16"><ImagesOutline /></n-icon>
+                      <span
+                        >Find images by narrative or chromatic similarity</span
+                      >
+                    </li>
+                    <li>
+                      <n-icon size="16"><DownloadOutline /></n-icon>
+                      <span>Intuitive drag and drop interface</span>
+                    </li>
+                  </ul>
+                  <n-button
+                    type="primary"
+                    size="large"
+                    @click="goToPlayground"
+                    class="tool-cta"
+                  >
+                    <template #icon>
+                      <n-icon><PlayCircleOutline /></n-icon>
+                    </template>
+                    Launch Canvas
+                  </n-button>
+                </div>
+                <div class="tool-visual canvas-visual">
+                  <div class="tool-screenshot-wrapper">
+                    <img
+                      :src="'src/assets/home/canvas_playground.png'"
+                      alt="Canvas Playground Screenshot"
+                      class="tool-screenshot"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- FAQs Section -->
         <section class="faqs-section" ref="faqsSection">
           <div class="section-container">
@@ -439,6 +587,7 @@ import {
   WalkOutline,
   PersonOutline,
   ImageOutline,
+  StopOutline,
 } from "@vicons/ionicons5";
 import { Workspace } from "@vicons/carbon";
 import { BookOpen16Regular, Trophy20Regular } from "@vicons/fluent";
@@ -488,12 +637,14 @@ const heroSection = ref(null);
 const featuresSection = ref(null);
 const integrationSection = ref(null);
 const sourcesSection = ref(null);
+const freeToolsSection = ref(null);
 const faqsSection = ref(null);
 
 const heroVisible = ref(false);
 const featuresVisible = ref(false);
 const integrationVisible = ref(false);
 const sourcesVisible = ref(false);
+const freeToolsVisible = ref(false);
 const faqsVisible = ref(false);
 
 // Video tabs data
@@ -911,6 +1062,14 @@ const setupScrollAnimations = () => {
     });
   }, observerOptions);
 
+  const freeToolsObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        freeToolsVisible.value = true;
+      }
+    });
+  }, observerOptions);
+
   const faqsObserver = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
       if (entry.isIntersecting) {
@@ -924,6 +1083,7 @@ const setupScrollAnimations = () => {
   if (integrationSection.value)
     integrationObserver.observe(integrationSection.value);
   if (sourcesSection.value) sourcesObserver.observe(sourcesSection.value);
+  if (freeToolsSection.value) freeToolsObserver.observe(freeToolsSection.value);
   if (faqsSection.value) faqsObserver.observe(faqsSection.value);
 };
 
@@ -1834,6 +1994,382 @@ if (typeof window !== "undefined") {
 
 [data-theme="light"] .source-badge.soon {
   color: #4b5563;
+}
+
+/* ========================================================================
+   FREE TOOLS SECTION
+   ======================================================================== */
+
+.free-tools-section {
+  padding: var(--section-padding-y) 0;
+  background: transparent;
+  position: relative;
+  overflow: hidden;
+}
+
+.tools-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  border-radius: 100px;
+  background: linear-gradient(
+    135deg,
+    rgba(37, 99, 235, 0.12),
+    rgba(139, 92, 246, 0.12)
+  );
+  border: 1.5px solid var(--premium-primary);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--premium-primary);
+  margin-bottom: 20px;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+}
+
+.tools-showcase {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 64px;
+  opacity: 0;
+  transform: translateY(30px);
+  transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tools-showcase.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.tool-card {
+  background: var(--premium-surface);
+  border: 1px solid var(--premium-border);
+  border-radius: 24px;
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.tool-card:hover {
+  border-color: var(--premium-primary);
+  /* transform: translateY(-4px); */
+  box-shadow: 0 20px 48px rgba(37, 99, 235, 0.2);
+}
+
+.tool-card-framer:hover {
+  border-color: #f59e0b;
+  box-shadow: 0 20px 48px rgba(245, 158, 11, 0.2);
+}
+
+/* Large Card - 2 Column Layout (contenido e imagen lado a lado) */
+.tool-card-large {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  grid-template-rows: none;
+  min-height: auto;
+}
+
+/* Framer card: contenido izquierda, imagen derecha */
+.tool-card-framer {
+  grid-template-columns: 1fr 1.3fr;
+  grid-template-rows: none;
+}
+
+.tool-card-framer .tool-card-content {
+  order: 1;
+}
+
+.tool-card-framer .tool-visual {
+  order: 2;
+}
+
+/* Segunda tarjeta (Canvas Playground): imagen izquierda, contenido derecha */
+.tool-card-large:nth-child(2) .tool-card-content {
+  order: 2;
+}
+
+.tool-card-large:nth-child(2) .tool-visual {
+  order: 1;
+}
+
+.tool-card-content {
+  padding: 48px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  background: var(--premium-surface);
+  position: relative;
+  z-index: 2;
+  order: 1;
+}
+
+.tool-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.tool-icon {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  color: white;
+  flex-shrink: 0;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.25);
+}
+
+.tool-icon-framer {
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.25);
+}
+
+.tool-meta {
+  flex: 1;
+}
+
+.tool-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  line-height: 1.2;
+  color: var(--premium-text-primary);
+}
+
+.tool-tag {
+  display: inline-block;
+  padding: 5px 14px;
+  border-radius: 100px;
+  background: var(--premium-bg-elevated);
+  border: 1px solid var(--premium-border);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--premium-text-secondary);
+}
+
+.tool-description {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--premium-text-secondary);
+  margin: 0;
+}
+
+.tool-features {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tool-features li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--premium-text-secondary);
+  line-height: 1.5;
+}
+
+.tool-features li .n-icon {
+  color: var(--premium-primary);
+  flex-shrink: 0;
+}
+
+.tool-card-framer .tool-features li .n-icon {
+  color: #f59e0b;
+}
+
+.tool-cta {
+  margin-top: auto;
+  width: 100%;
+  height: 44px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.tool-visual {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  min-height: 500px;
+  order: 2;
+  background: linear-gradient(
+    135deg,
+    rgba(37, 99, 235, 0.05) 0%,
+    rgba(139, 92, 246, 0.05) 100%
+  );
+}
+
+[data-theme="light"] .tool-visual {
+  background: linear-gradient(
+    135deg,
+    rgba(37, 99, 235, 0.03) 0%,
+    rgba(139, 92, 246, 0.03) 100%
+  );
+}
+
+.framer-visual {
+  background: linear-gradient(
+    135deg,
+    rgba(245, 158, 11, 0.05) 0%,
+    rgba(249, 115, 22, 0.05) 100%
+  );
+}
+
+[data-theme="light"] .framer-visual {
+  background: linear-gradient(
+    135deg,
+    rgba(245, 158, 11, 0.03) 0%,
+    rgba(249, 115, 22, 0.03) 100%
+  );
+}
+
+.tool-screenshot-wrapper {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+}
+
+.tool-screenshot {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-theme="light"] .tool-screenshot {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1);
+}
+
+.tool-card:hover .tool-screenshot {
+  /* transform: scale(1.02); */
+}
+
+.compact-visual {
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(
+    135deg,
+    var(--premium-gradient-1),
+    var(--premium-accent)
+  );
+  border-radius: 16px;
+  margin: -20px -20px 0 -20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.tool-description-compact {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--premium-text-secondary);
+  margin: 0;
+  flex: 1;
+}
+
+.tool-cta-compact {
+  width: 100%;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .tools-showcase {
+    grid-template-columns: 1fr;
+  }
+
+  .tool-visual {
+    min-height: 350px;
+  }
+
+  .tool-screenshot-wrapper {
+    padding: 32px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Volver al layout de 2 filas en mobile */
+  .tool-card-large {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  .tool-card-framer {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  /* Restablecer el orden original para mobile */
+  .tool-card-content {
+    padding: 32px 24px;
+    order: 2;
+  }
+
+  .tool-card-framer .tool-card-content {
+    order: 1;
+  }
+
+  .tool-visual {
+    order: 1;
+    min-height: 300px;
+  }
+
+  .tool-card-framer .tool-visual {
+    order: 2;
+  }
+
+  .tool-title {
+    font-size: 24px;
+  }
+
+  .tool-screenshot-wrapper {
+    padding: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .tool-card-content {
+    padding: 24px 20px;
+  }
+
+  .tool-title {
+    font-size: 20px;
+  }
+
+  .tool-icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .tool-visual {
+    min-height: 250px;
+  }
+
+  .tool-screenshot-wrapper {
+    padding: 20px;
+  }
+
+  .tool-description {
+    font-size: 14px;
+  }
+
+  .tool-features li {
+    font-size: 13px;
+  }
 }
 
 /* ========================================================================
