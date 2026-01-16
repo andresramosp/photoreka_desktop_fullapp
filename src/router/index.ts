@@ -32,23 +32,24 @@ import AuthError from "../views/AuthError.vue";
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    // {
-    //   path: "/",
-    //   redirect: "/landing",
-    // },
     {
       path: "/",
-      name: "landing",
-      component: LandingViewPremium,
-      meta: {
-        requiresGuest: false, // Accessible to both guests and authenticated users
-        title: "Photoreka - Curation Lab",
-        description:
-          "Organize and curate your photo library with advanced tools. Search photos using natural language, arrange them on the canvas, and discover related images based on narrative or color similarity. Rank your photos by aesthetic scores and navigate your catalog in 3D.",
-        keywords:
-          "photo enhancement, AI photo tools, canvas maker, photo frames, image editor, photo culling, photo organizer",
-      },
+      redirect: "/dashboard",
     },
+    // Landing page moved to separate app
+    // {
+    //   path: "/",
+    //   name: "landing",
+    //   component: LandingViewPremium,
+    //   meta: {
+    //     requiresGuest: false,
+    //     title: "Photoreka - Curation Lab",
+    //     description:
+    //       "Organize and curate your photo library with advanced tools. Search photos using natural language, arrange them on the canvas, and discover related images based on narrative or color similarity. Rank your photos by aesthetic scores and navigate your catalog in 3D.",
+    //     keywords:
+    //       "photo enhancement, AI photo tools, canvas maker, photo frames, image editor, photo culling, photo organizer",
+    //   },
+    // },
 
     {
       path: "/maintenance",
@@ -443,10 +444,6 @@ router.beforeEach(async (to, from, next) => {
     return;
   }
 
-  if (to.path === "/") {
-    next();
-  }
-
   // Check if route requires authentication
   if (to.meta.requiresAuth && !userStore.isAuthenticated) {
     next("/auth");
@@ -488,7 +485,7 @@ router.afterEach((to) => {
   updateMetaTag(
     "property",
     "twitter:url",
-    `https://photoreka.com${to.fullPath}`
+    `https://photoreka.com${to.fullPath}`,
   );
 
   // Update canonical URL
@@ -501,7 +498,7 @@ router.afterEach((to) => {
 // Helper function to update meta tags
 function updateMetaTag(attribute: string, value: string, content: string) {
   let element = document.querySelector(
-    `meta[${attribute}="${value}"]`
+    `meta[${attribute}="${value}"]`,
   ) as HTMLMetaElement;
   if (element) {
     element.content = content;
@@ -516,7 +513,7 @@ function updateMetaTag(attribute: string, value: string, content: string) {
 // Helper function to update canonical URL
 function updateCanonicalUrl(url: string) {
   let canonical = document.querySelector(
-    'link[rel="canonical"]'
+    'link[rel="canonical"]',
   ) as HTMLLinkElement;
   if (canonical) {
     canonical.href = url;
