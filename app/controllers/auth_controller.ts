@@ -39,7 +39,7 @@ export default class AuthController {
    * Get the frontend URL from environment or default
    */
   private getFrontendUrl(): string {
-    return process.env.FRONTEND_URL || 'https://www.photoreka.com'
+    return process.env.FRONTEND_URL || 'https://app.photoreka.com'
   }
 
   /**
