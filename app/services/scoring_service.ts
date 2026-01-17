@@ -77,7 +77,7 @@ const SEARCH_MODE_CONFIGURATION: Record<SearchMode, SearchModeConfig> = {
     notesThreshold: 0.2,
     imageThreshold: 0.2,
     refineMode: 'none',
-    nuancesThreshold: null,
+    nuancesThreshold: 0.35,
   },
   precise: {
     tagsThreshold: 0.17,

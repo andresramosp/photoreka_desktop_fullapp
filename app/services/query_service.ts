@@ -93,7 +93,7 @@ export default class QueryService {
     }
 
     const queryStuctureMessage =
-      searchMode == 'curation'
+      searchMode == 'curation' || searchMode == 'adaptive'
         ? MESSAGE_QUERY_STRUCTURE_CURATION_IMPLICIT_ONLY
         : MESSAGE_QUERY_STRUCTURE
 
@@ -116,7 +116,7 @@ export default class QueryService {
     modelResult.original = query
     modelResult.positive_segments = [...new Set([...modelResult.positive_segments])]
     modelResult.nuances_segments =
-      searchMode == 'curation'
+      searchMode == 'curation' || searchMode == 'adaptive'
         ? [...new Set(Object.values(modelResult.nuances_segments).flat())]
         : []
     modelResult.no_prefix = modelOneResult.no_prefix
@@ -126,7 +126,8 @@ export default class QueryService {
       modelResult.include_visual_aspects = // TODO: se peude desglosar en artistc/technical
         metadataResult.include_technical_aspects ||
         metadataResult.include_artistic_aspects ||
-        searchMode == 'curation'
+        searchMode == 'curation' ||
+        searchMode == 'adaptive'
     }
 
     console.log(
