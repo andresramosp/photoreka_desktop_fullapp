@@ -526,7 +526,7 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
     // Helper para crear objeto de foto para samplePhotos
     const createSamplePhoto = (photo: any) => ({
       id: photo.id,
-      thumbnailUrl: `https://images.photoreka.com/${photo.thumbnailName}`,
+      thumbnailUrl: `https://${process.env.IMAGES_WORKER}/${photo.thumbnailName}`,
       description: createPhotoDescription(photo),
     })
 

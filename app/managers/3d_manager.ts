@@ -391,7 +391,7 @@ export default class ThreeDManager {
         return {
           id: photoData.id,
           originalFileName: photoData.originalFileName,
-          thumbnailUrl: `https://images.photoreka.com/${photoData.thumbnailName}`,
+          thumbnailUrl: `https://${process.env.IMAGES_WORKER}/${photoData.thumbnailName}`,
           chunk: photoData.chunk,
           coordinates: reduced.embedding_3d,
           descriptions,

@@ -230,12 +230,12 @@ export default class Photo extends BaseModel {
 
   @computed()
   public get thumbnailUrl(): string {
-    return `https://images.photoreka.com/${this.thumbnailName}`
+    return `https://${process.env.IMAGES_WORKER}/${this.thumbnailName}`
   }
 
   @computed()
   public get originalUrl(): string {
-    return `https://images.photoreka.com/${this.name}`
+    return `https://${process.env.IMAGES_WORKER}/${this.name}`
   }
 
   @computed()
