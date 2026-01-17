@@ -54,6 +54,7 @@ export interface SearchModeConfig {
   tagsThreshold: number | null
   descSegmentThreshold: number | null
   descFullQueryThreshold: number | null
+  notesThreshold: number | null
   imageThreshold: number | null
   refineMode: RefineMode
   nuancesThreshold: number | null
@@ -64,6 +65,7 @@ const SEARCH_MODE_CONFIGURATION: Record<SearchMode, SearchModeConfig> = {
     tagsThreshold: null,
     descSegmentThreshold: null,
     descFullQueryThreshold: null,
+    notesThreshold: 0.2,
     imageThreshold: 0.15,
     refineMode: 'none',
     nuancesThreshold: null,
@@ -72,6 +74,7 @@ const SEARCH_MODE_CONFIGURATION: Record<SearchMode, SearchModeConfig> = {
     tagsThreshold: 0.17,
     descSegmentThreshold: 0.2,
     descFullQueryThreshold: 0.25,
+    notesThreshold: 0.2,
     imageThreshold: 0.2,
     refineMode: 'none',
     nuancesThreshold: null,
@@ -80,6 +83,7 @@ const SEARCH_MODE_CONFIGURATION: Record<SearchMode, SearchModeConfig> = {
     tagsThreshold: 0.17,
     descSegmentThreshold: 0.17,
     descFullQueryThreshold: 0.3,
+    notesThreshold: 0.45,
     imageThreshold: 0.3,
     refineMode: 'entailment',
     nuancesThreshold: null,
@@ -88,6 +92,7 @@ const SEARCH_MODE_CONFIGURATION: Record<SearchMode, SearchModeConfig> = {
     tagsThreshold: null,
     descSegmentThreshold: null,
     descFullQueryThreshold: 0.3,
+    notesThreshold: 0.25,
     imageThreshold: 0.15,
     refineMode: 'neutral',
     nuancesThreshold: 0.35,
@@ -272,16 +277,21 @@ export default class ScoringService {
     // 4. Inicializar scores
     const initialScores = this.initializeScores(photoIds)
 
-    // 5. Ejecutar en paralelo: segmentos, fullQuery, nuances e image
-    const [segmentScores, fullQueryScores, nuanceScores, imageScores] = await Promise.all([
-      this.processPositiveSegments(initialScores, query, config, userId),
-      this.processFullQuery(photoIds, query, config),
-      this.processNuances(photoIds, query, config, userId),
-      this.processImageSimilarity(photoIds, query.fullQuery, config),
-    ])
+    // 5. Ejecutar en paralelo: segmentos, fullQuery, notes, nuances e image
+    const [segmentScores, fullQueryScores, notesScores, nuanceScores, imageScores] =
+      await Promise.all([
+        this.processPositiveSegments(initialScores, query, config, userId),
+        this.processFullQuery(photoIds, query, config),
+        this.processNotes(photoIds, query, config),
+        this.processNuances(photoIds, query, config, userId),
+        this.processImageSimilarity(photoIds, query.fullQuery, config),
+      ])
 
     // 6. Merge todos los resultados
     let finalScores = this.mergeTagDescScoredPhotos(segmentScores, [], fullQueryScores)
+
+    // Merge notes scores
+    finalScores = this.mergeTagDescScoredPhotos(finalScores, [], notesScores)
 
     for (const nuanceScore of nuanceScores) {
       finalScores = this.mergeTagDescScoredPhotos(finalScores, nuanceScore, [])
@@ -588,6 +598,27 @@ export default class ScoringService {
   }
 
   // Versión para ejecución paralela (usa photoIds directamente)
+  private async processNotes(
+    photoIds: number[],
+    query: PreparedQuery,
+    config: EffectiveConfig
+  ): Promise<{ id: number; descScore: number; matchingChunks: any[] }[]> {
+    // Solo procesar si notes está habilitado y hay fullQuery
+    if (config.notesThreshold === null || !query.fullQuery) {
+      return []
+    }
+
+    return this.getScoredPhotoDescBySegment(
+      photoIds,
+      { name: query.fullQuery, index: -2 },
+      config.notesThreshold,
+      'none',
+      false,
+      ['notes']
+    )
+  }
+
+  // Versión para ejecución paralela (usa photoIds directamente)
   private async processImageSimilarity(
     photoIds: number[],
     fullQuery: string,
@@ -697,6 +728,7 @@ export default class ScoringService {
         proximity: mc.proximity,
         chunk_id: mc.id,
         photo_id: mc.photo_id,
+        category: mc.category,
       })),
       'desc',
       refineMode
@@ -712,6 +744,7 @@ export default class ScoringService {
           chunk: chunk.name,
           proximity: chunk.proximity,
           isFullQuery,
+          category: chunk.category,
         })
       }
     }

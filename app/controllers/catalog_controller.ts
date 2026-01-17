@@ -20,6 +20,7 @@ import {
   MESSAGE_PHOTO_INSIGHT_CUSTOM,
 } from '../utils/prompts/descriptions.js'
 import PhotoImageService from '#services/photo_image_service'
+import DescriptionChunk from '#models/descriptionChunk'
 
 const s3 = new S3Client({
   region: 'auto',
@@ -527,6 +528,82 @@ export default class CatalogController {
     } catch (error) {
       console.error('Error generando insight específico:', error)
       return response.internalServerError({ message: 'Error generando insight de la foto' })
+    }
+  }
+
+  /**
+   * Guarda o actualiza una nota sobre una foto y genera su embedding
+   * POST /catalog/:id/note
+   * Body: { note: string }
+   */
+  public async savePhotoNote({ response, auth, params, request }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as any
+      const userId = user.id.toString()
+
+      const { note } = request.only(['note'])
+
+      if (!note || typeof note !== 'string' || note.trim().length === 0) {
+        return response.badRequest({ message: 'La nota no puede estar vacía' })
+      }
+
+      // Verificar que la foto existe y pertenece al usuario
+      const photo = await Photo.query().where('id', params.id).where('user_id', userId).first()
+
+      if (!photo) {
+        return response.notFound({ message: 'Foto no encontrada' })
+      }
+
+      // Actualizar el campo descriptions.notes
+      const descriptions = photo.descriptions || {}
+      descriptions.notes = note.trim()
+      photo.descriptions = descriptions
+      await photo.save()
+
+      // Generar embedding para la nota
+      const modelsService = new ModelsService()
+      const { embeddings } = await modelsService.getEmbeddingsCPU([note.trim()])
+
+      if (!embeddings || embeddings.length === 0) {
+        return response.internalServerError({
+          message: 'Error generando embedding para la nota',
+        })
+      }
+
+      // Buscar si ya existe un chunk de tipo "notes" para esta foto
+      const existingChunk = await DescriptionChunk.query()
+        .where('photo_id', photo.id)
+        .where('category', 'notes')
+        .first()
+
+      if (existingChunk) {
+        // Actualizar el chunk existente
+        existingChunk.chunk = note.trim()
+        existingChunk.embedding = embeddings[0]
+        await existingChunk.save()
+      } else {
+        // Crear un nuevo chunk
+        const descriptionChunk = new DescriptionChunk()
+        descriptionChunk.photoId = photo.id
+        descriptionChunk.chunk = note.trim()
+        descriptionChunk.category = 'notes'
+        descriptionChunk.embedding = embeddings[0]
+        await descriptionChunk.save()
+      }
+
+      await this.invalidateUserCache(userId)
+
+      return response.ok({
+        message: 'Nota guardada exitosamente',
+        photo: {
+          id: photo.id,
+          note: note.trim(),
+        },
+      })
+    } catch (error) {
+      console.error('Error guardando nota de foto:', error)
+      return response.internalServerError({ message: 'Error guardando nota de la foto' })
     }
   }
 }

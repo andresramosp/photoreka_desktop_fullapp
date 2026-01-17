@@ -132,7 +132,7 @@ export default class VectorService {
 
     const result = await db.rawQuery(
       `
-      SELECT id, photo_id, chunk, area, ${metricQuery}
+      SELECT id, photo_id, chunk, area, category, ${metricQuery}
       FROM descriptions_chunks
       WHERE ${whereCondition}
       ORDER BY ${orderBy}

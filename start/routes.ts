@@ -97,6 +97,7 @@ router
       CatalogController,
       'photoInsightSpecific',
     ])
+    router.post('/api/catalog/:id/note', [CatalogController, 'savePhotoNote'])
 
     router.post('/api/analyzer/', [AnalyzerController, 'analyze'])
     router.post('/api/embeddings/', [EmbeddingController, 'getEmbeddings'])

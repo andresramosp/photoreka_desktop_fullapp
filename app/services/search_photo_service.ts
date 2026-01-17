@@ -174,6 +174,7 @@ export default class SearchPhotoService {
             chunkScoreMap[c.photo_id][chunkId] = {
               content: c.content || c.chunk || '',
               proximity: c.proximity,
+              category: c.category,
             }
           }
         })
@@ -183,10 +184,14 @@ export default class SearchPhotoService {
     // Ahora sumamos los scores de los chunks buscados para cada foto
     return Object.entries(chunkScoreMap).map(([id, chunkScores]) => {
       let score = 0
-      let matchingChunks: { chunk: string; proximity: number }[] = []
+      let matchingChunks: { chunk: string; proximity: number; category: string }[] = []
       for (const chunkScore of Object.values(chunkScores)) {
         score += chunkScore.proximity
-        matchingChunks.push({ chunk: chunkScore.content, proximity: chunkScore.proximity })
+        matchingChunks.push({
+          chunk: chunkScore.content,
+          proximity: chunkScore.proximity,
+          category: chunkScore.category,
+        })
       }
       return {
         id: +id,
