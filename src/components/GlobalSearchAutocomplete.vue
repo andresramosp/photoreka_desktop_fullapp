@@ -2,7 +2,7 @@
   <div class="global-search" ref="searchContainerRef">
     <n-input
       v-model:value="searchQuery"
-      placeholder="Search photos, collections, series, tools, help..."
+      placeholder="Search photos by filename, collections, series, tools, help..."
       class="search-input"
       size="medium"
       clearable
@@ -355,7 +355,7 @@ const setActiveItem = (type: string, id: string | number) => {
 const getActiveIndex = () => {
   if (!activeItemKey.value) return -1;
   return flatResults.value.findIndex(
-    (item) => getItemKey(item.type, item.id) === activeItemKey.value
+    (item) => getItemKey(item.type, item.id) === activeItemKey.value,
   );
 };
 
@@ -372,7 +372,7 @@ const setActiveByIndex = (index: number) => {
 const scrollToActiveItem = () => {
   nextTick(() => {
     const activeElement = dropdownRef.value?.querySelector(
-      ".result-item.active"
+      ".result-item.active",
     );
     if (activeElement) {
       activeElement.scrollIntoView({ block: "nearest", behavior: "smooth" });

@@ -140,11 +140,11 @@
                         {{
                           selectedPhoto?.descriptions?.EXIF?.dateTaken
                             ? formatDate(
-                                selectedPhoto.descriptions.EXIF.dateTaken
+                                selectedPhoto.descriptions.EXIF.dateTaken,
                               )
                             : selectedPhoto?.createdAt
-                            ? formatDate(selectedPhoto.createdAt)
-                            : "Not Present"
+                              ? formatDate(selectedPhoto.createdAt)
+                              : "Not Present"
                         }}
                       </n-tag>
                     </div>
@@ -195,7 +195,7 @@
                       >
                         {{
                           formatExposureTime(
-                            selectedPhoto.descriptions.EXIF.exposureTime
+                            selectedPhoto.descriptions.EXIF.exposureTime,
                           )
                         }}
                       </n-tag>
@@ -411,21 +411,87 @@
             </template>
             <div class="tab-panel-content">
               <div class="tags-section">
-                <div v-if="getGroupedTags().length > 0" class="grouped-tags">
+                <div
+                  v-if="Object.keys(getGroupedTags()).length > 0"
+                  class="grouped-tags"
+                >
+                  <!-- Contextual -->
                   <div
-                    v-for="group in getGroupedTags()"
-                    :key="group.groupName"
+                    v-if="getGroupedTags()['contextual']"
                     class="tag-group-item"
                   >
-                    <h5 class="tag-group-label">
-                      {{ formatGroupName(group.groupName) }}
-                    </h5>
+                    <h5 class="tag-group-label">Contextual</h5>
                     <div class="tag-group-content">
                       <div class="tags-list">
                         <n-tag
-                          v-for="tag in group.tags"
+                          v-for="tag in getGroupedTags()['contextual']"
                           :key="tag.id || tag.name"
-                          closable
+                          type="info"
+                          :bordered="false"
+                          @close="removeTag(tag)"
+                          class="photo-tag"
+                        >
+                          {{ tag.name || tag }}
+                        </n-tag>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Technical -->
+                  <div
+                    v-if="getGroupedTags()['technical']"
+                    class="tag-group-item"
+                  >
+                    <h5 class="tag-group-label">Technical</h5>
+                    <div class="tag-group-content">
+                      <div class="tags-list">
+                        <n-tag
+                          v-for="tag in getGroupedTags()['technical']"
+                          :key="tag.id || tag.name"
+                          type="info"
+                          :bordered="false"
+                          @close="removeTag(tag)"
+                          class="photo-tag"
+                        >
+                          {{ tag.name || tag }}
+                        </n-tag>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Artistic -->
+                  <div
+                    v-if="getGroupedTags()['artistic']"
+                    class="tag-group-item"
+                  >
+                    <h5 class="tag-group-label">Artistic</h5>
+                    <div class="tag-group-content">
+                      <div class="tags-list">
+                        <n-tag
+                          v-for="tag in getGroupedTags()['artistic']"
+                          :key="tag.id || tag.name"
+                          type="info"
+                          :bordered="false"
+                          @close="removeTag(tag)"
+                          class="photo-tag"
+                        >
+                          {{ tag.name || tag }}
+                        </n-tag>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Miscellaneous -->
+                  <div
+                    v-if="getGroupedTags()['miscellaneous']"
+                    class="tag-group-item"
+                  >
+                    <h5 class="tag-group-label">Miscellaneous</h5>
+                    <div class="tag-group-content">
+                      <div class="tags-list">
+                        <n-tag
+                          v-for="tag in getGroupedTags()['miscellaneous']"
+                          :key="tag.id || tag.name"
                           type="info"
                           :bordered="false"
                           @close="removeTag(tag)"
@@ -455,6 +521,73 @@
                     </n-button>
                   </n-input-group>
                 </div> -->
+              </div>
+            </div>
+          </n-tab-pane>
+
+          <n-tab-pane name="notes" display-directive="show:lazy">
+            <template #tab>
+              <div class="tab-content">
+                <n-icon size="18">
+                  <EditIcon />
+                </n-icon>
+                <span>Notes</span>
+              </div>
+            </template>
+            <div class="tab-panel-content">
+              <div class="notes-section">
+                <!-- Header Section -->
+                <div class="notes-header">
+                  <div class="notes-title-container">
+                    <n-icon size="24" class="notes-icon">
+                      <EditIcon />
+                    </n-icon>
+                    <h5 class="notes-title">Personal Notes</h5>
+                  </div>
+                  <p class="notes-subtitle">
+                    Add your thoughts, memories, or context about this photo.
+                    Your notes will be used for searches.
+                  </p>
+                </div>
+
+                <!-- Notes Input Area -->
+                <div class="notes-input-area">
+                  <n-input
+                    v-model:value="photoNotes"
+                    type="textarea"
+                    placeholder="Example: Taken during our summer vacation in Barcelona. The lighting was amazing that evening..."
+                    :autosize="{ minRows: 6, maxRows: 10 }"
+                    @input="updateWordCount"
+                  />
+                </div>
+
+                <!-- Actions -->
+                <div class="notes-actions">
+                  <div
+                    class="word-counter"
+                    :class="{ 'word-limit-exceeded': wordCount > 50 }"
+                  >
+                    {{ wordCount }} / 50 words
+                  </div>
+                  <div class="notes-buttons-group">
+                    <n-button
+                      size="small"
+                      type="primary"
+                      @click="saveNotes"
+                      :loading="isSavingNotes"
+                      :disabled="wordCount > 50"
+                    >
+                      {{
+                        selectedPhoto?.descriptions?.notes
+                          ? "Update Notes"
+                          : "Save Notes"
+                      }}
+                    </n-button>
+                    <span v-if="wordCount > 50" class="error-text">
+                      Please reduce to 50 words or less
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </n-tab-pane>
@@ -596,7 +729,7 @@
                       <div class="artistic-scores-grid">
                         <div
                           v-for="scoreData in getOrderedArtisticScores(
-                            selectedPhoto.descriptions.artistic_scores
+                            selectedPhoto.descriptions.artistic_scores,
                           )"
                           :key="scoreData.criterion"
                           class="score-item"
@@ -688,7 +821,7 @@
                       <p
                         v-html="
                           highlightMatchingChunks(
-                            selectedPhoto.descriptions.context
+                            selectedPhoto.descriptions.context,
                           )
                         "
                       ></p>
@@ -701,7 +834,7 @@
                       <p
                         v-html="
                           highlightMatchingChunks(
-                            selectedPhoto.descriptions.visual_accents
+                            selectedPhoto.descriptions.visual_accents,
                           )
                         "
                       ></p>
@@ -860,38 +993,6 @@
               </div>
             </div>
           </n-tab-pane>
-
-          <!-- <n-tab-pane name="notes" display-directive="show:lazy">
-            <template #tab>
-              <div class="tab-content">
-                <n-icon size="18">
-                  <EditIcon />
-                </n-icon>
-                <span>Notes</span>
-              </div>
-            </template>
-            <div class="tab-panel-content">
-              <div class="notes-section">
-                <n-input
-                  v-model:value="photoNotes"
-                  type="textarea"
-                  placeholder="Add your personal notes about this photo..."
-                  :autosize="{ minRows: 8, maxRows: 8 }"
-                  @blur="saveNotes"
-                />
-                <div class="notes-actions">
-                  <n-button
-                    size="small"
-                    type="primary"
-                    @click="saveNotes"
-                    :loading="isSavingNotes"
-                  >
-                    Save Notes
-                  </n-button>
-                </div>
-              </div>
-            </div>
-          </n-tab-pane> -->
         </n-tabs>
       </div>
     </div>
@@ -1033,6 +1134,7 @@ import { Trophy20Regular as ScoresIcon } from "@vicons/fluent";
 import { api } from "@/utils/axios.js";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
+import { tagCategoryNameMap } from "@/stores/photos.js";
 import { BookOpen16Regular } from "@vicons/fluent";
 import { PaletteOutlined } from "@vicons/material";
 
@@ -1096,6 +1198,7 @@ const pendingInsightLabel = ref("");
 const customInsightQuestion = ref("");
 const photoNotes = ref("");
 const isSavingNotes = ref(false);
+const wordCount = ref(0);
 
 const showCustomWeights = ref(false);
 const showFullscreenPhoto = ref(false);
@@ -1192,7 +1295,7 @@ watch(
         preloadImage(newIndex - 1);
       }
     }
-  }
+  },
 );
 
 // Lifecycle hooks for keyboard listeners
@@ -1227,7 +1330,8 @@ watch(
 
       // Initialize description and notes if they exist
       photoInsight.value = newPhoto.description || "";
-      photoNotes.value = newPhoto.notes || "";
+      photoNotes.value = newPhoto.descriptions?.notes || "";
+      updateWordCount(); // Update word count when photo changes
 
       // Load insights from session storage (persist across dialog openings)
       if (sessionPhotoInsights.value.has(newPhoto.id)) {
@@ -1245,7 +1349,7 @@ watch(
       pendingInsightLabel.value = "";
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 // Helper functions
@@ -1289,37 +1393,42 @@ const closeFullscreen = () => {
 };
 
 const formatCategoryName = (category) => {
-  // Convert snake_case to Title Case
+  // Check if there's a custom mapping first
+  if (tagCategoryNameMap[category]) {
+    return tagCategoryNameMap[category];
+  }
+
+  // Fallback: Convert snake_case to Title Case
   return category
     .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 };
 
-// Group tags by their group property, excluding 'misc' group
+// Group tags by their transformed category name, excluding 'misc' group
 const getGroupedTags = () => {
   if (!photoTags.value || photoTags.value.length === 0) {
-    return [];
+    return {};
   }
 
   // Filter out misc group and group by 'group' property
   const filteredTags = photoTags.value.filter((tag) => tag.group !== "misc");
 
-  // Group tags by their group property
+  // Group tags by their group property, applying category name transformation first
   const grouped = filteredTags.reduce((acc, tag) => {
-    const groupName = tag.category || "general";
-    if (!acc[groupName]) {
-      acc[groupName] = [];
+    const originalCategory = tag.category || "General";
+    // Apply category name mapping BEFORE grouping
+    const transformedGroupName = formatCategoryName(originalCategory);
+
+    if (!acc[transformedGroupName]) {
+      acc[transformedGroupName] = [];
     }
-    acc[groupName].push(tag);
+    acc[transformedGroupName].push(tag);
     return acc;
   }, {});
 
-  // Convert to array format similar to descriptions
-  return Object.entries(grouped).map(([groupName, tags]) => ({
-    groupName,
-    tags,
-  }));
+  // Return as object/map for direct access by category name
+  return grouped;
 };
 
 const formatGroupName = (groupName) => {
@@ -1409,7 +1518,7 @@ const fallbackCopyTextToClipboard = (text) => {
       message.success("Photo name copied to clipboard");
     } else {
       message.warning(
-        "Unable to copy automatically. Please copy manually: " + text
+        "Unable to copy automatically. Please copy manually: " + text,
       );
     }
   } catch (err) {
@@ -1462,7 +1571,7 @@ const removeTag = async (tagToRemove) => {
   const index = photoTags.value.findIndex(
     (tag) =>
       (tag.id && tag.id === tagToRemove.id) ||
-      (tag.name || tag) === (tagToRemove.name || tagToRemove)
+      (tag.name || tag) === (tagToRemove.name || tagToRemove),
   );
 
   if (index === -1) return;
@@ -1532,7 +1641,7 @@ const overallRating = computed(() => {
   return calculateArtisticScore(
     props.selectedPhoto.descriptions.artistic_scores,
     selectedGenre.value,
-    customWeights
+    customWeights,
   );
 });
 
@@ -1560,7 +1669,7 @@ const getSpecificInsight = async (type) => {
   const availability = insightTypesAvailable.value;
   if (!availability[type]) {
     message.warning(
-      `You've already requested a ${type} insight for this photo in this session`
+      `You've already requested a ${type} insight for this photo in this session`,
     );
     return;
   }
@@ -1568,7 +1677,7 @@ const getSpecificInsight = async (type) => {
   // Check if we can use insights on this photo (session limit)
   if (!canUseInsights.value) {
     message.warning(
-      "You've reached your session limit of photos with insights (20 photos)"
+      "You've reached your session limit of photos with insights (20 photos)",
     );
     return;
   }
@@ -1578,7 +1687,7 @@ const getSpecificInsight = async (type) => {
 
   try {
     const { data } = await api.get(
-      `/api/catalog/photoInsightSpecific/${props.selectedPhoto.id}?type=${type}&provider=gpt`
+      `/api/catalog/photoInsightSpecific/${props.selectedPhoto.id}?type=${type}&provider=gpt`,
     );
 
     if (data && data.insightType) {
@@ -1633,7 +1742,7 @@ const submitCustomQuestion = async () => {
   // Check if we have remaining custom questions
   if (customQuestionsRemaining.value <= 0) {
     message.warning(
-      "You've reached the limit of custom questions for this photo in this session (5 max)"
+      "You've reached the limit of custom questions for this photo in this session (5 max)",
     );
     return;
   }
@@ -1641,7 +1750,7 @@ const submitCustomQuestion = async () => {
   // Check if we can use insights on this photo (session limit)
   if (!canUseInsights.value) {
     message.warning(
-      "You've reached your session limit of photos with insights (20 photos)"
+      "You've reached your session limit of photos with insights (20 photos)",
     );
     return;
   }
@@ -1655,7 +1764,7 @@ const submitCustomQuestion = async () => {
     const { data } = await api.get(
       `/api/catalog/photoInsightSpecific/${
         props.selectedPhoto.id
-      }?type=custom&question=${encodeURIComponent(savedQuestion)}&provider=gpt`
+      }?type=custom&question=${encodeURIComponent(savedQuestion)}&provider=gpt`,
     );
 
     if (data && data.response) {
@@ -1725,11 +1834,11 @@ const highlightMatchingChunks = (text) => {
     // Create a case-insensitive regex to find the chunk
     const regex = new RegExp(
       `(${chunk.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
-      "gi"
+      "gi",
     );
     highlightedText = highlightedText.replace(
       regex,
-      `<span class="${className}" title="${tooltipText}">$1</span>`
+      `<span class="${className}" title="${tooltipText}">$1</span>`,
     );
   });
 
@@ -1737,14 +1846,33 @@ const highlightMatchingChunks = (text) => {
 };
 
 // Notes management
+const updateWordCount = () => {
+  const text = photoNotes.value.trim();
+  if (!text) {
+    wordCount.value = 0;
+    return;
+  }
+  // Count words by splitting on whitespace and filtering empty strings
+  const words = text.split(/\s+/).filter((word) => word.length > 0);
+  wordCount.value = words.length;
+};
+
 const saveNotes = async () => {
+  // Check word limit before saving
+  if (wordCount.value > 50) {
+    message.warning("Please reduce your notes to 50 words or less");
+    return;
+  }
+
   isSavingNotes.value = true;
 
   try {
     // Here you would typically save to backend
-    // await saveNotesToPhoto(props.selectedPhoto.id, photoNotes.value)
+    await api.post(`/api/catalog/${props.selectedPhoto.id}/note`, {
+      note: photoNotes.value,
+    });
 
-    message.success("Functionality coming soon!");
+    message.success("Notes saved successfully!");
   } catch (error) {
     message.error("Failed to save notes");
     console.error("Save notes failed:", error);
@@ -1812,6 +1940,79 @@ if (typeof window !== "undefined") {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
+}
+
+/* Notes Section Styles */
+.notes-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-md);
+}
+
+.notes-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.notes-title-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.notes-icon {
+  color: var(--primary-color);
+}
+
+.notes-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.notes-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.word-counter {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.word-counter.word-limit-exceeded {
+  color: var(--error-color);
+  font-weight: 600;
+}
+
+.notes-input-area {
+  width: 100%;
+}
+
+.notes-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.notes-buttons-group {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.error-text {
+  font-size: 12px;
+  color: var(--error-color);
+  font-weight: 500;
 }
 
 .tech-tag {
@@ -2463,7 +2664,7 @@ if (typeof window !== "undefined") {
 
 .overall-rating-container {
   padding: var(--spacing-lg);
-  /* background: var(--bg-surface); */
+  background: var(--bg-surface);
   border-radius: var(--radius-md);
   border-left: 4px solid var(--primary-color);
 }
@@ -2558,7 +2759,9 @@ if (typeof window !== "undefined") {
 }
 
 .genre-header {
-  margin-bottom: var(--spacing-md);
+  display: flex;
+  /* margin-bottom: var(--spacing-md); */
+  justify-content: center;
 }
 
 .genre-title {
@@ -2715,7 +2918,9 @@ if (typeof window !== "undefined") {
 
 .score-item:hover::before {
   opacity: 0.4;
-  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+  transition:
+    width 0.8s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.3s ease;
 }
 
 .score-label {
@@ -2766,7 +2971,9 @@ if (typeof window !== "undefined") {
 .score-fill {
   height: 100%;
   border-radius: 4px;
-  transition: width 0.3s ease, opacity 0.3s ease;
+  transition:
+    width 0.3s ease,
+    opacity 0.3s ease;
   position: relative;
   z-index: 1;
 }
@@ -2824,11 +3031,6 @@ if (typeof window !== "undefined") {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
-}
-
-.notes-actions {
-  display: flex;
-  justify-content: flex-end;
 }
 
 /* Highlighted chunks styling */
@@ -3089,7 +3291,9 @@ if (typeof window !== "undefined") {
 /* Slide to the left (next photo) */
 .slide-left-enter-active,
 .slide-left-leave-active {
-  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+  transition:
+    transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.4s ease;
 }
 
 .slide-left-enter-from {
@@ -3105,7 +3309,9 @@ if (typeof window !== "undefined") {
 /* Slide to the right (previous photo) */
 .slide-right-enter-active,
 .slide-right-leave-active {
-  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+  transition:
+    transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.4s ease;
 }
 
 .slide-right-enter-from {

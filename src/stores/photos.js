@@ -8,6 +8,15 @@ export const MIN_PHOTOS_THRESHOLD = 50;
 // true = modo suave (herramientas siempre disponibles, 50 fotos es solo una recomendación)
 export const ONBOARDING_SOFT = true;
 
+// Dictionary to transform category names to custom labels
+export const tagCategoryNameMap = {
+  // Add your custom category mappings here
+  context_story: "contextual",
+  visual_aspects: "technical",
+  visual_accents: "miscellaneous",
+  artistic_scores: "artistic",
+};
+
 import { defineStore } from "pinia";
 import { api } from "@/utils/axios";
 import { useUserStore } from "@/stores/userStore.ts";
@@ -37,14 +46,14 @@ export const usePhotosStore = defineStore("photos", {
             (p) =>
               p.status == "uploaded" ||
               p.status == "preprocessing" ||
-              p.status == "preprocessed"
+              p.status == "preprocessed",
           )
         : [],
 
     workspacePhotos: (state) =>
       Array.isArray(state.photos)
         ? state.photos.filter(
-            (p) => p.status == "processing" || p.status == "processed"
+            (p) => p.status == "processing" || p.status == "processed",
           )
         : [],
 
@@ -78,7 +87,7 @@ export const usePhotosStore = defineStore("photos", {
 
     appAccessMode: (state) => {
       const processedCount = state.photos?.filter(
-        (photo) => photo.status === "processed"
+        (photo) => photo.status === "processed",
       ).length;
 
       // En modo soft, desbloquear con al menos 1 foto procesada
@@ -98,17 +107,17 @@ export const usePhotosStore = defineStore("photos", {
     // New getter: determines if process button should be enabled/disabled
     processButtonState: (state) => {
       const processedCount = state.photos?.filter(
-        (photo) => photo.status === "processed"
+        (photo) => photo.status === "processed",
       ).length;
       const uploadedOrPreprocessedCount = state.photos?.filter(
         (photo) =>
-          photo.status === "preprocessed" || photo.status === "uploaded"
+          photo.status === "preprocessed" || photo.status === "uploaded",
       ).length;
       const processingCount = state.photos?.filter(
-        (photo) => photo.status === "processing"
+        (photo) => photo.status === "processing",
       ).length;
       const checkingDuplicatesCount = state.photos?.filter(
-        (photo) => photo.isCheckingDuplicates
+        (photo) => photo.isCheckingDuplicates,
       ).length;
 
       // If there are photos currently processing, show processing state
@@ -150,11 +159,11 @@ export const usePhotosStore = defineStore("photos", {
     // New getter: progress toward unlocking process button (0-100%)
     processButtonProgress: (state) => {
       const processedCount = state.photos?.filter(
-        (photo) => photo.status === "processed"
+        (photo) => photo.status === "processed",
       ).length;
       const uploadedOrPreprocessedCount = state.photos?.filter(
         (photo) =>
-          photo.status === "preprocessed" || photo.status === "uploaded"
+          photo.status === "preprocessed" || photo.status === "uploaded",
       ).length;
 
       // En modo soft, no hay requisito de umbral, por lo que no mostramos progreso
@@ -251,7 +260,7 @@ export const usePhotosStore = defineStore("photos", {
           delete this.selectedPhotosRecord[id];
         });
         this.photos = this.photos.filter(
-          (photo) => !photoIds.includes(photo.id)
+          (photo) => !photoIds.includes(photo.id),
         );
         // Reset duplicates check when photos are deleted
         this.duplicatesChecked = false;
@@ -262,7 +271,7 @@ export const usePhotosStore = defineStore("photos", {
       } catch (error) {
         console.warn(
           "API not available for deletePhotos, using local delete:",
-          error.message
+          error.message,
         );
       }
     },
@@ -284,7 +293,7 @@ export const usePhotosStore = defineStore("photos", {
       } catch (error) {
         console.warn(
           "API not available for deleteDuplicates, using local delete:",
-          error.message
+          error.message,
         );
         // Fallback: delete locally
         this.photos = this.photos.filter((p) => !photosIds.includes(p.id));

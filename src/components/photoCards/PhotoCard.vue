@@ -84,6 +84,18 @@
         </div>
       </div>
 
+      <!-- Notes Indicator (top-left corner) -->
+      <div v-if="hasNotesChunk" class="notes-indicator">
+        <n-tooltip trigger="hover" placement="top">
+          <template #trigger>
+            <n-icon size="14" class="notes-icon">
+              <NotesIcon />
+            </n-icon>
+          </template>
+          <span>Contains notes</span>
+        </n-tooltip>
+      </div>
+
       <!-- Action Buttons (center overlay or top-left if reasoning exists) -->
       <div
         v-if="showInfoButton"
@@ -211,6 +223,7 @@ import {
   HelpCircleOutline as HelpIcon,
   InformationCircleOutline as InfoIcon,
   TrashOutline as TrashIcon,
+  DocumentTextOutline as NotesIcon,
 } from "@vicons/ionicons5";
 
 import { usePhotoScored } from "@/composables/usePhotoScored.js";
@@ -227,6 +240,14 @@ const computedStars = computed(() => {
 // Mostrar icono de poca relevancia cuando labelScore es 'poor'
 const showLowRelevanceIcon = computed(() => {
   return props.showLowRelevanceIcon ?? shouldShowLowRelevanceIcon(props.photo);
+});
+
+// Check if photo has a notes chunk
+const hasNotesChunk = computed(() => {
+  return (
+    props.photo.matchingChunks &&
+    props.photo.matchingChunks.some((chunk) => chunk.category === "notes")
+  );
 });
 
 export interface Photo {
@@ -286,7 +307,7 @@ const showAnalyzing = computed(
   () =>
     props.mode === "curation" &&
     props.isThinking &&
-    (!props.photo.reasoning || props.photo.reasoning === "Reviewing...")
+    (!props.photo.reasoning || props.photo.reasoning === "Reviewing..."),
 );
 
 const shouldBlur = computed(() => showAnalyzing.value);
@@ -304,7 +325,7 @@ const showTooltip = ref(false);
 const showHoverContent = ref(false);
 
 const uniqueMatchingTags = computed(() =>
-  Array.from(new Set(props.photo.matchingTags))
+  Array.from(new Set(props.photo.matchingTags)),
 );
 
 // Computed for formatted matching chunks
@@ -312,12 +333,44 @@ const formattedMatchingChunks = computed(() => {
   if (!props.photo.matchingChunks || props.photo.matchingChunks.length === 0) {
     return "";
   }
-  return props.photo.matchingChunks.map((mc) => mc.chunk).join("... ");
+  // Prioritize chunks with category "notes"
+  const notesChunks = props.photo.matchingChunks.filter(
+    (mc) => mc.category === "notes",
+  );
+  const chunksToUse =
+    notesChunks.length > 0 ? notesChunks : props.photo.matchingChunks;
+  return chunksToUse.map((mc) => mc.chunk).join("... ");
 });
 
 // New computed property for tags to display
 const tagsToDisplay = computed(() => {
-  // If there are matchingTags, use them as before
+  // Priority 1: Always check for chunks with category "notes" first
+  if (props.photo.matchingChunks && props.photo.matchingChunks.length > 0) {
+    const notesChunk = props.photo.matchingChunks.find(
+      (chunk) => chunk.category === "notes",
+    );
+
+    if (notesChunk) {
+      // Truncate to 5 words + "..."
+      const words = notesChunk.chunk.split(" ");
+      const truncatedText =
+        words.length > 5
+          ? words.slice(0, 5).join(" ") + "..."
+          : notesChunk.chunk;
+
+      return [
+        {
+          text: truncatedText,
+          fullText: notesChunk.chunk,
+          score: notesChunk.score,
+          isChunk: true,
+          key: `chunk-notes-${notesChunk.score}`,
+        },
+      ];
+    }
+  }
+
+  // Priority 2: If no "notes" chunks, use matchingTags
   if (uniqueMatchingTags.value && uniqueMatchingTags.value.length > 0) {
     return uniqueMatchingTags.value.map((tag) => ({
       text: typeof tag === "object" ? tag.name || tag : tag,
@@ -331,27 +384,26 @@ const tagsToDisplay = computed(() => {
     }));
   }
 
-  // If no matchingTags, use the highest scoring chunk
+  // Priority 3: If no "notes" chunks and no matchingTags, use highest scoring chunk
   if (props.photo.matchingChunks && props.photo.matchingChunks.length > 0) {
-    // Find the chunk with the highest score
-    const highestScoreChunk = props.photo.matchingChunks.reduce(
-      (prev, current) => (current.score > prev.score ? current : prev)
+    const selectedChunk = props.photo.matchingChunks.reduce((prev, current) =>
+      current.score > prev.score ? current : prev,
     );
 
     // Truncate to 5 words + "..."
-    const words = highestScoreChunk.chunk.split(" ");
+    const words = selectedChunk.chunk.split(" ");
     const truncatedText =
       words.length > 5
         ? words.slice(0, 5).join(" ") + "..."
-        : highestScoreChunk.chunk;
+        : selectedChunk.chunk;
 
     return [
       {
         text: truncatedText,
-        fullText: highestScoreChunk.chunk,
-        score: highestScoreChunk.score,
+        fullText: selectedChunk.chunk,
+        score: selectedChunk.score,
         isChunk: true,
-        key: `chunk-${highestScoreChunk.score}`,
+        key: `chunk-${selectedChunk.score}`,
       },
     ];
   }
@@ -427,7 +479,9 @@ const handleMouseLeave = () => {
 
 .photo-card.selected {
   border-color: #8b5cf6;
-  box-shadow: 0 0 0 1px #8b5cf640, 0 8px 24px rgba(139, 92, 246, 0.2);
+  box-shadow:
+    0 0 0 1px #8b5cf640,
+    0 8px 24px rgba(139, 92, 246, 0.2);
 }
 
 .photo-container {
@@ -646,6 +700,30 @@ const handleMouseLeave = () => {
   transition: color 0.2s ease;
 }
 
+/* Notes Indicator */
+.notes-indicator {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  backdrop-filter: blur(4px);
+  background-color: color-mix(in srgb, var(--secondary-color), transparent 80%);
+  border-radius: 8px;
+  padding: 4px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notes-icon {
+  color: var(--text-on-secondary);
+  transition: color 0.2s ease;
+}
+
+.notes-indicator:hover .notes-icon {
+  color: color-mix(in srgb, var(--secondary-color), white 20%);
+}
+
 .selection-indicator {
   position: absolute;
   top: 8px;
@@ -755,18 +833,24 @@ const handleMouseLeave = () => {
 /* New photo highlight - thick and bright border with glow */
 .photo-card.is-new {
   border: 3px solid #22d3ee;
-  box-shadow: 0 0 0 1px #22d3ee40, 0 0 20px rgba(34, 211, 238, 0.4),
+  box-shadow:
+    0 0 0 1px #22d3ee40,
+    0 0 20px rgba(34, 211, 238, 0.4),
     0 4px 12px rgba(34, 211, 238, 0.2);
   animation: newPhotoGlow 2s ease-in-out infinite alternate;
 }
 
 @keyframes newPhotoGlow {
   0% {
-    box-shadow: 0 0 0 1px #22d3ee40, 0 0 15px rgba(34, 211, 238, 0.3),
+    box-shadow:
+      0 0 0 1px #22d3ee40,
+      0 0 15px rgba(34, 211, 238, 0.3),
       0 4px 12px rgba(34, 211, 238, 0.15);
   }
   100% {
-    box-shadow: 0 0 0 1px #22d3ee60, 0 0 25px rgba(34, 211, 238, 0.5),
+    box-shadow:
+      0 0 0 1px #22d3ee60,
+      0 0 25px rgba(34, 211, 238, 0.5),
       0 4px 12px rgba(34, 211, 238, 0.25);
   }
 }
