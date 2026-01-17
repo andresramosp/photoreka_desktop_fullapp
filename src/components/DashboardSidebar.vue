@@ -303,13 +303,13 @@ const thirdSectionToolsOptions = computed(() => {
       props: isBlocked ? { title: "Add photos to your catalog" } : {},
       icon: () => h(NIcon, null, { default: () => h(CanvasIcon) }),
     },
-    {
-      label: "Project Builder",
-      key: "project-builder",
-      disabled: isBlocked,
-      props: isBlocked ? { title: "Add photos to your catalog" } : {},
-      icon: () => h(NIcon, null, { default: () => h(CurationIcon) }),
-    },
+    // {
+    //   label: "Project Builder",
+    //   key: "project-builder",
+    //   disabled: isBlocked,
+    //   props: isBlocked ? { title: "Add photos to your catalog" } : {},
+    //   icon: () => h(NIcon, null, { default: () => h(CurationIcon) }),
+    // },
     {
       label: "Framer",
       key: "framer",

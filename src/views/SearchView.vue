@@ -674,33 +674,12 @@
         v-if="!isSearching && !searchStore.hasSearched"
         class="search-inspiration"
       >
-        <div class="inspiration-content">
-          <n-icon size="64" color="#6b7280" class="inspiration-icon">
-            <svg viewBox="0 0 24 24">
-              <path
-                fill="currentColor"
-                d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5l-1.5 1.5l-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16A6.5 6.5 0 0 1 3 9.5A6.5 6.5 0 0 1 9.5 3m0 2C7.01 5 5 7.01 5 9.5S7.01 14 9.5 14S14 11.99 14 9.5S11.99 5 9.5 5Z"
-              />
-            </svg>
-          </n-icon>
-
-          <div class="search-examples">
-            <h3 class="examples-title">Try something like...</h3>
-
-            <!-- Carousel Container -->
-            <div class="examples-carousel">
-              <div class="carousel-container">
-                <div
-                  class="example-card carousel-item"
-                  :class="{ sliding: isSliding }"
-                  @click="handleExampleClick"
-                >
-                  <div class="example-text">{{ currentExampleText }}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <!-- Empty State -->
+        <SearchPlaceHolder
+          :searchType="activeSearchType"
+          :searchMode="searchMode"
+          :onExampleClick="handleSearchExampleClick"
+        />
       </div>
 
       <div v-else-if="isSearching" class="search-loading">
@@ -991,7 +970,7 @@ const isLoadingMore = computed(() => searchStore.isLoadingMore);
 const searchResults = computed(() => searchStore.searchResults);
 const hasSearchQuery = computed(() => searchStore.hasSearchQuery);
 const hasMoreIterations = computed(
-  () => searchStore.currentSearchState.hasMoreIterations
+  () => searchStore.currentSearchState.hasMoreIterations,
 );
 
 // Convert visual aspects to tree-select format
@@ -1024,7 +1003,7 @@ const filteredSearchResults = computed(() => {
     return photosWithComputedStars.value;
   }
   return photosWithComputedStars.value.filter(
-    (photo) => photo.computedStars >= minStarRating.value
+    (photo) => photo.computedStars >= minStarRating.value,
   );
 });
 
@@ -1049,7 +1028,7 @@ const includedTags = computed({
   set: (value) =>
     searchStore.updateTagsSearch(
       value,
-      searchStore.searchStates.tags.excludedTags
+      searchStore.searchStates.tags.excludedTags,
     ),
 });
 
@@ -1058,7 +1037,7 @@ const excludedTags = computed({
   set: (value) =>
     searchStore.updateTagsSearch(
       searchStore.searchStates.tags.includedTags,
-      value
+      value,
     ),
 });
 
@@ -1089,6 +1068,7 @@ const isBeAdaptiveLoading = ref(false);
 
 // Warm up composable
 import { useWarmUp } from "@/composables/useWarmUp";
+import SearchPlaceHolder from "@/components/SearchPlaceHolder.vue";
 const { warmedUp, ensureWarmUp } = useWarmUp();
 
 const scrollContainer = ref(null);
@@ -1097,14 +1077,14 @@ const includedTagSuggestionsFormatted = computed(() =>
   includedTagSuggestions.value.map((tagName) => ({
     label: tagName,
     value: tagName,
-  }))
+  })),
 );
 
 const excludedTagSuggestionsFormatted = computed(() =>
   excludedTagSuggestions.value.map((tagName) => ({
     label: tagName,
     value: tagName,
-  }))
+  })),
 );
 
 const tagIncSelect = ref(null);
@@ -1241,7 +1221,7 @@ const handleToolSelected = async (toolId) => {
   await takeToTool(
     toolId,
     localSelectedPhotoIds.value,
-    localClearAllSelections
+    localClearAllSelections,
   );
   closeToolSelector();
 };
@@ -1266,7 +1246,7 @@ const handleDownloadMultiple = async () => {
 
 async function moveToCanvas() {
   await Promise.all(
-    localSelectedPhotoIds.value.map((id) => photoStore.fetchPhoto(id))
+    localSelectedPhotoIds.value.map((id) => photoStore.fetchPhoto(id)),
   );
   const photosToAdd = localSelectedPhotoIds.value
     .map((id) => photoStore.photos.find((p) => p.id == id))
@@ -1427,20 +1407,15 @@ onUnmounted(() => {
 });
 
 // Carousel de ejemplos dinámico usando composable
-function handleSearchExampleClick(example, exampleText, searchType) {
+function handleSearchExampleClick(exampleText, searchType) {
   if (searchType === "semantic") {
     semanticQuery.value = exampleText;
     performSearch();
   }
 }
 
-const {
-  exampleIndex,
-  isSliding,
-  currentExamples,
-  currentExampleText,
-  handleExampleClick,
-} = useQueryExamples(activeSearchType, searchMode, handleSearchExampleClick);
+// Ya no usamos useQueryExamples aquí, lo usa SearchPlaceHolder internamente
+
 
 // Función para manejar cambios en los inputs de búsqueda
 function onSearchChange(value) {
@@ -1467,7 +1442,7 @@ function updateTopologicalLeft(value) {
   searchStore.updateTopologicalSearch(
     value,
     topological.value.center,
-    topological.value.right
+    topological.value.right,
   );
 }
 
@@ -1484,7 +1459,7 @@ function updateTopologicalCenter(value) {
   searchStore.updateTopologicalSearch(
     topological.value.left,
     value,
-    topological.value.right
+    topological.value.right,
   );
 }
 
@@ -1501,7 +1476,7 @@ function updateTopologicalRight(value) {
   searchStore.updateTopologicalSearch(
     topological.value.left,
     topological.value.center,
-    value
+    value,
   );
 }
 

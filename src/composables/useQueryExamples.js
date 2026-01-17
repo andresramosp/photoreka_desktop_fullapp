@@ -1,31 +1,19 @@
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, watch, onMounted, onUnmounted } from "vue";
 import queryExamples from "@/assets/query_examples.json";
 
-/**
- * Composable para manejar ejemplos rotativos de búsqueda
- * @param {string} searchType - Tipo de búsqueda actual ('semantic', 'tags', 'topological', 'curation')
- * @param {string} searchMode - Modo de búsqueda para semantic ('precise', 'adaptive', etc.)
- * @param {Function} onExampleClick - Función a ejecutar cuando se hace clic en un ejemplo
- */
-export function useQueryExamples(
-  searchType,
-  searchMode = ref("strict"),
-  onExampleClick = null
-) {
+export function useQueryExamples(searchType, searchMode) {
   const exampleIndex = ref(0);
   const isSliding = ref(false);
-  let exampleInterval = null;
+  const currentText = ref("");
+  let intervalId = null;
 
-  // Obtener ejemplos según el tipo de búsqueda
-  const currentExamples = computed(() => {
+  // Obtener el array de ejemplos según tipo y modo
+  function getExamples() {
     const type = searchType.value;
+    const mode = searchMode.value;
 
     if (type === "semantic") {
-      // Para semantic: usar adaptive si está disponible y el modo es adaptive
-      if (searchMode.value === "adaptive" && queryExamples.adaptive?.length) {
-        return queryExamples.adaptive;
-      }
-      return queryExamples.precise || [];
+      return queryExamples[mode] || [];
     } else if (type === "tags") {
       return queryExamples.tags || [];
     } else if (type === "topological") {
@@ -33,80 +21,65 @@ export function useQueryExamples(
     } else if (type === "curation") {
       return queryExamples.curation || [];
     }
-
     return [];
-  });
+  }
 
-  // Formatear el texto del ejemplo según el tipo
-  const currentExampleText = computed(() => {
-    const examples = currentExamples.value;
+  // Actualizar el texto actual basado en el índice
+  function updateCurrentText() {
+    const examples = getExamples();
+    if (examples.length === 0) {
+      currentText.value = "";
+      return;
+    }
+
     const example = examples[exampleIndex.value];
-
-    if (!example) return "";
-
     const type = searchType.value;
 
-    if (type === "tags") {
-      // Mostrar como: Include: tag1, tag2 | Exclude: tag3
+    if (type === "tags" && example) {
       const inc = (example.include || []).join(", ");
       const exc = (example.exclude || []).join(", ");
-      return `Include: ${inc}${exc ? `  |  Exclude: ${exc}` : ""}`;
-    } else if (type === "topological") {
-      // Mostrar solo las cajas presentes, ej: Left: dog | Right: cat
-      const parts = [];
-      if (example.left) parts.push(`Left: ${example.left}`);
-      if (example.center) parts.push(`Center: ${example.center}`);
-      if (example.right) parts.push(`Right: ${example.right}`);
-      return parts.join("  |  ");
+      currentText.value = `Include: ${inc}${exc ? `  |  Exclude: ${exc}` : ""}`;
+    } else {
+      currentText.value = example || "";
     }
+  }
 
-    // Para 'semantic' y 'curation', simplemente devolver el texto
-    return example;
+  // Avanzar al siguiente ejemplo
+  function nextExample() {
+    const examples = getExamples();
+    if (examples.length === 0) return;
+
+    isSliding.value = true;
+
+    setTimeout(() => {
+      exampleIndex.value = (exampleIndex.value + 1) % examples.length;
+      updateCurrentText();
+      isSliding.value = false;
+    }, 300);
+  }
+
+  // Iniciar carousel
+  function startCarousel() {
+    if (intervalId) return;
+    intervalId = setInterval(nextExample, 5000);
+  }
+
+  // Detener carousel
+  function stopCarousel() {
+    if (intervalId) {
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+  }
+
+  // Watch para cambios en tipo o modo
+  watch([searchType, searchMode], () => {
+    exampleIndex.value = 0;
+    updateCurrentText();
   });
 
-  // Manejar clic en ejemplo
-  function handleExampleClick() {
-    if (onExampleClick && typeof onExampleClick === "function") {
-      const example = currentExamples.value[exampleIndex.value];
-      onExampleClick(example, currentExampleText.value, searchType.value);
-    }
-  }
-
-  // Iniciar el carrusel automático
-  function startCarousel() {
-    if (exampleInterval) return; // Ya está iniciado
-
-    exampleInterval = setInterval(() => {
-      isSliding.value = true;
-      setTimeout(() => {
-        isSliding.value = false;
-      }, 300);
-
-      const examples = currentExamples.value;
-      if (examples.length > 0) {
-        exampleIndex.value = (exampleIndex.value + 1) % examples.length;
-      } else {
-        exampleIndex.value = 0;
-      }
-    }, 5000);
-  }
-
-  // Detener el carrusel automático
-  function stopCarousel() {
-    if (exampleInterval) {
-      clearInterval(exampleInterval);
-      exampleInterval = null;
-    }
-  }
-
-  // Reiniciar índice cuando cambian los ejemplos
-  function resetIndex() {
-    exampleIndex.value = 0;
-    isSliding.value = false;
-  }
-
-  // Lifecycle hooks
   onMounted(() => {
+    updateCurrentText();
     startCarousel();
   });
 
@@ -115,16 +88,9 @@ export function useQueryExamples(
   });
 
   return {
-    // Estado reactivo
-    exampleIndex,
+    currentText,
     isSliding,
-    currentExamples,
-    currentExampleText,
-
-    // Métodos
-    handleExampleClick,
     startCarousel,
     stopCarousel,
-    resetIndex,
   };
 }
