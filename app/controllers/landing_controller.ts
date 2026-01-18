@@ -1,6 +1,7 @@
 import { HttpContext } from '@adonisjs/core/http'
 import vine from '@vinejs/vine'
 import MailService from '#services/mail_service'
+import { waitingListConfirmationTemplate } from '../utils/email_templates.js'
 
 // Validator para el payload de solicitud de acceso
 const requestAccessValidator = vine.compile(
@@ -17,7 +18,7 @@ export default class LandingController {
   /**
    * Manejar solicitudes de acceso desde la landing page
    */
-  async request({ request, response }: HttpContext) {
+  async waitingList({ request, response }: HttpContext) {
     try {
       const payload = await request.validateUsing(requestAccessValidator)
 
@@ -31,13 +32,22 @@ export default class LandingController {
         <p><small>Solicitud recibida el ${new Date().toLocaleString('es-ES')}</small></p>
       `
 
-      // Usar el servicio de mail para enviar el email
-      await this.mailService.sendEmail({
-        from: 'hello@photoreka.com',
-        to: 'andreschennai@gmail.com',
-        subject: `Nueva solicitud de acceso - ${payload.email}`,
-        body: emailContent,
-      })
+      // Enviar ambos correos en paralelo
+      await Promise.all([
+        this.mailService.sendEmail({
+          from: 'hello@photoreka.com',
+          to: 'andreschennai@gmail.com',
+          subject: `Nueva solicitud de acceso - ${payload.email}`,
+          body: emailContent,
+        }),
+        this.mailService.sendEmail({
+          from: 'hello@photoreka.com',
+          to: payload.email,
+          subject:
+            'Welcome to Photoreka’s Waitlist – Get Ready to Transform Your Creative Workflow!',
+          body: waitingListConfirmationTemplate(null),
+        }),
+      ])
 
       return response.status(200).json({
         message: 'Solicitud enviada correctamente. Te contactaremos pronto.',

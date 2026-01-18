@@ -2,7 +2,7 @@
  * Email templates for Photoreka authentication emails
  */
 
-const LOGO_URL = 'https://www.photoreka.com/assets/logo_name_white-BR4h4RBP.png'
+const LOGO_URL = 'https://www.photoreka.com/logos/marca/horizontal-claim-dark.png'
 const PRIMARY_COLOR = '#6366f1' // Indigo
 const SECONDARY_COLOR = '#4f46e5'
 const BACKGROUND_COLOR = '#0f172a' // Dark slate
@@ -30,7 +30,7 @@ function baseLayout(content: string, title: string): string {
           <!-- Logo Header -->
           <tr>
             <td align="center" style="padding: 30px 0;">
-              <img src="${LOGO_URL}" alt="Photoreka" style="height: 50px; width: auto;" />
+              <img src="${LOGO_URL}" alt="Photoreka" style="height: 75px; width: auto;" />
             </td>
           </tr>
           <!-- Main Content Card -->
@@ -247,3 +247,67 @@ export function resendConfirmationTemplate(userName: string, confirmationUrl: st
 
   return baseLayout(content, 'Confirm your email - Photoreka')
 }
+
+/**
+ * Waiting list confirmation email
+ */
+export function waitingListConfirmationTemplate(userName: string | null): string {
+  const content = `
+<h1 style="margin: 0 0 20px; font-size: 28px; font-weight: 700; color: ${TEXT_COLOR}; text-align: center;">
+You're on the Waiting List
+</h1>
+<p style="margin: 0 0 10px; font-size: 16px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+${userName ? `Hi ${userName},` : 'Hi there,'}
+</p>
+<p style="margin: 0 0 20px; font-size: 16px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+Thanks for your interest in Photoreka. We've added you to our waiting list.
+Access is being rolled out gradually in small batches of <strong style="color: ${TEXT_COLOR};">20 users</strong>,
+so we can ensure a smooth and high-quality experience for everyone.
+</p>
+
+
+<div style="background-color: rgba(99, 102, 241, 0.1); border-radius: 8px; padding: 20px; margin: 20px 0;">
+<p style="margin: 0; font-size: 14px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+You'll receive an email as soon as your batch is ready.
+There's nothing else you need to do for now.
+</p>
+</div>
+
+
+<p style="margin: 30px 0 0; font-size: 14px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+In the meantime, you can follow Photoreka's progress or simply sit back
+and wait. We appreciate your patience and interest.
+</p>
+
+
+${emailButton('Visit Photoreka', 'https://www.photoreka.com')}
+
+
+<hr style="border: none; border-top: 1px solid rgba(148, 163, 184, 0.2); margin: 30px 0;" />
+
+
+<p style="margin: 0; font-size: 12px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+This email confirms your subscription to the Photoreka waiting list.
+If you didn't request this, you can safely ignore this message.
+</p>
+`
+
+  return baseLayout(content, 'Photoreka waiting list confirmation')
+}
+
+// Subject: Your Photoreka access is ready
+
+// Hi,
+
+// Good news. Your batch is now open and you can start using Photoreka.
+
+// You now have access to Photoreka on the **Free plan**, which includes space for up to **1,000 photos**. This should be enough to explore the core workflow, organize your library, and see how the platform fits into your photography process.
+
+// If at some point you need to manage a larger collection, you’ll be able to upgrade your plan directly from your account. There’s no obligation to do so, and you can stay on the free plan for as long as it works for you.
+
+// You can get started here:
+// [https://www.photoreka.com](https://www.photoreka.com)
+
+// Thanks for your patience while waiting for access. We’re rolling things out gradually to make sure everything runs smoothly, and we’re happy to have you in this batch.
+
+// Welcome to Photoreka.

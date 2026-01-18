@@ -61,7 +61,7 @@ const ThreeDViewController = () => import('#controllers/3dview_controller')
 const PortfolioReviewController = () => import('#controllers/portfolio_review_controller')
 
 // Landing page endpoints (no auth required)
-router.post('/api/landing/request', [LandingController, 'request'])
+router.post('/api/landing/waiting-list', [LandingController, 'waitingList'])
 
 // 3D Visualization public endpoint (no auth required)
 router.post('/api/3d/catalog/:id', [ThreeDViewController, 'get3DPhotosByIdOrUsername'])
