@@ -156,7 +156,7 @@ watch(
   () => {
     initTheme();
   },
-  { immediate: false }
+  { immediate: false },
 );
 
 // List of route names where DashboardHeader should be visible
@@ -180,7 +180,7 @@ const allowedHeaderViews = [
 const showDashboardHeader = computed(() => {
   if (!route.name) return false;
   return allowedHeaderViews.some(
-    (prefix) => typeof route.name === "string" && route.name.startsWith(prefix)
+    (prefix) => typeof route.name === "string" && route.name.startsWith(prefix),
   );
 });
 const photosStore = usePhotosStore();
@@ -286,6 +286,7 @@ watch(
       }
       // Cargar catálogo inmediatamente cuando se autentica
       photosStore.getOrFetch(true);
+      collectionsStore.getOrFetch(true);
     } else {
       // Usuario se desautenticó - resetear stores
       if (wasAuth !== undefined) {
@@ -299,7 +300,7 @@ watch(
       photosStore.isInitialized = true;
     }
   },
-  { immediate: true } // Ejecutar inmediatamente para capturar estado inicial
+  { immediate: true }, // Ejecutar inmediatamente para capturar estado inicial
 );
 
 // Watcher adicional para forzar redirección si el usuario autenticado está en auth
@@ -310,7 +311,7 @@ watch(
       router.replace("/dashboard");
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 onUnmounted(() => {
@@ -362,9 +363,19 @@ onUnmounted(() => {
 
 body {
   margin: 0;
-  font-family: "Work Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
-    "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
-    "Helvetica Neue", sans-serif;
+  font-family:
+    "Work Sans",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Roboto",
+    "Oxygen",
+    "Ubuntu",
+    "Cantarell",
+    "Fira Sans",
+    "Droid Sans",
+    "Helvetica Neue",
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: #101014;

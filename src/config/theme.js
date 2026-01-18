@@ -162,6 +162,7 @@ export const darkTheme = {
   bgCard: "#18181c",
   bgDeepSurface: "black",
   bgOverlay: "rgba(0, 0, 0, 0.6)",
+  bgTagPill: "rgba(103, 102, 102, 0.7)",
   // bgTag: "rgba(37, 99, 235, 0.7)",
 
   // Borders
@@ -248,6 +249,7 @@ export const lightTheme = {
 
   bgOverlay: "rgba(0, 0, 0, 0.4)",
   bgTag: "rgba(37, 99, 235, 0.12)",
+  bgTagPill: "rgba(180, 180, 180, 0.7)",
 
   // Borders
   border: "rgba(0, 0, 0, 0.1)",
@@ -445,6 +447,7 @@ export function getThemeCSSVariables(isDark = true) {
     "--bg-overlay": theme.bgOverlay,
     "--bg-tag": theme.bgTag,
     "--bg-deep-surface": theme.bgDeepSurface,
+    "--bg-tag-pill": theme.bgTagPill,
 
     // Canvas
     "--canvas-dot-color": theme.canvasDotColor,

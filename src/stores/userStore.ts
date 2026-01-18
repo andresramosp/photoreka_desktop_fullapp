@@ -87,7 +87,7 @@ export const useUserStore = defineStore("user", () => {
 
   const login = async (
     email: string,
-    password: string
+    password: string,
   ): Promise<{ success: boolean; error?: string }> => {
     isLoading.value = true;
     // Resetear estado de inicialización al hacer login para forzar recarga completa
@@ -126,7 +126,7 @@ export const useUserStore = defineStore("user", () => {
     email: string,
     password: string,
     name: string,
-    authCode?: string
+    authCode?: string,
   ): Promise<{ success: boolean; error?: string }> => {
     isLoading.value = true;
     // Resetear estado de inicialización al hacer registro para forzar recarga completa
@@ -171,7 +171,7 @@ export const useUserStore = defineStore("user", () => {
 
   const loginWithProvider = async (
     provider: "google" | "facebook",
-    mode: "login" | "register" = "login"
+    mode: "login" | "register" = "login",
   ): Promise<{ success: boolean; error?: string }> => {
     if (provider === "google") {
       // Redirigir al backend que maneja OAuth
@@ -232,7 +232,7 @@ export const useUserStore = defineStore("user", () => {
   };
 
   const updateProfile = async (
-    profileData: any
+    profileData: any,
   ): Promise<{ success: boolean; error?: string }> => {
     if (!isAuthenticated.value || !token.value) {
       return {
@@ -246,7 +246,7 @@ export const useUserStore = defineStore("user", () => {
       const translatedData = { ...profileData };
       if (profileData.profiles && Array.isArray(profileData.profiles)) {
         translatedData.profiles = translateProfilesToUserProfile(
-          profileData.profiles
+          profileData.profiles,
         );
       }
 
@@ -267,7 +267,7 @@ export const useUserStore = defineStore("user", () => {
   };
 
   const confirmEmail = async (
-    token: string
+    token: string,
   ): Promise<{ success: boolean; error?: string }> => {
     try {
       await api.post("/api/auth/confirm-email", { token });
@@ -281,7 +281,7 @@ export const useUserStore = defineStore("user", () => {
   };
 
   const resendConfirmation = async (
-    email: string
+    email: string,
   ): Promise<{ success: boolean; error?: string }> => {
     try {
       await api.post("/api/auth/resend-confirmation", { email });
@@ -297,7 +297,7 @@ export const useUserStore = defineStore("user", () => {
   };
 
   const forgotPassword = async (
-    email: string
+    email: string,
   ): Promise<{ success: boolean; error?: string }> => {
     try {
       await api.post("/api/auth/forgot-password", { email });
@@ -314,7 +314,7 @@ export const useUserStore = defineStore("user", () => {
 
   const resetPassword = async (
     token: string,
-    newPassword: string
+    newPassword: string,
   ): Promise<{ success: boolean; error?: string }> => {
     try {
       await api.post("/api/auth/reset-password", { token, newPassword });
@@ -329,7 +329,7 @@ export const useUserStore = defineStore("user", () => {
 
   const changePassword = async (
     currentPassword: string,
-    newPassword: string
+    newPassword: string,
   ): Promise<{ success: boolean; error?: string }> => {
     if (!isAuthenticated.value || !token.value) {
       return {
@@ -353,7 +353,7 @@ export const useUserStore = defineStore("user", () => {
   };
 
   const processOAuthCallback = async (
-    receivedToken: string
+    receivedToken: string,
   ): Promise<{ success: boolean; error?: string }> => {
     isLoading.value = true;
     // Resetear estado de inicialización al hacer OAuth login para forzar recarga completa
@@ -387,7 +387,7 @@ export const useUserStore = defineStore("user", () => {
   };
 
   const consumeHandoff = async (
-    handoffToken: string
+    handoffToken: string,
   ): Promise<{ success: boolean; error?: string }> => {
     isLoading.value = true;
 
@@ -420,10 +420,6 @@ export const useUserStore = defineStore("user", () => {
       isLoading.value = false;
     }
   };
-
-  // Initialize auth state
-  // Llamar de forma asíncrona para no bloquear la carga
-  initAuth();
 
   return {
     isAuthenticated,

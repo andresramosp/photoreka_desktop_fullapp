@@ -24,7 +24,7 @@ async function createPhoto(
   basePosition = { x: 15, y: 15 },
   fromPhoto = false,
   currentZIndex,
-  index = 0
+  index = 0,
 ) {
   const hasCustomConfig = backendPhoto.config?.x != null;
 
@@ -106,7 +106,7 @@ export const useCanvasStore = defineStore("canvas", {
   actions: {
     updateBasicMode() {
       this.basicMode = this.photos.some(
-        (p) => p.status === "preprocessed" || p.status === "processing"
+        (p) => p.status === "preprocessed" || p.status === "processing",
       );
     },
 
@@ -120,7 +120,7 @@ export const useCanvasStore = defineStore("canvas", {
             undefined,
             fromPhoto,
             this.currentZIndex,
-            index
+            index,
           );
           this.photos.push(createdPhoto);
           addedPhotoIds.push(createdPhoto.id);
@@ -149,7 +149,8 @@ export const useCanvasStore = defineStore("canvas", {
       opposite,
       inverted,
       onCanvas,
-      autoFit = false
+      autoFit = false,
+      filterContext = null,
     ) {
       let basePhoto = basePhotos[0]; // de momento solo un anchor
       try {
@@ -188,6 +189,8 @@ export const useCanvasStore = defineStore("canvas", {
           resultLength,
           tagIds: selectedTags,
           boxesIds: selectedBoxes,
+          // Collection filter
+          collectionId: filterContext?.collectionId || null,
         });
         const backendPhotos = Array.isArray(response.data)
           ? response.data
@@ -201,7 +204,7 @@ export const useCanvasStore = defineStore("canvas", {
                 backendPhoto,
                 basePosition,
                 true,
-                this.currentZIndex
+                this.currentZIndex,
               );
               this.photos.push(createdPhoto);
               addedPhotoIds.push(createdPhoto.id);
@@ -242,7 +245,7 @@ export const useCanvasStore = defineStore("canvas", {
       });
 
       this.photos = this.photos.filter(
-        (p) => !photosToRemove.map((p) => p.id).includes(p.id)
+        (p) => !photosToRemove.map((p) => p.id).includes(p.id),
       );
       this.discardedPhotos = this.discardedPhotos.concat(photosToRemove);
       this.updateBasicMode();
@@ -299,7 +302,7 @@ export const useCanvasStore = defineStore("canvas", {
           minY: Infinity,
           maxX: -Infinity,
           maxY: -Infinity,
-        }
+        },
       );
 
       // Añadir padding adicional
@@ -315,7 +318,7 @@ export const useCanvasStore = defineStore("canvas", {
       const targetZoom = Math.min(
         containerWidth / photosWidth,
         containerHeight / photosHeight,
-        2
+        2,
       );
 
       const targetX =
@@ -358,6 +361,6 @@ export const expansionTypeOptions = [
   { label: "Visual accents", value: "visual_accents", basicOnly: false },
   { label: "Context", value: "context", basicOnly: false },
   { label: "Chromatic", value: "chromatic" },
-  { label: "Tags", value: "tags", basicOnly: false },
+  { label: "Photo tags", value: "tags", basicOnly: false },
   // { label: "Dominant Colors", value: "chromatic_dominant", basicOnly: false },
 ];

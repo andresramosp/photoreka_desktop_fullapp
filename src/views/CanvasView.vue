@@ -34,7 +34,7 @@
               y: selectionRect.y,
               width: selectionRect.width,
               height: selectionRect.height,
-              stroke: secondaryColor,
+              stroke: primaryColor,
               strokeWidth: 2,
               fill: 'rgba(37, 99, 235, 0.1)',
               dash: [5, 3],
@@ -50,7 +50,7 @@
               y: photo.config.y,
               draggable: true,
               zIndex: photo.config.zIndex,
-              opacity: photo.imageBroken ? 0.6 : photo.config.opacity ?? 1,
+              opacity: photo.imageBroken ? 0.6 : (photo.config.opacity ?? 1),
               _isPhoto: true,
             }"
             @dragstart="handleDragStart(photo, $event)"
@@ -207,7 +207,7 @@
                     photo.hovered
                   "
                   :photo="photo"
-                  :fill="secondaryColor"
+                  :fill="primaryColor"
                   icon="+"
                   font-size="30"
                   @click="handleAddPhotoFromPhoto"
@@ -239,6 +239,7 @@
       :is-visible="showRelatedPhotos"
       :is-loading="isLoadingRelatedPhotos"
       :toolbar-state="toolbarState"
+      :filter-context="filterContext"
       @close="hideRelatedPhotos"
       @loading="isLoadingRelatedPhotos = $event"
       @photos-selected="onPhotosSelected"
@@ -336,6 +337,21 @@
 
           <!-- Config Menu Dropdown -->
           <div v-if="showConfigMenu" class="config-dropdown" @click.stop>
+            <!-- Filters Section -->
+            <div v-if="!isPlayground" class="config-section">
+              <h4 class="section-title">Filters</h4>
+              <div class="config-item">
+                <span class="config-label">Collection</span>
+                <n-select
+                  v-model:value="selectedCollectionFilter"
+                  :options="collectionsOptions"
+                  placeholder="All Photos"
+                  size="tiny"
+                  style="width: 185px"
+                />
+              </div>
+            </div>
+
             <!-- Canvas Section -->
             <div class="config-section">
               <h4 class="section-title">Canvas</h4>
@@ -546,7 +562,7 @@
                   </template>
                   <span v-if="canvasModeIsExpanded" class="button-text">{{
                     expansionTypeOptions.find(
-                      (opt) => opt.value == toolbarState.expansion.type
+                      (opt) => opt.value == toolbarState.expansion.type,
                     ).label
                   }}</span>
                   <n-icon v-if="canvasModeIsExpanded" class="dropdown-arrow">
@@ -685,6 +701,7 @@ import {
 import { useCanvasPhoto } from "@/composables/canvas/useCanvasPhoto.js";
 import { usePhotoAnimations } from "@/composables/canvas/usePhotoAnimations";
 import { useCanvasStore, expansionTypeOptions } from "@/stores/canvas.js";
+import { useCollectionsStore } from "@/stores/collections.js";
 // import PhotoDetectionAreas from "@/components/canvas/PhotoControls/PhotoDetectionAreas.vue";
 import {
   AlbumsOutline,
@@ -719,6 +736,7 @@ import {
   NSwitch,
   NInputNumber,
   NTooltip,
+  NSelect,
 } from "naive-ui";
 import { storeToRefs } from "pinia";
 import PhotosDialog from "@/components/PhotosDialog.vue";
@@ -749,6 +767,7 @@ defineOptions({
 
 const canvasStore = useCanvasStore();
 const photosStore = usePhotosStore();
+const collectionsStore = useCollectionsStore();
 const route = useRoute();
 const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
 const {
@@ -886,10 +905,13 @@ const isDropdownOpen = ref(false);
 const showConfigMenu = ref(false);
 const configMenuRef = ref(null);
 
+// Filter state
+const selectedCollectionFilter = ref(null);
+
 // Dropdown options with SVG icons
 
-const secondaryColor = getComputedStyle(document.documentElement)
-  .getPropertyValue("--accent-color")
+const primaryColor = getComputedStyle(document.documentElement)
+  .getPropertyValue("--primary-color")
   .trim();
 
 const {
@@ -942,7 +964,7 @@ watch(
     } else if (expansionMode.value === null) {
       expansionMode.value = "catalog";
     }
-  }
+  },
 );
 
 // Count selected photos
@@ -982,6 +1004,36 @@ const filteredExpansionTypeOptions = computed(() => {
     return { ...opt, disabled: false };
   });
 });
+
+// Collections for filter dropdown
+const collectionsOptions = computed(() => {
+  const collections = collectionsStore.allCollections || [];
+  return [
+    { label: "All Photos", value: null },
+    ...collections.map((col) => ({
+      label: col.name || col.title,
+      value: col.id,
+    })),
+  ];
+});
+
+// Get photo IDs from selected collection for filtering
+const collectionPhotoIds = computed(() => {
+  if (!selectedCollectionFilter.value) return null;
+
+  const collection = collectionsStore.getCollectionById(
+    selectedCollectionFilter.value,
+  );
+  if (!collection || !collection.photos) return [];
+
+  return collection.photos.map((p) => p.id);
+});
+
+// Filter context to pass to expansion components
+const filterContext = computed(() => ({
+  collectionId: selectedCollectionFilter.value,
+  photoIds: collectionPhotoIds.value,
+}));
 
 // Event handlers
 
@@ -1094,7 +1146,9 @@ const handleAddPhotosToCanvas = async (event) => {
       basePosition,
       toolbarState.value.expansion.opposite,
       toolbarState.value.expansion.inverted,
-      true
+      true,
+      false, // autoFit
+      filterContext.value, // Pass filter context
     );
 
     if (
@@ -1108,7 +1162,7 @@ const handleAddPhotosToCanvas = async (event) => {
         position,
         offsetX,
         offsetY,
-        toolbarState.value.photoOptions.spreadMode
+        toolbarState.value.photoOptions.spreadMode,
       );
     } else {
       animatePhotoGroupExplosion(photoRefs, photos, basePosition, position);
@@ -1127,7 +1181,7 @@ const getPhotoStrokeColor = (photo) => {
       ? "rgba(255, 165, 0, 0.8)"
       : "rgba(128, 128, 128, 0.4)";
   if (photo.inTrash) return "rgba(250, 11, 11, 0.5)";
-  if (photo.selected) return secondaryColor;
+  if (photo.selected) return primaryColor;
   if (photo.isNew) return "#22d3ee";
   // if (photo.hovered) return primaryColor;
   return "gray";
@@ -1458,7 +1512,7 @@ const handleTouchEnd = (event) => {
     const touchDuration = Date.now() - event.target._stageTouchStartTime;
     const touchDistance = Math.sqrt(
       Math.pow(touch.clientX - event.target._stageTouchStartPos.x, 2) +
-        Math.pow(touch.clientY - event.target._stageTouchStartPos.y, 2)
+        Math.pow(touch.clientY - event.target._stageTouchStartPos.y, 2),
     );
 
     // Consider it a tap if duration < 300ms and distance < 15px (more responsive for stage)
@@ -1542,7 +1596,7 @@ const handlePhotoTouchEnd = (photo, event) => {
     const touchDuration = Date.now() - photo._touchStartTime;
     const touchDistance = Math.sqrt(
       Math.pow(touch.clientX - photo._touchStartPos.x, 2) +
-        Math.pow(touch.clientY - photo._touchStartPos.y, 2)
+        Math.pow(touch.clientY - photo._touchStartPos.y, 2),
     );
 
     // Consider it a tap if duration < 500ms and distance < 10px
@@ -1654,7 +1708,7 @@ watch(
       }
     });
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 watch(basicMode, (val) => {
@@ -1704,7 +1758,7 @@ watch(
       }
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 onMounted(async () => {
@@ -1735,7 +1789,7 @@ onMounted(async () => {
     canvasContainerEl.addEventListener("touchDrop", (e) => {
       handlePhotoDrop(
         e.detail,
-        relatedPhotosToolbarRef.value.removePhotoFromList
+        relatedPhotosToolbarRef.value.removePhotoFromList,
       );
     });
   }
@@ -1777,7 +1831,7 @@ onMounted(async () => {
       if (photoIds.length > 0) {
         await handleAddPhotos(photoIds);
         console.log(
-          `✅ Added ${photoIds.length} photos from URL to canvas (async)`
+          `✅ Added ${photoIds.length} photos from URL to canvas (async)`,
         );
       }
     },
@@ -1787,7 +1841,7 @@ onMounted(async () => {
   if (photoIdsFromQuery.length > 0) {
     await handleAddPhotos(photoIdsFromQuery);
     console.log(
-      `✅ Added ${photoIdsFromQuery.length} photos from URL to canvas`
+      `✅ Added ${photoIdsFromQuery.length} photos from URL to canvas`,
     );
   }
 
@@ -1803,6 +1857,13 @@ onMounted(async () => {
   const autoSaveInterval = setInterval(() => {
     handleSaveCanvas();
   }, 10000);
+
+  // Fetch collections for filter dropdown (only in non-playground mode)
+  if (!isPlayground.value) {
+    collectionsStore.getOrFetch().catch((err) => {
+      console.error("Failed to load collections for filter:", err);
+    });
+  }
 });
 
 onUnmounted(() => {
@@ -2073,7 +2134,7 @@ onUnmounted(() => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   z-index: 1000;
   margin-top: 8px;
-  min-width: 280px;
+  min-width: 300px;
   animation: slideDown 0.2s ease-out;
 }
 
@@ -2214,7 +2275,10 @@ onUnmounted(() => {
   align-items: center;
   line-height: 90px;
 
-  transition: background-color 0.2s, border-color 0.2s, transform 0.2s ease;
+  transition:
+    background-color 0.2s,
+    border-color 0.2s,
+    transform 0.2s ease;
   transform: rotate(0deg) scale(1);
   align-content: center;
   justify-content: center;
@@ -2225,7 +2289,9 @@ onUnmounted(() => {
   background-color: rgba(255, 0, 0, 0.25);
   border-color: darkred;
   transform: rotate(8deg) scale(1.08);
-  transition: transform 0.2s ease, background-color 0.2s ease,
+  transition:
+    transform 0.2s ease,
+    background-color 0.2s ease,
     border-color 0.2s ease;
 }
 

@@ -32,7 +32,7 @@
           :selected-color="selectedColor"
           :hover-color="hoverColor"
           :default-color="defaultColor"
-          text-color="white"
+          :text-color="textColor"
           :pill-height="pillHeight"
         />
       </div>
@@ -62,6 +62,7 @@ import SelectableTagChip from "../wrappers/SelectableTagChip.vue";
 const props = defineProps({
   baseImage: { type: Object, required: true },
   toolbarState: { type: Object, required: true },
+  filterContext: { type: Object, default: null },
 });
 
 const emit = defineEmits(["photos-generated", "loading"]);
@@ -79,8 +80,14 @@ const filteredExpansionTypeOptions = computed(() => {
   });
 });
 
-const { filteredTags, selectedColor, hoverColor, defaultColor, pillHeight } =
-  useTagDisplay(() => props.baseImage?.tags);
+const {
+  filteredTags,
+  selectedColor,
+  hoverColor,
+  defaultColor,
+  textColor,
+  pillHeight,
+} = useTagDisplay(() => props.baseImage?.tags);
 
 const tagsOverlay = ref(null);
 const pageSize = 100;
@@ -96,7 +103,10 @@ const loadPhotosFromToolbar = async () => {
     100,
     basePosition,
     props.toolbarState.expansion.opposite,
-    props.toolbarState.expansion.inverted
+    props.toolbarState.expansion.inverted,
+    false, // onCanvas
+    false, // autoFit
+    props.filterContext, // filterContext
   );
 
   await nextTick();
@@ -125,7 +135,10 @@ const loadPhotosFromSelections = debounce(async () => {
     100,
     basePosition,
     props.toolbarState.expansion.opposite,
-    props.toolbarState.expansion.inverted
+    props.toolbarState.expansion.inverted,
+    false, // onCanvas
+    false, // autoFit
+    props.filterContext, // filterContext
   );
 
   await nextTick();
@@ -167,7 +180,7 @@ watch(
       loadPhotosFromSelections();
     }
   },
-  { deep: true }
+  { deep: true },
 );
 
 watch(
@@ -179,7 +192,7 @@ watch(
     if (!photo || skip) return;
     await loadPhotosFromToolbar();
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 watch(
@@ -197,7 +210,7 @@ watch(
     } else {
       loadPhotosFromToolbar();
     }
-  }
+  },
 );
 
 watch(
@@ -206,7 +219,7 @@ watch(
     if (newCriteria === "tags" || newCriteria === "composition") {
       emit("photos-generated", []);
     }
-  }
+  },
 );
 
 function resetAllTags() {
