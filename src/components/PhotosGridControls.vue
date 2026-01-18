@@ -541,7 +541,7 @@ const availableCriteria = Object.entries(artisticScores).map(
       label: criterion.label,
       group: groupKey, // Add group information for styling
     })),
-  })
+  }),
 );
 
 // Helper function to get group for a criterion
@@ -592,7 +592,7 @@ const renderCriterionTag = ({ option, handleClose }) => {
     },
     {
       default: () => option.label,
-    }
+    },
   );
 };
 
@@ -611,7 +611,7 @@ visualAspectsOptions.forEach((group) => {
 // Computed for checking if there are active filters
 const hasActiveFilters = computed(() => {
   return Object.values(selectedFilters.value).some(
-    (filters) => filters.length > 0
+    (filters) => filters.length > 0,
   );
 });
 
@@ -619,7 +619,7 @@ const hasActiveFilters = computed(() => {
 const totalActiveFilters = computed(() => {
   return Object.values(selectedFilters.value).reduce(
     (total, filters) => total + filters.length,
-    0
+    0,
   );
 });
 
@@ -723,7 +723,7 @@ watch(
   (newValue) => {
     emit("sorting-type-change", newValue);
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 watch(
@@ -731,7 +731,7 @@ watch(
   (newValue) => {
     emit("sort-order-change", newValue);
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 watch(
@@ -739,7 +739,7 @@ watch(
   (newGenre) => {
     emit("genre-change", newGenre);
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 // Combined watcher for overall sorting state
@@ -748,7 +748,7 @@ watch(
   () => {
     emit("sorting-change", hasActiveSorting.value);
   },
-  { immediate: true }
+  { immediate: true },
 ); // Emitir inmediatamente al montar
 
 // Emitir estado inicial de filtros y criterios
@@ -757,7 +757,7 @@ watch(
   (newFilters) => {
     emit("filters-change", newFilters);
   },
-  { immediate: true, deep: true }
+  { immediate: true, deep: true },
 );
 
 watch(
@@ -765,7 +765,7 @@ watch(
   (newCriteria) => {
     emit("criteria-change", newCriteria);
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 // Watch for basic sort activation to deactivate scores sorting
@@ -777,7 +777,7 @@ watch(
       sortingType.value = "none";
       selectedCriteria.value = [];
     }
-  }
+  },
 );
 </script>
 
@@ -786,7 +786,6 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 16px;
 }
 
 /* Filters Section */
