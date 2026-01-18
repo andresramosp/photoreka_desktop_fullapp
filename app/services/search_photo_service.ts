@@ -27,6 +27,7 @@ export type SearchByPhotoOptions = {
   opposite: boolean
   inverted: boolean
   resultLength: number
+  collectionId?: number
 }
 
 export default class SearchPhotoService {
@@ -41,7 +42,18 @@ export default class SearchPhotoService {
   ): Promise<(Photo & { score: number; labelScore: string })[]> {
     if (!query.anchorIds?.length) return []
 
-    const userPhotoIds = await this.photoManager.getPhotosIdsForSearch(userId)
+    let userPhotoIds = await this.photoManager.getPhotosIdsForSearch(userId)
+
+    if (query.collectionId) {
+      const collectionPhotos = await Photo.query()
+        .whereHas('collections', (q) => {
+          q.where('collection_id', query.collectionId)
+        })
+        .where('user_id', userId)
+        .select('id')
+      const collectionPhotoIds = collectionPhotos.map((p) => p.id)
+      userPhotoIds = userPhotoIds.filter((id) => collectionPhotoIds.includes(id))
+    }
 
     const anchors = await this.photoManager.getPhotosByIds(query.anchorIds)
     if (!anchors.length) return []
