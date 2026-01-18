@@ -166,20 +166,14 @@
           <p class="action-description">Search your photos</p>
         </div>
 
-        <!-- New Canvas Card - Hidden on mobile -->
+        <!-- Canvas Card with Preview - Hidden on mobile -->
         <div
           v-if="!isMobileLimitedMode"
-          class="action-card new-project"
+          class="action-card"
           :class="{ disabled: appAccessMode === 'blocked' }"
           @click="goToCanvas"
         >
-          <div class="action-icon">
-            <n-icon size="32">
-              <Workspace />
-            </n-icon>
-          </div>
-          <h3 class="action-title">Canvas</h3>
-          <p class="action-description">Continue your work in Canvas</p>
+          <CanvasPreview :canvas-data="canvasData" />
         </div>
 
         <!-- <div
@@ -374,6 +368,7 @@ import { useUserStore } from "@/stores/userStore.js";
 import { api } from "@/utils/axios.js"; // Needed for photo insight API call
 import { useMessage } from "naive-ui";
 import MobileWelcomeBanner from "@/components/MobileWelcomeBanner.vue";
+import CanvasPreview from "@/components/CanvasPreview.vue";
 import { useMobileWelcome } from "@/composables/useMobileWelcome";
 
 // Import @vicons icons from ionicons5 for reliability
@@ -449,6 +444,9 @@ const isHoveringInsight = ref(false);
 const currentInsightIndex = ref(0);
 // Configurable insight fetch limit per day (via VITE_INSIGHT_FETCH_LIMIT), default to 1
 const insightFetchLimit = 1;
+
+// Canvas data from localStorage
+const canvasData = ref<any>(null);
 
 const appAccessMode = computed(() => photosStore.appAccessMode);
 
@@ -644,6 +642,23 @@ const formatDate = (date: Date) => {
     return `${Math.floor(diffDays / 30)} months ago`;
   }
 };
+
+// Load canvas data from localStorage
+const loadCanvasData = () => {
+  try {
+    const savedCanvas = localStorage.getItem("photoreka_canvas_data");
+    if (savedCanvas) {
+      canvasData.value = JSON.parse(savedCanvas);
+    }
+  } catch (error) {
+    console.error("Error loading canvas data:", error);
+  }
+};
+
+// Load canvas on mount
+onMounted(() => {
+  loadCanvasData();
+});
 </script>
 
 <style scoped>
@@ -745,8 +760,8 @@ const formatDate = (date: Date) => {
   cursor: pointer;
   padding: var(--spacing-2xl);
   text-align: center;
-  height: 160px;
-  min-height: 160px;
+  height: 180px;
+  min-height: 180px;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -795,6 +810,15 @@ const formatDate = (date: Date) => {
 
 .portfolio-report .action-icon {
   color: var(--info-color);
+}
+
+/* Canvas Card Styles */
+.canvas-card {
+  position: relative;
+  padding: 0;
+  overflow: hidden;
+  height: 160px;
+  min-height: 160px;
 }
 
 /* Did you know card styles */
