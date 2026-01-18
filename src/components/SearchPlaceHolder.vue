@@ -52,6 +52,8 @@ import {
   LocateOutline,
   BulbOutline,
   ListOutline,
+  SearchOutline,
+  GlobeOutline,
 } from "@vicons/ionicons5";
 import { useQueryExamples } from "@/composables/useQueryExamples";
 
@@ -73,7 +75,7 @@ const props = defineProps({
 // Configuración de contenido por searchMode
 const searchModeConfig = {
   broad: {
-    title: "Fast Search",
+    title: "Broad Mode",
     description:
       "A fast, lightweight search that scans broadly across your library. Ideal for quick exploration and high-level discovery.",
     instructions: [
@@ -89,7 +91,7 @@ const searchModeConfig = {
   },
 
   adaptive: {
-    title: "Adaptive Search",
+    title: "Adaptive Mode",
     description:
       "A flexible, context-aware search that adapts to meaning. It reveals subtle connections and indirect similarities.",
     instructions: [
@@ -105,7 +107,7 @@ const searchModeConfig = {
   },
 
   precise: {
-    title: "Precise Search",
+    title: "Precise Mode",
     description:
       "A focused and analytical search designed for accuracy. Returns results closely aligned with your exact intent.",
     instructions: [
@@ -141,7 +143,7 @@ const iconComponents = {
 
 // Mapeo de searchMode a iconos principales
 const searchModeIcons = {
-  broad: FlashOutline,
+  broad: GlobeOutline,
   adaptive: GitBranchOutline,
   precise: LocateOutline,
 };
@@ -151,10 +153,7 @@ const currentModeIcon = computed(() => {
   return searchModeIcons[props.searchMode] || FlashOutline;
 });
 
-const {
-  currentText,
-  isSliding,
-} = useQueryExamples(
+const { currentText, isSliding } = useQueryExamples(
   toRef(props, "searchType"),
   toRef(props, "searchMode"),
 );
@@ -162,7 +161,6 @@ const {
 function handleExampleClick() {
   props.onExampleClick(currentText.value, props.searchType);
 }
-
 </script>
 
 <style scoped>

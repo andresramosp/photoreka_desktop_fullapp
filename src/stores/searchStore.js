@@ -151,63 +151,77 @@ export const useSearchStore = defineStore("search", () => {
   // Artistic scores filter state
   const selectedArtisticScores = ref([]);
 
-  // Estado específico para cada tipo de búsqueda
+  // Helper function to create empty mode state with query fields
+  const createModeState = () => ({
+    // Semantic search
+    query: "",
+    // Tags search
+    includedTags: [],
+    excludedTags: [],
+    // Topological search
+    left: "",
+    center: "",
+    right: "",
+    // Pagination
+    iterationsRecord: {},
+    iteration: 1,
+    hasMoreIterations: false,
+    maxPageAttempts: false,
+    hasSearched: false,
+    lastCursor: null, // ID of last photo for cursor-based pagination
+  });
+
+  // Estado específico para cada tipo de búsqueda con modos independientes
   const searchStates = reactive({
     semantic: {
-      query: "",
-      results: [],
-      iterationsRecord: {},
-      iteration: 1,
-      hasMoreIterations: false,
-      maxPageAttempts: false,
-      hasSearched: false,
-      lastCursor: null, // ID of last photo for cursor-based pagination
+      modes: {
+        broad: createModeState(),
+        adaptive: createModeState(),
+        precise: createModeState(),
+      },
     },
     tags: {
-      includedTags: [],
-      excludedTags: [],
-      results: [],
-      iterationsRecord: {},
-      iteration: 1,
-      hasMoreIterations: false,
-      maxPageAttempts: false,
-      hasSearched: false,
-      lastCursor: null, // ID of last photo for cursor-based pagination
+      modes: {
+        broad: createModeState(),
+        adaptive: createModeState(),
+        precise: createModeState(),
+      },
     },
     topological: {
-      left: "",
-      center: "",
-      right: "",
-      results: [],
-      iterationsRecord: {},
-      iteration: 1,
-      hasMoreIterations: false,
-      maxPageAttempts: false,
-      hasSearched: false,
-      lastCursor: null, // ID of last photo for cursor-based pagination
+      modes: {
+        broad: createModeState(),
+        adaptive: createModeState(),
+        precise: createModeState(),
+      },
     },
   });
 
-  // Computed para el estado actual
+  // Computed para el estado actual (incluye el modo actual)
   const currentSearchState = computed(
-    () => searchStates[activeSearchType.value]
+    () => searchStates[activeSearchType.value].modes[searchMode.value],
   );
 
   // Computed para verificar si hay query
   const hasSearchQuery = computed(() => {
-    const state = currentSearchState.value;
+    const modeState = currentSearchState.value;
+
+    if (!modeState) return false;
 
     switch (activeSearchType.value) {
       case "semantic":
-        return state.query.trim().length > 0;
+        return (modeState.query || "").trim().length > 0;
       case "tags":
-        return state.includedTags.length > 0 || state.excludedTags.length > 0;
+        return (
+          modeState.includedTags.length > 0 || modeState.excludedTags.length > 0
+        );
       case "topological":
         return (
-          state.left.trim().length > 0 ||
-          state.center.trim().length > 0 ||
-          state.right.trim().length > 0
+          (modeState.left || "").trim().length > 0 ||
+          (modeState.center || "").trim().length > 0 ||
+          (modeState.right || "").trim().length > 0
         );
+      default:
+        return false;
     }
   });
 
@@ -259,22 +273,35 @@ export const useSearchStore = defineStore("search", () => {
   }
 
   function setSearchMode(mode) {
+    const previousMode = searchMode.value;
     searchMode.value = mode;
+
+    // Si el modo cambió, no resetear nada - cada modo mantiene su propio estado
+    // El cambio de modo simplemente cambia qué resultados se muestran
   }
 
   function updateSemanticQuery(query) {
-    searchStates.semantic.query = query;
+    const modeState = currentSearchState.value;
+    if (modeState) {
+      modeState.query = query;
+    }
   }
 
   function updateTagsSearch(included, excluded) {
-    searchStates.tags.includedTags = included;
-    searchStates.tags.excludedTags = excluded;
+    const modeState = currentSearchState.value;
+    if (modeState) {
+      modeState.includedTags = included;
+      modeState.excludedTags = excluded;
+    }
   }
 
   function updateTopologicalSearch(left, center, right) {
-    searchStates.topological.left = left;
-    searchStates.topological.center = center;
-    searchStates.topological.right = right;
+    const modeState = currentSearchState.value;
+    if (modeState) {
+      modeState.left = left;
+      modeState.center = center;
+      modeState.right = right;
+    }
   }
 
   function updateVisualAspects(visualAspects) {
@@ -294,21 +321,23 @@ export const useSearchStore = defineStore("search", () => {
   }
 
   function clearCurrentSearch() {
-    const state = currentSearchState.value;
+    const modeState = currentSearchState.value;
 
-    // Limpiar solo el tipo de búsqueda actual
+    if (!modeState) return;
+
+    // Limpiar solo el modo actual del tipo de búsqueda actual
     switch (activeSearchType.value) {
       case "semantic":
-        state.query = "";
+        modeState.query = "";
         break;
       case "tags":
-        state.includedTags = [];
-        state.excludedTags = [];
+        modeState.includedTags = [];
+        modeState.excludedTags = [];
         break;
       case "topological":
-        state.left = "";
-        state.center = "";
-        state.right = "";
+        modeState.left = "";
+        modeState.center = "";
+        modeState.right = "";
         break;
     }
 
@@ -318,35 +347,39 @@ export const useSearchStore = defineStore("search", () => {
     // Limpiar artistic scores
     selectedArtisticScores.value = [];
 
-    // Limpiar resultados y estado de paginación
-    state.results = [];
-    state.iterationsRecord = {};
-    state.iteration = 1;
-    state.hasMoreIterations = false;
-    state.maxPageAttempts = false;
-    state.hasSearched = false;
+    // Limpiar resultados y estado de paginación solo del modo actual
+    modeState.iterationsRecord = {};
+    modeState.iteration = 1;
+    modeState.hasMoreIterations = false;
+    modeState.maxPageAttempts = false;
+    modeState.hasSearched = false;
+    modeState.lastCursor = null;
   }
 
   function clearAllSearches() {
     Object.keys(searchStates).forEach((type) => {
-      const state = searchStates[type];
+      const typeState = searchStates[type];
       if (type === "semantic") {
-        state.query = "";
+        typeState.query = "";
       } else if (type === "tags") {
-        state.includedTags = [];
-        state.excludedTags = [];
+        typeState.includedTags = [];
+        typeState.excludedTags = [];
       } else if (type === "topological") {
-        state.left = "";
-        state.center = "";
-        state.right = "";
+        typeState.left = "";
+        typeState.center = "";
+        typeState.right = "";
       }
 
-      state.results = [];
-      state.iterationsRecord = {};
-      state.iteration = 1;
-      state.hasMoreIterations = false;
-      state.maxPageAttempts = false;
-      state.hasSearched = false;
+      // Limpiar todos los modos
+      Object.keys(typeState.modes).forEach((mode) => {
+        const modeState = typeState.modes[mode];
+        modeState.iterationsRecord = {};
+        modeState.iteration = 1;
+        modeState.hasMoreIterations = false;
+        modeState.maxPageAttempts = false;
+        modeState.hasSearched = false;
+        modeState.lastCursor = null;
+      });
     });
 
     // Limpiar visual aspects

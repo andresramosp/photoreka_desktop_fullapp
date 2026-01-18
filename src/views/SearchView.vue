@@ -90,9 +90,9 @@
                   "
                 >
                   <n-icon size="16" class="mode-icon">
-                    <FlashOutline />
+                    <GlobeOutline />
                   </n-icon>
-                  Fast
+                  Broad
                 </div>
               </template>
               Shallow and wide search for faster results
@@ -884,23 +884,15 @@ import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
 // Composable de tags y ejemplos
 import { useSearchTags } from "@/composables/useSearchTags";
 import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection";
-import { useQueryExamples } from "@/composables/useQueryExamples";
-import queryExamples from "@/assets/query_examples.json";
+
 import {
   DocumentOutline,
-  MapOutline,
-  PencilOutline,
-  AlbumsOutline,
-  CloudDownloadOutline,
-  RadioButtonOnOutline,
   SparklesOutline,
   GlobeOutline,
   LocateOutline,
-  FlashOutline,
   GitBranchOutline,
 } from "@vicons/ionicons5";
-import { CheckOutlined, InfoCircleFilled, TagOutlined } from "@vicons/antd";
-import { MagicWand } from "@vicons/carbon";
+import { InfoCircleFilled, TagOutlined } from "@vicons/antd";
 import { usePhotosStore } from "@/stores/photos";
 import { useCanvasStore } from "@/stores/canvas.js";
 import { useUserStore } from "@/stores/userStore";
@@ -1019,33 +1011,33 @@ const shouldShowTryAdaptive = computed(() => {
 
 // Computed para acceder a los valores específicos de cada tipo de búsqueda
 const semanticQuery = computed({
-  get: () => searchStore.searchStates.semantic.query,
+  get: () => searchStore.currentSearchState.query || "",
   set: (value) => searchStore.updateSemanticQuery(value),
 });
 
 const includedTags = computed({
-  get: () => searchStore.searchStates.tags.includedTags,
+  get: () => searchStore.currentSearchState.includedTags || [],
   set: (value) =>
     searchStore.updateTagsSearch(
       value,
-      searchStore.searchStates.tags.excludedTags,
+      searchStore.currentSearchState.excludedTags || [],
     ),
 });
 
 const excludedTags = computed({
-  get: () => searchStore.searchStates.tags.excludedTags,
+  get: () => searchStore.currentSearchState.excludedTags || [],
   set: (value) =>
     searchStore.updateTagsSearch(
-      searchStore.searchStates.tags.includedTags,
+      searchStore.currentSearchState.includedTags || [],
       value,
     ),
 });
 
 const topological = computed({
   get: () => ({
-    left: searchStore.searchStates.topological.left,
-    center: searchStore.searchStates.topological.center,
-    right: searchStore.searchStates.topological.right,
+    left: searchStore.currentSearchState.left || "",
+    center: searchStore.currentSearchState.center || "",
+    right: searchStore.currentSearchState.right || "",
   }),
   set: (value) =>
     searchStore.updateTopologicalSearch(value.left, value.center, value.right),
@@ -1415,7 +1407,6 @@ function handleSearchExampleClick(exampleText, searchType) {
 }
 
 // Ya no usamos useQueryExamples aquí, lo usa SearchPlaceHolder internamente
-
 
 // Función para manejar cambios en los inputs de búsqueda
 function onSearchChange(value) {
