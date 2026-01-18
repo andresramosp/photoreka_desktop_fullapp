@@ -2,6 +2,12 @@ import { defineStore } from "pinia";
 import { ref, reactive, computed } from "vue";
 import { useArtisticScores } from "@/composables/useArtisticScores";
 
+// ===== CONFIGURACIÓN DE ESTADO =====
+// Cambiar a true para usar un estado compartido único (grid y queries compartidos)
+// Cambiar a false para usar estados separados por type+mode
+const USE_SHARED_STATE = true;
+// ===================================
+
 // Export visualAspectsOptions for reuse in other components
 
 export const visualAspectsOptions = [
@@ -171,6 +177,9 @@ export const useSearchStore = defineStore("search", () => {
     lastCursor: null, // ID of last photo for cursor-based pagination
   });
 
+  // Estado compartido único (cuando USE_SHARED_STATE = true)
+  const sharedState = reactive(createModeState());
+
   // Estado específico para cada tipo de búsqueda con modos independientes
   const searchStates = reactive({
     semantic: {
@@ -197,9 +206,12 @@ export const useSearchStore = defineStore("search", () => {
   });
 
   // Computed para el estado actual (incluye el modo actual)
-  const currentSearchState = computed(
-    () => searchStates[activeSearchType.value].modes[searchMode.value],
-  );
+  const currentSearchState = computed(() => {
+    if (USE_SHARED_STATE) {
+      return sharedState;
+    }
+    return searchStates[activeSearchType.value].modes[searchMode.value];
+  });
 
   // Computed para verificar si hay query
   const hasSearchQuery = computed(() => {
@@ -325,20 +337,31 @@ export const useSearchStore = defineStore("search", () => {
 
     if (!modeState) return;
 
-    // Limpiar solo el modo actual del tipo de búsqueda actual
-    switch (activeSearchType.value) {
-      case "semantic":
-        modeState.query = "";
-        break;
-      case "tags":
-        modeState.includedTags = [];
-        modeState.excludedTags = [];
-        break;
-      case "topological":
-        modeState.left = "";
-        modeState.center = "";
-        modeState.right = "";
-        break;
+    // En modo compartido, limpiamos TODAS las queries de todos los tipos
+    // En modo separado, solo limpiamos el modo actual del tipo actual
+    if (USE_SHARED_STATE) {
+      modeState.query = "";
+      modeState.includedTags = [];
+      modeState.excludedTags = [];
+      modeState.left = "";
+      modeState.center = "";
+      modeState.right = "";
+    } else {
+      // Limpiar solo el modo actual del tipo de búsqueda actual
+      switch (activeSearchType.value) {
+        case "semantic":
+          modeState.query = "";
+          break;
+        case "tags":
+          modeState.includedTags = [];
+          modeState.excludedTags = [];
+          break;
+        case "topological":
+          modeState.left = "";
+          modeState.center = "";
+          modeState.right = "";
+          break;
+      }
     }
 
     // Limpiar visual aspects
@@ -357,30 +380,47 @@ export const useSearchStore = defineStore("search", () => {
   }
 
   function clearAllSearches() {
-    Object.keys(searchStates).forEach((type) => {
-      const typeState = searchStates[type];
-      if (type === "semantic") {
-        typeState.query = "";
-      } else if (type === "tags") {
-        typeState.includedTags = [];
-        typeState.excludedTags = [];
-      } else if (type === "topological") {
-        typeState.left = "";
-        typeState.center = "";
-        typeState.right = "";
-      }
+    if (USE_SHARED_STATE) {
+      // En modo compartido, solo limpiamos el estado compartido
+      sharedState.query = "";
+      sharedState.includedTags = [];
+      sharedState.excludedTags = [];
+      sharedState.left = "";
+      sharedState.center = "";
+      sharedState.right = "";
+      sharedState.iterationsRecord = {};
+      sharedState.iteration = 1;
+      sharedState.hasMoreIterations = false;
+      sharedState.maxPageAttempts = false;
+      sharedState.hasSearched = false;
+      sharedState.lastCursor = null;
+    } else {
+      // En modo separado, limpiamos todos los tipos y modos
+      Object.keys(searchStates).forEach((type) => {
+        const typeState = searchStates[type];
+        if (type === "semantic") {
+          typeState.query = "";
+        } else if (type === "tags") {
+          typeState.includedTags = [];
+          typeState.excludedTags = [];
+        } else if (type === "topological") {
+          typeState.left = "";
+          typeState.center = "";
+          typeState.right = "";
+        }
 
-      // Limpiar todos los modos
-      Object.keys(typeState.modes).forEach((mode) => {
-        const modeState = typeState.modes[mode];
-        modeState.iterationsRecord = {};
-        modeState.iteration = 1;
-        modeState.hasMoreIterations = false;
-        modeState.maxPageAttempts = false;
-        modeState.hasSearched = false;
-        modeState.lastCursor = null;
+        // Limpiar todos los modos
+        Object.keys(typeState.modes).forEach((mode) => {
+          const modeState = typeState.modes[mode];
+          modeState.iterationsRecord = {};
+          modeState.iteration = 1;
+          modeState.hasMoreIterations = false;
+          modeState.maxPageAttempts = false;
+          modeState.hasSearched = false;
+          modeState.lastCursor = null;
+        });
       });
-    });
+    }
 
     // Limpiar visual aspects
     selectedVisualAspects.value = [];
