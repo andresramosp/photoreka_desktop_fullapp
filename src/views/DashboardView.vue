@@ -146,7 +146,7 @@
               <PhotoHubIcon />
             </n-icon>
           </div>
-          <h3 class="action-title">Catalog</h3>
+          <h3 class="action-title">Workspace</h3>
           <p class="action-description">Browse your photo catalog</p>
         </div>
 
@@ -256,7 +256,7 @@
               <div
                 v-for="index in Math.max(
                   0,
-                  3 - (collection.photos || []).length
+                  3 - (collection.photos || []).length,
                 )"
                 :key="`placeholder-${index}`"
                 class="photo-item"
@@ -335,7 +335,7 @@
               <div
                 v-for="index in Math.max(
                   0,
-                  3 - (seriesItem.photos || []).length
+                  3 - (seriesItem.photos || []).length,
                 )"
                 :key="`placeholder-${index}`"
                 class="photo-item"
@@ -413,7 +413,7 @@ const collections = computed(() => {
     .slice()
     .sort(
       (a: { updatedAt: string }, b: { updatedAt: string }) =>
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
     )
     .slice(0, 4);
 });
@@ -426,7 +426,7 @@ const series = computed(() => {
     .slice()
     .sort(
       (a: { updatedAt: string }, b: { updatedAt: string }) =>
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
     )
     .slice(0, 4);
 });
@@ -484,7 +484,7 @@ const fetchPhotoInsight = async () => {
     const today = new Date().toDateString();
     const lastFetchDate = localStorage.getItem("photoInsightLastFetch");
     let fetchCount = Number(
-      localStorage.getItem("photoInsightFetchCount") || 0
+      localStorage.getItem("photoInsightFetchCount") || 0,
     );
     // Reset count if a new day
     if (lastFetchDate !== today) {
@@ -504,7 +504,7 @@ const fetchPhotoInsight = async () => {
     }
     isLoadingInsight.value = true;
     const { data } = await api.get(
-      `/api/catalog/photoInsight/${randomPhoto.id}`
+      `/api/catalog/photoInsight/${randomPhoto.id}`,
     );
 
     // Transform the new response format to match expected structure
@@ -530,7 +530,7 @@ const fetchPhotoInsight = async () => {
     // Cache data, update date and increment count
     localStorage.setItem(
       "photoInsightData",
-      JSON.stringify(photoInsight.value)
+      JSON.stringify(photoInsight.value),
     );
     localStorage.setItem("photoInsightLastFetch", today);
     localStorage.setItem("photoInsightFetchCount", String(fetchCount + 1));
@@ -557,7 +557,7 @@ watch(
       loadSeries();
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 const nextInsight = () => {

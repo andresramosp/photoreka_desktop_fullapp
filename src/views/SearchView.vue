@@ -1547,7 +1547,7 @@ const filterSummaryText = computed(() => {
   background-color: var(--bg-container);
   border: 1px solid var(--border-color);
   border-radius: 16px;
-  padding: 24px;
+  padding: 12px 24px;
   position: sticky;
   top: 0;
   z-index: 10;

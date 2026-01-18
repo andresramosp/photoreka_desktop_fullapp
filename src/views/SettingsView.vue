@@ -8,7 +8,7 @@
         </p>
       </div>
 
-      <div class="settings-content">
+      <div class="settings-grid">
         <!-- User Section -->
         <section class="settings-section">
           <div class="section-header">
@@ -349,7 +349,7 @@ const disconnectGooglePhotos = () => {
 const photosUsage = computed(() => userStore.user?.usage?.photosUsage || 0);
 const photosLimit = computed(() => userStore.user?.usage?.photosLimit || 0);
 const photosRemaining = computed(
-  () => userStore.user?.usage?.photosRemaining || 0
+  () => userStore.user?.usage?.photosRemaining || 0,
 );
 const uploadPercentage = computed(() => {
   if (photosLimit.value === 0) return 0;
@@ -369,7 +369,7 @@ const saveSettings = () => {
 }
 
 .settings-container {
-  max-width: 800px;
+  max-width: 1200px;
   margin: 0 auto;
 }
 
@@ -741,6 +741,18 @@ const saveSettings = () => {
 
   .section-content {
     padding: var(--spacing-md);
+  }
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-xl);
+}
+
+@media (max-width: 1024px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

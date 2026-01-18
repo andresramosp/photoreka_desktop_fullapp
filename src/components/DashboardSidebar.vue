@@ -278,6 +278,13 @@ const thirdSectionToolsOptions = computed(() => {
         props: isBlocked ? { title: "Add photos to your catalog" } : {},
         icon: () => h(NIcon, null, { default: () => h(SearchIcon) }),
       },
+      {
+        label: "Framer",
+        key: "framer",
+        disabled: isBlocked,
+        props: isBlocked ? { title: "Add photos to your catalog" } : {},
+        icon: () => h(NIcon, null, { default: () => h(FramerIcon) }),
+      },
     ];
   }
 
@@ -323,9 +330,6 @@ const thirdSectionToolsOptions = computed(() => {
 // Fourth section: Settings, Help (always enabled)
 // On mobile, hide Settings and Help from sidebar
 const fourthSectionOptions = computed<MenuOption[]>(() => {
-  if (isMobileLimitedMode.value) {
-    return [];
-  }
   return [
     {
       label: "Settings",
