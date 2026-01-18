@@ -95,7 +95,7 @@
                   Broad
                 </div>
               </template>
-              Shallow and wide search for faster results
+              Fast, broad search focused on overall visual aspects.
             </n-tooltip>
 
             <n-tooltip trigger="hover" placement="top">
