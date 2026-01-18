@@ -83,7 +83,7 @@ const SEARCH_MODE_CONFIGURATION: Record<SearchMode, SearchModeConfig> = {
     tagsThreshold: 0.17,
     descSegmentThreshold: 0.17,
     descFullQueryThreshold: 0.3,
-    notesThreshold: 0.45,
+    notesThreshold: 0.55,
     imageThreshold: 0.3,
     refineMode: 'entailment',
     nuancesThreshold: null,
