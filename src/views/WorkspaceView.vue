@@ -16,40 +16,51 @@
     </div>
 
     <!-- Content Section -->
-
-    <!-- Empty State (when no photos) -->
-    <div v-if="processedPhotos.length == 0" class="empty-state-section">
-      <div class="empty-state-container">
-        <div class="empty-state-content">
-          <div class="empty-state-icon">
-            <n-icon size="48" color="var(--primary-color)">
-              <LayersOutline />
-            </n-icon>
-          </div>
-          <h3 class="empty-state-title">Your workspace is empty</h3>
-          <p class="empty-state-subtitle">
-            Start by uploading and processing your photos.
-          </p>
-          <div class="empty-state-steps">
-            <div class="step-item">
-              1. Go to
-              <button class="tab-link" @click="navigateToSyncArea">
-                Sync Area
-              </button>
+    <div
+      v-if="processedPhotos.length == 0"
+      class="workspace-content content-container"
+    >
+      <!-- Empty State (when no photos) -->
+      <div v-if="processedPhotos.length == 0" class="empty-state-section">
+        <div class="empty-state-container">
+          <div class="empty-state-content">
+            <div class="empty-state-icon">
+              <n-icon size="48" color="var(--primary-color)">
+                <LayersOutline />
+              </n-icon>
             </div>
-            <div class="step-item">
-              2. Upload or sync your photos from any platform
-            </div>
-            <div class="step-item">
-              3. Click Analyze Photos and follow the process evolution in the
-              Analyses tab
+            <h3 class="empty-state-title">Your workspace is empty</h3>
+            <p class="empty-state-subtitle">
+              Start by uploading and processing your photos.
+            </p>
+            <div class="empty-state-steps">
+              <div class="step-item">
+                1. Go to
+                <button class="tab-link" @click="navigateToSyncArea">
+                  Sync Area
+                </button>
+              </div>
+              <div class="step-item">
+                2. Upload or sync your photos from any platform
+              </div>
+              <div class="step-item">
+                3. Click Analyze Photos and follow the process evolution in the
+                Analyses tab
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      <!-- Catalog with Photos -->
+      <div v-else class="catalog-section">
+        <div class="catalog-photos">
+          <!-- Photos Grid Component -->
+          <PhotosGrid :photos="processedPhotos" />
+        </div>
+      </div>
     </div>
 
-    <!-- Catalog with Photos -->
     <div v-else class="catalog-section">
       <div class="catalog-photos">
         <!-- Photos Grid Component -->
