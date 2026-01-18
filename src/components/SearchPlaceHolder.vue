@@ -85,7 +85,7 @@ const searchModeConfig = {
       },
       {
         icon: "ImagesOutline",
-        text: "Best for general themes, moods, and overall visual similarity.",
+        text: "Best for moods, geometry, compositional aspects, and overall visual style.",
       },
     ],
   },
@@ -117,7 +117,7 @@ const searchModeConfig = {
       },
       {
         icon: "ListOutline",
-        text: "Best for concrete objects, specific attributes, and fine visual details.",
+        text: "Best for concrete objects, specific attributes, and more precise taxonomic distinctions.",
       },
     ],
   },
