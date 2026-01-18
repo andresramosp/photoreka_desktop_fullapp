@@ -129,7 +129,7 @@ watch(
     console.log(`Preprocessed photos changed: ${oldCount} → ${newCount}`);
     console.log(`Progress: ${photosStore.processButtonProgress}%`);
     console.log(`Button state: ${photosStore.processButtonState}`);
-  }
+  },
 );
 
 // Debug the computed values too
@@ -137,14 +137,14 @@ watch(
   () => processButtonProgress.value,
   (newVal) => {
     console.log(`processButtonProgress computed changed: ${newVal}`);
-  }
+  },
 );
 
 watch(
   () => processButtonState.value,
   (newVal) => {
     console.log(`processButtonState computed changed: ${newVal}`);
-  }
+  },
 );
 
 const handleProcessButtonClick = () => {
@@ -182,7 +182,7 @@ async function analyze(ev) {
     setActiveTab("processing");
     message.success(
       `The analysis of your photos has begun! You can close this window in the meantime.`,
-      { duration: 5000 }
+      { duration: 5000 },
     );
     await api_analyzer.post(`/api/analyzer`, {
       packageId: "process",
@@ -227,7 +227,7 @@ onMounted(() => {
         emailConfirmationMessageId.value = null;
       }
     },
-    { immediate: true }
+    { immediate: true },
   );
 });
 </script>
@@ -508,7 +508,6 @@ onMounted(() => {
 
 .empty-state-content {
   text-align: center;
-  max-width: 400px;
 }
 
 .empty-state-title {
