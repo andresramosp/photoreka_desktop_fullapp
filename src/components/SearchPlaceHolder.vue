@@ -85,7 +85,7 @@ const searchModeConfig = {
       },
       {
         icon: "ImagesOutline",
-        text: "Best for moods, geometry, compositional aspects, and overall visual style.",
+        text: "Best for moods, compositional aspects, and overall visual style.",
       },
     ],
   },
