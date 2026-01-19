@@ -151,10 +151,10 @@
               </n-button>
             </div>
           </div>
-          <p class="detail-meta">
+          <!-- <p class="detail-meta">
             {{ (viewingCollection.photos || []).length }} photos • Updated
             {{ formatDate(viewingCollection.updatedAt) }}
-          </p>
+          </p> -->
         </div>
       </div>
 
@@ -234,7 +234,7 @@
               <div
                 v-for="index in Math.max(
                   0,
-                  3 - (collection.photos || []).length
+                  3 - (collection.photos || []).length,
                 )"
                 :key="`placeholder-${index}`"
                 class="photo-item"
@@ -465,12 +465,11 @@ const proceedToPhotoSelection = async () => {
       photoIds: [], // Colección vacía
     };
 
-    const newCollection = await collectionsStore.createCollection(
-      collectionData
-    );
+    const newCollection =
+      await collectionsStore.createCollection(collectionData);
 
     message.success(
-      `Collection "${formData.value.title}" created successfully`
+      `Collection "${formData.value.title}" created successfully`,
     );
 
     // Limpiar el formulario
@@ -502,13 +501,13 @@ const onPhotosSelected = async (photoIds) => {
     try {
       await collectionsStore.addPhotosToCollection(
         viewingCollection.value.id,
-        photoIds
+        photoIds,
       );
 
       message.success(
         `Added ${photoIds.length} photo${
           photoIds.length > 1 ? "s" : ""
-        } to the collection.`
+        } to the collection.`,
       );
       photosDialogVisible.value = false;
       await refreshCollection();
@@ -540,7 +539,7 @@ const deleteCollection = async () => {
     message.success(
       `Collection "${
         viewingCollection.value.name || viewingCollection.value.title
-      }" deleted successfully`
+      }" deleted successfully`,
     );
     deleteConfirmationVisible.value = false;
 
@@ -628,7 +627,7 @@ const updateViewingCollection = () => {
   if (id && collections.value.length > 0) {
     const collection = collectionsStore.getCollectionWithFullPhotos(
       id,
-      photosStore
+      photosStore,
     );
     if (collection) {
       viewingCollection.value = collection;
@@ -655,7 +654,7 @@ onMounted(async () => {
 
 watch(
   [() => route.params.id, collections, () => photosStore.allPhotos],
-  updateViewingCollection
+  updateViewingCollection,
 );
 </script>
 

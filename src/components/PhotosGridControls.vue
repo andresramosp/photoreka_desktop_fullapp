@@ -981,11 +981,11 @@ watch(
 .date-range-label {
   font-size: 10px;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--primary-color);
 }
 
 .toggle-icon {
-  color: var(--text-secondary);
+  color: var(--primary-color);
   transition: transform 0.3s ease;
 }
 
@@ -1110,13 +1110,6 @@ watch(
 
 /* Desktop: hide toggle icon */
 @media (min-width: 1024px) {
-  .toggle-icon {
-    display: none;
-  }
-
-  .section-header {
-  }
-
   .section-header:hover {
     background-color: transparent;
   }

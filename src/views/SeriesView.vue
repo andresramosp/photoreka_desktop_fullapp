@@ -217,10 +217,10 @@
               </n-button>
             </div>
           </div>
-          <p class="detail-meta">
+          <!-- <p class="detail-meta">
             {{ (viewingSeries.photos || []).length }} photos • Updated
             {{ formatDate(viewingSeries.updatedAt) }}
-          </p>
+          </p> -->
         </div>
       </div>
 
@@ -698,14 +698,14 @@ const handleSuggestPhotoAt = async (payload) => {
     explicitLeftId !== undefined
       ? { id: explicitLeftId }
       : insertIndex > 0
-      ? photos[insertIndex - 1]
-      : null;
+        ? photos[insertIndex - 1]
+        : null;
   const right =
     explicitRightId !== undefined
       ? { id: explicitRightId }
       : insertIndex < photos.length
-      ? photos[insertIndex]
-      : null;
+        ? photos[insertIndex]
+        : null;
 
   const anchorIds = [left?.id, right?.id].filter(Boolean);
 
@@ -759,7 +759,7 @@ const handleSuggestPhotoAt = async (payload) => {
     await seriesStore.insertPhotosAt(
       viewingSeries.value.id,
       [suggested.id],
-      insertIndex
+      insertIndex,
     );
     // message.success("Suggestion added to the series");
     await refreshSeries();
@@ -788,7 +788,7 @@ const onPhotosSelected = async (photoIds) => {
         await seriesStore.insertPhotosAt(
           viewingSeries.value.id,
           photoIds,
-          pendingInsertIndex.value
+          pendingInsertIndex.value,
         );
       } else {
         await seriesStore.addPhotosToSeries(viewingSeries.value.id, photoIds);
@@ -797,7 +797,7 @@ const onPhotosSelected = async (photoIds) => {
       message.success(
         `Added ${photoIds.length} photo${
           photoIds.length > 1 ? "s" : ""
-        } to the series.`
+        } to the series.`,
       );
       photosDialogVisible.value = false;
       pendingInsertIndex.value = null;
@@ -879,7 +879,7 @@ const handleRemovePhoto = async (photoId) => {
     discardedSet.add(photoId);
 
     console.log(
-      `Photo ${photoId} marked as discarded for gap context: ${contextKey}`
+      `Photo ${photoId} marked as discarded for gap context: ${contextKey}`,
     );
 
     // Remove from recently suggested
@@ -942,7 +942,7 @@ const handleDownloadMultiple = async () => {
   try {
     // Get full photo objects from selected IDs
     const selectedPhotos = viewingSeries.value.photos.filter((photo) =>
-      localSelectedPhotoIds.value.includes(photo.id)
+      localSelectedPhotoIds.value.includes(photo.id),
     );
 
     await downloadPhotosZip(selectedPhotos);
@@ -962,10 +962,10 @@ const handleRemoveSelectedFromSeries = async () => {
   try {
     await seriesStore.removePhotosFromSeries(
       viewingSeries.value.id,
-      localSelectedPhotoIds.value
+      localSelectedPhotoIds.value,
     );
     message.success(
-      `Removed ${localSelectedPhotoIds.value.length} photo(s) from series`
+      `Removed ${localSelectedPhotoIds.value.length} photo(s) from series`,
     );
     localClearAllSelections();
     await refreshSeries();
@@ -1227,7 +1227,7 @@ onMounted(async () => {
         if (photoIds.length > 0 && viewingSeries.value) {
           await onPhotosSelected(photoIds);
           console.log(
-            `✅ Added ${photoIds.length} photos from URL to series (async)`
+            `✅ Added ${photoIds.length} photos from URL to series (async)`,
           );
         }
       },
@@ -1237,7 +1237,7 @@ onMounted(async () => {
     if (photoIdsFromQuery.length > 0 && viewingSeries.value) {
       await onPhotosSelected(photoIdsFromQuery);
       console.log(
-        `✅ Added ${photoIdsFromQuery.length} photos from URL to series`
+        `✅ Added ${photoIdsFromQuery.length} photos from URL to series`,
       );
     }
   } catch (error) {
@@ -1248,7 +1248,7 @@ onMounted(async () => {
 
 watch(
   [() => route.params.id, allSeries, () => photosStore.allPhotos],
-  updateViewingSeries
+  updateViewingSeries,
 );
 
 // Watch for fullscreen viewer closing in public view to redirect
