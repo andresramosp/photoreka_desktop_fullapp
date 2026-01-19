@@ -18,10 +18,12 @@ import { useTheme } from "@/composables/useTheme";
 import iconDark from "@/assets/logos/marca/icon-dark.png";
 import iconLight from "@/assets/logos/marca/icon-light.png";
 import horizontalDark from "@/assets/logos/marca/horizontal-dark.png";
+
 import horizontalLight from "@/assets/logos/marca/horizontal-light.png";
 import horizontalClaimDark from "@/assets/logos/marca/horizontal-claim-dark.png";
 import horizontalClaimLight from "@/assets/logos/marca/horizontal-claim-light.png";
 import verticalDark from "@/assets/logos/marca/vertical-dark.png";
+
 import verticalLight from "@/assets/logos/marca/vertical-light.png";
 import verticalClaimDark from "@/assets/logos/marca/vertical-claim-dark.png";
 import verticalClaimLight from "@/assets/logos/marca/vertical-claim-light.png";

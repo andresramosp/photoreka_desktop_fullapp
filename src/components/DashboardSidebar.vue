@@ -12,7 +12,7 @@
     <div v-if="props.mobileMenuOpen" class="mobile-sidebar">
       <div class="logo-container">
         <div class="logo clickable-logo" @click="goToDashboard">
-          <AppLogo layout="horizontal" :height="43" />
+          <AppLogo layout="horizontal" :height="36" />
         </div>
       </div>
 
@@ -69,10 +69,10 @@
       <div class="logo-container">
         <div class="logo clickable-logo" @click="goToDashboard">
           <div v-if="collapsed" class="logo-icon">
-            <AppLogo layout="icon" :height="43" />
+            <AppLogo layout="icon" :height="46" />
           </div>
           <div v-if="!collapsed" class="logo-text">
-            <AppLogo layout="horizontal" :height="43" />
+            <AppLogo layout="horizontal" :height="36" />
           </div>
         </div>
       </div>

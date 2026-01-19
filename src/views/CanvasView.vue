@@ -518,7 +518,7 @@
     <!-- Playground Logo - Top Right -->
     <div v-if="isPlayground" class="canvas-controls playground-logo">
       <div class="logo-container-playground">
-        <AppLogo layout="horizontal" :height="50" />
+        <AppLogo layout="horizontal" :height="45" />
       </div>
     </div>
 
@@ -1955,7 +1955,7 @@ onUnmounted(() => {
 
 .logo-container-playground {
   border-radius: 12px;
-  padding: 5px;
+  padding: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
