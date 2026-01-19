@@ -1,79 +1,9 @@
 <template>
   <div class="portfolio-report-container view-container">
     <!-- Welcome/Explanation Section -->
-    <div v-if="!showReport" class="empty-state">
-      <div class="empty-content">
-        <n-icon
-          size="64"
-          color="#6b7280"
-          class="empty-icon"
-          :component="AnalyticsIcon"
-        />
-
-        <h2 class="empty-title">Portfolio Analytics & Insights</h2>
-        <p class="empty-description">
-          Generate comprehensive reports about your photo catalog with advanced
-          analytics. Get insights into visual aspects, narrative patterns,
-          cultural contexts, and aesthetic qualities of your collection.
-        </p>
-
-        <div class="instructions-list">
-          <div class="instruction-item">
-            <n-icon>
-              <ChartBarIcon />
-            </n-icon>
-            <span>
-              Detailed statistics and visual breakdowns of your photo
-              collection.
-            </span>
-          </div>
-          <div class="instruction-item">
-            <n-icon>
-              <BookIcon />
-            </n-icon>
-            <span>
-              Narrative clustering analysis to understand storytelling patterns.
-            </span>
-          </div>
-          <div class="instruction-item">
-            <n-icon>
-              <GlobeIcon />
-            </n-icon>
-            <span>
-              Cultural context insights and thematic categorization.
-            </span>
-          </div>
-          <div class="instruction-item">
-            <n-icon>
-              <StarIcon />
-            </n-icon>
-            <span>
-              Aesthetic quality assessment and improvement recommendations.
-            </span>
-          </div>
-        </div>
-
-        <div class="report-actions">
-          <n-button
-            type="primary"
-            size="large"
-            :loading="isGenerating"
-            @click="generateReport"
-            class="generate-button"
-          >
-            <template #icon>
-              <n-icon>
-                <AnalyticsIcon />
-              </n-icon>
-            </template>
-            Generate Portfolio Report
-          </n-button>
-        </div>
-      </div>
-    </div>
 
     <!-- Report Content -->
-    <div v-else class="report-content">
+    <div v-if="!isGenerating" class="report-content">
       <!-- Report Header -->
       <div class="report-header">
         <div class="header-content">
@@ -147,7 +77,7 @@
                         generatePieSlice(
                           item.percentage,
                           index,
-                          aspect.breakdown
+                          aspect.breakdown,
                         )
                       "
                       :fill="getSliceColor(index)"
@@ -395,7 +325,6 @@ const photosStore = usePhotosStore();
 const message = useMessage();
 
 // State
-const showReport = ref(false);
 const isGenerating = ref(false);
 const reportDate = ref(new Date());
 
@@ -625,7 +554,7 @@ const generateImprovements = () => {
 const generateReport = async () => {
   if (totalPhotos.value === 0) {
     message.warning(
-      "No photos found in your catalog. Please add photos first."
+      "No photos found in your catalog. Please add photos first.",
     );
     return;
   }
@@ -633,7 +562,7 @@ const generateReport = async () => {
   isGenerating.value = true;
 
   // Simulate API call delay
-  await new Promise((resolve) => setTimeout(resolve, 2000));
+  await new Promise((resolve) => setTimeout(resolve, 1000));
 
   try {
     // Generate all sections data
@@ -644,15 +573,14 @@ const generateReport = async () => {
     improvements.value = generateImprovements();
 
     reportDate.value = new Date();
-    showReport.value = true;
 
-    message.warning(
-      "This screen is only a preview for demonstration purposes. Real functionality coming soon.",
-      {
-        duration: 0, // requires manual close
-        closable: true,
-      }
-    );
+    // message.warning(
+    //   "This screen is only a preview for demonstration purposes. Real functionality coming soon.",
+    //   {
+    //     duration: 0, // requires manual close
+    //     closable: true,
+    //   },
+    // );
   } catch (error) {
     console.error("Error generating report:", error);
     message.error("Failed to generate report. Please try again.");
@@ -663,10 +591,6 @@ const generateReport = async () => {
 
 const regenerateReport = async () => {
   await generateReport();
-};
-
-const backToStart = () => {
-  showReport.value = false;
 };
 
 // Pie chart functions
@@ -726,6 +650,7 @@ onMounted(async () => {
   if (photosStore.photos.length === 0) {
     await photosStore.fetchPhotos();
   }
+  await generateReport();
 });
 </script>
 
@@ -820,7 +745,6 @@ onMounted(async () => {
 
 /* Report Content Styles */
 .report-content {
-  max-width: 1400px;
   margin: 0 auto;
 }
 

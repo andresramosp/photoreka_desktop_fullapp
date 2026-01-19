@@ -173,6 +173,7 @@ const allowedHeaderViews = [
   "sync-area",
   "settings",
   "help",
+  "portfolio-report",
   // "settings",
   // Add more route names as needed
 ];
@@ -287,6 +288,7 @@ watch(
       // Cargar catálogo inmediatamente cuando se autentica
       photosStore.getOrFetch(true);
       collectionsStore.getOrFetch(true);
+      seriesStore.getOrFetch(true);
     } else {
       // Usuario se desautenticó - resetear stores
       if (wasAuth !== undefined) {

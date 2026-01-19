@@ -9,10 +9,9 @@
           in all the tools.
         </p>
       </div>
-      <div class="header-actions">
-        <!-- Usage Indicators -->
+      <!-- <div class="header-actions">
         <UsageIndicators />
-      </div>
+      </div> -->
     </div>
 
     <!-- Content Section -->

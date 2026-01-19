@@ -249,7 +249,6 @@ export const lightTheme = {
 
   bgOverlay: "rgba(0, 0, 0, 0.4)",
   bgTag: "rgba(37, 99, 235, 0.12)",
-  bgTagPill: "rgba(180, 180, 180, 0.7)",
 
   // Borders
   border: "rgba(0, 0, 0, 0.1)",
@@ -341,11 +340,11 @@ export function getNaiveThemeOverrides(isDark = true) {
       color: isDark ? theme.bgCard : theme.bgSurface,
 
       // Color de fondo del item seleccionado/activo
-      itemColorActive: theme.accent,
-      itemColorActiveHover: theme.accent + "30",
+      // itemColorActive: theme.accent,
+      // itemColorActiveHover: theme.accent + "30",
 
       // Color de fondo del item activo cuando el menú está colapsado
-      itemColorActiveCollapsed: theme.accent,
+      // itemColorActiveCollapsed: theme.accent,
 
       // Color del texto del item activo
       itemTextColorActive: theme.primary,

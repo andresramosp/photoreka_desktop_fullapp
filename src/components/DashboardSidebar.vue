@@ -16,57 +16,17 @@
         </div>
       </div>
 
-      <!-- First Menu Section: Workspace, Sync Area -->
+      <!-- Unified Menu -->
       <n-menu
         :collapsed="false"
         :collapsed-width="64"
         :collapsed-icon-size="22"
-        :options="firstSectionOptions"
+        :options="menuOptions"
         :value="activeKey"
+        :expanded-keys="expandedKeys"
+        :accordion="exclusiveMenuMode"
         @update:value="handleMenuSelect"
-        class="sidebar-menu"
-      />
-
-      <!-- First Divider -->
-      <div class="menu-divider"></div>
-
-      <!-- Second Menu Section: Collections, Series -->
-      <n-menu
-        :collapsed="false"
-        :collapsed-width="64"
-        :collapsed-icon-size="22"
-        :options="collectionsSeriesOptions"
-        :value="activeKey"
-        @update:value="handleMenuSelect"
-        class="sidebar-menu"
-      />
-
-      <!-- Second Divider -->
-      <div class="menu-divider"></div>
-
-      <!-- Third Menu Section: Search, Canvas, Curation -->
-      <n-menu
-        :collapsed="false"
-        :collapsed-width="64"
-        :collapsed-icon-size="22"
-        :options="thirdSectionToolsOptions"
-        :value="activeKey"
-        @update:value="handleMenuSelect"
-        class="sidebar-menu"
-      />
-
-      <!-- Third Divider (only show if fourth section has items) -->
-      <div v-if="fourthSectionOptions.length > 0" class="menu-divider"></div>
-
-      <!-- Fourth Menu Section: Settings, Help (hidden on mobile) -->
-      <n-menu
-        v-if="fourthSectionOptions.length > 0"
-        :collapsed="false"
-        :collapsed-width="64"
-        :collapsed-icon-size="22"
-        :options="fourthSectionOptions"
-        :value="activeKey"
-        @update:value="handleMenuSelect"
+        @update:expanded-keys="handleExpandedKeysChange"
         class="sidebar-menu"
       />
     </div>
@@ -78,7 +38,7 @@
     bordered
     collapse-mode="width"
     :collapsed-width="64"
-    :width="240"
+    :width="260"
     :collapsed="collapsed"
     class="sidebar"
     @mouseenter="handleMouseEnter"
@@ -117,56 +77,17 @@
         </div>
       </div>
 
-      <!-- First Menu Section: Workspace, Sync Area -->
+      <!-- Unified Menu -->
       <n-menu
         :collapsed="collapsed"
         :collapsed-width="64"
         :collapsed-icon-size="22"
-        :options="firstSectionOptions"
+        :options="menuOptions"
         :value="activeKey"
+        :expanded-keys="expandedKeys"
+        :accordion="exclusiveMenuMode"
         @update:value="handleMenuSelect"
-        class="sidebar-menu"
-      />
-
-      <!-- First Divider -->
-      <div class="menu-divider" :class="{ collapsed }"></div>
-
-      <!-- Second Menu Section: Collections, Series -->
-      <n-menu
-        :collapsed="collapsed"
-        :collapsed-width="64"
-        :collapsed-icon-size="22"
-        :options="collectionsSeriesOptions"
-        :value="activeKey"
-        @update:value="handleMenuSelect"
-        class="sidebar-menu"
-      />
-
-      <!-- Second Divider -->
-      <div class="menu-divider" :class="{ collapsed }"></div>
-
-      <!-- Third Menu Section: Search, Canvas, Curation -->
-      <n-menu
-        :collapsed="collapsed"
-        :collapsed-width="64"
-        :collapsed-icon-size="22"
-        :options="thirdSectionToolsOptions"
-        :value="activeKey"
-        @update:value="handleMenuSelect"
-        class="sidebar-menu"
-      />
-
-      <!-- Third Divider -->
-      <div class="menu-divider" :class="{ collapsed }"></div>
-
-      <!-- Fourth Menu Section: Settings, Help -->
-      <n-menu
-        :collapsed="collapsed"
-        :collapsed-width="64"
-        :collapsed-icon-size="22"
-        :options="fourthSectionOptions"
-        :value="activeKey"
-        @update:value="handleMenuSelect"
+        @update:expanded-keys="handleExpandedKeysChange"
         class="sidebar-menu"
       />
     </div>
@@ -174,52 +95,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, h, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
-import { NIcon } from "naive-ui";
-import type { MenuOption } from "naive-ui";
-import { usePhotosStore } from "@/stores/photos.js";
-import { isMobileDevice } from "@/utils/utils.js";
-
-import { Workspace as CanvasIcon } from "@vicons/carbon";
-
-// Import @vicons icons from ionicons5 for reliability
+import { useMainMenu } from "@/composables/useMainMenu";
 import {
-  GridOutline as DashboardIcon,
-  CameraOutline as PhotoHubIcon,
-  FolderOpenOutline as WorkspaceIcon,
-  GridOutline as CollectionsIcon,
-  ListOutline as SeriesIcon,
-  ApertureOutline as StylerIcon,
-  SearchOutline as SearchIcon,
-  FlaskOutline as CurationIcon,
-  AnalyticsOutline as AnalyticsIcon,
-  CubeOutline as CubeIcon,
-  // ColorPaletteOutline as StylerIcon,
-  AppsOutline as GridIcon,
-  SettingsOutline as SettingsIcon,
-  HelpCircleOutline as HelpIcon,
-  PersonOutline,
-  LogOutOutline,
   ChevronForwardOutline as ChevronRightIcon,
   ChevronBackOutline as ChevronLeftIcon,
-  ConstructOutline as ConstructionIcon,
-  ConstructOutline,
-  SquareOutline as FramerIcon,
-  LayersOutline,
-  RepeatOutline,
-  SwapHorizontalOutline,
-  CloudUploadOutline,
 } from "@vicons/ionicons5";
-import { ConstructionOutlined, ConstructionSharp } from "@vicons/material";
 import AppLogo from "./AppLogo.vue";
 
 const router = useRouter();
 const route = useRoute();
-const photosStore = usePhotosStore();
-const collapsed = ref(true); // Default collapsed (showing only icons)
-const isMobile = ref(window.innerWidth < 768); // Initialize immediately
-const menuMode = ref<"hover" | "toggle">("toggle"); // 'hover' for original behavior, 'toggle' for new behavior
+const collapsed = ref(true);
+const menuMode = ref<"hover" | "toggle">("toggle");
 
 const props = defineProps<{
   mobileMenuOpen?: boolean;
@@ -227,137 +115,77 @@ const props = defineProps<{
 
 const emit = defineEmits(["close-mobile-menu"]);
 
-const activeKey = computed(() => route.name as string);
-const appAccessMode = computed(() => photosStore.appAccessMode);
+// Use the main menu composable
+const {
+  menuOptions,
+  defaultExpandedKeys,
+  isMobile,
+  updateIsMobile,
+  exclusiveMenuMode,
+} = useMainMenu();
 
-// Check if we're in mobile limited mode
-const isMobileLimitedMode = computed(() => isMobileDevice());
+const activeKey = computed(() => {
+  const routeName = route.name as string;
 
-// First section: Workspace, Sync Area (Photo Hub)
-const firstSectionOptions = computed(() => [
-  {
-    label: "Workspace",
-    key: "workspace",
-    icon: () => h(NIcon, null, { default: () => h(LayersOutline) }),
-  },
-  {
-    label: "Sync Area",
-    key: "sync-area",
-    icon: () => h(NIcon, null, { default: () => h(CloudUploadOutline) }),
-  },
-]);
-
-// Second section: Collections, Series
-const collectionsSeriesOptions = computed(() => [
-  {
-    label: "Collections",
-    key: "collections",
-    disabled: appAccessMode.value === "blocked",
-    icon: () => h(NIcon, null, { default: () => h(CollectionsIcon) }),
-  },
-  {
-    label: "Series",
-    key: "series",
-    disabled: appAccessMode.value === "blocked",
-    icon: () => h(NIcon, null, { default: () => h(SeriesIcon) }),
-  },
-]);
-
-// Third section: Explorer, Canvas, Curation, Grids, Styler
-// On mobile: only show Explorer (search)
-const thirdSectionToolsOptions = computed(() => {
-  const isBlocked = appAccessMode.value === "blocked";
-
-  // On mobile, only show Explorer
-  if (isMobileLimitedMode.value) {
-    return [
-      {
-        label: "Search",
-        key: "search",
-        disabled: isBlocked,
-        props: isBlocked ? { title: "Add photos to your catalog" } : {},
-        icon: () => h(NIcon, null, { default: () => h(SearchIcon) }),
-      },
-      {
-        label: "Framer",
-        key: "framer",
-        disabled: isBlocked,
-        props: isBlocked ? { title: "Add photos to your catalog" } : {},
-        icon: () => h(NIcon, null, { default: () => h(FramerIcon) }),
-      },
-    ];
+  // Handle collection detail routes
+  if (routeName === "collection-detail" && route.params.id) {
+    return `collection-${route.params.id}`;
   }
 
-  return [
-    {
-      label: "Search",
-      key: "search",
-      disabled: isBlocked,
-      props: isBlocked ? { title: "Add photos to your catalog" } : {},
-      icon: () => h(NIcon, null, { default: () => h(SearchIcon) }),
-    },
-    {
-      label: "3D Atlas",
-      key: "atlas",
-      disabled: isBlocked,
-      props: isBlocked ? { title: "Add photos to your catalog" } : {},
-      icon: () => h(NIcon, null, { default: () => h(CubeIcon) }),
-    },
-    {
-      label: "Canvas",
-      key: "canvas",
-      disabled: isBlocked,
-      props: isBlocked ? { title: "Add photos to your catalog" } : {},
-      icon: () => h(NIcon, null, { default: () => h(CanvasIcon) }),
-    },
-    // {
-    //   label: "Project Builder",
-    //   key: "project-builder",
-    //   disabled: isBlocked,
-    //   props: isBlocked ? { title: "Add photos to your catalog" } : {},
-    //   icon: () => h(NIcon, null, { default: () => h(CurationIcon) }),
-    // },
-    {
-      label: "Framer",
-      key: "framer",
-      disabled: isBlocked,
-      props: isBlocked ? { title: "Add photos to your catalog" } : {},
-      icon: () => h(NIcon, null, { default: () => h(FramerIcon) }),
-    },
-  ];
-});
+  // Handle series detail routes
+  if (routeName === "series-detail" && route.params.id) {
+    return `series-${route.params.id}`;
+  }
 
-// Fourth section: Settings, Help (always enabled)
-// On mobile, hide Settings and Help from sidebar
-const fourthSectionOptions = computed<MenuOption[]>(() => {
-  return [
-    {
-      label: "Settings",
-      key: "settings",
-      icon: () => h(NIcon, null, { default: () => h(SettingsIcon) }),
-    },
-    {
-      label: "Help",
-      key: "help",
-      icon: () => h(NIcon, null, { default: () => h(HelpIcon) }),
-    },
-  ];
+  // Handle collections list view - mark the group as active
+  if (routeName === "collections") {
+    return "collections-group";
+  }
+
+  // Handle series list view - mark the group as active
+  if (routeName === "series") {
+    return "series-group";
+  }
+
+  return routeName;
 });
+const expandedKeys = ref<string[]>([...defaultExpandedKeys.value]);
 
 const handleMenuSelect = (key: string) => {
+  // Skip navigation for section headers (they don't have routes)
+  if (key.endsWith("-section") || key.endsWith("-group")) {
+    return;
+  }
+
   if (key === "sync-area") {
     router.push({ name: "sync-area", hash: "#upload" });
+  } else if (key.startsWith("collection-") || key.startsWith("series-")) {
+    // Navegación usando /id en vez de query string
+    if (key.startsWith("collection-")) {
+      // Extraer el id después de "collection-"
+      const id = key.replace("collection-", "");
+      router.push(`/collections/${id}`);
+    } else {
+      // Extraer el id después de "series-"
+      const id = key.replace("series-", "");
+      router.push(`/series/${id}`);
+    }
   } else {
     router.push({ name: key });
   }
+
   // On mobile, close menu after selection
   if (isMobile.value) {
     emit("close-mobile-menu");
   }
 };
 
+const handleExpandedKeysChange = (keys: string[]) => {
+  expandedKeys.value = keys;
+};
+
 const goToDashboard = () => {
-  router.push({ name: "dashboard" });
+  router.push({ name: "workspace" });
   // On mobile, close menu after selection
   if (isMobile.value) {
     emit("close-mobile-menu");
@@ -399,7 +227,7 @@ defineExpose({
 });
 
 const checkIsMobile = () => {
-  isMobile.value = window.innerWidth < 768;
+  updateIsMobile();
   // On mobile, keep collapsed by default and close mobile menu
   if (isMobile.value) {
     collapsed.value = true;
@@ -511,38 +339,13 @@ onUnmounted(() => {
 }
 
 .sidebar-menu {
-  margin-top: 8px;
+  margin-top: 4px;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
-/* Aplicar opacidad al fondo del item activo (menú expandido y colapsado) */
-:deep(.n-menu-item.n-menu-item--selected) {
-  position: relative;
-}
-
-:deep(.n-menu-item.n-menu-item--selected::before) {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-color: currentColor;
-  opacity: 0.15;
-  border-radius: inherit;
-  pointer-events: none;
-}
-
-:deep(.n-menu-item.n-menu-item--selected:hover::before) {
-  opacity: 0.25;
-}
-
-.menu-divider {
-  /* margin: 16px 20px; */
-  height: 1px;
-  background-color: var(--border-color);
-  transition: margin 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.menu-divider.collapsed {
-  /* margin: 16px 12px; */
-}
+/* Remove the old divider styles - no longer needed */
 
 .user-profile-section {
   margin-top: auto;
@@ -674,7 +477,7 @@ onUnmounted(() => {
   position: fixed;
   top: 0;
   left: 0;
-  width: 240px;
+  width: 260px;
   height: 100vh;
 
   z-index: 1000;
@@ -686,7 +489,7 @@ onUnmounted(() => {
 
 @keyframes slideIn {
   from {
-    left: -240px;
+    left: -260px;
   }
   to {
     left: 0;
