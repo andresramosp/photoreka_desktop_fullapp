@@ -10,6 +10,7 @@ export default class AnalyzerProcessController {
 
     const processes = await AnalyzerProcess.query()
       .where('user_id', userId)
+      .whereHas('photos', () => {})
       .preload('photos')
       .orderBy('created_at', 'desc')
 
@@ -24,6 +25,7 @@ export default class AnalyzerProcessController {
     const process = await AnalyzerProcess.query()
       .where('id', params.id)
       .where('user_id', userId)
+      .whereHas('photos', () => {})
       .preload('photos')
       .first()
 
