@@ -6,6 +6,13 @@ export default class extends BaseSchema {
   async up() {
     this.schema.createTable(this.tableName, (table) => {
       table.increments('id').primary() // ID numérico incremental
+      table
+        .integer('user_id')
+        .unsigned()
+        .references('id')
+        .inTable('users')
+        .onDelete('CASCADE')
+        .nullable()
       table.jsonb('descriptions')
       table.integer('analyzer_process_id').references('id').inTable('analyzer_processes')
       table.string('title')

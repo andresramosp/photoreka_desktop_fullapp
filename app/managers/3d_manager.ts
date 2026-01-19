@@ -4,6 +4,21 @@ import PhotoManager from './photo_manager.js'
 import { withCache } from '../decorators/withCache.js'
 
 export default class ThreeDManager {
+  private parseVectorField(value: unknown): number[] | null {
+    if (!value) return null
+    if (Array.isArray(value)) return value as number[]
+
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value) as number[]
+      } catch {
+        return null
+      }
+    }
+
+    return null
+  }
+
   /**
    * Combina múltiples embeddings en uno solo usando promedio aritmético
    */
@@ -99,6 +114,27 @@ export default class ThreeDManager {
           visual_aspects_embedding_computed: photo.visualAspectsEmbeddingComputed,
         })),
       }
+    } else if (chunkName === 'color_histogram' || chunkName === 'color_histogram_dominant') {
+      const histogramField =
+        chunkName === 'color_histogram_dominant' ? 'color_histogram_dominant' : 'color_histogram'
+
+      photosWithCategory = await db.rawQuery(
+        `
+        SELECT 
+          p.id,
+          p.name,
+          p.thumbnail_name,
+          p.original_file_name,
+          p.${histogramField} AS color_histogram
+        FROM photos p
+        WHERE p.user_id = :userId
+          AND p.${histogramField} IS NOT NULL
+        ORDER BY p.id
+      `,
+        {
+          userId: parseInt(userId),
+        }
+      )
     } else {
       // Validación para cuando chunkName no es null
       if (!chunkName) {
@@ -197,6 +233,25 @@ export default class ThreeDManager {
               thumbnailName: photo.thumbnail_name,
               originalFileName: photo.original_file_name,
               chunk: null, // No hay chunk de descripción
+            },
+          }
+        })
+        .filter((v: any) => v.embedding && v.embedding.length > 0)
+    } else if (chunkName === 'color_histogram' || chunkName === 'color_histogram_dominant') {
+      vectors = photos
+        .map((photo: any) => {
+          const embedding = this.parseVectorField(photo.color_histogram)
+
+          return {
+            id: photo.id,
+            chunkId: null,
+            embedding,
+            photoData: {
+              id: photo.id,
+              name: photo.name,
+              thumbnailName: photo.thumbnail_name,
+              originalFileName: photo.original_file_name,
+              chunk: null,
             },
           }
         })
@@ -419,6 +474,32 @@ export default class ThreeDManager {
    * @returns Array de categorías con su conteo
    */
   public async getAvailableCategories(userId: string) {
+    const specialCategoriesResult = await db.rawQuery(
+      `
+      SELECT 'general' AS category, COUNT(*)::int AS count
+      FROM photos
+      WHERE user_id = :userId
+        AND embedding IS NOT NULL
+
+      UNION ALL
+
+      SELECT 'color_histogram' AS category, COUNT(*)::int AS count
+      FROM photos
+      WHERE user_id = :userId
+        AND color_histogram IS NOT NULL
+
+      UNION ALL
+
+      SELECT 'color_histogram_dominant' AS category, COUNT(*)::int AS count
+      FROM photos
+      WHERE user_id = :userId
+        AND color_histogram_dominant IS NOT NULL
+    `,
+      {
+        userId: parseInt(userId),
+      }
+    )
+
     const categoriesResult = await db.rawQuery(
       `
       SELECT 
@@ -436,10 +517,14 @@ export default class ThreeDManager {
       }
     )
 
-    const categories = categoriesResult.rows.map((row: any) => ({
-      category: row.category,
-      count: parseInt(row.count),
-    }))
+    const merged = [...specialCategoriesResult.rows, ...categoriesResult.rows]
+    const categories = merged
+      .map((row: any) => ({
+        category: row.category,
+        count: typeof row.count === 'number' ? row.count : parseInt(row.count),
+      }))
+      .filter((row: any) => row.count > 0)
+      .sort((a: any, b: any) => b.count - a.count)
 
     return {
       categories,

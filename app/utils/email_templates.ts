@@ -200,7 +200,7 @@ export function welcomeEmailTemplate(userName: string): string {
       Hi ${userName},
     </p>
     <p style="margin: 0 0 20px; font-size: 16px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
-      Your email has been confirmed and your Photoreka account is ready! Start uploading your photos and let our AI help you organize, discover, and create amazing collections.
+      Your email has been confirmed and your Photoreka account is ready! Start uploading your photos and let our engine help you curate your catalog.
     </p>
     
 
