@@ -125,24 +125,24 @@ const APP_TOOLS: SearchResultTool[] = [
       "space",
     ],
   },
-  {
-    type: "tool",
-    id: "project-builder",
-    name: "Project Builder",
-    description: "Build and curate photo projects",
-    icon: "FlaskOutline",
-    route: "/project-builder",
-    searchTerms: [
-      "curate",
-      "curation",
-      "build",
-      "create",
-      "portfolio",
-      "project",
-      "selection",
-      "pick",
-    ],
-  },
+  // {
+  //   type: "tool",
+  //   id: "project-builder",
+  //   name: "Project Builder",
+  //   description: "Build and curate photo projects",
+  //   icon: "FlaskOutline",
+  //   route: "/project-builder",
+  //   searchTerms: [
+  //     "curate",
+  //     "curation",
+  //     "build",
+  //     "create",
+  //     "portfolio",
+  //     "project",
+  //     "selection",
+  //     "pick",
+  //   ],
+  // },
   {
     type: "tool",
     id: "framer",
@@ -401,7 +401,7 @@ export function useGlobalSearch() {
       if (matchesQuery(photoName, query)) {
         // Extract tag names from tag objects
         const tagNames = (photo.tags || []).map((t: any) =>
-          typeof t === "string" ? t : t.name || t.tag?.name || ""
+          typeof t === "string" ? t : t.name || t.tag?.name || "",
         );
 
         results.push({
