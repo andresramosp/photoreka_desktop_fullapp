@@ -21,11 +21,14 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
     { value: "story", label: "Narrative" },
     { value: "context", label: "Context" },
     { value: "visual_accents", label: "Visual Accents" },
+    { value: "color_histogram", label: "Chromatic" },
+    { value: "color_histogram_dominant", label: "Dominant Color" },
+
     // Si no hay userId, incluir los dos últimos
     ...(!userId
       ? [
           { value: "visual_aspects", label: "Technical" },
-          { value: "artistic_scores", label: "Scores" },
+          // { value: "artistic_scores", label: "Scores" },
         ]
       : []),
   ];
@@ -85,13 +88,13 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
           .sort((a, b) => getScore(b) - getScore(a))
           .slice(0, 750);
         console.log(
-          `⚡ LowPerformance activo: filtradas ${photos.length} -> ${workingPhotos.length} (top aesthetic_quality)`
+          `⚡ LowPerformance activo: filtradas ${photos.length} -> ${workingPhotos.length} (top aesthetic_quality)`,
         );
       }
 
       // Extract raw coordinates for adaptive spacing
       const rawPositions = workingPhotos.map(
-        (p) => p.coordinates || p.position || p.coords || [0, 0, 0]
+        (p) => p.coordinates || p.position || p.coords || [0, 0, 0],
       );
 
       let adaptedPositions = rawPositions;
@@ -120,12 +123,12 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
         } catch (e) {
           console.warn(
             "⚠️ Falló adaptiveInitialSpacing, usando posiciones raw",
-            e
+            e,
           );
         }
       } else {
         console.log(
-          "⏩ Adaptive initial spacing desactivado, usando posiciones raw"
+          "⏩ Adaptive initial spacing desactivado, usando posiciones raw",
         );
       }
 
@@ -133,7 +136,7 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
       if (reuseExisting && photos3D.value.length > 0) {
         // Modo reutilización: actualizar solo las coordenadas de las fotos existentes
         console.log(
-          `♻️ Actualizando coordenadas de ${workingPhotos.length} fotos existentes`
+          `♻️ Actualizando coordenadas de ${workingPhotos.length} fotos existentes`,
         );
 
         // Crear un mapa de ID -> nuevas coordenadas
@@ -141,7 +144,7 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
         workingPhotos.forEach((photo, idx) => {
           coordsMap.set(
             photo.id,
-            adaptedPositions[idx] || photo.coordinates || [0, 0, 0]
+            adaptedPositions[idx] || photo.coordinates || [0, 0, 0],
           );
         });
 
@@ -196,7 +199,7 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
     // Solo saltar si realmente es el mismo valor Y ya tenemos fotos cargadas
     if (newChunk === currentChunk.value && photos3D.value.length > 0) {
       console.log(
-        "⏸️ Saltando cambio de chunk - mismo valor y datos ya cargados"
+        "⏸️ Saltando cambio de chunk - mismo valor y datos ya cargados",
       );
       return;
     }
