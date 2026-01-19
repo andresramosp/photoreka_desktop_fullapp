@@ -209,7 +209,8 @@ export function useMainMenu() {
           icon: renderIcon(SeriesIcon),
           disabled: isBlocked.value,
           children: series.value.map((ser) => ({
-            label: ser.label,
+            label: () =>
+              h("span", { class: "collection-menu-item" }, ser.label),
             key: ser.key,
           })),
         },
