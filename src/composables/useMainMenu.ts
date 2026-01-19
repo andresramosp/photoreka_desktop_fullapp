@@ -257,9 +257,17 @@ export function useMainMenu() {
   const menuOptions = computed<MenuOption[]>(() => {
     return [
       syncAreaOption.value,
+      {
+        type: "divider",
+        key: "sync-divider",
+      } as MenuOption,
       librarySection.value,
       exploreSection.value,
       createSection.value,
+      {
+        type: "divider",
+        key: "sync-divider",
+      } as MenuOption,
       systemSection.value,
     ];
   });

@@ -90,6 +90,11 @@
         @update:expanded-keys="handleExpandedKeysChange"
         class="sidebar-menu"
       />
+
+      <!-- Usage Indicators -->
+      <div v-if="!collapsed" class="usage-indicators-section">
+        <UsageIndicators />
+      </div>
     </div>
   </n-layout-sider>
 </template>
@@ -103,6 +108,7 @@ import {
   ChevronBackOutline as ChevronLeftIcon,
 } from "@vicons/ionicons5";
 import AppLogo from "./AppLogo.vue";
+import UsageIndicators from "./UsageIndicators.vue";
 
 const router = useRouter();
 const route = useRoute();
@@ -343,6 +349,14 @@ onUnmounted(() => {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+.usage-indicators-section {
+  /* margin-top: auto; */
+  margin-bottom: 39px;
+  padding: 16px;
+  border-top: 1px solid var(--border-color);
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Remove the old divider styles - no longer needed */

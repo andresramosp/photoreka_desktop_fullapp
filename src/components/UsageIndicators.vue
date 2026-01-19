@@ -102,14 +102,14 @@ const photosUsage = computed(() => userStore.user?.usage?.photosUsage || 0);
 const photosLimit = computed(() => userStore.user?.usage?.photosLimit || 5000);
 const photosRemaining = computed(() => userStore.user?.usage?.photosRemaining);
 const analyzedPhotosUsage = computed(
-  () => userStore.user?.usage?.analyzedPhotosUsage || 0
+  () => userStore.user?.usage?.analyzedPhotosUsage || 0,
 );
 const analyzedPhotosLimit = computed(
-  () => userStore.user?.usage?.analyzedPhotosLimit || 2000
+  () => userStore.user?.usage?.analyzedPhotosLimit || 2000,
 );
 const analyzedPhotosRemaining = computed(
   () =>
-    userStore.user?.usage?.analyzedPhotosRemaining || analyzedPhotosLimit.value
+    userStore.user?.usage?.analyzedPhotosRemaining || analyzedPhotosLimit.value,
 );
 
 // Calculate percentages
@@ -122,7 +122,7 @@ const analysisPercentage = computed(() => {
   if (analyzedPhotosLimit.value === 0) return 0;
   return Math.min(
     (analyzedPhotosUsage.value / analyzedPhotosLimit.value) * 100,
-    100
+    100,
   );
 });
 </script>
@@ -136,7 +136,7 @@ const analysisPercentage = computed(() => {
 
 .usage-card {
   flex: 1;
-  background-color: var(--bg-surface);
+  background-color: var(--bg-body);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: var(--spacing-lg);
@@ -168,7 +168,7 @@ const analysisPercentage = computed(() => {
 .progress-bar {
   width: 100%;
   height: 8px;
-  background-color: var(--bg-container);
+  background-color: var(--bg-surface);
   border-radius: var(--radius-full);
   overflow: hidden;
   margin-bottom: var(--spacing-xs);
