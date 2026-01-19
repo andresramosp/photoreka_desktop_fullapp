@@ -185,7 +185,7 @@ const handleExpandedKeysChange = (keys: string[]) => {
 };
 
 const goToDashboard = () => {
-  router.push({ name: "workspace" });
+  router.push({ name: "dashboard" });
   // On mobile, close menu after selection
   if (isMobile.value) {
     emit("close-mobile-menu");
