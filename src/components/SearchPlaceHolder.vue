@@ -183,13 +183,13 @@ function handleExampleClick() {
 .empty-title {
   font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   margin: 0 0 0 0;
 }
 
 .empty-description {
   font-size: var(--font-size-md);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   margin-top: 10px;
   margin-bottom: 5px;
   line-height: var(--line-height-relaxed);

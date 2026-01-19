@@ -376,28 +376,9 @@ import {
   Search20Regular,
   Settings20Regular,
   Trophy20Regular,
-  Sparkle20Regular,
-  Grid20Regular,
-  DocumentBulletList20Regular,
-  StarEmphasis20Regular,
-  Comment20Regular,
-  Emoji20Regular,
-  Eye20Regular,
 } from "@vicons/fluent";
-import { PaletteOutlined, PersonRound } from "@vicons/material";
+import { PaletteOutlined } from "@vicons/material";
 import { Walk, WalkOutline } from "@vicons/ionicons5";
-
-// Icon mapping for criteria
-const criterionIcons = {
-  aesthetic_quality: Sparkle20Regular,
-  composition: Grid20Regular,
-  storytelling: DocumentBulletList20Regular,
-  strangeness: StarEmphasis20Regular,
-  message: Comment20Regular,
-  humor: Emoji20Regular,
-  visual_games: Eye20Regular,
-  candidness: PersonRound,
-};
 
 const emit = defineEmits([
   "filters-change",
@@ -528,6 +509,7 @@ const {
   genrePresets,
   formatCriterionName,
   formatGenreTooltip,
+  criterionIcons,
 } = useArtisticScores();
 
 // Create grouped criteria options for n-select
@@ -843,7 +825,7 @@ watch(
 /* Desktop: force single row */
 @media (min-width: 1200px) {
   .filters-row {
-    grid-template-columns: repeat(11, minmax(0, 1fr));
+    grid-template-columns: repeat(9, minmax(0, 1fr));
   }
 }
 

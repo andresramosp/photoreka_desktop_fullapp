@@ -39,25 +39,25 @@ export const visualAspectsOptions = [
       { label: "Neutral", value: "neutral" },
     ],
   },
-  {
-    type: "group",
-    label: "Focus",
-    key: "focus",
-    children: [
-      { label: "Blurry", value: "blurry" },
-      { label: "Nitid", value: "nitid" },
-    ],
-  },
-  {
-    type: "group",
-    label: "Lighting Scheme",
-    key: "lighting_scheme",
-    children: [
-      { label: "Low key", value: "low key" },
-      { label: "High key", value: "high key" },
-      { label: "Balanced", value: "balanced" },
-    ],
-  },
+  // {
+  //   type: "group",
+  //   label: "Focus",
+  //   key: "focus",
+  //   children: [
+  //     { label: "Blurry", value: "blurry" },
+  //     { label: "Nitid", value: "nitid" },
+  //   ],
+  // },
+  // {
+  //   type: "group",
+  //   label: "Lighting Scheme",
+  //   key: "lighting_scheme",
+  //   children: [
+  //     { label: "Low key", value: "low key" },
+  //     { label: "High key", value: "high key" },
+  //     { label: "Balanced", value: "balanced" },
+  //   ],
+  // },
   {
     type: "group",
     label: "Stylistic",

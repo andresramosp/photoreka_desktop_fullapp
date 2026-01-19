@@ -16,7 +16,7 @@
         </div>
       </div>
       <div class="canvas-info">
-        <h3 class="canvas-title">Continue your Canvas</h3>
+        <h3 class="canvas-title">Canvas</h3>
         <p class="canvas-count">
           {{ photoCount }} {{ photoCount === 1 ? "photo" : "photos" }}
         </p>

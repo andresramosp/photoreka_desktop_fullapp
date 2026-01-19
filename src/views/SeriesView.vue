@@ -290,7 +290,7 @@
         <div
           v-for="series in allSeries"
           :key="series.id"
-          class="card"
+          class="action-card"
           @click="openSeries(series)"
         >
           <div class="card-preview">

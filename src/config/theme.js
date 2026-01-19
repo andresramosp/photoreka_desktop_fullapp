@@ -155,7 +155,7 @@ export const darkTheme = {
   infoPressed: colors.cyan[700],
 
   // Backgrounds
-  bgBody: "#16161a",
+  bgBody: "#0c0c0e",
   bgContainer: "#1a1a1f",
   bgSurface: "#2c2c32",
   bgSurfaceHover: "#11113f",
@@ -241,7 +241,7 @@ export const lightTheme = {
 
   // Backgrounds
   bgBody: "#F7F8FA",
-  bgContainer: "#F5F7FA",
+  bgContainer: "#d2d9e2",
   bgDeepSurface: "whitesmoke",
   bgSurface: "#FFFFFF",
   bgSurfaceHover: "#F1F5F9",

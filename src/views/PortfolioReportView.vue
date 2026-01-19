@@ -8,13 +8,13 @@
       <div class="report-header">
         <div class="header-content">
           <div class="header-left">
-            <h1 class="report-title">Portfolio Analytics Report</h1>
+            <h1 class="report-title">Analytics Report</h1>
             <p class="report-subtitle">
               Comprehensive analysis of {{ totalPhotos }} photos in your catalog
             </p>
-            <p class="report-date">Generated on {{ formatDate(reportDate) }}</p>
+            <!-- <p class="report-date">Generated on {{ formatDate(reportDate) }}</p> -->
           </div>
-          <div class="header-actions">
+          <!-- <div class="header-actions">
             <n-button
               @click="regenerateReport"
               :loading="isGenerating"
@@ -35,87 +35,18 @@
               </template>
               Back
             </n-button>
-          </div>
+          </div> -->
         </div>
       </div>
 
       <!-- Visual Aspects Section -->
-      <div class="report-section">
-        <div class="section-header">
-          <h2 class="section-title">
-            <n-icon class="section-icon">
-              <EyeIcon />
-            </n-icon>
-            Visual Aspects Analysis
-          </h2>
-          <p class="section-description">
-            Statistical breakdown of visual characteristics across your photo
-            collection
-          </p>
-        </div>
+      <VisualAspectsReport :photos="photosStore.photos" />
 
-        <div class="visual-aspects-charts-grid">
-          <div
-            v-for="aspect in visualAspectsData"
-            :key="aspect.key"
-            class="aspect-chart-card"
-          >
-            <div class="chart-header">
-              <h3 class="chart-title">{{ aspect.label }}</h3>
-              <span class="chart-total">{{ aspect.totalPhotos }} photos</span>
-            </div>
-
-            <div class="chart-container">
-              <div class="pie-chart" :id="`chart-${aspect.key}`">
-                <svg width="200" height="200" viewBox="0 0 200 200">
-                  <!-- Pie chart will be generated here -->
-                  <g transform="translate(100,100)">
-                    <path
-                      v-for="(item, index) in aspect.breakdown"
-                      :key="item.value"
-                      :d="
-                        generatePieSlice(
-                          item.percentage,
-                          index,
-                          aspect.breakdown,
-                        )
-                      "
-                      :fill="getSliceColor(index)"
-                      :stroke="'var(--bg-body)'"
-                      :stroke-width="2"
-                      class="pie-slice"
-                    >
-                      <title>
-                        {{ item.label }}: {{ item.percentage.toFixed(1) }}%
-                      </title>
-                    </path>
-                  </g>
-                </svg>
-              </div>
-
-              <div class="chart-legend">
-                <div
-                  v-for="(item, index) in aspect.breakdown"
-                  :key="item.value"
-                  class="legend-item"
-                >
-                  <div
-                    class="legend-color"
-                    :style="{ backgroundColor: getSliceColor(index) }"
-                  ></div>
-                  <span class="legend-label">{{ item.label }}</span>
-                  <span class="legend-value"
-                    >{{ item.percentage.toFixed(1) }}%</span
-                  >
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <!-- Artistic Scores Section -->
+      <ArtisticScoresReport :photos="photosStore.photos" />
 
       <!-- Narrative Analysis Section -->
-      <div class="report-section">
+      <!-- <div class="report-section">
         <div class="section-header">
           <h2 class="section-title">
             <n-icon class="section-icon">
@@ -152,7 +83,7 @@
         </div>
       </div>
 
-      <!-- Cultural Context Section -->
+
       <div class="report-section">
         <div class="section-header">
           <h2 class="section-title">
@@ -193,7 +124,7 @@
         </div>
       </div>
 
-      <!-- Aesthetic Qualities Section -->
+
       <div class="report-section">
         <div class="section-header">
           <h2 class="section-title">
@@ -237,7 +168,6 @@
         </div>
       </div>
 
-      <!-- Improvement Recommendations Section -->
       <div class="report-section last-section">
         <div class="section-header">
           <h2 class="section-title">
@@ -285,7 +215,7 @@
             </div>
           </div>
         </div>
-      </div>
+      </div> -->
     </div>
   </div>
 </template>
@@ -299,6 +229,8 @@ defineOptions({
 });
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useMessage } from "naive-ui";
+import VisualAspectsReport from "@/components/report/VisualAspectsReport.vue";
+import ArtisticScoresReport from "@/components/report/ArtisticScoresReport.vue";
 
 // Icons
 import {
@@ -331,32 +263,10 @@ const reportDate = ref(new Date());
 // Mock data - In a real app, this would come from API calls
 const totalPhotos = computed(() => photosStore.photos?.length || 0);
 
-const visualAspectsData = ref([]);
 const narrativeData = ref([]);
 const culturalData = ref([]);
 const aestheticQualities = ref([]);
 const improvements = ref([]);
-
-// Generate mock data based on visual aspects options
-const generateVisualAspectsData = () => {
-  return visualAspectsOptions.map((aspect) => ({
-    key: aspect.key,
-    label: aspect.label,
-    totalPhotos: Math.floor(Math.random() * totalPhotos.value * 0.8) + 50,
-    breakdown: aspect.children
-      .map((child) => {
-        const percentage = Math.random() * 40 + 10; // 10-50%
-        return {
-          label: child.label,
-          value: child.value,
-          percentage,
-          count: Math.floor((totalPhotos.value * percentage) / 100),
-        };
-      })
-      .sort((a, b) => b.percentage - a.percentage)
-      .slice(0, 5), // Top 5
-  }));
-};
 
 const generateNarrativeData = () => {
   return [
@@ -566,7 +476,6 @@ const generateReport = async () => {
 
   try {
     // Generate all sections data
-    visualAspectsData.value = generateVisualAspectsData();
     narrativeData.value = generateNarrativeData();
     culturalData.value = generateCulturalData();
     aestheticQualities.value = generateAestheticQualities();
@@ -593,47 +502,6 @@ const regenerateReport = async () => {
   await generateReport();
 };
 
-// Pie chart functions
-const generatePieSlice = (percentage, index, allItems) => {
-  const total = allItems.reduce((sum, item) => sum + item.percentage, 0);
-  const radius = 80;
-
-  // Calculate start and end angles
-  let startAngle = 0;
-  for (let i = 0; i < index; i++) {
-    startAngle += (allItems[i].percentage / total) * 2 * Math.PI;
-  }
-  const endAngle = startAngle + (percentage / total) * 2 * Math.PI;
-
-  // Calculate coordinates
-  const x1 = Math.cos(startAngle - Math.PI / 2) * radius;
-  const y1 = Math.sin(startAngle - Math.PI / 2) * radius;
-  const x2 = Math.cos(endAngle - Math.PI / 2) * radius;
-  const y2 = Math.sin(endAngle - Math.PI / 2) * radius;
-
-  // Large arc flag
-  const largeArcFlag = endAngle - startAngle > Math.PI ? 1 : 0;
-
-  // Build path
-  return `M 0 0 L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
-};
-
-const getSliceColor = (index) => {
-  const colors = [
-    "#3b82f6", // Blue
-    "#ef4444", // Red
-    "#10b981", // Green
-    "#f59e0b", // Yellow
-    "#8b5cf6", // Purple
-    "#06b6d4", // Cyan
-    "#f97316", // Orange
-    "#84cc16", // Lime
-    "#ec4899", // Pink
-    "#6b7280", // Gray
-  ];
-  return colors[index % colors.length];
-};
-
 const formatDate = (date) => {
   return new Intl.DateTimeFormat("en-US", {
     year: "numeric",
@@ -650,7 +518,7 @@ onMounted(async () => {
   if (photosStore.photos.length === 0) {
     await photosStore.fetchPhotos();
   }
-  await generateReport();
+  // await generateReport();
 });
 </script>
 
@@ -749,7 +617,6 @@ onMounted(async () => {
 }
 
 .report-header {
-  margin-bottom: var(--spacing-3xl);
   padding-bottom: var(--spacing-2xl);
   border-bottom: 1px solid var(--border-color);
 }
@@ -800,10 +667,6 @@ onMounted(async () => {
   margin-bottom: var(--spacing-6xl);
 }
 
-.section-header {
-  margin-bottom: var(--spacing-2xl);
-}
-
 .section-title {
   font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-semibold);
@@ -823,107 +686,6 @@ onMounted(async () => {
   color: var(--text-secondary);
   margin: 0;
   line-height: var(--line-height-relaxed);
-}
-
-/* Visual Aspects Charts Grid */
-.visual-aspects-charts-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-  gap: var(--spacing-xl);
-}
-
-.aspect-chart-card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-xl);
-  transition: var(--transition-normal);
-}
-
-.aspect-chart-card:hover {
-  border-color: var(--primary-color);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
-}
-
-.chart-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-lg);
-}
-
-.chart-title {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.chart-total {
-  font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
-}
-
-.chart-container {
-  display: flex;
-  gap: var(--spacing-lg);
-  align-items: flex-start;
-}
-
-.pie-chart {
-  flex-shrink: 0;
-}
-
-.pie-chart svg {
-  width: 200px;
-  height: 200px;
-  max-width: 100%;
-}
-
-.pie-slice {
-  transition: var(--transition-normal);
-  cursor: pointer;
-}
-
-.pie-slice:hover {
-  filter: brightness(1.1);
-  transform-origin: center;
-}
-
-.chart-legend {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  min-width: 150px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-xs) 0;
-}
-
-.legend-color {
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-
-.legend-label {
-  flex: 1;
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-}
-
-.legend-value {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-primary);
-  flex-shrink: 0;
 }
 
 /* Narrative Grid */
@@ -1301,7 +1063,6 @@ onMounted(async () => {
     justify-content: flex-start;
   }
 
-  .visual-aspects-charts-grid,
   .narrative-grid,
   .cultural-grid,
   .aesthetic-grid,
@@ -1322,22 +1083,6 @@ onMounted(async () => {
   }
 
   .score-bar {
-    width: 100%;
-  }
-
-  .chart-container {
-    flex-direction: column;
-    align-items: center;
-    gap: var(--spacing-lg);
-  }
-
-  .pie-chart svg {
-    width: 180px;
-    height: 180px;
-  }
-
-  .chart-legend {
-    min-width: unset;
     width: 100%;
   }
 }

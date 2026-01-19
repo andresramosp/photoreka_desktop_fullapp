@@ -212,7 +212,7 @@
         <div
           v-for="collection in collections"
           :key="collection.id"
-          class="card"
+          class="action-card"
           @click="openCollection(collection)"
         >
           <div class="card-preview">

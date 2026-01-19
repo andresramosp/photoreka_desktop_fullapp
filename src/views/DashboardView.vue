@@ -143,7 +143,7 @@
         >
           <div class="action-icon">
             <n-icon size="32">
-              <PhotoHubIcon />
+              <LayersOutline />
             </n-icon>
           </div>
           <h3 class="action-title">Workspace</h3>
@@ -384,6 +384,7 @@ import {
   AnalyticsOutline as AnalyticsIcon,
   FilmOutline as SeriesIcon,
   SearchOutline as SearchIcon,
+  LayersOutline,
 } from "@vicons/ionicons5";
 import { Workspace } from "@vicons/carbon";
 
@@ -750,41 +751,6 @@ onMounted(() => {
   gap: var(--spacing-xl);
   margin-bottom: var(--spacing-2xl);
   transition: var(--transition-normal);
-}
-
-.action-card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  transition: var(--transition-normal);
-  cursor: pointer;
-  padding: var(--spacing-2xl);
-  text-align: center;
-  height: 180px;
-  min-height: 180px;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.action-card:hover {
-  border-color: var(--primary-color);
-  box-shadow: var(--shadow-primary);
-  transform: translateY(-2px);
-}
-
-.action-card.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-.action-card.disabled:hover {
-  border-color: var(--border-color);
-  box-shadow: none;
-  transform: none;
 }
 
 .action-icon {
