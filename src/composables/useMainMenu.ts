@@ -73,25 +73,30 @@ export function useMainMenu() {
   const librarySection = computed<MenuOption>(() => {
     const children: MenuOption[] = [
       {
-        label: "Workspace",
+        label: () =>
+          h("span", { class: "second-level-menu-item" }, "Workspace"),
         key: "workspace",
         icon: renderIcon(LayersOutline),
       },
       {
         label: () =>
           h(
-            "div",
-            {
-              onClick: (e: MouseEvent) => {
-                e.stopPropagation();
-                router.push("/collections");
+            "span",
+            { class: "second-level-menu-item" },
+            h(
+              "div",
+              {
+                onClick: (e: MouseEvent) => {
+                  e.stopPropagation();
+                  router.push("/collections");
+                },
+                style: {
+                  cursor: "pointer",
+                  width: "100%",
+                },
               },
-              style: {
-                cursor: "pointer",
-                width: "100%",
-              },
-            },
-            "Collections",
+              "Collections",
+            ),
           ),
         key: "collections-group",
         icon: renderIcon(CollectionsIcon),
@@ -139,7 +144,7 @@ export function useMainMenu() {
   const exploreSection = computed<MenuOption>(() => {
     const children: MenuOption[] = [
       {
-        label: "Search",
+        label: () => h("span", { class: "second-level-menu-item" }, "Search"),
         key: "search",
         disabled: isBlocked.value,
         icon: renderIcon(SearchIcon),
@@ -150,13 +155,14 @@ export function useMainMenu() {
     if (!isMobileLimitedMode.value) {
       children.push(
         {
-          label: "3D Atlas",
+          label: () =>
+            h("span", { class: "second-level-menu-item" }, "3D Atlas"),
           key: "atlas",
           disabled: isBlocked.value,
           icon: renderIcon(CubeIcon),
         },
         {
-          label: "Report",
+          label: () => h("span", { class: "second-level-menu-item" }, "Report"),
           key: "portfolio-report",
           disabled: isBlocked.value,
           icon: renderIcon(ReportIcon),
@@ -182,18 +188,22 @@ export function useMainMenu() {
         {
           label: () =>
             h(
-              "div",
-              {
-                onClick: (e: MouseEvent) => {
-                  e.stopPropagation();
-                  router.push("/series");
+              "span",
+              { class: "second-level-menu-item" },
+              h(
+                "div",
+                {
+                  onClick: (e: MouseEvent) => {
+                    e.stopPropagation();
+                    router.push("/series");
+                  },
+                  style: {
+                    cursor: "pointer",
+                    width: "100%",
+                  },
                 },
-                style: {
-                  cursor: "pointer",
-                  width: "100%",
-                },
-              },
-              "Series",
+                "Series",
+              ),
             ),
           key: "series-group",
           icon: renderIcon(SeriesIcon),
@@ -204,23 +214,17 @@ export function useMainMenu() {
           })),
         },
         {
-          label: "Canvas",
+          label: () => h("span", { class: "second-level-menu-item" }, "Canvas"),
           key: "canvas",
           disabled: isBlocked.value,
           icon: renderIcon(CanvasIcon),
         },
-        // {
-        //   label: "Series",
-        //   key: "series",
-        //   disabled: isBlocked.value,
-        //   icon: renderIcon(SeriesIcon),
-        // },
       );
     }
 
     // Framer is available on both mobile and desktop
     children.push({
-      label: "Framer",
+      label: () => h("span", { class: "second-level-menu-item" }, "Framer"),
       key: "framer",
       disabled: isBlocked.value,
       icon: renderIcon(FramerIcon),
@@ -241,12 +245,12 @@ export function useMainMenu() {
     icon: renderIcon(SystemIcon),
     children: [
       {
-        label: "Settings",
+        label: () => h("span", { class: "second-level-menu-item" }, "Settings"),
         key: "settings",
         icon: renderIcon(SettingsIcon),
       },
       {
-        label: "Help",
+        label: () => h("span", { class: "second-level-menu-item" }, "Help"),
         key: "help",
         icon: renderIcon(HelpIcon),
       },

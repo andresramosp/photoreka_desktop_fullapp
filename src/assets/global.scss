@@ -1428,6 +1428,19 @@
     translateY(-3px);
 }
 
+// estilos custom del menu principal
+
+.n-menu-item-content:has(.second-level-menu-item) {
+  height: 32px !important;
+  // margin-top: -10px;
+}
+
+.n-menu-item:has(.second-level-menu-item) {
+  height: 32px !important;
+  // font-size: 15px !important;
+  // margin-top: -10px;
+}
+
 .n-menu-item-content:has(.collection-menu-item) {
   height: 23px !important;
   // margin-top: -10px;
