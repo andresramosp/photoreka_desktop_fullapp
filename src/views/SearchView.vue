@@ -711,7 +711,11 @@
             <div class="results-info results-info-base">
               <span class="results-count results-count-base">
                 {{ filteredSearchResults.length }} photos found
-                <span v-if="minStarRating > 0" class="filter-applied">
+                <span v-if="showOnlyHighMatches" class="filter-applied">
+                  ({{ filteredSearchResults.length }} of
+                  {{ searchResults.length }} high-quality matches)
+                </span>
+                <span v-else-if="minStarRating > 0" class="filter-applied">
                   ({{ filteredSearchResults.length }} of
                   {{ searchResults.length }} with {{ minStarRating }}+ stars)
                 </span>
@@ -723,6 +727,22 @@
           </div>
 
           <div class="controls-right">
+            <!-- High Matches Filter -->
+            <div class="high-matches-filter">
+              <span class="filter-label">High matches:</span>
+              <div class="diamond-button" @click="toggleHighMatchesFilter">
+                <n-icon
+                  size="18"
+                  :class="[
+                    'diamond-filter-icon',
+                    { active: showOnlyHighMatches },
+                  ]"
+                >
+                  <DiamondOutline />
+                </n-icon>
+              </div>
+            </div>
+
             <!-- Star Filter -->
             <div class="star-filter">
               <span class="filter-label">Min. Rating:</span>
@@ -769,6 +789,7 @@
             :photo="photo"
             :computed-stars="photo.computedStars"
             :show-low-relevance-icon="photo.showLowRelevanceIcon"
+            :high-match="photo.highMatch"
             :selected="localSelectedPhotoIds.includes(photo.id)"
             @select="togglePhotoSelection"
             @info="showPhotoInfo"
@@ -891,6 +912,7 @@ import {
   GlobeOutline,
   LocateOutline,
   GitBranchOutline,
+  DiamondOutline,
 } from "@vicons/ionicons5";
 import { InfoCircleFilled, TagOutlined } from "@vicons/antd";
 import { usePhotosStore } from "@/stores/photos";
@@ -987,10 +1009,18 @@ const photosWithComputedStars = computed(() => {
     ...photo,
     computedStars: computePhotoStars(photo),
     showLowRelevanceIcon: shouldShowLowRelevanceIcon(photo),
+    highMatch: photo.highMatch || false,
   }));
 });
 
 const filteredSearchResults = computed(() => {
+  // High matches filter takes priority over star rating
+  if (showOnlyHighMatches.value) {
+    return photosWithComputedStars.value.filter(
+      (photo) => photo.highMatch === true,
+    );
+  }
+
   if (minStarRating.value === 0) {
     return photosWithComputedStars.value;
   }
@@ -1148,6 +1178,9 @@ const gridColumns = ref(6);
 // Star filter for minimum rating
 const minStarRating = ref(0);
 
+// High matches filter
+const showOnlyHighMatches = ref(false);
+
 // Collections filter
 const selectedCollections = ref([]);
 
@@ -1176,7 +1209,21 @@ function setGridColumns(n) {
 // Star filter handler
 function onStarFilterChange(rating) {
   minStarRating.value = rating || 0;
+  // Clear high matches filter when setting star rating
+  if (rating > 0) {
+    showOnlyHighMatches.value = false;
+  }
   console.log("Min star rating filter set to:", minStarRating.value);
+}
+
+// High matches filter handler
+function toggleHighMatchesFilter() {
+  showOnlyHighMatches.value = !showOnlyHighMatches.value;
+  // Clear star filter when activating high matches
+  if (showOnlyHighMatches.value) {
+    minStarRating.value = 0;
+  }
+  console.log("High matches filter:", showOnlyHighMatches.value);
 }
 
 function togglePhotoSelection(id) {
@@ -1261,6 +1308,9 @@ function clearSearch() {
   // Reset star filter
   minStarRating.value = 0;
 
+  // Reset high matches filter
+  showOnlyHighMatches.value = false;
+
   // Reset collections filter (not managed by search store yet)
   clearCollectionsFilter();
 
@@ -1282,6 +1332,12 @@ async function performSearch() {
 // Cargar más resultados
 async function loadMorePhotos() {
   searchStore.setLoadingMore(true);
+
+  // Scroll cuando aparecen los skeletons
+  nextTick(() => {
+    scrollToLast();
+  });
+
   await searchPhotos();
   searchStore.setLoadingMore(false);
 }
@@ -2004,6 +2060,40 @@ const filterSummaryText = computed(() => {
   display: flex;
   align-items: center;
   gap: 24px;
+}
+
+/* High Matches Filter */
+.high-matches-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.diamond-button {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.diamond-button:hover {
+  background-color: rgba(96, 165, 250, 0.1);
+}
+
+.diamond-filter-icon {
+  color: rgba(96, 165, 250, 0.3);
+  transition: all 0.3s ease;
+}
+
+.diamond-filter-icon:hover {
+  color: rgba(96, 165, 250, 0.6);
+}
+
+.diamond-filter-icon.active {
+  color: #60a5fa;
+  filter: drop-shadow(0 0 4px rgba(96, 165, 250, 0.6));
 }
 
 /* Star Filter */

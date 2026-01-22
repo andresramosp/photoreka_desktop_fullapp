@@ -43,7 +43,10 @@
 
       <!-- Match Score Stars (visible en todos los modos) -->
       <div
-        v-if="props.showStars && (computedStars > 0 || showLowRelevanceIcon)"
+        v-if="
+          props.showStars &&
+          (props.highMatch || computedStars > 0 || showLowRelevanceIcon)
+        "
         class="match-score-indicator"
       >
         <!-- Icono de poca relevancia para labelScore 'poor' -->
@@ -58,6 +61,17 @@
               >Low relevance: The photo may not be relevant to this
               criterion.</span
             >
+          </n-tooltip>
+        </div>
+        <!-- Diamante para highMatch -->
+        <div v-else-if="props.highMatch" class="diamond-indicator">
+          <n-tooltip trigger="hover" placement="top">
+            <template #trigger>
+              <n-icon size="16" class="diamond-icon">
+                <DiamondIcon />
+              </n-icon>
+            </template>
+            <span>High-quality match</span>
           </n-tooltip>
         </div>
         <!-- Estrellas para matchScore > 0 -->
@@ -224,6 +238,7 @@ import {
   InformationCircleOutline as InfoIcon,
   TrashOutline as TrashIcon,
   DocumentTextOutline as NotesIcon,
+  DiamondOutline as DiamondIcon,
 } from "@vicons/ionicons5";
 
 import { usePhotoScored } from "@/composables/usePhotoScored.js";
@@ -259,6 +274,7 @@ export interface Photo {
   reasoning?: string;
   matchScore?: number; // AI-generated match score (0 = not scored yet, 1-3 stars)
   labelScore?: "excellent" | "good" | "fair" | "poor"; // New enum-based scoring system
+  highMatch?: boolean; // High-quality match indicator (shows diamond instead of stars)
   matchingTags?: any[];
   matchingChunks?: any[]; // AI-generated matching description chunks
   width?: number;
@@ -281,6 +297,7 @@ interface Props {
   isNew?: boolean; // Mark photo as newly arrived
   computedStars?: number; // Pre-computed stars (0-3)
   showLowRelevanceIcon?: boolean; // Pre-computed low relevance indicator
+  highMatch?: boolean; // High-quality match indicator (shows diamond instead of stars)
   showInfoButton?: boolean; // Control visibility of info button
   showDeleteButton?: boolean; // Control visibility of delete button
 }
@@ -685,6 +702,29 @@ const handleMouseLeave = () => {
 
 .star-icon.empty {
   color: rgba(255, 255, 255, 0.3); /* Semi-transparent white for empty stars */
+}
+
+/* Diamond Indicator */
+.diamond-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.diamond-icon {
+  color: #60a5fa; /* Blue color for diamond */
+  filter: drop-shadow(0 0 4px rgba(96, 165, 250, 0.5));
+  animation: diamondPulse 2s ease-in-out infinite;
+}
+
+@keyframes diamondPulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 4px rgba(96, 165, 250, 0.5));
+  }
+  50% {
+    filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.8));
+  }
 }
 
 /* Low Relevance Icon */
