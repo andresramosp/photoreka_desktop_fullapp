@@ -22,7 +22,7 @@
             <component :is="iconComponents[instruction.icon]" />
           </n-icon>
 
-          <span>{{ instruction.text }}</span>
+          <span v-html="instruction.text"></span>
         </div>
       </div>
       <div class="examples-carousel">
@@ -85,7 +85,7 @@ const searchModeConfig = {
       },
       {
         icon: "ImagesOutline",
-        text: "Best for moods, compositional aspects, and overall visual style.",
+        text: "Best for <strong> moods </strong>,  <strong> compositional aspects </strong>, and  <strong> overall visual style </strong>.",
       },
     ],
   },
@@ -101,7 +101,7 @@ const searchModeConfig = {
       },
       {
         icon: "GitBranchOutline",
-        text: "Ideal for metaphorical queries, cultural references, and nuanced interpretation.",
+        text: "Ideal for <strong> metaphorical queries </strong>, <strong> cultural references </strong>, and <strong> nuanced interpretation </strong>.",
       },
     ],
   },
@@ -117,7 +117,7 @@ const searchModeConfig = {
       },
       {
         icon: "ListOutline",
-        text: "Best for concrete objects, specific attributes, and more precise taxonomic distinctions.",
+        text: "Best for <strong> concrete objects </strong>, <strong> specific attributes </strong>, and <strong> more precise taxonomic distinctions </strong>.",
       },
     ],
   },

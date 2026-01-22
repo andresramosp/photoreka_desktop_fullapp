@@ -730,17 +730,30 @@
             <!-- High Matches Filter -->
             <div class="high-matches-filter">
               <span class="filter-label">High matches:</span>
-              <div class="diamond-button" @click="toggleHighMatchesFilter">
-                <n-icon
-                  size="18"
-                  :class="[
-                    'diamond-filter-icon',
-                    { active: showOnlyHighMatches },
-                  ]"
-                >
-                  <DiamondOutline />
-                </n-icon>
-              </div>
+              <n-tooltip
+                trigger="hover"
+                placement="top"
+                :disabled="withInsights"
+              >
+                <template #trigger>
+                  <div
+                    class="diamond-button"
+                    :class="{ disabled: !withInsights }"
+                    @click="withInsights && toggleHighMatchesFilter()"
+                  >
+                    <n-icon
+                      size="18"
+                      :class="[
+                        'diamond-filter-icon',
+                        { active: showOnlyHighMatches && withInsights },
+                      ]"
+                    >
+                      <DiamondOutline />
+                    </n-icon>
+                  </div>
+                </template>
+                Enable Insights and click search to use High Matches filter
+              </n-tooltip>
             </div>
 
             <!-- Star Filter -->
@@ -1447,6 +1460,13 @@ onMounted(() => {
   });
 });
 
+// Watch for Insights toggle to disable High Matches filter if needed
+watch(withInsights, (newValue) => {
+  if (!newValue && showOnlyHighMatches.value) {
+    showOnlyHighMatches.value = false;
+  }
+});
+
 onUnmounted(() => {
   // Remover scroll listener
   if (scrollContainer.value) {
@@ -2078,8 +2098,13 @@ const filterSummaryText = computed(() => {
   transition: all 0.2s ease;
 }
 
-.diamond-button:hover {
+.diamond-button:hover:not(.disabled) {
   background-color: rgba(96, 165, 250, 0.1);
+}
+
+.diamond-button.disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .diamond-filter-icon {
