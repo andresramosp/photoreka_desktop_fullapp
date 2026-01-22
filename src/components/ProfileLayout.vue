@@ -54,7 +54,7 @@ import AppLogo from "./AppLogo.vue";
 }
 
 .profile-content {
-  background-color: var(--bg-body);
+  background-color: var(--bg-container);
   border-radius: 16px;
   border: 1px solid #2c2c32;
   padding: 30px;
