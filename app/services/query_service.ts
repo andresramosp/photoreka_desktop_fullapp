@@ -72,7 +72,7 @@ export default class QueryService {
     const modelOnePromise = this.modelsService.getGeminiResponse(
       MESSAGE_QUERY_NO_PREFIX_AND_TRANSLATION,
       JSON.stringify({ query }),
-      'gemini-2.0-flash'
+      'gemini-2.5-flash-lite'
     )
 
     const { result: modelOneResult, cost: modelOneCost } = await modelOnePromise
@@ -101,7 +101,7 @@ export default class QueryService {
     const metadataPromise = this.modelsService.getGeminiResponse(
       MESSAGE_QUERY_METADATA,
       JSON.stringify({ query }),
-      'gemini-2.0-flash'
+      'gemini-2.5-flash-lite'
     )
 
     const { result: metadataResult } = await metadataPromise
@@ -110,7 +110,7 @@ export default class QueryService {
     const { result: modelResult, cost: modelTwoCost } = await this.modelsService.getGeminiResponse(
       queryStuctureMessage,
       JSON.stringify({ query: modelOneResult.no_prefix }),
-      searchMode == 'curation' ? 'gemini-2.5-flash' : 'gemini-2.0-flash'
+      searchMode == 'gemini-2.5-flash'
     )
 
     modelResult.original = query

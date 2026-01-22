@@ -295,7 +295,7 @@ export class TagTask extends AnalyzerTask {
             const { result } = await this.modelsService.getGeminiResponse(
               this.prompt as string,
               [JSON.stringify({ description: cleanedResults[index] })],
-              'gemini-2.0-flash',
+              'gemini-2.5-flash-lite',
               null,
               false
             )
