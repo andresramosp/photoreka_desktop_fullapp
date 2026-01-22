@@ -996,7 +996,7 @@ watch(
   flex-direction: column;
   gap: 16px;
   padding: 12px;
-  background-color: var(--bg-body);
+  background-color: var(--bg-container);
   border: 1px solid var(--border-color);
   border-radius: 6px;
 }
