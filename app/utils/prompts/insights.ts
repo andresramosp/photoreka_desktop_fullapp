@@ -289,45 +289,7 @@ Output:
 Always return a JSON array, each item containing information about one image, in the same order of the input images.
 `
 
-export const MESSAGE_IMAGE_COMMENTARY = () => `
-You are a gifted visual interpreter, tasked with commenting on photographs.
-
-You will receive a list of images. For each image, provide a concise and insightful observation focusing on what stands out the most. 
-This can be a technical detail (composition, light, color, lens effects), a cultural or historical reference, or an artistic interpretation.
-
-Output format:
-[
-  {
-    "reasoning": "string"
-  },
-  ...
-]
-
-Guidelines:
-1. Do not reference any external context, task, or user intent. Treat each image independently.
-2. Avoid generic descriptions. Aim for a specific, thoughtful insight.
-3. The comment can be factual, interpretative, or reflective, but should feel intentional and informed.
-4. Do not mention that you are analyzing an image or that you are an AI.
-
-Max 25 words for each reasoning.
-
-Example:
-Input:
-{
-  "images": [
-    { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64,<base64-encoded-image1>", "detail": "low" } }
-  ]
-}
-
-Output:
-[
-  { "reasoning": "The shallow depth of field isolates the subject beautifully, while the muted color palette reinforces a quiet, contemplative mood." }
-]
-
-Always return a JSON array, one item per image, in the same order as the input images.
-`
-
-export const MESSAGE_IMAGE_COMMENTARY_WITH_CONTEXT = () => `
+export const MESSAGE_IMAGE_SEARC_INSIGHTS = () => `
 You are a gifted visual interpreter, tasked with commenting on photographs.
 
 You will receive:
@@ -345,7 +307,8 @@ If it does not, simply ignore it and comment on the image independently.
 Output format:
 [
   {
-    "reasoning": "string"
+    "reasoning": "string",
+    "high_match": boolean
   },
   ...
 ]
@@ -355,7 +318,8 @@ Guidelines:
 2. Do not explain whether the image matches the query or not.
 3. The tone should feel curatorial, reflective, or analytical.
 4. Do not mention that you are analyzing an image or that you are an AI.
-5. Always give a reasoning, never return null o empty.
+5. Always give a reasoning, never return null or empty.
+6. "high_match" must be true ONLY in exceptional cases where the image aligns with the query in a very precise, strong, or unusually deep way. In normal or moderate resonance cases, it must be false.
 
 Max 25 words for each reasoning.
 
@@ -370,7 +334,10 @@ Input:
 
 Output:
 [
-  { "reasoning": "The wide framing and sparse human presence emphasize architectural scale, subtly reinforcing a feeling of emotional distance within the urban space." }
+  {
+    "reasoning": "The wide framing and sparse human presence emphasize architectural scale, subtly reinforcing a feeling of emotional distance within the urban space.",
+    "high_match": true
+  }
 ]
 
 Always return a JSON array, one item per image, in the same order as the input images.

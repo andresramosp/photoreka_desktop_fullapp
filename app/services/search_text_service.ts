@@ -13,8 +13,7 @@ import { withCache } from '../decorators/withCache.js'
 
 import PhotoManager from '../managers/photo_manager.js'
 import {
-  MESSAGE_IMAGE_COMMENTARY,
-  MESSAGE_IMAGE_COMMENTARY_WITH_CONTEXT,
+  MESSAGE_IMAGE_SEARC_INSIGHTS,
   MESSAGE_SEARCH_MODEL_CREATIVE,
   MESSAGE_SEARCH_MODEL_CREATIVE_SCORED_IMAGE,
   MESSAGE_SEARCH_MODEL_REFINED_ADAPTIVE_IMAGE,
@@ -284,13 +283,13 @@ export default class SearchTextService {
         return batch.map((scoredPhoto, idx) => {
           const result = modelResult[idx]
           const reasoning = result?.reasoning || ''
-          const matchScore = result?.matchScore
+          const highMatch = result?.high_match
 
           return {
             ...scoredPhoto,
             photo: {
               ...scoredPhoto.photo,
-              matchScore,
+              highMatch,
               reasoning,
             },
           }
@@ -429,7 +428,7 @@ export default class SearchTextService {
     const searchModelMessage =
       searchMode === 'curation'
         ? MESSAGE_SEARCH_MODEL_CREATIVE_SCORED_IMAGE
-        : MESSAGE_IMAGE_COMMENTARY_WITH_CONTEXT
+        : MESSAGE_IMAGE_SEARC_INSIGHTS
 
     const model = searchMode === 'curation' ? 'gemini-2.5-flash-lite' : 'gemini-2.5-flash-lite'
 
