@@ -1037,7 +1037,7 @@ defineExpose({
 
 /* Upload Progress Section */
 .upload-progress-section {
-  background-color: var(--bg-body);
+  background-color: var(--bg-surface);
   border-radius: 12px;
   padding: 24px;
   margin-bottom: 24px;

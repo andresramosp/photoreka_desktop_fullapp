@@ -77,7 +77,7 @@ const searchModeConfig = {
   broad: {
     title: "Broad Mode",
     description:
-      "A fast, lightweight search that scans broadly across your library. Ideal for quick exploration and high-level discovery.",
+      "A lightweight search that scans broadly across your library. Ideal for quick exploration and high-level discovery.",
     instructions: [
       {
         icon: "FlashOutline",
