@@ -168,7 +168,7 @@ const analysisPercentage = computed(() => {
 .progress-bar {
   width: 100%;
   height: 8px;
-  background-color: var(--bg-surface);
+  background-color: var(--bg-container);
   border-radius: var(--radius-full);
   overflow: hidden;
   margin-bottom: var(--spacing-xs);
