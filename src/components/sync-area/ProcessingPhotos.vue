@@ -212,13 +212,13 @@ function clearPollingInterval() {
   if (intervalId.value) {
     console.log(
       `[ProcessingPhotos-${componentId}] Limpio intervalId`,
-      intervalId.value
+      intervalId.value,
     );
     clearInterval(intervalId.value);
     intervalId.value = null;
   } else {
     console.log(
-      `[ProcessingPhotos-${componentId}] clearPollingInterval: No hay interval activo`
+      `[ProcessingPhotos-${componentId}] clearPollingInterval: No hay interval activo`,
     );
   }
   isPolling.value = false;
@@ -229,19 +229,19 @@ function startPolling() {
     `[ProcessingPhotos-${componentId}] startPolling llamado, isPolling:`,
     isPolling.value,
     "isMounted:",
-    isMounted.value
+    isMounted.value,
   );
 
   if (!isMounted.value) {
     console.log(
-      `[ProcessingPhotos-${componentId}] Componente desmontado, no inicio polling`
+      `[ProcessingPhotos-${componentId}] Componente desmontado, no inicio polling`,
     );
     return;
   }
 
   if (isPolling.value) {
     console.log(
-      `[ProcessingPhotos-${componentId}] Ya hay polling activo, ignorando`
+      `[ProcessingPhotos-${componentId}] Ya hay polling activo, ignorando`,
     );
     return;
   }
@@ -252,7 +252,7 @@ function startPolling() {
   const newIntervalId = setInterval(() => {
     if (!isMounted.value) {
       console.log(
-        `[ProcessingPhotos-${componentId}] Componente desmontado, limpiando interval`
+        `[ProcessingPhotos-${componentId}] Componente desmontado, limpiando interval`,
       );
       clearInterval(newIntervalId);
       return;
@@ -263,14 +263,14 @@ function startPolling() {
       console.log(
         `[ProcessingPhotos-${componentId}] setInterval tick (loadProcesses ejecutado)`,
         newIntervalId,
-        new Date().toISOString()
+        new Date().toISOString(),
       );
       loadProcesses();
     } else {
       console.log(
         `[ProcessingPhotos-${componentId}] setInterval tick (NO ejecuta loadProcesses, hash actual: #${hash})`,
         newIntervalId,
-        new Date().toISOString()
+        new Date().toISOString(),
       );
     }
   }, 5000);
@@ -278,7 +278,7 @@ function startPolling() {
   intervalId.value = newIntervalId;
   console.log(
     `[ProcessingPhotos-${componentId}] Creo intervalId`,
-    intervalId.value
+    intervalId.value,
   );
 }
 
@@ -373,7 +373,7 @@ function notifyFinished(job) {
 async function loadProcesses() {
   if (!isMounted.value) {
     console.log(
-      `[ProcessingPhotos-${componentId}] Componente desmontado, no cargo procesos`
+      `[ProcessingPhotos-${componentId}] Componente desmontado, no cargo procesos`,
     );
     return;
   }
@@ -384,7 +384,7 @@ async function loadProcesses() {
     // Verificar nuevamente después del await
     if (!isMounted.value) {
       console.log(
-        `[ProcessingPhotos-${componentId}] Componente desmontado después del API call`
+        `[ProcessingPhotos-${componentId}] Componente desmontado después del API call`,
       );
       return;
     }
@@ -402,7 +402,7 @@ async function loadProcesses() {
 
     processingJobs.value = updated.sort(
       (a, b) =>
-        new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
+        new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
     );
 
     // --- Notificación de procesos finalizados y onboarding del primer proceso ---
@@ -453,7 +453,7 @@ async function loadProcesses() {
         .filter((job) => job.status === "finished")
         .sort(
           (a, b) =>
-            new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+            new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
         )[0];
 
       if (oldestFinishedJob) {
@@ -471,7 +471,7 @@ async function loadProcesses() {
   } catch (error) {
     console.error(
       `[ProcessingPhotos-${componentId}] Error loading processes:`,
-      error
+      error,
     );
   }
 }
@@ -487,7 +487,7 @@ onMounted(async () => {
     startPolling();
   } else {
     console.log(
-      `[ProcessingPhotos-${componentId}] Componente desmontado durante onMounted, no inicio polling`
+      `[ProcessingPhotos-${componentId}] Componente desmontado durante onMounted, no inicio polling`,
     );
   }
 });
@@ -538,7 +538,7 @@ const navigateToTab = (tabName) => {
 // Solo mostrar el botón en el último proceso terminado
 function isLastFinishedJob(job) {
   const finishedJobs = processingJobs.value.filter(
-    (j) => j.status === "finished"
+    (j) => j.status === "finished",
   );
   if (finishedJobs.length === 0) return false;
   // Ordenar por fecha de inicio descendente (más reciente primero)
@@ -603,7 +603,7 @@ function isLastFinishedJob(job) {
 }
 
 .processing-row:hover {
-  background-color: rgba(139, 92, 246, 0.05);
+  /* background-color: var(--bg-surface); */
 }
 
 .processing-row.finished {
@@ -611,7 +611,7 @@ function isLastFinishedJob(job) {
 }
 
 .processing-row.expanded {
-  background-color: rgba(139, 92, 246, 0.05);
+  background-color: var(--bg-container);
 }
 
 .row-main {

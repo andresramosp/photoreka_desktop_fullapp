@@ -772,7 +772,7 @@ watch(
 
 /* Filters Section */
 .filters-section {
-  background-color: var(--bg-body);
+  background-color: var(--bg-container);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   overflow: hidden;
@@ -846,7 +846,7 @@ watch(
 
 /* Sorting Section */
 .sorting-section {
-  background-color: var(--bg-body);
+  background-color: var(--bg-container);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   overflow: hidden;

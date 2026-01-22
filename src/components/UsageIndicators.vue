@@ -136,7 +136,7 @@ const analysisPercentage = computed(() => {
 
 .usage-card {
   flex: 1;
-  background-color: var(--bg-body);
+  background-color: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: var(--spacing-lg);

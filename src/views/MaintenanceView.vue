@@ -111,7 +111,7 @@ const { isBypassActive, clearBypass } = useMaintenanceMode();
 const isMobileDevice = () => {
   return (
     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-      navigator.userAgent
+      navigator.userAgent,
     ) || window.innerWidth <= 768
   );
 };
@@ -257,16 +257,13 @@ const handleClearBypass = () => {
   left: 0;
   width: 100%;
   height: 100%;
-  background-image: radial-gradient(
+  background-image:
+    radial-gradient(
       circle at 20% 50%,
       rgba(37, 99, 235, 0.03) 0%,
       transparent 50%
     ),
-    radial-gradient(
-      circle at 80% 20%,
-      rgba(139, 92, 246, 0.03) 0%,
-      transparent 50%
-    ),
+    radial-gradient(circle at 80% 20%, var(--bg-surface) 0%, transparent 50%),
     radial-gradient(
       circle at 40% 80%,
       rgba(245, 158, 11, 0.02) 0%,
@@ -294,7 +291,7 @@ const handleClearBypass = () => {
   background: linear-gradient(
     45deg,
     rgba(37, 99, 235, 0.08),
-    rgba(139, 92, 246, 0.04)
+    var(--bg-surface)
   );
 }
 

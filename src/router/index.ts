@@ -24,6 +24,7 @@ import LandingViewPremium from "../views/LandingViewPremium.vue";
 import TermsView from "../views/TermsView.vue";
 import MaintenanceView from "../views/MaintenanceView.vue";
 import ThreeDView from "../views/3DView.vue";
+import WorldMapView from "../views/WorldMapView.vue";
 import ResetPasswordView from "../views/ResetPasswordView.vue";
 import ConfirmEmailView from "../views/ConfirmEmailView.vue";
 import AuthCallback from "../views/AuthCallback.vue";
@@ -243,6 +244,14 @@ const router = createRouter({
       path: "/atlas",
       name: "atlas",
       component: ThreeDView,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
+      path: "/world-map",
+      name: "world-map",
+      component: WorldMapView,
       meta: {
         requiresAuth: true,
       },

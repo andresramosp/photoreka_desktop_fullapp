@@ -481,7 +481,7 @@ const handleMouseLeave = () => {
   border-color: #8b5cf6;
   box-shadow:
     0 0 0 1px #8b5cf640,
-    0 8px 24px rgba(139, 92, 246, 0.2);
+    0 8px 24px var(--bg-surface);
 }
 
 .photo-container {

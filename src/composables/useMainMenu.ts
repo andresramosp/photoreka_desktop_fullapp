@@ -19,6 +19,7 @@ import {
   SquareOutline as FramerIcon,
   SettingsOutline as SettingsIcon,
   HelpCircleOutline as HelpIcon,
+  MapOutline as MapIcon,
 } from "@vicons/ionicons5";
 
 // Import icons for sections (generic)
@@ -151,7 +152,7 @@ export function useMainMenu() {
       },
     ];
 
-    // Only add 3D Atlas and Report on desktop
+    // Only add 3D Atlas, World Map, and Report on desktop
     if (!isMobileLimitedMode.value) {
       children.push(
         {
@@ -161,6 +162,13 @@ export function useMainMenu() {
           disabled: isBlocked.value,
           icon: renderIcon(CubeIcon),
         },
+        // {
+        //   label: () =>
+        //     h("span", { class: "second-level-menu-item" }, "World Map"),
+        //   key: "world-map",
+        //   disabled: isBlocked.value,
+        //   icon: renderIcon(MapIcon),
+        // },
         {
           label: () => h("span", { class: "second-level-menu-item" }, "Report"),
           key: "portfolio-report",

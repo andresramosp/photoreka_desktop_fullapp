@@ -324,6 +324,7 @@
             <n-button
               v-for="button in uploadButtons"
               :key="button.key"
+              secondary
               :type="button.type"
               size="large"
               @click="button.action"
@@ -483,7 +484,7 @@ import { useMessage } from "naive-ui";
 
 // Maintenance mode check
 const isMaintenanceMode = computed(
-  () => import.meta.env.VITE_MAINTENANCE_MODE === "true"
+  () => import.meta.env.VITE_MAINTENANCE_MODE === "true",
 );
 
 const emit = defineEmits(["on-analyze", "selection-change"]);
@@ -631,7 +632,7 @@ const uploadButtons = computed(() => {
       label: "Import from local files",
       compactLabel: "Local Files",
       icon: "FolderOpen",
-      type: "secondary",
+      type: "default",
       action: () => handleSourceSelection("local", () => triggerFileInput()),
     },
     lightroom: {
@@ -639,7 +640,7 @@ const uploadButtons = computed(() => {
       label: "Lightroom Plugin",
       compactLabel: "Plugin",
       icon: "lightroom",
-      type: "secondary",
+      type: "default",
       action: () =>
         handleSourceSelection("lightroom", () => {
           showLightroomModal.value = true;
@@ -650,7 +651,7 @@ const uploadButtons = computed(() => {
       label: "Google Photos",
       compactLabel: "Google Photos",
       icon: googlePhotos.isAuthorized.value ? "google" : "google-locked",
-      type: "secondary",
+      type: "default",
       action: () => handleSourceSelection("google", importFromGooglePhotos),
     },
   };
@@ -684,7 +685,7 @@ watch(
     if (newValue && !oldValue) {
       message.success("Google Photos connected successfully!");
     }
-  }
+  },
 );
 
 const fastModeOverride = ref(true);
@@ -721,7 +722,7 @@ const filteredPhotos = computed(() => {
 // Computed to check if photos are in preprocessing state
 const isPreprocessing = computed(() => {
   return lightboxPhotos.value.some(
-    (photo) => photo.isCheckingDuplicates || photo.status === "preprocessing"
+    (photo) => photo.isCheckingDuplicates || photo.status === "preprocessing",
   );
 });
 
@@ -780,7 +781,7 @@ const handleDrop = async (event) => {
   }
 
   const files = Array.from(event.dataTransfer.files).filter((file) =>
-    file.type.startsWith("image/")
+    file.type.startsWith("image/"),
   );
 
   if (files.length === 0) {
@@ -870,11 +871,11 @@ async function importFromGooglePhotos() {
         googlePhotoBlob: result.blob,
         googlePhotoMediaItem: result.mediaItem,
       })),
-      "google"
+      "google",
     );
 
     message.success(
-      `Successfully imported ${successfulDownloads.length} photos from Google Photos`
+      `Successfully imported ${successfulDownloads.length} photos from Google Photos`,
     );
   } catch (error) {
     console.error("❌ Error importing from Google Photos:", error);
@@ -988,7 +989,7 @@ defineExpose({
 }
 
 .compact-upload-section.compact-drag-over {
-  background-color: rgba(139, 92, 246, 0.05);
+  background-color: var(--bg-surface);
   border: 2px dashed var(--secondary-color);
   border-radius: 8px;
   padding: 8px;
@@ -1328,13 +1329,13 @@ defineExpose({
 
 .import-card:hover:not(.drag-over) {
   border-color: var(--accent-color);
-  background-color: rgba(139, 92, 246, 0.05);
+  background-color: var(--bg-surface);
 }
 
 .import-card.drag-over {
   border-color: #8b5cf6;
-  background-color: rgba(139, 92, 246, 0.1);
-  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
+  background-color: var(--bg-surface);
+  box-shadow: 0 4px 16px var(--bg-surface);
 }
 
 .import-card-icon {

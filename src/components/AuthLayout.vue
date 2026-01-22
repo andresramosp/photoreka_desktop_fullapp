@@ -117,18 +117,19 @@ import AppLogo from "./AppLogo.vue";
   left: 0;
   right: 0;
   bottom: 0;
-  background-image: radial-gradient(
+  background-image:
+    radial-gradient(
       circle at 25% 25%,
       rgba(37, 99, 235, 0.1) 0%,
       transparent 50%
     ),
-    radial-gradient(
-      circle at 75% 75%,
-      rgba(139, 92, 246, 0.1) 0%,
-      transparent 50%
-    );
-  background-size: 800px 800px, 600px 600px;
-  background-position: 0 0, 200px 200px;
+    radial-gradient(circle at 75% 75%, var(--bg-surface) 0%, transparent 50%);
+  background-size:
+    800px 800px,
+    600px 600px;
+  background-position:
+    0 0,
+    200px 200px;
 }
 
 .bg-gradient {

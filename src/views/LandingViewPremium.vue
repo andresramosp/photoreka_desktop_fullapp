@@ -693,7 +693,7 @@ const videoTabs = ref([
 // Lightroom video
 const lightroomVideoUrl = new URL(
   "@/assets/videos/lr_plugin.mp4",
-  import.meta.url
+  import.meta.url,
 ).href;
 
 // Features data
@@ -1007,7 +1007,7 @@ const setupIntersectionObserver = () => {
     {
       threshold: 1.0,
       rootMargin: "0px",
-    }
+    },
   );
 
   observer.value.observe(videoPlayer.value);
@@ -1153,11 +1153,14 @@ if (typeof window !== "undefined") {
   background: var(--premium-bg);
   color: var(--premium-text-primary);
   overflow-x: hidden;
-  transition: background 0.3s ease, color 0.3s ease;
+  transition:
+    background 0.3s ease,
+    color 0.3s ease;
 }
 
 .premium-landing {
-  background: radial-gradient(
+  background:
+    radial-gradient(
       circle at 20% 30%,
       var(--premium-gradient-2) 0%,
       transparent 25%
@@ -1500,13 +1503,17 @@ if (typeof window !== "undefined") {
   border-radius: 10px;
   overflow: hidden;
   background: #000;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.1);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.25),
+    0 0 0 1px rgba(0, 0, 0, 0.1);
   /* aspect-ratio: 16 / 7.61; */
 }
 
 [data-theme="light"] .demo-video-container {
   background: #f8f9fa;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.1);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(0, 0, 0, 0.1);
 }
 
 .demo-video {
@@ -1719,7 +1726,7 @@ if (typeof window !== "undefined") {
   background: linear-gradient(
     135deg,
     rgba(37, 99, 235, 0.08),
-    rgba(139, 92, 246, 0.08)
+    var(--bg-surface)
   );
   border-radius: 24px;
   opacity: 0.5;
@@ -1786,14 +1793,18 @@ if (typeof window !== "undefined") {
   position: relative;
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.1);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(0, 0, 0, 0.1);
   border: none;
   background: #000;
 }
 
 [data-theme="light"] .video-frame {
   background: #f8f9fa;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.1);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(0, 0, 0, 0.1);
 }
 
 .integration-video {
@@ -1886,7 +1897,7 @@ if (typeof window !== "undefined") {
   background: linear-gradient(
     135deg,
     rgba(37, 99, 235, 0.08),
-    rgba(139, 92, 246, 0.08)
+    var(--bg-surface)
   );
   border-radius: 8px;
   flex-shrink: 0;
@@ -1961,7 +1972,7 @@ if (typeof window !== "undefined") {
   background: linear-gradient(
     135deg,
     rgba(37, 99, 235, 0.08),
-    rgba(139, 92, 246, 0.08)
+    var(--bg-surface)
   );
   border-radius: 16px;
   margin-bottom: 20px;
@@ -2038,7 +2049,7 @@ if (typeof window !== "undefined") {
   background: linear-gradient(
     135deg,
     rgba(37, 99, 235, 0.12),
-    rgba(139, 92, 246, 0.12)
+    var(--bg-surface)
   );
   border: 1.5px solid var(--premium-primary);
   font-size: 13px;
@@ -2225,7 +2236,7 @@ if (typeof window !== "undefined") {
   background: linear-gradient(
     135deg,
     rgba(37, 99, 235, 0.05) 0%,
-    rgba(139, 92, 246, 0.05) 100%
+    var(--bg-surface) 100%
   );
 }
 
@@ -2233,7 +2244,7 @@ if (typeof window !== "undefined") {
   background: linear-gradient(
     135deg,
     rgba(37, 99, 235, 0.03) 0%,
-    rgba(139, 92, 246, 0.03) 100%
+    var(--bg-surface) 100%
   );
 }
 

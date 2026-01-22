@@ -307,7 +307,7 @@ function removeExtension(filename: string): string {
 }
 
 const cleanFileName = computed(() =>
-  removeExtension(props.photo.originalFileName)
+  removeExtension(props.photo.originalFileName),
 );
 
 const scoreBackgroundColor = computed(() => {
@@ -361,7 +361,7 @@ const onImageError = () => {
   border-radius: 12px;
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 2px solid transparent;
+  border: 1px solid transparent;
   background-color: var(--bg-container);
   display: flex;
   flex-direction: column;
@@ -383,7 +383,7 @@ const onImageError = () => {
 .photo-card-info.selected {
   border-color: var(--secondary-color);
 
-  /* box-shadow: 0 0 0 1px #8b5cf640, 0 8px 24px rgba(139, 92, 246, 0.2); */
+  /* box-shadow: 0 0 0 1px #8b5cf640, 0 8px 24px var(--bg-surface); */
 }
 
 .photo-container {
@@ -545,7 +545,7 @@ const onImageError = () => {
   position: absolute;
   top: 8px;
   right: 8px;
-  background-color: rgba(139, 92, 246, 0.9);
+  background-color: var(--bg-surface);
   border-radius: 50%;
   width: 32px;
   height: 32px;
