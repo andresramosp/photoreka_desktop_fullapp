@@ -371,7 +371,7 @@ const allFilteredSelected = ref(false);
 
 // Responsive state for column options
 const windowWidth = ref(
-  typeof window !== "undefined" ? window.innerWidth : 1200
+  typeof window !== "undefined" ? window.innerWidth : 1200,
 );
 
 // Column options based on screen width
@@ -394,7 +394,7 @@ watch(
       gridColumns.value = newOptions[Math.min(1, newOptions.length - 1)];
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 // Infinite scroll state
@@ -477,7 +477,7 @@ const getPhotoArtisticScore = (photo) => {
     const scoreResult = calculateArtisticScore(
       photo.descriptions.artistic_scores,
       "custom",
-      customWeights
+      customWeights,
     );
 
     return scoreResult.average;
@@ -488,14 +488,14 @@ const getPhotoArtisticScore = (photo) => {
       const scoreResult = calculateArtisticScore(
         photo.descriptions.artistic_scores,
         "custom",
-        customWeights.value
+        customWeights.value,
       );
       return scoreResult.average;
     } else {
       // Use genre preset
       const scoreResult = calculateArtisticScore(
         photo.descriptions.artistic_scores,
-        selectedGenre.value
+        selectedGenre.value,
       );
       return scoreResult.average;
     }
@@ -528,7 +528,7 @@ watch(
       allFilteredSelected.value = false;
     }
   },
-  { immediate: true, deep: true }
+  { immediate: true, deep: true },
 );
 
 // Watch for photos changes to reset duplicate review state
@@ -541,7 +541,7 @@ watch(
       hasDuplicates.value = false;
       filterDuplicates.value = false;
     }
-  }
+  },
 );
 
 // Grid functions
@@ -670,7 +670,7 @@ const handleReviewDuplicates = async () => {
 
     // Count how many duplicates we found
     const duplicatesCount = props.photos.filter(
-      (photo) => photo.isDuplicate
+      (photo) => photo.isDuplicate,
     ).length;
 
     duplicatesReviewed.value = true;
@@ -678,7 +678,7 @@ const handleReviewDuplicates = async () => {
 
     if (duplicatesCount > 0) {
       message.info(
-        `Found ${duplicatesCount} duplicate photos. Use the filter checkbox to view them.`
+        `Found ${duplicatesCount} duplicate photos. Use the filter checkbox to view them.`,
       );
     } else {
       message.success("No duplicate photos found.");
@@ -703,7 +703,7 @@ function groupDuplicates(photos) {
   photos.forEach((photo) => {
     if (!photo.isDuplicate) return;
     const groupIds = [photo.id, ...(photo.duplicates || [])].sort((a, b) =>
-      String(a).localeCompare(String(b))
+      String(a).localeCompare(String(b)),
     );
     const groupKey = groupIds.join("-");
     if (!groupMap.has(groupKey)) groupMap.set(groupKey, []);
@@ -714,7 +714,7 @@ function groupDuplicates(photos) {
   photos.forEach((photo) => {
     if (!photo.isDuplicate) return;
     const groupIds = [photo.id, ...(photo.duplicates || [])].sort((a, b) =>
-      String(a).localeCompare(String(b))
+      String(a).localeCompare(String(b)),
     );
     const groupKey = groupIds.join("-");
     if (groupMap.has(groupKey) && !added.has(groupKey)) {
@@ -749,7 +749,7 @@ const filteredAndSortedPhotos = computed(() => {
 
   // Apply visual aspects filters
   const hasActiveFilters = Object.values(selectedFilters.value).some(
-    (filters) => filters.length > 0
+    (filters) => filters.length > 0,
   );
 
   if (hasActiveFilters) {
@@ -775,9 +775,9 @@ const filteredAndSortedPhotos = computed(() => {
 
           // Photo must have at least one of the selected values in this category
           return selectedValues.some((selectedValue) =>
-            photoAspects.includes(selectedValue)
+            photoAspects.includes(selectedValue),
           );
-        }
+        },
       );
     });
   }
@@ -919,7 +919,7 @@ watch(
     showSelectAllBanner.value = false;
     allFilteredSelected.value = false;
   },
-  { deep: true }
+  { deep: true },
 );
 
 // Watch for props.photos changes to reset pagination
@@ -927,7 +927,7 @@ watch(
   () => props.photos.length,
   (newLength, oldLength) => {
     resetPagination();
-  }
+  },
 );
 
 // Lifecycle hooks for scroll listener
@@ -969,7 +969,7 @@ onUnmounted(() => {
 const currentPhotoIndex = computed(() => {
   if (!selectedDialogPhoto.value) return -1;
   return displayedPhotos.value.findIndex(
-    (photo) => photo.id === selectedDialogPhoto.value.id
+    (photo) => photo.id === selectedDialogPhoto.value.id,
   );
 });
 
@@ -1006,7 +1006,7 @@ const handleDeleteMultiple = async () => {
   try {
     await collectionsStore.removePhotosFromCollection(
       props.collectionId,
-      selectedPhotoIds.value
+      selectedPhotoIds.value,
     );
     // Recargar la ruta actual para refrescar la colección (sin reload completo)
     emit("refreshCollection");
@@ -1213,7 +1213,7 @@ const handleToolSelected = async (toolId) => {
 /* Photo Grid */
 .photo-grid-base {
   display: grid;
-  gap: 20px;
+  gap: 17px;
 }
 
 .photo-grid-base.grid-cols-1 {

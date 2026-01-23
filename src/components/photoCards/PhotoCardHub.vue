@@ -74,11 +74,11 @@
       </div>
 
       <!-- Selection indicator -->
-      <div v-if="isSelected" class="selection-indicator">
+      <!-- <div v-if="isSelected" class="selection-indicator">
         <n-icon size="20" color="#ffffff">
           <CheckCircleIcon />
         </n-icon>
-      </div>
+      </div> -->
 
       <!-- Artistic Score indicator -->
       <div
@@ -361,7 +361,6 @@ const onImageError = () => {
   border-radius: 12px;
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid transparent;
   background-color: var(--bg-container);
   display: flex;
   flex-direction: column;
@@ -369,21 +368,18 @@ const onImageError = () => {
   /* Habilitar container queries */
   container-type: inline-size;
   container-name: photo-card;
+
+  box-sizing: border-box;
+  border: 2px solid transparent;
+  transition: border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .photo-card-info.with-footer {
   aspect-ratio: 3/4 !important;
 }
 
-.photo-card-info:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-}
-
 .photo-card-info.selected {
-  border-color: var(--secondary-color);
-
-  /* box-shadow: 0 0 0 1px #8b5cf640, 0 8px 24px var(--bg-surface); */
+  border: solid 2px var(--secondary-color);
 }
 
 .photo-container {
@@ -545,7 +541,7 @@ const onImageError = () => {
   position: absolute;
   top: 8px;
   right: 8px;
-  background-color: var(--bg-surface);
+  background-color: var(--secondary-color);
   border-radius: 50%;
   width: 32px;
   height: 32px;

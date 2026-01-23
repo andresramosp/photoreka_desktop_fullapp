@@ -887,7 +887,6 @@ onMounted(() => {
 
 .carousel-arrow:hover {
   background: rgba(255, 255, 255, 0.3);
-  transform: scale(1.1);
 }
 
 .carousel-arrow-left {
@@ -949,7 +948,6 @@ onMounted(() => {
   position: absolute;
   bottom: var(--spacing-md);
   left: 50%;
-  transform: translateX(-50%);
   display: flex;
   gap: var(--spacing-xs);
   z-index: 5;
@@ -966,7 +964,6 @@ onMounted(() => {
 
 .carousel-dot.active {
   background: white;
-  transform: scale(1.2);
 }
 
 .carousel-dot:hover {
@@ -1034,7 +1031,6 @@ onMounted(() => {
 
 .did-you-know:hover .insight-question-btn {
   background-color: var(--primary-color-hover);
-  transform: scale(1.1);
 }
 
 .insight-loader {
@@ -1248,7 +1244,6 @@ onMounted(() => {
 
 .project-card:hover {
   border-color: #2563eb;
-  transform: translateY(-4px);
   box-shadow: 0 12px 32px rgba(37, 99, 235, 0.2);
 }
 
@@ -1416,7 +1411,6 @@ onMounted(() => {
 /* Large devices - hover effects */
 @media (min-width: 1024px) {
   .action-card:hover {
-    transform: translateY(-4px);
     box-shadow: 0 8px 24px rgba(37, 99, 235, 0.3);
   }
 
