@@ -110,7 +110,7 @@ export default class QueryService {
     const { result: modelResult, cost: modelTwoCost } = await this.modelsService.getGeminiResponse(
       queryStuctureMessage,
       JSON.stringify({ query: modelOneResult.no_prefix }),
-      searchMode == 'gemini-2.5-flash'
+      'gemini-2.5-flash-lite'
     )
 
     modelResult.original = query
