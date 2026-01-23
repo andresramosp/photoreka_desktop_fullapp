@@ -16,8 +16,6 @@ export function useQueryExamples(searchType, searchMode) {
       return queryExamples[mode] || [];
     } else if (type === "tags") {
       return queryExamples.tags || [];
-    } else if (type === "topological") {
-      return queryExamples.topological || [];
     } else if (type === "curation") {
       return queryExamples.curation || [];
     }

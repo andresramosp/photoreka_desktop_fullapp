@@ -1,672 +1,30 @@
 <template>
   <div ref="scrollContainer" class="search-container view-container">
-    <!-- Search Toolbar -->
-    <div class="search-toolbar" :class="{ 'is-collapsed': isToolbarCollapsed }">
-      <!-- Search Type and Mode Selector -->
-      <div class="search-selector-section">
-        <!-- Search Type -->
-        <div class="selector-group">
-          <div class="selector-label">Search Type:</div>
-          <div class="type-pills">
-            <n-tooltip trigger="hover" placement="top">
-              <template #trigger>
-                <div
-                  class="type-pill"
-                  :class="{ active: activeSearchType === 'semantic' }"
-                  @click="!isSearching && setSearchType('semantic')"
-                  :aria-disabled="isSearching"
-                  :tabindex="isSearching ? -1 : 0"
-                  :style="
-                    isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
-                  "
-                >
-                  <n-icon size="14" class="type-icon">
-                    <DocumentOutline />
-                  </n-icon>
-                  Natural Language
-                </div>
-              </template>
-              Search using natural language descriptions like "sunset beach
-              photos with people"
-            </n-tooltip>
-            <n-tooltip trigger="hover" placement="top">
-              <template #trigger>
-                <div
-                  class="type-pill"
-                  :class="{ active: activeSearchType === 'tags' }"
-                  @click="!isSearching && setSearchType('tags')"
-                  :aria-disabled="isSearching"
-                  :tabindex="isSearching ? -1 : 0"
-                  :style="
-                    isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
-                  "
-                >
-                  <n-icon size="16" class="type-icon">
-                    <TagOutlined />
-                  </n-icon>
-                  Tags
-                </div>
-              </template>
-              Search by specific tags and keywords assigned to your photos
-            </n-tooltip>
-            <!-- <n-tooltip trigger="hover" placement="top">
-              <template #trigger>
-                <div
-                  class="type-pill"
-                  :class="{ active: activeSearchType === 'topological' }"
-                  @click="!isSearching && setSearchType('topological')"
-                  :aria-disabled="isSearching"
-                  :tabindex="isSearching ? -1 : 0"
-                  :style="
-                    isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
-                  "
-                >
-                  <n-icon size="16" class="type-icon">
-                    <MapOutline />
-                  </n-icon>
-                  Spatial
-                </div>
-              </template>
-              Search based on spatial arrangement of objects in your photos
-              (left, center, right)
-            </n-tooltip> -->
-          </div>
-        </div>
+    <!-- Desktop Layout -->
+    <SearchDesktopLayout
+      v-if="!isMobile"
+      :is-toolbar-collapsed="isToolbarCollapsed"
+      :included-tag-suggestions-formatted="includedTagSuggestionsFormatted"
+      :excluded-tag-suggestions-formatted="excludedTagSuggestionsFormatted"
+      :show-more-filters="showMoreFilters"
+      @search-included-tags="onSearchInputIncluded"
+      @search-excluded-tags="onSearchInputExcluded"
+      @update:show-more-filters="(v) => (showMoreFilters = v)"
+      @search="performSearch"
+      @clear="clearSearch"
+    />
 
-        <!-- Search Mode -->
-        <div class="selector-group">
-          <div class="selector-label">Search Mode:</div>
-          <div class="mode-pills">
-            <n-tooltip trigger="hover" placement="top">
-              <template #trigger>
-                <div
-                  class="mode-pill"
-                  :class="{ active: searchMode === 'broad' }"
-                  @click="!isSearching && (searchMode = 'broad')"
-                  :aria-disabled="isSearching"
-                  :tabindex="isSearching ? -1 : 0"
-                  :style="
-                    isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
-                  "
-                >
-                  <n-icon size="16" class="mode-icon">
-                    <GlobeOutline />
-                  </n-icon>
-                  Broad
-                </div>
-              </template>
-              Fast, broad search focused on overall visual aspects.
-            </n-tooltip>
-
-            <n-tooltip trigger="hover" placement="top">
-              <template #trigger>
-                <div
-                  class="mode-pill premium-pill"
-                  :class="{ active: searchMode === 'adaptive' }"
-                  @click="!isSearching && (searchMode = 'adaptive')"
-                  :aria-disabled="isSearching"
-                  :tabindex="isSearching ? -1 : 0"
-                  :style="
-                    isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
-                  "
-                >
-                  <n-icon size="16" class="mode-icon">
-                    <GitBranchOutline />
-                  </n-icon>
-                  Adaptive
-                </div>
-              </template>
-              Flexible and deep search for similar and indirect associations
-            </n-tooltip>
-
-            <n-tooltip trigger="hover" placement="top">
-              <template #trigger>
-                <div
-                  class="mode-pill premium-pill"
-                  :class="{ active: searchMode === 'precise' }"
-                  @click="!isSearching && (searchMode = 'precise')"
-                  :aria-disabled="isSearching"
-                  :tabindex="isSearching ? -1 : 0"
-                  :style="
-                    isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
-                  "
-                >
-                  <n-icon size="15" class="mode-icon">
-                    <LocateOutline />
-                  </n-icon>
-                  Precise
-                  <div class="premium-indicator-pill"></div>
-                </div>
-              </template>
-              Heavy search that prioritizes logical accuracy
-            </n-tooltip>
-          </div>
-        </div>
-
-        <!-- Insights Toggle -->
-        <div class="selector-group">
-          <div class="selector-label">Insights:</div>
-          <div class="mode-pills">
-            <n-tooltip trigger="hover" placement="top">
-              <template #trigger>
-                <div
-                  class="mode-pill insights-pill premium-pill"
-                  :class="{ active: withInsights }"
-                  @click="!isSearching && (withInsights = !withInsights)"
-                  :aria-disabled="isSearching"
-                  :tabindex="isSearching ? -1 : 0"
-                  :style="
-                    isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
-                  "
-                >
-                  <n-icon size="16" class="mode-icon">
-                    <SparklesOutline />
-                  </n-icon>
-                  {{ withInsights ? "Enabled" : "Disabled" }}
-                  <div class="premium-indicator-pill"></div>
-                </div>
-              </template>
-              Enhance search results with insights and commentary
-            </n-tooltip>
-          </div>
-        </div>
-      </div>
-
-      <!-- More Filters Toggle -->
-      <div class="search-filters-section">
-        <div
-          class="more-filters-toggle"
-          @click="showMoreFilters = !showMoreFilters"
-        >
-          <span class="more-filters-label">More filters</span>
-          <div class="more-filters-indicators">
-            <span v-if="hasActiveFilters" class="active-filters-indicator">
-              {{
-                selectedCollections.length +
-                searchStore.selectedVisualAspects.length +
-                searchStore.selectedArtisticScores.length
-              }}
-            </span>
-            <n-icon
-              size="12"
-              class="toggle-icon"
-              :class="{ rotated: showMoreFilters }"
-            >
-              <svg viewBox="0 0 24 24">
-                <path
-                  fill="currentColor"
-                  d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
-                />
-              </svg>
-            </n-icon>
-          </div>
-        </div>
-
-        <!-- Collapsible Filters Container -->
-        <div v-if="showMoreFilters" class="filters-container">
-          <div class="filters-content">
-            <!-- Collections Filter -->
-            <div class="filter-compact-group">
-              <div
-                style="
-                  display: flex;
-                  flex-direction: column;
-                  align-items: flex-start;
-                  gap: 2px;
-                "
-              >
-                <div
-                  style="
-                    display: flex;
-                    align-items: center;
-                    gap: 4px;
-                    margin-bottom: 2px;
-                  "
-                >
-                  <span class="filter-compact-label">Collections</span>
-                  <n-tooltip trigger="hover" placement="top">
-                    <template #trigger>
-                      <n-icon
-                        size="12"
-                        color="var(--text-secondary)"
-                        style="cursor: help"
-                      >
-                        <InfoCircleFilled />
-                      </n-icon>
-                    </template>
-                    Only collections with more than 50 photos are available for
-                    filter searches.
-                  </n-tooltip>
-                </div>
-                <n-select
-                  v-model:value="selectedCollections"
-                  multiple
-                  clearable
-                  placeholder="Any"
-                  :options="collectionsOptions"
-                  :max-tag-count="3"
-                  class="filter-compact-select"
-                  :loading="collectionsStore.isLoading"
-                  :disabled="isSearching"
-                  size="small"
-                  style="min-width: 200px"
-                >
-                  <template #empty>
-                    <div style="padding: 8px; color: #888; font-size: 12px">
-                      No collections found
-                    </div>
-                  </template>
-                  <template #render-option="{ option }">
-                    <div
-                      style="
-                        display: flex;
-                        align-items: center;
-                        justify-content: space-between;
-                        width: 100%;
-                      "
-                    >
-                      <span>{{ option.label }}</span>
-                      <span
-                        :style="{
-                          color: option.disabled ? '#ff7875' : '#8c8c8c',
-                          fontSize: '12px',
-                        }"
-                      >
-                        {{ option.photoCount }} photos
-                      </span>
-                    </div>
-                  </template>
-                </n-select>
-              </div>
-            </div>
-
-            <!-- Visual Aspects Filter -->
-            <div class="filter-compact-group">
-              <div
-                style="
-                  display: flex;
-                  flex-direction: column;
-                  align-items: flex-start;
-                  gap: 2px;
-                "
-              >
-                <span class="filter-compact-label" style="margin-bottom: 2px"
-                  >Visual aspects</span
-                >
-                <n-tree-select
-                  v-model:value="searchStore.selectedVisualAspects"
-                  multiple
-                  clearable
-                  placeholder="Any"
-                  :options="treeSelectOptions"
-                  :max-tag-count="3"
-                  class="filter-compact-select"
-                  :disabled="isSearching"
-                  size="small"
-                  style="min-width: 200px"
-                  check-strategy="child"
-                  :show-path="false"
-                  expand-on-click
-                >
-                  <template #empty>
-                    <div style="padding: 8px; color: #888; font-size: 12px">
-                      No visual aspects found
-                    </div>
-                  </template>
-                </n-tree-select>
-              </div>
-            </div>
-
-            <!-- Artistic Scores Filter -->
-            <div class="filter-compact-group">
-              <div
-                style="
-                  display: flex;
-                  flex-direction: column;
-                  align-items: flex-start;
-                  gap: 2px;
-                "
-              >
-                <div
-                  style="
-                    display: flex;
-                    align-items: center;
-                    gap: 4px;
-                    margin-bottom: 2px;
-                  "
-                >
-                  <span class="filter-compact-label">Visual scores</span>
-                  <n-tooltip trigger="hover" placement="top">
-                    <template #trigger>
-                      <n-icon
-                        size="12"
-                        color="var(--text-secondary)"
-                        style="cursor: help"
-                      >
-                        <InfoCircleFilled />
-                      </n-icon>
-                    </template>
-                    Will include photos above 7 in the selected scores
-                  </n-tooltip>
-                </div>
-                <n-tree-select
-                  v-model:value="searchStore.selectedArtisticScores"
-                  multiple
-                  clearable
-                  placeholder="Any"
-                  :options="createArtisticScoresTreeOptions()"
-                  :max-tag-count="3"
-                  class="filter-compact-select"
-                  :disabled="isSearching"
-                  size="small"
-                  style="min-width: 200px"
-                  check-strategy="child"
-                  :show-path="false"
-                  expand-on-click
-                >
-                  <template #empty>
-                    <div style="padding: 8px; color: #888; font-size: 12px">
-                      No artistic scores found
-                    </div>
-                  </template>
-                </n-tree-select>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Conditional Search Content -->
-      <div class="search-content">
-        <!-- Semantic Language Search -->
-        <div
-          v-if="activeSearchType === 'semantic'"
-          key="semantic-search"
-          class="semantic-search-section"
-        >
-          <div class="search-input-row">
-            <n-input
-              v-model:value="semanticQuery"
-              type="textarea"
-              placeholder="Describe what you're looking for... e.g., 'sunset photos with people on the beach' or 'close-up portraits with red background'"
-              :autosize="{ minRows: 1, maxRows: 2 }"
-              class="semantic-input"
-              @input="onSearchChange"
-              :key="`semantic-${activeSearchType}`"
-            />
-
-            <div class="search-actions-inline">
-              <n-button
-                type="primary"
-                :loading="isSearching"
-                :disabled="!hasSearchQuery"
-                @click="performSearch"
-                class="search-button"
-              >
-                <template #icon>
-                  <n-icon>
-                    <svg viewBox="0 0 24 24">
-                      <path
-                        fill="currentColor"
-                        d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14z"
-                      />
-                    </svg>
-                  </n-icon>
-                </template>
-                Search Photos
-              </n-button>
-              <n-button
-                secondary
-                @click="clearSearch"
-                :disabled="!hasSearchQuery"
-                class="clear-button icon-only"
-              >
-                <template #icon>
-                  <n-icon>
-                    <svg viewBox="0 0 24 24">
-                      <path
-                        fill="currentColor"
-                        d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41z"
-                      />
-                    </svg>
-                  </n-icon>
-                </template>
-              </n-button>
-            </div>
-            <div
-              v-if="photoStore.processedPhotos.length < 100"
-              class="usage-limit-warning"
-            >
-              <!-- <WarningBadge
-                message="Low performance"
-                :tooltip="performanceTooltip"
-              /> -->
-            </div>
-            <!-- Usage Limit Warning Badge -->
-            <!-- <div
-              v-else-if="
-                userStore.usageLimits.search.exceeded &&
-                !userStore.usageLimits.search.dismissed
-              "
-              class="usage-limit-warning"
-            >
-              <WarningBadge
-                message="Low performance"
-                :tooltip="performanceTooltip"
-                :closable="true"
-                @close="userStore.dismissUsageWarning('search')"
-              />
-            </div> -->
-          </div>
-        </div>
-
-        <!-- Tags Search -->
-        <div
-          v-else-if="activeSearchType === 'tags'"
-          key="tags-search"
-          class="tags-search-section"
-        >
-          <div class="tags-input-row">
-            <div class="tags-row">
-              <div class="tags-group">
-                <n-select
-                  ref="tagIncSelect"
-                  :value="includedTags"
-                  @update:value="handleIncludedTagsChange"
-                  multiple
-                  filterable
-                  clearable
-                  tag
-                  placeholder="Add tags to include..."
-                  :options="includedTagSuggestionsFormatted"
-                  :clear-filter-after-select="true"
-                  :max-tag-count="5"
-                  class="tags-select include-tags"
-                  @search="onSearchInputIncluded"
-                >
-                  <template #empty>
-                    <div style="padding: 8px; color: #888">
-                      Start typing to search tags...
-                    </div>
-                  </template></n-select
-                >
-              </div>
-              <div class="tags-group">
-                <n-select
-                  ref="tagExcSelect"
-                  :value="excludedTags"
-                  @update:value="handleExcludedTagsChange"
-                  multiple
-                  filterable
-                  clearable
-                  tag
-                  placeholder="Add tags to exclude..."
-                  :options="excludedTagSuggestionsFormatted"
-                  :max-tag-count="5"
-                  class="tags-select exclude-tags"
-                  @search="onSearchInputExcluded"
-                >
-                  <template #empty>
-                    <div style="padding: 8px; color: #888">
-                      Start typing to search tags...
-                    </div>
-                  </template></n-select
-                >
-              </div>
-            </div>
-
-            <div class="search-actions-inline">
-              <n-button
-                type="primary"
-                :loading="isSearching"
-                :disabled="!hasSearchQuery"
-                @click="performSearch"
-                class="search-button"
-              >
-                <template #icon>
-                  <n-icon>
-                    <svg viewBox="0 0 24 24">
-                      <path
-                        fill="currentColor"
-                        d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14z"
-                      />
-                    </svg>
-                  </n-icon>
-                </template>
-                Search Photos
-              </n-button>
-              <n-button
-                secondary
-                @click="clearSearch"
-                :disabled="!hasSearchQuery"
-                class="clear-button icon-only"
-              >
-                <template #icon>
-                  <n-icon>
-                    <svg viewBox="0 0 24 24">
-                      <path
-                        fill="currentColor"
-                        d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41z"
-                      />
-                    </svg>
-                  </n-icon>
-                </template>
-              </n-button>
-            </div>
-            <!-- Usage Limit Warning Badge -->
-            <div
-              v-if="
-                userStore.usageLimits.search.exceeded &&
-                !userStore.usageLimits.search.dismissed
-              "
-              class="usage-limit-warning"
-            >
-              <!-- <WarningBadge
-                message="Search on a few photos"
-                tooltip="You have fewer than 100 photos processed. Searches may return irrelevant results."
-              /> -->
-            </div>
-          </div>
-        </div>
-
-        <!-- Topological Search -->
-        <div
-          v-else-if="activeSearchType === 'topological'"
-          key="topological-search"
-          class="topological-search-section"
-        >
-          <div class="topological-input-row">
-            <div class="topological-grid">
-              <div class="topological-area">
-                <n-input
-                  :value="topological.left"
-                  @input="updateTopologicalLeft"
-                  type="textarea"
-                  placeholder="Left side objects..."
-                  :autosize="{ minRows: 1, maxRows: 2 }"
-                  class="topological-input"
-                  :key="`topological-left-${activeSearchType}`"
-                />
-              </div>
-              <div class="topological-area">
-                <n-input
-                  :value="topological.center"
-                  @input="updateTopologicalCenter"
-                  type="textarea"
-                  placeholder="Center objects..."
-                  :autosize="{ minRows: 1, maxRows: 2 }"
-                  class="topological-input center-input"
-                  :key="`topological-center-${activeSearchType}`"
-                />
-              </div>
-              <div class="topological-area">
-                <n-input
-                  :value="topological.right"
-                  @input="updateTopologicalRight"
-                  type="textarea"
-                  placeholder="Right side objects..."
-                  :autosize="{ minRows: 1, maxRows: 2 }"
-                  class="topological-input"
-                  :key="`topological-right-${activeSearchType}`"
-                />
-              </div>
-            </div>
-
-            <div class="search-actions-inline">
-              <n-button
-                type="primary"
-                :loading="isSearching"
-                :disabled="!hasSearchQuery"
-                @click="performSearch"
-                class="search-button"
-              >
-                <template #icon>
-                  <n-icon>
-                    <svg viewBox="0 0 24 24">
-                      <path
-                        fill="currentColor"
-                        d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14z"
-                      />
-                    </svg>
-                  </n-icon>
-                </template>
-                Search Photos
-              </n-button>
-              <n-button
-                secondary
-                @click="clearSearch"
-                :disabled="!hasSearchQuery"
-                class="clear-button icon-only"
-              >
-                <template #icon>
-                  <n-icon>
-                    <svg viewBox="0 0 24 24">
-                      <path
-                        fill="currentColor"
-                        d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41z"
-                      />
-                    </svg>
-                  </n-icon>
-                </template>
-              </n-button>
-            </div>
-            <!-- Usage Limit Warning Badge -->
-            <div
-              v-if="
-                userStore.usageLimits.search.exceeded &&
-                !userStore.usageLimits.search.dismissed
-              "
-              class="usage-limit-warning"
-            >
-              <!-- <WarningBadge
-                message="Low performance"
-                :tooltip="performanceTooltip"
-              /> -->
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- Mobile Layout -->
+    <SearchMobileLayout
+      v-else
+      :included-tag-suggestions-formatted="includedTagSuggestionsFormatted"
+      :excluded-tag-suggestions-formatted="excludedTagSuggestionsFormatted"
+      @search-included-tags="onSearchInputIncluded"
+      @search-excluded-tags="onSearchInputExcluded"
+      @search="performSearch"
+      @clear="clearSearch"
+      @reset="handleMobileReset"
+    />
 
     <!-- Search Results / Empty State -->
     <div class="search-results-container">
@@ -676,8 +34,8 @@
       >
         <!-- Empty State -->
         <SearchPlaceHolder
-          :searchType="activeSearchType"
-          :searchMode="searchMode"
+          :searchType="searchStore.activeSearchType"
+          :searchMode="searchStore.searchMode"
           :onExampleClick="handleSearchExampleClick"
         />
       </div>
@@ -718,9 +76,6 @@
                 <span v-else-if="minStarRating > 0" class="filter-applied">
                   ({{ filteredSearchResults.length }} of
                   {{ searchResults.length }} with {{ minStarRating }}+ stars)
-                </span>
-                <span v-if="hasActiveFilters" class="filter-applied">
-                  {{ filterSummaryText }}
                 </span>
               </span>
             </div>
@@ -907,9 +262,12 @@ import {
 import { api } from "@/utils/axios";
 import { NTooltip, NRate, NTreeSelect, NCheckbox } from "naive-ui";
 
+// Layout Components
+import SearchDesktopLayout from "@/components/search/layouts/SearchDesktopLayout.vue";
+import SearchMobileLayout from "@/components/search/layouts/SearchMobileLayout.vue";
+
 // Componentes e íconos
 import PhotoCard from "@/components/photoCards/PhotoCard.vue";
-import WarningBadge from "@/components/WarningBadge.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import FloatingActionBar from "@/components/FloatingActionBar.vue";
@@ -918,37 +276,24 @@ import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
 // Composable de tags y ejemplos
 import { useSearchTags } from "@/composables/useSearchTags";
 import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection";
+import { useIsMobile } from "@/composables/useIsMobile";
 
-import {
-  DocumentOutline,
-  SparklesOutline,
-  GlobeOutline,
-  LocateOutline,
-  GitBranchOutline,
-  DiamondOutline,
-} from "@vicons/ionicons5";
-import { InfoCircleFilled, TagOutlined } from "@vicons/antd";
+import { DiamondOutline } from "@vicons/ionicons5";
 import { usePhotosStore } from "@/stores/photos";
-import { useCanvasStore } from "@/stores/canvas.js";
-import { useUserStore } from "@/stores/userStore";
-import {
-  useSearchStore,
-  createArtisticScoresTreeOptions,
-} from "@/stores/searchStore";
+import { useSearchStore } from "@/stores/searchStore";
 import { useCollectionsStore } from "@/stores/collections";
-import { useRouter } from "vue-router";
 import { usePhotoScored } from "@/composables/usePhotoScored";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection";
 import { usePhotoDownload } from "@/composables/usePhotoDownload";
 
 const photoStore = usePhotosStore();
-const canvasStore = useCanvasStore();
-const userStore = useUserStore();
 const searchStore = useSearchStore();
 const collectionsStore = useCollectionsStore();
-const router = useRouter();
 const showPhotoInfoDialog = ref(false);
 const selectedDialogPhoto = ref();
+
+// Mobile detection
+const { isMobile } = useIsMobile();
 
 // Photo scoring utilities
 const { computePhotoStars, shouldShowLowRelevanceIcon } = usePhotoScored();
@@ -982,39 +327,13 @@ const lastScrollY = ref(0);
 const showCollectionModal = ref(false);
 
 // Usar el store para el estado de búsqueda
-const activeSearchType = computed({
-  get: () => searchStore.activeSearchType,
-  set: (value) => searchStore.setSearchType(value),
-});
-
-const searchMode = computed({
-  get: () => searchStore.searchMode,
-  set: (value) => searchStore.setSearchMode(value),
-});
-
 const isSearching = computed(() => searchStore.isSearching);
 const isLoadingMore = computed(() => searchStore.isLoadingMore);
 const searchResults = computed(() => searchStore.searchResults);
-const hasSearchQuery = computed(() => searchStore.hasSearchQuery);
+
 const hasMoreIterations = computed(
   () => searchStore.currentSearchState.hasMoreIterations,
 );
-
-// Convert visual aspects to tree-select format
-const treeSelectOptions = computed(() => {
-  return searchStore.visualAspectsOptions.map((group) => ({
-    label: group.label,
-    key: group.key,
-    disabled: false, // Allow interaction for expanding
-    checkable: false, // But not selectable
-    children: group.children.map((child) => ({
-      label: child.label,
-      key: child.value,
-      disabled: false,
-      checkable: true, // Children are selectable
-    })),
-  }));
-});
 
 // Computed properties for photos with pre-computed stars and filtering
 const photosWithComputedStars = computed(() => {
@@ -1045,49 +364,14 @@ const filteredSearchResults = computed(() => {
 // Computed para determinar cuándo mostrar el botón "Try Adaptive"
 const shouldShowTryAdaptive = computed(() => {
   return (
-    searchMode.value === "precise" &&
+    searchStore.searchMode === "precise" &&
     !hasMoreIterations.value &&
     !isSearching.value &&
     !isLoadingMore.value
   );
 });
 
-// Computed para acceder a los valores específicos de cada tipo de búsqueda
-const semanticQuery = computed({
-  get: () => searchStore.currentSearchState.query || "",
-  set: (value) => searchStore.updateSemanticQuery(value),
-});
-
-const includedTags = computed({
-  get: () => searchStore.currentSearchState.includedTags || [],
-  set: (value) =>
-    searchStore.updateTagsSearch(
-      value,
-      searchStore.currentSearchState.excludedTags || [],
-    ),
-});
-
-const excludedTags = computed({
-  get: () => searchStore.currentSearchState.excludedTags || [],
-  set: (value) =>
-    searchStore.updateTagsSearch(
-      searchStore.currentSearchState.includedTags || [],
-      value,
-    ),
-});
-
-const topological = computed({
-  get: () => ({
-    left: searchStore.currentSearchState.left || "",
-    center: searchStore.currentSearchState.center || "",
-    right: searchStore.currentSearchState.right || "",
-  }),
-  set: (value) =>
-    searchStore.updateTopologicalSearch(value.left, value.center, value.right),
-});
-
-const performanceTooltip =
-  "You have exceeded your daily search limit. Strict and figurative modes operate with reduced performance. Fast mode will not be affected.";
+// Computed properties eliminados - los layouts acceden directamente al store
 
 // Tags - mantener el composable para las sugerencias
 const {
@@ -1122,41 +406,7 @@ const excludedTagSuggestionsFormatted = computed(() =>
   })),
 );
 
-const tagIncSelect = ref(null);
-const tagExcSelect = ref(null);
-
-function handleTagSelected() {
-  tagIncSelect.value?.blur();
-  tagExcSelect.value?.blur();
-}
-
-// Función para manejar cambios en tags incluidas
-function handleIncludedTagsChange(value) {
-  // Trigger warm up cuando el usuario empieza a escribir el primer tag
-  if (
-    value &&
-    value.length === 1 &&
-    includedTags.value.length === 0 &&
-    !userStore.usageLimits.search.exceeded
-  ) {
-    ensureWarmUp("logic_gpu");
-  }
-  searchStore.updateTagsSearch(value, excludedTags.value);
-}
-
-// Función para manejar cambios en tags excluidas
-function handleExcludedTagsChange(value) {
-  // Trigger warm up cuando el usuario empieza a escribir el primer tag
-  if (
-    value &&
-    value.length === 1 &&
-    excludedTags.value.length === 0 &&
-    !userStore.usageLimits.search.exceeded
-  ) {
-    ensureWarmUp("logic_gpu");
-  }
-  searchStore.updateTagsSearch(includedTags.value, value);
-}
+// Handlers de cambio de tags eliminados - ahora manejados por los layouts
 
 // Helpers
 const skeletonCount = computed(() => pageSize.value);
@@ -1194,24 +444,13 @@ const minStarRating = ref(0);
 // High matches filter
 const showOnlyHighMatches = ref(false);
 
-// Collections filter
-const selectedCollections = ref([]);
-
-// Insights checkbox
-const withInsights = ref(false);
+// Insights from store
+const withInsights = computed(
+  () => searchStore.currentSearchState.withInsights || false,
+);
 
 // Filters visibility state
 const showMoreFilters = ref(false);
-
-// Computed for collections options
-const collectionsOptions = computed(() => {
-  return collectionsStore.allCollections.map((collection) => ({
-    label: collection.name,
-    value: collection.id,
-    disabled: (collection.photoCount || 0) < 50,
-    photoCount: collection.photoCount || 0,
-  }));
-});
 
 function setGridColumns(n) {
   // NO resetear cursor - el usuario quiere seguir viendo los mismos resultados
@@ -1296,24 +535,6 @@ const handleDownloadMultiple = async () => {
   }
 };
 
-async function moveToCanvas() {
-  await Promise.all(
-    localSelectedPhotoIds.value.map((id) => photoStore.fetchPhoto(id)),
-  );
-  const photosToAdd = localSelectedPhotoIds.value
-    .map((id) => photoStore.photos.find((p) => p.id == id))
-    .filter(Boolean);
-
-  localClearAllSelections();
-  canvasStore.addPhotos(photosToAdd, false, true);
-
-  router.push("/canvas");
-}
-// Cambio de tipo de búsqueda
-function setSearchType(type) {
-  searchStore.setSearchType(type);
-}
-
 // Limpia inputs de búsqueda solo del tipo actual
 function clearSearch() {
   searchStore.clearCurrentSearch();
@@ -1323,9 +544,6 @@ function clearSearch() {
 
   // Reset high matches filter
   showOnlyHighMatches.value = false;
-
-  // Reset collections filter (not managed by search store yet)
-  clearCollectionsFilter();
 
   // Resetear estado del toolbar
   isToolbarCollapsed.value = false;
@@ -1363,7 +581,7 @@ async function searchPhotos() {
       iteration: currentState.iteration,
       pageSize: pageSize.value,
       searchMode: searchStore.searchMode,
-      collections: selectedCollections.value,
+      collections: searchStore.selectedCollections || [],
       visualAspects: searchStore.selectedVisualAspects,
       artisticScores: searchStore.selectedArtisticScores,
       cursor: currentState.lastCursor, // Add cursor for pagination
@@ -1373,23 +591,17 @@ async function searchPhotos() {
     let payload;
     let endpoint;
 
-    if (activeSearchType.value === "semantic") {
-      payload = { description: semanticQuery.value, options };
-    } else if (activeSearchType.value === "tags") {
+    if (searchStore.activeSearchType === "semantic") {
+      payload = { description: currentState.query || "", options };
+      endpoint = `/api/search/semantic/sync`;
+    } else if (searchStore.activeSearchType === "tags") {
       payload = {
-        included: includedTags.value,
-        excluded: excludedTags.value,
+        included: currentState.includedTags || [],
+        excluded: currentState.excludedTags || [],
         options,
       };
-    } else {
-      payload = {
-        left: topological.value.left,
-        middle: topological.value.center,
-        right: topological.value.right,
-        options,
-      };
+      endpoint = `/api/search/tags/sync`;
     }
-    endpoint = `/api/search/${activeSearchType.value}/sync`;
 
     const { data: response } = await api.post(endpoint, payload);
 
@@ -1477,138 +689,20 @@ onUnmounted(() => {
 // Carousel de ejemplos dinámico usando composable
 function handleSearchExampleClick(exampleText, searchType) {
   if (searchType === "semantic") {
-    semanticQuery.value = exampleText;
+    searchStore.updateSemanticQuery(exampleText);
     performSearch();
   }
 }
 
 // Ya no usamos useQueryExamples aquí, lo usa SearchPlaceHolder internamente
 
-// Función para manejar cambios en los inputs de búsqueda
-function onSearchChange(value) {
-  // Trigger warm up cuando el usuario empieza a escribir en input vacío
-  if (value && value.length === 1 && !userStore.usageLimits.search.exceeded) {
-    ensureWarmUp("logic_gpu");
-  }
-  // Esta función se puede usar para triggers adicionales si es necesario
-  // pero el binding reactivo del store ya se encarga de actualizar automáticamente
+// Funciones de cambio eliminadas - ahora manejadas por los layouts
+
+// Handler for mobile reset action
+function handleMobileReset() {
+  searchStore.setSearchMode("broad");
+  searchStore.setWithInsights(false);
 }
-
-// Función para manejar cambios en topological search
-function updateTopologicalLeft(value) {
-  // Trigger warm up cuando el usuario empieza a escribir en input vacío
-
-  if (
-    value &&
-    value.length === 1 &&
-    topological.value.left === "" &&
-    !userStore.usageLimits.search.exceeded
-  ) {
-    ensureWarmUp("logic_gpu");
-  }
-  searchStore.updateTopologicalSearch(
-    value,
-    topological.value.center,
-    topological.value.right,
-  );
-}
-
-function updateTopologicalCenter(value) {
-  // Trigger warm up cuando el usuario empieza a escribir en input vacío
-  if (
-    value &&
-    value.length === 1 &&
-    topological.value.center === "" &&
-    !userStore.usageLimits.search.exceeded
-  ) {
-    ensureWarmUp("logic_gpu");
-  }
-  searchStore.updateTopologicalSearch(
-    topological.value.left,
-    value,
-    topological.value.right,
-  );
-}
-
-function updateTopologicalRight(value) {
-  // Trigger warm up cuando el usuario empieza a escribir en input vacío
-  if (
-    value &&
-    value.length === 1 &&
-    topological.value.right === "" &&
-    !userStore.usageLimits.search.exceeded
-  ) {
-    ensureWarmUp("logic_gpu");
-  }
-  searchStore.updateTopologicalSearch(
-    topological.value.left,
-    topological.value.center,
-    value,
-  );
-}
-
-// Collections filter functions
-function clearCollectionsFilter() {
-  selectedCollections.value = [];
-}
-
-function clearVisualAspectsFilter() {
-  searchStore.clearVisualAspects();
-}
-
-function clearArtisticScoresFilter() {
-  searchStore.clearArtisticScores();
-}
-
-function clearAllFilters() {
-  clearCollectionsFilter();
-  clearVisualAspectsFilter();
-  clearArtisticScoresFilter();
-}
-
-function getSelectedCollectionNames() {
-  return selectedCollections.value
-    .map((id) => {
-      const collection = collectionsStore.getCollectionById(id);
-      return collection ? collection.name : null;
-    })
-    .filter(Boolean);
-}
-
-// Computed to check if any filters are active
-const hasActiveFilters = computed(() => {
-  return (
-    selectedCollections.value.length > 0 ||
-    searchStore.selectedVisualAspects.length > 0 ||
-    searchStore.selectedArtisticScores.length > 0
-  );
-});
-
-// Helper to get filter summary text
-const filterSummaryText = computed(() => {
-  const parts = [];
-
-  if (selectedCollections.value.length > 0) {
-    const names = getSelectedCollectionNames();
-    if (names.length === 1) {
-      parts.push(`in "${names[0]}"`);
-    } else if (names.length <= 3) {
-      parts.push(`in ${names.length} collections`);
-    } else {
-      parts.push(`in ${names.length} collections`);
-    }
-  }
-
-  if (searchStore.selectedVisualAspects.length > 0) {
-    parts.push(`${searchStore.selectedVisualAspects.length} visual aspects`);
-  }
-
-  if (searchStore.selectedArtisticScores.length > 0) {
-    parts.push(`${searchStore.selectedArtisticScores.length} artistic scores`);
-  }
-
-  return parts.join(", ");
-});
 </script>
 
 <style scoped>
@@ -1616,440 +710,6 @@ const filterSummaryText = computed(() => {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-}
-
-/* Search Toolbar */
-.search-toolbar {
-  background-color: var(--bg-container);
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  padding: 12px 24px;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  transform: translateY(0);
-  transition: transform 0.3s ease;
-}
-
-.search-toolbar.is-collapsed {
-  transform: translateY(-120%);
-}
-
-/* Combined Search Selector Section */
-.search-selector-section {
-  display: flex;
-  align-items: flex-start;
-  gap: 24px;
-  margin-bottom: 10px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--border-color);
-  overflow: visible;
-}
-
-.selector-group {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow: visible;
-}
-
-.selector-group:first-child {
-  flex: 1 1 auto;
-}
-
-.selector-group:last-child {
-  flex: 0 0 auto;
-}
-
-.selector-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-
-/* Search Type Pills */
-.type-pills {
-  display: flex;
-  gap: 6px;
-  flex-wrap: nowrap;
-  justify-content: flex-start;
-  overflow: visible;
-}
-
-.type-pill {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border-radius: 20px;
-  border: 1px solid var(--border-color);
-  background-color: var(--bg-secondary);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-  flex-shrink: 0;
-  justify-content: center;
-  text-align: center;
-  overflow: visible;
-}
-
-.type-pill:hover {
-  border-color: var(--primary-color);
-  color: var(--text-primary);
-  background-color: var(--bg-hover);
-  transform: translateY(-1px);
-}
-
-.type-pill.active {
-  background-color: var(--primary-color);
-  border-color: var(--primary-color);
-  color: var(--text-on-primary);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px var(--shadow-primary);
-}
-
-.type-icon {
-  flex-shrink: 0;
-}
-
-/* Search Mode Pills */
-.mode-pills {
-  display: flex;
-  gap: 6px;
-  justify-content: flex-start;
-  overflow: visible;
-}
-
-.mode-pill {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border-radius: 20px;
-  border: 1px solid var(--border-color);
-  background-color: var(--bg-secondary);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-  flex-shrink: 0;
-  justify-content: center;
-  overflow: visible;
-  position: relative;
-}
-
-.mode-pill.premium-pill {
-  padding-right: 20px;
-}
-
-.mode-pill:hover {
-  border-color: var(--primary-color);
-  color: var(--text-primary);
-  background-color: var(--bg-hover);
-}
-
-.mode-pill.active {
-  background-color: var(--primary-color);
-  border-color: var(--primary-color);
-  color: var(--text-on-primary);
-}
-
-.mode-icon {
-  flex-shrink: 0;
-}
-
-.premium-indicator-pill {
-  position: absolute;
-  top: -4px;
-  right: 4px;
-  width: 8px;
-  height: 8px;
-  background: var(--accent-gradient, linear-gradient(135deg, #f59e0b, #d97706));
-  transform: rotate(45deg);
-  box-shadow: 0 0 4px var(--shadow-accent);
-  border: 1px solid var(--border-color);
-}
-
-/* Insights Toggle Pill */
-.insights-pill {
-  min-width: 75px;
-  justify-content: center;
-  text-align: center;
-}
-
-/* Usage Limit Warning Badge */
-.usage-limit-warning {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 12px;
-}
-
-.warning-icon {
-  color: var(--warning-color);
-  flex-shrink: 0;
-}
-
-.warning-text {
-  color: var(--warning-color);
-  white-space: nowrap;
-}
-
-.info-icon {
-  color: var(--warning-color);
-  opacity: 0.8;
-  cursor: help;
-  flex-shrink: 0;
-}
-
-.close-badge-btn {
-  background: none;
-  border: none;
-  color: var(--warning-color);
-  cursor: pointer;
-  padding: 2px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.8;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-}
-
-.close-badge-btn:hover {
-  opacity: 1;
-  background-color: var(--warning-bg-subtle);
-  transform: scale(1.1);
-}
-
-.search-content {
-  padding-top: 8px;
-}
-
-/* Search Filters Section */
-.search-filters-section {
-  margin-top: 8px;
-}
-
-.more-filters-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-}
-
-.more-filters-toggle:hover {
-  background-color: var(--bg-hover);
-  border-color: var(--border-color-hover);
-}
-
-.more-filters-label {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--primary-color);
-}
-
-.more-filters-indicators {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-}
-
-.active-filters-indicator {
-  font-size: 8px;
-  color: var(--primary-color);
-  background-color: var(--primary-bg-subtle);
-  padding: 1px 3px;
-  border-radius: 4px;
-  font-weight: 600;
-  min-width: 12px;
-  text-align: center;
-}
-
-.toggle-icon {
-  color: var(--text-secondary);
-  transition: transform 0.3s ease;
-}
-
-.toggle-icon.rotated {
-  transform: rotate(180deg);
-}
-
-/* Collapsible Filters Container */
-.filters-container {
-  margin-top: 8px;
-  animation: slideDown 0.3s ease-out;
-}
-
-.filters-content {
-  border-radius: 6px;
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  flex-wrap: wrap;
-  padding-bottom: 5px;
-}
-
-.filter-compact-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.filter-compact-label {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.filter-compact-select {
-  min-width: 120px;
-  max-width: none;
-  width: auto;
-}
-
-.filter-compact-count {
-  font-size: 9px;
-  color: var(--primary-color);
-  background-color: var(--primary-bg-subtle);
-  padding: 1px 4px;
-  border-radius: 4px;
-  font-weight: 600;
-  min-width: 12px;
-  text-align: center;
-  flex-shrink: 0;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-    max-height: 0;
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-    max-height: 200px;
-  }
-}
-
-/* Semantic Language Search */
-.semantic-search-section {
-  max-width: 100%;
-}
-
-.search-input-row {
-  display: flex;
-  gap: 16px;
-  align-items: flex-start;
-}
-
-.semantic-input {
-  font-size: 16px;
-  flex: 1;
-}
-
-/* Tags Search */
-.tags-search-section {
-  width: 100%;
-}
-
-.tags-input-row {
-  display: flex;
-  gap: 16px;
-  align-items: flex-start;
-}
-
-.tags-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  flex: 1;
-}
-
-.tags-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.tags-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.tags-select {
-  min-height: 40px;
-}
-
-/* Topological Search */
-.topological-search-section {
-  width: 100%;
-}
-
-.topological-input-row {
-  display: flex;
-  gap: 16px;
-  align-items: flex-start;
-}
-
-.topological-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 20px;
-  flex: 1;
-}
-
-.topological-area {
-  width: 100%;
-}
-
-.topological-input {
-  text-align: center;
-  width: 100%;
-}
-
-.center-input {
-  border-color: #2563eb;
-}
-
-/* Inline Search Actions */
-.search-actions-inline {
-  display: flex;
-  flex-direction: row;
-  gap: 12px;
-  align-self: flex-start;
-  flex-shrink: 0;
-}
-
-.search-button {
-  min-width: 140px;
-  height: 40px;
-}
-
-.clear-button {
-  min-width: 100px;
-  height: 40px;
-}
-
-.clear-button.icon-only {
-  min-width: 40px;
-  width: 40px;
-  padding: 0;
 }
 
 /* Search Results Container */
@@ -2308,95 +968,8 @@ const filterSummaryText = computed(() => {
   text-align: center;
 }
 
-/* Medium screens - adjust spacing */
-@media (max-width: 1024px) {
-  .search-selector-section {
-    gap: 16px;
-  }
-
-  .type-pill,
-  .mode-pill {
-    font-size: 11px;
-    padding: 7px 8px;
-    gap: 3px;
-  }
-}
-
-/* Tablet responsive - stack vertically */
+/* Star filter responsive - Tablet */
 @media (max-width: 768px) {
-  .search-toolbar {
-    padding: 16px;
-  }
-
-  .search-toolbar.is-collapsed {
-    padding: 8px 16px;
-    transform: translateY(-4px);
-  }
-
-  .search-selector-section {
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .search-filters-section {
-    margin-bottom: 8px;
-  }
-
-  .more-filters-toggle {
-    padding: 2px 4px;
-  }
-
-  .more-filters-label {
-    font-size: 9px;
-  }
-
-  .active-filters-indicator {
-    font-size: 7px;
-    padding: 1px 2px;
-    min-width: 10px;
-  }
-
-  .filters-content {
-    padding: 8px;
-    gap: 12px;
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .filter-compact-group {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .filter-compact-label {
-    font-size: 10px;
-  }
-
-  .filter-compact-select {
-    min-width: 100px;
-    flex: 1;
-    margin-left: auto;
-  }
-
-  .filter-compact-count {
-    font-size: 7px;
-    padding: 1px 2px;
-    min-width: 10px;
-  }
-
-  .selector-group:first-child,
-  .selector-group:last-child {
-    flex: 1;
-    width: 100%;
-  }
-
-  .type-pill,
-  .mode-pill {
-    font-size: 12px;
-    padding: 8px 10px;
-  }
-
-  /* Star filter responsive */
   .controls-right {
     gap: 12px;
   }
@@ -2409,8 +982,6 @@ const filterSummaryText = computed(() => {
     font-size: 12px;
   }
 
-  /* Note: Grid responsive styles moved to global.scss */
-
   .selection-info {
     bottom: 16px;
     left: 16px;
@@ -2420,100 +991,8 @@ const filterSummaryText = computed(() => {
   }
 }
 
-/* Small mobile - compress further if needed */
+/* Star filter mobile responsive */
 @media (max-width: 480px) {
-  .search-toolbar {
-    padding: 12px;
-    margin-bottom: 16px;
-  }
-
-  .search-toolbar.is-collapsed {
-    padding: 6px 12px;
-    transform: translateY(-2px);
-  }
-
-  .type-pills {
-    gap: 2px;
-  }
-
-  .mode-pills {
-    gap: 2px;
-  }
-
-  .type-pill,
-  .mode-pill {
-    font-size: 10px;
-    padding: 6px 6px;
-    gap: 2px;
-  }
-
-  .type-icon,
-  .mode-icon {
-    width: 10px;
-    height: 10px;
-  }
-
-  .search-filters-section {
-    margin-bottom: 10px;
-    padding-bottom: 0;
-  }
-
-  .more-filters-label {
-    font-size: 11px;
-  }
-
-  .active-filters-indicator {
-    font-size: 9px;
-    padding: 1px 3px;
-  }
-
-  .filters-container {
-    margin-top: 8px;
-    padding: 0;
-  }
-
-  .filters-inline-container {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-
-  .filter-inline-group {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .filter-inline-label {
-    font-size: 10px;
-  }
-
-  .filter-inline-select {
-    min-width: 120px;
-    max-width: none;
-    flex: 1;
-    margin-left: auto;
-  }
-
-  .collections-select {
-    min-width: 140px;
-    max-width: none;
-  }
-
-  .filter-inline-count {
-    font-size: 8px;
-    padding: 1px 3px;
-  }
-
-  .clear-filters-container {
-    margin-top: 8px;
-    padding-top: 0;
-  }
-
-  .clear-filters-button {
-    font-size: 9px;
-  }
-
-  /* Star filter mobile responsive */
   .controls-right {
     gap: 8px;
   }
@@ -2524,134 +1003,6 @@ const filterSummaryText = computed(() => {
 
   .filter-label {
     font-size: 10px;
-  }
-
-  .search-input-row,
-  .tags-input-row,
-  .topological-input-row {
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .tags-row {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-
-  .topological-input-row {
-    flex-direction: column;
-    gap: 20px;
-    width: 100%;
-  }
-
-  .topological-grid {
-    display: grid;
-    grid-template-columns: 1fr !important;
-    gap: 20px;
-    width: 100% !important;
-  }
-
-  .topological-area {
-    width: 100% !important;
-  }
-
-  .topological-input {
-    text-align: left;
-    width: 100% !important;
-  }
-
-  .topological-search-section {
-    width: 100% !important;
-  }
-
-  .topological-search-section .topological-input {
-    width: 100% !important;
-  }
-
-  .topological-search-section .topological-input-row {
-    width: 100% !important;
-  }
-
-  .topological-search-section .topological-grid {
-    width: 100% !important;
-  }
-
-  .topological-search-section .topological-area {
-    width: 100% !important;
-  }
-
-  .topological-search-section .n-input {
-    width: 100% !important;
-  }
-
-  .topological-search-section :deep(.n-input) {
-    width: 100% !important;
-    box-sizing: border-box !important;
-  }
-
-  .topological-search-section :deep(.n-input-wrapper) {
-    width: 100% !important;
-    box-sizing: border-box !important;
-  }
-
-  .topological-search-section :deep(.n-input__input-el) {
-    width: 100% !important;
-    box-sizing: border-box !important;
-  }
-
-  .search-actions-inline {
-    flex-direction: row;
-    width: 100%;
-  }
-
-  .search-button {
-    flex: 1;
-  }
-
-  .clear-button.icon-only {
-    min-width: 40px;
-    width: 40px;
-    flex: none;
-  }
-
-  .inspiration-title {
-    font-size: 24px;
-  }
-
-  .inspiration-subtitle {
-    font-size: 16px;
-  }
-
-  .examples-carousel {
-    padding: 12px 0;
-  }
-
-  .carousel-container {
-    height: 70px;
-  }
-
-  .carousel-item.sliding {
-    transform: translateX(-60px);
-  }
-
-  .example-card {
-    min-height: 40px;
-    padding: 0;
-  }
-
-  .example-text {
-    font-size: 14px;
-  }
-
-  /* Note: Photo grid mobile styles moved to global.scss */
-
-  .load-more-container {
-    margin: 24px 0;
-  }
-
-  .load-more-button {
-    width: 100%;
-    min-width: auto;
   }
 
   .selection-info {
@@ -2666,19 +1017,7 @@ const filterSummaryText = computed(() => {
 
 /* Tablet Responsive */
 @media (min-width: 768px) and (max-width: 1024px) {
-  .search-input-row,
-  .tags-input-row,
-  .topological-input-row {
-    gap: 12px;
-  }
-
-  .topological-grid {
-    gap: 16px;
-  }
-
-  .tags-row {
-    gap: 16px;
-  }
+  /* Grid controls responsive handled above */
 }
 .controls-left {
   display: flex;

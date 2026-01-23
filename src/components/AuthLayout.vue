@@ -163,7 +163,7 @@ import AppLogo from "./AppLogo.vue";
 
 @media (max-width: 480px) {
   .auth-layout {
-    padding: 12px;
+    padding: 0;
   }
 
   .auth-content {
