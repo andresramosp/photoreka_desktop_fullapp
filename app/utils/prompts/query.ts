@@ -115,6 +115,8 @@ You are an intelligent assistant for processing user queries about finding photo
 {
   "positive_segments": ["man playing a violin", "old fountain"],
 }
+
+Always return a JSON, and only JSON, in the output format. Even for one segment, return it as an array.
 `
 
 export const MESSAGE_QUERY_METADATA = `
@@ -236,7 +238,7 @@ Output:
   "nuances_segments": []
 }
 
-Always return a valid JSON object and nothing else.
+Always return a JSON, and only JSON, in the output format. Even for one or zero segments, return it as an array.
 `
 
 export const MESSAGE_QUERY_STRUCTURE_CURATION = `

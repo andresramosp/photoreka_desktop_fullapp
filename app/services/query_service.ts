@@ -113,8 +113,18 @@ export default class QueryService {
       'gemini-2.5-flash-lite'
     )
 
+    // const { result: modelResult, cost: modelTwoCost } = await this.modelsService.getGPTResponse(
+    //   queryStuctureMessage,
+    //   JSON.stringify({ query: modelOneResult.no_prefix }),
+    //   searchMode == 'curation' || searchMode == 'adaptive' ? 'gpt-5-nano' : 'gpt-5-nano'
+    // )
+
     modelResult.original = query
-    modelResult.positive_segments = [...new Set([...modelResult.positive_segments])]
+    try {
+      modelResult.positive_segments = [...new Set([...modelResult.positive_segments])]
+    } catch (error) {
+      console.log('Error processing positive_segments:', error)
+    }
     modelResult.nuances_segments =
       searchMode == 'curation' || searchMode == 'adaptive'
         ? [...new Set(Object.values(modelResult.nuances_segments).flat())]
