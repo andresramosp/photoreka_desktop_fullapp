@@ -18,7 +18,8 @@
 
     <!-- Grid Controls -->
     <div class="grid-controls grid-controls-base">
-      <div class="controls-left">
+      <!-- Row 1: Photos count + Duplicates button -->
+      <div class="controls-row-1">
         <div class="results-info results-info-base">
           <span class="results-count results-count-base">
             {{ displayedPhotos.length }}{{ hasMorePhotos ? "+" : "" }} of
@@ -33,6 +34,7 @@
               <n-button
                 type="primary"
                 size="small"
+                secondary
                 @click="handleReviewDuplicates"
                 :disabled="duplicatesReviewed"
                 :loading="isCheckingDuplicates"
@@ -64,9 +66,12 @@
         </div>
       </div>
 
-      <div class="controls-right">
+      <!-- Row 2: Columns + Sort -->
+      <div class="controls-row-2">
         <div class="grid-size-controls grid-size-controls-base">
-          <span class="grid-label grid-label-base">Columns:</span>
+          <span v-if="!isMobile" class="grid-label grid-label-base"
+            >Columns:</span
+          >
           <n-button-group>
             <n-button
               v-for="size in columnOptions"
@@ -124,17 +129,27 @@
             </n-icon>
           </n-button>
         </div>
-
-        <!-- Select All Button -->
-        <n-button
-          size="small"
-          :type="allSelected ? 'primary' : 'default'"
-          @click="handleSelectAllToggle"
-          class="select-all-btn"
-        >
-          {{ allSelected ? "Deselect All" : "Select All" }}
-        </n-button>
       </div>
+
+      <!-- Row 3: Select All Button -->
+      <n-button
+        size="small"
+        :type="allSelected ? 'primary' : 'default'"
+        @click="handleSelectAllToggle"
+        class="select-all-btn"
+      >
+        <template #icon>
+          <n-icon>
+            <template v-if="allSelected">
+              <CheckmarkDoneOutline />
+            </template>
+            <template v-else>
+              <CheckboxOutline />
+            </template>
+          </n-icon>
+        </template>
+        {{ allSelected ? "Deselect All" : "Select All" }}
+      </n-button>
     </div>
 
     <!-- Select All Banner -->
@@ -293,6 +308,7 @@ import {
   NTooltip,
 } from "naive-ui";
 import { DuplicateOutline, CloseOutline } from "@vicons/ionicons5";
+import { CheckmarkDoneOutline, CheckboxOutline } from "@vicons/ionicons5";
 import { useRouter } from "vue-router";
 import PhotoCardHub from "./photoCards/PhotoCardHub.vue";
 import PhotoInfoDialog from "./PhotoInfoDialog.vue";
@@ -308,7 +324,7 @@ import { usePhotoUpload } from "@/composables/usePhotoUpload.js";
 import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
-import { MagicWand } from "@vicons/carbon";
+import { useIsMobile } from "@/composables/useIsMobile.js";
 
 const emit = defineEmits(["refreshCollection", "selection-change"]);
 const props = defineProps({
@@ -357,6 +373,8 @@ const {
   openToolSelector,
   closeToolSelector,
 } = usePhotoToolSelection();
+
+const { isMobile } = useIsMobile();
 
 // Grid columns state
 const gridColumns = ref(8);
@@ -1082,22 +1100,52 @@ const handleToolSelected = async (toolId) => {
 /* Grid Controls */
 .grid-controls-base {
   display: flex;
+  flex-direction: column;
+  margin-bottom: 24px;
+  gap: 12px;
+}
+
+/* Row 1: Photos count + Duplicates */
+.controls-row-1 {
+  display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
   gap: 16px;
+  flex-wrap: wrap;
 }
 
-.controls-left {
+/* Row 2: Columns + Sort */
+.controls-row-2 {
   display: flex;
+  justify-content: space-between;
   align-items: center;
   gap: 16px;
+  flex-wrap: wrap;
 }
 
-.controls-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+/* Desktop: Keep original layout */
+@media (min-width: 769px) {
+  .grid-controls-base {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .controls-row-1 {
+    flex: 0 0 auto;
+    gap: 16px;
+  }
+
+  .controls-row-2 {
+    flex: 1;
+    justify-content: flex-end;
+    gap: 12px;
+  }
+
+  .select-all-btn {
+    margin-left: 8px;
+  }
 }
 
 .results-info-base {
@@ -1291,54 +1339,55 @@ const handleToolSelected = async (toolId) => {
 @media (max-width: 768px) {
   .grid-controls-base {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     gap: 12px;
   }
 
-  .controls-left {
+  /* Row 1: Photos count (left) + Duplicates button (right) */
+  .controls-row-1 {
     width: 100%;
-    flex-wrap: nowrap;
-    gap: 8px;
-  }
-
-  .controls-right {
-    width: 100%;
-    flex-wrap: wrap;
-  }
-
-  .controls-right {
     justify-content: space-between;
+    align-items: center;
+    flex-wrap: nowrap;
     gap: 12px;
-  }
-
-  .action-buttons {
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .grid-size-controls-base {
-    flex: 1;
-    min-width: fit-content;
-  }
-
-  .sort-controls-base {
-    flex: 1;
-    min-width: fit-content;
-  }
-
-  .select-all-btn {
-    width: 100%;
-    margin-left: 0;
-    margin-top: 4px;
   }
 
   .results-info-base {
-    width: 100%;
+    flex: 0 0 auto;
   }
 
   .duplicates-controls-container {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+
+  .filter-duplicates-checkbox {
+    white-space: nowrap;
+  }
+
+  /* Row 2: Columns (left) + Sort (right) on same line */
+  .controls-row-2 {
     width: 100%;
-    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 12px;
+  }
+
+  .grid-size-controls-base {
+    flex: 0 0 auto;
+  }
+
+  .sort-controls-base {
+    flex: 0 0 auto;
+  }
+
+  /* Row 3: Select All button (full width) */
+  .select-all-btn {
+    width: 100%;
+    margin-left: 0;
   }
 
   /* On mobile, respect user's column choice from selector */
@@ -1376,15 +1425,20 @@ const handleToolSelected = async (toolId) => {
     gap: 10px;
   }
 
-  .controls-right {
-    flex-direction: column;
-    align-items: stretch;
+  /* Row 1: Photos count + Duplicates stay on same line but more compact */
+  .controls-row-1 {
+    gap: 8px;
+  }
+
+  /* Row 2: Columns + Sort might wrap on very small screens */
+  .controls-row-2 {
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .grid-size-controls-base,
   .sort-controls-base {
-    width: 100%;
-    justify-content: space-between;
+    min-width: 0;
   }
 
   .select-all-btn {

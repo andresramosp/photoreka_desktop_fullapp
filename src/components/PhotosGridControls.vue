@@ -14,7 +14,7 @@
           >
             <Camera20Regular />
           </n-icon>
-          <span class="section-label">Visual aspects</span>
+          <span class="section-label">Filter by visual aspects</span>
           <span
             v-if="hasActiveFilters && !isFiltersExpanded"
             class="active-badge"
@@ -35,7 +35,7 @@
           </svg>
         </n-icon>
       </div>
-      <div v-show="isFiltersExpanded" class="filters-row">
+      <div v-if="isFiltersExpanded" class="filters-row filters-tab-container">
         <div
           v-for="aspectGroup in visualAspectsOptions"
           :key="aspectGroup.key"
@@ -62,7 +62,10 @@
 
     <!-- Sorting Section -->
     <div class="sorting-section">
-      <div class="section-header sorting-header">
+      <div
+        class="section-header sorting-header"
+        @click="isSortingExpanded = !isSortingExpanded"
+      >
         <div class="header-left">
           <n-icon
             size="16"
@@ -71,16 +74,7 @@
           >
             <Trophy20Regular />
           </n-icon>
-          <span class="section-label">Rank by</span>
-          <n-radio-group
-            v-model:value="sortingType"
-            size="small"
-            @update:value="handleSortingTypeChange"
-            class="inline-radios"
-          >
-            <n-radio value="criteria" class="sorting-radio">Criteria</n-radio>
-            <n-radio value="genre" class="sorting-radio">Genre</n-radio>
-          </n-radio-group>
+          <span class="section-label">Rank by artistic scores</span>
           <n-button
             v-if="hasActiveSorting"
             text
@@ -138,7 +132,22 @@
           </svg>
         </n-icon>
       </div>
-      <div v-show="isSortingExpanded" class="sorting-wrapper">
+      <div
+        v-if="isSortingExpanded"
+        class="sorting-wrapper filters-tab-container"
+      >
+        <!-- Sorting Type Selection -->
+        <div class="sorting-type-row">
+          <n-radio-group
+            v-model:value="sortingType"
+            size="small"
+            @update:value="handleSortingTypeChange"
+            class="inline-radios"
+          >
+            <n-radio value="criteria" class="sorting-radio">Criteria</n-radio>
+            <n-radio value="genre" class="sorting-radio">Genre</n-radio>
+          </n-radio-group>
+        </div>
         <!-- Criteria Selection -->
         <div v-if="sortingType === 'criteria'" class="criteria-row">
           <template
@@ -227,7 +236,7 @@
       </div>
 
       <!-- Collapsible More Filters -->
-      <div v-if="isDateRangeExpanded" class="date-range-container">
+      <div v-if="isDateRangeExpanded" class="filters-tab-container">
         <div class="more-filters-content">
           <!-- Filename Search + Metadata Filters Row -->
           <div class="metadata-row">
@@ -338,7 +347,7 @@
       <template #footer>
         <div style="display: flex; justify-content: space-between; width: 100%">
           <n-button @click="resetCustomWeights"> Reset to Default </n-button>
-          <div style="display: flex; gap: 8px">
+          <div style="display: flex">
             <n-button @click="showCustomWeightsModal = false">
               Cancel
             </n-button>
@@ -470,7 +479,7 @@ const apertureOptions = [
 
 // Visual Aspects Filters
 const selectedFilters = ref({});
-const isFiltersExpanded = ref(true); // Will be set based on mobile on mount
+const isFiltersExpanded = ref(false); // Will be set based on mobile on mount
 
 // Date Range Filter
 const isDateRangeExpanded = ref(false);
@@ -480,28 +489,7 @@ const sortingType = ref("criteria"); // 'criteria' or 'genre'
 const selectedCriteria = ref([]); // Start empty (no sorting initially)
 const selectedGenre = ref("street");
 const sortOrder = ref("desc"); // 'asc', 'desc'
-const isSortingExpanded = ref(true); // Will be set based on mobile on mount
-
-// Initialize expanded state based on viewport
-onMounted(() => {
-  const handleResize = () => {
-    if (window.innerWidth >= 1024) {
-      // Desktop: always expanded
-      isFiltersExpanded.value = true;
-      isSortingExpanded.value = true;
-    } else if (window.innerWidth < 768) {
-      // Mobile: start collapsed
-      isFiltersExpanded.value = false;
-      isSortingExpanded.value = false;
-    }
-  };
-
-  handleResize();
-  window.addEventListener("resize", handleResize);
-
-  // Cleanup
-  return () => window.removeEventListener("resize", handleResize);
-});
+const isSortingExpanded = ref(false); // Will be set based on mobile on mount
 
 // Get dynamic criteria from useArtisticScores
 const {
@@ -855,12 +843,16 @@ watch(
 .sorting-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 4px 12px 8px 12px;
+  gap: 5px;
+  padding: 0 12px 8px 12px;
 }
 
-.sorting-header {
-  flex-wrap: wrap;
+.sorting-type-row {
+  display: flex;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 4px;
 }
 
 .inline-radios {
@@ -975,8 +967,7 @@ watch(
   transform: rotate(180deg);
 }
 
-.date-range-container {
-  margin-top: 8px;
+.filters-tab-container {
   animation: slideDown 0.3s ease-out;
 }
 
@@ -1095,13 +1086,12 @@ watch(
   .section-header:hover {
     background-color: transparent;
   }
+}
 
-  /* Allow clicks on interactive elements in sorting header */
-  .sorting-header .header-left,
-  .sorting-header .header-left * {
-    pointer-events: auto;
-    background-color: transparent;
-  }
+/* Sorting header button event handling */
+.sorting-header .sort-order-btn,
+.sorting-header .clear-action-btn {
+  pointer-events: auto;
 }
 
 /* Custom tooltip styling */

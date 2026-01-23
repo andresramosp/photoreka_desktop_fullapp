@@ -170,7 +170,9 @@ defineEmits([
   backdrop-filter: blur(12px);
   border-radius: 16px;
   padding: 12px 24px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.1);
 }
 
 .floating-action-content {
@@ -230,11 +232,12 @@ defineEmits([
 /* Responsive adjustments for floating bar */
 @media (max-width: 768px) {
   .floating-action-bar {
-    bottom: 20px;
-    left: 16px;
-    right: 16px;
-    transform: none;
-    padding: 10px 16px;
+    top: 75px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 8px 16px;
+    border-radius: 12px;
+    max-width: 95%;
   }
 
   .floating-action-content {
@@ -243,34 +246,42 @@ defineEmits([
 
   .selected-count {
     font-size: 13px;
+    padding: 0 4px;
   }
 
   .floating-action-buttons {
     gap: 6px;
   }
+
+  .floating-action-buttons :deep(.n-button) {
+    padding: 0 8px;
+    min-width: unset;
+  }
 }
 
 @media (max-width: 480px) {
   .floating-action-bar {
-    bottom: 16px;
-    left: 12px;
-    right: 12px;
+    top: 75px;
+    padding: 6px 12px;
+    max-width: 96%;
   }
 
   .floating-action-content {
-    flex-direction: column;
-    gap: 10px;
+    gap: 8px;
   }
 
   .selected-count {
-    width: 100%;
-    text-align: center;
+    font-size: 12px;
+    padding: 0 2px;
   }
 
   .floating-action-buttons {
-    width: 100%;
-    justify-content: center;
-    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .action-separator {
+    height: 20px;
+    margin: 0 2px;
   }
 }
 </style>
