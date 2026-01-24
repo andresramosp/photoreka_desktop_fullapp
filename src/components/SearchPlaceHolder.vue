@@ -2,7 +2,7 @@
   <div class="empty-state">
     <div class="empty-content">
       <n-icon
-        size="64"
+        :size="isMobileDevice() ? 45 : 64"
         color="#6b7280"
         class="empty-icon"
         :component="currentModeIcon"
@@ -26,7 +26,7 @@
         </div>
       </div>
       <div class="examples-carousel">
-        <span>Try something like...</span>
+        <span v-if="!isMobileDevice()">Try something like...</span>
         <div class="carousel-container">
           <div class="carousel-item" :class="{ sliding: isSliding }">
             <button class="example-card" @click="handleExampleClick">
@@ -42,6 +42,7 @@
 <script setup>
 import { toRef, defineProps, computed } from "vue";
 import { NIcon } from "naive-ui";
+import { isMobileDevice } from "@/utils/utils.js";
 import {
   ImagesOutline,
   Language,
@@ -187,12 +188,24 @@ function handleExampleClick() {
   margin: 0 0 0 0;
 }
 
+@media (max-width: 480px) {
+  .empty-title {
+    font-size: var(--font-size-xl);
+  }
+}
+
 .empty-description {
   font-size: var(--font-size-md);
   color: var(--text-secondary);
   margin-top: 10px;
   margin-bottom: 5px;
   line-height: var(--line-height-relaxed);
+}
+
+@media (max-width: 480px) {
+  .empty-description {
+    font-size: 13px;
+  }
 }
 
 .instructions-list {
@@ -219,13 +232,14 @@ function handleExampleClick() {
   display: flex;
   justify-content: center;
   padding: var(--spacing-sm) 0;
-  background-color: rgba(107, 114, 128, 0.05);
+  background-color: var(--bg-surface);
   border-radius: var(--radius-md);
-  border: 1px solid rgba(107, 114, 128, 0.1);
+  border: 1px solid var(--border-color);
   padding: var(--spacing-lg);
   align-content: center;
   align-items: center;
   flex-direction: column;
+  color: var(--text-primary);
 }
 
 .carousel-container {

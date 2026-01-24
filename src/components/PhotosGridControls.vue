@@ -74,7 +74,7 @@
           >
             <Trophy20Regular />
           </n-icon>
-          <span class="section-label">Rank by artistic scores</span>
+          <span class="section-label">Rank by visual scores</span>
           <n-button
             v-if="hasActiveSorting"
             text
@@ -157,6 +157,7 @@
             <n-button
               v-for="criterion in group.criteria"
               :key="criterion.value"
+              secondary
               :type="
                 selectedCriteria.includes(criterion.value)
                   ? groupKey === 'fundamentals'
@@ -192,6 +193,7 @@
               <n-button
                 :type="selectedGenre === genre.value ? 'primary' : 'default'"
                 size="small"
+                secondary
                 @click="handleGenreSelect(genre.value)"
                 class="genre-button"
                 :class="{ 'custom-button': genre.value === 'custom' }"
@@ -955,11 +957,11 @@ watch(
 .date-range-label {
   font-size: 10px;
   font-weight: 500;
-  color: var(--primary-color);
+  color: var(--text-primary);
 }
 
 .toggle-icon {
-  color: var(--primary-color);
+  color: var(--text-primary);
   transition: transform 0.3s ease;
 }
 

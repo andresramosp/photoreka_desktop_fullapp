@@ -299,6 +299,9 @@ import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
 const router = useRouter();
 const photosStore = usePhotosStore();
 
+// Emit events to parent
+const emit = defineEmits(["search-focus", "search-blur"]);
+
 // Search composable
 const {
   searchQuery,
@@ -384,6 +387,7 @@ const scrollToActiveItem = () => {
 const handleFocus = () => {
   showDropdown.value = true;
   ensureDataLoaded();
+  emit("search-focus");
 };
 
 const handleBlur = (event: FocusEvent) => {
@@ -396,6 +400,7 @@ const handleBlur = (event: FocusEvent) => {
     ) {
       showDropdown.value = false;
       activeItemKey.value = null;
+      emit("search-blur");
     }
   }, 150);
 };
@@ -507,6 +512,13 @@ const handleSelectPhoto = async (photo: SearchResultPhoto) => {
 
   clearSearch();
 };
+
+// Emit blur when search is cleared
+watch(searchQuery, (newValue) => {
+  if (!newValue || newValue.trim() === "") {
+    emit("search-blur");
+  }
+});
 
 // Reset active item when results change
 watch(flatResults, () => {

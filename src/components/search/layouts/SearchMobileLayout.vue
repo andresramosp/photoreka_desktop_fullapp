@@ -8,6 +8,7 @@
           <n-input
             v-if="activeSearchType === 'semantic'"
             v-model:value="semanticQuery"
+            clearable
             placeholder="Describe what you're looking for..."
             class="mobile-search-input"
           >
@@ -74,6 +75,40 @@
           />
         </n-button>
       </div>
+
+      <!-- Search Mode Pills (directly visible) -->
+      <div class="mobile-search-mode-row">
+        <div
+          class="filter-pill"
+          :class="{ active: searchMode === 'broad' }"
+          @click="!isSearching && updateSearchMode('broad')"
+        >
+          <n-icon size="16">
+            <GlobeOutline />
+          </n-icon>
+          <span>Broad</span>
+        </div>
+        <div
+          class="filter-pill"
+          :class="{ active: searchMode === 'adaptive' }"
+          @click="!isSearching && updateSearchMode('adaptive')"
+        >
+          <n-icon size="16">
+            <SparklesOutline />
+          </n-icon>
+          <span>Adaptive</span>
+        </div>
+        <div
+          class="filter-pill"
+          :class="{ active: searchMode === 'precise' }"
+          @click="!isSearching && updateSearchMode('precise')"
+        >
+          <n-icon size="16">
+            <SparklesOutline />
+          </n-icon>
+          <span>Precise</span>
+        </div>
+      </div>
     </div>
 
     <!-- Filters Panel (Bottom Sheet / Overlay) -->
@@ -123,43 +158,6 @@
                   <PricetagOutline />
                 </n-icon>
                 <span>Tags</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Search Mode -->
-          <div class="filter-section">
-            <div class="filter-section-label">Search Mode</div>
-            <div class="filter-pills-row">
-              <div
-                class="filter-pill"
-                :class="{ active: searchMode === 'broad' }"
-                @click="!isSearching && updateSearchMode('broad')"
-              >
-                <n-icon size="16">
-                  <GlobeOutline />
-                </n-icon>
-                <span>Broad</span>
-              </div>
-              <div
-                class="filter-pill"
-                :class="{ active: searchMode === 'adaptive' }"
-                @click="!isSearching && updateSearchMode('adaptive')"
-              >
-                <n-icon size="16">
-                  <SparklesOutline />
-                </n-icon>
-                <span>Adaptive</span>
-              </div>
-              <div
-                class="filter-pill"
-                :class="{ active: searchMode === 'precise' }"
-                @click="!isSearching && updateSearchMode('precise')"
-              >
-                <n-icon size="16">
-                  <SparklesOutline />
-                </n-icon>
-                <span>Precise</span>
               </div>
             </div>
           </div>
@@ -454,10 +452,8 @@ function updateWithInsights(value) {
 const totalActiveFilters = computed(() => {
   let count = 0;
 
-  // Count non-default search settings
-  if (searchMode.value !== "broad") count++;
+  // Count only actual filters, not search type or mode
   if (withInsights.value) count++;
-  if (activeSearchType.value !== "semantic") count++;
 
   // Count active filters
   count += selectedCollections.value.length;
@@ -522,14 +518,29 @@ function handleReset() {
   top: 0;
   z-index: 10;
   background-color: var(--bg-container);
-  border-bottom: 1px solid var(--border-color);
-  padding: 12px 16px;
 }
 
 .mobile-search-row {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+.mobile-search-mode-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 0 12px 12px 12px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.mobile-search-mode-row .filter-pill {
+  padding: 6px 12px;
+  font-size: 12px;
+  flex: 1;
+  min-width: 0;
+  justify-content: center;
 }
 
 .mobile-search-input-wrapper {
@@ -543,15 +554,15 @@ function handleReset() {
 
 .mobile-search-button {
   flex-shrink: 0;
-  width: 44px;
-  height: 44px;
+  width: 34px;
+  height: 34px;
   padding: 0;
 }
 
 .mobile-filters-button {
   flex-shrink: 0;
-  width: 44px;
-  height: 44px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   position: relative;
 }

@@ -787,7 +787,7 @@ function updateWithInsights(value) {
 .more-filters-label {
   font-size: 10px;
   font-weight: 500;
-  color: var(--primary-color);
+  color: var(--text-primary);
 }
 
 .more-filters-indicators {

@@ -2664,7 +2664,7 @@ if (typeof window !== "undefined") {
 
 .overall-rating-container {
   padding: var(--spacing-lg);
-  background: var(--bg-surface);
+  background: var(--bg-container);
   border-radius: var(--radius-md);
   border-left: 4px solid var(--primary-color);
 }
@@ -2756,6 +2756,7 @@ if (typeof window !== "undefined") {
 
 .genre-presets-container {
   margin-bottom: var(--spacing-md);
+  margin-top: var(--spacing-md);
 }
 
 .genre-header {
