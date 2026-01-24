@@ -1,435 +1,495 @@
 <template>
-  <div class="search-toolbar" :class="{ 'is-collapsed': isToolbarCollapsed }">
-    <!-- Search Type and Mode Selector -->
-    <div class="search-selector-section">
-      <!-- Search Type -->
-      <div class="selector-group">
-        <div class="selector-label">Search Type:</div>
-        <div class="type-pills">
-          <n-tooltip trigger="hover" placement="top">
-            <template #trigger>
-              <div
-                class="type-pill"
-                :class="{ active: activeSearchType === 'semantic' }"
-                @click="!isSearching && updateSearchType('semantic')"
-                :aria-disabled="isSearching"
-                :tabindex="isSearching ? -1 : 0"
-                :style="
-                  isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
-                "
-              >
-                <n-icon size="14" class="type-icon">
-                  <DocumentOutline />
-                </n-icon>
-                Natural Language
-              </div>
-            </template>
-            Search using natural language descriptions like "sunset beach photos
-            with people"
-          </n-tooltip>
-          <n-tooltip trigger="hover" placement="top">
-            <template #trigger>
-              <div
-                class="type-pill"
-                :class="{ active: activeSearchType === 'tags' }"
-                @click="!isSearching && updateSearchType('tags')"
-                :aria-disabled="isSearching"
-                :tabindex="isSearching ? -1 : 0"
-                :style="
-                  isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
-                "
-              >
-                <n-icon size="16" class="type-icon">
-                  <TagOutlined />
-                </n-icon>
-                Tags
-              </div>
-            </template>
-            Search by specific tags and keywords assigned to your photos
-          </n-tooltip>
+  <div
+    class="search-toolbar-wrapper"
+    @mouseenter="handleMouseEnter"
+    @mouseleave="handleMouseLeave"
+  >
+    <!-- Mini Collapsed Bar -->
+    <div
+      v-if="isToolbarCollapsed"
+      class="search-toolbar-mini"
+      :class="{ 'is-hovering': isHovering }"
+    >
+      <div class="mini-content">
+        <div class="mini-search-type">
+          <n-icon size="14">
+            <DocumentOutline v-if="activeSearchType === 'semantic'" />
+            <TagOutlined v-else />
+          </n-icon>
+          <span>{{
+            activeSearchType === "semantic" ? "Natural Language" : "Tags"
+          }}</span>
         </div>
-      </div>
-
-      <!-- Search Mode -->
-      <div class="selector-group">
-        <div class="selector-label">Search Mode:</div>
-        <div class="mode-pills">
-          <n-tooltip trigger="hover" placement="top">
-            <template #trigger>
-              <div
-                class="mode-pill"
-                :class="{ active: searchMode === 'broad' }"
-                @click="!isSearching && updateSearchMode('broad')"
-                :aria-disabled="isSearching"
-                :tabindex="isSearching ? -1 : 0"
-                :style="
-                  isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
-                "
-              >
-                <n-icon size="16" class="mode-icon">
-                  <GlobeOutline />
-                </n-icon>
-                Broad
-              </div>
-            </template>
-            Fast, broad search focused on overall visual aspects.
-          </n-tooltip>
-
-          <n-tooltip trigger="hover" placement="top">
-            <template #trigger>
-              <div
-                class="mode-pill premium-pill"
-                :class="{ active: searchMode === 'adaptive' }"
-                @click="!isSearching && updateSearchMode('adaptive')"
-                :aria-disabled="isSearching"
-                :tabindex="isSearching ? -1 : 0"
-                :style="
-                  isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
-                "
-              >
-                <n-icon size="16" class="mode-icon">
-                  <SparklesOutline />
-                </n-icon>
-                Adaptive
-              </div>
-            </template>
-            Flexible and deep search for similar and indirect associations
-          </n-tooltip>
-
-          <n-tooltip trigger="hover" placement="top">
-            <template #trigger>
-              <div
-                class="mode-pill premium-pill"
-                :class="{ active: searchMode === 'precise' }"
-                @click="!isSearching && updateSearchMode('precise')"
-                :aria-disabled="isSearching"
-                :tabindex="isSearching ? -1 : 0"
-                :style="
-                  isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
-                "
-              >
-                <n-icon size="16" class="mode-icon">
-                  <SparklesOutline />
-                </n-icon>
-                Precise
-                <div class="premium-indicator-pill"></div>
-              </div>
-            </template>
-            Heavy search that prioritizes logical accuracy
-          </n-tooltip>
+        <div class="mini-divider"></div>
+        <div class="mini-search-mode">
+          <n-icon size="14">
+            <GlobeOutline v-if="searchMode === 'broad'" />
+            <SparklesOutline v-else-if="searchMode === 'adaptive'" />
+            <SearchOutline v-else />
+          </n-icon>
+          <span>{{
+            searchMode.charAt(0).toUpperCase() + searchMode.slice(1)
+          }}</span>
         </div>
-      </div>
-
-      <!-- Insights Toggle -->
-      <div class="selector-group">
-        <div class="selector-label">Insights:</div>
-        <div class="mode-pills">
-          <n-tooltip trigger="hover" placement="top">
-            <template #trigger>
-              <div
-                class="mode-pill insights-pill premium-pill"
-                :class="{ active: withInsights }"
-                @click="!isSearching && updateWithInsights(!withInsights)"
-                :aria-disabled="isSearching"
-                :tabindex="isSearching ? -1 : 0"
-                :style="
-                  isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
-                "
-              >
-                <n-icon size="16" class="mode-icon">
-                  <SparklesOutline />
-                </n-icon>
-                {{ withInsights ? "Enabled" : "Disabled" }}
-                <div class="premium-indicator-pill"></div>
-              </div>
-            </template>
-            Enhance search results with insights and commentary
-          </n-tooltip>
+        <div class="mini-divider"></div>
+        <div class="mini-query">
+          <template v-if="activeSearchType === 'semantic'">
+            <span class="mini-query-text">{{
+              semanticQuery || "No query"
+            }}</span>
+          </template>
+          <template v-else>
+            <span class="mini-query-text" v-if="includedTags.length > 0">
+              {{ includedTags.join(", ") }}
+            </span>
+            <span class="mini-query-text" v-else>No tags selected</span>
+          </template>
         </div>
-      </div>
-    </div>
-
-    <!-- More Filters Toggle -->
-    <div class="search-filters-section">
-      <div
-        class="more-filters-toggle"
-        @click="emit('update:showMoreFilters', !showMoreFilters)"
-      >
-        <span class="more-filters-label">More filters</span>
-        <div class="more-filters-indicators">
-          <span v-if="hasActiveFilters" class="active-filters-indicator">
-            {{ activeFiltersCount }}
-          </span>
-          <n-icon
-            size="12"
-            class="toggle-icon"
-            :class="{ rotated: showMoreFilters }"
-          >
+        <div class="mini-expand-hint">
+          <n-icon size="16">
             <ChevronDownOutline />
           </n-icon>
-        </div>
-      </div>
-
-      <!-- Collapsible Filters Container -->
-      <div v-if="showMoreFilters" class="filters-container">
-        <div class="filters-content">
-          <!-- Collections Filter -->
-          <div class="filter-compact-group">
-            <div class="filter-column">
-              <div class="filter-label-row">
-                <span class="filter-compact-label">Collections</span>
-                <n-tooltip trigger="hover" placement="top">
-                  <template #trigger>
-                    <n-icon
-                      size="13"
-                      color="var(--text-secondary)"
-                      style="cursor: help"
-                    >
-                      <InformationCircle />
-                    </n-icon>
-                  </template>
-                  Only collections with more than 50 photos are available for
-                  filter searches.
-                </n-tooltip>
-              </div>
-              <n-select
-                v-model:value="selectedCollections"
-                multiple
-                clearable
-                placeholder="Any"
-                :options="collectionsOptions"
-                :max-tag-count="3"
-                class="filter-compact-select"
-                :loading="collectionsLoading"
-                :disabled="isSearching"
-                size="small"
-                style="min-width: 200px"
-              >
-                <template #empty>
-                  <div style="padding: 8px; color: #888; font-size: 12px">
-                    No collections found
-                  </div>
-                </template>
-                <template #render-option="{ option }">
-                  <div class="collection-option">
-                    <span>{{ option.label }}</span>
-                    <span
-                      :style="{
-                        color: option.disabled ? '#ff7875' : '#8c8c8c',
-                        fontSize: '12px',
-                      }"
-                    >
-                      {{ option.photoCount }} photos
-                    </span>
-                  </div>
-                </template>
-              </n-select>
-            </div>
-          </div>
-
-          <!-- Visual Aspects Filter -->
-          <div class="filter-compact-group">
-            <div class="filter-column">
-              <span class="filter-compact-label" style="margin-bottom: 2px"
-                >Visual aspects</span
-              >
-              <n-tree-select
-                v-model:value="selectedVisualAspects"
-                multiple
-                clearable
-                placeholder="Any"
-                :options="treeSelectOptions"
-                :max-tag-count="3"
-                class="filter-compact-select"
-                :disabled="isSearching"
-                size="small"
-                style="min-width: 200px"
-                check-strategy="child"
-                :show-path="false"
-                expand-on-click
-              >
-                <template #empty>
-                  <div style="padding: 8px; color: #888; font-size: 12px">
-                    No visual aspects found
-                  </div>
-                </template>
-              </n-tree-select>
-            </div>
-          </div>
-
-          <!-- Artistic Scores Filter -->
-          <div class="filter-compact-group">
-            <div class="filter-column">
-              <div class="filter-label-row">
-                <span class="filter-compact-label">Visual scores</span>
-                <n-tooltip trigger="hover" placement="top">
-                  <template #trigger>
-                    <n-icon
-                      size="13"
-                      color="var(--text-secondary)"
-                      style="cursor: help"
-                    >
-                      <InformationCircle />
-                    </n-icon>
-                  </template>
-                  Will include photos above 7 in the selected scores
-                </n-tooltip>
-              </div>
-              <n-tree-select
-                v-model:value="selectedArtisticScores"
-                multiple
-                clearable
-                placeholder="Any"
-                :options="artisticScoresOptions"
-                :max-tag-count="3"
-                class="filter-compact-select"
-                :disabled="isSearching"
-                size="small"
-                style="min-width: 200px"
-                check-strategy="child"
-                :show-path="false"
-                expand-on-click
-              >
-                <template #empty>
-                  <div style="padding: 8px; color: #888; font-size: 12px">
-                    No artistic scores found
-                  </div>
-                </template>
-              </n-tree-select>
-            </div>
-          </div>
+          <span>Hover to expand</span>
         </div>
       </div>
     </div>
 
-    <!-- Conditional Search Content -->
-    <div class="search-content">
-      <!-- Semantic Language Search -->
-      <div
-        v-if="activeSearchType === 'semantic'"
-        key="semantic-search"
-        class="semantic-search-section"
-      >
-        <div class="search-input-row">
-          <n-input
-            v-model:value="semanticQuery"
-            type="textarea"
-            placeholder="Describe what you're looking for... e.g., 'sunset photos with people on the beach' or 'close-up portraits with red background'"
-            :autosize="{ minRows: 1, maxRows: 2 }"
-            class="semantic-input"
-          />
+    <!-- Full Search Toolbar -->
+    <div
+      class="search-toolbar"
+      :class="{ 'is-collapsed': isToolbarCollapsed && !isHovering }"
+    >
+      <!-- Search Type and Mode Selector -->
+      <div class="search-selector-section">
+        <!-- Search Type -->
+        <div class="selector-group">
+          <div class="selector-label">Search Type:</div>
+          <div class="type-pills">
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <div
+                  class="type-pill"
+                  :class="{ active: activeSearchType === 'semantic' }"
+                  @click="!isSearching && updateSearchType('semantic')"
+                  :aria-disabled="isSearching"
+                  :tabindex="isSearching ? -1 : 0"
+                  :style="
+                    isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
+                  "
+                >
+                  <n-icon size="14" class="type-icon">
+                    <DocumentOutline />
+                  </n-icon>
+                  Natural Language
+                </div>
+              </template>
+              Search using natural language descriptions like "sunset beach
+              photos with people"
+            </n-tooltip>
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <div
+                  class="type-pill"
+                  :class="{ active: activeSearchType === 'tags' }"
+                  @click="!isSearching && updateSearchType('tags')"
+                  :aria-disabled="isSearching"
+                  :tabindex="isSearching ? -1 : 0"
+                  :style="
+                    isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
+                  "
+                >
+                  <n-icon size="16" class="type-icon">
+                    <TagOutlined />
+                  </n-icon>
+                  Tags
+                </div>
+              </template>
+              Search by specific tags and keywords assigned to your photos
+            </n-tooltip>
+          </div>
+        </div>
 
-          <div class="search-actions-inline">
-            <n-button
-              type="primary"
-              :loading="isSearching"
-              :disabled="!hasSearchQuery"
-              @click="emit('search')"
-              class="search-button"
-            >
-              <template #icon>
-                <n-icon>
-                  <SearchOutline />
-                </n-icon>
+        <!-- Search Mode -->
+        <div class="selector-group">
+          <div class="selector-label">Search Mode:</div>
+          <div class="mode-pills">
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <div
+                  class="mode-pill"
+                  :class="{ active: searchMode === 'broad' }"
+                  @click="!isSearching && updateSearchMode('broad')"
+                  :aria-disabled="isSearching"
+                  :tabindex="isSearching ? -1 : 0"
+                  :style="
+                    isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
+                  "
+                >
+                  <n-icon size="16" class="mode-icon">
+                    <GlobeOutline />
+                  </n-icon>
+                  Broad
+                </div>
               </template>
-              Search Photos
-            </n-button>
-            <n-button
-              secondary
-              @click="emit('clear')"
-              :disabled="!hasSearchQuery"
-              class="clear-button icon-only"
-            >
-              <template #icon>
-                <n-icon>
-                  <CloseOutline />
-                </n-icon>
+              Fast, broad search focused on overall visual aspects.
+            </n-tooltip>
+
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <div
+                  class="mode-pill premium-pill"
+                  :class="{ active: searchMode === 'adaptive' }"
+                  @click="!isSearching && updateSearchMode('adaptive')"
+                  :aria-disabled="isSearching"
+                  :tabindex="isSearching ? -1 : 0"
+                  :style="
+                    isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
+                  "
+                >
+                  <n-icon size="16" class="mode-icon">
+                    <SparklesOutline />
+                  </n-icon>
+                  Adaptive
+                </div>
               </template>
-            </n-button>
+              Flexible and deep search for similar and indirect associations
+            </n-tooltip>
+
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <div
+                  class="mode-pill premium-pill"
+                  :class="{ active: searchMode === 'precise' }"
+                  @click="!isSearching && updateSearchMode('precise')"
+                  :aria-disabled="isSearching"
+                  :tabindex="isSearching ? -1 : 0"
+                  :style="
+                    isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
+                  "
+                >
+                  <n-icon size="16" class="mode-icon">
+                    <SparklesOutline />
+                  </n-icon>
+                  Precise
+                  <div class="premium-indicator-pill"></div>
+                </div>
+              </template>
+              Heavy search that prioritizes logical accuracy
+            </n-tooltip>
+          </div>
+        </div>
+
+        <!-- Insights Toggle -->
+        <div class="selector-group">
+          <div class="selector-label">Insights:</div>
+          <div class="mode-pills">
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <div
+                  class="mode-pill insights-pill premium-pill"
+                  :class="{ active: withInsights }"
+                  @click="!isSearching && updateWithInsights(!withInsights)"
+                  :aria-disabled="isSearching"
+                  :tabindex="isSearching ? -1 : 0"
+                  :style="
+                    isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
+                  "
+                >
+                  <n-icon size="16" class="mode-icon">
+                    <SparklesOutline />
+                  </n-icon>
+                  {{ withInsights ? "Enabled" : "Disabled" }}
+                  <div class="premium-indicator-pill"></div>
+                </div>
+              </template>
+              Enhance search results with insights and commentary
+            </n-tooltip>
           </div>
         </div>
       </div>
 
-      <!-- Tags Search -->
-      <div
-        v-else-if="activeSearchType === 'tags'"
-        key="tags-search"
-        class="tags-search-section"
-      >
-        <div class="tags-input-row">
-          <div class="tags-row">
-            <div class="tags-group">
-              <n-select
-                ref="tagIncSelect"
-                v-model:value="includedTags"
-                multiple
-                filterable
-                clearable
-                tag
-                placeholder="Add tags to include..."
-                :options="includedTagSuggestionsFormatted"
-                :clear-filter-after-select="true"
-                :max-tag-count="5"
-                class="tags-select include-tags"
-                @search="emit('searchIncludedTags', $event)"
-              >
-                <template #empty>
-                  <div style="padding: 8px; color: #888">
-                    Start typing to search tags...
-                  </div>
-                </template>
-              </n-select>
+      <!-- More Filters Toggle -->
+      <div class="search-filters-section">
+        <div
+          class="more-filters-toggle"
+          @click="emit('update:showMoreFilters', !showMoreFilters)"
+        >
+          <span class="more-filters-label">More filters</span>
+          <div class="more-filters-indicators">
+            <span v-if="hasActiveFilters" class="active-filters-indicator">
+              {{ activeFiltersCount }}
+            </span>
+            <n-icon
+              size="12"
+              class="toggle-icon"
+              :class="{ rotated: showMoreFilters }"
+            >
+              <ChevronDownOutline />
+            </n-icon>
+          </div>
+        </div>
+
+        <!-- Collapsible Filters Container -->
+        <div v-if="showMoreFilters" class="filters-container">
+          <div class="filters-content">
+            <!-- Collections Filter -->
+            <div class="filter-compact-group">
+              <div class="filter-column">
+                <div class="filter-label-row">
+                  <span class="filter-compact-label">Collections</span>
+                  <n-tooltip trigger="hover" placement="top">
+                    <template #trigger>
+                      <n-icon
+                        size="13"
+                        color="var(--text-secondary)"
+                        style="cursor: help"
+                      >
+                        <InformationCircle />
+                      </n-icon>
+                    </template>
+                    Only collections with more than 50 photos are available for
+                    filter searches.
+                  </n-tooltip>
+                </div>
+                <n-select
+                  v-model:value="selectedCollections"
+                  multiple
+                  clearable
+                  placeholder="Any"
+                  :options="collectionsOptions"
+                  :max-tag-count="3"
+                  class="filter-compact-select"
+                  :loading="collectionsLoading"
+                  :disabled="isSearching"
+                  size="small"
+                  style="min-width: 200px"
+                >
+                  <template #empty>
+                    <div style="padding: 8px; color: #888; font-size: 12px">
+                      No collections found
+                    </div>
+                  </template>
+                  <template #render-option="{ option }">
+                    <div class="collection-option">
+                      <span>{{ option.label }}</span>
+                      <span
+                        :style="{
+                          color: option.disabled ? '#ff7875' : '#8c8c8c',
+                          fontSize: '12px',
+                        }"
+                      >
+                        {{ option.photoCount }} photos
+                      </span>
+                    </div>
+                  </template>
+                </n-select>
+              </div>
             </div>
-            <div class="tags-group">
-              <n-select
-                ref="tagExcSelect"
-                v-model:value="excludedTags"
-                multiple
-                filterable
-                clearable
-                tag
-                placeholder="Add tags to exclude..."
-                :options="excludedTagSuggestionsFormatted"
-                :max-tag-count="5"
-                class="tags-select exclude-tags"
-                @search="emit('searchExcludedTags', $event)"
-              >
-                <template #empty>
-                  <div style="padding: 8px; color: #888">
-                    Start typing to search tags...
-                  </div>
-                </template>
-              </n-select>
+
+            <!-- Visual Aspects Filter -->
+            <div class="filter-compact-group">
+              <div class="filter-column">
+                <span class="filter-compact-label" style="margin-bottom: 2px"
+                  >Visual aspects</span
+                >
+                <n-tree-select
+                  v-model:value="selectedVisualAspects"
+                  multiple
+                  clearable
+                  placeholder="Any"
+                  :options="treeSelectOptions"
+                  :max-tag-count="3"
+                  class="filter-compact-select"
+                  :disabled="isSearching"
+                  size="small"
+                  style="min-width: 200px"
+                  check-strategy="child"
+                  :show-path="false"
+                  expand-on-click
+                >
+                  <template #empty>
+                    <div style="padding: 8px; color: #888; font-size: 12px">
+                      No visual aspects found
+                    </div>
+                  </template>
+                </n-tree-select>
+              </div>
+            </div>
+
+            <!-- Artistic Scores Filter -->
+            <div class="filter-compact-group">
+              <div class="filter-column">
+                <div class="filter-label-row">
+                  <span class="filter-compact-label">Visual scores</span>
+                  <n-tooltip trigger="hover" placement="top">
+                    <template #trigger>
+                      <n-icon
+                        size="13"
+                        color="var(--text-secondary)"
+                        style="cursor: help"
+                      >
+                        <InformationCircle />
+                      </n-icon>
+                    </template>
+                    Will include photos above 7 in the selected scores
+                  </n-tooltip>
+                </div>
+                <n-tree-select
+                  v-model:value="selectedArtisticScores"
+                  multiple
+                  clearable
+                  placeholder="Any"
+                  :options="artisticScoresOptions"
+                  :max-tag-count="3"
+                  class="filter-compact-select"
+                  :disabled="isSearching"
+                  size="small"
+                  style="min-width: 200px"
+                  check-strategy="child"
+                  :show-path="false"
+                  expand-on-click
+                >
+                  <template #empty>
+                    <div style="padding: 8px; color: #888; font-size: 12px">
+                      No artistic scores found
+                    </div>
+                  </template>
+                </n-tree-select>
+              </div>
             </div>
           </div>
+        </div>
+      </div>
 
-          <div class="search-actions-inline">
-            <n-button
-              type="primary"
-              :loading="isSearching"
-              :disabled="!hasSearchQuery"
-              @click="emit('search')"
-              class="search-button"
-            >
-              <template #icon>
-                <n-icon>
-                  <SearchOutline />
-                </n-icon>
-              </template>
-              Search Photos
-            </n-button>
-            <n-button
-              secondary
-              @click="emit('clear')"
-              :disabled="!hasSearchQuery"
-              class="clear-button icon-only"
-            >
-              <template #icon>
-                <n-icon>
-                  <CloseOutline />
-                </n-icon>
-              </template>
-            </n-button>
+      <!-- Conditional Search Content -->
+      <div class="search-content">
+        <!-- Semantic Language Search -->
+        <div
+          v-if="activeSearchType === 'semantic'"
+          key="semantic-search"
+          class="semantic-search-section"
+        >
+          <div class="search-input-row">
+            <n-input
+              v-model:value="semanticQuery"
+              type="textarea"
+              placeholder="Describe what you're looking for... e.g., 'sunset photos with people on the beach' or 'close-up portraits with red background'"
+              :autosize="{ minRows: 1, maxRows: 2 }"
+              class="semantic-input"
+            />
+
+            <div class="search-actions-inline">
+              <n-button
+                type="primary"
+                :loading="isSearching"
+                :disabled="!hasSearchQuery"
+                @click="emit('search')"
+                class="search-button"
+              >
+                <template #icon>
+                  <n-icon>
+                    <SearchOutline />
+                  </n-icon>
+                </template>
+                Search Photos
+              </n-button>
+              <n-button
+                secondary
+                @click="emit('clear')"
+                :disabled="!hasSearchQuery"
+                class="clear-button icon-only"
+              >
+                <template #icon>
+                  <n-icon>
+                    <CloseOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tags Search -->
+        <div
+          v-else-if="activeSearchType === 'tags'"
+          key="tags-search"
+          class="tags-search-section"
+        >
+          <div class="tags-input-row">
+            <div class="tags-row">
+              <div class="tags-group">
+                <n-select
+                  ref="tagIncSelect"
+                  v-model:value="includedTags"
+                  multiple
+                  filterable
+                  clearable
+                  tag
+                  placeholder="Add tags to include..."
+                  :options="includedTagSuggestionsFormatted"
+                  :clear-filter-after-select="true"
+                  :max-tag-count="5"
+                  class="tags-select include-tags"
+                  @search="emit('searchIncludedTags', $event)"
+                >
+                  <template #empty>
+                    <div style="padding: 8px; color: #888">
+                      Start typing to search tags...
+                    </div>
+                  </template>
+                </n-select>
+              </div>
+              <div class="tags-group">
+                <n-select
+                  ref="tagExcSelect"
+                  v-model:value="excludedTags"
+                  multiple
+                  filterable
+                  clearable
+                  tag
+                  placeholder="Add tags to exclude..."
+                  :options="excludedTagSuggestionsFormatted"
+                  :max-tag-count="5"
+                  class="tags-select exclude-tags"
+                  @search="emit('searchExcludedTags', $event)"
+                >
+                  <template #empty>
+                    <div style="padding: 8px; color: #888">
+                      Start typing to search tags...
+                    </div>
+                  </template>
+                </n-select>
+              </div>
+            </div>
+
+            <div class="search-actions-inline">
+              <n-button
+                type="primary"
+                :loading="isSearching"
+                :disabled="!hasSearchQuery"
+                @click="emit('search')"
+                class="search-button"
+              >
+                <template #icon>
+                  <n-icon>
+                    <SearchOutline />
+                  </n-icon>
+                </template>
+                Search Photos
+              </n-button>
+              <n-button
+                secondary
+                @click="emit('clear')"
+                :disabled="!hasSearchQuery"
+                class="clear-button icon-only"
+              >
+                <template #icon>
+                  <n-icon>
+                    <CloseOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </div>
           </div>
         </div>
       </div>
@@ -438,7 +498,7 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import {
   NTooltip,
   NTreeSelect,
@@ -456,6 +516,7 @@ import {
   SearchOutline,
   CloseOutline,
   InformationCircle,
+  ChevronDownOutline as ChevronDown,
 } from "@vicons/ionicons5";
 import { TagOutlined } from "@vicons/antd";
 import {
@@ -469,6 +530,9 @@ defineOptions({ name: "SearchDesktopLayout" });
 // Stores
 const searchStore = useSearchStore();
 const collectionsStore = useCollectionsStore();
+
+// Local state for hover
+const isHovering = ref(false);
 
 // Props - only UI state and suggestions come from parent
 const props = defineProps({
@@ -603,9 +667,105 @@ function updateSearchMode(mode) {
 function updateWithInsights(value) {
   searchStore.setWithInsights(value);
 }
+
+// Handle hover for expanding toolbar when collapsed
+function handleMouseEnter() {
+  if (props.isToolbarCollapsed) {
+    isHovering.value = true;
+  }
+}
+
+function handleMouseLeave() {
+  isHovering.value = false;
+}
 </script>
 
 <style scoped>
+/* Toolbar Wrapper */
+.search-toolbar-wrapper {
+  position: relative;
+  flex-shrink: 0;
+  /* transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); */
+}
+
+/* Mini Collapsed Bar */
+.search-toolbar-mini {
+  background-color: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0 16px 14px 16px;
+  /* transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); */
+  cursor: pointer;
+}
+
+.search-toolbar-mini.is-hovering {
+  background-color: var(--bg-secondary);
+}
+
+/* Hide mini bar when hovering to show full toolbar */
+.search-toolbar-wrapper:hover .search-toolbar-mini {
+  max-height: 0;
+  overflow: hidden;
+  padding: 0;
+  border: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mini-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.mini-search-type,
+.mini-search-mode {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background-color: rgba(96, 165, 250, 0.1);
+  color: #60a5fa;
+  font-weight: 500;
+}
+
+.mini-divider {
+  width: 1px;
+  height: 16px;
+  background-color: var(--border-color);
+}
+
+.mini-query {
+  flex: 1;
+  min-width: 0;
+}
+
+.mini-query-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.mini-expand-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  margin-left: auto;
+  opacity: 0.6;
+}
+
+.search-toolbar-mini.is-hovering .mini-expand-hint {
+  opacity: 1;
+  color: #60a5fa;
+}
+
 /* Search Toolbar */
 .search-toolbar {
   background-color: var(--bg-container);
@@ -616,11 +776,28 @@ function updateWithInsights(value) {
   top: 0;
   z-index: 10;
   transform: translateY(0);
-  transition: transform 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .search-toolbar.is-collapsed {
-  transform: translateY(-120%);
+  max-height: 0;
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
+  border: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* When hovering over the mini bar, show full toolbar */
+.search-toolbar-wrapper:hover .search-toolbar.is-collapsed {
+  max-height: 1000px;
+  overflow: visible;
+  padding: 12px 24px;
+  margin-bottom: 0px;
+  border: 1px solid var(--border-color);
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* Combined Search Selector Section */

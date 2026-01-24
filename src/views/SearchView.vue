@@ -63,146 +63,29 @@
       </div>
 
       <div v-else-if="searchStore.hasSearched" class="search-results">
-        <!-- Grid Controls -->
-        <div class="grid-controls grid-controls-base">
-          <div class="controls-left">
-            <div class="results-info results-info-base">
-              <span class="results-count results-count-base">
-                {{ filteredSearchResults.length }} photos found
-                <span v-if="showOnlyHighMatches" class="filter-applied">
-                  ({{ filteredSearchResults.length }} of
-                  {{ searchResults.length }} high-quality matches)
-                </span>
-                <span v-else-if="minStarRating > 0" class="filter-applied">
-                  ({{ filteredSearchResults.length }} of
-                  {{ searchResults.length }} with {{ minStarRating }}+ stars)
-                </span>
-              </span>
-            </div>
-          </div>
-
-          <div class="controls-right">
-            <!-- High Matches Filter -->
-            <div class="high-matches-filter">
-              <span class="filter-label">High matches:</span>
-              <n-tooltip
-                trigger="hover"
-                placement="top"
-                :disabled="withInsights"
-              >
-                <template #trigger>
-                  <div
-                    class="diamond-button"
-                    :class="{ disabled: !withInsights }"
-                    @click="withInsights && toggleHighMatchesFilter()"
-                  >
-                    <n-icon
-                      size="18"
-                      :class="[
-                        'diamond-filter-icon',
-                        { active: showOnlyHighMatches && withInsights },
-                      ]"
-                    >
-                      <DiamondOutline />
-                    </n-icon>
-                  </div>
-                </template>
-                Enable Insights and click search to use High Matches filter
-              </n-tooltip>
-            </div>
-
-            <!-- Star Filter -->
-            <div class="star-filter">
-              <span class="filter-label">Min. Rating:</span>
-              <div class="star-buttons">
-                <n-rate
-                  v-model:value="minStarRating"
-                  :readonly="isSearching || isLoadingMore"
-                  :count="3"
-                  size="small"
-                  clearable
-                  @update:value="onStarFilterChange"
-                  class="star-rating"
-                  :allow-half="false"
-                />
-              </div>
-            </div>
-
-            <div class="grid-size-controls grid-size-controls-base">
-              <span class="grid-label grid-label-base">Columns:</span>
-              <n-button-group>
-                <n-button
-                  v-for="size in isMobile ? [1, 2] : [3, 4, 5, 6]"
-                  :key="size"
-                  :type="gridColumns === size ? 'primary' : 'default'"
-                  size="small"
-                  @click="setGridColumns(size)"
-                >
-                  {{ size }}
-                </n-button>
-              </n-button-group>
-            </div>
-          </div>
-        </div>
-
-        <!-- Photo Grid -->
-        <div
-          class="photo-grid photo-grid-base"
-          :class="`grid-cols-${gridColumns}`"
-        >
-          <!-- Photo Cards -->
-          <PhotoCard
-            v-for="photo in filteredSearchResults"
-            :key="photo.id"
-            :photo="photo"
-            :computed-stars="photo.computedStars"
-            :show-low-relevance-icon="photo.showLowRelevanceIcon"
-            :high-match="photo.highMatch"
-            :selected="localSelectedPhotoIds.includes(photo.id)"
-            @select="togglePhotoSelection"
-            @info="showPhotoInfo"
-            :show-info-button="true"
-          />
-
-          <!-- Skeleton Loading for Load More -->
-          <template v-if="isLoadingMore">
-            <div
-              v-for="n in pageSize"
-              :key="`skeleton-${n}`"
-              class="photo-skeleton"
-            >
-              <n-skeleton height="100%" />
-            </div>
-          </template>
-        </div>
-
-        <!-- Load More Button -->
-        <div
-          class="load-more-container"
-          v-if="hasMoreIterations || shouldShowTryAdaptive"
-        >
-          <n-button
-            size="large"
-            :loading="isLoadingMore || isBeAdaptiveLoading"
-            @click="
-              shouldShowTryAdaptive ? handleBeAdaptiveClick() : loadMorePhotos()
-            "
-            :type="shouldShowTryAdaptive ? 'info' : 'default'"
-            class="load-more-button"
-          >
-            <template #icon>
-              <n-icon>
-                <svg viewBox="0 0 24 24">
-                  <path
-                    fill="currentColor"
-                    d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"
-                  />
-                </svg>
-              </n-icon>
-            </template>
-            {{ shouldShowTryAdaptive ? "Try Adaptive" : "Load More Photos" }}
-          </n-button>
-        </div>
+        <PhotosSearchGrid
+          ref="photosSearchGridRef"
+          :photos="photosWithComputedStars"
+          :selected-photo-ids="localSelectedPhotoIds"
+          :is-searching="isSearching"
+          :is-loading-more="isLoadingMore"
+          :is-be-adaptive-loading="isBeAdaptiveLoading"
+          :has-more-iterations="hasMoreIterations"
+          :should-show-try-adaptive="shouldShowTryAdaptive"
+          :with-insights="withInsights"
+          :is-mobile="isMobile"
+          :page-size="pageSize"
+          :initial-grid-columns="isMobile ? 2 : 6"
+          v-model:min-star-rating="minStarRating"
+          v-model:show-only-high-matches="showOnlyHighMatches"
+          @select="togglePhotoSelection"
+          @info="showPhotoInfo"
+          @load-more="loadMorePhotos"
+          @try-adaptive="handleBeAdaptiveClick"
+          @add-to-collection="handleCuratorAddToCollection"
+          @take-to-tool="handleCuratorTakeToTool"
+          @curator-mode-changed="handleCuratorModeChanged"
+        />
       </div>
     </div>
 
@@ -214,8 +97,8 @@
     <!-- Collection Selection Modal -->
     <CollectionModal
       :show="showCollectionModal"
-      :photo-count="localSelectedPhotoIds.length"
-      :photo-ids="localSelectedPhotoIds"
+      :photo-count="activePhotoIdsForModal.length"
+      :photo-ids="activePhotoIdsForModal"
       @add-to-collection="handleCollectionAdded"
       @add-to-series="handleCollectionAdded"
       @cancel="cancelCollectionModal"
@@ -223,7 +106,7 @@
     <!-- Photo Tool Selector Modal -->
     <PhotoToolSelector
       :show="showToolSelector"
-      :photo-count="localSelectedPhotoIds.length"
+      :photo-count="activePhotoIdsForModal.length"
       :tools="availableTools"
       :is-processing="isProcessingTool"
       @tool-selected="handleToolSelected"
@@ -260,14 +143,13 @@ import {
   nextTick,
 } from "vue";
 import { api } from "@/utils/axios";
-import { NTooltip, NRate, NTreeSelect, NCheckbox } from "naive-ui";
 
 // Layout Components
 import SearchDesktopLayout from "@/components/search/layouts/SearchDesktopLayout.vue";
 import SearchMobileLayout from "@/components/search/layouts/SearchMobileLayout.vue";
 
 // Componentes e íconos
-import PhotoCard from "@/components/photoCards/PhotoCard.vue";
+import PhotosSearchGrid from "@/components/search/PhotosSearchGrid.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import FloatingActionBar from "@/components/FloatingActionBar.vue";
@@ -278,7 +160,6 @@ import { useSearchTags } from "@/composables/useSearchTags";
 import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection";
 import { useIsMobile } from "@/composables/useIsMobile";
 
-import { DiamondOutline } from "@vicons/ionicons5";
 import { usePhotosStore } from "@/stores/photos";
 import { useSearchStore } from "@/stores/searchStore";
 import { useCollectionsStore } from "@/stores/collections";
@@ -319,12 +200,17 @@ const {
   clearAllSelections: localClearAllSelections,
 } = useLocalPhotoSelection();
 
-// Estado del toolbar colapsable
+// Estado del toolbar colapsable (ya no usado con scroll interno)
 const isToolbarCollapsed = ref(false);
-const lastScrollY = ref(0);
 
 // Estado del modal de colecciones
 const showCollectionModal = ref(false);
+
+// Referencia al componente del grid
+const photosSearchGridRef = ref(null);
+
+// IDs de fotos para curator mode (se usan cuando se añade desde curator)
+const curatorPhotoIds = ref([]);
 
 // Usar el store para el estado de búsqueda
 const isSearching = computed(() => searchStore.isSearching);
@@ -335,7 +221,7 @@ const hasMoreIterations = computed(
   () => searchStore.currentSearchState.hasMoreIterations,
 );
 
-// Computed properties for photos with pre-computed stars and filtering
+// Computed properties for photos with pre-computed stars
 const photosWithComputedStars = computed(() => {
   return searchResults.value.map((photo) => ({
     ...photo,
@@ -343,22 +229,6 @@ const photosWithComputedStars = computed(() => {
     showLowRelevanceIcon: shouldShowLowRelevanceIcon(photo),
     highMatch: photo.highMatch || false,
   }));
-});
-
-const filteredSearchResults = computed(() => {
-  // High matches filter takes priority over star rating
-  if (showOnlyHighMatches.value) {
-    return photosWithComputedStars.value.filter(
-      (photo) => photo.highMatch === true,
-    );
-  }
-
-  if (minStarRating.value === 0) {
-    return photosWithComputedStars.value;
-  }
-  return photosWithComputedStars.value.filter(
-    (photo) => photo.computedStars >= minStarRating.value,
-  );
 });
 
 // Computed para determinar cuándo mostrar el botón "Try Adaptive"
@@ -369,6 +239,13 @@ const shouldShowTryAdaptive = computed(() => {
     !isSearching.value &&
     !isLoadingMore.value
   );
+});
+
+// Computed para los IDs de fotos activos para modales (curator o selección normal)
+const activePhotoIdsForModal = computed(() => {
+  return curatorPhotoIds.value.length > 0
+    ? curatorPhotoIds.value
+    : localSelectedPhotoIds.value;
 });
 
 // Computed properties eliminados - los layouts acceden directamente al store
@@ -408,34 +285,17 @@ const excludedTagSuggestionsFormatted = computed(() =>
 
 // Handlers de cambio de tags eliminados - ahora manejados por los layouts
 
+// Handler para colapsar toolbar cuando se activa curator mode
+function handleCuratorModeChanged(isCuratorModeActive) {
+  if (isCuratorModeActive) {
+    isToolbarCollapsed.value = true;
+  }
+}
+
 // Helpers
 const skeletonCount = computed(() => pageSize.value);
 
-// Función simple para manejar el scroll del toolbar
-function handleScroll() {
-  if (!scrollContainer.value) return;
-
-  const currentScrollY = scrollContainer.value.scrollTop;
-
-  // Solo aplicar si hay contenido de búsqueda
-  if (searchResults.value.length > 0 && !isSearching.value) {
-    // Si hacemos scroll hacia abajo y pasamos cierto punto, ocultar
-    if (currentScrollY > lastScrollY.value && currentScrollY > 100) {
-      isToolbarCollapsed.value = true;
-    }
-    // Si hacemos scroll hacia arriba, mostrar
-    else if (currentScrollY < lastScrollY.value && currentScrollY < 500) {
-      isToolbarCollapsed.value = false;
-    }
-  } else {
-    // Sin contenido, siempre mostrar
-    isToolbarCollapsed.value = false;
-  }
-
-  lastScrollY.value = currentScrollY;
-}
-
-// Columnas del grid y paginación
+// Columnas del grid y paginación (mantenido para skeleton inicial)
 const gridColumns = ref(isMobile.value ? 2 : 6);
 
 // Watch for mobile changes and update grid columns default
@@ -457,32 +317,6 @@ const withInsights = computed(
 
 // Filters visibility state
 const showMoreFilters = ref(false);
-
-function setGridColumns(n) {
-  // NO resetear cursor - el usuario quiere seguir viendo los mismos resultados
-  // solo con diferente layout de columnas
-  gridColumns.value = n;
-}
-
-// Star filter handler
-function onStarFilterChange(rating) {
-  minStarRating.value = rating || 0;
-  // Clear high matches filter when setting star rating
-  if (rating > 0) {
-    showOnlyHighMatches.value = false;
-  }
-  console.log("Min star rating filter set to:", minStarRating.value);
-}
-
-// High matches filter handler
-function toggleHighMatchesFilter() {
-  showOnlyHighMatches.value = !showOnlyHighMatches.value;
-  // Clear star filter when activating high matches
-  if (showOnlyHighMatches.value) {
-    minStarRating.value = 0;
-  }
-  console.log("High matches filter:", showOnlyHighMatches.value);
-}
 
 function togglePhotoSelection(id) {
   localTogglePhotoSelection(id);
@@ -506,20 +340,49 @@ function handleAddToCollection() {
 
 const cancelCollectionModal = () => {
   showCollectionModal.value = false;
+  // Reset curator photo ids when canceling
+  curatorPhotoIds.value = [];
 };
 
 const handleCollectionAdded = (data) => {
   showCollectionModal.value = false;
   // Clear selections after adding to collection
   localClearAllSelections();
+  // Clear curated selection if in curator mode
+  if (photosSearchGridRef.value?.curatorMode) {
+    photosSearchGridRef.value.clearCuratedSelection();
+  }
+  // Reset curator photo ids
+  curatorPhotoIds.value = [];
+};
+
+// Curator mode handlers
+const handleCuratorAddToCollection = (photoIds) => {
+  curatorPhotoIds.value = photoIds;
+  showCollectionModal.value = true;
+};
+
+const handleCuratorTakeToTool = (photoIds) => {
+  curatorPhotoIds.value = photoIds;
+  openToolSelector();
 };
 
 const handleToolSelected = async (toolId) => {
-  await takeToTool(
-    toolId,
-    localSelectedPhotoIds.value,
-    localClearAllSelections,
-  );
+  // Use curator photo ids if available, otherwise use local selection
+  const idsToUse =
+    curatorPhotoIds.value.length > 0
+      ? curatorPhotoIds.value
+      : localSelectedPhotoIds.value;
+
+  const clearCallback = () => {
+    localClearAllSelections();
+    if (photosSearchGridRef.value?.curatorMode) {
+      photosSearchGridRef.value.clearCuratedSelection();
+    }
+    curatorPhotoIds.value = [];
+  };
+
+  await takeToTool(toolId, idsToUse, clearCallback);
   closeToolSelector();
 };
 
@@ -551,9 +414,8 @@ function clearSearch() {
   // Reset high matches filter
   showOnlyHighMatches.value = false;
 
-  // Resetear estado del toolbar
+  // Expandir toolbar al limpiar búsqueda
   isToolbarCollapsed.value = false;
-  lastScrollY.value = 0;
 }
 
 // Ejecución de búsqueda
@@ -564,16 +426,20 @@ async function performSearch() {
 
   await searchPhotos();
   searchStore.setSearching(false);
+
+  // Auto-colapsar toolbar después de búsqueda (solo desktop)
+  if (!isMobile.value) {
+    nextTick(() => {
+      isToolbarCollapsed.value = true;
+    });
+  }
 }
 
 // Cargar más resultados
 async function loadMorePhotos() {
   searchStore.setLoadingMore(true);
 
-  // Scroll cuando aparecen los skeletons
-  nextTick(() => {
-    scrollToLast();
-  });
+  // Scroll automático removido - el PhotosSearchGrid maneja su propio scroll
 
   await searchPhotos();
   searchStore.setLoadingMore(false);
@@ -614,10 +480,7 @@ async function searchPhotos() {
     if (response.data) {
       searchStore.updateSearchResults(response.data);
 
-      // Auto-scroll después de actualizar los resultados
-      setTimeout(() => {
-        scrollToLast();
-      }, 0);
+      // Scroll automático removido - ahora los scrolls son internos en PhotosSearchGrid
 
       // Verificar si hay más iteraciones disponibles
       if (response.data.hasMore === false) {
@@ -627,15 +490,6 @@ async function searchPhotos() {
   } catch (err) {
     console.error("Error al buscar fotos:", err);
   }
-}
-
-function scrollToLast() {
-  nextTick(() => {
-    const el = scrollContainer.value;
-    if (el) {
-      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-    }
-  });
 }
 
 // Función para manejar el click en "Try Adaptive"
@@ -668,14 +522,7 @@ onMounted(() => {
   // Fetch collections when component mounts
   collectionsStore.getOrFetch();
 
-  // Añadir scroll listener después de que el DOM esté completamente montado
-  nextTick(() => {
-    if (scrollContainer.value) {
-      scrollContainer.value.addEventListener("scroll", handleScroll, {
-        passive: true,
-      });
-    }
-  });
+  // Scroll listener removido - ahora los scrolls son internos en PhotosSearchGrid
 });
 
 // Watch for Insights toggle to disable High Matches filter if needed
@@ -686,10 +533,7 @@ watch(withInsights, (newValue) => {
 });
 
 onUnmounted(() => {
-  // Remover scroll listener
-  if (scrollContainer.value) {
-    scrollContainer.value.removeEventListener("scroll", handleScroll);
-  }
+  // Scroll listener ya no es necesario
 });
 
 // Carousel de ejemplos dinámico usando composable
@@ -715,7 +559,8 @@ function handleMobileReset() {
 .search-container {
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  height: 100%;
+  overflow: hidden;
 }
 
 /* Search Results Container */
@@ -723,104 +568,17 @@ function handleMobileReset() {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 16px;
+  padding-right: 16px;
+  padding-bottom: 16px;
+  padding-left: 16px;
   min-height: 0;
+  overflow: hidden;
 }
 
 @media (max-width: 480px) {
   .search-results-container {
     padding: 0;
   }
-}
-
-/* Load More */
-.load-more-container {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 32px;
-}
-
-.load-more-button {
-  min-width: 100%;
-  height: 48px;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-/* Controls right container */
-.controls-right {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-}
-
-/* High Matches Filter */
-.high-matches-filter {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.diamond-button {
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  padding: 2px;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-}
-
-.diamond-button:hover:not(.disabled) {
-  background-color: rgba(96, 165, 250, 0.1);
-}
-
-.diamond-button.disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.diamond-filter-icon {
-  color: rgba(96, 165, 250, 0.3);
-  transition: all 0.3s ease;
-}
-
-.diamond-filter-icon:hover {
-  color: rgba(96, 165, 250, 0.6);
-}
-
-.diamond-filter-icon.active {
-  color: #60a5fa;
-  filter: drop-shadow(0 0 4px rgba(96, 165, 250, 0.6));
-}
-
-/* Star Filter */
-.star-filter {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.filter-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.star-buttons {
-  display: flex;
-  align-items: center;
-}
-
-.star-rating {
-  --n-item-color-active: #fbbf24;
-  --n-item-color: rgba(255, 255, 255, 0.3);
-}
-
-.filter-applied {
-  /* color: var(--text-primary); */
-  font-size: 12px;
-  margin-left: 4px;
 }
 
 /* Search Inspiration */
@@ -894,6 +652,7 @@ function handleMobileReset() {
   flex: 1;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
 }
 
 .loading-message {
@@ -916,6 +675,8 @@ function handleMobileReset() {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .results-placeholder {
@@ -943,61 +704,5 @@ function handleMobileReset() {
   color: var(--text-secondary);
   margin: 0;
   text-align: center;
-}
-
-/* Star filter responsive - Tablet */
-@media (max-width: 768px) {
-  .controls-right {
-    gap: 12px;
-  }
-
-  .star-filter {
-    gap: 6px;
-  }
-
-  .filter-label {
-    font-size: 12px;
-  }
-
-  .selection-info {
-    bottom: 16px;
-    left: 16px;
-    right: 16px;
-    transform: none;
-    border-radius: 16px;
-  }
-}
-
-/* Star filter mobile responsive */
-@media (max-width: 480px) {
-  .controls-right {
-    gap: 8px;
-  }
-
-  .star-filter {
-    gap: 4px;
-  }
-
-  .filter-label {
-    font-size: 10px;
-  }
-
-  .selection-info {
-    bottom: 12px;
-    left: 12px;
-    right: 12px;
-    transform: none;
-    padding: 10px 16px;
-    font-size: 13px;
-  }
-}
-
-/* Tablet Responsive */
-@media (min-width: 768px) and (max-width: 1024px) {
-  /* Grid controls responsive handled above */
-}
-.controls-left {
-  display: flex;
-  align-items: center;
 }
 </style>

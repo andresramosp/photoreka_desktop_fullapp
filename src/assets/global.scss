@@ -194,7 +194,7 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: var(--spacing-2xl);
-  padding: var(--spacing-lg) 0;
+  padding: 12px 4px;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -627,7 +627,7 @@
 
 /* ===== VIEW CONTAINERS ===== */
 .view-container {
-  padding: var(--spacing-2xl);
+  padding: var(--spacing-lg);
   margin: 0 auto;
   background-color: var(--bg-body);
   height: calc(100vh - var(--total-header-offset));

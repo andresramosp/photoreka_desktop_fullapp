@@ -1,6 +1,6 @@
 <template>
   <!-- Mobile: Icon with Popover -->
-  <div class="usage-indicators-mobile">
+  <!-- <div class="usage-indicators-mobile">
     <n-popover trigger="click" placement="bottom">
       <template #trigger>
         <n-button quaternary circle size="small" class="usage-trigger-btn">
@@ -34,7 +34,7 @@
         >
       </div>
     </n-popover>
-  </div>
+  </div> -->
 
   <!-- Desktop: Full card -->
   <div class="usage-indicators">
@@ -242,7 +242,7 @@ const analysisPercentage = computed(() => {
 /* Responsive */
 @media (max-width: 768px) {
   /* Hide desktop version, show mobile version */
-  .usage-indicators {
+  /* .usage-indicators {
     display: none;
   }
 
@@ -251,6 +251,6 @@ const analysisPercentage = computed(() => {
     position: absolute;
     top: 8px;
     right: 12px;
-  }
+  } */
 }
 </style>
