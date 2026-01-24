@@ -132,7 +132,7 @@
               <span class="grid-label grid-label-base">Columns:</span>
               <n-button-group>
                 <n-button
-                  v-for="size in [3, 4, 5, 6]"
+                  v-for="size in isMobile ? [1, 2] : [3, 4, 5, 6]"
                   :key="size"
                   :type="gridColumns === size ? 'primary' : 'default'"
                   size="small"
@@ -436,7 +436,13 @@ function handleScroll() {
 }
 
 // Columnas del grid y paginación
-const gridColumns = ref(6);
+const gridColumns = ref(isMobile.value ? 2 : 6);
+
+// Watch for mobile changes and update grid columns default
+watch(isMobile, (newIsMobile) => {
+  // Set appropriate default when switching between mobile/desktop
+  gridColumns.value = newIsMobile ? 2 : 6;
+});
 
 // Star filter for minimum rating
 const minStarRating = ref(0);

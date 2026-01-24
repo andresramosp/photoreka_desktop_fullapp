@@ -234,6 +234,14 @@
   margin-bottom: var(--spacing-3xl);
 }
 
+.photo-grid-base.grid-cols-1 {
+  grid-template-columns: repeat(1, 1fr);
+}
+
+.photo-grid-base.grid-cols-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
 .photo-grid-base.grid-cols-3 {
   grid-template-columns: repeat(3, 1fr);
 }

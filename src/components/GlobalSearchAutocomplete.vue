@@ -33,6 +33,8 @@
         v-if="showDropdown && searchQuery.length >= 2"
         class="search-dropdown"
         ref="dropdownRef"
+        @mousedown.prevent
+        @touchstart.stop
       >
         <!-- Loading state -->
         <div v-if="isSearching" class="search-loading">
@@ -68,6 +70,7 @@
                 class="result-item tool-item"
                 :class="{ active: isActiveItem('tool', tool.id) }"
                 @click="handleSelectTool(tool)"
+                @touchend.prevent="handleSelectTool(tool)"
                 @mouseenter="setActiveItem('tool', tool.id)"
               >
                 <div class="item-icon tool-icon">
@@ -104,6 +107,7 @@
                 class="result-item collection-item"
                 :class="{ active: isActiveItem('collection', collection.id) }"
                 @click="handleSelectCollection(collection)"
+                @touchend.prevent="handleSelectCollection(collection)"
                 @mouseenter="setActiveItem('collection', collection.id)"
               >
                 <div class="item-thumbnail">
@@ -146,6 +150,7 @@
                 class="result-item series-item"
                 :class="{ active: isActiveItem('series', series.id) }"
                 @click="handleSelectSeries(series)"
+                @touchend.prevent="handleSelectSeries(series)"
                 @mouseenter="setActiveItem('series', series.id)"
               >
                 <div class="item-thumbnail">
@@ -186,6 +191,7 @@
                 class="result-item photo-item"
                 :class="{ active: isActiveItem('photo', photo.id) }"
                 @click="handleSelectPhoto(photo)"
+                @touchend.prevent="handleSelectPhoto(photo)"
                 @mouseenter="setActiveItem('photo', photo.id)"
               >
                 <div class="item-thumbnail">
@@ -235,6 +241,7 @@
                 class="result-item help-item"
                 :class="{ active: isActiveItem('help', helpItem.id) }"
                 @click="handleSelectHelp(helpItem)"
+                @touchend.prevent="handleSelectHelp(helpItem)"
                 @mouseenter="setActiveItem('help', helpItem.id)"
               >
                 <div class="item-icon help-icon">
@@ -391,6 +398,11 @@ const handleFocus = () => {
 };
 
 const handleBlur = (event: FocusEvent) => {
+  // Don't hide dropdown on mobile - let click/touch handlers do it
+  if ("ontouchstart" in window) {
+    return;
+  }
+
   // Delay hiding to allow click events on dropdown items
   setTimeout(() => {
     const relatedTarget = event.relatedTarget as HTMLElement;
@@ -530,7 +542,7 @@ watch(flatResults, () => {
 });
 
 // Click outside handler
-const handleClickOutside = (event: MouseEvent) => {
+const handleClickOutside = (event: MouseEvent | TouchEvent) => {
   if (
     searchContainerRef.value &&
     !searchContainerRef.value.contains(event.target as Node)
@@ -542,10 +554,12 @@ const handleClickOutside = (event: MouseEvent) => {
 
 onMounted(() => {
   document.addEventListener("click", handleClickOutside);
+  document.addEventListener("touchstart", handleClickOutside);
 });
 
 onUnmounted(() => {
   document.removeEventListener("click", handleClickOutside);
+  document.removeEventListener("touchstart", handleClickOutside);
 });
 </script>
 
@@ -592,7 +606,14 @@ onUnmounted(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  z-index: 1000;
+  z-index: 5000;
+  /* Mobile-specific fixes */
+  -webkit-overflow-scrolling: touch;
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
 /* Transition */
@@ -623,6 +644,8 @@ onUnmounted(() => {
 .results-container {
   overflow-y: auto;
   flex: 1;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 /* Section */
@@ -659,6 +682,10 @@ onUnmounted(() => {
   padding: var(--spacing-sm) var(--spacing-lg);
   cursor: pointer;
   transition: background-color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
 }
 
 .result-item:hover,
@@ -802,6 +829,10 @@ onUnmounted(() => {
 
   .search-dropdown {
     max-height: 60vh;
+    position: fixed;
+    left: var(--spacing-md);
+    right: var(--spacing-md);
+    width: auto;
   }
 
   .shortcut-hint {
@@ -820,6 +851,12 @@ onUnmounted(() => {
   .item-icon {
     width: 36px;
     height: 36px;
+  }
+
+  /* Increase touch targets on mobile */
+  .result-item {
+    padding: var(--spacing-md) var(--spacing-lg);
+    min-height: 52px;
   }
 }
 </style>

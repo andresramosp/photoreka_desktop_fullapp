@@ -166,7 +166,7 @@ defineEmits([
   left: 50%;
   transform: translateX(-50%);
   z-index: 1000;
-  background: rgba(30, 30, 30, 0.95);
+  background: var(--bg-body);
   backdrop-filter: blur(12px);
   border-radius: 16px;
   padding: 12px 24px;

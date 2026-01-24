@@ -205,11 +205,11 @@
       </div>
 
       <!-- Selection indicator -->
-      <div v-if="isSelected" class="selection-indicator">
+      <!-- <div v-if="isSelected" class="selection-indicator">
         <n-icon size="20" color="#ffffff">
           <CheckCircleIcon />
         </n-icon>
-      </div>
+      </div> -->
 
       <!-- Delete button (top-right corner) -->
       <div
