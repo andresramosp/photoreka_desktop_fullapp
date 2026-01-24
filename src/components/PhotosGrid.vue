@@ -22,12 +22,17 @@
       <div class="controls-row-1">
         <div class="results-info results-info-base">
           <span class="results-count results-count-base">
-            {{ displayedPhotos.length }}{{ hasMorePhotos ? "+" : "" }} of
-            {{ filteredAndSortedPhotos.length }} photos
+            <span class="desktop-count">
+              {{ displayedPhotos.length }}{{ hasMorePhotos ? "+" : "" }} of
+              {{ filteredAndSortedPhotos.length }} photos
+            </span>
+            <span class="mobile-count">
+              {{ filteredAndSortedPhotos.length }}
+            </span>
           </span>
         </div>
 
-        <div class="duplicates-controls-container">
+        <div class="duplicates-controls-container desktop-only">
           <!-- Review Duplicates Button -->
           <n-tooltip placement="bottom" trigger="hover">
             <template #trigger>
@@ -68,11 +73,18 @@
 
       <!-- Row 2: Columns + Sort -->
       <div class="controls-row-2">
+        <!-- Photo count (mobile only, shown in row 2) -->
+        <div class="results-info results-info-base mobile-only-inline">
+          <span class="results-count results-count-base mobile-count-inline">
+            {{ filteredAndSortedPhotos.length }}
+          </span>
+        </div>
+
         <div class="grid-size-controls grid-size-controls-base">
           <span v-if="!isMobile" class="grid-label grid-label-base"
             >Columns:</span
           >
-          <n-button-group>
+          <n-button-group class="mobile-columns-compact">
             <n-button
               v-for="size in columnOptions"
               :key="size"
@@ -92,9 +104,9 @@
             v-model:value="basicSortType"
             :options="sortOptions"
             size="small"
-            style="width: 100px"
+            class="mobile-sort-select"
             clearable
-            placeholder="None"
+            placeholder="Sort"
             :disabled="sortByQuality"
             @update:value="handleBasicSortChange"
           />
@@ -129,27 +141,30 @@
             </n-icon>
           </n-button>
         </div>
-      </div>
 
-      <!-- Row 3: Select All Button -->
-      <n-button
-        size="small"
-        :type="allSelected ? 'primary' : 'default'"
-        @click="handleSelectAllToggle"
-        class="select-all-btn"
-      >
-        <template #icon>
-          <n-icon>
-            <template v-if="allSelected">
-              <CheckmarkDoneOutline />
-            </template>
-            <template v-else>
-              <CheckboxOutline />
-            </template>
-          </n-icon>
-        </template>
-        {{ allSelected ? "Deselect All" : "Select All" }}
-      </n-button>
+        <!-- Select All Button (mobile: in row 2, desktop: in row 3) -->
+        <n-button
+          size="small"
+          :type="allSelected ? 'primary' : 'default'"
+          @click="handleSelectAllToggle"
+          class="select-all-btn mobile-inline"
+        >
+          <template #icon>
+            <n-icon>
+              <template v-if="allSelected">
+                <CheckmarkDoneOutline />
+              </template>
+              <template v-else>
+                <CheckboxOutline />
+              </template>
+            </n-icon>
+          </template>
+          <span v-if="!isMobile">{{
+            allSelected ? "Deselect All" : "Select All"
+          }}</span>
+          <span v-else class="mobile-select-text">Select</span>
+        </n-button>
+      </div>
     </div>
 
     <!-- Select All Banner -->
@@ -1105,6 +1120,23 @@ const handleToolSelected = async (toolId) => {
   gap: 12px;
 }
 
+/* Desktop and Mobile count variants */
+.desktop-count {
+  display: inline;
+}
+
+.mobile-count {
+  display: none;
+}
+
+.desktop-only {
+  display: flex;
+}
+
+.mobile-only-inline {
+  display: none;
+}
+
 /* Row 1: Photos count + Duplicates */
 .controls-row-1 {
   display: flex;
@@ -1145,6 +1177,10 @@ const handleToolSelected = async (toolId) => {
 
   .select-all-btn {
     margin-left: 8px;
+  }
+
+  .mobile-sort-select {
+    width: 100px;
   }
 }
 
@@ -1337,57 +1373,98 @@ const handleToolSelected = async (toolId) => {
 }
 
 @media (max-width: 768px) {
+  /* Hide desktop elements */
+  .desktop-only {
+    display: none !important;
+  }
+
+  .desktop-count {
+    display: none;
+  }
+
+  .mobile-count {
+    display: none;
+  }
+
+  /* Show mobile count inline in row 2 */
+  .mobile-only-inline {
+    display: flex !important;
+  }
+
+  .mobile-count-inline {
+    display: inline !important;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
   .grid-controls-base {
     flex-direction: column;
     align-items: stretch;
-    gap: 12px;
+    gap: 0;
+    margin-bottom: 16px;
   }
 
-  /* Row 1: Photos count (left) + Duplicates button (right) */
+  /* Hide Row 1 completely on mobile */
   .controls-row-1 {
+    display: none !important;
+  }
+
+  /* Row 2: Single compact row with all controls */
+  .controls-row-2 {
     width: 100%;
+    display: flex;
     justify-content: space-between;
     align-items: center;
     flex-wrap: nowrap;
-    gap: 12px;
+    gap: 6px;
   }
 
   .results-info-base {
     flex: 0 0 auto;
+    display: none;
   }
 
-  .duplicates-controls-container {
+  .mobile-only-inline {
     flex: 0 0 auto;
-    display: flex;
-    gap: 8px;
-    flex-wrap: nowrap;
-  }
-
-  .filter-duplicates-checkbox {
-    white-space: nowrap;
-  }
-
-  /* Row 2: Columns (left) + Sort (right) on same line */
-  .controls-row-2 {
-    width: 100%;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: nowrap;
-    gap: 12px;
   }
 
   .grid-size-controls-base {
     flex: 0 0 auto;
+    gap: 4px;
+  }
+
+  .mobile-columns-compact {
+    display: flex;
+    gap: 4px;
+  }
+
+  .mobile-columns-compact .n-button {
+    min-width: 32px;
+    padding: 0 8px;
+  }
+
+  .select-all-btn.mobile-inline {
+    flex: 0 0 auto;
+    margin-left: 0;
+    white-space: nowrap;
+  }
+
+  .mobile-select-text {
+    margin-left: 4px;
+    font-size: 13px;
   }
 
   .sort-controls-base {
     flex: 0 0 auto;
+    gap: 2px;
   }
 
-  /* Row 3: Select All button (full width) */
-  .select-all-btn {
-    width: 100%;
-    margin-left: 0;
+  .sort-label-base {
+    display: none;
+  }
+
+  .mobile-sort-select {
+    width: 70px !important;
   }
 
   /* On mobile, respect user's column choice from selector */
@@ -1422,28 +1499,31 @@ const handleToolSelected = async (toolId) => {
 
 @media (max-width: 480px) {
   .grid-controls-base {
-    gap: 10px;
+    gap: 0;
   }
 
-  /* Row 1: Photos count + Duplicates stay on same line but more compact */
-  .controls-row-1 {
-    gap: 8px;
+  .mobile-count-inline {
+    font-size: 13px;
   }
 
-  /* Row 2: Columns + Sort might wrap on very small screens */
+  /* Row 2: Keep single row but more compact */
   .controls-row-2 {
-    flex-wrap: wrap;
-    gap: 8px;
+    flex-wrap: nowrap;
+    gap: 6px;
   }
 
-  .grid-size-controls-base,
-  .sort-controls-base {
-    min-width: 0;
+  .mobile-columns-compact .n-button {
+    min-width: 28px;
+    padding: 0 6px;
+    font-size: 12px;
   }
 
-  .select-all-btn {
-    width: 100%;
-    margin-left: 0;
+  .mobile-select-text {
+    font-size: 12px;
+  }
+
+  .mobile-sort-select {
+    width: 65px !important;
   }
 
   .grid-label-base,

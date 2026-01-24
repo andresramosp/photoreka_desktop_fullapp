@@ -1,0 +1,1774 @@
+<template>
+  <n-modal
+    v-model:show="visibleModel"
+    preset="card"
+    :style="{ maxWidth: '90vw', width: '900px', maxHeight: '90vh' }"
+    :show-icon="false"
+    :closable="true"
+    @close="visibleModel = false"
+  >
+    <template #header>
+      <div class="custom-header">
+        <span class="header-title">{{
+          selectedPhoto?.originalFileName || "Untitled"
+        }}</span>
+        <n-button
+          size="tiny"
+          style="margin-top: 3px; margin-left: 2px"
+          secondary
+          @click="emit('copy-name')"
+          title="Copy name to clipboard"
+        >
+          <template #icon>
+            <n-icon>
+              <CopyIcon />
+            </n-icon>
+          </template>
+        </n-button>
+      </div>
+    </template>
+
+    <div class="dialog-content">
+      <!-- Centered Photo Display with Overlay Info -->
+      <div class="photo-display-centered">
+        <img
+          :src="
+            selectedPhoto?.originalUrl ||
+            selectedPhoto?.url ||
+            selectedPhoto?.thumbnailUrl
+          "
+          :alt="selectedPhoto?.filename || selectedPhoto?.name || 'Photo'"
+          class="centered-photo"
+          @error="emit('image-error', $event)"
+        />
+
+        <!-- Photo Overlay with Actions Only -->
+        <div class="photo-overlay">
+          <!-- Bottom right: Download + Fullscreen -->
+          <div class="bottom-right-actions">
+            <n-button
+              size="small"
+              @click="emit('download')"
+              title="Download photo"
+              quaternary
+              class="download-btn"
+            >
+              <template #icon>
+                <n-icon size="18">
+                  <DownloadIcon />
+                </n-icon>
+              </template>
+            </n-button>
+            <n-button
+              size="small"
+              quaternary
+              class="fullscreen-btn"
+              @click="emit('open-fullscreen')"
+              title="View fullscreen"
+            >
+              <template #icon>
+                <n-icon size="18">
+                  <FullscreenOutlined />
+                </n-icon>
+              </template>
+            </n-button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Info Sections with Lateral Tabs -->
+      <div class="info-sections">
+        <n-tabs type="line" placement="left" size="large" animated>
+          <n-tab-pane name="technical" display-directive="show:lazy">
+            <template #tab>
+              <div class="tab-content">
+                <n-icon size="18">
+                  <InfoIcon />
+                </n-icon>
+                <span>Technical</span>
+              </div>
+            </template>
+            <div class="tab-panel-content">
+              <div class="technical-info-section">
+                <div class="technical-info-grid">
+                  <!-- File Information -->
+                  <div class="tech-category">
+                    <h6 class="category-title">File Information</h6>
+                    <div class="category-tags">
+                      <n-tag type="info" class="tech-tag">
+                        {{
+                          selectedPhoto?.originalFileName ||
+                          selectedPhoto?.name ||
+                          "Unknown"
+                        }}
+                      </n-tag>
+                      <n-tag
+                        :type="
+                          selectedPhoto?.descriptions?.visual_aspects?.format
+                            ? 'info'
+                            : 'warning'
+                        "
+                        class="tech-tag"
+                      >
+                        {{
+                          selectedPhoto?.descriptions?.visual_aspects?.format?.[0]?.toUpperCase() ||
+                          "Not Present"
+                        }}
+                      </n-tag>
+                      <n-tag
+                        :type="
+                          selectedPhoto?.descriptions?.visual_aspects
+                            ?.dimensions
+                            ? 'info'
+                            : 'warning'
+                        "
+                        class="tech-tag"
+                      >
+                        {{
+                          selectedPhoto?.descriptions?.visual_aspects
+                            ?.dimensions?.[0] || "Not Present"
+                        }}
+                      </n-tag>
+                    </div>
+                  </div>
+
+                  <!-- Date Information -->
+                  <div class="tech-category">
+                    <h6 class="category-title">Date Information</h6>
+                    <div class="category-tags">
+                      <n-tag type="info" class="tech-tag">
+                        {{
+                          selectedPhoto?.descriptions?.EXIF?.dateTaken
+                            ? formatDate(
+                                selectedPhoto.descriptions.EXIF.dateTaken,
+                              )
+                            : selectedPhoto?.createdAt
+                              ? formatDate(selectedPhoto.createdAt)
+                              : "Not Present"
+                        }}
+                      </n-tag>
+                    </div>
+                  </div>
+
+                  <!-- Camera Settings -->
+                  <div class="tech-category">
+                    <h6 class="category-title">Camera & Settings</h6>
+                    <div class="category-tags">
+                      <n-tag
+                        :type="
+                          selectedPhoto?.descriptions?.EXIF?.camera
+                            ? 'info'
+                            : 'warning'
+                        "
+                        class="tech-tag"
+                      >
+                        {{
+                          selectedPhoto?.descriptions?.EXIF?.camera ||
+                          "Not Present"
+                        }}
+                      </n-tag>
+                      <n-tag
+                        v-if="selectedPhoto?.descriptions?.EXIF?.iso"
+                        type="info"
+                        class="tech-tag"
+                      >
+                        ISO {{ selectedPhoto.descriptions.EXIF.iso }}
+                      </n-tag>
+                      <n-tag
+                        v-if="selectedPhoto?.descriptions?.EXIF?.aperture"
+                        type="info"
+                        class="tech-tag"
+                      >
+                        f/{{ selectedPhoto.descriptions.EXIF.aperture }}
+                      </n-tag>
+                      <n-tag
+                        v-if="selectedPhoto?.descriptions?.EXIF?.focalLength"
+                        type="info"
+                        class="tech-tag"
+                      >
+                        {{ selectedPhoto.descriptions.EXIF.focalLength }}mm
+                      </n-tag>
+                      <n-tag
+                        v-if="selectedPhoto?.descriptions?.EXIF?.exposureTime"
+                        type="info"
+                        class="tech-tag"
+                      >
+                        {{
+                          formatExposureTime(
+                            selectedPhoto.descriptions.EXIF.exposureTime,
+                          )
+                        }}
+                      </n-tag>
+                    </div>
+                  </div>
+
+                  <!-- Photography Type -->
+                  <div class="tech-category">
+                    <h6 class="category-title">Photography Type</h6>
+                    <div class="category-tags">
+                      <n-tag
+                        v-if="
+                          selectedPhoto?.descriptions?.visual_aspects?.genre
+                        "
+                        v-for="genre in selectedPhoto.descriptions
+                          .visual_aspects.genre"
+                        :key="genre"
+                        type="info"
+                        class="tech-tag"
+                      >
+                        {{ formatCategoryName(genre) }}
+                      </n-tag>
+                      <n-tag
+                        v-if="
+                          !selectedPhoto?.descriptions?.visual_aspects?.genre
+                        "
+                        type="warning"
+                        class="tech-tag"
+                      >
+                        Not Present
+                      </n-tag>
+                      <n-tag
+                        v-if="
+                          selectedPhoto?.descriptions?.visual_aspects
+                            ?.orientation
+                        "
+                        v-for="orientation in selectedPhoto.descriptions
+                          .visual_aspects.orientation"
+                        :key="orientation"
+                        type="info"
+                        class="tech-tag"
+                      >
+                        {{ formatCategoryName(orientation) }}
+                      </n-tag>
+                    </div>
+                  </div>
+
+                  <!-- Composition & Framing -->
+                  <div class="tech-category">
+                    <h6 class="category-title">Composition</h6>
+                    <div class="category-tags">
+                      <n-tag
+                        v-if="
+                          selectedPhoto?.descriptions?.visual_aspects?.framing
+                        "
+                        v-for="frame in selectedPhoto.descriptions
+                          .visual_aspects.framing"
+                        :key="frame"
+                        type="info"
+                        class="tech-tag"
+                      >
+                        {{ formatCategoryName(frame) }}
+                      </n-tag>
+                      <n-tag
+                        v-if="
+                          selectedPhoto?.descriptions?.visual_aspects
+                            ?.perspective
+                        "
+                        v-for="perspective in selectedPhoto.descriptions
+                          .visual_aspects.perspective"
+                        :key="perspective"
+                        type="info"
+                        class="tech-tag"
+                      >
+                        {{ formatCategoryName(perspective) }}
+                      </n-tag>
+                      <n-tag
+                        v-if="
+                          selectedPhoto?.descriptions?.visual_aspects
+                            ?.depth_of_field
+                        "
+                        v-for="dof in selectedPhoto.descriptions.visual_aspects
+                          .depth_of_field"
+                        :key="dof"
+                        type="info"
+                        class="tech-tag"
+                      >
+                        {{ formatCategoryName(dof) }}
+                      </n-tag>
+                    </div>
+                  </div>
+
+                  <!-- Lighting -->
+                  <div class="tech-category">
+                    <h6 class="category-title">Lighting</h6>
+                    <div class="category-tags">
+                      <n-tag
+                        v-if="
+                          selectedPhoto?.descriptions?.visual_aspects?.lighting
+                        "
+                        v-for="light in selectedPhoto.descriptions
+                          .visual_aspects.lighting"
+                        :key="light"
+                        type="info"
+                        class="tech-tag"
+                      >
+                        {{ formatCategoryName(light) }}
+                      </n-tag>
+                      <n-tag
+                        v-if="
+                          selectedPhoto?.descriptions?.visual_aspects
+                            ?.lighting_scheme
+                        "
+                        v-for="scheme in selectedPhoto.descriptions
+                          .visual_aspects.lighting_scheme"
+                        :key="scheme"
+                        type="info"
+                        class="tech-tag"
+                      >
+                        {{ formatCategoryName(scheme) }}
+                      </n-tag>
+                      <n-tag
+                        v-if="selectedPhoto?.descriptions?.EXIF?.flash"
+                        type="info"
+                        class="tech-tag"
+                      >
+                        {{ selectedPhoto.descriptions.EXIF.flash }}
+                      </n-tag>
+                      <n-tag
+                        v-if="selectedPhoto?.descriptions?.EXIF?.whiteBalance"
+                        type="info"
+                        class="tech-tag"
+                      >
+                        WB: {{ selectedPhoto.descriptions.EXIF.whiteBalance }}
+                      </n-tag>
+                    </div>
+                  </div>
+
+                  <!-- Visual Style -->
+                  <div class="tech-category">
+                    <h6 class="category-title">Visual Style</h6>
+                    <div class="category-tags">
+                      <n-tag
+                        v-if="
+                          selectedPhoto?.descriptions?.visual_aspects?.palette
+                        "
+                        v-for="color in selectedPhoto.descriptions
+                          .visual_aspects.palette"
+                        :key="color"
+                        type="info"
+                        class="tech-tag"
+                      >
+                        {{ formatCategoryName(color) }}
+                      </n-tag>
+                      <n-tag
+                        v-if="
+                          selectedPhoto?.descriptions?.visual_aspects
+                            ?.temperature
+                        "
+                        v-for="temp in selectedPhoto.descriptions.visual_aspects
+                          .temperature"
+                        :key="temp"
+                        type="info"
+                        class="tech-tag"
+                      >
+                        {{ formatCategoryName(temp) }}
+                      </n-tag>
+                      <n-tag
+                        v-if="
+                          selectedPhoto?.descriptions?.visual_aspects?.stylistic
+                        "
+                        v-for="style in selectedPhoto.descriptions
+                          .visual_aspects.stylistic"
+                        :key="style"
+                        type="info"
+                        class="tech-tag"
+                      >
+                        {{ formatCategoryName(style) }}
+                      </n-tag>
+                    </div>
+                  </div>
+
+                  <!-- Image Quality -->
+                  <div class="tech-category">
+                    <h6 class="category-title">Image Quality</h6>
+                    <div class="category-tags">
+                      <n-tag
+                        v-if="
+                          selectedPhoto?.descriptions?.visual_aspects?.focus
+                        "
+                        v-for="focus in selectedPhoto.descriptions
+                          .visual_aspects.focus"
+                        :key="focus"
+                        type="info"
+                        class="tech-tag"
+                      >
+                        {{ formatCategoryName(focus) }}
+                      </n-tag>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </n-tab-pane>
+
+          <n-tab-pane name="tags" display-directive="show:lazy">
+            <template #tab>
+              <div class="tab-content">
+                <n-icon size="18">
+                  <TagIcon />
+                </n-icon>
+                <span>Tags</span>
+              </div>
+            </template>
+            <div class="tab-panel-content">
+              <div class="tags-section">
+                <div
+                  v-if="Object.keys(groupedTags).length > 0"
+                  class="grouped-tags"
+                >
+                  <!-- Contextual -->
+                  <div v-if="groupedTags['contextual']" class="tag-group-item">
+                    <h5 class="tag-group-label">Contextual</h5>
+                    <div class="tag-group-content">
+                      <div class="tags-list">
+                        <n-tag
+                          v-for="tag in groupedTags['contextual']"
+                          :key="tag.id || tag.name"
+                          type="info"
+                          :bordered="false"
+                          class="photo-tag"
+                        >
+                          {{ tag.name || tag }}
+                        </n-tag>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Technical -->
+                  <div v-if="groupedTags['technical']" class="tag-group-item">
+                    <h5 class="tag-group-label">Technical</h5>
+                    <div class="tag-group-content">
+                      <div class="tags-list">
+                        <n-tag
+                          v-for="tag in groupedTags['technical']"
+                          :key="tag.id || tag.name"
+                          type="info"
+                          :bordered="false"
+                          class="photo-tag"
+                        >
+                          {{ tag.name || tag }}
+                        </n-tag>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Artistic -->
+                  <div v-if="groupedTags['artistic']" class="tag-group-item">
+                    <h5 class="tag-group-label">Artistic</h5>
+                    <div class="tag-group-content">
+                      <div class="tags-list">
+                        <n-tag
+                          v-for="tag in groupedTags['artistic']"
+                          :key="tag.id || tag.name"
+                          type="info"
+                          :bordered="false"
+                          class="photo-tag"
+                        >
+                          {{ tag.name || tag }}
+                        </n-tag>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Miscellaneous -->
+                  <div
+                    v-if="groupedTags['miscellaneous']"
+                    class="tag-group-item"
+                  >
+                    <h5 class="tag-group-label">Miscellaneous</h5>
+                    <div class="tag-group-content">
+                      <div class="tags-list">
+                        <n-tag
+                          v-for="tag in groupedTags['miscellaneous']"
+                          :key="tag.id || tag.name"
+                          type="info"
+                          :bordered="false"
+                          class="photo-tag"
+                        >
+                          {{ tag.name || tag }}
+                        </n-tag>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </n-tab-pane>
+
+          <n-tab-pane name="notes" display-directive="show:lazy">
+            <template #tab>
+              <div class="tab-content">
+                <n-icon size="18">
+                  <EditIcon />
+                </n-icon>
+                <span>Notes</span>
+              </div>
+            </template>
+            <div class="tab-panel-content">
+              <div class="notes-section">
+                <!-- Header Section -->
+                <div class="notes-header">
+                  <div class="notes-title-container">
+                    <n-icon size="24" class="notes-icon">
+                      <EditIcon />
+                    </n-icon>
+                    <h5 class="notes-title">Personal Notes</h5>
+                  </div>
+                  <p class="notes-subtitle">
+                    Add your thoughts, memories, or context about this photo.
+                    Your notes will be used for searches.
+                  </p>
+                </div>
+
+                <!-- Notes Input Area -->
+                <div class="notes-input-area">
+                  <n-input
+                    :value="photoNotes"
+                    @update:value="emit('update:photo-notes', $event)"
+                    type="textarea"
+                    placeholder="Example: Taken during our summer vacation in Barcelona. The lighting was amazing that evening..."
+                    :autosize="{ minRows: 6, maxRows: 10 }"
+                    @input="emit('update-word-count')"
+                  />
+                </div>
+
+                <!-- Actions -->
+                <div class="notes-actions">
+                  <div
+                    class="word-counter"
+                    :class="{ 'word-limit-exceeded': wordCount > 50 }"
+                  >
+                    {{ wordCount }} / 50 words
+                  </div>
+                  <div class="notes-buttons-group">
+                    <n-button
+                      size="small"
+                      type="primary"
+                      @click="emit('save-notes')"
+                      :loading="isSavingNotes"
+                      :disabled="wordCount > 50"
+                    >
+                      {{
+                        selectedPhoto?.descriptions?.notes
+                          ? "Update Notes"
+                          : "Save Notes"
+                      }}
+                    </n-button>
+                    <span v-if="wordCount > 50" class="error-text">
+                      Please reduce to 50 words or less
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </n-tab-pane>
+
+          <n-tab-pane name="scores" display-directive="show:lazy">
+            <template #tab>
+              <div class="tab-content">
+                <n-icon size="18">
+                  <ScoresIcon />
+                </n-icon>
+                <span>Scores</span>
+              </div>
+            </template>
+            <div class="tab-panel-content">
+              <div class="descriptions-section">
+                <div v-if="selectedPhoto?.descriptions" class="ai-descriptions">
+                  <div
+                    class="description-item"
+                    v-if="selectedPhoto.descriptions.artistic_scores"
+                  >
+                    <!-- Overall Rating -->
+                    <div class="overall-rating-container">
+                      <div class="overall-rating">
+                        <span class="overall-label">Overall Rating:</span>
+                        <div class="overall-score">
+                          <span class="overall-value"
+                            >{{ overallRating.average }}/{{
+                              scoreScale.max
+                            }}</span
+                          >
+                          <span
+                            class="overall-rating-text"
+                            :class="
+                              'rating-' +
+                              overallRating.rating
+                                .toLowerCase()
+                                .replace(' ', '-')
+                                .replace('/', '')
+                            "
+                          >
+                            {{ overallRating.rating }}
+                          </span>
+                        </div>
+                      </div>
+
+                      <!-- Genre Presets -->
+                      <div class="genre-presets-container">
+                        <div class="genre-header">
+                          <h6 class="genre-title">Photography Genre Presets</h6>
+                        </div>
+                        <div class="genre-pills">
+                          <n-tooltip
+                            trigger="hover"
+                            placement="bottom"
+                            :show-arrow="true"
+                            delay="1200"
+                          >
+                            <template #trigger>
+                              <div
+                                class="genre-pill"
+                                :class="{ active: selectedGenre === 'street' }"
+                                @click="emit('apply-genre-preset', 'street')"
+                              >
+                                <n-icon size="16" class="genre-icon">
+                                  <WalkOutline />
+                                </n-icon>
+                                Street
+                              </div>
+                            </template>
+                            <div v-html="formatGenreTooltip('street')"></div>
+                          </n-tooltip>
+
+                          <n-tooltip
+                            trigger="hover"
+                            placement="bottom"
+                            :show-arrow="true"
+                            delay="1200"
+                          >
+                            <template #trigger>
+                              <div
+                                class="genre-pill"
+                                :class="{
+                                  active: selectedGenre === 'documentary',
+                                }"
+                                @click="
+                                  emit('apply-genre-preset', 'documentary')
+                                "
+                              >
+                                <n-icon size="16" class="genre-icon">
+                                  <BookOpen16Regular />
+                                </n-icon>
+                                Documentary
+                              </div>
+                            </template>
+                            <div
+                              v-html="formatGenreTooltip('documentary')"
+                            ></div>
+                          </n-tooltip>
+
+                          <n-tooltip
+                            trigger="hover"
+                            placement="bottom"
+                            :show-arrow="true"
+                            delay="1200"
+                          >
+                            <template #trigger>
+                              <div
+                                class="genre-pill"
+                                :class="{
+                                  active: selectedGenre === 'abstract',
+                                }"
+                                @click="emit('apply-genre-preset', 'abstract')"
+                              >
+                                <n-icon size="16" class="genre-icon">
+                                  <PaletteOutlined />
+                                </n-icon>
+                                Artistic
+                              </div>
+                            </template>
+                            <div v-html="formatGenreTooltip('abstract')"></div>
+                          </n-tooltip>
+                        </div>
+                      </div>
+
+                      <!-- Weights Configuration -->
+                      <div
+                        class="weights-configuration-container"
+                        v-if="showCustomWeights"
+                      >
+                        <div class="weights-header">
+                          <h6 class="weights-title">
+                            Score Weights Configuration
+                          </h6>
+                        </div>
+                        <CustomArtisticWeights
+                          :modelValue="artisticScoreWeights"
+                          @update:modelValue="
+                            emit('update:artistic-score-weights', $event)
+                          "
+                          :format-criterion-name="formatCriterionName"
+                        />
+                      </div>
+
+                      <div class="artistic-scores-grid">
+                        <div
+                          v-for="scoreData in orderedArtisticScores"
+                          :key="scoreData.criterion"
+                          class="score-item"
+                          :class="{ 'bonus-item': scoreData.group === 'bonus' }"
+                          :style="{
+                            '--weight-scale':
+                              artisticScoreWeights[scoreData.criterion],
+                            '--weight-opacity':
+                              artisticScoreWeights[scoreData.criterion],
+                          }"
+                        >
+                          <span
+                            class="score-label"
+                            :data-weight="`×${artisticScoreWeights[
+                              scoreData.criterion
+                            ].toFixed(1)}`"
+                            :title="`Score: ${scoreData.score}/${
+                              scoreScale.max
+                            } | Weight: ${artisticScoreWeights[
+                              scoreData.criterion
+                            ].toFixed(1)} | Impact: ${(
+                              scoreData.score *
+                              artisticScoreWeights[scoreData.criterion]
+                            ).toFixed(1)}`"
+                          >
+                            {{ scoreData.label }}
+                          </span>
+                          <div class="score-bar-container">
+                            <div class="score-bar">
+                              <div
+                                class="score-fill"
+                                :style="{
+                                  width: (scoreData.score / 9) * 100 + '%',
+                                  opacity: 0.8,
+                                  background: getScoreBgColor(scoreData.score),
+                                }"
+                              ></div>
+                            </div>
+                            <span class="score-value">
+                              <span class="score-number">{{
+                                scoreData.score
+                              }}</span>
+                              <span class="max-score"
+                                >/{{ scoreScale.max }}</span
+                              >
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </n-tab-pane>
+
+          <n-tab-pane name="insights" display-directive="show:lazy">
+            <template #tab>
+              <div class="tab-content">
+                <n-icon size="18">
+                  <SparklesIcon />
+                </n-icon>
+                <span>Insights</span>
+              </div>
+            </template>
+            <div class="tab-panel-content">
+              <div class="insights-panel">
+                <!-- Insights Display Area -->
+                <div class="insights-display-area">
+                  <!-- Empty state placeholder -->
+                  <div
+                    v-if="allPhotoInsights.length === 0 && !isGeneratingInsight"
+                    class="insights-placeholder"
+                  >
+                    <n-icon size="64" class="placeholder-icon">
+                      <SparklesIcon />
+                    </n-icon>
+                    <p class="placeholder-title">Discover photo insights</p>
+                    <p class="placeholder-subtitle">
+                      Choose a preset topic or ask your own question.
+                    </p>
+                  </div>
+
+                  <!-- Accumulated insights -->
+                  <div v-if="allPhotoInsights.length > 0" class="insights-list">
+                    <div
+                      v-for="(insight, index) in allPhotoInsights"
+                      :key="index"
+                      class="description-item insight-item"
+                    >
+                      <h5 class="description-label">{{ insight.label }}</h5>
+                      <div class="description-content">
+                        <div v-html="insight.text"></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Loading state -->
+                  <div v-if="isGeneratingInsight" class="insight-loading">
+                    <div class="description-item insight-item loading">
+                      <h5 class="description-label">
+                        {{ pendingInsightLabel }}
+                      </h5>
+                      <div class="description-content loading-content">
+                        <n-spin size="small" />
+                        <span class="loading-text">Analyzing image...</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Control Panel -->
+                <div class="insights-control-panel">
+                  <div class="preset-buttons">
+                    <n-button
+                      type="primary"
+                      size="small"
+                      @click="emit('get-insight', 'cultural')"
+                      :disabled="
+                        isGeneratingInsight ||
+                        !insightTypesAvailable.cultural ||
+                        !canUseInsights
+                      "
+                      class="preset-btn"
+                    >
+                      <template #icon>
+                        <n-icon size="16">
+                          <GlobeOutline />
+                        </n-icon>
+                      </template>
+                      Cultural
+                    </n-button>
+                    <n-button
+                      type="primary"
+                      size="small"
+                      @click="emit('get-insight', 'technical')"
+                      :disabled="
+                        isGeneratingInsight ||
+                        !insightTypesAvailable.technical ||
+                        !canUseInsights
+                      "
+                      class="preset-btn"
+                    >
+                      <template #icon>
+                        <n-icon size="16">
+                          <SettingsOutline />
+                        </n-icon>
+                      </template>
+                      Technical
+                    </n-button>
+                    <n-button
+                      type="primary"
+                      size="small"
+                      @click="emit('get-insight', 'artistic')"
+                      :disabled="
+                        isGeneratingInsight ||
+                        !insightTypesAvailable.artistic ||
+                        !canUseInsights
+                      "
+                      class="preset-btn"
+                    >
+                      <template #icon>
+                        <n-icon size="16">
+                          <BrushOutline />
+                        </n-icon>
+                      </template>
+                      Artistic
+                    </n-button>
+                  </div>
+                  <div class="custom-question-input">
+                    <n-input
+                      :value="customInsightQuestion"
+                      @update:value="
+                        emit('update:custom-insight-question', $event)
+                      "
+                      placeholder="Ask anything about this photo..."
+                      :disabled="
+                        isGeneratingInsight ||
+                        customQuestionsRemaining <= 0 ||
+                        !canUseInsights
+                      "
+                      @keydown.enter="emit('submit-custom-question')"
+                      size="small"
+                    >
+                      <template #suffix>
+                        <n-button
+                          text
+                          :disabled="
+                            !customInsightQuestion.trim() ||
+                            isGeneratingInsight ||
+                            customQuestionsRemaining <= 0 ||
+                            !canUseInsights
+                          "
+                          @click="emit('submit-custom-question')"
+                          class="send-btn"
+                        >
+                          <n-icon size="18">
+                            <SendOutline />
+                          </n-icon>
+                        </n-button>
+                      </template>
+                    </n-input>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </n-tab-pane>
+        </n-tabs>
+      </div>
+    </div>
+  </n-modal>
+</template>
+
+<script setup>
+import { computed } from "vue";
+import {
+  NModal,
+  NIcon,
+  NButton,
+  NTag,
+  NInput,
+  NSpin,
+  NTooltip,
+  NTabs,
+  NTabPane,
+} from "naive-ui";
+import CustomArtisticWeights from "../../CustomArtisticWeights.vue";
+
+// Icons
+import {
+  CopyOutline as CopyIcon,
+  DownloadOutline as DownloadIcon,
+  InformationCircleOutline as InfoIcon,
+  PricetagOutline as TagIcon,
+  SparklesOutline as SparklesIcon,
+  CreateOutline as EditIcon,
+  WalkOutline,
+  GlobeOutline,
+  SettingsOutline,
+  BrushOutline,
+  SendOutline,
+} from "@vicons/ionicons5";
+import { FullscreenOutlined } from "@vicons/material";
+import { Trophy20Regular as ScoresIcon } from "@vicons/fluent";
+import { BookOpen16Regular } from "@vicons/fluent";
+import { PaletteOutlined } from "@vicons/material";
+
+defineOptions({ name: "PhotoInfoDesktopLayout" });
+
+const props = defineProps({
+  visible: { type: Boolean, default: false },
+  selectedPhoto: { type: Object, default: null },
+  groupedTags: { type: Object, default: () => ({}) },
+  photoNotes: { type: String, default: "" },
+  wordCount: { type: Number, default: 0 },
+  isSavingNotes: { type: Boolean, default: false },
+  overallRating: {
+    type: Object,
+    default: () => ({ average: 0, rating: "N/A" }),
+  },
+  scoreScale: { type: Object, default: () => ({ max: 9 }) },
+  selectedGenre: { type: String, default: "street" },
+  showCustomWeights: { type: Boolean, default: false },
+  artisticScoreWeights: { type: Object, default: () => ({}) },
+  orderedArtisticScores: { type: Array, default: () => [] },
+  allPhotoInsights: { type: Array, default: () => [] },
+  isGeneratingInsight: { type: Boolean, default: false },
+  pendingInsightLabel: { type: String, default: "" },
+  customInsightQuestion: { type: String, default: "" },
+  customQuestionsRemaining: { type: Number, default: 3 },
+  insightTypesAvailable: {
+    type: Object,
+    default: () => ({ cultural: true, technical: true, artistic: true }),
+  },
+  canUseInsights: { type: Boolean, default: true },
+  formatDate: { type: Function, default: (d) => d },
+  formatExposureTime: { type: Function, default: (e) => e },
+  formatCategoryName: { type: Function, default: (c) => c },
+  formatCriterionName: { type: Function, default: (c) => c },
+  formatGenreTooltip: { type: Function, default: () => "" },
+  getScoreBgColor: { type: Function, default: () => "#ccc" },
+});
+
+const emit = defineEmits([
+  "update:visible",
+  "copy-name",
+  "image-error",
+  "download",
+  "open-fullscreen",
+  "update:photo-notes",
+  "update-word-count",
+  "save-notes",
+  "apply-genre-preset",
+  "update:artistic-score-weights",
+  "get-insight",
+  "update:custom-insight-question",
+  "submit-custom-question",
+]);
+
+const visibleModel = computed({
+  get: () => props.visible,
+  set: (value) => emit("update:visible", value),
+});
+</script>
+
+<style scoped>
+/* Compact header styling */
+.custom-header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+}
+
+.header-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  max-height: calc(90vh - 80px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.technical-info-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.technical-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-lg);
+  padding: var(--spacing-md);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+}
+
+.tech-category {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.category-title {
+  margin: 0;
+  font-size: calc(var(--font-size-xs) - 1px);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+  text-transform: capitalize;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: calc(var(--spacing-xs) / 2);
+}
+
+.category-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--spacing-xs) / 2);
+}
+
+.tech-tag {
+  font-size: 11px;
+  height: 22px !important;
+  border-radius: 4px !important;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  margin: 2px;
+}
+
+/* Notes Section Styles */
+.notes-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-md);
+}
+
+.notes-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.notes-title-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.notes-icon {
+  color: var(--primary-color);
+}
+
+.notes-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.notes-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.word-counter {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.word-counter.word-limit-exceeded {
+  color: var(--error-color);
+  font-weight: 600;
+}
+
+.notes-input-area {
+  width: 100%;
+}
+
+.notes-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.notes-buttons-group {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.error-text {
+  font-size: 12px;
+  color: var(--error-color);
+  font-weight: 500;
+}
+
+.photo-display-centered {
+  width: 100%;
+  height: 330px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin-bottom: var(--spacing-lg);
+  flex-shrink: 0;
+}
+
+.centered-photo {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  object-position: center;
+  background-color: transparent;
+}
+
+/* Photo overlay */
+.photo-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.photo-overlay > * {
+  pointer-events: auto;
+}
+
+.bottom-right-actions {
+  position: absolute;
+  bottom: var(--spacing-sm);
+  right: var(--spacing-sm);
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.download-btn,
+.fullscreen-btn {
+  opacity: 0.6;
+  transition: opacity 0.3s ease;
+  background-color: rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: blur(4px);
+  color: white !important;
+}
+
+.download-btn:hover,
+.fullscreen-btn:hover {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.7) !important;
+}
+
+.info-sections {
+  flex: 1;
+}
+
+/* Lateral tabs styling */
+.info-sections :deep(.n-tabs) {
+  height: 100%;
+}
+
+.info-sections :deep(.n-tabs-nav) {
+  min-width: 140px !important;
+  width: 140px !important;
+}
+
+.info-sections :deep(.n-tabs-tab) {
+  justify-content: flex-start !important;
+  padding: var(--spacing-md) var(--spacing-sm) !important;
+  min-height: 48px !important;
+}
+
+.info-sections :deep(.n-tabs-content) {
+  padding: 0 !important;
+  flex: 1;
+}
+
+.info-sections :deep(.n-tab-pane) {
+  padding: var(--spacing-lg) !important;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.tab-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.tab-content span {
+  white-space: nowrap;
+}
+
+.tab-panel-content {
+  height: 100%;
+  overflow: visible;
+}
+
+/* Tags section */
+.tags-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.grouped-tags {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.tag-group-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.tag-group-label {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tag-group-content {
+  padding: var(--spacing-lg);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  border-left: 4px solid var(--primary-color);
+}
+
+.tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.photo-tag {
+  margin: 0;
+}
+
+/* Descriptions & Scores */
+.descriptions-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.ai-descriptions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.description-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.description-label {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.description-content {
+  padding: var(--spacing-lg);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  border-left: 4px solid var(--primary-color);
+}
+
+.description-content p {
+  margin: 0;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.overall-rating-container {
+  padding: var(--spacing-lg);
+  background: var(--bg-container);
+  border-radius: var(--radius-md);
+  border-left: 4px solid var(--primary-color);
+}
+
+.overall-rating {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.overall-label {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.overall-score {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.overall-value {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.overall-rating-text {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Rating color classes */
+.rating-disastrous {
+  background: #7f1d1d;
+  color: white;
+}
+.rating-very-poor {
+  background: #b91c1c;
+  color: white;
+}
+.rating-poor {
+  background: #ef4444;
+  color: white;
+}
+.rating-needs-improvement {
+  background: #f87171;
+  color: white;
+}
+.rating-acceptable {
+  background: #f59e0b;
+  color: white;
+}
+.rating-good {
+  background: #10b981;
+  color: white;
+}
+.rating-very-good {
+  background: #22d3ee;
+  color: white;
+}
+.rating-remarkable {
+  background: #3b82f6;
+  color: white;
+}
+.rating-excellent {
+  background: #6366f1;
+  color: white;
+}
+.rating-outstanding {
+  background: #7c3aed;
+  color: white;
+}
+
+/* Genre presets */
+.genre-presets-container {
+  margin-bottom: var(--spacing-md);
+  margin-top: var(--spacing-md);
+}
+
+.genre-header {
+  display: flex;
+  justify-content: center;
+}
+
+.genre-title {
+  margin: 0 0 var(--spacing-xs) 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.genre-pills {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: 12px 0;
+}
+
+.genre-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.genre-pill:hover {
+  border-color: var(--primary-color);
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
+  transform: translateY(-1px);
+}
+
+.genre-pill.active {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  color: var(--text-on-primary);
+}
+
+.genre-icon {
+  flex-shrink: 0;
+}
+
+/* Weights configuration */
+.weights-configuration-container {
+  margin-bottom: var(--spacing-md);
+  padding: var(--spacing-lg);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.weights-header {
+  margin-bottom: var(--spacing-md);
+  text-align: center;
+}
+
+.weights-title {
+  margin: 0 0 var(--spacing-xs) 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+/* Artistic scores grid */
+.artistic-scores-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-lg);
+  padding-top: 0;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.score-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: 5px;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.score-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: calc(var(--weight-scale, 0) * (140px + var(--spacing-sm)));
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--primary-color) 0%,
+    rgba(59, 130, 246, 0.4) 80%,
+    rgba(59, 130, 246, 0.1) 100%
+  );
+  border-radius: var(--radius-sm);
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0.25;
+  z-index: 0;
+}
+
+.score-item.bonus-item::before {
+  background: linear-gradient(
+    90deg,
+    #f59e0b 0%,
+    rgba(245, 158, 11, 0.4) 80%,
+    rgba(245, 158, 11, 0.1) 100%
+  );
+}
+
+.score-item:hover::before {
+  opacity: 0.4;
+}
+
+.score-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  min-width: 140px;
+  flex-shrink: 0;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  position: relative;
+  z-index: 1;
+  border-radius: var(--radius-sm);
+  transition: all 0.3s ease;
+}
+
+.score-bar-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex: 1;
+}
+
+.score-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.score-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition:
+    width 0.3s ease,
+    opacity 0.3s ease;
+  position: relative;
+  z-index: 1;
+}
+
+.score-value {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+  min-width: 40px;
+  text-align: right;
+  font-family: var(--font-mono);
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.score-number {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-bold);
+}
+
+.max-score {
+  color: var(--text-secondary);
+}
+
+/* Insights Panel */
+.insights-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 280px;
+}
+
+.insights-display-area {
+  flex: 1;
+  overflow-y: auto;
+  margin-bottom: var(--spacing-md);
+}
+
+.insights-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 180px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  border: 2px dashed var(--border-color);
+}
+
+.placeholder-icon {
+  color: var(--primary-color);
+  opacity: 0.6;
+  margin-bottom: var(--spacing-md);
+}
+
+.placeholder-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.placeholder-subtitle {
+  margin: var(--spacing-xs) 0 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  max-width: 280px;
+}
+
+.insights-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.insight-item {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.insight-loading {
+  margin-top: var(--spacing-md);
+}
+
+.insight-item.loading .description-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.loading-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-height: 40px;
+}
+
+.loading-text {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.insights-control-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.preset-buttons {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: stretch;
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+.preset-btn {
+  flex: 1;
+  min-width: 0;
+}
+
+.preset-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.custom-question-input {
+  width: 100%;
+}
+
+.custom-question-input :deep(.n-input) {
+  background: var(--bg-card);
+}
+
+.send-btn {
+  padding: 0 var(--spacing-xs);
+  color: var(--primary-color);
+  transition: transform 0.2s ease;
+}
+
+.send-btn:hover:not(:disabled) {
+  transform: scale(1.1);
+}
+
+.send-btn:disabled {
+  opacity: 0.4;
+}
+</style>
