@@ -9,6 +9,14 @@
           in all the tools.
         </p>
       </div>
+      <!-- Mobile Badge with Photo Count -->
+      <div
+        v-if="isMobile && processedPhotos.length > 0"
+        class="mobile-photo-badge"
+      >
+        <n-badge :value="processedPhotos.length + ' photos'" type="info">
+        </n-badge>
+      </div>
       <!-- <div class="header-actions">
         <UsageIndicators />
       </div> -->
@@ -73,10 +81,11 @@
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { usePhotosStore } from "@/stores/photos.js";
-import { NIcon } from "naive-ui";
+import { NIcon, NBadge } from "naive-ui";
 import { LayersOutline } from "@vicons/ionicons5";
 import PhotosGrid from "@/components/PhotosGrid.vue";
 import UsageIndicators from "@/components/UsageIndicators.vue";
+import { useIsMobile } from "@/composables/useIsMobile.js";
 
 defineOptions({
   name: "WorkspaceView",
@@ -84,6 +93,7 @@ defineOptions({
 
 const router = useRouter();
 const photosStore = usePhotosStore();
+const { isMobile } = useIsMobile();
 
 // Processed photos from store
 const processedPhotos = computed(() => photosStore.processedPhotos);
@@ -109,6 +119,7 @@ const navigateToSyncArea = () => {
   align-items: flex-start;
   margin-bottom: var(--spacing-2xl);
   gap: var(--spacing-2xl);
+  position: relative;
 }
 
 .header-content {
@@ -134,6 +145,15 @@ const navigateToSyncArea = () => {
   display: flex;
   gap: var(--spacing-md);
   flex-shrink: 0;
+}
+
+.mobile-photo-badge {
+  position: absolute;
+  top: 5px;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Content Section - local overrides only */

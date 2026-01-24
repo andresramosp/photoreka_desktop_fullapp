@@ -26,9 +26,6 @@
               {{ displayedPhotos.length }}{{ hasMorePhotos ? "+" : "" }} of
               {{ filteredAndSortedPhotos.length }} photos
             </span>
-            <span class="mobile-count">
-              {{ filteredAndSortedPhotos.length }}
-            </span>
           </span>
         </div>
 
@@ -71,20 +68,11 @@
         </div>
       </div>
 
-      <!-- Row 2: Columns + Sort -->
-      <div class="controls-row-2">
-        <!-- Photo count (mobile only, shown in row 2) -->
-        <div class="results-info results-info-base mobile-only-inline">
-          <span class="results-count results-count-base mobile-count-inline">
-            {{ filteredAndSortedPhotos.length }}
-          </span>
-        </div>
-
-        <div class="grid-size-controls grid-size-controls-base">
-          <span v-if="!isMobile" class="grid-label grid-label-base"
-            >Columns:</span
-          >
-          <n-button-group class="mobile-columns-compact">
+      <!-- Row 2: Columns + Sort (Desktop) -->
+      <div v-if="!isMobile" class="controls-row-2-desktop">
+        <div class="grid-size-controls">
+          <span class="grid-label">Columns:</span>
+          <n-button-group>
             <n-button
               v-for="size in columnOptions"
               :key="size"
@@ -97,14 +85,13 @@
           </n-button-group>
         </div>
 
-        <!-- Basic Sort Controls -->
-        <div class="sort-controls sort-controls-base">
-          <span class="sort-label sort-label-base">Sort:</span>
+        <div class="sort-controls">
+          <span class="sort-label">Sort:</span>
           <n-select
             v-model:value="basicSortType"
             :options="sortOptions"
             size="small"
-            class="mobile-sort-select"
+            style="width: 120px"
             clearable
             placeholder="Sort"
             :disabled="sortByQuality"
@@ -125,13 +112,11 @@
           >
             <n-icon size="18">
               <svg viewBox="0 0 24 24" style="width: 18px; height: 18px">
-                <!-- Desc (Descending) - Sort descending icon -->
                 <path
                   v-if="basicSortOrder === 'desc'"
                   d="M19,17H22L18,21L14,17H17V3H19V17M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
                   fill="currentColor"
                 />
-                <!-- Asc (Ascending) - Sort ascending icon -->
                 <path
                   v-else
                   d="M19,7H22L18,3L14,7H17V21H19V7M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
@@ -142,28 +127,108 @@
           </n-button>
         </div>
 
-        <!-- Select All Button (mobile: in row 2, desktop: in row 3) -->
         <n-button
           size="small"
           :type="allSelected ? 'primary' : 'default'"
           @click="handleSelectAllToggle"
-          class="select-all-btn mobile-inline"
+          class="select-all-btn"
         >
           <template #icon>
             <n-icon>
               <template v-if="allSelected">
-                <CheckmarkDoneOutline />
+                <SelectAllOn24Regular />
               </template>
               <template v-else>
-                <CheckboxOutline />
+                <SelectAllOn24Regular />
               </template>
             </n-icon>
           </template>
-          <span v-if="!isMobile">{{
-            allSelected ? "Deselect All" : "Select All"
-          }}</span>
-          <span v-else class="mobile-select-text">Select</span>
+          <span>{{ allSelected ? "Deselect All" : "Select All" }}</span>
         </n-button>
+      </div>
+
+      <!-- Row 2: Controls (Mobile) -->
+      <div v-else class="controls-row-2-mobile">
+        <div class="mobile-control mobile-sort-control">
+          <n-button
+            text
+            size="tiny"
+            @click="toggleBasicSortOrder"
+            class="sort-order-icon mobile-sort-icon"
+            :disabled="sortByQuality"
+            :title="
+              basicSortOrder === 'desc'
+                ? 'Descending (click for Ascending)'
+                : 'Ascending (click for Descending)'
+            "
+          >
+            <n-icon size="18">
+              <svg viewBox="0 0 24 24" style="width: 18px; height: 18px">
+                <path
+                  v-if="basicSortOrder === 'desc'"
+                  d="M19,17H22L18,21L14,17H17V3H19V17M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
+                  fill="currentColor"
+                />
+                <path
+                  v-else
+                  d="M19,7H22L18,3L14,7H17V21H19V7M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
+                  fill="currentColor"
+                />
+              </svg>
+            </n-icon>
+          </n-button>
+          <n-select
+            v-model:value="basicSortType"
+            :options="sortOptions"
+            size="small"
+            style="width: 100%; flex: 1"
+            clearable
+            placeholder="None"
+            :disabled="sortByQuality"
+            @update:value="handleBasicSortChange"
+          />
+        </div>
+
+        <div class="mobile-control">
+          <n-button-group style="width: 100%">
+            <n-button
+              v-for="size in columnOptions"
+              :key="size"
+              :type="gridColumns === size ? 'primary' : 'default'"
+              size="small"
+              @click="setGridColumns(size)"
+              style="flex: 1"
+            >
+              {{ size }}
+            </n-button>
+          </n-button-group>
+        </div>
+
+        <div class="mobile-control">
+          <n-button
+            size="small"
+            :type="allSelected ? 'primary' : 'default'"
+            @click="handleSelectAllToggle"
+            style="width: 100%"
+          >
+            <template #icon>
+              <n-icon>
+                <template v-if="allSelected">
+                  <SelectAllOn24Regular />
+                </template>
+                <template v-else>
+                  <SelectAllOn24Regular />
+                </template>
+              </n-icon>
+            </template>
+          </n-button>
+        </div>
+
+        <!-- <div class="mobile-control">
+          <span class="mobile-photo-count">
+            {{ filteredAndSortedPhotos.length }} photos
+          </span>
+        </div> -->
       </div>
     </div>
 
@@ -323,7 +388,7 @@ import {
   NTooltip,
 } from "naive-ui";
 import { DuplicateOutline, CloseOutline } from "@vicons/ionicons5";
-import { CheckmarkDoneOutline, CheckboxOutline } from "@vicons/ionicons5";
+import { SquareOutline } from "@vicons/ionicons5";
 import { useRouter } from "vue-router";
 import PhotoCardHub from "./photoCards/PhotoCardHub.vue";
 import PhotoInfoDialog from "./PhotoInfoDialog.vue";
@@ -340,6 +405,7 @@ import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection.js"
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
+import { CheckmarkSquare24Filled, SelectAllOn24Regular } from "@vicons/fluent";
 
 const emit = defineEmits(["refreshCollection", "selection-change"]);
 const props = defineProps({
@@ -1115,26 +1181,19 @@ const handleToolSelected = async (toolId) => {
 /* Grid Controls */
 .grid-controls-base {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 24px;
-  gap: 12px;
+  gap: 16px;
 }
 
-/* Desktop and Mobile count variants */
 .desktop-count {
   display: inline;
 }
 
-.mobile-count {
-  display: none;
-}
-
 .desktop-only {
   display: flex;
-}
-
-.mobile-only-inline {
-  display: none;
 }
 
 /* Row 1: Photos count + Duplicates */
@@ -1146,42 +1205,38 @@ const handleToolSelected = async (toolId) => {
   flex-wrap: wrap;
 }
 
-/* Row 2: Columns + Sort */
-.controls-row-2 {
+/* Row 2: Desktop Version */
+.controls-row-2-desktop {
   display: flex;
-  justify-content: space-between;
+  flex: 1;
+  justify-content: flex-end;
   align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
+  gap: 12px;
 }
 
-/* Desktop: Keep original layout */
-@media (min-width: 769px) {
-  .grid-controls-base {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-    gap: 16px;
-  }
+/* Row 2: Mobile Version */
+.controls-row-2-mobile {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr; /* Photo count | Columns | Sort | Select */
+  /* CAMBIAR PROPORCIONES: Por ejemplo 1fr 0.6fr 1.4fr 1fr */
+  gap: 8px;
+  width: 100%;
+  align-items: center;
+}
 
-  .controls-row-1 {
-    flex: 0 0 auto;
-    gap: 16px;
-  }
+.mobile-control {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
-  .controls-row-2 {
-    flex: 1;
-    justify-content: flex-end;
-    gap: 12px;
-  }
-
-  .select-all-btn {
-    margin-left: 8px;
-  }
-
-  .mobile-sort-select {
-    width: 100px;
-  }
+.mobile-photo-count {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: center;
+  white-space: nowrap;
 }
 
 .results-info-base {
@@ -1195,25 +1250,25 @@ const handleToolSelected = async (toolId) => {
   color: var(--text-secondary);
 }
 
-.grid-size-controls-base {
+.grid-size-controls {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.grid-label-base {
+.grid-label {
   font-size: 14px;
   color: var(--text-primary);
   font-weight: 500;
 }
 
-.sort-controls-base {
+.sort-controls {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.sort-label-base {
+.sort-label {
   font-size: 14px;
   color: var(--text-primary);
   font-weight: 500;
@@ -1222,7 +1277,6 @@ const handleToolSelected = async (toolId) => {
 .sort-order-icon {
   color: var(--text-primary);
   transition: all 0.2s ease;
-  margin-left: 8px;
   opacity: 0.7;
 }
 
@@ -1230,6 +1284,16 @@ const handleToolSelected = async (toolId) => {
   color: #8b5cf6;
   opacity: 1;
   transform: scale(1.1);
+}
+
+.mobile-sort-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mobile-sort-icon {
+  flex-shrink: 0;
 }
 
 .select-all-btn {
@@ -1373,7 +1437,6 @@ const handleToolSelected = async (toolId) => {
 }
 
 @media (max-width: 768px) {
-  /* Hide desktop elements */
   .desktop-only {
     display: none !important;
   }
@@ -1382,92 +1445,20 @@ const handleToolSelected = async (toolId) => {
     display: none;
   }
 
-  .mobile-count {
-    display: none;
-  }
-
-  /* Show mobile count inline in row 2 */
-  .mobile-only-inline {
-    display: flex !important;
-  }
-
-  .mobile-count-inline {
-    display: inline !important;
-    font-size: 14px;
-    font-weight: 600;
-  }
-
   .grid-controls-base {
     flex-direction: column;
     align-items: stretch;
-    gap: 0;
     margin-bottom: 16px;
   }
 
-  /* Hide Row 1 completely on mobile */
   .controls-row-1 {
     display: none !important;
   }
 
-  /* Row 2: Single compact row with all controls */
-  .controls-row-2 {
-    width: 100%;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: nowrap;
-    gap: 6px;
-  }
-
   .results-info-base {
-    flex: 0 0 auto;
     display: none;
   }
 
-  .mobile-only-inline {
-    flex: 0 0 auto;
-  }
-
-  .grid-size-controls-base {
-    flex: 0 0 auto;
-    gap: 4px;
-  }
-
-  .mobile-columns-compact {
-    display: flex;
-    gap: 4px;
-  }
-
-  .mobile-columns-compact .n-button {
-    min-width: 32px;
-    padding: 0 8px;
-  }
-
-  .select-all-btn.mobile-inline {
-    flex: 0 0 auto;
-    margin-left: 0;
-    white-space: nowrap;
-  }
-
-  .mobile-select-text {
-    margin-left: 4px;
-    font-size: 13px;
-  }
-
-  .sort-controls-base {
-    flex: 0 0 auto;
-    gap: 2px;
-  }
-
-  .sort-label-base {
-    display: none;
-  }
-
-  .mobile-sort-select {
-    width: 70px !important;
-  }
-
-  /* On mobile, respect user's column choice from selector */
   .photo-grid-base {
     gap: 12px;
   }
@@ -1488,7 +1479,6 @@ const handleToolSelected = async (toolId) => {
     grid-template-columns: repeat(4, 1fr);
   }
 
-  /* Only force columns for desktop-only options that shouldn't appear on mobile */
   .photo-grid-base.grid-cols-5,
   .photo-grid-base.grid-cols-6,
   .photo-grid-base.grid-cols-8,
@@ -1498,36 +1488,7 @@ const handleToolSelected = async (toolId) => {
 }
 
 @media (max-width: 480px) {
-  .grid-controls-base {
-    gap: 0;
-  }
-
-  .mobile-count-inline {
-    font-size: 13px;
-  }
-
-  /* Row 2: Keep single row but more compact */
-  .controls-row-2 {
-    flex-wrap: nowrap;
-    gap: 6px;
-  }
-
-  .mobile-columns-compact .n-button {
-    min-width: 28px;
-    padding: 0 6px;
-    font-size: 12px;
-  }
-
-  .mobile-select-text {
-    font-size: 12px;
-  }
-
-  .mobile-sort-select {
-    width: 65px !important;
-  }
-
-  .grid-label-base,
-  .sort-label-base {
+  .mobile-photo-count {
     font-size: 13px;
   }
 
@@ -1545,7 +1506,6 @@ const handleToolSelected = async (toolId) => {
     gap: 10px;
   }
 
-  /* On very small screens, max 2 columns */
   .photo-grid-base.grid-cols-3,
   .photo-grid-base.grid-cols-4,
   .photo-grid-base.grid-cols-5,
