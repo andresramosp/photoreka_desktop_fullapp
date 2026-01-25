@@ -138,7 +138,6 @@ const handleSubmit = async () => {
     const result = await userStore.login(formData.email, formData.password);
 
     if (result.success) {
-      message.success("Welcome back!");
       // Usar replace para evitar que quede en el historial y forzar navegación inmediata
       router.replace("/dashboard");
     } else {
@@ -278,7 +277,7 @@ export default {
 /* Mobile responsive */
 @media (max-width: 480px) {
   .form-header {
-    margin-bottom: 24px;
+    /* margin-bottom: 24px; */
   }
 
   .form-input,

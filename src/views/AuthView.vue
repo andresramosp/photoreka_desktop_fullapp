@@ -152,7 +152,7 @@ watch(() => route.query.mode, setModeFromQuery);
 /* Mobile responsive */
 @media (max-width: 480px) {
   .tab-buttons {
-    margin-bottom: 24px;
+    /* margin-bottom: 24px; */
   }
 
   .tab-button {

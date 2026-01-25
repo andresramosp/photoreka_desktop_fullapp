@@ -1,176 +1,231 @@
 <template>
-  <Transition name="slide-down">
-    <div v-if="show" class="mobile-welcome-banner">
-      <div class="banner-content">
-        <div class="banner-icon">
-          <n-icon size="20" color="#3b82f6">
-            <PhonePortraitOutline />
-          </n-icon>
-        </div>
-        <div class="banner-text">
-          <p class="banner-title">📱 Photoreka Mobile</p>
-          <p class="banner-description">
-            Explore, search and understand your archive from anywhere. Advanced
-            canvas and analysis tools are available on desktop.
-          </p>
-        </div>
-        <button class="banner-close" @click="handleClose" aria-label="Close">
-          <n-icon size="18">
-            <CloseOutline />
-          </n-icon>
-        </button>
-      </div>
-    </div>
+  <!-- Blur overlay background -->
+  <Transition name="blur-fade">
+    <div v-if="showBlurOverlay" class="blur-overlay" />
   </Transition>
 </template>
 
 <script setup lang="ts">
-import { NIcon } from "naive-ui";
-import { PhonePortraitOutline, CloseOutline } from "@vicons/ionicons5";
+import { h, ref, onMounted } from "vue";
+import {
+  useNotification,
+  NButton,
+  NAvatar,
+  type NotificationReactive,
+  NIcon,
+  NTag,
+} from "naive-ui";
+import {
+  SearchOutline as SearchIcon,
+  CloudUploadOutline,
+  GridOutline as CollectionsIcon,
+  LayersOutline,
+  AnalyticsOutline as ReportIcon,
+  ListOutline as SeriesIcon,
+  MapOutline,
+  CubeOutline,
+  PhonePortrait as MobileIcon,
+} from "@vicons/ionicons5";
 
-defineProps<{
-  show: boolean;
-}>();
+import AppLogo from "./AppLogo.vue";
 
-const emit = defineEmits<{
-  close: [];
-}>();
+const notification = useNotification();
+let closeNotification = ref<NotificationReactive | null>(null);
+const showBlurOverlay = ref(false);
 
-const handleClose = () => {
-  emit("close");
-};
+const STORAGE_KEY = "mobile-welcome-dismissed";
+
+function showMobileWelcome() {
+  // Mostrar el overlay con blur
+  showBlurOverlay.value = true;
+
+  // Helper to create icon render function
+  const renderIcon = (icon: any) => {
+    return () =>
+      h(
+        NIcon,
+        { size: 16, style: { marginRight: "8px" } },
+        { default: () => h(icon) },
+      );
+  };
+
+  closeNotification.value = notification.create({
+    content: () =>
+      h("div", { style: { lineHeight: "1.4" } }, [
+        // Logo
+        h("div", { style: { marginBottom: "0px", textAlign: "center" } }, [
+          h(AppLogo, {
+            height: 65,
+            layout: "horizontal",
+            withClaim: true,
+          }),
+        ]),
+
+        // Title
+        h("div", { style: { textAlign: "center", marginBottom: "8px" } }, [
+          h(
+            NTag,
+            {
+              size: "small",
+              type: "warning",
+              round: true,
+              bordered: false,
+              style: {
+                fontSize: "11px",
+                opacity: "0.85",
+                marginTop: "10px",
+                marginLeft: "0px",
+              },
+            },
+            {
+              icon: () =>
+                h(NIcon, { size: 13 }, { default: () => h(MobileIcon) }),
+              default: () => "Mobile Edition",
+            },
+          ),
+        ]),
+
+        // Subtitle
+        // h(
+        //   "p",
+        //   {
+        //     style: {
+        //       textAlign: "center",
+        //       opacity: "0.75",
+        //       fontSize: "13px",
+        //       marginBottom: "14px",
+        //     },
+        //   },
+        //   "Your photo archive, always with you.",
+        // ),
+
+        // Features
+        h(
+          "ul",
+          {
+            style: {
+              paddingLeft: "0",
+              marginTop: "6px",
+              listStyle: "none",
+            },
+          },
+          [
+            h(
+              "li",
+              {
+                style: {
+                  marginBottom: "8px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                },
+              },
+              [
+                renderIcon(CloudUploadOutline)(),
+                h("span", "Import new photos"),
+              ],
+            ),
+
+            h(
+              "li",
+              {
+                style: {
+                  marginBottom: "8px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                },
+              },
+              [
+                renderIcon(SearchIcon)(),
+                h("span", "Search your entire archive"),
+              ],
+            ),
+
+            h(
+              "li",
+              {
+                style: {
+                  marginBottom: "4px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                },
+              },
+              [
+                renderIcon(LayersOutline)(),
+                h("span", "Browse and manage your library"),
+              ],
+            ),
+          ],
+        ),
+
+        // Footer microcopy
+        h(
+          "p",
+          {
+            style: {
+              marginTop: "12px",
+              fontSize: "12px",
+              textAlign: "center",
+            },
+          },
+          h("i", "Advanced tools are available on desktop."),
+        ),
+
+        // CTA
+        h("div", { style: { marginTop: "16px", textAlign: "center" } }, [
+          h(
+            NButton,
+            {
+              type: "primary",
+              size: "small",
+              onClick: () => {
+                localStorage.setItem(STORAGE_KEY, "true");
+                closeNotification.value?.destroy();
+                showBlurOverlay.value = false;
+              },
+            },
+            { default: () => "Got it!" },
+          ),
+        ]),
+      ]),
+    closable: false,
+  });
+}
+
+onMounted(() => {
+  // Solo mostrar si el usuario no ha hecho clic en "Got it!" antes
+  const hasBeenDismissed = localStorage.getItem(STORAGE_KEY);
+  if (!hasBeenDismissed) {
+    showMobileWelcome();
+  }
+});
 </script>
 
 <style scoped>
-.mobile-welcome-banner {
+/* Blur overlay background */
+.blur-overlay {
   position: fixed;
-  top: 64px; /* Below header */
+  top: 0;
   left: 0;
   right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
   z-index: 999;
-  padding: 0 16px;
-}
-
-.banner-content {
-  max-width: 600px;
-  margin: 0 auto;
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  background: linear-gradient(
-    135deg,
-    rgba(59, 130, 246, 0.15) 0%,
-    rgba(99, 102, 241, 0.1) 100%
-  );
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  border-radius: 12px;
-  padding: 14px 16px;
-  backdrop-filter: blur(10px);
-}
-
-.banner-icon {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  background: rgba(59, 130, 246, 0.2);
-  border-radius: 8px;
-}
-
-.banner-text {
-  flex: 1;
-  min-width: 0;
-}
-
-.banner-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0 0 4px 0;
-}
-
-.banner-description {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin: 0;
-  line-height: 1.4;
-}
-
-.banner-close {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.banner-close:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
 }
 
 /* Transition animations */
-.slide-down-enter-active,
-.slide-down-leave-active {
+.blur-fade-enter-active,
+.blur-fade-leave-active {
   transition: all 0.3s ease;
 }
 
-.slide-down-enter-from {
+.blur-fade-enter-from,
+.blur-fade-leave-to {
   opacity: 0;
-  transform: translateY(-20px);
-}
-
-.slide-down-leave-to {
-  opacity: 0;
-  transform: translateY(-20px);
-}
-
-/* Light theme adjustments */
-[data-theme="light"] .banner-content {
-  background: linear-gradient(
-    135deg,
-    rgba(59, 130, 246, 0.1) 0%,
-    rgba(99, 102, 241, 0.08) 100%
-  );
-  border-color: rgba(59, 130, 246, 0.25);
-}
-
-[data-theme="light"] .banner-close:hover {
-  background: rgba(0, 0, 0, 0.05);
-}
-
-/* Responsive */
-@media (max-width: 480px) {
-  .mobile-welcome-banner {
-    padding: 0 12px;
-    top: 56px;
-  }
-
-  .banner-content {
-    padding: 12px;
-    gap: 10px;
-  }
-
-  .banner-icon {
-    width: 28px;
-    height: 28px;
-  }
-
-  .banner-title {
-    font-size: 13px;
-  }
-
-  .banner-description {
-    font-size: 12px;
-  }
+  backdrop-filter: blur(0px);
 }
 </style>

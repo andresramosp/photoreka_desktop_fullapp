@@ -2,6 +2,7 @@
   <div class="auth-providers">
     <div class="providers-grid">
       <n-button
+        size="large"
         class="provider-button provider-google"
         :loading="isLoading && activeProvider === 'google'"
         @click="handleProviderLogin('google')"
@@ -179,7 +180,6 @@ export default {
 
 .provider-button {
   width: 100%;
-  height: 36px;
   border-radius: 6px;
   font-weight: 500;
   font-size: 13px;
@@ -232,7 +232,6 @@ export default {
   }
 
   .provider-button {
-    height: 32px !important;
     font-size: 12px !important;
   }
 }
