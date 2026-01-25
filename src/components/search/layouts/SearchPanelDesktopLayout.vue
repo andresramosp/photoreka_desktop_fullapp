@@ -96,42 +96,42 @@
           <div class="type-pills">
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
-                <div
-                  class="type-pill"
-                  :class="{ active: activeSearchType === 'semantic' }"
-                  @click="!isSearching && updateSearchType('semantic')"
-                  :aria-disabled="isSearching"
-                  :tabindex="isSearching ? -1 : 0"
-                  :style="
-                    isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
+                <n-button
+                  :type="
+                    activeSearchType === 'semantic' ? 'primary' : 'default'
                   "
+                  @click="!isSearching && updateSearchType('semantic')"
+                  :disabled="isSearching"
+                  secondary
+                  class="selector-button"
                 >
-                  <n-icon size="14" class="type-icon">
-                    <DocumentOutline />
-                  </n-icon>
+                  <template #icon>
+                    <n-icon size="14">
+                      <DocumentOutline />
+                    </n-icon>
+                  </template>
                   Natural Language
-                </div>
+                </n-button>
               </template>
               Search using natural language descriptions like "sunset beach
               photos with people"
             </n-tooltip>
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
-                <div
-                  class="type-pill"
-                  :class="{ active: activeSearchType === 'tags' }"
+                <n-button
+                  :type="activeSearchType === 'tags' ? 'primary' : 'default'"
                   @click="!isSearching && updateSearchType('tags')"
-                  :aria-disabled="isSearching"
-                  :tabindex="isSearching ? -1 : 0"
-                  :style="
-                    isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
-                  "
+                  :disabled="isSearching"
+                  secondary
+                  class="selector-button"
                 >
-                  <n-icon size="16" class="type-icon">
-                    <TagOutlined />
-                  </n-icon>
+                  <template #icon>
+                    <n-icon size="16">
+                      <TagOutlined />
+                    </n-icon>
+                  </template>
                   Tags
-                </div>
+                </n-button>
               </template>
               Search by specific tags and keywords assigned to your photos
             </n-tooltip>
@@ -144,62 +144,61 @@
           <div class="mode-pills">
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
-                <div
-                  class="mode-pill"
-                  :class="{ active: searchMode === 'broad' }"
+                <n-button
+                  :type="searchMode === 'broad' ? 'primary' : 'default'"
                   @click="!isSearching && updateSearchMode('broad')"
-                  :aria-disabled="isSearching"
-                  :tabindex="isSearching ? -1 : 0"
-                  :style="
-                    isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
-                  "
+                  :disabled="isSearching"
+                  secondary
+                  class="selector-button"
                 >
-                  <n-icon size="16" class="mode-icon">
-                    <GlobeOutline />
-                  </n-icon>
+                  <template #icon>
+                    <n-icon size="16">
+                      <GlobeOutline />
+                    </n-icon>
+                  </template>
                   Broad
-                </div>
+                </n-button>
               </template>
               Fast, broad search focused on overall visual aspects.
             </n-tooltip>
 
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
-                <div
-                  class="mode-pill premium-pill"
-                  :class="{ active: searchMode === 'adaptive' }"
+                <n-button
+                  :type="searchMode === 'adaptive' ? 'primary' : 'default'"
                   @click="!isSearching && updateSearchMode('adaptive')"
-                  :aria-disabled="isSearching"
-                  :tabindex="isSearching ? -1 : 0"
-                  :style="
-                    isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
-                  "
+                  :disabled="isSearching"
+                  secondary
+                  class="selector-button premium-button"
                 >
-                  <n-icon size="16" class="mode-icon">
-                    <SparklesOutline />
-                  </n-icon>
+                  <template #icon>
+                    <n-icon size="16">
+                      <SparklesOutline />
+                    </n-icon>
+                  </template>
                   Adaptive
-                </div>
+                </n-button>
               </template>
               Flexible and deep search for similar and indirect associations
             </n-tooltip>
 
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
-                <div
-                  class="mode-pill premium-pill"
-                  :class="{ active: searchMode === 'precise' }"
-                  @click="!isSearching && updateSearchMode('precise')"
-                  :aria-disabled="isSearching"
-                  :tabindex="isSearching ? -1 : 0"
-                  :style="
-                    isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
-                  "
-                >
-                  <n-icon size="16" class="mode-icon">
-                    <SparklesOutline />
-                  </n-icon>
-                  Precise
+                <div class="premium-button-wrapper">
+                  <n-button
+                    :type="searchMode === 'precise' ? 'primary' : 'default'"
+                    @click="!isSearching && updateSearchMode('precise')"
+                    :disabled="isSearching"
+                    secondary
+                    class="selector-button premium-button"
+                  >
+                    <template #icon>
+                      <n-icon size="16">
+                        <SparklesOutline />
+                      </n-icon>
+                    </template>
+                    Precise
+                  </n-button>
                   <div class="premium-indicator-pill"></div>
                 </div>
               </template>
@@ -214,20 +213,21 @@
           <div class="mode-pills">
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
-                <div
-                  class="mode-pill insights-pill premium-pill"
-                  :class="{ active: withInsights }"
-                  @click="!isSearching && updateWithInsights(!withInsights)"
-                  :aria-disabled="isSearching"
-                  :tabindex="isSearching ? -1 : 0"
-                  :style="
-                    isSearching ? 'pointer-events: none; opacity: 0.5;' : ''
-                  "
-                >
-                  <n-icon size="16" class="mode-icon">
-                    <SparklesOutline />
-                  </n-icon>
-                  {{ withInsights ? "Enabled" : "Disabled" }}
+                <div class="premium-button-wrapper">
+                  <n-button
+                    :type="withInsights ? 'primary' : 'default'"
+                    @click="!isSearching && updateWithInsights(!withInsights)"
+                    :disabled="isSearching"
+                    secondary
+                    class="selector-button premium-button"
+                  >
+                    <template #icon>
+                      <n-icon size="16">
+                        <SparklesOutline />
+                      </n-icon>
+                    </template>
+                    {{ withInsights ? "Enabled" : "Disabled" }}
+                  </n-button>
                   <div class="premium-indicator-pill"></div>
                 </div>
               </template>
@@ -968,6 +968,11 @@ function toggleArtisticScore(scoreValue) {
   white-space: nowrap;
 }
 
+/* Selector Buttons */
+.selector-button {
+  flex-shrink: 0;
+}
+
 /* Search Type Pills */
 .type-pills {
   display: flex;
@@ -977,41 +982,6 @@ function toggleArtisticScore(scoreValue) {
   overflow: visible;
 }
 
-.type-pill {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border-radius: 20px;
-  border: 1px solid var(--border-color);
-  background-color: var(--bg-secondary);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-  flex-shrink: 0;
-  justify-content: center;
-  text-align: center;
-  overflow: visible;
-}
-
-.type-pill:hover {
-  background-color: var(--bg-hover);
-  border-color: var(--primary-color);
-}
-
-.type-pill.active {
-  background-color: var(--primary-color);
-  border-color: var(--primary-color);
-  color: white;
-}
-
-.type-icon {
-  flex-shrink: 0;
-}
-
 /* Mode Pills */
 .mode-pills {
   display: flex;
@@ -1019,36 +989,14 @@ function toggleArtisticScore(scoreValue) {
   flex-wrap: nowrap;
 }
 
-.mode-pill {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border-radius: 20px;
-  border: 1px solid var(--border-color);
-  background-color: var(--bg-secondary);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
+/* Premium Button Wrapper */
+.premium-button-wrapper {
   position: relative;
+  display: inline-block;
 }
 
-.mode-pill:hover {
-  background-color: var(--bg-hover);
-  border-color: var(--primary-color);
-}
-
-.mode-pill.active {
-  background-color: var(--primary-color);
-  border-color: var(--primary-color);
-  color: white;
-}
-
-.mode-icon {
-  flex-shrink: 0;
+.premium-button {
+  position: relative;
 }
 
 .premium-indicator-pill {

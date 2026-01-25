@@ -20,7 +20,7 @@
 
       <div class="controls-right">
         <!-- Curator View Toggle (Desktop Only) -->
-        <div v-if="!isMobile" class="curator-toggle">
+        <div v-if="false" class="curator-toggle">
           <span class="filter-label">Curator:</span>
           <n-tooltip trigger="hover" placement="top">
             <template #trigger>
@@ -85,7 +85,9 @@
         </div>
 
         <div class="grid-size-controls grid-size-controls-base">
-          <span class="grid-label grid-label-base">Columns:</span>
+          <span v-if="!isMobile" class="grid-label grid-label-base"
+            >Columns:</span
+          >
           <n-button-group>
             <n-button
               v-for="size in columnOptions"
@@ -412,6 +414,7 @@ const emit = defineEmits([
   "try-adaptive",
   "update:minStarRating",
   "update:showOnlyHighMatches",
+  "update:gridColumns",
   "add-to-collection",
   "take-to-tool",
   "curator-mode-changed",
@@ -515,6 +518,7 @@ watch(
 // Methods
 function setGridColumns(n) {
   gridColumns.value = n;
+  emit("update:gridColumns", n);
 }
 
 function toggleCuratorMode() {
@@ -524,6 +528,7 @@ function toggleCuratorMode() {
   // Force 6 columns in curator mode
   if (curatorMode.value) {
     gridColumns.value = 6;
+    emit("update:gridColumns", 6);
   }
   // Clear curated selection when exiting curator mode
   if (!curatorMode.value) {

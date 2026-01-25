@@ -78,36 +78,48 @@
 
       <!-- Search Mode Pills (directly visible) -->
       <div class="mobile-search-mode-row">
-        <div
-          class="filter-pill"
-          :class="{ active: searchMode === 'broad' }"
+        <n-button
+          :type="searchMode === 'broad' ? 'primary' : 'default'"
           @click="!isSearching && updateSearchMode('broad')"
+          :disabled="isSearching"
+          secondary
+          class="mode-pill-button"
         >
-          <n-icon size="16">
-            <GlobeOutline />
-          </n-icon>
-          <span>Broad</span>
-        </div>
-        <div
-          class="filter-pill"
-          :class="{ active: searchMode === 'adaptive' }"
+          <template #icon>
+            <n-icon size="16">
+              <GlobeOutline />
+            </n-icon>
+          </template>
+          Broad
+        </n-button>
+        <n-button
+          :type="searchMode === 'adaptive' ? 'primary' : 'default'"
           @click="!isSearching && updateSearchMode('adaptive')"
+          :disabled="isSearching"
+          secondary
+          class="mode-pill-button"
         >
-          <n-icon size="16">
-            <SparklesOutline />
-          </n-icon>
-          <span>Adaptive</span>
-        </div>
-        <div
-          class="filter-pill"
-          :class="{ active: searchMode === 'precise' }"
+          <template #icon>
+            <n-icon size="16">
+              <SparklesOutline />
+            </n-icon>
+          </template>
+          Adaptive
+        </n-button>
+        <n-button
+          :type="searchMode === 'precise' ? 'primary' : 'default'"
           @click="!isSearching && updateSearchMode('precise')"
+          :disabled="isSearching"
+          secondary
+          class="mode-pill-button"
         >
-          <n-icon size="16">
-            <SparklesOutline />
-          </n-icon>
-          <span>Precise</span>
-        </div>
+          <template #icon>
+            <n-icon size="16">
+              <SparklesOutline />
+            </n-icon>
+          </template>
+          Precise
+        </n-button>
       </div>
     </div>
 
@@ -139,26 +151,34 @@
           <div class="filter-section">
             <div class="filter-section-label">Search Type</div>
             <div class="filter-pills-row">
-              <div
-                class="filter-pill"
-                :class="{ active: activeSearchType === 'semantic' }"
+              <n-button
+                :type="activeSearchType === 'semantic' ? 'primary' : 'default'"
                 @click="!isSearching && updateSearchType('semantic')"
+                :disabled="isSearching"
+                secondary
+                class="mode-pill-button"
               >
-                <n-icon size="16">
-                  <DocumentOutline />
-                </n-icon>
-                <span>Natural Language</span>
-              </div>
-              <div
-                class="filter-pill"
-                :class="{ active: activeSearchType === 'tags' }"
+                <template #icon>
+                  <n-icon size="16">
+                    <DocumentOutline />
+                  </n-icon>
+                </template>
+                Natural Language
+              </n-button>
+              <n-button
+                :type="activeSearchType === 'tags' ? 'primary' : 'default'"
                 @click="!isSearching && updateSearchType('tags')"
+                :disabled="isSearching"
+                secondary
+                class="mode-pill-button"
               >
-                <n-icon size="16">
-                  <PricetagOutline />
-                </n-icon>
-                <span>Tags</span>
-              </div>
+                <template #icon>
+                  <n-icon size="16">
+                    <PricetagOutline />
+                  </n-icon>
+                </template>
+                Tags
+              </n-button>
             </div>
           </div>
 
@@ -166,16 +186,20 @@
           <div class="filter-section">
             <div class="filter-section-label">Insights</div>
             <div class="filter-pills-row">
-              <div
-                class="filter-pill insights-pill"
-                :class="{ active: withInsights }"
+              <n-button
+                :type="withInsights ? 'primary' : 'default'"
                 @click="!isSearching && updateWithInsights(!withInsights)"
+                :disabled="isSearching"
+                secondary
+                class="mode-pill-button"
               >
-                <n-icon size="16">
-                  <SparklesOutline />
-                </n-icon>
-                <span>{{ withInsights ? "Enabled" : "Disabled" }}</span>
-              </div>
+                <template #icon>
+                  <n-icon size="16">
+                    <SparklesOutline />
+                  </n-icon>
+                </template>
+                {{ withInsights ? "Enabled" : "Disabled" }}
+              </n-button>
             </div>
           </div>
 
@@ -529,17 +553,15 @@ function handleReset() {
   display: flex;
   gap: 8px;
   margin-top: 12px;
-  padding: 0 12px 12px 12px;
   justify-content: space-between;
   flex-wrap: wrap;
 }
 
-.mobile-search-mode-row .filter-pill {
-  padding: 6px 12px;
-  font-size: 12px;
+.mode-pill-button {
   flex: 1;
   min-width: 0;
   justify-content: center;
+  font-size: 12px;
 }
 
 .mobile-search-input-wrapper {
@@ -614,31 +636,6 @@ function handleReset() {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.filter-pill {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 16px;
-  border-radius: 20px;
-  border: 1px solid var(--border-color);
-  background-color: var(--bg-secondary);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.filter-pill:active {
-  transform: scale(0.98);
-}
-
-.filter-pill.active {
-  background-color: var(--primary-color);
-  border-color: var(--primary-color);
-  color: white;
 }
 
 /* Mobile Filter Selects */

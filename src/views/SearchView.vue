@@ -78,6 +78,7 @@
           :initial-grid-columns="isMobile ? 2 : 6"
           v-model:min-star-rating="minStarRating"
           v-model:show-only-high-matches="showOnlyHighMatches"
+          @update:grid-columns="gridColumns = $event"
           @select="togglePhotoSelection"
           @info="showPhotoInfo"
           @load-more="loadMorePhotos"
@@ -587,11 +588,16 @@ function handleMobileReset() {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 1;
   text-align: center;
   position: relative;
   z-index: 1;
   padding: var(--spacing-2xl) 0; /* Add padding instead of min-height */
+}
+
+@media (min-width: 481px) {
+  .search-inspiration {
+    flex: 1;
+  }
 }
 
 .inspiration-content {

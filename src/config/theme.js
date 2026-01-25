@@ -241,7 +241,7 @@ export const lightTheme = {
 
   // Backgrounds
   bgBody: "#F7F8FA",
-  bgContainer: "#d2d9e2",
+  bgContainer: "#f8f8f8",
   bgDeepSurface: "whitesmoke",
   bgSurface: "#FFFFFF",
   bgSurfaceHover: "#F1F5F9",
