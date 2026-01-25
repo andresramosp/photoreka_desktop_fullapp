@@ -3,28 +3,30 @@
     <!-- Visual Filters Compact Row -->
     <div class="filters-section">
       <div
-        class="section-header"
+        class="filter-controls-section-header"
         @click="isFiltersExpanded = !isFiltersExpanded"
       >
-        <div class="header-left">
+        <div class="filter-controls-header-left">
           <n-icon
             size="16"
-            class="section-icon"
+            class="filter-controls-section-icon"
             :color="`var(--primary-color)`"
           >
             <Camera20Regular />
           </n-icon>
-          <span class="section-label">Filter by visual aspects</span>
+          <span class="filter-controls-section-label"
+            >Filter by visual aspects</span
+          >
           <span
             v-if="hasActiveFilters && !isFiltersExpanded"
-            class="active-badge"
+            class="filter-controls-active-badge"
           >
             {{ totalActiveFilters }}
           </span>
         </div>
         <n-icon
           size="14"
-          class="toggle-icon"
+          class="filter-controls-toggle-icon"
           :class="{ rotated: isFiltersExpanded }"
         >
           <svg viewBox="0 0 24 24">
@@ -35,11 +37,15 @@
           </svg>
         </n-icon>
       </div>
-      <div v-if="isFiltersExpanded" class="filters-row filters-tab-container">
+      <!-- Filters Visual Aspects Collapsible Row -->
+      <div
+        v-if="isFiltersExpanded"
+        class="filter-controls-row filter-controls-tab-container"
+      >
         <div
           v-for="aspectGroup in visualAspectsOptions"
           :key="aspectGroup.key"
-          class="filter-item"
+          class="filter-controls-item"
         >
           <n-select
             v-model:value="selectedFilters[aspectGroup.key]"
@@ -52,7 +58,7 @@
             :max-tag-count="1"
             clearable
             filterable
-            class="filter-select"
+            class="filter-controls-select"
             size="small"
             @update:value="handleFilterChange"
           />
@@ -63,18 +69,20 @@
     <!-- Sorting Section -->
     <div class="sorting-section">
       <div
-        class="section-header sorting-header"
+        class="filter-controls-section-header sorting-header"
         @click="isSortingExpanded = !isSortingExpanded"
       >
-        <div class="header-left">
+        <div class="filter-controls-header-left">
           <n-icon
             size="16"
-            class="section-icon"
+            class="filter-controls-section-icon"
             :color="`var(--warning-color)`"
           >
             <Trophy20Regular />
           </n-icon>
-          <span class="section-label">Rank by visual scores</span>
+          <span class="filter-controls-section-label"
+            >Rank by visual scores</span
+          >
           <n-button
             v-if="hasActiveSorting"
             text
@@ -113,14 +121,14 @@
           </n-button>
           <span
             v-if="hasActiveSorting && !isSortingExpanded"
-            class="active-badge"
+            class="filter-controls-active-badge"
           >
             Active
           </span>
         </div>
         <n-icon
           size="14"
-          class="toggle-icon"
+          class="filter-controls-toggle-icon"
           :class="{ rotated: isSortingExpanded }"
           @click="isSortingExpanded = !isSortingExpanded"
         >
@@ -134,7 +142,7 @@
       </div>
       <div
         v-if="isSortingExpanded"
-        class="sorting-wrapper filters-tab-container"
+        class="sorting-wrapper filter-controls-tab-container"
       >
         <!-- Sorting Type Selection -->
         <div class="sorting-type-row">
@@ -149,7 +157,10 @@
           </n-radio-group>
         </div>
         <!-- Criteria Selection -->
-        <div v-if="sortingType === 'criteria'" class="criteria-row">
+        <div
+          v-if="sortingType === 'criteria'"
+          class="filter-controls-criteria-row"
+        >
           <template
             v-for="[groupKey, group] in Object.entries(artisticScores)"
             :key="groupKey"
@@ -167,7 +178,7 @@
               "
               size="small"
               @click="toggleCriterion(criterion.value)"
-              class="criterion-button"
+              class="filter-controls-criterion-button"
             >
               <template #icon>
                 <n-icon>
@@ -768,72 +779,6 @@ watch(
   overflow: hidden;
 }
 
-/* Unified Section Header */
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  user-select: none;
-}
-
-.section-header:hover {
-  background-color: var(--bg-hover);
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.section-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.active-badge {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--primary-color);
-  background-color: var(--primary-color-hover);
-  padding: 2px 6px;
-  border-radius: 10px;
-}
-
-/* Filters Row - Responsive grid */
-.filters-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 6px;
-  padding: 4px 12px 8px 12px;
-}
-
-/* Desktop: force single row */
-@media (min-width: 1200px) {
-  .filters-row {
-    grid-template-columns: repeat(9, minmax(0, 1fr));
-  }
-}
-
-/* Tablet/Medium screens: flexible columns */
-@media (min-width: 768px) and (max-width: 1199px) {
-  .filters-row {
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  }
-}
-
-.filter-item {
-  min-width: 0;
-}
-
-.filter-select {
-  width: 100%;
-}
-
 /* Sorting Section */
 .sorting-section {
   background-color: var(--bg-container);
@@ -879,7 +824,6 @@ watch(
 }
 
 /* Criteria and Genre Rows */
-.criteria-row,
 .genre-row {
   display: flex;
   align-items: center;
@@ -890,7 +834,6 @@ watch(
 
 /* Desktop: single row */
 @media (min-width: 1024px) {
-  .criteria-row,
   .genre-row {
     flex-wrap: nowrap;
   }
@@ -898,7 +841,6 @@ watch(
 
 /* Tablet and below: wrap */
 @media (max-width: 1023px) {
-  .criteria-row,
   .genre-row {
     flex-wrap: wrap;
   }
@@ -907,17 +849,6 @@ watch(
 .criteria-select {
   flex: 1;
   min-width: 280px;
-}
-
-.criterion-button {
-  flex: 1 1 auto;
-  min-width: 120px;
-  transition: all 0.2s ease;
-  font-size: 13px;
-}
-
-.criterion-button:hover {
-  transform: translateY(-1px);
 }
 
 .genre-button {
@@ -1024,31 +955,21 @@ watch(
   max-width: 400px;
 }
 
-.section-icon {
-  flex-shrink: 0;
-  opacity: 0.8;
-}
-
 /* Mobile styles */
 @media (max-width: 767px) {
-  .section-header {
+  .filter-controls-section-header {
     padding: 10px 12px;
   }
 
-  .section-label {
+  .filter-controls-section-label {
     font-size: 12px;
   }
 
-  .toggle-icon {
+  .filter-controls-toggle-icon {
     display: block;
   }
 
-  .filters-row {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-
-  .sorting-header .header-left {
+  .sorting-header .filter-controls-header-left {
     flex-wrap: wrap;
     width: 100%;
   }

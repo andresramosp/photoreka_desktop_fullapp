@@ -330,7 +330,7 @@ import {
 } from "@/stores/searchStore";
 import { useCollectionsStore } from "@/stores/collections";
 
-defineOptions({ name: "SearchMobileLayout" });
+defineOptions({ name: "SearchPanelMobileLayout" });
 
 // Stores
 const searchStore = useSearchStore();

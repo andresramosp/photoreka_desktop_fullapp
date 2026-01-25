@@ -1,7 +1,7 @@
 <template>
   <div ref="scrollContainer" class="search-container view-container">
     <!-- Desktop Layout -->
-    <SearchDesktopLayout
+    <SearchPanelDesktopLayout
       v-if="!isMobile"
       :is-toolbar-collapsed="isToolbarCollapsed"
       :included-tag-suggestions-formatted="includedTagSuggestionsFormatted"
@@ -15,7 +15,7 @@
     />
 
     <!-- Mobile Layout -->
-    <SearchMobileLayout
+    <SearchPanelMobileLayout
       v-else
       :included-tag-suggestions-formatted="includedTagSuggestionsFormatted"
       :excluded-tag-suggestions-formatted="excludedTagSuggestionsFormatted"
@@ -145,8 +145,8 @@ import {
 import { api } from "@/utils/axios";
 
 // Layout Components
-import SearchDesktopLayout from "@/components/search/layouts/SearchDesktopLayout.vue";
-import SearchMobileLayout from "@/components/search/layouts/SearchMobileLayout.vue";
+import SearchPanelDesktopLayout from "@/components/search/layouts/SearchPanelDesktopLayout.vue";
+import SearchPanelMobileLayout from "@/components/search/layouts/SearchPanelMobileLayout.vue";
 
 // Componentes e íconos
 import PhotosSearchGrid from "@/components/search/PhotosSearchGrid.vue";
@@ -424,15 +424,16 @@ async function performSearch() {
   searchStore.resetCurrentIteration();
   searchStore.setSearching(true);
 
-  await searchPhotos();
-  searchStore.setSearching(false);
-
-  // Auto-colapsar toolbar después de búsqueda (solo desktop)
   if (!isMobile.value) {
     nextTick(() => {
       isToolbarCollapsed.value = true;
     });
   }
+
+  await searchPhotos();
+  searchStore.setSearching(false);
+
+  // Auto-colapsar toolbar después de búsqueda (solo desktop)
 }
 
 // Cargar más resultados

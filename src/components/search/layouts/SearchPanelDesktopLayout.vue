@@ -1,12 +1,13 @@
 <template>
   <div
     class="search-toolbar-wrapper"
+    :class="{ 'is-hovering': isHovering }"
     @mouseenter="handleMouseEnter"
     @mouseleave="handleMouseLeave"
   >
     <!-- Mini Collapsed Bar -->
     <div
-      v-if="isToolbarCollapsed"
+      v-if="isToolbarCollapsed && !hasOpenSelect"
       class="search-toolbar-mini"
       :class="{ 'is-hovering': isHovering }"
     >
@@ -45,6 +46,32 @@
             <span class="mini-query-text" v-else>No tags selected</span>
           </template>
         </div>
+
+        <!-- Active Filters Badges -->
+        <template v-if="hasActiveFilters">
+          <div class="mini-divider"></div>
+          <n-tag
+            v-for="(filter, index) in activeFiltersBadges?.slice(0, 2)"
+            :key="index"
+            type="info"
+            size="small"
+            :bordered="false"
+            round
+          >
+            {{ filter }}
+          </n-tag>
+          <n-tag
+            v-if="activeFiltersBadges.length > 2"
+            type="info"
+            size="small"
+            :bordered="false"
+            round
+            strong
+          >
+            +{{ activeFiltersBadges.length - 2 }}
+          </n-tag>
+        </template>
+
         <div class="mini-expand-hint">
           <n-icon size="16">
             <ChevronDownOutline />
@@ -57,7 +84,9 @@
     <!-- Full Search Toolbar -->
     <div
       class="search-toolbar"
-      :class="{ 'is-collapsed': isToolbarCollapsed && !isHovering }"
+      :class="{
+        'is-collapsed': isToolbarCollapsed && !isHovering && !hasOpenSelect,
+      }"
     >
       <!-- Search Type and Mode Selector -->
       <div class="search-selector-section">
@@ -216,9 +245,14 @@
         >
           <span class="more-filters-label">More filters</span>
           <div class="more-filters-indicators">
-            <span v-if="hasActiveFilters" class="active-filters-indicator">
-              {{ activeFiltersCount }}
-            </span>
+            <n-badge
+              v-if="hasActiveFilters"
+              :value="activeFiltersCount"
+              type="info"
+              :offset="[8, -4]"
+              style="margin-right: 0"
+              size="small"
+            />
             <n-icon
               size="12"
               class="toggle-icon"
@@ -233,7 +267,7 @@
         <div v-if="showMoreFilters" class="filters-container">
           <div class="filters-content">
             <!-- Collections Filter -->
-            <div class="filter-compact-group">
+            <!-- <div class="filter-compact-group">
               <div class="filter-column">
                 <div class="filter-label-row">
                   <span class="filter-compact-label">Collections</span>
@@ -284,77 +318,87 @@
                   </template>
                 </n-select>
               </div>
-            </div>
+            </div> -->
 
             <!-- Visual Aspects Filter -->
-            <div class="filter-compact-group">
-              <div class="filter-column">
-                <span class="filter-compact-label" style="margin-bottom: 2px"
-                  >Visual aspects</span
-                >
-                <n-tree-select
-                  v-model:value="selectedVisualAspects"
+            <div class="filter-section-header">
+              <span class="filter-section-title">Filter by visual aspects</span>
+            </div>
+            <div class="visual-aspects-filters-container">
+              <div
+                v-for="aspectGroup in visualAspectsOptions"
+                :key="aspectGroup.key"
+                class="visual-aspect-item"
+              >
+                <n-select
+                  v-model:value="selectedFilters[aspectGroup.key]"
                   multiple
+                  :placeholder="`${
+                    aspectGroup.label.charAt(0).toUpperCase() +
+                    aspectGroup.label.slice(1)
+                  }`"
+                  :options="aspectGroup.children"
+                  :max-tag-count="1"
                   clearable
-                  placeholder="Any"
-                  :options="treeSelectOptions"
-                  :max-tag-count="3"
-                  class="filter-compact-select"
-                  :disabled="isSearching"
+                  filterable
+                  class="visual-aspect-select"
                   size="small"
-                  style="min-width: 200px"
-                  check-strategy="child"
-                  :show-path="false"
-                  expand-on-click
-                >
-                  <template #empty>
-                    <div style="padding: 8px; color: #888; font-size: 12px">
-                      No visual aspects found
-                    </div>
-                  </template>
-                </n-tree-select>
+                  :disabled="isSearching"
+                  @update:show="handleSelectShowChange"
+                />
               </div>
             </div>
 
             <!-- Artistic Scores Filter -->
-            <div class="filter-compact-group">
-              <div class="filter-column">
-                <div class="filter-label-row">
-                  <span class="filter-compact-label">Visual scores</span>
-                  <n-tooltip trigger="hover" placement="top">
-                    <template #trigger>
-                      <n-icon
-                        size="13"
-                        color="var(--text-secondary)"
-                        style="cursor: help"
-                      >
-                        <InformationCircle />
+            <div class="filter-section-header">
+              <span class="filter-section-title"
+                >Filter by artistic scores</span
+              >
+              <n-tooltip trigger="hover" placement="top">
+                <template #trigger>
+                  <n-icon
+                    size="13"
+                    color="var(--text-secondary)"
+                    style="cursor: help"
+                  >
+                    <InformationCircle />
+                  </n-icon>
+                </template>
+                Will include photos above 7 in the selected scores
+              </n-tooltip>
+            </div>
+            <div class="artistic-scores-filters-container">
+              <div class="filter-controls-criteria-row">
+                <template
+                  v-for="[groupKey, group] in Object.entries(artisticScores)"
+                  :key="groupKey"
+                >
+                  <n-button
+                    v-for="criterion in group.criteria"
+                    :key="criterion.value"
+                    secondary
+                    :type="
+                      (selectedArtisticScores || []).includes(criterion.value)
+                        ? groupKey === 'fundamentals'
+                          ? 'primary'
+                          : 'warning'
+                        : 'default'
+                    "
+                    size="small"
+                    @click="
+                      !isSearching && toggleArtisticScore(criterion.value)
+                    "
+                    class="filter-controls-criterion-button"
+                    :disabled="isSearching"
+                  >
+                    <template #icon>
+                      <n-icon>
+                        <component :is="criterionIcons[criterion.value]" />
                       </n-icon>
                     </template>
-                    Will include photos above 7 in the selected scores
-                  </n-tooltip>
-                </div>
-                <n-tree-select
-                  v-model:value="selectedArtisticScores"
-                  multiple
-                  clearable
-                  placeholder="Any"
-                  :options="artisticScoresOptions"
-                  :max-tag-count="3"
-                  class="filter-compact-select"
-                  :disabled="isSearching"
-                  size="small"
-                  style="min-width: 200px"
-                  check-strategy="child"
-                  :show-path="false"
-                  expand-on-click
-                >
-                  <template #empty>
-                    <div style="padding: 8px; color: #888; font-size: 12px">
-                      No artistic scores found
-                    </div>
-                  </template>
-                </n-tree-select>
+                    {{ criterion.label }}
+                  </n-button>
+                </template>
               </div>
             </div>
           </div>
@@ -431,6 +475,7 @@
                   :max-tag-count="5"
                   class="tags-select include-tags"
                   @search="emit('searchIncludedTags', $event)"
+                  @update:show="handleSelectShowChange"
                 >
                   <template #empty>
                     <div style="padding: 8px; color: #888">
@@ -452,6 +497,7 @@
                   :max-tag-count="5"
                   class="tags-select exclude-tags"
                   @search="emit('searchExcludedTags', $event)"
+                  @update:show="handleSelectShowChange"
                 >
                   <template #empty>
                     <div style="padding: 8px; color: #888">
@@ -498,15 +544,17 @@
 </template>
 
 <script setup>
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import {
   NTooltip,
-  NTreeSelect,
   NSelect,
   NInput,
   NButton,
   NIcon,
+  NTag,
+  NBadge,
 } from "naive-ui";
+import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import {
   DocumentOutline,
   SparklesOutline,
@@ -519,13 +567,10 @@ import {
   ChevronDownOutline as ChevronDown,
 } from "@vicons/ionicons5";
 import { TagOutlined } from "@vicons/antd";
-import {
-  useSearchStore,
-  createArtisticScoresTreeOptions,
-} from "@/stores/searchStore";
+import { useSearchStore, visualAspectsOptions } from "@/stores/searchStore";
 import { useCollectionsStore } from "@/stores/collections";
 
-defineOptions({ name: "SearchDesktopLayout" });
+defineOptions({ name: "SearchPanelDesktopLayout" });
 
 // Stores
 const searchStore = useSearchStore();
@@ -533,6 +578,20 @@ const collectionsStore = useCollectionsStore();
 
 // Local state for hover
 const isHovering = ref(false);
+const hasOpenSelect = ref(false);
+const hoverDebounceTimer = ref(null);
+const HOVER_DEBOUNCE_MS = 250; // Debounce de 200ms para pasadas rápidas
+
+// Visual Aspects Filters
+const selectedFilters = ref({});
+
+// Initialize selectedFilters with empty arrays for each category
+visualAspectsOptions.forEach((group) => {
+  selectedFilters.value[group.key] = [];
+});
+
+// Artistic Scores from composable
+const { artisticScores, criterionIcons } = useArtisticScores();
 
 // Props - only UI state and suggestions come from parent
 const props = defineProps({
@@ -586,9 +645,25 @@ const selectedCollections = computed({
 });
 
 const selectedVisualAspects = computed({
-  get: () => searchStore.selectedVisualAspects,
-  set: (value) => searchStore.setSelectedVisualAspects(value),
+  get: () => {
+    // Flatten all selected filters into a single array
+    return Object.values(selectedFilters.value).flat();
+  },
+  set: (value) => {
+    // This should not be called directly anymore
+    searchStore.setSelectedVisualAspects(value);
+  },
 });
+
+// Watch selectedFilters and update store
+watch(
+  selectedFilters,
+  (newFilters) => {
+    const flatFilters = Object.values(newFilters).flat();
+    searchStore.setSelectedVisualAspects(flatFilters);
+  },
+  { deep: true },
+);
 
 const selectedArtisticScores = computed({
   get: () => searchStore.selectedArtisticScores,
@@ -607,23 +682,6 @@ const collectionsOptions = computed(() => {
 
 const collectionsLoading = computed(() => collectionsStore.isLoading);
 
-const treeSelectOptions = computed(() => {
-  return searchStore.visualAspectsOptions.map((group) => ({
-    label: group.label,
-    key: group.key,
-    disabled: false,
-    checkable: false,
-    children: group.children.map((child) => ({
-      label: child.label,
-      key: child.value,
-      disabled: false,
-      checkable: true,
-    })),
-  }));
-});
-
-const artisticScoresOptions = computed(() => createArtisticScoresTreeOptions());
-
 // Active filters computed
 const hasActiveFilters = computed(() => {
   return (
@@ -639,6 +697,31 @@ const activeFiltersCount = computed(() => {
     searchStore.selectedVisualAspects.length +
     searchStore.selectedArtisticScores.length
   );
+});
+
+// Active filters badges for mini view
+const activeFiltersBadges = computed(() => {
+  const badges = [];
+
+  // Add visual aspects
+  searchStore.selectedVisualAspects.forEach((aspect) => {
+    badges.push(aspect);
+  });
+
+  // Add artistic scores
+  searchStore.selectedArtisticScores.forEach((score) => {
+    // Find the label for this score
+    let scoreLabel = score;
+    Object.values(artisticScores).forEach((group) => {
+      const criterion = group.criteria.find((c) => c.value === score);
+      if (criterion) {
+        scoreLabel = criterion.label;
+      }
+    });
+    badges.push(scoreLabel);
+  });
+
+  return badges;
 });
 
 // Events - only actions and tag search go to parent
@@ -671,12 +754,52 @@ function updateWithInsights(value) {
 // Handle hover for expanding toolbar when collapsed
 function handleMouseEnter() {
   if (props.isToolbarCollapsed) {
-    isHovering.value = true;
+    // Clear existing timer if any
+    if (hoverDebounceTimer.value) {
+      clearTimeout(hoverDebounceTimer.value);
+    }
+    // Set new debounced timer
+    hoverDebounceTimer.value = setTimeout(() => {
+      isHovering.value = true;
+      hoverDebounceTimer.value = null;
+    }, HOVER_DEBOUNCE_MS);
   }
 }
 
 function handleMouseLeave() {
-  isHovering.value = false;
+  // Clear debounce timer
+  if (hoverDebounceTimer.value) {
+    clearTimeout(hoverDebounceTimer.value);
+    hoverDebounceTimer.value = null;
+  }
+  // No colapsar si hay un select abierto
+  if (!hasOpenSelect.value) {
+    isHovering.value = false;
+  }
+}
+
+// Rastrear cuando un select se abre o cierra
+function handleSelectShowChange(show) {
+  hasOpenSelect.value = show;
+  // Si se abre un select, mantener el hover
+  if (show && props.isToolbarCollapsed) {
+    isHovering.value = true;
+  }
+}
+
+// Toggle artistic score
+function toggleArtisticScore(scoreValue) {
+  const current = selectedArtisticScores.value || [];
+  const index = current.indexOf(scoreValue);
+  if (index === -1) {
+    // Add score
+    searchStore.setSelectedArtisticScores([...current, scoreValue]);
+  } else {
+    // Remove score
+    const newScores = [...current];
+    newScores.splice(index, 1);
+    searchStore.setSelectedArtisticScores(newScores);
+  }
 }
 </script>
 
@@ -702,7 +825,7 @@ function handleMouseLeave() {
 }
 
 /* Hide mini bar when hovering to show full toolbar */
-.search-toolbar-wrapper:hover .search-toolbar-mini {
+.search-toolbar-wrapper.is-hovering .search-toolbar-mini {
   max-height: 0;
   overflow: hidden;
   padding: 0;
@@ -720,15 +843,27 @@ function handleMouseLeave() {
 }
 
 .mini-search-type,
-.mini-search-mode {
+.mini-search-mode,
+.mini-content :deep(.n-tag) {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 4px 8px;
-  border-radius: 6px;
-  background-color: rgba(96, 165, 250, 0.1);
-  color: #60a5fa;
+  border-radius: 12px;
   font-weight: 500;
+  font-size: 12px;
+}
+
+.mini-search-type,
+.mini-search-mode {
+  background-color: rgba(96, 165, 250, 0.1);
+  color: var(--info-color);
+}
+
+/* Purple color for filter tags */
+.mini-content :deep(.n-tag) {
+  background-color: rgba(168, 85, 247, 0.1) !important;
+  color: var(--secondary-color) !important;
 }
 
 .mini-divider {
@@ -763,7 +898,7 @@ function handleMouseLeave() {
 
 .search-toolbar-mini.is-hovering .mini-expand-hint {
   opacity: 1;
-  color: #60a5fa;
+  color: var(--info-color);
 }
 
 /* Search Toolbar */
@@ -790,7 +925,7 @@ function handleMouseLeave() {
 }
 
 /* When hovering over the mini bar, show full toolbar */
-.search-toolbar-wrapper:hover .search-toolbar.is-collapsed {
+.search-toolbar-wrapper.is-hovering .search-toolbar.is-collapsed {
   max-height: 1000px;
   overflow: visible;
   padding: 12px 24px;
@@ -931,6 +1066,7 @@ function handleMouseLeave() {
 /* Filters Section */
 .search-filters-section {
   margin-top: 10px;
+  /* margin-bottom: 12px; */
 }
 
 .more-filters-toggle {
@@ -973,15 +1109,6 @@ function handleMouseLeave() {
   gap: 4px;
 }
 
-.active-filters-indicator {
-  background-color: var(--primary-color);
-  color: white;
-  border-radius: 10px;
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 600;
-}
-
 .toggle-icon {
   transition: transform 0.2s ease;
 }
@@ -992,7 +1119,6 @@ function handleMouseLeave() {
 
 /* Filters Container */
 .filters-container {
-  margin-top: 5px;
   animation: slideDown 0.3s ease-out;
 }
 
@@ -1009,8 +1135,8 @@ function handleMouseLeave() {
 
 .filters-content {
   display: flex;
-  gap: 16px;
   flex-wrap: wrap;
+  margin-bottom: 16px;
 }
 
 .filter-compact-group {
@@ -1049,10 +1175,67 @@ function handleMouseLeave() {
   width: 100%;
 }
 
-/* Search Content */
-.search-content {
-  margin-top: 8px;
+/* Visual Aspects Filters - Grid layout like PhotosGridControls */
+.visual-aspects-filters-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px;
+  width: 100%;
 }
+
+/* Desktop: force single row */
+@media (min-width: 1200px) {
+  .visual-aspects-filters-container {
+    grid-template-columns: repeat(9, minmax(0, 1fr));
+  }
+}
+
+/* Tablet/Medium screens: flexible columns */
+@media (min-width: 768px) and (max-width: 1199px) {
+  .visual-aspects-filters-container {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+}
+
+/* Mobile: single column */
+@media (max-width: 767px) {
+  .visual-aspects-filters-container {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
+.visual-aspect-item {
+  min-width: 0;
+}
+
+.visual-aspect-select {
+  width: 100%;
+}
+
+/* Filter Section Headers */
+.filter-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  margin-top: 12px;
+}
+
+.filter-section-title {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+/* Artistic Scores Filters - Button row */
+.artistic-scores-filters-container {
+  width: 100%;
+}
+
+/* Search Content */
+/* .search-content {
+  margin-top: 16px;
+} */
 
 .semantic-search-section,
 .tags-search-section {

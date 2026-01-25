@@ -1496,3 +1496,152 @@
   box-shadow: none;
   transform: none;
 }
+/* ==========================================================================
+   FILTER CONTROLS - SHARED STYLES
+   ========================================================================== */
+
+/* Section Headers for Filters/Controls */
+.filter-controls-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  user-select: none;
+}
+
+.filter-controls-section-header:hover {
+  background-color: var(--bg-hover);
+}
+
+.filter-controls-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-controls-section-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.filter-controls-section-icon {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.filter-controls-active-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--primary-color);
+  background-color: var(--primary-color-hover);
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+.filter-controls-toggle-icon {
+  color: var(--text-primary);
+  transition: transform 0.3s ease;
+}
+
+.filter-controls-toggle-icon.rotated {
+  transform: rotate(180deg);
+}
+
+/* Filters Container Animation */
+.filter-controls-tab-container {
+  animation: filterControlsSlideDown 0.3s ease-out;
+}
+
+@keyframes filterControlsSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Filter Rows - Responsive grid layout */
+.filter-controls-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px;
+  padding: 4px 12px 8px 12px;
+}
+
+/* Desktop: force single row */
+@media (min-width: 1200px) {
+  .filter-controls-row {
+    grid-template-columns: repeat(9, minmax(0, 1fr));
+  }
+}
+
+/* Tablet/Medium screens: flexible columns */
+@media (min-width: 768px) and (max-width: 1199px) {
+  .filter-controls-row {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+}
+
+/* Mobile: single column */
+@media (max-width: 767px) {
+  .filter-controls-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
+.filter-controls-item {
+  min-width: 0;
+}
+
+.filter-controls-select {
+  width: 100%;
+}
+
+/* Criteria/Scores Button Rows */
+.filter-controls-criteria-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  // padding-top: 4px;
+}
+
+/* Desktop: single row */
+@media (min-width: 1024px) {
+  .filter-controls-criteria-row {
+    flex-wrap: nowrap;
+  }
+}
+
+/* Tablet and below: wrap */
+@media (max-width: 1023px) {
+  .filter-controls-criteria-row {
+    flex-wrap: wrap;
+  }
+}
+
+.filter-controls-criterion-button {
+  flex: 1 1 auto;
+  min-width: 120px;
+  transition: all 0.2s ease;
+  font-size: 13px;
+}
+
+.filter-controls-criterion-button:hover {
+  transform: translateY(-1px);
+}
+
+/* Mobile: adjust button sizing */
+@media (max-width: 767px) {
+  .filter-controls-criterion-button {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+  }
+}
