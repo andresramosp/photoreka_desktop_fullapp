@@ -1,11 +1,5 @@
 <template>
   <div class="dashboard-container view-container">
-    <!-- Mobile Welcome Banner -->
-    <MobileWelcomeBanner
-      :show="shouldShowMobileWelcome"
-      @close="dismissMobileWelcome"
-    />
-
     <!-- Welcome Section -->
     <div class="welcome-section">
       <h1 class="welcome-title">
@@ -367,9 +361,8 @@ import { useSeriesStore } from "@/stores/series.js";
 import { useUserStore } from "@/stores/userStore.js";
 import { api } from "@/utils/axios.js"; // Needed for photo insight API call
 import { useMessage } from "naive-ui";
-import MobileWelcomeBanner from "@/components/MobileWelcomeBanner.vue";
 import CanvasPreview from "@/components/CanvasPreview.vue";
-import { useMobileWelcome } from "@/composables/useMobileWelcome";
+import { isMobileDevice } from "@/utils/utils.js";
 
 // Import @vicons icons from ionicons5 for reliability
 import {
@@ -394,10 +387,6 @@ const collectionsStore = useCollectionsStore();
 const seriesStore = useSeriesStore();
 const userStore = useUserStore();
 const message = useMessage();
-
-// Mobile welcome banner
-const { shouldShowMobileWelcome, dismissMobileWelcome, isMobileDevice } =
-  useMobileWelcome();
 
 // Check if in mobile limited mode
 const isMobileLimitedMode = computed(() => isMobileDevice());

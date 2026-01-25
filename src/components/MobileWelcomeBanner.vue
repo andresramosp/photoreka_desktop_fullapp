@@ -25,9 +25,12 @@ import {
   MapOutline,
   CubeOutline,
   PhonePortrait as MobileIcon,
+  ListOutline,
 } from "@vicons/ionicons5";
+import { isMobileDevice } from "@/utils/utils.js";
 
 import AppLogo from "./AppLogo.vue";
+import { Workspace } from "@vicons/carbon";
 
 const notification = useNotification();
 let closeNotification = ref<NotificationReactive | null>(null);
@@ -55,9 +58,9 @@ function showMobileWelcome() {
         // Logo
         h("div", { style: { marginBottom: "0px", textAlign: "center" } }, [
           h(AppLogo, {
-            height: 65,
+            height: 40,
             layout: "horizontal",
-            withClaim: true,
+            withClaim: false,
           }),
         ]),
 
@@ -73,31 +76,31 @@ function showMobileWelcome() {
               style: {
                 fontSize: "11px",
                 opacity: "0.85",
-                marginTop: "10px",
+                marginTop: "15px",
                 marginLeft: "0px",
+                marginBottom: "8px",
               },
             },
             {
               icon: () =>
                 h(NIcon, { size: 13 }, { default: () => h(MobileIcon) }),
-              default: () => "Mobile Edition",
+              default: () => "Mobile Mode",
             },
           ),
         ]),
 
         // Subtitle
-        // h(
-        //   "p",
-        //   {
-        //     style: {
-        //       textAlign: "center",
-        //       opacity: "0.75",
-        //       fontSize: "13px",
-        //       marginBottom: "14px",
-        //     },
-        //   },
-        //   "Your photo archive, always with you.",
-        // ),
+        h(
+          "p",
+          {
+            style: {
+              opacity: "1",
+              fontSize: "13px",
+              color: "var(--text-primary)",
+            },
+          },
+          "📱 Your photo archive, always with you:",
+        ),
 
         // Features
         h(
@@ -105,7 +108,7 @@ function showMobileWelcome() {
           {
             style: {
               paddingLeft: "0",
-              marginTop: "6px",
+              marginTop: "16px",
               listStyle: "none",
             },
           },
@@ -165,12 +168,65 @@ function showMobileWelcome() {
           "p",
           {
             style: {
-              marginTop: "12px",
-              fontSize: "12px",
-              textAlign: "center",
+              opacity: "1",
+              fontSize: "13px",
+              marginBottom: "14px",
+              color: "var(--text-primary)",
             },
           },
-          h("i", "Advanced tools are available on desktop."),
+          "🖥️ More advanced tools available on desktop:",
+        ),
+
+        // Features
+        h(
+          "ul",
+          {
+            style: {
+              paddingLeft: "0",
+              marginTop: "16px",
+              listStyle: "none",
+            },
+          },
+          [
+            h(
+              "li",
+              {
+                style: {
+                  marginBottom: "8px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                },
+              },
+              [renderIcon(CubeOutline)(), h("span", "3D Atlas exploration")],
+            ),
+
+            h(
+              "li",
+              {
+                style: {
+                  marginBottom: "8px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                },
+              },
+              [renderIcon(Workspace)(), h("span", "Interactive Canvas")],
+            ),
+
+            h(
+              "li",
+              {
+                style: {
+                  marginBottom: "4px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                },
+              },
+              [renderIcon(ListOutline)(), h("span", "Series creation")],
+            ),
+          ],
         ),
 
         // CTA
@@ -195,9 +251,18 @@ function showMobileWelcome() {
 }
 
 onMounted(() => {
-  // Solo mostrar si el usuario no ha hecho clic en "Got it!" antes
+  // Usar window.location.pathname que siempre tiene el valor correcto
+  const currentPath = window.location.pathname;
+
+  // No mostrar en rutas de configuración de perfil o plan
+  const excludedPaths = ["/profile-setup", "/storage-plan-setup"];
+  if (excludedPaths.includes(currentPath)) {
+    return;
+  }
+
+  // Solo mostrar si es dispositivo móvil y el usuario no ha hecho clic en "Got it!" antes
   const hasBeenDismissed = localStorage.getItem(STORAGE_KEY);
-  if (!hasBeenDismissed) {
+  if (!hasBeenDismissed && isMobileDevice()) {
     showMobileWelcome();
   }
 });

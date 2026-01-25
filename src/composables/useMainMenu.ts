@@ -150,12 +150,7 @@ export function useMainMenu() {
         disabled: isBlocked.value,
         icon: renderIcon(SearchIcon),
       },
-      {
-        label: () => h("span", { class: "second-level-menu-item" }, "3D Atlas"),
-        key: "atlas",
-        disabled: isBlocked.value,
-        icon: renderIcon(CubeIcon),
-      },
+
       {
         label: () => h("span", { class: "second-level-menu-item" }, "Report"),
         key: "portfolio-report",
@@ -166,8 +161,7 @@ export function useMainMenu() {
 
     // Only add 3D Atlas, World Map, and Report on desktop
     if (!isMobileLimitedMode.value) {
-      children
-        .push
+      children.push(
         // {
         //   label: () =>
         //     h("span", { class: "second-level-menu-item" }, "World Map"),
@@ -175,7 +169,14 @@ export function useMainMenu() {
         //   disabled: isBlocked.value,
         //   icon: renderIcon(MapIcon),
         // },
-        ();
+        {
+          label: () =>
+            h("span", { class: "second-level-menu-item" }, "3D Atlas"),
+          key: "atlas",
+          disabled: isBlocked.value,
+          icon: renderIcon(CubeIcon),
+        },
+      );
     }
 
     return {

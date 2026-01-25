@@ -3,7 +3,11 @@
     <div class="profile-container">
       <div class="profile-content">
         <div class="profile-header">
-          <AppLogo layout="horizontal" :with-claim="false" :height="80" />
+          <AppLogo
+            layout="horizontal"
+            :with-claim="false"
+            :height="isMobile ? 45 : 70"
+          />
         </div>
 
         <div class="profile-form-container">
@@ -25,7 +29,10 @@
 </template>
 
 <script setup lang="ts">
+import { useIsMobile } from "@/composables/useIsMobile.js";
+
 import AppLogo from "./AppLogo.vue";
+const { isMobile } = useIsMobile();
 </script>
 
 <style scoped>
@@ -160,7 +167,7 @@ import AppLogo from "./AppLogo.vue";
   }
 
   .profile-header {
-    margin-bottom: 20px;
+    margin-bottom: 32px;
   }
 }
 
@@ -178,7 +185,7 @@ import AppLogo from "./AppLogo.vue";
   }
 
   .profile-header {
-    margin-bottom: 16px;
+    margin-bottom: 32px;
   }
 }
 

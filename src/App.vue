@@ -120,6 +120,9 @@
             ]"
             :count="120"
           />
+
+          <!-- Mobile Welcome Banner -->
+          <MobileWelcomeBanner />
         </template>
       </n-message-provider>
     </n-notification-provider>
@@ -139,6 +142,7 @@ import { useSeriesStore } from "@/stores/series.js";
 import ConfettiEffect from "./components/ConfettiEffect.vue";
 import AppInitLoader from "./components/AppInitLoader.vue";
 import { useThemeInit } from "@/composables/useTheme.js";
+import MobileWelcomeBanner from "./components/MobileWelcomeBanner.vue";
 
 const route = useRoute();
 const router = useRouter();

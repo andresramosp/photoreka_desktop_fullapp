@@ -97,7 +97,6 @@ const completeProfile = async () => {
     const result = await userStore.updateProfile(profilePayload.value);
 
     if (result.success) {
-      message.success("Profile preferences saved! Now let's sync your photos.");
       router.push({ name: "sync-area", hash: "#upload" });
     } else {
       message.error(result.error || "Error saving profile preferences.");
