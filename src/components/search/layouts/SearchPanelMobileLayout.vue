@@ -517,7 +517,6 @@ function handleReset() {
   position: sticky;
   top: 0;
   z-index: 10;
-  background-color: var(--bg-container);
 }
 
 .mobile-search-row {
