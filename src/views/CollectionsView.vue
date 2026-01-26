@@ -23,7 +23,8 @@
               </template>
               Back to Collections
             </n-button>
-            <div style="display: flex; gap: 12px">
+            <!-- Desktop buttons -->
+            <div class="header-actions-buttons desktop-actions">
               <n-button
                 type="primary"
                 ghost
@@ -55,6 +56,22 @@
                 </template>
                 Delete Collection
               </n-button>
+            </div>
+            <!-- Mobile overflow menu -->
+            <div class="mobile-actions">
+              <n-dropdown
+                trigger="click"
+                :options="dropdownOptions"
+                @select="handleDropdownSelect"
+              >
+                <n-button text class="overflow-menu-button">
+                  <template #icon>
+                    <n-icon size="24">
+                      <EllipsisVertical />
+                    </n-icon>
+                  </template>
+                </n-button>
+              </n-dropdown>
             </div>
           </div>
           <div class="title-row">
@@ -366,7 +383,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from "vue";
+import { ref, onMounted, computed, watch, h } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 defineOptions({
@@ -380,6 +397,7 @@ import {
   NFormItem,
   NInput,
   NSpin,
+  NDropdown,
   useMessage,
 } from "naive-ui";
 import {
@@ -388,6 +406,7 @@ import {
   CreateOutline,
   CheckmarkOutline,
   CloseOutline,
+  EllipsisVertical,
 } from "@vicons/ionicons5";
 import PhotosDialog from "@/components/PhotosDialog.vue";
 import PhotosGrid from "@/components/PhotosGrid.vue";
@@ -428,6 +447,39 @@ const formRules = {
     message: "Please enter a name",
     trigger: "blur",
   },
+};
+
+// Dropdown options for mobile
+const dropdownOptions = [
+  {
+    label: "Add Photos",
+    key: "add-photos",
+    icon: () => h(NIcon, null, { default: () => h(AddOutline) }),
+  },
+  {
+    label: "Delete Collection",
+    key: "delete-collection",
+    icon: () =>
+      h(NIcon, null, {
+        default: () =>
+          h(
+            "svg",
+            { viewBox: "0 0 24 24" },
+            h("path", {
+              fill: "currentColor",
+              d: "M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z",
+            }),
+          ),
+      }),
+  },
+];
+
+const handleDropdownSelect = (key) => {
+  if (key === "add-photos") {
+    showAddPhotosDialog();
+  } else if (key === "delete-collection") {
+    showDeleteConfirmation();
+  }
 };
 
 // Computed para saber si se puede mostrar la grid de colecciones
@@ -829,6 +881,29 @@ watch(
   padding: var(--spacing-md) var(--spacing-xl);
 }
 
+/* Header Actions Buttons */
+.header-actions-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.desktop-actions {
+  display: flex;
+}
+
+.mobile-actions {
+  display: none;
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 10;
+}
+
+.overflow-menu-button {
+  color: var(--text-primary);
+  padding: var(--spacing-sm);
+}
+
 /* Mobile Responsive */
 @media (max-width: 768px) {
   .collections-view {
@@ -847,6 +922,36 @@ watch(
   .photo-item {
     width: 50px;
     height: 50px;
+  }
+
+  /* Show mobile menu, hide desktop buttons */
+  .desktop-actions {
+    display: none;
+  }
+
+  .mobile-actions {
+    display: flex;
+  }
+
+  .detail-header {
+    position: relative;
+  }
+
+  .detail-back-button {
+    font-size: var(--font-size-sm);
+  }
+
+  /* Make title and description more compact on mobile */
+  .detail-title {
+    font-size: var(--font-size-2xl);
+  }
+
+  .title-edit :deep(.n-input__input) {
+    font-size: var(--font-size-2xl);
+  }
+
+  .detail-description {
+    font-size: var(--font-size-sm);
   }
 }
 </style>
