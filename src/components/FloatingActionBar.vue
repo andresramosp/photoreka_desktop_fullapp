@@ -185,6 +185,23 @@ const handleClearSelection = () => {
     0 0 0 1px rgba(255, 255, 255, 0.1);
 }
 
+@media (max-width: 768px) {
+  .floating-action-bar {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    transform: none;
+    width: 100%;
+    border-radius: 16px 16px 0 0;
+    padding: 12px 16px;
+    margin: 0;
+    box-shadow:
+      0 -8px 32px rgba(0, 0, 0, 0.4),
+      0 0 0 1px rgba(255, 255, 255, 0.1);
+  }
+}
+
 .floating-action-content {
   display: flex;
   align-items: center;
@@ -239,17 +256,20 @@ const handleClearSelection = () => {
   transform: translateX(-50%) translateY(20px);
 }
 
-/* Responsive adjustments for floating bar */
 @media (max-width: 768px) {
-  .floating-action-bar {
-    top: 75px;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 8px 16px;
-    border-radius: 12px;
-    max-width: 95%;
+  .floating-bar-enter-from {
+    opacity: 0;
+    transform: translateY(20px);
   }
 
+  .floating-bar-leave-to {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+}
+
+/* Responsive adjustments for floating bar */
+@media (max-width: 768px) {
   .floating-action-content {
     gap: 12px;
   }
@@ -271,9 +291,7 @@ const handleClearSelection = () => {
 
 @media (max-width: 480px) {
   .floating-action-bar {
-    top: 75px;
-    padding: 6px 12px;
-    max-width: 96%;
+    padding: 8px 12px;
   }
 
   .floating-action-content {

@@ -256,7 +256,7 @@ onMounted(() => {
 
   // No mostrar en rutas de configuración de perfil o plan
   const includedPaths = ["/dashboard", "/workspace", "/sync-area"];
-  debugger;
+
   if (!includedPaths.includes(currentPath)) {
     return;
   }
