@@ -173,15 +173,27 @@ const { isMobile } = useIsMobile();
 
 @media (max-width: 480px) {
   .profile-layout {
-    padding: 12px;
+    padding: 0;
+    width: 100vw;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .profile-container {
+    min-height: 100vh;
+    max-width: 100%;
+    width: 100%;
   }
 
   .profile-content {
     padding: 24px 20px;
-    border-radius: 8px;
+    padding-top: 24px;
+    border-radius: 0;
     border: none;
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
-    max-height: calc(100vh - 24px);
+    box-shadow: none;
+    width: 100%;
+    min-height: 100vh;
+    box-sizing: border-box;
   }
 
   .profile-header {

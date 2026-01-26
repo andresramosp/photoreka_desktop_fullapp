@@ -99,7 +99,7 @@ function showMobileWelcome() {
               color: "var(--text-primary)",
             },
           },
-          "📱 Your photo archive, always with you:",
+          "📱 Use mobile mode for photo management:",
         ),
 
         // Features
@@ -255,8 +255,9 @@ onMounted(() => {
   const currentPath = window.location.pathname;
 
   // No mostrar en rutas de configuración de perfil o plan
-  const excludedPaths = ["/profile-setup", "/storage-plan-setup"];
-  if (excludedPaths.includes(currentPath)) {
+  const includedPaths = ["/dashboard", "/workspace", "/sync-area"];
+  debugger;
+  if (!includedPaths.includes(currentPath)) {
     return;
   }
 

@@ -236,9 +236,9 @@ const handleSubmit = async () => {
     );
 
     if (result.success) {
-      message.success(
-        "Account created successfully! Let's set up your profile.",
-      );
+      // message.success(
+      //   "Account created successfully! Let's set up your profile.",
+      // );
       router.push("/profile-setup");
     } else {
       message.error(result.error || "Error creating account");
@@ -261,7 +261,7 @@ const goToTerms = () => {
 
 .form-header {
   text-align: center;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   font-size: 16px;
   color: var(--text-primary);
   font-weight: 400;
@@ -269,7 +269,7 @@ const goToTerms = () => {
 }
 
 .form-item {
-  margin-bottom: 15px;
+  margin-bottom: 12px;
 }
 
 .form-item :deep(.n-form-item-feedback-wrapper) {
@@ -328,7 +328,7 @@ const goToTerms = () => {
   border-radius: 6px;
   font-weight: 600;
   font-size: 14px;
-  margin-bottom: 10px;
+  margin-bottom: 0;
 }
 
 .submit-button:disabled {

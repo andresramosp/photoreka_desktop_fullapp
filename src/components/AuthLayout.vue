@@ -8,8 +8,10 @@
           </router-link>
         </div>
 
-        <div class="auth-form-container">
-          <slot />
+        <div class="auth-form-wrapper">
+          <div class="auth-form-container">
+            <slot />
+          </div>
         </div>
 
         <div class="auth-footer">
@@ -85,14 +87,19 @@ import AppLogo from "./AppLogo.vue";
   font-weight: 400;
 }
 
-.auth-form-container {
+.auth-form-wrapper {
   margin-bottom: 12px;
+}
+
+.auth-form-container {
+  /* Contenedor del formulario */
 }
 
 .auth-footer {
   text-align: center;
   padding-top: 16px;
   border-top: 1px solid #2c2c32;
+  flex-shrink: 0;
 }
 
 .footer-text {
@@ -164,23 +171,58 @@ import AppLogo from "./AppLogo.vue";
 @media (max-width: 480px) {
   .auth-layout {
     padding: 0;
+    align-items: stretch;
+  }
+
+  .auth-container {
+    max-width: 100%;
+    height: 100vh;
+    height: 100dvh; /* Dynamic viewport height para móviles */
   }
 
   .auth-content {
-    padding: 24px 20px;
-    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 24px 20px 20px 20px;
+    border-radius: 0;
     border: none;
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+    box-shadow: none;
+    animation: none !important;
   }
 
   .auth-header {
+    flex-shrink: 0;
+    margin-bottom: 20px;
+    margin-top: 16px;
+  }
+
+  .logo-link :deep(svg),
+  .logo-link :deep(img) {
+    height: 65px !important;
+    width: auto;
+  }
+
+  .auth-form-wrapper {
+    flex: 1;
+    min-height: 0;
     margin-bottom: 16px;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .auth-footer {
+    flex-shrink: 0;
+    padding-top: 16px;
+    padding-bottom: 16px;
   }
 }
 
-/* Animation for content entrance */
-.auth-content {
-  animation: slideUp 0.6s ease-out;
+/* Animation for content entrance - only desktop */
+@media (min-width: 481px) {
+  .auth-content {
+    animation: slideUp 0.6s ease-out;
+  }
 }
 
 @keyframes slideUp {

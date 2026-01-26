@@ -125,12 +125,17 @@ watch(() => route.query.mode, setModeFromQuery);
 .tab-content {
   position: relative;
   overflow: hidden;
+  min-height: 300px;
 }
 
 /* Transition animations */
 .slide-enter-active,
 .slide-leave-active {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: absolute;
+  width: 100%;
+  left: 0;
+  top: 0;
 }
 
 .slide-enter-from {
@@ -158,6 +163,18 @@ watch(() => route.query.mode, setModeFromQuery);
   .tab-button {
     padding: 10px 16px;
     font-size: 13px;
+  }
+
+  .tab-content {
+    /* En mobile, el contenido se ajusta dinámicamente sin altura fija */
+    overflow: visible;
+    min-height: 0;
+  }
+
+  .slide-enter-active,
+  .slide-leave-active {
+    /* En mobile usamos posición relativa para evitar saltos */
+    position: relative;
   }
 }
 </style>

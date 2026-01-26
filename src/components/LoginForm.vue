@@ -162,7 +162,7 @@ export default {
 
 .form-header {
   text-align: center;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   font-size: 16px;
   color: var(--text-secondary);
   font-weight: 400;
@@ -170,7 +170,7 @@ export default {
 }
 
 .form-item {
-  margin-bottom: 15px;
+  margin-bottom: 12px;
 }
 
 .form-item :deep(.n-form-item-feedback-wrapper) {
@@ -225,7 +225,7 @@ export default {
   border-radius: 6px;
   font-weight: 600;
   font-size: 14px;
-  margin-bottom: 10px;
+  margin-bottom: 0;
 }
 
 .email-divider {
