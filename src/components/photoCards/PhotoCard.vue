@@ -6,8 +6,12 @@
       'curation-mode': mode === 'curation',
       'selection-mode': mode === 'selection',
       'is-new': props.isNew,
+      'show-hover': showHoverOverlay,
     }"
-    @click="mode !== 'curation' && toggleSelection()"
+    @click="handleClick"
+    @touchstart="handleTouchStart"
+    @touchend="handleTouchEnd"
+    @touchcancel="handleTouchCancel"
     @mouseenter="handleMouseEnter"
     @mouseleave="handleMouseLeave"
     :style="mode === 'curation' ? 'cursor: default;' : ''"
@@ -112,7 +116,7 @@
 
       <!-- Action Buttons (center overlay or top-left if reasoning exists) -->
       <div
-        v-if="showInfoButton"
+        v-if="showInfoButton && !isSelectionModeActive"
         class="action-buttons-overlay"
         :class="{ 'has-reasoning': photo.reasoning }"
       >
@@ -226,8 +230,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, onUnmounted } from "vue";
 import { NIcon, NTooltip, NButton } from "naive-ui";
+import { useMobilePhotoSelection } from "@/composables/useMobilePhotoSelection";
 
 // Import @vicons icons from ionicons5 for reliability
 import {
@@ -331,6 +336,18 @@ const shouldBlur = computed(() => showAnalyzing.value);
 
 const emit = defineEmits<Emits>();
 
+// Mobile selection composable
+const {
+  isSelectionModeActive,
+  showHoverOverlay,
+  isMobile,
+  handleTouchStart: baseTouchStart,
+  handleTouchEnd: baseTouchEnd,
+  handleTouchCancel: baseTouchCancel,
+  handleClick: baseHandleClick,
+  cleanup,
+} = useMobilePhotoSelection();
+
 const showInfo = () => {
   emit("info", props.photo);
 };
@@ -428,6 +445,27 @@ const tagsToDisplay = computed(() => {
   return [];
 });
 
+// Event handlers for mobile touch and click
+const handleTouchStart = (event: TouchEvent) => {
+  if (props.mode === "curation") return;
+  baseTouchStart(event, props.photo.id, (id) => emit("select", id));
+};
+
+const handleTouchEnd = (event: TouchEvent) => {
+  if (props.mode === "curation") return;
+  baseTouchEnd(event, props.photo.id, (id) => emit("select", id), showInfo);
+};
+
+const handleTouchCancel = () => {
+  if (props.mode === "curation") return;
+  baseTouchCancel();
+};
+
+const handleClick = (event: MouseEvent) => {
+  if (props.mode === "curation") return;
+  baseHandleClick(event, props.photo.id, (id) => emit("select", id));
+};
+
 const toggleSelection = () => {
   if (props.mode === "curation") return;
   emit("select", props.photo.id);
@@ -472,6 +510,11 @@ const handleMouseLeave = () => {
   showTooltip.value = false;
   showHoverContent.value = false;
 };
+
+// Cleanup on unmount
+onUnmounted(() => {
+  cleanup();
+});
 </script>
 
 <style scoped>
@@ -489,10 +532,10 @@ const handleMouseLeave = () => {
   background-color: var(--bg-surface);
 }
 
-/* .photo-card:hover {
-  transform: translateY(-2px);
+.photo-card:hover,
+.photo-card.show-hover {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-} */
+}
 
 .photo-card.selected {
   border-color: #8b5cf6;

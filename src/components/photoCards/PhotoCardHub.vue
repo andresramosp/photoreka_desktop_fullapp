@@ -5,8 +5,12 @@
       selected: isSelected,
       duplicate: photo.isDuplicate,
       'with-footer': showFooter,
+      'show-hover': showHoverOverlay,
     }"
-    @click="toggleSelection()"
+    @click="handleClick"
+    @touchstart="handleTouchStart"
+    @touchend="handleTouchEnd"
+    @touchcancel="handleTouchCancel"
     :style="{
       cursor: 'pointer',
     }"
@@ -27,7 +31,8 @@
         v-if="
           !photo.isCheckingDuplicates &&
           !isUploading &&
-          (photo.status === 'processed' || photo.status === 'preprocessed')
+          (photo.status === 'processed' || photo.status === 'preprocessed') &&
+          !isSelectionModeActive
         "
         class="action-buttons-overlay"
       >
@@ -230,8 +235,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onUnmounted } from "vue";
 import { NIcon, NSpin, NTooltip } from "naive-ui";
+import { useMobilePhotoSelection } from "@/composables/useMobilePhotoSelection";
 
 // Import @vicons icons from ionicons5 for reliability
 import {
@@ -301,6 +307,18 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<Emits>();
 const { getScoreBgColor } = useArtisticScores();
 
+// Mobile selection composable
+const {
+  isSelectionModeActive,
+  showHoverOverlay,
+  isMobile,
+  handleTouchStart: baseTouchStart,
+  handleTouchEnd: baseTouchEnd,
+  handleTouchCancel: baseTouchCancel,
+  handleClick: baseHandleClick,
+  cleanup,
+} = useMobilePhotoSelection();
+
 // Utilidad para limpiar extensión y acortar nombre
 function removeExtension(filename: string): string {
   return filename.replace(/\.[^.]+$/, "");
@@ -321,8 +339,21 @@ const isSelected = computed(() => props.selected);
 const imageLoaded = ref(false);
 const imageError = ref(false);
 
-const toggleSelection = () => {
-  emit("select", props.photo.id);
+// Event handlers for mobile touch
+const handleTouchStart = (event: TouchEvent) => {
+  baseTouchStart(event, props.photo.id, (id) => emit("select", id));
+};
+
+const handleTouchEnd = (event: TouchEvent) => {
+  baseTouchEnd(event, props.photo.id, (id) => emit("select", id), showInfo);
+};
+
+const handleTouchCancel = () => {
+  baseTouchCancel();
+};
+
+const handleClick = (event: MouseEvent) => {
+  baseHandleClick(event, props.photo.id, (id) => emit("select", id));
 };
 
 const showInfo = () => {
@@ -348,6 +379,11 @@ const onImageLoad = () => {
 const onImageError = () => {
   imageError.value = true;
 };
+
+// Cleanup on unmount
+onUnmounted(() => {
+  cleanup();
+});
 </script>
 
 <style scoped>
@@ -413,7 +449,8 @@ const onImageError = () => {
   gap: 8px;
 }
 
-.photo-card-info:hover .action-buttons-overlay {
+.photo-card-info:hover .action-buttons-overlay,
+.photo-card-info.show-hover .action-buttons-overlay {
   opacity: 1;
 }
 

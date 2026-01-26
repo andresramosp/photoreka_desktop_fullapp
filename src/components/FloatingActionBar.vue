@@ -11,7 +11,7 @@
           <n-button
             text
             size="small"
-            @click="$emit('clear-selection')"
+            @click="handleClearSelection"
             class="clear-selection-btn"
             title="Clear selection"
           >
@@ -121,6 +121,10 @@
 import { NButton, NIcon, NTooltip } from "naive-ui";
 import { AlbumsOutline, CloudDownloadOutline } from "@vicons/ionicons5";
 import { MagicWand } from "@vicons/carbon";
+import { useMobilePhotoSelection } from "@/composables/useMobilePhotoSelection";
+
+// Get mobile selection composable to reset mode
+const { exitSelectionMode } = useMobilePhotoSelection();
 
 defineProps({
   selectedCount: {
@@ -149,13 +153,19 @@ defineProps({
   },
 });
 
-defineEmits([
+const emit = defineEmits([
   "clear-selection",
   "delete",
   "download",
   "add-to-collection",
   "move-to-tool",
 ]);
+
+// Handler for clear selection that also exits mobile selection mode
+const handleClearSelection = () => {
+  exitSelectionMode();
+  emit("clear-selection");
+};
 </script>
 
 <style scoped>
