@@ -40,7 +40,7 @@
       </div>
 
       <!-- Visual Aspects Section -->
-      <VisualAspectsReport :photos="photosStore.photos" />
+      <VisualAspectsReportNew :photos="photosStore.photos" />
 
       <!-- Artistic Scores Section -->
       <ArtisticScoresReport :photos="photosStore.photos" />
@@ -252,6 +252,7 @@ import {
   TrendingUpOutline as TrendingUpIcon,
   WarningOutline as WarningIcon,
 } from "@vicons/ionicons5";
+import VisualAspectsReportNew from "@/components/report/VisualAspectsReportNew.vue";
 
 const photosStore = usePhotosStore();
 const message = useMessage();
