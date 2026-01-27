@@ -571,7 +571,7 @@
               <div class="control-icon-group">
                 <span class="control-icon-text">🖱️</span>
                 <span class="control-text"
-                  >Right-click on stage to activate camera controls</span
+                  >Right-click on stage to activate camera</span
                 >
               </div>
             </div>
@@ -1446,7 +1446,8 @@ const handleSelectByClickChange = (value) => {
   font-size: 10px;
   font-weight: 600;
   font-family: "Segoe UI", system-ui, sans-serif;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15),
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.15),
     inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
   text-shadow: 0 0.5px 0.5px rgba(0, 0, 0, 0.25);
   flex-shrink: 0;

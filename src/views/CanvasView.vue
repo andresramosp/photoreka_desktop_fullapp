@@ -34,7 +34,7 @@
               y: selectionRect.y,
               width: selectionRect.width,
               height: selectionRect.height,
-              stroke: primaryColor,
+              stroke: accentColor,
               strokeWidth: 2,
               fill: 'rgba(37, 99, 235, 0.1)',
               dash: [5, 3],
@@ -207,7 +207,7 @@
                     photo.hovered
                   "
                   :photo="photo"
-                  :fill="primaryColor"
+                  :fill="accentColor"
                   icon="+"
                   font-size="30"
                   @click="handleAddPhotoFromPhoto"
@@ -798,7 +798,7 @@ const canvasTools = [
     description: "Navigate to photo in 3D space",
     icon: "CubeOutline",
     route: "/atlas",
-    singlePhotoOnly: true, // This tool only works with a single photo
+    singlePhotoOnly: false, // This tool only works with a single photo
   },
 ];
 
@@ -910,8 +910,8 @@ const selectedCollectionFilter = ref(null);
 
 // Dropdown options with SVG icons
 
-const primaryColor = getComputedStyle(document.documentElement)
-  .getPropertyValue("--primary-color")
+const accentColor = getComputedStyle(document.documentElement)
+  .getPropertyValue("--accent-color")
   .trim();
 
 const {
@@ -1181,9 +1181,9 @@ const getPhotoStrokeColor = (photo) => {
       ? "rgba(255, 165, 0, 0.8)"
       : "rgba(128, 128, 128, 0.4)";
   if (photo.inTrash) return "rgba(250, 11, 11, 0.5)";
-  if (photo.selected) return primaryColor;
+  if (photo.selected) return accentColor;
   if (photo.isNew) return "#22d3ee";
-  // if (photo.hovered) return primaryColor;
+  // if (photo.hovered) return accentColor;
   return "gray";
 };
 

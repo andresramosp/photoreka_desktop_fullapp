@@ -1,28 +1,31 @@
 <template>
-  <div class="threed-view" :class="{ 'catalog-mode': isCatalogMode }">
-    <!-- Error state -->
+  <n-message-provider placement="bottom">
+    <div class="threed-view" :class="{ 'catalog-mode': isCatalogMode }">
+      <!-- Error state -->
 
-    <!-- 3D Visualization -->
-    <Photos3D
-      class="photos-3d-component"
-      :catalog-user-id="catalogUserId"
-      :is-playground="isPlayground"
-    />
+      <!-- 3D Visualization -->
+      <Photos3D
+        class="photos-3d-component"
+        :catalog-user-id="catalogUserId"
+        :is-playground="isPlayground"
+      />
 
-    <!-- Playground Logo - Top Left -->
-    <div v-if="isPlayground" class="playground-logo">
-      <div class="logo-container-playground">
-        <a href="/" target="_blank" rel="noopener noreferrer">
-          <AppLogo layout="icon" :height="50" />
-        </a>
+      <!-- Playground Logo - Top Left -->
+      <div v-if="isPlayground" class="playground-logo">
+        <div class="logo-container-playground">
+          <a href="/" target="_blank" rel="noopener noreferrer">
+            <AppLogo layout="icon" :height="50" />
+          </a>
+        </div>
       </div>
     </div>
-  </div>
+  </n-message-provider>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
+import { NMessageProvider } from "naive-ui";
 import { usePhotosStore } from "@/stores/photos.js";
 import Photos3D from "@/components/Photos3D.vue";
 import AppLogo from "@/components/AppLogo.vue";
@@ -46,7 +49,7 @@ const hasPhotos = computed(() => {
     (photo) =>
       photo.status === "processed" ||
       photo.status === "preprocessed" ||
-      photo.status === "uploaded"
+      photo.status === "uploaded",
   );
   return photos.length > 0;
 });
@@ -120,7 +123,9 @@ onMounted(async () => {
   border-radius: 6px;
   font-size: 1em;
   cursor: pointer;
-  transition: background-color 0.2s, transform 0.1s;
+  transition:
+    background-color 0.2s,
+    transform 0.1s;
 }
 
 .retry-btn:hover {
@@ -168,7 +173,9 @@ onMounted(async () => {
   padding: 12px 24px;
   border-radius: 6px;
   font-size: 1em;
-  transition: background-color 0.2s, transform 0.1s;
+  transition:
+    background-color 0.2s,
+    transform 0.1s;
 }
 
 .upload-link:hover {

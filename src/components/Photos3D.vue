@@ -309,6 +309,11 @@ const useLowPerformance = computed(() => isMobile.value || hasTouch.value);
 
 const processedPhotos = computed(() => photosStore.processedPhotos);
 
+// Control para mostrar mensaje de activación de cámara solo una vez
+const cameraActivationMessageShown = ref(false);
+// Referencia a la función para cerrar el mensaje de cámara
+const cameraActivationMessageClose = ref(null);
+
 // 🔥 Función helper para obtener originalUrl de una foto desde el store
 const getPhotoOriginalUrl = (photoId) => {
   const photo = photosStore.photos?.find((p) => p.id === photoId);
@@ -340,7 +345,7 @@ const {
 // 🆕 Composable para gestión de texturas
 const textureManager = usePhotoTextureManager(
   useLowPerformance.value,
-  props.isPlayground
+  props.isPlayground,
 );
 
 // 🆕 Composable para efectos visuales
@@ -428,7 +433,7 @@ const flyToPhoto = (photoId) => {
 
   // Find the photo in photosWithMaterials
   const photo = photosWithMaterials.value.find(
-    (p) => String(p.id) === String(photoId)
+    (p) => String(p.id) === String(photoId),
   );
 
   if (!photo) {
@@ -454,7 +459,7 @@ const flyToPhoto = (photoId) => {
 
   console.log(
     `🎯 flyToPhoto: Flying to photo ${photoId} at position`,
-    position
+    position,
   );
 
   // Exit pointer lock if active to avoid control conflicts
@@ -472,7 +477,7 @@ const flyToPhoto = (photoId) => {
   const photoCenter = new THREE.Vector3(
     Number(position[0]) || 0,
     Number(position[1]) || 0,
-    Number(position[2]) || 0
+    Number(position[2]) || 0,
   );
 
   // Calcular dirección desde la foto hacia la cámara actual
@@ -527,8 +532,8 @@ const flyToPhoto = (photoId) => {
 
   console.log(
     `✈️ Flight initiated: duration=${duration}ms, distance=${distance.toFixed(
-      1
-    )}`
+      1,
+    )}`,
   );
   return true;
 };
@@ -634,7 +639,7 @@ const tryExecutePendingFlight = () => {
 
   const photoCount = pendingPhotoFlightIds.value.length;
   console.log(
-    `🎯 Attempting to execute pending flight with ${photoCount} photo(s)`
+    `🎯 Attempting to execute pending flight with ${photoCount} photo(s)`,
   );
 
   // Agregar delay de 1000ms antes de empezar el vuelo para asegurar que el 3D está listo
@@ -642,7 +647,7 @@ const tryExecutePendingFlight = () => {
     const success = startPhotoTour(pendingPhotoFlightIds.value);
     if (success) {
       console.log(
-        `✅ Pending flight started successfully (${photoCount} photo(s))`
+        `✅ Pending flight started successfully (${photoCount} photo(s))`,
       );
       pendingPhotoFlightIds.value = null;
     }
@@ -673,7 +678,7 @@ const flyToBeacon = (beacon) => {
   const center = new THREE.Vector3(
     Number(beacon.worldPosition[0]) || 0,
     (Number(beacon.worldPosition[1]) || 0) - yOffset,
-    Number(beacon.worldPosition[2]) || 0
+    Number(beacon.worldPosition[2]) || 0,
   );
 
   const dir = startPos.clone().sub(center);
@@ -685,7 +690,7 @@ const flyToBeacon = (beacon) => {
   const initialDistance = startPos.distanceTo(center);
   const dynamicApproach = Math.min(
     40,
-    Math.max(BEACON_FLY_APPROACH_DISTANCE, initialDistance * 0.02)
+    Math.max(BEACON_FLY_APPROACH_DISTANCE, initialDistance * 0.02),
   );
 
   const targetPos = center.clone().add(dir.multiplyScalar(dynamicApproach));
@@ -899,7 +904,7 @@ const cleanTextureQueue = () => {
 const updateLoadingProgress = () => {
   textureManager.updateLoadingProgress(
     photosWithMaterials.value,
-    downloadPhaseComplete.value
+    downloadPhaseComplete.value,
   );
 };
 
@@ -930,18 +935,18 @@ const checkAllTexturesLoaded = async () => {
 
   // Verificar estado de cada foto
   const loadedPhotos = photosWithMaterials.value.filter(
-    (photo) => photo.__textureLoaded
+    (photo) => photo.__textureLoaded,
   );
   const loadingPhotos = photosWithMaterials.value.filter(
-    (photo) => photo.__loading
+    (photo) => photo.__loading,
   );
 
   // Verificar si fase de descarga está completa
   const allDownloaded = photosWithMaterials.value.every(
-    (photo) => photo.__imageDownloaded
+    (photo) => photo.__imageDownloaded,
   );
   const nothingDownloading = photosWithMaterials.value.every(
-    (photo) => !photo.__downloading
+    (photo) => !photo.__downloading,
   );
   const noQueuePending = textureQueue.value.length === 0;
 
@@ -958,11 +963,11 @@ const checkAllTexturesLoaded = async () => {
 
     // Verificar cuántas vienen de cache vs descargadas
     const fromCache = photosWithMaterials.value.filter(
-      (p) => p.__fromCache
+      (p) => p.__fromCache,
     ).length;
     const downloaded = photosWithMaterials.value.length - fromCache;
     console.log(
-      `📊 Origen: ${fromCache} desde cache, ${downloaded} descargadas`
+      `📊 Origen: ${fromCache} desde cache, ${downloaded} descargadas`,
     );
 
     // Solo cachear las que NO vinieron de cache (las recién descargadas)
@@ -974,7 +979,7 @@ const checkAllTexturesLoaded = async () => {
         console.log(`⚠️ Cacheo deshabilitado en modo playground`);
       } else {
         console.log(
-          `✅ Todas las imágenes vinieron de cache, saltando fase de cacheo`
+          `✅ Todas las imágenes vinieron de cache, saltando fase de cacheo`,
         );
       }
     }
@@ -985,7 +990,7 @@ const checkAllTexturesLoaded = async () => {
     // 🔧 CRÍTICO: Solo crear texturas si NO existen LOD objects
     // En cambios de chunk, los LOD objects ya existen y solo necesitan actualizar posiciones
     const needsTextureCreation = photosWithMaterials.value.some(
-      (p) => p.__imageDownloaded && !p.lodObject
+      (p) => p.__imageDownloaded && !p.lodObject,
     );
 
     if (needsTextureCreation) {
@@ -1121,11 +1126,11 @@ const applyFilters = () => {
 
             // OR: debe tener al menos uno de los aspectos de esta categoría
             const hasAnyAspectInCategory = aspectsInCategory.some((aspect) =>
-              photoAspects.includes(aspect)
+              photoAspects.includes(aspect),
             );
 
             return hasAnyAspectInCategory;
-          }
+          },
         );
       }
     }
@@ -1140,7 +1145,7 @@ const applyFilters = () => {
           ([scoreKey, threshold]) => {
             const scoreValue = photo.descriptions?.artistic_scores?.[scoreKey];
             return scoreValue !== undefined && scoreValue >= threshold;
-          }
+          },
         );
       }
     }
@@ -1156,10 +1161,10 @@ const applyFilters = () => {
   });
 
   const visibleCount = photosWithMaterials.value.filter(
-    (p) => p.isVisible
+    (p) => p.isVisible,
   ).length;
   const hiddenCount = photosWithMaterials.value.filter(
-    (p) => p.isVisible === false
+    (p) => p.isVisible === false,
   ).length;
 
   // Log resumen de la lógica aplicada
@@ -1173,7 +1178,7 @@ const applyFilters = () => {
   }
   if (hasSearchFilter) {
     filterInfo.push(
-      `text search: "${searchQuery.value}" (${searchResults.value.length} results)`
+      `text search: "${searchQuery.value}" (${searchResults.value.length} results)`,
     );
   }
   if (timeRangeFilter.value !== null) {
@@ -1187,16 +1192,16 @@ const applyFilters = () => {
     };
     filterInfo.push(
       `time range: ${formatDate(timeRangeFilter.value[0])} - ${formatDate(
-        timeRangeFilter.value[1]
-      )}`
+        timeRangeFilter.value[1],
+      )}`,
     );
   }
 
   if (filterInfo.length > 0) {
     console.log(
       `🔍 Filtros aplicados: ${filterInfo.join(
-        " + "
-      )} | Visibles: ${visibleCount} | Ocultas: ${hiddenCount}`
+        " + ",
+      )} | Visibles: ${visibleCount} | Ocultas: ${hiddenCount}`,
     );
   }
 
@@ -1239,14 +1244,14 @@ tagBeaconsSystem.value = useTagBeacons(
   cameraRef,
   filteredPhotos,
   containerRef,
-  beaconsClusterType
+  beaconsClusterType,
 );
 
 // Handler para cambio en filtro de aspectos visuales
 const onVisualAspectsChange = () => {
   console.log(
     "🔄 onVisualAspectsChange triggered:",
-    selectedVisualAspects.value
+    selectedVisualAspects.value,
   );
   applyFilters();
 
@@ -1264,7 +1269,7 @@ const onVisualAspectsChange = () => {
 const onArtisticScoresChange = () => {
   console.log(
     "🔄 onArtisticScoresChange triggered:",
-    artisticScoreFilters.value
+    artisticScoreFilters.value,
   );
   applyFilters();
 
@@ -1329,7 +1334,7 @@ const performSearch = async () => {
 
     const { data: response } = await api.post(
       "/api/search/semantic/sync",
-      payload
+      payload,
     );
 
     // Handle direct response from sync endpoint
@@ -1343,7 +1348,7 @@ const performSearch = async () => {
       searchResults.value = photos;
 
       console.log(
-        `🔍 Búsqueda textual completada: "${searchQuery.value}" - ${photos.length} resultados (totalScore > 0.5)`
+        `🔍 Búsqueda textual completada: "${searchQuery.value}" - ${photos.length} resultados (totalScore > 0.5)`,
       );
     } else {
       // If no results, show empty array
@@ -1415,6 +1420,22 @@ const setupLoaderForPhotos = async (photos) => {
 const hideLoader = () => {
   showDiscreteLoader.value = false;
   console.log("✅ Loader ocultado - Carga completada");
+
+  // Mostrar mensaje de activación de cámara cuando todo esté listo (solo desktop)
+  if (!cameraActivationMessageShown.value && !hasTouch.value) {
+    cameraActivationMessageShown.value = true;
+    nextTick(() => {
+      cameraActivationMessageClose.value = message.warning(
+        "🖱️ Right-click on the stage to activate camera mode and navigate through your photos",
+        {
+          closable: true,
+          duration: 0,
+          placement: "bottomLeft",
+          keepAliveOnHover: true,
+        },
+      );
+    });
+  }
 };
 
 // Función para mostrar loader (sin bloquear navegación)
@@ -1427,12 +1448,12 @@ const showLoader = () => {
 const downloadImageOnly = (
   photoObj,
   retryCount = 0,
-  isOnDemandRetry = false
+  isOnDemandRetry = false,
 ) => {
   return textureManager.downloadImageOnly(
     photoObj,
     retryCount,
-    isOnDemandRetry
+    isOnDemandRetry,
   );
 };
 
@@ -1444,7 +1465,7 @@ const createLODObject = (imageElement, position) => {
 // Delegar creación de texturas al textureManager
 const enqueueInitialTexturesBulk = () => {
   const count = textureManager.enqueueInitialTexturesBulk(
-    photosWithMaterials.value
+    photosWithMaterials.value,
   );
   if (count > 0) {
     textureManager.startTextureCreationLoop(
@@ -1454,7 +1475,7 @@ const enqueueInitialTexturesBulk = () => {
         updateLoadingProgress();
         checkAllTexturesLoaded();
         updateVisiblePhotos();
-      }
+      },
     );
   }
 };
@@ -1466,7 +1487,7 @@ if (typeof window !== "undefined") {
     (e) => {
       console.warn("⚠️ WebGL context lost: posible saturación de VRAM", e);
     },
-    { capture: true }
+    { capture: true },
   );
 }
 
@@ -1547,12 +1568,12 @@ const registerNewPhotos = async (newPhotos) => {
         } catch (error) {
           console.warn(`⚠️ Error descargando ${photo.id}:`, error);
         }
-      })
+      }),
     );
 
     await Promise.all(downloadPromises);
     console.log(
-      `✅ Total de imágenes cargadas: ${downloadedImagesCache.size}/${newPhotos.length}`
+      `✅ Total de imágenes cargadas: ${downloadedImagesCache.size}/${newPhotos.length}`,
     );
   } else {
     console.log(`✅ Todas las fotos estaban en cache!`);
@@ -1595,12 +1616,12 @@ const registerNewPhotos = async (newPhotos) => {
     if (imagesToCache.length > 0) {
       const result = await bulkCacheImages(imagesToCache);
       console.log(
-        `✅ Cacheo completado: ${result.success} exitosos, ${result.failed} fallidos`
+        `✅ Cacheo completado: ${result.success} exitosos, ${result.failed} fallidos`,
       );
     }
   } else if (photosToDownload.length > 0 && props.isPlayground) {
     console.log(
-      `⚠️ Cacheo deshabilitado en modo playground (${photosToDownload.length} imágenes descargadas)`
+      `⚠️ Cacheo deshabilitado en modo playground (${photosToDownload.length} imágenes descargadas)`,
     );
   }
 
@@ -1726,7 +1747,7 @@ const updatePhotosPositions = async (newPhotos) => {
     });
 
     photosWithMaterials.value = photosWithMaterials.value.filter((p) =>
-      validIds.has(p.id)
+      validIds.has(p.id),
     );
   }
 
@@ -1743,20 +1764,20 @@ const updatePhotosPositions = async (newPhotos) => {
     startPositions,
     effectsManager.calculateScaledPositions(
       targetPositions,
-      inflateFactor.value
+      inflateFactor.value,
     ),
-    pendingOriginalPositions // Pasar las nuevas posiciones originales para actualizar al final
+    pendingOriginalPositions, // Pasar las nuevas posiciones originales para actualizar al final
   );
 
   // Imágenes a descargar (solo las nuevas)
   const toTexture = photosWithMaterials.value.filter(
-    (p) => !p.__imageDownloaded && !p.__downloading
+    (p) => !p.__imageDownloaded && !p.__downloading,
   );
 
   // Descarga silenciosa bajo demanda: NO mostrar loader ni bloquear navegación
   if (toTexture.length > 0) {
     console.log(
-      `🔄 (silencioso) ${toTexture.length} fotos nuevas por descargar`
+      `🔄 (silencioso) ${toTexture.length} fotos nuevas por descargar`,
     );
 
     // No tocar loaderStage/loaderTitle ni navigationBlocked en este flujo
@@ -1766,7 +1787,7 @@ const updatePhotosPositions = async (newPhotos) => {
     // Encolar las que falten para descarga de red
     textureManager.enqueueAllNonCachedPhotos(
       toTexture,
-      cameraRef.value?.position
+      cameraRef.value?.position,
     );
 
     // Iniciar loop mínimo de descarga si no está corriendo
@@ -1799,7 +1820,7 @@ const toggleFloatingTags = () => {
       !floatingTagsSystem.value.config.enabled;
     console.log(
       "🏷️ Floating tags:",
-      floatingTagsSystem.value.config.enabled ? "enabled" : "disabled"
+      floatingTagsSystem.value.config.enabled ? "enabled" : "disabled",
     );
   }
 };
@@ -1809,7 +1830,7 @@ const updateVisiblePhotos = () => {
   effectsManager.updateVisiblePhotos(
     cameraRef.value,
     photosWithMaterials.value,
-    filteredPhotos.value
+    filteredPhotos.value,
   );
 
   // Lógica adicional específica del componente (encolado de texturas)
@@ -1864,7 +1885,7 @@ const calculateDistancesForVisiblePhotos = (cameraPosition) => {
 const updateBillboardRotations = (photosWithDistances) => {
   effectsManager.updateBillboardRotations(
     photosWithDistances,
-    cameraRef.value?.position
+    cameraRef.value?.position,
   );
 };
 
@@ -1873,7 +1894,7 @@ const applyDistanceFading = () => {
   effectsManager.applyDistanceFading(
     cameraRef.value,
     visiblePhotos.value, // ✅ Solo fotos visibles (~200) en lugar de todas (~2000)
-    frameCounter
+    frameCounter,
   );
 };
 
@@ -1895,7 +1916,7 @@ const onChunkChange = async (newValue) => {
     queuedIds.clear();
   } else {
     console.log(
-      "♻️ Fotos existentes detectadas: manteniendo LODs, solo actualizando posiciones"
+      "♻️ Fotos existentes detectadas: manteniendo LODs, solo actualizando posiciones",
     );
     // NO limpiar LOD objects - solo limpiar cola de texturas
     // Los LODs se reutilizarán y solo se actualizarán sus posiciones
@@ -1960,7 +1981,7 @@ const animate = () => {
       const currentPos = new THREE.Vector3().lerpVectors(
         state.from,
         state.to,
-        eased
+        eased,
       );
       cameraRef.value.position.copy(currentPos);
 
@@ -1969,14 +1990,14 @@ const animate = () => {
       cameraRef.value.quaternion.slerpQuaternions(
         state.startQuaternion,
         state.endQuaternion,
-        eased
+        eased,
       );
     } else if (state.from && state.to) {
       // Vuelo lineal (fallback para beacons)
       const currentPos = new THREE.Vector3(
         state.from.x + (state.to.x - state.from.x) * eased,
         state.from.y + (state.to.y - state.from.y) * eased,
-        state.from.z + (state.to.z - state.from.z) * eased
+        state.from.z + (state.to.z - state.from.z) * eased,
       );
 
       cameraRef.value.position.copy(currentPos);
@@ -1995,7 +2016,7 @@ const animate = () => {
         photoTourState.value.isPaused = true;
         photoTourState.value.pauseStartTime = performance.now();
         console.log(
-          `⏸️ Tour paused at photo ${photoTourState.value.currentIndex + 1}`
+          `⏸️ Tour paused at photo ${photoTourState.value.currentIndex + 1}`,
         );
       }
     }
@@ -2020,7 +2041,7 @@ const animate = () => {
   if (isTransitioning.value) {
     const transitionCompleted = effectsManager.updateTransitionPositions(
       photosWithMaterials.value,
-      frameStart
+      frameStart,
     );
 
     // Si la transición terminó, actualizar visibilidad y efectos, y ocultar loader
@@ -2102,7 +2123,7 @@ const animate = () => {
         effectsManager.updateCameraMovementState(cameraRef.value);
 
         const photosWithDistances = calculateDistancesForVisiblePhotos(
-          cameraRef.value.position
+          cameraRef.value.position,
         );
 
         // Ordenar por distancia una sola vez (de cerca a lejos)
@@ -2113,7 +2134,7 @@ const animate = () => {
         if (frameCounter % 10 === 0) {
           textureManager.updateTextureLODs(
             photosWithDistances,
-            getPhotoOriginalUrl
+            getPhotoOriginalUrl,
           );
         }
 
@@ -2224,7 +2245,7 @@ const updatePhotoHover = (normalizedX, normalizedY) => {
 
   // Detectar intersecciones
   const intersects = raycaster.intersectObjects(
-    photoMeshes.map((pm) => pm.mesh)
+    photoMeshes.map((pm) => pm.mesh),
   );
 
   if (intersects.length > 0) {
@@ -2408,7 +2429,7 @@ const handlePhotoClick = (event) => {
 
   // Detectar intersecciones
   const intersects = raycaster.intersectObjects(
-    photoMeshes.map((pm) => pm.mesh)
+    photoMeshes.map((pm) => pm.mesh),
   );
 
   if (intersects.length > 0) {
@@ -2431,7 +2452,7 @@ const handlePhotoClick = (event) => {
     }
   } else {
     console.log(
-      "🌌 Click en el vacío (no se activa cámara con click izquierdo)"
+      "🌌 Click en el vacío (no se activa cámara con click izquierdo)",
     );
   }
   // No hacer nada si click en el vacío con botón izquierdo
@@ -2441,6 +2462,12 @@ const handlePhotoClick = (event) => {
 const handleRightClick = (event) => {
   event.preventDefault(); // Prevenir menú contextual
   console.log("🖱️ Right-click detectado, activando cámara...");
+
+  // Cerrar el mensaje de activación de cámara
+  if (cameraActivationMessageClose.value) {
+    cameraActivationMessageClose.value?.destroy();
+    cameraActivationMessageClose.value = null;
+  }
 
   if (!hasTouch.value && fpControls.value) {
     fpControls.value.requestPointerLock();
@@ -2479,7 +2506,7 @@ const handleDownloadPhotos = async () => {
     console.log(
       "� Download action triggered for",
       selectedPhotos.value.length,
-      "photos"
+      "photos",
     );
 
     if (selectedPhotos.value.length === 1) {
@@ -2500,7 +2527,7 @@ const handleAddToCollection = () => {
     console.log(
       "� Add to collection action triggered for",
       selectedPhotos.value.length,
-      "photos"
+      "photos",
     );
     showCollectionModal.value = true;
   }
@@ -2509,7 +2536,7 @@ const handleAddToCollection = () => {
 const handleCollectionAdded = (data) => {
   console.log("✅ Photos added to collection:", data);
   message.success(
-    `Added ${selectedPhotoIds.value.length} photos to collection`
+    `Added ${selectedPhotoIds.value.length} photos to collection`,
   );
   // Mantener selección después de agregar a colección
 };
@@ -2523,7 +2550,7 @@ const handleMoveToTool = () => {
     console.log(
       "🪄 Move to tool action triggered for",
       selectedPhotos.value.length,
-      "photos"
+      "photos",
     );
     openToolSelector();
   }
@@ -2564,7 +2591,7 @@ const initFirstPersonControls = () => {
           message.info("Tour cancelled");
         }
       },
-      { passive: true }
+      { passive: true },
     );
 
     // Configure touch controls (same profile as keyboard controls)
@@ -2624,7 +2651,7 @@ const initFirstPersonControls = () => {
   floatingTagsSystem.value = useFloatingTags(
     cameraRef,
     photos3D,
-    queryRadius // Pasar la función correcta del octree
+    queryRadius, // Pasar la función correcta del octree
   );
 
   // Iniciar el loop de actualización de tags
@@ -2665,7 +2692,7 @@ watch(
         const newPhotosOnly = newPhotos.slice(photosWithMaterials.value.length);
         console.log(
           "📸 Registrando fotos adicionales (paginación):",
-          newPhotosOnly.length
+          newPhotosOnly.length,
         );
         await registerNewPhotos(newPhotosOnly);
       }
@@ -2680,7 +2707,7 @@ watch(
       });
     }
   },
-  { immediate: false }
+  { immediate: false },
 );
 
 // Watcher: controlar el loader central cuando esté cargando
@@ -2690,7 +2717,7 @@ watch(isLoadingPositions, (newIsLoading, oldIsLoading) => {
     // No mostrar el loader aquí, se maneja en registerNewPhotos/updatePhotosPositions
   } else {
     console.log(
-      "✅ isLoadingPositions = false, verificando si todas las texturas están listas"
+      "✅ isLoadingPositions = false, verificando si todas las texturas están listas",
     );
     // Cuando termine de cargar, verificar si todas las texturas están listas
     checkAllTexturesLoaded();
@@ -2711,7 +2738,7 @@ watch(error, (newError) => {
         "Your catalog doesn't have enough photos to be processed. Please upload and process more photos.",
         {
           duration: 6000,
-        }
+        },
       );
     } else {
       message.error(newError, {
@@ -2727,12 +2754,12 @@ watch(
   () => {
     console.log(
       "🔄 selectedVisualAspects watcher triggered:",
-      selectedVisualAspects.value
+      selectedVisualAspects.value,
     );
     applyFilters();
     updateVisiblePhotos();
   },
-  { deep: true }
+  { deep: true },
 );
 
 // Watcher para ejecutar vuelos pendientes (tours o individuales) cuando las fotos se cargan
@@ -2745,7 +2772,7 @@ watch(
         tryExecutePendingFlight();
       }, 300);
     }
-  }
+  },
 );
 
 // Watcher para sincronizar currentChunk del composable con el selector local
@@ -2756,7 +2783,7 @@ watch(
       selectedChunk.value = newValue;
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 // ResizeObserver para manejar cambios de tamaño sin disparar recargas
@@ -2781,7 +2808,7 @@ onMounted(async () => {
         const success = flyToPhoto(photoId);
         if (!success) {
           console.warn(
-            "⚠️ Failed to fly to photo, will retry when photos load"
+            "⚠️ Failed to fly to photo, will retry when photos load",
           );
           // Guardar como array de un solo elemento
           pendingPhotoFlightIds.value = [photoId];
@@ -2816,7 +2843,7 @@ onMounted(async () => {
       window.removeEventListener("atlas:flyToPhoto", handleFlyToPhotoEvent);
       window.removeEventListener(
         "atlas:startPhotoTour",
-        handleStartPhotoTourEvent
+        handleStartPhotoTourEvent,
       );
     };
 
@@ -2831,12 +2858,12 @@ onMounted(async () => {
       await initDB();
       cacheStats.value = await getCacheStats();
       console.log(
-        `✅ IndexedDB inicializado. Imágenes en cache: ${cacheStats.value.totalImages}`
+        `✅ IndexedDB inicializado. Imágenes en cache: ${cacheStats.value.totalImages}`,
       );
     } catch (error) {
       console.warn(
         "⚠️ No se pudo inicializar IndexedDB, funcionando sin cache:",
-        error
+        error,
       );
     }
 
@@ -2857,7 +2884,7 @@ onMounted(async () => {
           updateCameraAspect();
           console.log(
             "📼 Aspect ratio actualizado por resize:",
-            cameraAspect.value
+            cameraAspect.value,
           );
         });
       });
@@ -2885,7 +2912,7 @@ onMounted(async () => {
         if (photoIds.length > 0) {
           const photoId = photoIds[0]; // Only fly to the first photo
           console.log(
-            `📍 [QueryParams] Flying to photo ${photoId} from URL (async)`
+            `📍 [QueryParams] Flying to photo ${photoId} from URL (async)`,
           );
           // Set as pending - the watcher will handle the flight when photos are ready
           pendingPhotoFlightIds.value = [photoId];
@@ -2963,7 +2990,7 @@ onUnmounted(() => {
       recovered: error429Stats.value.recovered,
       failed: error429Stats.value.failed,
       recoveryRate: `${Math.round(
-        (error429Stats.value.recovered / error429Stats.value.total) * 100
+        (error429Stats.value.recovered / error429Stats.value.total) * 100,
       )}%`,
     });
   }

@@ -3,7 +3,7 @@
     v-if="enableDiagonal"
     :photo="photo"
     position="bottom-right"
-    :fill="primaryColor"
+    :fill="accentColor"
     icon="+"
     @click="handleClick"
     :sizeFactor="sizeFactor"
@@ -12,7 +12,7 @@
     v-if="enableDiagonal"
     :photo="photo"
     position="bottom-left"
-    :fill="primaryColor"
+    :fill="accentColor"
     icon="+"
     @click="handleClick"
     :sizeFactor="sizeFactor"
@@ -21,7 +21,7 @@
     v-if="enableDiagonal"
     :photo="photo"
     position="upper-right"
-    :fill="primaryColor"
+    :fill="accentColor"
     icon="+"
     @click="handleClick"
     :sizeFactor="sizeFactor"
@@ -30,7 +30,7 @@
     v-if="enableDiagonal"
     :photo="photo"
     position="upper-left"
-    :fill="primaryColor"
+    :fill="accentColor"
     icon="+"
     @click="handleClick"
     :sizeFactor="sizeFactor"
@@ -39,7 +39,7 @@
   <PhotoCanvasButton
     :photo="photo"
     position="left"
-    :fill="primaryColor"
+    :fill="accentColor"
     icon="+"
     @click="handleClick"
     :sizeFactor="sizeFactor"
@@ -48,7 +48,7 @@
   <PhotoCanvasButton
     :photo="photo"
     position="right"
-    :fill="primaryColor"
+    :fill="accentColor"
     icon="+"
     @click="handleClick"
     :sizeFactor="sizeFactor"
@@ -57,7 +57,7 @@
   <PhotoCanvasButton
     :photo="photo"
     position="upper"
-    :fill="primaryColor"
+    :fill="accentColor"
     icon="+"
     @click="handleClick"
     :sizeFactor="sizeFactor"
@@ -66,7 +66,7 @@
   <PhotoCanvasButton
     :photo="photo"
     position="bottom"
-    :fill="primaryColor"
+    :fill="accentColor"
     icon="+"
     @click="handleClick"
     :sizeFactor="sizeFactor"
@@ -76,8 +76,8 @@
 <script setup>
 import PhotoCanvasButton from "./PhotoCanvasButton.vue";
 
-const primaryColor = getComputedStyle(document.documentElement)
-  .getPropertyValue("--primary-color")
+const accentColor = getComputedStyle(document.documentElement)
+  .getPropertyValue("--accent-color")
   .trim();
 
 const props = defineProps({
