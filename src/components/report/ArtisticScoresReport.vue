@@ -217,6 +217,12 @@
       <n-icon size="48" :component="StarIcon" class="empty-icon" />
       <p class="empty-text">No artistic scores found in your photos</p>
     </div>
+
+    <!-- Evolution Chart -->
+    <ArtisticScoreEvolutionChart
+      v-if="fundamentalsStats.length > 0 || bonusStats.length > 0"
+      :photos="photos"
+    />
   </div>
 </template>
 
@@ -224,6 +230,7 @@
 import { computed } from "vue";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { StarOutline as StarIcon } from "@vicons/ionicons5";
+import ArtisticScoreEvolutionChart from "./ArtisticScoreEvolutionChart.vue";
 
 const props = defineProps({
   photos: {
