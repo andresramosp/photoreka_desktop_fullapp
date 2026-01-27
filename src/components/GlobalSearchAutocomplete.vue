@@ -33,6 +33,7 @@
         v-if="showDropdown && searchQuery.length >= 2"
         class="search-dropdown"
         ref="dropdownRef"
+        :style="{ '--dropdown-top': dropdownTopPosition }"
         @mousedown.prevent
         @touchstart.stop
       >
@@ -326,6 +327,8 @@ const activeItemKey = ref<string | null>(null);
 const searchContainerRef = ref<HTMLElement | null>(null);
 const dropdownRef = ref<HTMLElement | null>(null);
 const inputRef = ref<any>(null);
+const isInputFocused = ref(false);
+const dropdownTopPosition = ref<string>("0px");
 
 // Photo dialog state
 const showPhotoDialog = ref(false);
@@ -392,29 +395,29 @@ const scrollToActiveItem = () => {
 
 // Handlers
 const handleFocus = () => {
+  isInputFocused.value = true;
   showDropdown.value = true;
+
+  // Calculate position for mobile fixed dropdown
+  if (searchContainerRef.value) {
+    const rect = searchContainerRef.value.getBoundingClientRect();
+    dropdownTopPosition.value = `${rect.bottom + 8}px`;
+  }
+
   ensureDataLoaded();
   emit("search-focus");
 };
 
-const handleBlur = (event: FocusEvent) => {
-  // Don't hide dropdown on mobile - let click/touch handlers do it
-  if ("ontouchstart" in window) {
-    return;
+const handleBlur = () => {
+  isInputFocused.value = false;
+
+  // On mobile, clear search when losing focus
+  if (window.innerWidth < 768) {
+    clearSearch();
   }
 
-  // Delay hiding to allow click events on dropdown items
-  setTimeout(() => {
-    const relatedTarget = event.relatedTarget as HTMLElement;
-    if (
-      !searchContainerRef.value?.contains(relatedTarget) &&
-      !dropdownRef.value?.contains(document.activeElement)
-    ) {
-      showDropdown.value = false;
-      activeItemKey.value = null;
-      emit("search-blur");
-    }
-  }, 150);
+  // Don't close immediately - let clicks on dropdown work first
+  // handleClickOutside will manage closing when clicking outside
 };
 
 const handleKeydown = (event: KeyboardEvent) => {
@@ -525,9 +528,9 @@ const handleSelectPhoto = async (photo: SearchResultPhoto) => {
   clearSearch();
 };
 
-// Emit blur when search is cleared
+// Emit blur when search is cleared only if not focused
 watch(searchQuery, (newValue) => {
-  if (!newValue || newValue.trim() === "") {
+  if ((!newValue || newValue.trim() === "") && !isInputFocused.value) {
     emit("search-blur");
   }
 });
@@ -543,12 +546,21 @@ watch(flatResults, () => {
 
 // Click outside handler
 const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+  const target = event.target as Node;
+  const container = searchContainerRef.value;
+  const dropdown = dropdownRef.value;
+
+  // Only close if clicking outside both the search container and dropdown
   if (
-    searchContainerRef.value &&
-    !searchContainerRef.value.contains(event.target as Node)
+    container &&
+    !container.contains(target) &&
+    dropdown &&
+    !dropdown.contains(target)
   ) {
     showDropdown.value = false;
     activeItemKey.value = null;
+    isInputFocused.value = false;
+    emit("search-blur");
   }
 };
 
@@ -830,9 +842,11 @@ onUnmounted(() => {
   .search-dropdown {
     max-height: 60vh;
     position: fixed;
+    top: var(--dropdown-top, 70px);
     left: var(--spacing-md);
     right: var(--spacing-md);
     width: auto;
+    z-index: 10000;
   }
 
   .shortcut-hint {
