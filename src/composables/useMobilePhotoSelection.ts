@@ -25,6 +25,7 @@ export function useMobilePhotoSelection() {
     event: TouchEvent,
     photoId: string,
     onSelect: (id: string) => void,
+    requireLongPress: boolean = true,
   ) => {
     // Only apply mobile logic if it's actually a mobile device
     if (!isMobile.value) return;
@@ -38,20 +39,27 @@ export function useMobilePhotoSelection() {
       clearTimeout(longPressTimeout.value);
     }
 
-    // Set up long press detection
-    longPressTimeout.value = window.setTimeout(() => {
-      // Long press detected!
-      // 1. Select the photo
-      onSelect(photoId);
+    // If long press is required, set up detection and prevent context menu
+    if (requireLongPress) {
+      // Prevent context menu from appearing during long press
+      event.preventDefault();
 
-      // 2. Activate selection mode globally
-      isSelectionModeActive.value = true;
+      // Set up long press detection
+      longPressTimeout.value = window.setTimeout(() => {
+        // Long press detected!
+        // 1. Select the photo
+        onSelect(photoId);
 
-      // 3. Provide haptic feedback if available
-      if (navigator.vibrate) {
-        navigator.vibrate(50);
-      }
-    }, LONG_PRESS_DURATION);
+        // 2. Activate selection mode globally
+        isSelectionModeActive.value = true;
+
+        // 3. Provide haptic feedback if available
+        if (navigator.vibrate) {
+          navigator.vibrate(50);
+        }
+      }, LONG_PRESS_DURATION);
+    }
+    // If long press is NOT required, we'll handle selection in touchEnd
   };
 
   /**
@@ -125,6 +133,7 @@ export function useMobilePhotoSelection() {
     photoId: string,
     onSelect: (id: string) => void,
     onShowInfo?: () => void,
+    requireLongPress: boolean = true,
   ) => {
     // Only apply mobile logic if it's actually a mobile device
     if (!isMobile.value) return;
@@ -156,6 +165,18 @@ export function useMobilePhotoSelection() {
     // Check if the touch target is a button or interactive element
     const target = event.target as HTMLElement;
     const isButton = target.closest("button, a, .action-button, .n-button");
+
+    // If long press is NOT required, allow simple tap selection
+    if (!requireLongPress) {
+      if (!isButton) {
+        event.preventDefault();
+        event.stopPropagation();
+        onSelect(photoId);
+      }
+      touchStartTime.value = 0;
+      touchStartPos.value = null;
+      return;
+    }
 
     // If touch was shorter than long press duration, it's a tap
     if (touchDuration < LONG_PRESS_DURATION) {

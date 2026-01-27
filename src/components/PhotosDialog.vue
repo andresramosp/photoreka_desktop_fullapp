@@ -100,6 +100,7 @@
                 :show-stars="false"
                 :show-tags="false"
                 :show-info-button="false"
+                :require-long-press="false"
               />
             </div>
 
@@ -208,6 +209,7 @@
             @select="toggleSelection"
             @info="showPhotoInfo"
             :show-info-button="false"
+            :require-long-press="false"
           />
         </div>
 
@@ -247,10 +249,10 @@
                   selectedIds.length === 1 ? "Photo" : "Photos"
                 }`
               : props.singleSelection
-              ? "Select Photo"
-              : `Add ${totalSelectedCount} ${
-                  totalSelectedCount === 1 ? "Photo" : "Photos"
-                } to Canvas`
+                ? "Select Photo"
+                : `Add ${totalSelectedCount} ${
+                    totalSelectedCount === 1 ? "Photo" : "Photos"
+                  } to Canvas`
           }}
         </n-button>
       </div>
@@ -343,7 +345,7 @@ const processedPhotos = computed(() => {
     return searchResults.value.filter(
       (p) =>
         !canvasStore.photos.find((photo) => photo.id === p.id) &&
-        !canvasStore.discardedPhotos.find((photo) => photo.id === p.id)
+        !canvasStore.discardedPhotos.find((photo) => photo.id === p.id),
     );
   }
 
@@ -423,7 +425,7 @@ async function confirmSelection() {
 
     // Remove from discarded photos (restore)
     canvasStore.discardedPhotos = canvasStore.discardedPhotos.filter(
-      (dp) => !selectedIds.value.includes(dp.id)
+      (dp) => !selectedIds.value.includes(dp.id),
     );
     photosToAdd = selectedIds.value;
   } else {
@@ -504,7 +506,7 @@ async function performSearch() {
 
     const { data: response } = await api.post(
       "/api/search/semantic/sync",
-      payload
+      payload,
     );
 
     // Handle direct response from sync endpoint
@@ -554,10 +556,10 @@ watch(
       allCatalogPhotos.value = photosStore.processedPhotos.filter(
         (p) =>
           !canvasStore.photos.find((photo) => photo.id === p.id) &&
-          !canvasStore.discardedPhotos.find((photo) => photo.id === p.id)
+          !canvasStore.discardedPhotos.find((photo) => photo.id === p.id),
       );
     }
-  }
+  },
 );
 
 // Fetch photos on mount
@@ -568,7 +570,7 @@ onMounted(async () => {
     allCatalogPhotos.value = photosStore.processedPhotos.filter(
       (p) =>
         !canvasStore.photos.find((photo) => photo.id === p.id) &&
-        !canvasStore.discardedPhotos.find((photo) => photo.id === p.id)
+        !canvasStore.discardedPhotos.find((photo) => photo.id === p.id),
     );
   }
 });

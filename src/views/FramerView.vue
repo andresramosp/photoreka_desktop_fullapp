@@ -262,10 +262,10 @@
               :show-tags="false"
               :show-return-button="false"
               :show-delete-button="true"
+              :require-long-press="false"
               @select="selectPhoto"
               @move-to-curation="removePhoto"
               @delete="removePhoto"
-              class="framer-photo-card"
             />
           </div>
         </div>
@@ -343,10 +343,10 @@
             :show-tags="false"
             :show-return-button="false"
             :show-delete-button="true"
+            :require-long-press="false"
             @select="selectPhoto"
             @move-to-curation="removePhoto"
             @delete="removePhoto"
-            class="framer-photo-card mobile-card"
           />
         </div>
       </div>
@@ -703,7 +703,7 @@ const triggerFileSelect = () => {
 
 const handleFileSelect = async (event) => {
   const files = Array.from(event.target.files).filter((file) =>
-    file.type.startsWith("image/")
+    file.type.startsWith("image/"),
   );
 
   if (files.length > 0) {
@@ -848,7 +848,7 @@ const removePhoto = (photoId) => {
       if (selectedCount.value > 0) {
         const firstSelectedId = Array.from(selectedPhotoIds.value)[0];
         currentPhoto.value = selectedPhotos.value.find(
-          (p) => p.id === firstSelectedId
+          (p) => p.id === firstSelectedId,
         );
       } else {
         // If no photos selected, try the first available photo or null
@@ -908,7 +908,7 @@ const downloadPhotos = async () => {
       photosToDownload[0],
       frameConfig,
       isPlaygroundMode.value,
-      frameVisualizerRef.value // Pass the FrameVisualizer reference for DOM capture
+      frameVisualizerRef.value, // Pass the FrameVisualizer reference for DOM capture
     );
   } else {
     // Download multiple photos as ZIP (now uses improved method with real margins)
@@ -916,7 +916,7 @@ const downloadPhotos = async () => {
       photosToDownload,
       frameConfig,
       isPlaygroundMode.value,
-      frameVisualizerRef.value // Pass the FrameVisualizer reference to extract real margins
+      frameVisualizerRef.value, // Pass the FrameVisualizer reference to extract real margins
     );
   }
 };
@@ -961,7 +961,7 @@ const processPhotosFromSessionStorage = () => {
           message.success(
             `Added ${photoObjects.length} photo${
               photoObjects.length > 1 ? "s" : ""
-            } to Framer`
+            } to Framer`,
           );
         }
       }
@@ -992,7 +992,7 @@ onMounted(async () => {
       if (photoIds.length > 0 && !isPlaygroundMode.value) {
         await handlePhotosAdded(photoIds);
         console.log(
-          `✅ Added ${photoIds.length} photos from URL to framer (async)`
+          `✅ Added ${photoIds.length} photos from URL to framer (async)`,
         );
       }
     },
@@ -1002,7 +1002,7 @@ onMounted(async () => {
   if (photoIdsFromQuery.length > 0 && !isPlaygroundMode.value) {
     await handlePhotosAdded(photoIdsFromQuery);
     console.log(
-      `✅ Added ${photoIdsFromQuery.length} photos from URL to framer`
+      `✅ Added ${photoIdsFromQuery.length} photos from URL to framer`,
     );
   }
 
@@ -1016,7 +1016,7 @@ watch(
   () => {
     // Check sessionStorage whenever route changes
     processPhotosFromSessionStorage();
-  }
+  },
 );
 
 onUnmounted(() => {

@@ -12,6 +12,7 @@
     @touchstart="handleTouchStart"
     @touchend="handleTouchEnd"
     @touchcancel="handleTouchCancel"
+    @contextmenu.prevent="() => {}"
     @mouseenter="handleMouseEnter"
     @mouseleave="handleMouseLeave"
     :style="mode === 'curation' ? 'cursor: default;' : ''"
@@ -305,6 +306,7 @@ interface Props {
   highMatch?: boolean; // High-quality match indicator (shows diamond instead of stars)
   showInfoButton?: boolean; // Control visibility of info button
   showDeleteButton?: boolean; // Control visibility of delete button
+  requireLongPress?: boolean; // Require long press for mobile selection (default: true)
 }
 
 interface Emits {
@@ -323,6 +325,7 @@ const props = withDefaults(defineProps<Props & { isThinking?: boolean }>(), {
   showTags: true,
   showReturnButton: true,
   isNew: false,
+  requireLongPress: true,
 });
 // Show "Reviewing..." label and blur if isThinking and reasoning is "Reviewing..."
 const showAnalyzing = computed(
@@ -448,12 +451,23 @@ const tagsToDisplay = computed(() => {
 // Event handlers for mobile touch and click
 const handleTouchStart = (event: TouchEvent) => {
   if (props.mode === "curation") return;
-  baseTouchStart(event, props.photo.id, (id) => emit("select", id));
+  baseTouchStart(
+    event,
+    props.photo.id,
+    (id) => emit("select", id),
+    props.requireLongPress,
+  );
 };
 
 const handleTouchEnd = (event: TouchEvent) => {
   if (props.mode === "curation") return;
-  baseTouchEnd(event, props.photo.id, (id) => emit("select", id), showInfo);
+  baseTouchEnd(
+    event,
+    props.photo.id,
+    (id) => emit("select", id),
+    showInfo,
+    props.requireLongPress,
+  );
 };
 
 const handleTouchCancel = () => {
@@ -678,15 +692,6 @@ onUnmounted(() => {
 .photo-card.curation-mode:hover {
   border-color: var(--primary-color);
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
-}
-
-.photo-card.selection-mode {
-  border-color: rgba(34, 197, 94, 0.3);
-}
-
-.photo-card.selection-mode:hover {
-  border-color: var(--success-color);
-  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.2);
 }
 
 .matched-tags {
