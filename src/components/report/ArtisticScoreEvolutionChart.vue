@@ -1,6 +1,6 @@
 <template>
   <div class="evolution-chart-section">
-    <div v-if="hasChartData" class="chart-container">
+    <div class="chart-container">
       <div class="chart-controls">
         <div class="control-group">
           <label class="control-label">Scores to Compare</label>
@@ -15,185 +15,187 @@
           />
         </div>
       </div>
-      <div class="chart-header">
-        <h4 class="chart-title">Score Evolution Over Time</h4>
-        <div class="chart-stats">
-          <span class="stat-item">
-            <span class="stat-label">Criteria:</span>
-            <span class="stat-value">{{ selectedCriteria.length }}</span>
-          </span>
-          <span class="stat-item">
-            <span class="stat-label">Time Span:</span>
-            <span class="stat-value">{{ timeSpanText }}</span>
-          </span>
+      <template v-if="hasChartData">
+        <div class="chart-header">
+          <h4 class="chart-title">Score Evolution Over Time</h4>
+          <div class="chart-stats">
+            <span class="stat-item">
+              <span class="stat-label">Criteria:</span>
+              <span class="stat-value">{{ selectedCriteria.length }}</span>
+            </span>
+            <span class="stat-item">
+              <span class="stat-label">Time Span:</span>
+              <span class="stat-value">{{ timeSpanText }}</span>
+            </span>
+          </div>
         </div>
-      </div>
 
-      <svg class="line-chart" viewBox="20 -10 780 190">
-        <!-- Chart background -->
-        <rect
-          x="60"
-          y="10"
-          width="720"
-          height="130"
-          fill="var(--bg-surface)"
-          rx="1"
-        />
+        <svg class="line-chart" viewBox="20 -10 780 190">
+          <!-- Chart background -->
+          <rect
+            x="60"
+            y="10"
+            width="720"
+            height="130"
+            fill="var(--bg-surface)"
+            rx="1"
+          />
 
-        <!-- Grid lines (horizontal) -->
-        <line
-          v-for="i in 5"
-          :key="`grid-${i}`"
-          x1="60"
-          :y1="10 + (i - 1) * 32.5"
-          x2="780"
-          :y2="10 + (i - 1) * 32.5"
-          stroke="var(--border-color)"
-          stroke-width="0.5"
-          opacity="0.2"
-        />
+          <!-- Grid lines (horizontal) -->
+          <line
+            v-for="i in 5"
+            :key="`grid-${i}`"
+            x1="60"
+            :y1="10 + (i - 1) * 32.5"
+            x2="780"
+            :y2="10 + (i - 1) * 32.5"
+            stroke="var(--border-color)"
+            stroke-width="0.5"
+            opacity="0.2"
+          />
 
-        <!-- Axes -->
-        <line
-          x1="60"
-          y1="140"
-          x2="60"
-          y2="10"
-          stroke="var(--text-secondary)"
-          stroke-width="1"
-        />
-        <line
-          x1="60"
-          y1="140"
-          x2="780"
-          y2="140"
-          stroke="var(--text-secondary)"
-          stroke-width="1"
-        />
+          <!-- Axes -->
+          <line
+            x1="60"
+            y1="140"
+            x2="60"
+            y2="10"
+            stroke="var(--text-secondary)"
+            stroke-width="1"
+          />
+          <line
+            x1="60"
+            y1="140"
+            x2="780"
+            y2="140"
+            stroke="var(--text-secondary)"
+            stroke-width="1"
+          />
 
-        <!-- Y-axis labels (scores 0-10) -->
-        <text
-          v-for="(label, i) in yAxisLabels"
-          :key="`y-${i}`"
-          x="50"
-          :y="143 - i * 32.5"
-          fill="var(--text-secondary)"
-          font-size="8"
-          text-anchor="end"
-        >
-          {{ label }}
-        </text>
-
-        <!-- X-axis labels (dates) -->
-        <g v-for="(point, index) in allDatePoints" :key="`x-label-${index}`">
+          <!-- Y-axis labels (scores 0-10) -->
           <text
-            v-if="shouldShowDateLabel(index)"
-            :x="getDateX(index)"
-            y="155"
+            v-for="(label, i) in yAxisLabels"
+            :key="`y-${i}`"
+            x="50"
+            :y="143 - i * 32.5"
             fill="var(--text-secondary)"
-            font-size="7"
-            text-anchor="middle"
+            font-size="8"
+            text-anchor="end"
           >
-            {{ formatDateLabel(point) }}
+            {{ label }}
           </text>
-        </g>
 
-        <!-- Data areas (filled) for each criterion -->
-        <g v-for="criterion in selectedCriteria" :key="`area-${criterion}`">
-          <path
-            :d="generateAreaPath(criterion)"
-            :fill="`url(#gradient-${criterion})`"
-            opacity="0.15"
-          />
-        </g>
-
-        <!-- Data lines for each criterion -->
-        <g v-for="criterion in selectedCriteria" :key="`line-${criterion}`">
-          <polyline
-            :points="generateChartLine(criterion)"
-            fill="none"
-            :stroke="getCriterionColor(criterion)"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </g>
-
-        <!-- Data points for each criterion -->
-        <g v-for="criterion in selectedCriteria" :key="`points-${criterion}`">
-          <g
-            v-for="(point, index) in getCriterionChartData(criterion)"
-            :key="`point-${criterion}-${index}`"
-          >
-            <circle
-              :cx="getDateX(index)"
-              :cy="getY(point.average)"
-              r="2"
-              :fill="getCriterionColor(criterion)"
-              stroke="white"
-              stroke-width="1"
-              class="chart-point"
+          <!-- X-axis labels (dates) -->
+          <g v-for="(point, index) in allDatePoints" :key="`x-label-${index}`">
+            <text
+              v-if="shouldShowDateLabel(index)"
+              :x="getDateX(index)"
+              y="155"
+              fill="var(--text-secondary)"
+              font-size="7"
+              text-anchor="middle"
             >
-              <title>
-                {{ formatCriterionName(criterion) }}
-                {{ formatDateLabel(point.date) }}
-                Avg: {{ point.average }} Photos: {{ point.count }}
-              </title>
-            </circle>
+              {{ formatDateLabel(point) }}
+            </text>
           </g>
-        </g>
 
-        <!-- Gradient definitions for each criterion -->
-        <defs>
-          <linearGradient
-            v-for="criterion in selectedCriteria"
-            :key="`gradient-${criterion}`"
-            :id="`gradient-${criterion}`"
-            x1="0%"
-            y1="0%"
-            x2="0%"
-            y2="100%"
-          >
-            <stop
-              offset="0%"
-              :style="`stop-color:${getCriterionColor(criterion)};stop-opacity:0.4`"
+          <!-- Data areas (filled) for each criterion -->
+          <g v-for="criterion in selectedCriteria" :key="`area-${criterion}`">
+            <path
+              :d="generateAreaPath(criterion)"
+              :fill="`url(#gradient-${criterion})`"
+              opacity="0.15"
             />
-            <stop
-              offset="100%"
-              :style="`stop-color:${getCriterionColor(criterion)};stop-opacity:0`"
-            />
-          </linearGradient>
-        </defs>
-      </svg>
+          </g>
 
-      <!-- Legend -->
-      <div class="chart-legend">
-        <div
-          v-for="criterion in selectedCriteria"
-          :key="`legend-${criterion}`"
-          class="legend-item"
-        >
+          <!-- Data lines for each criterion -->
+          <g v-for="criterion in selectedCriteria" :key="`line-${criterion}`">
+            <polyline
+              :points="generateChartLine(criterion)"
+              fill="none"
+              :stroke="getCriterionColor(criterion)"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </g>
+
+          <!-- Data points for each criterion -->
+          <g v-for="criterion in selectedCriteria" :key="`points-${criterion}`">
+            <g
+              v-for="(point, index) in getCriterionChartData(criterion)"
+              :key="`point-${criterion}-${index}`"
+            >
+              <circle
+                :cx="getDateX(index)"
+                :cy="getY(point.average)"
+                r="2"
+                :fill="getCriterionColor(criterion)"
+                stroke="white"
+                stroke-width="1"
+                class="chart-point"
+              >
+                <title>
+                  {{ formatCriterionName(criterion) }}
+                  {{ formatDateLabel(point.date) }}
+                  Avg: {{ point.average }} Photos: {{ point.count }}
+                </title>
+              </circle>
+            </g>
+          </g>
+
+          <!-- Gradient definitions for each criterion -->
+          <defs>
+            <linearGradient
+              v-for="criterion in selectedCriteria"
+              :key="`gradient-${criterion}`"
+              :id="`gradient-${criterion}`"
+              x1="0%"
+              y1="0%"
+              x2="0%"
+              y2="100%"
+            >
+              <stop
+                offset="0%"
+                :style="`stop-color:${getCriterionColor(criterion)};stop-opacity:0.4`"
+              />
+              <stop
+                offset="100%"
+                :style="`stop-color:${getCriterionColor(criterion)};stop-opacity:0`"
+              />
+            </linearGradient>
+          </defs>
+        </svg>
+
+        <!-- Legend -->
+        <div class="chart-legend">
           <div
-            class="legend-color"
-            :style="{ backgroundColor: getCriterionColor(criterion) }"
-          ></div>
-          <span class="legend-label">
-            {{ formatCriterionName(criterion) }}
-          </span>
+            v-for="criterion in selectedCriteria"
+            :key="`legend-${criterion}`"
+            class="legend-item"
+          >
+            <div
+              class="legend-color"
+              :style="{ backgroundColor: getCriterionColor(criterion) }"
+            ></div>
+            <span class="legend-label">
+              {{ formatCriterionName(criterion) }}
+            </span>
+          </div>
         </div>
-      </div>
-    </div>
-
-    <!-- Empty state -->
-    <div v-else class="empty-chart">
-      <n-icon size="48" :component="TrendingUpIcon" class="empty-icon" />
-      <p class="empty-text">
-        {{
-          selectedCriteria.length > 0
-            ? "No photos found with selected criteria"
-            : "Select one or more criteria to view evolution"
-        }}
-      </p>
+      </template>
+      <template v-else>
+        <div class="empty-chart">
+          <n-icon size="48" :component="TrendingUpIcon" class="empty-icon" />
+          <p class="empty-text">
+            {{
+              selectedCriteria.length > 0
+                ? "No photos found with selected criteria"
+                : "Select one or more criteria to view evolution"
+            }}
+          </p>
+        </div>
+      </template>
     </div>
   </div>
 </template>
