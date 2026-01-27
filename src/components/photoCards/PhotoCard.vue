@@ -10,6 +10,7 @@
     }"
     @click="handleClick"
     @touchstart="handleTouchStart"
+    @touchmove="handleTouchMove"
     @touchend="handleTouchEnd"
     @touchcancel="handleTouchCancel"
     @contextmenu.prevent="() => {}"
@@ -345,6 +346,7 @@ const {
   showHoverOverlay,
   isMobile,
   handleTouchStart: baseTouchStart,
+  handleTouchMove: baseTouchMove,
   handleTouchEnd: baseTouchEnd,
   handleTouchCancel: baseTouchCancel,
   handleClick: baseHandleClick,
@@ -457,6 +459,11 @@ const handleTouchStart = (event: TouchEvent) => {
     (id) => emit("select", id),
     props.requireLongPress,
   );
+};
+
+const handleTouchMove = (event: TouchEvent) => {
+  if (props.mode === "curation") return;
+  baseTouchMove(event);
 };
 
 const handleTouchEnd = (event: TouchEvent) => {
@@ -660,7 +667,8 @@ onUnmounted(() => {
   transform: none;
 }
 
-.photo-card:hover .action-buttons-overlay {
+.photo-card:hover .action-buttons-overlay,
+.photo-card.show-hover .action-buttons-overlay {
   opacity: 1;
 }
 

@@ -103,7 +103,7 @@
           </div>
 
           <!-- Floating Add Photos Button -->
-          <FloatingAddPhotosButton />
+          <FloatingAddPhotosButton v-if="!isMobile" />
 
           <!-- Confetti Effect for first process completion -->
           <ConfettiEffect

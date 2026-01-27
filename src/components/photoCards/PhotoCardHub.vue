@@ -9,8 +9,10 @@
     }"
     @click="handleClick"
     @touchstart="handleTouchStart"
+    @touchmove="handleTouchMove"
     @touchend="handleTouchEnd"
     @touchcancel="handleTouchCancel"
+    @contextmenu.prevent="() => {}"
     :style="{
       cursor: 'pointer',
     }"
@@ -313,6 +315,7 @@ const {
   showHoverOverlay,
   isMobile,
   handleTouchStart: baseTouchStart,
+  handleTouchMove: baseTouchMove,
   handleTouchEnd: baseTouchEnd,
   handleTouchCancel: baseTouchCancel,
   handleClick: baseHandleClick,
@@ -342,6 +345,10 @@ const imageError = ref(false);
 // Event handlers for mobile touch
 const handleTouchStart = (event: TouchEvent) => {
   baseTouchStart(event, props.photo.id, (id) => emit("select", id));
+};
+
+const handleTouchMove = (event: TouchEvent) => {
+  baseTouchMove(event);
 };
 
 const handleTouchEnd = (event: TouchEvent) => {

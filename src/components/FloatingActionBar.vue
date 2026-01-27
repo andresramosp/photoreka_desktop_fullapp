@@ -205,6 +205,7 @@ const handleClearSelection = () => {
 .floating-action-content {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 20px;
 }
 

@@ -3,6 +3,8 @@ import { useIsMobile } from "./useIsMobile";
 
 // Global state for mobile selection mode (shared across all photo card instances)
 const isSelectionModeActive = ref(false);
+// Internal tracking of selected photos to automatically exit selection mode
+const selectedPhotosSet = ref(new Set<string>());
 
 // Configuration
 const LONG_PRESS_DURATION = 500; // milliseconds
@@ -17,6 +19,29 @@ export function useMobilePhotoSelection() {
   const touchStartPos = ref<{ x: number; y: number } | null>(null);
   const hoverTimeout = ref<number | null>(null);
   const showHoverOverlay = ref(false);
+
+  /**
+   * Toggle photo in internal selection tracking and update selection mode state
+   */
+  const togglePhotoSelection = (
+    photoId: string,
+    onSelect: (id: string) => void,
+  ) => {
+    // Call the original selection handler
+    onSelect(photoId);
+
+    // Update internal tracking
+    if (selectedPhotosSet.value.has(photoId)) {
+      selectedPhotosSet.value.delete(photoId);
+    } else {
+      selectedPhotosSet.value.add(photoId);
+    }
+
+    // Auto-exit selection mode if no photos are selected
+    if (selectedPhotosSet.value.size === 0 && isSelectionModeActive.value) {
+      exitSelectionMode();
+    }
+  };
 
   /**
    * Handle touch start - initiate long press detection
@@ -39,19 +64,18 @@ export function useMobilePhotoSelection() {
       clearTimeout(longPressTimeout.value);
     }
 
-    // If long press is required, set up detection and prevent context menu
+    // If long press is required, set up detection
+    // NOTE: Don't preventDefault here - it blocks scrolling
+    // Context menu is prevented via @contextmenu.prevent in the template
     if (requireLongPress) {
-      // Prevent context menu from appearing during long press
-      event.preventDefault();
-
       // Set up long press detection
       longPressTimeout.value = window.setTimeout(() => {
         // Long press detected!
-        // 1. Select the photo
-        onSelect(photoId);
-
-        // 2. Activate selection mode globally
+        // 1. Activate selection mode globally
         isSelectionModeActive.value = true;
+
+        // 2. Toggle photo selection with internal tracking
+        togglePhotoSelection(photoId, onSelect);
 
         // 3. Provide haptic feedback if available
         if (navigator.vibrate) {
@@ -60,6 +84,25 @@ export function useMobilePhotoSelection() {
       }, LONG_PRESS_DURATION);
     }
     // If long press is NOT required, we'll handle selection in touchEnd
+  };
+
+  /**
+   * Handle touch move - cancel long press if user is scrolling
+   */
+  const handleTouchMove = (event: TouchEvent) => {
+    if (!isMobile.value || !touchStartPos.value) return;
+
+    const touch = event.touches[0];
+    const deltaX = Math.abs(touch.clientX - touchStartPos.value.x);
+    const deltaY = Math.abs(touch.clientY - touchStartPos.value.y);
+
+    // If user moved more than 10px, they're scrolling - cancel long press
+    if (deltaX > 10 || deltaY > 10) {
+      if (longPressTimeout.value) {
+        clearTimeout(longPressTimeout.value);
+        longPressTimeout.value = null;
+      }
+    }
   };
 
   /**
@@ -84,7 +127,7 @@ export function useMobilePhotoSelection() {
   ) => {
     // On desktop, always allow regular click-to-select
     if (!isMobile.value) {
-      onSelect(photoId);
+      togglePhotoSelection(photoId, onSelect);
     }
     // On mobile, prevent default click to avoid interference with touch events
     else {
@@ -97,6 +140,7 @@ export function useMobilePhotoSelection() {
    */
   const exitSelectionMode = () => {
     isSelectionModeActive.value = false;
+    selectedPhotosSet.value.clear();
     showHoverOverlay.value = false;
 
     if (hoverTimeout.value) {
@@ -171,7 +215,7 @@ export function useMobilePhotoSelection() {
       if (!isButton) {
         event.preventDefault();
         event.stopPropagation();
-        onSelect(photoId);
+        togglePhotoSelection(photoId, onSelect);
       }
       touchStartTime.value = 0;
       touchStartPos.value = null;
@@ -186,7 +230,7 @@ export function useMobilePhotoSelection() {
         if (!isButton) {
           event.preventDefault();
           event.stopPropagation();
-          onSelect(photoId);
+          togglePhotoSelection(photoId, onSelect);
         }
       } else {
         // Selection mode is NOT active - show hover overlay temporarily
@@ -221,6 +265,7 @@ export function useMobilePhotoSelection() {
 
     // Methods
     handleTouchStart,
+    handleTouchMove,
     handleTouchEnd,
     handleTouchCancel,
     handleClick,
