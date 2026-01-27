@@ -116,7 +116,7 @@
       v-if="!isFirstImportState || lightboxPhotos.length > 0"
       class="sync-area-header"
     >
-      <n-icon size="18">
+      <n-icon size="18" color="var(--primary-color)">
         <BookInformation20Regular />
       </n-icon>
       <h3 class="sync-area-title">Photo upload and preview area.</h3>
@@ -1217,10 +1217,6 @@ defineExpose({
   .sync-area-header {
     align-items: flex-start;
     gap: 8px;
-  }
-
-  .sync-area-title {
-    font-size: 14px;
   }
 
   .upload-progress-section {

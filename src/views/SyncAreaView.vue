@@ -302,8 +302,14 @@ onMounted(() => {
 }
 
 .tab-content {
-  padding: var(--spacing-3xl);
+  padding: var(--spacing-2xl);
   background-color: var(--bg-container);
+}
+
+@media (max-width: 768px) {
+  .tab-content {
+    padding: var(--spacing-xl);
+  }
 }
 
 .header-content {
@@ -566,11 +572,12 @@ onMounted(() => {
   }
 
   .tab-button {
-    flex: 0 0 auto;
+    flex: 1 1 0%;
+    width: 100%;
     padding: var(--spacing-sm) var(--spacing-lg);
     font-size: var(--font-size-base);
     white-space: nowrap;
-    min-width: fit-content;
+    min-width: 0;
   }
 
   .tab-title {

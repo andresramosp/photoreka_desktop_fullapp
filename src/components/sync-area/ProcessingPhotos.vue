@@ -4,13 +4,16 @@
       <!-- Processing Jobs Table -->
 
       <div class="sync-area-header">
-        <n-icon size="18">
+        <n-icon size="18" color="var(--primary-color)">
           <BookInformation20Regular />
         </n-icon>
         <h3 class="sync-area-title">
-          Here you can monitor the analysis process for your photos. They will
-          appear in your Workspace once the process is complete (up to two
-          hours).
+          <span class="desktop-only"
+            >Here you can monitor the analysis process for your photos. They
+            will appear in your Workspace once the process is complete (up to
+            two hours).</span
+          >
+          <span class="mobile-only">Monitor your photo analysis here.</span>
         </h3>
       </div>
       <div v-if="processingJobs.length > 0" class="processing-table-container">
@@ -524,6 +527,7 @@ const formatDate = (date) => {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
   });
 };
 const toggleJobExpansion = (jobId) => {
@@ -551,6 +555,21 @@ function isLastFinishedJob(job) {
 /* Tab content - local overrides only */
 .tab-content {
   /* Inherits from .tab-content-container global class */
+}
+/* Responsive text for .sync-area-title */
+.mobile-only {
+  display: none;
+}
+.desktop-only {
+  display: inline;
+}
+@media (max-width: 768px) {
+  .mobile-only {
+    display: inline;
+  }
+  .desktop-only {
+    display: none;
+  }
 }
 
 /* Processing Section */
@@ -586,20 +605,21 @@ function isLastFinishedJob(job) {
 }
 
 .processing-table {
-  /* background-color: var(--bg-body); */
-  border-radius: 12px;
-  border: 1px solid #2c2c32;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .processing-row {
-  border-bottom: 1px solid #2c2c32;
+  background-color: var(--bg-card);
+  border: 1px solid #2c2c32;
+  border-radius: 12px;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .processing-row:last-child {
-  border-bottom: none;
+  border-bottom: 1px solid #2c2c32;
 }
 
 .processing-row:hover {
@@ -630,7 +650,7 @@ function isLastFinishedJob(job) {
 
 .cell-label {
   font-size: 12px;
-  /* color: #ffffff60; */
+  color: var(--text-secondary);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -777,50 +797,124 @@ function isLastFinishedJob(job) {
 
 /* Responsive */
 @media (max-width: 768px) {
-  /* Processing Table Responsive */
+  /* Processing Table Responsive - Compact Card Style */
+
+  .processing-row {
+    background-color: var(--bg-card);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    margin-bottom: 12px;
+  }
+
+  .processing-row:last-child {
+    margin-bottom: 0;
+  }
+
   .row-main {
-    grid-template-columns: 1fr;
-    gap: 12px;
-    padding: 12px 16px;
+    display: block;
+    padding: 14px;
+    position: relative;
   }
 
   .row-cell {
+    display: flex;
     flex-direction: row;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
-    padding: 8px 0;
-    border-bottom: 1px solid #2c2c32;
-  }
-
-  .row-cell:last-child {
+    padding: 0;
     border-bottom: none;
+    gap: 8px;
+    margin-bottom: 10px;
   }
 
-  .expand-cell {
-    position: absolute;
-    top: 12px;
-    right: 16px;
+  .row-cell:last-of-type {
+    margin-bottom: 0;
   }
 
-  .actions-cell {
+  .cell-label {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    min-width: 70px;
+    flex-shrink: 0;
+  }
+
+  .cell-value {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  /* Date cell - header */
+  .date-cell {
+    margin-bottom: 12px;
+    padding-right: 32px;
+  }
+
+  .date-cell .cell-value {
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  /* Photos count */
+  .photos-cell .cell-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: #8b5cf6;
+  }
+
+  /* Progress cell */
+  .progress-cell {
+    flex-direction: row;
+    align-items: center;
+    width: auto;
+    min-width: auto;
+  }
+
+  /* Status cell */
+  .status-cell {
+    align-items: center;
+  }
+
+  /* Expand icon - absolute positioned top right */
+  .actions-cell:has(.expand-icon) {
     position: absolute;
-    top: 12px;
-    right: 50px;
+    top: 14px;
+    right: 14px;
+    margin-bottom: 0;
+  }
+
+  .expand-icon {
+    color: var(--text-secondary);
+  }
+
+  /* Action button - full width at bottom */
+  .actions-cell:has(.add-to-collection-btn) {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #2c2c32;
   }
 
   .row-actions {
-    flex-direction: column;
-    gap: 8px;
+    width: 100%;
   }
 
   .add-to-collection-btn {
-    font-size: 12px;
-    padding: 4px 8px;
+    font-size: 13px;
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Expanded content */
+  .row-expanded {
+    border-top: 1px solid #2c2c32;
+  }
+
+  .expanded-content {
+    padding: 12px 14px;
   }
 
   .photos-grid-mini {
-    grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
-    gap: 6px;
+    grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+    gap: 4px;
   }
 
   .expanded-header {
@@ -838,17 +932,20 @@ function isLastFinishedJob(job) {
   }
 }
 
-.progress-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-width: 48px;
-  width: 56px; /* Ajusta según tu diseño */
-}
+/* Desktop Progress Cell */
+@media (min-width: 769px) {
+  .progress-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 48px;
+    width: 56px;
+  }
 
-.progress-compact {
-  display: block;
-  margin: 0 auto;
+  .progress-compact {
+    display: block;
+    margin: 0 auto;
+  }
 }
 </style>
