@@ -401,7 +401,15 @@ const handleFocus = () => {
   // Calculate position for mobile fixed dropdown
   if (searchContainerRef.value) {
     const rect = searchContainerRef.value.getBoundingClientRect();
-    dropdownTopPosition.value = `${rect.bottom + 8}px`;
+    const topValue = rect.bottom + 8;
+    dropdownTopPosition.value = `${topValue}px`;
+    console.log("[GlobalSearch] Dropdown position calculated:", topValue, "px");
+    console.log(
+      "[GlobalSearch] showDropdown:",
+      showDropdown.value,
+      "searchQuery:",
+      searchQuery.value,
+    );
   }
 
   ensureDataLoaded();
@@ -544,6 +552,35 @@ watch(flatResults, () => {
   }
 });
 
+// Debug dropdown visibility on mobile
+watch([showDropdown, searchQuery], ([show, query]) => {
+  if (window.innerWidth < 768) {
+    console.log(
+      "[GlobalSearch] Mobile - showDropdown:",
+      show,
+      "query length:",
+      query?.length || 0,
+      "hasResults:",
+      hasResults.value,
+    );
+    if (show && query && query.length >= 2) {
+      nextTick(() => {
+        if (dropdownRef.value) {
+          const rect = dropdownRef.value.getBoundingClientRect();
+          console.log(
+            "[GlobalSearch] Dropdown actual position:",
+            rect.top,
+            "height:",
+            rect.height,
+            "display:",
+            window.getComputedStyle(dropdownRef.value).display,
+          );
+        }
+      });
+    }
+  }
+});
+
 // Click outside handler
 const handleClickOutside = (event: MouseEvent | TouchEvent) => {
   const target = event.target as Node;
@@ -631,13 +668,12 @@ onUnmounted(() => {
 /* Transition */
 .dropdown-enter-active,
 .dropdown-leave-active {
-  transition: all 0.2s ease;
+  transition: opacity 0.15s ease;
 }
 
 .dropdown-enter-from,
 .dropdown-leave-to {
   opacity: 0;
-  transform: translateY(-8px);
 }
 
 /* Loading & no results */
@@ -843,10 +879,17 @@ onUnmounted(() => {
     max-height: 60vh;
     position: fixed;
     top: var(--dropdown-top, 70px);
-    left: var(--spacing-md);
-    right: var(--spacing-md);
+    left: var(--spacing-md, 12px);
+    right: var(--spacing-md, 12px);
     width: auto;
     z-index: 10000;
+    /* Android specific fixes */
+    transform: translate3d(0, 0, 0);
+    -webkit-transform: translate3d(0, 0, 0);
+    visibility: visible !important;
+    opacity: 1 !important;
+    display: flex !important;
+    pointer-events: auto;
   }
 
   .shortcut-hint {
