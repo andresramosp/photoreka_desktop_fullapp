@@ -1,6 +1,24 @@
 <template>
   <div class="portfolio-report-container view-container">
-    <!-- Welcome/Explanation Section -->
+    <!-- Navigation Sidebar (Desktop) / Bottom Nav (Mobile) -->
+    <!-- <nav class="report-navigation">
+      <div class="nav-items">
+        <button
+          v-for="section in sections"
+          :key="section.id"
+          :class="['nav-item', { active: activeSection === section.id }]"
+          @click="scrollToSection(section.id)"
+        >
+          <n-icon :size="20" class="nav-icon">
+            <component :is="section.icon" />
+          </n-icon>
+          <span class="nav-label">
+            <span class="nav-label-desktop">{{ section.label }}</span>
+            <span class="nav-label-mobile">{{ section.shortLabel }}</span>
+          </span>
+        </button>
+      </div>
+    </nav> -->
 
     <!-- Report Content -->
     <div v-if="!isGenerating" class="report-content">
@@ -12,118 +30,44 @@
             <p class="report-subtitle">
               Comprehensive analysis of {{ totalPhotos }} photos in your catalog
             </p>
-            <!-- <p class="report-date">Generated on {{ formatDate(reportDate) }}</p> -->
           </div>
-          <!-- <div class="header-actions">
-            <n-button
-              @click="regenerateReport"
-              :loading="isGenerating"
-              secondary
-            >
-              <template #icon>
-                <n-icon>
-                  <RefreshIcon />
-                </n-icon>
-              </template>
-              Regenerate
-            </n-button>
-            <n-button @click="backToStart">
-              <template #icon>
-                <n-icon>
-                  <ArrowBackIcon />
-                </n-icon>
-              </template>
-              Back
-            </n-button>
-          </div> -->
         </div>
       </div>
 
       <!-- Visual Aspects Section -->
-      <VisualAspectsReportNew :photos="photosStore.photos" />
+      <section
+        id="visual"
+        ref="visualRef"
+        class="report-section-wrapper"
+        data-section="visual"
+      >
+        <VisualAspectsReportNew :photos="photosStore.photos" />
+      </section>
+
+      <!-- Photographic Patterns Section -->
+      <!-- <section
+        id="patterns"
+        ref="patternsRef"
+        class="report-section-wrapper"
+        data-section="patterns"
+      >
+        <div class="patterns-section">
+          <NarrativeAnalysisReport />
+        </div>
+      </section> -->
 
       <!-- Artistic Scores Section -->
-      <ArtisticScoresReport :photos="photosStore.photos" />
+      <section
+        id="artistic"
+        ref="artisticRef"
+        class="report-section-wrapper"
+        data-section="artistic"
+      >
+        <ArtisticScoresReport :photos="photosStore.photos" />
+      </section>
 
-      <!-- Narrative Analysis Section -->
+      <!-- Commented Sections -->
       <!-- <div class="report-section">
-        <div class="section-header">
-          <h2 class="section-title">
-            <n-icon class="section-icon">
-              <BookIcon />
-            </n-icon>
-            Narrative Patterns
-          </h2>
-          <p class="section-description">
-            Storytelling themes and narrative clusters identified in your
-            collection
-          </p>
-        </div>
-
-        <div class="narrative-grid">
-          <div
-            v-for="narrative in narrativeData"
-            :key="narrative.id"
-            class="narrative-card"
-          >
-            <div class="narrative-header">
-              <div class="narrative-percentage">
-                {{ narrative.percentage }}%
-              </div>
-              <h3 class="narrative-title">{{ narrative.title }}</h3>
-            </div>
-            <p class="narrative-description">{{ narrative.description }}</p>
-            <div class="narrative-meta">
-              <span class="photo-count">{{ narrative.photoCount }} photos</span>
-              <span class="narrative-strength" :class="narrative.strength">
-                {{ narrative.strength }} pattern
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-
-      <div class="report-section">
-        <div class="section-header">
-          <h2 class="section-title">
-            <n-icon class="section-icon">
-              <GlobeIcon />
-            </n-icon>
-            Cultural Context
-          </h2>
-          <p class="section-description">
-            Cultural themes, geographic influences, and contextual patterns
-          </p>
-        </div>
-
-        <div class="cultural-grid">
-          <div
-            v-for="context in culturalData"
-            :key="context.id"
-            class="cultural-card"
-          >
-            <div class="cultural-header">
-              <div class="cultural-percentage">{{ context.percentage }}%</div>
-              <h3 class="cultural-title">{{ context.title }}</h3>
-            </div>
-            <p class="cultural-description">{{ context.description }}</p>
-            <div class="cultural-meta">
-              <span class="photo-count">{{ context.photoCount }} photos</span>
-              <div class="cultural-tags">
-                <span
-                  v-for="tag in context.tags"
-                  :key="tag"
-                  class="cultural-tag"
-                >
-                  {{ tag }}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
 
       <div class="report-section">
         <div class="section-header">
@@ -221,7 +165,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { usePhotosStore } from "@/stores/photos.js";
 
 defineOptions({
@@ -230,6 +174,7 @@ defineOptions({
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useMessage } from "naive-ui";
 import VisualAspectsReport from "@/components/report/VisualAspectsReport.vue";
+import NarrativeAnalysisReport from "@/components/report/NarrativeAnalysisReport.vue";
 import ArtisticScoresReport from "@/components/report/ArtisticScoresReport.vue";
 
 // Icons
@@ -256,6 +201,70 @@ import VisualAspectsReportNew from "@/components/report/VisualAspectsReportNew.v
 
 const photosStore = usePhotosStore();
 const message = useMessage();
+
+// Navigation sections
+const sections = [
+  {
+    id: "visual",
+    label: "Visual Aspects",
+    shortLabel: "Visual",
+    icon: EyeIcon,
+  },
+  {
+    id: "patterns",
+    label: "Usage Patterns",
+    shortLabel: "Patterns",
+    icon: BookIcon,
+  },
+  {
+    id: "artistic",
+    label: "Artistic Scores",
+    shortLabel: "Artistic",
+    icon: StarIcon,
+  },
+];
+
+// Section refs
+const visualRef = ref(null);
+const patternsRef = ref(null);
+const artisticRef = ref(null);
+
+// Active section tracking
+const activeSection = ref("visual");
+
+// Scroll to section
+const scrollToSection = (sectionId) => {
+  const element = document.getElementById(sectionId);
+  if (element) {
+    element.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+};
+
+// IntersectionObserver setup
+let observer = null;
+
+const setupIntersectionObserver = () => {
+  const options = {
+    root: null,
+    rootMargin: "-20% 0px -70% 0px",
+    threshold: 0,
+  };
+
+  observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        const sectionId = entry.target.getAttribute("data-section");
+        if (sectionId) {
+          activeSection.value = sectionId;
+        }
+      }
+    });
+  }, options);
+
+  // Observe all sections
+  const sectionElements = document.querySelectorAll(".report-section-wrapper");
+  sectionElements.forEach((section) => observer.observe(section));
+};
 
 // State
 const isGenerating = ref(false);
@@ -519,7 +528,17 @@ onMounted(async () => {
   if (photosStore.photos.length === 0) {
     await photosStore.fetchPhotos();
   }
-  // await generateReport();
+
+  // Setup scroll spy
+  setTimeout(() => {
+    setupIntersectionObserver();
+  }, 100);
+});
+
+onUnmounted(() => {
+  if (observer) {
+    observer.disconnect();
+  }
 });
 </script>
 
@@ -530,6 +549,126 @@ onMounted(async () => {
   margin: 0 auto;
   background-color: var(--bg-body);
   min-height: 90vh;
+  position: relative;
+}
+
+/* Navigation Styles */
+.report-navigation {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: fit-content;
+  z-index: 100;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-sm) var(--spacing-md);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(10px);
+  transition: var(--transition-normal);
+  height: auto;
+  min-height: unset;
+}
+
+.nav-items {
+  display: flex;
+  flex-direction: row;
+  gap: var(--spacing-xs);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+.nav-item:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.nav-item.active {
+  background: var(--primary-color);
+  color: var(--text-on-primary);
+  border-color: var(--border-color);
+}
+
+.nav-item.active .nav-icon {
+  color: white;
+}
+
+.nav-icon {
+  flex-shrink: 0;
+  transition: var(--transition-fast);
+}
+
+.nav-label {
+  transition: var(--transition-fast);
+}
+
+/* Mobile Navigation */
+@media (max-width: 768px) {
+  .report-navigation {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    margin: 0;
+    transform: none;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    border-bottom: none;
+    padding: var(--spacing-sm) var(--spacing-md);
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100vw;
+  }
+
+  .nav-items {
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    gap: 0;
+    width: 100%;
+  }
+
+  .nav-item {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm) var(--spacing-md);
+    flex: 1;
+    text-align: center;
+    justify-content: center;
+  }
+
+  .nav-label {
+    font-size: var(--font-size-xs);
+    display: inline;
+  }
+
+  .portfolio-report-container {
+    padding-bottom: calc(var(--spacing-4xl) + 80px);
+  }
+}
+
+/* Section Wrappers */
+.report-section-wrapper {
+  scroll-margin-top: var(--spacing-2xl);
+  margin-bottom: var(--spacing-3xl);
 }
 
 /* Empty State Styles (similar to ProjectBuilderView) */
@@ -687,6 +826,15 @@ onMounted(async () => {
   color: var(--text-secondary);
   margin: 0;
   line-height: var(--line-height-relaxed);
+}
+
+/* Patterns Section */
+.patterns-section {
+  width: 100%;
+}
+
+.patterns-section .section-header {
+  margin-bottom: 0;
 }
 
 /* Narrative Grid */
@@ -1047,6 +1195,97 @@ onMounted(async () => {
   margin-bottom: var(--spacing-xs);
 }
 
+/* Shared Report Section Styles */
+:deep(.report-section) {
+  margin-bottom: var(--spacing-4xl);
+}
+
+:deep(.report-section-header) {
+  margin-bottom: var(--spacing-2xl);
+  margin-top: var(--spacing-xl);
+}
+
+:deep(.section-title) {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-sm) 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+:deep(.section-icon) {
+  color: var(--primary-color);
+}
+
+:deep(.section-description) {
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: var(--line-height-relaxed);
+}
+
+:deep(.subsection-header) {
+  margin-bottom: var(--spacing-xl);
+  margin-top: var(--spacing-3xl);
+}
+
+:deep(.subsection-title) {
+  font-size: var(--font-size-xl) !important;
+  font-weight: var(--font-weight-medium) !important;
+}
+
+:deep(.group-header) {
+  margin-bottom: var(--spacing-xl);
+  padding-bottom: var(--spacing-md);
+  border-bottom: 2px solid var(--border-color);
+}
+
+:deep(.group-title-wrapper) {
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.criteria-group) {
+  margin-top: var(--spacing-3xl);
+  margin-bottom: var(--spacing-3xl);
+}
+
+:deep(.criteria-group:first-of-type) {
+  margin-top: 0;
+}
+
+:deep(.criteria-group:last-of-type) {
+  margin-bottom: 0;
+}
+
+:deep(.group-title) {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+:deep(.group-subtitle) {
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-normal);
+}
+
+:deep(.empty-icon) {
+  color: var(--text-tertiary);
+  opacity: 0.5;
+}
+
+:deep(.empty-text) {
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
   .portfolio-report-container {
@@ -1113,6 +1352,22 @@ onMounted(async () => {
   .quality-score,
   .improvement-priority {
     flex-direction: row;
+  }
+}
+
+/* Mostrar solo el label largo en desktop, el corto en mobile */
+.nav-label-desktop {
+  display: inline;
+}
+.nav-label-mobile {
+  display: none;
+}
+@media (max-width: 768px) {
+  .nav-label-desktop {
+    display: none;
+  }
+  .nav-label-mobile {
+    display: inline;
   }
 }
 </style>

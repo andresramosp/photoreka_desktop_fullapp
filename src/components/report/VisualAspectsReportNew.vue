@@ -162,35 +162,7 @@ const getSliceColor = (index) => {
 </script>
 
 <style scoped>
-.report-section {
-  margin-bottom: var(--spacing-4xl);
-}
-
-.report-section-header {
-  margin-bottom: var(--spacing-2xl);
-  margin-top: var(--spacing-xl);
-}
-
-.section-title {
-  font-size: var(--font-size-2xl);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  margin: 0 0 var(--spacing-sm) 0;
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-}
-
-.section-icon {
-  color: var(--primary-color);
-}
-
-.section-description {
-  font-size: var(--font-size-base);
-  color: var(--text-secondary);
-  margin: 0;
-  line-height: var(--line-height-relaxed);
-}
+/* Common styles inherited from parent */
 
 /* Visual Aspects Container */
 .visual-aspects-container {
@@ -326,17 +298,6 @@ const getSliceColor = (index) => {
   justify-content: center;
   padding: var(--spacing-4xl) var(--spacing-2xl);
   gap: var(--spacing-md);
-}
-
-.empty-icon {
-  color: var(--text-tertiary);
-  opacity: 0.5;
-}
-
-.empty-text {
-  font-size: var(--font-size-base);
-  color: var(--text-secondary);
-  margin: 0;
 }
 
 /* Mobile Responsiveness */
