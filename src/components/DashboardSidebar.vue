@@ -69,7 +69,7 @@
       <div class="logo-container">
         <div class="logo clickable-logo" @click="goToDashboard">
           <div v-if="collapsed" class="logo-icon">
-            <AppLogo layout="icon" :height="46" />
+            <AppLogo layout="icon" :height="42" />
           </div>
           <div v-if="!collapsed" class="logo-text">
             <AppLogo layout="horizontal" :height="36" />

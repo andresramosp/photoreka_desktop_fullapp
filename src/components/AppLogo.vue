@@ -15,7 +15,7 @@ import { computed } from "vue";
 import { useTheme } from "@/composables/useTheme";
 
 // Nuevos logos (marca)
-import iconDark from "@/assets/logos/marca/icon-dark.png";
+import iconDark from "@/assets/logos/marca/icon-dark-dark.png";
 import iconLight from "@/assets/logos/marca/icon-light.png";
 import horizontalDark from "@/assets/logos/marca/horizontal-dark.png";
 

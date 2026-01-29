@@ -26,11 +26,13 @@ import {
   CubeOutline,
   PhonePortrait as MobileIcon,
   ListOutline,
+  CheckmarkCircleOutline,
 } from "@vicons/ionicons5";
 import { isMobileDevice } from "@/utils/utils.js";
 
 import AppLogo from "./AppLogo.vue";
-import { Workspace } from "@vicons/carbon";
+import { Workspace, Monitor } from "@vicons/carbon";
+import { MonitorFilled } from "@vicons/material";
 
 const notification = useNotification();
 let closeNotification = ref<NotificationReactive | null>(null);
@@ -74,7 +76,7 @@ function showMobileWelcome() {
               round: true,
               bordered: false,
               style: {
-                fontSize: "11px",
+                fontSize: "14px",
                 opacity: "0.85",
                 marginTop: "15px",
                 marginLeft: "0px",
@@ -121,11 +123,29 @@ function showMobileWelcome() {
                   display: "flex",
                   alignItems: "center",
                   gap: "8px",
+                  justifyContent: "space-between",
                 },
               },
               [
-                renderIcon(CloudUploadOutline)(),
-                h("span", "Import new photos"),
+                h(
+                  "div",
+                  {
+                    style: {
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    },
+                  },
+                  [
+                    renderIcon(CloudUploadOutline)(),
+                    h("span", "Import new photos"),
+                  ],
+                ),
+                h(
+                  NIcon,
+                  { size: 18, color: "#52c41a" },
+                  { default: () => h(CheckmarkCircleOutline) },
+                ),
               ],
             ),
 
@@ -137,11 +157,29 @@ function showMobileWelcome() {
                   display: "flex",
                   alignItems: "center",
                   gap: "8px",
+                  justifyContent: "space-between",
                 },
               },
               [
-                renderIcon(SearchIcon)(),
-                h("span", "Search your entire archive"),
+                h(
+                  "div",
+                  {
+                    style: {
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    },
+                  },
+                  [
+                    renderIcon(SearchIcon)(),
+                    h("span", "Search your entire archive"),
+                  ],
+                ),
+                h(
+                  NIcon,
+                  { size: 18, color: "#52c41a" },
+                  { default: () => h(CheckmarkCircleOutline) },
+                ),
               ],
             ),
 
@@ -153,11 +191,29 @@ function showMobileWelcome() {
                   display: "flex",
                   alignItems: "center",
                   gap: "8px",
+                  justifyContent: "space-between",
                 },
               },
               [
-                renderIcon(LayersOutline)(),
-                h("span", "Browse and manage your library"),
+                h(
+                  "div",
+                  {
+                    style: {
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    },
+                  },
+                  [
+                    renderIcon(LayersOutline)(),
+                    h("span", "Browse and manage your library"),
+                  ],
+                ),
+                h(
+                  NIcon,
+                  { size: 18, color: "#52c41a" },
+                  { default: () => h(CheckmarkCircleOutline) },
+                ),
               ],
             ),
           ],
@@ -174,7 +230,7 @@ function showMobileWelcome() {
               color: "var(--text-primary)",
             },
           },
-          "🖥️ More advanced tools available on desktop:",
+          "⚒️ Advanced tools available on tablet/desktop:",
         ),
 
         // Features
@@ -196,9 +252,30 @@ function showMobileWelcome() {
                   display: "flex",
                   alignItems: "center",
                   gap: "8px",
+                  justifyContent: "space-between",
                 },
               },
-              [renderIcon(CubeOutline)(), h("span", "3D Atlas exploration")],
+              [
+                h(
+                  "div",
+                  {
+                    style: {
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    },
+                  },
+                  [
+                    renderIcon(CubeOutline)(),
+                    h("span", "3D Atlas exploration"),
+                  ],
+                ),
+                h(
+                  NIcon,
+                  { size: 18, color: "#409eff" },
+                  { default: () => h(MonitorFilled) },
+                ),
+              ],
             ),
 
             h(
@@ -209,9 +286,27 @@ function showMobileWelcome() {
                   display: "flex",
                   alignItems: "center",
                   gap: "8px",
+                  justifyContent: "space-between",
                 },
               },
-              [renderIcon(Workspace)(), h("span", "Interactive Canvas")],
+              [
+                h(
+                  "div",
+                  {
+                    style: {
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    },
+                  },
+                  [renderIcon(Workspace)(), h("span", "Interactive Canvas")],
+                ),
+                h(
+                  NIcon,
+                  { size: 18, color: "#409eff" },
+                  { default: () => h(MonitorFilled) },
+                ),
+              ],
             ),
 
             h(
@@ -222,9 +317,27 @@ function showMobileWelcome() {
                   display: "flex",
                   alignItems: "center",
                   gap: "8px",
+                  justifyContent: "space-between",
                 },
               },
-              [renderIcon(ListOutline)(), h("span", "Series creation")],
+              [
+                h(
+                  "div",
+                  {
+                    style: {
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    },
+                  },
+                  [renderIcon(ListOutline)(), h("span", "Series creation")],
+                ),
+                h(
+                  NIcon,
+                  { size: 18, color: "#409eff" },
+                  { default: () => h(MonitorFilled) },
+                ),
+              ],
             ),
           ],
         ),
