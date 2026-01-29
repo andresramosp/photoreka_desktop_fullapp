@@ -21,6 +21,7 @@ import AuthLrController from '#controllers/auth_lr_controller'
 const AuthController = () => import('#controllers/auth_controller')
 router.post('/api/auth/register', [AuthController, 'register'])
 router.post('/api/auth/login', [AuthController, 'login'])
+router.post('/api/auth/demo-login', [AuthController, 'demoLogin']) // Demo login endpoint
 router.post('/api/auth/confirm-email', [AuthController, 'confirmEmail'])
 router.post('/api/auth/resend-confirmation', [AuthController, 'resendConfirmation'])
 router.post('/api/auth/forgot-password', [AuthController, 'forgotPassword'])
@@ -230,4 +231,4 @@ router
       return
     })
   })
-  .use(middleware.auth())
+  .use([middleware.auth(), middleware.readOnly()]) // Apply auth and then readOnly middleware

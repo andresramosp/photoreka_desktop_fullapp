@@ -138,6 +138,76 @@ export default class AuthController {
   }
 
   /**
+   * Demo login - impersonate a demo user with read-only access
+   */
+  async demoLogin({ response }: HttpContext) {
+    try {
+      // El email del usuario demo debe estar configurado en una variable de entorno
+      const demoEmail = process.env.DEMO_USER_EMAIL
+
+      if (!demoEmail) {
+        return response.status(503).json({
+          message: 'Demo mode is not configured on this server',
+        })
+      }
+
+      // Buscar el usuario demo
+      const demoUser = await User.findBy('email', demoEmail)
+
+      if (!demoUser) {
+        console.error('[Demo Login] Demo user not found:', demoEmail)
+        return response.status(503).json({
+          message: 'Demo user not available',
+        })
+      }
+
+      if (!demoUser.isActive) {
+        return response.status(503).json({
+          message: 'Demo user is currently inactive',
+        })
+      }
+
+      // Crear un token estándar - el middleware verificará si es usuario demo por email
+      const token = await User.accessTokens.create(demoUser, ['*'], {
+        name: 'demo-token',
+        expiresIn: '7 days', // Los tokens demo expiran en 7 días
+      })
+
+      console.log('[Demo Login] Demo session created for user:', demoEmail)
+
+      return response.ok({
+        message: 'Demo session started - You have read-only access',
+        user: {
+          id: demoUser.id,
+          name: demoUser.name,
+          email: demoUser.email,
+          preferredSource: demoUser.preferredSource,
+          isActive: demoUser.isActive,
+          isEmailConfirmed: true,
+          profiles: demoUser.profiles,
+          isDemoMode: true, // Marcador especial para el frontend
+        },
+        token: token.value!.release(),
+        isDemoMode: true,
+        demoRestrictions: {
+          canUpload: false,
+          canDelete: false,
+          canModify: false,
+          canCreateCollections: false,
+          message:
+            'You are in demo mode with read-only access. Create an account to unlock all features.',
+        },
+      })
+    } catch (error) {
+      console.error('[Demo Login] Error:', error)
+      return response.status(500).json({
+        message: 'Demo login failed',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
    * Login user
    */
   async login({ request, response }: HttpContext) {
