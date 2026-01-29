@@ -152,12 +152,20 @@ export default class AnalyzerController {
 
       if (!userId) return response.badRequest({ message: 'Missing userId' })
 
-      const reports = await HealthPhotoService.healthForUser(userId)
+      const reports = await HealthPhotoService.healthForUserRaw(userId)
+
+      // Filtrar reports y checks por ok: false
+      const filteredReports = reports
+        .filter((r) => !r.ok)
+        .map((r) => ({
+          ...r,
+          checks: Array.isArray(r.checks) ? r.checks.filter((c) => c && c.ok === false) : r.checks,
+        }))
 
       return response.ok({
         userId,
         ok: reports.every((r) => r.ok),
-        reports,
+        reports: filteredReports,
       })
     } catch (error) {
       logger.error('Error obteniendo health:', error)
@@ -183,7 +191,7 @@ export default class AnalyzerController {
         return response.notFound({ message: 'AnalyzerProcess not found' })
       }
 
-      await process.load('photos')
+      // healthForProcess ahora maneja el preload internamente
       const reports = await HealthPhotoService.updateSheetWithHealth(process)
 
       // Aquí puedes devolver los datos que necesites

@@ -1076,4 +1076,48 @@ export default class ModelsService {
 
     return results
   }
+
+  // ===============================
+  // GEMINI BATCH API (OFICIAL)
+  // ===============================
+
+  async submitGeminiBatch(requests: any[], displayName: string): Promise<string | null> {
+    const batchBody = {
+      batch: {
+        displayName,
+        inputConfig: {
+          requests: {
+            requests: requests.map((r) => ({
+              key: r.key, // identificador del request
+              request: r.request, // generateContent válido
+            })),
+          },
+        },
+      },
+    }
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.modelName}:batchGenerateContent`
+
+    const res = await this.http.post(url, batchBody)
+
+    // Devuelve el nombre del batch job
+    return res.data?.batch?.name ?? null
+  }
+
+  async getGeminiBatchStatus(batchName: string): Promise<string | null> {
+    const url = `https://generativelanguage.googleapis.com/v1beta/${batchName}`
+    const res = await this.http.get(url)
+
+    return res.data?.state ?? null
+  }
+
+  async getGeminiBatchResultsInline(batchName: string): Promise<any[]> {
+    const url = `https://generativelanguage.googleapis.com/v1beta/${batchName}`
+    const res = await this.http.get(url)
+
+    // Resultados inline según doc oficial
+    const responses = res.data?.output?.inlinedResponses?.inlinedResponses
+
+    return Array.isArray(responses) ? responses : []
+  }
 }

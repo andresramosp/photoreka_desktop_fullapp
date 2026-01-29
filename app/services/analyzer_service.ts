@@ -108,7 +108,7 @@ export default class AnalyzerProcessRunner {
     // Precargar health en paralelo solo si es retry_process
     if (this.process.mode === 'retry_process') {
       await this.changeStage('*** Precargando health de fotos ***')
-      await this.process.preloadPhotoHealth()
+      await this.process.preloadPhotoHealthBatch() // Versión optimizada con batch queries
     }
 
     // CAMBIO: Usar stages directamente en lugar de getTaskList

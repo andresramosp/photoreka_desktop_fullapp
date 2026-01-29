@@ -3,6 +3,7 @@
 import AnalyzerProcess from '#models/analyzer/analyzerProcess'
 import Photo from '#models/photo'
 import PhotoManager from '../managers/photo_manager.js'
+import db from '@adonisjs/lucid/services/db'
 type Check = { label: string; ok: boolean }
 
 export default class HealthPhotoService {
@@ -23,19 +24,45 @@ export default class HealthPhotoService {
     checks.push({ label: 'photo.exists', ok: !!photo })
     if (!photo) return { ok: false, checks, missing: ['photo'] }
 
+    return this.performHealthChecks({
+      embedding: photo.embedding,
+      descriptions: photo.descriptions,
+      colorHistogram: photo.colorHistogram,
+      tags: photo.tags,
+      chunks: photo.descriptionChunks,
+    })
+  }
+
+  /* ───────── 1b) Validación centralizada (CORE) ───────── */
+  private static performHealthChecks(data: {
+    embedding: any
+    descriptions: any
+    colorHistogram: any
+    tags: Array<{
+      id?: number
+      tag_photo_id?: number
+      category: string
+      tagId?: number
+      tag_id?: number
+      tag?: { embedding: any }
+      tag_embedding?: any
+    }>
+    chunks: Array<{ id: number; embedding: any }>
+  }) {
+    const checks: Check[] = []
+    const missing: string[] = []
+
     const push = (label: string, ok: boolean) => {
       checks.push({ label, ok })
       if (!ok) missing.push(label)
     }
 
-    push('photo.embedding', !!photo.embedding)
-    // push('detections', photo.detectionAreas.length > 0)
+    push('photo.embedding', !!data.embedding)
 
-    const d = photo.descriptions ?? {}
+    const d = data.descriptions ?? {}
     push('descriptions.context', !!d.context)
     push('descriptions.story', !!d.story)
     push('descriptions.visual_accents', !!d.visual_accents)
-
     push('descriptions.artistic_scores', !!d.artistic_scores)
 
     const visualAspects = d.visual_aspects || {}
@@ -43,7 +70,6 @@ export default class HealthPhotoService {
       'descriptions.visual_aspects.genre',
       !!(visualAspects.genre && visualAspects.genre.length > 0)
     )
-
     push(
       'descriptions.visual_aspects.orientation',
       !!(visualAspects.orientation && visualAspects.orientation.length > 0)
@@ -57,57 +83,128 @@ export default class HealthPhotoService {
       !!(visualAspects.palette && visualAspects.palette.length > 0)
     )
 
-    'descriptions.visual_aspects.temperature',
-      'descriptions.visual_aspects.color',
-      push('tags.any', photo.tags.length > 0)
+    push('tags.any', data.tags.length > 0)
     push(
       'tags.context_story',
-      photo.tags.some((t) => t.category === 'context_story')
+      data.tags.some((t) => t.category === 'context_story')
     )
     push(
       'tags.visual_accents',
-      photo.tags.some((t) => t.category === 'visual_accents')
+      data.tags.some((t) => t.category === 'visual_accents')
     )
     push(
       'tags.visual_aspects',
-      photo.tags.some((t) => t.category === 'visual_aspects')
+      data.tags.some((t) => t.category === 'visual_aspects')
     )
+    // push(
+    //   'tags.artistic_scores',
+    //   data.tags.some((t) => t.category === 'artistic_scores')
+    // )
 
-    push(
-      'tags.artistic_scores',
-      photo.tags.some((t) => t.category === 'artistic_scores')
-    )
+    push('descriptionChunks.any', data.chunks.length > 0)
+    data.chunks.forEach((c) => push(`descriptionChunk#${c.id}.embedding`, !!c.embedding))
 
-    push('descriptionChunks.any', photo.descriptionChunks.length > 0)
-    photo.descriptionChunks.forEach((c) =>
-      push(`descriptionChunk#${c.id}.embedding`, !!c.embedding)
-    )
+    push('photo.color_histogram', !!data.colorHistogram)
 
-    push('photo.color_histogram', !!photo.colorHistogram) // O el campo correcto donde almacenes el histograma
+    data.tags.forEach((t) => {
+      const tagPhotoId = t.id || t.tag_photo_id
+      const tagId = t.tagId || t.tag_id
+      const tagEmbedding = t.tag?.embedding || t.tag_embedding
+      push(`tagPhoto#${tagPhotoId}.tag#${tagId}.embedding`, !!tagEmbedding)
+    })
 
-    photo.tags.forEach((t) =>
-      push(`tagPhoto#${t.id}.tag#${t.tagId}.embedding`, !!(t.tag && t.tag.embedding))
-    )
-
-    // if (missing.length > 0) {
-    //   console.log(`❌ Foto #${photoId} tiene campos faltantes: ${missing.join(', ')}`)
-    // }
     return { ok: missing.length === 0, checks, missing }
   }
 
-  /* ───────── 2) healthForUser ───────── */
+  /* ───────── 1c) Carga batch optimizada (CENTRALIZADA) ───────── */
+  /**
+   * Carga fotos y sus relaciones usando raw queries batch.
+   * Mucho más rápido que preloads del ORM.
+   */
+  private static async loadPhotosWithRelationsBatch(photoIds: number[]) {
+    if (photoIds.length === 0) return []
+
+    // 1) Cargar fotos base
+    const photos = await Photo.query()
+      .whereIn('id', photoIds)
+      .select('id', 'embedding', 'descriptions', 'color_histogram')
+      .orderBy('id', 'asc')
+
+    // 2) Batch queries para relaciones
+    const [tags, descriptionChunks] = await Promise.all([
+      db
+        .from('tags_photos')
+        .select(
+          'tags_photos.id as tag_photo_id',
+          'tags_photos.photo_id',
+          'tags_photos.category',
+          'tags_photos.tag_id',
+          'tags.embedding as tag_embedding'
+        )
+        .leftJoin('tags', 'tags.id', 'tags_photos.tag_id')
+        .whereIn('tags_photos.photo_id', photoIds),
+
+      db
+        .from('descriptions_chunks')
+        .select('id', 'photo_id', 'embedding')
+        .whereIn('photo_id', photoIds),
+    ])
+
+    // 3) Indexar por photoId
+    const tagsByPhoto = new Map<number, any[]>()
+    const chunksByPhoto = new Map<number, any[]>()
+
+    tags.forEach((t) => {
+      if (!tagsByPhoto.has(t.photo_id)) tagsByPhoto.set(t.photo_id, [])
+      tagsByPhoto.get(t.photo_id)!.push(t)
+    })
+
+    descriptionChunks.forEach((c) => {
+      if (!chunksByPhoto.has(c.photo_id)) chunksByPhoto.set(c.photo_id, [])
+      chunksByPhoto.get(c.photo_id)!.push(c)
+    })
+
+    // 4) Retornar datos estructurados
+    return photos.map((photo) => ({
+      id: photo.id,
+      embedding: photo.embedding,
+      descriptions: photo.descriptions,
+      colorHistogram: photo.colorHistogram,
+      tags: tagsByPhoto.get(photo.id) || [],
+      chunks: chunksByPhoto.get(photo.id) || [],
+    }))
+  }
+
+  /* ───────── 2) healthForUser (OPTIMIZADO) ───────── */
   public static async healthForUser(userId: number, verbose = false) {
     const mark = (ok: boolean) => (ok ? '✅' : '❌')
 
-    const photoManager = new PhotoManager()
-    const photos = await photoManager.getPhotosByUser(userId)
+    // Obtener IDs de fotos del usuario
+    const photoIds = await Photo.query()
+      .where('user_id', userId)
+      .select('id')
+      .orderBy('id', 'asc')
+      .then((photos) => photos.map((p) => p.id))
 
-    const reports = await Promise.all(
-      photos.map(async (p) => ({
-        photoId: p.id,
-        ...(await HealthPhotoService.photoHealth(p.id)),
-      }))
-    )
+    if (photoIds.length === 0) {
+      console.log('\n✅ No hay fotos para analizar')
+      return []
+    }
+
+    // Cargar datos con raw queries batch
+    const photosData = await this.loadPhotosWithRelationsBatch(photoIds)
+
+    // Generar reportes
+    const reports = photosData.map((p) => ({
+      photoId: p.id,
+      ...this.performHealthChecks({
+        embedding: p.embedding,
+        descriptions: p.descriptions,
+        colorHistogram: p.colorHistogram,
+        tags: p.tags,
+        chunks: p.chunks,
+      }),
+    }))
 
     // Ordenar por ID
     reports.sort((a, b) => a.photoId - b.photoId)
@@ -136,16 +233,57 @@ export default class HealthPhotoService {
     return reports
   }
 
-  /* ───────── NUEVO: healthForProcess ───────── */
+  /* ───────── 2b) healthForPhotoIdsBatch (sin logging, para cache) ───────── */
+  /**
+   * Obtiene health reports para múltiples fotos de forma optimizada.
+   * Versión sin logging, ideal para cacheo en AnalyzerProcess.
+   */
+  public static async healthForPhotoIdsBatch(photoIds: number[]) {
+    if (photoIds.length === 0) return []
+
+    // Cargar datos con raw queries batch
+    const photosData = await this.loadPhotosWithRelationsBatch(photoIds)
+
+    // Generar reportes sin logging
+    return photosData.map((p) => ({
+      photoId: p.id,
+      ...this.performHealthChecks({
+        embedding: p.embedding,
+        descriptions: p.descriptions,
+        colorHistogram: p.colorHistogram,
+        tags: p.tags,
+        chunks: p.chunks,
+      }),
+    }))
+  }
+
+  /* ───────── NUEVO: healthForProcess (OPTIMIZADO) ───────── */
   public static async healthForProcess(process: AnalyzerProcess, verbose = false) {
     const mark = (ok: boolean) => (ok ? '✅' : '❌')
-    const photos = process.photos || []
-    const reports = await Promise.all(
-      photos.map(async (p) => ({
-        photoId: p.id,
-        ...(await HealthPhotoService.photoHealth(p.id)),
-      }))
-    )
+
+    // Obtener IDs de fotos del proceso
+    await process.load('photos')
+    const photoIds = (process.photos || []).map((p: any) => p.id)
+
+    if (photoIds.length === 0) {
+      console.log('\n✅ No hay fotos para analizar')
+      return []
+    }
+
+    // Cargar datos con raw queries batch
+    const photosData = await this.loadPhotosWithRelationsBatch(photoIds)
+
+    // Generar reportes
+    const reports = photosData.map((p) => ({
+      photoId: p.id,
+      ...this.performHealthChecks({
+        embedding: p.embedding,
+        descriptions: p.descriptions,
+        colorHistogram: p.colorHistogram,
+        tags: p.tags,
+        chunks: p.chunks,
+      }),
+    }))
     reports.sort((a, b) => a.photoId - b.photoId)
     if (verbose) {
       reports.forEach((r) => {
@@ -195,5 +333,14 @@ export default class HealthPhotoService {
       }
       await process.save()
     }
+  }
+
+  /* ───────── VERSIÓN ULTRA-OPTIMIZADA CON RAW QUERIES ───────── */
+  /**
+   * Alias de healthForUser (ahora ambos usan la misma implementación optimizada).
+   * @deprecated Usar healthForUser directamente, que ya está optimizado.
+   */
+  public static async healthForUserRaw(userId: number, verbose = false) {
+    return this.healthForUser(userId, verbose)
   }
 }
