@@ -48,7 +48,8 @@ export default class AnalyzerController {
       const isPreprocess = selectedPackage.isPreprocess || false
 
       logger.info(
-        `Iniciando análisis para usuario ${targetUserId} - Paquete: ${packageId} - Modo: ${mode} - Inmediato: ${inmediate}`
+        `Iniciando análisis - Paquete: ${packageId} - Modo: ${mode} - Inmediato: ${inmediate}` +
+          (mode == 'retry_process' ? ` Process ID: ${processId}` : '')
       )
 
       // Si photoIds está presente y es un array, usar getPhotosByIds, si no, getPhotosForAnalysis

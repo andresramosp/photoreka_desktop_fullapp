@@ -19,6 +19,7 @@ export default class ReadOnlyMiddleware {
     '/api/search/tags/sync',
     '/api/search/byPhotos',
     '/api/warmUp',
+    '/api/3d/photos',
   ]
 
   /**

@@ -13,10 +13,17 @@ export default class AnalyzerProcessController {
       .whereHas('photos', (query) => {
         query.whereNull('deleted_at')
       })
-      .preload('photos')
+      .preload('photos', (query) => {
+        query.select('id', 'thumbnailName', 'name')
+      })
       .orderBy('created_at', 'desc')
 
-    return response.ok(processes)
+    // Excluir processSheet de la respuesta
+    const processesWithoutSheet = processes.map((p) => {
+      const { processSheet, ...rest } = p.toJSON()
+      return rest
+    })
+    return response.ok(processesWithoutSheet)
   }
 
   public async getById({ params, response, auth }: HttpContext) {
@@ -30,13 +37,17 @@ export default class AnalyzerProcessController {
       .whereHas('photos', (query) => {
         query.whereNull('deleted_at')
       })
-      .preload('photos')
+      .preload('photos', (query) => {
+        query.select('id', 'thumbnailUrl')
+      })
       .first()
 
     if (!process) {
       return response.notFound({ message: 'AnalyzerProcess not found' })
     }
 
-    return response.ok(process)
+    // Excluir processSheet de la respuesta
+    const { processSheet, ...rest } = process.toJSON()
+    return response.ok(rest)
   }
 }

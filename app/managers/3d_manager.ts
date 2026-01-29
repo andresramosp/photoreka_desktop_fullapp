@@ -60,9 +60,15 @@ export default class ThreeDManager {
   @withCache({
     ttl: 60 * 60,
     provider: 'redis',
-    key: (userId, chunkName, fakeLimit) => `get3DPhotos:${userId}:${chunkName}:${fakeLimit}`,
+    key: (userId, chunkName, fakeLimit, outputDims) =>
+      `get3DPhotos:${userId}:${chunkName}:${fakeLimit}:${outputDims}`,
   })
-  public async get3DPhotos(userId: string, chunkName: string, fakeLimit: number = 5000) {
+  public async get3DPhotos(
+    userId: string,
+    chunkName: string,
+    fakeLimit: number = 5000,
+    outputDims: number = 3
+  ) {
     let photosWithCategory
 
     // Caso especial: si chunkName es null, usar embeddings de la tabla photos
@@ -348,7 +354,7 @@ export default class ThreeDManager {
       umap_n_neighbors: 20,
       umap_min_dist: 1, // Sube este valor para inflar los grupúsculos
       umap_spread: 10.0, // Sube este valor para separar más los grupos
-      output_dims: 3,
+      output_dims: outputDims,
       umap_metric: 'cosine',
       random_state: 42,
 
@@ -443,12 +449,19 @@ export default class ThreeDManager {
         if (!photoData) return null
         const descriptions = descriptionsMap.get(photoData.id) || {}
         const tags = tagsMap.get(photoData.id) || []
+
+        // Completar la tercera coordenada con 0 si outputDims === 2
+        let coordinates = reduced.embedding_3d
+        if (outputDims === 2 && Array.isArray(coordinates) && coordinates.length === 2) {
+          coordinates = [...coordinates, 0]
+        }
+
         return {
           id: photoData.id,
           originalFileName: photoData.originalFileName,
           thumbnailUrl: `https://${process.env.IMAGES_WORKER}/${photoData.thumbnailName}`,
           chunk: photoData.chunk,
-          coordinates: reduced.embedding_3d,
+          coordinates,
           descriptions,
           tags,
         }

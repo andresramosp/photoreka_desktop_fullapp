@@ -5,7 +5,7 @@ import { invalidateCache } from '../decorators/withCache.js'
 export default class ThreeDViewController {
   /**
    * Endpoint para obtener fotos con coordenadas 3D basadas en un chunk de descripción
-   * Body: { chunkName }
+   * Body: { chunkName, outputDims? }
    */
   public async get3DPhotos({ request, response, auth }: HttpContext) {
     try {
@@ -13,15 +13,15 @@ export default class ThreeDViewController {
       const user = auth.use('api').user! as any
       const userId = user.id.toString()
 
-      const { chunkName } = request.body()
+      const { chunkName, outputDims = 3 } = request.body()
 
       const threeDManager = new ThreeDManager()
-      const result = await threeDManager.get3DPhotos(userId, chunkName, 5000)
+      const result = await threeDManager.get3DPhotos(userId, chunkName, 5000, outputDims)
 
       // Si no hay fotos, invalidar el caché para que pueda reintentar
       if (result.photos && result.photos.length === 0) {
         const fakeLimit = 5000 // valor por defecto del método
-        const cacheKey = `get3DPhotos:${userId}:${chunkName}:${fakeLimit}`
+        const cacheKey = `get3DPhotos:${userId}:${chunkName}:${fakeLimit}:${outputDims}`
 
         console.log(`[3DViewController] Intentando invalidar caché para clave: ${cacheKey}`)
 
@@ -46,12 +46,12 @@ export default class ThreeDViewController {
   /**
    * Endpoint público para obtener fotos con coordenadas 3D por userId (numérico) o username (alfanumérico, parte antes de la @ en el email)
    * Params: { id } // puede ser userId (numérico) o username (alfanumérico)
-   * Body: { chunkName }
+   * Body: { chunkName, outputDims? }
    */
   public async get3DPhotosByIdOrUsername({ request, response, params }: HttpContext) {
     try {
       const { id } = params
-      const { chunkName } = request.body()
+      const { chunkName, outputDims = 3 } = request.body()
 
       if (!id) {
         return response.badRequest({ message: 'El parámetro id es requerido' })
@@ -78,7 +78,7 @@ export default class ThreeDViewController {
       }
 
       const threeDManager = new ThreeDManager()
-      const result = await threeDManager.get3DPhotos(userId, chunkName)
+      const result = await threeDManager.get3DPhotos(userId, chunkName, 5000, outputDims)
 
       return response.ok(result)
     } catch (error) {
