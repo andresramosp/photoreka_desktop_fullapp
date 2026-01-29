@@ -285,6 +285,25 @@
 
         <!-- Display Options Content -->
         <div v-if="showDisplayOptions" class="options-container">
+          <!-- 2D View Toggle -->
+          <div
+            class="control-item"
+            style="
+              margin-top: 12px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            "
+          >
+            <label class="control-label" style="margin: 0">2D View</label>
+            <n-switch
+              :value="outputDims === 2"
+              @update:value="handleDimensionsToggle"
+              size="small"
+              @click.stop
+            />
+          </div>
+
           <!-- Radial Scaling Slider -->
           <div class="control-item-full" style="margin-top: 12px">
             <label
@@ -758,6 +777,10 @@ const props = defineProps({
     default: () => [],
   },
   // Display options
+  outputDims: {
+    type: Number,
+    default: 3,
+  },
   inflateFactor: {
     type: Number,
     default: 1,
@@ -829,6 +852,7 @@ const emit = defineEmits([
   "update:selectedVisualAspects",
   "update:artisticScoreFilters",
   "update:timeRangeFilter",
+  "update:outputDims",
   "update:inflateFactor",
   "update:floatingTagsEnabled",
   "update:floatingTagsDetectionRadius",
@@ -844,6 +868,7 @@ const emit = defineEmits([
   "visual-aspects-change",
   "artistic-scores-change",
   "time-range-change",
+  "dimensions-change",
   "inflate-factor-change",
 ]);
 
@@ -958,6 +983,12 @@ const handleTimeRangeChange = (range) => {
 const clearTimeRange = () => {
   emit("update:timeRangeFilter", null);
   emit("time-range-change", null);
+};
+
+const handleDimensionsToggle = (value) => {
+  const newDims = value ? 2 : 3; // true = 2D, false = 3D
+  emit("update:outputDims", newDims);
+  emit("dimensions-change", newDims);
 };
 
 const handleInflateFactorChange = (value) => {

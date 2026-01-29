@@ -39,7 +39,7 @@
                 <span class="cell-label">Photos</span>
                 <span class="cell-value">{{ job.photoCount }}</span>
               </div>
-              <div class="row-cell type-cell progress-cell">
+              <!-- <div class="row-cell type-cell progress-cell">
                 <span class="cell-label">Progress</span>
                 <n-tooltip placement="top">
                   <template #trigger>
@@ -57,7 +57,7 @@
                   </template>
                   <span>{{ job.currentStageLabel }}</span>
                 </n-tooltip>
-              </div>
+              </div> -->
 
               <div class="row-cell status-cell">
                 <span class="cell-label">Status</span>
@@ -636,7 +636,7 @@ function isLastFinishedJob(job) {
 
 .row-main {
   display: grid;
-  grid-template-columns: 250px 250px 250px 250px 200px 1fr;
+  grid-template-columns: repeat(5, 1fr);
   gap: 16px;
   padding: 16px 20px;
   align-items: center;

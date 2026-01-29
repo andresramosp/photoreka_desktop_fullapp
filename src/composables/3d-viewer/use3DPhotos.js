@@ -14,6 +14,7 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
   const error = ref(null);
   const isCatalogMode = Boolean(userId);
   const lowPerformance = ref(lowPerformanceMode); // Guardar configuración de performance
+  const outputDims = ref(3); // 2 para 2D, 3 para 3D (default 3D)
 
   // Opciones de chunks disponibles
   const chunkOptions = [
@@ -49,6 +50,7 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
         response = await api.post("/api/3d/photos", {
           chunkName,
           includeVisualAspects: true,
+          outputDims: outputDims.value,
         });
       }
 
@@ -216,6 +218,29 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
     console.log("✅ changeChunk completado para chunk:", newChunk);
   };
 
+  // Función para cambiar entre 2D/3D
+  const changeDimensions = async (newDims) => {
+    console.log("🔄 changeDimensions called:", {
+      newDims,
+      currentDims: outputDims.value,
+      currentChunk: currentChunk.value,
+      hasExistingPhotos: photos3D.value.length > 0,
+    });
+
+    // Actualizar outputDims
+    outputDims.value = newDims;
+
+    // Recargar fotos con la nueva dimensión (reutilizando fotos existentes para transición suave)
+    const shouldReuseExisting = photos3D.value.length > 0;
+
+    console.log("🚀 Recargando fotos con outputDims:", newDims, {
+      reuseExisting: shouldReuseExisting,
+    });
+
+    await loadAllPhotos(currentChunk.value, shouldReuseExisting);
+    console.log("✅ changeDimensions completado para dims:", newDims);
+  };
+
   // Función para reiniciar
   const reset = () => {
     photos3D.value = [];
@@ -229,6 +254,7 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
     currentChunk,
     error,
     isCatalogMode,
+    outputDims,
 
     // Opciones
     chunkOptions,
@@ -236,6 +262,7 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
     // Métodos
     loadAllPhotos,
     changeChunk,
+    changeDimensions,
     reset,
   };
 }

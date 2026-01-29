@@ -38,6 +38,7 @@
       v-model:selectedVisualAspects="selectedVisualAspects"
       v-model:artisticScoreFilters="artisticScoreFilters"
       v-model:timeRangeFilter="timeRangeFilter"
+      v-model:outputDims="outputDims"
       v-model:inflateFactor="inflateFactor"
       v-model:floatingTagsEnabled="floatingTagsSystem.config.enabled"
       v-model:floatingTagsDetectionRadius="
@@ -63,6 +64,7 @@
       @visual-aspects-change="onVisualAspectsChange"
       @artistic-scores-change="onArtisticScoresChange"
       @time-range-change="onTimeRangeChange"
+      @dimensions-change="onDimensionsChange"
       @inflate-factor-change="onInflateFactorChange"
     />
 
@@ -337,8 +339,10 @@ const {
   currentChunk,
   error,
   chunkOptions,
+  outputDims,
   loadAllPhotos,
   changeChunk,
+  changeDimensions,
   reset,
 } = use3DPhotos(props.catalogUserId, useLowPerformance.value);
 
@@ -1925,6 +1929,35 @@ const onChunkChange = async (newValue) => {
   }
 
   await changeChunk(newValue);
+};
+
+// Handler para cambio de dimensiones (2D/3D)
+const onDimensionsChange = async (newDims) => {
+  console.log("🔄 onDimensionsChange llamado con:", newDims);
+
+  // Mostrar loader mientras se recalculan las posiciones
+  loaderTitle.value = newDims === 2 ? "Switching to 2D" : "Switching to 3D";
+  loadingProgress.value = 0;
+  showLoader();
+
+  // Mantener las fotos existentes para transición suave
+  const hasExistingPhotos = photosWithMaterials.value.length > 0;
+  if (hasExistingPhotos) {
+    console.log(
+      "♻️ Fotos existentes detectadas: manteniendo LODs, solo actualizando posiciones",
+    );
+    // NO limpiar LOD objects - solo limpiar cola de texturas
+    textureQueue.value = [];
+    queuedIds.clear();
+  } else {
+    console.log("🧹 Primera carga: limpieza completa");
+    visiblePhotos.value = [];
+    originalPositions.value = [];
+    textureQueue.value = [];
+    queuedIds.clear();
+  }
+
+  await changeDimensions(newDims);
 };
 
 // Función de retry
