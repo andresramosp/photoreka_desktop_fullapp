@@ -363,6 +363,17 @@ router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore();
   const { shouldBlockRoute } = useMaintenanceMode();
 
+  // Manejar demo login silenciosamente
+  if (to.path === "/demo") {
+    const result = await userStore.demoLogin();
+    if (result.success) {
+      next("/dashboard");
+    } else {
+      next("/auth");
+    }
+    return;
+  }
+
   // Detectar y consumir token de handoff de Lightroom ANTES de cualquier otra verificación
   let handoffToken: string | null = null;
   let isFromHash = false;

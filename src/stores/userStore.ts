@@ -421,6 +421,42 @@ export const useUserStore = defineStore("user", () => {
     }
   };
 
+  const demoLogin = async (): Promise<{ success: boolean; error?: string }> => {
+    isLoading.value = true;
+    // Resetear estado de inicialización al hacer demo login para forzar recarga completa
+    isInitialized.value = false;
+
+    try {
+      const response = await api.post("/api/auth/demo-login");
+      const { token: receivedToken } = response.data;
+
+      token.value = receivedToken;
+      isAuthenticated.value = true;
+      localStorage.setItem("auth_token", receivedToken);
+
+      // Obtener datos reales del usuario desde /profile
+      const profileResponse = await api.get("/api/auth/profile");
+      user.value = profileResponse.data.user;
+
+      // Fetch usage data after successful demo login
+      await fetchUsage();
+
+      // Marcar como inicializado después de cargar todo
+      isInitialized.value = true;
+
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error:
+          error.response?.data?.message ||
+          "Error logging in with demo account.",
+      };
+    } finally {
+      isLoading.value = false;
+    }
+  };
+
   return {
     isAuthenticated,
     token,
@@ -444,5 +480,6 @@ export const useUserStore = defineStore("user", () => {
     resetPassword,
     changePassword,
     consumeHandoff,
+    demoLogin,
   };
 });
