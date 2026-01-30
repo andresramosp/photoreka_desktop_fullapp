@@ -73,7 +73,7 @@
         >
           <div style="display: flex; align-items: center; gap: 4px">
             <span style="font-size: 12px; color: var(--text-secondary)">
-              Reduce overlaps
+              Unstack photos
             </span>
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
@@ -85,8 +85,7 @@
                   <InfoCircleFilled />
                 </n-icon>
               </template>
-              Reducing overlaps slightly distorts the relationships between
-              photos to provide a more comfortable visualization.
+              Separates overlapping photos locally causing a minimum distortion
             </n-tooltip>
           </div>
           <n-switch
@@ -99,27 +98,42 @@
         </div>
 
         <div
-          v-if="gridRelaxationEnabled"
           class="control-item-full"
-          style="margin-top: 8px"
+          style="
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+          "
         >
-          <n-select
+          <div style="display: flex; align-items: center; gap: 4px">
+            <span style="font-size: 12px; color: var(--text-secondary)">
+              Snap to grid
+            </span>
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <n-icon
+                  size="12"
+                  color="var(--text-secondary)"
+                  style="cursor: help"
+                >
+                  <InfoCircleFilled />
+                </n-icon>
+              </template>
+              Applies a distortion to align photos to a grid layout
+            </n-tooltip>
+          </div>
+          <n-switch
             :disabled="showDiscreteLoader"
-            :value="gridRelaxationMode"
-            @update:value="handleGridRelaxationModeChange"
-            :options="gridRelaxationModeOptions"
+            :value="gridSnapToGrid"
+            @update:value="handleGridSnapToGridChange"
             size="small"
-            class="embedding-select"
-            placeholder="Overlap method"
             @click.stop
           />
         </div>
 
-        <div
-          v-if="gridRelaxationEnabled && gridRelaxationMode === 'expand'"
-          class="control-item-full"
-          style="margin-top: 10px"
-        >
+        <div class="control-item-full" style="margin-top: 10px">
           <div
             style="
               display: flex;
@@ -127,9 +141,16 @@
               justify-content: space-between;
             "
           >
-            <div style="display: flex; align-items: center; gap: 4px">
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                margin-bottom: 7px;
+              "
+            >
               <span style="font-size: 12px; color: var(--text-secondary)">
-                Expansion
+                Balloon expansion
               </span>
               <n-tooltip trigger="hover" placement="top">
                 <template #trigger>
@@ -141,7 +162,7 @@
                     <InfoCircleFilled />
                   </n-icon>
                 </template>
-                Higher values push dense clusters further apart.
+                Inflates the layout around its center
               </n-tooltip>
             </div>
             <span style="font-size: 12px; color: var(--text-secondary)">
@@ -366,30 +387,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Navigation Controls Toggle -->
-      <div class="control-section">
-        <div class="section-toggle" @click="toggleNavigationControls">
-          <div style="display: flex; align-items: center; gap: 6px">
-            <n-icon size="16">
-              <CompassOutlined />
-            </n-icon>
-            <span class="section-toggle-label">Navigation Controls</span>
-          </div>
-          <n-icon
-            size="12"
-            class="toggle-icon"
-            :class="{ rotated: showNavigationControls }"
-          >
-            <svg viewBox="0 0 24 24">
-              <path
-                fill="currentColor"
-                d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
-              />
-            </svg>
-          </n-icon>
-        </div>
-      </div>
     </div>
   </div>
 </template>
@@ -469,13 +466,13 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
-  gridRelaxationMode: {
-    type: String,
-    default: "grid",
-  },
   gridRelaxationExpandStrength: {
     type: Number,
-    default: 0.15,
+    default: 0,
+  },
+  gridSnapToGrid: {
+    type: Boolean,
+    default: true,
   },
   // Navigation
   isPlayground: {
@@ -493,8 +490,8 @@ const emit = defineEmits([
   "update:timeRangeFilter",
   "update:photoSize",
   "update:gridRelaxationEnabled",
-  "update:gridRelaxationMode",
   "update:gridRelaxationExpandStrength",
+  "update:gridSnapToGrid",
   "chunk-change",
   "visual-aspects-change",
   "artistic-scores-change",
@@ -583,13 +580,8 @@ const handleGridRelaxationChange = (value) => {
   emit("update:gridRelaxationEnabled", value);
 };
 
-const gridRelaxationModeOptions = [
-  { value: "grid", label: "Grid (virtual cells)" },
-  { value: "expand", label: "Expand (balloon-like)" },
-];
-
-const handleGridRelaxationModeChange = (value) => {
-  emit("update:gridRelaxationMode", value);
+const handleGridSnapToGridChange = (value) => {
+  emit("update:gridSnapToGrid", value);
 };
 
 const handleGridRelaxationExpandStrengthChange = (value) => {

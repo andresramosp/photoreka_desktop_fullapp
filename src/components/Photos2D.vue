@@ -20,8 +20,8 @@
       v-model:artisticScoreFilters="artisticScoreFilters"
       v-model:timeRangeFilter="timeRangeFilter"
       v-model:gridRelaxationEnabled="gridRelaxationEnabled"
-      v-model:gridRelaxationMode="gridRelaxationMode"
       v-model:gridRelaxationExpandStrength="gridRelaxationExpandStrength"
+      v-model:gridSnapToGrid="gridSnapToGrid"
       :chunkOptions="chunkOptions"
       :showDiscreteLoader="showDiscreteLoader"
       :searchResults="searchResults"
@@ -144,9 +144,9 @@
     </div>
 
     <!-- Photo count indicator -->
-    <div class="photo-count-indicator">
+    <!-- <div class="photo-count-indicator">
       {{ visiblePhotosCount }} / {{ totalPhotosCount }} photos
-    </div>
+    </div> -->
 
     <!-- Collection Modal -->
     <CollectionModal
@@ -247,8 +247,8 @@ const {
   chunkOptions,
   getBounds,
   gridRelaxationEnabled,
-  gridRelaxationMode,
   gridRelaxationExpandStrength,
+  gridSnapToGrid,
   loadAllPhotos,
   changeChunk,
   reapplyLayout,
@@ -797,7 +797,7 @@ const loadPhotosToPixi = async () => {
 
   isLoadingTextures.value = true;
   loadingProgress.value = 0;
-  loaderTitle.value = "Loading textures...";
+  loaderTitle.value = "Loading photos";
 
   // Clear existing sprites
   photoContainer.value.removeChildren();
@@ -907,7 +907,7 @@ const zoomIn = () => {
   const centerY = pixiContainer.value?.clientHeight / 2 || 0;
 
   const oldScale = scale.value;
-  scale.value = Math.min(MAX_SCALE, scale.value * 1.3);
+  scale.value = Math.min(MAX_SCALE, scale.value * 1.1);
 
   const scaleChange = scale.value / oldScale;
   offsetX.value = centerX - (centerX - offsetX.value) * scaleChange;
@@ -921,7 +921,7 @@ const zoomOut = () => {
   const centerY = pixiContainer.value?.clientHeight / 2 || 0;
 
   const oldScale = scale.value;
-  scale.value = Math.max(MIN_SCALE, scale.value / 1.3);
+  scale.value = Math.max(MIN_SCALE, scale.value / 1.1);
 
   const scaleChange = scale.value / oldScale;
   offsetX.value = centerX - (centerX - offsetX.value) * scaleChange;
@@ -1039,35 +1039,42 @@ const handleCollectionModalCancel = () => {
 
 // Download handler
 const handleDownloadPhotos = async () => {
-  if (selectedPhotoIds.value.length === 0) return;
-
   try {
-    if (selectedPhotoIds.value.length === 1) {
-      const photo = selectedPhotos.value[0];
-      await downloadPhoto(photo.originalUrl || photo.url, `photo-${photo.id}`);
+    console.log(
+      "📥 Download action triggered for",
+      selectedPhotos.value.length,
+      "photos",
+    );
+
+    if (selectedPhotos.value.length === 1) {
+      // Download single photo directly (not as ZIP)
+      await downloadPhoto(selectedPhotos.value[0]);
     } else {
-      const photos = selectedPhotos.value.map((p) => ({
-        url: p.originalUrl || p.url,
-        filename: `photo-${p.id}`,
-      }));
-      await downloadPhotosZip(photos, "selected-photos");
+      // Download multiple photos as ZIP
+      await downloadPhotosZip(selectedPhotos.value);
     }
-    message.success("Download started");
-  } catch (err) {
-    message.error("Download failed");
-    console.error(err);
+  } catch (error) {
+    console.error("Download photos failed:", error);
+    message.error("Error downloading photos");
   }
 };
 
 // Tool handlers
 const handleMoveToTool = () => {
-  if (selectedPhotoIds.value.length === 0) return;
-  openToolSelector();
+  if (selectedPhotoIds.value.length > 0) {
+    console.log(
+      "🪄 Move to tool action triggered for",
+      selectedPhotos.value.length,
+      "photos",
+    );
+    openToolSelector();
+  }
 };
 
-const handleToolSelected = async (tool) => {
-  await takeToTool(tool, selectedPhotoIds.value);
-  clearSelection();
+const handleToolSelected = async (toolId) => {
+  // No pasar clearSelection para mantener la selección
+  await takeToTool(toolId, selectedPhotoIds.value, () => {});
+  closeToolSelector();
 };
 
 // Retry load
@@ -1185,7 +1192,7 @@ watch(gridRelaxationEnabled, () => {
   }
 });
 
-watch(gridRelaxationMode, () => {
+watch(gridRelaxationExpandStrength, () => {
   if (!photos2D.value.length) return;
   reapplyLayout();
   if (photoSprites.value.size > 0) {
@@ -1193,7 +1200,7 @@ watch(gridRelaxationMode, () => {
   }
 });
 
-watch(gridRelaxationExpandStrength, () => {
+watch(gridSnapToGrid, () => {
   if (!photos2D.value.length) return;
   reapplyLayout();
   if (photoSprites.value.size > 0) {
@@ -1588,10 +1595,5 @@ watch(gridRelaxationExpandStrength, () => {
   z-index: 100;
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-/* Selected photos container moves up when at bottom */
-.selected-photos-container ~ .zoom-controls {
-  bottom: 120px;
 }
 </style>

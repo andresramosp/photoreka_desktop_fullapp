@@ -5,8 +5,8 @@ import gridRelaxation from "@/utils/gridRelaxation";
 
 // Easy global toggle (edit this constant when you want a default behavior change)
 const GRID_RELAXATION_ENABLED_DEFAULT = true;
-const GRID_RELAXATION_MODE_DEFAULT = "grid"; // "grid" | "expand"
-const GRID_RELAXATION_EXPAND_STRENGTH_DEFAULT = 0.25; // 0..1
+const GRID_RELAXATION_EXPAND_STRENGTH_DEFAULT = 0; // 0..1
+const GRID_SNAP_TO_GRID_DEFAULT = false;
 
 /**
  * Composable for managing 2D photo data and positions
@@ -27,8 +27,9 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
   // Toggle: if false, photos keep backend coordinates (no relaxation)
   const gridRelaxationEnabled = ref(GRID_RELAXATION_ENABLED_DEFAULT);
 
-  // Mode: "grid" (snap to virtual grid) vs "expand" (radial/repulsive balloon-like)
-  const gridRelaxationMode = ref(GRID_RELAXATION_MODE_DEFAULT);
+  // Option: snap final positions to unique virtual grid cells.
+  // This guarantees no overlaps but can introduce a "grid" aesthetic.
+  const gridSnapToGrid = ref(GRID_SNAP_TO_GRID_DEFAULT);
 
   // Controls how aggressively "expand" separates clustered points (0..1)
   const gridRelaxationExpandStrength = ref(
@@ -70,15 +71,14 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
       };
     });
 
-    if (!gridRelaxationEnabled.value) return base;
-
-    const useGrid = gridRelaxationMode.value !== "expand";
     const expand = clamp01(gridRelaxationExpandStrength.value);
+    const cosmic = expand > 1e-9;
+    const snapToGrid = Boolean(gridSnapToGrid.value);
 
     // Expand mode works best as a true "universe expansion": scale around centroid,
     // then do a gentle overlap-only relaxation. This avoids the circular "repulsion" look.
-    let itemsForRelaxation = base;
-    if (!useGrid) {
+    let itemsForLayout = base;
+    if (cosmic) {
       const s = computeCosmicScale(expand);
       let cx = 0;
       let cy = 0;
@@ -91,7 +91,7 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
       cx /= n;
       cy /= n;
 
-      itemsForRelaxation = base.map((p) => {
+      itemsForLayout = base.map((p) => {
         const [x, y] = p.position || [0, 0];
         const sx = cx + ((x || 0) - cx) * s;
         const sy = cy + ((y || 0) - cy) * s;
@@ -103,19 +103,22 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
       });
     }
 
-    const relaxed = gridRelaxation(itemsForRelaxation, {
+    const shouldRunLayout = gridRelaxationEnabled.value || snapToGrid;
+    if (!shouldRunLayout) return itemsForLayout;
+
+    const relaxed = gridRelaxation(itemsForLayout, {
       dims: 2,
       baseSize: RELAX_BASE_SIZE,
       padding: RELAX_PADDING,
-      resolveMode: useGrid ? "aabb" : "radial",
-      // Grid mode keeps the existing "assigned cell" behavior.
-      snapToGrid: useGrid,
-      gridSize: useGrid ? RELAX_BASE_SIZE + RELAX_PADDING : undefined,
-      // Expand mode: overlap-only (no continuous repulsion), tuned to be stable.
+      // Use AABB resolution (photos are rectangles). In cosmic mode, this just prevents overlaps.
+      resolveMode: "aabb",
+      snapToGrid,
+      gridSize: snapToGrid ? RELAX_BASE_SIZE + RELAX_PADDING : undefined,
+      // Overlap separation is controlled by gridRelaxationEnabled. Snap-to-grid can run alone.
+      iterations: gridRelaxationEnabled.value ? (cosmic ? 12 : undefined) : 0,
       repelStrength: 0,
-      maxStep: useGrid ? 2.0 : 3.5,
-      iterations: useGrid ? undefined : 12,
-      stepScale: useGrid ? 0.85 : 0.65,
+      maxStep: gridRelaxationEnabled.value ? (cosmic ? 3.5 : 2.0) : 0,
+      stepScale: gridRelaxationEnabled.value ? (cosmic ? 0.65 : 0.85) : 0,
     });
 
     return base.map((p, idx) => {
@@ -339,8 +342,8 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
     isCatalogMode,
     outputDims,
     gridRelaxationEnabled,
-    gridRelaxationMode,
     gridRelaxationExpandStrength,
+    gridSnapToGrid,
 
     // Computed
     getBounds,
