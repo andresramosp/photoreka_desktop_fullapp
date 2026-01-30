@@ -200,6 +200,7 @@ import { useHasTouch } from "@/composables/useHasTouch.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
+import { use2DTextureManager } from "@/composables/2d-viewer/use2DTextureManager.js";
 
 // Props
 const props = defineProps({
@@ -249,6 +250,12 @@ const {
   reapplyLayout,
   reset,
 } = use2DPhotos(props.catalogUserId, useLowPerformance.value);
+
+// 2D texture manager (IndexedDB + in-memory cache), modeled after 3D
+const textureManager = use2DTextureManager(
+  useLowPerformance.value,
+  props.isPlayground,
+);
 
 // DOM refs
 const containerRef = ref(null);
@@ -777,12 +784,20 @@ const loadPhotosToPixi = async () => {
   photoContainer.value.removeChildren();
   photoSprites.value.clear();
 
-  // Clear PixiJS texture cache to free memory
-  PIXI.Assets.reset();
+  // Note: we intentionally DO NOT call PIXI.Assets.reset() here.
+  // Doing so forces re-creation/re-download of textures and defeats the IndexedDB cache.
 
   const photosToLoad = photos2D.value;
   const total = photosToLoad.length;
   let loaded = 0;
+
+  // Prime caches from IndexedDB (fast-path for previously downloaded images)
+  try {
+    await textureManager.initDB();
+    await textureManager.loadImagesFromCache(photosToLoad);
+  } catch (_) {
+    // Non-fatal: proceed with network loading
+  }
 
   // Create a default texture for placeholders
   const placeholderGraphics = new PIXI.Graphics();
@@ -791,54 +806,6 @@ const loadPhotosToPixi = async () => {
   placeholderGraphics.stroke({ color: 0x3a3a3a, width: 1 });
   const placeholderTexture =
     pixiApp.value.renderer.generateTexture(placeholderGraphics);
-
-  // Helper to load texture with retry logic
-  const loadTextureWithRetry = async (imageUrl, photoId, retries = 3) => {
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      try {
-        // Create image element with crossOrigin for Cloudflare
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-
-        const texture = await new Promise((resolve, reject) => {
-          img.onload = () => {
-            const pixiTexture = PIXI.Texture.from(img);
-            resolve(pixiTexture);
-          };
-          img.onerror = (err) => {
-            reject(
-              new Error(
-                `Failed to load ${imageUrl}: ${err.type || "unknown error"}`,
-              ),
-            );
-          };
-          img.src = imageUrl;
-        });
-
-        return texture;
-      } catch (err) {
-        const is403or429 =
-          err.message?.includes("403") || err.message?.includes("429");
-
-        if (attempt < retries && is403or429) {
-          // Exponential backoff: 1s, 2s, 4s
-          const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
-          console.warn(
-            `⚠️ Error loading ${photoId} (attempt ${attempt + 1}/${retries + 1}), retrying in ${delay}ms...`,
-          );
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          continue;
-        }
-
-        console.warn(
-          `❌ Failed to load texture for photo ${photoId} after ${retries + 1} attempts:`,
-          err.message,
-        );
-        return null;
-      }
-    }
-    return null;
-  };
 
   // Reduce batch size to avoid rate limiting (12 concurrent max, similar to 3D)
   const batchSize = 12;
@@ -866,19 +833,15 @@ const loadPhotosToPixi = async () => {
         photoSprites.value.set(photo.id, sprite);
         photoContainer.value.addChild(sprite);
 
-        // Load actual texture with retry logic
-        const imageUrl = photo.thumbnailUrl || photo.url;
-        if (imageUrl) {
-          const texture = await loadTextureWithRetry(imageUrl, photo.id);
+        // Load actual texture (cached via IndexedDB + in-memory)
+        const texture = await textureManager.getOrCreateTexture(photo);
+        if (texture) {
+          sprite.texture = texture;
 
-          if (texture) {
-            sprite.texture = texture;
-
-            // Adjust aspect ratio
-            const aspectRatio = texture.height / texture.width;
-            sprite.width = photoSize.value;
-            sprite.height = photoSize.value * aspectRatio;
-          }
+          // Adjust aspect ratio
+          const aspectRatio = texture.height / texture.width;
+          sprite.width = photoSize.value;
+          sprite.height = photoSize.value * aspectRatio;
         }
 
         loaded++;
@@ -892,6 +855,17 @@ const loadPhotosToPixi = async () => {
 
   isLoadingTextures.value = false;
   console.log(`✅ Loaded ${loaded} photo textures`);
+
+  // Persist newly downloaded images (so future visits don't re-download)
+  try {
+    await textureManager.bulkCacheDownloadedImages(photosToLoad);
+    const stats = await textureManager.getCacheStats();
+    console.log(
+      `💾 2D IndexedDB cache: ${stats?.totalImages ?? 0} images stored`,
+    );
+  } catch (_) {
+    // Non-fatal
+  }
 
   // Apply initial filter visibility
   updateSpriteVisibility();
@@ -1131,6 +1105,7 @@ const cleanup = () => {
     pixiApp.value = null;
   }
   photoSprites.value.clear();
+  textureManager.reset({ destroyTextures: true });
 };
 
 // Lifecycle
