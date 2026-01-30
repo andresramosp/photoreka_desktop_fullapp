@@ -426,7 +426,7 @@ const initPixi = async () => {
   const app = new PIXI.Application();
 
   await app.init({
-    background: "#1a1a1a",
+    background: "black",
     resizeTo: pixiContainer.value,
     antialias: true,
     resolution: window.devicePixelRatio || 1,
@@ -1162,7 +1162,7 @@ watch(gridRelaxationEnabled, () => {
   width: 100%;
   height: 100%;
   position: relative;
-  background: #1a1a1a;
+  background: black;
   overflow: hidden;
 }
 

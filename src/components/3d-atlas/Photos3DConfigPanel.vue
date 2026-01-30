@@ -1178,17 +1178,6 @@ const handleSelectByClickChange = (value) => {
   gap: 6px;
 }
 
-.active-indicator {
-  font-size: 9px;
-  color: #2563eb;
-  background-color: rgba(37, 99, 235, 0.15);
-  padding: 2px 5px;
-  border-radius: 4px;
-  font-weight: 600;
-  min-width: 14px;
-  text-align: center;
-}
-
 .toggle-icon {
   color: rgba(255, 255, 255, 0.5);
   transition: transform 0.3s ease;
@@ -1273,38 +1262,6 @@ const handleSelectByClickChange = (value) => {
   margin-bottom: 4px;
 }
 
-.score-slider-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.score-slider-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  min-height: 16px;
-}
-
-.score-slider-label {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.7);
-  font-weight: 400;
-}
-
-.score-slider-value {
-  font-size: 10px;
-  color: rgba(59, 130, 246, 0.9);
-  font-weight: 600;
-  background: rgba(59, 130, 246, 0.15);
-  padding: 2px 6px;
-  border-radius: 8px;
-}
-
-.score-slider {
-  margin: 0 !important;
-}
-
 .clear-scores-btn {
   background: rgba(239, 68, 68, 0.15);
   border: none;
@@ -1331,27 +1288,6 @@ const handleSelectByClickChange = (value) => {
   animation: slideDown 0.3s ease-out;
   display: flex;
   flex-direction: column;
-}
-
-.collapsed-panel {
-  position: fixed;
-  top: 15px;
-  right: 15px;
-  width: 48px;
-  height: 48px;
-  background: rgba(26, 26, 31, 0.9);
-  backdrop-filter: blur(12px);
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  user-select: none;
-  transition: all 0.2s ease;
-  z-index: 2000;
-  pointer-events: auto;
 }
 
 @media (max-width: 767px) {

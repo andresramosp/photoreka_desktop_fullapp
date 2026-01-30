@@ -539,24 +539,6 @@ const handleResetView = () => {
 
 <style scoped>
 /* Collapsed panel button */
-.collapsed-panel {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  background: rgba(30, 30, 30, 0.9);
-  border-radius: 10px;
-  padding: 10px;
-  cursor: pointer;
-  z-index: 200;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.2s ease;
-}
-
-.collapsed-panel:hover {
-  background: rgba(50, 50, 50, 0.95);
-  transform: scale(1.05);
-}
 
 .settings-icon {
   color: #e5e5e5;
@@ -642,15 +624,6 @@ const handleResetView = () => {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-.active-indicator {
-  background: #4ade80;
-  color: #1a1a1a;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 10px;
 }
 
 .toggle-icon {
@@ -758,29 +731,6 @@ const handleResetView = () => {
   letter-spacing: 0.5px;
   padding-bottom: 4px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.score-slider-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.score-slider-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.score-slider-label {
-  color: #aaa;
-  font-size: 11px;
-}
-
-.score-slider-value {
-  color: #4ade80;
-  font-size: 10px;
-  font-weight: 600;
 }
 
 /* Time range container */
