@@ -71,15 +71,92 @@
             gap: 10px;
           "
         >
-          <span style="font-size: 12px; color: var(--text-secondary)">
-            Reduce overlaps
-          </span>
+          <div style="display: flex; align-items: center; gap: 4px">
+            <span style="font-size: 12px; color: var(--text-secondary)">
+              Reduce overlaps
+            </span>
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <n-icon
+                  size="12"
+                  color="var(--text-secondary)"
+                  style="cursor: help"
+                >
+                  <InfoCircleFilled />
+                </n-icon>
+              </template>
+              Reducing overlaps slightly distorts the relationships between
+              photos to provide a more comfortable visualization.
+            </n-tooltip>
+          </div>
           <n-switch
             :disabled="showDiscreteLoader"
             :value="gridRelaxationEnabled"
             @update:value="handleGridRelaxationChange"
             size="small"
             @click.stop
+          />
+        </div>
+
+        <div
+          v-if="gridRelaxationEnabled"
+          class="control-item-full"
+          style="margin-top: 8px"
+        >
+          <n-select
+            :disabled="showDiscreteLoader"
+            :value="gridRelaxationMode"
+            @update:value="handleGridRelaxationModeChange"
+            :options="gridRelaxationModeOptions"
+            size="small"
+            class="embedding-select"
+            placeholder="Overlap method"
+            @click.stop
+          />
+        </div>
+
+        <div
+          v-if="gridRelaxationEnabled && gridRelaxationMode === 'expand'"
+          class="control-item-full"
+          style="margin-top: 10px"
+        >
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+            "
+          >
+            <div style="display: flex; align-items: center; gap: 4px">
+              <span style="font-size: 12px; color: var(--text-secondary)">
+                Expansion
+              </span>
+              <n-tooltip trigger="hover" placement="top">
+                <template #trigger>
+                  <n-icon
+                    size="12"
+                    color="var(--text-secondary)"
+                    style="cursor: help"
+                  >
+                    <InfoCircleFilled />
+                  </n-icon>
+                </template>
+                Higher values push dense clusters further apart.
+              </n-tooltip>
+            </div>
+            <span style="font-size: 12px; color: var(--text-secondary)">
+              {{ Math.round(gridRelaxationExpandStrength * 100) }}%
+            </span>
+          </div>
+          <n-slider
+            :disabled="showDiscreteLoader"
+            :value="gridRelaxationExpandStrength"
+            @update:value="handleGridRelaxationExpandStrengthChange"
+            :min="0"
+            :max="0.5"
+            :step="0.02"
+            @click.stop
+            class="score-slider"
           />
         </div>
       </div>
@@ -392,6 +469,14 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  gridRelaxationMode: {
+    type: String,
+    default: "grid",
+  },
+  gridRelaxationExpandStrength: {
+    type: Number,
+    default: 0.15,
+  },
   // Navigation
   isPlayground: {
     type: Boolean,
@@ -408,6 +493,8 @@ const emit = defineEmits([
   "update:timeRangeFilter",
   "update:photoSize",
   "update:gridRelaxationEnabled",
+  "update:gridRelaxationMode",
+  "update:gridRelaxationExpandStrength",
   "chunk-change",
   "visual-aspects-change",
   "artistic-scores-change",
@@ -494,6 +581,19 @@ const handleChunkChange = (value) => {
 
 const handleGridRelaxationChange = (value) => {
   emit("update:gridRelaxationEnabled", value);
+};
+
+const gridRelaxationModeOptions = [
+  { value: "grid", label: "Grid (virtual cells)" },
+  { value: "expand", label: "Expand (balloon-like)" },
+];
+
+const handleGridRelaxationModeChange = (value) => {
+  emit("update:gridRelaxationMode", value);
+};
+
+const handleGridRelaxationExpandStrengthChange = (value) => {
+  emit("update:gridRelaxationExpandStrength", value);
 };
 
 const handleVisualAspectsChange = (value) => {

@@ -20,6 +20,8 @@
       v-model:artisticScoreFilters="artisticScoreFilters"
       v-model:timeRangeFilter="timeRangeFilter"
       v-model:gridRelaxationEnabled="gridRelaxationEnabled"
+      v-model:gridRelaxationMode="gridRelaxationMode"
+      v-model:gridRelaxationExpandStrength="gridRelaxationExpandStrength"
       :chunkOptions="chunkOptions"
       :showDiscreteLoader="showDiscreteLoader"
       :searchResults="searchResults"
@@ -34,7 +36,7 @@
 
     <!-- Hovered Photo Info -->
     <div
-      v-if="hoveredPhoto"
+      v-if="hoveredPhoto && !showDiscreteLoader"
       class="photo-tooltip"
       :style="{ left: tooltipPosition.x + 'px', top: tooltipPosition.y + 'px' }"
     >
@@ -128,7 +130,7 @@
           <ZoomInOutlined />
         </n-icon>
       </button>
-      <span class="zoom-level">{{ Math.round(scale * 100) }}%</span>
+      <!-- <span class="zoom-level">{{ Math.round(scale * 100) }}%</span> -->
       <button @click="zoomOut" class="zoom-btn" title="Zoom Out">
         <n-icon size="18">
           <ZoomOutOutlined />
@@ -245,6 +247,8 @@ const {
   chunkOptions,
   getBounds,
   gridRelaxationEnabled,
+  gridRelaxationMode,
+  gridRelaxationExpandStrength,
   loadAllPhotos,
   changeChunk,
   reapplyLayout,
@@ -313,7 +317,7 @@ const showCollectionModal = ref(false);
 const SCALE_FACTOR = 50;
 
 // Zoom constraints
-const MIN_SCALE = 0.05;
+const MIN_SCALE = 0.0;
 const MAX_SCALE = 12;
 
 // Photo counts
@@ -444,6 +448,13 @@ const initPixi = async () => {
 
   // Setup interaction handlers
   setupInteraction(app);
+
+  // Start reasonably centered even before we have bounds/positions.
+  // This gets refined later by resetView() once positions are available.
+  offsetX.value = pixiContainer.value.clientWidth / 2;
+  offsetY.value = pixiContainer.value.clientHeight / 2;
+  scale.value = 1;
+  updateContainerTransform();
 
   console.log("✅ PixiJS initialized");
 };
@@ -638,9 +649,17 @@ const updateHoverState = (e) => {
     }
   }
 
-  hoveredPhoto.value = foundPhoto;
+  // Only show tooltip if zoomed in enough
   if (foundPhoto) {
-    tooltipPosition.value = { x: e.clientX + 15, y: e.clientY + 15 };
+    // Show tooltip only when zoom level is below threshold (far away)
+    if (scale.value < 1.5) {
+      hoveredPhoto.value = foundPhoto;
+      tooltipPosition.value = { x: e.clientX + 15, y: e.clientY + 15 };
+    } else {
+      hoveredPhoto.value = null;
+    }
+  } else {
+    hoveredPhoto.value = null;
   }
 };
 
@@ -978,6 +997,11 @@ const onChunkChange = async (newChunk) => {
 
     // First load: full reload
     await changeChunk(newChunk);
+
+    // Frame the view as soon as we have positions (don't wait for textures)
+    await nextTick();
+    resetView();
+
     await loadPhotosToPixi();
   }
 };
@@ -1049,8 +1073,12 @@ const handleToolSelected = async (tool) => {
 // Retry load
 const retryLoad = async () => {
   await loadAllPhotos(selectedChunk.value);
-  await loadPhotosToPixi();
+
+  // Frame immediately after positions are known
+  await nextTick();
   resetView();
+
+  await loadPhotosToPixi();
 };
 
 // Format date helper
@@ -1120,11 +1148,12 @@ onMounted(async () => {
 
   // Load photos
   await loadAllPhotos(selectedChunk.value);
-  await loadPhotosToPixi();
 
-  // Center view after photos load
-  // await nextTick();
-  // resetView();
+  // Frame the view as soon as we have positions (don't wait for textures)
+  await nextTick();
+  resetView();
+
+  await loadPhotosToPixi();
 
   // Hide config panel on mobile by default
   if (isMobile.value) {
@@ -1149,6 +1178,22 @@ watch(
 
 // Toggle overlap-free layout without reloading from backend
 watch(gridRelaxationEnabled, () => {
+  if (!photos2D.value.length) return;
+  reapplyLayout();
+  if (photoSprites.value.size > 0) {
+    repositionSprites(photos2D.value);
+  }
+});
+
+watch(gridRelaxationMode, () => {
+  if (!photos2D.value.length) return;
+  reapplyLayout();
+  if (photoSprites.value.size > 0) {
+    repositionSprites(photos2D.value);
+  }
+});
+
+watch(gridRelaxationExpandStrength, () => {
   if (!photos2D.value.length) return;
   reapplyLayout();
   if (photoSprites.value.size > 0) {
@@ -1223,13 +1268,25 @@ watch(gridRelaxationEnabled, () => {
 /* Photo tooltip */
 .photo-tooltip {
   position: fixed;
-  background: rgba(30, 30, 30, 0.95);
+  /* background: rgba(30, 30, 30, 0.95); */
   border-radius: 8px;
   padding: 8px;
   pointer-events: none;
   z-index: 1000;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
   max-width: 200px;
+  animation: tooltipFadeIn 0.2s ease-out;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-10px, -10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
 }
 
 .tooltip-image {

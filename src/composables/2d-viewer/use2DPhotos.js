@@ -5,6 +5,8 @@ import gridRelaxation from "@/utils/gridRelaxation";
 
 // Easy global toggle (edit this constant when you want a default behavior change)
 const GRID_RELAXATION_ENABLED_DEFAULT = true;
+const GRID_RELAXATION_MODE_DEFAULT = "grid"; // "grid" | "expand"
+const GRID_RELAXATION_EXPAND_STRENGTH_DEFAULT = 0.25; // 0..1
 
 /**
  * Composable for managing 2D photo data and positions
@@ -25,6 +27,14 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
   // Toggle: if false, photos keep backend coordinates (no relaxation)
   const gridRelaxationEnabled = ref(GRID_RELAXATION_ENABLED_DEFAULT);
 
+  // Mode: "grid" (snap to virtual grid) vs "expand" (radial/repulsive balloon-like)
+  const gridRelaxationMode = ref(GRID_RELAXATION_MODE_DEFAULT);
+
+  // Controls how aggressively "expand" separates clustered points (0..1)
+  const gridRelaxationExpandStrength = ref(
+    GRID_RELAXATION_EXPAND_STRENGTH_DEFAULT,
+  );
+
   // Always 2D output
   const outputDims = 2;
 
@@ -33,6 +43,16 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
   // Keep this here (not in the component) so the relaxation remains UI-agnostic.
   const RELAX_BASE_SIZE = 1.65;
   const RELAX_PADDING = 0.12;
+
+  const clamp01 = (v) => Math.max(0, Math.min(1, Number(v) || 0));
+
+  const computeCosmicScale = (strength01) => {
+    // Preserve cluster shapes by scaling all positions around the centroid.
+    // Non-linear curve: gentle early, strong late.
+    const t = clamp01(strength01);
+    const eased = t * t; // quadratic
+    return 1 + eased * 30; // up to ~31x
+  };
 
   const to2D = (pos) => {
     const p = Array.isArray(pos) ? pos : [];
@@ -52,13 +72,50 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
 
     if (!gridRelaxationEnabled.value) return base;
 
-    const relaxed = gridRelaxation(base, {
+    const useGrid = gridRelaxationMode.value !== "expand";
+    const expand = clamp01(gridRelaxationExpandStrength.value);
+
+    // Expand mode works best as a true "universe expansion": scale around centroid,
+    // then do a gentle overlap-only relaxation. This avoids the circular "repulsion" look.
+    let itemsForRelaxation = base;
+    if (!useGrid) {
+      const s = computeCosmicScale(expand);
+      let cx = 0;
+      let cy = 0;
+      const n = base.length || 1;
+      for (const p of base) {
+        const [x, y] = p.position || [0, 0];
+        cx += x || 0;
+        cy += y || 0;
+      }
+      cx /= n;
+      cy /= n;
+
+      itemsForRelaxation = base.map((p) => {
+        const [x, y] = p.position || [0, 0];
+        const sx = cx + ((x || 0) - cx) * s;
+        const sy = cy + ((y || 0) - cy) * s;
+        return {
+          ...p,
+          position: [sx, sy],
+          coordinates: [sx, sy],
+        };
+      });
+    }
+
+    const relaxed = gridRelaxation(itemsForRelaxation, {
       dims: 2,
       baseSize: RELAX_BASE_SIZE,
       padding: RELAX_PADDING,
-      // 2D should look grid-like
-      snapToGrid: true,
-      gridSize: RELAX_BASE_SIZE + RELAX_PADDING,
+      resolveMode: useGrid ? "aabb" : "radial",
+      // Grid mode keeps the existing "assigned cell" behavior.
+      snapToGrid: useGrid,
+      gridSize: useGrid ? RELAX_BASE_SIZE + RELAX_PADDING : undefined,
+      // Expand mode: overlap-only (no continuous repulsion), tuned to be stable.
+      repelStrength: 0,
+      maxStep: useGrid ? 2.0 : 3.5,
+      iterations: useGrid ? undefined : 12,
+      stepScale: useGrid ? 0.85 : 0.65,
     });
 
     return base.map((p, idx) => {
@@ -282,6 +339,8 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
     isCatalogMode,
     outputDims,
     gridRelaxationEnabled,
+    gridRelaxationMode,
+    gridRelaxationExpandStrength,
 
     // Computed
     getBounds,
