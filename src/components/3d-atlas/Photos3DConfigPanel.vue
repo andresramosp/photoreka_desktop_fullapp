@@ -286,7 +286,7 @@
         <!-- Display Options Content -->
         <div v-if="showDisplayOptions" class="options-container">
           <!-- 2D View Toggle -->
-          <div
+          <!-- <div
             class="control-item"
             style="
               margin-top: 12px;
@@ -300,6 +300,28 @@
               :value="outputDims === 2"
               @update:value="handleDimensionsToggle"
               size="small"
+              @click.stop
+            />
+          </div> -->
+
+          <!-- Grid Relaxation Toggle -->
+          <div
+            class="control-item"
+            style="
+              margin-top: 12px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            "
+          >
+            <label class="control-label" style="margin: 0"
+              >Reduce overlaps</label
+            >
+            <n-switch
+              :value="gridRelaxationEnabled"
+              @update:value="handleGridRelaxationToggle"
+              size="small"
+              :disabled="showDiscreteLoader"
               @click.stop
             />
           </div>
@@ -785,6 +807,10 @@ const props = defineProps({
     type: Number,
     default: 1,
   },
+  gridRelaxationEnabled: {
+    type: Boolean,
+    default: true,
+  },
   floatingTagsEnabled: {
     type: Boolean,
     default: true,
@@ -854,6 +880,7 @@ const emit = defineEmits([
   "update:timeRangeFilter",
   "update:outputDims",
   "update:inflateFactor",
+  "update:gridRelaxationEnabled",
   "update:floatingTagsEnabled",
   "update:floatingTagsDetectionRadius",
   "update:floatingTagsMaxTags",
@@ -994,6 +1021,10 @@ const handleDimensionsToggle = (value) => {
 const handleInflateFactorChange = (value) => {
   emit("update:inflateFactor", value);
   emit("inflate-factor-change", value);
+};
+
+const handleGridRelaxationToggle = (value) => {
+  emit("update:gridRelaxationEnabled", value);
 };
 
 const handleFloatingTagsToggle = (value) => {

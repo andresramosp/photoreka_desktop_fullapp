@@ -1,6 +1,10 @@
 // composables/2d-viewer/use2DPhotos.js
 import { ref, computed } from "vue";
 import { api } from "@/utils/axios";
+import gridRelaxation from "@/utils/gridRelaxation";
+
+// Easy global toggle (edit this constant when you want a default behavior change)
+const GRID_RELAXATION_ENABLED_DEFAULT = true;
 
 /**
  * Composable for managing 2D photo data and positions
@@ -18,8 +22,59 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
   const isCatalogMode = Boolean(userId);
   const lowPerformance = ref(lowPerformanceMode);
 
+  // Toggle: if false, photos keep backend coordinates (no relaxation)
+  const gridRelaxationEnabled = ref(GRID_RELAXATION_ENABLED_DEFAULT);
+
   // Always 2D output
   const outputDims = 2;
+
+  // Spacing model (world units). Photos2D maps coords to canvas with SCALE_FACTOR=50
+  // and uses a default sprite width of ~80px => ~1.6 world units.
+  // Keep this here (not in the component) so the relaxation remains UI-agnostic.
+  const RELAX_BASE_SIZE = 1.65;
+  const RELAX_PADDING = 0.12;
+
+  const to2D = (pos) => {
+    const p = Array.isArray(pos) ? pos : [];
+    return [p[0] || 0, p[1] || 0];
+  };
+
+  const applyLayout = (photos) => {
+    const base = (photos || []).map((p) => {
+      const raw = to2D(p?.rawCoordinates || p?.coordinates || p?.position);
+      return {
+        ...p,
+        rawCoordinates: to2D(p?.rawCoordinates || raw),
+        position: raw,
+        coordinates: raw,
+      };
+    });
+
+    if (!gridRelaxationEnabled.value) return base;
+
+    const relaxed = gridRelaxation(base, {
+      dims: 2,
+      baseSize: RELAX_BASE_SIZE,
+      padding: RELAX_PADDING,
+      // 2D should look grid-like
+      snapToGrid: true,
+      gridSize: RELAX_BASE_SIZE + RELAX_PADDING,
+    });
+
+    return base.map((p, idx) => {
+      const pos = relaxed[idx] || p.position || [0, 0];
+      return {
+        ...p,
+        position: [pos[0] || 0, pos[1] || 0],
+        coordinates: [pos[0] || 0, pos[1] || 0],
+      };
+    });
+  };
+
+  const reapplyLayout = () => {
+    if (!photos2D.value.length) return;
+    photos2D.value = applyLayout(photos2D.value);
+  };
 
   // Available chunk options (excluding 3D-only options)
   const chunkOptions = [
@@ -106,21 +161,19 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
         const coordsMap = new Map();
         workingPhotos.forEach((photo) => {
           const coords = photo.coordinates || photo.position || [0, 0];
-          // Ensure we have 2D coordinates
           coordsMap.set(photo.id, [coords[0] || 0, coords[1] || 0]);
         });
 
-        photos2D.value = photos2D.value.map((existingPhoto) => {
+        const updatedPhotos = photos2D.value.map((existingPhoto) => {
           const newCoords = coordsMap.get(existingPhoto.id);
-          if (newCoords) {
-            return {
-              ...existingPhoto,
-              position: newCoords,
-              coordinates: newCoords,
-            };
-          }
-          return existingPhoto;
+          if (!newCoords) return existingPhoto;
+          return {
+            ...existingPhoto,
+            rawCoordinates: newCoords,
+          };
         });
+
+        photos2D.value = applyLayout(updatedPhotos);
       } else {
         // Normal mode: replace all photos
         const processedPhotos = workingPhotos.map((photo) => {
@@ -131,12 +184,14 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
             ...photo,
             position: position2D,
             coordinates: position2D,
-            rawCoordinates: photo.coordinates || [0, 0],
+            rawCoordinates: position2D,
           };
         });
 
-        console.log(`📸 Loaded ${processedPhotos.length} photos in 2D`);
-        photos2D.value = processedPhotos;
+        const laidOut = applyLayout(processedPhotos);
+
+        console.log(`📸 Loaded ${laidOut.length} photos in 2D`);
+        photos2D.value = laidOut;
       }
 
       console.log(`Load complete: ${photos2D.value.length} photos`);
@@ -226,6 +281,7 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
     error,
     isCatalogMode,
     outputDims,
+    gridRelaxationEnabled,
 
     // Computed
     getBounds,
@@ -236,6 +292,7 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
     // Methods
     loadAllPhotos,
     changeChunk,
+    reapplyLayout,
     reset,
   };
 }

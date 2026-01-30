@@ -20,6 +20,7 @@ import {
   SettingsOutline as SettingsIcon,
   HelpCircleOutline as HelpIcon,
   MapOutline as MapIcon,
+  Image as ImageIcon,
 } from "@vicons/ionicons5";
 
 // Import icons for sections (generic)
@@ -30,7 +31,7 @@ import {
   ConstructOutline as SystemIcon,
 } from "@vicons/ionicons5";
 
-import { Workspace as CanvasIcon } from "@vicons/carbon";
+import { Workspace as CanvasIcon, Mountain } from "@vicons/carbon";
 
 export function useMainMenu() {
   const router = useRouter();
@@ -157,27 +158,31 @@ export function useMainMenu() {
         disabled: isBlocked.value,
         icon: renderIcon(ReportIcon),
       },
+      {
+        label: () => h("span", { class: "second-level-menu-item" }, "Atlas"),
+        key: "atlas-group",
+        disabled: isBlocked.value,
+        icon: renderIcon(MapIcon),
+        children: [
+          {
+            label: () =>
+              h("span", { class: "collection-menu-item" }, "2D Atlas"),
+            key: "2d-view",
+            icon: renderIcon(ImageIcon),
+          },
+          ...(!isMobileLimitedMode.value
+            ? [
+                {
+                  label: () =>
+                    h("span", { class: "collection-menu-item" }, "3D Atlas"),
+                  key: "atlas",
+                  icon: renderIcon(CubeIcon),
+                },
+              ]
+            : []),
+        ],
+      },
     ];
-
-    // Only add 3D Atlas, World Map, and Report on desktop
-    if (!isMobileLimitedMode.value) {
-      children.push(
-        // {
-        //   label: () =>
-        //     h("span", { class: "second-level-menu-item" }, "World Map"),
-        //   key: "world-map",
-        //   disabled: isBlocked.value,
-        //   icon: renderIcon(MapIcon),
-        // },
-        {
-          label: () =>
-            h("span", { class: "second-level-menu-item" }, "3D Atlas"),
-          key: "atlas",
-          disabled: isBlocked.value,
-          icon: renderIcon(CubeIcon),
-        },
-      );
-    }
 
     return {
       label: "Explore",

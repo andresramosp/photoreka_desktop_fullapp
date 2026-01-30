@@ -40,6 +40,7 @@
       v-model:timeRangeFilter="timeRangeFilter"
       v-model:outputDims="outputDims"
       v-model:inflateFactor="inflateFactor"
+      v-model:gridRelaxationEnabled="gridRelaxationEnabled"
       v-model:floatingTagsEnabled="floatingTagsSystem.config.enabled"
       v-model:floatingTagsDetectionRadius="
         floatingTagsSystem.config.detectionRadius
@@ -340,11 +341,22 @@ const {
   error,
   chunkOptions,
   outputDims,
+  gridRelaxationEnabled,
   loadAllPhotos,
   changeChunk,
   changeDimensions,
+  reapplyLayout,
   reset,
 } = use3DPhotos(props.catalogUserId, useLowPerformance.value);
+
+watch(
+  gridRelaxationEnabled,
+  () => {
+    // Local relayout without refetch; Photos3D watcher animates the transition.
+    reapplyLayout();
+  },
+  { flush: "post" },
+);
 
 // 🆕 Composable para gestión de texturas
 const textureManager = usePhotoTextureManager(

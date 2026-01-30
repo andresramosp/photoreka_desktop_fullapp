@@ -54,6 +54,36 @@
         </div>
       </div>
 
+      <!-- Layout Section -->
+      <div class="control-section">
+        <h4 class="section-title">
+          <n-icon size="16" style="margin-right: 6px; vertical-align: middle">
+            <EyeOutlined />
+          </n-icon>
+          Display options
+        </h4>
+        <div
+          class="control-item-full"
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+          "
+        >
+          <span style="font-size: 12px; color: var(--text-secondary)">
+            Reduce overlaps
+          </span>
+          <n-switch
+            :disabled="showDiscreteLoader"
+            :value="gridRelaxationEnabled"
+            @update:value="handleGridRelaxationChange"
+            size="small"
+            @click.stop
+          />
+        </div>
+      </div>
+
       <!-- More Filters Toggle -->
       <div class="control-section">
         <div class="section-toggle" @click="toggleMoreFilters">
@@ -260,65 +290,6 @@
         </div>
       </div>
 
-      <!-- Display Options Toggle -->
-      <div class="control-section">
-        <div class="section-toggle" @click="toggleDisplayOptions">
-          <div style="display: flex; align-items: center; gap: 6px">
-            <n-icon size="16">
-              <EyeOutlined />
-            </n-icon>
-            <span class="section-toggle-label">Display Options</span>
-          </div>
-          <n-icon
-            size="12"
-            class="toggle-icon"
-            :class="{ rotated: showDisplayOptions }"
-          >
-            <svg viewBox="0 0 24 24">
-              <path
-                fill="currentColor"
-                d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
-              />
-            </svg>
-          </n-icon>
-        </div>
-
-        <!-- Display Options Content -->
-        <div v-if="showDisplayOptions" class="options-container">
-          <!-- Photo Size Slider -->
-          <div class="control-item-full" style="margin-top: 12px">
-            <label
-              class="control-label"
-              style="margin-bottom: 8px; display: block"
-            >
-              Photo Size
-            </label>
-            <div class="slider-container">
-              <n-slider
-                :value="photoSize"
-                @update:value="handlePhotoSizeChange"
-                :min="40"
-                :max="200"
-                :step="10"
-                :marks="{ 40: 'S', 80: 'M', 120: 'L', 200: 'XL' }"
-                class="radial-slider"
-                @click.stop
-              />
-            </div>
-          </div>
-
-          <!-- Reset View Button -->
-          <div class="control-item-full" style="margin-top: 16px">
-            <button @click="handleResetView" class="reset-view-btn">
-              <n-icon size="14" style="margin-right: 6px">
-                <FullscreenOutlined />
-              </n-icon>
-              Reset View
-            </button>
-          </div>
-        </div>
-      </div>
-
       <!-- Navigation Controls Toggle -->
       <div class="control-section">
         <div class="section-toggle" @click="toggleNavigationControls">
@@ -340,34 +311,6 @@
               />
             </svg>
           </n-icon>
-        </div>
-
-        <!-- Navigation Controls Content -->
-        <div v-if="showNavigationControls" class="controls-info">
-          <div class="control-tip">
-            <div class="control-icon-group">
-              <span class="control-icon-text">🖱️</span>
-              <span class="control-text">Click and drag to pan</span>
-            </div>
-          </div>
-          <div class="control-tip">
-            <div class="control-icon-group">
-              <span class="control-icon-text">🖱️⚙️</span>
-              <span class="control-text">Scroll wheel to zoom</span>
-            </div>
-          </div>
-          <div class="control-tip">
-            <div class="control-icon-group">
-              <span class="control-icon-text">👆</span>
-              <span class="control-text">Click photos to select</span>
-            </div>
-          </div>
-          <div class="control-tip">
-            <div class="control-icon-group">
-              <span class="control-icon-text">🤏</span>
-              <span class="control-text">Pinch to zoom (touch)</span>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -444,6 +387,11 @@ const props = defineProps({
     type: Number,
     default: 80,
   },
+  // Layout
+  gridRelaxationEnabled: {
+    type: Boolean,
+    default: true,
+  },
   // Navigation
   isPlayground: {
     type: Boolean,
@@ -459,6 +407,7 @@ const emit = defineEmits([
   "update:artisticScoreFilters",
   "update:timeRangeFilter",
   "update:photoSize",
+  "update:gridRelaxationEnabled",
   "chunk-change",
   "visual-aspects-change",
   "artistic-scores-change",
@@ -502,7 +451,9 @@ const treeSelectOptions = computed(() => {
     checkable: false,
     children: group.children.map((child) => ({
       label: child.label,
-      key: child.key,
+      key: child.value,
+      disabled: false,
+      checkable: true,
     })),
   }));
 });
@@ -539,6 +490,10 @@ const toggleNavigationControls = () => {
 const handleChunkChange = (value) => {
   emit("update:selectedChunk", value);
   emit("chunk-change", value);
+};
+
+const handleGridRelaxationChange = (value) => {
+  emit("update:gridRelaxationEnabled", value);
 };
 
 const handleVisualAspectsChange = (value) => {

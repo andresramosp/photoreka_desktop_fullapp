@@ -258,41 +258,14 @@ const router = createRouter({
       },
     },
     {
-      path: "/scatter",
-      name: "scatter",
+      path: "/2d-view",
+      name: "2d-view",
       component: TwoDView,
       meta: {
         requiresAuth: true,
       },
     },
-    {
-      path: "/2d-catalog/:userId",
-      name: "2d-catalog",
-      component: TwoDView,
-      meta: {
-        requiresGuest: false, // Accessible without authentication
-        playground: true,
-        title: "2D Photo Scatter - Photoreka",
-        description:
-          "Explore photos in a 2D scatter visualization. Browse and navigate through photo collections with pan and zoom.",
-        keywords:
-          "2D photo viewer, photo catalog, scatter plot, photo browsing",
-      },
-    },
-    {
-      path: "/shared-scatter/:userId",
-      name: "shared-scatter",
-      component: TwoDView,
-      meta: {
-        requiresGuest: false, // Accessible without authentication
-        playground: true,
-        title: "2D Photo Scatter - Photoreka",
-        description:
-          "Explore photos in a 2D scatter visualization. Browse and navigate through photo collections with pan and zoom.",
-        keywords:
-          "2D photo viewer, photo catalog, scatter plot, photo browsing",
-      },
-    },
+
     {
       path: "/3d-catalog/:userId",
       name: "3d-catalog",

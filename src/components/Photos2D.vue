@@ -19,6 +19,7 @@
       v-model:selectedVisualAspects="selectedVisualAspects"
       v-model:artisticScoreFilters="artisticScoreFilters"
       v-model:timeRangeFilter="timeRangeFilter"
+      v-model:gridRelaxationEnabled="gridRelaxationEnabled"
       :chunkOptions="chunkOptions"
       :showDiscreteLoader="showDiscreteLoader"
       :searchResults="searchResults"
@@ -192,6 +193,7 @@ import CollectionModal from "@/components/CollectionModal.vue";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import Photos2DConfigPanel from "@/components/2d-atlas/Photos2DConfigPanel.vue";
 import { usePhotosStore } from "@/stores/photos.js";
+import { visualAspectsOptions } from "@/stores/searchStore.js";
 
 import { use2DPhotos } from "@/composables/2d-viewer/use2DPhotos.js";
 import { useHasTouch } from "@/composables/useHasTouch.js";
@@ -241,8 +243,10 @@ const {
   error,
   chunkOptions,
   getBounds,
+  gridRelaxationEnabled,
   loadAllPhotos,
   changeChunk,
+  reapplyLayout,
   reset,
 } = use2DPhotos(props.catalogUserId, useLowPerformance.value);
 
@@ -303,11 +307,26 @@ const SCALE_FACTOR = 50;
 
 // Zoom constraints
 const MIN_SCALE = 0.05;
-const MAX_SCALE = 5;
+const MAX_SCALE = 12;
 
 // Photo counts
 const totalPhotosCount = computed(() => photos2D.value.length);
 const visiblePhotosCount = computed(() => filteredPhotos.value.length);
+
+// Map visual-aspect values (e.g. "warm") to their category keys (e.g. "temperature")
+const createVisualAspectCategoryMap = () => {
+  const categoryMap = new Map();
+
+  visualAspectsOptions.forEach((group) => {
+    group.children.forEach((child) => {
+      categoryMap.set(child.value, group.key);
+    });
+  });
+
+  return categoryMap;
+};
+
+const visualAspectCategoryMap = createVisualAspectCategoryMap();
 
 // Filtered photos based on current filters
 const filteredPhotos = computed(() => {
@@ -316,10 +335,44 @@ const filteredPhotos = computed(() => {
   // Apply visual aspects filter
   if (selectedVisualAspects.value && selectedVisualAspects.value.length > 0) {
     filtered = filtered.filter((photo) => {
-      const photoAspects = photo.descriptions?.visual_aspects || [];
-      return selectedVisualAspects.value.some((aspect) =>
-        photoAspects.includes(aspect),
-      );
+      const visualAspects = photo.descriptions?.visual_aspects;
+
+      if (!visualAspects) return false;
+
+      // Legacy/alternate shape: array of selected aspects
+      if (Array.isArray(visualAspects)) {
+        return selectedVisualAspects.value.some((aspect) =>
+          visualAspects.includes(aspect),
+        );
+      }
+
+      // Current shape: object keyed by category, values are arrays
+      if (typeof visualAspects === "object") {
+        const selectedByCategory = new Map();
+        selectedVisualAspects.value.forEach((selectedAspect) => {
+          const category = visualAspectCategoryMap.get(selectedAspect);
+          if (!category) return;
+          if (!selectedByCategory.has(category)) {
+            selectedByCategory.set(category, []);
+          }
+          selectedByCategory.get(category).push(selectedAspect);
+        });
+
+        if (selectedByCategory.size === 0) return false;
+
+        // AND across categories, OR within a category
+        return Array.from(selectedByCategory.entries()).every(
+          ([category, aspectsInCategory]) => {
+            const photoAspects = visualAspects?.[category];
+            if (!Array.isArray(photoAspects)) return false;
+            return aspectsInCategory.some((aspect) =>
+              photoAspects.includes(aspect),
+            );
+          },
+        );
+      }
+
+      return false;
     });
   }
 
@@ -337,12 +390,14 @@ const filteredPhotos = computed(() => {
   }
 
   // Apply time range filter
-  if (timeRangeFilter.value) {
-    const { start, end } = timeRangeFilter.value;
+  if (timeRangeFilter.value !== null) {
+    const [minDate, maxDate] = timeRangeFilter.value;
     filtered = filtered.filter((photo) => {
-      if (!photo.dateTaken) return false;
-      const date = new Date(photo.dateTaken);
-      return date >= start && date <= end;
+      const timestamp = new Date(
+        photo.descriptions?.EXIF?.dateTaken ?? photo.dateTaken,
+      ).getTime();
+      if (isNaN(timestamp)) return false;
+      return timestamp >= minDate && timestamp <= maxDate;
     });
   }
 
@@ -944,18 +999,12 @@ const onChunkChange = async (newChunk) => {
 
     // Reposition sprites with smooth animation
     repositionSprites(photos2D.value);
-
-    // Reset view after a slight delay to let animation start
-    setTimeout(() => {
-      resetView();
-    }, 100);
   } else {
     console.log("🧹 First load: loading all photos and textures");
 
     // First load: full reload
     await changeChunk(newChunk);
     await loadPhotosToPixi();
-    resetView();
   }
 };
 
@@ -1099,8 +1148,8 @@ onMounted(async () => {
   await loadPhotosToPixi();
 
   // Center view after photos load
-  await nextTick();
-  resetView();
+  // await nextTick();
+  // resetView();
 
   // Hide config panel on mobile by default
   if (isMobile.value) {
@@ -1122,6 +1171,15 @@ watch(
   },
   { deep: true },
 );
+
+// Toggle overlap-free layout without reloading from backend
+watch(gridRelaxationEnabled, () => {
+  if (!photos2D.value.length) return;
+  reapplyLayout();
+  if (photoSprites.value.size > 0) {
+    repositionSprites(photos2D.value);
+  }
+});
 </script>
 
 <style scoped>
