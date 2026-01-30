@@ -24,6 +24,7 @@ import LandingViewPremium from "../views/LandingViewPremium.vue";
 import TermsView from "../views/TermsView.vue";
 import MaintenanceView from "../views/MaintenanceView.vue";
 import ThreeDView from "../views/3DView.vue";
+import TwoDView from "../views/2DView.vue";
 import WorldMapView from "../views/WorldMapView.vue";
 import ResetPasswordView from "../views/ResetPasswordView.vue";
 import ConfirmEmailView from "../views/ConfirmEmailView.vue";
@@ -254,6 +255,42 @@ const router = createRouter({
       component: WorldMapView,
       meta: {
         requiresAuth: true,
+      },
+    },
+    {
+      path: "/scatter",
+      name: "scatter",
+      component: TwoDView,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
+      path: "/2d-catalog/:userId",
+      name: "2d-catalog",
+      component: TwoDView,
+      meta: {
+        requiresGuest: false, // Accessible without authentication
+        playground: true,
+        title: "2D Photo Scatter - Photoreka",
+        description:
+          "Explore photos in a 2D scatter visualization. Browse and navigate through photo collections with pan and zoom.",
+        keywords:
+          "2D photo viewer, photo catalog, scatter plot, photo browsing",
+      },
+    },
+    {
+      path: "/shared-scatter/:userId",
+      name: "shared-scatter",
+      component: TwoDView,
+      meta: {
+        requiresGuest: false, // Accessible without authentication
+        playground: true,
+        title: "2D Photo Scatter - Photoreka",
+        description:
+          "Explore photos in a 2D scatter visualization. Browse and navigate through photo collections with pan and zoom.",
+        keywords:
+          "2D photo viewer, photo catalog, scatter plot, photo browsing",
       },
     },
     {

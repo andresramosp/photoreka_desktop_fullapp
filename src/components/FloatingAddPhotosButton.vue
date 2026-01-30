@@ -33,6 +33,7 @@ const hiddenRoutes = [
   "plan",
   "3d-view",
   "atlas",
+  "scatter",
 ];
 
 // Calcular si el botón debe mostrarse
@@ -48,7 +49,7 @@ const handleClick = async () => {
   // Esperar un tick para que se renderice la vista
   setTimeout(() => {
     const chooseFilesButton = document.querySelector(
-      ".upload-btn, .compact-upload-btn"
+      ".upload-btn, .compact-upload-btn",
     );
     if (chooseFilesButton) {
       chooseFilesButton.click();
