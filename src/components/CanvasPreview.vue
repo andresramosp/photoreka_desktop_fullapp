@@ -25,7 +25,7 @@
 
     <div v-else class="canvas-empty">
       <div class="empty-icon">
-        <n-icon size="32">
+        <n-icon size="32" color="var(--primary-color)">
           <Workspace />
         </n-icon>
       </div>

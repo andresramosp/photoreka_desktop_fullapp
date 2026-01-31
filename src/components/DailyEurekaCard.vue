@@ -288,6 +288,7 @@ const showPhotoInfo = async () => {
 .did-you-know.hovering {
   transform: none !important;
   box-shadow: none !important;
+  border: none !important;
 }
 
 .did-you-know.has-photo {
@@ -300,11 +301,13 @@ const showPhotoInfo = async () => {
   top: 0;
   left: 0;
   right: 0;
-  padding: 8px;
+  padding: 5px;
   bottom: 0;
   overflow: hidden;
   z-index: 1;
-  background-color: whitesmoke;
+  /* background-color: rgba(6, 182, 212, 0.7); */
+  background-color: var(--text-primary);
+  border-radius: 5px;
 }
 
 .insight-photo {
@@ -510,8 +513,10 @@ const showPhotoInfo = async () => {
   position: relative;
   z-index: 3;
   text-align: center;
-  width: 100%;
-  background: rgba(6, 182, 212, 0.3);
+  width: 103%;
+  /* background: rgba(6, 182, 212, 0.3); */
+  background: rgba(37, 99, 235, 0.3);
+
   padding: var(--spacing-lg) var(--spacing-md);
   opacity: 1;
 }

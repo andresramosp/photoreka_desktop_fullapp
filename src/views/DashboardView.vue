@@ -24,7 +24,7 @@
           @click="goToTool('workspace')"
         >
           <div class="action-icon">
-            <n-icon size="45">
+            <n-icon size="45" color="var(--primary-color)">
               <LayersOutline />
             </n-icon>
           </div>
@@ -39,7 +39,7 @@
           @click="goToTool('search')"
         >
           <div class="action-icon">
-            <n-icon size="45">
+            <n-icon size="45" color="var(--primary-color)">
               <SearchIcon />
             </n-icon>
           </div>
@@ -52,7 +52,7 @@
           @click="goToTool('report')"
         >
           <div class="action-icon">
-            <n-icon size="45">
+            <n-icon size="45" color="var(--primary-color)">
               <AnalyticsOutline />
             </n-icon>
           </div>

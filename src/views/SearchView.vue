@@ -45,6 +45,15 @@
         <div class="loading-message">
           <n-spin size="large" />
           <p class="loading-text">Searching through your photos...</p>
+          <transition name="slide-fade" mode="out-in">
+            <p
+              v-if="currentReference"
+              :key="currentRefIndex"
+              class="search-reference"
+            >
+              "{{ currentReference }}"
+            </p>
+          </transition>
         </div>
 
         <!-- Skeleton Grid -->
@@ -263,6 +272,13 @@ const {
 const pageSize = computed(() => gridColumns.value * 2); // 2 rows by default
 const isBeAdaptiveLoading = ref(false);
 
+// Adaptive search references
+const currentSearchId = ref(null);
+const searchReferences = ref([]);
+const currentRefIndex = ref(0);
+let refPollingInterval = null;
+let refCyclingInterval = null;
+
 // Warm up composable
 import { useWarmUp } from "@/composables/useWarmUp";
 import SearchPlaceHolder from "@/components/SearchPlaceHolder.vue";
@@ -417,12 +433,17 @@ function clearSearch() {
 
   // Expandir toolbar al limpiar búsqueda
   isToolbarCollapsed.value = false;
+
+  // Stop references polling
+  stopReferencesPolling();
+  currentSearchId.value = null;
 }
 
 // Ejecución de búsqueda
 async function performSearch() {
   clearSelection();
   searchStore.resetCurrentIteration();
+  stopReferencesPolling(); // Stop any previous polling
   searchStore.setSearching(true);
 
   if (!isMobile.value) {
@@ -433,6 +454,7 @@ async function performSearch() {
 
   await searchPhotos();
   searchStore.setSearching(false);
+  stopReferencesPolling(); // Stop polling when search completes
 
   // Auto-colapsar toolbar después de búsqueda (solo desktop)
 }
@@ -447,10 +469,108 @@ async function loadMorePhotos() {
   searchStore.setLoadingMore(false);
 }
 
+// Generate unique search ID
+function generateSearchId() {
+  return `search_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+}
+
+// Poll for search references
+async function pollSearchReferences(searchId) {
+  try {
+    const { data } = await api.get(`/api/search/refs/${searchId}`);
+    if (data && data.refs && data.refs.length > 0) {
+      searchReferences.value = data.refs;
+      currentRefIndex.value = 0;
+
+      // Stop polling once we have the references
+      if (refPollingInterval) {
+        clearInterval(refPollingInterval);
+        refPollingInterval = null;
+      }
+
+      // Start cycling through references ONLY if not already cycling
+      if (!refCyclingInterval) {
+        startReferenceCycling();
+      }
+    }
+  } catch (error) {
+    if (error.response?.status === 404) {
+      // References not found yet, continue polling
+      console.log("Search references not ready yet...");
+    } else {
+      console.error("Error polling search references:", error);
+    }
+  }
+}
+
+// Start polling interval
+function startReferencesPolling(searchId) {
+  // Clear any existing interval
+  if (refPollingInterval) {
+    clearInterval(refPollingInterval);
+  }
+
+  // Poll immediately
+  pollSearchReferences(searchId);
+
+  // Then poll every 500ms
+  refPollingInterval = setInterval(() => {
+    pollSearchReferences(searchId);
+  }, 500);
+}
+
+// Cycle through references with animation
+function startReferenceCycling() {
+  if (searchReferences.value.length === 0) return;
+
+  // Clear any existing cycling interval to prevent multiple intervals
+  if (refCyclingInterval) {
+    clearInterval(refCyclingInterval);
+    refCyclingInterval = null;
+  }
+
+  refCyclingInterval = setInterval(() => {
+    if (!isSearching.value || searchReferences.value.length === 0) {
+      clearInterval(refCyclingInterval);
+      refCyclingInterval = null;
+      return;
+    }
+
+    currentRefIndex.value =
+      (currentRefIndex.value + 1) % searchReferences.value.length;
+  }, 2250); // Change reference every 3 seconds
+}
+
+// Stop all polling and cycling
+function stopReferencesPolling() {
+  if (refPollingInterval) {
+    clearInterval(refPollingInterval);
+    refPollingInterval = null;
+  }
+  if (refCyclingInterval) {
+    clearInterval(refCyclingInterval);
+    refCyclingInterval = null;
+  }
+  searchReferences.value = [];
+  currentRefIndex.value = 0;
+}
+
 // Llamada a la API
 async function searchPhotos() {
   try {
     const currentState = searchStore.currentSearchState;
+
+    // Generate searchId for adaptive mode on first iteration
+    debugger;
+    if (searchStore.searchMode === "adaptive" && currentState.iteration === 1) {
+      currentSearchId.value = generateSearchId();
+      searchReferences.value = [];
+      currentRefIndex.value = 0;
+
+      // Start polling for references
+      startReferencesPolling(currentSearchId.value);
+    }
+
     const options = {
       iteration: currentState.iteration,
       pageSize: pageSize.value,
@@ -460,6 +580,9 @@ async function searchPhotos() {
       artisticScores: searchStore.selectedArtisticScores,
       cursor: currentState.lastCursor, // Add cursor for pagination
       withInsights: withInsights.value,
+      ...(searchStore.searchMode === "adaptive" && currentSearchId.value
+        ? { searchId: currentSearchId.value }
+        : {}),
     };
 
     let payload;
@@ -493,6 +616,12 @@ async function searchPhotos() {
     console.error("Error al buscar fotos:", err);
   }
 }
+
+// Computed for current visible reference
+const currentReference = computed(() => {
+  if (searchReferences.value.length === 0) return null;
+  return searchReferences.value[currentRefIndex.value];
+});
 
 // Función para manejar el click en "Try Adaptive"
 async function handleBeAdaptiveClick() {
@@ -536,6 +665,7 @@ watch(withInsights, (newValue) => {
 
 onUnmounted(() => {
   // Scroll listener ya no es necesario
+  stopReferencesPolling();
 });
 
 // Carousel de ejemplos dinámico usando composable
@@ -675,6 +805,30 @@ function handleMobileReset() {
   font-size: 16px;
   color: var(--text-secondary);
   margin: 0;
+}
+
+.search-reference {
+  font-size: 14px;
+  color: var(--primary-color);
+  font-style: italic;
+  margin: 0px 0 0 0;
+  min-height: 24px;
+}
+
+/* Slide fade animation */
+.slide-fade-enter-active,
+.slide-fade-leave-active {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.slide-fade-enter-from {
+  transform: translateX(20px);
+  opacity: 0;
+}
+
+.slide-fade-leave-to {
+  transform: translateX(-20px);
+  opacity: 0;
 }
 
 /* Search Results */

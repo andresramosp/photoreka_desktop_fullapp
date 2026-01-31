@@ -79,6 +79,100 @@
       <!-- Info Sections with Lateral Tabs -->
       <div class="info-sections">
         <n-tabs type="line" placement="left" size="large" animated>
+          <n-tab-pane name="tags" display-directive="show:lazy">
+            <template #tab>
+              <div class="tab-content">
+                <n-icon size="18">
+                  <TagIcon />
+                </n-icon>
+                <span>Tags</span>
+              </div>
+            </template>
+            <div class="tab-panel-content">
+              <div class="tags-section">
+                <div
+                  v-if="Object.keys(groupedTags).length > 0"
+                  class="grouped-tags"
+                >
+                  <!-- Contextual -->
+                  <div v-if="groupedTags['contextual']" class="tag-group-item">
+                    <h5 class="tag-group-label">Contextual</h5>
+                    <div class="tag-group-content">
+                      <div class="tags-list">
+                        <n-tag
+                          v-for="tag in groupedTags['contextual']"
+                          :key="tag.id || tag.name"
+                          type="info"
+                          :bordered="false"
+                          class="photo-tag"
+                        >
+                          {{ tag.name || tag }}
+                        </n-tag>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Technical -->
+                  <div v-if="groupedTags['technical']" class="tag-group-item">
+                    <h5 class="tag-group-label">Technical</h5>
+                    <div class="tag-group-content">
+                      <div class="tags-list">
+                        <n-tag
+                          v-for="tag in groupedTags['technical']"
+                          :key="tag.id || tag.name"
+                          type="info"
+                          :bordered="false"
+                          class="photo-tag"
+                        >
+                          {{ tag.name || tag }}
+                        </n-tag>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Artistic -->
+                  <div v-if="groupedTags['artistic']" class="tag-group-item">
+                    <h5 class="tag-group-label">Artistic</h5>
+                    <div class="tag-group-content">
+                      <div class="tags-list">
+                        <n-tag
+                          v-for="tag in groupedTags['artistic']"
+                          :key="tag.id || tag.name"
+                          type="info"
+                          :bordered="false"
+                          class="photo-tag"
+                        >
+                          {{ tag.name || tag }}
+                        </n-tag>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Miscellaneous -->
+                  <div
+                    v-if="groupedTags['miscellaneous']"
+                    class="tag-group-item"
+                  >
+                    <h5 class="tag-group-label">Miscellaneous</h5>
+                    <div class="tag-group-content">
+                      <div class="tags-list">
+                        <n-tag
+                          v-for="tag in groupedTags['miscellaneous']"
+                          :key="tag.id || tag.name"
+                          type="info"
+                          :bordered="false"
+                          class="photo-tag"
+                        >
+                          {{ tag.name || tag }}
+                        </n-tag>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </n-tab-pane>
+
           <n-tab-pane name="technical" display-directive="show:lazy">
             <template #tab>
               <div class="tab-content">
@@ -394,100 +488,6 @@
                       >
                         {{ formatCategoryName(focus) }}
                       </n-tag>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </n-tab-pane>
-
-          <n-tab-pane name="tags" display-directive="show:lazy">
-            <template #tab>
-              <div class="tab-content">
-                <n-icon size="18">
-                  <TagIcon />
-                </n-icon>
-                <span>Tags</span>
-              </div>
-            </template>
-            <div class="tab-panel-content">
-              <div class="tags-section">
-                <div
-                  v-if="Object.keys(groupedTags).length > 0"
-                  class="grouped-tags"
-                >
-                  <!-- Contextual -->
-                  <div v-if="groupedTags['contextual']" class="tag-group-item">
-                    <h5 class="tag-group-label">Contextual</h5>
-                    <div class="tag-group-content">
-                      <div class="tags-list">
-                        <n-tag
-                          v-for="tag in groupedTags['contextual']"
-                          :key="tag.id || tag.name"
-                          type="info"
-                          :bordered="false"
-                          class="photo-tag"
-                        >
-                          {{ tag.name || tag }}
-                        </n-tag>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Technical -->
-                  <div v-if="groupedTags['technical']" class="tag-group-item">
-                    <h5 class="tag-group-label">Technical</h5>
-                    <div class="tag-group-content">
-                      <div class="tags-list">
-                        <n-tag
-                          v-for="tag in groupedTags['technical']"
-                          :key="tag.id || tag.name"
-                          type="info"
-                          :bordered="false"
-                          class="photo-tag"
-                        >
-                          {{ tag.name || tag }}
-                        </n-tag>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Artistic -->
-                  <div v-if="groupedTags['artistic']" class="tag-group-item">
-                    <h5 class="tag-group-label">Artistic</h5>
-                    <div class="tag-group-content">
-                      <div class="tags-list">
-                        <n-tag
-                          v-for="tag in groupedTags['artistic']"
-                          :key="tag.id || tag.name"
-                          type="info"
-                          :bordered="false"
-                          class="photo-tag"
-                        >
-                          {{ tag.name || tag }}
-                        </n-tag>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Miscellaneous -->
-                  <div
-                    v-if="groupedTags['miscellaneous']"
-                    class="tag-group-item"
-                  >
-                    <h5 class="tag-group-label">Miscellaneous</h5>
-                    <div class="tag-group-content">
-                      <div class="tags-list">
-                        <n-tag
-                          v-for="tag in groupedTags['miscellaneous']"
-                          :key="tag.id || tag.name"
-                          type="info"
-                          :bordered="false"
-                          class="photo-tag"
-                        >
-                          {{ tag.name || tag }}
-                        </n-tag>
-                      </div>
                     </div>
                   </div>
                 </div>

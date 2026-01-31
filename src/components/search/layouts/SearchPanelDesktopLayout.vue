@@ -420,6 +420,7 @@
               placeholder="Describe what you're looking for... e.g., 'sunset photos with people on the beach' or 'close-up portraits with red background'"
               :autosize="{ minRows: 1, maxRows: 2 }"
               class="semantic-input"
+              @keydown.enter.prevent="handleSemanticInputEnter"
             />
 
             <div class="search-actions-inline">
@@ -569,6 +570,13 @@ import {
 import { TagOutlined } from "@vicons/antd";
 import { useSearchStore, visualAspectsOptions } from "@/stores/searchStore";
 import { useCollectionsStore } from "@/stores/collections";
+
+// Maneja Enter en el input semántico para disparar búsqueda (sin Shift)
+function handleSemanticInputEnter(e) {
+  if (!e.shiftKey && hasSearchQuery.value && !isSearching.value) {
+    emit("search");
+  }
+}
 
 defineOptions({ name: "SearchPanelDesktopLayout" });
 
