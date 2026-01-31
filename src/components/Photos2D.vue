@@ -19,6 +19,7 @@
       v-model:selectedVisualAspects="selectedVisualAspects"
       v-model:artisticScoreFilters="artisticScoreFilters"
       v-model:timeRangeFilter="timeRangeFilter"
+      v-model:atlasBackground="atlasBackground"
       v-model:gridRelaxationEnabled="gridRelaxationEnabled"
       v-model:gridRelaxationExpandStrength="gridRelaxationExpandStrength"
       v-model:gridSnapToGrid="gridSnapToGrid"
@@ -203,6 +204,7 @@ import { useIsMobile } from "@/composables/useIsMobile.js";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { use2DTextureManager } from "@/composables/2d-viewer/use2DTextureManager.js";
+import { useTheme } from "@/composables/useTheme.js";
 
 // Props
 const props = defineProps({
@@ -290,6 +292,90 @@ const pixiApp = shallowRef(null);
 const photoContainer = shallowRef(null);
 const photoSprites = shallowRef(new Map()); // Map of photoId -> sprite
 
+// Theme-aware background selector (same ids/behavior as CanvasView)
+const { isDarkMode } = useTheme();
+const atlasBackground = ref(isDarkMode.value ? "default" : "white");
+
+const atlasBackgroundColorById = (id) => {
+  switch (id) {
+    case "white":
+      return "#f5f5f5";
+    case "navy":
+      return "#1e3a5f";
+    case "forest":
+      return "#2d4a3e";
+    case "default":
+    default:
+      return "#000000";
+  }
+};
+
+const toPixiColorNumber = (colorSource) => {
+  try {
+    if (PIXI?.Color) {
+      return new PIXI.Color(colorSource).toNumber();
+    }
+  } catch (_) {}
+
+  const s = String(colorSource || "").trim();
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(s);
+  if (m) return parseInt(m[1], 16);
+  return 0x000000;
+};
+
+const applyPixiBackground = (backgroundId) => {
+  const app = pixiApp.value;
+  if (!app?.renderer) return;
+
+  const colorSource = atlasBackgroundColorById(backgroundId);
+  const colorNum = toPixiColorNumber(colorSource);
+
+  const renderer = app.renderer;
+  const bg = renderer.background;
+
+  // Pixi v8 renderer.background.color is typically a Color instance.
+  if (bg?.color) {
+    const c = bg.color;
+    if (typeof c === "object" && typeof c.setValue === "function") {
+      try {
+        c.setValue(colorSource);
+        return;
+      } catch (_) {}
+    }
+    try {
+      bg.color = colorSource;
+      return;
+    } catch (_) {}
+    try {
+      bg.color = colorNum;
+      return;
+    } catch (_) {}
+  }
+
+  // Older renderer API fallbacks
+  if ("backgroundColor" in renderer) {
+    try {
+      renderer.backgroundColor = colorNum;
+    } catch (_) {}
+  }
+};
+
+// Watch for theme changes and force valid background color (same as CanvasView)
+watch(isDarkMode, (newIsDarkMode) => {
+  const validIds = newIsDarkMode
+    ? ["default", "navy", "forest"]
+    : ["white", "navy", "forest"];
+
+  if (!validIds.includes(atlasBackground.value)) {
+    atlasBackground.value = newIsDarkMode ? "default" : "white";
+  }
+});
+
+// Apply background to Pixi when user changes it
+watch(atlasBackground, (newVal) => {
+  applyPixiBackground(newVal);
+});
+
 // O(1) lookups by id (avoid Array.find on large datasets)
 const photoById = shallowRef(new Map());
 watch(
@@ -343,8 +429,12 @@ const lastPointerPosition = ref({ x: 0, y: 0 });
 const isPinching = ref(false);
 const lastPinchDistance = ref(0);
 
+// Pinch anchoring: keep the same world point under the pinch midpoint.
+const lastPinchCenter = ref({ x: 0, y: 0 }); // screen (local to pixi container)
+const lastPinchWorld = ref({ x: 0, y: 0 }); // world (photoContainer space)
+
 // UI state
-const showConfigPanel = ref(true);
+const showConfigPanel = ref(!isMobile.value);
 const showDiscreteLoader = computed(
   () => isLoadingPositions.value || isLoadingTextures.value,
 );
@@ -377,8 +467,49 @@ const showCollectionModal = ref(false);
 const SCALE_FACTOR = 50;
 
 // Zoom constraints
-const MIN_SCALE = 0.0;
+// Avoid 0 to prevent division-by-zero and unstable transforms.
+const MIN_SCALE = 0.05;
 const MAX_SCALE = 12;
+
+const clampScale = (value) => {
+  const v = Number(value);
+  if (!Number.isFinite(v)) return 1;
+  return Math.max(MIN_SCALE, Math.min(MAX_SCALE, v));
+};
+
+const getLocalPointFromClient = (clientX, clientY, evt) => {
+  const rect = pixiContainer.value?.getBoundingClientRect?.()
+    ? pixiContainer.value.getBoundingClientRect()
+    : evt?.currentTarget?.getBoundingClientRect?.()
+      ? evt.currentTarget.getBoundingClientRect()
+      : null;
+
+  if (!rect) return { x: clientX, y: clientY };
+
+  return {
+    x: clientX - rect.left,
+    y: clientY - rect.top,
+  };
+};
+
+const screenToWorld = (screenX, screenY, scl = scale.value) => {
+  const s = Number(scl) || 1;
+  return {
+    x: (screenX - offsetX.value) / s,
+    y: (screenY - offsetY.value) / s,
+  };
+};
+
+const applyZoomAboutScreenPoint = (screenX, screenY, newScaleRaw) => {
+  const oldScale = Number(scale.value) || 1;
+  const newScale = clampScale(newScaleRaw);
+  if (newScale === oldScale) return;
+
+  const scaleChange = newScale / oldScale;
+  scale.value = newScale;
+  offsetX.value = screenX - (screenX - offsetX.value) * scaleChange;
+  offsetY.value = screenY - (screenY - offsetY.value) * scaleChange;
+};
 
 // Hi-res (originalUrl) swap when zooming close (3D-like behavior)
 const HIRES_ENABLED = ref(true);
@@ -505,7 +636,7 @@ const initPixi = async () => {
   const app = new PIXI.Application();
 
   await app.init({
-    background: "black",
+    background: atlasBackgroundColorById(atlasBackground.value),
     resizeTo: pixiContainer.value,
     antialias: true,
     resolution: window.devicePixelRatio || 1,
@@ -523,6 +654,9 @@ const initPixi = async () => {
 
   // Setup interaction handlers
   setupInteraction(app);
+
+  // Ensure background matches current selection (and stays in sync with the app theme).
+  applyPixiBackground(atlasBackground.value);
 
   // Start reasonably centered even before we have bounds/positions.
   // This gets refined later by resetView() once positions are available.
@@ -551,6 +685,7 @@ const setupInteraction = (app) => {
   canvas.addEventListener("touchstart", handleTouchStart, { passive: false });
   canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
   canvas.addEventListener("touchend", handleTouchEnd);
+  canvas.addEventListener("touchcancel", handleTouchEnd);
 };
 
 // Event handlers
@@ -566,13 +701,8 @@ const handleWheel = (e) => {
   const direction = e.deltaY > 0 ? -1 : 1;
   const newScale = direction > 0 ? oldScale * scaleBy : oldScale / scaleBy;
 
-  // Clamp scale
-  scale.value = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
-
   // Zoom towards mouse position
-  const scaleChange = scale.value / oldScale;
-  offsetX.value = mouseX - (mouseX - offsetX.value) * scaleChange;
-  offsetY.value = mouseY - (mouseY - offsetY.value) * scaleChange;
+  applyZoomAboutScreenPoint(mouseX, mouseY, newScale);
 
   updateContainerTransform();
   if (scale.value >= HIRES_MIN_SCALE) scheduleHiResUpdate();
@@ -637,6 +767,13 @@ const handleTouchStart = (e) => {
     const dx = touches[1].clientX - touches[0].clientX;
     const dy = touches[1].clientY - touches[0].clientY;
     lastPinchDistance.value = Math.sqrt(dx * dx + dy * dy);
+
+    // Midpoint (local coords) and anchored world point under it.
+    const midClientX = (touches[0].clientX + touches[1].clientX) / 2;
+    const midClientY = (touches[0].clientY + touches[1].clientY) / 2;
+    const mid = getLocalPointFromClient(midClientX, midClientY, e);
+    lastPinchCenter.value = mid;
+    lastPinchWorld.value = screenToWorld(mid.x, mid.y);
   }
 };
 
@@ -645,15 +782,35 @@ const handleTouchMove = (e) => {
   const touches = e.touches;
 
   if (isPinching.value && touches.length === 2) {
+    // Compute current midpoint in local (container) coords.
+    const midClientX = (touches[0].clientX + touches[1].clientX) / 2;
+    const midClientY = (touches[0].clientY + touches[1].clientY) / 2;
+    const mid = getLocalPointFromClient(midClientX, midClientY, e);
+
     const dx = touches[1].clientX - touches[0].clientX;
     const dy = touches[1].clientY - touches[0].clientY;
     const distance = Math.sqrt(dx * dx + dy * dy);
 
-    const pinchScale = distance / lastPinchDistance.value;
-    const newScale = scale.value * pinchScale;
+    // Guard against 0/NaN distance.
+    const prevDistance = Number(lastPinchDistance.value) || distance || 1;
+    const pinchScale = distance > 0 ? distance / prevDistance : 1;
 
-    scale.value = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
+    const oldScale = Number(scale.value) || 1;
+    const newScale = clampScale(oldScale * pinchScale);
+    scale.value = newScale;
+
+    // Keep the same world point under the pinch midpoint, while allowing midpoint translation.
+    // worldAnchor was computed from the previous frame's midpoint.
+    const worldAnchor =
+      lastPinchWorld.value || screenToWorld(mid.x, mid.y, oldScale);
+    offsetX.value = mid.x - (worldAnchor.x || 0) * newScale;
+    offsetY.value = mid.y - (worldAnchor.y || 0) * newScale;
+
     lastPinchDistance.value = distance;
+    lastPinchCenter.value = mid;
+    // Recompute anchor from the updated transform (numerically stable).
+    lastPinchWorld.value = screenToWorld(mid.x, mid.y, newScale);
+
     updateContainerTransform();
     if (scale.value >= HIRES_MIN_SCALE) scheduleHiResUpdate();
   } else if (isDragging.value && touches.length === 1) {
@@ -668,12 +825,15 @@ const handleTouchMove = (e) => {
       y: touches[0].clientY,
     };
     updateContainerTransform();
+    if (scale.value >= HIRES_MIN_SCALE) scheduleHiResUpdate();
   }
 };
 
 const handleTouchEnd = (e) => {
-  // Check for tap (click on touch)
-  if (isDragging.value && e.changedTouches.length > 0) {
+  const wasPinching = isPinching.value;
+
+  // Check for tap (click on touch). Avoid tap simulation after a pinch.
+  if (!wasPinching && isDragging.value && e.changedTouches.length > 0) {
     const touch = e.changedTouches[0];
     const dx = Math.abs(touch.clientX - dragStartPosition.value.x);
     const dy = Math.abs(touch.clientY - dragStartPosition.value.y);
@@ -682,8 +842,19 @@ const handleTouchEnd = (e) => {
       handleClick({ clientX: touch.clientX, clientY: touch.clientY });
     }
   }
-  isDragging.value = false;
-  isPinching.value = false;
+
+  // If one finger remains after pinching, seamlessly transition to pan.
+  if (e.touches && e.touches.length === 1) {
+    isPinching.value = false;
+    isDragging.value = true;
+    const t = e.touches[0];
+    dragStartPosition.value = { x: t.clientX, y: t.clientY };
+    lastPointerPosition.value = { x: t.clientX, y: t.clientY };
+  } else {
+    isDragging.value = false;
+    isPinching.value = false;
+  }
+
   // User stopped interacting, evaluate hi-res target.
   scheduleHiResUpdate();
 };
@@ -1845,6 +2016,7 @@ watch(gridSnapToGrid, () => {
   gap: 8px;
   z-index: 100;
   backdrop-filter: blur(10px);
+  flex-direction: column;
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 

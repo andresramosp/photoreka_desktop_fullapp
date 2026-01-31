@@ -6,9 +6,6 @@
       class="collapsed-panel"
       @click="isExpanded = true"
       @click.stop
-      @touchstart.stop
-      @touchmove.stop
-      @touchend.stop
     >
       <n-icon class="settings-icon">
         <SettingOutlined />
@@ -16,15 +13,7 @@
     </div>
 
     <!-- Expanded Panel Content -->
-    <div
-      v-if="isExpanded"
-      class="control-panel"
-      @click.stop
-      @wheel.stop
-      @touchstart.stop
-      @touchmove.stop
-      @touchend.stop
-    >
+    <div v-if="isExpanded" class="control-panel" @click.stop @wheel.stop>
       <!-- Close Button (Top Right Corner) -->
       <button class="close-panel-btn-corner" @click="isExpanded = false">
         <n-icon>
@@ -179,6 +168,32 @@
             @click.stop
             class="score-slider"
           />
+        </div>
+
+        <div
+          class="control-item-full"
+          style="
+            margin-top: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+          "
+        >
+          <span style="font-size: 12px; color: var(--text-secondary)">
+            Background
+          </span>
+          <div class="color-picker-pills">
+            <button
+              v-for="option in atlasBackgroundOptions"
+              :key="option.id"
+              :class="['color-pill', { active: atlasBackground === option.id }]"
+              :style="{ backgroundColor: option.color }"
+              :title="option.label"
+              :disabled="showDiscreteLoader"
+              @click.stop="handleAtlasBackgroundChange(option.id)"
+            ></button>
+          </div>
         </div>
       </div>
 
@@ -414,6 +429,7 @@ import { AppsOutline } from "@vicons/ionicons5";
 import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
+import { useTheme } from "@/composables/useTheme.js";
 
 // Props
 const props = defineProps({
@@ -461,6 +477,11 @@ const props = defineProps({
     type: Number,
     default: 80,
   },
+  // Background (theme-aware palette, same ids as CanvasView)
+  atlasBackground: {
+    type: String,
+    default: null,
+  },
   // Layout
   gridRelaxationEnabled: {
     type: Boolean,
@@ -489,6 +510,7 @@ const emit = defineEmits([
   "update:artisticScoreFilters",
   "update:timeRangeFilter",
   "update:photoSize",
+  "update:atlasBackground",
   "update:gridRelaxationEnabled",
   "update:gridRelaxationExpandStrength",
   "update:gridSnapToGrid",
@@ -510,6 +532,23 @@ const showDisplayOptions = ref(false);
 const showArtisticScores = ref(false);
 const showTimeRange = ref(false);
 const showNavigationControls = ref(true);
+
+// Theme-aware background palette (same behavior as CanvasView)
+const { isDarkMode } = useTheme();
+const atlasBackgroundOptions = computed(() => {
+  const allOptions = [
+    { id: "default", color: "#000000", label: "Dark" },
+    { id: "white", color: "#f5f5f5", label: "Light" },
+    { id: "navy", color: "#1e3a5f", label: "Navy" },
+    { id: "forest", color: "#2d4a3e", label: "Forest" },
+  ];
+
+  // In dark mode, hide the white option; in light mode, hide the default (dark) option
+  if (isDarkMode.value) {
+    return allOptions.filter((opt) => opt.id !== "white");
+  }
+  return allOptions.filter((opt) => opt.id !== "default");
+});
 
 // Local state for artistic score filters
 const localArtisticScoreFilters = ref({ ...props.artisticScoreFilters });
@@ -624,6 +663,10 @@ const handlePhotoSizeChange = (value) => {
   emit("update:photoSize", value);
 };
 
+const handleAtlasBackgroundChange = (value) => {
+  emit("update:atlasBackground", value);
+};
+
 const handleResetView = () => {
   emit("reset-view");
 };
@@ -631,6 +674,10 @@ const handleResetView = () => {
 
 <style scoped>
 /* Collapsed panel button */
+
+.collapsed-panel {
+  touch-action: manipulation;
+}
 
 .settings-icon {
   color: #e5e5e5;
@@ -649,6 +696,8 @@ const handleResetView = () => {
   padding: 16px;
   z-index: 200;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
@@ -926,5 +975,36 @@ const handleResetView = () => {
 
 .control-panel::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+/* Color picker pills (same UI as CanvasView) */
+.color-picker-pills {
+  display: flex;
+  gap: 8px;
+}
+
+.color-pill {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.color-pill:hover {
+  transform: scale(1.1);
+}
+
+.color-pill:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.color-pill.active {
+  border-color: var(--primary-color, #007bff);
+  box-shadow: 0 0 0 2px var(--primary-color, #007bff);
 }
 </style>
