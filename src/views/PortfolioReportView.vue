@@ -1,5 +1,5 @@
 <template>
-  <div class="portfolio-report-container view-container">
+  <div class="report-container view-container">
     <!-- Navigation Sidebar (Desktop) / Bottom Nav (Mobile) -->
     <!-- <nav class="report-navigation">
       <div class="nav-items">
@@ -543,7 +543,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.portfolio-report-container {
+.report-container {
   padding: var(--spacing-2xl) var(--spacing-2xl) var(--spacing-4xl)
     var(--spacing-2xl);
   margin: 0 auto;
@@ -660,7 +660,7 @@ onUnmounted(() => {
     display: inline;
   }
 
-  .portfolio-report-container {
+  .report-container {
     padding-bottom: calc(var(--spacing-4xl) + 80px);
   }
 }
@@ -1288,7 +1288,7 @@ onUnmounted(() => {
 
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
-  .portfolio-report-container {
+  .report-container {
     padding: var(--spacing-lg) var(--spacing-lg) var(--spacing-3xl)
       var(--spacing-lg);
   }

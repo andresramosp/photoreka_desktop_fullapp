@@ -31,7 +31,7 @@ import {
   ConstructOutline as SystemIcon,
 } from "@vicons/ionicons5";
 
-import { Workspace as CanvasIcon, Mountain } from "@vicons/carbon";
+import { Workspace as CanvasIcon } from "@vicons/carbon";
 
 export function useMainMenu() {
   const router = useRouter();
@@ -154,7 +154,7 @@ export function useMainMenu() {
 
       {
         label: () => h("span", { class: "second-level-menu-item" }, "Report"),
-        key: "portfolio-report",
+        key: "report",
         disabled: isBlocked.value,
         icon: renderIcon(ReportIcon),
       },

@@ -14,7 +14,7 @@ Disallow: /sync-area
 Disallow: /3dview
 Disallow: /project-builder
 Disallow: /framer
-Disallow: /portfolio-report
+Disallow: /report
 Disallow: /grid-maker
 Disallow: /settings
 Disallow: /help

@@ -1477,13 +1477,13 @@
 .action-card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  transition: var(--transition-normal);
+  border-radius: 16px;
+  padding: 20px;
   cursor: pointer;
-  padding: var(--spacing-2xl);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
   text-align: center;
-  height: 180px;
-  min-height: 180px;
+  min-height: 190px;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -1492,8 +1492,8 @@
 }
 
 .action-card:hover {
-  border-color: var(--primary-color);
-  box-shadow: var(--shadow-primary);
+  border-color: #2563eb;
+  box-shadow: 0 12px 32px rgba(37, 99, 235, 0.2);
   transform: translateY(-2px);
 }
 
@@ -1507,6 +1507,48 @@
   border-color: var(--border-color);
   box-shadow: none;
   transform: none;
+}
+
+.action-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-sm) 0;
+  line-height: var(--line-height-tight);
+}
+
+.action-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: var(--line-height-normal);
+}
+
+/* Mobile adjustments for action-card */
+@media (max-width: 768px) {
+  .action-card {
+    padding: 16px;
+    min-height: 190px;
+  }
+}
+
+@media (max-width: 480px) {
+  .action-card {
+    padding: 16px;
+    min-height: 190px;
+  }
+}
+
+/* Large devices - enhanced hover effects */
+@media (min-width: 1024px) {
+  .action-card:hover {
+    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.3);
+  }
+
+  .action-card.disabled:hover {
+    transform: none;
+    box-shadow: none;
+  }
 }
 /* ==========================================================================
    FILTER CONTROLS - SHARED STYLES

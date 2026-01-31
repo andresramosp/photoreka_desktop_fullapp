@@ -226,51 +226,13 @@
         </div>
 
         <!-- Existing Collections -->
-        <div
+        <CollectionCard
           v-for="collection in collections"
           :key="collection.id"
-          class="action-card"
+          :item="collection"
+          type="collection"
           @click="openCollection(collection)"
-        >
-          <div class="card-preview">
-            <div class="photo-stack">
-              <div
-                v-for="(photo, index) in (collection.photos || []).slice(0, 3)"
-                :key="photo.id"
-                class="photo-item"
-                :class="`photo-${index + 1}`"
-              >
-                <img
-                  :src="photo.thumbnailUrl || photo.url"
-                  :alt="photo.title || 'Photo'"
-                  class="photo-thumbnail"
-                  loading="lazy"
-                />
-              </div>
-              <!-- Show empty placeholders if less than 3 photos -->
-              <div
-                v-for="index in Math.max(
-                  0,
-                  3 - (collection.photos || []).length,
-                )"
-                :key="`placeholder-${index}`"
-                class="photo-item"
-                :class="`photo-${(collection.photos || []).length + index}`"
-              >
-                <div class="photo-placeholder-empty"></div>
-              </div>
-            </div>
-          </div>
-          <div class="card-info">
-            <h3 class="card-title">
-              {{ collection.name || collection.title }}
-            </h3>
-            <p class="card-meta">
-              {{ (collection.photos || []).length }} photos • Updated
-              {{ formatDate(collection.updatedAt) }}
-            </p>
-          </div>
-        </div>
+        />
 
         <!-- Empty State (when no collections exist) -->
         <div v-if="collections.length === 0" class="empty-collections-state">
@@ -410,6 +372,7 @@ import {
 } from "@vicons/ionicons5";
 import PhotosDialog from "@/components/PhotosDialog.vue";
 import PhotosGrid from "@/components/PhotosGrid.vue";
+import CollectionCard from "@/components/CollectionCard.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
 

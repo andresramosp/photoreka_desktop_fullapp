@@ -325,8 +325,8 @@ const router = createRouter({
       },
     },
     {
-      path: "/portfolio-report",
-      name: "portfolio-report",
+      path: "/report",
+      name: "report",
       component: PortfolioReportView,
       meta: {
         requiresAuth: true,

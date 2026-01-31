@@ -177,7 +177,7 @@ const allowedHeaderViews = [
   "sync-area",
   "settings",
   "help",
-  "portfolio-report",
+  "report",
   // "settings",
   // Add more route names as needed
 ];

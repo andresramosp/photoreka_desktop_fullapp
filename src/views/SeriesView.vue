@@ -287,48 +287,13 @@
         </div>
 
         <!-- Existing Series -->
-        <div
+        <CollectionCard
           v-for="series in allSeries"
           :key="series.id"
-          class="action-card"
+          :item="series"
+          type="series"
           @click="openSeries(series)"
-        >
-          <div class="card-preview">
-            <div
-              v-if="series.photos && series.photos.length > 0"
-              class="photo-sequence"
-            >
-              <div
-                v-for="(photo, index) in series.photos.slice(0, 3)"
-                :key="photo.id"
-                class="sequence-photo"
-                :class="`sequence-${index + 1}`"
-              >
-                <img
-                  :src="photo.thumbnailUrl || photo.url"
-                  :alt="photo.title || `Photo ${index + 1}`"
-                  class="photo-thumbnail"
-                  loading="lazy"
-                />
-                <span class="sequence-number">{{ index + 1 }}</span>
-              </div>
-            </div>
-            <div v-else class="empty-preview">
-              <n-icon size="40" color="var(--text-primary)">
-                <ListOutline />
-              </n-icon>
-            </div>
-          </div>
-          <div class="card-info">
-            <h3 class="card-title">
-              {{ series.name || series.title }}
-            </h3>
-            <p class="card-meta">
-              {{ (series.photos || []).length }} photos • Updated
-              {{ formatDate(series.updatedAt) }}
-            </p>
-          </div>
-        </div>
+        />
 
         <!-- Empty State (when no series exist) -->
         <div v-if="allSeries.length === 0" class="empty-series-state">
@@ -504,6 +469,7 @@ import {
   CloseOutline,
 } from "@vicons/ionicons5";
 import PhotosDialog from "@/components/PhotosDialog.vue";
+import CollectionCard from "@/components/CollectionCard.vue";
 import FloatingActionBar from "@/components/FloatingActionBar.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
