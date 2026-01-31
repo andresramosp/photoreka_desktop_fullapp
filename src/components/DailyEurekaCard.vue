@@ -52,8 +52,13 @@
       v-show="!isHoveringInsight && !isLoadingInsight"
       class="insight-overlay"
     >
-      <h3 class="action-title">Daily Eureka!</h3>
-      <p class="action-description">Discover insights in your images</p>
+      <h3 class="action-title">
+        <n-icon class="insight-icon" size="30" color="var(--text-primary)">
+          <InsightIcon />
+        </n-icon>
+        <!-- <span class="insight-text">Daily Eureka</span> -->
+      </h3>
+      <p class="action-description">Discover daily insights in your images</p>
     </div>
 
     <!-- Carousel overlay -->
@@ -132,6 +137,7 @@ import {
   ChevronBackOutline as ArrowLeftIcon,
   ChevronForwardOutline as ArrowRightIcon,
   InformationCircleOutline as InfoIcon,
+  BulbOutline as InsightIcon,
 } from "@vicons/ionicons5";
 
 const photosStore = usePhotosStore();
@@ -616,6 +622,19 @@ const showPhotoInfo = async () => {
   color: var(--text-primary);
   margin: 0 0 var(--spacing-sm) 0;
   line-height: var(--line-height-tight);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+}
+
+.insight-icon {
+  font-size: var(--font-size-lg);
+  flex-shrink: 0;
+}
+
+.insight-text {
+  /* font-style: italic; */
 }
 
 .action-description {
