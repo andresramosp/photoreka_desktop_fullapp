@@ -1145,7 +1145,7 @@ const updateSpriteSelection = (photoId) => {
   const sprite = photoSprites.value.get(photoId);
   if (sprite) {
     const isSelected = selectedPhotoIds.value.includes(photoId);
-    sprite.tint = isSelected ? 0x88ff88 : 0xffffff;
+    // sprite.tint = isSelected ? 0x88ff88 : 0xffffff;
   }
 };
 
