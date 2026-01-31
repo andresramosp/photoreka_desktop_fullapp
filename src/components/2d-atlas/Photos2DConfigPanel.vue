@@ -14,6 +14,7 @@
 
     <!-- Expanded Panel Content -->
     <div v-if="isExpanded" class="control-panel" @click.stop @wheel.stop>
+      <EmbeddingInfoModal v-model="showEmbeddingInfoModal" />
       <!-- Close Button (Top Right Corner) -->
       <button class="close-panel-btn-corner" @click="isExpanded = false">
         <n-icon>
@@ -28,6 +29,21 @@
             <AppsOutline />
           </n-icon>
           Clustering Type
+          <n-tooltip trigger="hover" placement="top">
+            <template #trigger>
+              <button
+                class="info-icon-btn"
+                type="button"
+                @click.stop="showEmbeddingInfoModal = true"
+                aria-label="About clustering types"
+              >
+                <n-icon size="12" color="var(--text-secondary)">
+                  <InfoCircleFilled />
+                </n-icon>
+              </button>
+            </template>
+            What this map means
+          </n-tooltip>
         </h4>
         <div class="control-item-full">
           <n-select
@@ -427,6 +443,7 @@ import {
 } from "@vicons/antd";
 import { AppsOutline } from "@vicons/ionicons5";
 import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
+import EmbeddingInfoModal from "./EmbeddingInfoModal.vue";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useTheme } from "@/composables/useTheme.js";
@@ -532,6 +549,7 @@ const showDisplayOptions = ref(false);
 const showArtisticScores = ref(false);
 const showTimeRange = ref(false);
 const showNavigationControls = ref(true);
+const showEmbeddingInfoModal = ref(false);
 
 // Theme-aware background palette (same behavior as CanvasView)
 const { isDarkMode } = useTheme();
@@ -684,6 +702,23 @@ const handleResetView = () => {
   font-size: 20px;
 }
 
+.info-icon-btn {
+  margin-left: 3px;
+  background: transparent;
+  border: none;
+  padding: 2px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.info-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 /* Control panel */
 .control-panel {
   position: absolute;
@@ -691,7 +726,7 @@ const handleResetView = () => {
   right: 16px;
   width: 280px;
   max-height: calc(100vh - 32px);
-  background: rgba(30, 30, 30, 0.95);
+  background: var(--bg-card);
   border-radius: 12px;
   padding: 16px;
   z-index: 200;
@@ -717,7 +752,7 @@ const handleResetView = () => {
 
 .close-panel-btn-corner:hover {
   background: rgba(255, 255, 255, 0.1);
-  color: #e5e5e5;
+  color: var(--text-primary);
 }
 
 /* Section styles */
@@ -734,8 +769,8 @@ const handleResetView = () => {
 }
 
 .section-title {
-  color: #e5e5e5;
-  font-size: 13px;
+  color: var(--text-primary);
+  font-size: 15px;
   font-weight: 600;
   margin: 0 0 12px 0;
   display: flex;

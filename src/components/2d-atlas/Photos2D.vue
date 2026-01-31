@@ -2008,7 +2008,7 @@ watch(gridSnapToGrid, () => {
   position: absolute;
   bottom: 20px;
   right: 20px;
-  background: rgba(30, 30, 30, 0.9);
+  background: var(--bg-container);
   border-radius: 8px;
   padding: 8px;
   display: flex;
@@ -2017,11 +2017,12 @@ watch(gridSnapToGrid, () => {
   z-index: 100;
   backdrop-filter: blur(10px);
   flex-direction: column;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-color);
 }
 
 .zoom-btn {
-  background: rgba(255, 255, 255, 0.1);
+  /* background: var(--bg-surface); */
+  background-color: var(--bg-surface);
   border: none;
   border-radius: 6px;
   width: 32px;
@@ -2030,13 +2031,13 @@ watch(gridSnapToGrid, () => {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: #e5e5e5;
+  color: var(--text-secondary);
   transition: all 0.2s;
 }
 
 .zoom-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
+  /* background: rgba(255, 255, 255, 0.2);
+  color: white; */
 }
 
 .zoom-level {

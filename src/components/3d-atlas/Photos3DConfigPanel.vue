@@ -33,12 +33,26 @@
       </button>
 
       <!-- Clustering Type Section (Always Visible) -->
+      <EmbeddingInfoModal3D v-model="showEmbeddingInfoModal3D" />
       <div class="control-section">
         <h4 class="section-title">
           <n-icon size="16" style="margin-right: 6px; vertical-align: middle">
             <AppsOutline />
           </n-icon>
           Clustering Type
+          <n-tooltip trigger="hover" placement="top">
+            <template #trigger>
+              <n-icon
+                size="12"
+                color="var(--text-secondary)"
+                style="cursor: help; margin-left: 4px"
+                @click.stop="showEmbeddingInfoModal3D = true"
+              >
+                <InfoCircleFilled />
+              </n-icon>
+            </template>
+            What this map means
+          </n-tooltip>
         </h4>
         <div class="control-item-full">
           <n-select
@@ -756,6 +770,7 @@ import { AppsOutline } from "@vicons/ionicons5";
 import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
+import EmbeddingInfoModal3D from "./EmbeddingInfoModal3D.vue";
 
 // Props
 const props = defineProps({
@@ -911,6 +926,7 @@ const showArtisticScores = ref(false);
 const showTimeRange = ref(false);
 const showNavigationControls = ref(true);
 const showTagBeacons = ref(false);
+const showEmbeddingInfoModal3D = ref(false);
 
 // Local state for artistic score filters
 const localArtisticScoreFilters = ref({ ...props.artisticScoreFilters });

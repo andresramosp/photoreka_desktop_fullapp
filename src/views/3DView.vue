@@ -27,7 +27,7 @@ import { ref, computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import { NMessageProvider } from "naive-ui";
 import { usePhotosStore } from "@/stores/photos.js";
-import Photos3D from "@/components/Photos3D.vue";
+import Photos3D from "@/components/3d-atlas/Photos3D.vue";
 import AppLogo from "@/components/AppLogo.vue";
 
 const route = useRoute();

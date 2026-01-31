@@ -25,7 +25,7 @@ import { ref, computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import { NMessageProvider } from "naive-ui";
 import { usePhotosStore } from "@/stores/photos.js";
-import Photos2D from "@/components/Photos2D.vue";
+import Photos2D from "@/components/2d-atlas/Photos2D.vue";
 import AppLogo from "@/components/AppLogo.vue";
 
 const route = useRoute();
