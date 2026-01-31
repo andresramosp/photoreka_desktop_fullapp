@@ -230,12 +230,12 @@ const isVisible = computed({
   background:
     radial-gradient(
       900px 320px at 30% 0%,
-      rgba(74, 222, 128, 0.18),
+      color-mix(in srgb, var(--primary-color) 18%, transparent),
       transparent 60%
     ),
     radial-gradient(
       900px 320px at 90% 0%,
-      rgba(139, 92, 246, 0.18),
+      color-mix(in srgb, var(--accent-color) 18%, transparent),
       transparent 60%
     ),
     rgba(255, 255, 255, 0.03);

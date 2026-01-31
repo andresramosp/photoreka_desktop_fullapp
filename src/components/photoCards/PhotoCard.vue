@@ -559,9 +559,9 @@ onUnmounted(() => {
 }
 
 .photo-card.selected {
-  border-color: #8b5cf6;
+  border-color: var(--accent-color);
   box-shadow:
-    0 0 0 1px #8b5cf640,
+    0 0 0 1px var(--accent-color) 40,
     0 8px 24px var(--bg-surface);
 }
 
@@ -709,7 +709,7 @@ onUnmounted(() => {
 }
 
 .tag {
-  background-color: color-mix(in srgb, var(--secondary-color), transparent 50%);
+  background-color: color-mix(in srgb, var(--accent-color), transparent 50%);
   color: #ffffff;
   font-size: 10px;
   /* font-weight: 500; */
@@ -802,7 +802,7 @@ onUnmounted(() => {
   top: 5px;
   left: 5px;
   backdrop-filter: blur(4px);
-  background-color: color-mix(in srgb, var(--secondary-color), transparent 80%);
+  background-color: color-mix(in srgb, var(--accent-color), transparent 80%);
   border-radius: 8px;
   padding: 4px;
   z-index: 3;
@@ -817,7 +817,7 @@ onUnmounted(() => {
 }
 
 .notes-indicator:hover .notes-icon {
-  color: color-mix(in srgb, var(--secondary-color), white 20%);
+  color: color-mix(in srgb, var(--accent-color), white 20%);
 }
 
 .selection-indicator {
@@ -862,8 +862,8 @@ onUnmounted(() => {
 }
 
 .photo-card-info.selected {
-  border-color: var(--secondary-color);
-  /* box-shadow: 0 0 0 1px #8b5cf640, 0 8px 24px rgba(139, 92, 246, 0.2); */
+  border-color: var(--accent-color);
+  /* box-shadow: 0 0 0 1px var(--accent-color)40, 0 8px 24px rgba(139, 92, 246, 0.2); */
 }
 
 /* Loading states */

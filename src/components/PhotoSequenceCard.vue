@@ -73,7 +73,7 @@
             () => {
               console.log(
                 '[PhotoSequenceCard] Info button clicked, photo.id:',
-                photo.id
+                photo.id,
               );
               $emit('show-info', photo.id);
             }
@@ -478,7 +478,7 @@ const truncatedName = computed(() => {
 }
 
 .photo-sequence-card.has-photo.is-selected {
-  border-color: var(--secondary-color);
+  border-color: var(--accent-color);
 }
 
 .filled-cell.is-selected .cell-photo {

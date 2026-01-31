@@ -209,7 +209,7 @@ const allSelected = computed(() => {
   return (
     duplicatePhotos.value.length > 0 &&
     duplicatePhotos.value.every((photo) =>
-      selectedPhotoIds.value.includes(photo.id)
+      selectedPhotoIds.value.includes(photo.id),
     )
   );
 });
@@ -217,7 +217,7 @@ const allSelected = computed(() => {
 // Processing status computeds
 const nonProcessedPhotos = computed(() => {
   return duplicatePhotos.value.filter(
-    (photo) => photo.status == "uploaded" || photo.status == "preprocessed"
+    (photo) => photo.status == "uploaded" || photo.status == "preprocessed",
   );
 });
 
@@ -297,7 +297,7 @@ const handleDeleteWorseVersions = async () => {
     await photosStore.deletePhotos(nonProcessedIds);
     // Remove from selected if they were selected
     selectedPhotoIds.value = selectedPhotoIds.value.filter(
-      (id) => !nonProcessedIds.includes(id)
+      (id) => !nonProcessedIds.includes(id),
     );
     photosStore.checkDuplicates();
     message.success("Non-processed photos deleted successfully");
@@ -318,7 +318,7 @@ watch(
     if (isOpen) {
       selectedPhotoIds.value = [];
     }
-  }
+  },
 );
 </script>
 
@@ -405,8 +405,10 @@ watch(
 }
 
 .duplicate-photo-card.selected {
-  border-color: #8b5cf6;
-  box-shadow: 0 0 0 1px #8b5cf640, 0 8px 24px rgba(139, 92, 246, 0.2);
+  border-color: var(--accent-color);
+  box-shadow:
+    0 0 0 1px var(--accent-color) 40,
+    0 8px 24px rgba(139, 92, 246, 0.2);
 }
 
 .photo-container {

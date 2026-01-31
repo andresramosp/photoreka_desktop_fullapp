@@ -196,7 +196,7 @@ const finish = () => {
   background: linear-gradient(
     135deg,
     var(--primary-color),
-    var(--secondary-color)
+    var(--accent-color)
   );
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;

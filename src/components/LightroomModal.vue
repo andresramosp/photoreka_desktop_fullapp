@@ -213,7 +213,7 @@ const downloadPlugin = () => {
   background: linear-gradient(
     135deg,
     var(--primary-color),
-    var(--secondary-color)
+    var(--accent-color)
   );
   color: white;
   width: 26px;
@@ -247,7 +247,7 @@ const downloadPlugin = () => {
 
 .step-content code {
   background-color: rgba(139, 92, 246, 0.15);
-  color: var(--secondary-color);
+  color: var(--accent-color);
   padding: 2px 6px;
   border-radius: 4px;
   font-family: "Courier New", monospace;

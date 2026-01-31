@@ -67,17 +67,17 @@
 
 /* Selection styles */
 .photo-card-selected {
-  border-color: var(--secondary-color);
+  border-color: var(--accent-color);
   box-shadow:
-    0 0 0 1px var(--secondary-color),
-    var(--shadow-secondary);
+    0 0 0 1px var(--accent-color),
+    var(--shadow-accent);
 }
 
 .selection-indicator-base {
   position: absolute;
   top: var(--spacing-sm);
   left: var(--spacing-sm);
-  background-color: var(--secondary-color);
+  background-color: var(--accent-color);
   border-radius: var(--radius-round);
   width: 32px;
   height: 32px;
@@ -372,13 +372,13 @@
 
 .n-tag {
   border-radius: 8px;
-  // background-color: var(--secondary-color);
+  // background-color: var(--accent-color);
   height: 25px;
 }
 
 .n-tag {
   border-radius: 8px;
-  // background-color: var(--secondary-color);
+  // background-color: var(--accent-color);
   height: 25px;
 }
 
@@ -453,7 +453,7 @@
 .tab-link {
   background: none;
   border: none;
-  color: #8b5cf6;
+  color: var(--accent-color);
   text-decoration: underline;
   cursor: pointer;
   font-size: inherit;
@@ -811,9 +811,9 @@
 }
 
 .card-selected {
-  border-color: var(--secondary-color);
+  border-color: var(--accent-color);
   box-shadow:
-    0 0 0 1px var(--secondary-color),
+    0 0 0 1px var(--accent-color),
     var(--shadow-secondary);
 }
 

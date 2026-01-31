@@ -25,7 +25,7 @@ const props = defineProps({
     type: Array,
     default: () => [
       "#f43f5e",
-      "#8b5cf6",
+      "var(--accent-color)",
       "#06b6d4",
       "#10b981",
       "#f59e0b",
@@ -112,7 +112,7 @@ watch(
         clearTimeout(animationTimeout);
       }
     }
-  }
+  },
 );
 </script>
 
@@ -132,7 +132,8 @@ watch(
 .confetti {
   position: absolute;
   top: -20px;
-  animation: confetti-fall linear forwards,
+  animation:
+    confetti-fall linear forwards,
     confetti-spin var(--rotation-speed) linear infinite;
   pointer-events: none;
 }
@@ -162,13 +163,15 @@ watch(
 
 /* Variaciones de movimiento para hacer más realista */
 .confetti:nth-child(3n) {
-  animation: confetti-fall linear forwards,
+  animation:
+    confetti-fall linear forwards,
     confetti-spin var(--rotation-speed) linear infinite,
     confetti-sway 2s ease-in-out infinite;
 }
 
 .confetti:nth-child(5n) {
-  animation: confetti-fall linear forwards,
+  animation:
+    confetti-fall linear forwards,
     confetti-spin var(--rotation-speed) linear infinite,
     confetti-sway 1.5s ease-in-out infinite reverse;
 }

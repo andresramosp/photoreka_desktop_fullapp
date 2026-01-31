@@ -665,7 +665,7 @@ function isLastFinishedJob(job) {
 .photos-cell .cell-value {
   font-size: 16px;
   font-weight: 600;
-  color: #8b5cf6;
+  color: var(--accent-color);
 }
 
 .status-cell {
@@ -773,7 +773,7 @@ function isLastFinishedJob(job) {
 
 .mini-photo:hover {
   transform: scale(1.05);
-  border-color: #8b5cf6;
+  border-color: var(--accent-color);
 }
 
 .mini-photo-image {
@@ -858,7 +858,7 @@ function isLastFinishedJob(job) {
   .photos-cell .cell-value {
     font-size: 16px;
     font-weight: 600;
-    color: #8b5cf6;
+    color: var(--accent-color);
   }
 
   /* Progress cell */

@@ -395,28 +395,28 @@ const allFrames = ref([
     id: "golden-3-2",
     ratio: "3:2",
     aspectRatio: "3/2",
-    color: "#8B5CF6",
+    color: "var(--accent-color)",
     category: "photo",
   },
   {
     id: "cinema-2-3",
     ratio: "2:3",
     aspectRatio: "2/3",
-    color: "#8B5CF6",
+    color: "var(--accent-color)",
     category: "photo",
   },
   {
     id: "portrait-3-4",
     ratio: "3:4",
     aspectRatio: "3/4",
-    color: "#8B5CF6",
+    color: "var(--accent-color)",
     category: "photo",
   },
   {
     id: "landscape-4-3",
     ratio: "4:3",
     aspectRatio: "4/3",
-    color: "#8B5CF6",
+    color: "var(--accent-color)",
     category: "photo",
   },
   {
@@ -550,7 +550,7 @@ const triggerFileSelect = () => {
 
 const handleFileSelect = async (event) => {
   const files = Array.from(event.target.files).filter((file) =>
-    file.type.startsWith("image/")
+    file.type.startsWith("image/"),
   );
 
   if (files.length > 0) {
@@ -617,7 +617,7 @@ const processLocalFiles = async (files) => {
       message.success(
         `Added ${processedPhotos.length} photo${
           processedPhotos.length > 1 ? "s" : ""
-        }`
+        }`,
       );
     }
   } catch (error) {
@@ -656,7 +656,7 @@ const handlePhotosAdded = (photoIds) => {
   }
 
   message.success(
-    `Added ${photoObjects.length} photo${photoObjects.length > 1 ? "s" : ""}`
+    `Added ${photoObjects.length} photo${photoObjects.length > 1 ? "s" : ""}`,
   );
 };
 
@@ -675,7 +675,7 @@ const handlePlaygroundPhotosAdded = (photoObjects) => {
   }
 
   message.success(
-    `Added ${photoObjects.length} photo${photoObjects.length > 1 ? "s" : ""}`
+    `Added ${photoObjects.length} photo${photoObjects.length > 1 ? "s" : ""}`,
   );
 };
 
@@ -702,7 +702,7 @@ const removePhoto = (photoId) => {
       if (selectedCount.value > 0) {
         const firstSelectedId = Array.from(selectedPhotoIds.value)[0];
         currentPhoto.value = selectedPhotos.value.find(
-          (p) => p.id === firstSelectedId
+          (p) => p.id === firstSelectedId,
         );
       } else {
         currentPhoto.value =
@@ -752,14 +752,14 @@ const downloadPhotos = async () => {
       photosToDownload[0],
       frameConfig,
       props.playgroundMode,
-      frameVisualizerRef.value
+      frameVisualizerRef.value,
     );
   } else {
     await downloadFramedPhotosZip(
       photosToDownload,
       frameConfig,
       props.playgroundMode,
-      frameVisualizerRef.value
+      frameVisualizerRef.value,
     );
   }
 };
@@ -852,12 +852,17 @@ onMounted(async () => {
 
 /* Background with checkered pattern only when photo is present */
 .mobile-photo-preview {
-  background: linear-gradient(45deg, #f8fafc 25%, transparent 25%),
+  background:
+    linear-gradient(45deg, #f8fafc 25%, transparent 25%),
     linear-gradient(-45deg, #f8fafc 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, #f8fafc 75%),
     linear-gradient(-45deg, transparent 75%, #f8fafc 75%);
   background-size: 15px 15px;
-  background-position: 0 0, 0 7px, 7px -7px, -7px 0px;
+  background-position:
+    0 0,
+    0 7px,
+    7px -7px,
+    -7px 0px;
 }
 
 .no-photo-preview {

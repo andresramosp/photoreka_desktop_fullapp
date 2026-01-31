@@ -169,7 +169,7 @@ onUnmounted(() => {
 }
 
 .slider-track:hover {
-  border-color: #8b5cf6;
+  border-color: var(--accent-color);
   transform: translateY(-1px);
 }
 

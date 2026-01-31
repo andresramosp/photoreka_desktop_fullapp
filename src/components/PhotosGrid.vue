@@ -1281,7 +1281,7 @@ const handleToolSelected = async (toolId) => {
 }
 
 .sort-order-icon:hover {
-  color: #8b5cf6;
+  color: var(--accent-color);
   opacity: 1;
   transform: scale(1.1);
 }

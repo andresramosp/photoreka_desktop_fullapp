@@ -212,7 +212,7 @@ const handleClearSelection = () => {
 .selected-count {
   font-size: 14px;
   font-weight: 600;
-  color: #8b5cf6;
+  color: var(--accent-color);
   padding: 0 8px;
   white-space: nowrap;
 }

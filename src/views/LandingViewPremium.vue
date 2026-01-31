@@ -248,7 +248,10 @@
                     <span>Direct sync from Lightroom catalog</span>
                   </li>
                   <li>
-                    <div class="feature-icon-wrapper" style="color: #8b5cf6">
+                    <div
+                      class="feature-icon-wrapper"
+                      style="color: var(--accent-color)"
+                    >
                       <n-icon size="28"><ChatbubblesOutline /></n-icon>
                     </div>
                     <span>Search by natural language integrated</span>
@@ -423,7 +426,7 @@
                       style="
                         background: linear-gradient(
                           135deg,
-                          #8b5cf6 0%,
+                          var(--accent-color) 0%,
                           #6366f1 100%
                         );
                       "
@@ -710,7 +713,7 @@ const features = ref([
     title: "Canvas",
     description:
       "Create stunning photo layouts and compositions with our intuitive canvas tool. Drag, drop, resize, and arrange your photos to tell your story.",
-    color: "#8b5cf6",
+    color: "var(--accent-color)",
   },
   {
     icon: Trophy20Regular,

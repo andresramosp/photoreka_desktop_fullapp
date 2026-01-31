@@ -40,7 +40,7 @@
       <div class="upload-dropzone">
         <div class="dropzone-content">
           <div class="upload-icon">
-            <n-icon size="48" color="#8b5cf6">
+            <n-icon size="48" color="var(--accent-color)">
               <svg viewBox="0 0 24 24">
                 <path
                   fill="currentColor"
@@ -214,7 +214,7 @@ const totalFiles = ref(0);
 const syncPhotos = computed(
   () =>
     [...photosStore.preProcessingPhotos, ...photosStore.preprocessedPhotos] ||
-    []
+    [],
 );
 
 const filteredPhotos = computed(() => syncPhotos.value);
@@ -258,9 +258,9 @@ async function uploadLocalFiles(event) {
         limit(() =>
           processAndUploadFile(file).then((photo) => {
             if (photo) photosToUpload.push(photo);
-          })
-        )
-      )
+          }),
+        ),
+      ),
     );
 
     isUploading.value = false;
@@ -387,9 +387,9 @@ async function importFromGooglePhotos() {
         limit(() =>
           processAndUploadGooglePhoto(result).then((photo) => {
             if (photo) photosToUpload.push(photo);
-          })
-        )
-      )
+          }),
+        ),
+      ),
     );
 
     // Ya no poner isUploading a false aquí, dejarlo true hasta el finally
@@ -528,7 +528,7 @@ function loadImageFromBlob(blob) {
 
 .upload-dropzone:hover,
 .upload-dropzone.drag-over {
-  border-color: var(--secondary-color);
+  border-color: var(--accent-color);
   background-color: rgba(139, 92, 246, 0.05);
 }
 

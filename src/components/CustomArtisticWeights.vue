@@ -121,7 +121,7 @@ const updateWeight = (criterion, value) => {
   margin: 0;
   font-size: 12px;
   font-weight: 600;
-  color: #8b5cf6;
+  color: var(--accent-color);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }

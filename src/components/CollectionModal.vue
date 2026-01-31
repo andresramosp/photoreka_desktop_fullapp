@@ -37,7 +37,7 @@
             >
               <div class="collection-info">
                 <div class="create-collection-content">
-                  <n-icon size="24" color="#8b5cf6">
+                  <n-icon size="24" color="var(--accent-color)">
                     <AddOutline />
                   </n-icon>
                   <div>
@@ -97,7 +97,7 @@
             >
               <div class="collection-info">
                 <div class="create-collection-content">
-                  <n-icon size="24" color="#8b5cf6">
+                  <n-icon size="24" color="var(--accent-color)">
                     <AddOutline />
                   </n-icon>
                   <div>
@@ -306,7 +306,7 @@ watch(
       loadData();
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 // Watch for modal close
@@ -361,7 +361,7 @@ const handleAddToCollection = async () => {
     try {
       await collectionsStore.addPhotosToCollection(
         selectedCollection.value.id,
-        props.photoIds
+        props.photoIds,
       );
       const collection = selectedCollection.value;
       notification.success({
@@ -374,7 +374,7 @@ const handleAddToCollection = async () => {
             "button",
             {
               style: {
-                color: "#8b5cf6",
+                color: "var(--accent-color)",
                 textDecoration: "none",
                 fontWeight: "600",
                 padding: "6px 12px",
@@ -394,7 +394,7 @@ const handleAddToCollection = async () => {
                 router.push(`/collections/${collection.id}`);
               },
             },
-            "View collection"
+            "View collection",
           ),
         duration: 5000,
       });
@@ -418,7 +418,7 @@ const handleAddToSeries = async () => {
       const photoIdsToAdd = orderedPhotoIdsForSeries.value;
       await seriesStore.addPhotosToSeries(
         selectedSeries.value.id,
-        photoIdsToAdd
+        photoIdsToAdd,
       );
       const series = selectedSeries.value;
       notification.success({
@@ -431,7 +431,7 @@ const handleAddToSeries = async () => {
             "button",
             {
               style: {
-                color: "#8b5cf6",
+                color: "var(--accent-color)",
                 textDecoration: "none",
                 fontWeight: "600",
                 padding: "6px 12px",
@@ -451,7 +451,7 @@ const handleAddToSeries = async () => {
                 router.push(`/series/${series.id}`);
               },
             },
-            "View series"
+            "View series",
           ),
         duration: 5000,
       });
@@ -493,9 +493,8 @@ const createNewCollection = async () => {
       photoIds: props.photoIds,
     };
 
-    const newCollection = await collectionsStore.createCollection(
-      collectionData
-    );
+    const newCollection =
+      await collectionsStore.createCollection(collectionData);
 
     notification.success({
       title: "Collection created and photos added",
@@ -507,7 +506,7 @@ const createNewCollection = async () => {
           "button",
           {
             style: {
-              color: "#8b5cf6",
+              color: "var(--accent-color)",
               textDecoration: "none",
               fontWeight: "600",
               padding: "6px 12px",
@@ -527,7 +526,7 @@ const createNewCollection = async () => {
               router.push(`/collections/${newCollection.id}`);
             },
           },
-          "View collection"
+          "View collection",
         ),
       duration: 5000,
     });
@@ -573,7 +572,7 @@ const createNewSeries = async () => {
           "button",
           {
             style: {
-              color: "#8b5cf6",
+              color: "var(--accent-color)",
               textDecoration: "none",
               fontWeight: "600",
               padding: "6px 12px",
@@ -593,7 +592,7 @@ const createNewSeries = async () => {
               router.push(`/series/${newSeries.id}`);
             },
           },
-          "View series"
+          "View series",
         ),
       duration: 5000,
     });
@@ -687,7 +686,7 @@ const handleCancel = () => {
 
 .collection-item.selected {
   background-color: rgba(139, 92, 246, 0.2);
-  border-color: #8b5cf6;
+  border-color: var(--accent-color);
 }
 
 .collection-item.create-new-collection {
@@ -696,7 +695,7 @@ const handleCancel = () => {
 }
 
 .collection-item.create-new-collection:hover {
-  border-color: #8b5cf6;
+  border-color: var(--accent-color);
   background-color: rgba(139, 92, 246, 0.1);
 }
 
@@ -707,7 +706,7 @@ const handleCancel = () => {
 }
 
 .create-collection-content .collection-name {
-  color: #8b5cf6;
+  color: var(--accent-color);
   font-weight: 600;
 }
 
@@ -736,7 +735,7 @@ const handleCancel = () => {
 
 .collection-count {
   font-size: 12px;
-  color: #8b5cf6;
+  color: var(--accent-color);
   font-weight: 500;
 }
 

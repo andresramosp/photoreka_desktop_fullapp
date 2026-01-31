@@ -871,7 +871,7 @@ function toggleArtisticScore(scoreValue) {
 /* Purple color for filter tags */
 .mini-content :deep(.n-tag) {
   background-color: rgba(168, 85, 247, 0.1) !important;
-  color: var(--secondary-color) !important;
+  color: var(--accent-color) !important;
 }
 
 .mini-divider {

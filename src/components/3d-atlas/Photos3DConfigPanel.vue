@@ -43,12 +43,12 @@
           <n-tooltip trigger="hover" placement="top">
             <template #trigger>
               <n-icon
-                size="12"
-                color="var(--text-secondary)"
-                style="cursor: help; margin-left: 4px"
+                size="15"
+                color="var(--text-primary)"
+                style="cursor: help; margin-left: 4px; margin-top: 2px"
                 @click.stop="showEmbeddingInfoModal3D = true"
               >
-                <InfoCircleFilled />
+                <InfoCircleOutlined />
               </n-icon>
             </template>
             What this map means
@@ -765,6 +765,7 @@ import {
   EyeOutlined,
   TagsOutlined,
   CompassOutlined,
+  InfoCircleOutlined,
 } from "@vicons/antd";
 import { AppsOutline } from "@vicons/ionicons5";
 import TimeRangeFilter from "@/components/TimeRangeFilter.vue";

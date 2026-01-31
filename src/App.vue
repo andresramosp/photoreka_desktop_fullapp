@@ -111,7 +111,7 @@
             @hide="hideConfetti"
             :duration="4000"
             :colors="[
-              '#8b5cf6',
+              'var(--accent-color)',
               '#06b6d4',
               '#10b981',
               '#f59e0b',

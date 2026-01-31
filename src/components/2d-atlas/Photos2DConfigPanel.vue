@@ -37,8 +37,8 @@
                 @click.stop="showEmbeddingInfoModal = true"
                 aria-label="About clustering types"
               >
-                <n-icon size="12" color="var(--text-secondary)">
-                  <InfoCircleFilled />
+                <n-icon size="15" color="var(--text-primary)">
+                  <InfoCircleOutlined />
                 </n-icon>
               </button>
             </template>
@@ -440,6 +440,7 @@ import {
   EyeOutlined,
   CompassOutlined,
   FullscreenOutlined,
+  InfoCircleOutlined,
 } from "@vicons/antd";
 import { AppsOutline } from "@vicons/ionicons5";
 import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
@@ -704,6 +705,7 @@ const handleResetView = () => {
 
 .info-icon-btn {
   margin-left: 3px;
+  margin-top: 2px;
   background: transparent;
   border: none;
   padding: 2px;

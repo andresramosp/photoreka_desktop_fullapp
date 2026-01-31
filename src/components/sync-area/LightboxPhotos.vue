@@ -990,7 +990,7 @@ defineExpose({
 
 .compact-upload-section.compact-drag-over {
   background-color: var(--bg-surface);
-  border: 2px dashed var(--secondary-color);
+  border: 2px dashed var(--accent-color);
   border-radius: 8px;
   padding: 8px;
   margin: 8px 0;
@@ -1329,7 +1329,7 @@ defineExpose({
 }
 
 .import-card.drag-over {
-  border-color: #8b5cf6;
+  border-color: var(--accent-color);
   background-color: var(--bg-surface);
   box-shadow: 0 4px 16px var(--bg-surface);
 }

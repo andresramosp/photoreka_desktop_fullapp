@@ -422,7 +422,7 @@ onUnmounted(() => {
 }
 
 .photo-card-info.selected {
-  border: solid 2px var(--secondary-color);
+  border: solid 2px var(--accent-color);
 }
 
 .photo-container {
@@ -585,7 +585,7 @@ onUnmounted(() => {
   position: absolute;
   top: 8px;
   right: 8px;
-  background-color: var(--secondary-color);
+  background-color: var(--accent-color);
   border-radius: 50%;
   width: 32px;
   height: 32px;

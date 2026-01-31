@@ -413,9 +413,9 @@ export function getThemeCSSVariables(isDark = true) {
     "--primary-color-suppl": theme.primarySuppl,
 
     // Secondary
-    "--secondary-color": theme.secondary,
-    "--secondary-color-hover": theme.secondaryHover,
-    "--secondary-color-pressed": theme.secondaryPressed,
+    "--accent-color": theme.secondary,
+    "--accent-color-hover": theme.secondaryHover,
+    "--accent-color-pressed": theme.secondaryPressed,
 
     // Accent
     "--accent-color": theme.accent,

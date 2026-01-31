@@ -408,7 +408,7 @@ onMounted(() => {
 }
 
 .ai-search .action-icon {
-  color: var(--secondary-color);
+  color: var(--accent-color);
 }
 
 .catalog .action-icon {
