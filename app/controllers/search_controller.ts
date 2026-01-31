@@ -27,6 +27,7 @@ export default class SearchController {
         withInsights: query.options.withInsights || false,
         cursor: query.options.cursor,
         source: query.options.source || null,
+        searchId: query.options.searchId || null,
       })
 
       return response.ok(result)
@@ -108,6 +109,28 @@ export default class SearchController {
     } catch (error) {
       console.error('Error fetching photos:', error)
       return response.internalServerError({ message: 'Error fetching photos' })
+    }
+  }
+
+  public async getSearchRefs({ response, params }: HttpContext) {
+    try {
+      const { searchId } = params
+
+      if (!searchId) {
+        return response.badRequest({ message: 'searchId is required' })
+      }
+
+      const searchService = new SearchTextService()
+      const result = await searchService.getSearchRefsFromRedis(searchId)
+
+      if (!result) {
+        return response.notFound({ message: 'Search references not found or expired' })
+      }
+
+      return response.ok(result)
+    } catch (error) {
+      console.error('Error fetching search refs:', error)
+      return response.internalServerError({ message: 'Error fetching search refs' })
     }
   }
 }

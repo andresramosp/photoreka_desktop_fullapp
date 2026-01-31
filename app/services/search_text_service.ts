@@ -10,6 +10,7 @@ import QueryService from './query_service.js'
 import withCostWS from '../decorators/withCostWs.js'
 import ScoringService from './scoring_service.js'
 import { withCache } from '../decorators/withCache.js'
+import redis from '@adonisjs/redis/services/main'
 
 import PhotoManager from '../managers/photo_manager.js'
 import {
@@ -45,6 +46,7 @@ export type SearchOptions = {
   cursor?: string
   source?: string
   withInsights?: boolean
+  searchId?: string
 }
 
 export type SearchTagsOptions = SearchOptions & {
@@ -228,6 +230,7 @@ export default class SearchTextService {
       cursor,
       source,
       withInsights = false,
+      searchId, // 👈 nuevo
     } = options
 
     if (searchMode === 'curation') {
@@ -247,6 +250,11 @@ export default class SearchTextService {
       searchMode
     )
 
+    // Guardar refs en Redis si hay searchId
+    if (searchId) {
+      await this.saveSearchRefsToRedis(searchId, structuredResult)
+    }
+
     const embeddingScoredPhotos = await this.scoringService.getScoredPhotosByTagsAndDesc(
       photoIds,
       structuredResult,
@@ -262,7 +270,6 @@ export default class SearchTextService {
 
     let modelCosts = []
 
-    // Si se solicitan insights, procesamos las fotos con el modelo
     if (withInsights && paginatedPhotos.length > 0) {
       const batchSize = 1
       let photoBatches = []
@@ -307,8 +314,11 @@ export default class SearchTextService {
         results: {
           [iteration]: paginatedPhotos,
         },
-        cost: { expansionCost, modelCosts: modelCosts.length > 0 ? modelCosts : undefined },
-        iteration: iteration,
+        cost: {
+          expansionCost,
+          modelCosts: modelCosts.length > 0 ? modelCosts : undefined,
+        },
+        iteration,
         structuredResult,
         requireSource: withInsights ? { useImage } : undefined,
       },
@@ -668,5 +678,63 @@ export default class SearchTextService {
     //     detail: 'low',
     //   },
     // }))
+  }
+
+  /**
+   * Extrae los nuances_segments del structuredResult para guardarlos como referencias
+   */
+  private extractRefsFromStructuredResult(structuredResult: any): string[] {
+    if (!structuredResult) {
+      return []
+    }
+
+    const segments = [...structuredResult.nuances_segments, ...structuredResult.positive_segments]
+
+    // Asegurarse de que sea un array y filtrar valores vacíos
+    return Array.isArray(segments)
+      ? segments.filter((segment) => segment && typeof segment === 'string')
+      : []
+  }
+
+  /**
+   * Guarda las referencias (nuances_segments) en Redis para un searchId dado
+   */
+  private async saveSearchRefsToRedis(searchId: string, structuredResult: any): Promise<void> {
+    try {
+      const refs = this.extractRefsFromStructuredResult(structuredResult)
+
+      await redis.set(
+        `search:refs:${searchId}`,
+        JSON.stringify({
+          refs,
+          createdAt: Date.now(),
+        }),
+        'EX',
+        30 // TTL de 30 segundos
+      )
+    } catch (err) {
+      // Importante: esto NUNCA debe romper la búsqueda
+      console.warn('[saveSearchRefsToRedis] Failed to store refs in redis', err)
+    }
+  }
+
+  /**
+   * Obtiene las referencias guardadas en Redis para un searchId dado
+   */
+  public async getSearchRefsFromRedis(
+    searchId: string
+  ): Promise<{ refs: string[]; createdAt: number } | null> {
+    try {
+      const data = await redis.get(`search:refs:${searchId}`)
+
+      if (!data) {
+        return null
+      }
+
+      return JSON.parse(data)
+    } catch (err) {
+      console.warn('[getSearchRefsFromRedis] Failed to retrieve refs from redis', err)
+      return null
+    }
   }
 }

@@ -110,6 +110,7 @@ router
     router.post('/api/search/semantic/sync', [SearchController, 'searchSemanticSync'])
     router.post('/api/search/tags/sync', [SearchController, 'searchByTagsSync'])
     router.post('/api/search/byPhotos', [SearchController, 'searchByPhotos'])
+    router.get('/api/search/refs/:searchId', [SearchController, 'getSearchRefs'])
     router.get('/api/warmUp/:endpointType', [WarmupController, 'warmUp'])
 
     router.get('/api/tags/search', [TagsController, 'search'])
