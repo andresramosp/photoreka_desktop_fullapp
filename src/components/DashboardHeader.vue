@@ -164,9 +164,9 @@ const checkIsMobile = () => {
 };
 
 const handleSearchFocus = () => {
-  if (isMobile.value) {
-    searchExpanded.value = true;
-  }
+  // if (isMobile.value) {
+  //   searchExpanded.value = true;
+  // }
 };
 
 const handleSearchBlur = () => {
