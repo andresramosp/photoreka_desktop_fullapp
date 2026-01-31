@@ -41,8 +41,8 @@
       :style="{ left: tooltipPosition.x + 'px', top: tooltipPosition.y + 'px' }"
     >
       <img
-        v-if="hoveredPhoto.thumbnailUrl || hoveredPhoto.url"
-        :src="hoveredPhoto.thumbnailUrl || hoveredPhoto.url"
+        v-if="hoveredPhoto.thumbnailUrl"
+        :src="hoveredPhoto.thumbnailUrl"
         class="tooltip-image"
       />
       <div class="tooltip-info">
@@ -97,7 +97,7 @@
           class="selected-photo-item"
         >
           <img
-            :src="photo.thumbnailUrl || photo.url || photo.originalUrl"
+            :src="photo.thumbnailUrl || photo.originalUrl"
             :alt="photo.id"
             class="selected-photo-thumb"
           />
@@ -231,6 +231,26 @@ const {
 
 const photosStore = usePhotosStore();
 
+// Resolve originalUrl from the catalog store (same approach as 3D).
+// The 2D clustering endpoints may omit originalUrl for performance/security.
+const originalUrlById = shallowRef(new Map());
+watch(
+  () => photosStore.photos,
+  (photos) => {
+    const map = new Map();
+    for (const p of photos || []) {
+      if (!p?.id) continue;
+      if (p.originalUrl) map.set(p.id, p.originalUrl);
+    }
+    originalUrlById.value = map;
+  },
+  { immediate: true },
+);
+
+const getPhotoOriginalUrl = (photoId) => {
+  return originalUrlById.value.get(photoId) || null;
+};
+
 // Detect mobile device
 const { isMobile } = useIsMobile();
 const { hasTouch } = useHasTouch();
@@ -269,6 +289,46 @@ const pixiContainer = ref(null);
 const pixiApp = shallowRef(null);
 const photoContainer = shallowRef(null);
 const photoSprites = shallowRef(new Map()); // Map of photoId -> sprite
+
+// O(1) lookups by id (avoid Array.find on large datasets)
+const photoById = shallowRef(new Map());
+watch(
+  () => photos2D.value,
+  (photos) => {
+    const map = new Map();
+    for (const p of photos || []) {
+      if (!p?.id) continue;
+      map.set(p.id, p);
+    }
+    photoById.value = map;
+  },
+  { immediate: true },
+);
+
+// Spatial index for hi-res candidate picking (avoid scanning all visible photos)
+const hiResSpatialIndex = shallowRef(new Map());
+const HIRES_SPATIAL_CELL_SIZE = 220; // world units (sprite.x/y space)
+const HIRES_MAX_CELL_RING = 6; // expands search area around viewport center
+
+const buildHiResSpatialIndex = () => {
+  const index = new Map();
+  const cellSize = HIRES_SPATIAL_CELL_SIZE;
+
+  photoSprites.value.forEach((sprite, photoId) => {
+    if (!sprite) return;
+    const cx = Math.floor(sprite.x / cellSize);
+    const cy = Math.floor(sprite.y / cellSize);
+    const key = `${cx},${cy}`;
+    let list = index.get(key);
+    if (!list) {
+      list = [];
+      index.set(key, list);
+    }
+    list.push(photoId);
+  });
+
+  hiResSpatialIndex.value = index;
+};
 
 // Canvas state
 const scale = ref(1);
@@ -319,6 +379,21 @@ const SCALE_FACTOR = 50;
 // Zoom constraints
 const MIN_SCALE = 0.0;
 const MAX_SCALE = 12;
+
+// Hi-res (originalUrl) swap when zooming close (3D-like behavior)
+const HIRES_ENABLED = ref(true);
+const HIRES_MIN_SCALE = 4.0;
+const HIRES_MIN_SCREEN_SIZE_PX = 360; // sprite size on screen required to trigger upgrade
+const activeHiResPhotoId = ref(null);
+let hiResUpdateScheduled = false;
+let hiResRequestToken = 0;
+
+// Debounce hi-res updates while the user is zooming/panning.
+// Creating an original texture is expensive (network + decode + canvas downscale + GPU upload).
+const HIRES_IDLE_DELAY_MS = 160;
+const HIRES_MIN_UPDATE_INTERVAL_MS = 250;
+let hiResIdleTimer = null;
+let lastHiResUpdateAt = 0;
 
 // Photo counts
 const totalPhotosCount = computed(() => photos2D.value.length);
@@ -500,6 +575,7 @@ const handleWheel = (e) => {
   offsetY.value = mouseY - (mouseY - offsetY.value) * scaleChange;
 
   updateContainerTransform();
+  if (scale.value >= HIRES_MIN_SCALE) scheduleHiResUpdate();
 };
 
 const handleMouseDown = (e) => {
@@ -523,6 +599,7 @@ const handleMouseMove = (e) => {
 
   lastPointerPosition.value = { x: e.clientX, y: e.clientY };
   updateContainerTransform();
+  if (scale.value >= HIRES_MIN_SCALE) scheduleHiResUpdate();
 };
 
 const handleMouseUp = (e) => {
@@ -535,6 +612,8 @@ const handleMouseUp = (e) => {
     }
   }
   isDragging.value = false;
+  // Run soon after releasing pointer (user likely paused).
+  scheduleHiResUpdate();
 };
 
 // Touch handlers
@@ -576,6 +655,7 @@ const handleTouchMove = (e) => {
     scale.value = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
     lastPinchDistance.value = distance;
     updateContainerTransform();
+    if (scale.value >= HIRES_MIN_SCALE) scheduleHiResUpdate();
   } else if (isDragging.value && touches.length === 1) {
     const dx = touches[0].clientX - lastPointerPosition.value.x;
     const dy = touches[0].clientY - lastPointerPosition.value.y;
@@ -604,6 +684,8 @@ const handleTouchEnd = (e) => {
   }
   isDragging.value = false;
   isPinching.value = false;
+  // User stopped interacting, evaluate hi-res target.
+  scheduleHiResUpdate();
 };
 
 // Update container transform
@@ -614,9 +696,190 @@ const updateContainerTransform = () => {
   photoContainer.value.scale.set(scale.value);
 };
 
+const getPhotoScreenSizePx = (sprite) => {
+  if (!sprite) return 0;
+  // Container scaling affects on-screen size.
+  return Math.max(sprite.width, sprite.height) * (scale.value || 1);
+};
+
+const pickHiResCandidatePhotoId = () => {
+  if (!pixiContainer.value) return null;
+  if (scale.value < HIRES_MIN_SCALE) return null;
+  if (!photoSprites.value?.size) return null;
+  if (isTransitioning.value) return null;
+
+  const centerX = pixiContainer.value.clientWidth / 2;
+  const centerY = pixiContainer.value.clientHeight / 2;
+
+  // Convert viewport center to world coordinates (sprite.x/y space)
+  const centerWorldX = (centerX - offsetX.value) / (scale.value || 1);
+  const centerWorldY = (centerY - offsetY.value) / (scale.value || 1);
+
+  const index = hiResSpatialIndex.value;
+  if (!index || index.size === 0) {
+    // Best-effort fallback; index should normally exist after load.
+    buildHiResSpatialIndex();
+  }
+
+  const cellSize = HIRES_SPATIAL_CELL_SIZE;
+  const baseCx = Math.floor(centerWorldX / cellSize);
+  const baseCy = Math.floor(centerWorldY / cellSize);
+
+  let bestId = null;
+  let bestDist2 = Infinity;
+
+  // Search nearby cells around the viewport center.
+  for (let r = 0; r <= HIRES_MAX_CELL_RING; r++) {
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dy = -r; dy <= r; dy++) {
+        if (r > 0 && Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+
+        const key = `${baseCx + dx},${baseCy + dy}`;
+        const ids = hiResSpatialIndex.value.get(key);
+        if (!ids?.length) continue;
+
+        for (const photoId of ids) {
+          const sprite = photoSprites.value.get(photoId);
+          if (!sprite || !sprite.visible) continue;
+          if (!getPhotoOriginalUrl(photoId)) continue;
+
+          const ddx = sprite.x - centerWorldX;
+          const ddy = sprite.y - centerWorldY;
+          const d2 = ddx * ddx + ddy * ddy;
+
+          if (d2 < bestDist2) {
+            bestDist2 = d2;
+            bestId = photoId;
+          }
+        }
+      }
+    }
+  }
+
+  if (!bestId) return null;
+
+  const bestSprite = photoSprites.value.get(bestId);
+  const screenSize = getPhotoScreenSizePx(bestSprite);
+  if (screenSize < HIRES_MIN_SCREEN_SIZE_PX) return null;
+
+  return bestId;
+};
+
+const applySpriteAspectFromTexture = (sprite, texture) => {
+  if (!sprite || !texture) return;
+  const w = texture.width || texture.baseTexture?.width;
+  const h = texture.height || texture.baseTexture?.height;
+  if (!w || !h) return;
+  const aspectRatio = h / w;
+  sprite.width = photoSize.value;
+  sprite.height = photoSize.value * aspectRatio;
+};
+
+const downgradeActiveHiRes = async () => {
+  const currentId = activeHiResPhotoId.value;
+  if (!currentId) return;
+
+  const photo = photoById.value.get(currentId);
+  const sprite = photoSprites.value.get(currentId);
+
+  try {
+    if (photo && sprite) {
+      const thumbTexture = await textureManager.getOrCreateTexture(photo, {
+        quality: "thumb",
+      });
+      if (thumbTexture) {
+        sprite.texture = thumbTexture;
+        applySpriteAspectFromTexture(sprite, thumbTexture);
+      }
+    }
+  } finally {
+    // Free hi-res GPU memory
+    textureManager.releaseTexture(currentId, "original");
+    activeHiResPhotoId.value = null;
+  }
+};
+
+const updateHiResTarget = async () => {
+  if (!HIRES_ENABLED.value) {
+    await downgradeActiveHiRes();
+    return;
+  }
+
+  const targetId = pickHiResCandidatePhotoId();
+  if (!targetId) {
+    await downgradeActiveHiRes();
+    return;
+  }
+
+  if (activeHiResPhotoId.value === targetId) return;
+
+  // Switch target: downgrade old first
+  await downgradeActiveHiRes();
+
+  const token = ++hiResRequestToken;
+  const photo = photoById.value.get(targetId);
+  const sprite = photoSprites.value.get(targetId);
+  if (!photo || !sprite) return;
+
+  const originalUrl = getPhotoOriginalUrl(targetId);
+  if (!originalUrl) return;
+
+  const originalTexture = await textureManager.getOrCreateTexture(photo, {
+    quality: "original",
+    urlOverride: originalUrl,
+  });
+
+  // If another request superseded this one, abort.
+  if (token !== hiResRequestToken) return;
+
+  if (originalTexture) {
+    sprite.texture = originalTexture;
+    applySpriteAspectFromTexture(sprite, originalTexture);
+    activeHiResPhotoId.value = targetId;
+  }
+};
+
+const scheduleHiResUpdate = () => {
+  // Fast path: if we're not zoomed in enough, ensure we drop back to thumb.
+  if (scale.value < HIRES_MIN_SCALE) {
+    // Don't await inside pointer handlers.
+    downgradeActiveHiRes().catch(() => {});
+    return;
+  }
+
+  if (hiResIdleTimer) {
+    clearTimeout(hiResIdleTimer);
+    hiResIdleTimer = null;
+  }
+
+  hiResIdleTimer = setTimeout(() => {
+    // Throttle: avoid doing heavy work too frequently.
+    const now = performance.now();
+    if (now - lastHiResUpdateAt < HIRES_MIN_UPDATE_INTERVAL_MS) return;
+    lastHiResUpdateAt = now;
+
+    if (hiResUpdateScheduled) return;
+    hiResUpdateScheduled = true;
+    requestAnimationFrame(async () => {
+      hiResUpdateScheduled = false;
+      try {
+        await updateHiResTarget();
+      } catch (_) {
+        // Non-fatal: keep viewer responsive
+      }
+    });
+  }, HIRES_IDLE_DELAY_MS);
+};
+
 // Update hover state
 const updateHoverState = (e) => {
   if (!photoContainer.value || isDragging.value) {
+    hoveredPhoto.value = null;
+    return;
+  }
+
+  // Tooltip is disabled when zoomed in; avoid expensive hit-testing.
+  if (scale.value >= 1.5) {
     hoveredPhoto.value = null;
     return;
   }
@@ -788,6 +1051,9 @@ const updateTransitionPositions = (currentTime) => {
 
     animationTargetPositions.clear();
     console.log("✅ Position transition completed");
+
+    // Rebuild spatial index after positions change.
+    buildHiResSpatialIndex();
   }
 };
 
@@ -802,6 +1068,7 @@ const loadPhotosToPixi = async () => {
   // Clear existing sprites
   photoContainer.value.removeChildren();
   photoSprites.value.clear();
+  hiResSpatialIndex.value = new Map();
 
   // Note: we intentionally DO NOT call PIXI.Assets.reset() here.
   // Doing so forces re-creation/re-download of textures and defeats the IndexedDB cache.
@@ -853,7 +1120,9 @@ const loadPhotosToPixi = async () => {
         photoContainer.value.addChild(sprite);
 
         // Load actual texture (cached via IndexedDB + in-memory)
-        const texture = await textureManager.getOrCreateTexture(photo);
+        const texture = await textureManager.getOrCreateTexture(photo, {
+          quality: "thumb",
+        });
         if (texture) {
           sprite.texture = texture;
 
@@ -888,6 +1157,12 @@ const loadPhotosToPixi = async () => {
 
   // Apply initial filter visibility
   updateSpriteVisibility();
+
+  // Build spatial index for hi-res candidate selection.
+  buildHiResSpatialIndex();
+
+  // After initial load, opportunistically upgrade if already zoomed in.
+  scheduleHiResUpdate();
 };
 
 // Update sprite visibility based on filters
@@ -899,6 +1174,8 @@ const updateSpriteVisibility = () => {
   photoSprites.value.forEach((sprite, photoId) => {
     sprite.visible = filteredIds.has(photoId);
   });
+
+  scheduleHiResUpdate();
 };
 
 // Zoom controls
@@ -914,6 +1191,7 @@ const zoomIn = () => {
   offsetY.value = centerY - (centerY - offsetY.value) * scaleChange;
 
   updateContainerTransform();
+  scheduleHiResUpdate();
 };
 
 const zoomOut = () => {
@@ -928,6 +1206,7 @@ const zoomOut = () => {
   offsetY.value = centerY - (centerY - offsetY.value) * scaleChange;
 
   updateContainerTransform();
+  scheduleHiResUpdate();
 };
 
 const resetView = () => {
@@ -951,6 +1230,7 @@ const resetView = () => {
   offsetY.value = containerHeight / 2 - centerY * scale.value;
 
   updateContainerTransform();
+  scheduleHiResUpdate();
 };
 
 // Selection handlers
@@ -1135,11 +1415,16 @@ const stopAnimationLoop = () => {
 
 // Cleanup
 const cleanup = () => {
+  // Ensure we free any hi-res texture currently in use.
+  try {
+    textureManager.releaseTexture(activeHiResPhotoId.value, "original");
+  } catch (_) {}
   if (pixiApp.value) {
     pixiApp.value.destroy(true, { children: true, texture: true });
     pixiApp.value = null;
   }
   photoSprites.value.clear();
+  hiResSpatialIndex.value = new Map();
   textureManager.reset({ destroyTextures: true });
 };
 
@@ -1147,6 +1432,10 @@ const cleanup = () => {
 onMounted(async () => {
   await nextTick();
   await initPixi();
+
+  // Start fetching catalog photos in background so originalUrl becomes available.
+  // If it fails, we still render thumbnails.
+  const storePromise = photosStore.getOrFetch(false).catch(() => null);
 
   window.addEventListener("resize", handleResize);
 
@@ -1161,6 +1450,9 @@ onMounted(async () => {
   resetView();
 
   await loadPhotosToPixi();
+
+  // Once store data is available, try hi-res promotion again.
+  storePromise?.then(() => scheduleHiResUpdate());
 
   // Hide config panel on mobile by default
   if (isMobile.value) {

@@ -12,6 +12,17 @@ import { ref } from "vue";
 import * as PIXI from "pixi.js";
 import { useIndexedDBCache } from "@/composables/useIndexedDBCache.js";
 
+// ===== Texture downscale configuration (GPU/RAM protection) =====
+// Pixi will upload the full source dimensions to GPU. Capping maxSide is a big win on low-memory devices.
+const CONFIG_2D_TEXTURE = {
+  lowResMaxSide: 256,
+  desktopMaxSide: 512,
+  // When zooming into a single photo, allow a higher cap for better fidelity.
+  // Still capped to avoid OOM on constrained devices.
+  lowResMaxSideOriginal: 512,
+  desktopMaxSideOriginal: 1024,
+};
+
 // ===== Retry configuration (similar to 3D) =====
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY = 1000;
@@ -26,8 +37,8 @@ export function use2DTextureManager(
   isPlayground = false,
 ) {
   // In-memory caches
-  const downloadedImagesCache = new Map(); // photoId -> HTMLImageElement
-  const textureCache = new Map(); // photoId -> PIXI.Texture
+  const downloadedImagesCache = new Map(); // cacheKey -> HTMLImageElement
+  const textureCache = new Map(); // cacheKey -> PIXI.Texture
 
   // Progress/state (optional but useful for UI)
   const totalPhotosToLoad = ref(0);
@@ -57,8 +68,16 @@ export function use2DTextureManager(
   const cacheStats = ref({ totalImages: 0 });
   const cachedPhotoIds = ref(new Set());
 
-  const getImageUrlForPhoto = (photo) =>
-    photo?.thumbnailUrl || photo?.url || photo?.originalUrl || null;
+  const cacheKey = (photoId, quality) => `${photoId}:${quality}`;
+
+  const getImageUrlForPhoto = (photo, quality = "thumb") => {
+    if (!photo) return null;
+    if (quality === "original") {
+      return photo?.originalUrl || photo?.thumbnailUrl || null;
+    }
+    // thumb/default
+    return photo?.thumbnailUrl || photo?.originalUrl || null;
+  };
 
   const updateLoadingProgress = (loaded, total) => {
     totalPhotosToLoad.value = total;
@@ -96,19 +115,77 @@ export function use2DTextureManager(
   };
 
   /**
+   * Downscale an image-like source to a maximum side length.
+   * Returns either the original source (if already small) or a Canvas.
+   *
+   * IMPORTANT: This caps GPU texture size, which is typically the main memory pressure point.
+   */
+  const downscaleSource = (source, maxSide) => {
+    try {
+      const maxSideNum = Math.max(1, Number(maxSide) || 0);
+      if (!source || !maxSideNum) return source;
+
+      const w0 = source.width || source.naturalWidth || 0;
+      const h0 = source.height || source.naturalHeight || 0;
+      if (!w0 || !h0) return source;
+
+      if (w0 <= maxSideNum && h0 <= maxSideNum) return source;
+
+      const scale = Math.min(maxSideNum / w0, maxSideNum / h0);
+      const w = Math.max(1, Math.round(w0 * scale));
+      const h = Math.max(1, Math.round(h0 * scale));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return source;
+
+      // Default smoothing is usually fine; keep it enabled.
+      ctx.imageSmoothingEnabled = true;
+      try {
+        // Not supported everywhere.
+        ctx.imageSmoothingQuality = "high";
+      } catch (_) {}
+
+      ctx.drawImage(source, 0, 0, w, h);
+      return canvas;
+    } catch (_) {
+      return source;
+    }
+  };
+
+  /**
    * Download image into memory (no PIXI.Texture creation yet)
    */
-  const downloadImageOnly = async (photoObj, retryCount = 0) => {
+  const downloadImageOnly = async (
+    photoObj,
+    retryCount = 0,
+    quality = "thumb",
+    { urlOverride = null } = {},
+  ) => {
     if (!photoObj) return;
-    if (photoObj.__imageDownloaded || photoObj.__downloading) return;
+    const isOriginal = quality === "original";
 
-    photoObj.__downloading = true;
+    const downloadedFlag = isOriginal
+      ? "__originalImageDownloaded"
+      : "__imageDownloaded";
+    const downloadingFlag = isOriginal
+      ? "__originalDownloading"
+      : "__downloading";
+    const downloadErrorFlag = isOriginal
+      ? "__originalDownloadError"
+      : "__downloadError";
 
-    const imageUrl = getImageUrlForPhoto(photoObj);
+    if (photoObj[downloadedFlag] || photoObj[downloadingFlag]) return;
+
+    photoObj[downloadingFlag] = true;
+
+    const imageUrl = urlOverride || getImageUrlForPhoto(photoObj, quality);
     if (!imageUrl) {
-      photoObj.__downloading = false;
-      photoObj.__imageDownloaded = true;
-      photoObj.__downloadError = true;
+      photoObj[downloadingFlag] = false;
+      photoObj[downloadedFlag] = true;
+      photoObj[downloadErrorFlag] = true;
       return;
     }
 
@@ -126,15 +203,23 @@ export function use2DTextureManager(
         ? await blobToImageElement(imageBlob)
         : await loadImageElement(imageUrl);
 
-      downloadedImagesCache.set(photoObj.id, imageElement);
+      downloadedImagesCache.set(cacheKey(photoObj.id, quality), imageElement);
 
-      photoObj.__imageElement = imageElement;
-      photoObj.__imageUrl = imageUrl;
-      if (imageBlob) photoObj.__imageBlob = imageBlob;
-      photoObj.__imageDownloaded = true;
-      photoObj.__downloadError = false;
-      photoObj.__fromCache = false;
-      photoObj.__retryCount = undefined;
+      if (isOriginal) {
+        photoObj.__originalImageElement = imageElement;
+        photoObj.__originalImageUrl = imageUrl;
+        photoObj.__originalImageDownloaded = true;
+        photoObj.__originalDownloadError = false;
+        photoObj.__originalRetryCount = undefined;
+      } else {
+        photoObj.__imageElement = imageElement;
+        photoObj.__imageUrl = imageUrl;
+        if (imageBlob) photoObj.__imageBlob = imageBlob;
+        photoObj.__imageDownloaded = true;
+        photoObj.__downloadError = false;
+        photoObj.__fromCache = false;
+        photoObj.__retryCount = undefined;
+      }
 
       if (photoObj.__had429Error) {
         error429Stats.value.recovered++;
@@ -154,7 +239,8 @@ export function use2DTextureManager(
       // For <img> loads we rarely get status codes; treat empty message as transient.
       if (retryCount < MAX_RETRIES && (is429Error || !e?.message)) {
         error429Stats.value.retried++;
-        photoObj.__retryCount = retryCount + 1;
+        if (isOriginal) photoObj.__originalRetryCount = retryCount + 1;
+        else photoObj.__retryCount = retryCount + 1;
 
         const delay = Math.min(
           INITIAL_RETRY_DELAY * Math.pow(RETRY_MULTIPLIER, retryCount),
@@ -162,15 +248,17 @@ export function use2DTextureManager(
         );
 
         await new Promise((resolve) => setTimeout(resolve, delay));
-        photoObj.__downloading = false;
-        return downloadImageOnly(photoObj, retryCount + 1);
+        photoObj[downloadingFlag] = false;
+        return downloadImageOnly(photoObj, retryCount + 1, quality, {
+          urlOverride,
+        });
       }
 
       error429Stats.value.failed++;
-      photoObj.__imageDownloaded = true;
-      photoObj.__downloadError = true;
+      photoObj[downloadedFlag] = true;
+      photoObj[downloadErrorFlag] = true;
     } finally {
-      photoObj.__downloading = false;
+      photoObj[downloadingFlag] = false;
     }
   };
 
@@ -214,7 +302,7 @@ export function use2DTextureManager(
               image.src = imageUrl;
             });
 
-            downloadedImagesCache.set(photoId, img);
+            downloadedImagesCache.set(cacheKey(photoId, "thumb"), img);
 
             const photo = photos.find((p) => p.id === photoId);
             if (photo) {
@@ -222,7 +310,7 @@ export function use2DTextureManager(
               photo.__downloadError = false;
               photo.__fromCache = true;
               photo.__imageElement = img;
-              photo.__imageUrl = getImageUrlForPhoto(photo);
+              photo.__imageUrl = getImageUrlForPhoto(photo, "thumb");
             }
           } catch (error) {
             cachedPhotoIds.value.delete(photoId);
@@ -237,31 +325,52 @@ export function use2DTextureManager(
     }
   };
 
-  const getOrCreateTexture = async (photoObj) => {
+  const getOrCreateTexture = async (
+    photoObj,
+    { quality = "thumb", urlOverride = null } = {},
+  ) => {
     if (!photoObj?.id) return null;
 
-    const cachedTexture = textureCache.get(photoObj.id);
+    const isOriginal = quality === "original";
+    const key = cacheKey(photoObj.id, quality);
+
+    const cachedTexture = textureCache.get(key);
     if (cachedTexture && !cachedTexture.destroyed) {
       return cachedTexture;
     }
 
+    const downloadedFlag = isOriginal
+      ? "__originalImageDownloaded"
+      : "__imageDownloaded";
+    const downloadErrorFlag = isOriginal
+      ? "__originalDownloadError"
+      : "__downloadError";
+
     // Ensure image is in memory (cache or download)
-    if (
-      !photoObj.__imageDownloaded &&
-      !downloadedImagesCache.has(photoObj.id)
-    ) {
+    if (!photoObj[downloadedFlag] && !downloadedImagesCache.has(key)) {
       loaderStage.value = "downloading";
-      await downloadImageOnly(photoObj);
+      await downloadImageOnly(photoObj, 0, quality, { urlOverride });
     }
 
-    if (photoObj.__downloadError) return null;
+    if (photoObj[downloadErrorFlag]) return null;
 
     const imageElement =
-      downloadedImagesCache.get(photoObj.id) || photoObj.__imageElement;
+      downloadedImagesCache.get(key) ||
+      (isOriginal ? photoObj.__originalImageElement : photoObj.__imageElement);
     if (!imageElement) return null;
 
-    const texture = PIXI.Texture.from(imageElement);
-    textureCache.set(photoObj.id, texture);
+    // Downscale source before uploading to GPU to reduce memory pressure.
+    const maxSide = useLowPerformance
+      ? isOriginal
+        ? CONFIG_2D_TEXTURE.lowResMaxSideOriginal
+        : CONFIG_2D_TEXTURE.lowResMaxSide
+      : isOriginal
+        ? CONFIG_2D_TEXTURE.desktopMaxSideOriginal
+        : CONFIG_2D_TEXTURE.desktopMaxSide;
+    const sourceForTexture = downscaleSource(imageElement, maxSide);
+
+    const texture = PIXI.Texture.from(sourceForTexture);
+    textureCache.set(key, texture);
 
     photoObj.__textureLoaded = true;
 
@@ -285,7 +394,8 @@ export function use2DTextureManager(
       if (photo.__fromCache) continue;
 
       const imageElement =
-        downloadedImagesCache.get(photo.id) || photo.__imageElement;
+        downloadedImagesCache.get(cacheKey(photo.id, "thumb")) ||
+        photo.__imageElement;
 
       if (photo.__imageDownloaded && !photo.__downloadError && imageElement) {
         try {
@@ -294,7 +404,7 @@ export function use2DTextureManager(
             imagesToCache.push({
               id: photo.id,
               blob: photo.__imageBlob,
-              url: photo.__imageUrl || getImageUrlForPhoto(photo),
+              url: photo.__imageUrl || getImageUrlForPhoto(photo, "thumb"),
             });
             continue;
           }
@@ -317,7 +427,7 @@ export function use2DTextureManager(
 
           // Fallback: if canvas is tainted (CORS) or toBlob returned null, try fetching directly.
           if (!blob) {
-            const url = photo.__imageUrl || getImageUrlForPhoto(photo);
+            const url = photo.__imageUrl || getImageUrlForPhoto(photo, "thumb");
             if (url) {
               try {
                 blob = await urlToBlob(url);
@@ -331,7 +441,7 @@ export function use2DTextureManager(
             imagesToCache.push({
               id: photo.id,
               blob,
-              url: photo.__imageUrl || getImageUrlForPhoto(photo),
+              url: photo.__imageUrl || getImageUrlForPhoto(photo, "thumb"),
             });
           }
         } catch (_) {
@@ -394,6 +504,20 @@ export function use2DTextureManager(
     };
   };
 
+  const releaseTexture = (photoId, quality = "original") => {
+    if (!photoId) return;
+    const key = cacheKey(photoId, quality);
+    const texture = textureCache.get(key);
+    if (texture && !texture.destroyed) {
+      try {
+        texture.destroy(true);
+      } catch (_) {}
+    }
+    textureCache.delete(key);
+    // Free decoded image element too (GC will reclaim it when unreferenced)
+    downloadedImagesCache.delete(key);
+  };
+
   return {
     // state
     downloadedImagesCache,
@@ -414,6 +538,7 @@ export function use2DTextureManager(
     getOrCreateTexture,
     bulkCacheDownloadedImages,
     updateLoadingProgress,
+    releaseTexture,
     reset,
   };
 }
