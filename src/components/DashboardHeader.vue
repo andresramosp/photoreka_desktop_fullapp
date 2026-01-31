@@ -17,11 +17,27 @@
           </template>
         </n-button>
 
-        <div class="search-container" :class="{ expanded: searchExpanded }">
+        <div
+          v-if="!isMobile"
+          class="search-container"
+          :class="{ expanded: searchExpanded }"
+        >
           <GlobalSearchAutocomplete
             @search-focus="handleSearchFocus"
             @search-blur="handleSearchBlur"
           />
+        </div>
+        <!-- Esto habria que centrar el logo -->
+        <div
+          style="
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex: 1;
+          "
+          v-else
+        >
+          <AppLogo layout="horizontal" />
         </div>
       </div>
 
@@ -101,6 +117,7 @@ import {
 } from "@vicons/ionicons5";
 import { useTheme } from "../composables/useTheme.js";
 import GlobalSearchAutocomplete from "./GlobalSearchAutocomplete.vue";
+import AppLogo from "./AppLogo.vue";
 
 const route = useRoute();
 const router = useRouter();
