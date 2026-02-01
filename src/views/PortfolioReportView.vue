@@ -33,7 +33,17 @@
           </div>
         </div>
       </div>
-
+      <!-- Photographic Patterns Section -->
+      <section
+        id="patterns"
+        ref="patternsRef"
+        class="report-section-wrapper"
+        data-section="patterns"
+      >
+        <div class="patterns-section">
+          <PatternsAnalysisReport />
+        </div>
+      </section>
       <!-- Visual Aspects Section -->
       <section
         id="visual"
@@ -43,18 +53,6 @@
       >
         <VisualAspectsReportNew :photos="photosStore.photos" />
       </section>
-
-      <!-- Photographic Patterns Section -->
-      <!-- <section
-        id="patterns"
-        ref="patternsRef"
-        class="report-section-wrapper"
-        data-section="patterns"
-      >
-        <div class="patterns-section">
-          <NarrativeAnalysisReport />
-        </div>
-      </section> -->
 
       <!-- Artistic Scores Section -->
       <section
@@ -171,10 +169,11 @@ import { usePhotosStore } from "@/stores/photos.js";
 defineOptions({
   name: "PortfolioReportView",
 });
-import { visualAspectsOptions } from "@/stores/searchStore.js";
+// import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useMessage } from "naive-ui";
-import VisualAspectsReport from "@/components/report/VisualAspectsReport.vue";
-import NarrativeAnalysisReport from "@/components/report/NarrativeAnalysisReport.vue";
+// import VisualAspectsReport from "@/components/report/VisualAspectsReport.vue";
+// import NarrativeAnalysisReport from "@/components/report/NarrativeAnalysisReport.vue";
+import PatternsAnalysisReport from "@/components/report/PatternsAnalysisReport.vue";
 import ArtisticScoresReport from "@/components/report/ArtisticScoresReport.vue";
 
 // Icons

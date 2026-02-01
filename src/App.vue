@@ -294,6 +294,7 @@ watch(
       photosStore.getOrFetch(true);
       collectionsStore.getOrFetch(true);
       seriesStore.getOrFetch(true);
+      userStore.processPatterns();
     } else {
       // Usuario se desautenticó - resetear stores
       if (wasAuth !== undefined) {

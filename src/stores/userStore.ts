@@ -457,6 +457,45 @@ export const useUserStore = defineStore("user", () => {
     }
   };
 
+  const processPatterns = async () => {
+    if (!isAuthenticated.value || !token.value) {
+      return;
+    }
+
+    try {
+      const response = await api.get("/api/portfolio-review/should-build");
+      const { action } = response.data;
+
+      console.log("Portfolio review action:", action);
+
+      // Si hay un build en progreso o se requiere rebuild, establecer polling
+      if (action === "BUILDING" || action === "RE-BUILDING") {
+        console.log(
+          `Portfolio patterns ${action.toLowerCase()}, will refresh profile in 5 minutes`,
+        );
+
+        // Establecer intervalo de 5 minutos (300000ms) para refrescar el perfil
+        setTimeout(async () => {
+          try {
+            console.log("Refreshing user profile after pattern processing");
+            const profileResponse = await api.get("/api/auth/profile");
+            if (user.value && profileResponse.data.user) {
+              user.value = profileResponse.data.user;
+              console.log("User profile updated with new patterns");
+            }
+          } catch (error) {
+            console.error(
+              "Error refreshing profile after pattern processing:",
+              error,
+            );
+          }
+        }, 300000); // 5 minutos
+      }
+    } catch (error) {
+      console.error("Error processing patterns:", error);
+    }
+  };
+
   return {
     isAuthenticated,
     token,
@@ -481,5 +520,6 @@ export const useUserStore = defineStore("user", () => {
     changePassword,
     consumeHandoff,
     demoLogin,
+    processPatterns,
   };
 });
