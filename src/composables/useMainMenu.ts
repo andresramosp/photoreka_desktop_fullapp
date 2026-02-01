@@ -21,6 +21,7 @@ import {
   HelpCircleOutline as HelpIcon,
   MapOutline as MapIcon,
   Image as ImageIcon,
+  DesktopOutline as LaptopIcon,
 } from "@vicons/ionicons5";
 
 // Import icons for sections (generic)
@@ -62,6 +63,16 @@ export function useMainMenu() {
   // Helper to create icon render function
   const renderIcon = (icon: any) => {
     return () => h(NIcon, null, { default: () => h(icon) });
+  };
+
+  // Helper to render laptop icon suffix for desktop-only features
+  const renderLaptopSuffix = () => {
+    return () =>
+      h(
+        NIcon,
+        { size: 16, style: { marginLeft: "auto", opacity: 0.5 } },
+        { default: () => h(LaptopIcon) },
+      );
   };
 
   // Sync Area (global, outside sections)
@@ -170,16 +181,27 @@ export function useMainMenu() {
             key: "2d-view",
             icon: renderIcon(ImageIcon),
           },
-          ...(!isMobileLimitedMode.value
-            ? [
+          {
+            label: () =>
+              h(
+                "span",
                 {
-                  label: () =>
-                    h("span", { class: "collection-menu-item" }, "3D Atlas"),
-                  key: "atlas",
-                  icon: renderIcon(CubeIcon),
+                  class: "collection-menu-item",
+                  style: {
+                    display: "flex",
+                    alignItems: "center",
+                    width: "100%",
+                  },
                 },
-              ]
-            : []),
+                [
+                  h("span", "3D Atlas"),
+                  isMobileLimitedMode.value ? renderLaptopSuffix()() : null,
+                ],
+              ),
+            key: "atlas",
+            icon: renderIcon(CubeIcon),
+            disabled: isMobileLimitedMode.value || isBlocked.value,
+          },
         ],
       },
     ];
@@ -194,56 +216,79 @@ export function useMainMenu() {
 
   // Create Section
   const createSection = computed<MenuOption>(() => {
-    const children: MenuOption[] = [];
-
-    // Only show full create tools on desktop
-    if (!isMobileLimitedMode.value) {
-      children.push(
-        {
-          label: () =>
-            h(
-              "span",
-              { class: "second-level-menu-item" },
+    const children: MenuOption[] = [
+      {
+        label: () =>
+          h(
+            "span",
+            {
+              class: "second-level-menu-item",
+              style: {
+                display: "flex",
+                alignItems: "center",
+                width: "100%",
+              },
+            },
+            [
               h(
                 "div",
                 {
                   onClick: (e: MouseEvent) => {
-                    e.stopPropagation();
-                    router.push("/series");
+                    if (!isMobileLimitedMode.value) {
+                      e.stopPropagation();
+                      router.push("/series");
+                    }
                   },
                   style: {
-                    cursor: "pointer",
-                    width: "100%",
+                    cursor: isMobileLimitedMode.value ? "default" : "pointer",
+                    flex: 1,
                   },
                 },
                 "Series",
               ),
-            ),
-          key: "series-group",
-          icon: renderIcon(SeriesIcon),
-          disabled: isBlocked.value,
-          children: series.value.map((ser) => ({
-            label: () =>
-              h("span", { class: "collection-menu-item" }, ser.label),
-            key: ser.key,
-          })),
-        },
-        {
-          label: () => h("span", { class: "second-level-menu-item" }, "Canvas"),
-          key: "canvas",
-          disabled: isBlocked.value,
-          icon: renderIcon(CanvasIcon),
-        },
-      );
-    }
-
-    // Framer is available on both mobile and desktop
-    children.push({
-      label: () => h("span", { class: "second-level-menu-item" }, "Framer"),
-      key: "framer",
-      disabled: isBlocked.value,
-      icon: renderIcon(FramerIcon),
-    });
+              isMobileLimitedMode.value ? renderLaptopSuffix()() : null,
+            ],
+          ),
+        key: "series-group",
+        icon: renderIcon(SeriesIcon),
+        disabled: isMobileLimitedMode.value || isBlocked.value,
+        children:
+          isMobileLimitedMode.value || isBlocked.value
+            ? undefined
+            : series.value.map((ser) => ({
+                label: () =>
+                  h("span", { class: "collection-menu-item" }, ser.label),
+                key: ser.key,
+              })),
+      },
+      {
+        label: () =>
+          h(
+            "span",
+            {
+              class: "second-level-menu-item",
+              style: {
+                display: "flex",
+                alignItems: "center",
+                width: "100%",
+              },
+            },
+            [
+              h("span", "Canvas"),
+              isMobileLimitedMode.value ? renderLaptopSuffix()() : null,
+            ],
+          ),
+        key: "canvas",
+        disabled: isMobileLimitedMode.value || isBlocked.value,
+        icon: renderIcon(CanvasIcon),
+      },
+      {
+        label: () => h("span", { class: "second-level-menu-item" }, "Framer"),
+        key: "framer",
+        disabled: isBlocked.value,
+        icon: renderIcon(FramerIcon),
+      },
+    ];
 
     return {
       label: "Create",
