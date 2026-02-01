@@ -799,8 +799,9 @@ onMounted(() => {
 }
 
 .example-photos {
-  margin: var(--spacing-lg) 0;
-  padding-top: var(--spacing-lg);
+  margin: 0;
+  margin-bottom: 5px;
+  padding-top: var(--spacing-sm);
   border-top: 1px solid var(--border-color);
   flex-shrink: 0;
 }
