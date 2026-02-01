@@ -6,7 +6,8 @@
 </template>
 
 <script setup lang="ts">
-import { h, ref, onMounted } from "vue";
+import { h, ref, onMounted, watch } from "vue";
+import { useRoute } from "vue-router";
 import {
   useNotification,
   NButton,
@@ -31,14 +32,34 @@ import {
 import { isMobileDevice } from "@/utils/utils.js";
 
 import AppLogo from "./AppLogo.vue";
-import { Workspace, Monitor } from "@vicons/carbon";
+import { Workspace } from "@vicons/carbon";
 import { MonitorFilled } from "@vicons/material";
+
+const route = useRoute();
 
 const notification = useNotification();
 let closeNotification = ref<NotificationReactive | null>(null);
 const showBlurOverlay = ref(false);
 
 const STORAGE_KEY = "mobile-welcome-dismissed";
+
+function checkAndShowWelcome() {
+  // Usar window.location.pathname que siempre tiene el valor correcto
+  const currentPath = window.location.pathname;
+
+  // No mostrar en rutas de configuración de perfil o plan
+  const includedPaths = ["/dashboard", "/workspace", "/sync-area"];
+
+  if (!includedPaths.includes(currentPath)) {
+    return;
+  }
+
+  // Solo mostrar si es dispositivo móvil y el usuario no ha hecho clic en "Got it!" antes
+  const hasBeenDismissed = localStorage.getItem(STORAGE_KEY);
+  if (!hasBeenDismissed && isMobileDevice()) {
+    showMobileWelcome();
+  }
+}
 
 function showMobileWelcome() {
   // Mostrar el overlay con blur
@@ -364,22 +385,16 @@ function showMobileWelcome() {
 }
 
 onMounted(() => {
-  // Usar window.location.pathname que siempre tiene el valor correcto
-  const currentPath = window.location.pathname;
-
-  // No mostrar en rutas de configuración de perfil o plan
-  const includedPaths = ["/dashboard", "/workspace", "/sync-area"];
-
-  if (!includedPaths.includes(currentPath)) {
-    return;
-  }
-
-  // Solo mostrar si es dispositivo móvil y el usuario no ha hecho clic en "Got it!" antes
-  const hasBeenDismissed = localStorage.getItem(STORAGE_KEY);
-  if (!hasBeenDismissed && isMobileDevice()) {
-    showMobileWelcome();
-  }
+  checkAndShowWelcome();
 });
+
+// Watch para detectar cambios de ruta después del login
+watch(
+  () => route.path,
+  () => {
+    checkAndShowWelcome();
+  },
+);
 </script>
 
 <style scoped>
