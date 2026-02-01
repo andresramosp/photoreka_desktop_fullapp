@@ -267,13 +267,13 @@ Your task is to analyze a new cluster of photos and decide whether it should:
 ANALYSIS TYPE: ${analysisType}
 
 DECISION CRITERIA FOR MERGE:
-- The new cluster shares the same core theme/concept as an existing pattern
+- The new cluster CLEARLY shares the same core theme/concept as an existing pattern
 - The photos would naturally belong to the existing pattern's description
 - Merging would strengthen the pattern, not dilute it
 - In case of doubt, don't merge
 
 DECISION CRITERIA FOR NEW:
-- The cluster represents a clearly distinct theme not covered by existing patterns
+- The cluster represents a somwhow distinct theme not covered by existing patterns
 - Merging would create an overly broad or incoherent pattern
 - The photos have unique characteristics that deserve their own category
 
