@@ -339,6 +339,7 @@ export default class AuthController {
           usage,
           preferredSource: user.preferredSource,
           profiles: user.profiles,
+          catalogPatterns: user.catalogPatterns,
           createdAt: user.createdAt,
           updatedAt: user.updatedAt,
         },

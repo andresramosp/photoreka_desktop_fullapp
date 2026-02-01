@@ -16,6 +16,7 @@ export default class extends BaseSchema {
       table.boolean('is_active').defaultTo(true)
       table.string('preferred_source').defaultTo('web')
       table.string('profiles').defaultTo('general')
+      table.jsonb('catalog_patterns').nullable()
 
       table.timestamp('created_at')
       table.timestamp('updated_at')

@@ -664,7 +664,7 @@ export default class ModelsService {
     }
   }
 
-  // @MeasureExecutionTime
+  @MeasureExecutionTime
   public async getGPTResponse(
     systemContent: string | null,
     userContent: any,
@@ -782,7 +782,8 @@ export default class ModelsService {
     userMessages: any[],
     model: ModelName,
     generationConfig: any = { temperature: 0.1 },
-    useCache: boolean = true
+    useCache: boolean = true,
+    throwOnError: boolean = false
   ): Promise<any> {
     let cacheDuration = 60 * 5
     let finalResult, parsedResult, rawResult
@@ -855,6 +856,8 @@ export default class ModelsService {
       return finalResult
     } catch (error) {
       console.error('Error fetching Gemini response:', error)
+      if (throwOnError) throw error
+      return undefined
     }
   }
 

@@ -1,5 +1,5 @@
 import db from '@adonisjs/lucid/services/db'
-import ModelsService from '#services/models_service'
+import ModelsService, { ModelName } from '#services/models_service'
 import PhotoManager from './photo_manager.js'
 import PhotoImageService from '../services/photo_image_service.js'
 import { withCache } from '../decorators/withCache.js'
@@ -11,14 +11,38 @@ import {
   PROMPT_PORTFOLIO_PROGRESSIVE_FUSION,
 } from '../utils/prompts/portfolio_review.js'
 
-export type ReviewType = 'story' | 'context' | 'aesthetic' | 'general' | 'visual_accents'
+export type ReviewType = 'story' | 'context' | 'general'
+
+// Configuración para cada tipo de review
+export interface ReviewTypeConfig {
+  model: ModelName // Modelo principal a usar
+  useProgressiveFusion: boolean // true: fusión progresiva, false: análisis independiente
+  retryModel?: ModelName // Modelo para reintentos (opcional, por defecto usa el mismo modelo)
+}
+
+// Configuración por reviewType
+export const REVIEW_TYPE_CONFIG: Record<ReviewType, ReviewTypeConfig> = {
+  general: {
+    model: 'gpt-5.1',
+    useProgressiveFusion: false,
+    retryModel: 'gpt-5.1',
+  },
+  story: {
+    model: 'gemini-2.5-flash',
+    useProgressiveFusion: true,
+    retryModel: 'gpt-5.1',
+  },
+  context: {
+    model: 'gemini-2.5-flash',
+    useProgressiveFusion: true,
+    retryModel: 'gpt-5.1',
+  },
+}
 
 // Mapeo de ReviewType a chunkName usado en la BD
 const REVIEW_TYPE_TO_CHUNK: Record<ReviewType, string> = {
   story: 'story',
   context: 'context',
-  visual_accents: 'visual_aspects',
-  aesthetic: 'visual_aspects',
   general: 'general', // Usa embeddings CLIP de photos.embedding
 }
 
@@ -52,6 +76,268 @@ export default class PortfolioReviewManager {
 
   constructor() {
     this.modelsService = new ModelsService()
+  }
+
+  /**
+   * Calcula la fuerza del patrón basándose en el porcentaje de fotos
+   * strong: >= 20% de las fotos
+   * moderate: >= 5% de las fotos
+   * weak: < 5% de las fotos
+   */
+  private calculatePatternStrength(percentage: number): 'strong' | 'moderate' | 'weak' {
+    if (percentage >= 20) {
+      return 'strong'
+    } else if (percentage >= 5) {
+      return 'moderate'
+    } else {
+      return 'weak'
+    }
+  }
+
+  private async sleep(ms: number) {
+    await new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
+  private isNonEmptyString(value: any): boolean {
+    return typeof value === 'string' && value.trim().length > 0
+  }
+
+  private isValidProgressiveFusionResult(result: any): boolean {
+    if (!result || typeof result !== 'object') return false
+
+    const decisionOk =
+      typeof result.decision === 'string' &&
+      (result.decision === 'merge' || result.decision === 'new')
+
+    if (!decisionOk) return false
+
+    // Si es merge, solo necesita mergeWithPatternId
+    if (result.decision === 'merge') {
+      return this.isNonEmptyString(result.mergeWithPatternId)
+    }
+
+    // Si es new, necesita title y description
+    if (result.decision === 'new') {
+      const hasTitle = this.isNonEmptyString(result.title)
+      const hasDescription = this.isNonEmptyString(result.description)
+      return hasTitle && hasDescription
+    }
+
+    return true
+  }
+
+  private isValidIndependentPatternResult(result: any): boolean {
+    if (!result || typeof result !== 'object') return false
+
+    // Requisito: si falta title/description, debemos reintentar.
+    return this.isNonEmptyString(result.title) && this.isNonEmptyString(result.description)
+  }
+
+  /**
+   * Realiza múltiples intentos de llamada a un LLM (Gemini o GPT) con retry exponencial
+   *
+   * Características:
+   * - Soporta tanto Gemini como GPT de forma transparente
+   * - Maneja automáticamente el formateo de imágenes según el modelo:
+   *   * Gemini: formato inlineData con base64
+   *   * GPT: formato image_url con URLs
+   * - Implementa retry con exponential backoff
+   * - Valida respuestas con función custom
+   * - Soporta fallback en caso de fallos repetidos
+   *
+   * @param options.systemPrompt - Prompt del sistema
+   * @param options.userMessages - Mensajes del usuario (texto)
+   * @param options.model - Modelo a usar (detecta automáticamente si es Gemini o GPT)
+   * @param options.retryModel - Modelo alternativo para reintentos (opcional, por defecto usa el mismo modelo)
+   * @param options.generationConfig - Configuración de generación (temperature, responseType, etc)
+   * @param options.useCache - Si usar caché (solo en primer intento)
+   * @param options.contextLabel - Label para logs
+   * @param options.maxAttempts - Número máximo de intentos
+   * @param options.validateResult - Función para validar la respuesta del LLM
+   * @param options.fallbackResult - Resultado de fallback si fallan todos los intentos
+   * @param options.images - Array de imágenes con { photo, base64 }
+   * @param options.imageResolution - Resolución para GPT ('low' | 'medium' | 'high')
+   */
+  private async getLLMResponseWithRetry(options: {
+    systemPrompt: string
+    userMessages: any[]
+    model:
+      | Parameters<ModelsService['getGeminiResponse']>[2]
+      | Parameters<ModelsService['getGPTResponse']>[2]
+    retryModel?: ModelName // Modelo para reintentos
+    generationConfig?: any
+    useCache?: boolean
+    contextLabel?: string
+    maxAttempts?: number
+    validateResult?: (result: any) => boolean
+    fallbackResult?: any
+    images?: Array<{ photo: any; base64: string }>
+    imageResolution?: 'low' | 'medium' | 'high'
+  }): Promise<any> {
+    const {
+      systemPrompt,
+      userMessages,
+      model,
+      retryModel,
+      generationConfig = { temperature: 0.1 },
+      useCache = true,
+      contextLabel = 'llm',
+      maxAttempts = 3, // 1 intento inicial + 2 reintentos
+      validateResult,
+      fallbackResult,
+      images,
+      imageResolution = 'low',
+    } = options
+
+    const baseDelayMs = 900
+    const maxDelayMs = 12000
+
+    let lastError: any
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      // A partir del segundo intento, usar retryModel si está disponible
+      const currentModel = attempt > 1 && retryModel ? retryModel : model
+
+      // Detectar si es un modelo Gemini o GPT
+      const modelStr = String(currentModel)
+      const isGeminiModel = modelStr.includes('gemini')
+      const isGPTModel = modelStr.includes('gpt')
+      try {
+        let response: any
+
+        if (isGeminiModel) {
+          // Formatear imágenes para Gemini
+          let formattedUserMessages = userMessages
+
+          if (images && images.length > 0) {
+            const geminiImages = images.map(({ base64 }) => ({
+              inlineData: {
+                mimeType: 'image/png',
+                data: base64,
+              },
+            }))
+
+            formattedUserMessages = [...geminiImages, ...userMessages]
+          }
+
+          response = await this.modelsService.getGeminiResponse(
+            systemPrompt,
+            formattedUserMessages,
+            currentModel as any,
+            generationConfig,
+            useCache && attempt === 1, // Solo usar cache en el primer intento
+            true // throwOnError
+          )
+        } else if (isGPTModel) {
+          // Formatear para GPT
+          let formattedUserContent: any
+
+          if (images && images.length > 0) {
+            // Con imágenes: content debe ser un array de objetos
+            const gptImages = images.map(({ photo }) => {
+              // Construir originalUrl a partir del nombre de la foto
+              const originalUrl = `https://${process.env.IMAGES_WORKER}/${photo.name}`
+
+              return {
+                type: 'image_url',
+                image_url: {
+                  url: originalUrl,
+                  detail: imageResolution,
+                },
+              }
+            })
+
+            // Convertir texto a formato de objetos y combinar con imágenes
+            const textObjects = userMessages.map((msg) => ({
+              type: 'text',
+              text: typeof msg === 'string' ? msg : JSON.stringify(msg),
+            }))
+
+            formattedUserContent = [...gptImages, ...textObjects]
+          } else {
+            // Sin imágenes: content debe ser un string simple
+            formattedUserContent =
+              userMessages.length === 1 ? userMessages[0] : userMessages.join('\n')
+          }
+
+          // Para GPT, extraer valores de generationConfig
+          const temperature = generationConfig.temperature ?? 0.1
+          const responseFormat = generationConfig.responseType
+            ? { type: generationConfig.responseType }
+            : null
+
+          response = await this.modelsService.getGPTResponse(
+            systemPrompt,
+            formattedUserContent,
+            currentModel as any,
+            responseFormat,
+            temperature,
+            useCache && attempt === 1 // Solo usar cache en el primer intento
+          )
+        } else {
+          throw new Error(
+            `Modelo no soportado: ${currentModel}. Solo se soportan modelos Gemini y GPT.`
+          )
+        }
+
+        if (!response || typeof response !== 'object') {
+          throw new Error(`Empty/invalid LLM response`)
+        }
+
+        const result = response.result
+
+        // Validar que no sea un objeto vacío
+        const isEmptyObject =
+          result &&
+          typeof result === 'object' &&
+          !Array.isArray(result) &&
+          Object.keys(result).length === 0
+
+        if (isEmptyObject) {
+          throw new Error(`Parsed empty JSON object (likely truncated)`)
+        }
+
+        // Validar con función custom si existe
+        if (validateResult && !validateResult(result)) {
+          throw new Error(`LLM JSON did not match expected shape`)
+        }
+
+        return response
+      } catch (error) {
+        lastError = error
+
+        // Log del error
+        console.log(
+          `⚠️ [${contextLabel}] Intento ${attempt}/${maxAttempts} falló:`,
+          error?.message || error
+        )
+
+        // Si es el último intento, salir del loop
+        if (attempt >= maxAttempts) {
+          break
+        }
+
+        // Exponential backoff con jitter
+        const exp = Math.min(6, attempt)
+        const delay = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, exp - 1))
+        const jitter = Math.floor(Math.random() * 250)
+        await this.sleep(delay + jitter)
+
+        console.log(`🔄 [${contextLabel}] Reintentando en ${delay + jitter}ms...`)
+      }
+    }
+
+    // Si agotamos todos los reintentos y hay fallback configurado
+    if (fallbackResult) {
+      console.error(
+        `❌ [${contextLabel}] Todos los reintentos fallaron, usando fallback.`,
+        'Último error:',
+        lastError?.message || lastError
+      )
+      return { result: fallbackResult, cost: { totalCostInEur: 0 }, usedFallback: true }
+    }
+
+    throw lastError || new Error(`[${contextLabel}] Failed after ${maxAttempts} attempts`)
   }
 
   /**
@@ -387,8 +673,16 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       return PROMPT_PORTFOLIO_AESTHETIC_PATTERN(photosList, samplePhotos.length)
     } else {
       // Para general: se deben pasar imágenes reales al LLM
+      const photosText = samplePhotos
+        .map((photo, idx) => {
+          const filename = photo.originalFileName || photo.name || 'Unknown'
+          return `Photo ${idx + 1}: ${filename} (ID: ${photo.id})`
+        })
+        .join('\n')
+
       const { systemPrompt, userMessage } = PROMPT_PORTFOLIO_GENERAL_PATTERN_WITH_IMAGES(
-        samplePhotos.length
+        samplePhotos.length,
+        photosText
       )
       return { systemPrompt, userMessage, requiresImages: true }
     }
@@ -402,32 +696,41 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
     samplePhotos: any[],
     reviewType: ReviewType,
     existingPatterns: AccumulatedPattern[]
-  ): { systemPrompt: string; userMessage: string } {
+  ): { systemPrompt: string; userMessage: string; requiresImages?: boolean } {
     const chunkName = REVIEW_TYPE_TO_CHUNK[reviewType]
 
     // Mapear ReviewType a los tipos del prompt
-    const reviewTypeMap: Record<ReviewType, 'narrative' | 'contextual' | 'aesthetic' | 'general'> =
-      {
-        story: 'narrative',
-        context: 'contextual',
-        aesthetic: 'aesthetic',
-        visual_accents: 'aesthetic',
-        general: 'general',
-      }
+    const reviewTypeMap: Record<ReviewType, 'narrative' | 'contextual' | 'general'> = {
+      story: 'narrative',
+      context: 'contextual',
+      general: 'general',
+    }
 
     // Preparar texto de las fotos según el tipo
     let photosText: string
-    if (chunkName === 'story' || chunkName === 'context') {
+    let requiresImages = false
+
+    if (chunkName === 'general') {
+      // Para 'general' el LLM debe analizar las imágenes reales (embeddings CLIP)
+      // El texto solo sirve como índice/metadata para alinear el orden con las imágenes adjuntas.
+      requiresImages = true
+      photosText = samplePhotos
+        .map((photo, idx) => {
+          const filename = photo.originalFileName || photo.name || 'Unknown'
+          return `Photo ${idx + 1}: ${filename} (id: ${photo.id})`
+        })
+        .join('\n')
+    } else if (chunkName === 'story' || chunkName === 'context' || chunkName === 'visual_accents') {
       photosText = samplePhotos
         .map((photo, idx) => {
           const relevantChunks = photo.chunks.filter((c: any) => c.category === chunkName)
-          return `Photo ${idx + 1}:
+          return `Photo ${idx + 1} (ID: ${photo.id}):
 ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') : 'No description'}`
         })
         .join('\n\n')
     } else {
       photosText = samplePhotos
-        .map((photo, idx) => `Photo ${idx + 1}: ${photo.originalFileName}`)
+        .map((photo, idx) => `Photo ${idx + 1} (ID: ${photo.id}): ${photo.originalFileName}`)
         .join('\n')
     }
 
@@ -438,12 +741,15 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       shortDescription: p.shortDescription,
     }))
 
-    return PROMPT_PORTFOLIO_PROGRESSIVE_FUSION(
-      photosText,
-      samplePhotos.length,
-      existingPatternsSummary,
-      reviewTypeMap[reviewType]
-    )
+    return {
+      ...PROMPT_PORTFOLIO_PROGRESSIVE_FUSION(
+        photosText,
+        samplePhotos.length,
+        existingPatternsSummary,
+        reviewTypeMap[reviewType]
+      ),
+      requiresImages,
+    }
   }
 
   /**
@@ -455,11 +761,27 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
   //   provider: 'redis',
   //   key: (userId, reviewType) => `portfolioReview:${reviewType}:${userId}`,
   // })
-  public async getPatterns(
-    userId: string,
-    reviewType: ReviewType = 'general',
-    useProgressiveFusion: boolean = true
-  ) {
+  public async getPatterns(userId: string, reviewType: ReviewType = 'general') {
+    // Obtener configuración para este reviewType
+    const config = REVIEW_TYPE_CONFIG[reviewType]
+    const actualUseProgressiveFusion = config.useProgressiveFusion
+    const mainModel = config.model
+    const retryModel = config.retryModel || config.model
+
+    // Log de configuración inicial
+    console.log('\n========== INICIO PORTFOLIO REVIEW ==========')
+    console.log(`📋 ReviewType: ${reviewType}`)
+    console.log(`🤖 Modelo principal: ${mainModel}`)
+    console.log(`🔄 Modelo para retries: ${retryModel}`)
+    console.log(
+      `🔀 Modo de procesamiento: ${actualUseProgressiveFusion ? 'Fusión Progresiva' : 'Independiente'}`
+    )
+    console.log(`👤 User ID: ${userId}`)
+    console.log('=============================================\n')
+
+    // Inicializar acumulador de costos
+    let totalCostInEur = 0
+
     // FASE 1: Obtener embeddings según el tipo de review
     const { vectors, photoMapObject } = await this.getEmbeddingsByReviewType(userId, reviewType)
 
@@ -473,7 +795,12 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       }
     }
 
-    const min_cluster_size = Object.keys(photoMapObject).length * 0.008
+    // HDBSCAN es muy sensible a min_cluster_size y a cómo escala con N.
+    // Para 'general' (CLIP) suele haber MUCHAS más fotos que en story/context,
+    // y un min_cluster_size proporcional demasiado alto tiende a producir muy pocos clusters.
+    const totalItemsForClustering = vectors.length
+    const minClusterRatio = reviewType === 'general' ? 0.002 : 0.008
+    const min_cluster_size = Math.max(5, Math.floor(totalItemsForClustering * minClusterRatio))
 
     // FASE 2: Clustering en espacio de alta dimensión
     const clusterPayload = {
@@ -488,7 +815,8 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       min_samples: 3,
       dim_reduction_method: 'umap',
       umap_n_components: 15,
-      umap_n_neighbors: 30,
+      // Para CLIP suele funcionar mejor un enfoque más local para evitar mega-clusters.
+      umap_n_neighbors: reviewType === 'general' ? 15 : 30,
       umap_min_dist: 0.0,
       umap_spread: 1.0,
       umap_metric: 'cosine',
@@ -496,6 +824,22 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
 
     const clusterResult = await this.modelsService.getClusters(clusterPayload)
     const clusters = clusterResult.clusters || []
+
+    // Log de clusters encontrados
+    console.log('\n========== RESULTADO DE CLUSTERING ==========')
+    console.log(`📊 Clusters encontrados: ${clusters.length}`)
+    console.log(`📷 Total de fotos a analizar: ${vectors.length}`)
+    console.log(`⚙️  min_cluster_size: ${min_cluster_size}`)
+    console.log(`⚙️  umap_n_neighbors: ${clusterPayload.umap_n_neighbors}`)
+    if (clusters.length > 0) {
+      console.log('\nDesglose de clusters:')
+      clusters.forEach((cluster: any, idx: number) => {
+        console.log(
+          `  ${idx + 1}. Cluster ${cluster.cluster_id}: ${cluster.size} fotos (${cluster.percentage.toFixed(1)}%)`
+        )
+      })
+    }
+    console.log('=============================================\n')
 
     if (clusters.length === 0) {
       return {
@@ -530,7 +874,7 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       description: createPhotoDescription(photo),
     })
 
-    if (useProgressiveFusion) {
+    if (actualUseProgressiveFusion) {
       // ============ MODO FUSIÓN PROGRESIVA ============
       // El LLM decide si cada cluster se fusiona con uno existente o crea uno nuevo
 
@@ -539,25 +883,128 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
         const sampleSize = Math.min(15, Math.max(5, Math.floor(clusterSize * 0.1)))
 
         const samplePhotoIds = this.sampleCluster(cluster, sampleSize)
-        const samplePhotos = samplePhotoIds.map((id) => photoMapObject[id]).filter(Boolean)
+        let samplePhotos = samplePhotoIds.map((id) => photoMapObject[id]).filter(Boolean)
         const allClusterPhotoIds = cluster.photo_ids.map((id: string) => parseInt(id))
 
         // Generar prompt con contexto de patrones existentes
-        const { systemPrompt, userMessage } = this.generateProgressiveFusionPrompt(
+        const { systemPrompt, userMessage, requiresImages } = this.generateProgressiveFusionPrompt(
           samplePhotos,
           reviewType,
           accumulatedPatterns
         )
 
-        const llmResponse = await this.modelsService.getGeminiResponse(
-          systemPrompt,
-          [userMessage],
-          'gemini-2.5-flash-lite',
-          { temperature: 0.7, responseType: 'json_object' },
-          true
-        )
+        let llmResponse: any
+        let analysis: any
 
-        const analysis = llmResponse.result
+        if (requiresImages) {
+          const photoImageService = PhotoImageService.getInstance()
+
+          const photosForImages = samplePhotos.map((photo) => ({
+            id: photo.id,
+            name: photo.name,
+          }))
+
+          const validImages = await photoImageService.getValidPhotosWithImages(
+            photosForImages as any,
+            false
+          )
+
+          if (validImages.length === 0) {
+            console.warn(
+              `No se pudieron obtener imágenes para el cluster ${cluster.cluster_id}, saltando...`
+            )
+            continue
+          }
+
+          const base64ById = new Map<number, string>(
+            validImages.map(({ photo, base64 }) => [photo.id as any, base64])
+          )
+
+          // Alinear orden y recortar muestra a las imágenes realmente disponibles
+          samplePhotos = samplePhotos.filter((p) => base64ById.has(p.id))
+
+          // Regenerar prompt para reflejar photoCount real
+          const refreshed = this.generateProgressiveFusionPrompt(
+            samplePhotos,
+            reviewType,
+            accumulatedPatterns
+          )
+
+          // Preparar imágenes para el método getLLMResponseWithRetry
+          const imagesForLLM = validImages.filter(({ photo }) =>
+            samplePhotos.some((p) => p.id === photo.id)
+          )
+
+          llmResponse = await this.getLLMResponseWithRetry({
+            contextLabel: `portfolioReview.progressiveFusion.withImages.cluster_${cluster.cluster_id}`,
+            systemPrompt: refreshed.systemPrompt,
+            userMessages: [refreshed.userMessage],
+            model: mainModel,
+            retryModel: retryModel,
+            generationConfig: { temperature: 0.7, responseType: 'json_object' },
+            useCache: false, // Evitar cache con imágenes grandes
+            validateResult: (r: any) => this.isValidProgressiveFusionResult(r),
+            fallbackResult: {
+              decision: 'new',
+              title: `Pattern ${accumulatedPatterns.length + 1}`,
+              shortDescription: 'No description',
+              description: 'No description available',
+              strength: 'moderate',
+            },
+            images: imagesForLLM,
+          })
+
+          // Acumular costo
+          if (llmResponse?.cost?.totalCostInEur) {
+            totalCostInEur += llmResponse.cost.totalCostInEur
+          }
+
+          analysis = llmResponse?.result
+        } else {
+          llmResponse = await this.getLLMResponseWithRetry({
+            contextLabel: `portfolioReview.progressiveFusion.textOnly.cluster_${cluster.cluster_id}`,
+            systemPrompt,
+            userMessages: [userMessage],
+            model: mainModel,
+            retryModel: retryModel,
+            generationConfig: { temperature: 0.7, responseType: 'json_object' },
+            useCache: true,
+            validateResult: (r: any) => this.isValidProgressiveFusionResult(r),
+            fallbackResult: {
+              decision: 'new',
+              title: `Pattern ${accumulatedPatterns.length + 1}`,
+              shortDescription: 'No description',
+              description: 'No description available',
+              strength: 'moderate',
+            },
+          })
+
+          // Acumular costo
+          if (llmResponse?.cost?.totalCostInEur) {
+            totalCostInEur += llmResponse.cost.totalCostInEur
+          }
+
+          analysis = llmResponse?.result
+        }
+
+        // Normalizar salida para evitar tumbar el flujo por campos ausentes
+        if (!analysis || typeof analysis !== 'object') {
+          analysis = {
+            decision: 'new',
+            title: `Pattern ${accumulatedPatterns.length + 1}`,
+            shortDescription: 'No description',
+            description: 'No description available',
+            strength: 'moderate',
+          }
+        }
+
+        if (analysis.decision !== 'merge' && analysis.decision !== 'new') {
+          analysis.decision = 'new'
+        }
+
+        if (analysis.decision === 'merge' && !analysis.mergeWithPatternId) {
+          analysis.decision = 'new'
+        }
 
         if (analysis.decision === 'merge' && analysis.mergeWithPatternId) {
           // FUSIONAR con patrón existente
@@ -582,8 +1029,20 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
               sampleDescription: sampleDescription.slice(0, 200),
             })
 
+            // Usar las fotos representativas del LLM si están disponibles
+            let photosToConsider: any[] = samplePhotos
+            if (analysis.representativePhotoIds && Array.isArray(analysis.representativePhotoIds)) {
+              const repIds = analysis.representativePhotoIds.map((id: any) => parseInt(String(id)))
+              const representativePhotos = repIds
+                .map((id: number) => photoMapObject[id])
+                .filter(Boolean)
+              if (representativePhotos.length > 0) {
+                photosToConsider = representativePhotos
+              }
+            }
+
             const existingPhotoIds = new Set(targetPattern.allPhotoIds)
-            const newPhotosToAdd = samplePhotos
+            const newPhotosToAdd = photosToConsider
               .filter((photo) => !existingPhotoIds.has(photo.id))
               .slice(0, Math.max(0, 8 - targetPattern.samplePhotos.length))
 
@@ -598,24 +1057,34 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
               }
             }
 
-            if (targetPattern.photoCount > totalPhotos * 0.2) {
-              targetPattern.strength = 'strong'
-            } else if (targetPattern.photoCount > totalPhotos * 0.1) {
-              targetPattern.strength = 'moderate'
-            }
+            // Recalcular strength basándose en el porcentaje actualizado
+            targetPattern.strength = this.calculatePatternStrength(targetPattern.percentage)
           }
         } else {
           // CREAR nuevo patrón
+          // Usar las fotos representativas seleccionadas por el LLM
+          let representativePhotos: any[] = []
+          if (analysis.representativePhotoIds && Array.isArray(analysis.representativePhotoIds)) {
+            // Convertir IDs a números y buscar las fotos correspondientes
+            const repIds = analysis.representativePhotoIds.map((id: any) => parseInt(String(id)))
+            representativePhotos = repIds.map((id: number) => photoMapObject[id]).filter(Boolean)
+          }
+
+          // Fallback: si no hay IDs representativos o no se encontraron, usar las primeras 4
+          if (representativePhotos.length === 0) {
+            representativePhotos = samplePhotos.slice(0, 4)
+          }
+
           const newPattern: AccumulatedPattern = {
             patternId: `pattern_${accumulatedPatterns.length + 1}`,
             title: analysis.title || `Pattern ${accumulatedPatterns.length + 1}`,
             shortDescription:
               analysis.shortDescription || analysis.description?.slice(0, 150) || 'No description',
-            description: analysis.description || 'No description available',
+            description: analysis.description || 'No description available (null)',
             photoCount: clusterSize,
             percentage: cluster.percentage,
-            strength: analysis.strength || 'moderate',
-            samplePhotos: samplePhotos.slice(0, 5).map(createSamplePhoto),
+            strength: this.calculatePatternStrength(cluster.percentage),
+            samplePhotos: representativePhotos.map(createSamplePhoto),
             mergedClusterIds: [`cluster_${cluster.cluster_id}`],
             allPhotoIds: allClusterPhotoIds,
           }
@@ -633,7 +1102,7 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
           photoCount: p.photoCount,
           percentage: Math.min(100, p.percentage),
           strength: p.strength,
-          samplePhotos: p.samplePhotos.slice(0, 5),
+          samplePhotos: p.samplePhotos.slice(0, 4),
         })
       }
 
@@ -678,6 +1147,7 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
         )
 
         let llmResponse: any
+        let analysis: any
 
         if (requiresImages) {
           // Para el caso 'general', obtenemos las imágenes reales y las pasamos al LLM
@@ -702,38 +1172,76 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
             continue
           }
 
-          // Convertir al formato esperado por Gemini (inlineData)
-          const images = validImages.map(({ base64 }) => ({
-            inlineData: {
-              mimeType: 'image/png',
-              data: base64,
-            },
-          }))
-
-          // Llamar a Gemini con las imágenes reales
-          llmResponse = await this.modelsService.getGeminiResponse(
+          // Llamar al LLM con las imágenes reales (encapsuladas en getLLMResponseWithRetry)
+          llmResponse = await this.getLLMResponseWithRetry({
+            contextLabel: `portfolioReview.independent.withImages.cluster_${cluster.cluster_id}`,
             systemPrompt,
-            [...images, userMessage],
-            'gemini-2.5-flash-lite',
-            { temperature: 0.7, responseType: 'json_object' },
-            false // No usar cache para evitar problemas con imágenes grandes
-          )
+            userMessages: [userMessage],
+            model: mainModel,
+            retryModel: retryModel,
+            generationConfig: { temperature: 0.7, responseType: 'json_object' },
+            useCache: false, // No usar cache para evitar problemas con imágenes grandes
+            validateResult: (r: any) => this.isValidIndependentPatternResult(r),
+            fallbackResult: {
+              title: `Pattern ${cluster.cluster_id + 1}`,
+              description: 'No description available',
+              strength: 'moderate',
+            },
+            images: validImages,
+          })
 
-          // Limpiar las imágenes de memoria
-          images.forEach((img) => (img.inlineData.data = ''))
-          images.length = 0
+          // Acumular costo
+          if (llmResponse?.cost?.totalCostInEur) {
+            totalCostInEur += llmResponse.cost.totalCostInEur
+          }
+
+          analysis = llmResponse?.result
         } else {
           // Para otros tipos, usar solo texto
-          llmResponse = await this.modelsService.getGeminiResponse(
+          llmResponse = await this.getLLMResponseWithRetry({
+            contextLabel: `portfolioReview.independent.textOnly.cluster_${cluster.cluster_id}`,
             systemPrompt,
-            [userMessage],
-            'gemini-2.5-flash-lite',
-            { temperature: 0.7, responseType: 'json_object' },
-            true
-          )
+            userMessages: [userMessage],
+            model: mainModel,
+            retryModel: retryModel,
+            generationConfig: { temperature: 0.7, responseType: 'json_object' },
+            useCache: true,
+            validateResult: (r: any) => this.isValidIndependentPatternResult(r),
+            fallbackResult: {
+              title: `Pattern ${cluster.cluster_id + 1}`,
+              description: 'No description available',
+              strength: 'moderate',
+            },
+          })
+
+          // Acumular costo
+          if (llmResponse?.cost?.totalCostInEur) {
+            totalCostInEur += llmResponse.cost.totalCostInEur
+          }
+
+          analysis = llmResponse?.result
         }
 
-        const analysis = llmResponse.result
+        if (!analysis || typeof analysis !== 'object') {
+          analysis = {
+            title: `Pattern ${cluster.cluster_id + 1}`,
+            description: 'No description available',
+            strength: 'moderate',
+          }
+        }
+
+        // Usar las fotos representativas seleccionadas por el LLM
+        let representativePhotos: any[] = []
+        if (analysis.representativePhotoIds && Array.isArray(analysis.representativePhotoIds)) {
+          // Convertir IDs a números y buscar las fotos correspondientes
+          const repIds = analysis.representativePhotoIds.map((id: any) => parseInt(String(id)))
+          representativePhotos = repIds.map((id: number) => photoMapObject[id]).filter(Boolean)
+        }
+
+        // Fallback: si no hay IDs representativos o no se encontraron, usar las primeras 4
+        if (representativePhotos.length === 0) {
+          representativePhotos = samplePhotos.slice(0, 4)
+        }
 
         const pattern: ClusterPattern = {
           patternId: `cluster_${cluster.cluster_id}`,
@@ -741,8 +1249,8 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
           description: analysis.description || 'No description available',
           photoCount: clusterSize,
           percentage: cluster.percentage,
-          strength: analysis.strength || 'moderate',
-          samplePhotos: samplePhotos.slice(0, 5).map(createSamplePhoto),
+          strength: this.calculatePatternStrength(cluster.percentage),
+          samplePhotos: representativePhotos.map(createSamplePhoto),
         }
 
         patterns.push(pattern)
@@ -758,9 +1266,12 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
         totalPhotos,
         clustersFound: clusters.length,
         patternsIdentified: patterns.length,
-        clustersMerged: useProgressiveFusion ? clusters.length - patterns.length : 0,
+        clustersMerged: actualUseProgressiveFusion ? clusters.length - patterns.length : 0,
         reviewType,
-        fusionMode: useProgressiveFusion ? 'progressive' : 'independent',
+        fusionMode: actualUseProgressiveFusion ? 'progressive' : 'independent',
+      },
+      cost: {
+        totalCostInEur,
       },
     }
   }

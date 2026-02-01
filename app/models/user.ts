@@ -58,6 +58,9 @@ export default class User extends compose(BaseModel, AuthFinder) {
   @column()
   declare avatar: string | null
 
+  @column()
+  declare catalogPatterns: Record<string, any> | null
+
   // Email confirmation fields
   @column.dateTime()
   declare emailConfirmedAt: DateTime | null
