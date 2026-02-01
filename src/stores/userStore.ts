@@ -1,6 +1,6 @@
 import { ref, computed } from "vue";
 import { defineStore } from "pinia";
-import { api } from "../utils/axios";
+import { api, api_analyzer } from "../utils/axios";
 
 interface Usage {
   creditsUsed: number;
@@ -463,7 +463,9 @@ export const useUserStore = defineStore("user", () => {
     }
 
     try {
-      const response = await api.get("/api/portfolio-review/should-build");
+      const response = await api_analyzer.get(
+        "/api/portfolio-review/should-build",
+      );
       const { action } = response.data;
 
       console.log("Portfolio review action:", action);

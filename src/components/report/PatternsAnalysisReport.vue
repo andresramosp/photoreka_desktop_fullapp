@@ -229,7 +229,7 @@ const sectionConfig = {
     color: colors.purple[600],
   },
   general: {
-    title: "General Patterns",
+    title: "Stylistic Patterns",
     subtitle:
       "General photographic patterns and technical characteristics across your collection",
     color: colors.green[600],
