@@ -151,7 +151,11 @@
 
             <div class="pattern-meta">
               <span class="pattern-strength" :class="pattern.strength">
-                {{ pattern.strength }} pattern
+                <n-icon
+                  :size="14"
+                  :component="getStrengthIcon(pattern.strength)"
+                />
+                {{ getStrengthLabel(pattern.strength) }} pattern
               </span>
             </div>
           </div>
@@ -195,6 +199,9 @@ import {
   BookmarkOutline as BookmarkIcon,
   ColorPaletteOutline as PaletteIcon,
   InformationCircleOutline as InformationCircleIcon,
+  Star as StarIcon,
+  EllipseOutline as EllipseIcon,
+  TrendingUpOutline as TrendingUpIcon,
 } from "@vicons/ionicons5";
 
 defineOptions({
@@ -427,6 +434,25 @@ const startDrag = (e, key) => {
 
   document.addEventListener("mousemove", onMouseMove);
   document.addEventListener("mouseup", onMouseUp);
+};
+
+// Translate strength labels
+const getStrengthLabel = (strength) => {
+  const labels = {
+    strong: "Strong",
+    moderate: "Moderate",
+    weak: "Emerging",
+  };
+  return labels[strength] || strength;
+};
+
+const getStrengthIcon = (strength) => {
+  const icons = {
+    strong: StarIcon,
+    moderate: EllipseIcon,
+    weak: TrendingUpIcon,
+  };
+  return icons[strength] || null;
 };
 
 // Handler for photo info
@@ -753,21 +779,23 @@ onMounted(() => {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
   text-transform: uppercase;
+  display: inline-flex;
+  gap: var(--spacing-xs);
 }
 
 .pattern-strength.strong {
+  background-color: var(--accent-color-light, var(--accent-color-100));
+  color: var(--accent-color);
+}
+
+.pattern-strength.moderate {
   background-color: var(--primary-color-light);
   color: var(--primary-color);
 }
 
-.pattern-strength.moderate {
+.pattern-strength.weak {
   background-color: var(--warning-color-light);
   color: var(--warning-color);
-}
-
-.pattern-strength.weak {
-  background-color: var(--error-color-light);
-  color: var(--error-color);
 }
 
 .example-photos {
