@@ -235,17 +235,23 @@ const sectionConfig = {
       "Contextual themes and regional patterns detected across your photography collection",
     color: colors.purple[600],
   },
-  general_stylistic: {
-    title: "Stylistic Patterns",
+  general: {
+    title: "Overall Patterns",
     subtitle:
-      "General photographic patterns and technical characteristics across your collection",
+      "Visual, stylistic, and recurring object patterns identified across your collection.",
     color: colors.orange ? colors.orange[600] : "#fb923c", // Orange for style
   },
-  general_object: {
-    title: "Other Patterns",
-    subtitle: "Additional photographic patterns identified in your collection",
-    color: colors.green[600],
-  },
+  // general_stylistic: {
+  //   title: "Stylistic Patterns",
+  //   subtitle:
+  //     "General photographic patterns and technical characteristics across your collection",
+  //   color: colors.orange ? colors.orange[600] : "#fb923c", // Orange for style
+  // },
+  // general_object: {
+  //   title: "Other Patterns",
+  //   subtitle: "Additional photographic patterns identified in your collection",
+  //   color: colors.green[600],
+  // },
 };
 
 const catalogPatterns = computed(() => {
