@@ -6,7 +6,7 @@ import Photo from '#models/photo'
 
 const REVIEW_TYPES: ReviewType[] = ['general', 'context', 'story']
 const BUILD_THRESHOLD_PHOTOS = 200
-const REBUILD_THRESHOLD_CHANGES = 1 // Número absoluto de fotos añadidas/borradas para rebuild
+const REBUILD_THRESHOLD_CHANGES = 200 // Número absoluto de fotos añadidas/borradas para rebuild
 const BUILD_TIMEOUT_MS = 60 * 60 * 1000 // 60 minutos - tiempo máximo esperado para un build
 
 /**

@@ -261,7 +261,7 @@ export const PROMPT_PORTFOLIO_PROGRESSIVE_FUSION = (
   reviewType: 'narrative' | 'contextual' | 'visual_accents' | 'general'
 ) => {
   if (reviewType === 'general') {
-    return PROMPT_PORTFOLIO_PROGRESSIVE_FUSION_GENERAL(photosText, photoCount, existingPatterns)
+    return PROMPT_PORTFOLIO_GENERAL_PATTERN_WITH_IMAGES(photoCount, photosText, existingPatterns)
   }
 
   return PROMPT_PORTFOLIO_PROGRESSIVE_FUSION_THEMATIC(
