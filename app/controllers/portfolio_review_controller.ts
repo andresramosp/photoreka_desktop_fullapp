@@ -4,9 +4,9 @@ import type { ReviewType } from '../managers/portfolio_review_manager.js'
 import User from '#models/user'
 import Photo from '#models/photo'
 
-const REVIEW_TYPES: ReviewType[] = ['general', 'story', 'context']
+const REVIEW_TYPES: ReviewType[] = ['general', 'context', 'story']
 const BUILD_THRESHOLD_PHOTOS = 200
-const REBUILD_THRESHOLD_CHANGES = 200 // Número absoluto de fotos añadidas/borradas para rebuild
+const REBUILD_THRESHOLD_CHANGES = 1 // Número absoluto de fotos añadidas/borradas para rebuild
 const BUILD_TIMEOUT_MS = 60 * 60 * 1000 // 60 minutos - tiempo máximo esperado para un build
 
 /**
@@ -51,10 +51,21 @@ export default class PortfolioReviewController {
       const catalogPatterns: Record<string, any> = {}
       let totalCostInEur = 0
 
+      // Obtener patrones previos del usuario para rebuild incremental
+      const existingCatalogPatterns = (userModelStart.catalogPatterns as any) || {}
+
       // Procesar cada reviewType secuencialmente
       for (const reviewType of REVIEW_TYPES) {
         console.log(`Procesando patterns para reviewType: ${reviewType}`)
-        const result = await portfolioReviewManager.getPatterns(userId, reviewType)
+
+        // Obtener patrones previos para este reviewType (si existen)
+        const previousPatterns = existingCatalogPatterns[reviewType] || []
+
+        const result = await portfolioReviewManager.getPatterns(
+          userId,
+          reviewType,
+          previousPatterns
+        )
         catalogPatterns[reviewType] = result
 
         // Acumular costo
@@ -78,6 +89,7 @@ export default class PortfolioReviewController {
           buildDate: new Date().toISOString(),
           photosCount: photoIds.length,
           photoIds: photoIds,
+          totalCostInEur: parseFloat(totalCostInEur.toFixed(6)),
           // buildStartedAt se omite al completar exitosamente
         },
         ...filteredCatalogPatterns,
@@ -241,6 +253,51 @@ export default class PortfolioReviewController {
       console.error('Error en shouldBuild:', error)
       return response.internalServerError({
         message: 'Error evaluando necesidad de build',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
+   * Obtiene los patrones identificados en el portfolio del usuario
+   * GET /portfolio-review/:reviewType
+   */
+  public async getPatterns({ params, response, auth }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as any
+      const userId = user.id.toString()
+
+      const reviewType = (params.reviewType || 'general') as ReviewType
+      const portfolioReviewManager = new PortfolioReviewManager()
+      const result = await portfolioReviewManager.getPatterns(userId, reviewType)
+
+      return response.ok(result)
+    } catch (error) {
+      console.error('Error en getPatterns:', error)
+      return response.internalServerError({
+        message: 'Error analizando patrones del portfolio',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
+   * Endpoint público para obtener patrones por userId
+   * GET /portfolio-review/:reviewType/user/:userId
+   */
+  public async getPatternsByUserId({ params, response }: HttpContext) {
+    try {
+      const { userId, reviewType } = params
+      const reviewTypeParam = (reviewType || 'general') as ReviewType
+      const portfolioReviewManager = new PortfolioReviewManager()
+      const result = await portfolioReviewManager.getPatterns(userId, reviewTypeParam)
+
+      return response.ok(result)
+    } catch (error) {
+      console.error('Error en getPatternsByUserId:', error)
+      return response.internalServerError({
+        message: 'Error analizando patrones del portfolio',
         error: error.message,
       })
     }

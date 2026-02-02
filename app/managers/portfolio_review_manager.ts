@@ -48,6 +48,7 @@ const REVIEW_TYPE_TO_CHUNK: Record<ReviewType, string> = {
 
 interface ClusterPattern {
   patternId: string
+  patternType: 'stylistic' | 'object_motif' | 'NA'
   title: string
   description: string
   photoCount: number
@@ -754,14 +755,16 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
 
   /**
    * Método principal: Obtiene patrones del portfolio según el tipo de review
-   * @param useProgressiveFusion - Si true, usa fusión progresiva con LLM. Si false, genera patrones independientes.
+   * @param userId - ID del usuario
+   * @param reviewType - Tipo de review (general, story, context)
+   * @param previousPatterns - Patrones previos del usuario para rebuild incremental (opcional)
    */
-  // @withCache({
-  //   ttl: 60 * 60 * 2, // Cache por 2 horas
-  //   provider: 'redis',
-  //   key: (userId, reviewType) => `portfolioReview:${reviewType}:${userId}`,
-  // })
-  public async getPatterns(userId: string, reviewType: ReviewType = 'general') {
+
+  public async getPatterns(
+    userId: string,
+    reviewType: ReviewType = 'general',
+    previousPatterns: ClusterPattern[] = []
+  ) {
     // Obtener configuración para este reviewType
     const config = REVIEW_TYPE_CONFIG[reviewType]
     const actualUseProgressiveFusion = config.useProgressiveFusion
@@ -812,11 +815,11 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       method: 'hdbscan',
       max_clusters: 20,
       min_cluster_size,
-      min_samples: 3,
+      min_samples: reviewType === 'general' ? 5 : 3,
       dim_reduction_method: 'umap',
       umap_n_components: 15,
       // Para CLIP suele funcionar mejor un enfoque más local para evitar mega-clusters.
-      umap_n_neighbors: reviewType === 'general' ? 15 : 30,
+      umap_n_neighbors: reviewType === 'general' ? 5 : 30,
       umap_min_dist: 0.0,
       umap_spread: 1.0,
       umap_metric: 'cosine',
@@ -842,17 +845,40 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
     console.log('=============================================\n')
 
     if (clusters.length === 0) {
+      // Si no hay clusters pero hay patrones previos, devolverlos vacíos (todos eliminados)
       return {
         patterns: [],
         metadata: {
           totalPhotos: vectors.length,
+          clustersFound: 0,
+          patternsIdentified: 0,
+          previousPatternsCount: previousPatterns.length,
           message: 'No se encontraron patrones significativos en el portfolio',
         },
       }
     }
 
+    // Log de patrones previos
+    if (previousPatterns.length > 0) {
+      console.log('\n========== PATRONES PREVIOS PARA REBUILD ==========')
+      console.log(`📋 Patrones previos encontrados: ${previousPatterns.length}`)
+      for (const p of previousPatterns) {
+        console.log(`   - [${p.patternId}] "${p.title}" (${p.photoCount} fotos)`)
+      }
+      console.log('===================================================\n')
+    }
+
     // FASE 3 & 4: Análisis de clusters con LLM
-    const accumulatedPatterns: AccumulatedPattern[] = []
+    // Inicializar accumulatedPatterns con los patrones previos (si existen)
+    const accumulatedPatterns: AccumulatedPattern[] = previousPatterns.map((p) => ({
+      ...p,
+      shortDescription: p.description.slice(0, 150),
+      mergedClusterIds: [],
+      allPhotoIds: p.samplePhotos.map((sp) => sp.id),
+      // Reset counters - se recalcularán con los nuevos clusters
+      photoCount: 0,
+      percentage: 0,
+    }))
     const patterns: ClusterPattern[] = []
     const totalPhotos = vectors.length
     const chunkName = REVIEW_TYPE_TO_CHUNK[reviewType]
@@ -1077,6 +1103,7 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
 
           const newPattern: AccumulatedPattern = {
             patternId: `pattern_${accumulatedPatterns.length + 1}`,
+            patternType: analysis.patternType || 'NA',
             title: analysis.title || `Pattern ${accumulatedPatterns.length + 1}`,
             shortDescription:
               analysis.shortDescription || analysis.description?.slice(0, 150) || 'No description',
@@ -1093,10 +1120,17 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
         }
       }
 
-      // Convertir AccumulatedPattern a ClusterPattern
+      // Convertir AccumulatedPattern a ClusterPattern (filtrar patrones con 0 fotos)
       for (const p of accumulatedPatterns) {
+        // Filtrar patrones que quedaron vacíos (no recibieron ningún merge)
+        if (p.photoCount === 0) {
+          console.log(`⚠️ Patrón "${p.title}" eliminado por tener 0 fotos después del rebuild`)
+          continue
+        }
+
         patterns.push({
           patternId: p.patternId,
+          patternType: p.patternType || 'NA',
           title: p.title,
           description: p.description,
           photoCount: p.photoCount,
@@ -1130,130 +1164,325 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       }
       console.log('\n===================================================\n')
     } else {
-      // ============ MODO INDEPENDIENTE (sin fusión) ============
-      // Cada cluster genera su propio patrón independiente
+      // ============ MODO INDEPENDIENTE (con soporte para patrones previos en rebuild) ============
+      // Cada cluster puede: 1) mergearse a un patrón previo, o 2) crear uno nuevo
+      // NO permite merge entre clusters nuevos del mismo batch
+
+      // Convertir patrones previos a estructura para el prompt
+      const previousPatternsForPrompt = accumulatedPatterns.map((p) => ({
+        patternId: p.patternId,
+        title: p.title,
+        shortDescription: p.shortDescription,
+      }))
+
+      const hasPreviousPatterns = previousPatternsForPrompt.length > 0
 
       for (const cluster of clusters) {
         const clusterSize = cluster.size
         const sampleSize = Math.min(15, Math.max(5, Math.floor(clusterSize * 0.1)))
 
         const samplePhotoIds = this.sampleCluster(cluster, sampleSize)
-        const samplePhotos = samplePhotoIds.map((id) => photoMapObject[id]).filter(Boolean)
-
-        // Generar prompt sin contexto de patrones previos
-        const { systemPrompt, userMessage, requiresImages } = this.generateClusterPrompt(
-          samplePhotos,
-          reviewType
-        )
+        let samplePhotos = samplePhotoIds.map((id) => photoMapObject[id]).filter(Boolean)
+        const allClusterPhotoIds = cluster.photo_ids.map((id: string) => parseInt(id))
 
         let llmResponse: any
         let analysis: any
 
-        if (requiresImages) {
-          // Para el caso 'general', obtenemos las imágenes reales y las pasamos al LLM
-          const photoImageService = PhotoImageService.getInstance()
+        // Decidir qué prompt usar según si hay patrones previos
+        if (hasPreviousPatterns) {
+          // REBUILD: Usar prompt que permite merge a previos o crear nuevo
+          const photosText = samplePhotos
+            .map((photo, idx) => `Photo ${idx + 1} (ID: ${photo.id}): ${photo.originalFileName}`)
+            .join('\n')
 
-          // Crear objetos Photo-like para el servicio de imágenes
-          const photosForImages = samplePhotos.map((photo) => ({
-            id: photo.id,
-            name: photo.name,
-          }))
-
-          // Obtener imágenes válidas de R2
-          const validImages = await photoImageService.getValidPhotosWithImages(
-            photosForImages as any,
-            false
+          const { systemPrompt, userMessage } = PROMPT_PORTFOLIO_GENERAL_PATTERN_WITH_IMAGES(
+            samplePhotos.length,
+            photosText,
+            previousPatternsForPrompt
           )
 
-          if (validImages.length === 0) {
-            console.warn(
-              `No se pudieron obtener imágenes para el cluster ${cluster.cluster_id}, saltando...`
+          // Para 'general' necesitamos imágenes
+          if (chunkName === 'general') {
+            const photoImageService = PhotoImageService.getInstance()
+            const photosForImages = samplePhotos.map((photo) => ({
+              id: photo.id,
+              name: photo.name,
+            }))
+
+            const validImages = await photoImageService.getValidPhotosWithImages(
+              photosForImages as any,
+              false
             )
-            continue
+
+            if (validImages.length === 0) {
+              console.warn(
+                `No se pudieron obtener imágenes para el cluster ${cluster.cluster_id}, saltando...`
+              )
+              continue
+            }
+
+            // Filtrar samplePhotos a las imágenes disponibles
+            const base64ById = new Map<number, string>(
+              validImages.map(({ photo, base64 }) => [photo.id as any, base64])
+            )
+            samplePhotos = samplePhotos.filter((p) => base64ById.has(p.id))
+
+            // Regenerar prompt con el conteo correcto
+            const refreshedPhotosText = samplePhotos
+              .map((photo, idx) => `Photo ${idx + 1} (ID: ${photo.id}): ${photo.originalFileName}`)
+              .join('\n')
+            const refreshed = PROMPT_PORTFOLIO_GENERAL_PATTERN_WITH_IMAGES(
+              samplePhotos.length,
+              refreshedPhotosText,
+              previousPatternsForPrompt
+            )
+
+            const imagesForLLM = validImages.filter(({ photo }) =>
+              samplePhotos.some((p) => p.id === photo.id)
+            )
+
+            llmResponse = await this.getLLMResponseWithRetry({
+              contextLabel: `portfolioReview.independentRebuild.withImages.cluster_${cluster.cluster_id}`,
+              systemPrompt: refreshed.systemPrompt,
+              userMessages: [refreshed.userMessage],
+              model: mainModel,
+              retryModel: retryModel,
+              generationConfig: { temperature: 0.7, responseType: 'json_object' },
+              useCache: false,
+              validateResult: (r: any) => this.isValidProgressiveFusionResult(r), // Mismo validador que fusión
+              fallbackResult: {
+                decision: 'new',
+                title: `Pattern ${patterns.length + accumulatedPatterns.length + 1}`,
+                description: 'No description available',
+                patternType: 'NA',
+              },
+              images: imagesForLLM,
+            })
+          } else {
+            llmResponse = await this.getLLMResponseWithRetry({
+              contextLabel: `portfolioReview.independentRebuild.textOnly.cluster_${cluster.cluster_id}`,
+              systemPrompt,
+              userMessages: [userMessage],
+              model: mainModel,
+              retryModel: retryModel,
+              generationConfig: { temperature: 0.7, responseType: 'json_object' },
+              useCache: true,
+              validateResult: (r: any) => this.isValidProgressiveFusionResult(r),
+              fallbackResult: {
+                decision: 'new',
+                title: `Pattern ${patterns.length + accumulatedPatterns.length + 1}`,
+                description: 'No description available',
+                patternType: 'NA',
+              },
+            })
           }
 
-          // Llamar al LLM con las imágenes reales (encapsuladas en getLLMResponseWithRetry)
-          llmResponse = await this.getLLMResponseWithRetry({
-            contextLabel: `portfolioReview.independent.withImages.cluster_${cluster.cluster_id}`,
-            systemPrompt,
-            userMessages: [userMessage],
-            model: mainModel,
-            retryModel: retryModel,
-            generationConfig: { temperature: 0.7, responseType: 'json_object' },
-            useCache: false, // No usar cache para evitar problemas con imágenes grandes
-            validateResult: (r: any) => this.isValidIndependentPatternResult(r),
-            fallbackResult: {
-              title: `Pattern ${cluster.cluster_id + 1}`,
-              description: 'No description available',
-              strength: 'moderate',
-            },
-            images: validImages,
-          })
-
-          // Acumular costo
           if (llmResponse?.cost?.totalCostInEur) {
             totalCostInEur += llmResponse.cost.totalCostInEur
           }
 
           analysis = llmResponse?.result
+
+          // Normalizar respuesta
+          if (!analysis || typeof analysis !== 'object') {
+            analysis = {
+              decision: 'new',
+              title: `Pattern ${patterns.length + accumulatedPatterns.length + 1}`,
+              description: 'No description available',
+              patternType: 'NA',
+            }
+          }
+
+          // Procesar decisión
+          if (analysis.decision === 'merge' && analysis.mergeWithPatternId) {
+            // MERGE con patrón previo
+            const targetPattern = accumulatedPatterns.find(
+              (p) => p.patternId === analysis.mergeWithPatternId
+            )
+
+            if (targetPattern) {
+              targetPattern.photoCount += clusterSize
+              targetPattern.percentage += cluster.percentage
+              targetPattern.mergedClusterIds.push(`cluster_${cluster.cluster_id}`)
+
+              // Usar las fotos representativas del LLM si están disponibles
+              let photosToConsider: any[] = samplePhotos
+              if (
+                analysis.representativePhotoIds &&
+                Array.isArray(analysis.representativePhotoIds)
+              ) {
+                const repIds = analysis.representativePhotoIds.map((id: any) =>
+                  parseInt(String(id))
+                )
+                const representativePhotos = repIds
+                  .map((id: number) => photoMapObject[id])
+                  .filter(Boolean)
+                if (representativePhotos.length > 0) {
+                  photosToConsider = representativePhotos
+                }
+              }
+
+              const existingPhotoIds = new Set(targetPattern.allPhotoIds)
+              const newPhotosToAdd = photosToConsider
+                .filter((photo) => !existingPhotoIds.has(photo.id))
+                .slice(0, Math.max(0, 8 - targetPattern.samplePhotos.length))
+
+              for (const photo of newPhotosToAdd) {
+                targetPattern.samplePhotos.push(createSamplePhoto(photo))
+                targetPattern.allPhotoIds.push(photo.id)
+              }
+
+              for (const photoId of allClusterPhotoIds) {
+                if (!existingPhotoIds.has(photoId)) {
+                  targetPattern.allPhotoIds.push(photoId)
+                }
+              }
+
+              targetPattern.strength = this.calculatePatternStrength(targetPattern.percentage)
+              console.log(
+                `🔗 Cluster ${cluster.cluster_id} mergeado a patrón previo "${targetPattern.title}"`
+              )
+              continue // No crear nuevo patrón
+            }
+          }
+
+          // CREATE NEW pattern (si no hubo merge o si el merge falló)
+          let representativePhotos: any[] = []
+          if (analysis.representativePhotoIds && Array.isArray(analysis.representativePhotoIds)) {
+            const repIds = analysis.representativePhotoIds.map((id: any) => parseInt(String(id)))
+            representativePhotos = repIds.map((id: number) => photoMapObject[id]).filter(Boolean)
+          }
+          if (representativePhotos.length === 0) {
+            representativePhotos = samplePhotos.slice(0, 4)
+          }
+
+          const pattern: ClusterPattern = {
+            patternId: `pattern_new_${patterns.length + 1}`,
+            patternType: analysis.patternType || 'NA',
+            title: analysis.title || `Pattern ${patterns.length + 1}`,
+            description: analysis.description || 'No description available',
+            photoCount: clusterSize,
+            percentage: cluster.percentage,
+            strength: this.calculatePatternStrength(cluster.percentage),
+            samplePhotos: representativePhotos.map(createSamplePhoto),
+          }
+
+          patterns.push(pattern)
+          console.log(`✨ Nuevo patrón creado: "${pattern.title}"`)
         } else {
-          // Para otros tipos, usar solo texto
-          llmResponse = await this.getLLMResponseWithRetry({
-            contextLabel: `portfolioReview.independent.textOnly.cluster_${cluster.cluster_id}`,
-            systemPrompt,
-            userMessages: [userMessage],
-            model: mainModel,
-            retryModel: retryModel,
-            generationConfig: { temperature: 0.7, responseType: 'json_object' },
-            useCache: true,
-            validateResult: (r: any) => this.isValidIndependentPatternResult(r),
-            fallbackResult: {
-              title: `Pattern ${cluster.cluster_id + 1}`,
-              description: 'No description available',
-              strength: 'moderate',
-            },
-          })
+          // PRIMER BUILD: Usar prompt original sin patrones previos
+          const { systemPrompt, userMessage, requiresImages } = this.generateClusterPrompt(
+            samplePhotos,
+            reviewType
+          )
 
-          // Acumular costo
+          if (requiresImages) {
+            const photoImageService = PhotoImageService.getInstance()
+            const photosForImages = samplePhotos.map((photo) => ({
+              id: photo.id,
+              name: photo.name,
+            }))
+
+            const validImages = await photoImageService.getValidPhotosWithImages(
+              photosForImages as any,
+              false
+            )
+
+            if (validImages.length === 0) {
+              console.warn(
+                `No se pudieron obtener imágenes para el cluster ${cluster.cluster_id}, saltando...`
+              )
+              continue
+            }
+
+            llmResponse = await this.getLLMResponseWithRetry({
+              contextLabel: `portfolioReview.independent.withImages.cluster_${cluster.cluster_id}`,
+              systemPrompt,
+              userMessages: [userMessage],
+              model: mainModel,
+              retryModel: retryModel,
+              generationConfig: { temperature: 0.7, responseType: 'json_object' },
+              useCache: false,
+              validateResult: (r: any) => this.isValidIndependentPatternResult(r),
+              fallbackResult: {
+                title: `Pattern ${cluster.cluster_id + 1}`,
+                description: 'No description available',
+                strength: 'moderate',
+              },
+              images: validImages,
+            })
+          } else {
+            llmResponse = await this.getLLMResponseWithRetry({
+              contextLabel: `portfolioReview.independent.textOnly.cluster_${cluster.cluster_id}`,
+              systemPrompt,
+              userMessages: [userMessage],
+              model: mainModel,
+              retryModel: retryModel,
+              generationConfig: { temperature: 0.7, responseType: 'json_object' },
+              useCache: true,
+              validateResult: (r: any) => this.isValidIndependentPatternResult(r),
+              fallbackResult: {
+                title: `Pattern ${cluster.cluster_id + 1}`,
+                description: 'No description available',
+                strength: 'moderate',
+              },
+            })
+          }
+
           if (llmResponse?.cost?.totalCostInEur) {
             totalCostInEur += llmResponse.cost.totalCostInEur
           }
 
           analysis = llmResponse?.result
-        }
 
-        if (!analysis || typeof analysis !== 'object') {
-          analysis = {
-            title: `Pattern ${cluster.cluster_id + 1}`,
-            description: 'No description available',
-            strength: 'moderate',
+          if (!analysis || typeof analysis !== 'object') {
+            analysis = {
+              title: `Pattern ${cluster.cluster_id + 1}`,
+              description: 'No description available',
+              strength: 'moderate',
+            }
           }
-        }
 
-        // Usar las fotos representativas seleccionadas por el LLM
-        let representativePhotos: any[] = []
-        if (analysis.representativePhotoIds && Array.isArray(analysis.representativePhotoIds)) {
-          // Convertir IDs a números y buscar las fotos correspondientes
-          const repIds = analysis.representativePhotoIds.map((id: any) => parseInt(String(id)))
-          representativePhotos = repIds.map((id: number) => photoMapObject[id]).filter(Boolean)
-        }
+          let representativePhotos: any[] = []
+          if (analysis.representativePhotoIds && Array.isArray(analysis.representativePhotoIds)) {
+            const repIds = analysis.representativePhotoIds.map((id: any) => parseInt(String(id)))
+            representativePhotos = repIds.map((id: number) => photoMapObject[id]).filter(Boolean)
+          }
+          if (representativePhotos.length === 0) {
+            representativePhotos = samplePhotos.slice(0, 4)
+          }
 
-        // Fallback: si no hay IDs representativos o no se encontraron, usar las primeras 4
-        if (representativePhotos.length === 0) {
-          representativePhotos = samplePhotos.slice(0, 4)
-        }
+          const pattern: ClusterPattern = {
+            patternId: `cluster_${cluster.cluster_id}`,
+            patternType: analysis.patternType || 'NA',
+            title: analysis.title || `Pattern ${cluster.cluster_id + 1}`,
+            description: analysis.description || 'No description available',
+            photoCount: clusterSize,
+            percentage: cluster.percentage,
+            strength: this.calculatePatternStrength(cluster.percentage),
+            samplePhotos: representativePhotos.map(createSamplePhoto),
+          }
 
-        const pattern: ClusterPattern = {
-          patternId: `cluster_${cluster.cluster_id}`,
-          title: analysis.title || `Pattern ${cluster.cluster_id + 1}`,
-          description: analysis.description || 'No description available',
-          photoCount: clusterSize,
-          percentage: cluster.percentage,
-          strength: this.calculatePatternStrength(cluster.percentage),
-          samplePhotos: representativePhotos.map(createSamplePhoto),
+          patterns.push(pattern)
         }
+      }
 
-        patterns.push(pattern)
+      // Agregar patrones previos que recibieron merges (con photoCount > 0)
+      for (const p of accumulatedPatterns) {
+        if (p.photoCount > 0) {
+          patterns.push({
+            patternId: p.patternId,
+            patternType: p.patternType || 'NA',
+            title: p.title,
+            description: p.description,
+            photoCount: p.photoCount,
+            percentage: Math.min(100, p.percentage),
+            strength: p.strength,
+            samplePhotos: p.samplePhotos.slice(0, 4),
+          })
+        } else {
+          console.log(`⚠️ Patrón previo "${p.title}" eliminado por no recibir ningún merge`)
+        }
       }
     }
 

@@ -73,55 +73,6 @@ Note: These photos have been clustered based on their visual embeddings, indicat
 })
 
 // Prompt for general pattern analysis with actual images
-export const PROMPT_PORTFOLIO_GENERAL_PATTERN_WITH_IMAGES = (
-  photoCount: number,
-  photosText: string
-) => ({
-  systemPrompt: `You are analyzing a stylistic pattern in a photography portfolio.
-
-You will be shown ${photoCount} photos from a cluster that have been grouped together based on their visual similarity (using CLIP embeddings).
-
-CRITICAL RULES (STYLE-ONLY):
-- Analyze ONLY stylistic elements you can SEE: composition, geometry, lighting, color palette, depth of field, grain, motion blur, flash usage, framing, perspective, type of shot.
-- DO NOT mention or infer subject matter, identity, culture, ethnicity, location, event, profession, story, or context.
-- DO NOT use proper nouns (no place names, people names, group names, brands).
-- DO NOT rely on filenames or IDs (they are only for indexing).
-
-TITLE RULES (2-4 words, style-only):
-- Use style descriptors + photographic terms (e.g., "Soft Backlight Portraits", "Hard Flash Street", "Muted Pastels", "High Contrast Silhouettes").
-- Forbidden: subject labels (e.g., "Masai Life", "Wedding", "Street Vendors"), narrative framing, cultural references, locations.
-
-Generate a concise analysis with:
-
-1. **Pattern Title**: A catchy 2-4 word name that captures the stylistic essence using ONLY style descriptors
-2. **Description**: 2-3 sentences explaining what stylistic elements, lighting, compositional approaches, aesthetic qualities, or photographic styles these photos share. Do not mention themes, subjects, or narrative content.
-3. **Strength Assessment**: Rate this pattern as "strong", "moderate", or "weak" based on:
-   - Strong: Very cohesive, clear and consistent stylistic elements
-   - Moderate: Present but with some variation
-   - Weak: Subtle connections, emerging stylistic pattern
-4. **Representative Photos**: Select the 4 most representative photo IDs from this cluster
-
-SELF-CHECK BEFORE YOU ANSWER:
-- If your draft contains ANY subject/context words, rewrite to remove them.
-- Ensure the title contains NO subject nouns and NO proper nouns.
-
-Return ONLY valid JSON (no markdown, no commentary) in this exact format:
-{
-  "title": "Pattern Title",
-  "description": "Clear description of the stylistic pattern shared by these photos",
-  "strength": "strong|moderate|weak",
-  "representativePhotoIds": ["id1", "id2", "id3", "id4"]
-}
-
-Return only valid JSON. Do not include explanations, markdown, or extra text.`,
-  userMessage: `Analyze the ${photoCount} photos shown above and identify the stylistic pattern they share.
-
-${photosText}
-
-Note: Each photo entry includes its ID. Use these IDs when selecting the 4 most representative photos.
-
-Focus only on lighting, aesthetic, composition, type of shot, and style. Ignore narrative or thematic content.`,
-})
 
 export const PROMPT_PORTFOLIO_AESTHETIC_PATTERN = (photosList: string, photoCount: number) => ({
   systemPrompt: `You are analyzing an aesthetic pattern in a photography portfolio.
@@ -319,4 +270,117 @@ export const PROMPT_PORTFOLIO_PROGRESSIVE_FUSION = (
     existingPatterns,
     reviewType
   )
+}
+
+// Prompt unificado para análisis general con imágenes (primer build o rebuild)
+export const PROMPT_PORTFOLIO_GENERAL_PATTERN_WITH_IMAGES = (
+  photoCount: number,
+  photosText: string,
+  existingPatterns: ExistingPatternSummary[] = []
+) => {
+  const hasExistingPatterns = existingPatterns.length > 0
+
+  const existingPatternsText = hasExistingPatterns
+    ? `
+EXISTING PATTERNS FROM PREVIOUS BUILD (you can merge into these):
+${existingPatterns.map((p, idx) => `${idx + 1}. [${p.patternId}] "${p.title}": ${p.shortDescription}`).join('\n')}
+`
+    : ''
+
+  const modeDescription = hasExistingPatterns
+    ? `REBUILD MODE: You have access to patterns from the PREVIOUS build. Your task is to:
+1) First, determine the pattern type of this cluster (stylistic vs object_motif)
+2) Decide whether to MERGE with an existing pattern from the previous build OR CREATE NEW pattern`
+    : `FIRST BUILD MODE: Your task is to:
+1) Determine the pattern type of this cluster (stylistic vs object_motif)
+2) Create a new pattern for this cluster`
+
+  const mergeRules = hasExistingPatterns
+    ? `
+MERGE RULES (CRITICAL):
+- You can ONLY merge with patterns from the PREVIOUS BUILD (listed above).
+- Merging should only happen if:
+  * The pattern type matches (both stylistic, or both object_motif with same object)
+  * The visual similarity is CLEARLY strong
+- When in doubt, create a NEW pattern instead of merging.
+- You CANNOT merge clusters with each other from the current batch.
+`
+    : ''
+
+  const outputFormat = hasExistingPatterns
+    ? `{
+  "decision": "merge" | "new",
+  "mergeWithPatternId": "pattern_id_here",  // REQUIRED if decision is "merge", must be an ID from existing patterns
+  "patternType": "stylistic" | "object_motif",  // REQUIRED always (for new patterns or to verify merge compatibility)
+  "title": "Pattern Title",                  // REQUIRED if decision is "new" (2-4 words)
+  "description": "Full detailed description",      // REQUIRED if decision is "new" (2-3 sentences)
+  "representativePhotoIds": ["id1", "id2", "id3", "id4"]  // REQUIRED: Select the 4 most representative photo IDs
+}`
+    : `{
+  "patternType": "stylistic" | "object_motif",
+  "title": "Pattern Title",
+  "description": "Clear visual description of the pattern shared by these photos",
+  "representativePhotoIds": ["id1", "id2", "id3", "id4"]
+}`
+
+  const userMessageTask = hasExistingPatterns
+    ? `Analyze the images shown above:
+1. Determine if this cluster is "stylistic" or "object_motif"
+2. Decide if it should MERGE with an existing pattern from the previous build, or create a NEW pattern
+3. Focus strictly on visible visual properties. Do not infer story or context.`
+    : `Analyze the ${photoCount} photos shown above and determine the dominant visual reason why they were clustered together.
+
+Focus strictly on visible visual properties. Do not infer story or context.`
+
+  return {
+    systemPrompt: `You are analyzing a cluster of photographs from a photography portfolio.
+
+These photos have been grouped together using CLIP embeddings. CLIP can group images for two main reasons:
+1. Shared stylistic or aesthetic treatment (lighting, composition, color, rendering, visual approach).
+2. The repeated presence of a concrete, visually recognizable object or motif across images (e.g. the same type of object appearing consistently).
+
+${modeDescription}
+
+PATTERN TYPE DEFINITIONS:
+- "stylistic": the similarity is driven mainly by visual style, aesthetic treatment, or photographic approach.
+- "object_motif": the similarity is driven mainly by the repeated presence of the same concrete visual object or motif.
+
+GLOBAL CONSTRAINTS:
+- Describe only what is directly visible in the images.
+- Do NOT infer story, meaning, social context, identity, culture, location, or events.
+- Do NOT use proper nouns (no place names, people names, brands).
+- Filenames and IDs are only for indexing.
+
+ADDITIONAL RULES BY PATTERN TYPE:
+- If patternType is "stylistic":
+  - DO NOT mention specific objects or subjects.
+  - Focus strictly on visual treatment, composition, light, color, texture, perspective, or rendering.
+- If patternType is "object_motif":
+  - You MAY name the recurring object or motif (e.g. dog, mannequin, bicycle).
+  - Describe it only as a visual element, without narrative, symbolism, or context.
+  - Still avoid proper nouns and storytelling.
+${mergeRules}
+TITLE RULES (2–4 words):
+- Must match the detected pattern type.
+- Purely visual or descriptive.
+- No narrative framing or implied story.
+- If stylistic: use style descriptors + photographic terms (e.g., "Soft Backlight Portraits", "Hard Flash Street", "Muted Pastels")
+- If object_motif: you may include the object name (e.g., "Recurring Bicycles", "Dog Portraits")
+
+SELF-CHECK BEFORE ANSWERING:
+- Pattern type matches the description.
+- No narrative or contextual interpretation.
+- Object mentions appear only if patternType is "object_motif".${hasExistingPatterns ? "\n- If merging, ensure the existing pattern's type is compatible." : ''}
+
+Return ONLY valid JSON (no markdown, no commentary) in this exact format:
+${outputFormat}
+
+Return only valid JSON.`,
+    userMessage: `${existingPatternsText}${hasExistingPatterns ? '\n' : ''}NEW CLUSTER TO ANALYZE (${photoCount} photos shown above):
+${photosText}
+
+Note: Each photo entry includes its ID. Use these IDs when selecting representative ${hasExistingPatterns ? 'photos' : 'images'}.
+
+${userMessageTask}`,
+  }
 }

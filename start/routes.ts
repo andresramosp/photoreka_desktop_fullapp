@@ -71,10 +71,10 @@ router.post('/api/3d/catalog/:id', [ThreeDViewController, 'get3DPhotosByIdOrUser
 router.get('/api/series/by-name/:name', [SeriesController, 'showByName'])
 
 // Portfolio Review public endpoint (no auth required)
-// router.get('/api/portfolio-review/:reviewType/user/:userId', [
-//   PortfolioReviewController,
-//   'getPatternsByUserId',
-// ])
+router.get('/api/portfolio-review/:reviewType/user/:userId', [
+  PortfolioReviewController,
+  'getPatternsByUserId',
+])
 
 // Endpoints health (sin auth)
 router.get('/api/analyzer/health/user', [AnalyzerController, 'healthForUser'])
