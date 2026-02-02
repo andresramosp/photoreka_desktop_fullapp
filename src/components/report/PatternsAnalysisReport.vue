@@ -303,10 +303,12 @@ const loadPatternsData = () => {
           description: pattern.description,
           photoCount: pattern.photoCount,
           strength: pattern.strength,
-          examples: (pattern.samplePhotos || []).map((photo) => ({
-            id: photo.id,
-            url: photo.thumbnailUrl,
-          })),
+          examples: (pattern.samplePhotos || [])
+            .map((photo) => ({
+              id: photo.id,
+              url: photo.thumbnailUrl,
+            }))
+            .slice(0, 4), // Limit to 4 example photos
         })),
       });
 
