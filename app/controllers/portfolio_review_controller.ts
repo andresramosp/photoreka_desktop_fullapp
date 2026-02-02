@@ -4,26 +4,11 @@ import type { ReviewType } from '../managers/portfolio_review_manager.js'
 import User from '#models/user'
 import Photo from '#models/photo'
 
-const REVIEW_TYPES: ReviewType[] = ['general', 'context', 'story']
+const REVIEW_TYPES: ReviewType[] = ['story']
 const BUILD_THRESHOLD_PHOTOS = 200
 const REBUILD_THRESHOLD_CHANGES = 200 // Número absoluto de fotos añadidas/borradas para rebuild
 const BUILD_TIMEOUT_MS = 60 * 60 * 1000 // 60 minutos - tiempo máximo esperado para un build
 
-/**
- * Controlador para Portfolio Review
- *
- * NOTA: Para personalizar la configuración de cada reviewType (modelo LLM, fusión/independiente, retries),
- * edita el objeto REVIEW_TYPE_CONFIG en portfolio_review_manager.ts
- *
- * Ejemplo de configuración:
- * {
- *   general: {
- *     model: 'gpt-5.1',              // Modelo principal para análisis
- *     useProgressiveFusion: true,     // true: fusión progresiva, false: análisis independiente
- *     retryModel: 'gemini-2.5-flash', // Modelo para reintentos (opcional)
- *   }
- * }
- */
 export default class PortfolioReviewController {
   /**
    * Construye y almacena los patrones de todos los reviewTypes en el usuario

@@ -1,205 +1,282 @@
-export const PROMPT_PORTFOLIO_NARRATIVE_PATTERN = (photosText: string, photoCount: number) => ({
-  systemPrompt: `You are analyzing a narrative pattern in a photography portfolio.
+/**
+ * Prompts unificados para Portfolio Review
+ *
+ * Cada tipo de review (story, context, general) tiene un único prompt que:
+ * - Recibe fotos del cluster (texto o imágenes según el tipo)
+ * - Opcionalmente recibe patrones previos (para rebuilds)
+ * - Devuelve: { decision, mergeWithPatternId?, title, description, representativePhotoIds, patternType? }
+ */
 
-Your task is to identify and describe narrative patterns, themes, or storytelling approaches shared by a group of photos.
-
-Generate a concise analysis with:
-
-1. **Pattern Title**: A catchy 2-4 word name that captures the essence (e.g., "Urban Storytelling", "Isolated Subjects")
-2. **Description**: 2-3 sentences explaining the narrative pattern, themes, or storytelling approach shared by these photos
-3. **Strength Assessment**: Rate this pattern as "strong", "moderate", or "weak" based on:
-   - Strong: Very cohesive, clear and consistent themes
-   - Moderate: Present but with some variation
-   - Weak: Subtle connections, emerging pattern
-
-Return your response in JSON format:
-{
-  "title": "Pattern Title",
-  "description": "Clear description of the pattern",
-  "strength": "strong|moderate|weak"
-}`,
-  userMessage: `Below are ${photoCount} representative photos from a cluster that shares similar themes.
-
-${photosText}`,
-})
-
-export const PROMPT_PORTFOLIO_CONTEXTUAL_PATTERN = (photosText: string, photoCount: number) => ({
-  systemPrompt: `You are analyzing a contextual pattern in a photography portfolio.
-
-Your task is to identify and describe contextual similarities, situations, or settings shared by a group of photos.
-
-Generate a concise analysis with:
-
-1. **Pattern Title**: A catchy 2-4 word name that captures the essence (e.g., "Documentary Moments", "Cultural Events")
-2. **Description**: 2-3 sentences explaining the contextual similarities, situations, or settings shared by these photos
-3. **Strength Assessment**: Rate this pattern as "strong", "moderate", or "weak" based on:
-   - Strong: Very cohesive, clear and consistent themes
-   - Moderate: Present but with some variation
-   - Weak: Subtle connections, emerging pattern
-
-Return your response in JSON format:
-{
-  "title": "Pattern Title",
-  "description": "Clear description of the pattern",
-  "strength": "strong|moderate|weak"
-}`,
-  userMessage: `Below are ${photoCount} representative photos from a cluster that shares similar themes.
-
-${photosText}`,
-})
-
-export const PROMPT_PORTFOLIO_GENERAL_PATTERN = (photosList: string, photoCount: number) => ({
-  systemPrompt: `You are analyzing a visual pattern in a photography portfolio based on CLIP embeddings.
-
-Your task is to identify and describe visual similarities, subjects, or compositional patterns shared by photos that have been clustered based on their visual embeddings.
-
-Generate a concise analysis with:
-
-1. **Pattern Title**: A catchy 2-4 word name that captures the essence (e.g., "Architectural Photography", "Nature Scenes")
-2. **Description**: 2-3 sentences explaining the visual similarities, subjects, or compositional patterns
-3. **Strength Assessment**: Rate this pattern as "strong", "moderate", or "weak"
-
-Return your response in JSON format:
-{
-  "title": "Pattern Title",
-  "description": "Clear description of the pattern",
-  "strength": "strong|moderate|weak"
-}`,
-  userMessage: `Below are ${photoCount} representative photos from a cluster that shares similar visual characteristics.
-
-${photosList}
-
-Note: These photos have been clustered based on their visual embeddings, indicating they share similar visual patterns or subjects.`,
-})
-
-// Prompt for general pattern analysis with actual images
-
-export const PROMPT_PORTFOLIO_AESTHETIC_PATTERN = (photosList: string, photoCount: number) => ({
-  systemPrompt: `You are analyzing an aesthetic pattern in a photography portfolio.
-
-Your task is to identify and describe aesthetic qualities, visual aspects, or stylistic similarities shared by photos that have been clustered based on their visual embeddings.
-
-Generate a concise analysis with:
-
-1. **Pattern Title**: A catchy 2-4 word name that captures the essence (e.g., "Minimalist Compositions", "High Contrast Drama")
-2. **Description**: 2-3 sentences explaining the aesthetic qualities, visual aspects, or stylistic similarities
-3. **Strength Assessment**: Rate this pattern as "strong", "moderate", or "weak"
-
-Return your response in JSON format:
-{
-  "title": "Pattern Title",
-  "description": "Clear description of the pattern",
-  "strength": "strong|moderate|weak"
-}`,
-  userMessage: `Below are ${photoCount} representative photos from a cluster that shares similar visual characteristics.
-
-${photosList}
-
-Note: These photos have been clustered based on their visual embeddings, indicating they share similar visual patterns or subjects.`,
-})
-
-// Tipo para patrones existentes en la fusión progresiva
-interface ExistingPatternSummary {
+// Tipo para patrones existentes (usados en rebuild)
+export interface ExistingPatternSummary {
   patternId: string
   title: string
-  shortDescription: string // Descripción corta (2 frases) para no saturar el contexto
+  shortDescription: string
 }
 
 // ========================================
-// PROGRESSIVE FUSION - THEMATIC (narrative/contextual/visual_accents)
+// PROMPT PARA STORY (narrative patterns)
 // ========================================
-// Para análisis temático, narrativo, contextual o de acentos visuales
-// SÍ analiza temas, narrativa y contexto
-export const PROMPT_PORTFOLIO_PROGRESSIVE_FUSION_THEMATIC = (
+export const PROMPT_PORTFOLIO_STORY = (
   photosText: string,
   photoCount: number,
-  existingPatterns: ExistingPatternSummary[],
-  reviewType: 'narrative' | 'contextual' | 'visual_accents'
+  existingPatterns: ExistingPatternSummary[] = []
 ) => {
-  const reviewTypeDescriptions: Record<'narrative' | 'contextual' | 'visual_accents', string> = {
-    narrative: 'narrative patterns, themes, or storytelling approaches',
-    contextual: 'contextual similarities, situations, or settings',
-    visual_accents: 'visual accents, lighting, composition, and stylistic elements',
-  }
+  const hasExistingPatterns = existingPatterns.length > 0
 
-  const analysisType = reviewTypeDescriptions[reviewType]
-
-  const existingPatternsText =
-    existingPatterns.length > 0
-      ? `
-EXISTING PATTERNS ALREADY IDENTIFIED:
+  const existingPatternsText = hasExistingPatterns
+    ? `
+EXISTING PATTERNS FROM PREVIOUS BUILD (you can merge into these):
 ${existingPatterns.map((p, idx) => `${idx + 1}. [${p.patternId}] "${p.title}": ${p.shortDescription}`).join('\n')}
 `
-      : `
-NO EXISTING PATTERNS YET (this is the first cluster being analyzed).
+    : ''
+
+  const modeDescription = hasExistingPatterns
+    ? `REBUILD MODE: You have access to patterns from the PREVIOUS build. Your task is to:
+1) Analyze the narrative pattern of this cluster
+2) Decide whether to MERGE with an existing pattern from the previous build OR CREATE NEW pattern`
+    : `FIRST BUILD MODE: Your task is to:
+1) Identify and describe narrative patterns, themes, or storytelling approaches shared by these photos
+2) Create a new pattern for this cluster`
+
+  const mergeRules = hasExistingPatterns
+    ? `
+MERGE RULES (CRITICAL):
+- You can ONLY merge with patterns from the PREVIOUS BUILD (listed above).
+- Merging should only happen if the photos CLEARLY share the same narrative theme as an existing pattern.
+- When in doubt, create a NEW pattern instead of merging.
+- Merging should strengthen the pattern, not dilute it.
 `
+    : ''
+
+  const outputFormat = hasExistingPatterns
+    ? `{
+  "decision": "merge" | "new",
+  "mergeWithPatternId": "pattern_id_here",  // REQUIRED if decision is "merge", must be an ID from existing patterns
+  "title": "Pattern Title",                  // REQUIRED if decision is "new" (2-4 catchy words)
+  "description": "Full detailed description",      // REQUIRED if decision is "new" (2-3 sentences)
+  "representativePhotoIds": ["id1", "id2", "id3", "id4"]  // REQUIRED: Select the 4 most representative photo IDs
+}`
+    : `{
+  "title": "Pattern Title",
+  "description": "Clear description of the narrative pattern shared by these photos",
+  "representativePhotoIds": ["id1", "id2", "id3", "id4"]
+}`
 
   return {
-    systemPrompt: `You are analyzing patterns in a photography portfolio with PROGRESSIVE CLUSTER FUSION.
+    systemPrompt: `You are analyzing NARRATIVE PATTERNS in a photography portfolio.
 
-Your task is to analyze a new cluster of photos and decide whether it should:
-1. **MERGE** with an existing pattern (if the photos fit conceptually within an already identified pattern)
-2. **CREATE NEW** pattern (if the photos represent a distinct, new pattern)
+${modeDescription}
 
-ANALYSIS TYPE: ${analysisType}
+Your task is to identify and describe NARRATIVE patterns, themes, or storytelling approaches shared by a group of photos.
 
-DECISION CRITERIA FOR MERGE:
-- The new cluster CLEARLY shares the same core theme/concept as an existing pattern
-- The photos would naturally belong to the existing pattern's description
-- Merging would strengthen the pattern, not dilute it
-- In case of doubt, don't merge
+NARRATIVE PATTERN CHARACTERISTICS:
+- Story elements: What story or stories do these photos tell together?
+- Emotional arc: Is there an emotional progression or consistent mood?
+- Subjects and protagonists: Who or what are the main characters?
+- Narrative devices: Use of sequence, contrast, symbolism, etc.
+- Thematic coherence: What overarching theme connects these photos?
 
-DECISION CRITERIA FOR NEW:
-- The cluster represents a somwhow distinct theme not covered by existing patterns
-- Merging would create an overly broad or incoherent pattern
-- The photos have unique characteristics that deserve their own category
+TITLE RULES (2-4 words):
+- Should capture the narrative essence (e.g., "Urban Storytelling", "Isolated Subjects", "Journey Through Time")
+- Be evocative but grounded in visible content
+- Avoid overly generic titles
 
-Return your response in JSON format:
-{
-  "decision": "merge" | "new",
-  "mergeWithPatternId": "pattern_id_here",  // REQUIRED if decision is "merge", use the exact patternId from existing patterns
-  "title": "Pattern Title",                  // REQUIRED if decision is "new" (2-4 catchy words)
-  "shortDescription": "Brief 2-sentence summary",  // REQUIRED if decision is "new" (concise, for context)
-  "description": "Full detailed description",      // REQUIRED if decision is "new" (2-3 detailed sentences)
-  "representativePhotoIds": ["id1", "id2", "id3", "id4"]  // REQUIRED: Select the 4 most representative photo IDs from this cluster (use the IDs provided with each photo)
-}
-
-Return only valid JSON. Do not include explanations, markdown, or extra text.`,
-    userMessage: `${existingPatternsText}
-
-NEW CLUSTER TO ANALYZE (${photoCount} representative photos):
+DESCRIPTION RULES:
+- 2-3 sentences explaining the narrative pattern
+- Focus on storytelling elements, not technical aspects
+- Be specific about themes observed
+${mergeRules}
+Return ONLY valid JSON (no markdown, no commentary) in this exact format:
+${outputFormat}`,
+    userMessage: `${existingPatternsText}${hasExistingPatterns ? '\n' : ''}NEW CLUSTER TO ANALYZE (${photoCount} representative photos):
 ${photosText}
 
 Note: Each photo entry includes its ID. Use these IDs when selecting representative photos.
 
-Analyze these photos and decide: should this cluster MERGE with an existing pattern, or create a NEW pattern?`,
+Analyze the narrative patterns shared by these photos.`,
   }
 }
 
 // ========================================
-// WRAPPER - PROGRESSIVE FUSION
+// PROMPT PARA VISUAL ACCENTS
 // ========================================
-// Función wrapper que elige automáticamente entre GENERAL (style-only) y THEMATIC
-export const PROMPT_PORTFOLIO_PROGRESSIVE_FUSION = (
+export const PROMPT_PORTFOLIO_VISUAL_ACCENTS = (
   photosText: string,
   photoCount: number,
-  existingPatterns: ExistingPatternSummary[],
-  reviewType: 'narrative' | 'contextual' | 'visual_accents' | 'general'
+  existingPatterns: ExistingPatternSummary[] = []
 ) => {
-  if (reviewType === 'general') {
-    return PROMPT_PORTFOLIO_PROGRESSIVE_FUSION_GENERAL(photosText, photoCount, existingPatterns)
-  }
+  const hasExistingPatterns = existingPatterns.length > 0
 
-  return PROMPT_PORTFOLIO_PROGRESSIVE_FUSION_THEMATIC(
-    photosText,
-    photoCount,
-    existingPatterns,
-    reviewType
-  )
+  const existingPatternsText = hasExistingPatterns
+    ? `
+EXISTING PATTERNS FROM PREVIOUS BUILD (you can merge into these):
+${existingPatterns.map((p, idx) => `${idx + 1}. [${p.patternId}] "${p.title}": ${p.shortDescription}`).join('\n')}
+`
+    : ''
+
+  const modeDescription = hasExistingPatterns
+    ? `REBUILD MODE: You have access to patterns from the PREVIOUS build. Your task is to:
+1) Analyze the visual accents present in this cluster
+2) Decide whether to MERGE with an existing visual accent pattern from the previous build OR CREATE a NEW pattern`
+    : `FIRST BUILD MODE: Your task is to:
+1) Identify recurring visual accents shared by these photos
+2) Create a new visual accent pattern for this cluster`
+
+  const mergeRules = hasExistingPatterns
+    ? `
+MERGE RULES (CRITICAL):
+- You can ONLY merge with patterns from the PREVIOUS BUILD (listed above).
+- Merge ONLY if the same type of visual accent is clearly present (same kind of object, color accent, visual anomaly, or striking detail).
+- Do NOT merge based on mood, story, place, or cultural meaning.
+- When in doubt, create a NEW pattern instead of merging.
+- Merging should sharpen the visual identity of the pattern, not generalize it.
+`
+    : ''
+
+  const outputFormat = hasExistingPatterns
+    ? `{
+  "decision": "merge" | "new",
+  "mergeWithPatternId": "pattern_id_here",  // REQUIRED if decision is "merge"
+  "title": "Pattern Title",                  // REQUIRED if decision is "new" (2–4 words)
+  "description": "Full detailed description",      // REQUIRED if decision is "new" (1–2 sentences)
+  "representativePhotoIds": ["id1", "id2", "id3", "id4"]  // REQUIRED: Select the 4 most representative photo IDs
+}`
+    : `{
+  "title": "Pattern Title",
+  "description": "Clear description of the shared visual accent",
+  "representativePhotoIds": ["id1", "id2", "id3", "id4"]
+}`
+
+  return {
+    systemPrompt: `You are analyzing VISUAL ACCENT PATTERNS in a photography portfolio.
+
+${modeDescription}
+
+Your task is to identify and describe VISUAL ACCENTS shared by a group of photos.
+
+VISUAL ACCENT CHARACTERISTICS:
+- Concrete elements only: objects, colors, textures, shapes, reflections, signage, markings, anomalies, or visual noise
+- Accidental or secondary details that attract attention
+- Strong color accents or isolated visual pops
+- Repeated but non-narrative elements
+- No story, no emotion, no cultural or contextual interpretation
+
+STRICT EXCLUSIONS:
+- Do NOT infer meaning, symbolism, or narrative
+- Do NOT describe atmosphere, mood, or social context
+- Do NOT explain why the element exists — only that it is visibly present and recurrent
+
+TITLE RULES (2–4 words):
+- Purely visual and literal (e.g. "Bright Plastic Chairs", "Red Warning Stickers", "Reflections on Glass")
+- No metaphors, no emotional language
+- Avoid abstract or conceptual wording
+
+DESCRIPTION RULES:
+- 1–2 sentences maximum
+- Describe WHAT visually stands out and HOW it repeats across the photos
+- Stay strictly descriptive and concrete
+${mergeRules}
+Return ONLY valid JSON (no markdown, no commentary) in this exact format:
+${outputFormat}`,
+
+    userMessage: `${existingPatternsText}${hasExistingPatterns ? '\n' : ''}NEW CLUSTER TO ANALYZE (${photoCount} representative photos):
+${photosText}
+
+Note: Each photo entry includes its ID. Use these IDs when selecting representative photos.
+
+Analyze the visual accents shared by these photos.`,
+  }
 }
 
-// No fusiona dentro del mismo build, solo con patrones pre-existentes
-export const PROMPT_PORTFOLIO_GENERAL_PATTERN_INDEPENDENT = (
+// ========================================
+// PROMPT PARA CONTEXT (contextual patterns)
+// ========================================
+export const PROMPT_PORTFOLIO_CONTEXT = (
+  photosText: string,
+  photoCount: number,
+  existingPatterns: ExistingPatternSummary[] = []
+) => {
+  const hasExistingPatterns = existingPatterns.length > 0
+
+  const existingPatternsText = hasExistingPatterns
+    ? `
+EXISTING PATTERNS FROM PREVIOUS BUILD (you can merge into these):
+${existingPatterns.map((p, idx) => `${idx + 1}. [${p.patternId}] "${p.title}": ${p.shortDescription}`).join('\n')}
+`
+    : ''
+
+  const modeDescription = hasExistingPatterns
+    ? `REBUILD MODE: You have access to patterns from the PREVIOUS build. Your task is to:
+1) Analyze the contextual pattern of this cluster
+2) Decide whether to MERGE with an existing pattern from the previous build OR CREATE NEW pattern`
+    : `FIRST BUILD MODE: Your task is to:
+1) Identify and describe contextual similarities, situations, or settings shared by these photos
+2) Create a new pattern for this cluster`
+
+  const mergeRules = hasExistingPatterns
+    ? `
+MERGE RULES (CRITICAL):
+- You can ONLY merge with patterns from the PREVIOUS BUILD (listed above).
+- Merging should only happen if the photos CLEARLY share the same contextual setting as an existing pattern.
+- When in doubt, create a NEW pattern instead of merging.
+- Merging should strengthen the pattern, not dilute it.
+`
+    : ''
+
+  const outputFormat = hasExistingPatterns
+    ? `{
+  "decision": "merge" | "new",
+  "mergeWithPatternId": "pattern_id_here",  // REQUIRED if decision is "merge", must be an ID from existing patterns
+  "title": "Pattern Title",                  // REQUIRED if decision is "new" (2-4 catchy words)
+  "description": "Full detailed description",      // REQUIRED if decision is "new" (2-3 sentences)
+  "representativePhotoIds": ["id1", "id2", "id3", "id4"]  // REQUIRED: Select the 4 most representative photo IDs
+}`
+    : `{
+  "title": "Pattern Title",
+  "description": "Clear description of the contextual pattern shared by these photos",
+  "representativePhotoIds": ["id1", "id2", "id3", "id4"]
+}`
+
+  return {
+    systemPrompt: `You are analyzing CONTEXTUAL PATTERNS in a photography portfolio.
+
+${modeDescription}
+
+Your task is to identify and describe CONTEXTUAL similarities, situations, or settings shared by a group of photos.
+
+CONTEXTUAL PATTERN CHARACTERISTICS (focus especially on region and geography):
+- Cultural-geographic context: Region, country, city, or geographic area reflected in the photos (urban, rural, coastal, mountainous, etc.)
+- Settings: Types of places or environments
+- Activities or events, traditions, rituals
+- Time context (day, season, era)
+- Environmental factors (weather, lighting, atmosphere)
+
+TITLE RULES (2-4 words):
+- Should capture the contextual or geographic essence (e.g., "Urban Nightlife", "Coastal Life")
+- Be descriptive of the setting, situation, or regional aspect
+- Avoid overly generic titles
+
+DESCRIPTION RULES:
+- 2-3 sentences explaining the contextual and especially geographic or regional similarities
+- Focus on settings, environments, and regional or geographic elements
+- Be specific about the observed contexts
+${mergeRules}
+Return ONLY valid JSON (no markdown, no commentary) in this exact format:
+${outputFormat}`,
+    userMessage: `${existingPatternsText}${hasExistingPatterns ? '\n' : ''}NEW CLUSTER TO ANALYZE (${photoCount} representative photos):
+${photosText}
+
+Note: Each photo entry includes its ID. Use these IDs when selecting representative photos.
+
+Analyze the contextual patterns shared by these photos, with special attention to region and geography.`,
+  }
+}
+
+// ========================================
+// PROMPT PARA GENERAL (visual patterns with patternType distinction)
+// ========================================
+export const PROMPT_PORTFOLIO_GENERAL = (
   photoCount: number,
   photosText: string,
   existingPatterns: ExistingPatternSummary[] = []
@@ -229,7 +306,6 @@ MERGE RULES (CRITICAL):
   * The pattern type matches (both stylistic, or both object_motif with same object)
   * The visual similarity is CLEARLY strong
 - When in doubt, create a NEW pattern instead of merging.
-- You CANNOT merge clusters with each other from the current batch.
 `
     : ''
 
@@ -273,8 +349,8 @@ PATTERN TYPE DEFINITIONS:
 
 GLOBAL CONSTRAINTS:
 - Describe only what is directly visible in the images.
-- Do NOT infer story, meaning, social context, identity, culture, location, or events.
-- Do NOT use proper nouns (no place names, people names, brands).
+- DO NOT infer story, meaning, social context, identity, culture, location, or events.
+- DO NOT use proper nouns (no place names, people names, brands).
 - Filenames and IDs are only for indexing.
 
 ADDITIONAL RULES BY PATTERN TYPE:
@@ -305,108 +381,75 @@ Return only valid JSON.`,
     userMessage: `${existingPatternsText}${hasExistingPatterns ? '\n' : ''}NEW CLUSTER TO ANALYZE (${photoCount} photos shown above):
 ${photosText}
 
-Note: Each photo entry includes its ID. Use these IDs when selecting representative ${hasExistingPatterns ? 'photos' : 'images'}.
+Note: Each photo entry includes its ID. Use these IDs when selecting representative photos.
 
 ${userMessageTask}`,
   }
 }
 
-// Fusiona en el mismo build y con patrones pre-existentes
-export const PROMPT_PORTFOLIO_PROGRESSIVE_FUSION_GENERAL = (
-  photosText: string,
-  photoCount: number,
-  existingPatterns: ExistingPatternSummary[]
+// ========================================
+// PROMPT PARA DEDUPLICACIÓN DE PATRONES
+// ========================================
+export interface PatternForDeduplication {
+  patternId: string
+  title: string
+  shortDescription: string
+  photoCount: number
+}
+
+export const PROMPT_PORTFOLIO_DEDUPLICATE = (
+  patterns: PatternForDeduplication[],
+  reviewType: 'story' | 'context' | 'general' | 'visual_accents'
 ) => {
-  const existingPatternsText =
-    existingPatterns.length > 0
-      ? `
-EXISTING STYLE PATTERNS ALREADY IDENTIFIED:
-${existingPatterns.map((p, idx) => `${idx + 1}. [${p.patternId}] "${p.title}": ${p.shortDescription}`).join('\n')}
-`
-      : `
-NO EXISTING PATTERNS YET (this is the first cluster being analyzed).
-`
+  const reviewTypeDescriptions: Record<'story' | 'context' | 'general' | 'visual_accents', string> =
+    {
+      story: 'narrative patterns (themes, storytelling approaches)',
+      context: 'contextual patterns (settings, situations, geographic regions)',
+      general: 'visual patterns (stylistic treatments or recurring object motifs)',
+      visual_accents:
+        'visual accent patterns (recurring visual details, objects, colors, weird details or anomalies)',
+    }
+
+  const patternsText = patterns
+    .map(
+      (p, idx) =>
+        `${idx + 1}. [${p.patternId}] "${p.title}" (${p.photoCount} photos): ${p.shortDescription}`
+    )
+    .join('\n')
 
   return {
-    systemPrompt: `You are analyzing a photography portfolio with PROGRESSIVE CLUSTER FUSION (GENERAL).
+    systemPrompt: `You are analyzing a list of ${reviewTypeDescriptions[reviewType]} identified in a photography portfolio.
 
-You will be provided with the ACTUAL IMAGES for the new cluster.
+Your task is to identify CLEARLY DUPLICATE patterns that describe essentially the same thing, so they can be MERGED together.
 
-These photos have been grouped together using CLIP embeddings. CLIP can group images for two main reasons:
-1. Shared stylistic or aesthetic treatment (lighting, composition, color, rendering, visual approach).
-2. The repeated presence of a concrete, visually recognizable object or motif across images (e.g. the same type of object appearing consistently).
+DUPLICATION CRITERIA:
+- Two patterns are duplicates if they describe the SAME core concept, theme, or visual characteristic
+- Minor wording differences do NOT make patterns unique
+- Patterns that are subsets of each other (one is more specific than the other) are NOT duplicates
+- Patterns that are related but distinct concepts are NOT duplicates
+- When in doubt, do NOT mark as duplicates
 
-Your task is to:
-1) First, determine the pattern type of this cluster (stylistic vs object_motif)
-2) Decide whether the new cluster should MERGE with an existing pattern OR CREATE NEW pattern
-
-PATTERN TYPE DEFINITIONS:
-- "stylistic": the similarity is driven mainly by visual style, aesthetic treatment, or photographic approach.
-- "object_motif": the similarity is driven mainly by the repeated presence of the same concrete visual object or motif.
-
-GLOBAL CONSTRAINTS:
-- Describe only what is directly visible in the images.
-- DO NOT infer story, meaning, social context, identity, culture, location, or events.
-- DO NOT use proper nouns (no place names, people names, brands).
-- Filenames and IDs are only for indexing.
-
-ADDITIONAL RULES BY PATTERN TYPE:
-- If patternType is "stylistic":
-  - DO NOT mention specific objects or subjects.
-  - Focus strictly on visual treatment, composition, light, color, texture, perspective, or rendering.
-- If patternType is "object_motif":
-  - You MAY name the recurring object or motif (e.g. dog, mannequin, bicycle).
-  - Describe it only as a visual element, without narrative, symbolism, or context.
-  - Still avoid proper nouns and storytelling.
-
-TITLE RULES (2-4 words):
-- Must match the detected pattern type.
-- Purely visual or descriptive.
-- No narrative framing or implied story.
-- If stylistic: use style descriptors + photographic terms (e.g., "Soft Backlight Portraits", "Hard Flash Street", "Muted Pastels", "High Contrast Silhouettes")
-- If object_motif: you may include the object name (e.g., "Recurring Bicycles", "Dog Portraits")
-- Forbidden: subject labels implying context (e.g., "Masai Life", "Wedding", "Street Vendors"), narrative framing, cultural references, locations.
-
-DECISION CRITERIA FOR MERGE:
-- The new cluster matches CLEARLY an existing pattern's visual look (lighting/composition/color/tone/shot-type) OR shares the same object motif.
-- The pattern type should be compatible with the existing pattern.
-- Merging strengthens coherence.
-- In case of doubt, don't merge.
-
-DECISION CRITERIA FOR NEW:
-- The cluster's visual look or object motif is somehow distinct from all existing patterns.
-- Merging would blur boundaries.
-
-SELF-CHECK BEFORE YOU ANSWER:
-- Pattern type matches the description.
-- No narrative or contextual interpretation.
-- Object mentions appear only if patternType is "object_motif".
-- If patternType is "stylistic", ensure NO subject/context words appear.
-- Title follows the rules for the detected pattern type.
-- If merging, ensure the existing pattern's type is compatible.
+MERGING RULES:
+- When you find duplicates, the pattern with FEWER photos will be merged INTO the pattern with MORE photos
+- The larger pattern keeps its title and description (it's more representative)
+- The smaller pattern will be eliminated, but its photos will be added to the larger one
+- If two patterns have the same photo count, merge the one that appears later in the list INTO the earlier one
 
 Return ONLY valid JSON (no markdown, no commentary) in this exact format:
 {
-  "decision": "merge" | "new",
-  "mergeWithPatternId": "pattern_id_here",  // REQUIRED if decision is "merge", use the exact patternId from existing patterns
-  "patternType": "stylistic" | "object_motif",  // REQUIRED always
-  "title": "Pattern Title",                  // REQUIRED if decision is "new" (2-4 words, following pattern type rules)
-  "shortDescription": "Brief 2-sentence summary",  // REQUIRED if decision is "new" (following pattern type rules)
-  "description": "Full detailed description",      // REQUIRED if decision is "new" (2-3 sentences, following pattern type rules)
-  "representativePhotoIds": ["id1", "id2", "id3", "id4"]  // REQUIRED: Select the 4 most representative photo IDs from this cluster (use the IDs provided with each photo)
+  "merges": [
+    {
+      "mergeFrom": "pattern_id_smaller",  // Pattern to be eliminated (fewer photos)
+      "mergeInto": "pattern_id_larger",   // Pattern that will absorb the other (more photos)
+      "reasoning": "Brief explanation of why these patterns are duplicates"
+    }
+  ]  // Empty array if no duplicates found
 }
 
-Return only valid JSON. Do not include explanations, markdown, or extra text.`,
-    userMessage: `${existingPatternsText}
+IMPORTANT: Be conservative. Only mark patterns as duplicates if they are CLEARLY the same concept. It's better to keep similar-but-distinct patterns than to incorrectly merge different concepts.`,
+    userMessage: `PATTERNS TO ANALYZE FOR DUPLICATES:
+${patternsText}
 
-NEW CLUSTER TO ANALYZE (${photoCount} photos shown above):
-${photosText}
-
-Note: Each photo entry includes its ID. Use these IDs when selecting representative photos.
-
-Analyze the images shown above:
-1. Determine if this cluster is "stylistic" or "object_motif"
-2. Decide if it should MERGE with an existing pattern, or create a NEW pattern
-3. Focus strictly on visible visual properties. Do not infer story or context.`,
+Identify any clearly duplicate patterns that should be merged. Remember: merge the smaller (fewer photos) INTO the larger (more photos).`,
   }
 }
