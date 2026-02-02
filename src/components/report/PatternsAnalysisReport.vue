@@ -230,16 +230,16 @@ const sectionConfig = {
     color: colors.blue[600],
   },
   context: {
-    title: "Cultural Patterns",
+    title: "Contextual Patterns",
     subtitle:
-      "Cultural themes and regional patterns detected across your photography collection",
+      "Contextual themes and regional patterns detected across your photography collection",
     color: colors.purple[600],
   },
   general_stylistic: {
     title: "Stylistic Patterns",
     subtitle:
       "General photographic patterns and technical characteristics across your collection",
-    color: colors.green[600],
+    color: colors.orange ? colors.orange[600] : "#fb923c", // Orange for style
   },
   general_object: {
     title: "Other Patterns",
