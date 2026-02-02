@@ -832,7 +832,7 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
           const existingPhotoIds = new Set(targetPattern.allPhotoIds)
           const newPhotosToAdd = photosToConsider
             .filter((photo) => !existingPhotoIds.has(photo.id))
-            .slice(0, Math.max(0, 8 - targetPattern.samplePhotos.length))
+            .slice(0, Math.max(0, 4 - targetPattern.samplePhotos.length))
 
           for (const photo of newPhotosToAdd) {
             targetPattern.samplePhotos.push(createSamplePhoto(photo))
@@ -876,7 +876,7 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
         photoCount: clusterSize,
         percentage: cluster.percentage,
         strength: this.calculatePatternStrength(cluster.percentage),
-        samplePhotos: representativePhotos.map(createSamplePhoto),
+        samplePhotos: representativePhotos.slice(0, 4).map(createSamplePhoto),
       }
 
       patterns.push(pattern)

@@ -60,7 +60,7 @@ MERGE RULES (CRITICAL):
     : `{
   "title": "Pattern Title",
   "description": "Clear description of the narrative pattern shared by these photos",
-  "representativePhotoIds": ["id1", "id2", "id3", "id4"]
+  "representativePhotoIds": ["id1", "id2", "id3", "id4"] // REQUIRED: Select the 4 most representative photo IDs
 }`
 
   return {
@@ -145,7 +145,7 @@ MERGE RULES (CRITICAL):
     : `{
   "title": "Pattern Title",
   "description": "Clear description of the shared visual accent",
-  "representativePhotoIds": ["id1", "id2", "id3", "id4"]
+  "representativePhotoIds": ["id1", "id2", "id3", "id4"] // REQUIRED: Select the 4 most representative photo IDs
 }`
 
   return {
@@ -235,7 +235,7 @@ MERGE RULES (CRITICAL):
     : `{
   "title": "Pattern Title",
   "description": "Clear description of the contextual pattern shared by these photos",
-  "representativePhotoIds": ["id1", "id2", "id3", "id4"]
+  "representativePhotoIds": ["id1", "id2", "id3", "id4"] // REQUIRED: Select the 4 most representative photo IDs
 }`
 
   return {
@@ -322,7 +322,7 @@ MERGE RULES (CRITICAL):
   "patternType": "stylistic" | "object_motif",
   "title": "Pattern Title",
   "description": "Clear visual description of the pattern shared by these photos",
-  "representativePhotoIds": ["id1", "id2", "id3", "id4"]
+  "representativePhotoIds": ["id1", "id2", "id3", "id4"] // REQUIRED: Select the 4 most representative photo IDs
 }`
 
   const userMessageTask = hasExistingPatterns
@@ -344,7 +344,7 @@ These photos have been grouped together using CLIP embeddings. CLIP can group im
 ${modeDescription}
 
 PATTERN TYPE DEFINITIONS:
-- "stylistic": the similarity is driven mainly by visual style, aesthetic treatment, or photographic approach.
+- "stylistic": the similarity is driven mainly by visual style, aesthetic treatment, technical or photographic approach.
 - "object_motif": the similarity is driven mainly by the repeated presence of the same concrete visual object or motif.
 
 GLOBAL CONSTRAINTS:
@@ -359,8 +359,7 @@ ADDITIONAL RULES BY PATTERN TYPE:
   - Focus strictly on visual treatment, composition, light, color, texture, perspective, or rendering.
 - If patternType is "object_motif":
   - You MAY name the recurring object or motif (e.g. dog, mannequin, bicycle).
-  - Describe it only as a visual element, without narrative, symbolism, or context.
-  - Still avoid proper nouns and storytelling.
+  - Focus on how the object appears across images (angles, contexts, variations, meanings or symbolism).
 ${mergeRules}
 TITLE RULES (2–4 words):
 - Must match the detected pattern type.
@@ -404,7 +403,7 @@ export const PROMPT_PORTFOLIO_DEDUPLICATE = (
   const reviewTypeDescriptions: Record<'story' | 'context' | 'general' | 'visual_accents', string> =
     {
       story: 'narrative patterns (themes, storytelling approaches)',
-      context: 'contextual patterns (settings, situations, geographic regions)',
+      context: 'contextual patterns (cultural context, settings, situations, geographic regions)',
       general: 'visual patterns (stylistic treatments or recurring object motifs)',
       visual_accents:
         'visual accent patterns (recurring visual details, objects, colors, weird details or anomalies)',
