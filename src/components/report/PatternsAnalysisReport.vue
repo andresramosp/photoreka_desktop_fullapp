@@ -235,10 +235,15 @@ const sectionConfig = {
       "Cultural themes and regional patterns detected across your photography collection",
     color: colors.purple[600],
   },
-  general: {
+  general_stylistic: {
     title: "Stylistic Patterns",
     subtitle:
       "General photographic patterns and technical characteristics across your collection",
+    color: colors.green[600],
+  },
+  general_object: {
+    title: "Other Patterns",
+    subtitle: "Additional photographic patterns identified in your collection",
     color: colors.green[600],
   },
 };
@@ -249,7 +254,7 @@ const catalogPatterns = computed(() => {
 
   // Try both camelCase and snake_case
   const patterns =
-    profile?.catalogPatterns || profile?.catalog_patterns || null;
+    profile?.catalogPatternsResult || profile?.catalog_patterns || null;
   console.log("Patterns found:", patterns);
 
   return patterns;
@@ -472,7 +477,7 @@ onMounted(() => {
   console.log("Profile:", userStore.profile);
   console.log(
     "CatalogPatterns (camelCase):",
-    userStore.profile?.catalogPatterns,
+    userStore.profile?.catalogPatternsResult,
   );
   console.log(
     "catalog_patterns (snake_case):",
