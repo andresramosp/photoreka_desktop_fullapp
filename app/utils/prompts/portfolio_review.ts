@@ -106,80 +106,6 @@ interface ExistingPatternSummary {
 }
 
 // ========================================
-// PROGRESSIVE FUSION - GENERAL (STYLE-ONLY)
-// ========================================
-// Para análisis de ESTILO VISUAL únicamente (composición, iluminación, color, etc.)
-// NO analiza temas, narrativa o contexto
-export const PROMPT_PORTFOLIO_PROGRESSIVE_FUSION_GENERAL = (
-  photosText: string,
-  photoCount: number,
-  existingPatterns: ExistingPatternSummary[]
-) => {
-  const existingPatternsText =
-    existingPatterns.length > 0
-      ? `
-EXISTING STYLE PATTERNS ALREADY IDENTIFIED:
-${existingPatterns.map((p, idx) => `${idx + 1}. [${p.patternId}] "${p.title}": ${p.shortDescription}`).join('\n')}
-`
-      : `
-NO EXISTING PATTERNS YET (this is the first cluster being analyzed).
-`
-
-  return {
-    systemPrompt: `You are analyzing a photography portfolio with PROGRESSIVE CLUSTER FUSION (GENERAL / STYLE-ONLY).
-
-You will be provided with the ACTUAL IMAGES for the new cluster.
-
-Your task is to decide whether the new cluster should:
-1) MERGE with an existing pattern (same visual style)
-2) CREATE NEW pattern (distinct visual style)
-
-CRITICAL RULES (STYLE-ONLY):
-- Analyze ONLY stylistic elements you can SEE: composition, geometry, lighting, color palette, depth of field, grain, motion blur, flash usage, framing, perspective, type of shot.
-- DO NOT mention or infer subject matter, identity, culture, ethnicity, location, event, profession, story, or context.
-- DO NOT use proper nouns (no place names, people names, group names, brands).
-- DO NOT rely on filenames or IDs (they are only for indexing).
-
-TITLE RULES (2-4 words, style-only):
-- Use style descriptors + photographic terms (e.g., "Soft Backlight Portraits", "Hard Flash Street", "Muted Pastels", "High Contrast Silhouettes").
-- Forbidden: subject labels (e.g., "Masai Life", "Wedding", "Street Vendors"), narrative framing, cultural references, locations.
-
-DECISION CRITERIA FOR MERGE (style-only):
-- The new cluster matches CLEARLY an existing pattern's visual look (lighting/composition/color/tone/shot-type).
-- Merging strengthens stylistic coherence.
-- In case of doubt, don't merge.
-
-DECISION CRITERIA FOR NEW (style-only):
-- The cluster's visual look is somehow distinct from all existing patterns.
-- Merging would blur stylistic boundaries.
-
-SELF-CHECK BEFORE YOU ANSWER:
-- If your draft contains ANY subject/context words, rewrite to remove them.
-- Ensure the title contains NO subject nouns and NO proper nouns.
-
-Return ONLY valid JSON (no markdown, no commentary) in this exact format:
-{
-  "decision": "merge" | "new",
-  "mergeWithPatternId": "pattern_id_here",  // REQUIRED if decision is "merge", use the exact patternId from existing patterns
-  "title": "Pattern Title",                  // REQUIRED if decision is "new" (2-4 catchy words, style-only)
-  "shortDescription": "Brief 2-sentence summary",  // REQUIRED if decision is "new" (style-only, no subjects)
-  "description": "Full detailed description",      // REQUIRED if decision is "new" (2-3 sentences, style-only)
-  "representativePhotoIds": ["id1", "id2", "id3", "id4"]  // REQUIRED: Select the 4 most representative photo IDs from this cluster (use the IDs provided with each photo)
-}
-
-Return only valid JSON. Do not include explanations, markdown, or extra text.`,
-    userMessage: `${existingPatternsText}
-
-NEW CLUSTER TO ANALYZE (${photoCount} photos shown above):
-${photosText}
-
-Note: Each photo entry includes its ID. Use these IDs when selecting representative photos.
-
-Analyze the images shown above and decide: should this cluster MERGE with an existing STYLE pattern, or create a NEW STYLE pattern? Remember: style-only (lighting/composition/aesthetic/shot-type).`,
-  }
-}
-
-// ========================================
 // PROGRESSIVE FUSION - THEMATIC (narrative/contextual/visual_accents)
 // ========================================
 // Para análisis temático, narrativo, contextual o de acentos visuales
@@ -261,7 +187,7 @@ export const PROMPT_PORTFOLIO_PROGRESSIVE_FUSION = (
   reviewType: 'narrative' | 'contextual' | 'visual_accents' | 'general'
 ) => {
   if (reviewType === 'general') {
-    return PROMPT_PORTFOLIO_GENERAL_PATTERN_WITH_IMAGES(photoCount, photosText, existingPatterns)
+    return PROMPT_PORTFOLIO_PROGRESSIVE_FUSION_GENERAL(photosText, photoCount, existingPatterns)
   }
 
   return PROMPT_PORTFOLIO_PROGRESSIVE_FUSION_THEMATIC(
@@ -272,8 +198,8 @@ export const PROMPT_PORTFOLIO_PROGRESSIVE_FUSION = (
   )
 }
 
-// Prompt unificado para análisis general con imágenes (primer build o rebuild)
-export const PROMPT_PORTFOLIO_GENERAL_PATTERN_WITH_IMAGES = (
+// No fusiona dentro del mismo build, solo con patrones pre-existentes
+export const PROMPT_PORTFOLIO_GENERAL_PATTERN_INDEPENDENT = (
   photoCount: number,
   photosText: string,
   existingPatterns: ExistingPatternSummary[] = []
@@ -382,5 +308,105 @@ ${photosText}
 Note: Each photo entry includes its ID. Use these IDs when selecting representative ${hasExistingPatterns ? 'photos' : 'images'}.
 
 ${userMessageTask}`,
+  }
+}
+
+// Fusiona en el mismo build y con patrones pre-existentes
+export const PROMPT_PORTFOLIO_PROGRESSIVE_FUSION_GENERAL = (
+  photosText: string,
+  photoCount: number,
+  existingPatterns: ExistingPatternSummary[]
+) => {
+  const existingPatternsText =
+    existingPatterns.length > 0
+      ? `
+EXISTING STYLE PATTERNS ALREADY IDENTIFIED:
+${existingPatterns.map((p, idx) => `${idx + 1}. [${p.patternId}] "${p.title}": ${p.shortDescription}`).join('\n')}
+`
+      : `
+NO EXISTING PATTERNS YET (this is the first cluster being analyzed).
+`
+
+  return {
+    systemPrompt: `You are analyzing a photography portfolio with PROGRESSIVE CLUSTER FUSION (GENERAL).
+
+You will be provided with the ACTUAL IMAGES for the new cluster.
+
+These photos have been grouped together using CLIP embeddings. CLIP can group images for two main reasons:
+1. Shared stylistic or aesthetic treatment (lighting, composition, color, rendering, visual approach).
+2. The repeated presence of a concrete, visually recognizable object or motif across images (e.g. the same type of object appearing consistently).
+
+Your task is to:
+1) First, determine the pattern type of this cluster (stylistic vs object_motif)
+2) Decide whether the new cluster should MERGE with an existing pattern OR CREATE NEW pattern
+
+PATTERN TYPE DEFINITIONS:
+- "stylistic": the similarity is driven mainly by visual style, aesthetic treatment, or photographic approach.
+- "object_motif": the similarity is driven mainly by the repeated presence of the same concrete visual object or motif.
+
+GLOBAL CONSTRAINTS:
+- Describe only what is directly visible in the images.
+- DO NOT infer story, meaning, social context, identity, culture, location, or events.
+- DO NOT use proper nouns (no place names, people names, brands).
+- Filenames and IDs are only for indexing.
+
+ADDITIONAL RULES BY PATTERN TYPE:
+- If patternType is "stylistic":
+  - DO NOT mention specific objects or subjects.
+  - Focus strictly on visual treatment, composition, light, color, texture, perspective, or rendering.
+- If patternType is "object_motif":
+  - You MAY name the recurring object or motif (e.g. dog, mannequin, bicycle).
+  - Describe it only as a visual element, without narrative, symbolism, or context.
+  - Still avoid proper nouns and storytelling.
+
+TITLE RULES (2-4 words):
+- Must match the detected pattern type.
+- Purely visual or descriptive.
+- No narrative framing or implied story.
+- If stylistic: use style descriptors + photographic terms (e.g., "Soft Backlight Portraits", "Hard Flash Street", "Muted Pastels", "High Contrast Silhouettes")
+- If object_motif: you may include the object name (e.g., "Recurring Bicycles", "Dog Portraits")
+- Forbidden: subject labels implying context (e.g., "Masai Life", "Wedding", "Street Vendors"), narrative framing, cultural references, locations.
+
+DECISION CRITERIA FOR MERGE:
+- The new cluster matches CLEARLY an existing pattern's visual look (lighting/composition/color/tone/shot-type) OR shares the same object motif.
+- The pattern type should be compatible with the existing pattern.
+- Merging strengthens coherence.
+- In case of doubt, don't merge.
+
+DECISION CRITERIA FOR NEW:
+- The cluster's visual look or object motif is somehow distinct from all existing patterns.
+- Merging would blur boundaries.
+
+SELF-CHECK BEFORE YOU ANSWER:
+- Pattern type matches the description.
+- No narrative or contextual interpretation.
+- Object mentions appear only if patternType is "object_motif".
+- If patternType is "stylistic", ensure NO subject/context words appear.
+- Title follows the rules for the detected pattern type.
+- If merging, ensure the existing pattern's type is compatible.
+
+Return ONLY valid JSON (no markdown, no commentary) in this exact format:
+{
+  "decision": "merge" | "new",
+  "mergeWithPatternId": "pattern_id_here",  // REQUIRED if decision is "merge", use the exact patternId from existing patterns
+  "patternType": "stylistic" | "object_motif",  // REQUIRED always
+  "title": "Pattern Title",                  // REQUIRED if decision is "new" (2-4 words, following pattern type rules)
+  "shortDescription": "Brief 2-sentence summary",  // REQUIRED if decision is "new" (following pattern type rules)
+  "description": "Full detailed description",      // REQUIRED if decision is "new" (2-3 sentences, following pattern type rules)
+  "representativePhotoIds": ["id1", "id2", "id3", "id4"]  // REQUIRED: Select the 4 most representative photo IDs from this cluster (use the IDs provided with each photo)
+}
+
+Return only valid JSON. Do not include explanations, markdown, or extra text.`,
+    userMessage: `${existingPatternsText}
+
+NEW CLUSTER TO ANALYZE (${photoCount} photos shown above):
+${photosText}
+
+Note: Each photo entry includes its ID. Use these IDs when selecting representative photos.
+
+Analyze the images shown above:
+1. Determine if this cluster is "stylistic" or "object_motif"
+2. Decide if it should MERGE with an existing pattern, or create a NEW pattern
+3. Focus strictly on visible visual properties. Do not infer story or context.`,
   }
 }

@@ -101,29 +101,29 @@ export default class User extends compose(BaseModel, AuthFinder) {
     const result = { ...this.catalogPatterns }
 
     // Process general patterns into general_stylistic and general_object
-    if (result.general && Array.isArray(result.general)) {
-      const stylistic: any[] = []
-      const objectMotif: any[] = []
+    // if (result.general && Array.isArray(result.general)) {
+    //   const stylistic: any[] = []
+    //   const objectMotif: any[] = []
 
-      for (const pattern of result.general) {
-        if (pattern.patternType === 'stylistic') {
-          stylistic.push(pattern)
-        } else if (pattern.patternType === 'object_motif') {
-          objectMotif.push(pattern)
-        }
-      }
+    //   for (const pattern of result.general) {
+    //     if (pattern.patternType === 'stylistic') {
+    //       stylistic.push(pattern)
+    //     } else if (pattern.patternType === 'object_motif') {
+    //       objectMotif.push(pattern)
+    //     }
+    //   }
 
-      // Remove the original general key
-      delete result.general
+    //   // Remove the original general key
+    //   delete result.general
 
-      // Add the new categorized patterns if they have content
-      if (stylistic.length > 0) {
-        result.general_stylistic = stylistic
-      }
-      if (objectMotif.length > 0) {
-        result.general_object = objectMotif
-      }
-    }
+    //   // Add the new categorized patterns if they have content
+    //   if (stylistic.length > 0) {
+    //     result.general_stylistic = stylistic
+    //   }
+    //   if (objectMotif.length > 0) {
+    //     result.general_object = objectMotif
+    //   }
+    // }
 
     return result
   }

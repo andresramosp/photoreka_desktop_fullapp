@@ -1,14 +1,13 @@
 import db from '@adonisjs/lucid/services/db'
 import ModelsService, { ModelName } from '#services/models_service'
 import PhotoManager from './photo_manager.js'
-import PhotoImageService from '../services/photo_image_service.js'
 import { withCache } from '../decorators/withCache.js'
 import {
   PROMPT_PORTFOLIO_NARRATIVE_PATTERN,
   PROMPT_PORTFOLIO_CONTEXTUAL_PATTERN,
-  PROMPT_PORTFOLIO_GENERAL_PATTERN_WITH_IMAGES,
   PROMPT_PORTFOLIO_AESTHETIC_PATTERN,
   PROMPT_PORTFOLIO_PROGRESSIVE_FUSION,
+  PROMPT_PORTFOLIO_GENERAL_PATTERN_INDEPENDENT,
 } from '../utils/prompts/portfolio_review.js'
 
 export type ReviewType = 'story' | 'context' | 'general'
@@ -633,12 +632,11 @@ export default class PortfolioReviewManager {
 
   /**
    * Genera el prompt para que el LLM interprete un cluster
-   * Para el caso 'general', devuelve requiresImages: true para indicar que se deben pasar imágenes reales
    */
   private generateClusterPrompt(
     samplePhotos: any[],
     reviewType: ReviewType
-  ): { systemPrompt: string; userMessage: string; requiresImages?: boolean } {
+  ): { systemPrompt: string; userMessage: string; needsImages?: boolean } {
     const chunkName = REVIEW_TYPE_TO_CHUNK[reviewType]
 
     // Para tipos que usan chunks de texto
@@ -681,11 +679,11 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
         })
         .join('\n')
 
-      const { systemPrompt, userMessage } = PROMPT_PORTFOLIO_GENERAL_PATTERN_WITH_IMAGES(
+      const { systemPrompt, userMessage } = PROMPT_PORTFOLIO_GENERAL_PATTERN_INDEPENDENT(
         samplePhotos.length,
         photosText
       )
-      return { systemPrompt, userMessage, requiresImages: true }
+      return { systemPrompt, userMessage, needsImages: true }
     }
   }
 
@@ -697,7 +695,7 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
     samplePhotos: any[],
     reviewType: ReviewType,
     existingPatterns: AccumulatedPattern[]
-  ): { systemPrompt: string; userMessage: string; requiresImages?: boolean } {
+  ): { systemPrompt: string; userMessage: string; needsImages?: boolean } {
     const chunkName = REVIEW_TYPE_TO_CHUNK[reviewType]
 
     // Mapear ReviewType a los tipos del prompt
@@ -709,12 +707,12 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
 
     // Preparar texto de las fotos según el tipo
     let photosText: string
-    let requiresImages = false
+    let needsImages = false
 
     if (chunkName === 'general') {
       // Para 'general' el LLM debe analizar las imágenes reales (embeddings CLIP)
       // El texto solo sirve como índice/metadata para alinear el orden con las imágenes adjuntas.
-      requiresImages = true
+      needsImages = true
       photosText = samplePhotos
         .map((photo, idx) => {
           const filename = photo.originalFileName || photo.name || 'Unknown'
@@ -749,7 +747,7 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
         existingPatternsSummary,
         reviewTypeMap[reviewType]
       ),
-      requiresImages,
+      needsImages,
     }
   }
 
@@ -913,105 +911,45 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
         const allClusterPhotoIds = cluster.photo_ids.map((id: string) => parseInt(id))
 
         // Generar prompt con contexto de patrones existentes
-        const { systemPrompt, userMessage, requiresImages } = this.generateProgressiveFusionPrompt(
+        const { systemPrompt, userMessage, needsImages } = this.generateProgressiveFusionPrompt(
           samplePhotos,
           reviewType,
           accumulatedPatterns
         )
 
-        let llmResponse: any
-        let analysis: any
+        // Preparar imágenes si es necesario
+        const imagesForLLM = needsImages
+          ? samplePhotos.map((photo) => ({
+              photo: { id: photo.id, name: photo.name },
+              base64: '', // No necesario, getLLMResponseWithRetry construirá las URLs
+            }))
+          : undefined
 
-        if (requiresImages) {
-          const photoImageService = PhotoImageService.getInstance()
+        const llmResponse = await this.getLLMResponseWithRetry({
+          contextLabel: `portfolioReview.progressiveFusion.${needsImages ? 'withImages' : 'textOnly'}.cluster_${cluster.cluster_id}`,
+          systemPrompt,
+          userMessages: [userMessage],
+          model: mainModel,
+          retryModel: retryModel,
+          generationConfig: { temperature: 0.7, responseType: 'json_object' },
+          useCache: !needsImages, // Evitar cache con imágenes grandes
+          validateResult: (r: any) => this.isValidProgressiveFusionResult(r),
+          fallbackResult: {
+            decision: 'new',
+            title: `Pattern ${accumulatedPatterns.length + 1}`,
+            shortDescription: 'No description',
+            description: 'No description available',
+            strength: 'moderate',
+          },
+          images: imagesForLLM,
+        })
 
-          const photosForImages = samplePhotos.map((photo) => ({
-            id: photo.id,
-            name: photo.name,
-          }))
-
-          const validImages = await photoImageService.getValidPhotosWithImages(
-            photosForImages as any,
-            false
-          )
-
-          if (validImages.length === 0) {
-            console.warn(
-              `No se pudieron obtener imágenes para el cluster ${cluster.cluster_id}, saltando...`
-            )
-            continue
-          }
-
-          const base64ById = new Map<number, string>(
-            validImages.map(({ photo, base64 }) => [photo.id as any, base64])
-          )
-
-          // Alinear orden y recortar muestra a las imágenes realmente disponibles
-          samplePhotos = samplePhotos.filter((p) => base64ById.has(p.id))
-
-          // Regenerar prompt para reflejar photoCount real
-          const refreshed = this.generateProgressiveFusionPrompt(
-            samplePhotos,
-            reviewType,
-            accumulatedPatterns
-          )
-
-          // Preparar imágenes para el método getLLMResponseWithRetry
-          const imagesForLLM = validImages.filter(({ photo }) =>
-            samplePhotos.some((p) => p.id === photo.id)
-          )
-
-          llmResponse = await this.getLLMResponseWithRetry({
-            contextLabel: `portfolioReview.progressiveFusion.withImages.cluster_${cluster.cluster_id}`,
-            systemPrompt: refreshed.systemPrompt,
-            userMessages: [refreshed.userMessage],
-            model: mainModel,
-            retryModel: retryModel,
-            generationConfig: { temperature: 0.7, responseType: 'json_object' },
-            useCache: false, // Evitar cache con imágenes grandes
-            validateResult: (r: any) => this.isValidProgressiveFusionResult(r),
-            fallbackResult: {
-              decision: 'new',
-              title: `Pattern ${accumulatedPatterns.length + 1}`,
-              shortDescription: 'No description',
-              description: 'No description available',
-              strength: 'moderate',
-            },
-            images: imagesForLLM,
-          })
-
-          // Acumular costo
-          if (llmResponse?.cost?.totalCostInEur) {
-            totalCostInEur += llmResponse.cost.totalCostInEur
-          }
-
-          analysis = llmResponse?.result
-        } else {
-          llmResponse = await this.getLLMResponseWithRetry({
-            contextLabel: `portfolioReview.progressiveFusion.textOnly.cluster_${cluster.cluster_id}`,
-            systemPrompt,
-            userMessages: [userMessage],
-            model: mainModel,
-            retryModel: retryModel,
-            generationConfig: { temperature: 0.7, responseType: 'json_object' },
-            useCache: true,
-            validateResult: (r: any) => this.isValidProgressiveFusionResult(r),
-            fallbackResult: {
-              decision: 'new',
-              title: `Pattern ${accumulatedPatterns.length + 1}`,
-              shortDescription: 'No description',
-              description: 'No description available',
-              strength: 'moderate',
-            },
-          })
-
-          // Acumular costo
-          if (llmResponse?.cost?.totalCostInEur) {
-            totalCostInEur += llmResponse.cost.totalCostInEur
-          }
-
-          analysis = llmResponse?.result
+        // Acumular costo
+        if (llmResponse?.cost?.totalCostInEur) {
+          totalCostInEur += llmResponse.cost.totalCostInEur
         }
+
+        let analysis = llmResponse?.result
 
         // Normalizar salida para evitar tumbar el flujo por campos ausentes
         if (!analysis || typeof analysis !== 'object') {
@@ -1195,87 +1133,38 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
             .map((photo, idx) => `Photo ${idx + 1} (ID: ${photo.id}): ${photo.originalFileName}`)
             .join('\n')
 
-          const { systemPrompt, userMessage } = PROMPT_PORTFOLIO_GENERAL_PATTERN_WITH_IMAGES(
+          const { systemPrompt, userMessage } = PROMPT_PORTFOLIO_GENERAL_PATTERN_INDEPENDENT(
             samplePhotos.length,
             photosText,
             previousPatternsForPrompt
           )
 
-          // Para 'general' necesitamos imágenes
-          if (chunkName === 'general') {
-            const photoImageService = PhotoImageService.getInstance()
-            const photosForImages = samplePhotos.map((photo) => ({
-              id: photo.id,
-              name: photo.name,
-            }))
+          // Preparar imágenes si es necesario (para 'general')
+          const imagesForLLM =
+            chunkName === 'general'
+              ? samplePhotos.map((photo) => ({
+                  photo: { id: photo.id, name: photo.name },
+                  base64: '',
+                }))
+              : undefined
 
-            const validImages = await photoImageService.getValidPhotosWithImages(
-              photosForImages as any,
-              false
-            )
-
-            if (validImages.length === 0) {
-              console.warn(
-                `No se pudieron obtener imágenes para el cluster ${cluster.cluster_id}, saltando...`
-              )
-              continue
-            }
-
-            // Filtrar samplePhotos a las imágenes disponibles
-            const base64ById = new Map<number, string>(
-              validImages.map(({ photo, base64 }) => [photo.id as any, base64])
-            )
-            samplePhotos = samplePhotos.filter((p) => base64ById.has(p.id))
-
-            // Regenerar prompt con el conteo correcto
-            const refreshedPhotosText = samplePhotos
-              .map((photo, idx) => `Photo ${idx + 1} (ID: ${photo.id}): ${photo.originalFileName}`)
-              .join('\n')
-            const refreshed = PROMPT_PORTFOLIO_GENERAL_PATTERN_WITH_IMAGES(
-              samplePhotos.length,
-              refreshedPhotosText,
-              previousPatternsForPrompt
-            )
-
-            const imagesForLLM = validImages.filter(({ photo }) =>
-              samplePhotos.some((p) => p.id === photo.id)
-            )
-
-            llmResponse = await this.getLLMResponseWithRetry({
-              contextLabel: `portfolioReview.independentRebuild.withImages.cluster_${cluster.cluster_id}`,
-              systemPrompt: refreshed.systemPrompt,
-              userMessages: [refreshed.userMessage],
-              model: mainModel,
-              retryModel: retryModel,
-              generationConfig: { temperature: 0.7, responseType: 'json_object' },
-              useCache: false,
-              validateResult: (r: any) => this.isValidProgressiveFusionResult(r), // Mismo validador que fusión
-              fallbackResult: {
-                decision: 'new',
-                title: `Pattern ${patterns.length + accumulatedPatterns.length + 1}`,
-                description: 'No description available',
-                patternType: 'NA',
-              },
-              images: imagesForLLM,
-            })
-          } else {
-            llmResponse = await this.getLLMResponseWithRetry({
-              contextLabel: `portfolioReview.independentRebuild.textOnly.cluster_${cluster.cluster_id}`,
-              systemPrompt,
-              userMessages: [userMessage],
-              model: mainModel,
-              retryModel: retryModel,
-              generationConfig: { temperature: 0.7, responseType: 'json_object' },
-              useCache: true,
-              validateResult: (r: any) => this.isValidProgressiveFusionResult(r),
-              fallbackResult: {
-                decision: 'new',
-                title: `Pattern ${patterns.length + accumulatedPatterns.length + 1}`,
-                description: 'No description available',
-                patternType: 'NA',
-              },
-            })
-          }
+          llmResponse = await this.getLLMResponseWithRetry({
+            contextLabel: `portfolioReview.independentRebuild.${chunkName === 'general' ? 'withImages' : 'textOnly'}.cluster_${cluster.cluster_id}`,
+            systemPrompt,
+            userMessages: [userMessage],
+            model: mainModel,
+            retryModel: retryModel,
+            generationConfig: { temperature: 0.7, responseType: 'json_object' },
+            useCache: chunkName !== 'general',
+            validateResult: (r: any) => this.isValidProgressiveFusionResult(r),
+            fallbackResult: {
+              decision: 'new',
+              title: `Pattern ${patterns.length + accumulatedPatterns.length + 1}`,
+              description: 'No description available',
+              patternType: 'NA',
+            },
+            images: imagesForLLM,
+          })
 
           if (llmResponse?.cost?.totalCostInEur) {
             totalCostInEur += llmResponse.cost.totalCostInEur
@@ -1371,63 +1260,35 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
           console.log(`✨ Nuevo patrón creado: "${pattern.title}"`)
         } else {
           // PRIMER BUILD: Usar prompt original sin patrones previos
-          const { systemPrompt, userMessage, requiresImages } = this.generateClusterPrompt(
+          const { systemPrompt, userMessage, needsImages } = this.generateClusterPrompt(
             samplePhotos,
             reviewType
           )
 
-          if (requiresImages) {
-            const photoImageService = PhotoImageService.getInstance()
-            const photosForImages = samplePhotos.map((photo) => ({
-              id: photo.id,
-              name: photo.name,
-            }))
+          // Preparar imágenes si es necesario
+          const imagesForLLM = needsImages
+            ? samplePhotos.map((photo) => ({
+                photo: { id: photo.id, name: photo.name },
+                base64: '',
+              }))
+            : undefined
 
-            const validImages = await photoImageService.getValidPhotosWithImages(
-              photosForImages as any,
-              false
-            )
-
-            if (validImages.length === 0) {
-              console.warn(
-                `No se pudieron obtener imágenes para el cluster ${cluster.cluster_id}, saltando...`
-              )
-              continue
-            }
-
-            llmResponse = await this.getLLMResponseWithRetry({
-              contextLabel: `portfolioReview.independent.withImages.cluster_${cluster.cluster_id}`,
-              systemPrompt,
-              userMessages: [userMessage],
-              model: mainModel,
-              retryModel: retryModel,
-              generationConfig: { temperature: 0.7, responseType: 'json_object' },
-              useCache: false,
-              validateResult: (r: any) => this.isValidIndependentPatternResult(r),
-              fallbackResult: {
-                title: `Pattern ${cluster.cluster_id + 1}`,
-                description: 'No description available',
-                strength: 'moderate',
-              },
-              images: validImages,
-            })
-          } else {
-            llmResponse = await this.getLLMResponseWithRetry({
-              contextLabel: `portfolioReview.independent.textOnly.cluster_${cluster.cluster_id}`,
-              systemPrompt,
-              userMessages: [userMessage],
-              model: mainModel,
-              retryModel: retryModel,
-              generationConfig: { temperature: 0.7, responseType: 'json_object' },
-              useCache: true,
-              validateResult: (r: any) => this.isValidIndependentPatternResult(r),
-              fallbackResult: {
-                title: `Pattern ${cluster.cluster_id + 1}`,
-                description: 'No description available',
-                strength: 'moderate',
-              },
-            })
-          }
+          llmResponse = await this.getLLMResponseWithRetry({
+            contextLabel: `portfolioReview.independent.${needsImages ? 'withImages' : 'textOnly'}.cluster_${cluster.cluster_id}`,
+            systemPrompt,
+            userMessages: [userMessage],
+            model: mainModel,
+            retryModel: retryModel,
+            generationConfig: { temperature: 0.7, responseType: 'json_object' },
+            useCache: !needsImages,
+            validateResult: (r: any) => this.isValidIndependentPatternResult(r),
+            fallbackResult: {
+              title: `Pattern ${cluster.cluster_id + 1}`,
+              description: 'No description available',
+              strength: 'moderate',
+            },
+            images: imagesForLLM,
+          })
 
           if (llmResponse?.cost?.totalCostInEur) {
             totalCostInEur += llmResponse.cost.totalCostInEur
