@@ -435,6 +435,8 @@ const dragStartPosition = ref({ x: 0, y: 0 });
 const lastPointerPosition = ref({ x: 0, y: 0 });
 const isPinching = ref(false);
 const lastPinchDistance = ref(0);
+const touchStartTime = ref(0);
+const hadRecentPinch = ref(false);
 
 // Pinch anchoring: keep the same world point under the pinch midpoint.
 const lastPinchCenter = ref({ x: 0, y: 0 }); // screen (local to pixi container)
@@ -793,6 +795,7 @@ const handleTouchStart = (e) => {
 
   if (touches.length === 1) {
     isDragging.value = true;
+    touchStartTime.value = performance.now();
     dragStartPosition.value = {
       x: touches[0].clientX,
       y: touches[0].clientY,
@@ -804,6 +807,7 @@ const handleTouchStart = (e) => {
   } else if (touches.length === 2) {
     isPinching.value = true;
     isDragging.value = false;
+    hadRecentPinch.value = true;
     const dx = touches[1].clientX - touches[0].clientX;
     const dy = touches[1].clientY - touches[0].clientY;
     lastPinchDistance.value = Math.sqrt(dx * dx + dy * dy);
@@ -873,11 +877,24 @@ const handleTouchEnd = (e) => {
   const wasPinching = isPinching.value;
 
   // Check for tap (click on touch). Avoid tap simulation after a pinch.
-  if (!wasPinching && isDragging.value && e.changedTouches.length > 0) {
+  // Stricter validation: must be quick, minimal movement, and no recent pinch
+  if (
+    !wasPinching &&
+    !hadRecentPinch.value &&
+    isDragging.value &&
+    e.changedTouches.length > 0
+  ) {
     const touch = e.changedTouches[0];
+    const touchDuration = performance.now() - touchStartTime.value;
     const dx = Math.abs(touch.clientX - dragStartPosition.value.x);
     const dy = Math.abs(touch.clientY - dragStartPosition.value.y);
-    if (dx < 10 && dy < 10) {
+    const totalMovement = Math.sqrt(dx * dx + dy * dy);
+
+    // Only register as tap if:
+    // - Duration < 300ms (quick tap)
+    // - Movement < 15px (minimal drift)
+    // - Total Euclidean distance < 20px
+    if (touchDuration < 300 && dx < 15 && dy < 15 && totalMovement < 20) {
       // Simulate click event
       handleClick({ clientX: touch.clientX, clientY: touch.clientY });
     }
@@ -887,12 +904,21 @@ const handleTouchEnd = (e) => {
   if (e.touches && e.touches.length === 1) {
     isPinching.value = false;
     isDragging.value = true;
+    touchStartTime.value = performance.now();
     const t = e.touches[0];
     dragStartPosition.value = { x: t.clientX, y: t.clientY };
     lastPointerPosition.value = { x: t.clientX, y: t.clientY };
   } else {
     isDragging.value = false;
     isPinching.value = false;
+
+    // Clear the recent pinch flag after a short delay
+    // This prevents accidental taps immediately after pinch gesture ends
+    if (hadRecentPinch.value) {
+      setTimeout(() => {
+        hadRecentPinch.value = false;
+      }, 300);
+    }
   }
 
   // User stopped interacting, evaluate hi-res target.
