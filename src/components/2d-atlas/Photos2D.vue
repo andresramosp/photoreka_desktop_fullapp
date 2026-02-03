@@ -274,8 +274,25 @@ const {
   loadAllPhotos,
   changeChunk,
   reapplyLayout,
+  reapplyLayoutForIds,
   reset,
 } = use2DPhotos(props.catalogUserId, useLowPerformance.value);
+
+const reapplyLayoutForCurrentView = () => {
+  if (!photos2D.value.length) return;
+
+  const visible = filteredPhotos.value;
+  if (!visible || visible.length === 0) return;
+
+  // If the user has active filters, apply snapping/relaxation to visible photos only.
+  // Otherwise, apply to the full set.
+  if (visible.length < photos2D.value.length) {
+    reapplyLayoutForIds(visible.map((p) => p.id));
+    return;
+  }
+
+  reapplyLayout();
+};
 
 // 2D texture manager (IndexedDB + in-memory cache), modeled after 3D
 const textureManager = use2DTextureManager(
@@ -1634,14 +1651,33 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener("resize", handleResize);
   stopAnimationLoop();
+  if (filterSnapReflowTimer) {
+    clearTimeout(filterSnapReflowTimer);
+    filterSnapReflowTimer = null;
+  }
   cleanup();
 });
+
+let filterSnapReflowTimer = null;
+const scheduleSnapReflowAfterFilterChange = () => {
+  if (!gridSnapToGrid.value) return;
+  if (!photos2D.value.length) return;
+
+  if (filterSnapReflowTimer) clearTimeout(filterSnapReflowTimer);
+  filterSnapReflowTimer = setTimeout(() => {
+    reapplyLayoutForCurrentView();
+    if (photoSprites.value.size > 0) {
+      repositionSprites(photos2D.value);
+    }
+  }, 60);
+};
 
 // Watch for filter changes to update visibility
 watch(
   [selectedVisualAspects, artisticScoreFilters, timeRangeFilter],
   () => {
     updateSpriteVisibility();
+    scheduleSnapReflowAfterFilterChange();
   },
   { deep: true },
 );
@@ -1649,7 +1685,7 @@ watch(
 // Toggle overlap-free layout without reloading from backend
 watch(gridRelaxationEnabled, () => {
   if (!photos2D.value.length) return;
-  reapplyLayout();
+  reapplyLayoutForCurrentView();
   if (photoSprites.value.size > 0) {
     repositionSprites(photos2D.value);
   }
@@ -1657,7 +1693,7 @@ watch(gridRelaxationEnabled, () => {
 
 watch(gridRelaxationExpandStrength, () => {
   if (!photos2D.value.length) return;
-  reapplyLayout();
+  reapplyLayoutForCurrentView();
   if (photoSprites.value.size > 0) {
     repositionSprites(photos2D.value);
   }
@@ -1665,7 +1701,7 @@ watch(gridRelaxationExpandStrength, () => {
 
 watch(gridSnapToGrid, () => {
   if (!photos2D.value.length) return;
-  reapplyLayout();
+  reapplyLayoutForCurrentView();
   if (photoSprites.value.size > 0) {
     repositionSprites(photos2D.value);
   }
@@ -2036,8 +2072,8 @@ watch(gridSnapToGrid, () => {
 }
 
 .zoom-btn:hover {
-  /* background: rgba(255, 255, 255, 0.2);
-  color: white; */
+  background-color: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
 }
 
 .zoom-level {

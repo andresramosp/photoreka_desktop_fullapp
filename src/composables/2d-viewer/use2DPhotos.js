@@ -45,6 +45,15 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
   const RELAX_BASE_SIZE = 1.65;
   const RELAX_PADDING = 0.12;
 
+  // Auto-tune: on the very first load, detect heavy crowding and apply a reasonable
+  // initial "Balloon expansion" so users don't start with a pile of overlapping photos.
+  // This never overrides a non-default user value.
+  const AUTO_EXPAND_ENABLED = true;
+  const AUTO_EXPAND_TARGET_STRENGTH = 0.2;
+  const AUTO_EXPAND_SAMPLE_MAX = 4000;
+  const AUTO_EXPAND_VERY_HIGH_COLLISION_RATIO = 0.65;
+  const AUTO_EXPAND_VERY_HIGH_MAX_OCC = 12;
+
   const clamp01 = (v) => Math.max(0, Math.min(1, Number(v) || 0));
 
   const computeCosmicScale = (strength01) => {
@@ -58,6 +67,48 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
   const to2D = (pos) => {
     const p = Array.isArray(pos) ? pos : [];
     return [p[0] || 0, p[1] || 0];
+  };
+
+  const hasVeryHighOverlap = (photos) => {
+    if (!AUTO_EXPAND_ENABLED) return false;
+
+    const list = Array.isArray(photos) ? photos : [];
+    const n0 = list.length;
+    if (n0 < 60) return false;
+
+    // Sample down to keep this O(N) and fast for very large catalogs.
+    const step = Math.max(1, Math.floor(n0 / AUTO_EXPAND_SAMPLE_MAX));
+    const sample =
+      step === 1 ? list : list.filter((_, idx) => idx % step === 0);
+    const n = sample.length || 1;
+
+    // Bucket points into "photo-sized" cells and see how much they pile up.
+    // This is intentionally strict: we only auto-expand when overlap is clearly extreme.
+    const cellSize = Math.max(0.4, RELAX_BASE_SIZE + RELAX_PADDING);
+    const counts = new Map();
+    let maxOcc = 1;
+
+    for (const p of sample) {
+      const raw = p?.rawCoordinates || p?.coordinates || p?.position;
+      const [x, y] = to2D(raw);
+      const cx = Math.floor((x || 0) / cellSize);
+      const cy = Math.floor((y || 0) / cellSize);
+      const key = `${cx},${cy}`;
+      const next = (counts.get(key) || 0) + 1;
+      counts.set(key, next);
+      if (next > maxOcc) maxOcc = next;
+    }
+
+    let collidedPoints = 0;
+    for (const c of counts.values()) {
+      if (c > 1) collidedPoints += c;
+    }
+    const collisionRatio = collidedPoints / n;
+
+    return (
+      collisionRatio >= AUTO_EXPAND_VERY_HIGH_COLLISION_RATIO ||
+      maxOcc >= AUTO_EXPAND_VERY_HIGH_MAX_OCC
+    );
   };
 
   const applyLayout = (photos) => {
@@ -136,6 +187,36 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
     photos2D.value = applyLayout(photos2D.value);
   };
 
+  // Reapply layout to a subset of photos (by id), merging results back into photos2D.
+  // Useful when the UI is filtering visibility and we want snap-to-grid to ignore hidden photos.
+  const reapplyLayoutForIds = (photoIds) => {
+    if (!photos2D.value.length) return;
+
+    const ids = Array.isArray(photoIds) ? photoIds : [];
+    if (ids.length === 0) return;
+
+    const idSet = new Set(ids);
+    const subset = photos2D.value.filter((p) => p?.id && idSet.has(p.id));
+    if (subset.length === 0) return;
+
+    const laidOut = applyLayout(subset);
+    const byId = new Map();
+    for (const p of laidOut) {
+      if (!p?.id) continue;
+      byId.set(p.id, p);
+    }
+
+    photos2D.value = photos2D.value.map((p) => {
+      const updated = p?.id ? byId.get(p.id) : null;
+      if (!updated) return p;
+      return {
+        ...p,
+        position: updated.position,
+        coordinates: updated.coordinates,
+      };
+    });
+  };
+
   // Available chunk options (excluding 3D-only options)
   const chunkOptions = [
     { value: "general", label: "General" },
@@ -209,6 +290,21 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
         console.log(
           `⚡ LowPerformance active: filtered ${photos.length} -> ${workingPhotos.length} (top aesthetic_quality)`,
         );
+      }
+
+      // Auto-tune initial expansion only on the very first load and only if the user
+      // hasn't changed the slider from its default.
+      if (
+        photos2D.value.length === 0 &&
+        gridRelaxationExpandStrength.value ===
+          GRID_RELAXATION_EXPAND_STRENGTH_DEFAULT
+      ) {
+        if (hasVeryHighOverlap(workingPhotos)) {
+          gridRelaxationExpandStrength.value = AUTO_EXPAND_TARGET_STRENGTH;
+          console.log(
+            `🫧 Auto balloon expansion: ${(AUTO_EXPAND_TARGET_STRENGTH * 100).toFixed(0)}% (very high overlap)`,
+          );
+        }
       }
 
       // Process photos with 2D coordinates
@@ -355,6 +451,7 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
     loadAllPhotos,
     changeChunk,
     reapplyLayout,
+    reapplyLayoutForIds,
     reset,
   };
 }
