@@ -910,11 +910,11 @@ onMounted(() => {
   }
 
   .placeholder-icon {
-    font-size: 48px !important;
+    font-size: 40px !important;
   }
 
   .placeholder-title {
-    font-size: var(--font-size-lg);
+    font-size: var(--font-size-base);
   }
 
   .placeholder-description {
@@ -945,22 +945,22 @@ onMounted(() => {
   }
 
   .section-title {
-    font-size: var(--font-size-xl);
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--spacing-sm);
+    font-size: var(--font-size-lg) !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: var(--spacing-sm) !important;
   }
 
   .pattern-card {
-    padding: var(--spacing-lg);
+    padding: var(--spacing-lg) !important;
   }
 
   .pattern-title {
-    font-size: var(--font-size-base);
+    font-size: var(--font-size-sm) !important;
   }
 
   .pattern-description {
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-xs) !important;
   }
 
   .photos-grid {

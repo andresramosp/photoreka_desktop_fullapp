@@ -1,7 +1,7 @@
 <template>
   <div class="report-container view-container">
     <!-- Navigation Sidebar (Desktop) / Bottom Nav (Mobile) -->
-    <!-- <nav class="report-navigation">
+    <nav class="report-navigation">
       <div class="nav-items">
         <button
           v-for="section in sections"
@@ -18,7 +18,7 @@
           </span>
         </button>
       </div>
-    </nav> -->
+    </nav>
 
     <!-- Report Content -->
     <div v-if="!isGenerating" class="report-content">
@@ -204,17 +204,18 @@ const message = useMessage();
 // Navigation sections
 const sections = [
   {
-    id: "visual",
-    label: "Visual Aspects",
-    shortLabel: "Visual",
-    icon: EyeIcon,
-  },
-  {
     id: "patterns",
     label: "Usage Patterns",
     shortLabel: "Patterns",
     icon: BookIcon,
   },
+  {
+    id: "visual",
+    label: "Visual Aspects",
+    shortLabel: "Visual",
+    icon: EyeIcon,
+  },
+
   {
     id: "artistic",
     label: "Artistic Scores",
@@ -229,7 +230,7 @@ const patternsRef = ref(null);
 const artisticRef = ref(null);
 
 // Active section tracking
-const activeSection = ref("visual");
+const activeSection = ref("patterns");
 
 // Scroll to section
 const scrollToSection = (sectionId) => {
@@ -304,7 +305,7 @@ onUnmounted(() => {
 /* Navigation Styles */
 .report-navigation {
   position: fixed;
-  top: 64px;
+  top: 70px;
   left: 50%;
   transform: translateX(-50%);
   width: fit-content;
