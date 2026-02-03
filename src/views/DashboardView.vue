@@ -48,7 +48,7 @@
         </div>
         <div
           class="action-card upload-photos"
-          :class="{ disabled: false }"
+          :class="{ disabled: appAccessMode === 'blocked' }"
           @click="goToTool('report')"
         >
           <div class="action-icon">
