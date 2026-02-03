@@ -23,7 +23,9 @@
       v-model:gridRelaxationEnabled="gridRelaxationEnabled"
       v-model:gridRelaxationExpandStrength="gridRelaxationExpandStrength"
       v-model:gridSnapToGrid="gridSnapToGrid"
+      v-model:viewPatternsEnabled="viewPatternsEnabled"
       :chunkOptions="chunkOptions"
+      :patternOptions="patternOptions"
       :showDiscreteLoader="showDiscreteLoader"
       :searchResults="searchResults"
       :processedPhotos="processedPhotos"
@@ -197,8 +199,10 @@ import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import Photos2DConfigPanel from "@/components/2d-atlas/Photos2DConfigPanel.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
+import { useUserStore } from "@/stores/userStore";
 
 import { use2DPhotos } from "@/composables/2d-viewer/use2DPhotos.js";
+import { use2DPatternTags } from "@/composables/2d-viewer/use2DPatternTags.js";
 import { useHasTouch } from "@/composables/useHasTouch.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
@@ -232,6 +236,7 @@ const {
 } = usePhotoToolSelection();
 
 const photosStore = usePhotosStore();
+const userStore = useUserStore();
 
 // Resolve originalUrl from the catalog store (same approach as 3D).
 // The 2D clustering endpoints may omit originalUrl for performance/security.
@@ -393,21 +398,6 @@ watch(atlasBackground, (newVal) => {
   applyPixiBackground(newVal);
 });
 
-// O(1) lookups by id (avoid Array.find on large datasets)
-const photoById = shallowRef(new Map());
-watch(
-  () => photos2D.value,
-  (photos) => {
-    const map = new Map();
-    for (const p of photos || []) {
-      if (!p?.id) continue;
-      map.set(p.id, p);
-    }
-    photoById.value = map;
-  },
-  { immediate: true },
-);
-
 // Spatial index for hi-res candidate picking (avoid scanning all visible photos)
 const hiResSpatialIndex = shallowRef(new Map());
 const HIRES_SPATIAL_CELL_SIZE = 220; // world units (sprite.x/y space)
@@ -471,6 +461,33 @@ const selectedVisualAspects = ref([]);
 const artisticScoreFilters = ref({});
 const timeRangeFilter = ref(null);
 const searchResults = ref(null);
+
+// Build a Map for fast photo lookup by id (for filtering, selection, etc.)
+const photoById = computed(() => {
+  const map = new Map();
+  for (const p of photos2D.value || []) {
+    if (p?.id) map.set(p.id, p);
+  }
+  return map;
+});
+
+// Pattern tags overlay
+const {
+  viewPatternsEnabled,
+  patternOptions,
+  ensurePatternTagsLayer,
+  ensurePatternTag,
+  updateAllPatternTagsScreenScale,
+} = use2DPatternTags({
+  userStore,
+  selectedChunk,
+  photoById,
+  photoContainer,
+  pixiApp,
+  scale,
+  isTransitioning,
+  isLoadingPositions,
+});
 
 // Selection state
 const selectedPhotoIds = ref([]);
@@ -669,6 +686,9 @@ const initPixi = async () => {
   app.stage.addChild(container);
   photoContainer.value = container;
 
+  // Pattern labels (render above photos, same transform as the atlas)
+  ensurePatternTagsLayer();
+
   // Setup interaction handlers
   setupInteraction(app);
 
@@ -681,6 +701,9 @@ const initPixi = async () => {
   offsetY.value = pixiContainer.value.clientHeight / 2;
   scale.value = 1;
   updateContainerTransform();
+
+  // If patterns are enabled, place the tag once Pixi is ready.
+  ensurePatternTag();
 
   console.log("✅ PixiJS initialized");
 };
@@ -882,6 +905,9 @@ const updateContainerTransform = () => {
   photoContainer.value.x = offsetX.value;
   photoContainer.value.y = offsetY.value;
   photoContainer.value.scale.set(scale.value);
+
+  // Keep pattern tag size stable on screen.
+  updateAllPatternTagsScreenScale();
 };
 
 const getPhotoScreenSizePx = (sprite) => {
@@ -1258,6 +1284,9 @@ const loadPhotosToPixi = async () => {
   photoSprites.value.clear();
   hiResSpatialIndex.value = new Map();
 
+  // Recreate the tag layer, since removeChildren() wipes it.
+  ensurePatternTagsLayer();
+
   // Note: we intentionally DO NOT call PIXI.Assets.reset() here.
   // Doing so forces re-creation/re-download of textures and defeats the IndexedDB cache.
 
@@ -1348,6 +1377,10 @@ const loadPhotosToPixi = async () => {
 
   // Build spatial index for hi-res candidate selection.
   buildHiResSpatialIndex();
+
+  // Ensure the pattern label is visible above sprites.
+  ensurePatternTagsLayer();
+  ensurePatternTag();
 
   // After initial load, opportunistically upgrade if already zoomed in.
   scheduleHiResUpdate();
@@ -1607,6 +1640,10 @@ const cleanup = () => {
   try {
     textureManager.releaseTexture(activeHiResPhotoId.value, "original");
   } catch (_) {}
+
+  // clearPatternTag();
+  // patternTagsContainer.value = null;
+
   if (pixiApp.value) {
     pixiApp.value.destroy(true, { children: true, texture: true });
     pixiApp.value = null;
@@ -1669,6 +1706,7 @@ const scheduleSnapReflowAfterFilterChange = () => {
     if (photoSprites.value.size > 0) {
       repositionSprites(photos2D.value);
     }
+    ensurePatternTag();
   }, 60);
 };
 
@@ -1689,6 +1727,7 @@ watch(gridRelaxationEnabled, () => {
   if (photoSprites.value.size > 0) {
     repositionSprites(photos2D.value);
   }
+  ensurePatternTag();
 });
 
 watch(gridRelaxationExpandStrength, () => {
@@ -1697,6 +1736,7 @@ watch(gridRelaxationExpandStrength, () => {
   if (photoSprites.value.size > 0) {
     repositionSprites(photos2D.value);
   }
+  ensurePatternTag();
 });
 
 watch(gridSnapToGrid, () => {
@@ -1705,6 +1745,19 @@ watch(gridSnapToGrid, () => {
   if (photoSprites.value.size > 0) {
     repositionSprites(photos2D.value);
   }
+  ensurePatternTag();
+});
+
+watch(
+  () => photos2D.value,
+  () => {
+    if (isTransitioning.value) return;
+    ensurePatternTag();
+  },
+);
+
+watch(isTransitioning, (v) => {
+  if (!v) ensurePatternTag();
 });
 </script>
 

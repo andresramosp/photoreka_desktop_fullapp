@@ -213,6 +213,67 @@
         </div>
       </div>
 
+      <!-- Patterns Section -->
+      <div class="control-section">
+        <h4 class="section-title">
+          <n-icon size="16" style="margin-right: 6px; vertical-align: middle">
+            <TagOutlined />
+          </n-icon>
+          Patterns
+        </h4>
+
+        <div
+          class="control-item-full"
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+          "
+        >
+          <div style="display: flex; align-items: center; gap: 4px">
+            <span style="font-size: 12px; color: var(--text-secondary)">
+              View patterns
+            </span>
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <n-icon
+                  size="12"
+                  color="var(--text-secondary)"
+                  style="cursor: help"
+                >
+                  <InfoCircleFilled />
+                </n-icon>
+              </template>
+              Shows all patterns for this clustering type on the map
+            </n-tooltip>
+          </div>
+          <n-switch
+            :disabled="showDiscreteLoader || patternOptions.length === 0"
+            :value="viewPatternsEnabled"
+            @update:value="handleViewPatternsEnabledChange"
+            size="small"
+            @click.stop
+          />
+        </div>
+
+        <div
+          v-if="viewPatternsEnabled && patternOptions.length === 0"
+          class="control-item-full"
+          style="margin-top: 10px"
+        >
+          <div
+            style="
+              margin-top: 6px;
+              font-size: 11px;
+              color: var(--text-secondary);
+            "
+          >
+            No patterns available for this clustering type
+          </div>
+        </div>
+      </div>
+
       <!-- More Filters Toggle -->
       <div class="control-section">
         <div class="section-toggle" @click="toggleMoreFilters">
@@ -441,6 +502,7 @@ import {
   CompassOutlined,
   FullscreenOutlined,
   InfoCircleOutlined,
+  TagOutlined,
 } from "@vicons/antd";
 import { AppsOutline } from "@vicons/ionicons5";
 import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
@@ -513,6 +575,16 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+
+  // Patterns
+  viewPatternsEnabled: {
+    type: Boolean,
+    default: false,
+  },
+  patternOptions: {
+    type: Array,
+    default: () => [],
+  },
   // Navigation
   isPlayground: {
     type: Boolean,
@@ -532,6 +604,7 @@ const emit = defineEmits([
   "update:gridRelaxationEnabled",
   "update:gridRelaxationExpandStrength",
   "update:gridSnapToGrid",
+  "update:viewPatternsEnabled",
   "chunk-change",
   "visual-aspects-change",
   "artistic-scores-change",
@@ -688,6 +761,10 @@ const handleAtlasBackgroundChange = (value) => {
 
 const handleResetView = () => {
   emit("reset-view");
+};
+
+const handleViewPatternsEnabledChange = (value) => {
+  emit("update:viewPatternsEnabled", value);
 };
 </script>
 
