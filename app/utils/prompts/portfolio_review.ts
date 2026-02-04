@@ -395,7 +395,6 @@ export interface PatternForDeduplication {
   shortDescription: string
   photoCount: number
 }
-
 export const PROMPT_PORTFOLIO_DEDUPLICATE = (
   patterns: PatternForDeduplication[],
   reviewType: 'story' | 'context' | 'general' | 'visual_accents'
@@ -419,18 +418,27 @@ export const PROMPT_PORTFOLIO_DEDUPLICATE = (
   return {
     systemPrompt: `You are analyzing a list of ${reviewTypeDescriptions[reviewType]} identified in a photography portfolio.
 
-Your task is to identify CLEARLY DUPLICATE patterns that describe essentially the same thing, so they can be MERGED together.
+Your task is to identify ONLY CLEARLY DUPLICATE patterns that describe essentially the SAME thing, at the SAME level of abstraction, so they can be MERGED together.
 
-DUPLICATION CRITERIA:
-- Two patterns are duplicates if they describe the SAME core concept, theme, or visual characteristic
-- Minor wording differences do NOT make patterns unique
-- Patterns that are subsets of each other (one is more specific than the other) are NOT duplicates
-- Patterns that are related but distinct concepts are NOT duplicates
-- When in doubt, do NOT mark as duplicates
+DUPLICATION CRITERIA (STRICT):
+- Two patterns are duplicates ONLY if they describe the SAME core concept and could be considered PRACTICAL SYNONYMS
+- They should be interchangeable in meaning: replacing one title with the other would not change interpretation
+- Minor wording or phrasing differences do NOT make patterns unique
+- Differences in scope, specificity, emphasis, or intent DO make patterns unique
+
+DO NOT MERGE:
+- Subcases, subsets, specializations, or variations of a broader pattern
+- A specific instance into a more general category, or vice versa
+- Patterns where one could logically exist inside the other
+- Patterns that share elements or subjects but describe different visual roles, meanings, or uses
+- Related, adjacent, overlapping, or complementary concepts
+
+Rule of thumb:
+If you can reasonably say “X is a type of Y” or “Y includes X”, they are NOT duplicates.
 
 MERGING RULES:
 - When you find duplicates, the pattern with FEWER photos will be merged INTO the pattern with MORE photos
-- The larger pattern keeps its title and description (it's more representative)
+- The larger pattern keeps its title and description (it is considered more representative)
 - The smaller pattern will be eliminated, but its photos will be added to the larger one
 - If two patterns have the same photo count, merge the one that appears later in the list INTO the earlier one
 
@@ -438,14 +446,17 @@ Return ONLY valid JSON (no markdown, no commentary) in this exact format:
 {
   "merges": [
     {
-      "mergeFrom": "pattern_id_smaller",  // Pattern to be eliminated (fewer photos)
-      "mergeInto": "pattern_id_larger",   // Pattern that will absorb the other (more photos)
-      "reasoning": "Brief explanation of why these patterns are duplicates"
+      "mergeFrom": "pattern_id_smaller",
+      "mergeInto": "pattern_id_larger",
+      "reasoning": "Brief explanation of why these patterns are effectively synonymous"
     }
-  ]  // Empty array if no duplicates found
-}
+  ]
+}  // Empty array if no duplicates found
 
-IMPORTANT: Be conservative. Only mark patterns as duplicates if they are CLEARLY the same concept. It's better to keep similar-but-distinct patterns than to incorrectly merge different concepts.`,
+IMPORTANT:
+Be extremely conservative.
+Only merge patterns that are practically identical in meaning.
+If there is ANY reasonable interpretation in which they differ, do NOT merge them.`,
     userMessage: `PATTERNS TO ANALYZE FOR DUPLICATES:
 ${patternsText}
 

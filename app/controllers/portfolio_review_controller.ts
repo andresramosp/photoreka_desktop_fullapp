@@ -1,10 +1,11 @@
 import type { HttpContext } from '@adonisjs/core/http'
+import pLimit from 'p-limit'
 import PortfolioReviewManager from '../managers/portfolio_review_manager.js'
 import type { ReviewType } from '../managers/portfolio_review_manager.js'
 import User from '#models/user'
 import Photo from '#models/photo'
 
-const REVIEW_TYPES: ReviewType[] = ['story', 'context', 'general']
+const REVIEW_TYPES: ReviewType[] = ['general', 'context', 'story']
 const BUILD_THRESHOLD_PHOTOS = 100
 const REBUILD_THRESHOLD_CHANGES = 200 // Número absoluto de fotos añadidas/borradas para rebuild
 const BUILD_TIMEOUT_MS = 60 * 60 * 1000 // 60 minutos - tiempo máximo esperado para un build
@@ -39,25 +40,32 @@ export default class PortfolioReviewController {
       // Obtener patrones previos del usuario para rebuild incremental
       const existingCatalogPatterns = (userModelStart.catalogPatterns as any) || {}
 
-      // Procesar cada reviewType secuencialmente
-      for (const reviewType of REVIEW_TYPES) {
-        console.log(`Procesando patterns para reviewType: ${reviewType}`)
+      // Procesar cada reviewType con límite de concurrencia (máximo 2 en paralelo)
+      const limit = pLimit(2)
+      const promises = REVIEW_TYPES.map((reviewType) =>
+        limit(async () => {
+          console.log(`Procesando patterns para reviewType: ${reviewType}`)
 
-        // Obtener patrones previos para este reviewType (si existen)
-        const previousPatterns = existingCatalogPatterns[reviewType] || []
+          // Obtener patrones previos para este reviewType (si existen)
+          const previousPatterns = existingCatalogPatterns[reviewType] || []
 
-        const result = await portfolioReviewManager.getPatterns(
-          userId,
-          reviewType,
-          previousPatterns
-        )
-        catalogPatterns[reviewType] = result
+          const result = await portfolioReviewManager.getPatterns(
+            userId,
+            reviewType,
+            previousPatterns
+          )
+          catalogPatterns[reviewType] = result
 
-        // Acumular costo
-        if (result?.cost?.totalCostInEur) {
-          totalCostInEur += result.cost.totalCostInEur
-        }
-      }
+          // Acumular costo
+          if (result?.cost?.totalCostInEur) {
+            totalCostInEur += result.cost.totalCostInEur
+          }
+
+          return result
+        })
+      )
+
+      await Promise.all(promises)
 
       // Obtener IDs de fotos del usuario para metadata
       const photos = await Photo.query().where('user_id', user.id).select('id')
@@ -156,8 +164,12 @@ export default class PortfolioReviewController {
       const currentPhotoIds = currentPhotos.map((p) => p.id)
       const currentPhotosCount = currentPhotoIds.length
 
-      // CASO 1: Sin build previo
-      if (!catalogPatterns || !catalogPatterns.metadata) {
+      // CASO 1: Sin build previo (si no hay catalogPatterns o no tiene metadata o metadata es el unico key)
+      if (
+        !catalogPatterns ||
+        !catalogPatterns.metadata ||
+        (Object.keys(catalogPatterns).length === 1 && catalogPatterns.metadata)
+      ) {
         if (currentPhotosCount >= BUILD_THRESHOLD_PHOTOS) {
           // Lanzar build de forma asíncrona
           this.buildPatterns({ response, auth } as HttpContext).catch((error) => {

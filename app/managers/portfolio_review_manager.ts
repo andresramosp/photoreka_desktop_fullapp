@@ -2,7 +2,9 @@ import db from '@adonisjs/lucid/services/db'
 import ModelsService, { ModelName } from '#services/models_service'
 import PhotoManager from './photo_manager.js'
 import PhotoImageService from '#services/photo_image_service'
+import VectorService from '#services/vector_service'
 import { withCache } from '../decorators/withCache.js'
+import pLimit from 'p-limit'
 import {
   PROMPT_PORTFOLIO_STORY,
   PROMPT_PORTFOLIO_CONTEXT,
@@ -23,6 +25,9 @@ export interface ReviewTypeConfig {
   model: ModelName
   retryModel: ModelName
   needsImages: boolean // true para general (CLIP), false para story/context (texto)
+  concurrency: number // límite de clusters procesados en paralelo
+  useThumbOnRetry: number // a partir de qué intento usar thumbnail (0 = nunca, 2 = a partir del 2do intento, etc.)
+  useBase64OnRetry: boolean // si en retry GPT debe enviar imágenes como base64 en lugar de URL
 }
 
 export const REVIEW_TYPE_CONFIG: Record<ReviewType, ReviewTypeConfig> = {
@@ -30,21 +35,33 @@ export const REVIEW_TYPE_CONFIG: Record<ReviewType, ReviewTypeConfig> = {
     model: 'gpt-5.1',
     retryModel: 'gpt-5.1',
     needsImages: true,
+    concurrency: 1,
+    useThumbOnRetry: 2,
+    useBase64OnRetry: true,
   },
   story: {
     model: 'gemini-2.5-flash',
     retryModel: 'gpt-5.1',
     needsImages: false,
+    concurrency: 3,
+    useThumbOnRetry: 0,
+    useBase64OnRetry: false,
   },
   context: {
     model: 'gemini-2.5-flash',
     retryModel: 'gpt-5.1',
     needsImages: false,
+    concurrency: 3,
+    useThumbOnRetry: 0,
+    useBase64OnRetry: false,
   },
   visual_accents: {
     model: 'gemini-2.5-flash',
     retryModel: 'gpt-5.1',
     needsImages: false,
+    concurrency: 5,
+    useThumbOnRetry: 0,
+    useBase64OnRetry: false,
   },
 }
 
@@ -64,6 +81,7 @@ export interface ClusterPattern {
   photoCount: number
   percentage: number
   strength: 'strong' | 'moderate' | 'weak'
+  clusterPhotos: number[]
   samplePhotos: Array<{
     id: number
     thumbnailUrl: string
@@ -214,7 +232,8 @@ export default class PortfolioReviewManager {
           p.id,
           p.name,
           p.thumbnail_name,
-          p.original_file_name
+          p.original_file_name,
+          p.embedding
         FROM photos p
         JOIN descriptions_chunks dc ON p.id = dc.photo_id
         WHERE dc.category = :chunkName
@@ -337,11 +356,17 @@ export default class PortfolioReviewManager {
         const combinedEmbedding = this.combineEmbeddings(embeddings)
         const photoInfo = photos.find((p: any) => p.id === photoId)
 
+        // Guardar tanto el embedding CLIP (para detección de duplicados) como los chunks
+        const clipEmbedding = photoInfo?.embedding
+          ? JSON.parse(photoInfo.embedding as string)
+          : null
+
         photoMapObject[photoId] = {
           id: photoId,
           name: photoInfo?.name,
           thumbnailName: photoInfo?.thumbnail_name,
           originalFileName: photoInfo?.original_file_name,
+          embedding: clipEmbedding,
           chunks: photoChunks,
         }
 
@@ -363,25 +388,125 @@ export default class PortfolioReviewManager {
   private sampleCluster(cluster: any, sampleSize: number = 10): number[] {
     const { photo_ids, centroid_distances } = cluster
 
+    if (!Array.isArray(photo_ids) || photo_ids.length === 0 || !Array.isArray(centroid_distances)) {
+      return []
+    }
+
+    const effectiveSampleSize = Math.min(sampleSize, photo_ids.length)
+
     const photoDistances = photo_ids.map((id: string, idx: number) => ({
-      id: parseInt(id),
+      id: parseInt(id, 10),
       distance: centroid_distances[idx],
     }))
 
-    photoDistances.sort((a: any, b: any) => a.distance - b.distance)
+    photoDistances.sort((a, b) => a.distance - b.distance)
 
-    // 70% fotos cercanas al centroide (más representativas)
-    const coreSize = Math.floor(sampleSize * 0.7)
-    const coreSample = photoDistances.slice(0, coreSize).map((p: any) => p.id)
+    // Ajusta aquí la proporción si quieres edge (0.7, 0.8, 1, etc.)
+    const coreRatio = 1
+    const coreSize = Math.floor(effectiveSampleSize * coreRatio)
+    const edgeSize = effectiveSampleSize - coreSize
 
-    // 30% fotos del borde (para capturar diversidad)
-    const edgeSize = sampleSize - coreSize
-    const edgeSample = photoDistances
-      .slice(-edgeSize)
-      .map((p: any) => p.id)
-      .reverse()
+    const coreSample = photoDistances.slice(0, coreSize).map((p) => p.id)
+
+    let edgeSample: number[] = []
+
+    if (edgeSize > 0) {
+      edgeSample = photoDistances
+        .slice(photoDistances.length - edgeSize)
+        .map((p) => p.id)
+        .reverse()
+    }
 
     return [...coreSample, ...edgeSample]
+  }
+
+  /**
+   * Filtra fotos duplicadas de una lista de IDs basándose en similitud de embeddings.
+   * Usa el mismo criterio que checkDuplicates en catalog_controller (umbral 0.92).
+   * @param photoIds - Array de IDs de fotos a filtrar
+   * @param photoMapObject - Mapa con información de las fotos incluyendo embeddings
+   * @returns Array de IDs de fotos sin duplicados
+   */
+  private async filterDuplicatePhotos(
+    photoIds: number[],
+    photoMapObject: Record<number, any>
+  ): Promise<number[]> {
+    if (photoIds.length <= 1) {
+      return photoIds
+    }
+
+    // console.log(`🔍 Analizando ${photoIds.length} fotos para detectar duplicados...`)
+
+    const vectorService = new VectorService()
+    const uniquePhotoIds: number[] = []
+    const processedIds = new Set<number>()
+    const removedDuplicates: { photoId: number; duplicateOf: number }[] = []
+
+    for (const photoId of photoIds) {
+      if (processedIds.has(photoId)) continue
+
+      const photo = photoMapObject[photoId]
+      if (!photo) {
+        continue
+      }
+
+      // Obtener embedding CLIP de la foto (siempre debe estar disponible)
+      let embedding: number[] | null = null
+
+      if (photo.embedding) {
+        embedding =
+          typeof photo.embedding === 'string' ? JSON.parse(photo.embedding) : photo.embedding
+      }
+
+      if (!embedding || embedding.length === 0) {
+        // Si no tiene embedding CLIP, la agregamos de todas formas
+        uniquePhotoIds.push(photoId)
+        processedIds.add(photoId)
+        continue
+      }
+
+      // Buscar duplicados solo entre las fotos restantes no procesadas
+      const remainingPhotoIds = photoIds.filter((id) => !processedIds.has(id))
+
+      try {
+        const similarPhotos = await vectorService.findSimilarPhotoToEmbedding(
+          embedding,
+          0.92, // mismo umbral que en checkDuplicates
+          remainingPhotoIds.length,
+          'cosine_similarity',
+          remainingPhotoIds
+        )
+
+        // Marcar como procesados todos los duplicados encontrados
+        const duplicatesFound = similarPhotos.filter((match: any) => match.id !== photoId)
+        duplicatesFound.forEach((match: any) => {
+          processedIds.add(match.id)
+          removedDuplicates.push({ photoId: match.id, duplicateOf: photoId })
+          console.log(
+            `   ❌ Foto ${match.id} es duplicada de ${photoId} (similitud: ${(match.similarity * 100).toFixed(1)}%)`
+          )
+        })
+
+        // Agregar la foto actual como representante del grupo
+        uniquePhotoIds.push(photoId)
+        processedIds.add(photoId)
+      } catch (error) {
+        console.error(`Error al verificar duplicados para foto ${photoId}:`, error)
+        // En caso de error, incluir la foto de todas formas
+        uniquePhotoIds.push(photoId)
+        processedIds.add(photoId)
+      }
+    }
+
+    if (removedDuplicates.length > 0) {
+      console.log(
+        `✅ Se eliminaron ${removedDuplicates.length} fotos duplicadas. Fotos restantes: ${uniquePhotoIds.length}`
+      )
+    } else {
+      // console.log(`✅ No se encontraron duplicados. Se mantienen ${uniquePhotoIds.length} fotos`)
+    }
+
+    return uniquePhotoIds
   }
 
   // ========================================
@@ -459,6 +584,8 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
     fallbackResult?: any
     images?: Array<{ photo: any; base64: string }>
     imageResolution?: 'low' | 'medium' | 'high'
+    useThumbOnRetry?: number
+    useBase64OnRetry?: boolean
   }): Promise<any> {
     const {
       systemPrompt,
@@ -473,9 +600,11 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       fallbackResult,
       images,
       imageResolution = 'low',
+      useThumbOnRetry = 0,
+      useBase64OnRetry = false,
     } = options
 
-    const baseDelayMs = 900
+    const baseDelayMs = 1200
     const maxDelayMs = 12000
 
     let lastError: any
@@ -495,17 +624,25 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
           if (images && images.length > 0) {
             // Para Gemini, necesitamos descargar las imágenes y convertirlas a base64
             const photoImageService = PhotoImageService.getInstance()
-            const geminiImages = await Promise.all(
-              images.map(async ({ photo }) => {
-                const base64 = await photoImageService.getImageBase64FromR2(photo.name, false)
-                return {
+            const shouldUseThumbnail = useThumbOnRetry > 0 && attempt >= useThumbOnRetry
+            if (shouldUseThumbnail) {
+              console.log(
+                `🖼️  [${contextLabel}] Usando thumbnails (intento ${attempt}/${maxAttempts})`
+              )
+            }
+            const geminiImages = await photoImageService
+              .getValidPhotosWithImages(
+                images.map(({ photo }) => photo),
+                shouldUseThumbnail
+              )
+              .then((photosWithImages) =>
+                photosWithImages.map((imageData) => ({
                   inlineData: {
                     mimeType: 'image/png',
-                    data: base64,
+                    data: imageData.base64,
                   },
-                }
-              })
-            )
+                }))
+              )
             formattedUserMessages = [...geminiImages, ...userMessages]
           }
 
@@ -521,23 +658,63 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
           let formattedUserContent: any
 
           if (images && images.length > 0) {
-            const gptImages = images.map(({ photo }) => {
-              const originalUrl = `https://${process.env.IMAGES_WORKER}/${photo.name}`
-              return {
-                type: 'image_url',
-                image_url: {
-                  url: originalUrl,
-                  detail: imageResolution,
-                },
-              }
-            })
+            const shouldUseThumbnail = useThumbOnRetry > 0 && attempt >= useThumbOnRetry
+            const shouldUseBase64 = useBase64OnRetry && attempt > 1
 
-            const textObjects = userMessages.map((msg) => ({
-              type: 'text',
-              text: typeof msg === 'string' ? msg : JSON.stringify(msg),
-            }))
+            if (shouldUseThumbnail) {
+              console.log(
+                `🖼️  [${contextLabel}] Usando thumbnails (intento ${attempt}/${maxAttempts})`
+              )
+            }
 
-            formattedUserContent = [...gptImages, ...textObjects]
+            if (shouldUseBase64) {
+              console.log(
+                `📦 [${contextLabel}] Usando base64 para imágenes (intento ${attempt}/${maxAttempts})`
+              )
+              // Descargar imágenes como base64 (similar a Gemini)
+              const photoImageService = PhotoImageService.getInstance()
+              const gptImages = await photoImageService
+                .getValidPhotosWithImages(
+                  images.map(({ photo }) => photo),
+                  shouldUseThumbnail
+                )
+                .then((photosWithImages) =>
+                  photosWithImages.map((imageData) => ({
+                    type: 'image_url',
+                    image_url: {
+                      url: `data:image/png;base64,${imageData.base64}`,
+                      detail: 'low',
+                    },
+                  }))
+                )
+
+              const textObjects = userMessages.map((msg) => ({
+                type: 'text',
+                text: typeof msg === 'string' ? msg : JSON.stringify(msg),
+              }))
+
+              formattedUserContent = [...gptImages, ...textObjects]
+            } else {
+              // Usar URL (comportamiento original)
+              const gptImages = images.map(({ photo }) => {
+                const imageName = shouldUseThumbnail ? photo.thumbnailName : photo.name
+                const imageUrl = `https://${process.env.IMAGES_WORKER}/${imageName}`
+                return {
+                  type: 'image_url',
+                  image_url: {
+                    url: imageUrl,
+                    detail: 'low',
+                  },
+                }
+              })
+
+              const textObjects = userMessages.map((msg) => ({
+                type: 'text',
+                text: typeof msg === 'string' ? msg : JSON.stringify(msg),
+              }))
+
+              formattedUserContent = [...gptImages, ...textObjects]
+            }
           } else {
             formattedUserContent =
               userMessages.length === 1 ? userMessages[0] : userMessages.join('\n')
@@ -663,10 +840,10 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       min_cluster_size,
       min_samples: reviewType === 'general' ? 6 : 4,
       dim_reduction_method: 'umap',
-      umap_n_components: reviewType === 'general' ? 10 : 15,
+      umap_n_components: reviewType === 'general' ? 5 : 15,
       umap_n_neighbors: reviewType === 'general' ? 4 : 30,
       umap_min_dist: 0.0,
-      umap_spread: 1.0,
+      umap_spread: 10.0,
       umap_metric: 'cosine',
     }
 
@@ -702,7 +879,7 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       ...p,
       shortDescription: p.description.slice(0, 250) + ' ...',
       mergedClusterIds: [],
-      allPhotoIds: p.samplePhotos.map((sp) => sp.id),
+      allPhotoIds: p.clusterPhotos || p.samplePhotos.map((sp) => sp.id),
       photoCount: 0, // Reset - se recalculará
       percentage: 0,
     }))
@@ -743,144 +920,207 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       shortDescription: p.shortDescription,
     }))
 
-    // FASE 3: Procesar cada cluster
-    for (const cluster of clusters) {
-      const clusterSize = cluster.size
-      const sampleSize = Math.min(15, Math.max(5, Math.floor(clusterSize * 0.1)))
+    // FASE 3: Procesar cada cluster (con límite de concurrencia)
+    const limit = pLimit(config.concurrency)
+    console.log(`⚡ Procesando clusters con límite de concurrencia: ${config.concurrency}`)
 
-      const samplePhotoIds = this.sampleCluster(cluster, sampleSize)
-      const samplePhotos = samplePhotoIds.map((id) => photoMapObject[id]).filter(Boolean)
-      const allClusterPhotoIds = cluster.photo_ids.map((id: string) => parseInt(id))
+    const clusterProcessingTasks = clusters.map((cluster: any) =>
+      limit(async () => {
+        const clusterPhotoIds = Array.isArray(cluster.photo_ids) ? cluster.photo_ids : []
+        const clusterSize = clusterPhotoIds.length > 0 ? clusterPhotoIds.length : cluster.size
+        const sampleSize = clusterSize >= 15 ? 15 : clusterSize
 
-      // Generar prompt unificado
-      const { systemPrompt, userMessage } = this.generatePrompt(
-        samplePhotos,
-        reviewType,
-        existingPatternsForPrompt
-      )
+        let samplePhotoIds = this.sampleCluster(cluster, sampleSize)
 
-      // Preparar imágenes si es necesario
-      const imagesForLLM = needsImages
-        ? samplePhotos.map((photo) => ({
-            photo: { id: photo.id, name: photo.name },
-            base64: '',
-          }))
-        : undefined
+        // Filtrar duplicados de las fotos de muestra
+        let filteredPhotoIds = await this.filterDuplicatePhotos(samplePhotoIds, photoMapObject)
+        let samplePhotos = filteredPhotoIds.map((id) => photoMapObject[id]).filter(Boolean)
 
-      // Llamar al LLM
-      const llmResponse = await this.getLLMResponseWithRetry({
-        contextLabel: `portfolioReview.${reviewType}.cluster_${cluster.cluster_id}`,
-        systemPrompt,
-        userMessages: [userMessage],
-        model: mainModel,
-        retryModel: retryModel,
-        generationConfig: { temperature: 0.7, responseType: 'json_object' },
-        useCache: !needsImages,
-        validateResult: (r: any) => this.isValidPatternResult(r, hasExistingPatterns),
-        fallbackResult: {
-          decision: 'new',
-          title: `Pattern ${patterns.length + accumulatedPatterns.length + 1}`,
-          description: 'No description available',
-          patternType: 'NA',
-        },
-        images: imagesForLLM,
-      })
+        // Re-samplear si quedamos con muy pocas fotos
+        const minAcceptablePhotos = Math.max(3, Math.floor(sampleSize * 0.6)) // Al menos 60% del objetivo o 3 fotos
+        if (samplePhotos.length < minAcceptablePhotos && samplePhotos.length < clusterSize) {
+          console.log(
+            `   ⚠️ Solo ${samplePhotos.length} fotos después de filtrar duplicados (objetivo: ${sampleSize}). Re-sampleando...`
+          )
 
-      if (llmResponse?.cost?.totalCostInEur) {
-        totalCostInEur += llmResponse.cost.totalCostInEur
-      }
+          const usedPhotoIds = new Set(samplePhotoIds)
+          const remainingPhotoIds = clusterPhotoIds
+            .map((id: string) => parseInt(id))
+            .filter((id: any) => !usedPhotoIds.has(id))
 
-      let analysis = llmResponse?.result
+          // Tomar fotos adicionales aleatoriamente
+          const photosNeeded = Math.min(sampleSize - samplePhotos.length, remainingPhotoIds.length)
+          const shuffled = remainingPhotoIds.sort(() => Math.random() - 0.5)
+          const additionalPhotoIds = shuffled.slice(0, photosNeeded)
 
-      // Normalizar respuesta
-      if (!analysis || typeof analysis !== 'object') {
-        analysis = {
-          decision: 'new',
-          title: `Pattern ${patterns.length + accumulatedPatterns.length + 1}`,
-          description: 'No description available',
-          patternType: 'NA',
+          // Filtrar duplicados de las fotos adicionales
+          const additionalFilteredIds = await this.filterDuplicatePhotos(
+            additionalPhotoIds,
+            photoMapObject
+          )
+          const additionalPhotos = additionalFilteredIds
+            .map((id) => photoMapObject[id])
+            .filter(Boolean)
+
+          samplePhotos.push(...additionalPhotos)
+          console.log(
+            `   ✅ Agregadas ${additionalPhotos.length} fotos adicionales. Total: ${samplePhotos.length} fotos`
+          )
         }
-      }
 
-      // Procesar decisión
-      const isMerge =
-        hasExistingPatterns && analysis.decision === 'merge' && analysis.mergeWithPatternId
+        const allClusterPhotoIds = clusterPhotoIds.map((id: string) => parseInt(id))
 
-      if (isMerge) {
-        // MERGE con patrón previo
-        const targetPattern = accumulatedPatterns.find(
-          (p) => p.patternId === analysis.mergeWithPatternId
+        // Generar prompt unificado
+        const { systemPrompt, userMessage } = this.generatePrompt(
+          samplePhotos,
+          reviewType,
+          existingPatternsForPrompt
         )
 
-        if (targetPattern) {
-          targetPattern.photoCount += clusterSize
-          targetPattern.percentage += cluster.percentage
-          targetPattern.mergedClusterIds.push(`cluster_${cluster.cluster_id}`)
+        // Preparar imágenes si es necesario
+        const imagesForLLM = needsImages
+          ? samplePhotos.map((photo) => ({
+              photo: { id: photo.id, name: photo.name, thumbnailName: photo.thumbnailName },
+              base64: '',
+            }))
+          : undefined
 
-          // Obtener fotos representativas
-          let photosToConsider: any[] = samplePhotos
-          if (analysis.representativePhotoIds && Array.isArray(analysis.representativePhotoIds)) {
-            const repIds = analysis.representativePhotoIds.map((id: any) => parseInt(String(id)))
-            const representativePhotos = repIds
-              .map((id: number) => photoMapObject[id])
-              .filter(Boolean)
-            if (representativePhotos.length > 0) {
-              photosToConsider = representativePhotos
-            }
-          }
+        // Llamar al LLM
+        console.log(
+          `🧠 Analizando cluster ${cluster.cluster_id} (${clusterSize} fotos, ${samplePhotos.length} en muestra, ${cluster.percentage.toFixed(2)}%)...`
+        )
 
-          const existingPhotoIds = new Set(targetPattern.allPhotoIds)
-          const newPhotosToAdd = photosToConsider
-            .filter((photo) => !existingPhotoIds.has(photo.id))
-            .slice(0, Math.max(0, 4 - targetPattern.samplePhotos.length))
+        const llmResponse = await this.getLLMResponseWithRetry({
+          contextLabel: `portfolioReview.${reviewType}.cluster_${cluster.cluster_id}`,
+          systemPrompt,
+          userMessages: [userMessage],
+          model: mainModel,
+          retryModel: retryModel,
+          generationConfig: { temperature: 0.7, responseType: 'json_object' },
+          useCache: !needsImages,
+          validateResult: (r: any) => this.isValidPatternResult(r, hasExistingPatterns),
+          fallbackResult: {
+            decision: 'new',
+            title: `Pattern ${patterns.length + accumulatedPatterns.length + 1}`,
+            description: 'No description available',
+            patternType: 'NA',
+          },
+          images: imagesForLLM,
+          useThumbOnRetry: config.useThumbOnRetry,
+          useBase64OnRetry: config.useBase64OnRetry,
+        })
 
-          for (const photo of newPhotosToAdd) {
-            targetPattern.samplePhotos.push(createSamplePhoto(photo))
-            targetPattern.allPhotoIds.push(photo.id)
-          }
-
-          for (const photoId of allClusterPhotoIds) {
-            if (!existingPhotoIds.has(photoId)) {
-              targetPattern.allPhotoIds.push(photoId)
-            }
-          }
-
-          targetPattern.strength = this.calculatePatternStrength(targetPattern.percentage)
-
-          console.log(
-            `🔗 Cluster ${cluster.cluster_id} mergeado a patrón previo "${targetPattern.title}"`
-          )
-          continue
+        let cost = 0
+        if (llmResponse?.cost?.totalCostInEur) {
+          cost = llmResponse.cost.totalCostInEur
         }
-      }
 
-      // CREATE NEW pattern
-      let representativePhotos: any[] = []
-      if (analysis.representativePhotoIds && Array.isArray(analysis.representativePhotoIds)) {
-        const repIds = analysis.representativePhotoIds.map((id: any) => parseInt(String(id)))
-        representativePhotos = repIds.map((id: number) => photoMapObject[id]).filter(Boolean)
-      }
-      if (representativePhotos.length === 0) {
-        representativePhotos = samplePhotos.slice(0, 4)
-      }
+        let analysis = llmResponse?.result
 
-      const newPatternId = hasExistingPatterns
-        ? `pattern_new_${patterns.length + 1}`
-        : `cluster_${cluster.cluster_id}`
+        // Normalizar respuesta
+        if (!analysis || typeof analysis !== 'object') {
+          analysis = {
+            decision: 'new',
+            title: `Pattern ${patterns.length + accumulatedPatterns.length + 1}`,
+            description: 'No description available',
+            patternType: 'NA',
+          }
+        }
 
-      const pattern: ClusterPattern = {
-        patternId: newPatternId,
-        patternType: analysis.patternType || 'NA',
-        title: analysis.title || `Pattern ${patterns.length + 1}`,
-        description: analysis.description || 'No description available',
-        photoCount: clusterSize,
-        percentage: cluster.percentage,
-        strength: this.calculatePatternStrength(cluster.percentage),
-        samplePhotos: representativePhotos.slice(0, 4).map(createSamplePhoto),
+        // Procesar decisión
+        const isMerge =
+          hasExistingPatterns && analysis.decision === 'merge' && analysis.mergeWithPatternId
+
+        if (isMerge) {
+          // MERGE con patrón previo
+          const targetPattern = accumulatedPatterns.find(
+            (p) => p.patternId === analysis.mergeWithPatternId
+          )
+
+          if (targetPattern) {
+            targetPattern.photoCount += clusterSize
+            targetPattern.percentage += cluster.percentage
+            targetPattern.mergedClusterIds.push(`cluster_${cluster.cluster_id}`)
+
+            // Obtener fotos representativas
+            let photosToConsider: any[] = samplePhotos
+            if (analysis.representativePhotoIds && Array.isArray(analysis.representativePhotoIds)) {
+              const repIds = analysis.representativePhotoIds.map((id: any) => parseInt(String(id)))
+              const representativePhotos = repIds
+                .map((id: number) => photoMapObject[id])
+                .filter(Boolean)
+              if (representativePhotos.length > 0) {
+                photosToConsider = representativePhotos
+              }
+            }
+
+            const existingPhotoIds = new Set(targetPattern.allPhotoIds)
+            const newPhotosToAdd = photosToConsider
+              .filter((photo) => !existingPhotoIds.has(photo.id))
+              .slice(0, Math.max(0, 4 - targetPattern.samplePhotos.length))
+
+            for (const photo of newPhotosToAdd) {
+              targetPattern.samplePhotos.push(createSamplePhoto(photo))
+              targetPattern.allPhotoIds.push(photo.id)
+            }
+
+            for (const photoId of allClusterPhotoIds) {
+              if (!existingPhotoIds.has(photoId)) {
+                targetPattern.allPhotoIds.push(photoId)
+              }
+            }
+
+            targetPattern.strength = this.calculatePatternStrength(targetPattern.percentage)
+
+            console.log(
+              `🔗 Cluster ${cluster.cluster_id} mergeado a patrón previo "${targetPattern.title}"`
+            )
+            return { type: 'merge', cost }
+          }
+        }
+
+        // CREATE NEW pattern
+        let representativePhotos: any[] = []
+        if (analysis.representativePhotoIds && Array.isArray(analysis.representativePhotoIds)) {
+          const repIds = analysis.representativePhotoIds.map((id: any) => parseInt(String(id)))
+          representativePhotos = repIds.map((id: number) => photoMapObject[id]).filter(Boolean)
+        }
+        if (representativePhotos.length === 0) {
+          representativePhotos = samplePhotos.slice(0, 4)
+        }
+
+        const newPatternId = hasExistingPatterns
+          ? `pattern_new_${patterns.length + 1}`
+          : `cluster_${cluster.cluster_id}`
+
+        const pattern: ClusterPattern = {
+          patternId: newPatternId,
+          patternType: analysis.patternType || 'NA',
+          title: analysis.title || `Pattern ${patterns.length + 1}`,
+          description: analysis.description || 'No description available',
+          photoCount: clusterSize,
+          percentage: cluster.percentage,
+          strength: this.calculatePatternStrength(cluster.percentage),
+          clusterPhotos: allClusterPhotoIds,
+          samplePhotos: representativePhotos.slice(0, 4).map(createSamplePhoto),
+        }
+
+        console.log(`✨ Nuevo patrón creado: "${pattern.title}"`)
+        return { type: 'new', pattern, cost }
+      })
+    )
+
+    // Esperar a que todos los clusters terminen de procesarse
+    const results = await Promise.all(clusterProcessingTasks)
+
+    // Consolidar resultados
+    for (const result of results) {
+      if (result.cost) {
+        totalCostInEur += result.cost
       }
-
-      patterns.push(pattern)
-      console.log(`✨ Nuevo patrón creado: "${pattern.title}"`)
+      if (result.type === 'new' && result.pattern) {
+        patterns.push(result.pattern)
+      }
     }
 
     // Agregar patrones previos que recibieron merges
@@ -894,6 +1134,7 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
           photoCount: p.photoCount,
           percentage: Math.min(100, p.percentage),
           strength: p.strength,
+          clusterPhotos: p.allPhotoIds,
           samplePhotos: p.samplePhotos.slice(0, 4),
         })
       } else {
@@ -910,6 +1151,10 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       reviewType,
       'gemini-2.5-flash'
     )
+
+    // devolvemos el objeto sin deduplicar
+    // const deduplicationResult = { patterns, removedIds: [], cost: 0 }
+
     const finalPatterns = deduplicationResult.patterns
     totalCostInEur += deduplicationResult.cost
 
@@ -1031,6 +1276,14 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
         // Fusionar photoCount y percentage
         targetPattern.photoCount += sourcePattern.photoCount
         targetPattern.percentage += sourcePattern.percentage
+
+        // Fusionar clusterPhotos (eliminar duplicados)
+        const existingPhotoIds = new Set(targetPattern.clusterPhotos)
+        for (const photoId of sourcePattern.clusterPhotos) {
+          if (!existingPhotoIds.has(photoId)) {
+            targetPattern.clusterPhotos.push(photoId)
+          }
+        }
 
         // Recalcular strength basándose en el nuevo porcentaje
         targetPattern.strength = this.calculatePatternStrength(targetPattern.percentage)
