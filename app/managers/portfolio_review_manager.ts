@@ -843,7 +843,7 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       umap_n_components: reviewType === 'general' ? 5 : 15,
       umap_n_neighbors: reviewType === 'general' ? 4 : 30,
       umap_min_dist: 0.0,
-      umap_spread: 10.0,
+      umap_spread: 5,
       umap_metric: 'cosine',
     }
 
