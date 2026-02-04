@@ -215,61 +215,69 @@
 
       <!-- Patterns Section -->
       <div class="control-section">
-        <h4 class="section-title">
-          <n-icon size="16" style="margin-right: 6px; vertical-align: middle">
-            <TagOutlined />
-          </n-icon>
-          Patterns
-        </h4>
-
-        <div
-          class="control-item-full"
-          style="
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-          "
-        >
-          <div style="display: flex; align-items: center; gap: 4px">
-            <span style="font-size: 12px; color: var(--text-secondary)">
-              View patterns
-            </span>
-            <n-tooltip trigger="hover" placement="top">
-              <template #trigger>
-                <n-icon
-                  size="12"
-                  color="var(--text-secondary)"
-                  style="cursor: help"
-                >
-                  <InfoCircleFilled />
-                </n-icon>
-              </template>
-              Shows all patterns for this clustering type on the map
-            </n-tooltip>
+        <div class="section-toggle" @click="showPatterns = !showPatterns">
+          <div style="display: flex; align-items: center; gap: 6px">
+            <n-icon size="16">
+              <TagOutlined />
+            </n-icon>
+            <span class="section-toggle-label">Patterns</span>
           </div>
-          <n-switch
-            :disabled="showDiscreteLoader || patternOptions.length === 0"
-            :value="viewPatternsEnabled"
-            @update:value="handleViewPatternsEnabledChange"
-            size="small"
-            @click.stop
-          />
+          <n-icon
+            size="12"
+            class="toggle-icon"
+            :class="{ rotated: showPatterns }"
+          >
+            <svg viewBox="0 0 24 24">
+              <path
+                fill="currentColor"
+                d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+              />
+            </svg>
+          </n-icon>
         </div>
 
+        <!-- Patterns List -->
         <div
-          v-if="viewPatternsEnabled && patternOptions.length === 0"
-          class="control-item-full"
-          style="margin-top: 10px"
+          v-if="showPatterns && patternsForCurrentChunk.length > 0"
+          class="patterns-list"
         >
           <div
-            style="
-              margin-top: 6px;
-              font-size: 11px;
-              color: var(--text-secondary);
-            "
+            v-for="pattern in patternsForCurrentChunk"
+            :key="pattern.patternId ?? pattern.title"
+            :class="[
+              'pattern-item',
+              {
+                selected:
+                  selectedPatternId === (pattern.patternId ?? pattern.title),
+              },
+            ]"
+            @click="handlePatternClick(pattern)"
           >
-            No patterns available for this clustering type
+            <div class="pattern-info">
+              <span class="pattern-title">{{
+                pattern.title || "Pattern"
+              }}</span>
+              <div class="pattern-meta">
+                <span class="pattern-count"
+                  >{{ (pattern.clusterPhotos || []).length }} photos</span
+                >
+                <n-tooltip
+                  v-if="pattern.description"
+                  trigger="hover"
+                  placement="left"
+                  :show-arrow="false"
+                >
+                  <template #trigger>
+                    <n-icon size="14" class="pattern-info-icon" @click.stop>
+                      <InfoCircleFilled />
+                    </n-icon>
+                  </template>
+                  <div class="pattern-tooltip-content">
+                    {{ pattern.description }}
+                  </div>
+                </n-tooltip>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -585,6 +593,14 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  patternsForCurrentChunk: {
+    type: Array,
+    default: () => [],
+  },
+  selectedPatternId: {
+    type: [String, Number],
+    default: null,
+  },
   // Navigation
   isPlayground: {
     type: Boolean,
@@ -605,11 +621,15 @@ const emit = defineEmits([
   "update:gridRelaxationExpandStrength",
   "update:gridSnapToGrid",
   "update:viewPatternsEnabled",
+  "update:selectedPatternId",
   "chunk-change",
   "visual-aspects-change",
   "artistic-scores-change",
   "time-range-change",
   "reset-view",
+  "highlight-pattern",
+  "unhighlight-pattern",
+  "select-pattern",
 ]);
 
 // Internal state
@@ -622,6 +642,7 @@ const showMoreFilters = ref(false);
 const showDisplayOptions = ref(false);
 const showArtisticScores = ref(false);
 const showTimeRange = ref(false);
+const showPatterns = ref(false);
 const showNavigationControls = ref(true);
 const showEmbeddingInfoModal = ref(false);
 
@@ -652,6 +673,17 @@ watch(
     localArtisticScoreFilters.value = { ...newVal };
   },
   { deep: true },
+);
+
+// Watch for chunk changes to clear selected pattern
+watch(
+  () => props.selectedChunk,
+  () => {
+    // Clear selected pattern when chunk changes
+    if (props.selectedPatternId !== null) {
+      emit("update:selectedPatternId", null);
+    }
+  },
 );
 
 // Computed
@@ -765,6 +797,18 @@ const handleResetView = () => {
 
 const handleViewPatternsEnabledChange = (value) => {
   emit("update:viewPatternsEnabled", value);
+};
+
+const handlePatternHover = (pattern) => {
+  emit("highlight-pattern", pattern);
+};
+
+const handlePatternUnhover = (pattern) => {
+  emit("unhighlight-pattern", pattern);
+};
+
+const handlePatternClick = (pattern) => {
+  emit("select-pattern", pattern);
 };
 </script>
 
@@ -1115,6 +1159,106 @@ const handleViewPatternsEnabledChange = (value) => {
   opacity: 0.45;
   cursor: not-allowed;
   transform: none;
+}
+
+.color-pill.active {
+  border-color: var(--primary-color, #007bff);
+  box-shadow: 0 0 0 2px var(--primary-color, #007bff);
+}
+
+/* Patterns list */
+.patterns-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.patterns-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.patterns-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.patterns-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+.pattern-item {
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pattern-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.pattern-item.selected {
+  background: color-mix(in srgb, var(--primary-color) 15%, transparent);
+  border-color: color-mix(in srgb, var(--primary-color) 40%, transparent);
+}
+
+.pattern-item.selected:hover {
+  background: color-mix(in srgb, var(--primary-color) 20%, transparent);
+  border-color: color-mix(in srgb, var(--primary-color) 50%, transparent);
+}
+
+.pattern-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pattern-title {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pattern-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pattern-count {
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.pattern-info-icon {
+  color: var(--text-secondary);
+  cursor: help;
+  transition: color 0.2s;
+  flex-shrink: 0;
+}
+
+.pattern-info-icon:hover {
+  color: var(--text-primary);
+}
+
+.pattern-tooltip-content {
+  max-width: 270px;
+  font-size: 12px;
+  line-height: 16px;
+  word-wrap: break-word;
 }
 
 .color-pill.active {

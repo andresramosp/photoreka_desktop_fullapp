@@ -24,8 +24,10 @@
       v-model:gridRelaxationExpandStrength="gridRelaxationExpandStrength"
       v-model:gridSnapToGrid="gridSnapToGrid"
       v-model:viewPatternsEnabled="viewPatternsEnabled"
+      v-model:selectedPatternId="selectedPatternId"
       :chunkOptions="chunkOptions"
       :patternOptions="patternOptions"
+      :patternsForCurrentChunk="patternsForCurrentChunk"
       :showDiscreteLoader="showDiscreteLoader"
       :searchResults="searchResults"
       :processedPhotos="processedPhotos"
@@ -35,6 +37,9 @@
       @artistic-scores-change="onArtisticScoresChange"
       @time-range-change="onTimeRangeChange"
       @reset-view="resetView"
+      @highlight-pattern="handleHighlightPattern"
+      @unhighlight-pattern="handleUnhighlightPattern"
+      @select-pattern="handleSelectPattern"
     />
 
     <!-- Hovered Photo Info -->
@@ -477,9 +482,12 @@ const photoById = computed(() => {
 const {
   viewPatternsEnabled,
   patternOptions,
+  patternsForCurrentChunk,
   ensurePatternTagsLayer,
   ensurePatternTag,
   updateAllPatternTagsScreenScale,
+  highlightPatternPhotos,
+  unhighlightPatternPhotos,
 } = use2DPatternTags({
   userStore,
   selectedChunk,
@@ -489,6 +497,8 @@ const {
   scale,
   isTransitioning,
   isLoadingPositions,
+  photoSprites,
+  displayMode: "list", // Use list mode (change to 'floating' for old behavior)
 });
 
 // Selection state
@@ -1562,6 +1572,56 @@ const handleCollectionAdded = () => {
 
 const handleCollectionModalCancel = () => {
   showCollectionModal.value = false;
+};
+
+// Pattern selection state
+const selectedPatternId = ref(null);
+
+// Pattern highlight handlers
+const handleHighlightPattern = (pattern) => {
+  // Don't apply hover highlight if a pattern is already selected
+  if (selectedPatternId.value !== null) return;
+
+  if (!pattern) return;
+  const clusterPhotoIds = pattern.clusterPhotos || [];
+  const patternId = pattern.patternId ?? pattern.title;
+  highlightPatternPhotos(clusterPhotoIds, patternId);
+};
+
+const handleUnhighlightPattern = (pattern) => {
+  // Don't remove highlight on hover out if a pattern is selected
+  if (selectedPatternId.value !== null) return;
+
+  if (!pattern) return;
+  const clusterPhotoIds = pattern.clusterPhotos || [];
+  unhighlightPatternPhotos(clusterPhotoIds);
+};
+
+const handleSelectPattern = (pattern) => {
+  if (!pattern) return;
+
+  const patternId = pattern.patternId ?? pattern.title;
+  const clusterPhotoIds = pattern.clusterPhotos || [];
+
+  // If clicking the same pattern, deselect it
+  if (selectedPatternId.value === patternId) {
+    selectedPatternId.value = null;
+    unhighlightPatternPhotos(clusterPhotoIds);
+  } else {
+    // Select new pattern
+    // First unhighlight previous if any
+    if (selectedPatternId.value !== null) {
+      const prevPattern = patternsForCurrentChunk.value.find(
+        (p) => (p.patternId ?? p.title) === selectedPatternId.value,
+      );
+      if (prevPattern) {
+        unhighlightPatternPhotos(prevPattern.clusterPhotos || []);
+      }
+    }
+
+    selectedPatternId.value = patternId;
+    highlightPatternPhotos(clusterPhotoIds, patternId);
+  }
 };
 
 // Download handler

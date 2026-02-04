@@ -14,6 +14,8 @@ import * as PIXI from "pixi.js";
  * @param {import('vue').Ref<number>} params.scale - Current zoom scale
  * @param {import('vue').Ref<boolean>} params.isTransitioning - Whether a layout transition is in progress
  * @param {import('vue').Ref<boolean>} params.isLoadingPositions - Whether positions are being loaded from API
+ * @param {import('vue').Ref<Map>} params.photoSprites - Map of photoId -> PIXI.Sprite
+ * @param {string} params.displayMode - Display mode: 'floating' (tags on map) or 'list' (menu list)
  */
 export function use2DPatternTags({
   userStore,
@@ -24,6 +26,8 @@ export function use2DPatternTags({
   scale,
   isTransitioning,
   isLoadingPositions,
+  photoSprites,
+  displayMode = "list", // Default to list mode
 }) {
   // Scale factor from backend coordinates to canvas coordinates
   const SCALE_FACTOR = 50;
@@ -144,20 +148,18 @@ export function use2DPatternTags({
   };
 
   /**
-   * Compute the centroid (average position) of a pattern's sample photos
-   * @param {Object} pattern - Pattern object with samplePhotos array
+   * Compute the centroid (average position) of a pattern's cluster photos
+   * @param {Object} pattern - Pattern object with clusterPhotos array
    * @returns {Object|null} - {x, y, count} in canvas coordinates, or null if no valid photos
    */
   const computeCentroidCanvasFromSamplePhotos = (pattern) => {
-    const sampleIds = (pattern?.samplePhotos || [])
-      .map((sp) => sp?.id)
-      .filter(Boolean);
+    const clusterIds = (pattern?.clusterPhotos || []).filter(Boolean);
 
     let sumX = 0;
     let sumY = 0;
     let count = 0;
 
-    for (const id of sampleIds) {
+    for (const id of clusterIds) {
       const photo = getPhotoByIdLoose(id);
       if (!photo) continue;
       const [x, y] = photo.position || [0, 0];
@@ -245,16 +247,136 @@ export function use2DPatternTags({
   };
 
   /**
+   * Highlight photos belonging to a pattern
+   * @param {Array} clusterPhotoIds - Array of photo IDs to highlight
+   * @param {string|number} patternId - ID of the pattern being highlighted
+   */
+  const highlightPatternPhotos = (clusterPhotoIds, patternId) => {
+    if (!clusterPhotoIds || !photoSprites?.value) return;
+
+    const clusterIdSet = new Set(clusterPhotoIds);
+
+    // Hide all other pattern tags
+    activePatternTags.value.forEach((tag, id) => {
+      if (id !== patternId) {
+        tag.alpha = 0;
+      }
+    });
+
+    // First pass: dim all photos that are NOT in the cluster
+    photoSprites.value.forEach((sprite, photoId) => {
+      if (!clusterIdSet.has(photoId)) {
+        // Store original alpha if not already stored
+        if (sprite.__originalAlpha === undefined) {
+          sprite.__originalAlpha = sprite.alpha ?? 1;
+        }
+        // Make non-cluster photos semi-transparent
+        sprite.alpha = 0.2;
+      }
+    });
+
+    // Second pass: highlight cluster photos
+    for (const photoId of clusterPhotoIds) {
+      const sprite = photoSprites.value.get(photoId);
+      if (!sprite) continue;
+
+      // Solo aplicar efecto de 'luz' (aumento de brillo), sin filtro de color
+      // Guardar alpha original si no está guardado
+      if (sprite.__originalAlpha === undefined) {
+        sprite.__originalAlpha = sprite.alpha ?? 1;
+      }
+      // Aumentar el alpha para dar efecto de luz (máximo 1)
+      sprite.alpha = Math.min(1, sprite.__originalAlpha * 1.2);
+    }
+  };
+
+  /**
+   * Remove highlight from photos belonging to a pattern
+   * @param {Array} clusterPhotoIds - Array of photo IDs to unhighlight
+   */
+  const unhighlightPatternPhotos = (clusterPhotoIds) => {
+    if (!clusterPhotoIds || !photoSprites?.value) return;
+
+    // Show all pattern tags again
+    activePatternTags.value.forEach((tag) => {
+      tag.alpha = 1;
+    });
+
+    // Restore alpha for all photos
+    photoSprites.value.forEach((sprite) => {
+      if (sprite.__originalAlpha !== undefined) {
+        sprite.alpha = sprite.__originalAlpha;
+        delete sprite.__originalAlpha;
+      }
+    });
+
+    // Restore tint and scale for cluster photos
+    for (const photoId of clusterPhotoIds) {
+      const sprite = photoSprites.value.get(photoId);
+      if (!sprite) continue;
+
+      // Restore original tint
+      if (sprite.__originalTint !== undefined) {
+        sprite.tint = sprite.__originalTint;
+        delete sprite.__originalTint;
+      }
+
+      // Restore original scale
+      if (sprite.__originalScale !== undefined) {
+        sprite.scale.set(sprite.__originalScale.x, sprite.__originalScale.y);
+        delete sprite.__originalScale;
+      }
+    }
+  };
+
+  /**
+   * Clear all photo highlights/lowlights regardless of pattern
+   * Restores all sprites to their original state
+   */
+  const clearPhotoHighlights = () => {
+    if (!photoSprites?.value) return;
+
+    // Show all pattern tags again
+    activePatternTags.value.forEach((tag) => {
+      tag.alpha = 1;
+    });
+
+    // Restore all sprites to original state
+    photoSprites.value.forEach((sprite) => {
+      // Restore original alpha
+      if (sprite.__originalAlpha !== undefined) {
+        sprite.alpha = sprite.__originalAlpha;
+        delete sprite.__originalAlpha;
+      }
+
+      // Restore original tint
+      if (sprite.__originalTint !== undefined) {
+        sprite.tint = sprite.__originalTint;
+        delete sprite.__originalTint;
+      }
+
+      // Restore original scale
+      if (sprite.__originalScale !== undefined) {
+        sprite.scale.set(sprite.__originalScale.x, sprite.__originalScale.y);
+        delete sprite.__originalScale;
+      }
+    });
+  };
+
+  /**
    * Create a pattern tag sprite with text and rounded background
    * @param {string} label - Pattern title/label to display
    * @param {string} description - Pattern description for tooltip
+   * @param {Array} clusterPhotoIds - Array of photo IDs in this pattern
+   * @param {string|number} patternId - Pattern ID
    * @returns {PIXI.Container} - Container with text and background graphics
    */
-  const createPatternTag = (label, description) => {
+  const createPatternTag = (label, description, clusterPhotoIds, patternId) => {
     const group = new PIXI.Container();
     group.zIndex = 10_000;
     group.__patternLabel = label;
     group.__patternDescription = description;
+    group.__clusterPhotoIds = clusterPhotoIds;
 
     // Make interactive for tooltip
     group.eventMode = "static";
@@ -314,16 +436,22 @@ export function use2DPatternTags({
     group.addChild(bg);
     group.addChild(text);
 
-    // Add tooltip events
-    if (description) {
-      group.on("pointerenter", () => {
-        showTooltip(group, description, pixiApp.value);
-      });
+    // Add tooltip and photo highlight events
+    group.on("pointerenter", () => {
+      // if (description) {
+      //   showTooltip(group, description, pixiApp.value);
+      // }
+      if (clusterPhotoIds) {
+        highlightPatternPhotos(clusterPhotoIds, patternId);
+      }
+    });
 
-      group.on("pointerleave", () => {
-        hideTooltip();
-      });
-    }
+    group.on("pointerleave", () => {
+      // hideTooltip();
+      if (clusterPhotoIds) {
+        unhighlightPatternPhotos(clusterPhotoIds);
+      }
+    });
 
     return group;
   };
@@ -358,6 +486,12 @@ export function use2DPatternTags({
    * - Removes tags when patterns are disabled or no longer exist
    */
   const ensurePatternTag = () => {
+    // Only render floating tags if displayMode is 'floating'
+    if (displayMode !== "floating") {
+      clearPatternTag();
+      return;
+    }
+
     ensurePatternTagsLayer();
     if (!patternTagsContainer.value) return;
 
@@ -394,6 +528,7 @@ export function use2DPatternTags({
 
       const label = pattern.title || "Pattern";
       const description = pattern.description || "";
+      const clusterPhotoIds = pattern.clusterPhotos || [];
       let tag = activePatternTags.value.get(patternId);
 
       const needsRecreate =
@@ -413,9 +548,12 @@ export function use2DPatternTags({
         }
 
         // Create new tag
-        tag = createPatternTag(label, description);
+        tag = createPatternTag(label, description, clusterPhotoIds, patternId);
         container.addChild(tag);
         activePatternTags.value.set(patternId, tag);
+      } else {
+        // Update cluster photo IDs in case they changed
+        tag.__clusterPhotoIds = clusterPhotoIds;
       }
 
       // Update position
@@ -445,6 +583,14 @@ export function use2DPatternTags({
   watch([viewPatternsEnabled, selectedChunk], () => {
     ensurePatternTag();
   });
+
+  // Watch for chunk changes to clear photo highlights
+  watch(
+    () => selectedChunk.value,
+    () => {
+      clearPhotoHighlights();
+    },
+  );
 
   // Watch for transition end to render tags
   watch(isTransitioning, (transitioning) => {
@@ -482,5 +628,10 @@ export function use2DPatternTags({
     clearPatternTag,
     updatePatternTagScreenScale,
     updateAllPatternTagsScreenScale,
+
+    // Highlight methods (exposed for external use, e.g., from UI list)
+    highlightPatternPhotos,
+    unhighlightPatternPhotos,
+    clearPhotoHighlights,
   };
 }
