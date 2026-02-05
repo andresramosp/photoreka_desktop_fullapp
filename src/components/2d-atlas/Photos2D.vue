@@ -478,6 +478,17 @@ const photoById = computed(() => {
   return map;
 });
 
+// Selection state
+const selectedPhotoIds = ref([]);
+const hoveredPhoto = ref(null);
+const tooltipPosition = ref({ x: 0, y: 0 });
+
+// Modal state
+const showCollectionModal = ref(false);
+
+// Pattern selection state
+const selectedPatternId = ref(null);
+
 // Pattern tags overlay
 const {
   viewPatternsEnabled,
@@ -488,6 +499,8 @@ const {
   updateAllPatternTagsScreenScale,
   highlightPatternPhotos,
   unhighlightPatternPhotos,
+  scheduleHeatmapUpdate,
+  cleanup: cleanupPatternTags,
   HIGHLIGHT_MODE, // Exposed for configuration: 'photos' or 'heatmap'
 } = use2DPatternTags({
   userStore,
@@ -500,15 +513,8 @@ const {
   isLoadingPositions,
   photoSprites,
   displayMode: "list", // Use list mode (change to 'floating' for old behavior)
+  selectedPatternId, // Pass selected pattern ID so heatmap can refresh properly
 });
-
-// Selection state
-const selectedPhotoIds = ref([]);
-const hoveredPhoto = ref(null);
-const tooltipPosition = ref({ x: 0, y: 0 });
-
-// Modal state
-const showCollectionModal = ref(false);
 
 // Scale coordinates from API to canvas
 const SCALE_FACTOR = 50;
@@ -1305,6 +1311,9 @@ const updateTransitionPositions = (currentTime) => {
 
     // Rebuild spatial index after positions change.
     buildHiResSpatialIndex();
+
+    // Update heatmap with new positions
+    scheduleHeatmapUpdate();
   }
 };
 
@@ -1434,6 +1443,7 @@ const updateSpriteVisibility = () => {
   });
 
   scheduleHiResUpdate();
+  scheduleHeatmapUpdate();
 };
 
 // Zoom controls
@@ -1574,9 +1584,6 @@ const handleCollectionAdded = () => {
 const handleCollectionModalCancel = () => {
   showCollectionModal.value = false;
 };
-
-// Pattern selection state
-const selectedPatternId = ref(null);
 
 // Pattern highlight handlers
 const handleHighlightPattern = (pattern) => {
@@ -1779,6 +1786,7 @@ onUnmounted(() => {
     clearTimeout(filterSnapReflowTimer);
     filterSnapReflowTimer = null;
   }
+  cleanupPatternTags();
   cleanup();
 });
 
@@ -1794,6 +1802,7 @@ const scheduleSnapReflowAfterFilterChange = () => {
       repositionSprites(photos2D.value);
     }
     ensurePatternTag();
+    scheduleHeatmapUpdate();
   }, 60);
 };
 
@@ -1803,6 +1812,7 @@ watch(
   () => {
     updateSpriteVisibility();
     scheduleSnapReflowAfterFilterChange();
+    // Heatmap will be updated by scheduleSnapReflowAfterFilterChange or by sprite visibility change
   },
   { deep: true },
 );
@@ -1815,6 +1825,7 @@ watch(gridRelaxationEnabled, () => {
     repositionSprites(photos2D.value);
   }
   ensurePatternTag();
+  scheduleHeatmapUpdate();
 });
 
 watch(gridRelaxationExpandStrength, () => {
@@ -1824,6 +1835,7 @@ watch(gridRelaxationExpandStrength, () => {
     repositionSprites(photos2D.value);
   }
   ensurePatternTag();
+  scheduleHeatmapUpdate();
 });
 
 watch(gridSnapToGrid, () => {
@@ -1833,6 +1845,7 @@ watch(gridSnapToGrid, () => {
     repositionSprites(photos2D.value);
   }
   ensurePatternTag();
+  scheduleHeatmapUpdate();
 });
 
 watch(

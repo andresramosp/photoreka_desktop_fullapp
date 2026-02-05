@@ -16,6 +16,7 @@ import * as PIXI from "pixi.js";
  * @param {import('vue').Ref<boolean>} params.isLoadingPositions - Whether positions are being loaded from API
  * @param {import('vue').Ref<Map>} params.photoSprites - Map of photoId -> PIXI.Sprite
  * @param {string} params.displayMode - Display mode: 'floating' (tags on map) or 'list' (menu list)
+ * @param {import('vue').Ref} params.selectedPatternId - Currently selected pattern ID (from parent component)
  */
 export function use2DPatternTags({
   userStore,
@@ -28,6 +29,7 @@ export function use2DPatternTags({
   isLoadingPositions,
   photoSprites,
   displayMode = "list", // Default to list mode
+  selectedPatternId, // Optional: pattern ID selected in parent component
 }) {
   // Scale factor from backend coordinates to canvas coordinates
   const SCALE_FACTOR = 50;
@@ -257,7 +259,9 @@ export function use2DPatternTags({
    */
   const ensureHeatmapContainer = () => {
     const parent = photoContainer.value;
-    if (!parent) return;
+    if (!parent || parent.destroyed) return;
+    // Safety check for pixiApp
+    if (!pixiApp?.value || pixiApp.value.destroyed) return;
 
     const existing = heatmapContainer.value;
     const needsNew =
@@ -328,7 +332,22 @@ export function use2DPatternTags({
    * @param {Array} clusterPhotoIds - Array of photo IDs in the pattern
    */
   const createHeatmapOverlay = (clusterPhotoIds) => {
+    console.log(
+      "[Heatmap] createHeatmapOverlay called with",
+      clusterPhotoIds?.length,
+      "photo IDs",
+    );
     if (!clusterPhotoIds || clusterPhotoIds.length === 0) return;
+
+    // Safety check: ensure Pixi app and containers are still valid
+    if (!pixiApp?.value || !photoContainer?.value) {
+      console.log("[Heatmap] Missing pixiApp or photoContainer");
+      return;
+    }
+    if (pixiApp.value.destroyed) {
+      console.log("[Heatmap] PixiApp is destroyed");
+      return;
+    }
 
     activeHeatmapPhotoIds.value = clusterPhotoIds;
 
@@ -336,21 +355,41 @@ export function use2DPatternTags({
     clearHeatmap();
 
     const container = heatmapContainer.value;
-    if (!container) return;
-
-    // Get positions of all cluster photos
-    const positions = [];
-    for (const photoId of clusterPhotoIds) {
-      const photo = getPhotoByIdLoose(photoId);
-      if (!photo) continue;
-      const [x, y] = photo.position || [0, 0];
-      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-      positions.push({
-        x: x * SCALE_FACTOR,
-        y: y * SCALE_FACTOR,
-      });
+    if (!container || container.destroyed) {
+      console.log("[Heatmap] Container invalid");
+      return;
     }
 
+    // Get positions of cluster photos that are currently visible
+    // Filter by photoSprites to respect current filters and layout
+    const positions = [];
+    const sprites = photoSprites?.value;
+
+    if (!sprites) {
+      console.log("[Heatmap] No sprites map available");
+      return;
+    }
+
+    for (const photoId of clusterPhotoIds) {
+      // Skip if photo is not in current sprite map (filtered out)
+      const sprite = sprites?.get(photoId);
+      if (!sprite || !sprite.visible) continue;
+
+      // Use sprite position (reflects current layout including snap/relaxation)
+      const x = sprite.x;
+      const y = sprite.y;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+
+      positions.push({ x, y });
+    }
+
+    console.log(
+      "[Heatmap] Found",
+      positions.length,
+      "visible positions out of",
+      clusterPhotoIds.length,
+      "cluster photos",
+    );
     if (positions.length === 0) return;
 
     // Create graphics for heatmap
@@ -418,6 +457,7 @@ export function use2DPatternTags({
 
     container.addChild(graphics);
     activeHeatmapGraphics.value = graphics;
+    console.log("[Heatmap] ✅ Heatmap rendered successfully");
   };
 
   // Keep heatmap roughly consistent when zoom changes.
@@ -427,7 +467,6 @@ export function use2DPatternTags({
     () => scale.value,
     () => {
       if (HIGHLIGHT_MODE.value !== "heatmap") return;
-      if (isLoadingPositions.value || isTransitioning.value) return;
       const ids = activeHeatmapPhotoIds.value;
       if (!ids || ids.length === 0) return;
 
@@ -438,6 +477,81 @@ export function use2DPatternTags({
       });
     },
   );
+
+  // Update heatmap when photo positions change (snap/relaxation) or filters change
+  let heatmapUpdateRaf = 0;
+  const scheduleHeatmapUpdate = () => {
+    console.log("[Heatmap] scheduleHeatmapUpdate called");
+    if (HIGHLIGHT_MODE.value !== "heatmap") {
+      console.log("[Heatmap] Not in heatmap mode, skipping");
+      return;
+    }
+    // Safety check before scheduling async update
+    if (!pixiApp?.value || pixiApp.value.destroyed) {
+      console.log("[Heatmap] PixiApp not available, skipping");
+      return;
+    }
+
+    // Try to get photo IDs from active heatmap state first
+    let ids = activeHeatmapPhotoIds.value;
+
+    // If no active heatmap IDs but there's a selected pattern, get IDs from pattern
+    if ((!ids || ids.length === 0) && selectedPatternId?.value) {
+      console.log(
+        "[Heatmap] No activeHeatmapPhotoIds, trying to get from selectedPatternId:",
+        selectedPatternId.value,
+      );
+      const currentPattern = patternsForCurrentChunk.value.find(
+        (p) => (p.patternId ?? p.title) === selectedPatternId.value,
+      );
+      if (currentPattern) {
+        ids = currentPattern.clusterPhotos || [];
+        console.log("[Heatmap] Found pattern with", ids.length, "photos");
+      }
+    }
+
+    if (!ids || ids.length === 0) {
+      console.log("[Heatmap] No active pattern selected, skipping");
+      return;
+    }
+
+    console.log("[Heatmap] Scheduling update for", ids.length, "photos");
+    if (heatmapUpdateRaf) cancelAnimationFrame(heatmapUpdateRaf);
+    heatmapUpdateRaf = requestAnimationFrame(() => {
+      heatmapUpdateRaf = 0;
+      console.log("[Heatmap] Executing scheduled update");
+      createHeatmapOverlay(ids);
+    });
+  };
+
+  // Watch for sprite map changes (filters, visibility changes)
+  // Use deep watch on the sprites value itself to catch visibility changes
+  watch(
+    () => {
+      // Create a reactive dependency on sprite visibility and positions
+      const sprites = photoSprites.value;
+      if (!sprites) return 0;
+      let hash = sprites.size;
+      sprites.forEach((sprite) => {
+        if (sprite.visible) hash++;
+      });
+      return hash;
+    },
+    () => {
+      scheduleHeatmapUpdate();
+    },
+  );
+
+  // Watch for transition end to update heatmap with new positions
+  watch(isTransitioning, (transitioning, wasTransitioning) => {
+    if (wasTransitioning && !transitioning) {
+      // Transition just finished, update heatmap
+      // Add small delay to ensure sprites have final positions
+      setTimeout(() => {
+        scheduleHeatmapUpdate();
+      }, 50);
+    }
+  });
 
   /**
    * Calculate average nearest neighbor distance to determine density
@@ -491,6 +605,13 @@ export function use2DPatternTags({
    * @param {string|number} patternId - ID of the pattern being highlighted
    */
   const highlightPatternPhotosHeatmap = (clusterPhotoIds, patternId) => {
+    console.log(
+      "[Heatmap] highlightPatternPhotosHeatmap called for pattern",
+      patternId,
+      "with",
+      clusterPhotoIds?.length,
+      "photos",
+    );
     if (!clusterPhotoIds) return;
 
     // Hide all other pattern tags
@@ -880,6 +1001,20 @@ export function use2DPatternTags({
     }
   });
 
+  // Cleanup function to cancel pending RAF calls
+  const cleanup = () => {
+    if (heatmapZoomRaf) {
+      cancelAnimationFrame(heatmapZoomRaf);
+      heatmapZoomRaf = 0;
+    }
+    if (heatmapUpdateRaf) {
+      cancelAnimationFrame(heatmapUpdateRaf);
+      heatmapUpdateRaf = 0;
+    }
+    clearHeatmap();
+    clearPatternTag();
+  };
+
   return {
     // State
     viewPatternsEnabled,
@@ -895,6 +1030,8 @@ export function use2DPatternTags({
     clearPatternTag,
     updatePatternTagScreenScale,
     updateAllPatternTagsScreenScale,
+    scheduleHeatmapUpdate, // Export to allow manual refresh after layout changes
+    cleanup, // Export cleanup for component unmount
 
     // Highlight methods (exposed for external use, e.g., from UI list)
     highlightPatternPhotos,
