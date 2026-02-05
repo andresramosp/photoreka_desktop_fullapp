@@ -488,6 +488,7 @@ const {
   updateAllPatternTagsScreenScale,
   highlightPatternPhotos,
   unhighlightPatternPhotos,
+  HIGHLIGHT_MODE, // Exposed for configuration: 'photos' or 'heatmap'
 } = use2DPatternTags({
   userStore,
   selectedChunk,

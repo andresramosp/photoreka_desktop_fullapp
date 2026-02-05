@@ -32,12 +32,18 @@ export function use2DPatternTags({
   // Scale factor from backend coordinates to canvas coordinates
   const SCALE_FACTOR = 50;
 
+  // Highlight mode: 'photos' (iluminar fotos específicas) o 'heatmap' (áreas difusas de densidad)
+  const HIGHLIGHT_MODE = ref("heatmap"); // Cambiar a "photos" para el comportamiento anterior
+
   // State
   const viewPatternsEnabled = ref(false);
   const patternTagsContainer = shallowRef(null);
   const activePatternTags = shallowRef(new Map()); // Map of patternId -> tag sprite
   const activeTooltip = shallowRef(null); // Current tooltip being displayed (HTML element)
   const tooltipElement = shallowRef(null); // DOM element for tooltip
+  const heatmapContainer = shallowRef(null); // Container for heatmap graphics
+  const activeHeatmapGraphics = shallowRef(null); // Current heatmap graphics
+  const activeHeatmapPhotoIds = shallowRef(null); // Remember last ids for zoom refresh
 
   // Get catalog patterns from user profile
   const catalogPatterns = computed(() => {
@@ -247,11 +253,263 @@ export function use2DPatternTags({
   };
 
   /**
-   * Highlight photos belonging to a pattern
+   * Create heatmap container if it doesn't exist
+   */
+  const ensureHeatmapContainer = () => {
+    const parent = photoContainer.value;
+    if (!parent) return;
+
+    const existing = heatmapContainer.value;
+    const needsNew =
+      !existing ||
+      existing.destroyed ||
+      existing.parent !== parent ||
+      typeof existing.addChild !== "function";
+
+    if (needsNew) {
+      try {
+        existing?.parent?.removeChild?.(existing);
+      } catch (_) {
+        // ignore
+      }
+
+      const layer = new PIXI.Container();
+      // Heatmap should be a subtle background layer.
+      // Keep it behind photo sprites so it doesn't "paint over" them.
+      layer.zIndex = -100;
+      // Avoid interfering with pointer events.
+      layer.eventMode = "none";
+
+      // Prefer an explicit back insertion to avoid relying on zIndex sorting.
+      try {
+        parent.addChildAt(layer, 0);
+      } catch (_) {
+        parent.addChild(layer);
+      }
+      try {
+        parent.sortChildren?.();
+      } catch (_) {
+        // ignore
+      }
+      heatmapContainer.value = layer;
+      return;
+    }
+
+    // Keep the layer at the back.
+    try {
+      if (parent.getChildIndex?.(existing) !== 0) {
+        parent.setChildIndex?.(existing, 0);
+      }
+      parent.sortChildren?.();
+    } catch (_) {
+      // ignore
+    }
+  };
+
+  /**
+   * Clear active heatmap graphics
+   */
+  const clearHeatmap = () => {
+    const graphics = activeHeatmapGraphics.value;
+    if (graphics) {
+      try {
+        heatmapContainer.value?.removeChild?.(graphics);
+        graphics.destroy?.({ children: true });
+      } catch (_) {
+        // ignore
+      }
+      activeHeatmapGraphics.value = null;
+    }
+    activeHeatmapPhotoIds.value = null;
+  };
+
+  /**
+   * Create a diffused heatmap overlay based on photo density
+   * @param {Array} clusterPhotoIds - Array of photo IDs in the pattern
+   */
+  const createHeatmapOverlay = (clusterPhotoIds) => {
+    if (!clusterPhotoIds || clusterPhotoIds.length === 0) return;
+
+    activeHeatmapPhotoIds.value = clusterPhotoIds;
+
+    ensureHeatmapContainer();
+    clearHeatmap();
+
+    const container = heatmapContainer.value;
+    if (!container) return;
+
+    // Get positions of all cluster photos
+    const positions = [];
+    for (const photoId of clusterPhotoIds) {
+      const photo = getPhotoByIdLoose(photoId);
+      if (!photo) continue;
+      const [x, y] = photo.position || [0, 0];
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      positions.push({
+        x: x * SCALE_FACTOR,
+        y: y * SCALE_FACTOR,
+      });
+    }
+
+    if (positions.length === 0) return;
+
+    // Create graphics for heatmap
+    const graphics = new PIXI.Graphics();
+
+    // Render as a background glow instead of an opaque overlay.
+    // Prefer SCREEN; fall back to ADD; if neither exist, keep Pixi default.
+    // IMPORTANT: Never assign undefined here (Pixi can crash in the blend mode pipe).
+    try {
+      const modes = PIXI?.BLEND_MODES;
+      const safeBlendMode = modes?.SCREEN ?? modes?.ADD ?? null;
+      if (safeBlendMode !== null && safeBlendMode !== undefined) {
+        graphics.blendMode = safeBlendMode;
+      }
+    } catch (_) {
+      // keep default blend mode
+    }
+    // A bit stronger than before but still a background effect.
+    graphics.alpha = 1.0;
+
+    // Get theme color for heatmap
+    let heatmapColor = 0x1976d2; // Default blue
+    try {
+      const primaryHex = getComputedStyle(document.documentElement)
+        .getPropertyValue("--v-primary-base")
+        .trim();
+      if (primaryHex && primaryHex.startsWith("#")) {
+        const parsed = parseInt(primaryHex.replace("#", ""), 16);
+        if (Number.isFinite(parsed)) {
+          heatmapColor = parsed;
+        }
+      }
+    } catch (_) {
+      // fallback
+    }
+
+    // Calculate adaptive radius based on density and scale
+    const avgDistance = calculateAverageNearestNeighborDistance(positions);
+    // Smaller radii + lower alpha keeps the effect subtle.
+    const baseRadius = Math.max(45, avgDistance * 1.8);
+    const currentScale = Number(scale.value) || 1;
+    // Slightly reduce growth with zoom so it remains background-like.
+    const adaptiveRadius =
+      baseRadius / Math.pow(Math.max(1e-6, currentScale), 0.4);
+
+    // Draw gradient circles at each photo position
+    // Using multiple circles with decreasing alpha creates a smooth diffused effect
+    positions.forEach((pos) => {
+      const steps = 8;
+      const maxPointAlpha = 0.055;
+      for (let i = steps; i > 0; i--) {
+        const radiusFactor = i / steps;
+        const alphaFactor = (1 - radiusFactor) * maxPointAlpha;
+        graphics.circle(pos.x, pos.y, adaptiveRadius * radiusFactor);
+        graphics.fill({ color: heatmapColor, alpha: alphaFactor });
+      }
+    });
+
+    // Apply blur filter for diffused effect
+    const blurFilter = new PIXI.BlurFilter();
+    // More blur, but with lower alpha, reads as "ambient" density.
+    blurFilter.blur = 18;
+    blurFilter.quality = 3;
+    graphics.filters = [blurFilter];
+
+    container.addChild(graphics);
+    activeHeatmapGraphics.value = graphics;
+  };
+
+  // Keep heatmap roughly consistent when zoom changes.
+  // Avoid heavy work during active transitions/loading; and only when a heatmap is active.
+  let heatmapZoomRaf = 0;
+  watch(
+    () => scale.value,
+    () => {
+      if (HIGHLIGHT_MODE.value !== "heatmap") return;
+      if (isLoadingPositions.value || isTransitioning.value) return;
+      const ids = activeHeatmapPhotoIds.value;
+      if (!ids || ids.length === 0) return;
+
+      if (heatmapZoomRaf) cancelAnimationFrame(heatmapZoomRaf);
+      heatmapZoomRaf = requestAnimationFrame(() => {
+        heatmapZoomRaf = 0;
+        createHeatmapOverlay(ids);
+      });
+    },
+  );
+
+  /**
+   * Calculate average nearest neighbor distance to determine density
+   * @param {Array} positions - Array of {x, y} positions
+   * @returns {number} Average distance to nearest neighbor
+   */
+  const calculateAverageNearestNeighborDistance = (positions) => {
+    if (positions.length < 2) return 100; // Default radius
+
+    let totalDistance = 0;
+    let count = 0;
+
+    // For each position, find distance to nearest neighbor
+    for (let i = 0; i < positions.length; i++) {
+      let minDistance = Infinity;
+      for (let j = 0; j < positions.length; j++) {
+        if (i === j) continue;
+        const dx = positions[i].x - positions[j].x;
+        const dy = positions[i].y - positions[j].y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance < minDistance) {
+          minDistance = distance;
+        }
+      }
+      if (Number.isFinite(minDistance)) {
+        totalDistance += minDistance;
+        count++;
+      }
+    }
+
+    return count > 0 ? totalDistance / count : 100;
+  };
+
+  /**
+   * Highlight photos belonging to a pattern (original method)
+   * Delegates to either photo-based or heatmap-based highlighting
    * @param {Array} clusterPhotoIds - Array of photo IDs to highlight
    * @param {string|number} patternId - ID of the pattern being highlighted
    */
   const highlightPatternPhotos = (clusterPhotoIds, patternId) => {
+    if (HIGHLIGHT_MODE.value === "heatmap") {
+      highlightPatternPhotosHeatmap(clusterPhotoIds, patternId);
+    } else {
+      highlightPatternPhotosPhotos(clusterPhotoIds, patternId);
+    }
+  };
+
+  /**
+   * Highlight using heatmap overlay (diffused areas)
+   * @param {Array} clusterPhotoIds - Array of photo IDs to highlight
+   * @param {string|number} patternId - ID of the pattern being highlighted
+   */
+  const highlightPatternPhotosHeatmap = (clusterPhotoIds, patternId) => {
+    if (!clusterPhotoIds) return;
+
+    // Hide all other pattern tags
+    activePatternTags.value.forEach((tag, id) => {
+      if (id !== patternId) {
+        tag.alpha = 0;
+      }
+    });
+
+    // Create heatmap overlay
+    createHeatmapOverlay(clusterPhotoIds);
+  };
+
+  /**
+   * Highlight using photo-based highlighting (original method)
+   * @param {Array} clusterPhotoIds - Array of photo IDs to highlight
+   * @param {string|number} patternId - ID of the pattern being highlighted
+   */
+  const highlightPatternPhotosPhotos = (clusterPhotoIds, patternId) => {
     if (!clusterPhotoIds || !photoSprites?.value) return;
 
     const clusterIdSet = new Set(clusterPhotoIds);
@@ -295,6 +553,11 @@ export function use2DPatternTags({
    * @param {Array} clusterPhotoIds - Array of photo IDs to unhighlight
    */
   const unhighlightPatternPhotos = (clusterPhotoIds) => {
+    // Clear heatmap if in heatmap mode
+    if (HIGHLIGHT_MODE.value === "heatmap") {
+      clearHeatmap();
+    }
+
     if (!clusterPhotoIds || !photoSprites?.value) return;
 
     // Show all pattern tags again
@@ -334,6 +597,9 @@ export function use2DPatternTags({
    * Restores all sprites to their original state
    */
   const clearPhotoHighlights = () => {
+    // Clear heatmap
+    clearHeatmap();
+
     if (!photoSprites?.value) return;
 
     // Show all pattern tags again
@@ -621,6 +887,7 @@ export function use2DPatternTags({
     patternsForCurrentChunk,
     patternTagsContainer,
     activePatternTags,
+    HIGHLIGHT_MODE, // Export for external configuration
 
     // Methods
     ensurePatternTagsLayer,
