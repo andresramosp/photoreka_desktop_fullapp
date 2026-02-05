@@ -238,11 +238,11 @@
 
         <!-- Patterns List -->
         <div
-          v-if="showPatterns && patternsForCurrentChunk.length > 0"
+          v-if="showPatterns && sortedPatternsForCurrentChunk.length > 0"
           class="patterns-list"
         >
           <div
-            v-for="pattern in patternsForCurrentChunk"
+            v-for="pattern in sortedPatternsForCurrentChunk"
             :key="pattern.patternId ?? pattern.title"
             :class="[
               'pattern-item',
@@ -254,13 +254,23 @@
             @click="handlePatternClick(pattern)"
           >
             <div class="pattern-info">
-              <span class="pattern-title">{{
-                pattern.title || "Pattern"
-              }}</span>
+              <div style="display: flex; align-items: center; gap: 8px">
+                <n-tooltip trigger="hover" placement="top">
+                  <template #trigger>
+                    <n-icon
+                      :size="14"
+                      :component="getStrengthIcon(pattern.strength)"
+                      class="pattern-strength-icon"
+                      :class="pattern.strength"
+                    />
+                  </template>
+                  {{ getStrengthLabel(pattern.strength) }} pattern
+                </n-tooltip>
+                <span class="pattern-title">{{
+                  pattern.title || "Pattern"
+                }}</span>
+              </div>
               <div class="pattern-meta">
-                <span class="pattern-count"
-                  >{{ (pattern.clusterPhotos || []).length }} photos</span
-                >
                 <n-tooltip
                   v-if="pattern.description"
                   trigger="hover"
@@ -512,7 +522,12 @@ import {
   InfoCircleOutlined,
   TagOutlined,
 } from "@vicons/antd";
-import { AppsOutline } from "@vicons/ionicons5";
+import {
+  AppsOutline,
+  Star as StarIcon,
+  EllipseOutline as EllipseIcon,
+  TrendingUpOutline as TrendingUpIcon,
+} from "@vicons/ionicons5";
 import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
 import EmbeddingInfoModal from "./EmbeddingInfoModal.vue";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
@@ -720,6 +735,24 @@ const activeFiltersCount = computed(() => {
   return count;
 });
 
+// Sort patterns by strength first, then by number of photos
+const sortedPatternsForCurrentChunk = computed(() => {
+  const strengthOrder = { strong: 0, moderate: 1, weak: 2 };
+  const patterns = [...props.patternsForCurrentChunk];
+  return patterns.sort((a, b) => {
+    // First, sort by strength (strong > moderate > weak)
+    const aStrengthIndex = strengthOrder[a.strength] ?? 999;
+    const bStrengthIndex = strengthOrder[b.strength] ?? 999;
+    if (aStrengthIndex !== bStrengthIndex) {
+      return aStrengthIndex - bStrengthIndex;
+    }
+    // If same strength, sort by number of photos (descending)
+    const aCount = (a.clusterPhotos || []).length;
+    const bCount = (b.clusterPhotos || []).length;
+    return bCount - aCount;
+  });
+});
+
 // Toggle handlers
 const toggleMoreFilters = () => {
   showMoreFilters.value = !showMoreFilters.value;
@@ -809,6 +842,25 @@ const handlePatternUnhover = (pattern) => {
 
 const handlePatternClick = (pattern) => {
   emit("select-pattern", pattern);
+};
+
+// Translate strength labels
+const getStrengthLabel = (strength) => {
+  const labels = {
+    strong: "Strong",
+    moderate: "Moderate",
+    weak: "Emerging",
+  };
+  return labels[strength] || strength;
+};
+
+const getStrengthIcon = (strength) => {
+  const icons = {
+    strong: StarIcon,
+    moderate: EllipseIcon,
+    weak: TrendingUpIcon,
+  };
+  return icons[strength] || null;
 };
 </script>
 
@@ -1237,10 +1289,22 @@ const handlePatternClick = (pattern) => {
   gap: 6px;
 }
 
-.pattern-count {
-  color: var(--text-secondary);
-  font-size: 11px;
-  white-space: nowrap;
+.pattern-strength-icon {
+  cursor: help;
+  transition: color 0.2s;
+  flex-shrink: 0;
+}
+
+.pattern-strength-icon.strong {
+  color: var(--accent-color, #4ade80);
+}
+
+.pattern-strength-icon.moderate {
+  color: var(--primary-color, #3b82f6);
+}
+
+.pattern-strength-icon.weak {
+  color: var(--warning-color, #f59e0b);
 }
 
 .pattern-info-icon {
