@@ -236,6 +236,9 @@
           </n-icon>
         </div>
 
+        <!-- Chunk description -->
+        <span class="chunk-description">{{ currentChunkDescription }}</span>
+
         <!-- Patterns List -->
         <div
           v-if="showPatterns && sortedPatternsForCurrentChunk.length > 0"
@@ -753,6 +756,27 @@ const sortedPatternsForCurrentChunk = computed(() => {
   });
 });
 
+// Chunk descriptions based on selected embedding type
+const chunkDescriptions = {
+  general:
+    "Visual, stylistic, and recurring object patterns identified across your collection",
+  story:
+    "Storytelling themes and narrative clusters identified in your collection",
+  context:
+    "Contextual themes and regional patterns detected across your photography collection",
+  // visual_accents:
+  //   "Recurring visual elements and compositional patterns in your photos",
+  // color_histogram:
+  //   "Color harmony and chromatic patterns across your collection",
+  // color_histogram_dominant:
+  //   "Dominant color groupings and color-based photo relationships",
+  // visual_aspects: "Technical visual characteristics and compositional elements",
+};
+
+const currentChunkDescription = computed(() => {
+  return chunkDescriptions[props.selectedChunk] || null;
+});
+
 // Toggle handlers
 const toggleMoreFilters = () => {
   showMoreFilters.value = !showMoreFilters.value;
@@ -969,6 +993,15 @@ const getStrengthIcon = (strength) => {
   color: #e5e5e5;
   font-size: 13px;
   font-weight: 600;
+}
+
+.chunk-description {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+  display: block;
+  margin-top: 0px;
+  margin-bottom: 8px;
 }
 
 .section-toggle-indicators {
