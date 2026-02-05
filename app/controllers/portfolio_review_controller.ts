@@ -5,7 +5,7 @@ import type { ReviewType } from '../managers/portfolio_review_manager.js'
 import User from '#models/user'
 import Photo from '#models/photo'
 
-const REVIEW_TYPES: ReviewType[] = ['story']
+const REVIEW_TYPES: ReviewType[] = ['general', 'story', 'context']
 const BUILD_THRESHOLD_PHOTOS = 100
 const REBUILD_THRESHOLD_CHANGES = 200 // Número absoluto de fotos añadidas/borradas para rebuild
 const BUILD_TIMEOUT_MS = 60 * 60 * 1000 // 60 minutos - tiempo máximo esperado para un build
@@ -41,7 +41,7 @@ export default class PortfolioReviewController {
       const existingCatalogPatterns = (userModelStart.catalogPatterns as any) || {}
 
       // Procesar cada reviewType con límite de concurrencia (máximo 2 en paralelo)
-      const limit = pLimit(2)
+      const limit = pLimit(3)
       const promises = REVIEW_TYPES.map((reviewType) =>
         limit(async () => {
           console.log(`Procesando patterns para reviewType: ${reviewType}`)

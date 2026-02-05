@@ -395,17 +395,18 @@ export interface PatternForDeduplication {
   shortDescription: string
   photoCount: number
 }
+
 export const PROMPT_PORTFOLIO_DEDUPLICATE = (
   patterns: PatternForDeduplication[],
   reviewType: 'story' | 'context' | 'general' | 'visual_accents'
 ) => {
   const reviewTypeDescriptions: Record<'story' | 'context' | 'general' | 'visual_accents', string> =
     {
-      story: 'narrative patterns (themes, storytelling approaches)',
-      context: 'contextual patterns (cultural context, settings, situations, geographic regions)',
-      general: 'visual patterns (stylistic treatments or recurring object motifs)',
-      visual_accents:
-        'visual accent patterns (recurring visual details, objects, colors, weird details or anomalies)',
+      story: 'narrative patterns (themes, storytelling approaches, implied meaning)',
+      context: 'contextual patterns (situations, environments, social or cultural settings)',
+      general:
+        'visual, technical and stylistic patterns (light, contrast, composition, visual treatment)',
+      visual_accents: 'visual accent patterns (recurring details, objects, colors, visual quirks)',
     }
 
   const patternsText = patterns
@@ -416,50 +417,50 @@ export const PROMPT_PORTFOLIO_DEDUPLICATE = (
     .join('\n')
 
   return {
-    systemPrompt: `You are analyzing a list of ${reviewTypeDescriptions[reviewType]} identified in a photography portfolio.
+    systemPrompt: `You are reviewing ${reviewTypeDescriptions[reviewType]} detected in a photography portfolio.
 
-Your task is to identify ONLY CLEARLY DUPLICATE patterns that describe essentially the SAME thing, at the SAME level of abstraction, so they can be MERGED together.
+Your task is to MERGE patterns that clearly describe the SAME underlying idea, even if worded differently.
 
-DUPLICATION CRITERIA (STRICT):
-- Two patterns are duplicates ONLY if they describe the SAME core concept and could be considered PRACTICAL SYNONYMS
-- They should be interchangeable in meaning: replacing one title with the other would not change interpretation
-- Minor wording or phrasing differences do NOT make patterns unique
-- Differences in scope, specificity, emphasis, or intent DO make patterns unique
+IMPORTANT:
+What counts as a meaningful difference depends on the TYPE of pattern you are reviewing.
+Respect the relevant visual or conceptual nuances implied by the pattern type.
+Do NOT collapse distinctions that are significant at this level of analysis.
 
-DO NOT MERGE:
-- Subcases, subsets, specializations, or variations of a broader pattern
-- A specific instance into a more general category, or vice versa
-- Patterns where one could logically exist inside the other
-- Patterns that share elements or subjects but describe different visual roles, meanings, or uses
-- Related, adjacent, overlapping, or complementary concepts
+MERGE WHEN:
+- Patterns refer to the same subject AND the same dominant idea or treatment
+- Differences are mostly linguistic (phrasing, adjectives, emphasis)
+- A human editor would perceive both clusters as essentially the same pattern
+
+DO NOT MERGE WHEN:
+- One pattern is a subset, variant, or special case of another
+- One is broader or more abstract than the other
+- The visual intention, role, or reading is meaningfully different
+- One could reasonably exist inside the other
+- They only share subject matter, not the same core idea
 
 Rule of thumb:
-If you can reasonably say “X is a type of Y” or “Y includes X”, they are NOT duplicates.
+If merging would reduce the portfolio’s ability to distinguish patterns at this level, do NOT merge.
 
 MERGING RULES:
-- When you find duplicates, the pattern with FEWER photos will be merged INTO the pattern with MORE photos
-- The larger pattern keeps its title and description (it is considered more representative)
-- The smaller pattern will be eliminated, but its photos will be added to the larger one
-- If two patterns have the same photo count, merge the one that appears later in the list INTO the earlier one
+- Merge the pattern with FEWER photos INTO the one with MORE photos
+- Keep the larger pattern’s title and description
+- If photo counts are equal, merge the later one INTO the earlier one
 
-Return ONLY valid JSON (no markdown, no commentary) in this exact format:
+Return ONLY valid JSON in this format:
 {
   "merges": [
     {
       "mergeFrom": "pattern_id_smaller",
       "mergeInto": "pattern_id_larger",
-      "reasoning": "Brief explanation of why these patterns are effectively synonymous"
+      "reasoning": "Brief explanation of why these describe the same pattern"
     }
   ]
-}  // Empty array if no duplicates found
+}
 
-IMPORTANT:
-Be extremely conservative.
-Only merge patterns that are practically identical in meaning.
-If there is ANY reasonable interpretation in which they differ, do NOT merge them.`,
-    userMessage: `PATTERNS TO ANALYZE FOR DUPLICATES:
+Be conservative, but apply visual and editorial common sense.`,
+    userMessage: `PATTERNS:
 ${patternsText}
 
-Identify any clearly duplicate patterns that should be merged. Remember: merge the smaller (fewer photos) INTO the larger (more photos).`,
+Identify any patterns that should be merged.`,
   }
 }

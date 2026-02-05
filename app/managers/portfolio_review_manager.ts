@@ -16,6 +16,17 @@ import {
 } from '../utils/prompts/portfolio_review.js'
 
 // ========================================
+// CONFIGURACIÓN GLOBAL
+// ========================================
+
+// Umbrales para reclusterización: se reclusteriza si el cluster supera CUALQUIERA de estos valores
+// Y tiene al menos RECLUSTER_MIN_PHOTO_COUNT fotos
+const RECLUSTER_MIN_PHOTO_COUNT = 25 // Número mínimo de fotos para reclusterizar
+const RECLUSTER_THRESHOLD_PERCENT = 20 // Porcentaje del total de fotos
+const RECLUSTER_THRESHOLD_PHOTO_COUNT = 500 // Número absoluto de fotos
+const MAX_RECLUSTERIZATION_STEPS = 2
+
+// ========================================
 // TYPES & INTERFACES
 // ========================================
 
@@ -26,7 +37,6 @@ export interface ReviewTypeConfig {
   retryModel: ModelName
   needsImages: boolean // true para general (CLIP), false para story/context (texto)
   concurrency: number // límite de clusters procesados en paralelo
-  useThumbOnRetry: number // a partir de qué intento usar thumbnail (0 = nunca, 2 = a partir del 2do intento, etc.)
   useBase64OnRetry: boolean // si en retry GPT debe enviar imágenes como base64 en lugar de URL
 }
 
@@ -35,8 +45,7 @@ export const REVIEW_TYPE_CONFIG: Record<ReviewType, ReviewTypeConfig> = {
     model: 'gpt-5.1',
     retryModel: 'gpt-5.1',
     needsImages: true,
-    concurrency: 1,
-    useThumbOnRetry: 2,
+    concurrency: 2,
     useBase64OnRetry: true,
   },
   story: {
@@ -44,7 +53,6 @@ export const REVIEW_TYPE_CONFIG: Record<ReviewType, ReviewTypeConfig> = {
     retryModel: 'gpt-5.1',
     needsImages: false,
     concurrency: 3,
-    useThumbOnRetry: 0,
     useBase64OnRetry: false,
   },
   context: {
@@ -52,7 +60,6 @@ export const REVIEW_TYPE_CONFIG: Record<ReviewType, ReviewTypeConfig> = {
     retryModel: 'gpt-5.1',
     needsImages: false,
     concurrency: 3,
-    useThumbOnRetry: 0,
     useBase64OnRetry: false,
   },
   visual_accents: {
@@ -60,7 +67,6 @@ export const REVIEW_TYPE_CONFIG: Record<ReviewType, ReviewTypeConfig> = {
     retryModel: 'gpt-5.1',
     needsImages: false,
     concurrency: 5,
-    useThumbOnRetry: 0,
     useBase64OnRetry: false,
   },
 }
@@ -117,6 +123,14 @@ export default class PortfolioReviewManager {
     return 'weak'
   }
 
+  private shouldReclusterCluster(cluster: any): boolean {
+    return (
+      cluster.size >= RECLUSTER_MIN_PHOTO_COUNT &&
+      (cluster.percentage > RECLUSTER_THRESHOLD_PERCENT ||
+        cluster.size > RECLUSTER_THRESHOLD_PHOTO_COUNT)
+    )
+  }
+
   private async sleep(ms: number) {
     await new Promise((resolve) => setTimeout(resolve, ms))
   }
@@ -166,6 +180,223 @@ export default class PortfolioReviewManager {
     }
 
     return combined
+  }
+
+  private createPhotoDescription(photo: any, chunkName: string): string {
+    return chunkName === 'story' || chunkName === 'context'
+      ? photo.chunks
+          .filter((c: any) => c.category === chunkName)
+          .map((c: any) => c.chunk)
+          .join(' ') || 'No description'
+      : photo.originalFileName || 'No filename'
+  }
+
+  private createSamplePhoto(photo: any, chunkName: string) {
+    return {
+      id: photo.id,
+      thumbnailUrl: `https://${process.env.IMAGES_WORKER}/${photo.thumbnailName}`,
+      description: this.createPhotoDescription(photo, chunkName),
+    }
+  }
+
+  private async processCluster(
+    cluster: any,
+    photoMapObject: Record<number, any>,
+    reviewType: ReviewType,
+    chunkName: string,
+    needsImages: boolean,
+    mainModel: ModelName,
+    retryModel: ModelName,
+    config: ReviewTypeConfig,
+    existingPatternsForPrompt: ExistingPatternSummary[],
+    hasExistingPatterns: boolean,
+    accumulatedPatterns: AccumulatedPattern[],
+    patterns: ClusterPattern[]
+  ) {
+    const clusterPhotoIds = Array.isArray(cluster.photo_ids) ? cluster.photo_ids : []
+    const clusterSize = clusterPhotoIds.length > 0 ? clusterPhotoIds.length : cluster.size
+    let sampleSize
+
+    if (clusterSize <= 15) sampleSize = clusterSize
+    else if (clusterSize <= 60) sampleSize = Math.min(20, Math.round(clusterSize * 0.65))
+    else sampleSize = Math.min(30, Math.round(20 + Math.log2(clusterSize / 60) * 5))
+
+    let samplePhotoIds = this.sampleCluster(cluster, sampleSize)
+
+    // Filtrar duplicados de las fotos de muestra
+    let filteredPhotoIds = await this.filterDuplicatePhotos(samplePhotoIds, photoMapObject)
+    let samplePhotos = filteredPhotoIds.map((id) => photoMapObject[id]).filter(Boolean)
+
+    // Re-samplear si quedamos con muy pocas fotos
+    const minAcceptablePhotos = Math.max(3, Math.floor(sampleSize * 0.6)) // Al menos 60% del objetivo o 3 fotos
+    if (samplePhotos.length < minAcceptablePhotos && samplePhotos.length < clusterSize) {
+      console.log(
+        `   ⚠️ Solo ${samplePhotos.length} fotos después de filtrar duplicados (objetivo: ${sampleSize}). Re-sampleando...`
+      )
+
+      const usedPhotoIds = new Set(samplePhotoIds)
+      const remainingPhotoIds = clusterPhotoIds
+        .map((id: string) => parseInt(id))
+        .filter((id: any) => !usedPhotoIds.has(id))
+
+      // Tomar fotos adicionales aleatoriamente
+      const photosNeeded = Math.min(sampleSize - samplePhotos.length, remainingPhotoIds.length)
+      const shuffled = remainingPhotoIds.sort(() => Math.random() - 0.5)
+      const additionalPhotoIds = shuffled.slice(0, photosNeeded)
+
+      // Filtrar duplicados de las fotos adicionales
+      const additionalFilteredIds = await this.filterDuplicatePhotos(
+        additionalPhotoIds,
+        photoMapObject
+      )
+      const additionalPhotos = additionalFilteredIds.map((id) => photoMapObject[id]).filter(Boolean)
+
+      samplePhotos.push(...additionalPhotos)
+      console.log(
+        `   ✅ Agregadas ${additionalPhotos.length} fotos adicionales. Total: ${samplePhotos.length} fotos`
+      )
+    }
+
+    const allClusterPhotoIds = clusterPhotoIds.map((id: string) => parseInt(id))
+
+    // Generar prompt unificado
+    const { systemPrompt, userMessage } = this.generatePrompt(
+      samplePhotos,
+      reviewType,
+      existingPatternsForPrompt
+    )
+
+    // Preparar imágenes si es necesario
+    const imagesForLLM = needsImages
+      ? samplePhotos.map((photo) => ({
+          photo: { id: photo.id, name: photo.name, thumbnailName: photo.thumbnailName },
+          base64: '',
+        }))
+      : undefined
+
+    // Llamar al LLM
+    console.log(
+      `🧠 Analizando cluster ${cluster.cluster_id} (${clusterSize} fotos, ${samplePhotos.length} en muestra, ${cluster.percentage.toFixed(2)}%)...`
+    )
+
+    const llmResponse = await this.getLLMResponseWithRetry({
+      contextLabel: `portfolioReview.${reviewType}.cluster_${cluster.cluster_id}`,
+      systemPrompt,
+      userMessages: [userMessage],
+      model: mainModel,
+      retryModel: retryModel,
+      generationConfig: { temperature: 0.7, responseType: 'json_object' },
+      useCache: !needsImages,
+      validateResult: (r: any) => this.isValidPatternResult(r, hasExistingPatterns),
+      fallbackResult: {
+        decision: 'new',
+        title: `Pattern ${patterns.length + accumulatedPatterns.length + 1}`,
+        description: 'No description available',
+        patternType: 'NA',
+      },
+      images: imagesForLLM,
+      useBase64OnRetry: config.useBase64OnRetry,
+    })
+
+    let cost = 0
+    if (llmResponse?.cost?.totalCostInEur) {
+      cost = llmResponse.cost.totalCostInEur
+    }
+
+    let analysis = llmResponse?.result
+
+    // Normalizar respuesta
+    if (!analysis || typeof analysis !== 'object') {
+      analysis = {
+        decision: 'new',
+        title: `Pattern ${patterns.length + accumulatedPatterns.length + 1}`,
+        description: 'No description available',
+        patternType: 'NA',
+      }
+    }
+
+    // Procesar decisión
+    const isMerge =
+      hasExistingPatterns && analysis.decision === 'merge' && analysis.mergeWithPatternId
+
+    if (isMerge) {
+      // MERGE con patrón previo
+      const targetPattern = accumulatedPatterns.find(
+        (p) => p.patternId === analysis.mergeWithPatternId
+      )
+
+      if (targetPattern) {
+        targetPattern.photoCount += clusterSize
+        targetPattern.percentage += cluster.percentage
+        targetPattern.mergedClusterIds.push(`cluster_${cluster.cluster_id}`)
+
+        // Obtener fotos representativas
+        let photosToConsider: any[] = samplePhotos
+        if (analysis.representativePhotoIds && Array.isArray(analysis.representativePhotoIds)) {
+          const repIds = analysis.representativePhotoIds.map((id: any) => parseInt(String(id)))
+          const representativePhotos = repIds
+            .map((id: number) => photoMapObject[id])
+            .filter(Boolean)
+          if (representativePhotos.length > 0) {
+            photosToConsider = representativePhotos
+          }
+        }
+
+        const existingPhotoIds = new Set(targetPattern.allPhotoIds)
+        const newPhotosToAdd = photosToConsider
+          .filter((photo) => !existingPhotoIds.has(photo.id))
+          .slice(0, Math.max(0, 4 - targetPattern.samplePhotos.length))
+
+        for (const photo of newPhotosToAdd) {
+          targetPattern.samplePhotos.push(this.createSamplePhoto(photo, chunkName))
+          targetPattern.allPhotoIds.push(photo.id)
+        }
+
+        for (const photoId of allClusterPhotoIds) {
+          if (!existingPhotoIds.has(photoId)) {
+            targetPattern.allPhotoIds.push(photoId)
+          }
+        }
+
+        targetPattern.strength = this.calculatePatternStrength(targetPattern.percentage)
+
+        console.log(
+          `🔗 Cluster ${cluster.cluster_id} mergeado a patrón previo "${targetPattern.title}"`
+        )
+        return { type: 'merge', cost }
+      }
+    }
+
+    // CREATE NEW pattern
+    let representativePhotos: any[] = []
+    if (analysis.representativePhotoIds && Array.isArray(analysis.representativePhotoIds)) {
+      const repIds = analysis.representativePhotoIds.map((id: any) => parseInt(String(id)))
+      representativePhotos = repIds.map((id: number) => photoMapObject[id]).filter(Boolean)
+    }
+    if (representativePhotos.length === 0) {
+      representativePhotos = samplePhotos.slice(0, 4)
+    }
+
+    const newPatternId = hasExistingPatterns
+      ? `pattern_new_${patterns.length + 1}`
+      : `cluster_${cluster.cluster_id}`
+
+    const pattern: ClusterPattern = {
+      patternId: newPatternId,
+      patternType: analysis.patternType || 'NA',
+      title: analysis.title || `Pattern ${patterns.length + 1}`,
+      description: analysis.description || 'No description available',
+      photoCount: clusterSize,
+      percentage: cluster.percentage,
+      strength: this.calculatePatternStrength(cluster.percentage),
+      clusterPhotos: allClusterPhotoIds,
+      samplePhotos: representativePhotos
+        .slice(0, 4)
+        .map((photo) => this.createSamplePhoto(photo, chunkName)),
+    }
+
+    console.log(`✨ Nuevo patrón creado: "${pattern.title}"`)
+    return { type: 'new', pattern, cost }
   }
 
   // ========================================
@@ -503,7 +734,7 @@ export default class PortfolioReviewManager {
         `✅ Se eliminaron ${removedDuplicates.length} fotos duplicadas. Fotos restantes: ${uniquePhotoIds.length}`
       )
     } else {
-      // console.log(`✅ No se encontraron duplicados. Se mantienen ${uniquePhotoIds.length} fotos`)
+      console.log(`✅ No se encontraron duplicados. Se mantienen ${uniquePhotoIds.length} fotos`)
     }
 
     return uniquePhotoIds
@@ -568,6 +799,375 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
   }
 
   // ========================================
+  // CLUSTERING HELPERS
+  // ========================================
+
+  private getClusteringParams(
+    reviewType: ReviewType,
+    iteration: number,
+    totalItemsForClustering: number
+  ): {
+    max_clusters: number
+    min_cluster_size: number
+    min_samples: number
+    umap_n_components: number
+    umap_n_neighbors: number
+    umap_min_dist: number
+    umap_spread: number
+    umap_metric: 'cosine'
+  } {
+    // Iteración 0: exactamente como antes
+    const baseMinClusterRatio = reviewType === 'general' ? 0.008 : 0.008
+    const baseMinClusterSize = Math.max(
+      5,
+      Math.floor(totalItemsForClustering * baseMinClusterRatio)
+    )
+
+    const base = {
+      max_clusters: 15,
+      min_cluster_size: baseMinClusterSize,
+      min_samples: reviewType === 'general' ? 6 : 6,
+      umap_n_components: reviewType === 'general' ? 5 : 5,
+      umap_n_neighbors: reviewType === 'general' ? 4 : 4,
+      umap_min_dist: 1,
+      umap_spread: 10,
+      umap_metric: 'cosine' as const,
+    }
+
+    const step = Math.max(0, iteration)
+    if (step === 0) {
+      return base
+    }
+
+    // Sub-iteraciones: variar más agresivamente para evitar sobre-fragmentación
+    // Aumentar el ratio y el tamaño mínimo de cluster más rápido, y reducir max_clusters más fuerte
+    const adjustedMinClusterRatio = Math.min(0.05, baseMinClusterRatio + step * 0.008)
+    const adjustedMinClusterSize = Math.max(
+      base.min_cluster_size,
+      12 + step * 2,
+      Math.floor(totalItemsForClustering * adjustedMinClusterRatio)
+    )
+
+    return {
+      ...base,
+      max_clusters: Math.max(6, base.max_clusters - step * 4),
+      min_cluster_size: adjustedMinClusterSize,
+      min_samples: Math.min(16, base.min_samples + step * 2),
+      umap_n_neighbors: Math.min(20, base.umap_n_neighbors + step * 4),
+      umap_min_dist: Math.min(0.18, base.umap_min_dist + step * 0.06),
+      umap_spread: Math.min(20, base.umap_spread + step * 1.2),
+    }
+  }
+
+  /**
+   * Obtiene clusters a partir de embeddings usando HDBSCAN + UMAP
+   * @param vectors - Array de vectores con embeddings
+   * @param reviewType - Tipo de review (general, story, context, etc.)
+   * @param currentStep - Paso actual de reclusterización (uso interno)
+   * @param parentClusterId - ID del cluster padre (uso interno)
+   */
+  private async getClustersFromEmbeddings(
+    vectors: any[],
+    reviewType: ReviewType,
+    currentStep: number = 0,
+    parentClusterId: string = ''
+  ): Promise<any[]> {
+    const totalItemsForClustering = vectors.length
+
+    const params = this.getClusteringParams(reviewType, currentStep, totalItemsForClustering)
+
+    const clusterPayload = {
+      items: vectors.map((v: any) => ({
+        id: v.id.toString(),
+        embedding: v.embedding,
+      })),
+      method: 'hdbscan',
+      max_clusters: params.max_clusters,
+      min_cluster_size: params.min_cluster_size,
+      min_samples: params.min_samples,
+      dim_reduction_method: 'umap',
+      umap_n_components: params.umap_n_components,
+      umap_n_neighbors: params.umap_n_neighbors,
+      umap_min_dist: params.umap_min_dist,
+      umap_spread: params.umap_spread,
+      umap_metric: params.umap_metric,
+    }
+
+    const indent = '  '.repeat(currentStep)
+    console.log(
+      `${indent}\n${indent}========== CLUSTERING ${parentClusterId ? `(${parentClusterId})` : ''} - NIVEL ${currentStep} ==========`
+    )
+    console.log(`${indent}📊 Total de fotos a clusterizar: ${vectors.length}`)
+
+    const clusterResult = await this.modelsService.getClusters(clusterPayload)
+    let clusters = clusterResult.clusters || []
+
+    console.log(`${indent}📊 Clusters encontrados: ${clusters.length}`)
+    if (clusters.length > 0) {
+      clusters.forEach((cluster: any, idx: number) => {
+        console.log(
+          `${indent}  ${idx + 1}. Cluster ${cluster.cluster_id}: ${cluster.size} fotos (${cluster.percentage.toFixed(1)}%)`
+        )
+      })
+    }
+    console.log(`${indent}========================================\n`)
+
+    // Si hemos alcanzado el límite de pasos de reclusterización, retornar
+    if (currentStep >= MAX_RECLUSTERIZATION_STEPS) {
+      console.log(`${indent}⚠️ Límite de reclusterización alcanzado (nivel ${currentStep})\n`)
+      return clusters
+    }
+
+    // Identificar clusters que superan el threshold (porcentaje O número absoluto de fotos)
+    // Y tienen al menos el mínimo de fotos requeridas
+    const largeClusters = clusters.filter((cluster: any) => this.shouldReclusterCluster(cluster))
+
+    if (largeClusters.length === 0) {
+      console.log(
+        `${indent}✅ No hay clusters que superen el ${RECLUSTER_THRESHOLD_PERCENT}% o ${RECLUSTER_THRESHOLD_PHOTO_COUNT} fotos (mín: ${RECLUSTER_MIN_PHOTO_COUNT})\n`
+      )
+      return clusters
+    }
+
+    console.log(
+      `${indent}🔍 Clusters que superen ${RECLUSTER_THRESHOLD_PERCENT}% o ${RECLUSTER_THRESHOLD_PHOTO_COUNT} fotos (mín requerido: ${RECLUSTER_MIN_PHOTO_COUNT}): ${largeClusters.length}`
+    )
+
+    // Procesar cada cluster grande
+    const finalClusters: any[] = []
+    const vectorsMap = new Map(vectors.map((v) => [v.id, v]))
+
+    for (const cluster of clusters) {
+      if (!this.shouldReclusterCluster(cluster)) {
+        // Cluster pequeño, mantenerlo
+        finalClusters.push(cluster)
+      } else {
+        // Cluster grande, reclusterizar
+        console.log(
+          `${indent}🔄 Reclusterizando cluster ${cluster.cluster_id} (${cluster.size} fotos, ${cluster.percentage.toFixed(1)}%)`
+        )
+
+        const clusterPhotoIds = Array.isArray(cluster.photo_ids) ? cluster.photo_ids : []
+        const clusterVectors = clusterPhotoIds
+          .map((id: string) => vectorsMap.get(parseInt(id)))
+          .filter(Boolean)
+
+        if (clusterVectors.length < 10) {
+          // Si el cluster es muy pequeño, no vale la pena reclusterizar
+          console.log(
+            `${indent}   ⚠️ Cluster muy pequeño para reclusterizar (${clusterVectors.length} fotos), manteniéndolo`
+          )
+          finalClusters.push(cluster)
+          continue
+        }
+
+        // Reclusterizar recursivamente
+        const newParentId = parentClusterId
+          ? `${parentClusterId}_${cluster.cluster_id}`
+          : `cluster_${cluster.cluster_id}`
+
+        const subclusters = await this.getClustersFromEmbeddings(
+          clusterVectors,
+          reviewType,
+          currentStep + 1,
+          newParentId
+        )
+
+        if (subclusters.length === 0 || subclusters.length === 1) {
+          // Si no se pudo subdividir o solo hay 1 subcluster, mantener el original
+          console.log(
+            `${indent}   ⚠️ No se pudo subdividir significativamente, manteniendo cluster original`
+          )
+          finalClusters.push(cluster)
+        } else {
+          // Agregar los subclusters con IDs jerárquicos
+          console.log(`${indent}   ✅ Subdividido en ${subclusters.length} subclusters`)
+          subclusters.forEach((subcluster: any, idx: number) => {
+            // Si el subcluster ya tiene depth > currentStep + 1, viene de niveles más profundos
+            // y debemos preservar tanto su depth como su cluster_id
+            const comesFromDeeperLevel = subcluster.depth && subcluster.depth > currentStep + 1
+            const hierarchicalId = `${newParentId}_${idx + 1}`
+
+            finalClusters.push({
+              ...subcluster,
+              cluster_id: comesFromDeeperLevel ? subcluster.cluster_id : hierarchicalId,
+              parent_cluster_id: cluster.cluster_id,
+              depth: subcluster.depth ?? currentStep + 1,
+            })
+          })
+        }
+      }
+    }
+
+    console.log(`${indent}📦 Clusters finales en nivel ${currentStep}: ${finalClusters.length}\n`)
+
+    return finalClusters
+  }
+
+  /**
+   * Muestra un resumen consolidado de todos los clusters finales
+   */
+  private logFinalClustersHierarchy(clusters: any[]): void {
+    console.log('\n')
+    console.log('════════════════════════════════════════════════════════════════════════')
+    console.log('                    CLUSTERS FINALES CONSOLIDADOS')
+    console.log('════════════════════════════════════════════════════════════════════════\n')
+
+    console.log(`📊 TOTAL: ${clusters.length} clusters\n`)
+
+    clusters.forEach((cluster, idx) => {
+      const size = cluster.size || (Array.isArray(cluster.photo_ids) ? cluster.photo_ids.length : 0)
+      const percentage = cluster.percentage?.toFixed(1) || 'N/A'
+      const depth = cluster.depth ?? 0
+      // Add asterisks for each depth level > 0
+      const asterisks = depth > 0 ? ' ' + '*'.repeat(depth) : ''
+
+      console.log(
+        `  ${idx + 1}. ${cluster.cluster_id} → ${size} fotos (${percentage}%)${asterisks}`
+      )
+    })
+
+    console.log('\n════════════════════════════════════════════════════════════════════════\n')
+  }
+
+  /**
+   * Inicializa patrones previos para rebuild y prepara estructuras de datos
+   */
+  private initializePreviousPatterns(previousPatterns: ClusterPattern[]): {
+    accumulatedPatterns: AccumulatedPattern[]
+    existingPatternsForPrompt: ExistingPatternSummary[]
+    hasExistingPatterns: boolean
+  } {
+    const accumulatedPatterns: AccumulatedPattern[] = previousPatterns.map((p) => ({
+      ...p,
+      shortDescription: p.description.slice(0, 250) + ' ...',
+      mergedClusterIds: [],
+      allPhotoIds: p.clusterPhotos || p.samplePhotos.map((sp) => sp.id),
+      photoCount: 0, // Reset - se recalculará
+      percentage: 0,
+    }))
+
+    const hasExistingPatterns = accumulatedPatterns.length > 0
+
+    // Log de patrones previos
+    if (hasExistingPatterns) {
+      console.log('\n========== PATRONES PREVIOS PARA REBUILD ==========')
+      console.log(`📋 Patrones previos: ${accumulatedPatterns.length}`)
+      accumulatedPatterns.forEach((p) => console.log(`   - [${p.patternId}] "${p.title}"`))
+      console.log('===================================================\n')
+    }
+
+    // Preparar patrones existentes para el prompt
+    const existingPatternsForPrompt: ExistingPatternSummary[] = accumulatedPatterns.map((p) => ({
+      patternId: p.patternId,
+      title: p.title,
+      shortDescription: p.shortDescription,
+    }))
+
+    return { accumulatedPatterns, existingPatternsForPrompt, hasExistingPatterns }
+  }
+
+  /**
+   * Procesa todos los clusters en paralelo con límite de concurrencia
+   */
+  private async processAllClusters(
+    clusters: any[],
+    photoMapObject: Record<number, any>,
+    reviewType: ReviewType,
+    chunkName: string,
+    config: ReviewTypeConfig,
+    existingPatternsForPrompt: ExistingPatternSummary[],
+    hasExistingPatterns: boolean,
+    accumulatedPatterns: AccumulatedPattern[],
+    patterns: ClusterPattern[]
+  ): Promise<{ totalCost: number }> {
+    const limit = pLimit(config.concurrency)
+    console.log(`⚡ Procesando clusters con límite de concurrencia: ${config.concurrency}`)
+
+    const clusterProcessingTasks = clusters.map((cluster: any) =>
+      limit(() =>
+        this.processCluster(
+          cluster,
+          photoMapObject,
+          reviewType,
+          chunkName,
+          config.needsImages,
+          config.model,
+          config.retryModel,
+          config,
+          existingPatternsForPrompt,
+          hasExistingPatterns,
+          accumulatedPatterns,
+          patterns
+        )
+      )
+    )
+
+    // Esperar a que todos los clusters terminen de procesarse
+    const results = await Promise.all(clusterProcessingTasks)
+
+    // Consolidar resultados
+    let totalCost = 0
+    for (const result of results) {
+      if (result.cost) {
+        totalCost += result.cost
+      }
+      if (result.type === 'new' && result.pattern) {
+        patterns.push(result.pattern)
+      }
+    }
+
+    return { totalCost }
+  }
+
+  /**
+   * Consolida patrones previos con merges y ordena por porcentaje
+   */
+  private consolidatePatternsWithMerges(
+    patterns: ClusterPattern[],
+    accumulatedPatterns: AccumulatedPattern[]
+  ): ClusterPattern[] {
+    // Agregar patrones previos que recibieron merges
+    for (const p of accumulatedPatterns) {
+      if (p.photoCount > 0) {
+        patterns.push({
+          patternId: p.patternId,
+          patternType: p.patternType || 'NA',
+          title: p.title,
+          description: p.description,
+          photoCount: p.photoCount,
+          percentage: Math.min(100, p.percentage),
+          strength: p.strength,
+          clusterPhotos: p.allPhotoIds,
+          samplePhotos: p.samplePhotos.slice(0, 4),
+        })
+      } else {
+        console.log(`⚠️ Patrón previo "${p.title}" eliminado (0 fotos después del rebuild)`)
+      }
+    }
+
+    // Ordenar por porcentaje
+    patterns.sort((a, b) => b.percentage - a.percentage)
+
+    return patterns
+  }
+
+  /**
+   * Imprime resumen final de patrones y costo
+   */
+  private logFinalSummary(patterns: ClusterPattern[], totalCost: number): void {
+    console.log('\n========== RESUMEN FINAL ==========')
+    console.log(`📦 Patrones identificados: ${patterns.length}`)
+    patterns.forEach((p, idx) => {
+      console.log(
+        `  ${idx + 1}. "${p.title}" - ${p.photoCount} fotos (${p.percentage.toFixed(1)}%)`
+      )
+    })
+    console.log(`💰 Costo total: €${totalCost.toFixed(4)}`)
+    console.log('====================================\n')
+  }
+
+  // ========================================
   // LLM WITH RETRY
   // ========================================
 
@@ -584,7 +1184,6 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
     fallbackResult?: any
     images?: Array<{ photo: any; base64: string }>
     imageResolution?: 'low' | 'medium' | 'high'
-    useThumbOnRetry?: number
     useBase64OnRetry?: boolean
   }): Promise<any> {
     const {
@@ -600,7 +1199,6 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       fallbackResult,
       images,
       imageResolution = 'low',
-      useThumbOnRetry = 0,
       useBase64OnRetry = false,
     } = options
 
@@ -624,16 +1222,10 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
           if (images && images.length > 0) {
             // Para Gemini, necesitamos descargar las imágenes y convertirlas a base64
             const photoImageService = PhotoImageService.getInstance()
-            const shouldUseThumbnail = useThumbOnRetry > 0 && attempt >= useThumbOnRetry
-            if (shouldUseThumbnail) {
-              console.log(
-                `🖼️  [${contextLabel}] Usando thumbnails (intento ${attempt}/${maxAttempts})`
-              )
-            }
             const geminiImages = await photoImageService
-              .getValidPhotosWithImages(
+              .getValidPhotosWithImagesThumb(
                 images.map(({ photo }) => photo),
-                shouldUseThumbnail
+                false
               )
               .then((photosWithImages) =>
                 photosWithImages.map((imageData) => ({
@@ -658,14 +1250,7 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
           let formattedUserContent: any
 
           if (images && images.length > 0) {
-            const shouldUseThumbnail = useThumbOnRetry > 0 && attempt >= useThumbOnRetry
             const shouldUseBase64 = useBase64OnRetry && attempt > 1
-
-            if (shouldUseThumbnail) {
-              console.log(
-                `🖼️  [${contextLabel}] Usando thumbnails (intento ${attempt}/${maxAttempts})`
-              )
-            }
 
             if (shouldUseBase64) {
               console.log(
@@ -674,16 +1259,16 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
               // Descargar imágenes como base64 (similar a Gemini)
               const photoImageService = PhotoImageService.getInstance()
               const gptImages = await photoImageService
-                .getValidPhotosWithImages(
+                .getValidPhotosWithImagesThumb(
                   images.map(({ photo }) => photo),
-                  shouldUseThumbnail
+                  false
                 )
                 .then((photosWithImages) =>
                   photosWithImages.map((imageData) => ({
                     type: 'image_url',
                     image_url: {
                       url: `data:image/png;base64,${imageData.base64}`,
-                      detail: 'low',
+                      detail: imageResolution,
                     },
                   }))
                 )
@@ -697,13 +1282,12 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
             } else {
               // Usar URL (comportamiento original)
               const gptImages = images.map(({ photo }) => {
-                const imageName = shouldUseThumbnail ? photo.thumbnailName : photo.name
-                const imageUrl = `https://${process.env.IMAGES_WORKER}/${imageName}`
+                const imageUrl = `https://${process.env.IMAGES_WORKER}/${photo.thumbnailName}`
                 return {
                   type: 'image_url',
                   image_url: {
                     url: imageUrl,
-                    detail: 'low',
+                    detail: imageResolution,
                   },
                 }
               })
@@ -798,15 +1382,13 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
     previousPatterns: ClusterPattern[] = []
   ) {
     const config = REVIEW_TYPE_CONFIG[reviewType]
-    const mainModel = config.model
-    const retryModel = config.retryModel
-    const needsImages = config.needsImages
 
+    // Log inicial
     console.log('\n========== INICIO PORTFOLIO REVIEW ==========')
     console.log(`📋 ReviewType: ${reviewType}`)
-    console.log(`🤖 Modelo principal: ${mainModel}`)
-    console.log(`🔄 Modelo para retries: ${retryModel}`)
-    console.log(`🖼️  Necesita imágenes: ${needsImages}`)
+    console.log(`🤖 Modelo principal: ${config.model}`)
+    console.log(`🔄 Modelo para retries: ${config.retryModel}`)
+    console.log(`🖼️  Necesita imágenes: ${config.needsImages}`)
     console.log(`👤 User ID: ${userId}`)
     console.log('=============================================\n')
 
@@ -826,41 +1408,10 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
     }
 
     // FASE 2: Clustering
-    const totalItemsForClustering = vectors.length
-    const minClusterRatio = reviewType === 'general' ? 0.002 : 0.008
-    const min_cluster_size = Math.max(5, Math.floor(totalItemsForClustering * minClusterRatio))
+    const clusters = await this.getClustersFromEmbeddings(vectors, reviewType)
 
-    const clusterPayload = {
-      items: vectors.map((v: any) => ({
-        id: v.id.toString(),
-        embedding: v.embedding,
-      })),
-      method: 'hdbscan',
-      max_clusters: 20,
-      min_cluster_size,
-      min_samples: reviewType === 'general' ? 6 : 4,
-      dim_reduction_method: 'umap',
-      umap_n_components: reviewType === 'general' ? 5 : 15,
-      umap_n_neighbors: reviewType === 'general' ? 4 : 30,
-      umap_min_dist: 0.0,
-      umap_spread: 5,
-      umap_metric: 'cosine',
-    }
-
-    const clusterResult = await this.modelsService.getClusters(clusterPayload)
-    const clusters = clusterResult.clusters || []
-
-    console.log('\n========== RESULTADO DE CLUSTERING ==========')
-    console.log(`📊 Clusters encontrados: ${clusters.length}`)
-    console.log(`📷 Total de fotos: ${vectors.length}`)
-    if (clusters.length > 0) {
-      clusters.forEach((cluster: any, idx: number) => {
-        console.log(
-          `  ${idx + 1}. Cluster ${cluster.cluster_id}: ${cluster.size} fotos (${cluster.percentage.toFixed(1)}%)`
-        )
-      })
-    }
-    console.log('=============================================\n')
+    // Mostrar resumen consolidado de clusters
+    this.logFinalClustersHierarchy(clusters)
 
     if (clusters.length === 0) {
       return {
@@ -874,307 +1425,49 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       }
     }
 
-    // Inicializar con patrones previos (para rebuilds)
-    const accumulatedPatterns: AccumulatedPattern[] = previousPatterns.map((p) => ({
-      ...p,
-      shortDescription: p.description.slice(0, 250) + ' ...',
-      mergedClusterIds: [],
-      allPhotoIds: p.clusterPhotos || p.samplePhotos.map((sp) => sp.id),
-      photoCount: 0, // Reset - se recalculará
-      percentage: 0,
-    }))
+    // Inicializar patrones previos y estructuras de datos
+    const { accumulatedPatterns, existingPatternsForPrompt, hasExistingPatterns } =
+      this.initializePreviousPatterns(previousPatterns)
 
-    const hasExistingPatterns = accumulatedPatterns.length > 0
     const patterns: ClusterPattern[] = []
-    const totalPhotos = vectors.length
     const chunkName = REVIEW_TYPE_TO_CHUNK[reviewType]
 
-    // Log de patrones previos
-    if (hasExistingPatterns) {
-      console.log('\n========== PATRONES PREVIOS PARA REBUILD ==========')
-      console.log(`📋 Patrones previos: ${accumulatedPatterns.length}`)
-      accumulatedPatterns.forEach((p) => console.log(`   - [${p.patternId}] "${p.title}"`))
-      console.log('===================================================\n')
-    }
-
-    // Helpers
-    const createPhotoDescription = (photo: any) => {
-      return chunkName === 'story' || chunkName === 'context'
-        ? photo.chunks
-            .filter((c: any) => c.category === chunkName)
-            .map((c: any) => c.chunk)
-            .join(' ') || 'No description'
-        : photo.originalFileName || 'No filename'
-    }
-
-    const createSamplePhoto = (photo: any) => ({
-      id: photo.id,
-      thumbnailUrl: `https://${process.env.IMAGES_WORKER}/${photo.thumbnailName}`,
-      description: createPhotoDescription(photo),
-    })
-
-    // Preparar patrones existentes para el prompt
-    const existingPatternsForPrompt: ExistingPatternSummary[] = accumulatedPatterns.map((p) => ({
-      patternId: p.patternId,
-      title: p.title,
-      shortDescription: p.shortDescription,
-    }))
-
-    // FASE 3: Procesar cada cluster (con límite de concurrencia)
-    const limit = pLimit(config.concurrency)
-    console.log(`⚡ Procesando clusters con límite de concurrencia: ${config.concurrency}`)
-
-    const clusterProcessingTasks = clusters.map((cluster: any) =>
-      limit(async () => {
-        const clusterPhotoIds = Array.isArray(cluster.photo_ids) ? cluster.photo_ids : []
-        const clusterSize = clusterPhotoIds.length > 0 ? clusterPhotoIds.length : cluster.size
-        const sampleSize = clusterSize >= 15 ? 15 : clusterSize
-
-        let samplePhotoIds = this.sampleCluster(cluster, sampleSize)
-
-        // Filtrar duplicados de las fotos de muestra
-        let filteredPhotoIds = await this.filterDuplicatePhotos(samplePhotoIds, photoMapObject)
-        let samplePhotos = filteredPhotoIds.map((id) => photoMapObject[id]).filter(Boolean)
-
-        // Re-samplear si quedamos con muy pocas fotos
-        const minAcceptablePhotos = Math.max(3, Math.floor(sampleSize * 0.6)) // Al menos 60% del objetivo o 3 fotos
-        if (samplePhotos.length < minAcceptablePhotos && samplePhotos.length < clusterSize) {
-          console.log(
-            `   ⚠️ Solo ${samplePhotos.length} fotos después de filtrar duplicados (objetivo: ${sampleSize}). Re-sampleando...`
-          )
-
-          const usedPhotoIds = new Set(samplePhotoIds)
-          const remainingPhotoIds = clusterPhotoIds
-            .map((id: string) => parseInt(id))
-            .filter((id: any) => !usedPhotoIds.has(id))
-
-          // Tomar fotos adicionales aleatoriamente
-          const photosNeeded = Math.min(sampleSize - samplePhotos.length, remainingPhotoIds.length)
-          const shuffled = remainingPhotoIds.sort(() => Math.random() - 0.5)
-          const additionalPhotoIds = shuffled.slice(0, photosNeeded)
-
-          // Filtrar duplicados de las fotos adicionales
-          const additionalFilteredIds = await this.filterDuplicatePhotos(
-            additionalPhotoIds,
-            photoMapObject
-          )
-          const additionalPhotos = additionalFilteredIds
-            .map((id) => photoMapObject[id])
-            .filter(Boolean)
-
-          samplePhotos.push(...additionalPhotos)
-          console.log(
-            `   ✅ Agregadas ${additionalPhotos.length} fotos adicionales. Total: ${samplePhotos.length} fotos`
-          )
-        }
-
-        const allClusterPhotoIds = clusterPhotoIds.map((id: string) => parseInt(id))
-
-        // Generar prompt unificado
-        const { systemPrompt, userMessage } = this.generatePrompt(
-          samplePhotos,
-          reviewType,
-          existingPatternsForPrompt
-        )
-
-        // Preparar imágenes si es necesario
-        const imagesForLLM = needsImages
-          ? samplePhotos.map((photo) => ({
-              photo: { id: photo.id, name: photo.name, thumbnailName: photo.thumbnailName },
-              base64: '',
-            }))
-          : undefined
-
-        // Llamar al LLM
-        console.log(
-          `🧠 Analizando cluster ${cluster.cluster_id} (${clusterSize} fotos, ${samplePhotos.length} en muestra, ${cluster.percentage.toFixed(2)}%)...`
-        )
-
-        const llmResponse = await this.getLLMResponseWithRetry({
-          contextLabel: `portfolioReview.${reviewType}.cluster_${cluster.cluster_id}`,
-          systemPrompt,
-          userMessages: [userMessage],
-          model: mainModel,
-          retryModel: retryModel,
-          generationConfig: { temperature: 0.7, responseType: 'json_object' },
-          useCache: !needsImages,
-          validateResult: (r: any) => this.isValidPatternResult(r, hasExistingPatterns),
-          fallbackResult: {
-            decision: 'new',
-            title: `Pattern ${patterns.length + accumulatedPatterns.length + 1}`,
-            description: 'No description available',
-            patternType: 'NA',
-          },
-          images: imagesForLLM,
-          useThumbOnRetry: config.useThumbOnRetry,
-          useBase64OnRetry: config.useBase64OnRetry,
-        })
-
-        let cost = 0
-        if (llmResponse?.cost?.totalCostInEur) {
-          cost = llmResponse.cost.totalCostInEur
-        }
-
-        let analysis = llmResponse?.result
-
-        // Normalizar respuesta
-        if (!analysis || typeof analysis !== 'object') {
-          analysis = {
-            decision: 'new',
-            title: `Pattern ${patterns.length + accumulatedPatterns.length + 1}`,
-            description: 'No description available',
-            patternType: 'NA',
-          }
-        }
-
-        // Procesar decisión
-        const isMerge =
-          hasExistingPatterns && analysis.decision === 'merge' && analysis.mergeWithPatternId
-
-        if (isMerge) {
-          // MERGE con patrón previo
-          const targetPattern = accumulatedPatterns.find(
-            (p) => p.patternId === analysis.mergeWithPatternId
-          )
-
-          if (targetPattern) {
-            targetPattern.photoCount += clusterSize
-            targetPattern.percentage += cluster.percentage
-            targetPattern.mergedClusterIds.push(`cluster_${cluster.cluster_id}`)
-
-            // Obtener fotos representativas
-            let photosToConsider: any[] = samplePhotos
-            if (analysis.representativePhotoIds && Array.isArray(analysis.representativePhotoIds)) {
-              const repIds = analysis.representativePhotoIds.map((id: any) => parseInt(String(id)))
-              const representativePhotos = repIds
-                .map((id: number) => photoMapObject[id])
-                .filter(Boolean)
-              if (representativePhotos.length > 0) {
-                photosToConsider = representativePhotos
-              }
-            }
-
-            const existingPhotoIds = new Set(targetPattern.allPhotoIds)
-            const newPhotosToAdd = photosToConsider
-              .filter((photo) => !existingPhotoIds.has(photo.id))
-              .slice(0, Math.max(0, 4 - targetPattern.samplePhotos.length))
-
-            for (const photo of newPhotosToAdd) {
-              targetPattern.samplePhotos.push(createSamplePhoto(photo))
-              targetPattern.allPhotoIds.push(photo.id)
-            }
-
-            for (const photoId of allClusterPhotoIds) {
-              if (!existingPhotoIds.has(photoId)) {
-                targetPattern.allPhotoIds.push(photoId)
-              }
-            }
-
-            targetPattern.strength = this.calculatePatternStrength(targetPattern.percentage)
-
-            console.log(
-              `🔗 Cluster ${cluster.cluster_id} mergeado a patrón previo "${targetPattern.title}"`
-            )
-            return { type: 'merge', cost }
-          }
-        }
-
-        // CREATE NEW pattern
-        let representativePhotos: any[] = []
-        if (analysis.representativePhotoIds && Array.isArray(analysis.representativePhotoIds)) {
-          const repIds = analysis.representativePhotoIds.map((id: any) => parseInt(String(id)))
-          representativePhotos = repIds.map((id: number) => photoMapObject[id]).filter(Boolean)
-        }
-        if (representativePhotos.length === 0) {
-          representativePhotos = samplePhotos.slice(0, 4)
-        }
-
-        const newPatternId = hasExistingPatterns
-          ? `pattern_new_${patterns.length + 1}`
-          : `cluster_${cluster.cluster_id}`
-
-        const pattern: ClusterPattern = {
-          patternId: newPatternId,
-          patternType: analysis.patternType || 'NA',
-          title: analysis.title || `Pattern ${patterns.length + 1}`,
-          description: analysis.description || 'No description available',
-          photoCount: clusterSize,
-          percentage: cluster.percentage,
-          strength: this.calculatePatternStrength(cluster.percentage),
-          clusterPhotos: allClusterPhotoIds,
-          samplePhotos: representativePhotos.slice(0, 4).map(createSamplePhoto),
-        }
-
-        console.log(`✨ Nuevo patrón creado: "${pattern.title}"`)
-        return { type: 'new', pattern, cost }
-      })
+    // FASE 3: Procesar todos los clusters
+    const { totalCost: clusterProcessingCost } = await this.processAllClusters(
+      clusters,
+      photoMapObject,
+      reviewType,
+      chunkName,
+      config,
+      existingPatternsForPrompt,
+      hasExistingPatterns,
+      accumulatedPatterns,
+      patterns
     )
+    totalCostInEur += clusterProcessingCost
 
-    // Esperar a que todos los clusters terminen de procesarse
-    const results = await Promise.all(clusterProcessingTasks)
+    // FASE 4: Consolidar patrones con merges
+    const consolidatedPatterns = this.consolidatePatternsWithMerges(patterns, accumulatedPatterns)
 
-    // Consolidar resultados
-    for (const result of results) {
-      if (result.cost) {
-        totalCostInEur += result.cost
-      }
-      if (result.type === 'new' && result.pattern) {
-        patterns.push(result.pattern)
-      }
-    }
-
-    // Agregar patrones previos que recibieron merges
-    for (const p of accumulatedPatterns) {
-      if (p.photoCount > 0) {
-        patterns.push({
-          patternId: p.patternId,
-          patternType: p.patternType || 'NA',
-          title: p.title,
-          description: p.description,
-          photoCount: p.photoCount,
-          percentage: Math.min(100, p.percentage),
-          strength: p.strength,
-          clusterPhotos: p.allPhotoIds,
-          samplePhotos: p.samplePhotos.slice(0, 4),
-        })
-      } else {
-        console.log(`⚠️ Patrón previo "${p.title}" eliminado (0 fotos después del rebuild)`)
-      }
-    }
-
-    // Ordenar por porcentaje
-    patterns.sort((a, b) => b.percentage - a.percentage)
-
-    // FASE 4: Deduplicación de patrones
+    // FASE 5: Deduplicación de patrones
     const deduplicationResult = await this.deduplicatePatterns(
-      patterns,
+      consolidatedPatterns,
       reviewType,
       'gemini-2.5-flash'
     )
-
-    // devolvemos el objeto sin deduplicar
-    // const deduplicationResult = { patterns, removedIds: [], cost: 0 }
-
-    const finalPatterns = deduplicationResult.patterns
     totalCostInEur += deduplicationResult.cost
 
-    console.log('\n========== RESUMEN FINAL ==========')
-    console.log(`📦 Patrones identificados: ${finalPatterns.length}`)
-    finalPatterns.forEach((p, idx) => {
-      console.log(
-        `  ${idx + 1}. "${p.title}" - ${p.photoCount} fotos (${p.percentage.toFixed(1)}%)`
-      )
-    })
-    console.log(`💰 Costo total: €${totalCostInEur.toFixed(4)}`)
-    console.log('====================================\n')
+    // Log final y retorno
+    const finalPatterns = deduplicationResult.patterns
+    this.logFinalSummary(finalPatterns, totalCostInEur)
 
     return {
       patterns: finalPatterns,
       metadata: {
-        totalPhotos,
+        totalPhotos: vectors.length,
         clustersFound: clusters.length,
         patternsIdentified: finalPatterns.length,
-        patternsBeforeDeduplication: patterns.length,
+        patternsBeforeDeduplication: consolidatedPatterns.length,
         patternsRemoved: deduplicationResult.removedIds.length,
         reviewType,
         previousPatternsCount: previousPatterns.length,
