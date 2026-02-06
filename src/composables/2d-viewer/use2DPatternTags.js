@@ -47,6 +47,69 @@ export function use2DPatternTags({
   const activeHeatmapGraphics = shallowRef(null); // Current heatmap graphics
   const activeHeatmapPhotoIds = shallowRef(null); // Remember last ids for zoom refresh
 
+  // Heatmap rendering UX: avoid showing a stale heatmap for 1 frame while updates are scheduled.
+  // Morphing between shapes is non-trivial; use a simple fade-in for the new heatmap.
+  const HEATMAP_FADE_IN_MS = 180;
+  let heatmapFadeRaf = 0;
+  let heatmapFadeToken = 0;
+
+  const cancelHeatmapFade = () => {
+    heatmapFadeToken++;
+    if (heatmapFadeRaf) {
+      cancelAnimationFrame(heatmapFadeRaf);
+      heatmapFadeRaf = 0;
+    }
+  };
+
+  const hideHeatmapImmediately = () => {
+    cancelHeatmapFade();
+    const g = activeHeatmapGraphics.value;
+    if (!g) return;
+    try {
+      // Keep it around until the next render pass removes it,
+      // but ensure it cannot appear for a frame with outdated geometry.
+      g.visible = false;
+      g.renderable = false;
+      g.alpha = 0;
+    } catch (_) {
+      // ignore
+    }
+  };
+
+  const fadeInHeatmap = (graphics) => {
+    if (!graphics) return;
+    cancelHeatmapFade();
+
+    const myToken = ++heatmapFadeToken;
+    const start = performance.now();
+
+    try {
+      graphics.visible = true;
+      graphics.renderable = true;
+      graphics.alpha = 0;
+    } catch (_) {
+      // ignore
+    }
+
+    const step = (now) => {
+      if (myToken !== heatmapFadeToken) return;
+      const t = HEATMAP_FADE_IN_MS > 0 ? (now - start) / HEATMAP_FADE_IN_MS : 1;
+      const a = Math.max(0, Math.min(1, t));
+      try {
+        graphics.alpha = a;
+      } catch (_) {
+        // ignore
+      }
+      if (a < 1) {
+        heatmapFadeRaf = requestAnimationFrame(step);
+      } else {
+        heatmapFadeRaf = 0;
+      }
+    };
+
+    heatmapFadeRaf = requestAnimationFrame(step);
+  };
+
   // Get catalog patterns from user profile
   const catalogPatterns = computed(() => {
     const profile = userStore.user;
@@ -313,7 +376,8 @@ export function use2DPatternTags({
   /**
    * Clear active heatmap graphics
    */
-  const clearHeatmap = () => {
+  const clearHeatmap = ({ preserveIds = false } = {}) => {
+    cancelHeatmapFade();
     const graphics = activeHeatmapGraphics.value;
     if (graphics) {
       try {
@@ -324,7 +388,9 @@ export function use2DPatternTags({
       }
       activeHeatmapGraphics.value = null;
     }
-    activeHeatmapPhotoIds.value = null;
+    if (!preserveIds) {
+      activeHeatmapPhotoIds.value = null;
+    }
   };
 
   /**
@@ -339,6 +405,15 @@ export function use2DPatternTags({
     );
     if (!clusterPhotoIds || clusterPhotoIds.length === 0) return;
 
+    // If photo sprites are currently animating to new positions (balloon expansion, snap, etc),
+    // rendering now would draw the *old* geometry for the whole transition duration.
+    // Instead, keep ids and wait for the transition-end update.
+    if (isTransitioning?.value || isLoadingPositions?.value) {
+      hideHeatmapImmediately();
+      clearHeatmap({ preserveIds: true });
+      return;
+    }
+
     // Safety check: ensure Pixi app and containers are still valid
     if (!pixiApp?.value || !photoContainer?.value) {
       console.log("[Heatmap] Missing pixiApp or photoContainer");
@@ -349,10 +424,14 @@ export function use2DPatternTags({
       return;
     }
 
+    // Remember the active ids for zoom refresh and future updates.
     activeHeatmapPhotoIds.value = clusterPhotoIds;
 
     ensureHeatmapContainer();
-    clearHeatmap();
+    // We're about to re-render; ensure the old graphics cannot flash for 1 frame.
+    hideHeatmapImmediately();
+    // Clear only the graphics, keep ids.
+    clearHeatmap({ preserveIds: true });
 
     const container = heatmapContainer.value;
     if (!container || container.destroyed) {
@@ -390,7 +469,10 @@ export function use2DPatternTags({
       clusterPhotoIds.length,
       "cluster photos",
     );
-    if (positions.length === 0) return;
+    if (positions.length === 0) {
+      // No visible points => keep ids but show nothing.
+      return;
+    }
 
     // Create graphics for heatmap
     const graphics = new PIXI.Graphics();
@@ -407,8 +489,8 @@ export function use2DPatternTags({
     } catch (_) {
       // keep default blend mode
     }
-    // A bit stronger than before but still a background effect.
-    graphics.alpha = 1.0;
+    // Start hidden; fade-in after the new shape is ready.
+    graphics.alpha = 0;
 
     // Get theme color for heatmap
     let heatmapColor = 0x1976d2; // Default blue
@@ -457,6 +539,7 @@ export function use2DPatternTags({
 
     container.addChild(graphics);
     activeHeatmapGraphics.value = graphics;
+    fadeInHeatmap(graphics);
     console.log("[Heatmap] ✅ Heatmap rendered successfully");
   };
 
@@ -469,6 +552,9 @@ export function use2DPatternTags({
       if (HIGHLIGHT_MODE.value !== "heatmap") return;
       const ids = activeHeatmapPhotoIds.value;
       if (!ids || ids.length === 0) return;
+
+      // Avoid showing outdated heatmap while waiting for RAF.
+      hideHeatmapImmediately();
 
       if (heatmapZoomRaf) cancelAnimationFrame(heatmapZoomRaf);
       heatmapZoomRaf = requestAnimationFrame(() => {
@@ -489,6 +575,14 @@ export function use2DPatternTags({
     // Safety check before scheduling async update
     if (!pixiApp?.value || pixiApp.value.destroyed) {
       console.log("[Heatmap] PixiApp not available, skipping");
+      return;
+    }
+
+    // During animated re-layouts (balloon/snap) the sprite positions are mid-flight.
+    // Rendering during this window tends to show the previous shape.
+    if (isTransitioning?.value || isLoadingPositions?.value) {
+      hideHeatmapImmediately();
+      clearHeatmap({ preserveIds: true });
       return;
     }
 
@@ -515,6 +609,9 @@ export function use2DPatternTags({
       return;
     }
 
+    // Hide immediately so the previous geometry doesn't linger for a frame.
+    hideHeatmapImmediately();
+
     console.log("[Heatmap] Scheduling update for", ids.length, "photos");
     if (heatmapUpdateRaf) cancelAnimationFrame(heatmapUpdateRaf);
     heatmapUpdateRaf = requestAnimationFrame(() => {
@@ -523,6 +620,22 @@ export function use2DPatternTags({
       createHeatmapOverlay(ids);
     });
   };
+
+  // During layout transitions/loading, photo positions are in flux.
+  // Hide heatmap to avoid incoherent intermediate frames.
+  watch(isTransitioning, (transitioning) => {
+    if (transitioning) {
+      hideHeatmapImmediately();
+      clearHeatmap({ preserveIds: true });
+    }
+  });
+
+  watch(isLoadingPositions, (loading) => {
+    if (loading) {
+      hideHeatmapImmediately();
+      clearHeatmap({ preserveIds: true });
+    }
+  });
 
   // Watch for sprite map changes (filters, visibility changes)
   // Use deep watch on the sprites value itself to catch visibility changes
@@ -1011,6 +1124,7 @@ export function use2DPatternTags({
       cancelAnimationFrame(heatmapUpdateRaf);
       heatmapUpdateRaf = 0;
     }
+    cancelHeatmapFade();
     clearHeatmap();
     clearPatternTag();
   };
