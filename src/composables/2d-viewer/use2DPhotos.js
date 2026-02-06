@@ -53,8 +53,19 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
   const AUTO_EXPAND_SAMPLE_MAX = 4000;
   const AUTO_EXPAND_VERY_HIGH_COLLISION_RATIO = 0.65;
   const AUTO_EXPAND_VERY_HIGH_MAX_OCC = 12;
+  const AUTO_EXPAND_EASE_K = 6.5;
 
   const clamp01 = (v) => Math.max(0, Math.min(1, Number(v) || 0));
+
+  const easeInExp01 = (t01) => {
+    // Smooth "ease-in" curve (gentle early, stronger late).
+    // Returns 0..1 with t=1 mapping exactly to 1.
+    const t = clamp01(t01);
+    const k = Math.max(1e-6, Number(AUTO_EXPAND_EASE_K) || 1);
+    const denom = Math.expm1(k);
+    if (Math.abs(denom) < 1e-12) return t;
+    return Math.expm1(k * t) / denom;
+  };
 
   const computeCosmicScale = (strength01) => {
     // Preserve cluster shapes by scaling all positions around the centroid.
@@ -69,21 +80,19 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
     return [p[0] || 0, p[1] || 0];
   };
 
-  const hasVeryHighOverlap = (photos) => {
-    if (!AUTO_EXPAND_ENABLED) return false;
-
+  const getOverlapMetrics = (photos) => {
     const list = Array.isArray(photos) ? photos : [];
     const n0 = list.length;
-    if (n0 < 60) return false;
+    if (n0 < 60) return null;
 
     // Sample down to keep this O(N) and fast for very large catalogs.
     const step = Math.max(1, Math.floor(n0 / AUTO_EXPAND_SAMPLE_MAX));
     const sample =
       step === 1 ? list : list.filter((_, idx) => idx % step === 0);
-    const n = sample.length || 1;
+    const n = sample.length || 0;
+    if (n <= 0) return null;
 
-    // Bucket points into "photo-sized" cells and see how much they pile up.
-    // This is intentionally strict: we only auto-expand when overlap is clearly extreme.
+    // Bucket points into "photo-sized" cells and estimate pile-ups.
     const cellSize = Math.max(0.4, RELAX_BASE_SIZE + RELAX_PADDING);
     const counts = new Map();
     let maxOcc = 1;
@@ -105,10 +114,30 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
     }
     const collisionRatio = collidedPoints / n;
 
-    return (
-      collisionRatio >= AUTO_EXPAND_VERY_HIGH_COLLISION_RATIO ||
-      maxOcc >= AUTO_EXPAND_VERY_HIGH_MAX_OCC
+    return {
+      collisionRatio: Number.isFinite(collisionRatio) ? collisionRatio : 0,
+      maxOcc: Number.isFinite(maxOcc) ? maxOcc : 1,
+      sampleSize: n,
+    };
+  };
+
+  const computeAutoExpandStrength = (photos) => {
+    if (!AUTO_EXPAND_ENABLED) return 0;
+
+    const metrics = getOverlapMetrics(photos);
+    if (!metrics) return 0;
+
+    const ratioScore = clamp01(
+      metrics.collisionRatio / AUTO_EXPAND_VERY_HIGH_COLLISION_RATIO,
     );
+    const occDenom = Math.max(1, AUTO_EXPAND_VERY_HIGH_MAX_OCC - 1);
+    const occScore = clamp01((metrics.maxOcc - 1) / occDenom);
+
+    // Use whichever indicates stronger crowding.
+    const crowdingScore = Math.max(ratioScore, occScore);
+    const eased = easeInExp01(crowdingScore);
+
+    return clamp01(eased) * AUTO_EXPAND_TARGET_STRENGTH;
   };
 
   const applyLayout = (photos) => {
@@ -299,10 +328,11 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
         gridRelaxationExpandStrength.value ===
           GRID_RELAXATION_EXPAND_STRENGTH_DEFAULT
       ) {
-        if (hasVeryHighOverlap(workingPhotos)) {
-          gridRelaxationExpandStrength.value = AUTO_EXPAND_TARGET_STRENGTH;
+        const autoStrength = computeAutoExpandStrength(workingPhotos);
+        if (autoStrength > 1e-6) {
+          gridRelaxationExpandStrength.value = autoStrength;
           console.log(
-            `🫧 Auto balloon expansion: ${(AUTO_EXPAND_TARGET_STRENGTH * 100).toFixed(0)}% (very high overlap)`,
+            `🫧 Auto balloon expansion: ${(autoStrength * 100).toFixed(1)}% (gradual from overlap)`,
           );
         }
       }
