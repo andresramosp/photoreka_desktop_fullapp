@@ -758,12 +758,9 @@ const sortedPatternsForCurrentChunk = computed(() => {
 
 // Chunk descriptions based on selected embedding type
 const chunkDescriptions = {
-  general:
-    "Visual, stylistic, and recurring object patterns identified across your collection",
-  story:
-    "Storytelling themes and narrative clusters identified in your collection",
-  context:
-    "Contextual themes and regional patterns detected across your photography collection",
+  general: "Visual, stylistic, and recurring object patterns",
+  story: "Storytelling themes and narrative clusters",
+  context: "Contextual themes and regional patterns",
   // visual_accents:
   //   "Recurring visual elements and compositional patterns in your photos",
   // color_histogram:

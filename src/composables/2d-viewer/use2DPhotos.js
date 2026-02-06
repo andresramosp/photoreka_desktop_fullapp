@@ -281,16 +281,16 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
 
       // Filter for low performance mode
       let workingPhotos = photos;
-      if (lowPerformance.value && photos.length > 750) {
-        const getScore = (p) =>
-          p?.descriptions?.artistic_scores?.aesthetic_quality ?? -Infinity;
-        workingPhotos = [...photos]
-          .sort((a, b) => getScore(b) - getScore(a))
-          .slice(0, 750);
-        console.log(
-          `⚡ LowPerformance active: filtered ${photos.length} -> ${workingPhotos.length} (top aesthetic_quality)`,
-        );
-      }
+      // if (lowPerformance.value && photos.length > 750) {
+      //   const getScore = (p) =>
+      //     p?.descriptions?.artistic_scores?.aesthetic_quality ?? -Infinity;
+      //   workingPhotos = [...photos]
+      //     .sort((a, b) => getScore(b) - getScore(a))
+      //     .slice(0, 750);
+      //   console.log(
+      //     `⚡ LowPerformance active: filtered ${photos.length} -> ${workingPhotos.length} (top aesthetic_quality)`,
+      //   );
+      // }
 
       // Auto-tune initial expansion only on the very first load and only if the user
       // hasn't changed the slider from its default.

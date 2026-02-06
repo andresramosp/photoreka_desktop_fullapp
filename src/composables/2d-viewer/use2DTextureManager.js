@@ -32,6 +32,47 @@ const MAX_RETRY_DELAY = 10000;
 // Set true temporarily if you want verbose cache logs
 const DEBUG_2D_CACHE = false;
 
+const getDeviceMemoryGb = () => {
+  try {
+    const dm = Number(globalThis?.navigator?.deviceMemory);
+    return Number.isFinite(dm) && dm > 0 ? dm : null;
+  } catch (_) {
+    return null;
+  }
+};
+
+// Scale texture caps based on device RAM hint.
+// This is independent of useLowPerformance and keeps UX identical (same loading flow).
+const getMaxSideCapsByDeviceMemory = () => {
+  const dm = getDeviceMemoryGb();
+  if (dm === null) return null;
+
+  // Conservative defaults for low-memory devices.
+  // Goal: avoid GPU OOM while preserving acceptable quality.
+  if (dm <= 1) {
+    return {
+      thumbMaxSide: 192,
+      originalMaxSide: 640,
+    };
+  }
+  if (dm <= 2) {
+    return {
+      thumbMaxSide: 256,
+      originalMaxSide: 768,
+    };
+  }
+  if (dm <= 4) {
+    return {
+      thumbMaxSide: 384,
+      originalMaxSide: 896,
+    };
+  }
+  return {
+    thumbMaxSide: null,
+    originalMaxSide: null,
+  };
+};
+
 export function use2DTextureManager(
   useLowPerformance = false,
   isPlayground = false,
@@ -360,13 +401,23 @@ export function use2DTextureManager(
     if (!imageElement) return null;
 
     // Downscale source before uploading to GPU to reduce memory pressure.
-    const maxSide = useLowPerformance
+    // First choose the baseline caps (lowPerformance vs desktop), then optionally tighten
+    // them based on deviceMemory (independent of useLowPerformance).
+    let maxSide = useLowPerformance
       ? isOriginal
         ? CONFIG_2D_TEXTURE.lowResMaxSideOriginal
         : CONFIG_2D_TEXTURE.lowResMaxSide
       : isOriginal
         ? CONFIG_2D_TEXTURE.desktopMaxSideOriginal
         : CONFIG_2D_TEXTURE.desktopMaxSide;
+
+    const dmCaps = getMaxSideCapsByDeviceMemory();
+    if (dmCaps) {
+      const cap = isOriginal ? dmCaps.originalMaxSide : dmCaps.thumbMaxSide;
+      if (Number.isFinite(cap) && cap > 0) {
+        maxSide = Math.min(maxSide, cap);
+      }
+    }
     const sourceForTexture = downscaleSource(imageElement, maxSide);
 
     const texture = PIXI.Texture.from(sourceForTexture);
