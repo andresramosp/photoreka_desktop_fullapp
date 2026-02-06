@@ -12,8 +12,9 @@
     <!-- PixiJS Canvas Container -->
     <div v-else ref="pixiContainer" class="pixi-container"></div>
 
-    <!-- Config Panel Component -->
+    <!-- Config Panel Component (Desktop) -->
     <Photos2DConfigPanel
+      v-if="!isMobile"
       v-model:showConfigPanel="showConfigPanel"
       v-model:selectedChunk="selectedChunk"
       v-model:selectedVisualAspects="selectedVisualAspects"
@@ -39,6 +40,29 @@
       @reset-view="resetView"
       @highlight-pattern="handleHighlightPattern"
       @unhighlight-pattern="handleUnhighlightPattern"
+      @select-pattern="handleSelectPattern"
+    />
+
+    <!-- Config Panel Component (Mobile) -->
+    <Photos2DConfigPanelMobile
+      v-else
+      v-model:selectedChunk="selectedChunk"
+      v-model:selectedVisualAspects="selectedVisualAspects"
+      v-model:artisticScoreFilters="artisticScoreFilters"
+      v-model:timeRangeFilter="timeRangeFilter"
+      v-model:atlasBackground="atlasBackground"
+      v-model:gridRelaxationEnabled="gridRelaxationEnabled"
+      v-model:gridRelaxationExpandStrength="gridRelaxationExpandStrength"
+      v-model:gridSnapToGrid="gridSnapToGrid"
+      v-model:selectedPatternId="selectedPatternId"
+      :chunkOptions="chunkOptions"
+      :patternsForCurrentChunk="patternsForCurrentChunk"
+      :showDiscreteLoader="showDiscreteLoader"
+      :processedPhotos="processedPhotos"
+      @chunk-change="onChunkChange"
+      @visual-aspects-change="onVisualAspectsChange"
+      @artistic-scores-change="onArtisticScoresChange"
+      @time-range-change="onTimeRangeChange"
       @select-pattern="handleSelectPattern"
     />
 
@@ -133,13 +157,18 @@
 
     <!-- Zoom Controls -->
     <div class="zoom-controls">
-      <button @click="zoomIn" class="zoom-btn" title="Zoom In">
+      <button v-if="!isMobile" @click="zoomIn" class="zoom-btn" title="Zoom In">
         <n-icon size="18">
           <ZoomInOutlined />
         </n-icon>
       </button>
       <!-- <span class="zoom-level">{{ Math.round(scale * 100) }}%</span> -->
-      <button @click="zoomOut" class="zoom-btn" title="Zoom Out">
+      <button
+        v-if="!isMobile"
+        @click="zoomOut"
+        class="zoom-btn"
+        title="Zoom Out"
+      >
         <n-icon size="18">
           <ZoomOutOutlined />
         </n-icon>
@@ -202,6 +231,7 @@ import FixedActionBar from "@/components/3d-atlas/FixedActionBar.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import Photos2DConfigPanel from "@/components/2d-atlas/Photos2DConfigPanel.vue";
+import Photos2DConfigPanelMobile from "@/components/2d-atlas/Photos2DConfigPanelMobile.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useUserStore } from "@/stores/userStore";
@@ -1639,13 +1669,32 @@ const handleUnhighlightPattern = (pattern) => {
 };
 
 const handleSelectPattern = (pattern) => {
-  if (!pattern) return;
+  console.log("[Photos2D] handleSelectPattern called with:", pattern);
+
+  if (!pattern) {
+    // Clear pattern selection
+    if (selectedPatternId.value !== null) {
+      const prevPattern = patternsForCurrentChunk.value.find(
+        (p) => (p.patternId ?? p.title) === selectedPatternId.value,
+      );
+      if (prevPattern) {
+        unhighlightPatternPhotos(prevPattern.clusterPhotos || []);
+      }
+    }
+    selectedPatternId.value = null;
+    return;
+  }
 
   const patternId = pattern.patternId ?? pattern.title;
   const clusterPhotoIds = pattern.clusterPhotos || [];
 
+  console.log("[Photos2D] Pattern ID:", patternId);
+  console.log("[Photos2D] Cluster photo IDs:", clusterPhotoIds);
+  console.log("[Photos2D] Current selectedPatternId:", selectedPatternId.value);
+
   // If clicking the same pattern, deselect it
   if (selectedPatternId.value === patternId) {
+    console.log("[Photos2D] Deselecting pattern");
     selectedPatternId.value = null;
     unhighlightPatternPhotos(clusterPhotoIds);
   } else {
@@ -1661,6 +1710,7 @@ const handleSelectPattern = (pattern) => {
     }
 
     selectedPatternId.value = patternId;
+    console.log("[Photos2D] Calling highlightPatternPhotos");
     highlightPatternPhotos(clusterPhotoIds, patternId);
   }
 };
@@ -2176,7 +2226,10 @@ watch(isTransitioning, (v) => {
 /* Mobile adjustments for selected photos */
 @media (max-width: 767px) {
   .selected-photos-container {
-    left: 5px;
+    left: 10px;
+    right: 0px;
+    top: auto;
+    bottom: 0px;
     max-width: calc(100vw - 10px);
     padding: 8px;
   }
@@ -2184,6 +2237,11 @@ watch(isTransitioning, (v) => {
   .selected-photo-item {
     width: 50px;
     height: 50px;
+  }
+
+  .zoom-controls {
+    right: 5px !important;
+    bottom: 5px !important;
   }
 }
 
@@ -2308,5 +2366,12 @@ watch(isTransitioning, (v) => {
   z-index: 100;
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Mobile adjustments for config panel floating buttons */
+@media (max-width: 768px) {
+  .pixi-container {
+    padding-top: 60px; /* Space for mobile config buttons bar */
+  }
 }
 </style>
