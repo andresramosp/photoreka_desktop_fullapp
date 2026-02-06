@@ -425,7 +425,7 @@
                       </span>
                     </div>
                     <n-slider
-                      :value="localArtisticScoreFilters[criterion.value]"
+                      :value="localArtisticScoreFilters[criterion.value] || 1"
                       @update:value="
                         (value) =>
                           handleArtisticScoreChange(criterion.value, value)
