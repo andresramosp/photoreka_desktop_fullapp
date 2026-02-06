@@ -47,6 +47,18 @@ export function use2DPatternTags({
   const activeHeatmapGraphics = shallowRef(null); // Current heatmap graphics
   const activeHeatmapPhotoIds = shallowRef(null); // Remember last ids for zoom refresh
 
+  // MEMORY OPTIMIZATION: Reuse a single BlurFilter instead of creating a new one per redraw.
+  // BlurFilter allocates WebGL framebuffers internally that are NOT freed by Graphics.destroy().
+  let sharedBlurFilter = null;
+  const getOrCreateBlurFilter = () => {
+    if (!sharedBlurFilter) {
+      sharedBlurFilter = new PIXI.BlurFilter();
+      sharedBlurFilter.blur = 18;
+      sharedBlurFilter.quality = 3;
+    }
+    return sharedBlurFilter;
+  };
+
   // Heatmap rendering UX: avoid showing a stale heatmap for 1 frame while updates are scheduled.
   // Morphing between shapes is non-trivial; use a simple fade-in for the new heatmap.
   const HEATMAP_FADE_IN_MS = 180;
@@ -196,7 +208,8 @@ export function use2DPatternTags({
         // ignore
       }
       try {
-        tag.destroy?.({ children: true });
+        // Use destroy(true) to free internal contexts (GraphicsContext, TextContext)
+        tag.destroy?.(true);
       } catch (_) {
         // ignore
       }
@@ -381,8 +394,15 @@ export function use2DPatternTags({
     const graphics = activeHeatmapGraphics.value;
     if (graphics) {
       try {
+        // Detach shared filter before destroying so it survives for reuse
+        graphics.filters = null;
+
         heatmapContainer.value?.removeChild?.(graphics);
-        graphics.destroy?.({ children: true });
+        // CRITICAL: pass `true` (not { children: true }) to also destroy the
+        // internal GraphicsContext. In Pixi v8, GraphicsContext holds ALL the
+        // circle geometry (vertices, indices, fill batches). Without this,
+        // every redraw leaks ~10-40 MB of geometry data that GC cannot free.
+        graphics.destroy(true);
       } catch (_) {
         // ignore
       }
@@ -398,11 +418,6 @@ export function use2DPatternTags({
    * @param {Array} clusterPhotoIds - Array of photo IDs in the pattern
    */
   const createHeatmapOverlay = (clusterPhotoIds) => {
-    console.log(
-      "[Heatmap] createHeatmapOverlay called with",
-      clusterPhotoIds?.length,
-      "photo IDs",
-    );
     if (!clusterPhotoIds || clusterPhotoIds.length === 0) return;
 
     // If photo sprites are currently animating to new positions (balloon expansion, snap, etc),
@@ -416,11 +431,9 @@ export function use2DPatternTags({
 
     // Safety check: ensure Pixi app and containers are still valid
     if (!pixiApp?.value || !photoContainer?.value) {
-      console.log("[Heatmap] Missing pixiApp or photoContainer");
       return;
     }
     if (pixiApp.value.destroyed) {
-      console.log("[Heatmap] PixiApp is destroyed");
       return;
     }
 
@@ -435,7 +448,6 @@ export function use2DPatternTags({
 
     const container = heatmapContainer.value;
     if (!container || container.destroyed) {
-      console.log("[Heatmap] Container invalid");
       return;
     }
 
@@ -445,7 +457,6 @@ export function use2DPatternTags({
     const sprites = photoSprites?.value;
 
     if (!sprites) {
-      console.log("[Heatmap] No sprites map available");
       return;
     }
 
@@ -462,13 +473,6 @@ export function use2DPatternTags({
       positions.push({ x, y });
     }
 
-    console.log(
-      "[Heatmap] Found",
-      positions.length,
-      "visible positions out of",
-      clusterPhotoIds.length,
-      "cluster photos",
-    );
     if (positions.length === 0) {
       // No visible points => keep ids but show nothing.
       return;
@@ -530,22 +534,18 @@ export function use2DPatternTags({
       }
     });
 
-    // Apply blur filter for diffused effect
-    const blurFilter = new PIXI.BlurFilter();
-    // More blur, but with lower alpha, reads as "ambient" density.
-    blurFilter.blur = 18;
-    blurFilter.quality = 3;
-    graphics.filters = [blurFilter];
+    // Reuse shared BlurFilter (avoids allocating new WebGL framebuffers each redraw)
+    graphics.filters = [getOrCreateBlurFilter()];
 
     container.addChild(graphics);
     activeHeatmapGraphics.value = graphics;
     fadeInHeatmap(graphics);
-    console.log("[Heatmap] ✅ Heatmap rendered successfully");
   };
 
   // Keep heatmap roughly consistent when zoom changes.
-  // Avoid heavy work during active transitions/loading; and only when a heatmap is active.
-  let heatmapZoomRaf = 0;
+  // DEBOUNCED: recreating Graphics+geometry on every wheel tick was the #1 heap pressure.
+  // Now we wait until zoom stabilizes (200ms idle) before redrawing.
+  let heatmapZoomTimer = 0;
   watch(
     () => scale.value,
     () => {
@@ -553,28 +553,25 @@ export function use2DPatternTags({
       const ids = activeHeatmapPhotoIds.value;
       if (!ids || ids.length === 0) return;
 
-      // Avoid showing outdated heatmap while waiting for RAF.
+      // Hide stale heatmap immediately (visual) but DON'T recreate yet.
       hideHeatmapImmediately();
 
-      if (heatmapZoomRaf) cancelAnimationFrame(heatmapZoomRaf);
-      heatmapZoomRaf = requestAnimationFrame(() => {
-        heatmapZoomRaf = 0;
+      if (heatmapZoomTimer) clearTimeout(heatmapZoomTimer);
+      heatmapZoomTimer = setTimeout(() => {
+        heatmapZoomTimer = 0;
         createHeatmapOverlay(ids);
-      });
+      }, 200); // Only redraw when zoom stabilizes
     },
   );
 
   // Update heatmap when photo positions change (snap/relaxation) or filters change
   let heatmapUpdateRaf = 0;
   const scheduleHeatmapUpdate = () => {
-    console.log("[Heatmap] scheduleHeatmapUpdate called");
     if (HIGHLIGHT_MODE.value !== "heatmap") {
-      console.log("[Heatmap] Not in heatmap mode, skipping");
       return;
     }
     // Safety check before scheduling async update
     if (!pixiApp?.value || pixiApp.value.destroyed) {
-      console.log("[Heatmap] PixiApp not available, skipping");
       return;
     }
 
@@ -591,32 +588,24 @@ export function use2DPatternTags({
 
     // If no active heatmap IDs but there's a selected pattern, get IDs from pattern
     if ((!ids || ids.length === 0) && selectedPatternId?.value) {
-      console.log(
-        "[Heatmap] No activeHeatmapPhotoIds, trying to get from selectedPatternId:",
-        selectedPatternId.value,
-      );
       const currentPattern = patternsForCurrentChunk.value.find(
         (p) => (p.patternId ?? p.title) === selectedPatternId.value,
       );
       if (currentPattern) {
         ids = currentPattern.clusterPhotos || [];
-        console.log("[Heatmap] Found pattern with", ids.length, "photos");
       }
     }
 
     if (!ids || ids.length === 0) {
-      console.log("[Heatmap] No active pattern selected, skipping");
       return;
     }
 
     // Hide immediately so the previous geometry doesn't linger for a frame.
     hideHeatmapImmediately();
 
-    console.log("[Heatmap] Scheduling update for", ids.length, "photos");
     if (heatmapUpdateRaf) cancelAnimationFrame(heatmapUpdateRaf);
     heatmapUpdateRaf = requestAnimationFrame(() => {
       heatmapUpdateRaf = 0;
-      console.log("[Heatmap] Executing scheduled update");
       createHeatmapOverlay(ids);
     });
   };
@@ -637,23 +626,10 @@ export function use2DPatternTags({
     }
   });
 
-  // Watch for sprite map changes (filters, visibility changes)
-  // Use deep watch on the sprites value itself to catch visibility changes
-  watch(
-    () => {
-      // Create a reactive dependency on sprite visibility and positions
-      const sprites = photoSprites.value;
-      if (!sprites) return 0;
-      let hash = sprites.size;
-      sprites.forEach((sprite) => {
-        if (sprite.visible) hash++;
-      });
-      return hash;
-    },
-    () => {
-      scheduleHeatmapUpdate();
-    },
-  );
+  // NOTE: Sprite visibility changes are already handled by scheduleHeatmapUpdate()
+  // calls in Photos2D.vue (updateSpriteVisibility, filter watchers, etc.).
+  // The previous watcher iterated ALL sprites on every reactivity tick, creating GC pressure
+  // and triggering redundant heatmap redraws. Removed to fix memory accumulation.
 
   // Watch for transition end to update heatmap with new positions
   watch(isTransitioning, (transitioning, wasTransitioning) => {
@@ -672,12 +648,11 @@ export function use2DPatternTags({
    * @returns {number} Average distance to nearest neighbor
    */
   const calculateAverageNearestNeighborDistance = (positions) => {
-    if (positions.length < 2) return 100; // Default radius
+    if (positions.length < 2) return 100;
 
     let totalDistance = 0;
     let count = 0;
 
-    // For each position, find distance to nearest neighbor
     for (let i = 0; i < positions.length; i++) {
       let minDistance = Infinity;
       for (let j = 0; j < positions.length; j++) {
@@ -718,13 +693,6 @@ export function use2DPatternTags({
    * @param {string|number} patternId - ID of the pattern being highlighted
    */
   const highlightPatternPhotosHeatmap = (clusterPhotoIds, patternId) => {
-    console.log(
-      "[Heatmap] highlightPatternPhotosHeatmap called for pattern",
-      patternId,
-      "with",
-      clusterPhotoIds?.length,
-      "photos",
-    );
     if (!clusterPhotoIds) return;
 
     // Hide all other pattern tags
@@ -1041,7 +1009,7 @@ export function use2DPatternTags({
         if (tag) {
           try {
             container.removeChild(tag);
-            tag.destroy?.({ children: true });
+            tag.destroy?.(true);
           } catch (_) {
             // ignore
           }
@@ -1069,7 +1037,7 @@ export function use2DPatternTags({
         if (tag) {
           try {
             container.removeChild(tag);
-            tag.destroy?.({ children: true });
+            tag.destroy?.(true);
           } catch (_) {
             // ignore
           }
@@ -1114,19 +1082,49 @@ export function use2DPatternTags({
     }
   });
 
-  // Cleanup function to cancel pending RAF calls
+  // Cleanup function to cancel pending timers/RAFs and free all resources
   const cleanup = () => {
-    if (heatmapZoomRaf) {
-      cancelAnimationFrame(heatmapZoomRaf);
-      heatmapZoomRaf = 0;
+    // Cancel timers and animation frames
+    if (heatmapZoomTimer) {
+      clearTimeout(heatmapZoomTimer);
+      heatmapZoomTimer = 0;
     }
     if (heatmapUpdateRaf) {
       cancelAnimationFrame(heatmapUpdateRaf);
       heatmapUpdateRaf = 0;
     }
     cancelHeatmapFade();
+
+    // Clear graphics and tags
     clearHeatmap();
     clearPatternTag();
+
+    // Destroy the shared BlurFilter (it holds WebGL framebuffers)
+    if (sharedBlurFilter) {
+      try {
+        sharedBlurFilter.destroy();
+      } catch (_) {}
+      sharedBlurFilter = null;
+    }
+
+    // Destroy and clear container references
+    const hContainer = heatmapContainer.value;
+    if (hContainer && !hContainer.destroyed) {
+      try {
+        hContainer.parent?.removeChild?.(hContainer);
+        hContainer.destroy(true);
+      } catch (_) {}
+    }
+    heatmapContainer.value = null;
+
+    const pContainer = patternTagsContainer.value;
+    if (pContainer && !pContainer.destroyed) {
+      try {
+        pContainer.parent?.removeChild?.(pContainer);
+        pContainer.destroy(true);
+      } catch (_) {}
+    }
+    patternTagsContainer.value = null;
   };
 
   return {

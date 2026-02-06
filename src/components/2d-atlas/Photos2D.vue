@@ -318,6 +318,7 @@ const pixiContainer = ref(null);
 const pixiApp = shallowRef(null);
 const photoContainer = shallowRef(null);
 const photoSprites = shallowRef(new Map()); // Map of photoId -> sprite
+const placeholderTexture = shallowRef(null); // Reused placeholder (GPU memory optimization)
 
 // Theme-aware background selector (same ids/behavior as CanvasView)
 const { isDarkMode } = useTheme();
@@ -577,6 +578,10 @@ let hiResRequestToken = 0;
 const HIRES_IDLE_DELAY_MS = 160;
 const HIRES_MIN_UPDATE_INTERVAL_MS = 250;
 let hiResIdleTimer = null;
+
+// Canvas interaction cleanup (listeners must be removed manually)
+let canvasRef = null;
+const canvasListeners = [];
 let lastHiResUpdateAt = 0;
 
 // Photo counts
@@ -730,21 +735,41 @@ const initPixi = async () => {
 // Setup mouse/touch interaction
 const setupInteraction = (app) => {
   const canvas = app.canvas;
+  canvasRef = canvas;
 
-  // Mouse wheel zoom
-  canvas.addEventListener("wheel", handleWheel, { passive: false });
+  // Store listeners for cleanup (array of [event, handler, options])
+  const listeners = [
+    ["wheel", handleWheel, { passive: false }],
+    ["mousedown", handleMouseDown],
+    ["mousemove", handleMouseMove],
+    ["mouseup", handleMouseUp],
+    ["mouseleave", handleMouseUp],
+    ["touchstart", handleTouchStart, { passive: false }],
+    ["touchmove", handleTouchMove, { passive: false }],
+    ["touchend", handleTouchEnd],
+    ["touchcancel", handleTouchEnd],
+  ];
 
-  // Mouse drag
-  canvas.addEventListener("mousedown", handleMouseDown);
-  canvas.addEventListener("mousemove", handleMouseMove);
-  canvas.addEventListener("mouseup", handleMouseUp);
-  canvas.addEventListener("mouseleave", handleMouseUp);
+  // Add all listeners
+  listeners.forEach(([event, handler, options]) => {
+    canvas.addEventListener(event, handler, options);
+    canvasListeners.push([event, handler, options]);
+  });
+};
 
-  // Touch events
-  canvas.addEventListener("touchstart", handleTouchStart, { passive: false });
-  canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
-  canvas.addEventListener("touchend", handleTouchEnd);
-  canvas.addEventListener("touchcancel", handleTouchEnd);
+// Cleanup canvas interaction
+const cleanupInteraction = () => {
+  if (!canvasRef) return;
+
+  // Remove all listeners
+  canvasListeners.forEach(([event, handler, options]) => {
+    try {
+      canvasRef.removeEventListener(event, handler, options);
+    } catch (_) {}
+  });
+
+  canvasListeners.length = 0;
+  canvasRef = null;
 };
 
 // Event handlers
@@ -1325,7 +1350,12 @@ const loadPhotosToPixi = async () => {
   loadingProgress.value = 0;
   loaderTitle.value = "Loading photos";
 
-  // Clear existing sprites
+  // Clear existing sprites - DESTROY them to free GPU memory (not just remove from container)
+  for (const sprite of photoSprites.value.values()) {
+    try {
+      sprite.destroy({ children: false, texture: false }); // texture managed by textureManager
+    } catch (_) {}
+  }
   photoContainer.value.removeChildren();
   photoSprites.value.clear();
   hiResSpatialIndex.value = new Map();
@@ -1348,13 +1378,16 @@ const loadPhotosToPixi = async () => {
     // Non-fatal: proceed with network loading
   }
 
-  // Create a default texture for placeholders
-  const placeholderGraphics = new PIXI.Graphics();
-  placeholderGraphics.rect(0, 0, photoSize.value, photoSize.value * 0.75);
-  placeholderGraphics.fill({ color: 0x2a2a2a });
-  placeholderGraphics.stroke({ color: 0x3a3a3a, width: 1 });
-  const placeholderTexture =
-    pixiApp.value.renderer.generateTexture(placeholderGraphics);
+  // Create placeholder texture ONCE and reuse (GPU memory optimization)
+  if (!placeholderTexture.value || placeholderTexture.value.destroyed) {
+    const placeholderGraphics = new PIXI.Graphics();
+    placeholderGraphics.rect(0, 0, photoSize.value, photoSize.value * 0.75);
+    placeholderGraphics.fill({ color: 0x2a2a2a });
+    placeholderGraphics.stroke({ color: 0x3a3a3a, width: 1 });
+    placeholderTexture.value =
+      pixiApp.value.renderer.generateTexture(placeholderGraphics);
+    placeholderGraphics.destroy(); // Free the Graphics object immediately
+  }
 
   // Reduce batch size to avoid rate limiting (12 concurrent max, similar to 3D)
   const batchSize = 12;
@@ -1369,7 +1402,7 @@ const loadPhotosToPixi = async () => {
         const canvasY = y * SCALE_FACTOR;
 
         // Create sprite with placeholder first
-        const sprite = new PIXI.Sprite(placeholderTexture);
+        const sprite = new PIXI.Sprite(placeholderTexture.value);
         sprite.anchor.set(0.5);
         sprite.x = canvasX;
         sprite.y = canvasY;
@@ -1730,19 +1763,45 @@ const stopAnimationLoop = () => {
 
 // Cleanup
 const cleanup = () => {
+  // Cancel pending timers
+  if (hiResIdleTimer) {
+    clearTimeout(hiResIdleTimer);
+    hiResIdleTimer = null;
+  }
+
   // Ensure we free any hi-res texture currently in use.
   try {
     textureManager.releaseTexture(activeHiResPhotoId.value, "original");
   } catch (_) {}
+  activeHiResPhotoId.value = null;
 
   // clearPatternTag();
   // patternTagsContainer.value = null;
+
+  // Destroy all sprites explicitly before destroying the app
+  for (const sprite of photoSprites.value.values()) {
+    try {
+      sprite.destroy({ children: false, texture: false });
+    } catch (_) {}
+  }
+  photoSprites.value.clear();
+
+  // Destroy placeholder texture (we manage it, not Pixi)
+  if (placeholderTexture.value && !placeholderTexture.value.destroyed) {
+    try {
+      placeholderTexture.value.destroy(true);
+    } catch (_) {}
+    placeholderTexture.value = null;
+  }
+
+  // Remove canvas event listeners BEFORE destroying Pixi
+  cleanupInteraction();
 
   if (pixiApp.value) {
     pixiApp.value.destroy(true, { children: true, texture: true });
     pixiApp.value = null;
   }
-  photoSprites.value.clear();
+  photoContainer.value = null;
   hiResSpatialIndex.value = new Map();
   textureManager.reset({ destroyTextures: true });
 };
