@@ -1,7 +1,7 @@
 <template>
   <div v-if="hasValidPhotos" class="time-range-filter" ref="containerRef">
     <div class="filter-header">
-      <span class="filter-label">Time Range</span>
+      <span v-if="showTitle" class="filter-label">Time Range</span>
       <span v-if="hasActiveFilter" class="date-display">
         {{ formatDate(dateRange[0]) }} - {{ formatDate(dateRange[1]) }}
       </span>
@@ -46,6 +46,14 @@ const props = defineProps({
   photos: {
     type: Array,
     default: () => [],
+  },
+  showTitle: {
+    type: Boolean,
+    default: true,
+  },
+  currentTimeRange: {
+    type: [Array, Object],
+    default: null,
   },
 });
 
@@ -126,7 +134,7 @@ const histogramBars = computed(() => {
     if (!isNaN(timestamp)) {
       const binIndex = Math.min(
         Math.floor((timestamp - minTimestamp.value) / binSize),
-        numBins - 1
+        numBins - 1,
       );
       if (binIndex >= 0) {
         bins[binIndex].count++;
@@ -266,7 +274,17 @@ watch(
     // Reset the internal filter when photos change
     internalDateRange.value = null;
   },
-  { immediate: true }
+  { immediate: true },
+);
+
+// Reset internal state when external filter is cleared
+watch(
+  () => props.currentTimeRange,
+  (newVal) => {
+    if (newVal === null) {
+      internalDateRange.value = null;
+    }
+  },
 );
 
 // Detect container size for responsive marks
@@ -329,7 +347,9 @@ onBeforeUnmount(() => {
   position: absolute;
   bottom: 4px;
   background: var(--primary-color);
-  transition: opacity 0.3s ease, height 0.3s ease;
+  transition:
+    opacity 0.3s ease,
+    height 0.3s ease;
   border-radius: 2px;
   cursor: pointer;
 }

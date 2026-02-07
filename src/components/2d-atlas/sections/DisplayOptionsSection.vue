@@ -77,17 +77,11 @@
     <!-- Background -->
     <div class="control-item-row">
       <span class="control-item-text">Background</span>
-      <div class="color-picker-pills">
-        <button
-          v-for="option in atlasBackgroundOptions"
-          :key="option.id"
-          :class="['color-pill', { active: atlasBackground === option.id }]"
-          :style="{ backgroundColor: option.color }"
-          :title="option.label"
-          :disabled="showDiscreteLoader"
-          @click.stop="handleAtlasBackgroundChange(option.id)"
-        ></button>
-      </div>
+      <ColorPickerPills
+        :model-value="atlasBackground"
+        :disabled="showDiscreteLoader"
+        @update:model-value="handleAtlasBackgroundChange"
+      />
     </div>
   </div>
 </template>
@@ -97,6 +91,7 @@ import { computed } from "vue";
 import { NSwitch, NSlider, NTooltip, NIcon } from "naive-ui";
 import { InfoCircleFilled } from "@vicons/antd";
 import { useTheme } from "@/composables/useTheme.js";
+import ColorPickerPills from "@/components/ColorPickerPills.vue";
 
 const props = defineProps({
   gridRelaxationEnabled: {
@@ -128,22 +123,6 @@ const emit = defineEmits([
   "update:atlasBackground",
 ]);
 
-const { isDarkMode } = useTheme();
-
-const atlasBackgroundOptions = computed(() => {
-  const allOptions = [
-    { id: "default", color: "#000000", label: "Dark" },
-    { id: "white", color: "#f5f5f5", label: "Light" },
-    { id: "navy", color: "#1e3a5f", label: "Navy" },
-    { id: "forest", color: "#2d4a3e", label: "Forest" },
-  ];
-
-  if (isDarkMode.value) {
-    return allOptions.filter((opt) => opt.id !== "white");
-  }
-  return allOptions.filter((opt) => opt.id !== "default");
-});
-
 const handleGridRelaxationChange = (value) => {
   emit("update:gridRelaxationEnabled", value);
 };
@@ -166,6 +145,7 @@ const handleAtlasBackgroundChange = (value) => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding: 5px;
 }
 
 .control-item-row {
@@ -207,36 +187,6 @@ const handleAtlasBackgroundChange = (value) => {
 .slider-value {
   font-size: 12px;
   color: var(--text-secondary);
-}
-
-.color-picker-pills {
-  display: flex;
-  gap: 8px;
-}
-
-.color-pill {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-}
-
-.color-pill:hover {
-  transform: scale(1.1);
-}
-
-.color-pill:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.color-pill.active {
-  border-color: var(--primary-color, #007bff);
-  box-shadow: 0 0 0 2px var(--primary-color, #007bff);
 }
 
 :deep(.n-slider) {

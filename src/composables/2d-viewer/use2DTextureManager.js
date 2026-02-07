@@ -13,14 +13,29 @@ import * as PIXI from "pixi.js";
 import { useIndexedDBCache } from "@/composables/useIndexedDBCache.js";
 
 // ===== Texture downscale configuration (GPU/RAM protection) =====
-// Pixi will upload the full source dimensions to GPU. Capping maxSide is a big win on low-memory devices.
+// Pixi uploads the full source dimensions to GPU. Downscaling aggressively for the baseline LOD
+// avoids OOM when rendering thousands of sprites.
+//
+// LOD levels:
+// - low: baseline for all photos (always created) -> very small
+// - mid/high: only for a limited number of "closest" photos (scheduled by the viewer)
+// - original: special-case override used by the existing "zoom very close" logic
 const CONFIG_2D_TEXTURE = {
-  lowResMaxSide: 256,
-  desktopMaxSide: 512,
-  // When zooming into a single photo, allow a higher cap for better fidelity.
-  // Still capped to avoid OOM on constrained devices.
-  lowResMaxSideOriginal: 512,
-  desktopMaxSideOriginal: 1024,
+  // Baseline (all sprites). Keep this small to scale to 5k+ photos.
+  lowMaxSideLowPerf: 96,
+  lowMaxSideDesktop: 128,
+
+  // Mid quality for near photos.
+  midMaxSideLowPerf: 256,
+  midMaxSideDesktop: 384,
+
+  // High quality for very near photos (still not original).
+  highMaxSideLowPerf: 384,
+  highMaxSideDesktop: 512,
+
+  // Original override (single active photo). Still capped.
+  originalMaxSideLowPerf: 768,
+  originalMaxSideDesktop: 1024,
 };
 
 // ===== Retry configuration (similar to 3D) =====
@@ -49,26 +64,36 @@ const getMaxSideCapsByDeviceMemory = () => {
 
   // Conservative defaults for low-memory devices.
   // Goal: avoid GPU OOM while preserving acceptable quality.
+  // NOTE: We cap LODs too. The baseline low LOD is already small, but we still tighten
+  // mid/high/original on very low-memory devices.
   if (dm <= 1) {
     return {
-      thumbMaxSide: 192,
+      lowMaxSide: 80,
+      midMaxSide: 192,
+      highMaxSide: 256,
       originalMaxSide: 640,
     };
   }
   if (dm <= 2) {
     return {
-      thumbMaxSide: 256,
+      lowMaxSide: 96,
+      midMaxSide: 256,
+      highMaxSide: 384,
       originalMaxSide: 768,
     };
   }
   if (dm <= 4) {
     return {
-      thumbMaxSide: 384,
+      lowMaxSide: 128,
+      midMaxSide: 320,
+      highMaxSide: 512,
       originalMaxSide: 896,
     };
   }
   return {
-    thumbMaxSide: null,
+    lowMaxSide: null,
+    midMaxSide: null,
+    highMaxSide: null,
     originalMaxSide: null,
   };
 };
@@ -109,15 +134,112 @@ export function use2DTextureManager(
   const cacheStats = ref({ totalImages: 0 });
   const cachedPhotoIds = ref(new Set());
 
-  const cacheKey = (photoId, quality) => `${photoId}:${quality}`;
+  const normalizeQuality = (quality) => {
+    const q = String(quality || "low");
+    if (q === "thumb") return "low";
+    return q;
+  };
+
+  const cacheKey = (photoId, quality) =>
+    `${photoId}:${normalizeQuality(quality)}`;
 
   const getImageUrlForPhoto = (photo, quality = "thumb") => {
     if (!photo) return null;
-    if (quality === "original") {
-      return photo?.originalUrl || photo?.thumbnailUrl || null;
+    const q = normalizeQuality(quality);
+    if (q === "original") {
+      return photo?.originalUrl || photo?.url || photo?.thumbnailUrl || null;
     }
-    // thumb/default
-    return photo?.thumbnailUrl || photo?.originalUrl || null;
+    if (q === "high") {
+      return photo?.url || photo?.thumbnailUrl || photo?.originalUrl || null;
+    }
+    if (q === "mid") {
+      return photo?.url || photo?.thumbnailUrl || photo?.originalUrl || null;
+    }
+    // low (baseline)
+    return photo?.thumbnailUrl || photo?.url || photo?.originalUrl || null;
+  };
+
+  const getFlagsForQuality = (qualityRaw) => {
+    const q = normalizeQuality(qualityRaw);
+    if (q === "original") {
+      return {
+        downloadedFlag: "__originalImageDownloaded",
+        downloadingFlag: "__originalDownloading",
+        downloadErrorFlag: "__originalDownloadError",
+        imageElementProp: "__originalImageElement",
+        imageUrlProp: "__originalImageUrl",
+        imageBlobProp: "__originalImageBlob",
+        retryCountProp: "__originalRetryCount",
+      };
+    }
+    if (q === "mid") {
+      return {
+        downloadedFlag: "__midImageDownloaded",
+        downloadingFlag: "__midDownloading",
+        downloadErrorFlag: "__midDownloadError",
+        imageElementProp: "__midImageElement",
+        imageUrlProp: "__midImageUrl",
+        imageBlobProp: "__midImageBlob",
+        retryCountProp: "__midRetryCount",
+      };
+    }
+    if (q === "high") {
+      return {
+        downloadedFlag: "__highImageDownloaded",
+        downloadingFlag: "__highDownloading",
+        downloadErrorFlag: "__highDownloadError",
+        imageElementProp: "__highImageElement",
+        imageUrlProp: "__highImageUrl",
+        imageBlobProp: "__highImageBlob",
+        retryCountProp: "__highRetryCount",
+      };
+    }
+    // low
+    return {
+      downloadedFlag: "__imageDownloaded",
+      downloadingFlag: "__downloading",
+      downloadErrorFlag: "__downloadError",
+      imageElementProp: "__imageElement",
+      imageUrlProp: "__imageUrl",
+      imageBlobProp: "__imageBlob",
+      retryCountProp: "__retryCount",
+    };
+  };
+
+  const getMaxSideForQuality = (qualityRaw) => {
+    const q = normalizeQuality(qualityRaw);
+    const dmCaps = getMaxSideCapsByDeviceMemory();
+
+    const pick = (base, dmCap) => {
+      if (dmCaps && Number.isFinite(dmCap) && dmCap > 0) {
+        return Math.min(base, dmCap);
+      }
+      return base;
+    };
+
+    if (q === "original") {
+      const base = useLowPerformance
+        ? CONFIG_2D_TEXTURE.originalMaxSideLowPerf
+        : CONFIG_2D_TEXTURE.originalMaxSideDesktop;
+      return pick(base, dmCaps?.originalMaxSide);
+    }
+    if (q === "high") {
+      const base = useLowPerformance
+        ? CONFIG_2D_TEXTURE.highMaxSideLowPerf
+        : CONFIG_2D_TEXTURE.highMaxSideDesktop;
+      return pick(base, dmCaps?.highMaxSide);
+    }
+    if (q === "mid") {
+      const base = useLowPerformance
+        ? CONFIG_2D_TEXTURE.midMaxSideLowPerf
+        : CONFIG_2D_TEXTURE.midMaxSideDesktop;
+      return pick(base, dmCaps?.midMaxSide);
+    }
+    // low
+    const base = useLowPerformance
+      ? CONFIG_2D_TEXTURE.lowMaxSideLowPerf
+      : CONFIG_2D_TEXTURE.lowMaxSideDesktop;
+    return pick(base, dmCaps?.lowMaxSide);
   };
 
   const updateLoadingProgress = (loaded, total) => {
@@ -206,23 +328,18 @@ export function use2DTextureManager(
     { urlOverride = null } = {},
   ) => {
     if (!photoObj) return;
-    const isOriginal = quality === "original";
+    const q = normalizeQuality(quality);
+    const flags = getFlagsForQuality(q);
 
-    const downloadedFlag = isOriginal
-      ? "__originalImageDownloaded"
-      : "__imageDownloaded";
-    const downloadingFlag = isOriginal
-      ? "__originalDownloading"
-      : "__downloading";
-    const downloadErrorFlag = isOriginal
-      ? "__originalDownloadError"
-      : "__downloadError";
+    const downloadedFlag = flags.downloadedFlag;
+    const downloadingFlag = flags.downloadingFlag;
+    const downloadErrorFlag = flags.downloadErrorFlag;
 
     if (photoObj[downloadedFlag] || photoObj[downloadingFlag]) return;
 
     photoObj[downloadingFlag] = true;
 
-    const imageUrl = urlOverride || getImageUrlForPhoto(photoObj, quality);
+    const imageUrl = urlOverride || getImageUrlForPhoto(photoObj, q);
     if (!imageUrl) {
       photoObj[downloadingFlag] = false;
       photoObj[downloadedFlag] = true;
@@ -244,23 +361,21 @@ export function use2DTextureManager(
         ? await blobToImageElement(imageBlob)
         : await loadImageElement(imageUrl);
 
-      downloadedImagesCache.set(cacheKey(photoObj.id, quality), imageElement);
+      downloadedImagesCache.set(cacheKey(photoObj.id, q), imageElement);
 
-      if (isOriginal) {
-        photoObj.__originalImageElement = imageElement;
-        photoObj.__originalImageUrl = imageUrl;
-        photoObj.__originalImageDownloaded = true;
-        photoObj.__originalDownloadError = false;
-        photoObj.__originalRetryCount = undefined;
-      } else {
-        photoObj.__imageElement = imageElement;
-        photoObj.__imageUrl = imageUrl;
-        if (imageBlob) photoObj.__imageBlob = imageBlob;
-        photoObj.__imageDownloaded = true;
-        photoObj.__downloadError = false;
+      photoObj[flags.imageElementProp] = imageElement;
+      photoObj[flags.imageUrlProp] = imageUrl;
+      if (imageBlob) photoObj[flags.imageBlobProp] = imageBlob;
+      photoObj[downloadedFlag] = true;
+      photoObj[downloadErrorFlag] = false;
+      if (q === "low") {
         photoObj.__fromCache = false;
-        photoObj.__retryCount = undefined;
       }
+      photoObj[flags.retryCountProp] = undefined;
+
+      console.log(
+        `✅ Descargada: ${photoObj.id} [${q}] de ${imageUrl.substring(imageUrl.lastIndexOf("/") + 1)}`,
+      );
 
       if (photoObj.__had429Error) {
         error429Stats.value.recovered++;
@@ -280,8 +395,7 @@ export function use2DTextureManager(
       // For <img> loads we rarely get status codes; treat empty message as transient.
       if (retryCount < MAX_RETRIES && (is429Error || !e?.message)) {
         error429Stats.value.retried++;
-        if (isOriginal) photoObj.__originalRetryCount = retryCount + 1;
-        else photoObj.__retryCount = retryCount + 1;
+        photoObj[flags.retryCountProp] = retryCount + 1;
 
         const delay = Math.min(
           INITIAL_RETRY_DELAY * Math.pow(RETRY_MULTIPLIER, retryCount),
@@ -290,7 +404,7 @@ export function use2DTextureManager(
 
         await new Promise((resolve) => setTimeout(resolve, delay));
         photoObj[downloadingFlag] = false;
-        return downloadImageOnly(photoObj, retryCount + 1, quality, {
+        return downloadImageOnly(photoObj, retryCount + 1, q, {
           urlOverride,
         });
       }
@@ -298,6 +412,9 @@ export function use2DTextureManager(
       error429Stats.value.failed++;
       photoObj[downloadedFlag] = true;
       photoObj[downloadErrorFlag] = true;
+      console.warn(
+        `❌ Error descargando: ${photoObj.id} [${q}] (intento ${retryCount}/${MAX_RETRIES}): ${e?.message}`,
+      );
     } finally {
       photoObj[downloadingFlag] = false;
     }
@@ -343,7 +460,7 @@ export function use2DTextureManager(
               image.src = imageUrl;
             });
 
-            downloadedImagesCache.set(cacheKey(photoId, "thumb"), img);
+            downloadedImagesCache.set(cacheKey(photoId, "low"), img);
 
             const photo = photos.find((p) => p.id === photoId);
             if (photo) {
@@ -351,7 +468,7 @@ export function use2DTextureManager(
               photo.__downloadError = false;
               photo.__fromCache = true;
               photo.__imageElement = img;
-              photo.__imageUrl = getImageUrlForPhoto(photo, "thumb");
+              photo.__imageUrl = getImageUrlForPhoto(photo, "low");
             }
           } catch (error) {
             cachedPhotoIds.value.delete(photoId);
@@ -372,56 +489,43 @@ export function use2DTextureManager(
   ) => {
     if (!photoObj?.id) return null;
 
-    const isOriginal = quality === "original";
-    const key = cacheKey(photoObj.id, quality);
+    const q = normalizeQuality(quality);
+    const isOriginal = q === "original";
+    const key = cacheKey(photoObj.id, q);
 
     const cachedTexture = textureCache.get(key);
     if (cachedTexture && !cachedTexture.destroyed) {
+      if (DEBUG_2D_CACHE)
+        console.log(`📦 Textura en caché: ${photoObj.id} [${q}]`);
       return cachedTexture;
     }
 
-    const downloadedFlag = isOriginal
-      ? "__originalImageDownloaded"
-      : "__imageDownloaded";
-    const downloadErrorFlag = isOriginal
-      ? "__originalDownloadError"
-      : "__downloadError";
+    const flags = getFlagsForQuality(q);
+    const downloadedFlag = flags.downloadedFlag;
+    const downloadErrorFlag = flags.downloadErrorFlag;
 
     // Ensure image is in memory (cache or download)
     if (!photoObj[downloadedFlag] && !downloadedImagesCache.has(key)) {
+      console.log(`⬇️ Descargando: ${photoObj.id} [${q}]...`);
       loaderStage.value = "downloading";
-      await downloadImageOnly(photoObj, 0, quality, { urlOverride });
+      await downloadImageOnly(photoObj, 0, q, { urlOverride });
     }
 
     if (photoObj[downloadErrorFlag]) return null;
 
     const imageElement =
-      downloadedImagesCache.get(key) ||
-      (isOriginal ? photoObj.__originalImageElement : photoObj.__imageElement);
+      downloadedImagesCache.get(key) || photoObj[flags.imageElementProp];
     if (!imageElement) return null;
 
     // Downscale source before uploading to GPU to reduce memory pressure.
-    // First choose the baseline caps (lowPerformance vs desktop), then optionally tighten
-    // them based on deviceMemory (independent of useLowPerformance).
-    let maxSide = useLowPerformance
-      ? isOriginal
-        ? CONFIG_2D_TEXTURE.lowResMaxSideOriginal
-        : CONFIG_2D_TEXTURE.lowResMaxSide
-      : isOriginal
-        ? CONFIG_2D_TEXTURE.desktopMaxSideOriginal
-        : CONFIG_2D_TEXTURE.desktopMaxSide;
-
-    const dmCaps = getMaxSideCapsByDeviceMemory();
-    if (dmCaps) {
-      const cap = isOriginal ? dmCaps.originalMaxSide : dmCaps.thumbMaxSide;
-      if (Number.isFinite(cap) && cap > 0) {
-        maxSide = Math.min(maxSide, cap);
-      }
-    }
+    const maxSide = getMaxSideForQuality(q);
     const sourceForTexture = downscaleSource(imageElement, maxSide);
 
     const texture = PIXI.Texture.from(sourceForTexture);
     textureCache.set(key, texture);
+    console.log(
+      `🎨 Textura creada: ${photoObj.id} [${q}] (maxSide: ${maxSide}px)`,
+    );
 
     photoObj.__textureLoaded = true;
 
@@ -445,7 +549,7 @@ export function use2DTextureManager(
       if (photo.__fromCache) continue;
 
       const imageElement =
-        downloadedImagesCache.get(cacheKey(photo.id, "thumb")) ||
+        downloadedImagesCache.get(cacheKey(photo.id, "low")) ||
         photo.__imageElement;
 
       if (photo.__imageDownloaded && !photo.__downloadError && imageElement) {
@@ -455,7 +559,7 @@ export function use2DTextureManager(
             imagesToCache.push({
               id: photo.id,
               blob: photo.__imageBlob,
-              url: photo.__imageUrl || getImageUrlForPhoto(photo, "thumb"),
+              url: photo.__imageUrl || getImageUrlForPhoto(photo, "low"),
             });
             continue;
           }
@@ -492,7 +596,7 @@ export function use2DTextureManager(
             imagesToCache.push({
               id: photo.id,
               blob,
-              url: photo.__imageUrl || getImageUrlForPhoto(photo, "thumb"),
+              url: photo.__imageUrl || getImageUrlForPhoto(photo, "low"),
             });
           }
         } catch (_) {

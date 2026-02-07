@@ -266,6 +266,7 @@
               <div v-if="showTimeRange" class="time-range-container">
                 <TimeRangeFilter
                   :photos="processedPhotos"
+                  :show-title="false"
                   @time-range-change="handleTimeRangeChange"
                 />
               </div>

@@ -4,7 +4,7 @@
     :class="{
       'playground-mode': isPlayground,
       'show-dots': toolbarState.showDots,
-      [`bg-${toolbarState.canvasBackground}`]: true,
+      [`bg-${canvasBackgroundId}`]: true,
     }"
   >
     <div
@@ -365,19 +365,7 @@
               </div>
               <div class="config-item">
                 <span class="config-label">Background</span>
-                <div class="color-picker-pills">
-                  <button
-                    v-for="option in canvasBackgroundOptions"
-                    :key="option.id"
-                    :class="[
-                      'color-pill',
-                      { active: toolbarState.canvasBackground === option.id },
-                    ]"
-                    :style="{ backgroundColor: option.color }"
-                    :title="option.label"
-                    @click="toolbarState.canvasBackground = option.id"
-                  ></button>
-                </div>
+                <ColorPickerPills v-model="toolbarState.canvasBackground" />
               </div>
             </div>
 
@@ -759,6 +747,7 @@ import { usePhotoQueryParams } from "@/composables/usePhotoQueryParams.js";
 import { useTheme } from "@/composables/useTheme.js";
 import AppLogo from "@/components/AppLogo.vue";
 import { ExpandAltOutlined } from "@vicons/antd";
+import ColorPickerPills from "@/components/ColorPickerPills.vue";
 
 // Define component name for KeepAlive
 defineOptions({
@@ -843,40 +832,18 @@ const toolbarState = ref({
     enabled: true, // New property to enable/disable expansion functionality
   },
   showDots: true, // toggle grid dots background
-  canvasBackground: isDarkMode.value ? "default" : "white", // canvas background color: default, white, navy, forest
+  canvasBackground: isDarkMode.value ? "default" : "white", // Initial ID, ColorPickerPills will replace with object
   photoOptions: {
     count: 3,
     spreadMode: "perpendicular",
   },
 });
 
-// Canvas background color options - filtered based on current theme
-const canvasBackgroundOptions = computed(() => {
-  const allOptions = [
-    { id: "default", color: "#000000", label: "Dark" },
-    { id: "white", color: "#f5f5f5", label: "Light" },
-    { id: "navy", color: "#1e3a5f", label: "Navy" },
-    { id: "forest", color: "#2d4a3e", label: "Forest" },
-  ];
-
-  // In dark mode, hide the white option; in light mode, hide the default (dark) option
-  if (isDarkMode.value) {
-    return allOptions.filter((opt) => opt.id !== "white");
-  } else {
-    return allOptions.filter((opt) => opt.id !== "default");
-  }
-});
-
-// Watch for theme changes and force valid background color
-watch(isDarkMode, (newIsDarkMode) => {
-  const validIds = newIsDarkMode
-    ? ["default", "navy", "forest"]
-    : ["white", "navy", "forest"];
-
-  // If current background is not valid for the new theme, force to default for that theme
-  if (!validIds.includes(toolbarState.value.canvasBackground)) {
-    toolbarState.value.canvasBackground = newIsDarkMode ? "default" : "white";
-  }
+// Computed to get background color ID for CSS class
+const canvasBackgroundId = computed(() => {
+  const bg = toolbarState.value.canvasBackground;
+  if (!bg) return "default";
+  return typeof bg === "object" ? bg.id : bg;
 });
 
 // State
@@ -2304,12 +2271,8 @@ onUnmounted(() => {
   background-color: #ffffff !important;
 }
 
-.canvas-container.bg-navy {
-  background-color: #1e3a5f !important;
-}
-
-.canvas-container.bg-forest {
-  background-color: #2d4a3e !important;
+.canvas-container.bg-lightGray {
+  background-color: #d3d3d3 !important;
 }
 
 /* Dots overlay for each background */
@@ -2331,46 +2294,12 @@ onUnmounted(() => {
   background-size: 45px 45px;
 }
 
-.canvas-container.show-dots.bg-navy {
+.canvas-container.show-dots.bg-lightGray {
   background-image: radial-gradient(
     circle,
-    rgba(255, 255, 255, 0.2) 1.2px,
+    rgba(0, 0, 0, 0.15) 1.2px,
     transparent 1.2px
   );
   background-size: 45px 45px;
-}
-
-.canvas-container.show-dots.bg-forest {
-  background-image: radial-gradient(
-    circle,
-    rgba(255, 255, 255, 0.2) 1.2px,
-    transparent 1.2px
-  );
-  background-size: 45px 45px;
-}
-
-/* Color picker pills */
-.color-picker-pills {
-  display: flex;
-  gap: 8px;
-}
-
-.color-pill {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 1px solid white;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-}
-
-.color-pill:hover {
-  transform: scale(1.1);
-}
-
-.color-pill.active {
-  border-color: var(--primary-color, #007bff);
-  box-shadow: 0 0 0 2px var(--primary-color, #007bff);
 }
 </style>

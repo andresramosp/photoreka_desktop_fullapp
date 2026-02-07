@@ -163,6 +163,8 @@
       <div v-if="showTimeRange" class="time-range-container">
         <TimeRangeFilter
           :photos="processedPhotos"
+          :show-title="false"
+          :current-time-range="timeRangeFilter"
           @time-range-change="handleTimeRangeChange"
         />
       </div>
@@ -281,6 +283,7 @@ const clearTimeRange = () => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  margin-bottom: 5px;
 }
 
 .filter-item {

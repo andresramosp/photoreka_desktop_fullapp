@@ -60,7 +60,7 @@
 
       <!-- Patterns Section -->
       <div class="control-section">
-        <div class="section-toggle" @click="showPatterns = !showPatterns">
+        <div class="section-toggle" @click="togglePatternsSection">
           <div style="display: flex; align-items: center; gap: 6px">
             <n-icon size="16" color="var(--text-on-primary)">
               <TagOutlined />
@@ -70,7 +70,7 @@
           <n-icon
             size="12"
             class="toggle-icon"
-            :class="{ rotated: showPatterns }"
+            :class="{ rotated: expandedSection === 'patterns' }"
           >
             <svg viewBox="0 0 24 24">
               <path
@@ -81,7 +81,10 @@
           </n-icon>
         </div>
 
-        <div v-if="showPatterns">
+        <div
+          class="expandable-content"
+          :class="{ expanded: expandedSection === 'patterns' }"
+        >
           <PatternsSection
             :patternsForCurrentChunk="patternsForCurrentChunk"
             :selectedPatternId="selectedPatternId"
@@ -93,10 +96,7 @@
 
       <!-- Display Options Section -->
       <div class="control-section">
-        <div
-          class="section-toggle"
-          @click="showDisplayOptions = !showDisplayOptions"
-        >
+        <div class="section-toggle" @click="toggleDisplayOptionsSection">
           <div style="display: flex; align-items: center; gap: 6px">
             <n-icon size="16" color="var(--text-on-primary)">
               <EyeOutlined />
@@ -106,7 +106,7 @@
           <n-icon
             size="12"
             class="toggle-icon"
-            :class="{ rotated: showDisplayOptions }"
+            :class="{ rotated: expandedSection === 'displayOptions' }"
           >
             <svg viewBox="0 0 24 24">
               <path
@@ -117,7 +117,10 @@
           </n-icon>
         </div>
 
-        <div v-if="showDisplayOptions">
+        <div
+          class="expandable-content"
+          :class="{ expanded: expandedSection === 'displayOptions' }"
+        >
           <DisplayOptionsSection
             :gridRelaxationEnabled="gridRelaxationEnabled"
             :gridRelaxationExpandStrength="gridRelaxationExpandStrength"
@@ -140,7 +143,7 @@
 
       <!-- Search Filters Section -->
       <div class="control-section">
-        <div class="section-toggle" @click="toggleMoreFilters">
+        <div class="section-toggle" @click="toggleFiltersSection">
           <div style="display: flex; align-items: center; gap: 6px">
             <n-icon size="16" color="var(--text-on-primary)">
               <FilterOutlined />
@@ -154,7 +157,7 @@
             <n-icon
               size="12"
               class="toggle-icon"
-              :class="{ rotated: showMoreFilters }"
+              :class="{ rotated: expandedSection === 'filters' }"
             >
               <svg viewBox="0 0 24 24">
                 <path
@@ -166,7 +169,10 @@
           </div>
         </div>
 
-        <div v-if="showMoreFilters" class="filters-container">
+        <div
+          class="expandable-content filters-container"
+          :class="{ expanded: expandedSection === 'filters' }"
+        >
           <SearchFiltersSection
             :selectedVisualAspects="selectedVisualAspects"
             :artisticScoreFilters="artisticScoreFilters"
@@ -328,9 +334,8 @@ const isExpanded = computed({
   set: (value) => emit("update:showConfigPanel", value),
 });
 
-const showMoreFilters = ref(false);
-const showPatterns = ref(false);
-const showDisplayOptions = ref(false);
+// Control which section is expanded (null, 'patterns', 'displayOptions', 'filters')
+const expandedSection = ref(null);
 const clusteringSectionRef = ref(null);
 
 // Local state for artistic score filters (for counting active filters)
@@ -371,9 +376,20 @@ const activeFiltersCount = computed(() => {
   return count;
 });
 
-// Toggle handlers
-const toggleMoreFilters = () => {
-  showMoreFilters.value = !showMoreFilters.value;
+// Toggle handlers - sections are mutually exclusive
+const togglePatternsSection = () => {
+  expandedSection.value =
+    expandedSection.value === "patterns" ? null : "patterns";
+};
+
+const toggleDisplayOptionsSection = () => {
+  expandedSection.value =
+    expandedSection.value === "displayOptions" ? null : "displayOptions";
+};
+
+const toggleFiltersSection = () => {
+  expandedSection.value =
+    expandedSection.value === "filters" ? null : "filters";
 };
 
 // Change handlers - pass through to emit
@@ -529,6 +545,22 @@ const handlePatternClick = (pattern) => {
 
 .toggle-icon.rotated {
   transform: rotate(180deg);
+}
+
+/* Expandable content with smooth animation */
+.expandable-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease-out;
+  opacity: 0;
+}
+
+.expandable-content.expanded {
+  max-height: 1000px;
+  opacity: 1;
+  transition:
+    max-height 0.3s ease-out,
+    opacity 0.3s ease-out;
 }
 
 /* Filters container */

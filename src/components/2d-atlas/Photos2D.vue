@@ -350,23 +350,28 @@ const photoContainer = shallowRef(null);
 const photoSprites = shallowRef(new Map()); // Map of photoId -> sprite
 const placeholderTexture = shallowRef(null); // Reused placeholder (GPU memory optimization)
 
-// Theme-aware background selector (same ids/behavior as CanvasView)
+// Theme-aware background selector
 const { isDarkMode } = useTheme();
+
+// Initialize with default color ID based on theme
 const atlasBackground = ref(isDarkMode.value ? "default" : "white");
 
-const atlasBackgroundColorById = (id) => {
-  switch (id) {
-    case "white":
-      return "#f5f5f5";
-    case "navy":
-      return "#1e3a5f";
-    case "forest":
-      return "#2d4a3e";
-    case "default":
-    default:
-      return "#000000";
+// Get the HEX color from atlasBackground (supports both object and string ID)
+const getCurrentBackgroundColor = computed(() => {
+  if (!atlasBackground.value) return "#000000";
+
+  // If it's an object with color property (from ColorPickerPills), use it directly
+  if (
+    typeof atlasBackground.value === "object" &&
+    atlasBackground.value.color
+  ) {
+    return atlasBackground.value.color;
   }
-};
+
+  // If it's a string ID (legacy/initial), return black as fallback
+  // ColorPickerPills will replace this with proper object on first interaction
+  return "#000000";
+});
 
 const toPixiColorNumber = (colorSource) => {
   try {
@@ -381,11 +386,11 @@ const toPixiColorNumber = (colorSource) => {
   return 0x000000;
 };
 
-const applyPixiBackground = (backgroundId) => {
+const applyPixiBackground = () => {
   const app = pixiApp.value;
   if (!app?.renderer) return;
 
-  const colorSource = atlasBackgroundColorById(backgroundId);
+  const colorSource = getCurrentBackgroundColor.value;
   const colorNum = toPixiColorNumber(colorSource);
 
   const renderer = app.renderer;
@@ -418,20 +423,17 @@ const applyPixiBackground = (backgroundId) => {
   }
 };
 
-// Watch for theme changes and force valid background color (same as CanvasView)
+// Watch for theme changes - ColorPickerPills will handle auto-setting
 watch(isDarkMode, (newIsDarkMode) => {
-  const validIds = newIsDarkMode
-    ? ["default", "navy", "forest"]
-    : ["white", "navy", "forest"];
-
-  if (!validIds.includes(atlasBackground.value)) {
+  // Reset to ID if no object is set yet
+  if (!atlasBackground.value || typeof atlasBackground.value === "string") {
     atlasBackground.value = newIsDarkMode ? "default" : "white";
   }
 });
 
 // Apply background to Pixi when user changes it
-watch(atlasBackground, (newVal) => {
-  applyPixiBackground(newVal);
+watch(atlasBackground, () => {
+  applyPixiBackground();
 });
 
 // Spatial index for hi-res candidate picking (avoid scanning all visible photos)
@@ -614,6 +616,360 @@ let canvasRef = null;
 const canvasListeners = [];
 let lastHiResUpdateAt = 0;
 
+// LOD (low/mid/high) textures for PixiJS sprites.
+// Separate from the existing "originalUrl" swap (which stays as-is).
+// Goal: keep baseline textures tiny for 5k+ photos and only upgrade a limited set near the viewport center.
+const LOD_ENABLED = ref(true);
+const LOD_MID_MIN_SCREEN_SIZE_PX = 120;
+const LOD_HIGH_MIN_SCREEN_SIZE_PX = 230;
+
+const LOD_MID_COUNT = 160;
+const LOD_HIGH_COUNT = 45;
+const LOD_MID_HYSTERESIS_MARGIN = 30;
+const LOD_HIGH_HYSTERESIS_MARGIN = 15;
+
+const LOD_UPGRADES_PER_FRAME = 4;
+const LOD_DOWNGRADES_PER_FRAME = 8;
+
+const LOD_IDLE_DELAY_MS = 140;
+const LOD_MIN_UPDATE_INTERVAL_MS = 220;
+let lodIdleTimer = null;
+let lodUpdateScheduled = false;
+let lastLodUpdateAt = 0;
+let lodRequestToken = 0;
+
+const lodMidPhotoIds = new Set();
+const lodHighPhotoIds = new Set();
+const lodUpgradeQueue = [];
+const lodDowngradeQueue = [];
+let lodQueueRunning = false;
+
+const getViewportCenterWorld = () => {
+  const w = pixiContainer.value?.clientWidth || 0;
+  const h = pixiContainer.value?.clientHeight || 0;
+  const centerX = w / 2;
+  const centerY = h / 2;
+  const s = Number(scale.value) || 1;
+  return {
+    x: (centerX - offsetX.value) / s,
+    y: (centerY - offsetY.value) / s,
+  };
+};
+
+const getApproxScreenSizePx = () => {
+  const s = Number(scale.value) || 1;
+  return Math.max(0, (Number(photoSize.value) || 0) * s);
+};
+
+const getViewportWorldBounds = () => {
+  const w = pixiContainer.value?.clientWidth || 0;
+  const h = pixiContainer.value?.clientHeight || 0;
+  const s = Number(scale.value) || 1;
+
+  // screenToWorld({0..w, 0..h}) in photoContainer space
+  const minX = (0 - offsetX.value) / s;
+  const maxX = (w - offsetX.value) / s;
+  const minY = (0 - offsetY.value) / s;
+  const maxY = (h - offsetY.value) / s;
+
+  return {
+    minX: Math.min(minX, maxX),
+    maxX: Math.max(minX, maxX),
+    minY: Math.min(minY, maxY),
+    maxY: Math.max(minY, maxY),
+  };
+};
+
+const pickLodCandidatePhotoIds = (maxCandidates) => {
+  if (!pixiContainer.value) return [];
+  if (!photoSprites.value?.size) return [];
+  if (isTransitioning.value) return [];
+
+  const index = hiResSpatialIndex.value;
+  if (!index || index.size === 0) buildHiResSpatialIndex();
+
+  const { x: centerWorldX, y: centerWorldY } = getViewportCenterWorld();
+  const bounds = getViewportWorldBounds();
+
+  // IMPORTANT: only consider sprites actually inside the viewport.
+  // Otherwise, photos just outside the screen (but closer to the center) can steal slots,
+  // making on-screen neighbors stay low-res, which feels wrong in 2D.
+  const half = Math.max(1, (Number(photoSize.value) || 0) / 2);
+  const margin = half * 1.2;
+  const minX = bounds.minX - margin;
+  const maxX = bounds.maxX + margin;
+  const minY = bounds.minY - margin;
+  const maxY = bounds.maxY + margin;
+
+  const isInViewport = (sprite) => {
+    if (!sprite) return false;
+    const x = Number(sprite.x) || 0;
+    const y = Number(sprite.y) || 0;
+    return x >= minX && x <= maxX && y >= minY && y <= maxY;
+  };
+
+  const cellSize = HIRES_SPATIAL_CELL_SIZE;
+  const cx0 = Math.floor(minX / cellSize);
+  const cx1 = Math.floor(maxX / cellSize);
+  const cy0 = Math.floor(minY / cellSize);
+  const cy1 = Math.floor(maxY / cellSize);
+
+  const scored = [];
+  const visitedCells = new Set();
+  const max = Math.max(1, Number(maxCandidates) || 1);
+
+  for (let cx = cx0; cx <= cx1; cx++) {
+    for (let cy = cy0; cy <= cy1; cy++) {
+      const key = `${cx},${cy}`;
+      if (visitedCells.has(key)) continue;
+      visitedCells.add(key);
+
+      const ids = hiResSpatialIndex.value.get(key);
+      if (!ids?.length) continue;
+
+      for (const photoId of ids) {
+        const sprite = photoSprites.value.get(photoId);
+        if (!sprite || !sprite.visible) continue;
+        if (!isInViewport(sprite)) continue;
+
+        // Never LOD-manage the active originalUrl sprite.
+        if (activeHiResPhotoId.value && photoId === activeHiResPhotoId.value)
+          continue;
+
+        const ddx = sprite.x - centerWorldX;
+        const ddy = sprite.y - centerWorldY;
+        scored.push({ id: photoId, d2: ddx * ddx + ddy * ddy });
+      }
+    }
+  }
+
+  if (scored.length === 0) return [];
+
+  scored.sort((a, b) => a.d2 - b.d2);
+  const out = scored.slice(0, max).map((s) => s.id);
+  console.log(
+    `🧭 LOD candidatos viewport: ${scored.length} encontrados, devolviendo ${out.length}`,
+  );
+  return out;
+};
+
+const applyLodTextureToSprite = async (photoId, targetLod) => {
+  if (!photoId) return;
+  if (activeHiResPhotoId.value && photoId === activeHiResPhotoId.value) return;
+
+  const sprite = photoSprites.value.get(photoId);
+  if (!sprite) return;
+
+  const photo = photoById.value.get(photoId);
+  if (!photo) return;
+
+  const quality =
+    targetLod === "high" ? "high" : targetLod === "mid" ? "mid" : "low";
+  const oldLod = sprite.__lodLevel || "low";
+
+  if (oldLod !== quality) {
+    console.log(`🎨 LOD cambio: foto ${photoId} | ${oldLod} → ${quality}`);
+  }
+
+  const texture = await textureManager.getOrCreateTexture(photo, { quality });
+  if (!texture) return;
+
+  sprite.texture = texture;
+  sprite.__lodLevel = quality;
+  applySpriteAspectFromTexture(sprite, texture);
+
+  if (quality === "high") {
+    lodHighPhotoIds.add(photoId);
+    lodMidPhotoIds.add(photoId);
+  } else if (quality === "mid") {
+    lodHighPhotoIds.delete(photoId);
+    lodMidPhotoIds.add(photoId);
+    textureManager.releaseTexture(photoId, "high");
+  } else {
+    lodHighPhotoIds.delete(photoId);
+    lodMidPhotoIds.delete(photoId);
+    textureManager.releaseTexture(photoId, "high");
+    textureManager.releaseTexture(photoId, "mid");
+  }
+};
+
+const processLodQueues = () => {
+  if (lodQueueRunning) return;
+  lodQueueRunning = true;
+
+  const downgradeCount = lodDowngradeQueue.length;
+  const upgradeCount = lodUpgradeQueue.length;
+  if (downgradeCount > 0 || upgradeCount > 0) {
+    console.log(
+      `📊 LOD colas: ${downgradeCount} downgrades, ${upgradeCount} upgrades | mid: ${lodMidPhotoIds.size}, high: ${lodHighPhotoIds.size}`,
+    );
+  }
+
+  const step = async () => {
+    const token = lodRequestToken;
+
+    let d = 0;
+    while (d < LOD_DOWNGRADES_PER_FRAME && lodDowngradeQueue.length > 0) {
+      const op = lodDowngradeQueue.shift();
+      if (!op || op.token !== token) continue;
+      try {
+        await applyLodTextureToSprite(op.photoId, op.to);
+      } catch (_) {}
+      d++;
+    }
+
+    let u = 0;
+    while (u < LOD_UPGRADES_PER_FRAME && lodUpgradeQueue.length > 0) {
+      const op = lodUpgradeQueue.shift();
+      if (!op || op.token !== token) continue;
+      try {
+        await applyLodTextureToSprite(op.photoId, op.to);
+      } catch (_) {}
+      u++;
+    }
+
+    if (lodDowngradeQueue.length > 0 || lodUpgradeQueue.length > 0) {
+      requestAnimationFrame(() => step());
+      return;
+    }
+
+    lodQueueRunning = false;
+  };
+
+  requestAnimationFrame(() => step());
+};
+
+const updateLodTargets = () => {
+  const screenSize = getApproxScreenSizePx();
+
+  if (!LOD_ENABLED.value) {
+    console.log(
+      `⚠️ LOD deshabilitado | tamaño pantalla: ${Math.round(screenSize)}px`,
+    );
+    lodRequestToken++;
+    const token = lodRequestToken;
+    for (const id of lodHighPhotoIds) {
+      lodDowngradeQueue.push({ token, photoId: id, to: "low" });
+    }
+    for (const id of lodMidPhotoIds) {
+      lodDowngradeQueue.push({ token, photoId: id, to: "low" });
+    }
+    processLodQueues();
+    return;
+  }
+
+  const wantMid = screenSize >= LOD_MID_MIN_SCREEN_SIZE_PX;
+  const wantHigh = screenSize >= LOD_HIGH_MIN_SCREEN_SIZE_PX;
+
+  console.log(
+    `🔍 LOD update | tamaño: ${Math.round(screenSize)}px (mid:${LOD_MID_MIN_SCREEN_SIZE_PX}px, high:${LOD_HIGH_MIN_SCREEN_SIZE_PX}px) | quiere mid: ${wantMid}, high: ${wantHigh}`,
+  );
+
+  if (!wantMid) {
+    console.log(
+      `⬇️ LOD degradar todo a LOW (muy zoom out) | liberando ${lodMidPhotoIds.size} mid + ${lodHighPhotoIds.size} high`,
+    );
+    lodRequestToken++;
+    const token = lodRequestToken;
+    for (const id of lodHighPhotoIds) {
+      lodDowngradeQueue.push({ token, photoId: id, to: "low" });
+    }
+    for (const id of lodMidPhotoIds) {
+      lodDowngradeQueue.push({ token, photoId: id, to: "low" });
+    }
+    processLodQueues();
+    return;
+  }
+
+  const token = ++lodRequestToken;
+  lodUpgradeQueue.length = 0;
+  lodDowngradeQueue.length = 0;
+
+  const candidatesMax = LOD_MID_COUNT + LOD_MID_HYSTERESIS_MARGIN + 30;
+  const candidates = pickLodCandidatePhotoIds(candidatesMax);
+  const rank = new Map();
+  candidates.forEach((id, idx) => rank.set(id, idx));
+
+  const highCount = wantHigh ? LOD_HIGH_COUNT : 0;
+  const midCount = LOD_MID_COUNT;
+
+  const desiredHigh = new Set(candidates.slice(0, highCount));
+  const desiredMid = new Set(candidates.slice(0, midCount));
+
+  for (const id of Array.from(lodHighPhotoIds)) {
+    if (activeHiResPhotoId.value && id === activeHiResPhotoId.value) continue;
+    const r = rank.get(id);
+    const keepHigh =
+      desiredHigh.has(id) ||
+      (Number.isFinite(r) && r <= highCount + LOD_HIGH_HYSTERESIS_MARGIN);
+    if (keepHigh) continue;
+
+    const keepMid =
+      desiredMid.has(id) ||
+      (Number.isFinite(r) && r <= midCount + LOD_MID_HYSTERESIS_MARGIN);
+    lodDowngradeQueue.push({ token, photoId: id, to: keepMid ? "mid" : "low" });
+  }
+
+  for (const id of Array.from(lodMidPhotoIds)) {
+    if (lodHighPhotoIds.has(id)) continue;
+    if (activeHiResPhotoId.value && id === activeHiResPhotoId.value) continue;
+
+    const r = rank.get(id);
+    const keepMid =
+      desiredMid.has(id) ||
+      (Number.isFinite(r) && r <= midCount + LOD_MID_HYSTERESIS_MARGIN);
+    if (!keepMid) lodDowngradeQueue.push({ token, photoId: id, to: "low" });
+  }
+
+  for (const id of desiredHigh) {
+    if (activeHiResPhotoId.value && id === activeHiResPhotoId.value) continue;
+    if (!lodHighPhotoIds.has(id)) {
+      lodUpgradeQueue.push({ token, photoId: id, to: "high" });
+    }
+  }
+
+  for (const id of desiredMid) {
+    if (activeHiResPhotoId.value && id === activeHiResPhotoId.value) continue;
+    if (desiredHigh.has(id)) continue;
+    if (!lodMidPhotoIds.has(id)) {
+      lodUpgradeQueue.push({ token, photoId: id, to: "mid" });
+    }
+  }
+
+  console.log(
+    `📈 LOD targets: high ${desiredHigh.size}/${highCount} (queue +${lodUpgradeQueue.filter((op) => op.to === "high").length}), mid ${desiredMid.size}/${midCount} (queue +${lodUpgradeQueue.filter((op) => op.to === "mid").length}), downgrades: ${lodDowngradeQueue.length}`,
+  );
+
+  processLodQueues();
+};
+
+const scheduleLodUpdate = () => {
+  if (lodIdleTimer) {
+    clearTimeout(lodIdleTimer);
+    lodIdleTimer = null;
+  }
+
+  lodIdleTimer = setTimeout(() => {
+    const now = performance.now();
+    if (now - lastLodUpdateAt < LOD_MIN_UPDATE_INTERVAL_MS) {
+      console.log(
+        `⏱️ LOD throttle: ${Math.round(now - lastLodUpdateAt)}ms < ${LOD_MIN_UPDATE_INTERVAL_MS}ms`,
+      );
+      return;
+    }
+    lastLodUpdateAt = now;
+
+    if (lodUpdateScheduled) return;
+    lodUpdateScheduled = true;
+    requestAnimationFrame(() => {
+      lodUpdateScheduled = false;
+      try {
+        updateLodTargets();
+      } catch (_) {}
+    });
+  }, LOD_IDLE_DELAY_MS);
+};
+
 // Photo counts
 const totalPhotosCount = computed(() => photos2D.value.length);
 const visiblePhotosCount = computed(() => filteredPhotos.value.length);
@@ -724,7 +1080,7 @@ const initPixi = async () => {
   const app = new PIXI.Application();
 
   await app.init({
-    background: atlasBackgroundColorById(atlasBackground.value),
+    background: getCurrentBackgroundColor.value,
     resizeTo: pixiContainer.value,
     antialias: true,
     resolution: window.devicePixelRatio || 1,
@@ -819,6 +1175,7 @@ const handleWheel = (e) => {
   applyZoomAboutScreenPoint(mouseX, mouseY, newScale);
 
   updateContainerTransform();
+  scheduleLodUpdate();
   if (scale.value >= HIRES_MIN_SCALE) scheduleHiResUpdate();
 };
 
@@ -843,6 +1200,7 @@ const handleMouseMove = (e) => {
 
   lastPointerPosition.value = { x: e.clientX, y: e.clientY };
   updateContainerTransform();
+  scheduleLodUpdate();
   if (scale.value >= HIRES_MIN_SCALE) scheduleHiResUpdate();
 };
 
@@ -857,6 +1215,7 @@ const handleMouseUp = (e) => {
   }
   isDragging.value = false;
   // Run soon after releasing pointer (user likely paused).
+  scheduleLodUpdate();
   scheduleHiResUpdate();
 };
 
@@ -928,6 +1287,7 @@ const handleTouchMove = (e) => {
     lastPinchWorld.value = screenToWorld(mid.x, mid.y, newScale);
 
     updateContainerTransform();
+    scheduleLodUpdate();
     if (scale.value >= HIRES_MIN_SCALE) scheduleHiResUpdate();
   } else if (isDragging.value && touches.length === 1) {
     const dx = touches[0].clientX - lastPointerPosition.value.x;
@@ -941,6 +1301,7 @@ const handleTouchMove = (e) => {
       y: touches[0].clientY,
     };
     updateContainerTransform();
+    scheduleLodUpdate();
     if (scale.value >= HIRES_MIN_SCALE) scheduleHiResUpdate();
   }
 };
@@ -994,6 +1355,7 @@ const handleTouchEnd = (e) => {
   }
 
   // User stopped interacting, evaluate hi-res target.
+  scheduleLodUpdate();
   scheduleHiResUpdate();
 };
 
@@ -1091,6 +1453,8 @@ const downgradeActiveHiRes = async () => {
   const currentId = activeHiResPhotoId.value;
   if (!currentId) return;
 
+  console.log(`⬇️ HiRes degradar: ${currentId} → LOW`);
+
   const photo = photoById.value.get(currentId);
   const sprite = photoSprites.value.get(currentId);
 
@@ -1102,6 +1466,7 @@ const downgradeActiveHiRes = async () => {
       if (thumbTexture) {
         sprite.texture = thumbTexture;
         applySpriteAspectFromTexture(sprite, thumbTexture);
+        sprite.__lodLevel = "low";
       }
     }
   } finally {
@@ -1113,17 +1478,30 @@ const downgradeActiveHiRes = async () => {
 
 const updateHiResTarget = async () => {
   if (!HIRES_ENABLED.value) {
+    if (activeHiResPhotoId.value) {
+      console.log(
+        `📵 HiRes deshabilitado, degradando ${activeHiResPhotoId.value}`,
+      );
+    }
     await downgradeActiveHiRes();
     return;
   }
 
   const targetId = pickHiResCandidatePhotoId();
   if (!targetId) {
+    if (activeHiResPhotoId.value) {
+      console.log(
+        `📥 HiRes sin candidatos cerca, degradando ${activeHiResPhotoId.value}`,
+      );
+    }
     await downgradeActiveHiRes();
     return;
   }
 
-  if (activeHiResPhotoId.value === targetId) return;
+  if (activeHiResPhotoId.value === targetId) {
+    console.log(`🔄 HiRes ya está en ${targetId}`);
+    return;
+  }
 
   // Switch target: downgrade old first
   await downgradeActiveHiRes();
@@ -1148,6 +1526,16 @@ const updateHiResTarget = async () => {
     sprite.texture = originalTexture;
     applySpriteAspectFromTexture(sprite, originalTexture);
     activeHiResPhotoId.value = targetId;
+    console.log(`🖼️ HiRes cargado: foto ${targetId} (original URL)`);
+
+    // Ensure we don't keep additional mid/high LOD textures for the same photo.
+    lodHighPhotoIds.delete(targetId);
+    lodMidPhotoIds.delete(targetId);
+    try {
+      textureManager.releaseTexture(targetId, "high");
+      textureManager.releaseTexture(targetId, "mid");
+    } catch (_) {}
+    sprite.__lodLevel = "original";
   }
 };
 
@@ -1367,6 +1755,9 @@ const updateTransitionPositions = (currentTime) => {
     // Rebuild spatial index after positions change.
     buildHiResSpatialIndex();
 
+    // Closest-photo set changed; refresh LOD targets.
+    scheduleLodUpdate();
+
     // Update heatmap with new positions
     scheduleHeatmapUpdate();
   }
@@ -1420,7 +1811,7 @@ const loadPhotosToPixi = async () => {
   }
 
   // Reduce batch size to avoid rate limiting (12 concurrent max, similar to 3D)
-  const batchSize = 12;
+  const batchSize = 24;
 
   for (let i = 0; i < photosToLoad.length; i += batchSize) {
     const batch = photosToLoad.slice(i, i + batchSize);
@@ -1492,6 +1883,7 @@ const loadPhotosToPixi = async () => {
   ensurePatternTag();
 
   // After initial load, opportunistically upgrade if already zoomed in.
+  scheduleLodUpdate();
   scheduleHiResUpdate();
 };
 
@@ -1505,6 +1897,7 @@ const updateSpriteVisibility = () => {
     sprite.visible = filteredIds.has(photoId);
   });
 
+  scheduleLodUpdate();
   scheduleHiResUpdate();
   scheduleHeatmapUpdate();
 };
@@ -1522,6 +1915,7 @@ const zoomIn = () => {
   offsetY.value = centerY - (centerY - offsetY.value) * scaleChange;
 
   updateContainerTransform();
+  scheduleLodUpdate();
   scheduleHiResUpdate();
 };
 
@@ -1537,6 +1931,7 @@ const zoomOut = () => {
   offsetY.value = centerY - (centerY - offsetY.value) * scaleChange;
 
   updateContainerTransform();
+  scheduleLodUpdate();
   scheduleHiResUpdate();
 };
 
@@ -1561,6 +1956,7 @@ const resetView = () => {
   offsetY.value = containerHeight / 2 - centerY * scale.value;
 
   updateContainerTransform();
+  scheduleLodUpdate();
   scheduleHiResUpdate();
 };
 
@@ -1818,6 +2214,16 @@ const cleanup = () => {
     clearTimeout(hiResIdleTimer);
     hiResIdleTimer = null;
   }
+
+  if (lodIdleTimer) {
+    clearTimeout(lodIdleTimer);
+    lodIdleTimer = null;
+  }
+
+  lodUpgradeQueue.length = 0;
+  lodDowngradeQueue.length = 0;
+  lodMidPhotoIds.clear();
+  lodHighPhotoIds.clear();
 
   // Ensure we free any hi-res texture currently in use.
   try {
