@@ -527,6 +527,17 @@ export function use2DTextureManager(
       `🎨 Textura creada: ${photoObj.id} [${q}] (maxSide: ${maxSide}px)`,
     );
 
+    // ---- Free *our* extra references to the decoded image data. ----
+    // The PIXI.Texture still holds a reference to the source internally
+    // (needed for lazy GPU upload on first render), so the pixel data
+    // stays alive until Pixi releases the texture.  But by removing our
+    // duplicated pointers we avoid keeping *two* copies reachable.
+    // For 5 000 photos this alone reclaims ~200+ MB of JS heap.
+    downloadedImagesCache.delete(key);
+    if (photoObj[flags.imageElementProp]) {
+      photoObj[flags.imageElementProp] = null;
+    }
+
     photoObj.__textureLoaded = true;
 
     return texture;
@@ -622,6 +633,16 @@ export function use2DTextureManager(
         cacheStats.value = await getCacheStats();
       } catch (_) {
         // ignore cache failure
+      }
+
+      // ---- Free blob references from photo objects after caching ----
+      // Each Blob is typically 15-60 KB; for 5k photos this adds 75-300 MB of JS heap.
+      for (const photo of photos || []) {
+        if (!photo) continue;
+        if (photo.__imageBlob) photo.__imageBlob = null;
+        if (photo.__midImageBlob) photo.__midImageBlob = null;
+        if (photo.__highImageBlob) photo.__highImageBlob = null;
+        if (photo.__originalImageBlob) photo.__originalImageBlob = null;
       }
     } else {
       if (DEBUG_2D_CACHE) {

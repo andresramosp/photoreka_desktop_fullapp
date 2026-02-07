@@ -1079,12 +1079,29 @@ const initPixi = async () => {
   // Create PixiJS application
   const app = new PIXI.Application();
 
+  // ── Memory / perf tuning ──────────────────────────────────────────
+  // 1. Cap resolution: on Retina (2×/3×) the canvas backing store is 4–9× larger.
+  //    For a photo atlas with small thumbnails, 1× is more than enough on mobile,
+  //    and 1.5× is a good quality/RAM trade-off on desktop.
+  const maxRes = useLowPerformance.value
+    ? 1
+    : Math.min(window.devicePixelRatio || 1, 1.5);
+
   await app.init({
     background: getCurrentBackgroundColor.value,
     resizeTo: pixiContainer.value,
-    antialias: true,
-    resolution: window.devicePixelRatio || 1,
+    antialias: false, // 2. Disable: doubles GPU render buffer, unnecessary for photo sprites
+    resolution: maxRes,
     autoDensity: true,
+    powerPreference: "high-performance", // 3. Use discrete GPU when available
+    // 4. Texture GC: reclaim unused GPU textures much sooner (default: 3600 frames → ~5s)
+    textureGCActive: true,
+    textureGCMaxIdle: 300, // ~5s at 60 fps
+    textureGCCheckCountMax: 120, // check every 2s
+    // 5. Renderable GC: free GPU buffers of off-screen renderables sooner
+    renderableGCActive: true,
+    renderableGCMaxUnusedTime: 300,
+    renderableGCFrequency: 120,
   });
 
   pixiContainer.value.appendChild(app.canvas);
@@ -1092,7 +1109,7 @@ const initPixi = async () => {
 
   // Create container for photos
   const container = new PIXI.Container();
-  container.sortableChildren = true;
+  container.sortableChildren = false; // No z-ordering needed for flat atlas (saves per-frame sort)
   app.stage.addChild(container);
   photoContainer.value = container;
 
@@ -1829,8 +1846,10 @@ const loadPhotosToPixi = async () => {
         sprite.y = canvasY;
         sprite.width = photoSize.value;
         sprite.height = photoSize.value * 0.75;
-        sprite.eventMode = "static";
-        sprite.cursor = "pointer";
+        // eventMode 'none': we do manual hit-testing in updateHoverState/handleClick,
+        // so Pixi's event system doesn't need to traverse 5k+ sprites.
+        sprite.eventMode = "none";
+        // cursor is set on the canvas element via CSS, not per-sprite.
 
         // Store reference
         photoSprites.value.set(photo.id, sprite);
@@ -2186,17 +2205,19 @@ const handleResize = () => {
 // Animation frame loop
 const animationFrameId = ref(null);
 
+// Only run the rAF loop while there's an active transition (saves CPU/GPU when idle).
 const animationLoop = () => {
   if (isTransitioning.value) {
     updateTransitionPositions(performance.now());
+    animationFrameId.value = requestAnimationFrame(animationLoop);
+  } else {
+    animationFrameId.value = null; // self-stop
   }
-
-  animationFrameId.value = requestAnimationFrame(animationLoop);
 };
 
 const startAnimationLoop = () => {
   if (!animationFrameId.value) {
-    animationLoop();
+    animationFrameId.value = requestAnimationFrame(animationLoop);
   }
 };
 
@@ -2372,7 +2393,12 @@ watch(
 );
 
 watch(isTransitioning, (v) => {
-  if (!v) ensurePatternTag();
+  if (v) {
+    // Restart the on-demand animation loop when a transition begins.
+    startAnimationLoop();
+  } else {
+    ensurePatternTag();
+  }
 });
 </script>
 
@@ -2392,6 +2418,7 @@ watch(isTransitioning, (v) => {
 
 .pixi-container canvas {
   display: block;
+  cursor: pointer; /* applied at canvas level instead of per-sprite to avoid per-sprite eventMode overhead */
 }
 
 /* Error screen */

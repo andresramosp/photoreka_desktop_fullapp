@@ -287,7 +287,7 @@ const showPhotoInfo = async () => {
   background-color: var(--bg-card);
   transform: none !important;
   box-shadow: none !important;
-  border-radius: 0 !important;
+  border-radius: 16px;
 }
 
 .did-you-know:hover,
@@ -322,6 +322,7 @@ const showPhotoInfo = async () => {
   object-fit: cover;
   object-position: center;
   display: block;
+  border-radius: 16px;
 }
 
 .photo-overlay {
