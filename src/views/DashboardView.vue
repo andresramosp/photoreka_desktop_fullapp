@@ -78,7 +78,7 @@
           />
         </div>
         <DashboardActionCard
-          v-else
+          v-else-if="!isMobileLimitedMode"
           :icon="Workspace"
           title="Canvas"
           description="Arrange and storyboard your photos"
