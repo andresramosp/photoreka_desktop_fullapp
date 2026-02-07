@@ -19,17 +19,25 @@
         <DailyEurekaCard />
 
         <div
-          class="action-card catalog"
+          class="action-card workspace-card"
           :class="{ disabled: appAccessMode === 'blocked' }"
           @click="goToTool('workspace')"
         >
+          <WorkspacePreview :photos="recentPhotos" />
+        </div>
+
+        <div
+          class="action-card upload-photos"
+          :class="{ disabled: appAccessMode === 'blocked' }"
+          @click="goToTool('report')"
+        >
           <div class="action-icon">
-            <n-icon size="45" color="var(--primary-color)">
-              <LayersOutline />
+            <n-icon size="45" color="var(--text-on-primary)">
+              <AnalyticsOutline />
             </n-icon>
           </div>
-          <h3 class="action-title">Workspace</h3>
-          <p class="action-description">Browse your photo catalog</p>
+          <h3 class="action-title">Report & Statistics</h3>
+          <p class="action-description">Understand your body of work</p>
         </div>
         <!-- Explorer Card - Only shown on mobile as replacement for Canvas -->
         <div
@@ -46,20 +54,6 @@
           <h3 class="action-title">Explorer</h3>
           <p class="action-description">Search your photos</p>
         </div>
-        <div
-          class="action-card upload-photos"
-          :class="{ disabled: appAccessMode === 'blocked' }"
-          @click="goToTool('report')"
-        >
-          <div class="action-icon">
-            <n-icon size="45" color="var(--primary-color)">
-              <AnalyticsOutline />
-            </n-icon>
-          </div>
-          <h3 class="action-title">Report & Statistics</h3>
-          <p class="action-description">Understand your body of work</p>
-        </div>
-
         <!-- Canvas Card with Preview - Hidden on mobile -->
         <div
           v-if="!isMobileLimitedMode"
@@ -150,6 +144,7 @@ import { useUserStore } from "@/stores/userStore.js";
 import { api } from "@/utils/axios.js"; // Needed for photo insight API call
 import { useMessage } from "naive-ui";
 import CanvasPreview from "@/components/CanvasPreview.vue";
+import WorkspacePreview from "@/components/WorkspacePreview.vue";
 import CollectionCard from "@/components/CollectionCard.vue";
 import DailyEurekaCard from "@/components/DailyEurekaCard.vue";
 import { isMobileDevice } from "@/utils/utils.js";
@@ -210,6 +205,15 @@ const isLoadingCollections = computed(
 
 // Canvas data from localStorage
 const canvasData = ref<any>(null);
+
+// Recent photos for workspace preview
+const recentPhotos = computed(() => {
+  if (!photosStore.photos || !Array.isArray(photosStore.photos)) {
+    return [];
+  }
+  // Return all photos for counting, component will slice for display
+  return photosStore.photos;
+});
 
 const appAccessMode = computed(() => photosStore.appAccessMode);
 
@@ -403,8 +407,38 @@ onMounted(() => {
   color: var(--success-color);
 }
 
+.upload-photos {
+  background: url("../assets/dashboard/report_bg.png") center/cover no-repeat;
+  position: relative;
+  overflow: hidden;
+}
+
+.upload-photos::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("../assets/dashboard/report_bg.png") center/cover no-repeat;
+  /* filter: blur(1px); */
+  z-index: 0;
+  pointer-events: none;
+}
+
 .upload-photos .action-icon {
   color: var(--primary-color);
+  position: relative;
+  z-index: 1;
+}
+
+.upload-photos .action-title {
+  position: relative;
+  z-index: 1;
+  color: var(--text-on-primary);
+}
+
+.upload-photos .action-description {
+  position: relative;
+  z-index: 1;
+  color: var(--text-on-primary);
 }
 
 .ai-search .action-icon {
@@ -424,8 +458,15 @@ onMounted(() => {
   position: relative;
   padding: 0;
   overflow: hidden;
-  height: 160px;
-  min-height: 160px;
+  min-height: 190px;
+}
+
+/* Workspace Card Styles */
+.workspace-card {
+  position: relative;
+  padding: 0;
+  overflow: hidden;
+  min-height: 190px;
 }
 
 /* Mobile devices - stack vertically when too narrow */
