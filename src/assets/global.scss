@@ -1763,3 +1763,79 @@
 .score-slider {
   margin: 0 !important;
 }
+/* ==========================================================================
+   GRADIENT BACKGROUNDS - REUSABLE CLASSES
+   ========================================================================== */
+
+/* Card gradient background - subtle blue gradient */
+.card-bg-gradient {
+  background: linear-gradient(
+    135deg,
+    var(--bg-card) 0%,
+    var(--primary-06) 40%,
+    var(--primary-08) 100%
+  );
+}
+
+/* Card gradient overlay - appears on hover */
+.card-bg-gradient-overlay {
+  background: linear-gradient(135deg, transparent 0%, var(--primary-05) 100%);
+}
+
+/* Decorative background pattern - radial gradients with geometric shapes */
+.card-background-pattern {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  opacity: 0.4;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    radial-gradient(circle at 20% 30%, var(--primary-05) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, var(--primary-05) 0%, transparent 50%),
+    radial-gradient(circle at 60% 20%, var(--primary-03) 0%, transparent 40%);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-background-pattern::before,
+.card-background-pattern::after {
+  content: "";
+  position: absolute;
+  border: 2px solid var(--primary-08);
+  border-radius: 8px;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-background-pattern::before {
+  width: 80px;
+  height: 60px;
+  top: 20%;
+  right: 15%;
+  transform: rotate(-10deg);
+}
+
+.card-background-pattern::after {
+  width: 60px;
+  height: 50px;
+  bottom: 25%;
+  left: 10%;
+  transform: rotate(15deg);
+}
+
+/* Hover effects for pattern */
+.dashboard-action-card:hover .card-background-pattern,
+.card-hover:hover .card-background-pattern {
+  opacity: 0.6;
+}
+
+.dashboard-action-card:hover .card-background-pattern::before,
+.card-hover:hover .card-background-pattern::before {
+  transform: rotate(-15deg) translateY(-5px);
+}
+
+.dashboard-action-card:hover .card-background-pattern::after,
+.card-hover:hover .card-background-pattern::after {
+  transform: rotate(20deg) translateY(5px);
+}

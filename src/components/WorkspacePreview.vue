@@ -173,7 +173,7 @@ const gridPhotos = computed(() => {
     ellipse 93% 100% at center,
     rgba(15, 23, 42, 0.9) 0%,
     rgba(15, 23, 42, 0.75) 25%,
-    rgba(15, 23, 42, 0.4) 50%,
+    rgba(15, 23, 42, 0.4) 60%,
     rgba(15, 23, 42, 0.1) 75%,
     transparent 100%
   );

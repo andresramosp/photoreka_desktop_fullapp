@@ -1,6 +1,6 @@
 <template>
   <div class="canvas-preview-wrapper">
-    <div v-if="hasCanvas" class="canvas-preview-content">
+    <div class="canvas-preview-content">
       <div class="canvas-photo-grid" :class="`grid-${gridPhotos.length}`">
         <div
           v-for="(photo, index) in gridPhotos"
@@ -22,22 +22,11 @@
         </p>
       </div>
     </div>
-
-    <div v-else class="canvas-empty">
-      <div class="empty-icon">
-        <n-icon size="32" color="var(--primary-color)">
-          <Workspace />
-        </n-icon>
-      </div>
-      <h3 class="empty-title">Canvas</h3>
-      <p class="empty-description">Start a new canvas</p>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { Workspace } from "@vicons/carbon";
 
 interface Props {
   canvasData?: any;
@@ -45,22 +34,11 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const hasCanvas = computed(() => {
-  return (
-    props.canvasData &&
-    props.canvasData.data &&
-    Array.isArray(props.canvasData.data.photos) &&
-    props.canvasData.data.photos.length > 0
-  );
-});
-
 const photoCount = computed(() => {
   return props.canvasData?.data?.photos?.length || 0;
 });
 
 const gridPhotos = computed(() => {
-  if (!hasCanvas.value) return [];
-
   const photos = props.canvasData.data.photos;
 
   // Take first 4 photos for grid

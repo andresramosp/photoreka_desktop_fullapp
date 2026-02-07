@@ -18,51 +18,74 @@
         <!-- Daily Eureka Card -->
         <DailyEurekaCard />
 
-        <div
+        <!-- <div
           class="action-card workspace-card"
           :class="{ disabled: appAccessMode === 'blocked' }"
           @click="goToTool('workspace')"
         >
           <WorkspacePreview :photos="recentPhotos" />
-        </div>
+        </div> -->
 
-        <div
-          class="action-card upload-photos"
-          :class="{ disabled: appAccessMode === 'blocked' }"
+        <DashboardActionCard
+          :icon="LayersOutline"
+          title="Your Workspace"
+          :disabled="appAccessMode === 'blocked'"
+          @click="goToTool('workspace')"
+        >
+          <template #description>
+            <span v-if="photos.length > 0">
+              {{ photos.length }} {{ photos.length === 1 ? "photo" : "photos" }}
+            </span>
+            <span v-else>No photos available</span>
+          </template>
+        </DashboardActionCard>
+
+        <!-- Report and Statistics Card - Hidden on mobile, as it requires too much screen space for now. Will be redesigned in the future to be more mobile-friendly, but for now we want to avoid showing a card that leads to an empty page on mobile. -->
+        <DashboardActionCard
+          :icon="AnalyticsOutline"
+          title="Report & Statistics"
+          description="Understand your body of work"
+          :disabled="appAccessMode === 'blocked'"
           @click="goToTool('report')"
-        >
-          <div class="action-icon">
-            <n-icon size="45" color="var(--text-on-primary)">
-              <AnalyticsOutline />
-            </n-icon>
-          </div>
-          <h3 class="action-title">Report & Statistics</h3>
-          <p class="action-description">Understand your body of work</p>
-        </div>
+        />
         <!-- Explorer Card - Only shown on mobile as replacement for Canvas -->
-        <div
+        <DashboardActionCard
           v-if="isMobileLimitedMode"
-          class="action-card explorer"
-          :class="{ disabled: appAccessMode === 'blocked' }"
+          :icon="SearchIcon"
+          title="Explorer"
+          description="Browse photos in natural language"
+          additional-classes="explorer"
+          icon-color="var(--primary-color)"
+          :disabled="appAccessMode === 'blocked'"
           @click="goToTool('search')"
-        >
-          <div class="action-icon">
-            <n-icon size="45" color="var(--primary-color)">
-              <SearchIcon />
-            </n-icon>
-          </div>
-          <h3 class="action-title">Explorer</h3>
-          <p class="action-description">Search your photos</p>
-        </div>
+        />
         <!-- Canvas Card with Preview - Hidden on mobile -->
         <div
-          v-if="!isMobileLimitedMode"
+          v-if="
+            !isMobileLimitedMode &&
+            canvasData &&
+            canvasData.data &&
+            Array.isArray(canvasData.data.photos) &&
+            canvasData.data.photos.length > 0
+          "
           class="action-card"
           :class="{ disabled: appAccessMode === 'blocked' }"
           @click="goToTool('canvas')"
         >
-          <CanvasPreview :canvas-data="canvasData" />
+          <CanvasPreview
+            v-if="!isMobileLimitedMode"
+            :canvas-data="canvasData"
+          />
         </div>
+        <DashboardActionCard
+          v-else
+          :icon="Workspace"
+          title="Canvas"
+          description="Arrange and storyboard your photos"
+          additional-classes="explorer"
+          icon-color="var(--primary-color)"
+          @click="goToTool('canvas')"
+        />
 
         <!-- <div
           class="action-card report"
@@ -147,6 +170,7 @@ import CanvasPreview from "@/components/CanvasPreview.vue";
 import WorkspacePreview from "@/components/WorkspacePreview.vue";
 import CollectionCard from "@/components/CollectionCard.vue";
 import DailyEurekaCard from "@/components/DailyEurekaCard.vue";
+import DashboardActionCard from "@/components/DashboardActionCard.vue";
 import { isMobileDevice } from "@/utils/utils.js";
 
 // Import @vicons icons from ionicons5 for reliability
@@ -163,6 +187,8 @@ import {
   LayersOutline,
   AnalyticsOutline,
 } from "@vicons/ionicons5";
+import { LayersOutlined } from "@vicons/material";
+import { Workspace } from "@vicons/carbon";
 
 const router = useRouter();
 const photosStore = usePhotosStore();
@@ -207,7 +233,7 @@ const isLoadingCollections = computed(
 const canvasData = ref<any>(null);
 
 // Recent photos for workspace preview
-const recentPhotos = computed(() => {
+const photos = computed(() => {
   if (!photosStore.photos || !Array.isArray(photosStore.photos)) {
     return [];
   }
@@ -342,11 +368,40 @@ onMounted(() => {
 }
 
 .stat-card {
-  background-color: var(--bg-card) !important;
+  position: relative;
+  background: linear-gradient(
+    135deg,
+    var(--bg-card) 0%,
+    var(--primary-02) 100%
+  ) !important;
   border: 1px solid var(--border-color) !important;
   flex: 1;
-  transition: var(--transition-normal);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   min-height: 120px;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, transparent 0%, var(--primary-05) 100%);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+
+.stat-card:hover::before {
+  opacity: 1;
+}
+
+.stat-card:hover {
+  border-color: var(--primary-50);
+  box-shadow: 0 8px 24px var(--primary-15);
+  transform: translateY(-2px);
 }
 
 .stat-content {
@@ -398,59 +453,56 @@ onMounted(() => {
   transition: var(--transition-normal);
 }
 
-.action-icon {
-  margin-bottom: var(--spacing-lg);
-  color: var(--text-primary);
-}
-
-.new-project .action-icon {
-  color: var(--success-color);
-}
-
-.upload-photos {
-  background: url("../assets/dashboard/report_bg.png") center/cover no-repeat;
+/* Action Card Base Styles */
+.action-card {
   position: relative;
+  background: linear-gradient(
+    135deg,
+    var(--bg-card) 0%,
+    var(--primary-02) 100%
+  );
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
+  min-height: 190px;
+  flex: 1;
 }
 
-.upload-photos::before {
+.action-card::before {
   content: "";
   position: absolute;
-  inset: 0;
-  background: url("../assets/dashboard/report_bg.png") center/cover no-repeat;
-  /* filter: blur(1px); */
-  z-index: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, transparent 0%, var(--primary-05) 100%);
+  opacity: 0;
+  transition: opacity 0.4s ease;
   pointer-events: none;
 }
 
-.upload-photos .action-icon {
-  color: var(--primary-color);
-  position: relative;
-  z-index: 1;
+.action-card:hover::before {
+  opacity: 1;
 }
 
-.upload-photos .action-title {
-  position: relative;
-  z-index: 1;
-  color: var(--text-on-primary);
+.action-card:hover {
+  border-color: var(--primary-50);
+  box-shadow: 0 12px 32px var(--primary-15);
+  transform: translateY(-4px);
 }
 
-.upload-photos .action-description {
-  position: relative;
-  z-index: 1;
-  color: var(--text-on-primary);
+.action-card.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
-.ai-search .action-icon {
-  color: var(--accent-color);
-}
-
-.catalog .action-icon {
-  color: var(--warning-color);
-}
-
-.report .action-icon {
-  color: var(--info-color);
+.action-card.disabled:hover {
+  border-color: var(--border-color);
+  box-shadow: none;
+  transform: none;
 }
 
 /* Canvas Card Styles */

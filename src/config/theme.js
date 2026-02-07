@@ -412,6 +412,15 @@ export function getThemeCSSVariables(isDark = true) {
     "--primary-color-pressed": theme.primaryPressed,
     "--primary-color-suppl": theme.primarySuppl,
 
+    // Primary opacity variants
+    "--primary-02": "rgba(37, 99, 235, 0.02)",
+    "--primary-03": "rgba(37, 99, 235, 0.03)",
+    "--primary-05": "rgba(37, 99, 235, 0.05)",
+    "--primary-08": "rgba(37, 99, 235, 0.08)",
+    "--primary-15": "rgba(37, 99, 235, 0.15)",
+    "--primary-30": "rgba(37, 99, 235, 0.3)",
+    "--primary-50": "rgba(37, 99, 235, 0.5)",
+
     // Secondary
     "--accent-color": theme.secondary,
     "--accent-color-hover": theme.secondaryHover,
