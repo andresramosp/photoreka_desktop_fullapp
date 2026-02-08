@@ -15,8 +15,8 @@
 import { ref, shallowRef, watch } from "vue";
 
 // ─── LOD constants ──────────────────────────────────────────────────────
-const LOD_MID_MIN_SCREEN_PX = 55;
-const LOD_HIGH_MIN_SCREEN_PX = 130;
+const LOD_MID_MIN_SCREEN_PX = 45;
+const LOD_HIGH_MIN_SCREEN_PX = 120;
 const LOD_DEBOUNCE_MS = 400;
 const LOD_BATCH_SIZE = 12;
 
