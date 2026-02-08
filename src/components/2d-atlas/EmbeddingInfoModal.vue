@@ -78,21 +78,7 @@
         <n-divider />
 
         <div class="section">
-          <h4 class="section-title">1) Embeddings in one minute</h4>
-          <p class="section-text">
-            An embedding is a list of numbers that summarizes an image. It’s
-            built so that “similar images” get similar embeddings.
-          </p>
-          <div class="codebox">
-            <div class="codebox-title">Pipeline</div>
-            <pre class="codebox-pre">
-photo → embedding → 2D projection → (x, y)</pre
-            >
-          </div>
-        </div>
-
-        <div class="section">
-          <h4 class="section-title">2) What each type emphasizes</h4>
+          <h4 class="section-title">1) What each type emphasizes</h4>
           <p class="section-text">
             Different types use different signals, so the map can change a lot:
           </p>
@@ -144,7 +130,7 @@ photo → embedding → 2D projection → (x, y)</pre
         </div>
 
         <div class="section">
-          <h4 class="section-title">3) Why it’s 2D</h4>
+          <h4 class="section-title">2) Why it’s 2D</h4>
           <p class="section-text">
             The embedding space is high-dimensional. To visualize it, we project
             it down to 2D while trying to keep neighborhoods reasonably
@@ -158,7 +144,7 @@ photo → embedding → 2D projection → (x, y)</pre
         </div>
 
         <div class="section">
-          <h4 class="section-title">4) What clusters mean</h4>
+          <h4 class="section-title">3) What clusters mean</h4>
           <p class="section-text">
             A cluster is a region where many photos are similar under the chosen
             type. It’s great for discovery and curation.
@@ -174,7 +160,7 @@ photo → embedding → 2D projection → (x, y)</pre
         </div>
 
         <div class="section">
-          <h4 class="section-title">5) What is lost in 2D reduction?</h4>
+          <h4 class="section-title">4) What is lost in 2D reduction?</h4>
           <p class="section-text">
             Reducing high-dimensional embeddings to 2D inevitably sacrifices
             some semantic and visual richness. The projection creates broader,
@@ -182,13 +168,11 @@ photo → embedding → 2D projection → (x, y)</pre
             images can be lost. This means that photos grouped together here may
             not match the nuanced similarities found in the Canvas tool, where
             the full embedding vector is used to search for richer connections.
-            Here, we visualize global groupings, while Canvas operates with the
-            complete vector to reveal more detailed and precise relationships.
           </p>
         </div>
 
         <div class="section">
-          <h4 class="section-title">How to play with this?</h4>
+          <h4 class="section-title">5) How to play with this?</h4>
           <p class="section-text">
             Don’t just zoom in on local clusters—try zooming out and exploring
             the whole map. Switch between clustering types to see how groups

@@ -81,22 +81,7 @@
         <n-divider />
 
         <div class="section">
-          <h4 class="section-title">1) Embeddings in one minute</h4>
-          <p class="section-text">
-            An embedding is a list of numbers that summarizes an image. It’s
-            designed so that images that look or “mean” something similar end up
-            close to each other in the embedding space.
-          </p>
-          <div class="codebox">
-            <div class="codebox-title">Pipeline</div>
-            <pre class="codebox-pre">
-photo → embedding → 3D projection → (x, y, z)</pre
-            >
-          </div>
-        </div>
-
-        <div class="section">
-          <h4 class="section-title">2) What each type emphasizes</h4>
+          <h4 class="section-title">1) What each type emphasizes</h4>
           <p class="section-text">
             Each clustering type highlights different signals, reshaping the 3D
             space and changing how volumes, layers, and transitions appear:
@@ -150,7 +135,7 @@ photo → embedding → 3D projection → (x, y, z)</pre
         </div>
 
         <div class="section">
-          <h4 class="section-title">3) Why 3D?</h4>
+          <h4 class="section-title">2) Why 3D?</h4>
           <p class="section-text">
             The embedding space is inherently high-dimensional. Projecting it to
             3D preserves more structure than flattening it to 2D, making certain
@@ -166,7 +151,7 @@ photo → embedding → 3D projection → (x, y, z)</pre
         </div>
 
         <div class="section">
-          <h4 class="section-title">4) What clusters mean in 3D</h4>
+          <h4 class="section-title">3) What clusters mean in 3D</h4>
           <p class="section-text">
             A cluster is a dense region in space where many photos share similar
             characteristics under the selected type.
@@ -188,7 +173,7 @@ photo → embedding → 3D projection → (x, y, z)</pre
         </div>
 
         <div class="section">
-          <h4 class="section-title">5) What is lost in 3D reduction?</h4>
+          <h4 class="section-title">4) What is lost in 3D reduction?</h4>
           <p class="section-text">
             Even when projecting to 3D, some semantic and visual richness is
             inevitably lost compared to the original high-dimensional embedding
@@ -196,14 +181,12 @@ photo → embedding → 3D projection → (x, y, z)</pre
             relationships between images may disappear. As a result, photos
             grouped together here might not match the nuanced similarities found
             in the Canvas tool, which uses the full embedding vector to search
-            for richer connections. Here, we visualize global groupings, while
-            Canvas operates with the complete vector to reveal more detailed and
-            precise relationships.
+            for richer connections.
           </p>
         </div>
 
         <div class="section">
-          <h4 class="section-title">How to explore the space?</h4>
+          <h4 class="section-title">5) How to explore the space?</h4>
           <p class="section-text">
             Don’t stay fixed on a single angle. Rotate the space, zoom in and
             out, and move through dense regions and empty gaps. Switch
