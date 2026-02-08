@@ -96,6 +96,22 @@ export default class SearchController {
     }
   }
 
+  public async searchByTagsDirect({ response, request, auth }: HttpContext) {
+    try {
+      const user = auth.use('api').user!
+      const searchService = new SearchTextService()
+
+      const { included = [], excluded = [] } = request.body()
+
+      const result = await searchService.searchByTagsDirect(included, excluded, user.id)
+
+      return response.ok(result)
+    } catch (error) {
+      console.error('Error fetching photos:', error)
+      return response.internalServerError({ message: 'Error fetching photos' })
+    }
+  }
+
   public async searchByPhotos({ response, request, auth }: HttpContext) {
     try {
       const user = auth.use('api').user!

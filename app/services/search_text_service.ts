@@ -737,4 +737,98 @@ export default class SearchTextService {
       return null
     }
   }
+
+  /**
+   * Búsqueda simple por tags usando comparación directa de strings
+   * Matchea si el tag buscado está contenido en el tag de la foto (perro -> perro grande)
+   * pero no al revés (perro grande NO matchea con perro)
+   */
+  public async searchByTagsDirect(
+    includedTags: string[],
+    excludedTags: string[],
+    userId: string | number
+  ) {
+    const db = await import('@adonisjs/lucid/services/db').then((mod) => mod.default)
+
+    // Normalizar tags a minúsculas para comparación
+    const normalizedIncluded = includedTags.map((t) => t.toLowerCase().trim())
+    const normalizedExcluded = excludedTags.map((t) => t.toLowerCase().trim())
+
+    // Query base: obtener todas las fotos del usuario con sus tags
+    const photosWithTags = await db
+      .from('photos')
+      .select('photos.id as photo_id', 'tags.id as tag_id', 'tags.name as tag_name')
+      .innerJoin('tags_photos', 'photos.id', 'tags_photos.photo_id')
+      .innerJoin('tags', 'tags_photos.tag_id', 'tags.id')
+      .where('photos.user_id', userId)
+      .whereNull('photos.deleted_at')
+
+    // Agrupar tags por foto
+    const photoTagsMap = new Map<
+      number,
+      { photoId: number; tags: Array<{ id: number; name: string }> }
+    >()
+
+    for (const row of photosWithTags) {
+      if (!photoTagsMap.has(row.photo_id)) {
+        photoTagsMap.set(row.photo_id, {
+          photoId: row.photo_id,
+          tags: [],
+        })
+      }
+      photoTagsMap.get(row.photo_id)!.tags.push({
+        id: row.tag_id,
+        name: row.tag_name,
+      })
+    }
+
+    // Filtrar y matchear fotos
+    const results: Array<{
+      photoId: number
+      matchedIncluded: string[]
+      matchedExcluded: string[]
+    }> = []
+
+    for (const [photoId, { tags }] of photoTagsMap.entries()) {
+      const normalizedPhotoTags = tags.map((t) => t.name.toLowerCase())
+
+      // Buscar matches incluidos (tag buscado está contenido en tag de foto)
+      const matchedIncluded: string[] = []
+      for (const searchTag of normalizedIncluded) {
+        for (const photoTag of normalizedPhotoTags) {
+          // El tag de la foto debe CONTENER el tag buscado (no al revés)
+          if (photoTag.includes(searchTag)) {
+            matchedIncluded.push(photoTag)
+          }
+        }
+      }
+
+      // Si no hay tags incluidos especificados, consideramos que todas las fotos califican
+      const hasIncludedMatch = normalizedIncluded.length === 0 || matchedIncluded.length > 0
+
+      // Buscar matches excluidos (tag excluido está contenido en tag de foto)
+      const matchedExcluded: string[] = []
+      for (const searchTag of normalizedExcluded) {
+        for (const photoTag of normalizedPhotoTags) {
+          // El tag de la foto debe CONTENER el tag excluido (no al revés)
+          if (photoTag.includes(searchTag)) {
+            matchedExcluded.push(photoTag)
+          }
+        }
+      }
+
+      // Incluir foto solo si:
+      // 1. Tiene al menos un match incluido (o no hay tags incluidos)
+      // 2. NO tiene ningún match excluido
+      if (hasIncludedMatch && matchedExcluded.length === 0) {
+        results.push({
+          photoId,
+          matchedIncluded: [...new Set(matchedIncluded)], // Eliminar duplicados
+          matchedExcluded: [],
+        })
+      }
+    }
+
+    return results
+  }
 }
