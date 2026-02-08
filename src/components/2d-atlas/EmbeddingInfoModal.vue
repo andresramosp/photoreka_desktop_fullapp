@@ -174,6 +174,20 @@ photo → embedding → 2D projection → (x, y)</pre
         </div>
 
         <div class="section">
+          <h4 class="section-title">5) What is lost in 2D reduction?</h4>
+          <p class="section-text">
+            Reducing high-dimensional embeddings to 2D inevitably sacrifices
+            some semantic and visual richness. The projection creates broader,
+            more global clusters of similarity, but finer relationships between
+            images can be lost. This means that photos grouped together here may
+            not match the nuanced similarities found in the Canvas tool, where
+            the full embedding vector is used to search for richer connections.
+            Here, we visualize global groupings, while Canvas operates with the
+            complete vector to reveal more detailed and precise relationships.
+          </p>
+        </div>
+
+        <div class="section">
           <h4 class="section-title">How to play with this?</h4>
           <p class="section-text">
             Don’t just zoom in on local clusters—try zooming out and exploring

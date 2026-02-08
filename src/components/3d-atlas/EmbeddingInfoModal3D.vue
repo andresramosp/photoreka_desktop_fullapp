@@ -188,6 +188,21 @@ photo → embedding → 3D projection → (x, y, z)</pre
         </div>
 
         <div class="section">
+          <h4 class="section-title">5) What is lost in 3D reduction?</h4>
+          <p class="section-text">
+            Even when projecting to 3D, some semantic and visual richness is
+            inevitably lost compared to the original high-dimensional embedding
+            space. The 3D view forms broader, more global clusters, but subtle
+            relationships between images may disappear. As a result, photos
+            grouped together here might not match the nuanced similarities found
+            in the Canvas tool, which uses the full embedding vector to search
+            for richer connections. Here, we visualize global groupings, while
+            Canvas operates with the complete vector to reveal more detailed and
+            precise relationships.
+          </p>
+        </div>
+
+        <div class="section">
           <h4 class="section-title">How to explore the space?</h4>
           <p class="section-text">
             Don’t stay fixed on a single angle. Rotate the space, zoom in and
