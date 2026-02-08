@@ -7,8 +7,8 @@ import Photo from '#models/photo'
 import AnalyzerProcess from '#models/analyzer/analyzerProcess'
 
 const REVIEW_TYPES: ReviewType[] = ['general', 'story', 'context']
-const BUILD_THRESHOLD_PHOTOS = 10
-const REBUILD_THRESHOLD_CHANGES = 150 // Número absoluto de fotos añadidas/borradas para rebuild
+const BUILD_THRESHOLD_PHOTOS = 200
+const REBUILD_THRESHOLD_CHANGES = 15 // Número absoluto de fotos añadidas/borradas para rebuild
 const BUILD_TIMEOUT_MS = 60 * 60 * 1000 // 60 minutos - tiempo máximo esperado para un build
 
 export default class PortfolioReviewController {
