@@ -48,7 +48,6 @@ export function use2DTextureManager(
   // IndexedDB cache
   const {
     initDB,
-    bulkLoadFromCache,
     bulkCheckCache,
     bulkCacheImages,
     getCachedImage,
@@ -330,62 +329,35 @@ export function use2DTextureManager(
     }
 
     try {
-      const cachedBlobs = await bulkLoadFromCache(photoIds);
+      // ── LIGHTWEIGHT CHECK ──────────────────────────────────────────────
+      // Only check which photo IDs exist in IndexedDB (getKey, zero blob reads).
+      // Actual blobs are loaded on-demand inside getOrCreateTexture() —
+      // one photo at a time — to keep peak memory under control.
+      // Previously this used bulkLoadFromCache (decoded ALL 5000 blobs
+      // into HTMLImageElements upfront ≈ 1 GB), causing OOM.
+      const cachedIds = await bulkCheckCache(photoIds);
 
-      if (cachedBlobs.size > 0) {
-        cachedPhotoIds.value = new Set(cachedBlobs.keys());
+      if (cachedIds.size > 0) {
+        cachedPhotoIds.value = new Set(cachedIds);
 
-        // Build a fast lookup map to avoid O(n²) photos.find() per blob
-        const photoLookup = new Map();
         for (const p of photos) {
-          if (p?.id) photoLookup.set(p.id, p);
-        }
-
-        for (const [photoId, blob] of cachedBlobs.entries()) {
-          try {
-            const imageUrl = URL.createObjectURL(blob);
-            const img = await new Promise((resolve, reject) => {
-              const image = new Image();
-              image.onload = () => {
-                URL.revokeObjectURL(imageUrl);
-                resolve(image);
-              };
-              image.onerror = (err) => {
-                URL.revokeObjectURL(imageUrl);
-                reject(err);
-              };
-              image.src = imageUrl;
-            });
-
-            downloadedImagesCache.set(cacheKey(photoId, "low"), img);
-
-            // Release the blob immediately to reduce peak memory.
-            // With 5000 photos, blobs alone can be 100–300 MB.
-            cachedBlobs.delete(photoId);
-
-            const photo = photoLookup.get(photoId);
-            if (photo) {
-              photo.__imageDownloaded = true;
-              photo.__downloadError = false;
-              photo.__fromCache = true;
-              photo.__imageElement = img;
-              photo.__imageUrl = getImageUrlForPhoto(photo, "low");
-            }
-          } catch (error) {
-            cachedPhotoIds.value.delete(photoId);
-            cachedBlobs.delete(photoId);
+          if (p?.id && cachedIds.has(p.id)) {
+            // Mark as "present in IDB" so getOrCreateTexture knows
+            // to try getCachedImage() before network download.
+            p.__cachedInIDB = true;
+            p.__fromCache = true;
           }
         }
       }
 
       console.log(
-        `📊 [2D Cache] IndexedDB: ${cachedBlobs.size}/${photoIds.length} fotos cargadas de cache (${photoIds.length - cachedBlobs.size} NO cacheadas → se descargarán de red)`,
+        `📊 [2D Cache] IndexedDB: ${cachedIds.size}/${photoIds.length} fotos en cache (${photoIds.length - cachedIds.size} se descargarán de red)`,
       );
 
       cacheStats.value = await getCacheStats();
-      return cachedBlobs;
+      return new Map(); // no blobs in memory — loaded on-demand
     } catch (error) {
-      console.warn(`⚠️ [2D Cache] Error cargando de IndexedDB:`, error);
+      console.warn(`⚠️ [2D Cache] Error verificando IndexedDB:`, error);
       return new Map();
     }
   };
@@ -464,11 +436,13 @@ export function use2DTextureManager(
         }
       }
 
-      // Last resort: download from network (first visit, or IDB miss)
+      // Last resort: download from network (first visit, or IDB miss).
+      // Reset download flags — the source was freed after initial load to save
+      // RAM, so the old "downloaded" flag is stale and blocks re-download.
       if (!imageElement) {
-        if (!photoObj[thumbFlags.downloadedFlag]) {
-          await downloadImageOnly(photoObj, 0, "low", {});
-        }
+        photoObj[thumbFlags.downloadedFlag] = false;
+        photoObj[thumbFlags.downloadErrorFlag] = false;
+        await downloadImageOnly(photoObj, 0, "low", {});
         imageElement =
           downloadedImagesCache.get(thumbKey) ||
           photoObj[thumbFlags.imageElementProp];
@@ -513,22 +487,25 @@ export function use2DTextureManager(
       if (photo.__fromCache || photo.__cachedInIDB) continue;
       if (!photo.__imageDownloaded || photo.__downloadError) continue;
 
-      const imageElement =
-        downloadedImagesCache.get(cacheKey(photo.id, "low")) ||
-        photo.__imageElement;
+      try {
+        // Best path: we already have the blob from the download step.
+        // Check this FIRST — imageElement may have been freed by
+        // per-batch freeSourceImage() but the blob is still on the photo object.
+        if (photo.__imageBlob instanceof Blob) {
+          imagesToCache.push({
+            id: photo.id,
+            blob: photo.__imageBlob,
+            url: photo.__imageUrl || getImageUrlForPhoto(photo, "low"),
+          });
+          continue;
+        }
 
-      if (imageElement) {
-        try {
-          // Best path: we already have the blob from download.
-          if (photo.__imageBlob instanceof Blob) {
-            imagesToCache.push({
-              id: photo.id,
-              blob: photo.__imageBlob,
-              url: photo.__imageUrl || getImageUrlForPhoto(photo, "low"),
-            });
-            continue;
-          }
+        // Fallback: re-encode from the in-memory HTMLImageElement (if still available).
+        const imageElement =
+          downloadedImagesCache.get(cacheKey(photo.id, "low")) ||
+          photo.__imageElement;
 
+        if (imageElement) {
           const canvas = document.createElement("canvas");
           const ctx = canvas.getContext("2d");
           if (!ctx) continue;
@@ -564,9 +541,21 @@ export function use2DTextureManager(
               url: photo.__imageUrl || getImageUrlForPhoto(photo, "low"),
             });
           }
-        } catch (_) {
-          // ignore per-image cache errors
+        } else {
+          // Both blob and imageElement are gone (freed by per-batch cleanup).
+          // Last resort: re-fetch the blob from the network just for caching.
+          const url = photo.__imageUrl || getImageUrlForPhoto(photo, "low");
+          if (url) {
+            try {
+              const blob = await urlToBlob(url);
+              if (blob) {
+                imagesToCache.push({ id: photo.id, blob, url });
+              }
+            } catch (_) {}
+          }
         }
+      } catch (_) {
+        // ignore per-image cache errors
       }
     }
 

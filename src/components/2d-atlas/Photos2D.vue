@@ -1483,9 +1483,10 @@ const loadPhotosToPixi = async () => {
 
   // After the next render frame, Pixi has uploaded all textures to GPU.
   // Free the intermediate Canvas elements used by downscaleSource() (~135 MB).
-  requestAnimationFrame(() => {
+  // Use a generous delay so Pixi has time to render & upload all textures.
+  setTimeout(() => {
     textureManager.freeTextureCanvasSources();
-  });
+  }, 3000);
 
   // Apply initial filter visibility
   updateSpriteVisibility();

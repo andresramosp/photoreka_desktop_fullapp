@@ -34,7 +34,7 @@ const HIRES_MAX_CELL_RING = 6;
 // avoids OOM when rendering thousands of sprites.
 const CONFIG_2D_TEXTURE = {
   lowMaxSideLowPerf: 96,
-  lowMaxSideDesktop: 512,
+  lowMaxSideDesktop: 96,
 
   // midMaxSideLowPerf: 96,
   // midMaxSideDesktop: 96,
