@@ -194,6 +194,68 @@
           />
         </div>
       </div>
+
+      <!-- Navigation Controls Section -->
+      <div class="control-section">
+        <div class="section-toggle" @click="toggleNavigationControls">
+          <div style="display: flex; align-items: center; gap: 6px">
+            <n-icon size="16" color="var(--text-on-primary)">
+              <CompassOutlined />
+            </n-icon>
+            <span class="section-toggle-label">Navigation Controls</span>
+          </div>
+          <n-icon
+            size="12"
+            class="toggle-icon"
+            :class="{ rotated: showNavigationControls }"
+          >
+            <svg viewBox="0 0 24 24">
+              <path
+                fill="currentColor"
+                d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+              />
+            </svg>
+          </n-icon>
+        </div>
+
+        <!-- Navigation Controls Content -->
+        <div v-if="showNavigationControls" class="controls-info">
+          <div class="control-tip">
+            <div class="control-icon-group">
+              <div class="keyboard-keys-group">
+                <div class="keyboard-key">W</div>
+                <div class="keyboard-key">A</div>
+                <div class="keyboard-key">S</div>
+                <div class="keyboard-key">D</div>
+              </div>
+              <span class="control-text">Up/left/down/right</span>
+            </div>
+          </div>
+          <div class="control-tip">
+            <div class="control-icon-group">
+              <div class="keyboard-keys-group">
+                <div class="keyboard-key">↑</div>
+                <div class="keyboard-key">←</div>
+                <div class="keyboard-key">↓</div>
+                <div class="keyboard-key">→</div>
+              </div>
+              <span class="control-text">Arrow keys also work</span>
+            </div>
+          </div>
+          <div class="control-tip">
+            <div class="control-icon-group">
+              <span class="control-icon-text">🖱️</span>
+              <span class="control-text">Mouse wheel to zoom in/out</span>
+            </div>
+          </div>
+          <div class="control-tip">
+            <div class="control-icon-group">
+              <span class="control-icon-text">👆</span>
+              <span class="control-text">Click on photos to select them</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -208,6 +270,7 @@ import {
   EyeOutlined,
   InfoCircleOutlined,
   TagOutlined,
+  CompassOutlined,
 } from "@vicons/antd";
 import { AppsOutline } from "@vicons/ionicons5";
 import ClusteringTypeSection from "./sections/ClusteringTypeSection.vue";
@@ -334,9 +397,10 @@ const isExpanded = computed({
   set: (value) => emit("update:showConfigPanel", value),
 });
 
-// Control which section is expanded (null, 'patterns', 'displayOptions', 'filters')
+// Control which section is expanded (null, 'patterns', 'displayOptions', 'filters', 'navigation')
 const expandedSection = ref(null);
 const clusteringSectionRef = ref(null);
+const showNavigationControls = ref(false);
 
 // Local state for artistic score filters (for counting active filters)
 const localArtisticScoreFilters = ref({ ...props.artisticScoreFilters });
@@ -390,6 +454,10 @@ const toggleDisplayOptionsSection = () => {
 const toggleFiltersSection = () => {
   expandedSection.value =
     expandedSection.value === "filters" ? null : "filters";
+};
+
+const toggleNavigationControls = () => {
+  showNavigationControls.value = !showNavigationControls.value;
 };
 
 // Change handlers - pass through to emit
@@ -565,7 +633,7 @@ const handlePatternClick = (pattern) => {
 
 /* Filters container */
 .filters-container {
-  margin-top: 12px;
+  /* margin-top: 12px; */
 }
 
 /* Scrollbar styling */
@@ -584,5 +652,89 @@ const handlePatternClick = (pattern) => {
 
 .control-panel::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+/* Navigation controls styles */
+.controls-info {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 4px;
+  padding: 12px;
+  margin-top: 12px;
+  animation: slideDown 0.3s ease-out;
+}
+
+.control-tip {
+  margin: 8px 0;
+  color: var(--text-secondary, #a0aec0);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.control-tip:last-child {
+  margin-bottom: 0;
+}
+
+.control-icon-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.control-icon-text {
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.control-text {
+  color: var(--text-secondary, #a0aec0);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.keyboard-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 13px;
+  height: 13px;
+  padding: 2px 5px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.12),
+    rgba(255, 255, 255, 0.04)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 3px;
+  color: var(--text-primary, #ffffff);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.15),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
+  text-shadow: 0 0.5px 0.5px rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
+}
+
+.keyboard-keys-group {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>

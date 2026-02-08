@@ -1448,8 +1448,16 @@ const loadPhotosToPixi = async () => {
       }),
     );
 
+    // Free source images from this batch immediately.
+    // The textures are already created — the HTMLImageElements are redundant.
+    // Without this, 5000 decoded bitmaps would accumulate (~1 GB) and crash.
+    for (const photo of batch) {
+      textureManager.freeSourceImage(photo.id);
+      photo.__imageElement = null;
+    }
+
     // Small delay between batches to avoid overwhelming Cloudflare
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
   isLoadingTextures.value = false;

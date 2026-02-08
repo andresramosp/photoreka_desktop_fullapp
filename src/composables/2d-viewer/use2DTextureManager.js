@@ -49,6 +49,7 @@ export function use2DTextureManager(
   const {
     initDB,
     bulkLoadFromCache,
+    bulkCheckCache,
     bulkCacheImages,
     getCachedImage,
     getCacheStats,
@@ -261,9 +262,11 @@ export function use2DTextureManager(
       }
       photoObj[flags.retryCountProp] = undefined;
 
-      console.log(
-        `✅ Descargada: ${photoObj.id} [${q}] de ${imageUrl.substring(imageUrl.lastIndexOf("/") + 1)}`,
-      );
+      if (DEBUG_2D_CACHE) {
+        console.log(
+          `\u2705 Descargada: ${photoObj.id} [${q}] de ${imageUrl.substring(imageUrl.lastIndexOf("/") + 1)}`,
+        );
+      }
 
       if (photoObj.__had429Error) {
         error429Stats.value.recovered++;
@@ -494,6 +497,7 @@ export function use2DTextureManager(
 
   /**
    * Bulk-cache images that were downloaded this session.
+   * Only caches photos that were downloaded from network (not from IDB).
    */
   const bulkCacheDownloadedImages = async (photos) => {
     if (isPlayground) return;
@@ -506,13 +510,14 @@ export function use2DTextureManager(
 
     for (const photo of photos || []) {
       if (!photo?.id) continue;
-      if (photo.__fromCache) continue;
+      if (photo.__fromCache || photo.__cachedInIDB) continue;
+      if (!photo.__imageDownloaded || photo.__downloadError) continue;
 
       const imageElement =
         downloadedImagesCache.get(cacheKey(photo.id, "low")) ||
         photo.__imageElement;
 
-      if (photo.__imageDownloaded && !photo.__downloadError && imageElement) {
+      if (imageElement) {
         try {
           // Best path: we already have the blob from download.
           if (photo.__imageBlob instanceof Blob) {
