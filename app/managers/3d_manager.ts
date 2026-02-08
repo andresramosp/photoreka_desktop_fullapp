@@ -84,6 +84,7 @@ export default class ThreeDManager {
         FROM photos p
         WHERE p.user_id = :userId
           AND p.embedding IS NOT NULL
+          AND p.deleted_at IS NULL
         ORDER BY p.id
       `,
         {
@@ -135,6 +136,7 @@ export default class ThreeDManager {
         FROM photos p
         WHERE p.user_id = :userId
           AND p.${histogramField} IS NOT NULL
+          AND p.deleted_at IS NULL
         ORDER BY p.id
       `,
         {
@@ -160,6 +162,7 @@ export default class ThreeDManager {
         WHERE dc.category = :chunkName
           AND p.user_id = :userId
           AND dc.embedding IS NOT NULL
+          AND p.deleted_at IS NULL
         ORDER BY p.id
       `,
         {
@@ -387,7 +390,7 @@ export default class ThreeDManager {
     let descriptionsMap = new Map()
     if (photoIdsForDescriptions.length > 0) {
       const descriptionsResult = await db.rawQuery(
-        `SELECT id, descriptions FROM photos WHERE id = ANY(:photoIds)`,
+        `SELECT id, descriptions FROM photos WHERE id = ANY(:photoIds) AND deleted_at IS NULL`,
         { photoIds: photoIdsForDescriptions }
       )
       descriptionsResult.rows.forEach((row: any) => {
@@ -493,6 +496,7 @@ export default class ThreeDManager {
       FROM photos
       WHERE user_id = :userId
         AND embedding IS NOT NULL
+        AND deleted_at IS NULL
 
       UNION ALL
 
@@ -500,6 +504,7 @@ export default class ThreeDManager {
       FROM photos
       WHERE user_id = :userId
         AND color_histogram IS NOT NULL
+        AND deleted_at IS NULL
 
       UNION ALL
 
@@ -507,6 +512,7 @@ export default class ThreeDManager {
       FROM photos
       WHERE user_id = :userId
         AND color_histogram_dominant IS NOT NULL
+        AND deleted_at IS NULL
     `,
       {
         userId: parseInt(userId),
@@ -522,6 +528,7 @@ export default class ThreeDManager {
       JOIN photos p ON dc.photo_id = p.id
       WHERE p.user_id = :userId
         AND dc.embedding IS NOT NULL
+        AND p.deleted_at IS NULL
       GROUP BY dc.category
       ORDER BY count DESC
     `,

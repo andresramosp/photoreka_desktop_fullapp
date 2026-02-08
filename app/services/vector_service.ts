@@ -240,6 +240,7 @@ export default class VectorService {
       JOIN tags ON tags.id = tags_photos.tag_id
       JOIN photos ON photos.id = tags_photos.photo_id
       WHERE ${whereCondition}
+        AND photos.deleted_at IS NULL
       ORDER BY ${orderBy}
       LIMIT :limit
       `,
@@ -334,6 +335,9 @@ export default class VectorService {
       additionalParams.photoIds = photoIds
     }
 
+    // Filtrar fotos eliminadas (soft delete)
+    whereCondition += ' AND photos.deleted_at IS NULL'
+
     const embeddingString = `[${embedding.join(',')}]`
 
     const result = await db.rawQuery(
@@ -402,6 +406,9 @@ export default class VectorService {
       additionalParams.photoIds = photoIds
     }
 
+    // Filtrar fotos eliminadas (soft delete)
+    whereCondition += ' AND photos.deleted_at IS NULL'
+
     const embeddingString = `[${embedding.join(',')}]`
 
     const result = await db.rawQuery(
@@ -459,6 +466,7 @@ export default class VectorService {
     const sql = `
     SELECT photos.id, photos.name, ${distanceFormula} AS proximity
     FROM photos
+    WHERE photos.deleted_at IS NULL
     ORDER BY ${orderBy}
     LIMIT :limit
   `

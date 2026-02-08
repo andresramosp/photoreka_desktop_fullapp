@@ -32,6 +32,7 @@ export default class TagsController {
       JOIN tags t ON t.id = tp.tag_id
       WHERE p.user_id = ?
         AND LOWER(t.name) LIKE ?
+        AND p.deleted_at IS NULL
       ORDER BY t.name, t.id DESC
       `,
       [user.id, `%${term}%`]

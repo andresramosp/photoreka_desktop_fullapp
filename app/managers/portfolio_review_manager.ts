@@ -5,6 +5,7 @@ import PhotoImageService from '#services/photo_image_service'
 import VectorService from '#services/vector_service'
 import { withCache } from '../decorators/withCache.js'
 import pLimit from 'p-limit'
+import crypto from 'node:crypto'
 import {
   PROMPT_PORTFOLIO_STORY,
   PROMPT_PORTFOLIO_CONTEXT,
@@ -378,7 +379,7 @@ export default class PortfolioReviewManager {
     }
 
     const newPatternId = hasExistingPatterns
-      ? `pattern_new_${patterns.length + 1}`
+      ? `pattern_new_${crypto.randomBytes(4).toString('hex')}`
       : `cluster_${cluster.cluster_id}`
 
     const pattern: ClusterPattern = {
@@ -425,6 +426,7 @@ export default class PortfolioReviewManager {
         FROM photos p
         WHERE p.user_id = :userId
           AND p.embedding IS NOT NULL
+          AND p.deleted_at IS NULL
         ORDER BY p.id
       `,
         { userId: parseInt(userId) }
@@ -470,6 +472,7 @@ export default class PortfolioReviewManager {
         WHERE dc.category = :chunkName
           AND p.user_id = :userId
           AND dc.embedding IS NOT NULL
+          AND p.deleted_at IS NULL
         ORDER BY p.id
       `,
         { chunkName, userId: parseInt(userId) }
