@@ -35,12 +35,20 @@ const HIRES_MAX_CELL_RING = 6;
 const CONFIG_2D_TEXTURE = {
   lowMaxSideLowPerf: 96,
   lowMaxSideDesktop: 96,
-  midMaxSideLowPerf: 256,
-  midMaxSideDesktop: 384,
-  highMaxSideLowPerf: 384,
-  highMaxSideDesktop: 512,
-  originalMaxSideLowPerf: 768,
-  originalMaxSideDesktop: 1024,
+
+  midMaxSideLowPerf: 96,
+  midMaxSideDesktop: 96,
+  highMaxSideLowPerf: 96,
+  highMaxSideDesktop: 96,
+  originalMaxSideLowPerf: 96,
+  originalMaxSideDesktop: 96,
+
+  // midMaxSideLowPerf: 256,
+  // midMaxSideDesktop: 384,
+  // highMaxSideLowPerf: 384,
+  // highMaxSideDesktop: 512,
+  // originalMaxSideLowPerf: 768,
+  // originalMaxSideDesktop: 1024,
 };
 
 const getDeviceMemoryGb = () => {
