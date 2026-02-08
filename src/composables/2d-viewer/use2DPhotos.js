@@ -253,7 +253,7 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
     { value: "context", label: "Contextual" },
     { value: "visual_accents", label: "Visual accents" },
     { value: "color_histogram", label: "Chromatic" },
-    { value: "color_histogram_dominant", label: "Dominant color" },
+    // { value: "color_histogram_dominant", label: "Dominant color" },
     // Include these only for authenticated users
     ...(!userId ? [{ value: "visual_aspects", label: "Technical" }] : []),
   ];

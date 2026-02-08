@@ -149,7 +149,7 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
     { value: "context", label: "Cultural context" },
     { value: "visual_accents", label: "Visual accents" },
     { value: "color_histogram", label: "Chromatic" },
-    { value: "color_histogram_dominant", label: "Dominant color" },
+    // { value: "color_histogram_dominant", label: "Dominant color" },
 
     // Si no hay userId, incluir los dos últimos
     ...(!userId

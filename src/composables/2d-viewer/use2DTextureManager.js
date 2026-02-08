@@ -147,15 +147,11 @@ export function use2DTextureManager(
     if (!photo) return null;
     const q = normalizeQuality(quality);
     if (q === "original") {
+      // Original: prefer the full-size URL
       return photo?.originalUrl || photo?.url || photo?.thumbnailUrl || null;
     }
-    if (q === "high") {
-      return photo?.url || photo?.thumbnailUrl || photo?.originalUrl || null;
-    }
-    if (q === "mid") {
-      return photo?.url || photo?.thumbnailUrl || photo?.originalUrl || null;
-    }
-    // low (baseline)
+    // low/mid/high all use the thumbnail — it's the same source image,
+    // just downscaled to different sizes when creating the PIXI texture.
     return photo?.thumbnailUrl || photo?.url || photo?.originalUrl || null;
   };
 
@@ -339,6 +335,12 @@ export function use2DTextureManager(
 
     photoObj[downloadingFlag] = true;
 
+    // Diagnostic: log who triggered this download
+    console.warn(
+      `🌐 [DOWNLOAD] Iniciando descarga: ${photoObj.id} [${q}]`,
+      new Error("stack").stack?.split("\n").slice(1, 4).join(" ← "),
+    );
+
     const imageUrl = urlOverride || getImageUrlForPhoto(photoObj, q);
     if (!imageUrl) {
       photoObj[downloadingFlag] = false;
@@ -476,16 +478,21 @@ export function use2DTextureManager(
         }
       }
 
+      console.log(
+        `📊 [2D Cache] IndexedDB: ${cachedBlobs.size}/${photoIds.length} fotos cargadas de cache (${photoIds.length - cachedBlobs.size} NO cacheadas → se descargarán de red)`,
+      );
+
       cacheStats.value = await getCacheStats();
       return cachedBlobs;
     } catch (error) {
+      console.warn(`⚠️ [2D Cache] Error cargando de IndexedDB:`, error);
       return new Map();
     }
   };
 
   const getOrCreateTexture = async (
     photoObj,
-    { quality = "thumb", urlOverride = null } = {},
+    { quality = "thumb", urlOverride = null, allowDownload = true } = {},
   ) => {
     if (!photoObj?.id) return null;
 
@@ -493,50 +500,84 @@ export function use2DTextureManager(
     const isOriginal = q === "original";
     const key = cacheKey(photoObj.id, q);
 
+    // 1) If we already have this exact texture cached, return it.
     const cachedTexture = textureCache.get(key);
     if (cachedTexture && !cachedTexture.destroyed) {
-      if (DEBUG_2D_CACHE)
-        console.log(`📦 Textura en caché: ${photoObj.id} [${q}]`);
       return cachedTexture;
     }
 
-    const flags = getFlagsForQuality(q);
-    const downloadedFlag = flags.downloadedFlag;
-    const downloadErrorFlag = flags.downloadErrorFlag;
+    // 2) Get the source image to build the texture from.
+    //    For low/mid/high: ALL use the same thumbnail source image.
+    //    For original: uses a separate download (urlOverride).
+    let imageElement = null;
 
-    // Ensure image is in memory (cache or download)
-    if (!photoObj[downloadedFlag] && !downloadedImagesCache.has(key)) {
-      console.log(`⬇️ Descargando: ${photoObj.id} [${q}]...`);
-      loaderStage.value = "downloading";
-      await downloadImageOnly(photoObj, 0, q, { urlOverride });
+    if (isOriginal) {
+      // "original" is the only case that downloads a different image.
+      const flags = getFlagsForQuality("original");
+      if (!photoObj[flags.downloadedFlag] && !downloadedImagesCache.has(key)) {
+        if (!allowDownload) return null; // caller doesn't want network requests
+        await downloadImageOnly(photoObj, 0, "original", { urlOverride });
+      }
+      if (photoObj[flags.downloadErrorFlag]) return null;
+      imageElement =
+        downloadedImagesCache.get(key) || photoObj[flags.imageElementProp];
+
+      // If data was freed, re-download.
+      if (!imageElement && photoObj[flags.downloadedFlag]) {
+        if (!allowDownload) return null;
+        photoObj[flags.downloadedFlag] = false;
+        photoObj[flags.downloadErrorFlag] = false;
+        await downloadImageOnly(photoObj, 0, "original", { urlOverride });
+        if (photoObj[flags.downloadErrorFlag]) return null;
+        imageElement =
+          downloadedImagesCache.get(key) || photoObj[flags.imageElementProp];
+      }
+    } else {
+      // low/mid/high all use the SAME thumbnail that was already downloaded
+      // during initial load (or from IndexedDB cache). No new download needed.
+      const thumbKey = cacheKey(photoObj.id, "low");
+      const thumbFlags = getFlagsForQuality("low");
+
+      imageElement =
+        downloadedImagesCache.get(thumbKey) ||
+        photoObj[thumbFlags.imageElementProp];
+
+      // If not in memory yet and downloads allowed, download the thumbnail once.
+      if (!imageElement) {
+        if (!allowDownload) return null; // don't download during LOD updates
+        if (!photoObj[thumbFlags.downloadedFlag]) {
+          await downloadImageOnly(photoObj, 0, "low", {});
+        }
+        imageElement =
+          downloadedImagesCache.get(thumbKey) ||
+          photoObj[thumbFlags.imageElementProp];
+      }
+
+      // If data was freed (after previous texture creation), re-download thumb.
+      if (!imageElement && photoObj[thumbFlags.downloadedFlag]) {
+        if (!allowDownload) return null;
+        photoObj[thumbFlags.downloadedFlag] = false;
+        photoObj[thumbFlags.downloadErrorFlag] = false;
+        await downloadImageOnly(photoObj, 0, "low", {});
+        imageElement =
+          downloadedImagesCache.get(thumbKey) ||
+          photoObj[thumbFlags.imageElementProp];
+      }
     }
 
-    if (photoObj[downloadErrorFlag]) return null;
-
-    const imageElement =
-      downloadedImagesCache.get(key) || photoObj[flags.imageElementProp];
     if (!imageElement) return null;
 
-    // Downscale source before uploading to GPU to reduce memory pressure.
+    // 3) Downscale to the appropriate size for this LOD level.
     const maxSide = getMaxSideForQuality(q);
     const sourceForTexture = downscaleSource(imageElement, maxSide);
 
     const texture = PIXI.Texture.from(sourceForTexture);
     textureCache.set(key, texture);
-    console.log(
-      `🎨 Textura creada: ${photoObj.id} [${q}] (maxSide: ${maxSide}px)`,
-    );
 
-    // ---- Free *our* extra references to the decoded image data. ----
-    // The PIXI.Texture still holds a reference to the source internally
-    // (needed for lazy GPU upload on first render), so the pixel data
-    // stays alive until Pixi releases the texture.  But by removing our
-    // duplicated pointers we avoid keeping *two* copies reachable.
-    // For 5 000 photos this alone reclaims ~200+ MB of JS heap.
-    downloadedImagesCache.delete(key);
-    if (photoObj[flags.imageElementProp]) {
-      photoObj[flags.imageElementProp] = null;
-    }
+    // NOTE: We do NOT delete the source image from downloadedImagesCache here.
+    // The thumbnail source is shared across all LOD levels (low/mid/high).
+    // Deleting it would force re-downloads when switching LOD levels.
+    // Memory is fine: it's ONE thumbnail per photo, already tiny.
 
     photoObj.__textureLoaded = true;
 
@@ -682,7 +723,8 @@ export function use2DTextureManager(
 
   const releaseTexture = (photoId, quality = "original") => {
     if (!photoId) return;
-    const key = cacheKey(photoId, quality);
+    const q = normalizeQuality(quality);
+    const key = cacheKey(photoId, q);
     const texture = textureCache.get(key);
     if (texture && !texture.destroyed) {
       try {
@@ -690,8 +732,13 @@ export function use2DTextureManager(
       } catch (_) {}
     }
     textureCache.delete(key);
-    // Free decoded image element too (GC will reclaim it when unreferenced)
-    downloadedImagesCache.delete(key);
+
+    // Only free the source image for "original" quality.
+    // For low/mid/high the source is the shared thumbnail — don't delete it
+    // or we'd need to re-download it next time.
+    if (q === "original") {
+      downloadedImagesCache.delete(key);
+    }
   };
 
   return {

@@ -159,13 +159,18 @@
             </n-icon>
           </button>
         </div>
-        <div class="mobile-modal-body">
+        <div class="mobile-modal-body patterns-body">
           <PatternsSection
             :patternsForCurrentChunk="patternsForCurrentChunk"
             :selectedPatternId="selectedPatternId"
             displayMode="select"
             @select-pattern="handlePatternClick"
           />
+          <!-- <button class="close-modal-btn" @click="activeModal = null">
+            <n-icon size="18">
+              <CloseOutlined />
+            </n-icon>
+          </button> -->
         </div>
       </div>
     </div>
@@ -357,7 +362,7 @@ const activeFiltersCount = computed(() => {
 const handleChunkChange = (value) => {
   emit("chunk-change", value);
   // Auto-close modal after selection
-  activeModal.value = null;
+  // activeModal.value = null;
 };
 
 const handleVisualAspectsChange = (value) => {
@@ -376,7 +381,7 @@ const handlePatternClick = (pattern) => {
   console.log("[Mobile] handlePatternClick called with pattern:", pattern);
   emit("select-pattern", pattern);
   // Auto-close modal after selection
-  activeModal.value = null;
+  // activeModal.value = null;
 };
 
 const goBack = () => {
@@ -488,9 +493,8 @@ const goBack = () => {
   top: 0;
   left: 0;
   right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  /* bottom: 0; */
+
   z-index: 202;
   display: flex;
   align-items: flex-start;
@@ -515,7 +519,7 @@ const goBack = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px;
+  padding: 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   flex-shrink: 0;
 }
@@ -568,7 +572,7 @@ const goBack = () => {
 }
 
 .mobile-modal-body {
-  padding: 16px;
+  padding: 8px;
   overflow-y: auto;
   flex: 1;
 }
@@ -588,5 +592,20 @@ const goBack = () => {
 
 .mobile-modal-body::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+.patterns-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.patterns-body > :first-child {
+  flex: 1;
+}
+
+.patterns-body .close-modal-btn {
+  flex-shrink: 0;
+  margin-top: 0;
 }
 </style>

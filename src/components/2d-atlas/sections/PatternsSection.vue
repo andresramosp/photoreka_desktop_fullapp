@@ -72,6 +72,15 @@
         placeholder="Select a pattern"
         clearable
         @click.stop
+        :menu-props="{
+          style: {
+            'max-height': '200px',
+            padding: '0',
+            overflow: 'hidden',
+            padding: '0',
+            overflowY: 'auto',
+          },
+        }"
       >
         <template #empty>
           <div style="padding: 8px; color: #888; font-size: 12px">
