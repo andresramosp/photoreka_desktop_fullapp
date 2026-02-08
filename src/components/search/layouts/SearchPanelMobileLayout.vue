@@ -242,6 +242,7 @@
               class="mobile-filter-select"
               :loading="collectionsLoading"
               :disabled="isSearching"
+              :filterable="false"
             >
               <template #empty>
                 <div style="padding: 8px; color: #888; font-size: 12px">
@@ -265,6 +266,7 @@
               check-strategy="child"
               :show-path="false"
               expand-on-click
+              :filterable="false"
             >
               <template #empty>
                 <div style="padding: 8px; color: #888; font-size: 12px">
@@ -288,6 +290,7 @@
               check-strategy="child"
               :show-path="false"
               expand-on-click
+              :filterable="false"
             >
               <template #empty>
                 <div style="padding: 8px; color: #888; font-size: 12px">

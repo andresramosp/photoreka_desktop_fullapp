@@ -14,7 +14,12 @@
         <div class="mobile-header">
           <div class="mobile-header-title">
             <span class="mobile-photo-name">
-              {{ selectedPhoto?.originalFileName || "Untitled" }}
+              {{
+                selectedPhoto?.originalFileName &&
+                selectedPhoto.originalFileName.length > 15
+                  ? selectedPhoto.originalFileName.slice(0, 15) + "…"
+                  : selectedPhoto?.originalFileName || "Untitled"
+              }}
             </span>
             <n-button
               size="tiny"
@@ -98,6 +103,49 @@
             justify-content="space-evenly"
             animated
           >
+            <n-tab-pane name="tags" display-directive="show:lazy">
+              <template #tab>
+                <div class="mobile-tab">
+                  <n-icon size="16">
+                    <TagIcon />
+                  </n-icon>
+                  <span>Tags</span>
+                </div>
+              </template>
+
+              <div class="mobile-tab-content">
+                <div
+                  v-if="Object.keys(groupedTags).length > 0"
+                  class="mobile-tags-groups"
+                >
+                  <div
+                    v-for="(tags, groupName) in groupedTags"
+                    :key="groupName"
+                    class="mobile-tag-group"
+                  >
+                    <h6 class="mobile-group-title">{{ groupName }}</h6>
+                    <div class="mobile-tags-row">
+                      <n-tag
+                        v-for="tag in tags"
+                        :key="tag.id || tag.name"
+                        size="small"
+                        type="info"
+                        :bordered="false"
+                      >
+                        {{ tag.name || tag }}
+                      </n-tag>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="mobile-empty-state">
+                  <n-icon size="32" color="var(--text-tertiary)">
+                    <TagIcon />
+                  </n-icon>
+                  <p>No tags available</p>
+                </div>
+              </div>
+            </n-tab-pane>
+
             <n-tab-pane name="technical" display-directive="show:lazy">
               <template #tab>
                 <div class="mobile-tab">
@@ -311,49 +359,6 @@
                       </template>
                     </div>
                   </div>
-                </div>
-              </div>
-            </n-tab-pane>
-
-            <n-tab-pane name="tags" display-directive="show:lazy">
-              <template #tab>
-                <div class="mobile-tab">
-                  <n-icon size="16">
-                    <TagIcon />
-                  </n-icon>
-                  <span>Tags</span>
-                </div>
-              </template>
-
-              <div class="mobile-tab-content">
-                <div
-                  v-if="Object.keys(groupedTags).length > 0"
-                  class="mobile-tags-groups"
-                >
-                  <div
-                    v-for="(tags, groupName) in groupedTags"
-                    :key="groupName"
-                    class="mobile-tag-group"
-                  >
-                    <h6 class="mobile-group-title">{{ groupName }}</h6>
-                    <div class="mobile-tags-row">
-                      <n-tag
-                        v-for="tag in tags"
-                        :key="tag.id || tag.name"
-                        size="small"
-                        type="info"
-                        :bordered="false"
-                      >
-                        {{ tag.name || tag }}
-                      </n-tag>
-                    </div>
-                  </div>
-                </div>
-                <div v-else class="mobile-empty-state">
-                  <n-icon size="32" color="var(--text-tertiary)">
-                    <TagIcon />
-                  </n-icon>
-                  <p>No tags available</p>
                 </div>
               </div>
             </n-tab-pane>
@@ -733,7 +738,7 @@ const emit = defineEmits([
   "submit-custom-question",
 ]);
 
-const activeTab = ref("technical");
+const activeTab = ref("tags");
 
 const visibleModel = computed({
   get: () => props.visible,
@@ -1029,6 +1034,7 @@ const visibleModel = computed({
   overflow-x: auto;
   padding: var(--spacing-xs) 0;
   -webkit-overflow-scrolling: touch;
+  justify-content: center;
 }
 
 .mobile-genre-pill {

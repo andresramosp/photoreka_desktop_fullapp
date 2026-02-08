@@ -852,11 +852,12 @@ onMounted(async () => {
 
 /* Background with checkered pattern only when photo is present */
 .mobile-photo-preview {
-  background:
+  /* background:
     linear-gradient(45deg, #f8fafc 25%, transparent 25%),
     linear-gradient(-45deg, #f8fafc 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, #f8fafc 75%),
-    linear-gradient(-45deg, transparent 75%, #f8fafc 75%);
+    linear-gradient(-45deg, transparent 75%, #f8fafc 75%); */
+  background-color: var(--bg-container);
   background-size: 15px 15px;
   background-position:
     0 0,

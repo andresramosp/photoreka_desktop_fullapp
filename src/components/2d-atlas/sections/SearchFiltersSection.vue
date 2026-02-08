@@ -17,6 +17,7 @@
         check-strategy="child"
         :show-path="false"
         expand-on-click
+        :filterable="false"
         @click.stop
       >
         <template #empty>

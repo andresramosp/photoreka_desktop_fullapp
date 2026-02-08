@@ -57,7 +57,7 @@
             :options="aspectGroup.children"
             :max-tag-count="1"
             clearable
-            filterable
+            :filterable="false"
             class="filter-controls-select"
             size="small"
             @update:value="handleFilterChange"

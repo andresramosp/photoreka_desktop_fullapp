@@ -96,6 +96,7 @@
             placeholder="Sort"
             :disabled="sortByQuality"
             @update:value="handleBasicSortChange"
+            :filterable="false"
           />
           <n-button
             v-if="basicSortActive"

@@ -71,6 +71,7 @@
         class="pattern-select"
         placeholder="Select a pattern"
         clearable
+        :filterable="false"
         @click.stop
         :menu-props="{
           style: {

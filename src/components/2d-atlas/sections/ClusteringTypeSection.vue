@@ -10,6 +10,7 @@
         class="embedding-select"
         placeholder="Select embedding type"
         @click.stop
+        :filterable="false"
       />
     </div>
 
