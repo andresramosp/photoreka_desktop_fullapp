@@ -192,8 +192,8 @@
         <div class="header-content">
           <h1 class="page-title">Collections</h1>
           <p class="page-subtitle">
-            Organize your photos into beautiful collections for better
-            management and storytelling.
+            Manage and categorize your photographs into collections for
+            efficient organization and professional presentation.
           </p>
         </div>
       </div>
@@ -238,12 +238,11 @@
         <div v-if="collections.length === 0" class="empty-collections-state">
           <div class="empty-collections-content">
             <n-icon size="64" class="empty-collections-icon">
-              <ImagesOutline />
+              <GridOutline />
             </n-icon>
             <h3 class="empty-collections-title">No collections yet</h3>
             <p class="empty-collections-description">
-              Create your first collection to start organizing your photos into
-              beautiful collections.
+              Create your first collection to start organizing your photos.
             </p>
             <n-button
               type="primary"
@@ -364,11 +363,11 @@ import {
 } from "naive-ui";
 import {
   AddOutline,
-  ImagesOutline,
   CreateOutline,
   CheckmarkOutline,
   CloseOutline,
   EllipsisVertical,
+  GridOutline,
 } from "@vicons/ionicons5";
 import PhotosDialog from "@/components/PhotosDialog.vue";
 import PhotosGrid from "@/components/PhotosGrid.vue";
@@ -811,8 +810,7 @@ watch(
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100%;
-  min-height: 400px;
+  min-height: calc(100vh - 300px);
   text-align: center;
 }
 
@@ -875,6 +873,9 @@ watch(
 
   .page-title {
     font-size: var(--font-size-3xl);
+  }
+  .page-subtitle {
+    font-size: var(--font-size-sm);
   }
 
   .photo-stack {
