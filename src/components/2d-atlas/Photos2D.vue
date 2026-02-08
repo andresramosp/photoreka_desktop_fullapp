@@ -243,6 +243,7 @@ import { useIsMobile } from "@/composables/useIsMobile.js";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { use2DTextureManager } from "@/composables/2d-viewer/use2DTextureManager.js";
+import { use2DLod } from "@/composables/2d-viewer/use2DLod.js";
 import { useTheme } from "@/composables/useTheme.js";
 
 // Props
@@ -436,31 +437,6 @@ watch(atlasBackground, () => {
   applyPixiBackground();
 });
 
-// Spatial index for hi-res candidate picking (avoid scanning all visible photos)
-const hiResSpatialIndex = shallowRef(new Map());
-const HIRES_SPATIAL_CELL_SIZE = 220; // world units (sprite.x/y space)
-const HIRES_MAX_CELL_RING = 6; // expands search area around viewport center
-
-const buildHiResSpatialIndex = () => {
-  const index = new Map();
-  const cellSize = HIRES_SPATIAL_CELL_SIZE;
-
-  photoSprites.value.forEach((sprite, photoId) => {
-    if (!sprite) return;
-    const cx = Math.floor(sprite.x / cellSize);
-    const cy = Math.floor(sprite.y / cellSize);
-    const key = `${cx},${cy}`;
-    let list = index.get(key);
-    if (!list) {
-      list = [];
-      index.set(key, list);
-    }
-    list.push(photoId);
-  });
-
-  hiResSpatialIndex.value = index;
-};
-
 // Canvas state
 const scale = ref(1);
 const offsetX = ref(0);
@@ -479,6 +455,11 @@ const hadRecentPinch = ref(false);
 // Pinch anchoring: keep the same world point under the pinch midpoint.
 const lastPinchCenter = ref({ x: 0, y: 0 }); // screen (local to pixi container)
 const lastPinchWorld = ref({ x: 0, y: 0 }); // world (photoContainer space)
+
+// Keyboard navigation state
+const keysPressed = ref(new Set());
+const keyboardPanSpeed = 8; // pixels per frame
+let keyboardAnimationId = null;
 
 // UI state
 const showConfigPanel = ref(!isMobile.value);
@@ -597,258 +578,34 @@ const applyZoomAboutScreenPoint = (screenX, screenY, newScaleRaw) => {
   offsetY.value = screenY - (screenY - offsetY.value) * scaleChange;
 };
 
-// Hi-res (originalUrl) swap when zooming close (3D-like behavior)
-const HIRES_ENABLED = ref(true);
-const HIRES_MIN_SCALE = 4.0;
-const HIRES_MIN_SCREEN_SIZE_PX = 360; // sprite size on screen required to trigger upgrade
-const activeHiResPhotoId = ref(null);
-let hiResUpdateScheduled = false;
-let hiResRequestToken = 0;
-
-// Debounce hi-res updates while the user is zooming/panning.
-// Creating an original texture is expensive (network + decode + canvas downscale + GPU upload).
-const HIRES_IDLE_DELAY_MS = 160;
-const HIRES_MIN_UPDATE_INTERVAL_MS = 250;
-let hiResIdleTimer = null;
-
 // Canvas interaction cleanup (listeners must be removed manually)
 let canvasRef = null;
 const canvasListeners = [];
-let lastHiResUpdateAt = 0;
 
-// ─── LOD system ─────────────────────────────────────────────────────────
-// Simple & robust: every visible sprite in the viewport gets upgraded.
-// No queues, no per-frame limits, no center-distance ranking.
-// When LOD_ENABLED is false, ALL sprites use "high" quality unconditionally.
-const LOD_ENABLED = ref(true); // ← AHORA ACTIVADO
-
-// Screen-size thresholds (sprite size in pixels on screen) to decide quality.
-// Calibrados para que el LOD sea perceptible:
-// - scale 0.5 → 40px  → low  (vista general)
-// - scale 1.5 → 120px → mid  (navegación normal)
-// - scale 3.0 → 240px → high (acercamiento)
-const LOD_MID_MIN_SCREEN_PX = 100; // Era 80, ahora requiere más zoom
-const LOD_HIGH_MIN_SCREEN_PX = 160; // Era 150, ahora requiere bastante más zoom
-
-// Debounce: wait for interaction to fully settle before doing LOD work.
-// Longer debounce = smoother interaction, LOD only runs when user stops.
-const LOD_DEBOUNCE_MS = 400;
-let lodTimer = null;
-let lodToken = 0; // monotonic token to discard stale async work
-let lodRunning = false; // prevent overlapping LOD updates
-
-// How many textures to create per batch during LOD update.
-// Small batches yield to the event loop between them, keeping zoom/pan smooth.
-const LOD_BATCH_SIZE = 8;
-
-// Track current LOD level per photo so we know what to upgrade/downgrade.
-const lodCurrentLevel = new Map(); // photoId -> 'low' | 'mid' | 'high'
-
-const getViewportWorldBounds = () => {
-  const w = pixiContainer.value?.clientWidth || 0;
-  const h = pixiContainer.value?.clientHeight || 0;
-  const s = Number(scale.value) || 1;
-  const minX = (0 - offsetX.value) / s;
-  const maxX = (w - offsetX.value) / s;
-  const minY = (0 - offsetY.value) / s;
-  const maxY = (h - offsetY.value) / s;
-  return {
-    minX: Math.min(minX, maxX),
-    maxX: Math.max(minX, maxX),
-    minY: Math.min(minY, maxY),
-    maxY: Math.max(minY, maxY),
-  };
-};
-
-const getApproxScreenSizePx = () => {
-  const s = Number(scale.value) || 1;
-  return Math.max(0, (Number(photoSize.value) || 0) * s);
-};
-
-/**
- * Determine the desired LOD quality for the current zoom level.
- * When LOD is disabled, always returns "high" so every sprite is max quality.
- */
-const getDesiredLodQuality = () => {
-  if (!LOD_ENABLED.value) return "high";
-  const screenSize = getApproxScreenSizePx();
-  if (screenSize >= LOD_HIGH_MIN_SCREEN_PX) return "high";
-  if (screenSize >= LOD_MID_MIN_SCREEN_PX) return "mid";
-  return "low";
-};
-
-/**
- * Get all visible photo IDs that are inside (or near) the viewport.
- * Uses generous padding to preload textures before they enter the visible area,
- * preventing the "quality pop" effect during panning.
- */
-const getViewportPhotoIds = () => {
-  if (!pixiContainer.value || !photoSprites.value?.size) return [];
-
-  const bounds = getViewportWorldBounds();
-
-  // Generous padding: 3× viewport width/height in world-space
-  // This preloads textures ~2-3 screens ahead in each direction, ensuring smooth panning
-  const w = pixiContainer.value?.clientWidth || 0;
-  const h = pixiContainer.value?.clientHeight || 0;
-  const s = Number(scale.value) || 1;
-  const viewportWorldWidth = w / s;
-  const viewportWorldHeight = h / s;
-
-  // Scale padding by zoom level: more padding when zoomed out (covers more photos),
-  // less padding when zoomed in (fewer photos, but each is more expensive to load)
-  const paddingFactor = Math.max(0.3, Math.min(1.0, 2.0 / s)); // 30-100% of viewport size
-  const marginX = viewportWorldWidth * paddingFactor;
-  const marginY = viewportWorldHeight * paddingFactor;
-
-  const minX = bounds.minX - marginX;
-  const maxX = bounds.maxX + marginX;
-  const minY = bounds.minY - marginY;
-  const maxY = bounds.maxY + marginY;
-
-  const ids = [];
-  photoSprites.value.forEach((sprite, photoId) => {
-    if (!sprite || !sprite.visible) return;
-    const x = sprite.x;
-    const y = sprite.y;
-    if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
-      ids.push(photoId);
-    }
-  });
-  return ids;
-};
-
-/**
- * Apply a LOD texture to a single sprite. Returns true on success.
- */
-const applyLodToSprite = async (photoId, quality) => {
-  if (!photoId) return false;
-  // Don't touch the active hi-res (original URL) sprite
-  if (activeHiResPhotoId.value === photoId) return false;
-
-  const sprite = photoSprites.value.get(photoId);
-  if (!sprite) return false;
-
-  const photo = photoById.value.get(photoId);
-  if (!photo) return false;
-
-  const currentLevel = lodCurrentLevel.get(photoId) || "low";
-  if (currentLevel === quality) return false; // already at desired level
-
-  const texture = await textureManager.getOrCreateTexture(photo, {
-    quality,
-    allowDownload: false, // LOD path: NEVER download, only use cached thumbnails
-  });
-  if (!texture) return false;
-
-  sprite.texture = texture;
-  sprite.__lodLevel = quality;
-  applySpriteAspectFromTexture(sprite, texture);
-  lodCurrentLevel.set(photoId, quality);
-
-  // Release textures for levels above what we're setting
-  if (quality === "low") {
-    textureManager.releaseTexture(photoId, "mid");
-    textureManager.releaseTexture(photoId, "high");
-  } else if (quality === "mid") {
-    textureManager.releaseTexture(photoId, "high");
-  }
-
-  return true;
-};
-
-/**
- * Helper: yield to the event loop so the browser can process input events.
- */
-const yieldToEventLoop = () => new Promise((r) => setTimeout(r, 0));
-
-/**
- * Core LOD update: upgrade viewport sprites, downgrade off-screen ones.
- * Processes in small batches to avoid blocking zoom/pan.
- * Never triggers network downloads — only uses already-cached thumbnails.
- */
-const runLodUpdate = async () => {
-  const token = ++lodToken;
-  if (isTransitioning.value) return;
-  if (isLoadingTextures.value) return; // don't compete with initial load
-  if (lodRunning) return; // prevent overlapping runs
-
-  lodRunning = true;
-  try {
-    const desiredQuality = getDesiredLodQuality();
-    const viewportIds = new Set(getViewportPhotoIds());
-
-    // 1) Upgrade viewport sprites to the desired quality (in small batches)
-    const toUpgrade = [];
-    for (const photoId of viewportIds) {
-      if (activeHiResPhotoId.value === photoId) continue;
-      const current = lodCurrentLevel.get(photoId) || "low";
-      if (current !== desiredQuality) {
-        toUpgrade.push(photoId);
-      }
-    }
-
-    for (let i = 0; i < toUpgrade.length; i += LOD_BATCH_SIZE) {
-      if (token !== lodToken) return; // cancelled by new interaction
-      const batch = toUpgrade.slice(i, i + LOD_BATCH_SIZE);
-      await Promise.all(
-        batch.map((id) => applyLodToSprite(id, desiredQuality)),
-      );
-      if (i + LOD_BATCH_SIZE < toUpgrade.length) {
-        await yieldToEventLoop(); // let browser process input
-      }
-    }
-
-    if (token !== lodToken) return;
-
-    // 2) Downgrade off-screen sprites back to "low" to free GPU memory
-    const toDowngrade = [];
-    for (const [photoId, level] of lodCurrentLevel) {
-      if (level === "low") continue;
-      if (viewportIds.has(photoId)) continue;
-      if (activeHiResPhotoId.value === photoId) continue;
-      toDowngrade.push(photoId);
-    }
-
-    for (let i = 0; i < toDowngrade.length; i += LOD_BATCH_SIZE) {
-      if (token !== lodToken) return;
-      const batch = toDowngrade.slice(i, i + LOD_BATCH_SIZE);
-      await Promise.all(batch.map((id) => applyLodToSprite(id, "low")));
-      if (i + LOD_BATCH_SIZE < toDowngrade.length) {
-        await yieldToEventLoop();
-      }
-    }
-  } finally {
-    lodRunning = false;
-  }
-};
-
-/**
- * Cancel any pending or in-progress LOD update.
- * Call this when a new interaction starts to abort stale work immediately.
- */
-const cancelLodUpdate = () => {
-  lodToken++; // invalidates any running async LOD work
-  if (lodTimer) {
-    clearTimeout(lodTimer);
-    lodTimer = null;
-  }
-};
-
-/**
- * Schedule a LOD update after interaction settles.
- * Multiple calls within the debounce window only trigger one update.
- */
-const scheduleLodUpdate = () => {
-  if (lodTimer) {
-    clearTimeout(lodTimer);
-    lodTimer = null;
-  }
-  lodTimer = setTimeout(() => {
-    lodTimer = null;
-    runLodUpdate().catch(() => {});
-  }, LOD_DEBOUNCE_MS);
-};
+// ─── LOD + HiRes system (centralized composable) ────────────────────
+const {
+  lodCurrentLevel,
+  scheduleLodUpdate,
+  cancelLodUpdate,
+  scheduleHiResUpdate,
+  buildHiResSpatialIndex,
+  getMaxSideForQuality,
+  resetState: resetLodState,
+  cleanup: cleanupLod,
+} = use2DLod({
+  pixiContainer,
+  scale,
+  offsetX,
+  offsetY,
+  photoSize,
+  photoSprites,
+  photoById,
+  isTransitioning,
+  isLoadingTextures,
+  textureManager,
+  getPhotoOriginalUrl,
+  useLowPerformance: useLowPerformance.value,
+});
 
 // Photo counts
 const totalPhotosCount = computed(() => photos2D.value.length);
@@ -1038,16 +795,119 @@ const setupInteraction = (app) => {
     canvas.addEventListener(event, handler, options);
     canvasListeners.push([event, handler, options]);
   });
+
+  // Setup keyboard navigation
+  setupKeyboardNavigation();
+};
+
+// Setup keyboard navigation
+const setupKeyboardNavigation = () => {
+  window.addEventListener("keydown", handleKeyDown);
+  window.addEventListener("keyup", handleKeyUp);
+  canvasListeners.push(["keydown", handleKeyDown]);
+  canvasListeners.push(["keyup", handleKeyUp]);
+};
+
+// Keyboard event handlers
+const handleKeyDown = (e) => {
+  const key = e.key.toLowerCase();
+
+  // Check if it's a navigation key
+  if (
+    key === "w" ||
+    key === "a" ||
+    key === "s" ||
+    key === "d" ||
+    key === "arrowup" ||
+    key === "arrowdown" ||
+    key === "arrowleft" ||
+    key === "arrowright"
+  ) {
+    // Prevent default behavior (like scrolling the page)
+    e.preventDefault();
+
+    // Add key to pressed set
+    keysPressed.value.add(key);
+
+    // Start keyboard animation loop if not already running
+    if (!keyboardAnimationId) {
+      keyboardAnimationId = requestAnimationFrame(updateKeyboardPan);
+    }
+  }
+};
+
+const handleKeyUp = (e) => {
+  const key = e.key.toLowerCase();
+  keysPressed.value.delete(key);
+
+  // If no navigation keys are pressed, stop the loop and update LOD
+  if (keysPressed.value.size === 0 && keyboardAnimationId) {
+    cancelAnimationFrame(keyboardAnimationId);
+    keyboardAnimationId = null;
+    scheduleLodUpdate();
+    scheduleHiResUpdate();
+  }
+};
+
+// Update panning based on pressed keys
+const updateKeyboardPan = () => {
+  if (keysPressed.value.size === 0) {
+    keyboardAnimationId = null;
+    return;
+  }
+
+  let dx = 0;
+  let dy = 0;
+
+  // Check which keys are pressed and adjust delta
+  if (keysPressed.value.has("w") || keysPressed.value.has("arrowup")) {
+    dy += keyboardPanSpeed;
+  }
+  if (keysPressed.value.has("s") || keysPressed.value.has("arrowdown")) {
+    dy -= keyboardPanSpeed;
+  }
+  if (keysPressed.value.has("a") || keysPressed.value.has("arrowleft")) {
+    dx += keyboardPanSpeed;
+  }
+  if (keysPressed.value.has("d") || keysPressed.value.has("arrowright")) {
+    dx -= keyboardPanSpeed;
+  }
+
+  // Apply panning
+  if (dx !== 0 || dy !== 0) {
+    offsetX.value += dx;
+    offsetY.value += dy;
+    updateContainerTransform();
+  }
+
+  // Continue loop
+  keyboardAnimationId = requestAnimationFrame(updateKeyboardPan);
 };
 
 // Cleanup canvas interaction
 const cleanupInteraction = () => {
+  // Stop keyboard animation loop
+  if (keyboardAnimationId) {
+    cancelAnimationFrame(keyboardAnimationId);
+    keyboardAnimationId = null;
+  }
+
+  // Remove keyboard listeners from window
+  try {
+    window.removeEventListener("keydown", handleKeyDown);
+    window.removeEventListener("keyup", handleKeyUp);
+  } catch (_) {}
+
   if (!canvasRef) return;
 
   // Remove all listeners
   canvasListeners.forEach(([event, handler, options]) => {
     try {
-      canvasRef.removeEventListener(event, handler, options);
+      if (event === "keydown" || event === "keyup") {
+        window.removeEventListener(event, handler, options);
+      } else {
+        canvasRef.removeEventListener(event, handler, options);
+      }
     } catch (_) {}
   });
 
@@ -1074,7 +934,7 @@ const handleWheel = (e) => {
   updateContainerTransform();
   // LOD update only after wheel interaction settles (debounced)
   scheduleLodUpdate();
-  if (scale.value >= HIRES_MIN_SCALE) scheduleHiResUpdate();
+  scheduleHiResUpdate();
 };
 
 const handleMouseDown = (e) => {
@@ -1265,207 +1125,6 @@ const updateContainerTransform = () => {
 
   // Keep pattern tag size stable on screen.
   updateAllPatternTagsScreenScale();
-};
-
-const getPhotoScreenSizePx = (sprite) => {
-  if (!sprite) return 0;
-  // Container scaling affects on-screen size.
-  return Math.max(sprite.width, sprite.height) * (scale.value || 1);
-};
-
-const pickHiResCandidatePhotoId = () => {
-  if (!pixiContainer.value) return null;
-  if (scale.value < HIRES_MIN_SCALE) return null;
-  if (!photoSprites.value?.size) return null;
-  if (isTransitioning.value) return null;
-
-  const centerX = pixiContainer.value.clientWidth / 2;
-  const centerY = pixiContainer.value.clientHeight / 2;
-
-  // Convert viewport center to world coordinates (sprite.x/y space)
-  const centerWorldX = (centerX - offsetX.value) / (scale.value || 1);
-  const centerWorldY = (centerY - offsetY.value) / (scale.value || 1);
-
-  const index = hiResSpatialIndex.value;
-  if (!index || index.size === 0) {
-    // Best-effort fallback; index should normally exist after load.
-    buildHiResSpatialIndex();
-  }
-
-  const cellSize = HIRES_SPATIAL_CELL_SIZE;
-  const baseCx = Math.floor(centerWorldX / cellSize);
-  const baseCy = Math.floor(centerWorldY / cellSize);
-
-  let bestId = null;
-  let bestDist2 = Infinity;
-
-  // Search nearby cells around the viewport center.
-  for (let r = 0; r <= HIRES_MAX_CELL_RING; r++) {
-    for (let dx = -r; dx <= r; dx++) {
-      for (let dy = -r; dy <= r; dy++) {
-        if (r > 0 && Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
-
-        const key = `${baseCx + dx},${baseCy + dy}`;
-        const ids = hiResSpatialIndex.value.get(key);
-        if (!ids?.length) continue;
-
-        for (const photoId of ids) {
-          const sprite = photoSprites.value.get(photoId);
-          if (!sprite || !sprite.visible) continue;
-          if (!getPhotoOriginalUrl(photoId)) continue;
-
-          const ddx = sprite.x - centerWorldX;
-          const ddy = sprite.y - centerWorldY;
-          const d2 = ddx * ddx + ddy * ddy;
-
-          if (d2 < bestDist2) {
-            bestDist2 = d2;
-            bestId = photoId;
-          }
-        }
-      }
-    }
-  }
-
-  if (!bestId) return null;
-
-  const bestSprite = photoSprites.value.get(bestId);
-  const screenSize = getPhotoScreenSizePx(bestSprite);
-  if (screenSize < HIRES_MIN_SCREEN_SIZE_PX) return null;
-
-  return bestId;
-};
-
-const applySpriteAspectFromTexture = (sprite, texture) => {
-  if (!sprite || !texture) return;
-  const w = texture.width || texture.baseTexture?.width;
-  const h = texture.height || texture.baseTexture?.height;
-  if (!w || !h) return;
-  const aspectRatio = h / w;
-  sprite.width = photoSize.value;
-  sprite.height = photoSize.value * aspectRatio;
-};
-
-const downgradeActiveHiRes = async () => {
-  const currentId = activeHiResPhotoId.value;
-  if (!currentId) return;
-
-  console.log(`⬇️ HiRes degradar: ${currentId} → LOW`);
-
-  const photo = photoById.value.get(currentId);
-  const sprite = photoSprites.value.get(currentId);
-
-  try {
-    if (photo && sprite) {
-      const thumbTexture = await textureManager.getOrCreateTexture(photo, {
-        quality: "thumb",
-      });
-      if (thumbTexture) {
-        sprite.texture = thumbTexture;
-        applySpriteAspectFromTexture(sprite, thumbTexture);
-        sprite.__lodLevel = "low";
-        lodCurrentLevel.set(currentId, "low");
-      }
-    }
-  } finally {
-    // Free hi-res GPU memory
-    textureManager.releaseTexture(currentId, "original");
-    activeHiResPhotoId.value = null;
-  }
-};
-
-const updateHiResTarget = async () => {
-  if (!HIRES_ENABLED.value) {
-    if (activeHiResPhotoId.value) {
-      console.log(
-        `📵 HiRes deshabilitado, degradando ${activeHiResPhotoId.value}`,
-      );
-    }
-    await downgradeActiveHiRes();
-    return;
-  }
-
-  const targetId = pickHiResCandidatePhotoId();
-  if (!targetId) {
-    if (activeHiResPhotoId.value) {
-      console.log(
-        `📥 HiRes sin candidatos cerca, degradando ${activeHiResPhotoId.value}`,
-      );
-    }
-    await downgradeActiveHiRes();
-    return;
-  }
-
-  if (activeHiResPhotoId.value === targetId) {
-    console.log(`🔄 HiRes ya está en ${targetId}`);
-    return;
-  }
-
-  // Switch target: downgrade old first
-  await downgradeActiveHiRes();
-
-  const token = ++hiResRequestToken;
-  const photo = photoById.value.get(targetId);
-  const sprite = photoSprites.value.get(targetId);
-  if (!photo || !sprite) return;
-
-  const originalUrl = getPhotoOriginalUrl(targetId);
-  if (!originalUrl) return;
-
-  const originalTexture = await textureManager.getOrCreateTexture(photo, {
-    quality: "original",
-    urlOverride: originalUrl,
-  });
-
-  // If another request superseded this one, abort.
-  if (token !== hiResRequestToken) return;
-
-  if (originalTexture) {
-    sprite.texture = originalTexture;
-    applySpriteAspectFromTexture(sprite, originalTexture);
-    activeHiResPhotoId.value = targetId;
-    console.log(`🖼️ HiRes cargado: foto ${targetId} (original URL)`);
-
-    // Ensure we don't keep additional mid/high LOD textures for the same photo.
-    lodCurrentLevel.set(targetId, "original");
-    try {
-      textureManager.releaseTexture(targetId, "high");
-      textureManager.releaseTexture(targetId, "mid");
-    } catch (_) {}
-    sprite.__lodLevel = "original";
-  }
-};
-
-const scheduleHiResUpdate = () => {
-  // Fast path: if we're not zoomed in enough, ensure we drop back to thumb.
-  if (scale.value < HIRES_MIN_SCALE) {
-    // Don't await inside pointer handlers.
-    downgradeActiveHiRes().catch(() => {});
-    return;
-  }
-
-  if (hiResIdleTimer) {
-    clearTimeout(hiResIdleTimer);
-    hiResIdleTimer = null;
-  }
-
-  hiResIdleTimer = setTimeout(() => {
-    // Throttle: avoid doing heavy work too frequently.
-    const now = performance.now();
-    if (now - lastHiResUpdateAt < HIRES_MIN_UPDATE_INTERVAL_MS) return;
-    lastHiResUpdateAt = now;
-
-    if (hiResUpdateScheduled) return;
-    hiResUpdateScheduled = true;
-    requestAnimationFrame(async () => {
-      hiResUpdateScheduled = false;
-      try {
-        await updateHiResTarget();
-      } catch (_) {
-        // Non-fatal: keep viewer responsive
-      }
-    });
-  }, HIRES_IDLE_DELAY_MS);
 };
 
 // Hover debounce timer
@@ -1700,8 +1359,7 @@ const loadPhotosToPixi = async () => {
   }
   photoContainer.value.removeChildren();
   photoSprites.value.clear();
-  lodCurrentLevel.clear();
-  hiResSpatialIndex.value = new Map();
+  resetLodState();
 
   // Recreate the tag layer, since removeChildren() wipes it.
   ensurePatternTagsLayer();
@@ -1770,6 +1428,7 @@ const loadPhotosToPixi = async () => {
         // Load actual texture (cached via IndexedDB + in-memory)
         const texture = await textureManager.getOrCreateTexture(photo, {
           quality: "thumb",
+          maxSide: getMaxSideForQuality("low"),
         });
         if (texture) {
           sprite.texture = texture;
@@ -2146,24 +1805,8 @@ const stopAnimationLoop = () => {
 
 // Cleanup
 const cleanup = () => {
-  // Cancel pending timers
-  if (hiResIdleTimer) {
-    clearTimeout(hiResIdleTimer);
-    hiResIdleTimer = null;
-  }
-
-  if (lodTimer) {
-    clearTimeout(lodTimer);
-    lodTimer = null;
-  }
-
-  lodCurrentLevel.clear();
-
-  // Ensure we free any hi-res texture currently in use.
-  try {
-    textureManager.releaseTexture(activeHiResPhotoId.value, "original");
-  } catch (_) {}
-  activeHiResPhotoId.value = null;
+  // Release LOD + HiRes state (timers, textures, spatial index)
+  cleanupLod();
 
   // clearPatternTag();
   // patternTagsContainer.value = null;
@@ -2192,7 +1835,6 @@ const cleanup = () => {
     pixiApp.value = null;
   }
   photoContainer.value = null;
-  hiResSpatialIndex.value = new Map();
   textureManager.reset({ destroyTextures: true });
 };
 
@@ -2295,11 +1937,6 @@ watch(gridSnapToGrid, () => {
   }
   ensurePatternTag();
   scheduleHeatmapUpdate();
-});
-
-// When LOD_ENABLED changes, immediately re-evaluate all sprites.
-watch(LOD_ENABLED, () => {
-  scheduleLodUpdate();
 });
 
 watch(

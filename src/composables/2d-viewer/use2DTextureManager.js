@@ -12,32 +12,6 @@ import { ref } from "vue";
 import * as PIXI from "pixi.js";
 import { useIndexedDBCache } from "@/composables/useIndexedDBCache.js";
 
-// ===== Texture downscale configuration (GPU/RAM protection) =====
-// Pixi uploads the full source dimensions to GPU. Downscaling aggressively for the baseline LOD
-// avoids OOM when rendering thousands of sprites.
-//
-// LOD levels:
-// - low: baseline for all photos (always created) -> very small
-// - mid/high: only for a limited number of "closest" photos (scheduled by the viewer)
-// - original: special-case override used by the existing "zoom very close" logic
-const CONFIG_2D_TEXTURE = {
-  // Baseline (all sprites). Keep this small to scale to 5k+ photos.
-  lowMaxSideLowPerf: 96,
-  lowMaxSideDesktop: 128,
-
-  // Mid quality for near photos.
-  midMaxSideLowPerf: 256,
-  midMaxSideDesktop: 384,
-
-  // High quality for very near photos (still not original).
-  highMaxSideLowPerf: 384,
-  highMaxSideDesktop: 512,
-
-  // Original override (single active photo). Still capped.
-  originalMaxSideLowPerf: 768,
-  originalMaxSideDesktop: 1024,
-};
-
 // ===== Retry configuration (similar to 3D) =====
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY = 1000;
@@ -46,57 +20,6 @@ const MAX_RETRY_DELAY = 10000;
 
 // Set true temporarily if you want verbose cache logs
 const DEBUG_2D_CACHE = false;
-
-const getDeviceMemoryGb = () => {
-  try {
-    const dm = Number(globalThis?.navigator?.deviceMemory);
-    return Number.isFinite(dm) && dm > 0 ? dm : null;
-  } catch (_) {
-    return null;
-  }
-};
-
-// Scale texture caps based on device RAM hint.
-// This is independent of useLowPerformance and keeps UX identical (same loading flow).
-const getMaxSideCapsByDeviceMemory = () => {
-  const dm = getDeviceMemoryGb();
-  if (dm === null) return null;
-
-  // Conservative defaults for low-memory devices.
-  // Goal: avoid GPU OOM while preserving acceptable quality.
-  // NOTE: We cap LODs too. The baseline low LOD is already small, but we still tighten
-  // mid/high/original on very low-memory devices.
-  if (dm <= 1) {
-    return {
-      lowMaxSide: 80,
-      midMaxSide: 192,
-      highMaxSide: 256,
-      originalMaxSide: 640,
-    };
-  }
-  if (dm <= 2) {
-    return {
-      lowMaxSide: 96,
-      midMaxSide: 256,
-      highMaxSide: 384,
-      originalMaxSide: 768,
-    };
-  }
-  if (dm <= 4) {
-    return {
-      lowMaxSide: 128,
-      midMaxSide: 320,
-      highMaxSide: 512,
-      originalMaxSide: 896,
-    };
-  }
-  return {
-    lowMaxSide: null,
-    midMaxSide: null,
-    highMaxSide: null,
-    originalMaxSide: null,
-  };
-};
 
 export function use2DTextureManager(
   useLowPerformance = false,
@@ -200,42 +123,6 @@ export function use2DTextureManager(
       imageBlobProp: "__imageBlob",
       retryCountProp: "__retryCount",
     };
-  };
-
-  const getMaxSideForQuality = (qualityRaw) => {
-    const q = normalizeQuality(qualityRaw);
-    const dmCaps = getMaxSideCapsByDeviceMemory();
-
-    const pick = (base, dmCap) => {
-      if (dmCaps && Number.isFinite(dmCap) && dmCap > 0) {
-        return Math.min(base, dmCap);
-      }
-      return base;
-    };
-
-    if (q === "original") {
-      const base = useLowPerformance
-        ? CONFIG_2D_TEXTURE.originalMaxSideLowPerf
-        : CONFIG_2D_TEXTURE.originalMaxSideDesktop;
-      return pick(base, dmCaps?.originalMaxSide);
-    }
-    if (q === "high") {
-      const base = useLowPerformance
-        ? CONFIG_2D_TEXTURE.highMaxSideLowPerf
-        : CONFIG_2D_TEXTURE.highMaxSideDesktop;
-      return pick(base, dmCaps?.highMaxSide);
-    }
-    if (q === "mid") {
-      const base = useLowPerformance
-        ? CONFIG_2D_TEXTURE.midMaxSideLowPerf
-        : CONFIG_2D_TEXTURE.midMaxSideDesktop;
-      return pick(base, dmCaps?.midMaxSide);
-    }
-    // low
-    const base = useLowPerformance
-      ? CONFIG_2D_TEXTURE.lowMaxSideLowPerf
-      : CONFIG_2D_TEXTURE.lowMaxSideDesktop;
-    return pick(base, dmCaps?.lowMaxSide);
   };
 
   const updateLoadingProgress = (loaded, total) => {
@@ -492,7 +379,12 @@ export function use2DTextureManager(
 
   const getOrCreateTexture = async (
     photoObj,
-    { quality = "thumb", urlOverride = null, allowDownload = true } = {},
+    {
+      quality = "thumb",
+      urlOverride = null,
+      allowDownload = true,
+      maxSide = null,
+    } = {},
   ) => {
     if (!photoObj?.id) return null;
 
@@ -567,9 +459,10 @@ export function use2DTextureManager(
 
     if (!imageElement) return null;
 
-    // 3) Downscale to the appropriate size for this LOD level.
-    const maxSide = getMaxSideForQuality(q);
-    const sourceForTexture = downscaleSource(imageElement, maxSide);
+    // 3) Downscale to the caller-specified size (controlled by LOD composable).
+    const sourceForTexture = maxSide
+      ? downscaleSource(imageElement, maxSide)
+      : imageElement;
 
     const texture = PIXI.Texture.from(sourceForTexture);
     textureCache.set(key, texture);
