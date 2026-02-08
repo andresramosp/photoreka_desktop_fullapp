@@ -50,6 +50,7 @@ export function use2DTextureManager(
     initDB,
     bulkLoadFromCache,
     bulkCacheImages,
+    getCachedImage,
     getCacheStats,
     urlToBlob,
   } = useIndexedDBCache();
@@ -222,11 +223,9 @@ export function use2DTextureManager(
 
     photoObj[downloadingFlag] = true;
 
-    // Diagnostic: log who triggered this download
-    console.warn(
-      `🌐 [DOWNLOAD] Iniciando descarga: ${photoObj.id} [${q}]`,
-      new Error("stack").stack?.split("\n").slice(1, 4).join(" ← "),
-    );
+    if (DEBUG_2D_CACHE) {
+      console.log(`🌐 [DOWNLOAD] Iniciando descarga: ${photoObj.id} [${q}]`);
+    }
 
     const imageUrl = urlOverride || getImageUrlForPhoto(photoObj, q);
     if (!imageUrl) {
@@ -333,6 +332,12 @@ export function use2DTextureManager(
       if (cachedBlobs.size > 0) {
         cachedPhotoIds.value = new Set(cachedBlobs.keys());
 
+        // Build a fast lookup map to avoid O(n²) photos.find() per blob
+        const photoLookup = new Map();
+        for (const p of photos) {
+          if (p?.id) photoLookup.set(p.id, p);
+        }
+
         for (const [photoId, blob] of cachedBlobs.entries()) {
           try {
             const imageUrl = URL.createObjectURL(blob);
@@ -351,7 +356,11 @@ export function use2DTextureManager(
 
             downloadedImagesCache.set(cacheKey(photoId, "low"), img);
 
-            const photo = photos.find((p) => p.id === photoId);
+            // Release the blob immediately to reduce peak memory.
+            // With 5000 photos, blobs alone can be 100–300 MB.
+            cachedBlobs.delete(photoId);
+
+            const photo = photoLookup.get(photoId);
             if (photo) {
               photo.__imageDownloaded = true;
               photo.__downloadError = false;
@@ -361,6 +370,7 @@ export function use2DTextureManager(
             }
           } catch (error) {
             cachedPhotoIds.value.delete(photoId);
+            cachedBlobs.delete(photoId);
           }
         }
       }
@@ -434,23 +444,28 @@ export function use2DTextureManager(
         downloadedImagesCache.get(thumbKey) ||
         photoObj[thumbFlags.imageElementProp];
 
-      // If not in memory yet and downloads allowed, download the thumbnail once.
+      // If not in memory (freed after initial load to save RAM), try IndexedDB
+      // before falling back to network. IndexedDB already has the blob from
+      // the initial session cache — no need to re-download from the server.
       if (!imageElement) {
-        if (!allowDownload) return null; // don't download during LOD updates
+        if (!allowDownload) return null;
+        try {
+          const cachedBlob = await getCachedImage(photoObj.id);
+          if (cachedBlob) {
+            imageElement = await blobToImageElement(cachedBlob);
+            // Don't persist in downloadedImagesCache — the caller (LOD)
+            // will call freeSourceImage() after creating the texture.
+          }
+        } catch (_) {
+          // IndexedDB read failed; fall through to network
+        }
+      }
+
+      // Last resort: download from network (first visit, or IDB miss)
+      if (!imageElement) {
         if (!photoObj[thumbFlags.downloadedFlag]) {
           await downloadImageOnly(photoObj, 0, "low", {});
         }
-        imageElement =
-          downloadedImagesCache.get(thumbKey) ||
-          photoObj[thumbFlags.imageElementProp];
-      }
-
-      // If data was freed (after previous texture creation), re-download thumb.
-      if (!imageElement && photoObj[thumbFlags.downloadedFlag]) {
-        if (!allowDownload) return null;
-        photoObj[thumbFlags.downloadedFlag] = false;
-        photoObj[thumbFlags.downloadErrorFlag] = false;
-        await downloadImageOnly(photoObj, 0, "low", {});
         imageElement =
           downloadedImagesCache.get(thumbKey) ||
           photoObj[thumbFlags.imageElementProp];
@@ -569,8 +584,9 @@ export function use2DTextureManager(
         // ignore cache failure
       }
 
-      // ---- Free blob references from photo objects after caching ----
+      // ---- Free blob + image element references from photo objects after caching ----
       // Each Blob is typically 15-60 KB; for 5k photos this adds 75-300 MB of JS heap.
+      // Each decoded HTMLImageElement can be 120 KB+; another 600 MB with 5k photos.
       for (const photo of photos || []) {
         if (!photo) continue;
         if (photo.__imageBlob) photo.__imageBlob = null;
@@ -614,6 +630,82 @@ export function use2DTextureManager(
     };
   };
 
+  /**
+   * Free the source image for a single photo from in-memory cache.
+   * Used by LOD after creating a texture from a re-downloaded thumbnail,
+   * so it doesn't accumulate HTMLImageElements as the user pans.
+   */
+  const freeSourceImage = (photoId) => {
+    if (!photoId) return;
+    // Remove all quality variants of this photo's source image
+    for (const q of ["low", "mid", "high", "original"]) {
+      downloadedImagesCache.delete(cacheKey(photoId, q));
+    }
+  };
+
+  /**
+   * Free all source image elements from memory.
+   * Call after initial texture load + IndexedDB caching to reclaim ~600 MB+
+   * with 5000 photos. Textures are already in textureCache and on sprites;
+   * the source HTMLImageElements are no longer needed.
+   *
+   * After this call, LOD upgrades that require source images will gracefully
+   * return null (the sprite keeps its current texture). Hi-res still works
+   * because it downloads originals on-demand.
+   */
+  const freeSourceImageCache = (photos) => {
+    // Clear the main in-memory image cache (5000 decoded bitmaps ≈ 600 MB)
+    downloadedImagesCache.clear();
+
+    // Remove duplicate references hanging off photo objects
+    for (const photo of photos || []) {
+      if (!photo) continue;
+      photo.__imageElement = null;
+      photo.__midImageElement = null;
+      photo.__highImageElement = null;
+      photo.__originalImageElement = null;
+    }
+
+    if (DEBUG_2D_CACHE) {
+      console.log(
+        `🧹 [2D] freeSourceImageCache: cleared ${photos?.length ?? 0} source images`,
+      );
+    }
+  };
+
+  /**
+   * Free Canvas elements used as texture sources after GPU upload.
+   * Each downscaleSource() call creates a Canvas that Pixi keeps as the
+   * BaseTexture/TextureSource backing store. With 5000 photos at 96×72,
+   * that's ~135 MB of canvas memory that's redundant once uploaded to GPU.
+   *
+   * Call this AFTER at least one render frame so Pixi has uploaded all
+   * textures to GPU. After this call, GPU context loss recovery might
+   * produce blank textures — an acceptable trade-off vs. OOM crash.
+   */
+  const freeTextureCanvasSources = () => {
+    let freed = 0;
+    for (const texture of textureCache.values()) {
+      try {
+        // Pixi v8: texture.source.resource is the canvas/image/etc.
+        const src =
+          texture.source?.resource?.source ??
+          texture.source?.resource ??
+          texture.baseTexture?.resource?.source;
+        if (src instanceof HTMLCanvasElement) {
+          src.width = 0;
+          src.height = 0;
+          freed++;
+        }
+      } catch (_) {}
+    }
+    if (DEBUG_2D_CACHE || freed > 0) {
+      console.log(
+        `🧹 [2D] freeTextureCanvasSources: freed ${freed} canvas backing stores`,
+      );
+    }
+  };
+
   const releaseTexture = (photoId, quality = "original") => {
     if (!photoId) return;
     const q = normalizeQuality(quality);
@@ -653,6 +745,9 @@ export function use2DTextureManager(
     loadImagesFromCache,
     getOrCreateTexture,
     bulkCacheDownloadedImages,
+    freeSourceImage,
+    freeSourceImageCache,
+    freeTextureCanvasSources,
     updateLoadingProgress,
     releaseTexture,
     reset,

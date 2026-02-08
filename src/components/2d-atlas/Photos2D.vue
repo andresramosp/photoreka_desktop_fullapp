@@ -1466,6 +1466,19 @@ const loadPhotosToPixi = async () => {
     // Non-fatal
   }
 
+  // ── CRITICAL MEMORY FIX ──────────────────────────────────────────────
+  // Free the decoded HTMLImageElements held in downloadedImagesCache.
+  // With 5000 photos, these consume ~600 MB+ of JS heap memory and are no
+  // longer needed: Pixi textures are already created and cached in textureCache.
+  // Without this, browsers kill the tab on devices with < 4 GB RAM.
+  textureManager.freeSourceImageCache(photosToLoad);
+
+  // After the next render frame, Pixi has uploaded all textures to GPU.
+  // Free the intermediate Canvas elements used by downscaleSource() (~135 MB).
+  requestAnimationFrame(() => {
+    textureManager.freeTextureCanvasSources();
+  });
+
   // Apply initial filter visibility
   updateSpriteVisibility();
 

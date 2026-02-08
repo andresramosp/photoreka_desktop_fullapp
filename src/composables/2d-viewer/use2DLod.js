@@ -36,19 +36,19 @@ const CONFIG_2D_TEXTURE = {
   lowMaxSideLowPerf: 96,
   lowMaxSideDesktop: 96,
 
-  midMaxSideLowPerf: 96,
-  midMaxSideDesktop: 96,
-  highMaxSideLowPerf: 96,
-  highMaxSideDesktop: 96,
-  originalMaxSideLowPerf: 96,
-  originalMaxSideDesktop: 96,
+  // midMaxSideLowPerf: 96,
+  // midMaxSideDesktop: 96,
+  // highMaxSideLowPerf: 96,
+  // highMaxSideDesktop: 96,
+  // originalMaxSideLowPerf: 96,
+  // originalMaxSideDesktop: 96,
 
-  // midMaxSideLowPerf: 256,
-  // midMaxSideDesktop: 384,
-  // highMaxSideLowPerf: 384,
-  // highMaxSideDesktop: 512,
-  // originalMaxSideLowPerf: 768,
-  // originalMaxSideDesktop: 1024,
+  midMaxSideLowPerf: 256,
+  midMaxSideDesktop: 384,
+  highMaxSideLowPerf: 384,
+  highMaxSideDesktop: 512,
+  originalMaxSideLowPerf: 768,
+  originalMaxSideDesktop: 1024,
 };
 
 const getDeviceMemoryGb = () => {
@@ -299,7 +299,10 @@ export function use2DLod({
 
     const texture = await textureManager.getOrCreateTexture(photo, {
       quality,
-      allowDownload: false, // LOD path: NEVER download, only use cached thumbnails
+      // After initial load, source images are freed from RAM to avoid OOM.
+      // Allow re-downloading the thumbnail for the small set of viewport photos
+      // that need LOD upgrades (typically 20–100 at mid/high zoom levels).
+      allowDownload: true,
       maxSide: getMaxSideForQuality(quality),
     });
     if (!texture) return false;
@@ -308,6 +311,11 @@ export function use2DLod({
     sprite.__lodLevel = quality;
     applySpriteAspectFromTexture(sprite, texture);
     lodCurrentLevel.set(photoId, quality);
+
+    // After the texture is created and assigned, free the re-downloaded source
+    // image from RAM so it doesn't accumulate as the user pans around.
+    // The texture is already in textureCache; the source is no longer needed.
+    textureManager.freeSourceImage(photoId);
 
     // Release textures for levels above what we're setting
     if (quality === "low") {
@@ -323,7 +331,8 @@ export function use2DLod({
   /**
    * Core LOD update: upgrade viewport sprites, downgrade off-screen ones.
    * Processes in small batches to avoid blocking zoom/pan.
-   * Never triggers network downloads — only uses already-cached thumbnails.
+   * May re-download thumbnails for viewport photos whose source images
+   * were freed after initial load (to prevent OOM with 5000+ photos).
    */
   const runLodUpdate = async () => {
     const token = ++lodToken;
