@@ -15,7 +15,7 @@
 import { ref, shallowRef, watch } from "vue";
 
 // ─── LOD constants ──────────────────────────────────────────────────────
-const LOD_MID_MIN_SCREEN_PX = 45;
+const LOD_MID_MIN_SCREEN_PX = 40;
 const LOD_HIGH_MIN_SCREEN_PX = 120;
 const LOD_DEBOUNCE_MS = 400;
 const LOD_BATCH_SIZE = 12;
@@ -34,7 +34,7 @@ const HIRES_MAX_CELL_RING = 6;
 // avoids OOM when rendering thousands of sprites.
 const CONFIG_2D_TEXTURE = {
   lowMaxSideLowPerf: 96,
-  lowMaxSideDesktop: 96,
+  lowMaxSideDesktop: 128,
 
   // midMaxSideLowPerf: 96,
   // midMaxSideDesktop: 96,
