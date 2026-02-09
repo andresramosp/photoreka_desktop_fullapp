@@ -52,6 +52,16 @@ export default class ReadOnlyMiddleware {
       return next()
     }
 
+    // Block DELETE requests for demo users - they should never be allowed
+    if (ctx.request.method() === 'DELETE') {
+      return ctx.response.forbidden({
+        message:
+          'This is a demo account with read-only access. You cannot perform this operation. Please create your own account to access full functionality.',
+        code: 'READ_ONLY_ACCESS',
+        isDemoMode: true,
+      })
+    }
+
     // Check if the request method is read-only
     if (this.readOnlyMethods.includes(ctx.request.method())) {
       // Read-only methods are always allowed
