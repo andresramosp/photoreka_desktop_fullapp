@@ -207,7 +207,7 @@
     <PhotoToolSelector
       :show="showToolSelector"
       :photo-count="selectedPhotoIds.length"
-      :tools="availableTools"
+      current-tool="3d-atlas"
       :is-processing="isProcessingTool"
       @tool-selected="handleToolSelected"
       @close="closeToolSelector"
@@ -292,7 +292,6 @@ const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
 const {
   isProcessing: isProcessingTool,
   showToolSelector,
-  availableTools,
   takeToTool,
   openToolSelector,
   closeToolSelector,

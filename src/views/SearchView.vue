@@ -117,7 +117,6 @@
     <PhotoToolSelector
       :show="showToolSelector"
       :photo-count="activePhotoIdsForModal.length"
-      :tools="availableTools"
       :is-processing="isProcessingTool"
       @tool-selected="handleToolSelected"
       @close="closeToolSelector"
@@ -193,7 +192,6 @@ const { computePhotoStars, shouldShowLowRelevanceIcon } = usePhotoScored();
 const {
   isProcessing: isProcessingTool,
   showToolSelector,
-  availableTools,
   takeToTool,
   openToolSelector,
   closeToolSelector,

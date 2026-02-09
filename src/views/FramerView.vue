@@ -983,7 +983,10 @@ onMounted(async () => {
   }
 
   // Check for photos to add from other views (via sessionStorage)
-  processPhotosFromSessionStorage();
+  // Only process in desktop view - mobile component will handle it
+  if (!isMobileView.value) {
+    processPhotosFromSessionStorage();
+  }
 
   // Load photos from query params if present (e.g., ?source=lightroom&ids=123,456)
   const photoIdsFromQuery = getPhotoIdsFromQuery({
@@ -1015,7 +1018,10 @@ watch(
   () => route.fullPath,
   () => {
     // Check sessionStorage whenever route changes
-    processPhotosFromSessionStorage();
+    // Only process in desktop view - mobile component will handle it
+    if (!isMobileView.value) {
+      processPhotosFromSessionStorage();
+    }
   },
 );
 

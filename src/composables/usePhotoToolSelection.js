@@ -4,7 +4,7 @@ import { useMessage } from "naive-ui";
 import { useCanvasStore } from "@/stores/canvas.js";
 import { usePhotosStore } from "@/stores/photos.js";
 
-export function usePhotoToolSelection(customTools = null) {
+export function usePhotoToolSelection() {
   const router = useRouter();
   const message = useMessage();
   const canvasStore = useCanvasStore();
@@ -12,34 +12,6 @@ export function usePhotoToolSelection(customTools = null) {
 
   const isProcessing = ref(false);
   const showToolSelector = ref(false);
-
-  // Default available tools for photo selection
-  const defaultTools = [
-    {
-      id: "canvas",
-      name: "Canvas",
-      description: "Create layouts and arrange photos",
-      icon: "Workspace",
-      route: "/canvas",
-    },
-    {
-      id: "framer",
-      name: "Framer",
-      description: "Add frames and borders to photos",
-      icon: "ImageFrame",
-      route: "/framer",
-    },
-    {
-      id: "3d-atlas",
-      name: "3D Atlas",
-      description: "Navigate to photos in 3D space",
-      icon: "CubeOutline",
-      route: "/atlas",
-    },
-  ];
-
-  // Use custom tools if provided, otherwise use default tools
-  const availableTools = customTools || defaultTools;
 
   /**
    * Takes selected photos to Canvas
@@ -75,7 +47,7 @@ export function usePhotoToolSelection(customTools = null) {
       message.success(
         `Added ${photosToAdd.length} photo${
           photosToAdd.length > 1 ? "s" : ""
-        } to Canvas`
+        } to Canvas`,
       );
     } catch (error) {
       console.error("Error taking photos to canvas:", error);
@@ -107,11 +79,7 @@ export function usePhotoToolSelection(customTools = null) {
         return;
       }
 
-      // Clear selections before navigating
-      clearSelections();
-
       // Store photos in sessionStorage to be picked up by FramerView
-      // This is a temporary solution until we have a proper framer store
       const photosData = photosToAdd.map((photo) => ({
         id: photo.id,
         thumbnailUrl: photo.thumbnailUrl,
@@ -125,8 +93,15 @@ export function usePhotoToolSelection(customTools = null) {
 
       sessionStorage.setItem(
         "framer_photos_to_add",
-        JSON.stringify(photosData)
+        JSON.stringify(photosData),
       );
+
+      console.log(
+        `📦 Stored ${photosData.length} photos in sessionStorage for Framer`,
+      );
+
+      // Clear selections before navigating
+      clearSelections();
 
       // Navigate to framer
       await router.push("/framer");
@@ -177,14 +152,14 @@ export function usePhotoToolSelection(customTools = null) {
           window.dispatchEvent(
             new CustomEvent("atlas:flyToPhoto", {
               detail: { photoId: photoIds[0] },
-            })
+            }),
           );
           console.log("🚀 Flying to single photo:", photoIds[0]);
         } else {
           window.dispatchEvent(
             new CustomEvent("atlas:startPhotoTour", {
               detail: { photoIds: photoIds },
-            })
+            }),
           );
           console.log("🎬 Starting photo tour:", photoIds);
         }
@@ -246,7 +221,6 @@ export function usePhotoToolSelection(customTools = null) {
     // State
     isProcessing,
     showToolSelector,
-    availableTools,
 
     // Methods
     takeToCanvas,

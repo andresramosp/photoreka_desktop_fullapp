@@ -285,7 +285,7 @@
     <PhotoToolSelector
       :show="showToolSelector"
       :photo-count="selectedPhotosCount"
-      :tools="availableTools"
+      current-tool="canvas"
       :is-processing="isProcessingTool"
       @tool-selected="handleToolSelected"
       @close="closeToolSelector"
@@ -772,33 +772,14 @@ const {
 // Photo query params handling (e.g., ?source=lightroom&ids=123,456)
 const { getPhotoIdsFromQuery } = usePhotoQueryParams();
 
-// Photo tool selection (only Framer available from Canvas)
-const canvasTools = [
-  {
-    id: "framer",
-    name: "Framer",
-    description: "Add frames and borders to photos",
-    icon: "ImageFrame",
-    route: "/framer",
-  },
-  {
-    id: "3d-atlas",
-    name: "3D Atlas",
-    description: "Navigate to photo in 3D space",
-    icon: "CubeOutline",
-    route: "/atlas",
-    singlePhotoOnly: false, // This tool only works with a single photo
-  },
-];
-
+// Photo tool selection
 const {
   isProcessing: isProcessingTool,
   showToolSelector,
-  availableTools,
   takeToTool,
   openToolSelector,
   closeToolSelector,
-} = usePhotoToolSelection(canvasTools);
+} = usePhotoToolSelection();
 
 // Playground mode detection
 const isPlayground = computed(() => route.meta?.playground === true);

@@ -427,7 +427,6 @@
     <PhotoToolSelector
       :show="showToolSelector"
       :photo-count="localSelectedPhotoIds.length"
-      :tools="availableTools"
       :is-processing="isProcessingTool"
       @tool-selected="handleToolSelected"
       @close="closeToolSelector"
@@ -510,7 +509,6 @@ const { getPhotoIdsFromQuery } = usePhotoQueryParams();
 const {
   isProcessing: isProcessingTool,
   showToolSelector,
-  availableTools,
   takeToTool,
   openToolSelector,
   closeToolSelector,

@@ -249,7 +249,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
+import { useRoute } from "vue-router";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useMessage } from "naive-ui";
 import PhotoCard from "@/components/photoCards/PhotoCard.vue";
@@ -287,6 +288,7 @@ import {
 } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
 
+const route = useRoute();
 const photosStore = usePhotosStore();
 const message = useMessage();
 const { downloadFramedPhoto, downloadFramedPhotosZip, isDownloading } =
@@ -772,12 +774,100 @@ const onImageError = () => {
   message.error("Failed to load image");
 };
 
+// Function to process photos from sessionStorage
+const processPhotosFromSessionStorage = () => {
+  console.log("🔍 Checking sessionStorage for photos to add...");
+  const photosToAddData = sessionStorage.getItem("framer_photos_to_add");
+
+  if (photosToAddData) {
+    console.log("📦 Found photos in sessionStorage");
+    try {
+      const photosData = JSON.parse(photosToAddData);
+      if (Array.isArray(photosData) && photosData.length > 0) {
+        console.log(
+          `📸 Processing ${photosData.length} photos from sessionStorage`,
+        );
+
+        // Convert stored data back to photo objects
+        const photoObjects = photosData
+          .map((data) => data.photoObject)
+          .filter(Boolean);
+
+        if (photoObjects.length > 0) {
+          // Add new photos to existing ones (accumulate instead of replace)
+          selectedPhotos.value.push(...photoObjects);
+
+          // Add photo IDs to selected set
+          photoObjects.forEach((photo) => {
+            selectedPhotoIds.value.add(photo.id);
+          });
+
+          // Auto-select first photo if none selected
+          if (!currentPhoto.value) {
+            currentPhoto.value = photoObjects[0];
+          }
+
+          // Auto-select first frame if none selected
+          if (!selectedFrame.value) {
+            selectedFrame.value = allFrames.value[0];
+          }
+
+          console.log(
+            `✅ Successfully added ${photoObjects.length} photos to Framer (Mobile)`,
+          );
+
+          message.success(
+            `Added ${photoObjects.length} photo${
+              photoObjects.length > 1 ? "s" : ""
+            } to Framer`,
+          );
+        }
+      }
+
+      // Clear the sessionStorage after processing
+      sessionStorage.removeItem("framer_photos_to_add");
+      console.log("🧹 Cleared sessionStorage");
+    } catch (error) {
+      console.error("❌ Error processing photos from sessionStorage:", error);
+      sessionStorage.removeItem("framer_photos_to_add");
+    }
+  } else {
+    console.log("ℹ️ No photos found in sessionStorage");
+  }
+};
+
+// Watch for route changes to detect when coming back to framer with new photos
+// Only process if we're already mounted (avoid double processing on initial mount)
+let hasMounted = false;
+
 onMounted(async () => {
+  console.log("📱 FramerViewMobile onMounted");
+
   // Only load photos from store in authenticated mode
   if (!props.playgroundMode && photosStore.photos?.length === 0) {
     await photosStore.getOrFetch(false);
   }
+
+  // Check for photos to add from other views (via sessionStorage)
+  // Use small delay to ensure everything is ready
+  setTimeout(() => {
+    processPhotosFromSessionStorage();
+    hasMounted = true; // Mark as mounted after processing
+  }, 50);
 });
+
+watch(
+  () => route.fullPath,
+  () => {
+    // Only process on route changes AFTER initial mount
+    if (hasMounted) {
+      console.log("🔄 Route changed, checking for new photos...");
+      setTimeout(() => {
+        processPhotosFromSessionStorage();
+      }, 50);
+    }
+  },
+);
 </script>
 
 <style scoped>

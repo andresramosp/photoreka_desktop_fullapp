@@ -16,7 +16,7 @@
 
       <div class="tools-grid">
         <div
-          v-for="tool in tools"
+          v-for="tool in availableTools"
           :key="tool.id"
           class="tool-option"
           :class="{
@@ -27,9 +27,7 @@
         >
           <div class="tool-icon">
             <n-icon :size="32">
-              <Workspace v-if="tool.icon === 'Workspace'" />
-              <SquareOutline v-else-if="tool.icon === 'ImageFrame'" />
-              <CubeOutline v-else-if="tool.icon === 'CubeOutline'" />
+              <component :is="getIconComponent(tool.icon)" />
             </n-icon>
           </div>
           <div class="tool-info">
@@ -65,10 +63,10 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, computed, h } from "vue";
 import { NModal, NButton, NIcon, NSpin } from "naive-ui";
-import { Workspace } from "@vicons/carbon";
-import { SquareOutline, CubeOutline } from "@vicons/ionicons5";
+import { useToolsAvailability } from "@/composables/useToolsAvailability.js";
+import { getIconComponent } from "@/config/toolsConfig";
 
 const props = defineProps({
   show: {
@@ -81,7 +79,11 @@ const props = defineProps({
   },
   tools: {
     type: Array,
-    default: () => [],
+    default: null, // Optional - if not provided, uses device-aware tools
+  },
+  currentTool: {
+    type: String,
+    default: null, // Current tool context (e.g., 'canvas') - will be excluded from list
   },
   isProcessing: {
     type: Boolean,
@@ -92,6 +94,35 @@ const props = defineProps({
 const emit = defineEmits(["close", "tool-selected"]);
 
 const selectedTool = ref(null);
+
+// Get device-aware tools automatically
+const { photoSelectorTools } = useToolsAvailability();
+
+// Use provided tools or fall back to device-filtered tools, excluding current tool
+const availableTools = computed(() => {
+  let tools = [];
+
+  // If tools prop is explicitly provided, use those
+  if (props.tools && props.tools.length > 0) {
+    tools = props.tools;
+  } else {
+    // Otherwise use device-aware tools from config
+    tools = photoSelectorTools.value.map((tool) => ({
+      id: tool.id,
+      name: tool.name,
+      description: tool.description,
+      icon: tool.icon,
+      singlePhotoOnly: tool.singlePhotoOnly || false,
+    }));
+  }
+
+  // Exclude current tool if specified (e.g., don't show "Canvas" when already in Canvas)
+  if (props.currentTool) {
+    tools = tools.filter((tool) => tool.id !== props.currentTool);
+  }
+
+  return tools;
+});
 
 const isToolDisabled = (tool) => {
   return tool.singlePhotoOnly && props.photoCount > 1;

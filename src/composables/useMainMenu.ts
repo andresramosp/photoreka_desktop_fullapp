@@ -4,35 +4,26 @@ import type { MenuOption } from "naive-ui";
 import { usePhotosStore } from "@/stores/photos";
 import { useCollectionsStore } from "@/stores/collections";
 import { useSeriesStore } from "@/stores/series";
-import { isMobileDevice } from "@/utils/utils";
 import { useRouter } from "vue-router";
 
-// Import icons for tools (existing)
-import {
-  LayersOutline,
-  CloudUploadOutline,
-  GridOutline as CollectionsIcon,
-  ListOutline as SeriesIcon,
-  SearchOutline as SearchIcon,
-  CubeOutline as CubeIcon,
-  AnalyticsOutline as ReportIcon,
-  SquareOutline as FramerIcon,
-  SettingsOutline as SettingsIcon,
-  HelpCircleOutline as HelpIcon,
-  MapOutline as MapIcon,
-  Image as ImageIcon,
-  DesktopOutline as LaptopIcon,
-} from "@vicons/ionicons5";
+// Centralized tool config: single source of truth for icons & availability
+import { TOOL_ICONS, getToolById, isDesktopOnly } from "@/config/toolsConfig";
+import { isMobileDevice } from "@/utils/utils";
 
-// Import icons for sections (generic)
+// Section icons (menu-only, not tied to any tool)
 import {
   LibraryOutline as LibraryIcon,
   CompassOutline as ExploreIcon,
   CreateOutline as CreateIcon,
   ConstructOutline as SystemIcon,
+  MapOutline as MapIcon,
 } from "@vicons/ionicons5";
 
-import { Workspace as CanvasIcon } from "@vicons/carbon";
+// Shorthand: resolve a tool's icon component from its config
+const toolIcon = (toolId: string) => {
+  const tool = getToolById(toolId);
+  return tool ? TOOL_ICONS[tool.icon] : TOOL_ICONS.Workspace;
+};
 
 export function useMainMenu() {
   const router = useRouter();
@@ -57,7 +48,6 @@ export function useMainMenu() {
   );
 
   const appAccessMode = computed(() => photosStore.appAccessMode);
-  const isMobileLimitedMode = computed(() => isMobileDevice());
   const isBlocked = computed(() => appAccessMode.value === "blocked");
 
   // Helper to create icon render function
@@ -71,15 +61,20 @@ export function useMainMenu() {
       h(
         NIcon,
         { size: 16, style: { marginLeft: "auto", opacity: 0.5 } },
-        { default: () => h(LaptopIcon) },
+        { default: () => h(TOOL_ICONS.DesktopOutline) },
       );
   };
+
+  // Check if a tool should be disabled on the current device.
+  // Returns true when the tool is desktop-only AND the user is on mobile.
+  const isToolDisabledOnMobile = (toolId: string) =>
+    isDesktopOnly(toolId) && isMobileDevice();
 
   // Sync Area (global, outside sections)
   const syncAreaOption = computed<MenuOption>(() => ({
     label: "Sync Area",
     key: "sync-area",
-    icon: renderIcon(CloudUploadOutline),
+    icon: renderIcon(toolIcon("sync-area")),
   }));
 
   // Library Section
@@ -89,7 +84,7 @@ export function useMainMenu() {
         label: () =>
           h("span", { class: "second-level-menu-item" }, "Workspace"),
         key: "workspace",
-        icon: renderIcon(LayersOutline),
+        icon: renderIcon(toolIcon("workspace")),
       },
       {
         label: () =>
@@ -112,37 +107,13 @@ export function useMainMenu() {
             ),
           ),
         key: "collections-group",
-        icon: renderIcon(CollectionsIcon),
+        icon: renderIcon(toolIcon("collections")),
         disabled: isBlocked.value,
         children: collections.value.map((col) => ({
           label: () => h("span", { class: "collection-menu-item" }, col.label),
           key: col.key,
         })),
       },
-      //   {
-      //     label: () =>
-      //       h(
-      //         "div",
-      //         {
-      //           onClick: (e: MouseEvent) => {
-      //             e.stopPropagation();
-      //             router.push("/series");
-      //           },
-      //           style: {
-      //             cursor: "pointer",
-      //             width: "100%",
-      //           },
-      //         },
-      //         "All Series",
-      //       ),
-      //     key: "series-group",
-      //     icon: renderIcon(SeriesIcon),
-      //     disabled: isBlocked.value,
-      //     children: series.value.map((ser) => ({
-      //       label: ser.label,
-      //       key: ser.key,
-      //     })),
-      //   },
     ];
 
     return {
@@ -160,14 +131,14 @@ export function useMainMenu() {
         label: () => h("span", { class: "second-level-menu-item" }, "Search"),
         key: "search",
         disabled: isBlocked.value,
-        icon: renderIcon(SearchIcon),
+        icon: renderIcon(toolIcon("search")),
       },
 
       {
         label: () => h("span", { class: "second-level-menu-item" }, "Report"),
         key: "report",
         disabled: isBlocked.value,
-        icon: renderIcon(ReportIcon),
+        icon: renderIcon(toolIcon("report")),
       },
       {
         label: () => h("span", { class: "second-level-menu-item" }, "Atlas"),
@@ -179,7 +150,7 @@ export function useMainMenu() {
             label: () =>
               h("span", { class: "collection-menu-item" }, "2D Atlas"),
             key: "2d-view",
-            icon: renderIcon(ImageIcon),
+            icon: renderIcon(toolIcon("2d-view")),
           },
           {
             label: () =>
@@ -195,12 +166,14 @@ export function useMainMenu() {
                 },
                 [
                   h("span", "3D Atlas"),
-                  isMobileLimitedMode.value ? renderLaptopSuffix()() : null,
+                  isToolDisabledOnMobile("3d-atlas")
+                    ? renderLaptopSuffix()()
+                    : null,
                 ],
               ),
             key: "atlas",
-            icon: renderIcon(CubeIcon),
-            disabled: isMobileLimitedMode.value || isBlocked.value,
+            icon: renderIcon(toolIcon("3d-atlas")),
+            disabled: isToolDisabledOnMobile("3d-atlas") || isBlocked.value,
           },
         ],
       },
@@ -234,26 +207,28 @@ export function useMainMenu() {
                 "div",
                 {
                   onClick: (e: MouseEvent) => {
-                    if (!isMobileLimitedMode.value) {
+                    if (!isToolDisabledOnMobile("series")) {
                       e.stopPropagation();
                       router.push("/series");
                     }
                   },
                   style: {
-                    cursor: isMobileLimitedMode.value ? "default" : "pointer",
+                    cursor: isToolDisabledOnMobile("series")
+                      ? "default"
+                      : "pointer",
                     flex: 1,
                   },
                 },
                 "Series",
               ),
-              isMobileLimitedMode.value ? renderLaptopSuffix()() : null,
+              isToolDisabledOnMobile("series") ? renderLaptopSuffix()() : null,
             ],
           ),
         key: "series-group",
-        icon: renderIcon(SeriesIcon),
-        disabled: isMobileLimitedMode.value || isBlocked.value,
+        icon: renderIcon(toolIcon("series")),
+        disabled: isToolDisabledOnMobile("series") || isBlocked.value,
         children:
-          isMobileLimitedMode.value || isBlocked.value
+          isToolDisabledOnMobile("series") || isBlocked.value
             ? undefined
             : series.value.map((ser) => ({
                 label: () =>
@@ -275,18 +250,18 @@ export function useMainMenu() {
             },
             [
               h("span", "Canvas"),
-              isMobileLimitedMode.value ? renderLaptopSuffix()() : null,
+              isToolDisabledOnMobile("canvas") ? renderLaptopSuffix()() : null,
             ],
           ),
         key: "canvas",
-        disabled: isMobileLimitedMode.value || isBlocked.value,
-        icon: renderIcon(CanvasIcon),
+        disabled: isToolDisabledOnMobile("canvas") || isBlocked.value,
+        icon: renderIcon(toolIcon("canvas")),
       },
       {
         label: () => h("span", { class: "second-level-menu-item" }, "Framer"),
         key: "framer",
         disabled: isBlocked.value,
-        icon: renderIcon(FramerIcon),
+        icon: renderIcon(toolIcon("framer")),
       },
     ];
 
@@ -307,12 +282,12 @@ export function useMainMenu() {
       {
         label: () => h("span", { class: "second-level-menu-item" }, "Settings"),
         key: "settings",
-        icon: renderIcon(SettingsIcon),
+        icon: renderIcon(toolIcon("settings")),
       },
       {
         label: () => h("span", { class: "second-level-menu-item" }, "Help"),
         key: "help",
-        icon: renderIcon(HelpIcon),
+        icon: renderIcon(toolIcon("help")),
       },
     ],
   }));
@@ -330,7 +305,7 @@ export function useMainMenu() {
       createSection.value,
       {
         type: "divider",
-        key: "sync-divider",
+        key: "create-divider",
       } as MenuOption,
       systemSection.value,
     ];

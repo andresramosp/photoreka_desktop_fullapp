@@ -178,13 +178,7 @@
 
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
-import {
-  NModal,
-  NIcon,
-  NButton,
-
-  useMessage,
-} from "naive-ui";
+import { NModal, NIcon, NButton, useMessage } from "naive-ui";
 import CustomArtisticWeights from "./CustomArtisticWeights.vue";
 
 // Layout Components
@@ -756,6 +750,26 @@ const getInsightLabel = (type, question = null) => {
   return labels[type] || type;
 };
 
+// Build insight history for API call (last 3 interactions)
+const buildInsightHistory = (insights) => {
+  // Take the last 3 insights
+  const recentInsights = insights.slice(-3);
+
+  const history = [];
+  for (const insight of recentInsights) {
+    history.push({
+      role: "user",
+      content: insight.label,
+    });
+    history.push({
+      role: "assistant",
+      content: insight.text,
+    });
+  }
+
+  return history;
+};
+
 // Get specific insight by type
 const getSpecificInsight = async (type) => {
   if (!props.selectedPhoto?.id) {
@@ -784,8 +798,12 @@ const getSpecificInsight = async (type) => {
   pendingInsightLabel.value = getInsightLabel(type);
 
   try {
-    const { data } = await api.get(
-      `/api/catalog/photoInsightSpecific/${props.selectedPhoto.id}?type=${type}&provider=gpt`,
+    const { data } = await api.post(
+      `/api/catalog/photoInsightSpecific/${props.selectedPhoto.id}`,
+      {
+        type: type,
+        provider: "gpt",
+      },
     );
 
     if (data && data.insightType) {
@@ -859,10 +877,16 @@ const submitCustomQuestion = async () => {
   customInsightQuestion.value = "";
 
   try {
-    const { data } = await api.get(
-      `/api/catalog/photoInsightSpecific/${
-        props.selectedPhoto.id
-      }?type=custom&question=${encodeURIComponent(savedQuestion)}&provider=gpt`,
+    const history = buildInsightHistory(allPhotoInsights.value);
+
+    const { data } = await api.post(
+      `/api/catalog/photoInsightSpecific/${props.selectedPhoto.id}`,
+      {
+        type: "custom",
+        question: savedQuestion,
+        provider: "gpt",
+        history: history,
+      },
     );
 
     if (data && data.response) {

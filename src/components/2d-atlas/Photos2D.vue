@@ -199,7 +199,6 @@
     <PhotoToolSelector
       :show="showToolSelector"
       :photo-count="selectedPhotoIds.length"
-      :tools="availableTools"
       :is-processing="isProcessingTool"
       @tool-selected="handleToolSelected"
       @close="closeToolSelector"
@@ -265,7 +264,6 @@ const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
 const {
   isProcessing: isProcessingTool,
   showToolSelector,
-  availableTools,
   takeToTool,
   openToolSelector,
   closeToolSelector,
@@ -1173,18 +1171,24 @@ const updateHoverState = (e) => {
 
     // Find photo under cursor
     let foundPhoto = null;
-    const halfSize = photoSize.value / 2;
 
     for (const photo of filteredPhotos.value) {
       const [px, py] = photo.position || [0, 0];
       const canvasX = px * SCALE_FACTOR;
       const canvasY = py * SCALE_FACTOR;
 
+      // Get actual sprite dimensions (respects aspect ratio)
+      const sprite = photoSprites.value.get(photo.id);
+      if (!sprite) continue;
+
+      const halfWidth = sprite.width / 2;
+      const halfHeight = sprite.height / 2;
+
       if (
-        worldX >= canvasX - halfSize &&
-        worldX <= canvasX + halfSize &&
-        worldY >= canvasY - halfSize &&
-        worldY <= canvasY + halfSize
+        worldX >= canvasX - halfWidth &&
+        worldX <= canvasX + halfWidth &&
+        worldY >= canvasY - halfHeight &&
+        worldY <= canvasY + halfHeight
       ) {
         foundPhoto = photo;
         break;
@@ -1206,47 +1210,10 @@ const updateHoverState = (e) => {
   }, HOVER_DEBOUNCE_MS);
 };
 
-// Handle click for selection
+// Handle click for selection (now handled by sprite pointerdown events)
 const handleClick = (e) => {
-  if (!pixiContainer.value) return;
-
-  const rect = pixiContainer.value.getBoundingClientRect();
-  const mouseX = e.clientX - rect.left;
-  const mouseY = e.clientY - rect.top;
-
-  // Convert to world coordinates
-  const worldX = (mouseX - offsetX.value) / scale.value;
-  const worldY = (mouseY - offsetY.value) / scale.value;
-
-  // Find photo under cursor
-  const halfSize = photoSize.value / 2;
-
-  for (const photo of filteredPhotos.value) {
-    const [px, py] = photo.position || [0, 0];
-    const canvasX = px * SCALE_FACTOR;
-    const canvasY = py * SCALE_FACTOR;
-
-    if (
-      worldX >= canvasX - halfSize &&
-      worldX <= canvasX + halfSize &&
-      worldY >= canvasY - halfSize &&
-      worldY <= canvasY + halfSize
-    ) {
-      // Toggle selection
-      const photoId = photo.id;
-      const index = selectedPhotoIds.value.indexOf(photoId);
-
-      if (index === -1) {
-        selectedPhotoIds.value.push(photoId);
-      } else {
-        selectedPhotoIds.value.splice(index, 1);
-      }
-
-      // Update sprite selection visual
-      updateSpriteSelection(photoId);
-      break;
-    }
-  }
+  // Clicks are now handled directly on sprites via pointerdown events
+  // This function is kept for backwards compatibility but is no longer used
 };
 
 // Update sprite selection visual
@@ -1416,10 +1383,24 @@ const loadPhotosToPixi = async () => {
         sprite.y = canvasY;
         sprite.width = photoSize.value;
         sprite.height = photoSize.value * 0.75;
-        // eventMode 'none': we do manual hit-testing in updateHoverState/handleClick,
-        // so Pixi's event system doesn't need to traverse 5k+ sprites.
-        sprite.eventMode = "none";
-        // cursor is set on the canvas element via CSS, not per-sprite.
+        // Enable interaction for precise touch/click detection
+        sprite.eventMode = "static";
+        sprite.cursor = "pointer";
+
+        // Add click/tap handler directly to sprite
+        sprite.on("pointerdown", (event) => {
+          if (isDragging.value || isPinching.value) return;
+          event.stopPropagation();
+
+          const photoId = photo.id;
+          const index = selectedPhotoIds.value.indexOf(photoId);
+          if (index === -1) {
+            selectedPhotoIds.value.push(photoId);
+          } else {
+            selectedPhotoIds.value.splice(index, 1);
+          }
+          updateSpriteSelection(photoId);
+        });
 
         // Store reference
         photoSprites.value.set(photo.id, sprite);
@@ -2195,10 +2176,10 @@ watch(isTransitioning, (v) => {
   cursor: pointer;
 }
 
-.selected-photo-item:hover {
+/* .selected-photo-item:hover {
   transform: scale(1.05);
   border-color: rgba(100, 181, 246, 0.8);
-}
+} */
 
 .selected-photo-thumb {
   width: 100%;

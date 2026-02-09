@@ -318,7 +318,6 @@
     <PhotoToolSelector
       :show="showToolSelector"
       :photo-count="selectedPhotoIds.length"
-      :tools="availableTools"
       :is-processing="isProcessingTool"
       @tool-selected="handleToolSelected"
       @close="closeToolSelector"
@@ -450,7 +449,6 @@ const {
 const {
   isProcessing: isProcessingTool,
   showToolSelector,
-  availableTools,
   takeToTool,
   openToolSelector,
   closeToolSelector,
