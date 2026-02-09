@@ -6,7 +6,7 @@ import gridRelaxation from "@/utils/gridRelaxation";
 // Easy global toggle (edit this constant when you want a default behavior change)
 const GRID_RELAXATION_ENABLED_DEFAULT = true;
 const GRID_RELAXATION_EXPAND_STRENGTH_DEFAULT = 0; // 0..1
-const GRID_SNAP_TO_GRID_DEFAULT = false;
+const GRID_SNAP_TO_GRID_DEFAULT = true;
 
 /**
  * Composable for managing 2D photo data and positions
@@ -51,7 +51,7 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
   const AUTO_EXPAND_ENABLED = true;
   const AUTO_EXPAND_TARGET_STRENGTH = 0.2;
   const AUTO_EXPAND_SAMPLE_MAX = 4000;
-  const AUTO_EXPAND_VERY_HIGH_COLLISION_RATIO = 0.65;
+  const AUTO_EXPAND_VERY_HIGH_COLLISION_RATIO = 0.75;
   const AUTO_EXPAND_VERY_HIGH_MAX_OCC = 12;
   const AUTO_EXPAND_EASE_K = 6.5;
 
