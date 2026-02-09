@@ -345,7 +345,6 @@ const loadCollections = async () => {
     await collectionsStore.getOrFetch();
   } catch (error) {
     console.error("Error loading collections:", error);
-    message.error("Failed to load collections");
   }
 };
 
@@ -354,7 +353,6 @@ const loadSeries = async () => {
     await seriesStore.getOrFetch();
   } catch (error) {
     console.error("Error loading series:", error);
-    message.error("Failed to load series");
   }
 };
 
@@ -416,7 +414,6 @@ const handleAddToCollection = async () => {
       handleCancel();
     } catch (error) {
       console.error("Error adding photos to collection:", error);
-      message.error("Failed to add photos to collection");
     }
   }
 };
@@ -473,7 +470,6 @@ const handleAddToSeries = async () => {
       handleCancel();
     } catch (error) {
       console.error("Error adding photos to series:", error);
-      message.error("Failed to add photos to series");
     }
   }
 };
@@ -552,7 +548,6 @@ const createNewCollection = async () => {
     handleCancel();
   } catch (error) {
     console.error("Error creating collection:", error);
-    message.error("Failed to create collection. Please try again.");
   }
 };
 
@@ -618,7 +613,6 @@ const createNewSeries = async () => {
     handleCancel();
   } catch (error) {
     console.error("Error creating series:", error);
-    message.error("Failed to create series. Please try again.");
   }
 };
 

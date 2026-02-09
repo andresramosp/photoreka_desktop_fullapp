@@ -1,4 +1,5 @@
-import axios, { type AxiosInstance } from "axios";
+import axios, { type AxiosInstance, type AxiosError } from "axios";
+import { message } from "./notifications";
 
 // Crear una instancia de axios
 const api: AxiosInstance = axios.create({
@@ -27,5 +28,52 @@ api_analyzer.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// Manejador de errores común
+const handleApiError = (error: AxiosError) => {
+  if (error.response) {
+    const { status, data } = error.response;
+
+    // No mostrar mensaje para errores 404
+    if (status === 404) {
+      return Promise.reject(error);
+    }
+
+    // Detectar cuenta demo con acceso de solo lectura (403)
+    if (status === 403 && data && typeof data === "object") {
+      const errorData = data as any;
+      if (
+        errorData.code === "READ_ONLY_ACCESS" &&
+        errorData.isDemoMode === true
+      ) {
+        // Mostrar el mensaje específico de la cuenta demo
+        message.warning(
+          "This is a demo account with read-only access. Sign up to gain full access.",
+        );
+        return Promise.reject(error);
+      }
+    }
+
+    // Para cualquier otro error, mostrar mensaje genérico
+    const errorData = data as any;
+    const errorMessage =
+      errorData?.message || "An error occurred. Please try again.";
+    message.error(errorMessage);
+  } else if (error.request) {
+    // Error de red o sin respuesta del servidor
+    message.error("Network error. Please check your connection and try again.");
+  } else {
+    // Error en la configuración de la request
+    message.error("An unexpected error occurred.");
+  }
+
+  return Promise.reject(error);
+};
+
+// Interceptor de respuesta para api
+api.interceptors.response.use((response) => response, handleApiError);
+
+// Interceptor de respuesta para api_analyzer
+api_analyzer.interceptors.response.use((response) => response, handleApiError);
 
 export { api, api_analyzer };

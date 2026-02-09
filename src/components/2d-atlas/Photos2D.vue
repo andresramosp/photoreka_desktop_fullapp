@@ -1726,7 +1726,6 @@ const handleDownloadPhotos = async () => {
     }
   } catch (error) {
     console.error("Download photos failed:", error);
-    message.error("Error downloading photos");
   }
 };
 

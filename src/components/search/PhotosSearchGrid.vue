@@ -731,13 +731,15 @@ defineExpose({
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+  padding-right: 6px;
+  padding-left: 0px;
 }
 
 /* Load More */
 .load-more-container {
   display: flex;
   justify-content: center;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
 .load-more-button {

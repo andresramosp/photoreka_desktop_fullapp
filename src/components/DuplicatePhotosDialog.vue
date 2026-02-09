@@ -272,9 +272,7 @@ const deletePhoto = async (photoId) => {
     photosStore.checkDuplicates();
 
     message.success("Photo deleted successfully");
-  } catch (error) {
-    message.error("Failed to delete photo");
-  }
+  } catch (error) {}
 };
 
 const handleDeleteSelected = async () => {
@@ -285,9 +283,7 @@ const handleDeleteSelected = async () => {
     selectedPhotoIds.value = [];
     message.success("Selected photos deleted successfully");
     photosStore.checkDuplicates();
-  } catch (error) {
-    message.error("Failed to delete selected photos");
-  }
+  } catch (error) {}
 };
 
 const handleDeleteWorseVersions = async () => {
@@ -301,9 +297,7 @@ const handleDeleteWorseVersions = async () => {
     );
     photosStore.checkDuplicates();
     message.success("Non-processed photos deleted successfully");
-  } catch (error) {
-    message.error("Failed to delete non-processed photos");
-  }
+  } catch (error) {}
 };
 
 const close = () => {

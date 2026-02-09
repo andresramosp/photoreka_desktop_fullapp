@@ -803,7 +803,6 @@ const handleDrop = async (event) => {
     await handleUploadFlow(files, "local");
   } catch (error) {
     console.error("Error uploading files:", error);
-    message.error("Error al subir los archivos");
   }
 };
 
@@ -879,7 +878,6 @@ async function importFromGooglePhotos() {
     );
   } catch (error) {
     console.error("❌ Error importing from Google Photos:", error);
-    message.error("Error importing photos from Google Photos");
   }
 }
 

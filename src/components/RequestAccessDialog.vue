@@ -237,7 +237,7 @@ const handleSubmit = async () => {
     });
 
     message.success(
-      "Access request submitted successfully! We'll be in touch soon."
+      "Access request submitted successfully! We'll be in touch soon.",
     );
 
     // Reset form
@@ -260,12 +260,10 @@ const handleSubmit = async () => {
 
     if (error.response?.status === 409) {
       message.warning(
-        "You have already submitted a request with this email address."
+        "You have already submitted a request with this email address.",
       );
     } else if (error.response?.status === 400) {
       message.error("Please check your information and try again.");
-    } else {
-      message.error("Failed to submit request. Please try again later.");
     }
   } finally {
     loading.value = false;

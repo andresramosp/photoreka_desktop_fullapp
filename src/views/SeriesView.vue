@@ -627,7 +627,6 @@ const createSeries = async () => {
     });
   } catch (error) {
     console.error("Error creating series:", error);
-    message.error("Failed to create series. Please try again.");
   }
 };
 
@@ -729,7 +728,6 @@ const handleSuggestPhotoAt = async (payload) => {
     await refreshSeries();
   } catch (error) {
     console.error("Error getting suggestion:", error);
-    message.error("Failed to get suggestion. Please try again.");
   }
 };
 
@@ -768,7 +766,6 @@ const onPhotosSelected = async (photoIds) => {
       await refreshSeries();
     } catch (error) {
       console.error("Error adding photos to series:", error);
-      message.error("Failed to add photos. Please try again.");
     }
   }
 };
@@ -813,7 +810,6 @@ const handleRefreshSuggestion = async (photoId) => {
     });
   } catch (error) {
     console.error("Error refreshing suggestion:", error);
-    message.error("Failed to refresh suggestion. Please try again.");
     // On error, refresh to restore correct state
     await refreshSeries();
   } finally {
@@ -856,7 +852,6 @@ const handleRemovePhoto = async (photoId) => {
     await refreshSeries();
   } catch (error) {
     console.error("Error removing photo:", error);
-    message.error("Failed to remove photo. Please try again.");
   }
 };
 
@@ -868,7 +863,6 @@ const handleReorder = async (newOrder) => {
     // Don't refresh here to avoid flickering - the local state is already updated
   } catch (error) {
     console.error("Error reordering photos:", error);
-    message.error("Failed to reorder photos. Please try again.");
     await refreshSeries(); // Refresh to restore correct order on error
   }
 };
@@ -881,7 +875,6 @@ const handleMovePhoto = async (photoId, newPosition) => {
     // Don't refresh here to avoid flickering - the local state is already updated
   } catch (error) {
     console.error("Error moving photo:", error);
-    message.error("Failed to move photo. Please try again.");
     await refreshSeries(); // Refresh to restore correct order on error
   }
 };
@@ -914,7 +907,6 @@ const handleDownloadMultiple = async () => {
     localClearAllSelections();
   } catch (error) {
     console.error("Error downloading photos:", error);
-    message.error("Failed to download photos");
   }
 };
 
@@ -935,7 +927,6 @@ const handleRemoveSelectedFromSeries = async () => {
     await refreshSeries();
   } catch (error) {
     console.error("Error removing photos:", error);
-    message.error("Failed to remove photos. Please try again.");
   }
 };
 
@@ -1000,7 +991,6 @@ const saveTitle = async () => {
     updateViewingSeries();
   } catch (error) {
     console.error("Error updating series name:", error);
-    message.error("Failed to update series name");
   } finally {
     isSavingTitle.value = false;
   }
@@ -1031,7 +1021,6 @@ const saveDescription = async () => {
     updateViewingSeries();
   } catch (error) {
     console.error("Error updating series description:", error);
-    message.error("Failed to update series description");
   } finally {
     isSavingDescription.value = false;
   }
@@ -1059,7 +1048,6 @@ const deleteSeries = async () => {
     router.push({ name: "series" });
   } catch (error) {
     console.error("Error deleting series:", error);
-    message.error("Failed to delete series. Please try again.");
   }
 };
 
@@ -1085,7 +1073,6 @@ const handleShowPhotoInfo = async (photoId) => {
     }
   } catch (error) {
     console.error("[SeriesView] Error fetching photo:", error);
-    message.error("Failed to load photo information");
   }
 };
 
@@ -1206,7 +1193,6 @@ onMounted(async () => {
     }
   } catch (error) {
     console.error("Error loading data:", error);
-    message.error("Failed to load series");
   }
 });
 

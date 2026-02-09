@@ -496,7 +496,6 @@ const proceedToPhotoSelection = async () => {
     });
   } catch (error) {
     console.error("Error creating collection:", error);
-    message.error("Failed to create collection. Please try again.");
   }
 };
 
@@ -527,7 +526,6 @@ const onPhotosSelected = async (photoIds) => {
       await refreshCollection();
     } catch (error) {
       console.error("Error adding photos to collection:", error);
-      message.error("Failed to add photos. Please try again.");
     }
   }
 };
@@ -561,7 +559,6 @@ const deleteCollection = async () => {
     router.push({ name: "collections" });
   } catch (error) {
     console.error("Error deleting collection:", error);
-    message.error("Failed to delete collection. Please try again.");
   }
 };
 
@@ -589,7 +586,6 @@ const saveTitle = async () => {
     updateViewingCollection();
   } catch (error) {
     console.error("Error updating collection name:", error);
-    message.error("Failed to update collection name");
   } finally {
     isSavingTitle.value = false;
   }
@@ -620,7 +616,6 @@ const saveDescription = async () => {
     updateViewingCollection();
   } catch (error) {
     console.error("Error updating collection description:", error);
-    message.error("Failed to update collection description");
   } finally {
     isSavingDescription.value = false;
   }
@@ -662,7 +657,6 @@ onMounted(async () => {
     updateViewingCollection();
   } catch (error) {
     console.error("Error loading data:", error);
-    message.error("Failed to load collections");
   }
 });
 

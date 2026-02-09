@@ -33,7 +33,7 @@ export function usePhotoUpload() {
   async function processPhotoSource(
     source,
     srcType = "local",
-    originalName = null
+    originalName = null,
   ) {
     let file;
     let fileName;
@@ -90,18 +90,18 @@ export function usePhotoUpload() {
         thumbnailUploadUrl,
         thumbnailBlob,
         fileName,
-        "thumbnail"
+        "thumbnail",
       ),
     ]);
 
     // Verificar que ambas subidas fueron exitosas
     const failedUploads = uploadResults.filter(
-      (result) => result.status === "rejected"
+      (result) => result.status === "rejected",
     );
     if (failedUploads.length > 0) {
       console.error(`❌ Failed uploads for ${fileName}:`, failedUploads);
       throw new Error(
-        `Failed to upload ${failedUploads.length} of 2 files for ${fileName}`
+        `Failed to upload ${failedUploads.length} of 2 files for ${fileName}`,
       );
     }
 
@@ -126,7 +126,7 @@ export function usePhotoUpload() {
       if (!userStore.user?.isEmailConfirmed) {
         message.error("Please confirm your email before importing photos.");
       } else {
-        message.error("No photos were uploaded successfully.");
+        // message.error("No photos were uploaded successfully.");
       }
       return false;
     }
@@ -173,7 +173,7 @@ export function usePhotoUpload() {
       // Si falla la llamada, borrar las fotos y mostrar notificación
       await photosStore.deletePhotos(photoIds);
       message.error(
-        "There was an error processing the photos. Please try again later."
+        "There was an error processing the photos. Please try again later.",
       );
       return false;
     }
@@ -259,22 +259,22 @@ export function usePhotoUpload() {
               console.error(`❌ Failed to upload ${fileName}:`, error);
               failedUploads.push({ file: fileName, error: error.message });
               uploadedCount.value++;
-            })
-        )
+            }),
+        ),
       );
 
       await Promise.all(uploadPromises);
 
-      // Mostrar resumen de la subida
-      if (failedUploads.length > 0) {
-        message.warning(
-          `${photosToUpload.length} photos uploaded successfully. ${failedUploads.length} photos failed to upload.`
-        );
-      } else {
-        console.log(
-          `✅ All ${photosToUpload.length} photos uploaded successfully`
-        );
-      }
+      // // Mostrar resumen de la subida
+      // if (failedUploads.length > 0) {
+      //   message.warning(
+      //     `${photosToUpload.length} photos uploaded successfully. ${failedUploads.length} photos failed to upload.`
+      //   );
+      // } else {
+      //   console.log(
+      //     `✅ All ${photosToUpload.length} photos uploaded successfully`
+      //   );
+      // }
 
       // Post-procesamiento común
       await handlePostUpload(photosToUpload);

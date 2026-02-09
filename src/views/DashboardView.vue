@@ -249,7 +249,6 @@ const loadCollections = async () => {
     await collectionsStore.getOrFetch();
   } catch (error) {
     console.error("Error loading collections:", error);
-    message.error("Failed to load collections");
   }
 };
 
@@ -259,7 +258,6 @@ const loadSeries = async () => {
     await seriesStore.getOrFetch();
   } catch (error) {
     console.error("Error loading series:", error);
-    message.error("Failed to load series");
   }
 };
 

@@ -783,7 +783,6 @@ const handleReviewDuplicates = async () => {
     }
   } catch (error) {
     console.error("Error reviewing duplicates:", error);
-    message.error("Error reviewing duplicates");
   } finally {
     isCheckingDuplicates.value = false;
   }
@@ -1108,9 +1107,7 @@ const handleDeleteMultiple = async () => {
     );
     // Recargar la ruta actual para refrescar la colección (sin reload completo)
     emit("refreshCollection");
-  } catch (e) {
-    message.error("Error removing photos from collection");
-  }
+  } catch (e) {}
   clearAllSelections();
 };
 
@@ -1122,7 +1119,6 @@ const confirmDeletePhotos = async () => {
     await photosStore.deletePhotos(selectedPhotoIds.value);
     clearAllSelections();
   } catch (error) {
-    message.error("Error eliminando las fotos");
     console.error("Error deleting photos:", error);
   } finally {
     isDeletingPhotos.value = false;

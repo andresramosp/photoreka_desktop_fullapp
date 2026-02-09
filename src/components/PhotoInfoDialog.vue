@@ -642,7 +642,6 @@ const addTag = async () => {
     message.success("Tag added successfully");
   } catch (error) {
     photoTags.value.pop(); // Remove the tag if save failed
-    message.error("Failed to add tag");
     console.error("Add tag failed:", error);
   } finally {
     isAddingTag.value = false;
@@ -668,7 +667,6 @@ const removeTag = async (tagToRemove) => {
   } catch (error) {
     // Restore the tag if removal failed
     photoTags.value.splice(index, 0, tagToRemove);
-    message.error("Failed to remove tag");
     console.error("Remove tag failed:", error);
   }
 };
@@ -837,7 +835,6 @@ const getSpecificInsight = async (type) => {
       message.warning("No insights found for this photo");
     }
   } catch (error) {
-    message.error("Failed to generate insight");
     console.error("Generate insight failed:", error);
   } finally {
     isGeneratingInsight.value = false;
@@ -915,7 +912,6 @@ const submitCustomQuestion = async () => {
       message.warning("No response received");
     }
   } catch (error) {
-    message.error("Failed to get answer");
     console.error("Custom question failed:", error);
   } finally {
     isGeneratingInsight.value = false;
@@ -996,7 +992,6 @@ const saveNotes = async () => {
 
     message.success("Notes saved successfully!");
   } catch (error) {
-    message.error("Failed to save notes");
     console.error("Save notes failed:", error);
   } finally {
     isSavingNotes.value = false;
