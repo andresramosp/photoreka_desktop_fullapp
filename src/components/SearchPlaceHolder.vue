@@ -80,13 +80,13 @@ const searchModeConfig = {
     description:
       "A lightweight search that scans broadly across your library. Ideal for quick exploration and high-level discovery.",
     instructions: [
-      {
-        icon: "FlashOutline",
-        text: "Your query is embedded into the same vector space as the images for broad similarity matching.",
-      },
+      // {
+      //   icon: "FlashOutline",
+      //   text: "Your query is embedded into the same vector space as the images for broad similarity matching.",
+      // },
       {
         icon: "ImagesOutline",
-        text: "Best for <strong> moods </strong>,  <strong> compositional aspects </strong>, and  <strong> overall visual style </strong>.",
+        text: "Best for <strong> moods </strong>,  <strong> compositional aspects </strong> and  <strong> overall visual style </strong>.",
       },
     ],
   },
@@ -94,15 +94,15 @@ const searchModeConfig = {
   adaptive: {
     title: "Adaptive Mode",
     description:
-      "A flexible, context-aware search that adapts to meaning. It reveals subtle connections and indirect similarities.",
+      "A flexible, context-aware search that adapts to meaning. Your query is automatically enriched with contextual nuances and related concepts.",
     instructions: [
-      {
-        icon: "BulbOutline",
-        text: "Your query is automatically enriched with contextual nuances and related concepts.",
-      },
+      // {
+      //   icon: "BulbOutline",
+      //   text: "Your query is automatically enriched with contextual nuances and related concepts.",
+      // },
       {
         icon: "GitBranchOutline",
-        text: "Ideal for <strong> metaphorical queries </strong>, <strong> cultural references </strong>, and <strong> nuanced interpretation </strong>.",
+        text: "Ideal for <strong> metaphorical queries </strong>, <strong> cultural references </strong> and <strong> nuanced interpretation </strong>.",
       },
     ],
   },
@@ -112,13 +112,13 @@ const searchModeConfig = {
     description:
       "A focused and analytical search designed for accuracy. Returns results closely aligned with your exact intent.",
     instructions: [
-      {
-        icon: "LocateOutline",
-        text: "Your query is carefully analyzed and structured for maximum precision.",
-      },
+      // {
+      //   icon: "LocateOutline",
+      //   text: "Your query is carefully analyzed and structured for maximum precision.",
+      // },
       {
         icon: "ListOutline",
-        text: "Best for <strong> concrete objects </strong>, <strong> specific attributes </strong>, and <strong> more precise taxonomic distinctions </strong>.",
+        text: "Best for <strong> concrete objects </strong> and <strong> more precise taxonomic distinctions </strong>.",
       },
     ],
   },
@@ -224,8 +224,14 @@ function handleExampleClick() {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  font-size: var(--font-size-sm);
+  font-size: 14px;
   color: var(--text-secondary);
+}
+
+@media (max-width: 480px) {
+  .instruction-item {
+    font-size: var(--font-size-sm);
+  }
 }
 
 .examples-carousel {
