@@ -76,7 +76,7 @@
           </div>
         </n-tab-pane>
 
-        <n-tab-pane name="series" tab="Series">
+        <n-tab-pane v-if="isSeriesAvailable" name="series" tab="Series">
           <p class="modal-description">
             Select a series to add {{ photoCount }} photo{{
               photoCount === 1 ? "" : "s"
@@ -206,6 +206,7 @@ import {
 import { AddOutline } from "@vicons/ionicons5";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useSeriesStore } from "@/stores/series.js";
+import { useToolsAvailability } from "@/composables/useToolsAvailability.js";
 
 const emit = defineEmits(["add-to-collection", "add-to-series", "cancel"]);
 const props = defineProps({
@@ -234,6 +235,7 @@ const notification = useNotification();
 const collectionsStore = useCollectionsStore();
 const seriesStore = useSeriesStore();
 const router = useRouter();
+const { isAvailable: isToolAvailable } = useToolsAvailability();
 
 // Local state
 const showModal = ref(false);
@@ -263,6 +265,7 @@ const collections = computed(() => collectionsStore.allCollections);
 const isLoadingCollections = computed(() => collectionsStore.isLoading);
 const seriesList = computed(() => seriesStore.allSeries);
 const isLoadingSeries = computed(() => seriesStore.isLoading);
+const isSeriesAvailable = computed(() => isToolAvailable("series"));
 
 // Get photo IDs ordered by horizontal position (for series)
 // Always orders by X position (left to right) when positions are available
@@ -322,6 +325,13 @@ watch(activeTab, (newTab) => {
     loadCollections();
   } else if (newTab === "series" && !seriesStore.hasBeenLoaded) {
     loadSeries();
+  }
+});
+
+// Watch for series availability change - switch tab if series becomes unavailable
+watch(isSeriesAvailable, (available) => {
+  if (!available && activeTab.value === "series") {
+    activeTab.value = "collections";
   }
 });
 
