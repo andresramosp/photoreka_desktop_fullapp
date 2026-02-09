@@ -23,7 +23,7 @@ export default class ReadOnlyMiddleware {
     '/api/catalog/photoInsightSpecific', //  Allow photo insights as they are read operations
     // Series routes allowed for demo users
     '/api/series',
-    '/api/series/:id',
+    // '/api/series/:id',
     '/api/series/:id/photos',
     '/api/series/:id/order',
     '/api/series/:id/move',
