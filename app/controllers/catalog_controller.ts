@@ -409,9 +409,11 @@ export default class CatalogController {
       const user = auth.use('api').user! as any
       const userId = user.id.toString()
 
-      const provider = request.qs().provider || 'gemini'
-      const insightType = request.qs().type as 'cultural' | 'technical' | 'artistic' | 'custom'
-      const customQuestion = request.qs().question as string | undefined
+      // Recibir todos los parámetros del body
+      const { provider = 'gemini', type, question, history } = request.body() || {}
+      const insightType = type as 'cultural' | 'technical' | 'artistic' | 'custom'
+      const customQuestion = question as string | undefined
+      const chatHistory = Array.isArray(history) ? history : []
 
       // Validación del tipo de insight
       if (!insightType || !['cultural', 'technical', 'artistic', 'custom'].includes(insightType)) {
@@ -469,6 +471,18 @@ export default class CatalogController {
           break
       }
 
+      // Construir el prompt con el historial integrado
+      let fullPrompt = systemPrompt
+
+      if (chatHistory.length > 0) {
+        fullPrompt += '\n\n--- Historial de la conversación ---\n'
+        chatHistory.forEach((msg: any) => {
+          const role = msg.role === 'user' ? 'Usuario' : 'Asistente'
+          fullPrompt += `${role}: ${msg.content}\n`
+        })
+        fullPrompt += '--- Fin del historial ---\n\n'
+      }
+
       let insights = []
 
       if (provider === 'gpt') {
@@ -483,7 +497,7 @@ export default class CatalogController {
         ]
 
         const gptResponse = await modelsService.getGPTResponse(
-          systemPrompt,
+          fullPrompt,
           imagePayload,
           'gpt-5.1',
           { type: 'json_object' },
@@ -503,7 +517,7 @@ export default class CatalogController {
         }
 
         const geminiResponse = await modelsService.getGeminiResponse(
-          systemPrompt,
+          fullPrompt,
           [imagePayload],
           'gemini-2.5-flash-lite',
           {

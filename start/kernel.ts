@@ -50,6 +50,7 @@ router.use([() => import('@adonisjs/core/bodyparser_middleware')])
 export const middleware = router.named({
   auth: () => import('#middleware/auth_middleware'),
   readOnly: () => import('#middleware/read_only_middleware'),
+  llmRateLimit: () => import('#middleware/llm_rate_limit_middleware'),
 })
 
 const migrator = new MigrationRunner(db, app, {

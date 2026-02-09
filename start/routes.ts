@@ -81,7 +81,7 @@ router.get('/api/analyzer/health/user', [AnalyzerController, 'healthForUser'])
 router.get('/api/analyzer/health/photo', [AnalyzerController, 'healthForPhoto'])
 router.get('/api/analyzer/health/process', [AnalyzerController, 'healthForProcess'])
 
-// Protected API routes (require authentication)3
+// Protected API routes (require authentication)
 router
   .group(() => {
     router.get('/api/catalog', [CatalogController, 'getPhotos'])
@@ -93,21 +93,12 @@ router
 
     router.post('/api/catalog/checkDuplicates', [CatalogController, 'checkDuplicates'])
     router.post('/api/catalog/deleteDuplicates', [CatalogController, 'deleteDuplicates'])
-    router.get('/api/catalog/photoInsight/:id?', [CatalogController, 'photoInsight'])
-    router.get('/api/catalog/photoInsightSpecific/:id?', [
-      CatalogController,
-      'photoInsightSpecific',
-    ])
-    router.post('/api/catalog/:id/note', [CatalogController, 'savePhotoNote'])
 
-    router.post('/api/analyzer/', [AnalyzerController, 'analyze'])
-    router.post('/api/embeddings/', [EmbeddingController, 'getEmbeddings'])
+    router.post('/api/catalog/:id/note', [CatalogController, 'savePhotoNote'])
 
     router.get('/api/analyzer-process', [AnalyzerProcessController, 'getAll'])
     router.get('/api/analyzer-process/:id', [AnalyzerProcessController, 'getById'])
 
-    router.post('/api/search/semantic/stream', [SearchController, 'searchSemanticStream'])
-    router.post('/api/search/semantic/sync', [SearchController, 'searchSemanticSync'])
     router.post('/api/search/tags/sync', [SearchController, 'searchByTagsSync'])
     router.post('/api/search/tags/direct', [SearchController, 'searchByTagsDirect'])
     router.post('/api/search/byPhotos', [SearchController, 'searchByPhotos'])
@@ -235,3 +226,21 @@ router
     })
   })
   .use([middleware.auth(), middleware.readOnly()]) // Apply auth and then readOnly middleware
+
+// Protected LLM endpoints (require authentication + rate limiting)
+router
+  .group(() => {
+    // Analyzer endpoints - AI-powered photo analysis
+    router.post('/api/analyzer/', [AnalyzerController, 'analyze'])
+    router.post('/api/embeddings/', [EmbeddingController, 'getEmbeddings'])
+
+    // Semantic search endpoints - AI-powered search
+    router.post('/api/search/semantic/stream', [SearchController, 'searchSemanticStream'])
+    router.post('/api/search/semantic/sync', [SearchController, 'searchSemanticSync'])
+    router.get('/api/catalog/photoInsight/:id?', [CatalogController, 'photoInsight'])
+    router.post('/api/catalog/photoInsightSpecific/:id?', [
+      CatalogController,
+      'photoInsightSpecific',
+    ])
+  })
+  .use([middleware.auth(), middleware.readOnly(), middleware.llmRateLimit()]) // Apply auth, readOnly and LLM rate limiting
