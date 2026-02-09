@@ -20,7 +20,7 @@ export default class ReadOnlyMiddleware {
     '/api/search/byPhotos',
     '/api/warmUp',
     '/api/3d/photos',
-    '/api/catalog/photoInsightSpecific', // Allow photo insights as they are read operations
+    '/api/catalog/photoInsightSpecific', //  Allow photo insights as they are read operations
   ]
 
   /**
