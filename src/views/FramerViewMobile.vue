@@ -211,6 +211,7 @@
               :show-stars="false"
               :show-tags="false"
               :show-return-button="false"
+              :require-long-press="false"
               @select="selectPhoto"
               @move-to-curation="removePhoto"
               class="mobile-photo-card"
