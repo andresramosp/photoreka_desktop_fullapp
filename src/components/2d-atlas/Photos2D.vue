@@ -238,12 +238,12 @@ import { useUserStore } from "@/stores/userStore";
 import { use2DPhotos } from "@/composables/2d-viewer/use2DPhotos.js";
 import { use2DPatternTags } from "@/composables/2d-viewer/use2DPatternTags.js";
 import { useHasTouch } from "@/composables/useHasTouch.js";
-import { useIsMobile } from "@/composables/useIsMobile.js";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { use2DTextureManager } from "@/composables/2d-viewer/use2DTextureManager.js";
 import { use2DLod } from "@/composables/2d-viewer/use2DLod.js";
 import { useTheme } from "@/composables/useTheme.js";
+import { isMobileDevice } from "@/utils/utils.js";
 
 // Props
 const props = defineProps({
@@ -292,8 +292,8 @@ const getPhotoOriginalUrl = (photoId) => {
   return originalUrlById.value.get(photoId) || null;
 };
 
-// Detect mobile device
-const { isMobile } = useIsMobile();
+// Detect mobile device (strict: real mobile devices, not just narrow desktop windows)
+const isMobile = ref(isMobileDevice());
 const { hasTouch } = useHasTouch();
 const useLowPerformance = computed(() => isMobile.value || hasTouch.value);
 
