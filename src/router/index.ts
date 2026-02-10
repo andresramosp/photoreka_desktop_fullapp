@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
+import { useIsMobile } from "../composables/useIsMobile";
 import { useUserStore } from "../stores/userStore";
 import { useMaintenanceMode } from "../composables/useMaintenanceMode";
 import { trackPageView } from "../utils/analytics";
@@ -36,7 +37,11 @@ const router = createRouter({
   routes: [
     {
       path: "/",
-      redirect: "/dashboard",
+      redirect: () => {
+        // Use composable to detect mobile (returns { isMobile })
+        const { isMobile } = useIsMobile();
+        return isMobile.value ? "/workspace" : "/dashboard";
+      },
     },
     // Landing page moved to separate app
     // {

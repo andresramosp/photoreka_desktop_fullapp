@@ -83,7 +83,7 @@
           <div class="section-header">
             <h4>Frames</h4>
           </div>
-          <div class="frame-styles-grid">
+          <div class="frame-styles-row">
             <div
               v-for="frame in allFrames"
               :key="frame.id"
@@ -194,7 +194,7 @@
               @click="openPhotoDialog"
               :class="{ processing: isProcessingFiles }"
             >
-              <n-icon :size="20">
+              <n-icon :size="20" color="var(--primary-color)">
                 <AddIcon v-if="!isProcessingFiles" />
                 <n-spin v-else :size="20" />
               </n-icon>
@@ -1033,27 +1033,25 @@ watch(
 }
 
 .frame-styles-container {
-  padding: var(--spacing-sm);
-  max-height: 220px; /* Increased height */
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
 }
 
-.frame-styles-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+.frame-styles-row {
+  display: flex;
+  overflow-x: auto;
   gap: var(--spacing-sm);
-  grid-auto-rows: minmax(min-content, max-content);
-  align-items: start;
-  justify-items: center;
+  padding: var(--spacing-sm);
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
 .mobile-frame-option {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-md);
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm);
   border-radius: var(--border-radius-lg);
   border: 2px solid var(--border-color);
   background-color: var(--bg-body);
@@ -1063,7 +1061,9 @@ watch(
   justify-content: center;
   position: relative;
   overflow: visible;
-  width: 100%;
+  width: 85px;
+  min-width: 85px;
+  flex-shrink: 0;
   box-sizing: border-box;
 }
 
@@ -1405,25 +1405,25 @@ watch(
 }
 
 /* Custom scrollbars for mobile */
-.frame-styles-container::-webkit-scrollbar,
+.frame-styles-row::-webkit-scrollbar,
 .mobile-photos-scroll::-webkit-scrollbar {
   width: 4px;
   height: 4px;
 }
 
-.frame-styles-container::-webkit-scrollbar-track,
+.frame-styles-row::-webkit-scrollbar-track,
 .mobile-photos-scroll::-webkit-scrollbar-track {
   background: var(--bg-tertiary);
   border-radius: var(--border-radius-sm);
 }
 
-.frame-styles-container::-webkit-scrollbar-thumb,
+.frame-styles-row::-webkit-scrollbar-thumb,
 .mobile-photos-scroll::-webkit-scrollbar-thumb {
   background: var(--border-color);
   border-radius: var(--border-radius-sm);
 }
 
-.frame-styles-container::-webkit-scrollbar-thumb:hover,
+.frame-styles-row::-webkit-scrollbar-thumb:hover,
 .mobile-photos-scroll::-webkit-scrollbar-thumb:hover {
   background: var(--border-color-hover);
 }
@@ -1444,6 +1444,8 @@ watch(
 
   .mobile-frame-option {
     padding: var(--spacing-xs);
+    width: 75px;
+    min-width: 75px;
     /* Keep aspect-ratio: 1 for squares */
   }
 
@@ -1488,10 +1490,6 @@ watch(
     flex: 1;
   }
 
-  .frame-styles-container {
-    max-height: 200px; /* Reduced for small screens */
-  }
-
   .section-header {
     padding: var(--spacing-xs);
   }
@@ -1517,15 +1515,13 @@ watch(
   .mobile-frame-option {
     /* Keep aspect-ratio: 1 for squares */
     padding: var(--spacing-xs);
+    width: 70px;
+    min-width: 70px;
   }
 
   .mobile-color-option {
     width: 20px;
     height: 20px;
-  }
-
-  .frame-styles-container {
-    max-height: 120px;
   }
 
   .mobile-photos-section {

@@ -103,8 +103,6 @@
 
     <!-- Compact Upload Section -->
     <div v-else class="compact-upload-section">
-      If you upload photos directly here, the Canvas will be limited to only
-      General and Chromatic expansion types.
       <div class="compact-upload-buttons">
         <n-button
           type="primary"

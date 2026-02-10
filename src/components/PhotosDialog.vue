@@ -2,7 +2,8 @@
   <n-modal
     v-model:show="dialog"
     preset="dialog"
-    :style="{ maxWidth: '90vw', width: '1000px', maxHeight: '90vh' }"
+    :style="modalStyle"
+    class="photos-dialog-modal"
     :on-mask-click="close"
     :closable="false"
     :bordered="false"
@@ -16,8 +17,8 @@
     </template>
 
     <div class="dialog-content">
-      <!-- Tabs -->
-      <div v-if="!isTrash" class="tabs-container">
+      <!-- Tabs (desktop only) -->
+      <div v-if="!isTrash && !isMobile" class="tabs-container">
         <n-tabs v-model:value="activeTab" type="line" animated>
           <n-tab-pane name="catalog" tab="From Workspace">
             <!-- Search and Stats Bar -->
@@ -129,8 +130,106 @@
         </n-tabs>
       </div>
 
+      <!-- Mobile catalog (no tabs) -->
+      <div v-else-if="!isTrash" class="mobile-catalog-container">
+        <div class="stats-bar">
+          <div v-if="displaySearch" class="search-section">
+            <n-input
+              v-model:value="searchQuery"
+              placeholder="Search photos..."
+              size="small"
+              :clearable="!isSearching"
+              class="text-search"
+              @input="onSearchChange"
+              @clear="clearSearch"
+            >
+              <template #prefix>
+                <n-icon size="16">
+                  <svg viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14z"
+                    />
+                  </svg>
+                </n-icon>
+              </template>
+              <template #suffix>
+                <n-spin
+                  size="small"
+                  class="spinner-search spinner-medium spinner-centered"
+                  v-if="isSearching"
+                />
+              </template>
+            </n-input>
+          </div>
+          <div class="stats-section">
+            <div class="stats-info">
+              <span class="stats-text">
+                {{ processedPhotos.length }}
+                {{ processedPhotos.length === 1 ? "photo" : "photos" }}
+                available
+                <span v-if="selectedIds.length > 0" class="selected-count">
+                  • {{ selectedIds.length }} selected
+                </span>
+              </span>
+            </div>
+            <div class="stats-actions">
+              <n-button
+                v-if="selectedIds.length > 0"
+                text
+                type="primary"
+                @click="selectAll"
+              >
+                Select All
+              </n-button>
+              <n-button
+                v-if="selectedIds.length > 0"
+                text
+                type="warning"
+                @click="clearSelection"
+              >
+                Clear Selection
+              </n-button>
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-if="processedPhotos.length > 0"
+          class="photos-grid photo-grid-base"
+          :class="`grid-cols-${6}`"
+        >
+          <PhotoCard
+            v-for="photo in processedPhotos"
+            :key="photo.id"
+            :photo="photo"
+            :selected="selectedIds.includes(photo.id)"
+            mode="default"
+            @select="toggleSelection"
+            @info="showPhotoInfo"
+            :show-stars="false"
+            :show-tags="false"
+            :show-info-button="false"
+            :require-long-press="false"
+          />
+        </div>
+
+        <div v-else class="empty-state">
+          <div class="empty-state-content">
+            <n-icon size="64" class="empty-state-icon">
+              <ImageIcon />
+            </n-icon>
+            <h3 class="empty-state-title">No photos available</h3>
+            <p class="empty-state-description">
+              You don't have any photos here. Import them to Lightbox and click
+              Analyze Photos to start building your Workspace.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <!-- Trash mode (no tabs) -->
-      <div v-else>
+      <div v-else class="trash-container">
         <!-- Search and Stats Bar -->
         <div class="stats-bar">
           <div class="search-section">
@@ -245,14 +344,20 @@
           </template>
           {{
             isTrash
-              ? `Restore ${selectedIds.length} ${
-                  selectedIds.length === 1 ? "Photo" : "Photos"
-                }`
+              ? isMobile
+                ? `Restore (${selectedIds.length})`
+                : `Restore ${selectedIds.length} ${
+                    selectedIds.length === 1 ? "Photo" : "Photos"
+                  }`
               : props.singleSelection
-                ? "Select Photo"
-                : `Add ${totalSelectedCount} ${
-                    totalSelectedCount === 1 ? "Photo" : "Photos"
-                  } to Canvas`
+                ? isMobile
+                  ? "Select"
+                  : "Select Photo"
+                : isMobile
+                  ? `Add (${totalSelectedCount})`
+                  : `Add ${totalSelectedCount} ${
+                      totalSelectedCount === 1 ? "Photo" : "Photos"
+                    } to Canvas`
           }}
         </n-button>
       </div>
@@ -264,6 +369,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { usePhotosStore } from "@/stores/photos";
 import { useCanvasStore } from "@/stores/canvas";
+import { useIsMobile } from "@/composables/useIsMobile";
 import PhotoCard from "@/components/photoCards/PhotoCard.vue";
 import PhotosLightboxTab from "@/components/canvas/PhotosLightboxTab.vue";
 
@@ -324,6 +430,22 @@ const dialog = computed({
 // Stores
 const photosStore = usePhotosStore();
 const canvasStore = useCanvasStore();
+const { isMobile } = useIsMobile();
+
+// Computed modal style
+const modalStyle = computed(() => {
+  if (isMobile.value) {
+    return {
+      width: "100vw",
+      height: "100vh",
+      maxWidth: "100vw",
+      maxHeight: "100vh",
+      margin: 0,
+      "--n-border-radius": 0,
+    };
+  }
+  return { maxWidth: "90vw", width: "1000px", maxHeight: "90vh" };
+});
 
 // Component state
 const selectedIds = ref([]);
@@ -710,10 +832,65 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
+  :deep(.n-dialog.photos-dialog-modal) {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  :deep(.n-dialog.photos-dialog-modal .n-dialog__content) {
+    flex: 1 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .dialog-content {
+    max-height: none !important;
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    min-height: 0;
+  }
+
+  .empty-state {
+    min-height: 200px;
+  }
+
+  .tabs-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  :deep(.n-tabs) {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  :deep(.n-tabs-pane-wrapper) {
+    flex: 1;
+    overflow: hidden;
+  }
+
+  :deep(.n-tab-pane) {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
   .stats-bar {
     flex-direction: column;
     align-items: stretch;
     gap: var(--spacing-md);
+    padding: var(--spacing-sm) var(--spacing-md);
   }
 
   .search-section {
@@ -724,7 +901,7 @@ onMounted(async () => {
     order: 2;
     flex-direction: column;
     align-items: stretch;
-    gap: var(--spacing-md);
+    gap: var(--spacing-sm);
   }
 
   .stats-info {
@@ -735,13 +912,36 @@ onMounted(async () => {
     justify-content: center;
   }
 
+  .mobile-catalog-container,
+  .trash-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .mobile-catalog-container > .stats-bar,
+  .trash-container > .stats-bar {
+    flex-shrink: 0;
+  }
+
   .photos-grid {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: var(--spacing-sm);
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: var(--spacing-xs);
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
   }
 
   .dialog-actions {
-    flex-direction: column-reverse;
+    flex-direction: row;
+    width: 100%;
+    gap: var(--spacing-sm);
+  }
+
+  .dialog-actions .n-button {
+    flex: 1;
   }
 }
 

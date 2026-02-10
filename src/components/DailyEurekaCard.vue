@@ -312,7 +312,7 @@ const showPhotoInfo = async () => {
   overflow: hidden;
   z-index: 1;
   /* background-color: rgba(6, 182, 212, 0.7); */
-  background-color: var(--text-primary);
+  background-color: var(--text-secondary);
   border-radius: 5px;
 }
 

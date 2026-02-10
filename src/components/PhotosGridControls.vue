@@ -348,6 +348,7 @@
 
     <!-- Custom Weights Modal -->
     <n-modal
+      class="custom-weights-modal"
       v-model:show="showCustomWeightsModal"
       preset="card"
       title="Custom Preset Configuration"
@@ -358,15 +359,24 @@
         :format-criterion-name="formatCriterionName"
       />
       <template #footer>
-        <div style="display: flex; justify-content: space-between; width: 100%">
-          <n-button @click="resetCustomWeights"> Reset to Default </n-button>
-          <div style="display: flex">
-            <n-button @click="showCustomWeightsModal = false">
-              Cancel
-            </n-button>
-            <n-button type="primary" @click="saveCustomWeights">
-              Apply Custom Preset
-            </n-button>
+        <div class="custom-weights-footer">
+          <div class="footer-left">
+            <n-button class="reset-button" @click="resetCustomWeights"
+              >Reset</n-button
+            >
+          </div>
+          <div class="footer-right">
+            <n-button
+              class="cancel-button"
+              @click="showCustomWeightsModal = false"
+              >Cancel</n-button
+            >
+            <n-button
+              class="apply-button"
+              type="primary"
+              @click="saveCustomWeights"
+              >Apply</n-button
+            >
           </div>
         </div>
       </template>
@@ -868,7 +878,7 @@ watch(
 
 /* More Filters Section */
 .date-range-section {
-  margin-top: 4px;
+  /* margin-top: 4px; */
 }
 
 .date-range-toggle {
@@ -1025,5 +1035,74 @@ watch(
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important;
   max-width: 280px !important;
   padding: 12px !important;
+}
+
+/* Custom modal footer responsiveness */
+.custom-weights-modal {
+  /* allow CSS to adjust modal width on very small screens */
+}
+
+.custom-weights-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+.custom-weights-footer .footer-left {
+  flex: 1 1 auto;
+}
+.custom-weights-footer .footer-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* On small screens stack buttons vertically and make them full width */
+@media (max-width: 600px) {
+  .custom-weights-modal {
+    max-width: 92vw !important;
+    width: 100% !important;
+    padding: 0 8px;
+  }
+  .custom-weights-footer {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+  .custom-weights-footer .footer-left,
+  .custom-weights-footer .footer-right {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .custom-weights-footer .footer-left {
+    flex: 0 0 auto;
+  }
+  .custom-weights-footer .footer-right {
+    flex: 1 0 auto;
+    justify-content: flex-end;
+  }
+  .custom-weights-footer n-button {
+    padding: 6px 12px;
+    font-size: 14px;
+    line-height: 1;
+    min-width: 84px;
+    border-radius: 6px;
+  }
+  .custom-weights-footer n-button.reset-button,
+  .custom-weights-footer n-button.cancel-button {
+    min-width: 84px;
+    padding: 6px 12px;
+  }
+  .custom-weights-footer n-button.apply-button {
+    min-width: 96px;
+    padding: 8px 16px;
+  }
+  /* If space becomes tight, keep content on one line */
+  .custom-weights-footer n-button .n-button__content {
+    white-space: nowrap;
+  }
 }
 </style>

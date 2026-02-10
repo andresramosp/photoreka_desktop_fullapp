@@ -25,7 +25,7 @@ const toolIcon = (toolId: string) => {
   return tool ? TOOL_ICONS[tool.icon] : TOOL_ICONS.Workspace;
 };
 
-export function useMainMenu() {
+export function useMainMenu(closeMobileMenu?: () => void) {
   const router = useRouter();
   const photosStore = usePhotosStore();
   const collectionsStore = useCollectionsStore();
@@ -92,15 +92,19 @@ export function useMainMenu() {
             "span",
             { class: "second-level-menu-item" },
             h(
-              "div",
+              "span",
               {
                 onClick: (e: MouseEvent) => {
                   e.stopPropagation();
                   router.push("/collections");
+                  // Close mobile menu after navigation
+                  if (isMobile.value && closeMobileMenu) {
+                    closeMobileMenu();
+                  }
                 },
                 style: {
                   cursor: "pointer",
-                  width: "100%",
+                  display: "inline-block",
                 },
               },
               "Collections",
@@ -204,19 +208,23 @@ export function useMainMenu() {
             },
             [
               h(
-                "div",
+                "span",
                 {
                   onClick: (e: MouseEvent) => {
                     if (!isToolDisabledOnMobile("series")) {
                       e.stopPropagation();
                       router.push("/series");
+                      // Close mobile menu after navigation
+                      if (isMobile.value && closeMobileMenu) {
+                        closeMobileMenu();
+                      }
                     }
                   },
                   style: {
                     cursor: isToolDisabledOnMobile("series")
                       ? "default"
                       : "pointer",
-                    flex: 1,
+                    display: "inline-block",
                   },
                 },
                 "Series",

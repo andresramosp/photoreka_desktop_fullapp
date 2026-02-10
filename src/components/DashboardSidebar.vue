@@ -121,14 +121,21 @@ const props = defineProps<{
 
 const emit = defineEmits(["close-mobile-menu"]);
 
-// Use the main menu composable
+// Function to close mobile menu
+const closeMobileMenu = () => {
+  if (isMobile.value) {
+    emit("close-mobile-menu");
+  }
+};
+
+// Use the main menu composable with mobile menu close callback
 const {
   menuOptions,
   defaultExpandedKeys,
   isMobile,
   updateIsMobile,
   exclusiveMenuMode,
-} = useMainMenu();
+} = useMainMenu(closeMobileMenu);
 
 const activeKey = computed(() => {
   const routeName = route.name as string;
