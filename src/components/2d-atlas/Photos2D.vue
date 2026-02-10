@@ -1387,19 +1387,53 @@ const loadPhotosToPixi = async () => {
         sprite.eventMode = "static";
         sprite.cursor = "pointer";
 
-        // Add click/tap handler directly to sprite
-        sprite.on("pointerdown", (event) => {
-          if (isDragging.value || isPinching.value) return;
-          event.stopPropagation();
+        // Track pointer position to detect panning vs tap
+        let pointerDownPos = null;
+        let pointerDownTime = 0;
 
-          const photoId = photo.id;
-          const index = selectedPhotoIds.value.indexOf(photoId);
-          if (index === -1) {
-            selectedPhotoIds.value.push(photoId);
-          } else {
-            selectedPhotoIds.value.splice(index, 1);
+        sprite.on("pointerdown", (event) => {
+          // Store initial position and time for movement detection
+          pointerDownPos = { x: event.global.x, y: event.global.y };
+          pointerDownTime = performance.now();
+        });
+
+        // Handle selection on pointerup (after validating it wasn't a pan)
+        sprite.on("pointerup", (event) => {
+          if (!pointerDownPos || isPinching.value) {
+            pointerDownPos = null;
+            return;
           }
-          updateSpriteSelection(photoId);
+
+          // Calculate movement since pointerdown
+          const dx = Math.abs(event.global.x - pointerDownPos.x);
+          const dy = Math.abs(event.global.y - pointerDownPos.y);
+          const totalMovement = Math.sqrt(dx * dx + dy * dy);
+          const duration = performance.now() - pointerDownTime;
+
+          // Reset tracking
+          pointerDownPos = null;
+
+          // Only select if:
+          // - Duration < 300ms (quick tap)
+          // - Movement < 10px (minimal drift - stricter than touch threshold)
+          // - Not currently pinching
+          if (duration < 300 && totalMovement < 10) {
+            event.stopPropagation();
+
+            const photoId = photo.id;
+            const index = selectedPhotoIds.value.indexOf(photoId);
+            if (index === -1) {
+              selectedPhotoIds.value.push(photoId);
+            } else {
+              selectedPhotoIds.value.splice(index, 1);
+            }
+            updateSpriteSelection(photoId);
+          }
+        });
+
+        // Clean up tracking if pointer leaves sprite
+        sprite.on("pointerupoutside", () => {
+          pointerDownPos = null;
         });
 
         // Store reference

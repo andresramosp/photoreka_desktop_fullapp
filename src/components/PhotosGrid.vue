@@ -38,7 +38,7 @@
                 size="small"
                 secondary
                 @click="handleReviewDuplicates"
-                :disabled="duplicatesReviewed"
+                :disabled="duplicatesReviewed || isDemoUser"
                 :loading="isCheckingDuplicates"
               >
                 <template #icon v-if="!isCheckingDuplicates">
@@ -49,7 +49,11 @@
                 {{ "Find duplicates" }}
               </n-button>
             </template>
-            <span>Review duplicate photos in your selection</span>
+            <span>{{
+              isDemoUser
+                ? "Not available in demo mode"
+                : "Review duplicate photos in your selection"
+            }}</span>
           </n-tooltip>
 
           <!-- Filter Duplicates Checkbox (only show if duplicates were reviewed and found) -->
@@ -399,6 +403,7 @@ import PhotoToolSelector from "./PhotoToolSelector.vue";
 import FloatingActionBar from "./FloatingActionBar.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
+import { useUserStore } from "@/stores/userStore";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { usePhotoUpload } from "@/composables/usePhotoUpload.js";
 import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection.js";
@@ -435,6 +440,7 @@ const message = useMessage();
 const router = useRouter();
 const photosStore = usePhotosStore();
 const collectionsStore = useCollectionsStore();
+const userStore = useUserStore();
 const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
 const { preprocessPhotos } = usePhotoUpload();
 const {
@@ -455,6 +461,11 @@ const {
 } = usePhotoToolSelection();
 
 const { isMobile } = useIsMobile();
+
+// Check if user is demo
+const isDemoUser = computed(() => {
+  return userStore.user?.email === "demo@photorekatest.com";
+});
 
 // Grid columns state
 const gridColumns = ref(8);
