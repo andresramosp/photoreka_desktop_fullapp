@@ -382,7 +382,7 @@ router.beforeEach(async (to, from, next) => {
   if (to.path === "/demo") {
     const result = await userStore.demoLogin();
     if (result.success) {
-      next("/dashboard");
+      next("/workspace");
     } else {
       next("/auth");
     }
