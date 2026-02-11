@@ -96,7 +96,8 @@ export const TOOLS_CONFIG = [
     route: "/2d-view",
     availableOn: TOOL_AVAILABILITY.BOTH,
     menuSection: "explore",
-    showInPhotoSelector: false,
+    showInPhotoSelector: true,
+    singlePhotoOnly: true,
   },
   {
     id: "3d-atlas",

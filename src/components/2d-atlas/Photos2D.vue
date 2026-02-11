@@ -1591,6 +1591,238 @@ const resetView = () => {
   scheduleHiResUpdate();
 };
 
+// ============================================================================
+// Photo Flight Navigation (similar to 3D Atlas)
+// ============================================================================
+
+// Store pending photo ID if user clicks "Take to 2D" before photos are loaded
+const pendingPhotoFlightId = ref(null);
+
+// Animation state for camera flight
+const isFlying = ref(false);
+const flightState = ref(null);
+
+/**
+ * Smoothly flies camera to a specific photo
+ * @param {string|number} photoId - The photo ID to fly to
+ * @returns {boolean} true if flight initiated, false if photo not found
+ */
+const flyToPhoto = (photoId) => {
+  if (!pixiContainer.value || !photoContainer.value) {
+    console.warn("🚫 flyToPhoto: Container not ready");
+    return false;
+  }
+
+  // Find the photo in photos2D
+  const photo = photos2D.value.find((p) => String(p.id) === String(photoId));
+
+  if (!photo) {
+    console.warn(`🚫 flyToPhoto: Photo ${photoId} not found in 2D scene`);
+    return false;
+  }
+
+  // Check if photo has valid position (stored as [x, y] array)
+  if (!photo.position || !Array.isArray(photo.position)) {
+    console.warn(`🚫 flyToPhoto: Photo ${photoId} has no position array`);
+    return false;
+  }
+
+  const [x, y] = photo.position;
+
+  if (
+    typeof x !== "number" ||
+    typeof y !== "number" ||
+    !Number.isFinite(x) ||
+    !Number.isFinite(y)
+  ) {
+    console.warn(`🚫 flyToPhoto: Photo ${photoId} has invalid position values`);
+    return false;
+  }
+
+  // Wait for loading to complete before flying
+  if (isLoadingPositions.value || isLoadingTextures.value) {
+    console.warn(
+      `🚫 flyToPhoto: Still loading (positions: ${isLoadingPositions.value}, textures: ${isLoadingTextures.value})`,
+    );
+    return false;
+  }
+
+  // Check if sprite exists (photo must be rendered)
+  const sprite = photoSprites.value.get(photo.id);
+  if (!sprite) {
+    console.warn(`🚫 flyToPhoto: Sprite not found for photo ${photoId}`);
+    return false;
+  }
+
+  console.log(`🎯 flyToPhoto: Flying to photo ${photoId} at position`, {
+    x,
+    y,
+  });
+
+  // Get photo position in world space (already scaled by SCALE_FACTOR in the data)
+  const photoWorldX = x * SCALE_FACTOR;
+  const photoWorldY = y * SCALE_FACTOR;
+
+  // Container dimensions
+  const containerWidth = pixiContainer.value.clientWidth;
+  const containerHeight = pixiContainer.value.clientHeight;
+
+  // Calculate target zoom based on photo size to make it occupy ~80% of viewport
+  // Get the sprite's actual dimensions
+  const spriteWidth = sprite.width;
+  const spriteHeight = sprite.height;
+
+  // Calculate the scale needed to fit photo at 80% of viewport
+  const targetViewportCoverage = 0.8;
+  const scaleForWidth = (containerWidth * targetViewportCoverage) / spriteWidth;
+  const scaleForHeight =
+    (containerHeight * targetViewportCoverage) / spriteHeight;
+
+  // Use the smaller scale to ensure the photo fits in viewport
+  const TARGET_ZOOM = Math.min(scaleForWidth, scaleForHeight);
+
+  console.log(
+    `📐 Calculated zoom: ${TARGET_ZOOM.toFixed(2)} (sprite: ${spriteWidth.toFixed(0)}x${spriteHeight.toFixed(0)}, viewport: ${containerWidth}x${containerHeight})`,
+  );
+
+  // Calculate target offset to center the photo
+  const targetOffsetX = containerWidth / 2 - photoWorldX * TARGET_ZOOM;
+  const targetOffsetY = containerHeight / 2 - photoWorldY * TARGET_ZOOM;
+
+  // Start values
+  const startOffsetX = offsetX.value;
+  const startOffsetY = offsetY.value;
+  const startScale = scale.value;
+
+  // Calculate flight duration based on distance
+  const dx = targetOffsetX - startOffsetX;
+  const dy = targetOffsetY - startOffsetY;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  const scaleDiff = Math.abs(TARGET_ZOOM - startScale);
+
+  // Duration: minimum 800ms, scale with distance and zoom change
+  const duration = Math.max(
+    800,
+    Math.min(2000, distance * 0.5 + scaleDiff * 200),
+  );
+
+  // Store flight state
+  flightState.value = {
+    startTime: performance.now(),
+    duration: duration,
+    startOffsetX,
+    startOffsetY,
+    targetOffsetX,
+    targetOffsetY,
+    startScale,
+    targetScale: TARGET_ZOOM,
+  };
+
+  isFlying.value = true;
+
+  console.log(
+    `✈️ Flight initiated: duration=${duration.toFixed(0)}ms, distance=${distance.toFixed(1)}px`,
+  );
+
+  // Start animation loop if not running
+  if (!animationFrameId.value) {
+    animationFrameId.value = requestAnimationFrame(flightAnimationLoop);
+  }
+
+  return true;
+};
+
+/**
+ * Animation loop for smooth camera flight
+ */
+const flightAnimationLoop = () => {
+  if (!isFlying.value || !flightState.value) {
+    // Stop animation when flight is complete
+    if (!isTransitioning.value) {
+      animationFrameId.value = null;
+    } else {
+      // Keep running if there are other animations
+      animationFrameId.value = requestAnimationFrame(animationLoop);
+    }
+    return;
+  }
+
+  const now = performance.now();
+  const elapsed = now - flightState.value.startTime;
+  const progress = Math.min(elapsed / flightState.value.duration, 1);
+
+  // Easing function: ease-in-out cubic for smooth start and stop
+  const eased =
+    progress < 0.5
+      ? 4 * progress * progress * progress
+      : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+
+  // Interpolate offset and scale
+  offsetX.value =
+    flightState.value.startOffsetX +
+    (flightState.value.targetOffsetX - flightState.value.startOffsetX) * eased;
+  offsetY.value =
+    flightState.value.startOffsetY +
+    (flightState.value.targetOffsetY - flightState.value.startOffsetY) * eased;
+  scale.value =
+    flightState.value.startScale +
+    (flightState.value.targetScale - flightState.value.startScale) * eased;
+
+  // Update container transform
+  updateContainerTransform();
+
+  if (progress >= 1) {
+    // Flight complete
+    isFlying.value = false;
+    flightState.value = null;
+    console.log("✅ Flight complete");
+
+    // Update LOD after flight completes
+    scheduleLodUpdate();
+    scheduleHiResUpdate();
+
+    // Continue animation loop if there are transitions, otherwise stop
+    if (isTransitioning.value) {
+      animationFrameId.value = requestAnimationFrame(animationLoop);
+    } else {
+      animationFrameId.value = null;
+    }
+  } else {
+    // Continue flight
+    animationFrameId.value = requestAnimationFrame(flightAnimationLoop);
+  }
+};
+
+// Update the regular animation loop to handle both transitions and flights
+const animationLoop = () => {
+  // Handle flight animation
+  if (isFlying.value) {
+    flightAnimationLoop();
+    return; // Flight loop will handle continuation
+  }
+
+  // Handle sprite transitions
+  if (isTransitioning.value) {
+    updateTransitionPositions(performance.now());
+    animationFrameId.value = requestAnimationFrame(animationLoop);
+  } else {
+    animationFrameId.value = null; // self-stop
+  }
+};
+
+const startAnimationLoop = () => {
+  if (!animationFrameId.value) {
+    animationFrameId.value = requestAnimationFrame(animationLoop);
+  }
+};
+
+const stopAnimationLoop = () => {
+  if (animationFrameId.value) {
+    cancelAnimationFrame(animationFrameId.value);
+    animationFrameId.value = null;
+  }
+};
+
 // Selection handlers
 const clearSelection = () => {
   selectedPhotoIds.value.forEach((id) => {
@@ -1816,29 +2048,6 @@ const handleResize = () => {
 // Animation frame loop
 const animationFrameId = ref(null);
 
-// Only run the rAF loop while there's an active transition (saves CPU/GPU when idle).
-const animationLoop = () => {
-  if (isTransitioning.value) {
-    updateTransitionPositions(performance.now());
-    animationFrameId.value = requestAnimationFrame(animationLoop);
-  } else {
-    animationFrameId.value = null; // self-stop
-  }
-};
-
-const startAnimationLoop = () => {
-  if (!animationFrameId.value) {
-    animationFrameId.value = requestAnimationFrame(animationLoop);
-  }
-};
-
-const stopAnimationLoop = () => {
-  if (animationFrameId.value) {
-    cancelAnimationFrame(animationFrameId.value);
-    animationFrameId.value = null;
-  }
-};
-
 // Cleanup
 const cleanup = () => {
   // Release LOD + HiRes state (timers, textures, spatial index)
@@ -1879,6 +2088,54 @@ onMounted(async () => {
   await nextTick();
   await initPixi();
 
+  // Listen for custom event to fly to a specific photo (from photo selector)
+  const handleFlyToPhotoEvent = (event) => {
+    const { photoId } = event.detail;
+    console.log("📍 Received 2d:flyToPhoto event", photoId);
+    console.log("📊 Current photos2D.value.length:", photos2D.value.length);
+    console.log(
+      "⏳ Loading states - positions:",
+      isLoadingPositions.value,
+      "textures:",
+      isLoadingTextures.value,
+    );
+
+    // Cancel any active flight
+    isFlying.value = false;
+    flightState.value = null;
+
+    // Check if still loading
+    if (
+      isLoadingPositions.value ||
+      isLoadingTextures.value ||
+      photos2D.value.length === 0
+    ) {
+      console.log("⏳ Still loading, will retry when ready");
+      pendingPhotoFlightId.value = photoId;
+      return;
+    }
+
+    // Try to fly immediately if everything is loaded
+    setTimeout(() => {
+      console.log(
+        "🔍 Attempting flight, photos2D.value.length:",
+        photos2D.value.length,
+      );
+      const success = flyToPhoto(photoId);
+      if (!success) {
+        console.warn("⚠️ Failed to fly to photo, will retry when photos load");
+        pendingPhotoFlightId.value = photoId;
+      }
+    }, 300);
+  };
+
+  window.addEventListener("2d:flyToPhoto", handleFlyToPhotoEvent);
+
+  // Store reference to clean up later
+  window._2dAtlasEventCleanup = () => {
+    window.removeEventListener("2d:flyToPhoto", handleFlyToPhotoEvent);
+  };
+
   // Start fetching catalog photos in background so originalUrl becomes available.
   // If it fails, we still render thumbnails.
   const storePromise = photosStore.getOrFetch(false).catch(() => null);
@@ -1907,6 +2164,12 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  // Clean up event listeners
+  if (window._2dAtlasEventCleanup) {
+    window._2dAtlasEventCleanup();
+    delete window._2dAtlasEventCleanup;
+  }
+
   window.removeEventListener("resize", handleResize);
   stopAnimationLoop();
   if (filterSnapReflowTimer) {
@@ -1980,8 +2243,36 @@ watch(
   () => {
     if (isTransitioning.value) return;
     ensurePatternTag();
+
+    // Don't attempt flight here - let the isLoadingTextures watcher handle it
+    // This watcher is triggered when positions are loaded, but textures might still be loading
   },
 );
+
+// Watch for textures loading completion to trigger pending photo flight
+// This is the most reliable indicator that everything is ready
+watch(isLoadingTextures, (newValue, oldValue) => {
+  // Only act when loading transitions from true to false (loading complete)
+  if (oldValue === true && newValue === false && pendingPhotoFlightId.value) {
+    console.log(
+      "✅ Textures finished loading, attempting pending photo flight",
+    );
+    console.log("📊 photos2D.value.length:", photos2D.value.length);
+    console.log("📊 photoSprites.value.size:", photoSprites.value.size);
+
+    const photoId = pendingPhotoFlightId.value;
+    pendingPhotoFlightId.value = null;
+
+    // Give a small delay for final sprite setup
+    setTimeout(() => {
+      console.log("🎬 Executing flight to photo after texture load:", photoId);
+      const success = flyToPhoto(photoId);
+      if (!success) {
+        console.warn("⚠️ Flight failed after textures loaded");
+      }
+    }, 200);
+  }
+});
 
 watch(isTransitioning, (v) => {
   if (v) {

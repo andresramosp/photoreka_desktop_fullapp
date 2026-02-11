@@ -114,6 +114,62 @@ export function usePhotoToolSelection() {
   };
 
   /**
+   * Takes a photo to the 2D Atlas and flies to it
+   * @param {Array} photoIds - Array with single photo ID to visit
+   * @param {Function} clearSelections - Function to clear current selections
+   */
+  const takeTo2D = async (photoIds, clearSelections) => {
+    try {
+      isProcessing.value = true;
+
+      if (!photoIds || photoIds.length === 0) {
+        message.error("No photo selected for 2D navigation");
+        return;
+      }
+
+      if (photoIds.length > 1) {
+        message.error("Please select only one photo for 2D view");
+        return;
+      }
+
+      const photoId = photoIds[0];
+
+      // Fetch photo to ensure it exists
+      await photosStore.fetchPhoto(photoId);
+
+      const photo = photosStore.photos.find((p) => p.id == photoId);
+
+      if (!photo) {
+        message.error("Photo not found");
+        return;
+      }
+
+      // Clear selections before navigating
+      clearSelections();
+
+      // Navigate to 2D Atlas first
+      await router.push("/2d-view");
+
+      // Dispatch custom event with photo ID for camera flight
+      setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent("2d:flyToPhoto", {
+            detail: { photoId: photoId },
+          }),
+        );
+        console.log("🚀 Flying to photo in 2D:", photoId);
+      }, 100);
+
+      message.info("Navigating to photo in 2D space...");
+    } catch (error) {
+      console.error("Error taking photo to 2D Atlas:", error);
+      message.error("Failed to navigate to 2D Atlas");
+    } finally {
+      isProcessing.value = false;
+    }
+  };
+
+  /**
    * Takes photos to the 3D Atlas and flies to them sequentially
    * @param {Array} photoIds - Array of photo IDs to visit in sequence
    * @param {Function} clearSelections - Function to clear current selections
@@ -195,6 +251,9 @@ export function usePhotoToolSelection() {
       case "framer":
         await takeToFramer(photoIds, clearSelections);
         break;
+      case "2d-view":
+        await takeTo2D(photoIds, clearSelections);
+        break;
       case "3d-atlas":
         await takeToAtlas(photoIds, clearSelections);
         break;
@@ -225,6 +284,7 @@ export function usePhotoToolSelection() {
     // Methods
     takeToCanvas,
     takeToFramer,
+    takeTo2D,
     takeToAtlas,
     takeToTool,
     openToolSelector,
