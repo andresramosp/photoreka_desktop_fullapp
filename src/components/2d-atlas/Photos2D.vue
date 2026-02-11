@@ -2157,6 +2157,26 @@ onMounted(async () => {
   // Once store data is available, try hi-res promotion again.
   storePromise?.then(() => scheduleHiResUpdate());
 
+  // Check if there's a pending photo flight that arrived during loading
+  // This handles the case where the event arrived while textures were loading
+  if (pendingPhotoFlightId.value && !isLoadingTextures.value) {
+    const photoId = pendingPhotoFlightId.value;
+    console.log(
+      "🎯 Processing pending flight after mount completion:",
+      photoId,
+    );
+    pendingPhotoFlightId.value = null;
+
+    // Small delay to ensure all sprites are fully initialized
+    setTimeout(() => {
+      console.log("🎬 Executing pending flight:", photoId);
+      const success = flyToPhoto(photoId);
+      if (!success) {
+        console.warn("⚠️ Pending flight failed after mount");
+      }
+    }, 300);
+  }
+
   // Hide config panel on mobile by default
   if (isMobile.value) {
     showConfigPanel.value = false;
@@ -2244,14 +2264,41 @@ watch(
     if (isTransitioning.value) return;
     ensurePatternTag();
 
-    // Don't attempt flight here - let the isLoadingTextures watcher handle it
-    // This watcher is triggered when positions are loaded, but textures might still be loading
+    // Fallback: if there's a pending flight and we're not loading anymore, try it
+    // This handles edge cases where the watcher misses the state transition
+    if (
+      pendingPhotoFlightId.value &&
+      !isLoadingPositions.value &&
+      !isLoadingTextures.value &&
+      photos2D.value.length > 0 &&
+      photoSprites.value.size > 0
+    ) {
+      const photoId = pendingPhotoFlightId.value;
+      console.log(
+        "🔄 Fallback: Detected pending flight with loaded photos:",
+        photoId,
+      );
+      pendingPhotoFlightId.value = null;
+
+      setTimeout(() => {
+        console.log("🎬 Executing fallback flight:", photoId);
+        const success = flyToPhoto(photoId);
+        if (!success) {
+          console.warn("⚠️ Fallback flight failed");
+        }
+      }, 200);
+    }
   },
 );
 
 // Watch for textures loading completion to trigger pending photo flight
 // This is the most reliable indicator that everything is ready
 watch(isLoadingTextures, (newValue, oldValue) => {
+  console.log(
+    `📊 isLoadingTextures changed: ${oldValue} -> ${newValue}, pendingFlightId:`,
+    pendingPhotoFlightId.value,
+  );
+
   // Only act when loading transitions from true to false (loading complete)
   if (oldValue === true && newValue === false && pendingPhotoFlightId.value) {
     console.log(

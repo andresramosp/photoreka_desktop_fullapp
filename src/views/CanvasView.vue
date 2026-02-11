@@ -1342,11 +1342,17 @@ const handleClickOutside = (event) => {
 };
 
 const handleKeyDown = (event) => {
-  // Check if user is typing in an input field
+  // Check if user is typing in an input field (including Naive UI inputs)
+  const targetElement = event.target;
   const isTyping =
-    ["INPUT", "TEXTAREA"].includes(event.target.tagName) ||
-    event.target.contentEditable === "true" ||
-    event.target.isContentEditable;
+    ["INPUT", "TEXTAREA"].includes(targetElement.tagName) ||
+    targetElement.contentEditable === "true" ||
+    targetElement.isContentEditable ||
+    targetElement.getAttribute?.("contenteditable") === "true" ||
+    // Check if typing in any input-like component (Naive UI, etc.)
+    targetElement.closest?.("input, textarea, [contenteditable]") !== null ||
+    document.activeElement?.tagName === "INPUT" ||
+    document.activeElement?.tagName === "TEXTAREA";
 
   // Delete selected photos ONLY when Delete (Supr) key is pressed
   // Backspace is reserved for text editing and should not delete photos
