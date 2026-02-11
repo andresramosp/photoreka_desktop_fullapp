@@ -21,6 +21,7 @@
     :customQuestionsRemaining="customQuestionsRemaining"
     :insightTypesAvailable="insightTypesAvailable"
     :canUseInsights="canUseInsights"
+    :photoCredit="photoCredit"
     :formatDate="formatDate"
     :formatExposureTime="formatExposureTime"
     :formatCategoryName="formatCategoryName"
@@ -64,6 +65,7 @@
     :customQuestionsRemaining="customQuestionsRemaining"
     :insightTypesAvailable="insightTypesAvailable"
     :canUseInsights="canUseInsights"
+    :photoCredit="photoCredit"
     :formatDate="formatDate"
     :formatExposureTime="formatExposureTime"
     :formatCategoryName="formatCategoryName"
@@ -187,6 +189,7 @@ import PhotoInfoMobileLayout from "./photo-info/layouts/PhotoInfoMobileLayout.vu
 
 // Composables
 import { useIsMobile } from "@/composables/useIsMobile.js";
+import { useUserStore } from "@/stores/userStore.ts";
 
 // Icons from @vicons
 import {
@@ -219,6 +222,7 @@ import { PaletteOutlined } from "@vicons/material";
 
 // Mobile detection
 const { isMobile } = useIsMobile();
+const userStore = useUserStore();
 
 const props = defineProps({
   modelValue: {
@@ -304,6 +308,29 @@ const hasNextPhoto = computed(() => {
 const photoCounter = computed(() => {
   if (!props.allPhotos?.length || props.currentPhotoIndex < 0) return "";
   return `${props.currentPhotoIndex + 1} / ${props.allPhotos.length}`;
+});
+
+// Generic photo credit info for any user
+const photoCredit = computed(() => {
+  // Check if user is demo user
+  const isDemoUser = userStore.user?.email === "demo@photorekatest.com";
+  if (!isDemoUser) return null;
+
+  // Check if filename contains "DSCF" for flaneur_oo credit
+  const filename =
+    props.selectedPhoto?.originalFileName ||
+    props.selectedPhoto?.filename ||
+    props.selectedPhoto?.name ||
+    "";
+
+  if (filename.toUpperCase().includes("DSCF")) {
+    return {
+      username: "@flaneur_oo",
+      url: "https://www.instagram.com/flaneur_oo",
+    };
+  }
+
+  return null;
 });
 
 // Navigation methods

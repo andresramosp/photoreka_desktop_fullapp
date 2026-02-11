@@ -1364,23 +1364,23 @@ const handleKeyDown = (event) => {
     }
   }
 
-  // Zoom in with 'A' key
-  if (event.key === "a" || event.key === "A") {
-    // Only if not typing in an input field
-    if (!isTyping) {
-      event.preventDefault();
-      zoomTick(1);
-    }
-  }
+  // Zoom in with 'A' key - DISABLED
+  // if (event.key === "a" || event.key === "A") {
+  //   // Only if not typing in an input field
+  //   if (!isTyping) {
+  //     event.preventDefault();
+  //     zoomTick(1);
+  //   }
+  // }
 
-  // Zoom out with 'Z' key
-  if (event.key === "z" || event.key === "Z") {
-    // Only if not typing in an input field
-    if (!isTyping) {
-      event.preventDefault();
-      zoomTick(-1);
-    }
-  }
+  // Zoom out with 'Z' key - DISABLED
+  // if (event.key === "z" || event.key === "Z") {
+  //   // Only if not typing in an input field
+  //   if (!isTyping) {
+  //     event.preventDefault();
+  //     zoomTick(-1);
+  //   }
+  // }
 
   // Escape key to deselect all photos
   if (event.key === "Escape") {

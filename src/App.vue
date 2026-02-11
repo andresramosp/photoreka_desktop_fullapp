@@ -102,8 +102,8 @@
             </div>
           </div>
 
-          <!-- Floating Add Photos Button -->
-          <!-- <FloatingAddPhotosButton v-if="!isMobile" /> -->
+          <!-- Floating Request Access Button (solo en modo demo) -->
+          <FloatingRequestAccessButton />
 
           <!-- Confetti Effect for first process completion -->
           <ConfettiEffect
@@ -135,7 +135,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useUserStore } from "./stores/userStore";
 import DashboardSidebar from "./components/DashboardSidebar.vue";
 import DashboardHeader from "./components/DashboardHeader.vue";
-import FloatingAddPhotosButton from "./components/FloatingAddPhotosButton.vue";
+import FloatingRequestAccessButton from "./components/FloatingRequestAccessButton.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useSeriesStore } from "@/stores/series.js";

@@ -63,6 +63,21 @@
             @error="emit('image-error', $event)"
             @click="emit('open-fullscreen')"
           />
+          <!-- Photo credit badge (if available) -->
+          <a
+            v-if="photoCredit"
+            :href="photoCredit.url"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="photo-credit-badge mobile"
+            :title="`Photo by ${photoCredit.username}`"
+          >
+            <n-icon size="14">
+              <LogoInstagram />
+            </n-icon>
+            <span>{{ photoCredit.username }}</span>
+          </a>
+
           <!-- Quick Actions Overlay -->
           <div class="mobile-photo-actions">
             <n-button
@@ -679,6 +694,7 @@ import {
   SettingsOutline,
   BrushOutline,
   SendOutline,
+  LogoInstagram,
 } from "@vicons/ionicons5";
 import { FullscreenOutlined, PaletteOutlined } from "@vicons/material";
 import {
@@ -714,6 +730,7 @@ const props = defineProps({
     default: () => ({ cultural: true, technical: true, artistic: true }),
   },
   canUseInsights: { type: Boolean, default: true },
+  photoCredit: { type: Object, default: null },
   formatDate: { type: Function, default: (d) => d },
   formatExposureTime: { type: Function, default: (e) => e },
   formatCategoryName: { type: Function, default: (c) => c },
@@ -818,6 +835,40 @@ const visibleModel = computed({
 
 .mobile-action-btn:hover {
   background: rgba(0, 0, 0, 0.8) !important;
+}
+
+/* Photo credit badge mobile */
+.photo-credit-badge.mobile {
+  position: absolute;
+  bottom: var(--spacing-sm);
+  left: var(--spacing-sm);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  border-radius: 16px;
+  color: white;
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.85;
+  transition: all 0.3s ease;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  z-index: 10;
+}
+
+.photo-credit-badge.mobile:hover,
+.photo-credit-badge.mobile:active {
+  opacity: 1;
+  background: rgba(225, 48, 108, 0.8);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: scale(1.05);
+}
+
+.photo-credit-badge.mobile span {
+  line-height: 1;
 }
 
 /* Tabs Container */

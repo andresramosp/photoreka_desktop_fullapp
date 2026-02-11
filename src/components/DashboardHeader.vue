@@ -37,7 +37,14 @@
           "
           v-else
         >
-          <AppLogo layout="horizontal" />
+          <a
+            href="https://www.photoreka.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="display: flex; align-items: center"
+          >
+            <AppLogo layout="horizontal" />
+          </a>
         </div>
       </div>
 

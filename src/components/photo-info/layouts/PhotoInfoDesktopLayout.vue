@@ -44,6 +44,21 @@
 
         <!-- Photo Overlay with Actions Only -->
         <div class="photo-overlay">
+          <!-- Bottom left: Photo credit badge (if available) -->
+          <a
+            v-if="photoCredit"
+            :href="photoCredit.url"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="photo-credit-badge"
+            :title="`Photo by ${photoCredit.username}`"
+          >
+            <n-icon size="16">
+              <LogoInstagram />
+            </n-icon>
+            <span>{{ photoCredit.username }}</span>
+          </a>
+
           <!-- Bottom right: Download + Fullscreen -->
           <div class="bottom-right-actions">
             <n-button
@@ -945,6 +960,7 @@ import {
   SettingsOutline,
   BrushOutline,
   SendOutline,
+  LogoInstagram,
 } from "@vicons/ionicons5";
 import { FullscreenOutlined } from "@vicons/material";
 import { Trophy20Regular as ScoresIcon } from "@vicons/fluent";
@@ -979,6 +995,7 @@ const props = defineProps({
     default: () => ({ cultural: true, technical: true, artistic: true }),
   },
   canUseInsights: { type: Boolean, default: true },
+  photoCredit: { type: Object, default: null },
   formatDate: { type: Function, default: (d) => d },
   formatExposureTime: { type: Function, default: (e) => e },
   formatCategoryName: { type: Function, default: (c) => c },
@@ -1216,6 +1233,39 @@ const visibleModel = computed({
 .fullscreen-btn:hover {
   opacity: 1;
   background-color: rgba(0, 0, 0, 0.7) !important;
+}
+
+/* Photo credit badge - generic for any user */
+.photo-credit-badge {
+  position: absolute;
+  bottom: var(--spacing-sm);
+  left: var(--spacing-sm);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  border-radius: 20px;
+  color: white;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.8;
+  transition: all 0.3s ease;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.photo-credit-badge:hover {
+  opacity: 1;
+  background: rgba(225, 48, 108, 0.8);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(225, 48, 108, 0.3);
+}
+
+.photo-credit-badge span {
+  line-height: 1;
 }
 
 .info-sections {
