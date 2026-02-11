@@ -177,6 +177,7 @@ export const darkTheme = {
   textPlaceholder: colors.gray[500],
   textDisabled: "rgba(255, 255, 255, 0.25)",
   textOnPrimary: "#ffffff",
+  textOnAccent: "#000000",
 
   // Icons
   iconPrimary: "rgba(255, 255, 255, 0.82)",
@@ -262,6 +263,7 @@ export const lightTheme = {
   textPlaceholder: "#94a3b8",
   textDisabled: "#cbd5e1",
   textOnPrimary: "#ffffff",
+  textOnAccent: "#000000",
 
   // Icons
   iconPrimary: "#0f172a",
@@ -472,6 +474,7 @@ export function getThemeCSSVariables(isDark = true) {
     "--text-placeholder": theme.textPlaceholder,
     "--text-disabled": theme.textDisabled,
     "--text-on-primary": theme.textOnPrimary,
+    "--text-on-accent": theme.textOnAccent, // Reutilizamos el mismo para asegurar contraste
 
     // Icons
     "--icon-primary": theme.iconPrimary,

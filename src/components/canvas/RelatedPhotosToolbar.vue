@@ -3,7 +3,7 @@
     <div class="toolbar-content">
       <!-- Base Image Section (Fixed Left) -->
       <PhotoBase
-        :baseImage="props.baseImage"
+        :base-images="props.baseImages"
         :toolbar-state="toolbarState"
         :filter-context="props.filterContext"
         @photos-generated="handleGeneratedPhotos"
@@ -83,7 +83,7 @@ import PhotoBase from "./PhotoBase.vue";
 
 interface Props {
   isVisible: boolean;
-  baseImage?: Photo;
+  baseImages?: Photo[];
   toolbarState: Object;
   isLoading?: boolean;
   filterContext?: Object;

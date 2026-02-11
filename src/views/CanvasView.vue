@@ -235,7 +235,7 @@
     <RelatedPhotosToolbar
       ref="relatedPhotosToolbarRef"
       v-if="showRelatedPhotos && isExpansionEnabled"
-      :base-image="selectedPhotoForToolbar"
+      :base-images="selectedPhotosForToolbar"
       :is-visible="showRelatedPhotos"
       :is-loading="isLoadingRelatedPhotos"
       :toolbar-state="toolbarState"
@@ -835,7 +835,7 @@ const showRelatedPhotos = ref(false);
 const showPhotosDialog = ref(false);
 const showTrashDialog = ref(false);
 const showPhotoInfoDialog = ref(false);
-const selectedPhotoForToolbar = ref(null);
+const selectedPhotosForToolbar = ref([]);
 const selectedDialogPhoto = ref(null);
 const isLoadingRelatedPhotos = ref(false);
 
@@ -1059,7 +1059,20 @@ function handleAddPhotoFromPhoto(event) {
   if (expansionMode.value == "canvas") {
     handleAddPhotosToCanvas(event);
   } else {
-    selectedPhotoForToolbar.value = event.photo;
+    // Para expansión por tags, siempre usar solo la foto clicada
+    // (los tags siempre se seleccionan de la foto principal)
+    if (toolbarState.value.expansion.type === "tags") {
+      selectedPhotosForToolbar.value = [event.photo];
+    } else {
+      // Para otros tipos: si la foto clicada NO está seleccionada, usar solo esa foto
+      // Si SÍ está seleccionada, usar todas las fotos seleccionadas
+      if (!event.photo.selected) {
+        selectedPhotosForToolbar.value = [event.photo];
+      } else {
+        const selectedPhotos = photos.value.filter((photo) => photo.selected);
+        selectedPhotosForToolbar.value = selectedPhotos;
+      }
+    }
     showRelatedPhotos.value = true;
   }
 }
