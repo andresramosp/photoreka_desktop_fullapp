@@ -26,6 +26,25 @@
           <WorkspacePreview :photos="recentPhotos" />
         </div> -->
 
+        <!-- Canvas Card with Preview - Hidden on mobile -->
+        <div
+          v-if="
+            !isMobileLimitedMode &&
+            canvasData &&
+            canvasData.data &&
+            Array.isArray(canvasData.data.photos) &&
+            canvasData.data.photos.length > 0
+          "
+          class="action-card"
+          :class="{ disabled: appAccessMode === 'blocked' }"
+          @click="goToTool('canvas')"
+        >
+          <CanvasPreview
+            v-if="!isMobileLimitedMode"
+            :canvas-data="canvasData"
+          />
+        </div>
+
         <DashboardActionCard
           :icon="LayersOutline"
           title="Your Workspace"
@@ -59,24 +78,7 @@
           :disabled="appAccessMode === 'blocked'"
           @click="goToTool('search')"
         />
-        <!-- Canvas Card with Preview - Hidden on mobile -->
-        <div
-          v-if="
-            !isMobileLimitedMode &&
-            canvasData &&
-            canvasData.data &&
-            Array.isArray(canvasData.data.photos) &&
-            canvasData.data.photos.length > 0
-          "
-          class="action-card"
-          :class="{ disabled: appAccessMode === 'blocked' }"
-          @click="goToTool('canvas')"
-        >
-          <CanvasPreview
-            v-if="!isMobileLimitedMode"
-            :canvas-data="canvasData"
-          />
-        </div>
+        <!-- 
         <DashboardActionCard
           v-else-if="!isMobileLimitedMode"
           :icon="Workspace"
@@ -85,7 +87,7 @@
           additional-classes="explorer"
           icon-color="var(--primary-color)"
           @click="goToTool('canvas')"
-        />
+        /> -->
 
         <!-- <div
           class="action-card report"

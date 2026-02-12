@@ -53,6 +53,7 @@
       v-model:tagBeaconsTopTags="tagBeaconsSystem.config.topTagsPerCell"
       v-model:tagBeaconsMergeRadius="tagBeaconsSystem.config.mergeSameTagRadius"
       v-model:selectByClick="selectByClick"
+      :controlMode="controlMode"
       :chunkOptions="chunkOptions"
       :showDiscreteLoader="showDiscreteLoader"
       :searchResults="searchResults"
@@ -62,6 +63,7 @@
       :isPlayground="isPlayground"
       :navigationHintText="navigationHintText"
       @chunk-change="onChunkChange"
+      @control-mode-change="onControlModeChange"
       @visual-aspects-change="onVisualAspectsChange"
       @artistic-scores-change="onArtisticScoresChange"
       @time-range-change="onTimeRangeChange"
@@ -255,6 +257,7 @@ import { usePhotosStore } from "@/stores/photos.js";
 import { use3DPhotos } from "@/composables/3d-viewer/use3DPhotos.js";
 import { useFirstPersonControls } from "@/composables//3d-viewer/useFirstPersonControls.js";
 import { useTouchControls } from "@/composables/3d-viewer/useTouchControls.js";
+import { useOrbitControls } from "@/composables/3d-viewer/useOrbitControls.js";
 import { useFloatingTags } from "@/composables/3d-viewer/useFloatingTags.js";
 import { usePhotoTextureManager } from "@/composables/3d-viewer/usePhotoTextureManager.js";
 import { useTagBeacons } from "@/composables/3d-viewer/useTagBeacons.js";
@@ -782,8 +785,12 @@ const initialLoadingPhase = ref(true);
 // Valor local del selector para evitar conflictos con v-model
 const selectedChunk = ref(null);
 
+// Navigation control mode: 'orbit' (default) or 'fps'
+const controlMode = ref("orbit");
 // First Person Controls (keyboard/mouse)
 const fpControls = ref(null);
+// Orbit Controls (default - click & drag to rotate)
+const orbitControls = ref(null);
 // Touch Controls (mobile)
 const touchControls = ref(null);
 let animationId = null;
@@ -1019,9 +1026,13 @@ const checkAllTexturesLoaded = async () => {
     navigationBlocked.value = false;
 
     // Activar controles de navegación si existen
-    if (fpControls.value) {
+    if (controlMode.value === "orbit" && orbitControls.value) {
+      console.log("🌐 Activando controles orbitales...");
+      orbitControls.value.setup(); // idempotent: registers listeners if needed, resyncs
+    } else if (fpControls.value) {
       console.log("🎮 Activando controles de navegación (keyboard/mouse)...");
       fpControls.value.setup();
+      fpControls.value.enable(); // ensure enabled after navigationBlocked disabled it
     }
     if (touchControls.value) {
       console.log("📱 Activando controles táctiles (touch)...");
@@ -1436,8 +1447,12 @@ const hideLoader = () => {
   showDiscreteLoader.value = false;
   console.log("✅ Loader ocultado - Carga completada");
 
-  // Mostrar mensaje de activación de cámara cuando todo esté listo (solo desktop)
-  if (!cameraActivationMessageShown.value && !hasTouch.value) {
+  // Mostrar mensaje de activación de cámara cuando todo esté listo (solo desktop, solo modo FPS)
+  if (
+    !cameraActivationMessageShown.value &&
+    !hasTouch.value &&
+    controlMode.value === "fps"
+  ) {
     cameraActivationMessageShown.value = true;
     nextTick(() => {
       cameraActivationMessageClose.value = message.warning(
@@ -1683,8 +1698,11 @@ const registerNewPhotos = async (newPhotos) => {
   // Reactivar navegación
   navigationBlocked.value = false;
 
-  if (fpControls.value) {
+  if (controlMode.value === "orbit" && orbitControls.value) {
+    orbitControls.value.setup(); // idempotent: registers listeners if needed, resyncs
+  } else if (fpControls.value) {
     fpControls.value.setup();
+    fpControls.value.enable(); // ensure enabled after navigationBlocked disabled it
   }
   if (touchControls.value) {
     touchControls.value.setup();
@@ -1993,8 +2011,10 @@ const animate = () => {
 
   // Bloquear controles durante fase de descarga inicial (o durante vuelo)
   if (!navigationBlocked.value && !isBeaconFlying.value) {
-    // Update keyboard/mouse controls
-    if (fpControls.value) {
+    // Update active controls based on current mode
+    if (controlMode.value === "orbit" && orbitControls.value) {
+      orbitControls.value.update();
+    } else if (fpControls.value) {
       fpControls.value.update();
     }
     // Update touch controls if available
@@ -2054,6 +2074,41 @@ const animate = () => {
     if (t >= 1) {
       isBeaconFlying.value = false;
       beaconFlightState.value = null;
+
+      // Resync controls after flight so they pick up the new camera position/orientation
+      if (controlMode.value === "orbit" && orbitControls.value) {
+        // Set orbit target directly (without calling setTarget which moves the camera)
+        if (state.photoCenter) {
+          orbitControls.value.target.set(
+            state.photoCenter.x,
+            state.photoCenter.y,
+            state.photoCenter.z,
+          );
+        } else if (state.lookAt) {
+          orbitControls.value.target.set(
+            state.lookAt.x,
+            state.lookAt.y,
+            state.lookAt.z,
+          );
+        }
+        // Now sync the spherical coordinates from the camera's current position
+        orbitControls.value.resyncFromCamera();
+      } else if (controlMode.value === "fps" && fpControls.value) {
+        // After SLERP flight, quaternion may have introduced roll.
+        // Re-extract clean yaw/pitch and zero out roll.
+        const cam = cameraRef.value;
+        if (cam) {
+          cam.updateMatrixWorld(true);
+          const dir = new THREE.Vector3();
+          cam.getWorldDirection(dir);
+          const yaw = Math.atan2(-dir.x, -dir.z);
+          const pitch = Math.asin(Math.max(-1, Math.min(1, dir.y)));
+          cam.up.set(0, 1, 0);
+          cam.rotation.set(pitch, yaw, 0, "YXZ");
+          cam.updateMatrixWorld(true);
+          fpControls.value.setCameraRotation(yaw, pitch);
+        }
+      }
 
       // Si hay un tour activo, iniciar la pausa antes del siguiente vuelo
       if (photoTourState.value && !photoTourState.value.isPaused) {
@@ -2401,10 +2456,28 @@ const handlePhotoClick = (event) => {
     return;
   }
 
+  // In orbit mode, ignore clicks that were part of a drag (rotation/pan)
+  if (controlMode.value === "orbit" && orbitControls.value) {
+    if (
+      orbitControls.value.isDragging.value ||
+      orbitControls.value.isPanning.value
+    ) {
+      return;
+    }
+    // Check if mouse moved significantly since pointerdown (drag detection)
+    if (orbitControls.value._lastDragDistance > 5) {
+      return;
+    }
+  }
+
   console.log("🖱️ Click detectado, tipo:", event.type);
 
-  // Si estamos en modo cámara, usar la foto con hover activa
-  if (fpControls.value?.mouseState?.isPointerLocked && hoveredPhoto.value) {
+  // Si estamos en modo cámara (FPS), usar la foto con hover activa
+  if (
+    controlMode.value === "fps" &&
+    fpControls.value?.mouseState?.isPointerLocked &&
+    hoveredPhoto.value
+  ) {
     console.log("📸 Click en modo cámara - seleccionando foto con hover");
     event.preventDefault();
     event.stopPropagation();
@@ -2502,9 +2575,13 @@ const handlePhotoClick = (event) => {
   // No hacer nada si click en el vacío con botón izquierdo
 };
 
-// Manejador para click derecho (activar cámara)
+// Manejador para click derecho (activar cámara - only in FPS mode)
 const handleRightClick = (event) => {
   event.preventDefault(); // Prevenir menú contextual
+
+  // In orbit mode, right-click does nothing (orbit uses left-click drag)
+  if (controlMode.value === "orbit") return;
+
   console.log("🖱️ Right-click detectado, activando cámara...");
 
   // Cerrar el mensaje de activación de cámara
@@ -2605,6 +2682,149 @@ const handleToolSelected = async (toolId) => {
   closeToolSelector();
 };
 
+// Función para cambiar el modo de navegación
+const onControlModeChange = (newMode) => {
+  const oldMode = controlMode.value;
+  if (newMode === oldMode) return;
+  console.log(`🔄 Switching control mode: ${oldMode} → ${newMode}`);
+  controlMode.value = newMode;
+
+  const cam = cameraRef.value;
+
+  // ── Step 1: Capture camera world state BEFORE any teardown ─────
+  // Position + look-direction are mode-agnostic and survive the reset
+  let savedPosition = null;
+  let savedDirection = null;
+
+  if (cam) {
+    cam.updateMatrixWorld(true);
+    savedPosition = cam.position.clone();
+    savedDirection = new THREE.Vector3();
+    cam.getWorldDirection(savedDirection);
+  }
+
+  // ── Step 2: Tear down old mode completely ──────────────────────
+  if (oldMode === "fps") {
+    if (fpControls.value) {
+      fpControls.value.cleanup(); // remove FPS event listeners
+      fpControls.value.disable();
+      if (document.pointerLockElement && document.exitPointerLock) {
+        try {
+          document.exitPointerLock();
+        } catch (_) {}
+      }
+    }
+  } else {
+    if (orbitControls.value) {
+      orbitControls.value.cleanup(); // remove orbit event listeners
+      orbitControls.value.disable();
+    }
+  }
+
+  // ── Step 3: Full camera reset (clean slate) ────────────────────
+  // This eliminates leftover roll (rotation.z), stale Euler decomposition
+  // artefacts, and any up-vector drift between modes.
+  if (cam) {
+    cam.up.set(0, 1, 0);
+    // Reset quaternion to identity (auto-clears rotation via Three.js binding)
+    cam.quaternion.identity();
+    // Explicitly zero rotation and set a neutral order
+    cam.rotation.set(0, 0, 0, "XYZ");
+    // Restore saved position (rotation is now identity → looking down -Z)
+    cam.position.copy(savedPosition);
+    cam.updateMatrixWorld(true);
+    console.log(
+      `🔄 Camera reset: pos=(${savedPosition.x.toFixed(1)}, ${savedPosition.y.toFixed(1)}, ${savedPosition.z.toFixed(1)})`,
+    );
+  }
+
+  // ── Step 4: Initialize new mode with clean camera state ────────
+  if (newMode === "orbit") {
+    if (cam && orbitControls.value) {
+      // Compute orbit target as the centroid of visible photos (scene center).
+      // This is where the user naturally expects to orbit around.
+      const orbitTarget = new THREE.Vector3(0, 0, 0);
+      const visible = filteredPhotos.value;
+      if (visible.length > 0) {
+        let count = 0;
+        for (const p of visible) {
+          if (p.lodObject) {
+            orbitTarget.add(p.lodObject.position);
+            count++;
+          } else if (p.position) {
+            orbitTarget.x += p.position[0] || 0;
+            orbitTarget.y += p.position[1] || 0;
+            orbitTarget.z += p.position[2] || 0;
+            count++;
+          }
+        }
+        if (count > 0) orbitTarget.divideScalar(count);
+      }
+
+      // Set target on the controls object
+      orbitControls.value.target.copy(orbitTarget);
+
+      // Orient camera towards the scene center from its current position
+      cam.lookAt(orbitTarget);
+      cam.updateMatrixWorld(true);
+
+      // setup() calls syncFromCamera → computes spherical from current camera+target
+      orbitControls.value.setup();
+      console.log(
+        `🌐 Orbit target set to centroid (${orbitTarget.x.toFixed(1)}, ${orbitTarget.y.toFixed(1)}, ${orbitTarget.z.toFixed(1)})`,
+      );
+    }
+
+    // Cerrar mensaje de activación de cámara si está visible
+    if (cameraActivationMessageClose.value) {
+      cameraActivationMessageClose.value();
+      cameraActivationMessageClose.value = null;
+    }
+  } else {
+    // FPS mode
+    if (cam && fpControls.value) {
+      // Set FPS rotation order BEFORE applying angles
+      cam.rotation.order = "YXZ";
+
+      // Calculate clean yaw/pitch from saved direction
+      const yaw = Math.atan2(-savedDirection.x, -savedDirection.z);
+      const pitch = Math.asin(Math.max(-1, Math.min(1, savedDirection.y)));
+
+      // Apply rotation with explicit z = 0 (no roll)
+      cam.rotation.set(pitch, yaw, 0, "YXZ");
+      cam.updateMatrixWorld(true);
+
+      // Sync FPS controls internal state
+      fpControls.value.setCameraRotation(yaw, pitch);
+      fpControls.value.setup(); // register FPS event listeners
+      fpControls.value.enable();
+
+      console.log(
+        `🎮 FPS camera reset: yaw=${yaw.toFixed(3)}, pitch=${pitch.toFixed(3)}, roll=0`,
+      );
+
+      // Mostrar mensaje de activación de cámara cuando se cambia a modo FPS (solo desktop)
+      if (!hasTouch.value) {
+        nextTick(() => {
+          // Cerrar mensaje anterior si existe
+          if (cameraActivationMessageClose.value) {
+            cameraActivationMessageClose.value();
+          }
+          cameraActivationMessageClose.value = message.warning(
+            "🖱️ Right-click on the stage to activate camera mode and navigate through your photos",
+            {
+              closable: true,
+              duration: 0,
+              placement: "bottomLeft",
+              keepAliveOnHover: true,
+            },
+          );
+        });
+      }
+    }
+  }
+};
+
 // Inicializar controles FPS
 const initFirstPersonControls = () => {
   if (!cameraRef.value || !containerRef.value) {
@@ -2614,6 +2834,13 @@ const initFirstPersonControls = () => {
 
   const camera = cameraRef.value;
   const domElement = containerRef.value;
+
+  // Always initialize orbit controls (default mode)
+  console.log("🌐 Initializing orbit controls (default mode)");
+  orbitControls.value = useOrbitControls(camera, domElement);
+  if (!navigationBlocked.value && controlMode.value === "orbit") {
+    orbitControls.value.setup();
+  }
 
   // Initialize appropriate controls based on touch capability
   if (hasTouch.value) {
@@ -2651,8 +2878,14 @@ const initFirstPersonControls = () => {
     fpControls.value = useFirstPersonControls(camera, domElement);
 
     // Solo activar controles si no estamos en fase de descarga bloqueada
-    if (!navigationBlocked.value) {
+    // AND we're in FPS mode (orbit is default)
+    if (!navigationBlocked.value && controlMode.value === "fps") {
       fpControls.value.setup();
+      fpControls.value.enable();
+    } else {
+      // Navigation blocked or orbit mode: disable FPS controls but keep them ready
+      // They'll be enabled later by checkAllTexturesLoaded or onControlModeChange
+      fpControls.value.disable();
     }
 
     // Cancelar tour con ESC o cualquier movimiento de teclado
@@ -3076,9 +3309,12 @@ onUnmounted(() => {
     }
   }
 
-  // Limpiar controles FPS y touch
+  // Limpiar controles FPS, orbit y touch
   if (fpControls.value) {
     fpControls.value.cleanup();
+  }
+  if (orbitControls.value) {
+    orbitControls.value.cleanup();
   }
   if (touchControls.value) {
     touchControls.value.cleanup();

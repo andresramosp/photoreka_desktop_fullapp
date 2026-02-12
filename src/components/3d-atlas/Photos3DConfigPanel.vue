@@ -4,8 +4,7 @@
     <div
       v-if="!isExpanded"
       class="collapsed-panel"
-      @click="isExpanded = true"
-      @click.stop
+      @click.stop="isExpanded = true"
       @touchstart.stop
       @touchmove.stop
       @touchend.stop
@@ -20,6 +19,9 @@
       v-if="isExpanded"
       class="control-panel"
       @click.stop
+      @mousedown.stop
+      @mouseup.stop
+      @mousemove.stop
       @wheel.stop
       @touchstart.stop
       @touchmove.stop
@@ -621,8 +623,73 @@
 
         <!-- Navigation Controls Content -->
         <div v-if="showNavigationControls" class="controls-info">
-          <!-- Desktop Controls -->
-          <template v-if="!hasTouch">
+          <!-- Control Mode Switcher (Desktop only) -->
+          <div
+            v-if="!hasTouch"
+            class="control-item"
+            style="
+              margin-bottom: 12px;
+              padding-bottom: 12px;
+              border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            "
+          >
+            <span class="control-label">
+              Navigation mode
+              <n-tooltip trigger="hover" placement="top">
+                <template #trigger>
+                  <n-icon
+                    size="12"
+                    color="var(--text-secondary)"
+                    style="cursor: help; margin-left: 4px"
+                  >
+                    <InfoCircleFilled />
+                  </n-icon>
+                </template>
+                Orbit: drag to rotate, Shift+drag to pan, scroll to zoom. FPS:
+                WASD + mouse camera.
+              </n-tooltip>
+            </span>
+            <n-select
+              :value="controlMode"
+              @update:value="handleControlModeChange"
+              :options="controlModeOptions"
+              size="tiny"
+              style="width: 110px"
+              :disabled="showDiscreteLoader"
+              @click.stop
+            />
+          </div>
+
+          <!-- Desktop Controls - Orbit Mode -->
+          <template v-if="!hasTouch && controlMode === 'orbit'">
+            <div class="control-tip">
+              <div class="control-icon-group">
+                <span class="control-icon-text">🖱️</span>
+                <span class="control-text">Click + drag to rotate view</span>
+              </div>
+            </div>
+            <!-- <div class="control-tip">
+              <div class="control-icon-group">
+                <span class="control-icon-text">⇧🖱️</span>
+                <span class="control-text">Shift + drag to pan</span>
+              </div>
+            </div> -->
+            <div class="control-tip">
+              <div class="control-icon-group">
+                <span class="control-icon-text">🖱️⚙️</span>
+                <span class="control-text">Scroll wheel to zoom in/out</span>
+              </div>
+            </div>
+            <div v-if="!isPlayground" class="control-tip">
+              <div class="control-icon-group">
+                <span class="control-icon-text">👆</span>
+                <span class="control-text">{{ navigationHintText }}</span>
+              </div>
+            </div>
+          </template>
+
+          <!-- Desktop Controls - FPS Mode -->
+          <template v-if="!hasTouch && controlMode === 'fps'">
             <div class="control-tip">
               <div class="control-icon-group">
                 <span class="control-icon-text">🖱️</span>
@@ -676,7 +743,7 @@
           </template>
 
           <!-- Touch Controls (Mobile) -->
-          <template v-else>
+          <template v-else-if="hasTouch">
             <div class="control-tip">
               <div class="control-icon-group">
                 <span class="control-icon-text">☝️</span>
@@ -882,6 +949,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  controlMode: {
+    type: String,
+    default: "fps",
+  },
   navigationHintText: {
     type: String,
     default: "Left-click on photos to fly to them",
@@ -908,13 +979,26 @@ const emit = defineEmits([
   "update:tagBeaconsTopTags",
   "update:tagBeaconsMergeRadius",
   "update:selectByClick",
+  "update:controlMode",
   "chunk-change",
+  "control-mode-change",
   "visual-aspects-change",
   "artistic-scores-change",
   "time-range-change",
   "dimensions-change",
   "inflate-factor-change",
 ]);
+
+// Control mode options
+const controlModeOptions = [
+  { label: "🌐 Orbit", value: "orbit" },
+  { label: "🎮 FPS", value: "fps" },
+];
+
+const handleControlModeChange = (value) => {
+  emit("update:controlMode", value);
+  emit("control-mode-change", value);
+};
 
 // Internal state
 const isExpanded = computed({
