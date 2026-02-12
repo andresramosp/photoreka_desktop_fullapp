@@ -27,6 +27,7 @@ export default class ReadOnlyMiddleware {
     '/api/series/:id/photos',
     '/api/series/:id/order',
     '/api/series/:id/move',
+    '/api/search/tags/direct',
   ]
 
   /**

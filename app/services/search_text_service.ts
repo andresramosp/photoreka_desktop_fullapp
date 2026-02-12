@@ -28,6 +28,10 @@ import { getUploadPath } from '../utils/dataPath.js'
 import PhotoImageService from './photo_image_service.js'
 import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
 import { MediaResolution } from '@google/genai'
+import { createRequire } from 'module'
+
+const require = createRequire(import.meta.url)
+const pluralize = require('pluralize')
 
 export type SearchMode = 'precise' | 'adaptive' | 'broad' | 'curation'
 export type SearchType = 'semantic' | 'tags'
@@ -746,7 +750,8 @@ export default class SearchTextService {
   public async searchByTagsDirect(
     includedTags: string[],
     excludedTags: string[],
-    userId: string | number
+    userId: string | number,
+    mode: 'AND' | 'OR' = 'AND'
   ) {
     const db = await import('@adonisjs/lucid/services/db').then((mod) => mod.default)
 
@@ -791,28 +796,67 @@ export default class SearchTextService {
 
     for (const [photoId, { tags }] of photoTagsMap.entries()) {
       const normalizedPhotoTags = tags.map((t) => t.name.toLowerCase())
+      // Convertir tags a singular para mejor matching
+      const singularPhotoTags = normalizedPhotoTags.map((t) => pluralize.singular(t))
 
       // Buscar matches incluidos (tag buscado está contenido en tag de foto)
       const matchedIncluded: string[] = []
       for (const searchTag of normalizedIncluded) {
-        for (const photoTag of normalizedPhotoTags) {
-          // El tag de la foto debe CONTENER el tag buscado (no al revés)
-          if (photoTag.includes(searchTag)) {
-            matchedIncluded.push(photoTag)
+        const singularSearchTag = pluralize.singular(searchTag)
+        for (let i = 0; i < singularPhotoTags.length; i++) {
+          const photoTag = singularPhotoTags[i]
+          // El tag de la foto debe ser una palabra aislada (no parte de otra palabra)
+          // Usamos regex con word boundaries comparando formas singulares
+          const regex = new RegExp(
+            `\\b${singularSearchTag.replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}\\b`,
+            'i'
+          )
+          if (regex.test(photoTag)) {
+            matchedIncluded.push(normalizedPhotoTags[i])
           }
         }
       }
 
-      // Si no hay tags incluidos especificados, consideramos que todas las fotos califican
-      const hasIncludedMatch = normalizedIncluded.length === 0 || matchedIncluded.length > 0
+      // Si no hay tags incluidos especificados, todas califican.
+      // Si hay tags incluidos:
+      // - AND: la foto debe tener TODOS los tags incluidos
+      // - OR: la foto debe tener AL MENOS UNO de los tags incluidos
+      let hasIncludedMatch = normalizedIncluded.length === 0
+      if (normalizedIncluded.length > 0) {
+        if (mode === 'AND') {
+          hasIncludedMatch = normalizedIncluded.every((searchTag) => {
+            const singularSearchTag = pluralize.singular(searchTag)
+            const regex = new RegExp(
+              `\\b${singularSearchTag.replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}\\b`,
+              'i'
+            )
+            return singularPhotoTags.some((photoTag) => regex.test(photoTag))
+          })
+        } else {
+          hasIncludedMatch = normalizedIncluded.some((searchTag) => {
+            const singularSearchTag = pluralize.singular(searchTag)
+            const regex = new RegExp(
+              `\\b${singularSearchTag.replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}\\b`,
+              'i'
+            )
+            return singularPhotoTags.some((photoTag) => regex.test(photoTag))
+          })
+        }
+      }
 
       // Buscar matches excluidos (tag excluido está contenido en tag de foto)
       const matchedExcluded: string[] = []
       for (const searchTag of normalizedExcluded) {
-        for (const photoTag of normalizedPhotoTags) {
-          // El tag de la foto debe CONTENER el tag excluido (no al revés)
-          if (photoTag.includes(searchTag)) {
-            matchedExcluded.push(photoTag)
+        const singularSearchTag = pluralize.singular(searchTag)
+        for (let i = 0; i < singularPhotoTags.length; i++) {
+          const photoTag = singularPhotoTags[i]
+          // El tag de la foto debe ser una palabra aislada (no parte de otra palabra)
+          const regex = new RegExp(
+            `\\b${singularSearchTag.replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}\\b`,
+            'i'
+          )
+          if (regex.test(photoTag)) {
+            matchedExcluded.push(normalizedPhotoTags[i])
           }
         }
       }
