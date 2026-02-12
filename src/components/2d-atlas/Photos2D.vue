@@ -41,6 +41,7 @@
       @highlight-pattern="handleHighlightPattern"
       @unhighlight-pattern="handleUnhighlightPattern"
       @select-pattern="handleSelectPattern"
+      @tag-search="handleTagSearch"
     />
 
     <!-- Config Panel Component (Mobile) -->
@@ -64,6 +65,7 @@
       @artistic-scores-change="onArtisticScoresChange"
       @time-range-change="onTimeRangeChange"
       @select-pattern="handleSelectPattern"
+      @tag-search="handleTagSearch"
     />
 
     <!-- Hovered Photo Info -->
@@ -244,6 +246,7 @@ import { use2DTextureManager } from "@/composables/2d-viewer/use2DTextureManager
 import { use2DLod } from "@/composables/2d-viewer/use2DLod.js";
 import { useTheme } from "@/composables/useTheme.js";
 import { isMobileDevice } from "@/utils/utils.js";
+import { api } from "@/utils/axios";
 
 // Props
 const props = defineProps({
@@ -480,6 +483,7 @@ const selectedVisualAspects = ref([]);
 const artisticScoreFilters = ref({});
 const timeRangeFilter = ref(null);
 const searchResults = ref(null);
+const tagFilterResults = ref(null); // Tag search results: Map<photoId, { matchedIncluded, matchedExcluded }>
 
 // Build a Map for fast photo lookup by id (for filtering, selection, etc.)
 const photoById = computed(() => {
@@ -697,6 +701,14 @@ const filteredPhotos = computed(() => {
     });
   }
 
+  // Apply tag filter
+  if (tagFilterResults.value !== null) {
+    const tagResultsMap = new Map(
+      tagFilterResults.value.map((item) => [item.photoId, item]),
+    );
+    filtered = filtered.filter((photo) => tagResultsMap.has(photo.id));
+  }
+
   return filtered;
 });
 
@@ -808,6 +820,22 @@ const setupKeyboardNavigation = () => {
 
 // Keyboard event handlers
 const handleKeyDown = (e) => {
+  // Ignore keyboard navigation if user is typing in an input/textarea/select
+  const target = e.target;
+  const tagName = target?.tagName?.toLowerCase();
+  const isEditable = target?.isContentEditable;
+
+  if (
+    tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select" ||
+    isEditable ||
+    target?.closest?.(".n-select") || // Naive UI select dropdown
+    target?.closest?.(".n-input") // Naive UI input
+  ) {
+    return; // Don't intercept, let the user type normally
+  }
+
   const key = e.key.toLowerCase();
 
   // Check if it's a navigation key
@@ -835,6 +863,22 @@ const handleKeyDown = (e) => {
 };
 
 const handleKeyUp = (e) => {
+  // Ignore keyboard navigation if user is typing in an input/textarea/select
+  const target = e.target;
+  const tagName = target?.tagName?.toLowerCase();
+  const isEditable = target?.isContentEditable;
+
+  if (
+    tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select" ||
+    isEditable ||
+    target?.closest?.(".n-select") || // Naive UI select dropdown
+    target?.closest?.(".n-input") // Naive UI input
+  ) {
+    return; // Don't intercept, let the user type normally
+  }
+
   const key = e.key.toLowerCase();
   keysPressed.value.delete(key);
 
@@ -1889,6 +1933,38 @@ const onArtisticScoresChange = (scores) => {
 const onTimeRangeChange = (range) => {
   timeRangeFilter.value = range;
   updateSpriteVisibility();
+};
+
+// Tag search handler
+const handleTagSearch = async (tags) => {
+  const { included = [], excluded = [], mode = "OR" } = tags;
+
+  // Clear tag filter if no tags are selected
+  if (included.length === 0 && excluded.length === 0) {
+    tagFilterResults.value = null;
+    updateSpriteVisibility();
+    return;
+  }
+
+  try {
+    // Call the new direct tag search endpoint with mode parameter
+    const { data: response } = await api.post("/api/search/tags/direct", {
+      included,
+      excluded,
+      mode,
+    });
+
+    // Store the results
+    tagFilterResults.value = response;
+
+    // Update visibility to apply the filter
+    updateSpriteVisibility();
+
+    console.log(`✅ Tag search completed: ${response.length} photos matched`);
+  } catch (error) {
+    console.error("Error searching by tags:", error);
+    message.error("Failed to search by tags");
+  }
 };
 
 // Collection modal handlers

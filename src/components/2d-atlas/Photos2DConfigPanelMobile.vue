@@ -214,6 +214,7 @@
             @visual-aspects-change="handleVisualAspectsChange"
             @artistic-scores-change="handleArtisticScoresChange"
             @time-range-change="handleTimeRangeChange"
+            @tag-search="handleTagSearch"
           />
         </div>
       </div>
@@ -314,6 +315,7 @@ const emit = defineEmits([
   "artistic-scores-change",
   "time-range-change",
   "select-pattern",
+  "tag-search",
 ]);
 
 // Internal state
@@ -382,6 +384,10 @@ const handlePatternClick = (pattern) => {
   emit("select-pattern", pattern);
   // Auto-close modal after selection
   // activeModal.value = null;
+};
+
+const handleTagSearch = (tags) => {
+  emit("tag-search", tags);
 };
 
 const goBack = () => {

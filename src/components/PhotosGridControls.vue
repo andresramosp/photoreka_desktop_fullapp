@@ -230,13 +230,22 @@
     <!-- More Filters Section -->
     <div class="date-range-section">
       <div
-        class="date-range-toggle"
+        class="filter-controls-section-header"
         @click="isDateRangeExpanded = !isDateRangeExpanded"
       >
-        <span class="date-range-label">More filters</span>
+        <div class="filter-controls-header-left">
+          <n-icon
+            size="16"
+            class="filter-controls-section-icon"
+            :color="`var(--text-color)`"
+          >
+            <Settings20Regular />
+          </n-icon>
+          <span class="filter-controls-section-label">More filters</span>
+        </div>
         <n-icon
-          size="12"
-          class="toggle-icon"
+          size="14"
+          class="filter-controls-toggle-icon"
           :class="{ rotated: isDateRangeExpanded }"
         >
           <svg viewBox="0 0 24 24">
@@ -249,7 +258,7 @@
       </div>
 
       <!-- Collapsible More Filters -->
-      <div v-if="isDateRangeExpanded" class="filters-tab-container">
+      <div v-if="isDateRangeExpanded" class="filter-controls-tab-container">
         <div class="more-filters-content">
           <!-- Filename Search + Metadata Filters Row -->
           <div class="metadata-row">
@@ -878,36 +887,10 @@ watch(
 
 /* More Filters Section */
 .date-range-section {
-  /* margin-top: 4px; */
-}
-
-.date-range-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-}
-
-.date-range-toggle:hover {
-  background-color: var(--bg-hover);
-}
-
-.date-range-label {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.toggle-icon {
-  color: var(--text-primary);
-  transition: transform 0.3s ease;
-}
-
-.toggle-icon.rotated {
-  transform: rotate(180deg);
+  background-color: var(--bg-container);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
 }
 
 .filters-tab-container {

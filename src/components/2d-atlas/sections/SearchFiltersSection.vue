@@ -19,6 +19,8 @@
         expand-on-click
         :filterable="false"
         @click.stop
+        @keydown.stop
+        @keyup.stop
       >
         <template #empty>
           <div style="padding: 8px; color: #888; font-size: 12px">
@@ -108,6 +110,9 @@
               :step="0.5"
               :disabled="showDiscreteLoader"
               @click.stop
+              @mousedown.stop
+              @keydown.stop
+              @keyup.stop
               class="score-slider"
             />
           </div>
@@ -170,16 +175,65 @@
         />
       </div>
     </div>
+
+    <!-- Tags Filter -->
+    <div class="filter-item">
+      <div class="filter-header-row">
+        <label class="filter-label">Tags</label>
+        <div class="tags-mode-switch-wrapper">
+          <span class="tag-mode-label" :class="{ active: !isOrMode }">All</span>
+          <n-switch
+            v-model:value="isOrMode"
+            size="small"
+            class="tags-mode-switch"
+          />
+          <span class="tag-mode-label" :class="{ active: isOrMode }">Any</span>
+        </div>
+      </div>
+      <n-select
+        v-model:value="includedTagsFilter"
+        multiple
+        filterable
+        clearable
+        tag
+        placeholder="Include tags..."
+        :options="includedTagSuggestionsFormatted"
+        :clear-filter-after-select="true"
+        :max-tag-count="3"
+        class="tags-select include-tags-select"
+        size="small"
+        :disabled="showDiscreteLoader || isSearchingTags"
+        @search="handleIncludedTagSearch"
+        @update:value="handleIncludedTagsUpdate"
+        @click.stop
+        @keydown.stop
+        @keyup.stop
+      >
+        <template #empty>
+          <div style="padding: 8px; color: #888; font-size: 11px">
+            Start typing to search tags...
+          </div>
+        </template>
+      </n-select>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch } from "vue";
-import { NTreeSelect, NTooltip, NIcon, NSlider } from "naive-ui";
+import {
+  NTreeSelect,
+  NTooltip,
+  NIcon,
+  NSlider,
+  NSelect,
+  NSwitch,
+} from "naive-ui";
 import { InfoCircleFilled, CloseOutlined } from "@vicons/antd";
 import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
+import { api } from "@/utils/axios";
 
 const props = defineProps({
   selectedVisualAspects: {
@@ -211,6 +265,7 @@ const emit = defineEmits([
   "visual-aspects-change",
   "artistic-scores-change",
   "time-range-change",
+  "tag-search",
 ]);
 
 // Internal state
@@ -220,6 +275,19 @@ const showTimeRange = ref(false);
 // Local state for artistic score filters
 const localArtisticScoreFilters = ref({ ...props.artisticScoreFilters });
 
+// Tags filter state
+const includedTagsFilter = ref([]);
+const excludedTagsFilter = ref([]);
+const includedTagSuggestions = ref([]);
+const excludedTagSuggestions = ref([]);
+const isSearchingTags = ref(false);
+const isOrMode = ref(true); // true = OR (Any), false = AND (All)
+
+const tagsMode = computed(() => (isOrMode.value ? "OR" : "AND"));
+
+let debounceIncludedTimer = null;
+let debounceExcludedTimer = null;
+
 // Watch for external changes to artistic score filters
 watch(
   () => props.artisticScoreFilters,
@@ -227,6 +295,24 @@ watch(
     localArtisticScoreFilters.value = { ...newVal };
   },
   { deep: true },
+);
+
+// Watch for tags mode changes and re-trigger search if tags are selected
+watch(
+  () => isOrMode.value,
+  () => {
+    if (includedTagsFilter.value.length > 0) {
+      isSearchingTags.value = true;
+      emit("tag-search", {
+        included: includedTagsFilter.value,
+        excluded: excludedTagsFilter.value,
+        mode: tagsMode.value,
+      });
+      setTimeout(() => {
+        isSearchingTags.value = false;
+      }, 500);
+    }
+  },
 );
 
 const { artisticScores } = useArtisticScores();
@@ -277,6 +363,71 @@ const clearTimeRange = () => {
   emit("update:timeRangeFilter", null);
   emit("time-range-change", null);
 };
+
+// Tag filtering functions
+const fetchTagSuggestions = async (query) => {
+  try {
+    const response = await api.get("/api/tags/search", {
+      params: { term: query },
+    });
+    return response.data.result.map((tag) => ({
+      label: tag.name,
+      value: tag.name,
+    }));
+  } catch (error) {
+    console.error("Error fetching tag suggestions", error);
+    return [];
+  }
+};
+
+const handleIncludedTagSearch = (query) => {
+  if (debounceIncludedTimer) clearTimeout(debounceIncludedTimer);
+  if (!query || query.trim().length < 2) {
+    includedTagSuggestions.value = [];
+    return;
+  }
+  debounceIncludedTimer = setTimeout(async () => {
+    includedTagSuggestions.value = await fetchTagSuggestions(query);
+  }, 300);
+};
+
+const handleIncludedTagsUpdate = (value) => {
+  // Execute tag search automatically whenever tags change
+  isSearchingTags.value = true;
+  emit("tag-search", {
+    included: value,
+    excluded: excludedTagsFilter.value,
+    mode: tagsMode.value,
+  });
+  // Reset searching state after a delay
+  setTimeout(() => {
+    isSearchingTags.value = false;
+  }, 500);
+};
+
+const handleExcludedTagSearch = (query) => {
+  if (debounceExcludedTimer) clearTimeout(debounceExcludedTimer);
+  if (!query || query.trim().length < 2) {
+    excludedTagSuggestions.value = [];
+    return;
+  }
+  debounceExcludedTimer = setTimeout(async () => {
+    excludedTagSuggestions.value = await fetchTagSuggestions(query);
+  }, 300);
+};
+
+const includedTagSuggestionsFormatted = computed(
+  () => includedTagSuggestions.value,
+);
+const excludedTagSuggestionsFormatted = computed(
+  () => excludedTagSuggestions.value,
+);
+
+const clearTags = () => {
+  includedTagsFilter.value = [];
+  excludedTagsFilter.value = [];
+  emit("tag-search", { included: [], excluded: [], mode: tagsMode.value });
+};
 </script>
 
 <style scoped>
@@ -299,6 +450,49 @@ const clearTimeRange = () => {
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.filter-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tags-mode-switch-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.tag-mode-label {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #666;
+  transition: color 0.2s;
+  cursor: default;
+}
+
+.tag-mode-label.active {
+  color: #aaa;
+}
+
+.tags-mode-switch :deep(.n-switch) {
+  --n-height: 16px;
+  --n-width: 28px;
+}
+
+.tags-mode-switch :deep(.n-switch__rail) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.tags-mode-switch :deep(.n-switch.n-switch--checked .n-switch__rail) {
+  background: rgba(74, 222, 128, 0.3);
 }
 
 .aspects-select {
@@ -403,5 +597,26 @@ const clearTimeRange = () => {
 :deep(.n-slider-handle) {
   background: #4ade80;
   border-color: #4ade80;
+}
+
+.tags-select {
+  width: 100%;
+  margin: 0;
+}
+
+.include-tags-select :deep(.n-base-selection) {
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.include-tags-select :deep(.n-base-selection:hover) {
+  border-color: rgba(34, 197, 94, 0.6);
+}
+
+.exclude-tags-select :deep(.n-base-selection) {
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.exclude-tags-select :deep(.n-base-selection:hover) {
+  border-color: rgba(239, 68, 68, 0.6);
 }
 </style>

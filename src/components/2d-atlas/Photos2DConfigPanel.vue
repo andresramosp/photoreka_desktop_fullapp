@@ -191,6 +191,7 @@
             @visual-aspects-change="handleVisualAspectsChange"
             @artistic-scores-change="handleArtisticScoresChange"
             @time-range-change="handleTimeRangeChange"
+            @tag-search="handleTagSearch"
           />
         </div>
       </div>
@@ -389,6 +390,7 @@ const emit = defineEmits([
   "highlight-pattern",
   "unhighlight-pattern",
   "select-pattern",
+  "tag-search",
 ]);
 
 // Internal state
@@ -479,6 +481,10 @@ const handleTimeRangeChange = (range) => {
 
 const handlePatternClick = (pattern) => {
   emit("select-pattern", pattern);
+};
+
+const handleTagSearch = (tags) => {
+  emit("tag-search", tags);
 };
 </script>
 
