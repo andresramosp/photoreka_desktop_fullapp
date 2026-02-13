@@ -469,7 +469,7 @@
                   multiple
                   filterable
                   clearable
-                  tag
+                  remote
                   placeholder="Add tags to include..."
                   :options="includedTagSuggestionsFormatted"
                   :clear-filter-after-select="true"
@@ -492,7 +492,7 @@
                   multiple
                   filterable
                   clearable
-                  tag
+                  remote
                   placeholder="Add tags to exclude..."
                   :options="excludedTagSuggestionsFormatted"
                   :max-tag-count="5"

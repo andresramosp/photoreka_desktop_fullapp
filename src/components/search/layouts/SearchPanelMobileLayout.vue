@@ -18,27 +18,6 @@
               </n-icon>
             </template>
           </n-input>
-
-          <n-select
-            v-else-if="activeSearchType === 'tags'"
-            v-model:value="includedTags"
-            multiple
-            filterable
-            clearable
-            tag
-            placeholder="Add tags to include..."
-            :options="includedTagSuggestionsFormatted"
-            :clear-filter-after-select="true"
-            :max-tag-count="2"
-            class="mobile-search-input"
-            @search="emit('searchIncludedTags', $event)"
-          >
-            <template #empty>
-              <div style="padding: 8px; color: #888">
-                Start typing to search tags...
-              </div>
-            </template>
-          </n-select>
         </div>
 
         <!-- Search Button -->
@@ -208,13 +187,36 @@
 
           <!-- Additional Search Inputs (for tags mode) -->
           <div v-if="activeSearchType === 'tags'" class="filter-section">
+            <div class="filter-section-label">Included Tags</div>
+            <n-select
+              v-model:value="includedTags"
+              multiple
+              filterable
+              clearable
+              remote
+              placeholder="Add tags to include..."
+              :options="includedTagSuggestionsFormatted"
+              :clear-filter-after-select="true"
+              :max-tag-count="2"
+              class="mobile-search-input"
+              @search="emit('searchIncludedTags', $event)"
+            >
+              <template #empty>
+                <div style="padding: 8px; color: #888">
+                  Start typing to search tags...
+                </div>
+              </template>
+            </n-select>
+          </div>
+
+          <div v-if="activeSearchType === 'tags'" class="filter-section">
             <div class="filter-section-label">Excluded Tags</div>
             <n-select
               v-model:value="excludedTags"
               multiple
               filterable
               clearable
-              tag
+              remote
               placeholder="Add tags to exclude..."
               :options="excludedTagSuggestionsFormatted"
               :max-tag-count="3"

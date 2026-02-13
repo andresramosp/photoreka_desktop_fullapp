@@ -13,6 +13,8 @@
     @touchend="handleTouchEnd"
     @touchcancel="handleTouchCancel"
     @contextmenu.prevent="() => {}"
+    @mouseenter="handleMouseEnter"
+    @mouseleave="handleMouseLeave"
     :style="{
       cursor: 'pointer',
     }"
@@ -148,18 +150,40 @@
         </template>
         Click to view duplicates
       </n-tooltip>
-    </div>
 
-    <!-- File name in top-right corner of photo (if showName) -->
-    <div v-if="showName" class="photo-filename-topright" :title="cleanFileName">
-      {{ cleanFileName }}
+      <!-- File name in top-right corner of photo (if showName) -->
+      <div
+        v-if="showName"
+        class="photo-filename-topright"
+        :title="cleanFileName"
+      >
+        {{ cleanFileName }}
+      </div>
+
+      <!-- Bottom overlay with matched tags -->
+      <div
+        v-if="matchedTags && matchedTags.length > 0 && showHoverContent"
+        class="bottom-overlay"
+      >
+        <div class="matched-tags">
+          <span
+            v-for="(tag, index) in matchedTags.slice(0, 3)"
+            :key="index"
+            class="tag"
+          >
+            {{ tag }}
+          </span>
+          <span v-if="matchedTags.length > 3" class="tag-more">
+            +{{ matchedTags.length - 3 }}
+          </span>
+        </div>
+      </div>
     </div>
 
     <!-- Footer with detailed information -->
     <div v-if="showFooter" class="photo-footer">
       <div class="photo-status">
         <!-- Status tags -->
-
         <n-tag
           v-if="photo.status == 'uploaded' || photo.status == 'preprocessing'"
           size="small"
@@ -293,6 +317,7 @@ interface Props {
   isUploading: boolean;
   showDuplicate: boolean;
   artisticScore?: number | null;
+  matchedTags?: string[];
 }
 
 interface Emits {
@@ -304,6 +329,7 @@ interface Emits {
 
 const props = withDefaults(defineProps<Props>(), {
   selected: false,
+  matchedTags: () => [],
 });
 
 const emit = defineEmits<Emits>();
@@ -341,6 +367,7 @@ const scoreBackgroundColor = computed(() => {
 const isSelected = computed(() => props.selected);
 const imageLoaded = ref(false);
 const imageError = ref(false);
+const showHoverContent = ref(false);
 
 // Event handlers for mobile touch
 const handleTouchStart = (event: TouchEvent) => {
@@ -361,6 +388,14 @@ const handleTouchCancel = () => {
 
 const handleClick = (event: MouseEvent) => {
   baseHandleClick(event, props.photo.id, (id) => emit("select", id));
+};
+
+const handleMouseEnter = () => {
+  showHoverContent.value = true;
+};
+
+const handleMouseLeave = () => {
+  showHoverContent.value = false;
 };
 
 const showInfo = () => {
@@ -915,5 +950,54 @@ onUnmounted(() => {
     /* padding: 3px 5px; */
     max-width: 80%;
   }
+}
+
+/* Bottom overlay with matched tags */
+.bottom-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 10;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.matched-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  background-color: color-mix(in srgb, var(--accent-color), transparent 50%);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  font-size: 11px;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.tag-more {
+  display: inline-block;
+  padding: 2px 8px;
+  background-color: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  font-size: 11px;
+  color: #ffffff;
+  font-weight: 600;
 }
 </style>

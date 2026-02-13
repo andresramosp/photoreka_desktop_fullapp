@@ -364,34 +364,30 @@ export function getNaiveThemeOverrides(isDark = true) {
       itemIconColor: theme.iconSecondary,
     },
 
-    // InternalSelection: {
-    //   // Estos son los colores de los tags que realmente se usan
-    //   color: theme.primary + "20", // Fondo del tag
-    //   textColor: theme.primary, // Texto del tag
-    //   colorActive: theme.primary + "30", // Hover
-    //   border: "1px solid " + theme.primary + "40",
-    //   closeColorHover: theme.primary,
-    //   closeColorPressed: theme.primaryPressed,
-    // },
-    Select: {
-      // fondo del tag
-      multipleItemColor: "red",
-      multipleItemColorHover: theme.primary + "20",
-      multipleItemColorPressed: theme.primary,
+    // Los tags dentro del Select múltiple se personalizan con el componente Tag
+    Tag: {
+      // Tags con borde (default en Select múltiple)
+      colorBordered: theme.bgSurface,
+      colorBorderedHover: theme.bgSurface,
+      colorBorderedPressed: theme.bgSurface,
 
-      // texto
-      multipleItemTextColor: theme.primary,
-      multipleItemTextColorHover: theme.primary,
-      multipleItemTextColorPressed: "#ffffff",
+      // Texto del tag
+      textColor: theme.primary,
+      textColorBordered: theme.primary,
+      textColorBorderedHover: theme.primary,
+      textColorBorderedPressed: theme.primary,
 
-      // borde / radio
-      multipleItemBorderRadius: "4px",
+      // Color del borde
+      borderColor: theme.border,
 
-      // icono de cerrar
-      multipleItemBorderColor: theme.primary,
-      multipleItemIconColor: theme.primary,
-      multipleItemIconColorHover: theme.primaryHover,
-      multipleItemIconColorPressed: theme.primaryPressed,
+      // Icono de cerrar (X)
+      closeIconColor: theme.primary,
+      closeIconColorHover: theme.primaryHover,
+      closeIconColorPressed: theme.primaryPressed,
+
+      // Color de fondo al hacer hover/press en el botón de cerrar
+      closeColorHover: theme.primary + "15",
+      closeColorPressed: theme.primary + "25",
     },
   };
 }

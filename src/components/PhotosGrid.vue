@@ -14,6 +14,7 @@
       @custom-weights-change="handleCustomWeightsChange"
       @filename-search-change="handleFilenameSearchChange"
       @time-range-change="handleTimeRangeChange"
+      @tag-search="handleTagSearch"
     />
 
     <!-- Grid Controls -->
@@ -275,6 +276,7 @@
         :show-footer="false"
         :showDuplicate="true"
         :artistic-score="getPhotoArtisticScore(photo)"
+        :matched-tags="photo.matchedTags"
       />
     </div>
 
@@ -515,6 +517,7 @@ const isLoadingMore = ref(false);
 const selectedFilters = ref({});
 const filenameSearch = ref("");
 const timeRange = ref(null);
+const tagFilterResults = ref(null); // Array of photo IDs from tag search
 const sortingType = ref("none"); // 'none', 'criteria' or 'genre'
 const selectedCriteria = ref([]);
 const selectedGenre = ref("street");
@@ -764,6 +767,10 @@ const handleTimeRangeChange = (range) => {
   timeRange.value = range;
 };
 
+const handleTagSearch = (results) => {
+  tagFilterResults.value = results;
+};
+
 // Handle review duplicates (preprocess and check)
 const handleReviewDuplicates = async () => {
   isCheckingDuplicates.value = true;
@@ -836,6 +843,16 @@ function groupDuplicates(photos) {
 // Filter and sort ALL photos (without pagination limit)
 const filteredAndSortedPhotos = computed(() => {
   let filtered = props.photos;
+
+  // Apply tag filter first (if active)
+  if (
+    tagFilterResults.value !== null &&
+    Array.isArray(tagFilterResults.value)
+  ) {
+    // Filter photos to only include those in tagFilterResults
+    const tagPhotoIds = new Set(tagFilterResults.value.map((p) => p.photoId));
+    filtered = filtered.filter((photo) => tagPhotoIds.has(photo.id));
+  }
 
   // Apply filename search filter
   if (filenameSearch.value && filenameSearch.value.trim() !== "") {
@@ -954,6 +971,30 @@ const displayedPhotos = computed(() => {
   const totalPhotosToShow = currentPage.value * PHOTOS_PER_PAGE;
   const result = filteredAndSortedPhotos.value.slice(0, totalPhotosToShow);
 
+  // If there are tag filter results, enrich photos with matchedTags
+  if (
+    tagFilterResults.value !== null &&
+    Array.isArray(tagFilterResults.value)
+  ) {
+    const tagMap = new Map(
+      tagFilterResults.value.map((item) => [
+        item.photoId,
+        item.matchedIncluded,
+      ]),
+    );
+
+    return result.map((photo) => {
+      const matchedTags = tagMap.get(photo.id);
+      if (matchedTags && matchedTags.length > 0) {
+        return {
+          ...photo,
+          matchedTags: matchedTags,
+        };
+      }
+      return photo;
+    });
+  }
+
   return result;
 });
 
@@ -1012,6 +1053,7 @@ watch(
     selectedFilters,
     filenameSearch,
     timeRange,
+    tagFilterResults,
     sortingType,
     selectedCriteria,
     selectedGenre,

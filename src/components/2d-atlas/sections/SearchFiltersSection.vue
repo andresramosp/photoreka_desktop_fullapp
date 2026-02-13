@@ -37,19 +37,21 @@
         @click="showArtisticScores = !showArtisticScores"
       >
         <div style="display: flex; align-items: center; gap: 4px">
-          <span class="scores-toggle-label">Visual Scores</span>
-          <n-tooltip trigger="hover" placement="top">
-            <template #trigger>
-              <n-icon
-                size="12"
-                color="var(--text-secondary)"
-                style="cursor: help"
-              >
-                <InfoCircleFilled />
-              </n-icon>
-            </template>
-            Filter photos by minimum score threshold (1-10)
-          </n-tooltip>
+          <span class="scores-toggle-label"
+            >Visual Scores
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <n-icon
+                  size="12"
+                  color="var(--text-secondary)"
+                  style="cursor: help"
+                >
+                  <InfoCircleFilled />
+                </n-icon>
+              </template>
+              Filter photos by minimum score threshold (1-10)
+            </n-tooltip></span
+          >
         </div>
         <div style="display: flex; align-items: center; gap: 8px">
           <button
@@ -125,18 +127,6 @@
       <div class="scores-toggle" @click="showTimeRange = !showTimeRange">
         <div style="display: flex; align-items: center; gap: 4px">
           <span class="scores-toggle-label">Time Range</span>
-          <n-tooltip trigger="hover" placement="top">
-            <template #trigger>
-              <n-icon
-                size="12"
-                color="var(--text-secondary)"
-                style="cursor: help"
-              >
-                <InfoCircleFilled />
-              </n-icon>
-            </template>
-            Filter photos by capture date range
-          </n-tooltip>
         </div>
         <div style="display: flex; align-items: center; gap: 8px">
           <button
@@ -179,7 +169,18 @@
     <!-- Tags Filter -->
     <div class="filter-item">
       <div class="filter-header-row">
-        <label class="filter-label">Tags</label>
+        <label class="filter-label"
+          >Tags
+          <n-tooltip trigger="hover" placement="top">
+            <template #trigger>
+              <n-icon size="12" color="var(--text-secondary)">
+                <InfoCircleFilled />
+              </n-icon>
+            </template>
+            Exact tag matching only. Use Search tool for semantic queries.
+          </n-tooltip></label
+        >
+
         <div class="tags-mode-switch-wrapper">
           <span class="tag-mode-label" :class="{ active: !isOrMode }">All</span>
           <n-switch
@@ -195,14 +196,13 @@
         multiple
         filterable
         clearable
-        tag
+        remote
         placeholder="Include tags..."
         :options="includedTagSuggestionsFormatted"
         :clear-filter-after-select="true"
         :max-tag-count="3"
         class="tags-select include-tags-select"
         size="small"
-        :disabled="showDiscreteLoader || isSearchingTags"
         @search="handleIncludedTagSearch"
         @update:value="handleIncludedTagsUpdate"
         @click.stop

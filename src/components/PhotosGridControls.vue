@@ -260,6 +260,94 @@
       <!-- Collapsible More Filters -->
       <div v-if="isDateRangeExpanded" class="filter-controls-tab-container">
         <div class="more-filters-content">
+          <!-- Tags Filter Row -->
+          <div class="tags-filter-row">
+            <div class="filter-wrapper">
+              <div class="filter-header-row">
+                <div style="display: flex; align-items: center; gap: 6px">
+                  <label class="filter-label">Include tags</label>
+                  <n-tooltip trigger="hover" placement="top">
+                    <template #trigger>
+                      <n-icon
+                        size="14"
+                        style="
+                          color: var(--text-secondary);
+                          cursor: help;
+                          opacity: 0.7;
+                        "
+                      >
+                        <Info16Regular />
+                      </n-icon>
+                    </template>
+                    Exact tag matching only. Use Search tool for semantic
+                    queries.
+                  </n-tooltip>
+                </div>
+                <div class="tags-mode-switch-wrapper">
+                  <span class="tag-mode-label" :class="{ active: !isOrMode }">
+                    All
+                  </span>
+                  <n-switch
+                    v-model:value="isOrMode"
+                    size="small"
+                    class="tags-mode-switch"
+                  />
+                  <span class="tag-mode-label" :class="{ active: isOrMode }">
+                    Any
+                  </span>
+                </div>
+              </div>
+              <n-select
+                v-model:value="includedTags"
+                multiple
+                filterable
+                clearable
+                remote
+                placeholder="Include tags..."
+                :options="includedTagSuggestionsFormatted"
+                :filter="() => true"
+                :clear-filter-after-select="true"
+                :max-tag-count="3"
+                size="small"
+                @search="handleIncludedTagSearch"
+                @update:value="handleIncludedTagsUpdate"
+                class="compact-select"
+              >
+                <template #empty>
+                  <div style="padding: 8px; color: #888; font-size: 11px">
+                    Start typing to search tags...
+                  </div>
+                </template>
+              </n-select>
+            </div>
+
+            <div class="filter-wrapper">
+              <label class="filter-label">Exclude tags</label>
+              <n-select
+                v-model:value="excludedTags"
+                multiple
+                filterable
+                clearable
+                remote
+                placeholder="Exclude tags..."
+                :options="excludedTagSuggestionsFormatted"
+                :filter="() => true"
+                :clear-filter-after-select="true"
+                :max-tag-count="3"
+                size="small"
+                @search="handleExcludedTagSearch"
+                @update:value="handleExcludedTagsUpdate"
+                class="compact-select"
+              >
+                <template #empty>
+                  <div style="padding: 8px; color: #888; font-size: 11px">
+                    Start typing to search tags...
+                  </div>
+                </template>
+              </n-select>
+            </div>
+          </div>
+
           <!-- Filename Search + Metadata Filters Row -->
           <div class="metadata-row">
             <!-- Filename Search -->
@@ -398,8 +486,10 @@ import { computed, ref, watch, h, onMounted } from "vue";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
+import { useSearchTags } from "@/composables/useSearchTags.js";
 import CustomArtisticWeights from "./CustomArtisticWeights.vue";
 import TimeRangeFilter from "./TimeRangeFilter.vue";
+import { api } from "@/utils/axios";
 import {
   NButton,
   NSelect,
@@ -410,10 +500,13 @@ import {
   NTag,
   NTooltip,
   NInput,
+  NSwitch,
+  useMessage,
 } from "naive-ui";
 import {
   BookOpen16Regular,
   Camera20Regular,
+  Info16Regular,
   Search20Regular,
   Settings20Regular,
   Trophy20Regular,
@@ -435,6 +528,7 @@ const emit = defineEmits([
   "iso-change",
   "flash-change",
   "aperture-change",
+  "tag-search",
 ]);
 
 // Genre definitions for rendering
@@ -458,6 +552,25 @@ const props = defineProps({
 
 // Mobile detection
 const { isMobile } = useIsMobile();
+
+// Message instance
+const message = useMessage();
+
+// Use search tags composable
+const {
+  includedTagSuggestions,
+  excludedTagSuggestions,
+  onSearchInputIncluded,
+  onSearchInputExcluded,
+} = useSearchTags();
+
+// Tags filter state (local to this component)
+const includedTags = ref([]);
+const excludedTags = ref([]);
+const isSearchingTags = ref(false);
+const isOrMode = ref(true); // true = OR (Any), false = AND (All)
+
+const tagsMode = computed(() => (isOrMode.value ? "OR" : "AND"));
 
 // Filename Search
 const filenameSearch = ref("");
@@ -719,6 +832,80 @@ const handleTimeRangeChange = (range) => {
   emit("time-range-change", range);
 };
 
+// Tag filtering functions - use composable handlers
+const handleIncludedTagSearch = (query) => {
+  onSearchInputIncluded(query);
+};
+
+const handleExcludedTagSearch = (query) => {
+  onSearchInputExcluded(query);
+};
+
+const handleIncludedTagsUpdate = async (value) => {
+  includedTags.value = value;
+  await executeTagSearch();
+};
+
+const handleExcludedTagsUpdate = async (value) => {
+  excludedTags.value = value;
+  await executeTagSearch();
+};
+
+const executeTagSearch = async () => {
+  // If no tags selected, clear the filter
+  if (includedTags.value.length === 0 && excludedTags.value.length === 0) {
+    emit("tag-search", null);
+    return;
+  }
+
+  try {
+    isSearchingTags.value = true;
+    const { data: response } = await api.post("/api/search/tags/direct", {
+      included: includedTags.value,
+      excluded: excludedTags.value,
+      mode: tagsMode.value,
+    });
+
+    // Emit the search results to parent
+    emit("tag-search", response);
+
+    console.log(`✅ Tag search completed: ${response.length} photos matched`);
+  } catch (error) {
+    console.error("Error searching by tags:", error);
+    message.error("Failed to search by tags");
+  } finally {
+    setTimeout(() => {
+      isSearchingTags.value = false;
+    }, 500);
+  }
+};
+
+const includedTagSuggestionsFormatted = computed(() => {
+  // Filter out already selected tags to avoid duplicates in n-select dropdown
+  const selectedSet = new Set(includedTags.value);
+  return includedTagSuggestions.value.filter(
+    (tag) => !selectedSet.has(tag.value),
+  );
+});
+
+const excludedTagSuggestionsFormatted = computed(() => {
+  // Filter out already selected tags to avoid duplicates in n-select dropdown
+  const selectedSet = new Set(excludedTags.value);
+  return excludedTagSuggestions.value.filter(
+    (tag) => !selectedSet.has(tag.value),
+  );
+});
+
+// Watch for tags mode changes and re-trigger search if tags are selected
+watch(
+  () => isOrMode.value,
+  () => {
+    if (includedTags.value.length > 0 || excludedTags.value.length > 0) {
+      executeTagSearch();
+    }
+  },
+);
+
 // Watchers to emit changes
 watch(
   sortingType,
@@ -918,6 +1105,15 @@ watch(
   border-radius: 6px;
 }
 
+.tags-filter-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 8px;
+}
+
 .metadata-row {
   display: flex;
   gap: 12px;
@@ -941,6 +1137,51 @@ watch(
   font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
+}
+
+.filter-header-row {
+  display: flex;
+  align-items: center;
+  /* justify-content: space-between; */
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.tags-mode-switch-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.tag-mode-label {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  opacity: 0.6;
+  transition: opacity 0.2s;
+  cursor: default;
+}
+
+.tag-mode-label.active {
+  opacity: 1;
+}
+
+.tags-mode-switch :deep(.n-switch) {
+  --n-height: 16px;
+  --n-width: 28px;
+}
+
+.tags-mode-switch :deep(.n-switch__rail) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.tags-mode-switch :deep(.n-switch.n-switch--checked .n-switch__rail) {
+  background: var(--primary-color);
 }
 
 .filename-input {
@@ -987,6 +1228,7 @@ watch(
     width: 100%;
   }
 
+  .tags-filter-row,
   .metadata-row {
     flex-direction: column;
     gap: 12px;

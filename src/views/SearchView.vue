@@ -284,19 +284,23 @@ const { warmedUp, ensureWarmUp } = useWarmUp();
 
 const scrollContainer = ref(null);
 
-const includedTagSuggestionsFormatted = computed(() =>
-  includedTagSuggestions.value.map((tagName) => ({
-    label: tagName,
-    value: tagName,
-  })),
-);
+const includedTagSuggestionsFormatted = computed(() => {
+  // Filter out already selected tags to avoid duplicates in n-select dropdown
+  const selectedTags = searchStore.currentSearchState.includedTags || [];
+  const selectedSet = new Set(selectedTags);
+  return includedTagSuggestions.value.filter(
+    (tag) => !selectedSet.has(tag.value),
+  );
+});
 
-const excludedTagSuggestionsFormatted = computed(() =>
-  excludedTagSuggestions.value.map((tagName) => ({
-    label: tagName,
-    value: tagName,
-  })),
-);
+const excludedTagSuggestionsFormatted = computed(() => {
+  // Filter out already selected tags to avoid duplicates in n-select dropdown
+  const selectedTags = searchStore.currentSearchState.excludedTags || [];
+  const selectedSet = new Set(selectedTags);
+  return excludedTagSuggestions.value.filter(
+    (tag) => !selectedSet.has(tag.value),
+  );
+});
 
 // Handlers de cambio de tags eliminados - ahora manejados por los layouts
 
