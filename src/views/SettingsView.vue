@@ -59,7 +59,7 @@
             </div>
 
             <!-- Invite Friends Card -->
-            <div class="invite-card">
+            <div class="invite-card" :class="{ disabled: isDemoUser }">
               <div class="invite-card-header">
                 <div class="invite-icon-wrapper">
                   <n-icon size="24" color="var(--accent-color)">
@@ -69,8 +69,13 @@
                 <div class="invite-card-info">
                   <span class="invite-card-title">Invite Friends</span>
                   <span class="invite-card-description">
-                    Give your friends access to Photoreka with a free batch of
-                    1500 photos.
+                    <template v-if="isDemoUser">
+                      This feature is not available for demo accounts.
+                    </template>
+                    <template v-else>
+                      Give your friends access to Photoreka with a free batch of
+                      1500 photos.
+                    </template>
                   </span>
                 </div>
               </div>
@@ -80,13 +85,13 @@
                   placeholder="friend@email.com"
                   type="text"
                   class="invite-card-input"
-                  :disabled="isSendingInvite"
+                  :disabled="isSendingInvite || isDemoUser"
                   @keyup.enter="sendInvitation"
                 />
                 <n-button
                   type="info"
                   :loading="isSendingInvite"
-                  :disabled="!inviteEmail || isSendingInvite"
+                  :disabled="!inviteEmail || isSendingInvite || isDemoUser"
                   @click="sendInvitation"
                 >
                   <template #icon>
@@ -344,6 +349,11 @@ const { isDarkMode, setTheme } = useTheme();
 const googlePhotos = useGooglePhotos();
 const message = useMessage();
 
+// Check if user is demo
+const isDemoUser = computed(() => {
+  return userStore.user?.email === "demo@photorekatest.com";
+});
+
 // User data (real)
 const userName = computed(() => userStore.user?.name || "User");
 const userEmail = computed(() => userStore.user?.email || "");
@@ -353,6 +363,11 @@ const inviteEmail = ref("");
 const isSendingInvite = ref(false);
 
 const sendInvitation = async () => {
+  if (isDemoUser.value) {
+    message.warning("This feature is not available for demo accounts");
+    return;
+  }
+
   if (!inviteEmail.value) {
     message.warning("Please enter an email address");
     return;
@@ -848,6 +863,17 @@ const saveSettings = () => {
 .invite-card:hover {
   border-color: var(--primary-color-hover);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.invite-card.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+.invite-card.disabled:hover {
+  border-color: var(--border-color);
+  box-shadow: none;
 }
 
 .invite-card-header {
