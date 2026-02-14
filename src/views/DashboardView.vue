@@ -46,6 +46,16 @@
         </div>
 
         <DashboardActionCard
+          v-else-if="!isMobileLimitedMode"
+          :icon="Workspace"
+          title="Canvas"
+          description="Arrange and storyboard your photos"
+          additional-classes="explorer"
+          icon-color="var(--primary-color)"
+          @click="goToTool('canvas')"
+        />
+
+        <DashboardActionCard
           :icon="LayersOutline"
           title="Your Workspace"
           :disabled="appAccessMode === 'blocked'"
@@ -78,16 +88,6 @@
           :disabled="appAccessMode === 'blocked'"
           @click="goToTool('search')"
         />
-        <!-- 
-        <DashboardActionCard
-          v-else-if="!isMobileLimitedMode"
-          :icon="Workspace"
-          title="Canvas"
-          description="Arrange and storyboard your photos"
-          additional-classes="explorer"
-          icon-color="var(--primary-color)"
-          @click="goToTool('canvas')"
-        /> -->
 
         <!-- <div
           class="action-card report"
