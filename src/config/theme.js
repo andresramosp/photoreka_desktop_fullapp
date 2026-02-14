@@ -262,7 +262,7 @@ export const lightTheme = {
   textTertiary: "#64748b",
   textPlaceholder: "#94a3b8",
   textDisabled: "#cbd5e1",
-  textOnPrimary: "#ffffff",
+  textOnPrimary: "#000000",
   textOnAccent: "#000000",
 
   // Icons

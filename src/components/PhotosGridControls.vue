@@ -2,10 +2,7 @@
   <div class="photos-grid-controls">
     <!-- Visual Filters Compact Row -->
     <div class="filters-section">
-      <div
-        class="filter-controls-section-header"
-        @click="isFiltersExpanded = !isFiltersExpanded"
-      >
+      <div class="filter-controls-section-header" @click="toggleFilters">
         <div class="filter-controls-header-left">
           <n-icon
             size="16"
@@ -70,7 +67,7 @@
     <div class="sorting-section">
       <div
         class="filter-controls-section-header sorting-header"
-        @click="isSortingExpanded = !isSortingExpanded"
+        @click="toggleSorting"
       >
         <div class="filter-controls-header-left">
           <n-icon
@@ -130,7 +127,6 @@
           size="14"
           class="filter-controls-toggle-icon"
           :class="{ rotated: isSortingExpanded }"
-          @click="isSortingExpanded = !isSortingExpanded"
         >
           <svg viewBox="0 0 24 24">
             <path
@@ -229,15 +225,12 @@
 
     <!-- More Filters Section -->
     <div class="date-range-section">
-      <div
-        class="filter-controls-section-header"
-        @click="isDateRangeExpanded = !isDateRangeExpanded"
-      >
+      <div class="filter-controls-section-header" @click="toggleDateRange">
         <div class="filter-controls-header-left">
           <n-icon
             size="16"
             class="filter-controls-section-icon"
-            :color="`var(--text-color)`"
+            :color="`var(--text-on-primary)`"
           >
             <Settings20Regular />
           </n-icon>
@@ -814,6 +807,40 @@ const clearSorting = () => {
 
 const toggleSortOrder = () => {
   sortOrder.value = sortOrder.value === "desc" ? "asc" : "desc";
+};
+
+// Toggle functions for exclusive accordion behavior on mobile
+const toggleFilters = () => {
+  if (isMobile.value) {
+    // Close other sections in mobile
+    if (!isFiltersExpanded.value) {
+      isSortingExpanded.value = false;
+      isDateRangeExpanded.value = false;
+    }
+  }
+  isFiltersExpanded.value = !isFiltersExpanded.value;
+};
+
+const toggleSorting = () => {
+  if (isMobile.value) {
+    // Close other sections in mobile
+    if (!isSortingExpanded.value) {
+      isFiltersExpanded.value = false;
+      isDateRangeExpanded.value = false;
+    }
+  }
+  isSortingExpanded.value = !isSortingExpanded.value;
+};
+
+const toggleDateRange = () => {
+  if (isMobile.value) {
+    // Close other sections in mobile
+    if (!isDateRangeExpanded.value) {
+      isFiltersExpanded.value = false;
+      isSortingExpanded.value = false;
+    }
+  }
+  isDateRangeExpanded.value = !isDateRangeExpanded.value;
 };
 
 const handleFilterChange = () => {
