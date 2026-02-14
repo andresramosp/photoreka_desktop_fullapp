@@ -804,7 +804,7 @@ export default class AuthController {
         }
 
         // Create new user
-        const tier = UsageTier.TESTER
+        const tier = UsageTier.PROMOTIONAL
         const usage = getDefaultUsageByTier(tier)
 
         user = await User.create({
