@@ -328,18 +328,10 @@ export function inviteUserTemplate(
     </p>
     <p style="margin: 0 0 20px; font-size: 16px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
       <strong style="color: ${TEXT_COLOR};">${inviterName}</strong> has invited you to join Photoreka, 
-      the Curation Lab for organizing and re-discovering your photos.
+      the Photo Management and Curation Platform for photographers who care about their archive. 
     </p>
     
-    <div style="background-color: rgba(99, 102, 241, 0.1); border-radius: 8px; padding: 25px; margin: 25px 0;">
-      <p style="margin: 0 0 10px; font-size: 14px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
-        <strong style="color: ${TEXT_COLOR};">Your Invitation Code:</strong>
-      </p>
-      <p style="margin: 0; font-size: 24px; font-weight: 700; color: ${PRIMARY_COLOR}; text-align: center; letter-spacing: 2px; font-family: monospace;">
-        ${inviteCode}
-      </p>
-    </div>
-    
+
     ${emailButton('Join Photoreka', registerUrl)}
     
     <div style="background-color: rgba(99, 102, 241, 0.05); border-radius: 8px; padding: 20px; margin: 25px 0;">
