@@ -333,12 +333,10 @@
     <n-modal
       v-model:show="showDeleteConfirmDialog"
       preset="dialog"
-      title="Confirmar eliminación"
+      title="Confirm Deletion"
     >
       <template #header>
-        <div style="font-size: 18px; font-weight: 600">
-          Confirmar eliminación
-        </div>
+        <div style="font-size: 18px; font-weight: 600">Confirm Deletion</div>
       </template>
       <div style="padding: 16px 0">
         <p style="margin-bottom: 16px; font-size: 16px">
@@ -356,7 +354,7 @@
             Cancelar
           </n-button>
           <n-button type="error" @click="confirmDeletePhotos">
-            Eliminar
+            Delete
           </n-button>
         </div>
       </template>

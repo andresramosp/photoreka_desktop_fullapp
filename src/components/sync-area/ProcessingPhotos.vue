@@ -158,6 +158,21 @@
       </div>
     </div>
 
+    <!-- Processing Summary Modal -->
+    <ProcessingSummaryModal
+      :show="showSummaryModal"
+      :job="summaryModalJob"
+      @close="
+        () => {
+          if (summaryModalJob) {
+            markSummaryModalAsShown(summaryModalJob.id);
+          }
+          showSummaryModal = false;
+          summaryModalJob = null;
+        }
+      "
+    />
+
     <!-- Collection Selection Modal -->
     <CollectionModal
       :show="showCollectionModal"
@@ -178,6 +193,7 @@ import { InProgress } from "@vicons/carbon";
 import PhotoCardHub from "../photoCards/PhotoCardHub.vue";
 import PieProgress from "../PieProgress.vue";
 import CollectionModal from "../CollectionModal.vue";
+import ProcessingSummaryModal from "./ProcessingSummaryModal.vue";
 import {
   NTooltip,
   NSpin,
@@ -197,12 +213,21 @@ const route = useRoute();
 
 const emit = defineEmits(["navigate-to-tab", "on-add-to-collection"]);
 
+// Estado del modal de resumen de procesamiento
+const showSummaryModal = ref(false);
+const summaryModalJob = ref(null);
+
 // Estado del modal de colecciones
 const showCollectionModal = ref(false);
 const selectedJob = ref(null);
 
 // Utilidades
 const API_URL = "/api/analyzer-process";
+
+// LocalStorage keys para rastrear modales de resumen pendientes
+const PENDING_SUMMARY_MODALS_KEY = "pendingSummaryModals";
+const SHOWN_SUMMARY_MODALS_KEY = "shownSummaryModals";
+const SEEN_PROCESS_IDS_KEY = "seenProcessIds"; // IDs de procesos que ya vimos
 
 // Estado de procesos
 const processingJobs = ref([]);
@@ -361,16 +386,59 @@ function setFirstProcessOnboardingTriggered(ids) {
   localStorage.setItem(FIRST_PROCESS_ONBOARDING_KEY, JSON.stringify(ids));
 }
 
-function notifyFinished(job) {
-  notification.create({
-    title: "Process Finished",
-    content: `The analysis for ${
-      job.photoCount
-    } photo(s) started on ${formatDate(job.startDate)} is complete.`,
-    meta: new Date().toLocaleString(),
-    closable: true,
-    type: "success",
-  });
+// --- LocalStorage helpers para modales de resumen ---
+function getPendingSummaryModals() {
+  try {
+    return JSON.parse(localStorage.getItem(PENDING_SUMMARY_MODALS_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function getShownSummaryModals() {
+  try {
+    return JSON.parse(localStorage.getItem(SHOWN_SUMMARY_MODALS_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function getSeenProcessIds() {
+  try {
+    return JSON.parse(localStorage.getItem(SEEN_PROCESS_IDS_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function addSeenProcessId(jobId) {
+  const seen = getSeenProcessIds();
+  if (!seen.includes(jobId)) {
+    seen.push(jobId);
+    localStorage.setItem(SEEN_PROCESS_IDS_KEY, JSON.stringify(seen));
+  }
+}
+
+function addPendingSummaryModal(jobId) {
+  const pending = getPendingSummaryModals();
+  if (!pending.includes(jobId)) {
+    pending.push(jobId);
+    localStorage.setItem(PENDING_SUMMARY_MODALS_KEY, JSON.stringify(pending));
+  }
+}
+
+function markSummaryModalAsShown(jobId) {
+  // Remove from pending
+  const pending = getPendingSummaryModals();
+  const filtered = pending.filter((id) => id !== jobId);
+  localStorage.setItem(PENDING_SUMMARY_MODALS_KEY, JSON.stringify(filtered));
+
+  // Add to shown
+  const shown = getShownSummaryModals();
+  if (!shown.includes(jobId)) {
+    shown.push(jobId);
+    localStorage.setItem(SHOWN_SUMMARY_MODALS_KEY, JSON.stringify(shown));
+  }
 }
 
 async function loadProcesses() {
@@ -408,50 +476,60 @@ async function loadProcesses() {
         new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
     );
 
-    // --- Notificación de procesos finalizados y onboarding del primer proceso ---
-    let onboardingTriggeredIds = getFirstProcessOnboardingTriggered();
-    let newOnboardingTriggered = false;
+    // --- Gestión de modales de resumen ---
+    const seenIds = getSeenProcessIds();
 
-    // Detectar si alguno ha pasado de "processing" a "finished"
-    for (const updatedJob of processingJobs.value) {
-      const previousJob = previousJobs.find((j) => j.id == updatedJob.id);
-      if (
-        previousJob &&
-        previousJob.status === "processing" &&
-        updatedJob.status === "finished"
-      ) {
-        // Verificar si este era el primer proceso antes de actualizar el store
-        const wasFirstProcess = photosStore.processedPhotos.length === 0;
-
-        await photosStore.getOrFetch(true);
-
-        // Solo mostrar notificación si el proceso acaba de terminar (usuario está en la app)
-        notifyFinished(updatedJob);
-
-        // Si era el primer proceso y no se ha activado el onboarding para este proceso
-        if (
-          wasFirstProcess &&
-          !onboardingTriggeredIds.includes(updatedJob.id) &&
-          typeof window.triggerFirstProcessOnboarding === "function"
-        ) {
-          setTimeout(() => {
-            window.triggerFirstProcessOnboarding();
-          }, 1500); // Pequeño delay para que la notificación se muestre primero
-
-          onboardingTriggeredIds.push(updatedJob.id);
-          newOnboardingTriggered = true;
+    // Detectar procesos NUEVOS que nunca hemos visto
+    for (const job of processingJobs.value) {
+      if (!seenIds.includes(job.id)) {
+        // Solo agregar a pending si el proceso está actualmente en "processing"
+        // (es decir, se acaba de lanzar y está en curso)
+        if (job.status === "processing") {
+          console.log(
+            `[ProcessingPhotos-${componentId}] 🆕 Nuevo proceso en curso detectado: ${job.id}, agregando a pending`,
+          );
+          addPendingSummaryModal(job.id);
+        } else {
+          console.log(
+            `[ProcessingPhotos-${componentId}] ℹ️ Proceso antiguo detectado: ${job.id} (status: ${job.status}), marcando como visto pero NO agregando a pending`,
+          );
         }
-        break; // solo una vez
+        // Marcar como visto en cualquier caso para no volver a considerarlo
+        addSeenProcessId(job.id);
       }
     }
 
-    // Activar onboarding para el primer proceso si no se ha hecho (solo al cargar inicialmente)
+    // Obtener la lista actualizada de pending
+    const currentPending = getPendingSummaryModals();
+
+    // Si hay jobs pendientes que están finished, mostrar el modal del más reciente
+    const finishedPendingJobs = processingJobs.value.filter(
+      (job) => currentPending.includes(job.id) && job.status === "finished",
+    );
+
+    if (finishedPendingJobs.length > 0 && !showSummaryModal.value) {
+      // Obtener el más reciente (ya están ordenados por fecha descendente)
+      const jobToShow = finishedPendingJobs[0];
+      console.log(
+        `[ProcessingPhotos-${componentId}] ✅ Mostrando modal para proceso terminado: ${jobToShow.id}`,
+      );
+
+      // Refrescar fotos del store
+      await photosStore.getOrFetch(true);
+
+      summaryModalJob.value = jobToShow;
+      showSummaryModal.value = true;
+    }
+
+    // --- Onboarding del primer proceso ---
+    let onboardingTriggeredIds = getFirstProcessOnboardingTriggered();
+
+    // Si hay fotos procesadas y no se ha activado onboarding para ningún proceso
     if (
-      photosStore.processedPhotos.length > 0 && // Hay fotos procesadas
-      onboardingTriggeredIds.length === 0 && // No se ha activado onboarding para ningún proceso
+      photosStore.processedPhotos.length > 0 &&
+      onboardingTriggeredIds.length === 0 &&
       typeof window.triggerFirstProcessOnboarding === "function"
     ) {
-      // Buscar el proceso más antiguo terminado para marcarlo como el que activó el onboarding
       const oldestFinishedJob = processingJobs.value
         .filter((job) => job.status === "finished")
         .sort(
@@ -465,12 +543,9 @@ async function loadProcesses() {
         }, 500);
 
         onboardingTriggeredIds.push(oldestFinishedJob.id);
-        newOnboardingTriggered = true;
+        setFirstProcessOnboardingTriggered(onboardingTriggeredIds);
       }
     }
-
-    if (newOnboardingTriggered)
-      setFirstProcessOnboardingTriggered(onboardingTriggeredIds);
   } catch (error) {
     console.error(
       `[ProcessingPhotos-${componentId}] Error loading processes:`,
@@ -483,6 +558,9 @@ async function loadProcesses() {
 onMounted(async () => {
   console.log(`[ProcessingPhotos-${componentId}] onMounted`);
   isMounted.value = true;
+
+  // loadProcesses maneja todo: detecta nuevos procesos, los marca como pendientes,
+  // y muestra el modal si alguno está finished
   await loadProcesses();
 
   // Verificar si el componente sigue montado después del await
