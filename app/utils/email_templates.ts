@@ -347,15 +347,21 @@ export function inviteUserTemplate(
       </p>
     </div>
 
-    <div style="background-color: rgba(16, 185, 129, 0.06); border-radius: 8px; padding: 18px; margin: 20px 0; border: 1px solid rgba(16, 185, 129, 0.15);">
-      <p style="margin: 0 0 8px; font-size: 14px; color: ${TEXT_COLOR}; font-weight: 600; text-align: center;">
-        🚀 Opening Promotion
-      </p>
-      <p style="margin: 0; font-size: 13px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
-        This invitation is part of Photoreka’s launch promotion and includes a complimentary package of 
-        <strong style="color: ${TEXT_COLOR};">1,500 photos processed for free</strong>.
-      </p>
-    </div>
+   <div style="background-color: rgba(16, 185, 129, 0.06); border-radius: 8px; padding: 18px; margin: 20px 0; border: 1px solid rgba(16, 185, 129, 0.15);">
+  <p style="margin: 0 0 8px; font-size: 14px; color: ${TEXT_COLOR}; font-weight: 600; text-align: center;">
+    🚀 Early Access Invitation
+  </p>
+  <p style="margin: 0 0 10px; font-size: 13px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+    This invitation includes a complimentary package of 
+    <strong style="color: ${TEXT_COLOR};">1,500 photos processed for free</strong> — 
+    so you can fully explore your archive and experience Photoreka without limits.
+  </p>
+  <p style="margin: 0; font-size: 12px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+    Photoreka is currently in <strong style="color: ${TEXT_COLOR};">beta</strong>. 
+    You may encounter occasional rough edges as we continue refining the experience. 
+    Your feedback is not only welcome — it directly shapes what comes next.
+  </p>
+</div>
 
     <hr style="border: none; border-top: 1px solid rgba(148, 163, 184, 0.2); margin: 30px 0;" />
     
