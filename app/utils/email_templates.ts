@@ -339,11 +339,11 @@ export function inviteUserTemplate(
         ✨ What you'll unlock with Photoreka:
       </p>
       <p style="margin: 0 0 10px; font-size: 13px; color: ${MUTED_TEXT_COLOR}; text-align: left; line-height: 1.6;">
-        • <strong style="color: ${TEXT_COLOR};">Contextual Search:</strong> Find any photo by describing what’s happening in it<br/>
-        • <strong style="color: ${TEXT_COLOR};">Dynamic Tag System:</strong> Combine, refine and filter with flexible tags<br/>
-        • <strong style="color: ${TEXT_COLOR};">2D & 3D Map View:</strong> Explore your archive geographically with proximity clusters<br/>
-        • <strong style="color: ${TEXT_COLOR};">Sequencing Canvas:</strong> Visually arrange and reorder images to build narratives<br/>
-        • <strong style="color: ${TEXT_COLOR};">Series Creation:</strong> Group and structure projects into coherent bodies of work
+        • <strong style="color: ${TEXT_COLOR};">Natural Language Search:</strong> Find any photo by describing what’s happening in it<br/>
+        • <strong style="color: ${TEXT_COLOR};">2D & 3D Map:</strong> Navigate your archive like an Universe organized by proximity clusters<br/>
+        • <strong style="color: ${TEXT_COLOR};">Interactive Canvas:</strong> Visually arrange and reorder images to build narratives<br/>
+         • <strong style="color: ${TEXT_COLOR};">Rank by Aesthetics:</strong> Automatically rank your photos based on visual appeal<br/>
+        • <strong style="color: ${TEXT_COLOR};">Series Creation:</strong> Create series by letting photos to find other photos<br/>
       </p>
     </div>
 
