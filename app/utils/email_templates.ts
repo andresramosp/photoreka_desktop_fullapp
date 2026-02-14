@@ -342,17 +342,19 @@ export function inviteUserTemplate(
     
     ${emailButton('Join Photoreka', registerUrl)}
     
-    <div style="background-color: rgba(99, 102, 241, 0.05); border-radius: 8px; padding: 20px; margin: 25px 0;">
-      <p style="margin: 0 0 15px; font-size: 14px; color: ${TEXT_COLOR}; font-weight: 600; text-align: center;">
-        ✨ What you'll get with Photoreka:
-      </p>
-      <p style="margin: 0 0 10px; font-size: 13px; color: ${MUTED_TEXT_COLOR}; text-align: left; line-height: 1.6;">
-        • <strong style="color: ${TEXT_COLOR};">Smart Search:</strong> Find photos using natural language<br/>
-        • <strong style="color: ${TEXT_COLOR};">Auto-Tagging:</strong> AI automatically categorizes your photos<br/>
-        • <strong style="color: ${TEXT_COLOR};">Insights:</strong> Get detailed analysis of your photography style<br/>
-        • <strong style="color: ${TEXT_COLOR};">Organization:</strong> Keep your photo library perfectly organized
-      </p>
-    </div>
+  <div style="background-color: rgba(99, 102, 241, 0.05); border-radius: 8px; padding: 20px; margin: 25px 0;">
+    <p style="margin: 0 0 15px; font-size: 14px; color: ${TEXT_COLOR}; font-weight: 600; text-align: center;">
+      ✨ What you'll unlock with Photoreka:
+    </p>
+    <p style="margin: 0 0 10px; font-size: 13px; color: ${MUTED_TEXT_COLOR}; text-align: left; line-height: 1.6;">
+      • <strong style="color: ${TEXT_COLOR};">Contextual Search:</strong> Find any photo by describing what’s happening in it<br/>
+      • <strong style="color: ${TEXT_COLOR};">Dynamic Tag System:</strong> Combine, refine and filter with flexible tags<br/>
+      • <strong style="color: ${TEXT_COLOR};">2D & 3D Map View:</strong> Explore your archive geographically with proximity clusters<br/>
+      • <strong style="color: ${TEXT_COLOR};">Sequencing Canvas:</strong> Visually arrange and reorder images to build narratives<br/>
+      • <strong style="color: ${TEXT_COLOR};">Series Creation:</strong> Group and structure projects into coherent bodies of work
+    </p>
+  </div>
+
     
     <hr style="border: none; border-top: 1px solid rgba(148, 163, 184, 0.2); margin: 30px 0;" />
     

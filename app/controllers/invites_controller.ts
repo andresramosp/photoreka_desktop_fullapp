@@ -143,7 +143,7 @@ export default class InvitesController {
       // Send invitation email
       try {
         await this.mailService.sendEmail({
-          from: 'Photoreka <hello@photoreka.com>',
+          from: 'Photoreka | Curation Lab <hello@photoreka.com>',
           to: payload.email,
           subject: `${user.name} invited you to join Photoreka 🎉`,
           body: inviteUserTemplate(user.name, code, registerUrl),
