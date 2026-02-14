@@ -30,7 +30,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
 import { useUserStore } from "../stores/userStore";
 import { useMessage } from "naive-ui";
 
@@ -89,6 +89,7 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const router = useRouter();
+const route = useRoute();
 const userStore = useUserStore();
 const message = useMessage();
 
@@ -100,7 +101,14 @@ const handleProviderLogin = async (provider: "google" | "facebook") => {
   activeProvider.value = provider;
 
   try {
-    const result = await userStore.loginWithProvider(provider, props.mode);
+    // Obtener inviteCode de la query string si existe (para registro)
+    const inviteCode = route.query.inviteCode as string | undefined;
+
+    const result = await userStore.loginWithProvider(
+      provider,
+      props.mode,
+      inviteCode,
+    );
 
     // Si es Google, la redirección ocurre automáticamente
     // No necesitamos hacer nada más aquí

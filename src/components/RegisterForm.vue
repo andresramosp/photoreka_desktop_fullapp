@@ -225,14 +225,14 @@ const handleSubmit = async () => {
   try {
     await formRef.value.validate();
 
-    // Obtener authCode de la query string si existe
-    const authCode = route.query.authCode as string | undefined;
+    // Obtener inviteCode de la query string si existe
+    const inviteCode = route.query.inviteCode as string | undefined;
 
     const result = await userStore.register(
       formData.email,
       formData.password,
       formData.name,
-      authCode,
+      inviteCode,
     );
 
     if (result.success) {

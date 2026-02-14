@@ -126,7 +126,7 @@ export const useUserStore = defineStore("user", () => {
     email: string,
     password: string,
     name: string,
-    authCode?: string,
+    inviteCode?: string,
   ): Promise<{ success: boolean; error?: string }> => {
     isLoading.value = true;
     // Resetear estado de inicialización al hacer registro para forzar recarga completa
@@ -139,8 +139,8 @@ export const useUserStore = defineStore("user", () => {
         name,
       };
 
-      if (authCode) {
-        payload.authCode = authCode;
+      if (inviteCode) {
+        payload.inviteCode = inviteCode;
       }
 
       const response = await api.post("/api/auth/register", payload);
@@ -172,13 +172,21 @@ export const useUserStore = defineStore("user", () => {
   const loginWithProvider = async (
     provider: "google" | "facebook",
     mode: "login" | "register" = "login",
+    inviteCode?: string,
   ): Promise<{ success: boolean; error?: string }> => {
     if (provider === "google") {
       // Redirigir al backend que maneja OAuth
       const backendUrl =
         import.meta.env.VITE_MAIN_API_BASE_URL || "http://localhost:3333";
-      // Pasar el modo para que el backend sepa si es login o registro
-      window.location.href = `${backendUrl}/api/auth/google/redirect?mode=${mode}`;
+
+      // Construir URL con parámetros
+      const params = new URLSearchParams();
+      params.append("mode", mode);
+      if (inviteCode) {
+        params.append("inviteCode", inviteCode);
+      }
+
+      window.location.href = `${backendUrl}/api/auth/google/redirect?${params.toString()}`;
 
       // La función retorna pero no se completa aquí
       // El flujo continúa en el componente AuthCallback

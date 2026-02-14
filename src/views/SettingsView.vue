@@ -57,6 +57,47 @@
                 </n-button>
               </div>
             </div>
+
+            <!-- Invite Friends Card -->
+            <div class="invite-card">
+              <div class="invite-card-header">
+                <div class="invite-icon-wrapper">
+                  <n-icon size="24" color="var(--accent-color)">
+                    <MailOutline />
+                  </n-icon>
+                </div>
+                <div class="invite-card-info">
+                  <span class="invite-card-title">Invite Friends</span>
+                  <span class="invite-card-description">
+                    Give your friends access to Photoreka with a free batch of
+                    1500 photos.
+                  </span>
+                </div>
+              </div>
+              <div class="invite-card-form">
+                <n-input
+                  v-model:value="inviteEmail"
+                  placeholder="friend@email.com"
+                  type="text"
+                  class="invite-card-input"
+                  :disabled="isSendingInvite"
+                  @keyup.enter="sendInvitation"
+                />
+                <n-button
+                  type="info"
+                  :loading="isSendingInvite"
+                  :disabled="!inviteEmail || isSendingInvite"
+                  @click="sendInvitation"
+                >
+                  <template #icon>
+                    <n-icon>
+                      <SendOutline />
+                    </n-icon>
+                  </template>
+                  Send
+                </n-button>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -287,12 +328,15 @@ import {
   AddOutline,
   CloudUploadOutline,
   LogoInstagram,
+  MailOutline,
+  SendOutline,
 } from "@vicons/ionicons5";
 import { DriveFolderUploadFilled } from "@vicons/material";
 import googlePhotosIconUrl from "@/assets/logos/google_photos.png";
 import { useUserStore } from "@/stores/userStore";
 import { useTheme } from "@/composables/useTheme.js";
 import { useGooglePhotos } from "@/composables/useGooglePhotos.js";
+import { api } from "@/utils/axios";
 
 // Stores and composables
 const userStore = useUserStore();
@@ -303,6 +347,42 @@ const message = useMessage();
 // User data (real)
 const userName = computed(() => userStore.user?.name || "User");
 const userEmail = computed(() => userStore.user?.email || "");
+
+// Invite friends
+const inviteEmail = ref("");
+const isSendingInvite = ref(false);
+
+const sendInvitation = async () => {
+  if (!inviteEmail.value) {
+    message.warning("Please enter an email address");
+    return;
+  }
+
+  // Basic email validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(inviteEmail.value)) {
+    message.error("Please enter a valid email address");
+    return;
+  }
+
+  try {
+    isSendingInvite.value = true;
+    await api.post("/api/invites/send", {
+      email: inviteEmail.value,
+    });
+    message.success(`Invitation sent to ${inviteEmail.value}!`);
+    inviteEmail.value = ""; // Clear input after success
+  } catch (error: any) {
+    const errorMessage =
+      error?.response?.data?.message ||
+      error?.message ||
+      "Failed to send invitation";
+    message.error(errorMessage);
+    console.error("Error sending invitation:", error);
+  } finally {
+    isSendingInvite.value = false;
+  }
+};
 
 // Preferences
 const selectedLanguage = ref("en");
@@ -724,6 +804,18 @@ const saveSettings = () => {
   .storage-footer .n-button {
     width: 100%;
   }
+
+  .invite-card-form {
+    flex-direction: column;
+  }
+
+  .invite-card-input {
+    width: 100%;
+  }
+
+  .invite-card-form .n-button {
+    width: 100%;
+  }
 }
 
 @media (max-width: 480px) {
@@ -742,6 +834,72 @@ const saveSettings = () => {
   .section-content {
     padding: var(--spacing-md);
   }
+}
+
+/* Invite Friends Card Styles */
+.invite-card {
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-container);
+  border: 1px solid var(--border-color);
+  transition: var(--transition-fast);
+}
+
+.invite-card:hover {
+  border-color: var(--primary-color-hover);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.invite-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.invite-icon-wrapper {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    135deg,
+    rgba(59, 130, 246, 0.1),
+    rgba(99, 102, 241, 0.1)
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.invite-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  flex: 1;
+  min-width: 0;
+}
+
+.invite-card-title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--accent-color);
+}
+
+.invite-card-description {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.invite-card-form {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.invite-card-input {
+  flex: 1;
+  min-width: 0;
 }
 
 .settings-grid {
