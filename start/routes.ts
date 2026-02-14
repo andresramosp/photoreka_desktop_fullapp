@@ -41,6 +41,15 @@ router
   })
   .use(middleware.auth())
 
+// Invites routes (require authentication)
+const InvitesController = () => import('#controllers/invites_controller')
+router.group(() => {
+  router.post('/api/invites/generate', [InvitesController, 'generateInvite'])
+  router.get('/api/invites', [InvitesController, 'listInvites'])
+  router.post('/api/invites/send', [InvitesController, 'sendInvite'])
+})
+// .use(middleware.auth())
+
 router
   .group(() => {
     router.post('/api/auth_lr/create-handoff', [AuthLrController, 'createHandoff'])

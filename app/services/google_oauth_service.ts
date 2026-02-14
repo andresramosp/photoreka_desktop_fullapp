@@ -25,7 +25,7 @@ export default class GoogleOAuthService {
   /**
    * Generate Google OAuth authorization URL
    */
-  getAuthUrl(): string {
+  getAuthUrl(state?: string): string {
     return this.oauth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: [
@@ -33,6 +33,7 @@ export default class GoogleOAuthService {
         'https://www.googleapis.com/auth/userinfo.profile',
       ],
       prompt: 'select_account', // Force account selection even if user is already logged in
+      ...(state && { state }),
     })
   }
 

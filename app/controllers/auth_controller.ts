@@ -1,6 +1,6 @@
 import User from '#models/user'
+import Invite from '#models/invite'
 import { EXPIRED_EMAILS } from '#config/expired_emails'
-import { WHITELIST_EMAILS } from '#config/whitelist_emails'
 import {
   changePasswordValidator,
   createAuthValidator,
@@ -41,21 +41,6 @@ export default class AuthController {
   private getFrontendUrl(): string {
     return process.env.FRONTEND_URL || 'https://app.photoreka.com'
   }
-
-  /**
-   * Check if email is whitelisted or has @photorekatest.com domain
-   */
-  private isEmailAllowed(email: string): boolean {
-    // Check if email is in whitelist
-    if (WHITELIST_EMAILS.includes(email)) {
-      return true
-    }
-    // Check if email has @photorekatest.com domain
-    if (email.endsWith('@photorekatest.com')) {
-      return true
-    }
-    return false
-  }
   /**
    * Register a new user
    */
@@ -63,10 +48,12 @@ export default class AuthController {
     try {
       const payload = await request.validateUsing(createAuthValidator)
 
-      // Verificar si el email está en la whitelist o tiene dominio @photorekatest.com
-      if (!this.isEmailAllowed(payload.email)) {
+      // Validate invitation code
+      const invite = await Invite.findBy('code', payload.inviteCode)
+
+      if (!invite || invite.isUsed) {
         return response.unauthorized({
-          message: 'Unauthorized email for registration. Please request access.',
+          message: 'Invalid or already used invitation code',
         })
       }
 
@@ -79,7 +66,7 @@ export default class AuthController {
       }
 
       // Importar enum y función para usage
-      const tier = UsageTier[payload.usageTier as keyof typeof UsageTier] || UsageTier.TESTER
+      const tier = UsageTier.PROMOTIONAL
       const usage = getDefaultUsageByTier(tier)
 
       // Generate email confirmation token
@@ -110,6 +97,22 @@ export default class AuthController {
         console.error('Error sending confirmation email:', emailError)
         // Don't fail registration if email fails, user can request resend
       }
+
+      // Notify admin about new user registration
+      try {
+        await this.mailService.sendEmail({
+          from: 'Photoreka <hello@photoreka.com>',
+          to: 'andreschennai@gmail.com',
+          subject: 'Nuevo usuario registrado - Photoreka',
+          body: `Un nuevo usuario se ha registrado en Photoreka y necesita ser añadido a los usuarios de prueba de Google Photos API:\n\nNombre: ${user.name}\nEmail: ${user.email}\nID: ${user.id}\nFecha de registro: ${DateTime.now().toISO()}`,
+        })
+      } catch (adminEmailError) {
+        console.error('Error sending admin notification email:', adminEmailError)
+      }
+
+      // Mark invitation as used
+      invite.usedAt = DateTime.now()
+      await invite.save()
 
       // Create access token (user can do some things before confirming email)
       const token = await User.accessTokens.create(user, ['*'])
@@ -698,10 +701,19 @@ export default class AuthController {
   /**
    * Redirect to Google OAuth
    */
-  async googleRedirect({ response }: HttpContext) {
+  async googleRedirect({ request, response }: HttpContext) {
     try {
+      const inviteCode = request.input('inviteCode') // Optional - only needed for new users
+
+      // Pass invitation code in state (can be null for existing users)
+      const statePayload = {
+        inviteCode: inviteCode || null,
+      }
+
+      const state = Buffer.from(JSON.stringify(statePayload)).toString('base64')
+
       const googleService = new GoogleOAuthService()
-      const authUrl = googleService.getAuthUrl()
+      const authUrl = googleService.getAuthUrl(state)
       return response.redirect(authUrl)
     } catch (error) {
       console.error('Error generating Google auth URL:', error)
@@ -718,6 +730,7 @@ export default class AuthController {
     try {
       const code = request.input('code')
       const error = request.input('error')
+      const stateParam = request.input('state')
 
       // User denied access
       if (error) {
@@ -731,6 +744,17 @@ export default class AuthController {
         return response.redirect(
           `${this.getFrontendUrl()}/auth/error?message=No authorization code received`
         )
+      }
+
+      // Parse state parameter (contains optional invite code)
+      let inviteCode: string | null = null
+      if (stateParam) {
+        try {
+          const decoded = JSON.parse(Buffer.from(stateParam, 'base64').toString('utf-8'))
+          inviteCode = decoded.inviteCode || null
+        } catch {
+          console.error('[Google OAuth] Error parsing state parameter')
+        }
       }
 
       // Exchange code for user data
@@ -760,13 +784,22 @@ export default class AuthController {
           await user.save()
           console.log('[Google OAuth] Updated existing user with Google OAuth data')
         }
+        // Don't require or consume invitation for existing users
       } else {
         console.log('[Google OAuth] Creating new user')
 
-        // Verificar si el email está en la whitelist o tiene dominio @photorekatest.com
-        if (!this.isEmailAllowed(googleUser.email)) {
+        // For new users, validate invitation code
+        if (!inviteCode) {
           return response.redirect(
-            `${this.getFrontendUrl()}/auth/error?message=Email not whitelisted. Please request access.`
+            `${this.getFrontendUrl()}/auth/error?message=Invitation code required for new registrations`
+          )
+        }
+
+        const invite = await Invite.findBy('code', inviteCode)
+
+        if (!invite || invite.isUsed) {
+          return response.redirect(
+            `${this.getFrontendUrl()}/auth/error?message=Invalid or already used invitation code`
           )
         }
 
@@ -790,6 +823,13 @@ export default class AuthController {
 
         console.log('[Google OAuth] New user created:', user.id)
 
+        // Mark invitation as used
+        if (invite) {
+          invite.usedAt = DateTime.now()
+          await invite.save()
+          console.log('[Google OAuth] Invitation code marked as used')
+        }
+
         // Send welcome email
         try {
           await this.mailService.sendEmail({
@@ -800,6 +840,18 @@ export default class AuthController {
           })
         } catch (emailError) {
           console.error('[Google OAuth] Error sending welcome email:', emailError)
+        }
+
+        // Notify admin about new user registration
+        try {
+          await this.mailService.sendEmail({
+            from: 'Photoreka <hello@photoreka.com>',
+            to: 'andreschennai@gmail.com',
+            subject: 'Nuevo usuario registrado (Google OAuth) - Photoreka',
+            body: `Un nuevo usuario se ha registrado en Photoreka vía Google OAuth y necesita ser añadido a los usuarios de prueba de Google Photos API:\n\nNombre: ${user.name}\nEmail: ${user.email}\nGoogle ID: ${user.googleId}\nID: ${user.id}\nFecha de registro: ${DateTime.now().toISO()}`,
+          })
+        } catch (adminEmailError) {
+          console.error('[Google OAuth] Error sending admin notification email:', adminEmailError)
         }
       }
 
