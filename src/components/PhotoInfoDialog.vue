@@ -323,7 +323,13 @@ const photoCredit = computed(() => {
     props.selectedPhoto?.name ||
     "";
 
-  if (filename.toUpperCase().includes("DSCF")) {
+  const process986 = props.selectedPhoto?.analyzerProcessId === 986;
+
+  if (
+    filename.toUpperCase().includes("DSCF") ||
+    filename.toUpperCase().includes("_DSC") ||
+    process986
+  ) {
     return {
       username: "@flaneur_oo",
       url: "https://www.instagram.com/flaneur_oo",

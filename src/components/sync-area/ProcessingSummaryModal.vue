@@ -36,11 +36,16 @@
           <n-icon size="32" color="var(--success-color)">
             <CheckmarkCircleOutline />
           </n-icon>
-          <h2 class="header-title">Analysis Complete!</h2>
+          <h2 class="header-title">
+            Analysis of {{ totalPhotos }} Photo{{
+              totalPhotos !== 1 ? "s" : ""
+            }}
+            Complete!
+          </h2>
         </div>
-        <p class="header-subtitle">
+        <!-- <p class="header-subtitle">
           {{ totalPhotos }} photo{{ totalPhotos !== 1 ? "s" : "" }} analyzed
-        </p>
+        </p> -->
 
         <!-- Genre Breakdown -->
         <div class="genre-breakdown">
@@ -236,10 +241,10 @@ const mockPhotos = [
     isCheckingDuplicates: false,
     descriptions: {
       artistic_scores: {
-        aesthetic_quality: 8.5,
-        composition: 7.2,
-        storytelling: 6.8,
-        strangeness: 5.4,
+        aesthetic_quality: 9.5,
+        composition: 6.2,
+        storytelling: 5.8,
+        strangeness: 4.4,
       },
       visual_aspects: {
         genre: ["street"],
@@ -262,10 +267,10 @@ const mockPhotos = [
     isCheckingDuplicates: false,
     descriptions: {
       artistic_scores: {
-        aesthetic_quality: 7.1,
-        composition: 9.0,
-        storytelling: 6.5,
-        strangeness: 4.8,
+        aesthetic_quality: 9.2,
+        composition: 6.5,
+        storytelling: 5.2,
+        strangeness: 3.8,
       },
       visual_aspects: {
         genre: ["landscape"],
@@ -288,10 +293,10 @@ const mockPhotos = [
     isCheckingDuplicates: false,
     descriptions: {
       artistic_scores: {
-        aesthetic_quality: 7.8,
-        composition: 7.0,
-        storytelling: 8.6,
-        strangeness: 5.2,
+        aesthetic_quality: 9.0,
+        composition: 5.8,
+        storytelling: 7.6,
+        strangeness: 4.2,
       },
       visual_aspects: {
         genre: ["portrait"],
@@ -314,10 +319,10 @@ const mockPhotos = [
     isCheckingDuplicates: false,
     descriptions: {
       artistic_scores: {
-        aesthetic_quality: 6.9,
-        composition: 8.1,
+        aesthetic_quality: 8.8,
+        composition: 8.5,
         storytelling: 5.5,
-        strangeness: 8.8,
+        strangeness: 6.0,
       },
       visual_aspects: {
         genre: ["architecture"],
@@ -340,10 +345,10 @@ const mockPhotos = [
     isCheckingDuplicates: false,
     descriptions: {
       artistic_scores: {
-        aesthetic_quality: 8.2,
+        aesthetic_quality: 9,
         composition: 7.5,
         storytelling: 5.0,
-        strangeness: 6.3,
+        strangeness: 7.3,
       },
       visual_aspects: {
         genre: ["nature"],
@@ -366,9 +371,9 @@ const mockPhotos = [
     isCheckingDuplicates: false,
     descriptions: {
       artistic_scores: {
-        aesthetic_quality: 10,
+        aesthetic_quality: 7.0,
         composition: 6.8,
-        storytelling: 7.2,
+        storytelling: 8.2,
         strangeness: 5.0,
       },
       visual_aspects: {
@@ -392,10 +397,10 @@ const mockPhotos = [
     isCheckingDuplicates: false,
     descriptions: {
       artistic_scores: {
-        aesthetic_quality: 7.0,
-        composition: 7.8,
+        aesthetic_quality: 6.5,
+        composition: 7.2,
         storytelling: 6.0,
-        strangeness: 10,
+        strangeness: 9.2,
       },
       visual_aspects: {
         genre: ["landscape"],
@@ -567,26 +572,25 @@ const topPhotos = computed(() => {
   const fundamentalKeys = Object.keys(fundamentalLabels);
   const candidates = [];
 
-  // For each photo, find its best fundamental score
+  // For each photo, collect ALL its fundamental scores (sorted by value)
   allPhotos.value.forEach((photo) => {
     const scores = photo.descriptions?.artistic_scores || {};
-    let bestKey = null;
-    let bestVal = -1;
 
-    fundamentalKeys.forEach((key) => {
-      if ((scores[key] || 0) > bestVal) {
-        bestVal = scores[key] || 0;
-        bestKey = key;
-      }
-    });
+    // Get all fundamentals sorted by score
+    const photoScores = fundamentalKeys
+      .map((key) => ({
+        key,
+        score: scores[key] || 0,
+      }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score);
 
-    if (bestKey) {
+    if (photoScores.length > 0) {
       candidates.push({
         photo,
-        criterion: bestKey,
-        score: bestVal,
-        label: fundamentalLabels[bestKey],
-        icon: fundamentalIcons.value[bestKey],
+        allScores: photoScores, // Keep all scores for flexible selection
+        primaryCriterion: photoScores[0].key,
+        primaryScore: photoScores[0].score,
       });
     }
   });
@@ -597,34 +601,69 @@ const topPhotos = computed(() => {
     c.maxScore = calculateMaxScore(c.photo);
   });
 
-  // Sort by: record-breaking first, then by individual score descending
+  // Sort by: record-breaking first, then by primary score descending
   candidates.sort((a, b) => {
     if (a.isRecord && !b.isRecord) return -1;
     if (!a.isRecord && b.isRecord) return 1;
-    return b.score - a.score;
+    return b.primaryScore - a.primaryScore;
   });
 
   // Determine target count: 4 if total < 8, otherwise 8
   const targetCount = allPhotos.value.length < 8 ? 4 : 8;
 
   const selected = [];
-  const usedCriteria = new Set();
+  const criterionCount = {};
 
-  // First pass: pick best for each unique criterion (prioritizing records)
-  for (const c of candidates) {
-    if (selected.length >= targetCount) break;
-    if (!usedCriteria.has(c.criterion)) {
-      usedCriteria.add(c.criterion);
-      selected.push(c);
-    }
-  }
+  // Helper to select the best available criterion for a photo
+  const selectBestCriterion = (candidate) => {
+    // Check each score in descending order
+    for (const scoreItem of candidate.allScores) {
+      const count = criterionCount[scoreItem.key] || 0;
 
-  // Second pass: fill remaining slots with highest scores (prioritizing records)
-  for (const c of candidates) {
-    if (selected.length >= targetCount) break;
-    if (!selected.find((s) => s.photo.id === c.photo.id)) {
-      selected.push(c);
+      // If this criterion appears less than 3 times, use it immediately
+      if (count < 3) {
+        return scoreItem;
+      }
+
+      // If it already appears 3+ times, skip to next option
+      // (continue checking other scores)
     }
+
+    // No criterion with < 3 uses found, look for next best with score >= 7
+    for (const scoreItem of candidate.allScores) {
+      if (scoreItem.score >= 7) {
+        return scoreItem;
+      }
+    }
+
+    // Fallback: use the best score even if conditions not met
+    return candidate.allScores[0];
+  };
+
+  // Select photos with criterion diversity
+  for (const candidate of candidates) {
+    if (selected.length >= targetCount) break;
+
+    // Skip if already selected
+    if (selected.find((s) => s.photo.id === candidate.photo.id)) {
+      continue;
+    }
+
+    const selectedScore = selectBestCriterion(candidate);
+
+    // Update criterion count
+    criterionCount[selectedScore.key] =
+      (criterionCount[selectedScore.key] || 0) + 1;
+
+    selected.push({
+      photo: candidate.photo,
+      criterion: selectedScore.key,
+      score: selectedScore.score,
+      label: fundamentalLabels[selectedScore.key],
+      icon: fundamentalIcons.value[selectedScore.key],
+      isRecord: candidate.isRecord,
+      maxScore: candidate.maxScore,
+    });
   }
 
   return selected;
@@ -697,6 +736,7 @@ const topPhotos = computed(() => {
   font-weight: 700;
   color: var(--text-primary);
   margin: 0;
+  margin-bottom: 12px;
 }
 
 .header-subtitle {
