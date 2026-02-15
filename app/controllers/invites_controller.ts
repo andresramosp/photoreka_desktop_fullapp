@@ -145,7 +145,8 @@ export default class InvitesController {
         await this.mailService.sendEmail({
           from: 'The Photoreka Team <hello@photoreka.com>',
           to: payload.email,
-          subject: `${user.name} invited you to join Photoreka 🎉`,
+          subject: `${user.name} invited you to try Photoreka (Early Access) 🚀`,
+
           body: inviteUserTemplate(user.name, code, registerUrl),
         })
       } catch (emailError) {

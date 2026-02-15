@@ -101,9 +101,15 @@ export default class SearchController {
       const user = auth.use('api').user!
       const searchService = new SearchTextService()
 
-      const { included = [], excluded = [], mode = 'AND' } = request.body()
+      const { included = [], excluded = [], mode = 'AND', semantic = false } = request.body()
 
-      const result = await searchService.searchByTagsDirect(included, excluded, user.id, mode)
+      const result = await searchService.searchByTagsDirect(
+        included,
+        excluded,
+        user.id,
+        mode,
+        semantic
+      )
 
       return response.ok(result)
     } catch (error) {

@@ -78,6 +78,7 @@ export default class PhotoManager {
       thumbnailUrl: p.thumbnailUrl,
       status: p.status,
       originalFileName: p.originalFileName,
+      analyzerProcessId: p.analyzerProcessId,
       descriptions: {
         visual_aspects: p.descriptions?.visual_aspects || {},
         artistic_scores: p.descriptions?.artistic_scores || {},

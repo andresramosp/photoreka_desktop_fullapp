@@ -174,7 +174,7 @@ export class TagTask extends AnalyzerTask {
           logger.debug(
             `Obteniendo embeddings para batch de ${batch.length} tags (${i + 1}-${i + batch.length} de ${termsWithoutEmbeddings.length})`
           )
-          const { embeddings } = await this.modelsService.getEmbeddingsCPU(batch)
+          const { embeddings } = await this.modelsService.getEmbeddingsCPUBatch(batch)
 
           // Asignar embeddings a los términos
           batch.forEach((name, idx) => {

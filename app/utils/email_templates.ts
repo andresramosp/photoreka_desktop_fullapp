@@ -321,57 +321,62 @@ export function inviteUserTemplate(
 ): string {
   const content = `
     <h1 style="margin: 0 0 20px; font-size: 28px; font-weight: 700; color: ${TEXT_COLOR}; text-align: center;">
-      You've Been Invited to Photoreka! 🎉
+      You're Invited to Photoreka
     </h1>
+
     <p style="margin: 0 0 10px; font-size: 16px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
       Hi there,
     </p>
+
     <p style="margin: 0 0 20px; font-size: 16px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
-      <strong style="color: ${TEXT_COLOR};">${inviterName}</strong> has invited you to join Photoreka, 
-      the Photo Management and Curation Platform for photographers who care about their archive. 
+      <strong style="color: ${TEXT_COLOR};">${inviterName}</strong> invited you to join Photoreka — 
+      a Photo Management and Curation platform built for photographers who truly care about their archive.
     </p>
-    
 
     ${emailButton('Join Photoreka', registerUrl)}
-    
+
     <div style="background-color: rgba(99, 102, 241, 0.05); border-radius: 8px; padding: 20px; margin: 25px 0;">
       <p style="margin: 0 0 15px; font-size: 14px; color: ${TEXT_COLOR}; font-weight: 600; text-align: center;">
-        ✨ What you'll unlock with Photoreka:
+        What you can do inside Photoreka:
       </p>
       <p style="margin: 0 0 10px; font-size: 13px; color: ${MUTED_TEXT_COLOR}; text-align: left; line-height: 1.6;">
         • <strong style="color: ${TEXT_COLOR};">Natural Language Search:</strong> Find any photo by describing what’s happening in it<br/>
-        • <strong style="color: ${TEXT_COLOR};">2D & 3D Map:</strong> Navigate your archive like an Universe of proximity clusters<br/>
+        • <strong style="color: ${TEXT_COLOR};">2D & 3D Map:</strong> Navigate your archive as a universe of proximity clusters<br/>
         • <strong style="color: ${TEXT_COLOR};">Interactive Canvas:</strong> Visually arrange and reorder images to build narratives<br/>
-         • <strong style="color: ${TEXT_COLOR};">Rank by Aesthetics:</strong> Automatically rank your photos based on visual appeal<br/>
-        • <strong style="color: ${TEXT_COLOR};">Series Creation:</strong> Create series by letting photos to find other photos<br/>
+        • <strong style="color: ${TEXT_COLOR};">Aesthetic Ranking:</strong> Sort your archive by visual impact<br/>
+        • <strong style="color: ${TEXT_COLOR};">Series Creation:</strong> Let photos connect and form coherent bodies of work
       </p>
     </div>
 
-   <div style="background-color: rgba(16, 185, 129, 0.06); border-radius: 8px; padding: 18px; margin: 20px 0; border: 1px solid rgba(16, 185, 129, 0.15);">
-  <p style="margin: 0 0 8px; font-size: 14px; color: ${TEXT_COLOR}; font-weight: 600; text-align: center;">
-    🚀 Early Access Invitation
-  </p>
-  <p style="margin: 0 0 10px; font-size: 13px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
-    This invitation includes a complimentary package of 
-    <strong style="color: ${TEXT_COLOR};">1,500 photos processed for free</strong> — 
-    so you can fully explore your archive and experience Photoreka without limits.
-  </p>
-  <p style="margin: 0; font-size: 12px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
-    Photoreka is currently in <strong style="color: ${TEXT_COLOR};">beta</strong>. 
-    You may encounter occasional rough edges as we continue refining the experience. 
-    Your feedback is not only welcome — it directly shapes what comes next.
-  </p>
-</div>
+    <div style="background-color: rgba(16, 185, 129, 0.06); border-radius: 8px; padding: 18px; margin: 20px 0; border: 1px solid rgba(16, 185, 129, 0.15);">
+      <p style="margin: 0 0 8px; font-size: 14px; color: ${TEXT_COLOR}; font-weight: 600; text-align: center;">
+        🚀 Founding Phase Access
+      </p>
+      <p style="margin: 0 0 10px; font-size: 13px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+        This invitation includes a complimentary package of 
+        <strong style="color: ${TEXT_COLOR};">1,500 photos processed free of charge</strong>, 
+        so you can fully explore your archive and experience the platform.
+      </p>
+      <p style="margin: 0 0 10px; font-size: 12px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+        Photoreka is currently in its early phase, with a limited group of photographers shaping its evolution. 
+        We’re continuously refining the experience — your feedback directly influences what comes next.
+      </p>
+      <p style="margin: 0; font-size: 12px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+        During this phase, usage is complimentary. As the platform matures, structured subscription plans with usage tiers will be introduced. 
+        Early members will retain preferential access.
+      </p>
+    </div>
 
     <hr style="border: none; border-top: 1px solid rgba(148, 163, 184, 0.2); margin: 30px 0;" />
     
     <p style="margin: 0; font-size: 12px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
       If the button doesn't work, copy and paste this link into your browser:
     </p>
+
     <p style="margin: 10px 0 0; font-size: 12px; color: ${PRIMARY_COLOR}; text-align: center; word-break: break-all;">
       ${registerUrl}
     </p>
   `
 
-  return baseLayout(content, "You're invited to Photoreka!")
+  return baseLayout(content, "You're invited to Photoreka")
 }

@@ -422,6 +422,25 @@ export default class ModelsService {
     }
   }
 
+  async getEmbeddingsCPUBatch(tags) {
+    if (this.apiMode === 'REMOTE') await this.ensureRunPodWarm('embeddings_cpu')
+
+    try {
+      const { url, requestPayload, headers } = this.buildRequestConfig(
+        'get_embeddings',
+        { tags },
+        'embeddings_cpu'
+      )
+
+      const { data } = await axios.post(url, requestPayload, { headers })
+
+      return { embeddings: data.output.embeddings }
+    } catch (error) {
+      console.error('Error en getEmbeddings:', error.message, JSON.stringify(tags))
+      return { embeddings: [] }
+    }
+  }
+
   async getCLIPEmbeddingsCPU(tags) {
     try {
       const { data } = await axios.post(process.env.PYTHON_API_CPU + '/clip-text-embeddings', {

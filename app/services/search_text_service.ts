@@ -29,6 +29,7 @@ import PhotoImageService from './photo_image_service.js'
 import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
 import { MediaResolution } from '@google/genai'
 import { createRequire } from 'module'
+import { EmbeddingStoreService } from './embeddings_store_service.js'
 
 const require = createRequire(import.meta.url)
 const pluralize = require('pluralize')
@@ -751,7 +752,8 @@ export default class SearchTextService {
     includedTags: string[],
     excludedTags: string[],
     userId: string | number,
-    mode: 'AND' | 'OR' = 'AND'
+    mode: 'AND' | 'OR' = 'AND',
+    semantic: boolean = false
   ) {
     const db = await import('@adonisjs/lucid/services/db').then((mod) => mod.default)
 
@@ -787,87 +789,216 @@ export default class SearchTextService {
       })
     }
 
-    // Filtrar y matchear fotos
+    // ========== PASO 1: IDENTIFICAR TAGS QUE MATCHEAN POR STRING (GLOBALMENTE) ==========
+
+    // Obtener todos los tags únicos del usuario
+    const allUserTags = Array.from(
+      new Map(
+        Array.from(photoTagsMap.values())
+          .flatMap((p) => p.tags)
+          .map((t) => [t.id, t])
+      ).values()
+    )
+
+    // Identificar qué tags del usuario matchean por string (para excluirlos de búsqueda semántica)
+    const tagsMatchedByString = new Set<number>()
+
+    for (const searchTag of normalizedIncluded) {
+      const singularSearchTag = pluralize.singular(searchTag)
+      const regex = new RegExp(
+        `\\b${singularSearchTag.replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}\\b`,
+        'i'
+      )
+
+      for (const tag of allUserTags) {
+        const singularTagName = pluralize.singular(tag.name.toLowerCase())
+        if (regex.test(singularTagName)) {
+          tagsMatchedByString.add(tag.id)
+        }
+      }
+    }
+
+    // ========== PASO 2: BÚSQUEDA SEMÁNTICA (EXCLUYE TAGS MATCHED POR STRING) ==========
+
+    const photoSemanticMatches = new Map<
+      number,
+      Array<{ searchTag: string; matchedTag: string; proximity: number }>
+    >()
+
+    if (semantic && normalizedIncluded.length > 0) {
+      const vectorService = new VectorService()
+
+      // Obtener todos los tag IDs del usuario EXCLUYENDO los que ya matchearon por string
+      const allUserTagIds = Array.from(
+        new Set(Array.from(photoTagsMap.values()).flatMap((p) => p.tags.map((t) => t.id)))
+      )
+      const tagIdsForSemanticSearch = allUserTagIds.filter((id) => !tagsMatchedByString.has(id))
+
+      // Obtener todos los photo IDs del usuario para filtrar
+      const userPhotoIds = Array.from(photoTagsMap.keys())
+
+      if (tagIdsForSemanticSearch.length > 0) {
+        // Calcular embeddings para todos los términos de búsqueda
+        await EmbeddingStoreService.calculateEmbeddings(normalizedIncluded, false)
+
+        // Buscar tags similares en paralelo para todos los términos de búsqueda
+        const semanticSearchPromises = normalizedIncluded.map(async (searchTag) => {
+          try {
+            const embedding = EmbeddingStoreService.getEmbedding(searchTag)
+
+            if (!embedding) {
+              console.warn(`No se pudo obtener embedding para "${searchTag}"`)
+              return { searchTag, results: [] }
+            }
+
+            const similarTagPhotos = await vectorService.findSimilarTagToEmbedding(
+              embedding,
+              0.75,
+              100,
+              'cosine_similarity',
+              tagIdsForSemanticSearch,
+              undefined,
+              undefined,
+              [],
+              userPhotoIds,
+              false
+            )
+
+            return { searchTag, results: similarTagPhotos }
+          } catch (error) {
+            console.error(`Error buscando tags similares para "${searchTag}":`, error)
+            return { searchTag, results: [] }
+          }
+        })
+
+        const semanticSearchResults = await Promise.all(semanticSearchPromises)
+
+        // Agrupar resultados por foto
+        for (const { searchTag, results } of semanticSearchResults) {
+          for (const tagPhoto of results) {
+            const photoId = tagPhoto.photo_id
+
+            if (!photoSemanticMatches.has(photoId)) {
+              photoSemanticMatches.set(photoId, [])
+            }
+
+            // Verificar que este tag no haya matcheado por string
+            const photoData = photoTagsMap.get(photoId)
+            if (photoData) {
+              const tagInPhoto = photoData.tags.find((t) => t.id === tagPhoto.tag_id)
+              if (tagInPhoto && !tagsMatchedByString.has(tagInPhoto.id)) {
+                photoSemanticMatches.get(photoId)!.push({
+                  searchTag,
+                  matchedTag: tagPhoto.name,
+                  proximity: tagPhoto.proximity,
+                })
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // ========== PASO 3: CONSTRUCCIÓN FINAL DE RESULTADOS ==========
+
     const results: Array<{
       photoId: number
       matchedIncluded: string[]
       matchedExcluded: string[]
+      semanticMatches?: Array<{ searchTag: string; matchedTag: string; proximity: number }>
     }> = []
 
     for (const [photoId, { tags }] of photoTagsMap.entries()) {
-      const normalizedPhotoTags = tags.map((t) => t.name.toLowerCase())
-      // Convertir tags a singular para mejor matching
-      const singularPhotoTags = normalizedPhotoTags.map((t) => pluralize.singular(t))
-
-      // Buscar matches incluidos (tag buscado está contenido en tag de foto)
+      // Analizar matches por string en esta foto
       const matchedIncluded: string[] = []
+      const matchedExcluded: string[] = []
+      const matchesBySearchTag = new Map<string, string[]>()
+
+      // Inicializar mapa para cada tag de búsqueda
       for (const searchTag of normalizedIncluded) {
-        const singularSearchTag = pluralize.singular(searchTag)
-        for (let i = 0; i < singularPhotoTags.length; i++) {
-          const photoTag = singularPhotoTags[i]
-          // El tag de la foto debe ser una palabra aislada (no parte de otra palabra)
-          // Usamos regex con word boundaries comparando formas singulares
-          const regex = new RegExp(
-            `\\b${singularSearchTag.replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}\\b`,
-            'i'
-          )
-          if (regex.test(photoTag)) {
-            matchedIncluded.push(normalizedPhotoTags[i])
+        matchesBySearchTag.set(searchTag, [])
+      }
+
+      // Buscar tags que matchearon por string en esta foto
+      for (const tag of tags) {
+        if (tagsMatchedByString.has(tag.id)) {
+          const tagNameLower = tag.name.toLowerCase()
+          matchedIncluded.push(tagNameLower)
+
+          // Determinar a qué searchTag corresponde
+          for (const searchTag of normalizedIncluded) {
+            const singularSearchTag = pluralize.singular(searchTag)
+            const singularTagName = pluralize.singular(tagNameLower)
+            const regex = new RegExp(
+              `\\b${singularSearchTag.replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}\\b`,
+              'i'
+            )
+            if (regex.test(singularTagName)) {
+              matchesBySearchTag.get(searchTag)!.push(tagNameLower)
+            }
           }
         }
       }
 
-      // Si no hay tags incluidos especificados, todas califican.
-      // Si hay tags incluidos:
-      // - AND: la foto debe tener TODOS los tags incluidos
-      // - OR: la foto debe tener AL MENOS UNO de los tags incluidos
-      let hasIncludedMatch = normalizedIncluded.length === 0
+      // Buscar tags excluidos en esta foto
+      for (const tag of tags) {
+        const tagNameLower = tag.name.toLowerCase()
+        const singularTagName = pluralize.singular(tagNameLower)
+
+        for (const searchTag of normalizedExcluded) {
+          const singularSearchTag = pluralize.singular(searchTag)
+          const regex = new RegExp(
+            `\\b${singularSearchTag.replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}\\b`,
+            'i'
+          )
+          if (regex.test(singularTagName)) {
+            matchedExcluded.push(tagNameLower)
+            break
+          }
+        }
+      }
+
+      // Si tiene tags excluidos, saltamos esta foto
+      if (matchedExcluded.length > 0) {
+        continue
+      }
+
+      // Obtener matches semánticos para esta foto
+      const semanticMatch = photoSemanticMatches.get(photoId)
+
+      // Verificar si cumple con el modo AND/OR
+      let shouldInclude = normalizedIncluded.length === 0 // Si no hay incluidos, todas califican
+
       if (normalizedIncluded.length > 0) {
         if (mode === 'AND') {
-          hasIncludedMatch = normalizedIncluded.every((searchTag) => {
-            const singularSearchTag = pluralize.singular(searchTag)
-            const regex = new RegExp(
-              `\\b${singularSearchTag.replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}\\b`,
-              'i'
-            )
-            return singularPhotoTags.some((photoTag) => regex.test(photoTag))
+          // TODOS los tags de búsqueda deben tener match (string O semántico)
+          shouldInclude = normalizedIncluded.every((searchTag) => {
+            const hasStringMatch = matchesBySearchTag.get(searchTag)!.length > 0
+            const hasSemanticMatch =
+              semanticMatch?.some((sm) => sm.searchTag === searchTag) || false
+            return hasStringMatch || hasSemanticMatch
           })
         } else {
-          hasIncludedMatch = normalizedIncluded.some((searchTag) => {
-            const singularSearchTag = pluralize.singular(searchTag)
-            const regex = new RegExp(
-              `\\b${singularSearchTag.replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}\\b`,
-              'i'
-            )
-            return singularPhotoTags.some((photoTag) => regex.test(photoTag))
+          // AL MENOS UNO de los tags de búsqueda debe tener match (string O semántico)
+          shouldInclude = normalizedIncluded.some((searchTag) => {
+            const hasStringMatch = matchesBySearchTag.get(searchTag)!.length > 0
+            const hasSemanticMatch =
+              semanticMatch?.some((sm) => sm.searchTag === searchTag) || false
+            return hasStringMatch || hasSemanticMatch
           })
         }
       }
 
-      // Buscar matches excluidos (tag excluido está contenido en tag de foto)
-      const matchedExcluded: string[] = []
-      for (const searchTag of normalizedExcluded) {
-        const singularSearchTag = pluralize.singular(searchTag)
-        for (let i = 0; i < singularPhotoTags.length; i++) {
-          const photoTag = singularPhotoTags[i]
-          // El tag de la foto debe ser una palabra aislada (no parte de otra palabra)
-          const regex = new RegExp(
-            `\\b${singularSearchTag.replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}\\b`,
-            'i'
-          )
-          if (regex.test(photoTag)) {
-            matchedExcluded.push(normalizedPhotoTags[i])
-          }
+      if (shouldInclude) {
+        // Combinar tags matched por string y semántica
+        const allMatchedTags = [...matchedIncluded]
+        if (semanticMatch) {
+          allMatchedTags.push(...semanticMatch.map((sm) => sm.matchedTag))
         }
-      }
 
-      // Incluir foto solo si:
-      // 1. Tiene al menos un match incluido (o no hay tags incluidos)
-      // 2. NO tiene ningún match excluido
-      if (hasIncludedMatch && matchedExcluded.length === 0) {
         results.push({
           photoId,
-          matchedIncluded: [...new Set(matchedIncluded)], // Eliminar duplicados
+          matchedIncluded: [...new Set(allMatchedTags)],
           matchedExcluded: [],
         })
       }

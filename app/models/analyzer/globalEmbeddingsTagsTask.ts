@@ -67,7 +67,7 @@ export class GlobalEmbeddingsTagsTask extends AnalyzerTask {
 
       try {
         // Obtener embeddings para el lote
-        const { embeddings } = await this.modelsService.getEmbeddingsCPU(batch)
+        const { embeddings } = await this.modelsService.getEmbeddingsCPUBatch(batch)
 
         // Guardar en paralelo con límite de concurrencia
         const limit = pLimit(concurrencyLimit)
@@ -122,7 +122,7 @@ export class GlobalEmbeddingsTagsTask extends AnalyzerTask {
 
       try {
         // Obtener embeddings para el lote
-        const { embeddings } = await this.modelsService.getEmbeddingsCPU(batch)
+        const { embeddings } = await this.modelsService.getEmbeddingsCPUBatch(batch)
 
         // Guardar en paralelo con límite de concurrencia
         const limit = pLimit(concurrencyLimit)
