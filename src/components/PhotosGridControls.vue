@@ -292,6 +292,7 @@
               </div>
               <n-select
                 v-model:value="includedTags"
+                v-model:show="includedTagsDropdownShow"
                 multiple
                 filterable
                 clearable
@@ -318,6 +319,7 @@
               <label class="filter-label">Exclude tags</label>
               <n-select
                 v-model:value="excludedTags"
+                v-model:show="excludedTagsDropdownShow"
                 multiple
                 filterable
                 clearable
@@ -560,6 +562,8 @@ const {
 // Tags filter state (local to this component)
 const includedTags = ref([]);
 const excludedTags = ref([]);
+const includedTagsDropdownShow = ref(false);
+const excludedTagsDropdownShow = ref(false);
 const isSearchingTags = ref(false);
 const isOrMode = ref(true); // true = OR (Any), false = AND (All)
 
@@ -870,11 +874,13 @@ const handleExcludedTagSearch = (query) => {
 
 const handleIncludedTagsUpdate = async (value) => {
   includedTags.value = value;
+  includedTagsDropdownShow.value = false; // Cerrar dropdown al seleccionar
   await executeTagSearch();
 };
 
 const handleExcludedTagsUpdate = async (value) => {
   excludedTags.value = value;
+  excludedTagsDropdownShow.value = false; // Cerrar dropdown al seleccionar
   await executeTagSearch();
 };
 
@@ -891,6 +897,7 @@ const executeTagSearch = async () => {
       included: includedTags.value,
       excluded: excludedTags.value,
       mode: tagsMode.value,
+      semantic: false,
     });
 
     // Emit the search results to parent

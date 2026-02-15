@@ -616,7 +616,7 @@ const topPhotos = computed(() => {
 
   // Helper to select the best available criterion for a photo
   const selectBestCriterion = (candidate) => {
-    // Check each score in descending order
+    // First pass: check each score in descending order for ones with < 3 uses
     for (const scoreItem of candidate.allScores) {
       const count = criterionCount[scoreItem.key] || 0;
 
@@ -624,19 +624,16 @@ const topPhotos = computed(() => {
       if (count < 3) {
         return scoreItem;
       }
-
-      // If it already appears 3+ times, skip to next option
-      // (continue checking other scores)
     }
 
-    // No criterion with < 3 uses found, look for next best with score >= 7
+    // Second pass: all criteria have 3+ uses, look for alternatives >= 7
     for (const scoreItem of candidate.allScores) {
       if (scoreItem.score >= 7) {
         return scoreItem;
       }
     }
 
-    // Fallback: use the best score even if conditions not met
+    // Third pass: no alternatives >= 7 found, use the best score anyway (allow repetition)
     return candidate.allScores[0];
   };
 
