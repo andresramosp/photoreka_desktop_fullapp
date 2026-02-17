@@ -66,7 +66,7 @@ function emailButton(text: string, url: string): string {
   return `
     <table role="presentation" style="width: 100%; border-collapse: collapse;">
       <tr>
-        <td align="center" style="padding: 30px 0;">
+        <td align="center" style="padding: 0 0;">
           <a href="${url}" 
              style="display: inline-block; 
                     padding: 16px 40px; 
@@ -337,7 +337,7 @@ export function inviteUserTemplate(
 
     <p style="margin: -20px 0 20px 0; font-size: 13px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
       <a href="https://www.photoreka.com/demo" style="color: ${PRIMARY_COLOR}; text-decoration: none; font-weight: 500;">
-        Or try the demo first
+        ▶️ Or try the demo first
       </a>
     </p>
 
