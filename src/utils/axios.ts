@@ -13,7 +13,9 @@ const api_analyzer: AxiosInstance = axios.create({
 
 // Interceptor para añadir el token JWT si existe
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("auth_token");
+  // Verificar primero localStorage (usuarios normales), luego sessionStorage (modo demo)
+  const token =
+    localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
   if (token) {
     config.headers["Authorization"] = `Bearer ${token}`;
   }
@@ -22,7 +24,9 @@ api.interceptors.request.use((config) => {
 
 // Interceptor para api_analyzer (opcional, igual que api)
 api_analyzer.interceptors.request.use((config) => {
-  const token = localStorage.getItem("auth_token");
+  // Verificar primero localStorage (usuarios normales), luego sessionStorage (modo demo)
+  const token =
+    localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
   if (token) {
     config.headers["Authorization"] = `Bearer ${token}`;
   }

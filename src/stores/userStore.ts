@@ -63,7 +63,14 @@ export const useUserStore = defineStore("user", () => {
 
   // Check for existing token on store initialization
   const initAuth = async () => {
-    const savedToken = localStorage.getItem("auth_token");
+    // Verificar primero localStorage (usuarios normales), luego sessionStorage (modo demo)
+    const savedToken =
+      localStorage.getItem("auth_token") ||
+      sessionStorage.getItem("auth_token");
+    const isDemo =
+      !localStorage.getItem("auth_token") &&
+      !!sessionStorage.getItem("auth_token");
+
     if (savedToken) {
       token.value = savedToken;
       isAuthenticated.value = true;
@@ -79,6 +86,7 @@ export const useUserStore = defineStore("user", () => {
         isAuthenticated.value = false;
         user.value = null;
         localStorage.removeItem("auth_token");
+        sessionStorage.removeItem("auth_token");
       }
     }
     // Marcar como inicializado independientemente del resultado
@@ -96,6 +104,9 @@ export const useUserStore = defineStore("user", () => {
     try {
       const response = await api.post("/api/auth/login", { email, password });
       const { token: receivedToken } = response.data;
+
+      // Limpiar cualquier sesión de demo anterior
+      sessionStorage.removeItem("auth_token");
 
       token.value = receivedToken;
       isAuthenticated.value = true;
@@ -145,6 +156,9 @@ export const useUserStore = defineStore("user", () => {
 
       const response = await api.post("/api/auth/register", payload);
       const { token: receivedToken, user: receivedUser } = response.data;
+
+      // Limpiar cualquier sesión de demo anterior
+      sessionStorage.removeItem("auth_token");
 
       token.value = receivedToken;
       isAuthenticated.value = true;
@@ -206,6 +220,7 @@ export const useUserStore = defineStore("user", () => {
     user.value = null;
     isInitialized.value = false;
     localStorage.removeItem("auth_token");
+    sessionStorage.removeItem("auth_token");
   };
 
   const dismissUsageWarning = (section: "search" | "curation") => {
@@ -368,6 +383,9 @@ export const useUserStore = defineStore("user", () => {
     isInitialized.value = false;
 
     try {
+      // Limpiar cualquier sesión de demo anterior
+      sessionStorage.removeItem("auth_token");
+
       // Guardar token
       token.value = receivedToken;
       isAuthenticated.value = true;
@@ -405,6 +423,9 @@ export const useUserStore = defineStore("user", () => {
       });
       const { token: receivedToken } = response.data;
 
+      // Limpiar cualquier sesión de demo anterior
+      sessionStorage.removeItem("auth_token");
+
       // Actualizar estado de autenticación
       token.value = receivedToken;
       isAuthenticated.value = true;
@@ -438,9 +459,13 @@ export const useUserStore = defineStore("user", () => {
       const response = await api.post("/api/auth/demo-login");
       const { token: receivedToken } = response.data;
 
+      // Limpiar cualquier sesión anterior (usuario normal)
+      localStorage.removeItem("auth_token");
+
       token.value = receivedToken;
       isAuthenticated.value = true;
-      localStorage.setItem("auth_token", receivedToken);
+      // Usar sessionStorage para demo - se borra al cerrar la pestaña
+      sessionStorage.setItem("auth_token", receivedToken);
 
       // Obtener datos reales del usuario desde /profile
       const profileResponse = await api.get("/api/auth/profile");
