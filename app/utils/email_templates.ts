@@ -335,7 +335,7 @@ export function inviteUserTemplate(
 
     ${emailButton('Join Photoreka', registerUrl)}
 
-    <p style="margin: 15px 0 0; font-size: 13px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+    <p style="margin: -20px 0 20px 0; font-size: 13px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
       <a href="https://www.photoreka.com/demo" style="color: ${PRIMARY_COLOR}; text-decoration: none; font-weight: 500;">
         Or try the demo first
       </a>
