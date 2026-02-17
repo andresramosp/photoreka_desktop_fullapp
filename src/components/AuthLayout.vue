@@ -3,9 +3,14 @@
     <div class="auth-container">
       <div class="auth-content">
         <div class="auth-header">
-          <router-link to="/" class="logo-link" aria-label="Inicio">
-            <AppLogo layout="horizontal" :with-claim="true" :height="85" />
-          </router-link>
+          <div class="logo-wrapper" aria-label="Inicio">
+            <AppLogo
+              layout="horizontal"
+              :with-claim="true"
+              :height="85"
+              :click-to-home="true"
+            />
+          </div>
         </div>
 
         <div class="auth-form-wrapper">
@@ -68,14 +73,13 @@ import AppLogo from "./AppLogo.vue";
   margin-bottom: 12px;
 }
 
-.logo-link {
+.logo-wrapper {
   display: inline-block;
   cursor: pointer;
   color: inherit;
-  text-decoration: none;
 }
 
-.logo-link:focus {
+.logo-wrapper:focus {
   outline: 2px solid rgba(37, 99, 235, 0.35);
   border-radius: 8px;
 }

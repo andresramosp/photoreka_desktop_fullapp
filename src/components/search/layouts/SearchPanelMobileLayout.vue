@@ -190,6 +190,7 @@
             <div class="filter-section-label">Included Tags</div>
             <n-select
               v-model:value="includedTags"
+              v-model:show="includedTagsDropdownShow"
               multiple
               filterable
               clearable
@@ -213,6 +214,7 @@
             <div class="filter-section-label">Excluded Tags</div>
             <n-select
               v-model:value="excludedTags"
+              v-model:show="excludedTagsDropdownShow"
               multiple
               filterable
               clearable
@@ -330,7 +332,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import {
   NInput,
   NSelect,
@@ -463,6 +465,8 @@ const emit = defineEmits([
 
 // Local state for filters panel
 const showFiltersPanel = ref(false);
+const includedTagsDropdownShow = ref(false);
+const excludedTagsDropdownShow = ref(false);
 
 // Methods to update store directly
 function updateSearchType(type) {
@@ -532,6 +536,21 @@ function handleReset() {
   excludedTags.value = [];
   emit("reset");
 }
+
+// Watch for tag changes and close dropdowns automatically
+watch(
+  () => includedTags.value.length,
+  () => {
+    includedTagsDropdownShow.value = false;
+  },
+);
+
+watch(
+  () => excludedTags.value.length,
+  () => {
+    excludedTagsDropdownShow.value = false;
+  },
+);
 </script>
 
 <style scoped>

@@ -1,5 +1,9 @@
 <template>
-  <div class="photoreka-logo">
+  <div
+    class="photoreka-logo"
+    :class="{ clickable: props.clickToHome }"
+    @click="handleLogoClick"
+  >
     <img
       :src="logoSrc"
       alt="Photoreka"
@@ -35,16 +39,25 @@ interface Props {
   height?: number; // altura en px, prevalece sobre size
   layout?: LogoLayout; // horizontal, vertical o solo icono
   withClaim?: boolean; // incluir el claim/tagline
+  clickToHome?: boolean; // hace el logo clickeable para ir a www.photoreka.com
 }
 
 const props = withDefaults(defineProps<Props>(), {
   size: "normal",
   layout: "vertical",
   withClaim: false,
+  clickToHome: false,
 });
 
 // Obtener el tema internamente
 const { themeMode } = useTheme();
+
+// Manejador de clic para ir a www.photoreka.com
+const handleLogoClick = () => {
+  if (props.clickToHome) {
+    window.location.href = "https://www.photoreka.com";
+  }
+};
 
 // Mapa de logos según layout y themeMode
 const logoMap = {
@@ -99,6 +112,15 @@ export default {
   align-items: center;
   justify-content: center;
   opacity: 0.8;
+}
+
+.photoreka-logo.clickable {
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.photoreka-logo.clickable:hover {
+  opacity: 1;
 }
 
 .logo-image {
