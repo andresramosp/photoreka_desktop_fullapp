@@ -203,9 +203,7 @@
         :options="includedTagSuggestionsFormatted"
         :clear-filter-after-select="true"
         :max-tag-count="3"
-        :inputProps="{
-          onCompositionend: (e) => handleIncludedTagSearch(e.target.value),
-        }"
+        :ignore-composition="false"
         class="tags-select include-tags-select"
         size="small"
         @search="handleIncludedTagSearch"

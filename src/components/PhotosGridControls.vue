@@ -375,10 +375,7 @@
                 :filter="() => true"
                 :clear-filter-after-select="true"
                 :max-tag-count="3"
-                :inputProps="{
-                  onCompositionend: (e) =>
-                    handleIncludedTagSearch(e.target.value),
-                }"
+                :ignore-composition="false"
                 size="small"
                 @search="handleIncludedTagSearch"
                 @update:value="handleIncludedTagsUpdate"
@@ -406,10 +403,7 @@
                 :filter="() => true"
                 :clear-filter-after-select="true"
                 :max-tag-count="3"
-                :inputProps="{
-                  onCompositionend: (e) =>
-                    handleExcludedTagSearch(e.target.value),
-                }"
+                :ignore-composition="false"
                 size="small"
                 @search="handleExcludedTagSearch"
                 @update:value="handleExcludedTagsUpdate"
