@@ -178,6 +178,7 @@ const allowedHeaderViews = [
   "settings",
   "help",
   "report",
+  // "chat",
   // "settings",
   // Add more route names as needed
 ];
@@ -224,6 +225,7 @@ const getKeepAliveComponents = () => {
     "GridMakerView",
     "3DView",
     "2DView",
+    "ChatView",
   ];
 
   // Debug: log components being kept alive

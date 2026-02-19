@@ -300,6 +300,13 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     ],
   }));
 
+  // Chat option (global, like Sync Area)
+  const chatOption = computed<MenuOption>(() => ({
+    label: "Chat",
+    key: "chat",
+    icon: renderIcon(toolIcon("chat")),
+  }));
+
   // Complete menu structure
   const menuOptions = computed<MenuOption[]>(() => {
     return [
@@ -311,9 +318,14 @@ export function useMainMenu(closeMobileMenu?: () => void) {
       librarySection.value,
       exploreSection.value,
       createSection.value,
+      // {
+      //   type: "divider",
+      //   key: "create-divider",
+      // } as MenuOption,
+      // chatOption.value,
       {
         type: "divider",
-        key: "create-divider",
+        key: "chat-divider",
       } as MenuOption,
       systemSection.value,
     ];

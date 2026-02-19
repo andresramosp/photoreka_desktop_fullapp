@@ -18,6 +18,7 @@ import {
   HelpCircleOutline,
   Image,
   DesktopOutline,
+  ChatbubblesOutline,
 } from "@vicons/ionicons5";
 
 export const TOOL_AVAILABILITY = {
@@ -45,6 +46,7 @@ export const TOOL_ICONS = {
   HelpCircleOutline,
   Image,
   DesktopOutline,
+  ChatbubblesOutline,
 };
 
 export const TOOLS_CONFIG = [
@@ -141,6 +143,16 @@ export const TOOLS_CONFIG = [
     menuSection: "create",
     showInPhotoSelector: true,
     singlePhotoOnly: false,
+  },
+  {
+    id: "chat",
+    name: "Chat",
+    description: "Chat with AI about your photos",
+    icon: "ChatbubblesOutline",
+    route: "/chat",
+    availableOn: TOOL_AVAILABILITY.BOTH,
+    menuSection: "global",
+    showInPhotoSelector: false,
   },
   {
     id: "sync-area",

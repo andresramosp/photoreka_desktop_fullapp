@@ -20,6 +20,7 @@ import AuthView from "../views/AuthView.vue";
 import ProfileSelectionView from "../views/ProfileSelectionView.vue";
 import StoragePlanSelectionView from "../views/StoragePlanSelectionView.vue";
 import GridMaker from "../views/GridMakerView.vue";
+import ChatView from "../views/ChatView.vue";
 // import LandingView from "../views/LandingView.vue";
 import LandingViewPremium from "../views/LandingViewPremium.vue";
 import TermsView from "../views/TermsView.vue";
@@ -342,6 +343,14 @@ const router = createRouter({
       path: "/grid-maker",
       name: "grid-maker",
       component: GridMaker,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
+      path: "/chat",
+      name: "chat",
+      component: ChatView,
       meta: {
         requiresAuth: true,
       },
