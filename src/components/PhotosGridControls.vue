@@ -375,6 +375,10 @@
                 :filter="() => true"
                 :clear-filter-after-select="true"
                 :max-tag-count="3"
+                :inputProps="{
+                  onCompositionend: (e) =>
+                    handleIncludedTagSearch(e.target.value),
+                }"
                 size="small"
                 @search="handleIncludedTagSearch"
                 @update:value="handleIncludedTagsUpdate"
@@ -402,6 +406,10 @@
                 :filter="() => true"
                 :clear-filter-after-select="true"
                 :max-tag-count="3"
+                :inputProps="{
+                  onCompositionend: (e) =>
+                    handleExcludedTagSearch(e.target.value),
+                }"
                 size="small"
                 @search="handleExcludedTagSearch"
                 @update:value="handleExcludedTagsUpdate"
@@ -917,34 +925,28 @@ const toggleSortOrder = () => {
 
 // Toggle functions for exclusive accordion behavior on mobile
 const toggleFilters = () => {
-  if (isMobile.value) {
-    // Close other sections in mobile
-    if (!isFiltersExpanded.value) {
-      isSortingExpanded.value = false;
-      isDateRangeExpanded.value = false;
-    }
+  // Close other sections when opening this one
+  if (!isFiltersExpanded.value) {
+    isSortingExpanded.value = false;
+    isDateRangeExpanded.value = false;
   }
   isFiltersExpanded.value = !isFiltersExpanded.value;
 };
 
 const toggleSorting = () => {
-  if (isMobile.value) {
-    // Close other sections in mobile
-    if (!isSortingExpanded.value) {
-      isFiltersExpanded.value = false;
-      isDateRangeExpanded.value = false;
-    }
+  // Close other sections when opening this one
+  if (!isSortingExpanded.value) {
+    isFiltersExpanded.value = false;
+    isDateRangeExpanded.value = false;
   }
   isSortingExpanded.value = !isSortingExpanded.value;
 };
 
 const toggleDateRange = () => {
-  if (isMobile.value) {
-    // Close other sections in mobile
-    if (!isDateRangeExpanded.value) {
-      isFiltersExpanded.value = false;
-      isSortingExpanded.value = false;
-    }
+  // Close other sections when opening this one
+  if (!isDateRangeExpanded.value) {
+    isFiltersExpanded.value = false;
+    isSortingExpanded.value = false;
   }
   isDateRangeExpanded.value = !isDateRangeExpanded.value;
 };

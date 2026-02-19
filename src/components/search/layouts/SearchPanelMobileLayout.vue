@@ -199,6 +199,10 @@
               :options="includedTagSuggestionsFormatted"
               :clear-filter-after-select="true"
               :max-tag-count="2"
+              :inputProps="{
+                onCompositionend: (e) =>
+                  emit('searchIncludedTags', e.target.value),
+              }"
               class="mobile-search-input"
               @search="emit('searchIncludedTags', $event)"
             >
@@ -222,6 +226,10 @@
               placeholder="Add tags to exclude..."
               :options="excludedTagSuggestionsFormatted"
               :max-tag-count="3"
+              :inputProps="{
+                onCompositionend: (e) =>
+                  emit('searchExcludedTags', e.target.value),
+              }"
               class="mobile-filter-select"
               @search="emit('searchExcludedTags', $event)"
             >
