@@ -101,6 +101,21 @@
             </n-button>
           </n-button-group>
         </div>
+
+        <!-- Select All Button -->
+        <n-button
+          size="small"
+          :type="allSelected ? 'primary' : 'default'"
+          @click="handleSelectAll"
+          class="select-all-btn"
+        >
+          <template #icon>
+            <n-icon>
+              <SelectAllOn24Regular />
+            </n-icon>
+          </template>
+          <span>{{ allSelected ? "Deselect All" : "Select All" }}</span>
+        </n-button>
       </div>
     </div>
 
@@ -351,6 +366,7 @@ import {
   ConstructOutline,
   ImagesOutline,
 } from "@vicons/ionicons5";
+import { SelectAllOn24Regular } from "@vicons/fluent";
 
 const props = defineProps({
   photos: {
@@ -418,6 +434,8 @@ const emit = defineEmits([
   "add-to-collection",
   "take-to-tool",
   "curator-mode-changed",
+  "select-all",
+  "deselect-all",
 ]);
 
 // Local state
@@ -457,6 +475,14 @@ const filteredPhotos = computed(() => {
 });
 
 const displayedPhotosCount = computed(() => filteredPhotos.value.length);
+
+// Computed: whether all filtered photos are selected
+const allSelected = computed(() => {
+  if (filteredPhotos.value.length === 0) return false;
+  return filteredPhotos.value.every((photo) =>
+    props.selectedPhotoIds.includes(photo.id),
+  );
+});
 
 // Computed: photos for left panel (filtered minus curated)
 const leftPanelPhotos = computed(() =>
@@ -553,6 +579,15 @@ function toggleHighMatchesFilter() {
   if (localShowOnlyHighMatches.value) {
     localMinStarRating.value = 0;
     emit("update:minStarRating", 0);
+  }
+}
+
+function handleSelectAll() {
+  if (allSelected.value) {
+    emit("deselect-all");
+  } else {
+    const ids = filteredPhotos.value.map((photo) => photo.id);
+    emit("select-all", ids);
   }
 }
 
@@ -915,6 +950,7 @@ defineExpose({
 .controls-left {
   display: flex;
   align-items: center;
+  gap: 10px;
 }
 
 /* Responsive */

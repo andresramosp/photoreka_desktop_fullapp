@@ -89,6 +89,8 @@
           v-model:show-only-high-matches="showOnlyHighMatches"
           @update:grid-columns="gridColumns = $event"
           @select="togglePhotoSelection"
+          @select-all="handleSelectAll"
+          @deselect-all="handleDeselectAll"
           @info="showPhotoInfo"
           @load-more="loadMorePhotos"
           @try-adaptive="handleBeAdaptiveClick"
@@ -206,6 +208,8 @@ const {
   selectedPhotoIds: localSelectedPhotoIds,
   togglePhotoSelection: localTogglePhotoSelection,
   clearAllSelections: localClearAllSelections,
+  selectAllPhotos: localSelectAllPhotos,
+  deselectAllPhotos: localDeselectAllPhotos,
 } = useLocalPhotoSelection();
 
 // Estado del toolbar colapsable (ya no usado con scroll interno)
@@ -339,6 +343,14 @@ const showMoreFilters = ref(false);
 
 function togglePhotoSelection(id) {
   localTogglePhotoSelection(id);
+}
+
+function handleSelectAll(ids) {
+  localSelectAllPhotos(ids);
+}
+
+function handleDeselectAll() {
+  localClearAllSelections();
 }
 function clearSelection() {
   localClearAllSelections();

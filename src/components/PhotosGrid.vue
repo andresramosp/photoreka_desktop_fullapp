@@ -15,6 +15,7 @@
       @filename-search-change="handleFilenameSearchChange"
       @time-range-change="handleTimeRangeChange"
       @tag-search="handleTagSearch"
+      @artistic-scores-change="handleArtisticScoresChange"
     />
 
     <!-- Grid Controls -->
@@ -516,6 +517,7 @@ const selectedFilters = ref({});
 const filenameSearch = ref("");
 const timeRange = ref(null);
 const tagFilterResults = ref(null); // Array of photo IDs from tag search
+const artisticScoreFilters = ref({}); // Minimum score thresholds per criterion
 const sortingType = ref("none"); // 'none', 'criteria' or 'genre'
 const selectedCriteria = ref([]);
 const selectedGenre = ref("street");
@@ -769,6 +771,10 @@ const handleTagSearch = (results) => {
   tagFilterResults.value = results;
 };
 
+const handleArtisticScoresChange = (filters) => {
+  artisticScoreFilters.value = filters;
+};
+
 // Handle review duplicates (preprocess and check)
 const handleReviewDuplicates = async () => {
   isCheckingDuplicates.value = true;
@@ -867,6 +873,20 @@ const filteredAndSortedPhotos = computed(() => {
       const photoDate = new Date(photo.descriptions?.EXIF?.dateTaken).getTime();
       if (isNaN(photoDate)) return false;
       return photoDate >= timeRange.value[0] && photoDate <= timeRange.value[1];
+    });
+  }
+
+  // Apply artistic score minimum filters
+  if (Object.keys(artisticScoreFilters.value).length > 0) {
+    filtered = filtered.filter((photo) => {
+      const scores = photo.descriptions?.artistic_scores;
+      if (!scores) return false;
+      return Object.entries(artisticScoreFilters.value).every(
+        ([criterion, minValue]) => {
+          const score = scores[criterion];
+          return score !== undefined && score !== null && score >= minValue;
+        },
+      );
     });
   }
 
@@ -1052,6 +1072,7 @@ watch(
     filenameSearch,
     timeRange,
     tagFilterResults,
+    artisticScoreFilters,
     sortingType,
     selectedCriteria,
     selectedGenre,

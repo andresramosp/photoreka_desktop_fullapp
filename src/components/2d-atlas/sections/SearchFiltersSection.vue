@@ -5,6 +5,7 @@
       <label class="filter-label">Visual Aspects</label>
       <n-tree-select
         :value="selectedVisualAspects"
+        v-model:show="visualAspectsDropdownShow"
         @update:value="handleVisualAspectsChange"
         multiple
         clearable
@@ -193,6 +194,7 @@
       </div>
       <n-select
         v-model:value="includedTagsFilter"
+        v-model:show="includedTagsDropdownShow"
         multiple
         filterable
         clearable
@@ -233,6 +235,7 @@ import { InfoCircleFilled, CloseOutlined } from "@vicons/antd";
 import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
+import { useIsMobile } from "@/composables/useIsMobile.js";
 import { api } from "@/utils/axios";
 
 const props = defineProps({
@@ -271,6 +274,11 @@ const emit = defineEmits([
 // Internal state
 const showArtisticScores = ref(false);
 const showTimeRange = ref(false);
+const visualAspectsDropdownShow = ref(false);
+const includedTagsDropdownShow = ref(false);
+
+// Mobile detection
+const { isMobile } = useIsMobile();
 
 // Local state for artistic score filters
 const localArtisticScoreFilters = ref({ ...props.artisticScoreFilters });
@@ -334,6 +342,7 @@ const treeSelectOptions = computed(() => {
 });
 
 const handleVisualAspectsChange = (value) => {
+  if (isMobile.value) visualAspectsDropdownShow.value = false;
   emit("update:selectedVisualAspects", value);
   emit("visual-aspects-change", value);
 };
@@ -392,6 +401,7 @@ const handleIncludedTagSearch = (query) => {
 };
 
 const handleIncludedTagsUpdate = (value) => {
+  if (isMobile.value) includedTagsDropdownShow.value = false;
   // Execute tag search automatically whenever tags change
   isSearchingTags.value = true;
   emit("tag-search", {

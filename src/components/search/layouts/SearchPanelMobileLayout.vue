@@ -238,6 +238,7 @@
             <div class="filter-section-label">Collections</div>
             <n-select
               v-model:value="selectedCollections"
+              v-model:show="collectionsDropdownShow"
               multiple
               clearable
               placeholder="Any collection"
@@ -247,6 +248,11 @@
               :loading="collectionsLoading"
               :disabled="isSearching"
               :filterable="false"
+              @update:value="
+                () => {
+                  collectionsDropdownShow.value = false;
+                }
+              "
             >
               <template #empty>
                 <div style="padding: 8px; color: #888; font-size: 12px">
@@ -260,6 +266,7 @@
             <div class="filter-section-label">Visual Aspects</div>
             <n-tree-select
               v-model:value="selectedVisualAspects"
+              v-model:show="visualAspectsDropdownShow"
               multiple
               clearable
               placeholder="Any aspect"
@@ -271,6 +278,11 @@
               :show-path="false"
               expand-on-click
               :filterable="false"
+              @update:value="
+                () => {
+                  visualAspectsDropdownShow.value = false;
+                }
+              "
             >
               <template #empty>
                 <div style="padding: 8px; color: #888; font-size: 12px">
@@ -284,6 +296,7 @@
             <div class="filter-section-label">Visual Scores</div>
             <n-tree-select
               v-model:value="selectedArtisticScores"
+              v-model:show="artisticScoresDropdownShow"
               multiple
               clearable
               placeholder="Any score"
@@ -295,6 +308,11 @@
               :show-path="false"
               expand-on-click
               :filterable="false"
+              @update:value="
+                () => {
+                  artisticScoresDropdownShow.value = false;
+                }
+              "
             >
               <template #empty>
                 <div style="padding: 8px; color: #888; font-size: 12px">
@@ -467,6 +485,9 @@ const emit = defineEmits([
 const showFiltersPanel = ref(false);
 const includedTagsDropdownShow = ref(false);
 const excludedTagsDropdownShow = ref(false);
+const collectionsDropdownShow = ref(false);
+const visualAspectsDropdownShow = ref(false);
+const artisticScoresDropdownShow = ref(false);
 
 // Methods to update store directly
 function updateSearchType(type) {
