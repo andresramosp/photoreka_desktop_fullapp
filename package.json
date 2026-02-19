@@ -105,14 +105,17 @@
     ]
   },
   "overrides": {
-    "strtok3": "8.0.1"
+    "strtok3": "8.0.1",
+    "string-width": "7"
   },
   "resolutions": {
-    "strtok3": "8.0.1"
+    "strtok3": "8.0.1",
+    "string-width": "7"
   },
   "pnpm": {
     "overrides": {
-      "strtok3": "8.0.1"
+      "strtok3": "8.0.1",
+      "string-width": "7"
     }
   },
   "prettier": "@adonisjs/prettier-config"
