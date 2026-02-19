@@ -69,6 +69,7 @@ const SeriesController = () => import('#controllers/series_controller')
 const UsageController = () => import('#controllers/usage_controller')
 const ThreeDViewController = () => import('#controllers/3dview_controller')
 const PortfolioReviewController = () => import('#controllers/portfolio_review_controller')
+const ChatController = () => import('#controllers/chat_controller')
 
 // Landing page endpoints (no auth required)
 router.post('/api/landing/waiting-list', [LandingController, 'waitingList'])
@@ -251,5 +252,9 @@ router
       CatalogController,
       'photoInsightSpecific',
     ])
+
+    // Agentic chat endpoint (Langchain + GPT-5)
+    router.post('/api/chat', [ChatController, 'chat'])
+    router.get('/api/chat/reset', [ChatController, 'reset'])
   })
   .use([middleware.auth(), middleware.readOnly(), middleware.llmRateLimit()]) // Apply auth, readOnly and LLM rate limiting
