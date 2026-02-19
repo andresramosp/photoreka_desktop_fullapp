@@ -106,16 +106,16 @@
   },
   "overrides": {
     "strtok3": "8.0.1",
-    "string-width": "7"
+    "string-width": "4"
   },
   "resolutions": {
     "strtok3": "8.0.1",
-    "string-width": "7"
+    "string-width": "4"
   },
   "pnpm": {
     "overrides": {
       "strtok3": "8.0.1",
-      "string-width": "7"
+      "string-width": "4"
     }
   },
   "prettier": "@adonisjs/prettier-config"
