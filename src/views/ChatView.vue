@@ -450,11 +450,12 @@ const selectedDialogPhoto = ref<any>(null);
 const suggestions = [
   {
     title: "Help me find some photos",
-    description: "Find travel photos with a good composition",
+    description:
+      "Describe what you're looking for and I'll search your library",
     icon: SearchSuggestionIcon,
-    prompt:
-      "I'm looking for travel photos with strong composition. Can you find some good examples in my library?",
+    prompt: "Hello, I'm looking for photos that ",
     needsPhotos: false,
+    autoSend: false,
   },
 
   {
@@ -465,6 +466,7 @@ const suggestions = [
     prompt:
       "Can you create a sequence using these photos? Suggest a compelling order and explain the narrative or thematic flow you see. If possible, recommend a title for the series.",
     needsPhotos: true,
+    autoSend: true,
   },
   {
     title: "Portfolio insights",
@@ -473,21 +475,36 @@ const suggestions = [
     prompt:
       "Analyze my photo library and give me portfolio insights. Where do I excel and what areas could I develop further?",
     needsPhotos: false,
+    autoSend: true,
   },
-  // {
-  //   title: "Search tips",
-  //   description: "Learn how to get the most from semantic search",
-  //   icon: SearchSuggestionIcon,
-  //   prompt: "",
-  //   needsPhotos: false,
-  // },
-  // {
-  //   title: "Compare styles",
-  //   description: "Analyze compositional patterns in your work",
-  //   icon: LayersIcon,
-  //   prompt: "",
-  //   needsPhotos: true,
-  // },
+  {
+    title: "Find similar photos to these",
+    description:
+      "Find photos in my library with similar storytelling to these ones",
+    icon: ImagesIcon,
+    prompt:
+      "Look at these photos and find others in my library that share a similar mood, subject matter, or storytelling style. Explain what visual or thematic thread connects them.",
+    needsPhotos: true,
+    autoSend: true,
+  },
+  {
+    title: "Which version is the best?",
+    description:
+      "I'm unsure which version of a photo to keep. Help me choose the best one",
+    icon: StarIcon,
+    prompt:
+      "I have multiple versions of the same shot and I can't decide which to keep. Please compare these photos technically and artistically — sharpness, exposure, composition, expression — and recommend the strongest one with a clear reason.",
+    needsPhotos: true,
+    autoSend: true,
+  },
+  {
+    title: "Help with the app",
+    description: "Ask me anything about how to use Photoreka",
+    icon: BulbIcon,
+    prompt: "Please explain how to use Photoreka to ",
+    needsPhotos: false,
+    autoSend: false,
+  },
 ];
 
 const checkMobile = () => {
@@ -577,15 +594,21 @@ const handleSuggestionClick = (suggestion: {
   title: string;
   prompt: string;
   needsPhotos: boolean;
+  autoSend: boolean;
 }) => {
+  // Always pre-fill first so it's ready when photos are added
+  inputText.value = suggestion.prompt;
+
   if (suggestion.needsPhotos && contextPhotos.value.length === 0) {
-    message.warning(
-      "Please attach at least one photo before using this suggestion.",
-    );
+    // Open the photo picker — when user confirms, text is already set
+    photosDialogVisible.value = true;
     return;
   }
-  inputText.value = suggestion.prompt;
-  sendMessage();
+
+  if (suggestion.autoSend) {
+    sendMessage();
+  }
+  // else: just pre-fills the input so the user can complete and send manually
 };
 
 const handleKeyDown = (e: KeyboardEvent) => {
