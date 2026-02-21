@@ -65,7 +65,7 @@ const SEARCH_MODE_CONFIGURATION: Record<SearchMode, SearchModeConfig> = {
     tagsThreshold: null,
     descSegmentThreshold: null,
     descFullQueryThreshold: null,
-    notesThreshold: 0.5,
+    notesThreshold: null,
     imageThreshold: 0.15,
     refineMode: 'none',
     nuancesThreshold: null,
@@ -172,12 +172,34 @@ export default class ScoringService {
   }
 
   private async prepareEmbeddings(query: PreparedQuery, config: EffectiveConfig): Promise<void> {
-    const terms = [...query.positiveSegments, ...query.nuancesSegments, query.fullQuery].filter(
-      Boolean
-    )
-
+    const needsSegmentEmbeddings =
+      config.tagsThreshold !== null || config.descSegmentThreshold !== null
+    const needsNuancesEmbeddings = config.nuancesThreshold !== null
+    const needsFullQueryTextEmbedding =
+      config.descFullQueryThreshold !== null || config.notesThreshold !== null
     const needsClipEmbedding = config.imageThreshold !== null
-    await EmbeddingStoreService.calculateEmbeddings(terms, needsClipEmbedding)
+
+    const terms: string[] = []
+
+    if (needsSegmentEmbeddings) {
+      terms.push(...query.positiveSegments)
+    }
+    if (needsNuancesEmbeddings) {
+      terms.push(...query.nuancesSegments)
+    }
+    if ((needsFullQueryTextEmbedding || needsClipEmbedding) && query.fullQuery) {
+      terms.push(query.fullQuery)
+    }
+
+    const needsTextEmbedding =
+      needsSegmentEmbeddings || needsNuancesEmbeddings || needsFullQueryTextEmbedding
+
+    const filteredTerms = [...new Set(terms.filter(Boolean))]
+    await EmbeddingStoreService.calculateEmbeddings(
+      filteredTerms,
+      needsClipEmbedding,
+      needsTextEmbedding
+    )
   }
 
   private initializeScores(photoIds: number[]): ScoredPhoto[] {

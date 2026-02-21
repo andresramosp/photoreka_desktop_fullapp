@@ -256,11 +256,17 @@ router
   })
   .use([middleware.auth(), middleware.readOnly(), middleware.llmRateLimit()]) // Apply auth, readOnly and LLM rate limiting
 
+// Chat reset endpoint - no rate limiting
+router
+  .group(() => {
+    router.get('/api/chat/reset', [ChatController, 'reset'])
+  })
+  .use([middleware.auth(), middleware.readOnly()])
+
 // Chat endpoints - separate group with stricter rate limiting
 router
   .group(() => {
     router.post('/api/chat', [ChatController, 'chat'])
-    router.get('/api/chat/reset', [ChatController, 'reset'])
   })
   .use([
     middleware.auth(),

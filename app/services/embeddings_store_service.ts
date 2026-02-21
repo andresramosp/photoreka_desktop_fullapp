@@ -137,8 +137,14 @@ export class EmbeddingStoreService {
     )
   }
 
-  public static async calculateEmbeddings(terms: string[], includeCLIP = false): Promise<void> {
-    const newTerms = [...new Set(terms.filter((term) => !this.embeddingsMap[term]))]
+  public static async calculateEmbeddings(
+    terms: string[],
+    includeCLIP = false,
+    includeText = true
+  ): Promise<void> {
+    const newTerms = includeText
+      ? [...new Set(terms.filter((term) => !this.embeddingsMap[term]))]
+      : []
     const newTermsCLIP = includeCLIP
       ? [...new Set(terms.filter((term) => !this.embeddingsMapCLIP[term]))]
       : []
