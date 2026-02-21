@@ -280,20 +280,23 @@ export const TOOL_DESCRIPTIONS = {
   get_photo_info:
     '[BASIC_TOOLS] Get full details and thumbnail image of one or more photos by their IDs. MUST be called before discussing, comparing, or operating on any photo — including photos the user has attached (prefixed as [Attached photo IDs: ...] in the message) and photos referenced from conversation history. Pass multiple IDs in a single call to batch-fetch. Returns full photo data (artistic scores, story, context, visual aspects, visual accents, EXIF, tags) plus the thumbnail image for visual analysis.',
 
-  get_catalog_patterns:
-    "[CATALOG_INSIGHT] Get the photographer's catalog patterns — AI-detected recurring themes, stylistic tendencies, dominant subjects, narrative patterns, and visual motifs across the entire catalog. Use this when the user asks about their photographic style, strengths, recurring subjects, or catalog overview. Use it as well when you need to understand the user's photographic habits, visual preferences, or provide general advice based on their typical patterns.",
+  fetch_collections:
+    "[BASIC_TOOLS] Get all the user's collections and series, each with their name, description, and up to 10 sample photo IDs. Use this when the user asks about their collections, series, albums, or organized groups of photos — for example 'what collections do I have?', 'show me my series', 'which albums exist?'. Returns two separate arrays: 'collections' (manually curated groups) and 'series' (ordered sequences/stories).",
+
+  filter_photos:
+    '[PHOTO_SEARCH] Filter and sort the user\'s photo catalog by two distinct and mutually exclusive property types — read their schema descriptions carefully before populating them. (1) scoreFilters: numeric artistic scores 0–10 — aesthetic_quality, composition, storytelling, strangeness, message, humor, visual_games, candidness. (2) visualAspects: categorical labels — genre, framing, focus, lighting, lighting_scheme, depth_of_field, perspective, stylistic, orientation, temperature, palette. Use this tool when the user asks questions like "my funniest photo", "most surreal shot", "photos with high visual games score", "close-up portraits", "landscape shots from 2024", "photos with shallow depth of field", "vertical photos", "warm-toned photos", "black and white photos", etc. Returns matching photo IDs — include the relevant ones (drop results that don\'t match the user\'s intent) in your final answer\'s photo_ids.',
 
   search_semantic_overall_style:
-    "[PHOTO_SEARCH] Search for photos by overall visual style, compositional feel, mood, color palette, or general atmosphere — broad semantic embedding search. Use this for open-ended style descriptions such as 'melancholic blue-toned street scenes' or 'minimalist high-key compositions'. Do NOT use for concrete subjects or narrative content — use search_semantic_content instead. Extract the query from user input but do not modify it or enrich it. IMPORTANT: after calling this tool you MUST call add_photos_to_result with the final curated set of IDs — only include photos you are actually referencing, drop any results that don't match the user's intent (wrong subject, irrelevant, etc.).",
+    "[PHOTO_SEARCH] Search for photos by overall visual style, compositional feel, mood, color palette, or general atmosphere — broad semantic embedding search. Use this for open-ended style descriptions such as 'melancholic blue-toned street scenes' or 'minimalist high-key compositions'. Do NOT use for concrete subjects or narrative content — use search_semantic_content instead. Extract the query from user input but do not modify it or enrich it. Returns a ranked list of matching photo IDs — include the relevant ones (drop results that don't match the user's intent) in your final answer's photo_ids.",
 
   search_semantic_content:
-    "[PHOTO_SEARCH] Search for photos containing specific subjects, narrative elements, or concrete content using 1 to 3 keyword tags (e.g. ['dog'], ['market', 'crowd'], ['child', 'bicycle']). Use this when the user is looking for photos of particular things, people, actions, or scenes — not for abstract style or mood queries (use search_semantic_overall_style for those). IMPORTANT: after calling this tool you MUST call add_photos_to_result with the final curated set of IDs — only include photos you are actually referencing, drop any results that don't match the user's intent.",
-
-  add_photos_to_result:
-    '[BASIC_TOOLS] Set the ordered list of photo IDs that will be returned to the client. The position in the array defines display order (index 0 = first). MANDATORY: call this every single time your response mentions, describes, compares, or references any specific photo — no exceptions. This is the ONLY way photos reach the client; if you skip this call, no photos will be shown to the user regardless of what you write. ALWAYS arrange the IDs in the intended display order when expressing a sequence, ranking, or curated selection.',
+    "[PHOTO_SEARCH] Search for photos containing specific subjects, narrative elements, or concrete content using 1 to 3 keyword tags (e.g. ['dog'], ['market', 'crowd'], ['child', 'bicycle']). Use this when the user is looking for photos of particular things, people, actions, or scenes — not for abstract style or mood queries (use search_semantic_overall_style for those). Returns a ranked list of matching photo IDs — include the relevant ones (drop results that don't match the user's intent) in your final answer's photo_ids.",
 
   find_photos_from_photo:
-    "[PHOTO_SEARCH] Find photos visually or semantically similar to one or more reference photos (provided by their IDs). Use this tool whenever the user asks to find photos similar to a specific photo, or wants more photos like a given one. Choose the criteria based on the intent: use 'embedding' for overall visual likeness (default), 'story' for narrative similarity, 'context' for situational/environmental similarity, or 'chromatic' for color palette similarity. After calling this tool you MUST call add_photos_to_result with the final curated set of IDs.",
+    "[PHOTO_SEARCH] Find photos visually or semantically similar to one or more reference photos (provided by their IDs). Use this tool whenever the user asks to find photos similar to a specific photo, or wants more photos like a given one. Choose the criteria based on the intent: use 'embedding' for overall visual likeness (default), 'story' for narrative similarity, 'context' for situational/environmental similarity, or 'chromatic' for color palette similarity. Returns a ranked list of matching photo IDs — include the relevant ones in your final answer's photo_ids.",
+
+  get_catalog_patterns:
+    "[CATALOG_INSIGHT] Get the photographer's catalog patterns — AI-detected recurring themes, stylistic tendencies, dominant subjects, narrative patterns, and visual motifs across the entire catalog. Use this when the user asks about their photographic style, strengths, recurring subjects, or catalog overview. Use it as well when you need to understand the user's photographic habits, visual preferences, or provide general advice based on their typical patterns.",
 
   stats_visual_aspects:
     "[CATALOG_INSIGHT] Get a statistical breakdown of the user's catalog by visual aspects: for each aspect (genre, framing, focus, lighting, lighting scheme, depth of field, perspective, stylistic, orientation, temperature, palette) returns the number of photos per value, sorted by frequency. Use this when the user asks about the distribution of visual characteristics, what styles are most common, or wants an overview of how their photos look visually. Use it as well when you need to understand the visual diversity of the catalog or provide general advice for the user.",
@@ -307,11 +310,6 @@ export const TOOL_DESCRIPTIONS = {
   overall_catalog_view:
     '[CATALOG_INSIGHT] Get a single combined report of the entire catalog: catalog patterns (recurring themes, subjects, narrative motifs), visual aspects distribution, and artistic scores statistics. Use this as the FIRST tool whenever the user asks for advice on improving their photography, critique of their catalog, identification of weak points or strengths, general feedback on their style, or any holistic question about their photographic practice. This tool replaces calling get_catalog_patterns + stats_visual_aspects + stats_artistic_scores individually — it returns all of that data in one shot.',
 
-  fetch_collections:
-    "[PHOTO_SEARCH] Get all the user's collections and series, each with their name, description, and up to 10 sample photo IDs. Use this when the user asks about their collections, series, albums, or organized groups of photos — for example 'what collections do I have?', 'show me my series', 'which albums exist?'. Returns two separate arrays: 'collections' (manually curated groups) and 'series' (ordered sequences/stories).",
-
-  filter_photos:
-    '[PHOTO_SEARCH] Filter and sort the user\'s photo catalog by two distinct and mutually exclusive property types — read their schema descriptions carefully before populating them. (1) scoreFilters: numeric artistic scores 0–10 — aesthetic_quality, composition, storytelling, strangeness, message, humor, visual_games, candidness. (2) visualAspects: categorical labels — genre, framing, focus, lighting, lighting_scheme, depth_of_field, perspective, stylistic, orientation, temperature, palette. Use this tool when the user asks questions like "my funniest photo", "most surreal shot", "photos with high visual games score", "close-up portraits", "landscape shots from 2024", "photos with shallow depth of field", "vertical photos", "warm-toned photos", "black and white photos", etc. IMPORTANT: after calling this tool you MUST call add_photos_to_result with the final curated set of IDs — only include photos you are actually referencing, drop any results that don\'t match the user\'s intent (wrong subject, irrelevant, etc.)',
 } as const
 
 // ─────────────────────────────────────────────────────────────
@@ -499,21 +497,8 @@ export default class AgentToolsService {
       }
     )
 
-    // ── Tool 4: add_photos_to_result ────────────────────────
-    const addPhotosToResult = tool(
-      async ({ photo_ids: ids }): Promise<string> => {
-        foundPhotoIds.length = 0
-        for (const id of ids) {
-          if (!foundPhotoIds.includes(id)) foundPhotoIds.push(id)
-        }
-        return JSON.stringify({ ordered: foundPhotoIds, total: foundPhotoIds.length })
-      },
-      {
-        name: 'add_photos_to_result',
-        description: TOOL_DESCRIPTIONS.add_photos_to_result,
-        schema: AddPhotosToResultSchema,
-      }
-    )
+    // ── Tool 4 (removed): add_photos_to_result was replaced by structured output
+    // Photo IDs are now collected via withStructuredOutput in the final answer call.
 
     // ── Tool 5: filter_photos ───────────────────────────────
     const filterPhotos = tool(
@@ -805,7 +790,6 @@ export default class AgentToolsService {
       searchSemanticOverallStyle,
       searchSemanticContent,
       findPhotosFromPhoto,
-      addPhotosToResult,
       filterPhotos,
       fetchCollections,
       statsVisualAspects,

@@ -119,12 +119,12 @@ export function routeProvider(message: string): ModelProvider {
   return 'gemini'
 }
 
-function createChatModel(provider: ModelProvider = 'openai') {
+function createChatModel(provider: ModelProvider = 'openai', maxTokensOverride?: number) {
   if (provider === 'gemini') {
     return new ChatGoogleGenerativeAI({
       apiKey: process.env.GEMINI_API_KEY,
       model: process.env.GEMINI_MODEL ?? 'gemini-2.5-flash',
-      maxOutputTokens: Number(process.env.AGENT_MAX_TOKENS ?? 750),
+      maxOutputTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
       safetySettings: [
         {
           category: HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -148,9 +148,33 @@ function createChatModel(provider: ModelProvider = 'openai') {
   return new ChatOpenAI({
     apiKey: process.env.OPENAI_KEY,
     model: process.env.OPENAI_MODEL ?? 'gpt-5',
-    maxTokens: Number(process.env.AGENT_MAX_TOKENS ?? 750),
+    // maxTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
   })
 }
+
+// ─────────────────────────────────────────────────────────────
+// Structured output schema for the final answer
+// Both OpenAI and Gemini support withStructuredOutput with JSON schema.
+// The model fills `text` with its response and `photo_ids` with the IDs
+// of photos it actually references — preserving its own curation intent.
+// ─────────────────────────────────────────────────────────────
+
+const FINAL_ANSWER_SCHEMA = {
+  type: 'object',
+  properties: {
+    text: {
+      type: 'string',
+      description: 'The complete response text to show to the user',
+    },
+    photo_ids: {
+      type: 'array',
+      items: { type: 'integer' },
+      description:
+        'Ordered list of photo IDs to display alongside your response. This field is your primary tool for visual communication: use it not only to reference photos mentioned in your text, but also to express any intentional sequence — a curated ranking, a chronological progression, a before/after pair, a grouped selection, a re-ordered set from photos the user provided, etc. The order you choose IS the message: index 0 is shown first and carries the most visual weight. Leave empty only when no specific photos are relevant.',
+    },
+  },
+  required: ['text', 'photo_ids'],
+} as const
 
 // ─────────────────────────────────────────────────────────────
 // In-memory session store (userId → conversation history)
@@ -188,85 +212,37 @@ export type AgentChatResult = {
 // System prompt
 // ─────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are Photoreka's intelligent photo catalog assistant. 
+const SYSTEM_PROMPT = `You are Photoreka's intelligent photo catalog assistant.
 You help photographers explore, understand, and get insights from their photo library.
 
 ## Tool groups
 All available tools belong to one of three groups, indicated by their [TAG] prefix:
 
-- [BASIC_TOOLS] — Core tools required whenever specific photos are involved: get_photo_info (fetch photo data and thumbnails) and add_photos_to_result (send photo IDs to the client). These two always work together and are mandatory any time you reference specific photos.
+- [BASIC_TOOLS] — For fetching data about user photos and collections: get_photo_info, fetch_collections. get_photo_info MUST be called before discussing any specific photo.
 
 - [CATALOG_INSIGHT] — Analytical tools that reveal patterns and statistics across the entire catalog: overall_catalog_view, get_catalog_patterns, stats_visual_aspects, stats_artistic_scores, stats_artistic_scores_evolution. Use these to understand the photographer's overall style, strengths, weaknesses, and evolution over time. Prefer overall_catalog_view when you need a holistic picture in a single call.
 
-- [PHOTO_SEARCH] — Tools that find or filter specific photos from the catalog: search_semantic_overall_style, search_semantic_content, filter_photos, find_photos_from_photo. Always follow up with add_photos_to_result after using any of these.
+- [PHOTO_SEARCH] — Tools that find or filter specific photos from the catalog: search_semantic_overall_style, search_semantic_content, filter_photos, find_photos_from_photo.
 
 ## Guidelines
 - You can chain multiple tools in one turn when it helps answer the question better.
-- Be concise, specific and helpful. Summarize key data rather than dumping raw JSON.
+- Be concise, specific and helpful. Summarize key data rather than dumping raw JSON. Aim for responses under 200 words unless the question genuinely requires more depth (e.g. a full catalog critique). Never pad or repeat yourself.
 - If you need to reference a concrete photo by text, you can use the filename, never the ID.
-- Artistic scores are from 0 to 10. Scores >= 7 are considered strong. Use scores for your internal reasoning, but do not mention them unless they are relevant to the user's question.
+- Artistic scores are from 0 to 10. Scores >= 7 are considered strong. Use scores for your internal reasoning, but do not mention them unless they are relevant to the user's question. Don't evaluate photos solely based on scores — always consider the actual image/descriptions provided.
 - Always respond in the same language the user writes in (but for some tools you will need english prompts — that's fine, just keep the final output in the user's language).
 - Be kind and helpful. At the end of your response, you can suggest concrete next steps or questions the user can ask to explore further, always based on what you can actually do with the tools available to you.
 
 ## Catalog advice guideline
-Whenever the user asks for advice, improvement tips, a general critique, weak points, strengths, or any holistic question about their photographic practice or catalog, you MUST call overall_catalog_view as your FIRST action — it returns catalog patterns, visual aspects statistics, and artistic scores in a single call, giving you everything you need to provide well-rounded advice. 
+Whenever the user asks for advice, improvement tips, a general critique, weak points, strengths, or any holistic question about their photographic practice or catalog, you MUST call overall_catalog_view as your FIRST action — it returns catalog patterns, visual aspects statistics, and artistic scores in a single call, giving you everything you need to provide well-rounded advice.
 
-## CRITICAL — [BASIC_TOOLS] are ALWAYS required whenever you reference specific photos (no exceptions)
-
-A) get_photo_info [BASIC_TOOLS] — MUST be called first, before discussing any photo:
+## CRITICAL — get_photo_info MUST be called before discussing any specific photo
 1. The user's message includes attached photo IDs (listed as [Attached photo IDs: ...]). Call get_photo_info with ALL of those IDs as your very first action, before doing anything else.
 2. The user references any photo already mentioned in the conversation history — by filename, position ("the first one", "that photo"), pronoun, or any other indirect reference. Call get_photo_info to re-fetch current data; history information about photos is never sufficient.
 3. Any time you need to discuss, compare, analyze, or otherwise operate on specific photos for any reason.
-NEVER rely on photo information from conversation history alone — always re-fetch via get_photo_info. The only data you can trust from history is photo IDs and filenames, which you use as input to get_photo_info.
+NEVER rely on photo information from conversation history alone — always re-fetch via get_photo_info. The only data you can trust from history is photo IDs and filenames.
 
-B) add_photos_to_result [BASIC_TOOLS] — MUST be called every single time you mention or reference specific photos in your response, without exception. If you describe a photo, compare photos, answer a question about a photo, or reference any photo in any way, you MUST call add_photos_to_result with those photo IDs. Skipping this call means the user will not see the photos you are talking about, which breaks the experience entirely. There is no scenario where you talk about specific photos without calling add_photos_to_result.`
-
-// ─────────────────────────────────────────────────────────────
-// Helper: format messages array for human-readable debug logging
-// ─────────────────────────────────────────────────────────────
-
-function formatMessagesForDebug(messages: any[]): string {
-  const lines: string[] = []
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i]
-    const type: string = msg._getType?.() ?? msg.constructor?.name ?? 'unknown'
-
-    let role: string
-    if (type === 'system') role = 'SYSTEM'
-    else if (type === 'human') role = 'USER'
-    else if (type === 'ai') role = 'ASSISTANT'
-    else if (type === 'tool') role = `TOOL(${msg.name ?? msg.tool_call_id ?? '?'})`
-    else role = type.toUpperCase()
-
-    // Resolve content to a readable string
-    let content: string
-    if (typeof msg.content === 'string') {
-      content = msg.content
-    } else if (Array.isArray(msg.content)) {
-      content = msg.content
-        .map((p: any) => {
-          if (p?.type === 'text') return p.text
-          if (p?.type === 'image_url') return `[image: ${p.image_url?.url?.slice(0, 60)}…]`
-          return JSON.stringify(p)
-        })
-        .join('\n')
-    } else {
-      content = JSON.stringify(msg.content)
-    }
-
-    // Append tool_calls summary for assistant messages
-    const toolCalls = msg.tool_calls ?? []
-    const toolCallSummary =
-      toolCalls.length > 0
-        ? '\n  → tool_calls: ' +
-          toolCalls.map((tc: any) => `${tc.name}(${JSON.stringify(tc.args)})`).join(', ')
-        : ''
-
-    lines.push(`[${i}] ${role}:\n${content}${toolCallSummary}`)
-    lines.push('─'.repeat(60))
-  }
-  return lines.join('\n')
-}
+## Displaying photos
+Your final response includes a photo_ids field. Use it to surface the photos you discuss or reference. When the user's request implies a visual result — a ranking, a sorted selection, a before/after, a serie, sequence or curated set — photo_ids is also how you express that result: the client renders photos in exactly the order you provide, so the sequence itself carries meaning. Only omit photo_ids when no specific photos are relevant to the response.`
 
 // ─────────────────────────────────────────────────────────────
 // Helper: extract plain text from a model response's content
@@ -338,61 +314,19 @@ export default class LangchainAgentService {
           m.photoIds && m.photoIds.length > 0 ? `\n[Photo IDs: ${m.photoIds.join(', ')}]` : ''
         messages.push(new HumanMessage(m.content + photoSuffix))
       } else {
-        // For assistant turns that surfaced photos, reconstruct the proper
-        // tool-call / tool-result exchange so the model learns the correct
-        // pattern from history instead of reproducing a "[Photo IDs: …]" text
-        // suffix in its own output.
-        if (m.photoIds && m.photoIds.length > 0) {
-          const toolCallId = `hist_apr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
-          messages.push(
-            new AIMessage({
-              content: '',
-              tool_calls: [
-                {
-                  id: toolCallId,
-                  name: 'add_photos_to_result',
-                  args: { photo_ids: m.photoIds },
-                },
-              ],
-            })
-          )
-          messages.push(
-            new ToolMessage({
-              content: JSON.stringify({ added: m.photoIds.length }),
-              tool_call_id: toolCallId,
-            })
-          )
-        }
-        messages.push(new AIMessage(m.content))
+        // For assistant turns that surfaced photos, append a note so the model
+        // can refer back to which photos it showed in the previous turn.
+        // Use a clearly-internal format so the model does not reproduce it verbatim.
+        const photoNote =
+          m.photoIds && m.photoIds.length > 0
+            ? `\n[INTERNAL_CONTEXT: shown_photo_ids=${m.photoIds.join(',')}]`
+            : ''
+        messages.push(new AIMessage(m.content + photoNote))
       }
     }
 
     messages.push(currentUserMessage)
     return messages
-  }
-
-  // ───────────────────────────────────────────────────────────
-  // Resolves the final text output from a model response.
-  // If the response is empty (e.g. after a side-effect-only tool call like
-  // add_photos_to_result), walks back through messages to find the last
-  // non-empty AIMessage text.
-  // ───────────────────────────────────────────────────────────
-
-  private resolveOutput(response: any, messages: any[]): string {
-    let output = extractTextContent(response.content)
-    if (!output.trim()) {
-      for (let i = messages.length - 1; i >= 0; i--) {
-        const msg = messages[i]
-        if (msg instanceof AIMessage) {
-          const candidate = extractTextContent(msg.content)
-          if (candidate.trim()) {
-            output = candidate
-            break
-          }
-        }
-      }
-    }
-    return output
   }
 
   // ───────────────────────────────────────────────────────────
@@ -449,29 +383,6 @@ export default class LangchainAgentService {
   }
 
   // ───────────────────────────────────────────────────────────
-  // Rescue pass: ensures every photo fetched via get_photo_info ends up in
-  // foundPhotoIds, even when the model forgets add_photos_to_result.
-  // ───────────────────────────────────────────────────────────
-
-  private rescuePhotoIds(intermediateSteps: IntermediateStep[], foundPhotoIds: number[]): void {
-    // Only rescue if the model never called add_photos_to_result at all.
-    // If it did call it (even once), trust its intentional selection entirely.
-    const modelCalledAddPhotos = intermediateSteps.some((s) => s.tool === 'add_photos_to_result')
-    if (modelCalledAddPhotos) return
-
-    for (const step of intermediateSteps) {
-      if (step.tool === 'get_photo_info') {
-        const ids: number[] = Array.isArray(step.input?.photo_ids) ? step.input.photo_ids : []
-        for (const id of ids) {
-          if (!foundPhotoIds.includes(id)) {
-            foundPhotoIds.push(id)
-          }
-        }
-      }
-    }
-  }
-
-  // ───────────────────────────────────────────────────────────
   // Persists a completed turn (user + assistant messages) to the in-memory
   // history, capped at MAX_HISTORY_TURNS pairs. No-ops on empty output.
   // ───────────────────────────────────────────────────────────
@@ -512,7 +423,16 @@ export default class LangchainAgentService {
     const provider = routeProvider(message)
     console.log(`[Agent] 🤖 Routed to provider: ${provider.toUpperCase()}`)
     const tools = this.toolsService.createTools(userId, foundPhotoIds, provider)
+    // For Gemini, tool_choice defaults to 'auto', which lets it bypass tool calls entirely
+    // and answer the user directly (e.g. "Fetching your collections." with no actual fetch).
+    // We create a second binding with tool_choice:'any' to force at least one tool call on
+    // the first Phase-1 iteration; subsequent iterations revert to 'auto' so the model can
+    // naturally signal it has all the data it needs and exit the loop.
     const modelWithTools = createChatModel(provider).bindTools(tools)
+    const modelWithToolsForced =
+      provider === 'gemini'
+        ? createChatModel(provider).bindTools(tools, { tool_choice: 'any' })
+        : modelWithTools
     const toolMap = Object.fromEntries(tools.map((t) => [t.name, t]))
 
     const currentUserMessage = this.buildCurrentUserMessage(message, contextPhotoIds)
@@ -526,51 +446,42 @@ export default class LangchainAgentService {
       `\n[Agent] ▶ Starting | userId=${userId} | message="${message.slice(0, 100)}${message.length > 100 ? '…' : ''}"`
     )
 
-    // Agentic loop: keep invoking until no more tool calls
+    // ── Phase 1: data-fetching loop ─────────────────────────────────────────
+    // Run tool calls until the model signals it has all the data it needs.
+    // add_photos_to_result is intentionally absent — photo IDs are collected
+    // via structured output in Phase 2, preserving the model's own selection.
+    let totalIter = 0
     for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
-      console.log(`[Agent] 🔄 Iteration ${iter + 1}/${MAX_ITERATIONS} — calling model…`)
-      const debugMessages = formatMessagesForDebug(messages)
+      totalIter = iter + 1
+      console.log(`[Agent] 🔄 Iteration ${totalIter}/${MAX_ITERATIONS} — calling model…`)
 
-      const response = await modelWithTools.invoke(messages)
-
+      // First Gemini iteration: force at least one tool call so it doesn't answer
+      // directly without fetching any data. Subsequent iterations use auto so the
+      // model can exit the loop once it has everything it needs.
+      const activeModel = iter === 0 ? modelWithToolsForced : modelWithTools
+      const response = await activeModel.invoke(messages)
       const toolCalls = response.tool_calls ?? []
 
       if (toolCalls.length === 0) {
-        messages.push(response)
-        const output = this.resolveOutput(response, messages)
-        this.rescuePhotoIds(intermediateSteps, foundPhotoIds)
-        console.log(
-          `[Agent] ✅ Final answer after ${iter + 1} iteration(s). Tools used: [${toolsUsed.join(', ') || 'none'}]`
-        )
-        console.log(
-          `[Agent] 📤 Output preview: "${output.slice(0, 200)}${output.length > 200 ? '…' : ''}"\n`
-        )
-        this.persistHistory(userId, history, message, contextPhotoIds, output, foundPhotoIds)
-        return {
-          output,
-          photoIds: foundPhotoIds,
-          toolsUsed,
-          intermediateSteps,
-          totalIterations: iter + 1,
-        }
+        // No more tool calls — Phase 2 will generate the final answer from
+        // the current messages state (ends at HumanMessage or last ToolMessage).
+        // Do NOT push this response: it would leave an AIMessage as the last
+        // message, which breaks OpenAI's structured output parsing.
+        console.log(`[Agent] ✅ Data phase complete after ${totalIter} iteration(s).`)
+        break
       }
 
-      // When the model emits text AND tool calls in the same response, the
-      // text is intermediate reasoning, not the final answer. Strip it from
-      // the message pushed into the conversation so the model is forced to
-      // produce a full, self-contained answer in the final (tool-free) turn.
-      const hasIntermediateText = !!extractTextContent(response.content).trim()
-      if (hasIntermediateText) {
-        console.log(`[Agent]   ℹ️  Stripping intermediate text from tool-call response to preserve final-answer quality`)
-        messages.push(
-          new AIMessage({ content: '', tool_calls: toolCalls })
-        )
+      // Strip any intermediate reasoning text from tool-call responses so the
+      // final answer is self-contained and not fragmented across turns.
+      if (!!extractTextContent(response.content).trim()) {
+        console.log(`[Agent]   ℹ️  Stripping intermediate text from tool-call response`)
+        messages.push(new AIMessage({ content: '', tool_calls: toolCalls }))
       } else {
         messages.push(response)
       }
 
       console.log(
-        `[Agent] 🔧 Tool calls requested (${toolCalls.length}): ${toolCalls.map((tc: any) => tc.name).join(', ')}`
+        `[Agent] 🔧 Tool calls (${toolCalls.length}): ${toolCalls.map((tc: any) => tc.name).join(', ')}`
       )
       const toolResults = await this.executeToolCalls(
         toolCalls,
@@ -581,23 +492,37 @@ export default class LangchainAgentService {
       messages.push(...toolResults)
     }
 
-    // Reached max iterations — do one final call without tools to get a response
+    // ── Phase 2: structured final answer ─────────────────────────────────────
+    // The model produces text + photo_ids in a single structured call.
+    // withStructuredOutput ensures the model consciously selects which photos
+    // to surface, with no extra round-trips and no side-effect tool needed.
+    console.log(`[Agent] 🏁 Requesting structured final answer…`)
+    // Use a higher token budget for Phase 2 — the structured output wraps the
+    // entire response in JSON, so it needs more room than the data-fetching calls.
+    const finalAnswerModel = createChatModel(provider, 3000).withStructuredOutput(FINAL_ANSWER_SCHEMA)
+    const structured = (await finalAnswerModel.invoke(messages)) as {
+      text: string
+      photo_ids: number[]
+    }
+    // Strip any leaked internal-context annotations the model may have echoed.
+    const rawOutput = structured.text ?? ''
+    const output = rawOutput
+      .replace(/\[(?:Shown photos|INTERNAL_CONTEXT)[^\]]*\]\s*/gi, '')
+      .trim()
+    foundPhotoIds.push(...(structured.photo_ids ?? []))
+
     console.log(
-      `[Agent] ⚠️  Max iterations (${MAX_ITERATIONS}) reached. Requesting final response without tools…`
+      `[Agent] ✅ Done. Tools used: [${toolsUsed.join(', ') || 'none'}] | Photos: [${foundPhotoIds.join(', ')}]`
     )
-    const finalResponse = await createChatModel().invoke(messages)
-    const output = this.resolveOutput(finalResponse, messages)
-    this.rescuePhotoIds(intermediateSteps, foundPhotoIds)
-    console.log(
-      `[Agent] ✅ Final answer (max-iter fallback). Tools used: [${toolsUsed.join(', ')}]\n`
-    )
+    console.log(`[Agent] 📤 Output preview: "${output.slice(0, 200)}${output.length > 200 ? '…' : ''}"`)
     this.persistHistory(userId, history, message, contextPhotoIds, output, foundPhotoIds)
     return {
       output,
       photoIds: foundPhotoIds,
       toolsUsed,
       intermediateSteps,
-      totalIterations: MAX_ITERATIONS,
+      totalIterations: totalIter,
     }
   }
 }
+
