@@ -63,6 +63,7 @@
     "@aws-sdk/credential-providers": "^3.799.0",
     "@aws-sdk/s3-request-presigner": "^3.800.0",
     "@google/genai": "^1.13.0",
+    "@google/generative-ai": "^0.24.1",
     "@googleapis/oauth2": "^1.0.7",
     "@langchain/core": "^1.1.26",
     "@langchain/google-genai": "^2.1.19",

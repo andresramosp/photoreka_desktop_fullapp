@@ -81,6 +81,8 @@ export const GetVisualAspectsStatsSchema = z.object({})
 
 export const GetArtisticScoresStatsSchema = z.object({})
 
+export const OverallCatalogViewSchema = z.object({})
+
 export const GetArtisticScoresEvolutionSchema = z.object({
   criteria: z
     .array(ScoreField)
@@ -101,7 +103,7 @@ export const FilterPhotosSchema = z.object({
     )
     .optional()
     .describe(
-      'Filter by artistic score fields. Multiple entries are ANDed. Omit to skip score filtering.'
+      'Filter by numeric artistic score fields (aesthetic_quality, composition, storytelling, strangeness, message, humor, visual_games, candidness). These are ALL numeric scores 0–10. Multiple entries are ANDed. Omit to skip score filtering. NEVER put score names inside visualAspects.'
     ),
   sortByScore: ScoreField.optional().describe(
     'Sort results by this artistic score (use with sortOrder). Omit to sort by date.'
@@ -127,7 +129,7 @@ export const FilterPhotosSchema = z.object({
     })
     .optional()
     .describe(
-      'Filter by visual aspect values. Each key accepts an array of valid values; a photo must match at least one value per specified key (OR within a key, AND across keys). Accepted values per key — genre: abstract|documentary|street|landscape|portrait; framing: close-up|medium shot|wide shot; focus: blurry|nitid; lighting: natural|artificial|backlit|frontlit|side lit; lighting_scheme: low key|high key|balanced; depth_of_field: shallow|deep|medium; perspective: normal|high angle|low angle; stylistic: long exposure|motion blur|silhouettes|bokeh|grain; orientation: portrait|landscape|square; temperature: warm|cold|neutral; palette: color|black and white.'
+      'Filter by categorical visual aspect values. ONLY these keys are valid: genre, framing, focus, lighting, lighting_scheme, depth_of_field, perspective, stylistic, orientation, temperature, palette. Do NOT place artistic score names (e.g. visual_games, humor, strangeness) here — those are numeric scores and belong in scoreFilters. Each key accepts an array of valid values (OR within a key, AND across keys). Accepted values per key — genre: abstract|documentary|street|landscape|portrait; framing: close-up|medium shot|wide shot; focus: blurry|nitid; lighting: natural|artificial|backlit|frontlit|side lit; lighting_scheme: low key|high key|balanced; depth_of_field: shallow|deep|medium; perspective: normal|high angle|low angle; stylistic: long exposure|motion blur|silhouettes|bokeh|grain; orientation: portrait|landscape|square; temperature: warm|cold|neutral; palette: color|black and white.'
     ),
   filenameLike: z
     .string()
@@ -184,27 +186,27 @@ export const SearchSemanticContentSchema = z.object({
 // Formatters
 // ─────────────────────────────────────────────────────────────
 
-export function formatPhotoForAgent(photo: any): string {
+export function photoDataForAgent(photo: any, extra?: Record<string, any>): Record<string, any> {
   const descriptions = photo.descriptions || {}
+  return {
+    id: photo.id,
+    originalFileName: photo.originalFileName,
+    originalUrl: photo.originalUrl ?? null,
+    thumbnailUrl: photo.thumbnailUrl ?? null,
+    createdAt: photo.createdAt,
+    story: descriptions.story || null,
+    context: descriptions.context || null,
+    visual_accents: descriptions.visual_accents || null,
+    visual_aspects: descriptions.visual_aspects || null,
+    artistic_scores: descriptions.artistic_scores || null,
+    exif: descriptions.EXIF || null,
+    notes: descriptions.notes || null,
+    ...extra,
+  }
+}
 
-  return JSON.stringify(
-    {
-      id: photo.id,
-      originalFileName: photo.originalFileName,
-      originalUrl: photo.originalUrl,
-      thumbnailUrl: photo.thumbnailUrl,
-      createdAt: photo.createdAt,
-      story: descriptions.story || null,
-      context: descriptions.context || null,
-      visual_accents: descriptions.visual_accents || null,
-      visual_aspects: descriptions.visual_aspects || null,
-      artistic_scores: descriptions.artistic_scores || null,
-      exif: descriptions.EXIF || null,
-      notes: descriptions.notes || null,
-    },
-    null,
-    2
-  )
+export function formatPhotoForAgent(photo: any): string {
+  return JSON.stringify(photoDataForAgent(photo), null, 2)
 }
 
 export function formatSearchResultsForAgent(result: any): string {
@@ -214,31 +216,10 @@ export function formatSearchResultsForAgent(result: any): string {
   const formatted = photosArray.slice(0, 50).map((entry: any) => {
     const p = entry.photo ?? entry
     const matchScore = p.matchScore !== undefined ? Math.round(p.matchScore * 100) / 100 : undefined
-    return {
-      id: p.id,
-      originalFileName: p.originalFileName,
-      matchScore,
-      story: p.descriptions?.story || null,
-      context: p.descriptions?.context || null,
-      artistic_scores: p.descriptions?.artistic_scores || null,
-      visual_aspects: p.descriptions?.visual_aspects
-        ? {
-            genre: p.descriptions.visual_aspects.genre,
-            subject: p.descriptions.visual_aspects.subject,
-            mood: p.descriptions.visual_aspects.mood,
-          }
-        : null,
-    }
+    return photoDataForAgent(p, matchScore !== undefined ? { matchScore } : undefined)
   })
 
-  return JSON.stringify(
-    {
-      totalFound: photosArray.length,
-      photos: formatted,
-    },
-    null,
-    2
-  )
+  return JSON.stringify({ totalFound: photosArray.length, photos: formatted }, null, 2)
 }
 
 export function formatContextPhotoBasic(photo: any): string {
@@ -293,34 +274,37 @@ export function formatCatalogPatternsForAgent(catalogPatterns: any, reviewType: 
 
 export const TOOL_DESCRIPTIONS = {
   get_photo_info:
-    'Get full details and thumbnail image of one or more photos by their IDs. MUST be called before discussing, comparing, or operating on any photo — including photos the user has attached (prefixed as [Attached photo IDs: ...] in the message) and photos referenced from conversation history. Pass multiple IDs in a single call to batch-fetch. Returns full photo data (artistic scores, story, context, visual aspects, visual accents, EXIF, tags) plus the thumbnail image for visual analysis.',
+    '[BASIC_TOOLS] Get full details and thumbnail image of one or more photos by their IDs. MUST be called before discussing, comparing, or operating on any photo — including photos the user has attached (prefixed as [Attached photo IDs: ...] in the message) and photos referenced from conversation history. Pass multiple IDs in a single call to batch-fetch. Returns full photo data (artistic scores, story, context, visual aspects, visual accents, EXIF, tags) plus the thumbnail image for visual analysis.',
 
   get_catalog_patterns:
-    "Get the photographer's catalog patterns — AI-detected recurring themes, stylistic tendencies, dominant subjects, narrative patterns, and visual motifs across the entire catalog. Use this when the user asks about their photographic style, strengths, recurring subjects, or catalog overview.",
+    "[CATALOG_INSIGHT] Get the photographer's catalog patterns — AI-detected recurring themes, stylistic tendencies, dominant subjects, narrative patterns, and visual motifs across the entire catalog. Use this when the user asks about their photographic style, strengths, recurring subjects, or catalog overview. Use it as well when you need to understand the user's photographic habits, visual preferences, or provide general advice based on their typical patterns.",
 
   search_semantic_overall_style:
-    "Search for photos by overall visual style, compositional feel, mood, color palette, or general atmosphere — broad semantic embedding search. Use this for open-ended style descriptions such as 'melancholic blue-toned street scenes' or 'minimalist high-key compositions'. Do NOT use for concrete subjects or narrative content — use search_semantic_content instead. Extract the query from user input but do not modify it or enrich it. IMPORTANT: after calling this tool you MUST call add_photos_to_result with the final curated set of IDs — only include photos you are actually referencing, drop any results that don't match the user's intent (wrong subject, irrelevant, etc.).",
+    "[PHOTO_SEARCH] Search for photos by overall visual style, compositional feel, mood, color palette, or general atmosphere — broad semantic embedding search. Use this for open-ended style descriptions such as 'melancholic blue-toned street scenes' or 'minimalist high-key compositions'. Do NOT use for concrete subjects or narrative content — use search_semantic_content instead. Extract the query from user input but do not modify it or enrich it. IMPORTANT: after calling this tool you MUST call add_photos_to_result with the final curated set of IDs — only include photos you are actually referencing, drop any results that don't match the user's intent (wrong subject, irrelevant, etc.).",
 
   search_semantic_content:
-    "Search for photos containing specific subjects, narrative elements, or concrete content using 1 to 3 keyword tags (e.g. ['dog'], ['market', 'crowd'], ['child', 'bicycle']). Use this when the user is looking for photos of particular things, people, actions, or scenes — not for abstract style or mood queries (use search_semantic_overall_style for those). IMPORTANT: after calling this tool you MUST call add_photos_to_result with the final curated set of IDs — only include photos you are actually referencing, drop any results that don't match the user's intent.",
+    "[PHOTO_SEARCH] Search for photos containing specific subjects, narrative elements, or concrete content using 1 to 3 keyword tags (e.g. ['dog'], ['market', 'crowd'], ['child', 'bicycle']). Use this when the user is looking for photos of particular things, people, actions, or scenes — not for abstract style or mood queries (use search_semantic_overall_style for those). IMPORTANT: after calling this tool you MUST call add_photos_to_result with the final curated set of IDs — only include photos you are actually referencing, drop any results that don't match the user's intent.",
 
   add_photos_to_result:
-    'Set the ordered list of photo IDs that will be returned to the client. The position in the array defines display order (index 0 = first). MANDATORY: call this every single time your response mentions, describes, compares, or references any specific photo — no exceptions. This is the ONLY way photos reach the client; if you skip this call, no photos will be shown to the user regardless of what you write. ALWAYS arrange the IDs in the intended display order when expressing a sequence, ranking, or curated selection.',
+    '[BASIC_TOOLS] Set the ordered list of photo IDs that will be returned to the client. The position in the array defines display order (index 0 = first). MANDATORY: call this every single time your response mentions, describes, compares, or references any specific photo — no exceptions. This is the ONLY way photos reach the client; if you skip this call, no photos will be shown to the user regardless of what you write. ALWAYS arrange the IDs in the intended display order when expressing a sequence, ranking, or curated selection.',
 
   find_photos_from_photo:
-    "Find photos visually or semantically similar to one or more reference photos (provided by their IDs). Use this tool whenever the user asks to find photos similar to a specific photo, or wants more photos like a given one. Choose the criteria based on the intent: use 'embedding' for overall visual likeness (default), 'story' for narrative similarity, 'context' for situational/environmental similarity, or 'chromatic' for color palette similarity. After calling this tool you MUST call add_photos_to_result with the final curated set of IDs.",
+    "[PHOTO_SEARCH] Find photos visually or semantically similar to one or more reference photos (provided by their IDs). Use this tool whenever the user asks to find photos similar to a specific photo, or wants more photos like a given one. Choose the criteria based on the intent: use 'embedding' for overall visual likeness (default), 'story' for narrative similarity, 'context' for situational/environmental similarity, or 'chromatic' for color palette similarity. After calling this tool you MUST call add_photos_to_result with the final curated set of IDs.",
 
   stats_visual_aspects:
-    "Get a statistical breakdown of the user's catalog by visual aspects: for each aspect (genre, framing, focus, lighting, lighting scheme, depth of field, perspective, stylistic, orientation, temperature, palette) returns the number of photos per value, sorted by frequency. Use this when the user asks about the distribution of visual characteristics, what styles are most common, or wants an overview of how their photos look visually.",
+    "[CATALOG_INSIGHT] Get a statistical breakdown of the user's catalog by visual aspects: for each aspect (genre, framing, focus, lighting, lighting scheme, depth of field, perspective, stylistic, orientation, temperature, palette) returns the number of photos per value, sorted by frequency. Use this when the user asks about the distribution of visual characteristics, what styles are most common, or wants an overview of how their photos look visually. Use it as well when you need to understand the visual diversity of the catalog or provide general advice for the user.",
 
   stats_artistic_scores:
-    "Get statistical analysis of the user's artistic scores across the entire catalog: for each scoring criterion returns the average (mean), standard deviation, photo count, a rating label (Excellent/Good/Average/Below Average/Poor), and a consistency label (Very Consistent / Mostly Consistent / Variable / Highly Variable). Criteria are grouped into Fundamentals (aesthetic_quality, composition, storytelling, candidness) and Bonus (strangeness, message, humor, visual_games). Use this when the user asks about their average scores, overall quality, strengths and weaknesses, or score consistency.",
+    "[CATALOG_INSIGHT] Get statistical analysis of the user's artistic scores across the entire catalog: for each scoring criterion returns the average (mean), standard deviation, photo count, a rating label (Excellent/Good/Average/Below Average/Poor), and a consistency label (Very Consistent / Mostly Consistent / Variable / Highly Variable). Criteria are grouped into Fundamentals (aesthetic_quality, composition, storytelling, candidness) and Bonus (strangeness, message, humor, visual_games). Use this when the user asks about their average scores, overall quality, strengths and weaknesses, or score consistency. Use it as well when you need to understand the user's artistic profile or provide general advice for improvement.",
 
   stats_artistic_scores_evolution:
-    'Get the evolution of one or more artistic scores over time, using adaptive time binning (day/week/month/quarter depending on the date range, capped at 30 data points). For each time bin returns the average score, photo count, and min/max range. Use this when the user asks about progress over time, how a score has improved or declined, or wants a timeline chart of their scores.',
+    "[CATALOG_INSIGHT] Get the evolution of one or more artistic scores over time, using adaptive time binning (day/week/month/quarter depending on the date range, capped at 30 data points). For each time bin returns the average score, photo count, and min/max range. Use this when the user asks about progress over time, how a score has improved or declined, or wants a timeline chart of their scores. Use it as well when you need to understand the user's artistic development or provide advice based on their improvement areas.",
+
+  overall_catalog_view:
+    '[CATALOG_INSIGHT] Get a single combined report of the entire catalog: catalog patterns (recurring themes, subjects, narrative motifs), visual aspects distribution, and artistic scores statistics. Use this as the FIRST tool whenever the user asks for advice on improving their photography, critique of their catalog, identification of weak points or strengths, general feedback on their style, or any holistic question about their photographic practice. This tool replaces calling get_catalog_patterns + stats_visual_aspects + stats_artistic_scores individually — it returns all of that data in one shot.',
 
   filter_photos:
-    'Filter and sort the user\'s photo catalog by structured properties: artistic scores (aesthetic_quality, composition, storytelling, strangeness, message, humor, visual_games, candidness), visual aspects (genre, framing, focus, lighting, depth of field, perspective, stylistic, orientation, temperature, palette), filename, and date range. Use this instead of semantic search when the user asks questions like "my funniest photo", "most surreal shot", "close-up portraits", "landscape shots from 2024", "photos with shallow depth of field", "vertical photos", "portrait orientation", "horizontal photos", "warm-toned photos", "cold color temperature", "black and white photos", "color photos", etc. Score fields meaning — aesthetic_quality: visual beauty; composition: frame balance and harmony; storytelling: narrative power of characters/gestures; strangeness: mysterious or surreal quality; message: social or symbolic statement; humor: funny or ironic element; visual_games: illusions, reflections, paradoxes; candidness: spontaneity and naturalness. IMPORTANT: after calling this tool you MUST call add_photos_to_result with the final curated set of IDs — only include photos you are actually referencing, drop any results that don\'t match the user\'s intent (wrong subject, irrelevant, etc.).',
+    '[PHOTO_SEARCH] Filter and sort the user\'s photo catalog by two distinct and mutually exclusive property types — read their schema descriptions carefully before populating them. (1) scoreFilters: numeric artistic scores 0–10 — aesthetic_quality, composition, storytelling, strangeness, message, humor, visual_games, candidness. (2) visualAspects: categorical labels — genre, framing, focus, lighting, lighting_scheme, depth_of_field, perspective, stylistic, orientation, temperature, palette. Use this tool when the user asks questions like "my funniest photo", "most surreal shot", "photos with high visual games score", "close-up portraits", "landscape shots from 2024", "photos with shallow depth of field", "vertical photos", "warm-toned photos", "black and white photos", etc. IMPORTANT: after calling this tool you MUST call add_photos_to_result with the final curated set of IDs — only include photos you are actually referencing, drop any results that don\'t match the user\'s intent (wrong subject, irrelevant, etc.)',
 } as const
 
 // ─────────────────────────────────────────────────────────────
@@ -493,21 +477,7 @@ export default class AgentToolsService {
           const formatted = topScored.map((s) => {
             const p = photoMap.get(s.id)
             if (!p) return { id: s.id, matchScore: s.totalScore }
-            return {
-              id: p.id,
-              originalFileName: p.originalFileName,
-              matchScore: Math.round((s.totalScore ?? 0) * 100) / 100,
-              story: p.descriptions?.story || null,
-              context: p.descriptions?.context || null,
-              artistic_scores: p.descriptions?.artistic_scores || null,
-              visual_aspects: p.descriptions?.visual_aspects
-                ? {
-                    genre: p.descriptions.visual_aspects.genre,
-                    subject: p.descriptions.visual_aspects.subject,
-                    mood: p.descriptions.visual_aspects.mood,
-                  }
-                : null,
-            }
+            return photoDataForAgent(p, { matchScore: Math.round((s.totalScore ?? 0) * 100) / 100 })
           })
 
           return JSON.stringify({ totalFound: scored.length, photos: formatted }, null, 2)
@@ -635,13 +605,7 @@ export default class AgentToolsService {
 
           const limited = filtered.slice(0, Math.min(limit, 50))
 
-          const formatted = limited.map((p) => ({
-            id: p.id,
-            originalFileName: p.originalFileName,
-            artistic_scores: p.descriptions?.artistic_scores ?? null,
-            visual_aspects: p.descriptions?.visual_aspects ?? null,
-            createdAt: p.createdAt,
-          }))
+          const formatted = limited.map((p) => photoDataForAgent(p))
 
           return JSON.stringify({ totalMatched: filtered.length, photos: formatted }, null, 2)
         } catch (error) {
@@ -675,22 +639,12 @@ export default class AgentToolsService {
             userId
           )
 
-          const formatted = results.map((p: any) => ({
-            id: p.id,
-            originalFileName: p.originalFileName,
-            score: Math.round((p.score ?? 0) * 100) / 100,
-            labelScore: p.labelScore,
-            story: p.descriptions?.story || null,
-            context: p.descriptions?.context || null,
-            artistic_scores: p.descriptions?.artistic_scores || null,
-            visual_aspects: p.descriptions?.visual_aspects
-              ? {
-                  genre: p.descriptions.visual_aspects.genre,
-                  subject: p.descriptions.visual_aspects.subject,
-                  mood: p.descriptions.visual_aspects.mood,
-                }
-              : null,
-          }))
+          const formatted = results.map((p: any) =>
+            photoDataForAgent(p, {
+              score: Math.round((p.score ?? 0) * 100) / 100,
+              labelScore: p.labelScore,
+            })
+          )
 
           return JSON.stringify({ totalFound: formatted.length, photos: formatted }, null, 2)
         } catch (error) {
@@ -701,6 +655,40 @@ export default class AgentToolsService {
         name: 'find_photos_from_photo',
         description: TOOL_DESCRIPTIONS.find_photos_from_photo,
         schema: FindPhotosFromPhotoSchema,
+      }
+    )
+
+    // ── Tool: overall_catalog_view ─────────────────────────
+    const overallCatalogView = tool(
+      async (): Promise<string> => {
+        try {
+          const statsService = new StatsService()
+
+          const [catalogPatterns, visualAspectsStats, artisticScoresStats] = await Promise.all([
+            User.find(userId).then((user) =>
+              user
+                ? formatCatalogPatternsForAgent(user.catalogPatterns, 'all')
+                : JSON.stringify({ error: 'User not found' })
+            ),
+            statsService.getVisualAspectsStats(userId),
+            statsService.getArtisticScoresStats(userId),
+          ])
+
+          const report = {
+            catalog_patterns: JSON.parse(catalogPatterns),
+            visual_aspects_stats: visualAspectsStats,
+            artistic_scores_stats: artisticScoresStats,
+          }
+
+          return JSON.stringify(report, null, 2)
+        } catch (error) {
+          return JSON.stringify({ error: `Failed to build overall catalog view: ${error.message}` })
+        }
+      },
+      {
+        name: 'overall_catalog_view',
+        description: TOOL_DESCRIPTIONS.overall_catalog_view,
+        schema: OverallCatalogViewSchema,
       }
     )
 
@@ -773,6 +761,7 @@ export default class AgentToolsService {
       statsVisualAspects,
       statsArtisticScores,
       statsArtisticScoresEvolution,
+      overallCatalogView,
     ]
   }
 }

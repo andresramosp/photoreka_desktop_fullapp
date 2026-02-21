@@ -1,6 +1,6 @@
-// @ts-nocheck
 import { ChatOpenAI } from '@langchain/openai'
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
+import { HarmBlockThreshold, HarmCategory } from '@google/generative-ai'
 import { HumanMessage, AIMessage, ToolMessage, SystemMessage } from '@langchain/core/messages'
 import PhotoManager from '../managers/photo_manager.js'
 import SearchTextService from './search_text_service.js'
@@ -18,6 +18,24 @@ function createChatModel() {
     return new ChatGoogleGenerativeAI({
       apiKey: process.env.GEMINI_API_KEY,
       model: process.env.GEMINI_MODEL ?? 'gemini-2.5-flash',
+      safetySettings: [
+        {
+          category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+          threshold: HarmBlockThreshold.BLOCK_NONE,
+        },
+        {
+          category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+          threshold: HarmBlockThreshold.BLOCK_NONE,
+        },
+        {
+          category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+          threshold: HarmBlockThreshold.BLOCK_NONE,
+        },
+        {
+          category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+          threshold: HarmBlockThreshold.BLOCK_NONE,
+        },
+      ],
     })
   }
   return new ChatOpenAI({
@@ -65,7 +83,16 @@ export type AgentChatResult = {
 const SYSTEM_PROMPT = `You are Photoreka's intelligent photo catalog assistant. 
 You help photographers explore, understand, and get insights from their photo library.
 
-Guidelines:
+## Tool groups
+All available tools belong to one of three groups, indicated by their [TAG] prefix:
+
+- [BASIC_TOOLS] — Core tools required whenever specific photos are involved: get_photo_info (fetch photo data and thumbnails) and add_photos_to_result (send photo IDs to the client). These two always work together and are mandatory any time you reference specific photos.
+
+- [CATALOG_INSIGHT] — Analytical tools that reveal patterns and statistics across the entire catalog: overall_catalog_view, get_catalog_patterns, stats_visual_aspects, stats_artistic_scores, stats_artistic_scores_evolution. Use these to understand the photographer's overall style, strengths, weaknesses, and evolution over time. Prefer overall_catalog_view when you need a holistic picture in a single call.
+
+- [PHOTO_SEARCH] — Tools that find or filter specific photos from the catalog: search_semantic_overall_style, search_semantic_content, filter_photos, find_photos_from_photo. Always follow up with add_photos_to_result after using any of these.
+
+## Guidelines
 - You can chain multiple tools in one turn when it helps answer the question better.
 - Be concise, specific and helpful. Summarize key data rather than dumping raw JSON.
 - If you need to reference a concrete photo by text, you can use the filename, never the ID.
@@ -73,15 +100,18 @@ Guidelines:
 - Always respond in the same language the user writes in (but for some tools you will need english prompts — that's fine, just keep the final output in the user's language).
 - Be kind and helpful. At the end of your response, you can suggest concrete next steps or questions the user can ask to explore further, always based on what you can actually do with the tools available to you.
 
-CRITICAL — two tools are ALWAYS required together whenever you reference specific photos (no exceptions):
+## Catalog advice guideline
+Whenever the user asks for advice, improvement tips, a general critique, weak points, strengths, or any holistic question about their photographic practice or catalog, you MUST call overall_catalog_view as your FIRST action — it returns catalog patterns, visual aspects statistics, and artistic scores in a single call, giving you everything you need to provide well-rounded advice. 
 
-A) get_photo_info — MUST be called first, before discussing any photo:
+## CRITICAL — [BASIC_TOOLS] are ALWAYS required whenever you reference specific photos (no exceptions)
+
+A) get_photo_info [BASIC_TOOLS] — MUST be called first, before discussing any photo:
 1. The user's message includes attached photo IDs (listed as [Attached photo IDs: ...]). Call get_photo_info with ALL of those IDs as your very first action, before doing anything else.
 2. The user references any photo already mentioned in the conversation history — by filename, position ("the first one", "that photo"), pronoun, or any other indirect reference. Call get_photo_info to re-fetch current data; history information about photos is never sufficient.
 3. Any time you need to discuss, compare, analyze, or otherwise operate on specific photos for any reason.
 NEVER rely on photo information from conversation history alone — always re-fetch via get_photo_info. The only data you can trust from history is photo IDs and filenames, which you use as input to get_photo_info.
 
-B) add_photos_to_result — MUST be called every single time you mention or reference specific photos in your response, without exception. If you describe a photo, compare photos, answer a question about a photo, or reference any photo in any way, you MUST call add_photos_to_result with those photo IDs. Skipping this call means the user will not see the photos you are talking about, which breaks the experience entirely. There is no scenario where you talk about specific photos without calling add_photos_to_result.`
+B) add_photos_to_result [BASIC_TOOLS] — MUST be called every single time you mention or reference specific photos in your response, without exception. If you describe a photo, compare photos, answer a question about a photo, or reference any photo in any way, you MUST call add_photos_to_result with those photo IDs. Skipping this call means the user will not see the photos you are talking about, which breaks the experience entirely. There is no scenario where you talk about specific photos without calling add_photos_to_result.`
 
 // ─────────────────────────────────────────────────────────────
 // Helper: format messages array for human-readable debug logging
