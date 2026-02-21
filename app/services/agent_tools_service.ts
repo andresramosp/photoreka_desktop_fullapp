@@ -9,6 +9,8 @@ import StatsService from './stats_service.js'
 import SearchPhotoService from './search_photo_service.js'
 import User from '#models/user'
 import Photo from '#models/photo'
+import Collection from '#models/collection'
+import Series from '#models/series'
 
 // ─────────────────────────────────────────────────────────────
 // Tool schemas
@@ -82,6 +84,8 @@ export const GetVisualAspectsStatsSchema = z.object({})
 export const GetArtisticScoresStatsSchema = z.object({})
 
 export const OverallCatalogViewSchema = z.object({})
+
+export const FetchCollectionsSchema = z.object({})
 
 export const GetArtisticScoresEvolutionSchema = z.object({
   criteria: z
@@ -302,6 +306,9 @@ export const TOOL_DESCRIPTIONS = {
 
   overall_catalog_view:
     '[CATALOG_INSIGHT] Get a single combined report of the entire catalog: catalog patterns (recurring themes, subjects, narrative motifs), visual aspects distribution, and artistic scores statistics. Use this as the FIRST tool whenever the user asks for advice on improving their photography, critique of their catalog, identification of weak points or strengths, general feedback on their style, or any holistic question about their photographic practice. This tool replaces calling get_catalog_patterns + stats_visual_aspects + stats_artistic_scores individually — it returns all of that data in one shot.',
+
+  fetch_collections:
+    "[PHOTO_SEARCH] Get all the user's collections and series, each with their name, description, and up to 10 sample photo IDs. Use this when the user asks about their collections, series, albums, or organized groups of photos — for example 'what collections do I have?', 'show me my series', 'which albums exist?'. Returns two separate arrays: 'collections' (manually curated groups) and 'series' (ordered sequences/stories).",
 
   filter_photos:
     '[PHOTO_SEARCH] Filter and sort the user\'s photo catalog by two distinct and mutually exclusive property types — read their schema descriptions carefully before populating them. (1) scoreFilters: numeric artistic scores 0–10 — aesthetic_quality, composition, storytelling, strangeness, message, humor, visual_games, candidness. (2) visualAspects: categorical labels — genre, framing, focus, lighting, lighting_scheme, depth_of_field, perspective, stylistic, orientation, temperature, palette. Use this tool when the user asks questions like "my funniest photo", "most surreal shot", "photos with high visual games score", "close-up portraits", "landscape shots from 2024", "photos with shallow depth of field", "vertical photos", "warm-toned photos", "black and white photos", etc. IMPORTANT: after calling this tool you MUST call add_photos_to_result with the final curated set of IDs — only include photos you are actually referencing, drop any results that don\'t match the user\'s intent (wrong subject, irrelevant, etc.)',
@@ -750,6 +757,48 @@ export default class AgentToolsService {
       }
     )
 
+    // ── Tool: fetch_collections ────────────────────────────
+    const fetchCollections = tool(
+      async (): Promise<string> => {
+        try {
+          const [collections, series] = await Promise.all([
+            Collection.query()
+              .where('user_id', userId)
+              .preload('photos', (q) => q.select('id')),
+            Series.query()
+              .where('user_id', userId)
+              .preload('photos', (q) => q.select('id')),
+          ])
+
+          return JSON.stringify(
+            {
+              collections: collections.map((c) => ({
+                id: c.id,
+                name: c.name,
+                description: c.description,
+                samplePhotoIds: c.photos.slice(0, 10).map((p) => p.id),
+              })),
+              series: series.map((s) => ({
+                id: s.id,
+                name: s.name,
+                description: s.description,
+                samplePhotoIds: s.photos.slice(0, 10).map((p) => p.id),
+              })),
+            },
+            null,
+            2
+          )
+        } catch (error) {
+          return JSON.stringify({ error: `Failed to fetch collections: ${error.message}` })
+        }
+      },
+      {
+        name: 'fetch_collections',
+        description: TOOL_DESCRIPTIONS.fetch_collections,
+        schema: FetchCollectionsSchema,
+      }
+    )
+
     return [
       getPhotoInfo,
       getCatalogPatterns,
@@ -758,6 +807,7 @@ export default class AgentToolsService {
       findPhotosFromPhoto,
       addPhotosToResult,
       filterPhotos,
+      fetchCollections,
       statsVisualAspects,
       statsArtisticScores,
       statsArtisticScoresEvolution,

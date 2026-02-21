@@ -12,8 +12,114 @@ import AgentToolsService from './agent_tools_service.js'
 
 type ModelProvider = 'openai' | 'gemini'
 
-function createChatModel() {
-  const provider = (process.env.AGENT_PROVIDER ?? 'openai') as ModelProvider
+// ─────────────────────────────────────────────────────────────
+// Rule-based query router — decides which model handles the turn
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Returns 'openai' for queries that require aesthetic sensitivity, curation,
+ * artistic judgment, or nuanced creative advice; returns 'gemini' for mechanical
+ * data-retrieval queries (search, filter, stats, collections, etc.).
+ *
+ * The env var AGENT_PROVIDER can override routing entirely when set.
+ */
+export function routeProvider(message: string): ModelProvider {
+  // Hard override: if the env var is set to a specific provider, always use it
+  const envOverride = process.env.AGENT_PROVIDER
+  if (envOverride === 'openai' || envOverride === 'gemini') return envOverride
+
+  const q = message.toLowerCase()
+
+  // ── Aesthetic / curatorial signals → OpenAI ──────────────────
+  const aestheticPatterns = [
+    // English patterns
+    /\bcritique?\b/,
+    /\breview\b/,
+    /\badvice\b|\badvise\b/,
+    /\bimprove\b|\bimprovement\b/,
+    /\bweakness\b|\bweak point\b/,
+    /\bstrength\b/,
+    /\bfeedback\b/,
+    /\bbest photo\b|\bbest shot\b/,
+    /\bworst photo\b/,
+    /\bcurate\b|\bcuration\b/,
+    /\branking\b|\brank\b/,
+    /\bportfolio\b/,
+    /\baesthet/,
+    /\bcreative\b/,
+    /\bartistic\b|\bart\b/,
+    /\bbeautiful\b|\bbeauty\b/,
+    /\bexpressive\b/,
+    /\bgenuine\b|\bauthentic\b/,
+    /\bsuggesti/,
+    /\brecomend/,
+    /\bopinion\b/,
+    /\bwhat do you think\b/,
+    /\banalyze\b|\banalyz/,
+    /\bevaluat/,
+    /\bassess\b/,
+    /\bvision\b|\beye\b/,
+    /\belegance\b/,
+    /\bimpact\b/,
+    /\bsubtl/,
+    /\bnuance\b/,
+    /\bsen(?:sibility|sitiv)/,
+    /\bhow (does|do|is).*feel\b/,
+    /\bshow me.*best\b/,
+    /\bwhich.*stands? out\b/,
+
+    // Spanish patterns
+    /\bcrítica\b|\bcrítico\b|\bcritica\b/,
+    /\breseña\b/,
+    /\bconse(?:jo|jero)\b/,
+    /\bmejorar\b|\bmejoría\b/,
+    /\bdebilidad(?:es)?\b|\bpunto débil\b|\bpuntos débiles\b/,
+    /\bfortaleza\b|\bfuerte\b|\bpunto fuerte\b/,
+    /\bcommentario\b|\bcomentarios\b/,
+    /\bmejor foto\b|\bmejor disparo\b/,
+    /\bpeor foto\b|\bpeor disparo\b/,
+    /\bcuración\b|\bcurada?\b/,
+    /\bselecciona\b|\bseleccionar\b|\bselección\b/,
+    /\branking\b|\bclasific(?:ar|ación)\b|\bordenar artísticamente\b/,
+    /\bportafolio\b/,
+    /\bestét(?:ico|ica)\b|\bestética\b/,
+    /\bnarrativa?\b|\bhistoria\b|\brelato\b/,
+    /\bnarración\b|\bnarradora?\b/,
+    /\bcreativa?\b|\bcreatividad\b/,
+    /\bartística?\b|\barte\b/,
+    /\bbella?\b|\bbelleza\b/,
+    /\bexpresiva?\b|\bexpresividad\b/,
+    /\bauténtica?\b|\bautenticidad\b|\briginal\b/,
+    /\bsugerencia\b|\bsugerencias\b/,
+    /\brecomendación\b|\brecomendaciones\b/,
+    /\bopinión\b|\bopiniones\b/,
+    /\bqué piensas\b|\bqué opinas\b|\btu opinión\b/,
+    /\ban[aá]lisis\b|\banalizar\b/,
+    /\bevaluación\b|\bevalúa\b/,
+    /\bvaloración\b|\bvalorar\b/,
+    /\bdescripción\b|\bdescribe\b/,
+    /\bvisión\b|\bojo\b|\bojos artísticos\b/,
+    /\belegancia\b/,
+    /\bimpacto\b/,
+    /\bsutileza\b|\bsutil\b/,
+    /\bmatiz\b|\bmatices\b/,
+    /\bsensibilidad\b|\bsensible\b/,
+    /\bcómo.*siente\b|\bcómo se siente\b/,
+    /\bmuestrame.*mejor\b|\bmuestrá?me\b/,
+    /\bcuál destaca\b|\bcuáles destacan\b|\bqué sobresale\b/,
+  ]
+
+  if (aestheticPatterns.some((p) => p.test(q))) {
+    return 'openai'
+  }
+
+  // ── Mechanical / data-retrieval signals → Gemini ─────────────
+  // (filter, search, stats, collections, find, list, count, etc.)
+  // Default fallback is also Gemini for pure retrieval tasks.
+  return 'gemini'
+}
+
+function createChatModel(provider: ModelProvider = 'openai') {
   if (provider === 'gemini') {
     return new ChatGoogleGenerativeAI({
       apiKey: process.env.GEMINI_API_KEY,
@@ -341,6 +447,29 @@ export default class LangchainAgentService {
   }
 
   // ───────────────────────────────────────────────────────────
+  // Rescue pass: ensures every photo fetched via get_photo_info ends up in
+  // foundPhotoIds, even when the model forgets add_photos_to_result.
+  // ───────────────────────────────────────────────────────────
+
+  private rescuePhotoIds(intermediateSteps: IntermediateStep[], foundPhotoIds: number[]): void {
+    // Only rescue if the model never called add_photos_to_result at all.
+    // If it did call it (even once), trust its intentional selection entirely.
+    const modelCalledAddPhotos = intermediateSteps.some((s) => s.tool === 'add_photos_to_result')
+    if (modelCalledAddPhotos) return
+
+    for (const step of intermediateSteps) {
+      if (step.tool === 'get_photo_info') {
+        const ids: number[] = Array.isArray(step.input?.photo_ids) ? step.input.photo_ids : []
+        for (const id of ids) {
+          if (!foundPhotoIds.includes(id)) {
+            foundPhotoIds.push(id)
+          }
+        }
+      }
+    }
+  }
+
+  // ───────────────────────────────────────────────────────────
   // Persists a completed turn (user + assistant messages) to the in-memory
   // history, capped at MAX_HISTORY_TURNS pairs. No-ops on empty output.
   // ───────────────────────────────────────────────────────────
@@ -390,9 +519,10 @@ export default class LangchainAgentService {
             .join('\n'))
 
     const foundPhotoIds: number[] = []
-    const provider = (process.env.AGENT_PROVIDER ?? 'openai') as ModelProvider
+    const provider = routeProvider(message)
+    console.log(`[Agent] 🤖 Routed to provider: ${provider.toUpperCase()}`)
     const tools = this.toolsService.createTools(userId, foundPhotoIds, provider)
-    const modelWithTools = createChatModel().bindTools(tools)
+    const modelWithTools = createChatModel(provider).bindTools(tools)
     const toolMap = Object.fromEntries(tools.map((t) => [t.name, t]))
 
     const currentUserMessage = this.buildCurrentUserMessage(message, contextPhotoIds)
@@ -421,6 +551,7 @@ export default class LangchainAgentService {
 
       if (toolCalls.length === 0) {
         const output = this.resolveOutput(response, messages)
+        this.rescuePhotoIds(intermediateSteps, foundPhotoIds)
         console.log(
           `[Agent] ✅ Final answer after ${iter + 1} iteration(s). Tools used: [${toolsUsed.join(', ') || 'none'}]`
         )
@@ -455,6 +586,7 @@ export default class LangchainAgentService {
     )
     const finalResponse = await createChatModel().invoke(messages)
     const output = extractTextContent(finalResponse.content)
+    this.rescuePhotoIds(intermediateSteps, foundPhotoIds)
     console.log(
       `[Agent] ✅ Final answer (max-iter fallback). Tools used: [${toolsUsed.join(', ')}]\n`
     )
