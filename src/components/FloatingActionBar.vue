@@ -111,6 +111,25 @@
             </template>
             <span>Take selected photos to a tool</span>
           </n-tooltip>
+
+          <!-- Attach to Chat Button -->
+          <n-tooltip v-if="showAttachToChat" placement="top" trigger="hover">
+            <template #trigger>
+              <n-button
+                type="primary"
+                size="medium"
+                @click="$emit('attach-to-chat')"
+                :disabled="selectedCount === 0"
+              >
+                <template #icon>
+                  <n-icon>
+                    <AttachOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </template>
+            <span>Attach selected photos to your message</span>
+          </n-tooltip>
         </div>
       </div>
     </div>
@@ -119,7 +138,11 @@
 
 <script setup>
 import { NButton, NIcon, NTooltip } from "naive-ui";
-import { AlbumsOutline, CloudDownloadOutline } from "@vicons/ionicons5";
+import {
+  AlbumsOutline,
+  CloudDownloadOutline,
+  AttachOutline,
+} from "@vicons/ionicons5";
 import { MagicWand } from "@vicons/carbon";
 import { useMobilePhotoSelection } from "@/composables/useMobilePhotoSelection";
 
@@ -143,6 +166,10 @@ defineProps({
     type: Boolean,
     default: true,
   },
+  showAttachToChat: {
+    type: Boolean,
+    default: false,
+  },
   isDeleting: {
     type: Boolean,
     default: false,
@@ -159,6 +186,7 @@ const emit = defineEmits([
   "download",
   "add-to-collection",
   "move-to-tool",
+  "attach-to-chat",
 ]);
 
 // Handler for clear selection that also exits mobile selection mode

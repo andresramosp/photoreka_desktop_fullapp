@@ -94,18 +94,18 @@
                     :key="photo.id"
                     class="message-photo-item"
                   >
-                    <PhotoCard
+                    <PhotoCardHub
                       :photo="photo"
-                      mode="default"
-                      :showStars="false"
-                      :showTags="false"
-                      :showInfoButton="false"
-                      :showDeleteButton="false"
-                      :requireLongPress="false"
+                      :showName="true"
+                      :showFooter="false"
+                      :showDelete="false"
+                      :showDuplicate="false"
+                      :isUploading="photo.isUploading"
                       :selected="isPhotoSelectedInMessage(index, photo.id)"
                       @select="
                         (photoId) => toggleMessagePhotoSelection(index, photoId)
                       "
+                      @info="showPhotoInfo"
                     />
                   </div>
                 </div>
@@ -128,14 +128,13 @@
                   :key="photo.id"
                   class="message-photo-item"
                 >
-                  <PhotoCard
+                  <PhotoCardHub
                     :photo="photo"
-                    mode="default"
-                    :showStars="false"
-                    :showTags="false"
-                    :showInfoButton="true"
-                    :showDeleteButton="false"
-                    :requireLongPress="false"
+                    :showName="true"
+                    :showFooter="false"
+                    :showDelete="false"
+                    :showDuplicate="false"
+                    :isUploading="photo.isUploading"
                     :selected="isPhotoSelectedInMessage(index, photo.id)"
                     @select="
                       (photoId) => toggleMessagePhotoSelection(index, photoId)
@@ -145,9 +144,27 @@
                 </div>
               </div>
             </div>
-            <span class="message-time">{{
-              formatTime(message.timestamp)
-            }}</span>
+            <div class="message-footer">
+              <span class="message-time">{{
+                formatTime(message.timestamp)
+              }}</span>
+              <n-button
+                v-if="
+                  message.role === 'assistant' &&
+                  message.photoIds &&
+                  message.photoIds.length > 0
+                "
+                quaternary
+                size="tiny"
+                class="msg-add-to-btn"
+                @click="handleAddMessagePhotosToCollection(message.photoIds)"
+              >
+                <template #icon>
+                  <n-icon :size="12"><BookmarksOutline /></n-icon>
+                </template>
+                Add to...
+              </n-button>
+            </div>
           </div>
         </div>
 
@@ -175,14 +192,13 @@
             :key="photo.id"
             class="context-photo-wrapper"
           >
-            <PhotoCard
+            <PhotoCardHub
               :photo="photo"
-              mode="default"
-              :showStars="false"
-              :showTags="false"
-              :showInfoButton="false"
-              :showDeleteButton="false"
-              :requireLongPress="false"
+              :showName="true"
+              :showFooter="false"
+              :showDelete="false"
+              :showDuplicate="false"
+              :isUploading="photo.isUploading"
             />
             <button
               class="remove-photo-btn"
@@ -260,8 +276,8 @@
     <!-- Collection Modal -->
     <CollectionModal
       :show="showCollectionModal"
-      :photo-count="selectedPhotoIds.length"
-      :photo-ids="selectedPhotoIds"
+      :photo-count="collectionModalPhotoIds.length"
+      :photo-ids="collectionModalPhotoIds"
       @add-to-collection="handleCollectionAdded"
       @add-to-series="handleCollectionAdded"
       @cancel="showCollectionModal = false"
@@ -283,6 +299,7 @@
       :show-delete="false"
       :show-add-to-collection="true"
       :show-move-to-tool="true"
+      :show-attach-to-chat="true"
       :is-deleting="isDeletingPhotos"
       :is-downloading="isDownloading"
       @clear-selection="clearAllSelectionsAndScopes"
@@ -290,6 +307,7 @@
       @download="handleDownloadMultiple"
       @add-to-collection="handleAddToCollection"
       @move-to-tool="openToolSelector"
+      @attach-to-chat="handleAttachToChat"
     />
   </div>
 </template>
@@ -298,7 +316,7 @@
 import { ref, nextTick, onMounted, onUnmounted } from "vue";
 import { NIcon, useMessage } from "naive-ui";
 import PhotosDialog from "@/components/PhotosDialog.vue";
-import PhotoCard from "@/components/photoCards/PhotoCard.vue";
+import PhotoCardHub from "@/components/photoCards/PhotoCardHub.vue";
 import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
 import FloatingActionBar from "@/components/FloatingActionBar.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
@@ -324,6 +342,7 @@ import {
   LayersOutline as LayersIcon,
   TrendingUpOutline as TrendingIcon,
   CreateOutline as CreateIcon,
+  BookmarksOutline,
 } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
 import { PlusCircleFilled } from "@vicons/antd";
@@ -342,14 +361,17 @@ interface ChatMessage {
 interface ContextPhoto {
   id: string;
   title: string;
+  name: string;
   url: string;
   thumbnailUrl: string;
-  // Fields required by PhotoCard
   rating: number;
   isUploading: boolean;
   file: any;
   needProcess: boolean;
   isDuplicate: boolean;
+  originalFileName: string;
+  isCheckingDuplicates: boolean;
+  status?: string;
 }
 
 const photosStore = usePhotosStore();
@@ -410,6 +432,7 @@ const {
 } = usePhotoToolSelection();
 
 const showCollectionModal = ref(false);
+const collectionModalPhotoIds = ref<(string | number)[]>([]);
 const isDeletingPhotos = ref(false);
 
 const inputText = ref("");
@@ -426,35 +449,45 @@ const selectedDialogPhoto = ref<any>(null);
 
 const suggestions = [
   {
-    title: "Find my best shots",
-    description: "Discover top-rated photos from your library",
-    icon: StarIcon,
-  },
-  {
-    title: "Color palette analysis",
-    description: "Explore the dominant colors across your catalog",
-    icon: PaletteIcon,
-  },
-  {
-    title: "Curation suggestions",
-    description: "Get AI recommendations for your next series",
-    icon: BulbIcon,
-  },
-  {
-    title: "Search tips",
-    description: "Learn how to get the most from semantic search",
+    title: "Help me find some photos",
+    description: "Find travel photos with a good composition",
     icon: SearchSuggestionIcon,
+    prompt:
+      "I'm looking for travel photos with strong composition. Can you find some good examples in my library?",
+    needsPhotos: false,
   },
+
   {
-    title: "Compare styles",
-    description: "Analyze compositional patterns in your work",
+    title: "Sequence my photos",
+    description:
+      "Get suggestions for sequencing photos into a series or collection",
     icon: LayersIcon,
+    prompt:
+      "Can you create a sequence using these photos? Suggest a compelling order and explain the narrative or thematic flow you see. If possible, recommend a title for the series.",
+    needsPhotos: true,
   },
   {
     title: "Portfolio insights",
     description: "Understand trends and strengths in your catalog",
-    icon: TrendingIcon,
+    icon: SparklesIcon,
+    prompt:
+      "Analyze my photo library and give me portfolio insights. Where do I excel and what areas could I develop further?",
+    needsPhotos: false,
   },
+  // {
+  //   title: "Search tips",
+  //   description: "Learn how to get the most from semantic search",
+  //   icon: SearchSuggestionIcon,
+  //   prompt: "",
+  //   needsPhotos: false,
+  // },
+  // {
+  //   title: "Compare styles",
+  //   description: "Analyze compositional patterns in your work",
+  //   icon: LayersIcon,
+  //   prompt: "",
+  //   needsPhotos: true,
+  // },
 ];
 
 const checkMobile = () => {
@@ -462,6 +495,7 @@ const checkMobile = () => {
 };
 
 onMounted(() => {
+  resetChat();
   window.addEventListener("resize", checkMobile);
 });
 
@@ -539,8 +573,18 @@ const renderMarkdown = (content: string): string => {
   return marked(content) as string;
 };
 
-const handleSuggestionClick = (suggestion: { title: string }) => {
-  inputText.value = suggestion.title;
+const handleSuggestionClick = (suggestion: {
+  title: string;
+  prompt: string;
+  needsPhotos: boolean;
+}) => {
+  if (suggestion.needsPhotos && contextPhotos.value.length === 0) {
+    message.warning(
+      "Please attach at least one photo before using this suggestion.",
+    );
+    return;
+  }
+  inputText.value = suggestion.prompt;
   sendMessage();
 };
 
@@ -567,6 +611,7 @@ const onPhotosSelected = (photoIds: string[]) => {
     newPhotos.push({
       id: photo.id,
       title: photo.title || photo.name || "Photo",
+      name: photo.name || photo.title || "Photo",
       url: photo.url,
       thumbnailUrl: photo.thumbnailUrl || photo.url,
       rating: photo.rating ?? 0,
@@ -574,6 +619,10 @@ const onPhotosSelected = (photoIds: string[]) => {
       file: null,
       needProcess: false,
       isDuplicate: false,
+      originalFileName:
+        photo.originalFileName || photo.name || photo.title || "photo",
+      isCheckingDuplicates: false,
+      status: "processed",
     });
     existingIds.add(id);
   }
@@ -592,6 +641,7 @@ const getPhotosForMessage = (photoIds: number[]): ContextPhoto[] => {
       return {
         id: String(photo.id),
         title: photo.title || photo.name || "Photo",
+        name: photo.name || photo.title || "Photo",
         url: photo.url,
         thumbnailUrl: photo.thumbnailUrl || photo.url,
         rating: photo.rating ?? 0,
@@ -599,6 +649,10 @@ const getPhotosForMessage = (photoIds: number[]): ContextPhoto[] => {
         file: null,
         needProcess: false,
         isDuplicate: false,
+        originalFileName:
+          photo.originalFileName || photo.name || photo.title || "photo",
+        isCheckingDuplicates: false,
+        status: "processed",
       } as ContextPhoto;
     })
     .filter(Boolean) as ContextPhoto[];
@@ -639,6 +693,14 @@ const handleDownloadMultiple = async () => {
 
 const handleAddToCollection = () => {
   if (selectedPhotoIds.value.length > 0) {
+    collectionModalPhotoIds.value = [...selectedPhotoIds.value];
+    showCollectionModal.value = true;
+  }
+};
+
+const handleAddMessagePhotosToCollection = (photoIds: number[]) => {
+  if (photoIds && photoIds.length > 0) {
+    collectionModalPhotoIds.value = [...photoIds];
     showCollectionModal.value = true;
   }
 };
@@ -651,6 +713,42 @@ const handleCollectionAdded = () => {
 const handleToolSelected = async (toolId: string) => {
   await takeToTool(toolId, selectedPhotoIds.value, clearAllSelectionsAndScopes);
   closeToolSelector();
+};
+
+const handleAttachToChat = () => {
+  const existingIds = new Set(contextPhotos.value.map((p) => p.id));
+  const remaining = 10 - contextPhotos.value.length;
+  const newPhotos: ContextPhoto[] = [];
+
+  for (const id of selectedPhotoIds.value) {
+    if (newPhotos.length >= remaining) break;
+    const strId = String(id);
+    if (existingIds.has(strId)) continue;
+
+    const photo = photosStore.photos.find((p: any) => String(p.id) === strId);
+    if (!photo) continue;
+
+    newPhotos.push({
+      id: strId,
+      title: photo.title || photo.name || "Photo",
+      name: photo.name || photo.title || "Photo",
+      url: photo.url,
+      thumbnailUrl: photo.thumbnailUrl || photo.url,
+      rating: photo.rating ?? 0,
+      isUploading: false,
+      file: null,
+      needProcess: false,
+      isDuplicate: false,
+      originalFileName:
+        photo.originalFileName || photo.name || photo.title || "photo",
+      isCheckingDuplicates: false,
+      status: "processed",
+    });
+    existingIds.add(strId);
+  }
+
+  contextPhotos.value.push(...newPhotos);
+  clearAllSelectionsAndScopes();
 };
 
 const showPhotoInfo = async (photo: ContextPhoto) => {
@@ -673,7 +771,7 @@ const clearContextPhotos = () => {
 
 const resetChat = async () => {
   try {
-    await api.get("/api/chat/reset");
+    api.get("/api/chat/reset");
   } catch {
     // silently ignore reset errors
   }
@@ -900,7 +998,7 @@ const resetChat = async () => {
 .message-row {
   display: flex;
   gap: var(--spacing-sm);
-  max-width: 720px;
+  max-width: 960px;
   width: 100%;
   margin: 0 auto;
   align-items: flex-start;
@@ -932,7 +1030,7 @@ const resetChat = async () => {
 .message-bubble {
   padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--radius-lg);
-  max-width: 75%;
+  max-width: 90%;
   position: relative;
 }
 
@@ -940,32 +1038,26 @@ const resetChat = async () => {
   background: var(--bg-container);
   border: 1px solid var(--border-color);
   border-top-left-radius: var(--radius-xs);
+  width: 80%;
 }
 
 .message-user .message-bubble {
   background: var(--bg-container);
-  color: white;
+  color: var(--text-primary);
   border-top-right-radius: var(--radius-xs);
+  width: 80%;
 }
 
 .message-text {
   margin: 0;
-  font-size: var(--font-size-sm);
+  font-size: 14px;
+
   line-height: var(--line-height-relaxed);
   word-break: break-word;
 }
 
-.message-time {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  margin-top: var(--spacing-xs);
-  display: block;
-  opacity: 0.7;
-}
-
 .message-user .message-time {
   color: rgba(255, 255, 255, 0.7);
-  text-align: right;
 }
 
 /* ── Typing Indicator ── */
@@ -1016,7 +1108,7 @@ const resetChat = async () => {
 }
 
 .chat-input-area > * {
-  max-width: 720px;
+  max-width: 960px;
   margin-left: auto;
   margin-right: auto;
 }
@@ -1063,10 +1155,6 @@ const resetChat = async () => {
     padding: var(--spacing-md);
   }
 
-  .message-bubble {
-    max-width: 85%;
-  }
-
   .chat-input-area {
     padding: var(--spacing-sm) var(--spacing-md) var(--spacing-md);
   }
@@ -1097,6 +1185,34 @@ const resetChat = async () => {
   }
 }
 
+/* ── Message Footer ── */
+.message-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--spacing-xs);
+  gap: var(--spacing-sm);
+}
+
+.message-time {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  opacity: 0.7;
+}
+
+.msg-add-to-btn {
+  font-size: var(--font-size-xs) !important;
+  color: var(--text-tertiary) !important;
+  height: 20px !important;
+  padding: 0 6px !important;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.message-bubble:hover .msg-add-to-btn {
+  opacity: 1;
+}
+
 /* ── Message Photos Grid ── */
 .message-photos {
   margin-top: var(--spacing-sm);
@@ -1115,8 +1231,8 @@ const resetChat = async () => {
 
 .message-photos-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  gap: var(--spacing-md);
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--spacing-sm);
 }
 
 .message-photo-item {
@@ -1125,8 +1241,13 @@ const resetChat = async () => {
 }
 
 @media (max-width: 768px) {
+  .message-user .message-bubble,
+  .message-assistant .message-bubble {
+    width: 92%;
+  }
+
   .message-photos-grid {
-    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
@@ -1142,7 +1263,8 @@ const resetChat = async () => {
 
 /* ── Markdown content (assistant messages) ── */
 .message-assistant .message-bubble :deep(.markdown-content) {
-  font-size: var(--font-size-sm);
+  font-size: 14px;
+
   line-height: var(--line-height-relaxed);
   word-break: break-word;
   margin: 0;

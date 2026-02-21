@@ -4,6 +4,7 @@ import type { MenuOption } from "naive-ui";
 import { usePhotosStore } from "@/stores/photos";
 import { useCollectionsStore } from "@/stores/collections";
 import { useSeriesStore } from "@/stores/series";
+import { useUserStore } from "@/stores/userStore";
 import { useRouter } from "vue-router";
 
 // Centralized tool config: single source of truth for icons & availability
@@ -30,7 +31,13 @@ export function useMainMenu(closeMobileMenu?: () => void) {
   const photosStore = usePhotosStore();
   const collectionsStore = useCollectionsStore();
   const seriesStore = useSeriesStore();
+  const userStore = useUserStore();
   const isMobile = ref(window.innerWidth < 768);
+
+  // Check if user is demo
+  const isDemoUser = computed(() => {
+    return userStore.user?.email === "demo@photorekatest.com";
+  });
 
   // Get real collections and series from stores
   const collections = computed(() =>
@@ -305,6 +312,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     label: "Chat",
     key: "chat",
     icon: renderIcon(toolIcon("chat")),
+    disabled: isDemoUser.value,
   }));
 
   // Complete menu structure
@@ -318,11 +326,11 @@ export function useMainMenu(closeMobileMenu?: () => void) {
       librarySection.value,
       exploreSection.value,
       createSection.value,
-      // {
-      //   type: "divider",
-      //   key: "create-divider",
-      // } as MenuOption,
-      // chatOption.value,
+      {
+        type: "divider",
+        key: "create-divider",
+      } as MenuOption,
+      chatOption.value,
       {
         type: "divider",
         key: "chat-divider",
@@ -349,5 +357,6 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     collections,
     series,
     exclusiveMenuMode,
+    isDemoUser,
   };
 }
