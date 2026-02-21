@@ -4,6 +4,17 @@ import redis from '@adonisjs/redis/services/main'
 import llmRateLimitConfig from '#config/llm_rate_limit'
 
 /**
+ * Opciones por-ruta que sobreescriben el config global
+ */
+export type LlmRateLimitOptions = {
+  perMinute?: number
+  perHour?: number
+  perDay?: number
+  cooldownSeconds?: number
+  keyPrefix?: string // permite namespace separado en Redis (ej: 'chat')
+}
+
+/**
  * Middleware de rate limiting específico para endpoints que hacen llamadas a LLM
  *
  * Protecciones implementadas:
@@ -15,14 +26,28 @@ import llmRateLimitConfig from '#config/llm_rate_limit'
  * - Cooldown automático tras exceder límites
  * - Whitelist para IPs y usuarios privilegiados
  * - Estrategias de fallo configurables
+ * - Opciones por-ruta para configuración específica de endpoint
  */
 export default class LlmRateLimitMiddleware {
-  async handle({ request, response, auth }: HttpContext, next: NextFn) {
+  async handle(
+    { request, response, auth }: HttpContext,
+    next: NextFn,
+    options: LlmRateLimitOptions = {}
+  ) {
     // Si el middleware está deshabilitado, continuar
     if (!llmRateLimitConfig.enabled) {
       await next()
       return
     }
+
+    // Resolver límites efectivos: las opciones por-ruta tienen prioridad sobre el config global
+    const limits = {
+      perMinute: options.perMinute ?? llmRateLimitConfig.limits.perMinute,
+      perHour: options.perHour ?? llmRateLimitConfig.limits.perHour,
+      perDay: options.perDay ?? llmRateLimitConfig.limits.perDay,
+    }
+    const cooldownSeconds = options.cooldownSeconds ?? llmRateLimitConfig.cooldownSeconds
+    const keyPrefix = options.keyPrefix ? `llm_rate_limit_${options.keyPrefix}` : 'llm_rate_limit'
 
     try {
       // Identificadores para tracking
@@ -40,7 +65,7 @@ export default class LlmRateLimitMiddleware {
       }
 
       // Verificar si está en cooldown
-      const cooldownKey = `llm_rate_limit:cooldown:${identifier}`
+      const cooldownKey = `${keyPrefix}:cooldown:${identifier}`
       const isInCooldown = await redis.get(cooldownKey)
 
       if (isInCooldown) {
@@ -54,9 +79,9 @@ export default class LlmRateLimitMiddleware {
       }
 
       // Claves para diferentes ventanas de tiempo
-      const minuteKey = `llm_rate_limit:minute:${identifier}:${this.getCurrentMinute()}`
-      const hourKey = `llm_rate_limit:hour:${identifier}:${this.getCurrentHour()}`
-      const dayKey = `llm_rate_limit:day:${identifier}:${this.getCurrentDay()}`
+      const minuteKey = `${keyPrefix}:minute:${identifier}:${this.getCurrentMinute()}`
+      const hourKey = `${keyPrefix}:hour:${identifier}:${this.getCurrentHour()}`
+      const dayKey = `${keyPrefix}:day:${identifier}:${this.getCurrentDay()}`
 
       // Obtener contadores actuales
       const [minuteCount, hourCount, dayCount] = await Promise.all([
@@ -70,40 +95,40 @@ export default class LlmRateLimitMiddleware {
       const currentDay = parseInt(dayCount || '0', 10)
 
       // Calcular límites restantes
-      const remainingMinute = llmRateLimitConfig.limits.perMinute - currentMinute
-      const remainingHour = llmRateLimitConfig.limits.perHour - currentHour
-      const remainingDay = llmRateLimitConfig.limits.perDay - currentDay
+      const remainingMinute = limits.perMinute - currentMinute
+      const remainingHour = limits.perHour - currentHour
+      const remainingDay = limits.perDay - currentDay
 
       // Verificar límites (el más restrictivo primero)
       let limitExceeded = false
       let limitType = ''
       let retryAfter = 0
 
-      if (currentMinute >= llmRateLimitConfig.limits.perMinute) {
+      if (currentMinute >= limits.perMinute) {
         limitExceeded = true
         limitType = 'minute'
         retryAfter = 60
-      } else if (currentHour >= llmRateLimitConfig.limits.perHour) {
+      } else if (currentHour >= limits.perHour) {
         limitExceeded = true
         limitType = 'hour'
         retryAfter = 3600
-      } else if (currentDay >= llmRateLimitConfig.limits.perDay) {
+      } else if (currentDay >= limits.perDay) {
         limitExceeded = true
         limitType = 'day'
         retryAfter = 86400
       }
 
       // Agregar headers informativos
-      response.header('X-RateLimit-Limit-Minute', llmRateLimitConfig.limits.perMinute.toString())
-      response.header('X-RateLimit-Limit-Hour', llmRateLimitConfig.limits.perHour.toString())
-      response.header('X-RateLimit-Limit-Day', llmRateLimitConfig.limits.perDay.toString())
+      response.header('X-RateLimit-Limit-Minute', limits.perMinute.toString())
+      response.header('X-RateLimit-Limit-Hour', limits.perHour.toString())
+      response.header('X-RateLimit-Limit-Day', limits.perDay.toString())
       response.header('X-RateLimit-Remaining-Minute', Math.max(0, remainingMinute).toString())
       response.header('X-RateLimit-Remaining-Hour', Math.max(0, remainingHour).toString())
       response.header('X-RateLimit-Remaining-Day', Math.max(0, remainingDay).toString())
 
       if (limitExceeded) {
         // Activar cooldown
-        await redis.setex(cooldownKey, llmRateLimitConfig.cooldownSeconds, '1')
+        await redis.setex(cooldownKey, cooldownSeconds, '1')
 
         response.header('Retry-After', retryAfter.toString())
         return response.tooManyRequests({
@@ -111,9 +136,9 @@ export default class LlmRateLimitMiddleware {
           message: this.getErrorMessage(limitType),
           retryAfter,
           limits: {
-            minute: { limit: llmRateLimitConfig.limits.perMinute, remaining: remainingMinute },
-            hour: { limit: llmRateLimitConfig.limits.perHour, remaining: remainingHour },
-            day: { limit: llmRateLimitConfig.limits.perDay, remaining: remainingDay },
+            minute: { limit: limits.perMinute, remaining: remainingMinute },
+            hour: { limit: limits.perHour, remaining: remainingHour },
+            day: { limit: limits.perDay, remaining: remainingDay },
           },
           type: limitType,
         })
@@ -135,17 +160,17 @@ export default class LlmRateLimitMiddleware {
 
       // Log para monitoreo
       if (llmRateLimitConfig.logLevel === 'warning' || llmRateLimitConfig.logLevel === 'all') {
-        const warningLimit = llmRateLimitConfig.limits.perDay * llmRateLimitConfig.warningThreshold
+        const warningLimit = limits.perDay * llmRateLimitConfig.warningThreshold
         if (currentDay >= warningLimit) {
           console.warn(
-            `[LLM Rate Limit Warning] Usuario ${userId} (IP: ${ip}) ha usado ${currentDay + 1}/${llmRateLimitConfig.limits.perDay} llamadas diarias`
+            `[LLM Rate Limit Warning] Usuario ${userId} (IP: ${ip}) ha usado ${currentDay + 1}/${limits.perDay} llamadas diarias`
           )
         }
       }
 
       if (llmRateLimitConfig.logLevel === 'all') {
         console.log(
-          `[LLM Rate Limit] Usuario ${userId} - Minute: ${currentMinute + 1}/${llmRateLimitConfig.limits.perMinute}, Hour: ${currentHour + 1}/${llmRateLimitConfig.limits.perHour}, Day: ${currentDay + 1}/${llmRateLimitConfig.limits.perDay}`
+          `[LLM Rate Limit] Usuario ${userId} - Minute: ${currentMinute + 1}/${limits.perMinute}, Hour: ${currentHour + 1}/${limits.perHour}, Day: ${currentDay + 1}/${limits.perDay}`
         )
       }
 

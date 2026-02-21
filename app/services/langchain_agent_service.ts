@@ -5,6 +5,7 @@ import { HumanMessage, AIMessage, ToolMessage, SystemMessage } from '@langchain/
 import PhotoManager from '../managers/photo_manager.js'
 import SearchTextService from './search_text_service.js'
 import AgentToolsService from './agent_tools_service.js'
+import QueryService from './query_service.js'
 
 // ─────────────────────────────────────────────────────────────
 // Model provider config
@@ -12,111 +13,19 @@ import AgentToolsService from './agent_tools_service.js'
 
 type ModelProvider = 'openai' | 'gemini'
 
-// ─────────────────────────────────────────────────────────────
-// Rule-based query router — decides which model handles the turn
-// ─────────────────────────────────────────────────────────────
-
 /**
- * Returns 'openai' for queries that require aesthetic sensitivity, curation,
- * artistic judgment, or nuanced creative advice; returns 'gemini' for mechanical
- * data-retrieval queries (search, filter, stats, collections, etc.).
- *
- * The env var AGENT_PROVIDER can override routing entirely when set.
+ * Uses an LLM call (Gemini Flash Lite) to determine whether the message is a
+ * purely curatorial query (aesthetic evaluation, portfolio critique, contest
+ * advice, aesthetic sequencing) — if so returns 'openai', otherwise 'gemini'.
+ * The env var AGENT_PROVIDER overrides routing entirely when set.
  */
-export function routeProvider(message: string): ModelProvider {
+async function routeProvider(message: string, queryService: QueryService): Promise<ModelProvider> {
   // Hard override: if the env var is set to a specific provider, always use it
   const envOverride = process.env.AGENT_PROVIDER
   if (envOverride === 'openai' || envOverride === 'gemini') return envOverride
 
-  const q = message.toLowerCase()
-
-  // ── Aesthetic / curatorial signals → OpenAI ──────────────────
-  const aestheticPatterns = [
-    // English patterns
-    /\bcritique?\b/,
-    /\breview\b/,
-    /\badvice\b|\badvise\b/,
-    /\bimprove\b|\bimprovement\b/,
-    /\bweakness\b|\bweak point\b/,
-    /\bstrength\b/,
-    /\bfeedback\b/,
-    /\bbest photo\b|\bbest shot\b/,
-    /\bworst photo\b/,
-    /\bcurate\b|\bcuration\b/,
-    /\branking\b|\brank\b/,
-    /\bportfolio\b/,
-    /\baesthet/,
-    /\bcreative\b/,
-    /\bartistic\b|\bart\b/,
-    /\bbeautiful\b|\bbeauty\b/,
-    /\bexpressive\b/,
-    /\bgenuine\b|\bauthentic\b/,
-    /\bsuggesti/,
-    /\brecomend/,
-    /\bopinion\b/,
-    /\bwhat do you think\b/,
-    /\banalyze\b|\banalyz/,
-    /\bevaluat/,
-    /\bassess\b/,
-    /\bvision\b|\beye\b/,
-    /\belegance\b/,
-    /\bimpact\b/,
-    /\bsubtl/,
-    /\bnuance\b/,
-    /\bsen(?:sibility|sitiv)/,
-    /\bhow (does|do|is).*feel\b/,
-    /\bshow me.*best\b/,
-    /\bwhich.*stands? out\b/,
-
-    // Spanish patterns
-    /\bcrítica\b|\bcrítico\b|\bcritica\b/,
-    /\breseña\b/,
-    /\bconse(?:jo|jero)\b/,
-    /\bmejorar\b|\bmejoría\b/,
-    /\bdebilidad(?:es)?\b|\bpunto débil\b|\bpuntos débiles\b/,
-    /\bfortaleza\b|\bfuerte\b|\bpunto fuerte\b/,
-    /\bcommentario\b|\bcomentarios\b/,
-    /\bmejor foto\b|\bmejor disparo\b/,
-    /\bpeor foto\b|\bpeor disparo\b/,
-    /\bcuración\b|\bcurada?\b/,
-    /\bselecciona\b|\bseleccionar\b|\bselección\b/,
-    /\branking\b|\bclasific(?:ar|ación)\b|\bordenar artísticamente\b/,
-    /\bportafolio\b/,
-    /\bestét(?:ico|ica)\b|\bestética\b/,
-    /\bnarrativa?\b|\bhistoria\b|\brelato\b/,
-    /\bnarración\b|\bnarradora?\b/,
-    /\bcreativa?\b|\bcreatividad\b/,
-    /\bartística?\b|\barte\b/,
-    /\bbella?\b|\bbelleza\b/,
-    /\bexpresiva?\b|\bexpresividad\b/,
-    /\bauténtica?\b|\bautenticidad\b|\briginal\b/,
-    /\bsugerencia\b|\bsugerencias\b/,
-    /\brecomendación\b|\brecomendaciones\b/,
-    /\bopinión\b|\bopiniones\b/,
-    /\bqué piensas\b|\bqué opinas\b|\btu opinión\b/,
-    /\ban[aá]lisis\b|\banalizar\b|\banaliza\b/,
-    /\bevaluaci[óo]n\b|\bevalú[aá]\b|\bevalua\b/,
-    /\bvaloraci[óo]n\b|\bvalora\b/,
-    /\bdescripci[óo]n\b|\bdescribe\b/,
-    /\bvisi[óo]n\b|\bojo\b|\bojos art[ií]sticos\b/,
-    /\belegancia\b/,
-    /\bimpacto\b/,
-    /\bsutileza\b|\bsutil\b/,
-    /\bmatiz\b|\bmatices\b/,
-    /\bsensibilidad\b|\bsensible\b/,
-    /\bc[óo]mo.*siente\b|\bc[óo]mo se siente\b/,
-    /\bmuestrame.*mejor\b|\bmuéstrame\b|\bmuestrame\b/,
-    /\bcu[aá]l destaca\b|\bcu[aá]les destacan\b|\bqué sobresale\b/,
-  ]
-
-  if (aestheticPatterns.some((p) => p.test(q))) {
-    return 'openai'
-  }
-
-  // ── Mechanical / data-retrieval signals → Gemini ─────────────
-  // (filter, search, stats, collections, find, list, count, etc.)
-  // Default fallback is also Gemini for pure retrieval tasks.
-  return 'gemini'
+  const isCuratorial = await queryService.classifyCuratorialQuery(message)
+  return isCuratorial ? 'openai' : 'gemini'
 }
 
 function createChatModel(provider: ModelProvider = 'openai', maxTokensOverride?: number) {
@@ -230,7 +139,7 @@ All available tools belong to one of three groups, indicated by their [TAG] pref
 - If you need to reference a concrete photo by text, you can use the filename, never the ID.
 - Artistic scores are from 0 to 10. Scores >= 7 are considered strong. Use scores for your internal reasoning, but do not mention them unless they are relevant to the user's question. Don't evaluate photos solely based on scores — always consider the actual image/descriptions provided.
 - Always respond in the same language the user writes in (but for some tools you will need english prompts — that's fine, just keep the final output in the user's language).
-- Be kind and helpful. At the end of your response, you can suggest concrete next steps or questions the user can ask to explore further, always based on what you can actually do with the tools available to you.
+- Be kind and helpful. At the end of your response, you can suggest concrete next steps or questions the user can ask to explore further, always based on what you can actually do with the tools available to you. Be conservative with suggestions; do not suggest if you are not sure you can do that with the tools.
 
 ## Catalog advice guideline
 Whenever the user asks for advice, improvement tips, a general critique, weak points, strengths, or any holistic question about their photographic practice or catalog, you MUST call overall_catalog_view as your FIRST action — it returns catalog patterns, visual aspects statistics, and artistic scores in a single call, giving you everything you need to provide well-rounded advice.
@@ -268,11 +177,13 @@ export default class LangchainAgentService {
   private photoManager: PhotoManager
   private searchService: SearchTextService
   private toolsService: AgentToolsService
+  private queryService: QueryService
 
   constructor() {
     this.photoManager = new PhotoManager()
     this.searchService = new SearchTextService()
     this.toolsService = new AgentToolsService(this.photoManager, this.searchService)
+    this.queryService = new QueryService()
   }
 
   // ───────────────────────────────────────────────────────────
@@ -420,8 +331,11 @@ export default class LangchainAgentService {
     const history: ChatMessage[] = sessionHistories.get(userId) ?? []
 
     const foundPhotoIds: number[] = []
-    const provider = routeProvider(message)
+    const provider = await routeProvider(message, this.queryService)
     console.log(`[Agent] 🤖 Routed to provider: ${provider.toUpperCase()}`)
+    console.log(
+      `[Agent] 🔍 Query classified as: ${provider === 'openai' ? 'CURATORIAL' : 'GENERAL'}`
+    )
     const tools = this.toolsService.createTools(userId, foundPhotoIds, provider)
     // For Gemini, tool_choice defaults to 'auto', which lets it bypass tool calls entirely
     // and answer the user directly (e.g. "Fetching your collections." with no actual fetch).
@@ -499,22 +413,24 @@ export default class LangchainAgentService {
     console.log(`[Agent] 🏁 Requesting structured final answer…`)
     // Use a higher token budget for Phase 2 — the structured output wraps the
     // entire response in JSON, so it needs more room than the data-fetching calls.
-    const finalAnswerModel = createChatModel(provider, 3000).withStructuredOutput(FINAL_ANSWER_SCHEMA)
+    const finalAnswerModel = createChatModel(provider, 3000).withStructuredOutput(
+      FINAL_ANSWER_SCHEMA
+    )
     const structured = (await finalAnswerModel.invoke(messages)) as {
       text: string
       photo_ids: number[]
     }
     // Strip any leaked internal-context annotations the model may have echoed.
     const rawOutput = structured.text ?? ''
-    const output = rawOutput
-      .replace(/\[(?:Shown photos|INTERNAL_CONTEXT)[^\]]*\]\s*/gi, '')
-      .trim()
+    const output = rawOutput.replace(/\[(?:Shown photos|INTERNAL_CONTEXT)[^\]]*\]\s*/gi, '').trim()
     foundPhotoIds.push(...(structured.photo_ids ?? []))
 
     console.log(
       `[Agent] ✅ Done. Tools used: [${toolsUsed.join(', ') || 'none'}] | Photos: [${foundPhotoIds.join(', ')}]`
     )
-    console.log(`[Agent] 📤 Output preview: "${output.slice(0, 200)}${output.length > 200 ? '…' : ''}"`)
+    console.log(
+      `[Agent] 📤 Output preview: "${output.slice(0, 200)}${output.length > 200 ? '…' : ''}"`
+    )
     this.persistHistory(userId, history, message, contextPhotoIds, output, foundPhotoIds)
     return {
       output,
@@ -525,4 +441,3 @@ export default class LangchainAgentService {
     }
   }
 }
-

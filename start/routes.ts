@@ -252,9 +252,17 @@ router
       CatalogController,
       'photoInsightSpecific',
     ])
+  })
+  .use([middleware.auth(), middleware.readOnly(), middleware.llmRateLimit()]) // Apply auth, readOnly and LLM rate limiting
 
-    // Agentic chat endpoint (Langchain + GPT-5)
+// Chat endpoints - separate group with stricter rate limiting
+router
+  .group(() => {
     router.post('/api/chat', [ChatController, 'chat'])
     router.get('/api/chat/reset', [ChatController, 'reset'])
   })
-  .use([middleware.auth(), middleware.readOnly(), middleware.llmRateLimit()]) // Apply auth, readOnly and LLM rate limiting
+  .use([
+    middleware.auth(),
+    middleware.readOnly(),
+    middleware.llmRateLimit({ perMinute: 5, perHour: 30, perDay: 70, keyPrefix: 'chat' }),
+  ])

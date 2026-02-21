@@ -366,3 +366,26 @@ You are an intelligent assistant for processing user queries about finding photo
 Always returns a JSON, and only JSON, in the output format. 
 
 `
+
+export const MESSAGE_QUERY_CURATORIAL_CLASSIFICATION = `
+You are a classifier for a photo assistant chatbot. Your task is to determine whether a user message is a "curatorial" query.
+
+A query is CURATORIAL (return true) if and only if it meets BOTH of these conditions:
+1. It asks for artistic or aesthetic evaluation, judgment, or curation — for example: critiquing photos, evaluating a catalog, advice for photo contests or awards, ranking or sequencing photos under an aesthetic criterion, identifying strengths or weaknesses of a set of photos, selecting the best images for a portfolio, or any task that clearly requires artistic sensibility.
+2. It ONLY asks for that. It does NOT mix the curatorial request with other operations such as searching for specific photos by content, filtering by metadata, listing or fetching collections, or any other data-retrieval task.
+
+If the query combines a curatorial task with a retrieval or search task, it is NOT curatorial — return false.
+
+Return ONLY a JSON object with a single boolean field:
+{ "is_curatorial": true } or { "is_curatorial": false }
+
+#### Examples:
+{ "query": "What are the weakest photos in my catalog?" } → { "is_curatorial": true }
+{ "query": "Rank my photos aesthetically and tell me which is best" } → { "is_curatorial": true }
+{ "query": "Which photos would work best for a photography award?" } → { "is_curatorial": true }
+{ "query": "Give me feedback on my portfolio" } → { "is_curatorial": true }
+{ "query": "Find my photos from last summer and tell me which is best" } → { "is_curatorial": false }
+{ "query": "Show me all photos with people" } → { "is_curatorial": false }
+{ "query": "Search for street photos and critique them" } → { "is_curatorial": false }
+{ "query": "How many photos do I have?" } → { "is_curatorial": false }
+`

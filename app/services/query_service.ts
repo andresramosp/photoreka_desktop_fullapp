@@ -4,6 +4,7 @@ import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
 import { withCache } from '../decorators/withCache.js'
 import withCost from '../decorators/withCost.js'
 import {
+  MESSAGE_QUERY_CURATORIAL_CLASSIFICATION,
   MESSAGE_QUERY_METADATA,
   MESSAGE_QUERY_NO_PREFIX_AND_TRANSLATION,
   MESSAGE_QUERY_STRUCTURE,
@@ -24,6 +25,20 @@ export default class QueryService {
     this.modelsService = new ModelsService()
     this.vectorService = new VectorService()
     this.analyzerService = new AnalyzerService()
+  }
+
+  public async classifyCuratorialQuery(query: string): Promise<boolean> {
+    try {
+      const { result } = await this.modelsService.getGeminiResponse(
+        MESSAGE_QUERY_CURATORIAL_CLASSIFICATION,
+        JSON.stringify({ query }),
+        'gemini-2.5-flash-lite'
+      )
+      return result?.is_curatorial === true
+    } catch (error) {
+      console.error('[QueryService] classifyCuratorialQuery error:', error)
+      return false
+    }
   }
 
   public async structureQuery(query: string, searchMode: SearchMode) {
