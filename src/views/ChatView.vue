@@ -1032,6 +1032,7 @@ const resetChat = async () => {
   border-radius: var(--radius-lg);
   max-width: 90%;
   position: relative;
+  color: var(--text-primary);
 }
 
 .message-assistant .message-bubble {
