@@ -94,19 +94,19 @@ export function routeProvider(message: string): ModelProvider {
     /\brecomendación\b|\brecomendaciones\b/,
     /\bopinión\b|\bopiniones\b/,
     /\bqué piensas\b|\bqué opinas\b|\btu opinión\b/,
-    /\ban[aá]lisis\b|\banalizar\b/,
-    /\bevaluación\b|\bevalúa\b/,
-    /\bvaloración\b|\bvalorar\b/,
-    /\bdescripción\b|\bdescribe\b/,
-    /\bvisión\b|\bojo\b|\bojos artísticos\b/,
+    /\ban[aá]lisis\b|\banalizar\b|\banaliza\b/,
+    /\bevaluaci[óo]n\b|\bevalú[aá]\b|\bevalua\b/,
+    /\bvaloraci[óo]n\b|\bvalora\b/,
+    /\bdescripci[óo]n\b|\bdescribe\b/,
+    /\bvisi[óo]n\b|\bojo\b|\bojos art[ií]sticos\b/,
     /\belegancia\b/,
     /\bimpacto\b/,
     /\bsutileza\b|\bsutil\b/,
     /\bmatiz\b|\bmatices\b/,
     /\bsensibilidad\b|\bsensible\b/,
-    /\bcómo.*siente\b|\bcómo se siente\b/,
-    /\bmuestrame.*mejor\b|\bmuestrá?me\b/,
-    /\bcuál destaca\b|\bcuáles destacan\b|\bqué sobresale\b/,
+    /\bc[óo]mo.*siente\b|\bc[óo]mo se siente\b/,
+    /\bmuestrame.*mejor\b|\bmuéstrame\b|\bmuestrame\b/,
+    /\bcu[aá]l destaca\b|\bcu[aá]les destacan\b|\bqué sobresale\b/,
   ]
 
   if (aestheticPatterns.some((p) => p.test(q))) {
@@ -124,6 +124,7 @@ function createChatModel(provider: ModelProvider = 'openai') {
     return new ChatGoogleGenerativeAI({
       apiKey: process.env.GEMINI_API_KEY,
       model: process.env.GEMINI_MODEL ?? 'gemini-2.5-flash',
+      maxOutputTokens: Number(process.env.AGENT_MAX_TOKENS ?? 750),
       safetySettings: [
         {
           category: HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -147,6 +148,7 @@ function createChatModel(provider: ModelProvider = 'openai') {
   return new ChatOpenAI({
     apiKey: process.env.OPENAI_KEY,
     model: process.env.OPENAI_MODEL ?? 'gpt-5',
+    maxTokens: Number(process.env.AGENT_MAX_TOKENS ?? 750),
   })
 }
 
@@ -506,18 +508,6 @@ export default class LangchainAgentService {
   ): Promise<AgentChatResult> {
     const history: ChatMessage[] = sessionHistories.get(userId) ?? []
 
-    let debugHistory =
-      `[Agent] 📚 Session history (${history.length} messages):\n` +
-      (history.length === 0
-        ? '  (empty)'
-        : history
-            .map(
-              (m, i) =>
-                `  [${i}] ${m.role.toUpperCase()}: "${m.content.slice(0, 120)}${m.content.length > 120 ? '…' : ''}"` +
-                (m.photoIds?.length ? ` [photoIds: ${m.photoIds.join(', ')}]` : '')
-            )
-            .join('\n'))
-
     const foundPhotoIds: number[] = []
     const provider = routeProvider(message)
     console.log(`[Agent] 🤖 Routed to provider: ${provider.toUpperCase()}`)
@@ -540,16 +530,13 @@ export default class LangchainAgentService {
     for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
       console.log(`[Agent] 🔄 Iteration ${iter + 1}/${MAX_ITERATIONS} — calling model…`)
       const debugMessages = formatMessagesForDebug(messages)
-      // console.log(
-      //   `[Agent] 📨 Messages sent to model (iter ${iter + 1}):\n${'═'.repeat(60)}\n${debugMessages}`
-      // )
 
       const response = await modelWithTools.invoke(messages)
-      messages.push(response)
 
       const toolCalls = response.tool_calls ?? []
 
       if (toolCalls.length === 0) {
+        messages.push(response)
         const output = this.resolveOutput(response, messages)
         this.rescuePhotoIds(intermediateSteps, foundPhotoIds)
         console.log(
@@ -566,6 +553,20 @@ export default class LangchainAgentService {
           intermediateSteps,
           totalIterations: iter + 1,
         }
+      }
+
+      // When the model emits text AND tool calls in the same response, the
+      // text is intermediate reasoning, not the final answer. Strip it from
+      // the message pushed into the conversation so the model is forced to
+      // produce a full, self-contained answer in the final (tool-free) turn.
+      const hasIntermediateText = !!extractTextContent(response.content).trim()
+      if (hasIntermediateText) {
+        console.log(`[Agent]   ℹ️  Stripping intermediate text from tool-call response to preserve final-answer quality`)
+        messages.push(
+          new AIMessage({ content: '', tool_calls: toolCalls })
+        )
+      } else {
+        messages.push(response)
       }
 
       console.log(
@@ -585,7 +586,7 @@ export default class LangchainAgentService {
       `[Agent] ⚠️  Max iterations (${MAX_ITERATIONS}) reached. Requesting final response without tools…`
     )
     const finalResponse = await createChatModel().invoke(messages)
-    const output = extractTextContent(finalResponse.content)
+    const output = this.resolveOutput(finalResponse, messages)
     this.rescuePhotoIds(intermediateSteps, foundPhotoIds)
     console.log(
       `[Agent] ✅ Final answer (max-iter fallback). Tools used: [${toolsUsed.join(', ')}]\n`
