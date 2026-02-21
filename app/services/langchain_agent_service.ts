@@ -57,6 +57,7 @@ function createChatModel(provider: ModelProvider = 'openai', maxTokensOverride?:
   return new ChatOpenAI({
     apiKey: process.env.OPENAI_KEY,
     model: process.env.OPENAI_MODEL ?? 'gpt-5',
+    reasoning: { effort: 'low' },
     // maxTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
   })
 }
