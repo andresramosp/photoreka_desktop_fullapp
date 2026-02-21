@@ -47,6 +47,7 @@ router.group(() => {
   router.post('/api/invites/generate', [InvitesController, 'generateInvite'])
   router.get('/api/invites', [InvitesController, 'listInvites'])
   router.post('/api/invites/send', [InvitesController, 'sendInvite'])
+  router.post('/api/invites/send-grant', [InvitesController, 'sendGrant'])
 })
 // .use(middleware.auth())
 

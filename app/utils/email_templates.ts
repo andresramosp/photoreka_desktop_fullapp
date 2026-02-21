@@ -386,3 +386,62 @@ export function inviteUserTemplate(
 
   return baseLayout(content, "You're invited to Photoreka")
 }
+
+// Early access email (plain style, low-promo, user requested access)
+
+export function grantUserTemplate(
+  inviterName: string,
+  inviteCode: string,
+  registerUrl: string
+): string {
+  const content = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+                font-size: 15px; 
+                line-height: 1.7; 
+                color: ${TEXT_COLOR};">
+
+      <p style="margin: 0 0 16px;">
+        Hi,
+      </p>
+
+      <p style="margin: 0 0 16px;">
+        Thanks for requesting early access to Photoreka.
+      </p>
+
+      <p style="margin: 0 0 16px;">
+        You can now create your account using the link below:
+      </p>
+
+      <p style="margin: 0 0 20px; word-break: break-all;">
+        <a href="${registerUrl}" style="color: ${PRIMARY_COLOR}; text-decoration: none;">
+          ${registerUrl}
+        </a>
+      </p>
+
+      <p style="margin: 0 0 16px;">
+        During this early phase, you can upload and process up to 
+        <strong>1,500 photos free of charge</strong> to explore the platform and work with your archive.
+      </p>
+
+      <p style="margin: 0 0 16px;">
+        Photoreka is still evolving. You may notice small rough edges, but your catalog and edits are meant to stay with you as the platform matures.
+      </p>
+
+      <p style="margin: 0 0 16px;">
+        If anything feels unclear, unstable, or especially useful, just reply to this email. 
+        Your feedback directly shapes what we improve next.
+      </p>
+
+      <p style="margin: 24px 0 0;">
+        — ${inviterName}
+      </p>
+
+      <p style="margin: 4px 0 0; font-size: 13px; color: ${MUTED_TEXT_COLOR};">
+        Photoreka
+      </p>
+
+    </div>
+  `
+
+  return baseLayout(content, 'Your Photoreka early access')
+}

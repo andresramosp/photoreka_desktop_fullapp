@@ -3,6 +3,7 @@ import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
 import PhotoManager from '../managers/photo_manager.js'
 import SearchTextService from './search_text_service.js'
+import { APP_KNOWLEDGE_SECTIONS, AppKnowledgeSection } from '../utils/app_knowledge_content.js'
 import ScoringService from './scoring_service.js'
 import PhotoImageService from './photo_image_service.js'
 import StatsService from './stats_service.js'
@@ -82,6 +83,16 @@ export const FindPhotosFromPhotoSchema = z.object({
 export const GetVisualAspectsStatsSchema = z.object({})
 
 export const GetArtisticScoresStatsSchema = z.object({})
+
+export const AppKnowledgeSchema = z.object({
+  section: z
+    .enum(['terms_and_privacy', 'usage_and_help', 'all'])
+    .optional()
+    .default('all')
+    .describe(
+      'Which section to retrieve: terms_and_privacy (legal terms and privacy policy), usage_and_help (general usage guide and FAQ), or all (default — returns both sections).'
+    ),
+})
 
 export const OverallCatalogViewSchema = z.object({})
 
@@ -310,6 +321,8 @@ export const TOOL_DESCRIPTIONS = {
   overall_catalog_view:
     '[CATALOG_INSIGHT] Get a single combined report of the entire catalog: catalog patterns (recurring themes, subjects, narrative motifs), visual aspects distribution, and artistic scores statistics. Use this as the FIRST tool whenever the user asks for advice on improving their photography, critique of their catalog, identification of weak points or strengths, general feedback on their style, or any holistic question about their photographic practice. This tool replaces calling get_catalog_patterns + stats_visual_aspects + stats_artistic_scores individually — it returns all of that data in one shot.',
 
+  app_knowledge:
+    "[BASIC_TOOLS] Get static information about the Photoreka application itself. Use this whenever the user asks about how the app works, what features are available, how to use a specific feature, pricing, data limits, privacy policy, terms of use, data handling, account management, or any general help question unrelated to their photo catalog. Returns one or both sections: 'terms_and_privacy' (legal terms and privacy policy) and 'usage_and_help' (feature overview, FAQ, tips).",
 } as const
 
 // ─────────────────────────────────────────────────────────────
@@ -742,6 +755,26 @@ export default class AgentToolsService {
       }
     )
 
+    // ── Tool: app_knowledge ────────────────────────────────
+    const appKnowledge = tool(
+      async ({ section = 'all' }): Promise<string> => {
+        try {
+          if (section === 'all') {
+            return JSON.stringify(APP_KNOWLEDGE_SECTIONS, null, 2)
+          }
+          const key = section as AppKnowledgeSection
+          return JSON.stringify({ section: key, content: APP_KNOWLEDGE_SECTIONS[key] }, null, 2)
+        } catch (error) {
+          return JSON.stringify({ error: `Failed to retrieve app knowledge: ${error.message}` })
+        }
+      },
+      {
+        name: 'app_knowledge',
+        description: TOOL_DESCRIPTIONS.app_knowledge,
+        schema: AppKnowledgeSchema,
+      }
+    )
+
     // ── Tool: fetch_collections ────────────────────────────
     const fetchCollections = tool(
       async (): Promise<string> => {
@@ -786,6 +819,7 @@ export default class AgentToolsService {
 
     return [
       getPhotoInfo,
+      appKnowledge,
       getCatalogPatterns,
       searchSemanticOverallStyle,
       searchSemanticContent,

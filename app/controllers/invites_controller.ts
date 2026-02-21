@@ -3,7 +3,7 @@ import Invite from '#models/invite'
 import { HttpContext } from '@adonisjs/core/http'
 import MailService from '#services/mail_service'
 import crypto from 'crypto'
-import { inviteUserTemplate } from '../utils/email_templates.js'
+import { inviteUserTemplate, grantUserTemplate } from '../utils/email_templates.js'
 import vine from '@vinejs/vine'
 
 export default class InvitesController {
@@ -171,6 +171,83 @@ export default class InvitesController {
     } catch (error) {
       return response.badRequest({
         message: 'Failed to send invitation',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
+   * Send grant (early access) email to a user
+   */
+  async sendGrant({ auth, request, response }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as unknown as User
+
+      // Validate request payload
+      const sendGrantValidator = vine.compile(
+        vine.object({
+          email: vine.string().email().normalizeEmail(),
+        })
+      )
+
+      const payload = await request.validateUsing(sendGrantValidator)
+
+      // Check if user is trying to grant themselves
+      if (payload.email === user.email) {
+        return response.badRequest({
+          message: 'You cannot grant access to yourself',
+        })
+      }
+
+      // Check if the email is already registered
+      const existingUser = await User.findBy('email', payload.email)
+      if (existingUser) {
+        return response.badRequest({
+          message: 'This email is already registered on Photoreka',
+        })
+      }
+
+      // Generate invitation code
+      const code = this.generateInviteCode()
+      const invite = await Invite.create({
+        code,
+        createdBy: user.id,
+      })
+
+      // Create registration URL with invite code
+      const registerUrl = `${this.getFrontendUrl()}/auth?inviteCode=${code}`
+
+      // Send grant email
+      try {
+        await this.mailService.sendEmail({
+          from: 'The Photoreka Team <hello@photoreka.com>',
+          to: payload.email,
+          subject: 'Your Photoreka early access is ready 🚀',
+          body: grantUserTemplate(user.name, code, registerUrl),
+        })
+      } catch (emailError) {
+        console.error('Error sending grant email:', emailError)
+        // Delete the invite if email fails
+        await invite.delete()
+        return response.status(500).json({
+          message: 'Failed to send grant email',
+          error: 'Email service error',
+        })
+      }
+
+      return response.created({
+        message: `Grant email sent successfully to ${payload.email}`,
+        invite: {
+          id: invite.id,
+          code: invite.code,
+          sentTo: payload.email,
+          createdAt: invite.createdAt,
+        },
+      })
+    } catch (error) {
+      return response.badRequest({
+        message: 'Failed to send grant email',
         error: error.message,
       })
     }
