@@ -28,7 +28,11 @@ async function routeProvider(message: string, queryService: QueryService): Promi
   return isCuratorial ? 'openai' : 'gemini'
 }
 
-function createChatModel(provider: ModelProvider = 'openai', maxTokensOverride?: number) {
+function createChatModel(
+  provider: ModelProvider = 'openai',
+  maxTokensOverride?: number,
+  effortOverride?: 'low' | 'medium' | 'high'
+) {
   if (provider === 'gemini') {
     return new ChatGoogleGenerativeAI({
       apiKey: process.env.GEMINI_API_KEY,
@@ -57,7 +61,7 @@ function createChatModel(provider: ModelProvider = 'openai', maxTokensOverride?:
   return new ChatOpenAI({
     apiKey: process.env.OPENAI_KEY,
     model: process.env.OPENAI_MODEL ?? 'gpt-5',
-    reasoning: { effort: 'medium' },
+    reasoning: { effort: effortOverride ?? 'medium' },
     // maxTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
   })
 }
@@ -343,10 +347,10 @@ export default class LangchainAgentService {
     // We create a second binding with tool_choice:'any' to force at least one tool call on
     // the first Phase-1 iteration; subsequent iterations revert to 'auto' so the model can
     // naturally signal it has all the data it needs and exit the loop.
-    const modelWithTools = createChatModel(provider).bindTools(tools)
+    const modelWithTools = createChatModel(provider, undefined, 'low').bindTools(tools)
     const modelWithToolsForced =
       provider === 'gemini'
-        ? createChatModel(provider).bindTools(tools, { tool_choice: 'any' })
+        ? createChatModel(provider, undefined, 'low').bindTools(tools, { tool_choice: 'any' })
         : modelWithTools
     const toolMap = Object.fromEntries(tools.map((t) => [t.name, t]))
 
@@ -414,7 +418,7 @@ export default class LangchainAgentService {
     console.log(`[Agent] 🏁 Requesting structured final answer…`)
     // Use a higher token budget for Phase 2 — the structured output wraps the
     // entire response in JSON, so it needs more room than the data-fetching calls.
-    const finalAnswerModel = createChatModel(provider, 3000).withStructuredOutput(
+    const finalAnswerModel = createChatModel(provider, 3000, 'medium').withStructuredOutput(
       FINAL_ANSWER_SCHEMA
     )
     const structured = (await finalAnswerModel.invoke(messages)) as {
