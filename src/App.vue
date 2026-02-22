@@ -178,7 +178,7 @@ const allowedHeaderViews = [
   "settings",
   "help",
   "report",
-  // "chat",
+  "chat-lab",
   // "settings",
   // Add more route names as needed
 ];
