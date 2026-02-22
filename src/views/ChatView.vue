@@ -154,15 +154,15 @@
                   message.photoIds &&
                   message.photoIds.length > 0
                 "
-                quaternary
-                size="tiny"
                 class="msg-add-to-btn"
+                type="primary"
+                secondary
                 @click="handleAddMessagePhotosToCollection(message.photoIds)"
               >
                 <template #icon>
-                  <n-icon :size="12"><BookmarksOutline /></n-icon>
+                  <n-icon :size="11"><BookmarksOutline /></n-icon>
                 </template>
-                Add to...
+                Add to collection
               </n-button>
             </div>
           </div>
@@ -1226,15 +1226,11 @@ const resetChat = async () => {
 
 .msg-add-to-btn {
   font-size: var(--font-size-xs) !important;
-  color: var(--text-tertiary) !important;
+  /* color: var(--text-tertiary) !important; */
   height: 20px !important;
   padding: 0 6px !important;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.message-bubble:hover .msg-add-to-btn {
   opacity: 1;
+  transition: opacity 0.15s;
 }
 
 /* ── Message Photos Grid ── */
