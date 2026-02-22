@@ -37,7 +37,7 @@ export type ModelName =
   // | 'gemini-2.0-flash'
   | 'gemini-2.5-flash'
   | 'gemini-2.5-flash-lite'
-  | 'gemini-3-flash'
+  | 'gemini-3-flash-preview'
   | 'gemini-3.1-pro'
 
 const PRICES = {
@@ -106,7 +106,7 @@ const PRICES = {
     input_cache_hit: 0.05 / 1_000_000,
     output: 0.4 / 1_000_000,
   },
-  'gemini-3-flash': {
+  'gemini-3-flash-preview': {
     input_cache_miss: 0.5 / 1_000_000, // USD per input token
     input_cache_hit: 0.25 / 1_000_000, // USD per cached input token (estimate, not official)
     output: 3.0 / 1_000_000, // USD per output token

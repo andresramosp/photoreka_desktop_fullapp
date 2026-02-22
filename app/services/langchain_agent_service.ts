@@ -32,8 +32,8 @@ async function routeModel(message: string, queryService: QueryService): Promise<
 
   const isCuratorial = await queryService.classifyCuratorialQuery(message)
   return isCuratorial
-    ? (process.env.OPENAI_CHAT_MODEL ?? 'gemini-2.5-flash')
-    : (process.env.GEMINI_CHAT_MODEL ?? 'gemini-2.5-flash')
+    ? (process.env.OPENAI_CHAT_MODEL ?? 'gemini-3-flash-preview')
+    : (process.env.GEMINI_CHAT_MODEL ?? 'gemini-3-flash-preview')
 }
 
 function createChatModel(
@@ -357,10 +357,10 @@ export default class LangchainAgentService {
     // the first Phase-1 iteration; subsequent iterations revert to 'auto' so the model can
     // naturally signal it has all the data it needs and exit the loop.
     const modelWithTools = createChatModel(modelName, undefined, 'low').bindTools(tools)
-    const modelWithToolsForced =
-      provider === 'gemini'
-        ? createChatModel(modelName, undefined, 'low').bindTools(tools, { tool_choice: 'any' })
-        : modelWithTools
+    // const modelWithToolsForced =
+    //   provider === 'gemini'
+    //     ? createChatModel(modelName, undefined, 'low').bindTools(tools, { tool_choice: 'any' })
+    //     : modelWithTools
     const toolMap = Object.fromEntries(tools.map((t) => [t.name, t]))
 
     const currentUserMessage = this.buildCurrentUserMessage(message, contextPhotoIds)
@@ -386,7 +386,7 @@ export default class LangchainAgentService {
       // First Gemini iteration: force at least one tool call so it doesn't answer
       // directly without fetching any data. Subsequent iterations use auto so the
       // model can exit the loop once it has everything it needs.
-      const activeModel = iter === 0 ? modelWithToolsForced : modelWithTools
+      const activeModel = modelWithTools //iter === 0 ? modelWithToolsForced : modelWithTools
       const response = await activeModel.invoke(messages)
       const toolCalls = response.tool_calls ?? []
 
