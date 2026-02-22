@@ -20,20 +20,29 @@ function getProviderFromModel(model: ModelName): ModelProvider {
 }
 
 /**
- * Returns a concrete model name to use for this request.
+ * Returns a concrete model name and classification for this request.
  * Curatorial queries (aesthetic evaluation, portfolio critique, etc.) are routed
  * to the OpenAI model; general queries go to the Gemini model.
  * The env var AGENT_MODEL overrides routing entirely when set (e.g. 'gpt-5.1').
  */
-async function routeModel(message: string, queryService: QueryService): Promise<ModelName> {
+async function routeModel(
+  message: string,
+  queryService: QueryService
+): Promise<{ model: ModelName; isCuratorial: boolean }> {
   // Hard override: if the env var is set to a specific model, always use it
   const envOverride = process.env.AGENT_MODEL
-  if (envOverride) return envOverride
+  if (envOverride) return { model: envOverride, isCuratorial: false }
 
-  const isCuratorial = await queryService.classifyCuratorialQuery(message)
-  return isCuratorial
-    ? (process.env.OPENAI_CHAT_MODEL ?? 'gemini-3-flash-preview')
-    : (process.env.GEMINI_CHAT_MODEL ?? 'gemini-3-flash-preview')
+  return {
+    model: 'gemini-3-flash-preview',
+    isCuratorial: false,
+  }
+
+  // const isCuratorial = await queryService.classifyCuratorialQuery(message)
+  // return {
+  //   model: isCuratorial ? 'gpt-5.1' : 'gemini-3-flash-preview',
+  //   isCuratorial,
+  // }
 }
 
 function createChatModel(
@@ -344,12 +353,10 @@ export default class LangchainAgentService {
     const history: ChatMessage[] = sessionHistories.get(userId) ?? []
 
     const foundPhotoIds: number[] = []
-    const modelName = await routeModel(message, this.queryService)
+    const { model: modelName, isCuratorial } = await routeModel(message, this.queryService)
     const provider = getProviderFromModel(modelName)
     console.log(`[Agent] 🤖 Routed to model: ${modelName} (${provider.toUpperCase()})`)
-    console.log(
-      `[Agent] 🔍 Query classified as: ${provider === 'openai' ? 'CURATORIAL' : 'GENERAL'}`
-    )
+    console.log(`[Agent] 🔍 Query classified as: ${isCuratorial ? 'CURATORIAL' : 'GENERAL'}`)
     const tools = this.toolsService.createTools(userId, foundPhotoIds, provider)
     // For Gemini, tool_choice defaults to 'auto', which lets it bypass tool calls entirely
     // and answer the user directly (e.g. "Fetching your collections." with no actual fetch).
