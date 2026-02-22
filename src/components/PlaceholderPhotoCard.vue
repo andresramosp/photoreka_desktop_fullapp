@@ -112,29 +112,7 @@ const handleSuggest = (criteria) => {
   justify-content: center;
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  transition: all 0.3s ease;
-  animation: placeholderFadeIn 0.3s ease;
   pointer-events: auto;
-}
-
-@keyframes placeholderFadeIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.placeholder-photo-card:hover {
-  border-color: #3c3c42;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-}
-
-.placeholder-photo-card:hover .placeholder-overlay {
-  opacity: 1;
 }
 
 /* Loading State */
@@ -166,8 +144,6 @@ const handleSuggest = (criteria) => {
   right: 8px;
   display: flex;
   gap: 4px;
-  opacity: 0;
-  transition: opacity 0.3s ease;
   z-index: 10;
 }
 
@@ -181,14 +157,6 @@ const handleSuggest = (criteria) => {
   border-radius: 8px;
   background: #1f1f23;
   border: 1px solid #2c2c32;
-  transition: all 0.15s ease;
-}
-
-.menu-option:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: #3c3c42;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .menu-option.expanded {
@@ -199,7 +167,6 @@ const handleSuggest = (criteria) => {
 .menu-option :deep(.n-button__icon--right) {
   margin-left: auto;
   margin-right: 0;
-  transition: transform 0.2s ease;
   font-size: 10px;
 }
 
@@ -239,12 +206,6 @@ const handleSuggest = (criteria) => {
   font-size: 14px;
   border-radius: 6px;
   background: #1f1f23;
-  transition: all 0.15s ease;
-}
-
-.submenu-option:hover {
-  background: rgba(255, 255, 255, 0.1);
-  /* transform: translateX(4px); */
 }
 
 /* Responsive adjustments */

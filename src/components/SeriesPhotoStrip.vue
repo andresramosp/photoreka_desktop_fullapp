@@ -91,7 +91,7 @@
               class="gap-plus"
               size="tiny"
               circle
-              secondary
+              type="primary"
               @click.stop="createPlaceholder(0)"
               @mousedown.stop
               aria-label="Insert photo here"
@@ -137,6 +137,8 @@
               @select="handlePhotoSelect"
               @show-info="handleShowInfo"
               @refresh-suggestion="handleRefreshSuggestion(photo.id)"
+              @mouseenter="hoveredPhotoIndex = index"
+              @mouseleave="hoveredPhotoIndex = null"
             />
 
             <!-- Placeholder after this photo if it matches -->
@@ -166,7 +168,7 @@
                 class="gap-plus"
                 size="tiny"
                 circle
-                secondary
+                type="info"
                 @click.stop="createPlaceholder(index + 1)"
                 @mousedown.stop
                 aria-label="Insert photo here"
@@ -243,6 +245,7 @@ const allSelected = ref(false);
 
 // Hover and insertion UI state
 const hoveredGapIndex = ref(null);
+const hoveredPhotoIndex = ref(null);
 const activePlaceholderIndex = ref(null);
 const isPlaceholderLoading = ref(false);
 
@@ -276,7 +279,7 @@ const realPhotos = computed({
       result.splice(
         activePlaceholderIndex.value,
         0,
-        localPhotos.value.find(isPlaceholder)
+        localPhotos.value.find(isPlaceholder),
       );
       localPhotos.value = result;
     } else {
@@ -306,16 +309,16 @@ watch(
     if (props.refreshingPhotoId) {
       // Check if the refreshing photo is missing from newPhotos but exists in oldPhotos
       const refreshingPhotoExists = newPhotosList.some(
-        (p) => p.id === props.refreshingPhotoId
+        (p) => p.id === props.refreshingPhotoId,
       );
       if (!refreshingPhotoExists && oldPhotosList) {
         const refreshingPhoto = oldPhotosList.find(
-          (p) => p.id === props.refreshingPhotoId
+          (p) => p.id === props.refreshingPhotoId,
         );
         if (refreshingPhoto) {
           // Find the position where it should be inserted (maintain its original position)
           const originalIndex = oldPhotosList.findIndex(
-            (p) => p.id === props.refreshingPhotoId
+            (p) => p.id === props.refreshingPhotoId,
           );
           photosToDisplay.splice(originalIndex, 0, refreshingPhoto);
         }
@@ -379,7 +382,7 @@ watch(
 
     localPhotos.value = [...photosToDisplay];
   },
-  { immediate: true, deep: true }
+  { immediate: true, deep: true },
 );
 
 // Size configurations
@@ -473,8 +476,16 @@ const handleRefreshSuggestion = (photoId) => {
 const shouldShowPlus = (gapIndex) => {
   // Don't show plus if there's already a placeholder
   if (activePlaceholderIndex.value !== null) return false;
-  // Only show plus when hovering over this specific gap
-  return hoveredGapIndex.value === gapIndex;
+  // Show plus when hovering over this specific gap or adjacent photo
+  if (hoveredGapIndex.value === gapIndex) return true;
+  // Show if hovering over a photo and this is an adjacent gap
+  if (hoveredPhotoIndex.value !== null) {
+    return (
+      gapIndex === hoveredPhotoIndex.value ||
+      gapIndex === hoveredPhotoIndex.value + 1
+    );
+  }
+  return false;
 };
 
 const createPlaceholder = (gapIndex) => {
@@ -521,7 +532,7 @@ const scrollToPhoto = (photoIndex) => {
 const handleShowInfo = (photoId) => {
   console.log(
     "[SeriesPhotoStrip] handleShowInfo called with photoId:",
-    photoId
+    photoId,
   );
   emit("show-info", photoId);
   console.log("[SeriesPhotoStrip] show-info event emitted");
