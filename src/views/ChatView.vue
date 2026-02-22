@@ -2,7 +2,7 @@
   <div class="chat-view">
     <!-- Chat Header (shown only while a conversation is active) -->
     <div v-if="messages.length > 0" class="chat-header">
-      <span class="chat-header-title">ChatLab</span>
+      <span class="chat-header-title">CHATLAB</span>
       <n-button
         quaternary
         size="small"
