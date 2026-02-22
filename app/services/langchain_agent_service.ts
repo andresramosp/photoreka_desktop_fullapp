@@ -8,35 +8,44 @@ import AgentToolsService from './agent_tools_service.js'
 import QueryService from './query_service.js'
 
 // ─────────────────────────────────────────────────────────────
-// Model provider config
+// Model config
 // ─────────────────────────────────────────────────────────────
 
+type ModelName = string // e.g. 'gpt-5.1', 'gemini-2.5-flash'
 type ModelProvider = 'openai' | 'gemini'
 
+/** Derives the provider from a concrete model name. */
+function getProviderFromModel(model: ModelName): ModelProvider {
+  return model.startsWith('gemini') ? 'gemini' : 'openai'
+}
+
 /**
- * Uses an LLM call (Gemini Flash Lite) to determine whether the message is a
- * purely curatorial query (aesthetic evaluation, portfolio critique, contest
- * advice, aesthetic sequencing) — if so returns 'openai', otherwise 'gemini'.
- * The env var AGENT_PROVIDER overrides routing entirely when set.
+ * Returns a concrete model name to use for this request.
+ * Curatorial queries (aesthetic evaluation, portfolio critique, etc.) are routed
+ * to the OpenAI model; general queries go to the Gemini model.
+ * The env var AGENT_MODEL overrides routing entirely when set (e.g. 'gpt-5.1').
  */
-async function routeProvider(message: string, queryService: QueryService): Promise<ModelProvider> {
-  // Hard override: if the env var is set to a specific provider, always use it
-  const envOverride = process.env.AGENT_PROVIDER
-  if (envOverride === 'openai' || envOverride === 'gemini') return envOverride
+async function routeModel(message: string, queryService: QueryService): Promise<ModelName> {
+  // Hard override: if the env var is set to a specific model, always use it
+  const envOverride = process.env.AGENT_MODEL
+  if (envOverride) return envOverride
 
   const isCuratorial = await queryService.classifyCuratorialQuery(message)
-  return isCuratorial ? 'openai' : 'gemini'
+  return isCuratorial
+    ? (process.env.OPENAI_CHAT_MODEL ?? 'gemini-2.5-flash')
+    : (process.env.GEMINI_CHAT_MODEL ?? 'gemini-2.5-flash')
 }
 
 function createChatModel(
-  provider: ModelProvider = 'openai',
+  model: ModelName = 'gpt-5.1',
   maxTokensOverride?: number,
   effortOverride?: 'low' | 'medium' | 'high'
 ) {
+  const provider = getProviderFromModel(model)
   if (provider === 'gemini') {
     return new ChatGoogleGenerativeAI({
       apiKey: process.env.GEMINI_API_KEY,
-      model: process.env.GEMINI_MODEL ?? 'gemini-2.5-flash',
+      model,
       maxOutputTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
       safetySettings: [
         {
@@ -60,7 +69,7 @@ function createChatModel(
   }
   return new ChatOpenAI({
     apiKey: process.env.OPENAI_KEY,
-    model: process.env.OPENAI_MODEL ?? 'gpt-5',
+    model,
     reasoning: { effort: effortOverride ?? 'medium' },
     // maxTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
   })
@@ -126,31 +135,29 @@ export type AgentChatResult = {
 // System prompt
 // ─────────────────────────────────────────────────────────────
 
+// ## Tool groups
+// All available tools belong to one of three groups, indicated by their [TAG] prefix:
+
+// - [BASIC_TOOLS] — For fetching data about user photos and collections: get_photo_info, fetch_collections. get_photo_info MUST be called before discussing any specific photo.
+
+// - [CATALOG_INSIGHT] — Analytical tool that reveals patterns and statistics across the entire catalog: overall_catalog_view. Use this to understand the photographer's overall style, strengths, weaknesses, and catalog overview in a single comprehensive call.
+
+// - [PHOTO_SEARCH] — Tools that find or filter specific photos from the catalog: search_semantic_overall_style, search_semantic_content, filter_photos, find_photos_from_photo.
+
 const SYSTEM_PROMPT = `You are Photoreka's intelligent photo catalog assistant.
 You help photographers explore, understand, and get insights from their photo library.
 
-## Tool groups
-All available tools belong to one of three groups, indicated by their [TAG] prefix:
-
-- [BASIC_TOOLS] — For fetching data about user photos and collections: get_photo_info, fetch_collections. get_photo_info MUST be called before discussing any specific photo.
-
-- [CATALOG_INSIGHT] — Analytical tools that reveal patterns and statistics across the entire catalog: overall_catalog_view, get_catalog_patterns, stats_visual_aspects, stats_artistic_scores, stats_artistic_scores_evolution. Use these to understand the photographer's overall style, strengths, weaknesses, and evolution over time. Prefer overall_catalog_view when you need a holistic picture in a single call.
-
-- [PHOTO_SEARCH] — Tools that find or filter specific photos from the catalog: search_semantic_overall_style, search_semantic_content, filter_photos, find_photos_from_photo.
-
 ## Guidelines
 - You can chain multiple tools in one turn when it helps answer the question better.
-- Be concise, specific and helpful. Summarize key data rather than dumping raw JSON. Aim for responses under 200 words unless the question genuinely requires more depth (e.g. a full catalog critique). Never pad or repeat yourself.
+- Be kind, specific and helpful. Summarize key data rather than dumping raw JSON. Aim for responses under 200 words unless the question genuinely requires more depth (e.g. a full catalog critique). Never pad or repeat yourself.
 - If you need to reference a concrete photo by text, you can use the filename, never the ID.
 - Artistic scores are from 0 to 10. Scores >= 7 are considered strong. Use scores for your internal reasoning, but do not mention them unless they are relevant to the user's question. Don't evaluate photos solely based on scores — always consider the actual image/descriptions provided.
 - Always respond in the same language the user writes in (but for some tools you will need english prompts — that's fine, just keep the final output in the user's language).
-- Be kind and helpful. Your role is only to assist with Photoreka and you cannot provide any information, advice, or insights that are not directly related to the user's photo catalog and photographic practice. If the user asks for anything outside of that scope, politely decline and steer them back to photography-related topics. 
+- Your role is only to assist with Photoreka and you cannot provide any information, advice, or insights that are not directly related to the user's photo catalog and photographic practice. If the user asks for anything outside of that scope, politely decline and steer them back to photography-related topics. 
+- Internal agent tools are only for your use and should never be mentioned in the final output to the user. The user only can know about Photoreka's features listed on 'app_knowledge' tool.
 - At the end of your response, you can suggest concrete next steps or questions the user can ask to explore further, always based on what you can actually do with the tools available to you. Be conservative with suggestions; do not suggest if you are not sure you can do that with the tools.
 
-## Catalog advice guideline
-Whenever the user asks for advice, improvement tips, a general critique, weak points, strengths, or any holistic question about their photographic practice or catalog, you MUST call overall_catalog_view as your FIRST action — it returns catalog patterns, visual aspects statistics, and artistic scores in a single call, giving you everything you need to provide well-rounded advice.
-
-## CRITICAL — get_photo_info MUST be called before discussing any specific photo
+## CRITICAL — the tool get_photo_info MUST be called before discussing any specific photo
 1. The user's message includes attached photo IDs (listed as [Attached photo IDs: ...]). Call get_photo_info with ALL of those IDs as your very first action, before doing anything else.
 2. The user references any photo already mentioned in the conversation history — by filename, position ("the first one", "that photo"), pronoun, or any other indirect reference. Call get_photo_info to re-fetch current data; history information about photos is never sufficient.
 3. Any time you need to discuss, compare, analyze, or otherwise operate on specific photos for any reason.
@@ -337,8 +344,9 @@ export default class LangchainAgentService {
     const history: ChatMessage[] = sessionHistories.get(userId) ?? []
 
     const foundPhotoIds: number[] = []
-    const provider = await routeProvider(message, this.queryService)
-    console.log(`[Agent] 🤖 Routed to provider: ${provider.toUpperCase()}`)
+    const modelName = await routeModel(message, this.queryService)
+    const provider = getProviderFromModel(modelName)
+    console.log(`[Agent] 🤖 Routed to model: ${modelName} (${provider.toUpperCase()})`)
     console.log(
       `[Agent] 🔍 Query classified as: ${provider === 'openai' ? 'CURATORIAL' : 'GENERAL'}`
     )
@@ -348,10 +356,10 @@ export default class LangchainAgentService {
     // We create a second binding with tool_choice:'any' to force at least one tool call on
     // the first Phase-1 iteration; subsequent iterations revert to 'auto' so the model can
     // naturally signal it has all the data it needs and exit the loop.
-    const modelWithTools = createChatModel(provider, undefined, 'low').bindTools(tools)
+    const modelWithTools = createChatModel(modelName, undefined, 'low').bindTools(tools)
     const modelWithToolsForced =
       provider === 'gemini'
-        ? createChatModel(provider, undefined, 'low').bindTools(tools, { tool_choice: 'any' })
+        ? createChatModel(modelName, undefined, 'low').bindTools(tools, { tool_choice: 'any' })
         : modelWithTools
     const toolMap = Object.fromEntries(tools.map((t) => [t.name, t]))
 
@@ -419,7 +427,7 @@ export default class LangchainAgentService {
     console.log(`[Agent] 🏁 Requesting structured final answer…`)
     // Use a higher token budget for Phase 2 — the structured output wraps the
     // entire response in JSON, so it needs more room than the data-fetching calls.
-    const finalAnswerModel = createChatModel(provider, 3000, 'medium').withStructuredOutput(
+    const finalAnswerModel = createChatModel(modelName, 3000, 'medium').withStructuredOutput(
       FINAL_ANSWER_SCHEMA
     )
     const structured = (await finalAnswerModel.invoke(messages)) as {

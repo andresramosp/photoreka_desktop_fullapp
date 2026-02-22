@@ -37,72 +37,84 @@ export type ModelName =
   // | 'gemini-2.0-flash'
   | 'gemini-2.5-flash'
   | 'gemini-2.5-flash-lite'
+  | 'gemini-3-flash'
+  | 'gemini-3.1-pro'
 
 const PRICES = {
   'gpt-4o': {
-    input_cache_miss: 2.5 / 1_000_000, // USD per input token
+    input_cache_miss: 2.5 / 1_000_000,
     input_cache_hit: 1.25 / 1_000_000,
-    output: 10.0 / 1_000_000, // USD per output token
+    output: 10.0 / 1_000_000,
   },
   'gpt-4.1': {
-    input_cache_miss: 2 / 1_000_000, // USD per input token
+    input_cache_miss: 2 / 1_000_000,
     input_cache_hit: 0.5 / 1_000_000,
-    output: 8 / 1_000_000, // USD per output token
+    output: 8 / 1_000_000,
   },
   'gpt-5': {
-    input_cache_miss: 1.25 / 1_000_000, // USD per input token
-    input_cache_hit: 0.125 / 1_000_000, // USD per cached input token
-    output: 10 / 1_000_000, // USD per output token
+    input_cache_miss: 1.25 / 1_000_000,
+    input_cache_hit: 0.125 / 1_000_000,
+    output: 10 / 1_000_000,
   },
   'gpt-5.1': {
-    input_cache_miss: 1.25 / 1_000_000, // USD per input token
-    input_cache_hit: 0.125 / 1_000_000, // USD per cached input token
-    output: 10 / 1_000_000, // USD per output token
+    input_cache_miss: 1.25 / 1_000_000,
+    input_cache_hit: 0.125 / 1_000_000,
+    output: 10 / 1_000_000,
   },
   'gpt-5-mini': {
-    input_cache_miss: 0.25 / 1_000_000, // USD per input token
-    input_cache_hit: 0.025 / 1_000_000, // USD per cached input token
-    output: 2.0 / 1_000_000, // USD per output token
+    input_cache_miss: 0.25 / 1_000_000,
+    input_cache_hit: 0.025 / 1_000_000,
+    output: 2.0 / 1_000_000,
   },
   'gpt-5-nano': {
-    input_cache_miss: 0.05 / 1_000_000, // USD per input token
-    input_cache_hit: 0.005 / 1_000_000, // USD per cached input token
-    output: 0.4 / 1_000_000, // USD per output token
+    input_cache_miss: 0.05 / 1_000_000,
+    input_cache_hit: 0.005 / 1_000_000,
+    output: 0.4 / 1_000_000,
   },
   'gpt-5-chat-latest': {
-    input_cache_miss: 1.25 / 1_000_000, // USD per input token
-    input_cache_hit: 0.125 / 1_000_000, // USD per cached input token
-    output: 10 / 1_000_000, // USD per output token
+    input_cache_miss: 1.25 / 1_000_000,
+    input_cache_hit: 0.125 / 1_000_000,
+    output: 10 / 1_000_000,
   },
   'gpt-4o-mini': {
-    input_cache_miss: 0.15 / 1_000_000, // USD per input token
+    input_cache_miss: 0.15 / 1_000_000,
     input_cache_hit: 0.075 / 1_000_000,
-    output: 0.6 / 1_000_000, // USD per output token
+    output: 0.6 / 1_000_000,
   },
   'deepseek-chat': {
-    input_cache_miss: 0.27 / 1_000_000, // USD per input token
-    input_cache_hit: 0.07 / 1_000_000, // USD per input token
-    output: 1.1 / 1_000_000, // USD per output token
+    input_cache_miss: 0.27 / 1_000_000,
+    input_cache_hit: 0.07 / 1_000_000,
+    output: 1.1 / 1_000_000,
   },
   'qwen-vl-max': {
-    input_cache_miss: 1.6 / 1_000_000, // USD per input token (inventado)
-    input_cache_hit: 0.2 / 1_000_000, // USD per input token (inventado)
-    output: 6.4 / 1_000_000, // USD per output token (inventado)
+    input_cache_miss: 1.6 / 1_000_000,
+    input_cache_hit: 0.2 / 1_000_000,
+    output: 6.4 / 1_000_000,
   },
   // 'gemini-2.0-flash': {
-  //   input_cache_miss: 0.1 / 1_000_000, // USD per input token
-  //   input_cache_hit: 0.05 / 1_000_000, // USD per cached input token
-  //   output: 0.4 / 1_000_000, // USD per output token
+  //   input_cache_miss: 0.1 / 1_000_000,
+  //   input_cache_hit: 0.05 / 1_000_000,
+  //   output: 0.4 / 1_000_000,
   // },
   'gemini-2.5-flash': {
-    input_cache_miss: 0.3 / 1_000_000, // USD per input token
-    input_cache_hit: 0.15 / 1_000_000, // USD per cached input token
-    output: 2.5 / 1_000_000, // USD per output token
+    input_cache_miss: 0.3 / 1_000_000,
+    input_cache_hit: 0.15 / 1_000_000,
+    output: 2.5 / 1_000_000,
   },
   'gemini-2.5-flash-lite': {
-    input_cache_miss: 0.1 / 1_000_000, // USD per input token
-    input_cache_hit: 0.05 / 1_000_000, // USD per cached input token
-    output: 0.4 / 1_000_000, // USD per output token
+    input_cache_miss: 0.1 / 1_000_000,
+    input_cache_hit: 0.05 / 1_000_000,
+    output: 0.4 / 1_000_000,
+  },
+  'gemini-3-flash': {
+    input_cache_miss: 0.5 / 1_000_000, // USD per input token
+    input_cache_hit: 0.25 / 1_000_000, // USD per cached input token (estimate, not official)
+    output: 3.0 / 1_000_000, // USD per output token
+  },
+  'gemini-3.1-pro': {
+    input_cache_miss: 2.0 / 1_000_000, // USD per input token
+    input_cache_hit: 1.0 / 1_000_000, // USD per cached input token (estimate, not official)
+    output: 12.0 / 1_000_000, // USD per output token
   },
 }
 

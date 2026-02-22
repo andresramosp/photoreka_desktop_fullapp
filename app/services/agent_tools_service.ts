@@ -25,16 +25,6 @@ export const GetPhotoInfoSchema = z.object({
     ),
 })
 
-export const GetCatalogPatternsSchema = z.object({
-  reviewType: z
-    .enum(['general', 'story', 'context', 'visual_accents', 'all'])
-    .optional()
-    .default('all')
-    .describe(
-      'Which pattern category to retrieve: general (stylistic/object motif patterns), story (narrative patterns), context (contextual patterns), visual_accents (visual accent patterns), or all (default)'
-    ),
-})
-
 export const AddPhotosToResultSchema = z.object({
   photo_ids: z
     .array(z.number())
@@ -80,10 +70,6 @@ export const FindPhotosFromPhotoSchema = z.object({
     .describe('If true, return the most dissimilar photos instead of the most similar.'),
 })
 
-export const GetVisualAspectsStatsSchema = z.object({})
-
-export const GetArtisticScoresStatsSchema = z.object({})
-
 export const AppKnowledgeSchema = z.object({
   section: z
     .enum(['terms_and_privacy', 'usage_and_help', 'all'])
@@ -97,15 +83,6 @@ export const AppKnowledgeSchema = z.object({
 export const OverallCatalogViewSchema = z.object({})
 
 export const FetchCollectionsSchema = z.object({})
-
-export const GetArtisticScoresEvolutionSchema = z.object({
-  criteria: z
-    .array(ScoreField)
-    .min(1)
-    .describe(
-      'One or more artistic score criteria to plot over time. Valid values: aesthetic_quality, composition, storytelling, strangeness, message, humor, visual_games, candidness.'
-    ),
-})
 
 export const FilterPhotosSchema = z.object({
   scoreFilters: z
@@ -262,7 +239,15 @@ export function formatCatalogPatternsForAgent(catalogPatterns: any, reviewType: 
 
   const stripClusterPhotos = (patterns: any) => {
     if (!Array.isArray(patterns)) return patterns
-    return patterns.map(({ clusterPhotos: _omit, ...rest }: any) => rest)
+    return patterns.map(({ clusterPhotos: _omit, ...rest }: any) => {
+      // Also strip description and thumbnailUrl from samplePhotos
+      if (rest.samplePhotos && Array.isArray(rest.samplePhotos)) {
+        rest.samplePhotos = rest.samplePhotos.map(
+          ({ description: _omit, thumbnailUrl: _omit2, ...photo }: any) => photo
+        )
+      }
+      return rest
+    })
   }
 
   if (reviewType === 'all') {
@@ -306,23 +291,11 @@ export const TOOL_DESCRIPTIONS = {
   find_photos_from_photo:
     "[PHOTO_SEARCH] Find photos visually or semantically similar to one or more reference photos (provided by their IDs). Use this tool whenever the user asks to find photos similar to a specific photo, or wants more photos like a given one. Choose the criteria based on the intent: use 'embedding' for overall visual likeness (default), 'story' for narrative similarity, 'context' for situational/environmental similarity, or 'chromatic' for color palette similarity. Returns a ranked list of matching photo IDs — include the relevant ones in your final answer's photo_ids.",
 
-  get_catalog_patterns:
-    "[CATALOG_INSIGHT] Get the photographer's catalog patterns — AI-detected recurring themes, stylistic tendencies, dominant subjects, narrative patterns, and visual motifs across the entire catalog. Use this when the user asks about their photographic style, strengths, recurring subjects, or catalog overview. Use it as well when you need to understand the user's photographic habits, visual preferences, or provide general advice based on their typical patterns.",
-
-  stats_visual_aspects:
-    "[CATALOG_INSIGHT] Get a statistical breakdown of the user's catalog by visual aspects: for each aspect (genre, framing, focus, lighting, lighting scheme, depth of field, perspective, stylistic, orientation, temperature, palette) returns the number of photos per value, sorted by frequency. Use this when the user asks about the distribution of visual characteristics, what styles are most common, or wants an overview of how their photos look visually. Use it as well when you need to understand the visual diversity of the catalog or provide general advice for the user.",
-
-  stats_artistic_scores:
-    "[CATALOG_INSIGHT] Get statistical analysis of the user's artistic scores across the entire catalog: for each scoring criterion returns the average (mean), standard deviation, photo count, a rating label (Excellent/Good/Average/Below Average/Poor), and a consistency label (Very Consistent / Mostly Consistent / Variable / Highly Variable). Criteria are grouped into Fundamentals (aesthetic_quality, composition, storytelling, candidness) and Bonus (strangeness, message, humor, visual_games). Use this when the user asks about their average scores, overall quality, strengths and weaknesses, or score consistency. Use it as well when you need to understand the user's artistic profile or provide general advice for improvement.",
-
-  stats_artistic_scores_evolution:
-    "[CATALOG_INSIGHT] Get the evolution of one or more artistic scores over time, using adaptive time binning (day/week/month/quarter depending on the date range, capped at 30 data points). For each time bin returns the average score, photo count, and min/max range. Use this when the user asks about progress over time, how a score has improved or declined, or wants a timeline chart of their scores. Use it as well when you need to understand the user's artistic development or provide advice based on their improvement areas.",
-
   overall_catalog_view:
     '[CATALOG_INSIGHT] Get a single combined report of the entire catalog: catalog patterns (recurring themes, subjects, narrative motifs), visual aspects distribution, and artistic scores statistics. Use this as the FIRST tool whenever the user asks for advice on improving their photography, critique of their catalog, identification of weak points or strengths, general feedback on their style, or any holistic question about their photographic practice. This tool replaces calling get_catalog_patterns + stats_visual_aspects + stats_artistic_scores individually — it returns all of that data in one shot.',
 
   app_knowledge:
-    "[BASIC_TOOLS] Get static information about the Photoreka application itself. Use this whenever the user asks about how the app works, what features are available, how to use a specific feature, pricing, data limits, privacy policy, terms of use, data handling, account management, or any general help question unrelated to their photo catalog. Returns one or both sections: 'terms_and_privacy' (legal terms and privacy policy) and 'usage_and_help' (feature overview, FAQ, tips).",
+    "[BASIC_TOOLS] Get useful information about the Photoreka application itself. Use this whenever the user asks about how the app works, what features are available, how to use a specific feature, pricing, data limits, privacy policy, terms of use, data handling, account management, or any general help question unrelated to their photo catalog. Returns one or both sections: 'terms_and_privacy' (legal terms and privacy policy) and 'usage_and_help' (feature overview, FAQ, tips).",
 } as const
 
 // ─────────────────────────────────────────────────────────────
@@ -427,25 +400,7 @@ export default class AgentToolsService {
       }
     )
 
-    // ── Tool 2: get_catalog_patterns ────────────────────────
-    const getCatalogPatterns = tool(
-      async ({ reviewType = 'all' }): Promise<string> => {
-        try {
-          const user = await User.find(userId)
-          if (!user) return JSON.stringify({ error: 'User not found' })
-          return formatCatalogPatternsForAgent(user.catalogPatterns, reviewType)
-        } catch (error) {
-          return JSON.stringify({ error: `Failed to retrieve catalog patterns: ${error.message}` })
-        }
-      },
-      {
-        name: 'get_catalog_patterns',
-        description: TOOL_DESCRIPTIONS.get_catalog_patterns,
-        schema: GetCatalogPatternsSchema,
-      }
-    )
-
-    // ── Tool 3: search_semantic_overall_style ──────────────
+    // ── Tool 2: search_semantic_overall_style ──────────────
     const searchSemanticOverallStyle = tool(
       async ({ query, pageSize = 20, minMatchScore }): Promise<string> => {
         try {
@@ -469,7 +424,7 @@ export default class AgentToolsService {
       }
     )
 
-    // ── Tool 3b: search_semantic_content ───────────────────
+    // ── Tool 3: search_semantic_content ───────────────────
     const searchSemanticContent = tool(
       async ({ tags, limit = 20 }): Promise<string> => {
         try {
@@ -510,10 +465,7 @@ export default class AgentToolsService {
       }
     )
 
-    // ── Tool 4 (removed): add_photos_to_result was replaced by structured output
-    // Photo IDs are now collected via withStructuredOutput in the final answer call.
-
-    // ── Tool 5: filter_photos ───────────────────────────────
+    // ── Tool 4: filter_photos ───────────────────────────────
     const filterPhotos = tool(
       async ({
         scoreFilters,
@@ -624,7 +576,7 @@ export default class AgentToolsService {
       }
     )
 
-    // ── Tool 6: find_photos_from_photo ──────────────────────
+    // ── Tool 5: find_photos_from_photo ──────────────────────
     const findPhotosFromPhoto = tool(
       async ({ anchor_photo_ids, criteria, limit = 10, opposite = false }): Promise<string> => {
         try {
@@ -697,64 +649,6 @@ export default class AgentToolsService {
       }
     )
 
-    // ── Tool 7: stats_visual_aspects ───────────────────────
-    const statsVisualAspects = tool(
-      async (): Promise<string> => {
-        try {
-          const statsService = new StatsService()
-          const stats = await statsService.getVisualAspectsStats(userId)
-          return JSON.stringify(stats, null, 2)
-        } catch (error) {
-          return JSON.stringify({
-            error: `Failed to compute visual aspects stats: ${error.message}`,
-          })
-        }
-      },
-      {
-        name: 'stats_visual_aspects',
-        description: TOOL_DESCRIPTIONS.stats_visual_aspects,
-        schema: GetVisualAspectsStatsSchema,
-      }
-    )
-
-    // ── Tool 7: stats_artistic_scores ──────────────────────
-    const statsArtisticScores = tool(
-      async (): Promise<string> => {
-        try {
-          const statsService = new StatsService()
-          const stats = await statsService.getArtisticScoresStats(userId)
-          return JSON.stringify(stats, null, 2)
-        } catch (error) {
-          return JSON.stringify({
-            error: `Failed to compute artistic scores stats: ${error.message}`,
-          })
-        }
-      },
-      {
-        name: 'stats_artistic_scores',
-        description: TOOL_DESCRIPTIONS.stats_artistic_scores,
-        schema: GetArtisticScoresStatsSchema,
-      }
-    )
-
-    // ── Tool 8: stats_artistic_scores_evolution ────────────
-    const statsArtisticScoresEvolution = tool(
-      async ({ criteria }): Promise<string> => {
-        try {
-          const statsService = new StatsService()
-          const series = await statsService.getArtisticScoresEvolution(userId, criteria)
-          return JSON.stringify(series, null, 2)
-        } catch (error) {
-          return JSON.stringify({ error: `Failed to compute score evolution: ${error.message}` })
-        }
-      },
-      {
-        name: 'stats_artistic_scores_evolution',
-        description: TOOL_DESCRIPTIONS.stats_artistic_scores_evolution,
-        schema: GetArtisticScoresEvolutionSchema,
-      }
-    )
-
     // ── Tool: app_knowledge ────────────────────────────────
     const appKnowledge = tool(
       async ({ section = 'all' }): Promise<string> => {
@@ -820,15 +714,11 @@ export default class AgentToolsService {
     return [
       getPhotoInfo,
       appKnowledge,
-      getCatalogPatterns,
       searchSemanticOverallStyle,
       searchSemanticContent,
       findPhotosFromPhoto,
       filterPhotos,
       fetchCollections,
-      statsVisualAspects,
-      statsArtisticScores,
-      statsArtisticScoresEvolution,
       overallCatalogView,
     ]
   }
