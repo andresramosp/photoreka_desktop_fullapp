@@ -68,6 +68,12 @@ export const FindPhotosFromPhotoSchema = z.object({
     .optional()
     .default(false)
     .describe('If true, return the most dissimilar photos instead of the most similar.'),
+  candidate_ids: z
+    .array(z.number())
+    .optional()
+    .describe(
+      'Optional array of photo IDs to restrict the search pool. When provided, similarity is computed only among these photos. Use this to chain with a previous filter_photos or search result.'
+    ),
 })
 
 export const AppKnowledgeSchema = z.object({
@@ -140,6 +146,12 @@ export const FilterPhotosSchema = z.object({
     .optional()
     .default(20)
     .describe('Maximum number of results to return (default 20)'),
+  candidate_ids: z
+    .array(z.number())
+    .optional()
+    .describe(
+      'Optional array of photo IDs to restrict filtering to a pre-selected pool. When provided, only these photos are considered. Use this to chain multiple search/filter steps.'
+    ),
 })
 
 export const SearchSemanticOverallStyleSchema = z.object({
@@ -157,6 +169,12 @@ export const SearchSemanticOverallStyleSchema = z.object({
     .number()
     .optional()
     .describe('Minimum match score threshold from 0 to 1 (default 0.2 for broad search)'),
+  candidate_ids: z
+    .array(z.number())
+    .optional()
+    .describe(
+      'Optional array of photo IDs to restrict the search pool. When provided, semantic style search is performed only among these photos. Use this to chain with a previous filter_photos or search result.'
+    ),
 })
 
 export const SearchSemanticContentSchema = z.object({
@@ -172,6 +190,12 @@ export const SearchSemanticContentSchema = z.object({
     .optional()
     .default(20)
     .describe('Maximum number of results to return (default 20)'),
+  candidate_ids: z
+    .array(z.number())
+    .optional()
+    .describe(
+      'Optional array of photo IDs to restrict the search pool. When provided, content search is performed only among these photos. Use this to chain with a previous filter_photos or search result.'
+    ),
 })
 
 // ─────────────────────────────────────────────────────────────
@@ -402,7 +426,7 @@ export default class AgentToolsService {
 
     // ── Tool 2: search_semantic_overall_style ──────────────
     const searchSemanticOverallStyle = tool(
-      async ({ query, pageSize = 20, minMatchScore }): Promise<string> => {
+      async ({ query, pageSize = 20, minMatchScore, candidate_ids }): Promise<string> => {
         try {
           const clampedPageSize = 8 //Math.min(Math.max(pageSize, 1), 50)
           const result = await searchService.searchSemanticSync(query, userId, {
@@ -411,6 +435,7 @@ export default class AgentToolsService {
             iteration: 1,
             minMatchScore: minMatchScore ?? 0.2,
             withInsights: false,
+            ...(candidate_ids && candidate_ids.length > 0 ? { candidateIds: candidate_ids } : {}),
           })
           return formatSearchResultsForAgent(result)
         } catch (error) {
@@ -426,10 +451,14 @@ export default class AgentToolsService {
 
     // ── Tool 3: search_semantic_content ───────────────────
     const searchSemanticContent = tool(
-      async ({ tags, limit = 20 }): Promise<string> => {
+      async ({ tags, limit = 20, candidate_ids }): Promise<string> => {
         try {
           const scoringService = new ScoringService()
-          const photoIds = await photoManager.getPhotosIdsForSearch(userId.toString())
+          const allPhotoIds = await photoManager.getPhotosIdsForSearch(userId.toString())
+          const photoIds =
+            candidate_ids && candidate_ids.length > 0
+              ? allPhotoIds.filter((id) => (candidate_ids as number[]).includes(id))
+              : allPhotoIds
           const scored = await scoringService.getScoredPhotosByTags(
             photoIds,
             tags,
@@ -476,12 +505,17 @@ export default class AgentToolsService {
         dateFrom,
         dateTo,
         limit = 20,
+        candidate_ids,
       }): Promise<string> => {
         try {
-          const photos = await Photo.query()
+          const photosQuery = Photo.query()
             .where('user_id', userId)
             .select('id', 'original_file_name', 'descriptions', 'created_at')
             .orderBy('created_at', 'desc')
+          if (candidate_ids && candidate_ids.length > 0) {
+            photosQuery.whereIn('id', candidate_ids)
+          }
+          const photos = await photosQuery
 
           const dateFromMs = dateFrom ? new Date(dateFrom).getTime() : null
           const dateToMs = dateTo ? new Date(dateTo + 'T23:59:59').getTime() : null
@@ -578,7 +612,13 @@ export default class AgentToolsService {
 
     // ── Tool 5: find_photos_from_photo ──────────────────────
     const findPhotosFromPhoto = tool(
-      async ({ anchor_photo_ids, criteria, limit = 10, opposite = false }): Promise<string> => {
+      async ({
+        anchor_photo_ids,
+        criteria,
+        limit = 10,
+        opposite = false,
+        candidate_ids,
+      }): Promise<string> => {
         try {
           const searchPhotoService = new SearchPhotoService()
           const results = await searchPhotoService.searchByPhotos(
@@ -592,6 +632,9 @@ export default class AgentToolsService {
               opposite,
               inverted: false,
               resultLength: Math.min(limit, 50),
+              ...(candidate_ids && candidate_ids.length > 0
+                ? { candidatePoolIds: candidate_ids }
+                : {}),
             },
             userId
           )

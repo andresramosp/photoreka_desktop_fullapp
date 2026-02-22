@@ -52,6 +52,8 @@ export type SearchOptions = {
   source?: string
   withInsights?: boolean
   searchId?: string
+  /** When provided, restricts the search pool to only these photo IDs (after collection/aspect filters). */
+  candidateIds?: number[]
 }
 
 export type SearchTagsOptions = SearchOptions & {
@@ -236,19 +238,24 @@ export default class SearchTextService {
       source,
       withInsights = false,
       searchId, // 👈 nuevo
+      candidateIds,
     } = options
 
     if (searchMode === 'curation') {
       throw new Error('searchSemanticSync no soporta el modo curation')
     }
 
-    const photoIds = await this.photoManager.getPhotosIdsForSearch(
+    const rawPhotoIds = await this.photoManager.getPhotosIdsForSearch(
       userId?.toString(),
       collections && collections.length > 0 ? collections : undefined,
       visualAspects && visualAspects.length > 0 ? visualAspects : undefined,
       artisticScores && artisticScores.length > 0 ? artisticScores : undefined,
       source || undefined
     )
+    const photoIds =
+      candidateIds && candidateIds.length > 0
+        ? rawPhotoIds.filter((id) => (candidateIds as number[]).includes(id))
+        : rawPhotoIds
 
     const { structuredResult, useImage, expansionCost } = await this.queryService.structureQuery(
       query,

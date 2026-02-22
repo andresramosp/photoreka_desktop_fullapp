@@ -28,6 +28,8 @@ export type SearchByPhotoOptions = {
   inverted: boolean
   resultLength: number
   collectionId?: number
+  /** When provided, restricts the candidate pool to only these photo IDs (applied after collectionId filter). */
+  candidatePoolIds?: number[]
 }
 
 export default class SearchPhotoService {
@@ -53,6 +55,11 @@ export default class SearchPhotoService {
         .select('id')
       const collectionPhotoIds = collectionPhotos.map((p) => p.id)
       userPhotoIds = userPhotoIds.filter((id) => collectionPhotoIds.includes(id))
+    }
+
+    if (query.candidatePoolIds && query.candidatePoolIds.length > 0) {
+      const poolSet = new Set(query.candidatePoolIds)
+      userPhotoIds = userPhotoIds.filter((id) => poolSet.has(id))
     }
 
     const anchors = await this.photoManager.getPhotosByIds(query.anchorIds)
