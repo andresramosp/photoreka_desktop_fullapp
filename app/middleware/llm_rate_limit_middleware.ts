@@ -49,6 +49,24 @@ export default class LlmRateLimitMiddleware {
     const cooldownSeconds = options.cooldownSeconds ?? llmRateLimitConfig.cooldownSeconds
     const keyPrefix = options.keyPrefix ? `llm_rate_limit_${options.keyPrefix}` : 'llm_rate_limit'
 
+    // Aplicar límites más restrictivos para el usuario demo
+    try {
+      const demoEmail = process.env.DEMO_USER_EMAIL
+      const user =
+        auth.user ||
+        (await auth
+          .check()
+          .then(() => auth.user)
+          .catch(() => null))
+      if (demoEmail && user?.email === demoEmail) {
+        limits.perMinute = 5
+        limits.perHour = 10
+        limits.perDay = 15
+      }
+    } catch (error) {
+      // Si hay error al obtener el usuario, continuar con límites normales
+    }
+
     try {
       // Identificadores para tracking
       const ip = request.ip()
@@ -72,7 +90,7 @@ export default class LlmRateLimitMiddleware {
         const ttl = await redis.ttl(cooldownKey)
         return response.tooManyRequests({
           error: 'Rate limit exceeded',
-          message: `Demasiadas solicitudes. Espera ${ttl} segundos antes de reintentar.`,
+          message: `Too many requests. Please wait ${ttl} seconds before retrying.`,
           retryAfter: ttl,
           type: 'cooldown',
         })
@@ -228,11 +246,10 @@ export default class LlmRateLimitMiddleware {
    */
   private getErrorMessage(limitType: string): string {
     const messages = {
-      minute:
-        'Has excedido el límite de solicitudes por minuto. Por favor, espera antes de reintentar.',
-      hour: 'Has excedido el límite de solicitudes por hora. Intenta más tarde.',
-      day: 'Has alcanzado tu cuota diaria de análisis. Tu límite se restablecerá mañana.',
+      minute: 'You have exceeded the request limit per minute. Please wait before retrying.',
+      hour: 'You have exceeded the request limit per hour. Please try again later.',
+      day: 'You have reached your daily analysis quota. Your limit will reset tomorrow.',
     }
-    return messages[limitType as keyof typeof messages] || 'Límite de solicitudes excedido.'
+    return messages[limitType as keyof typeof messages] || 'Request limit exceeded.'
   }
 }

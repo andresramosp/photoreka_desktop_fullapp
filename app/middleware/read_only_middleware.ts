@@ -28,6 +28,8 @@ export default class ReadOnlyMiddleware {
     '/api/series/:id/order',
     '/api/series/:id/move',
     '/api/search/tags/direct',
+    '/api/chat',
+    '/api/chat/reset',
   ]
 
   /**
