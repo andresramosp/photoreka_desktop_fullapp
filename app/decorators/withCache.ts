@@ -37,13 +37,15 @@ export function withCache(options: CacheOptions = {}) {
         cacheKey = `${propertyKey}_${serializedArgs}`
       }
 
+      const redisCacheKey = `cache:${cacheKey}`
+
       if (provider === 'nodecache') {
         const cached = nodeCache.get(cacheKey)
         if (cached !== undefined) {
           return cached
         }
       } else {
-        const cached = await redis.get(cacheKey)
+        const cached = await redis.get(redisCacheKey)
         if (cached) {
           return JSON.parse(cached)
         }
@@ -62,7 +64,7 @@ export function withCache(options: CacheOptions = {}) {
         if (provider === 'nodecache') {
           nodeCache.set(cacheKey, result, ttl)
         } else {
-          await redis.set(cacheKey, JSON.stringify(result), 'EX', ttl)
+          await redis.set(redisCacheKey, JSON.stringify(result), 'EX', ttl)
         }
       }
       return result
@@ -81,13 +83,18 @@ export async function invalidateCache(key?: string, provider: 'nodecache' | 'red
     }
   } else {
     if (key) {
-      const deleted = await redis.del(key)
+      const redisCacheKey = `cache:${key}`
+      const deleted = await redis.del(redisCacheKey)
       console.log(
-        `[invalidateCache] Redis key ${deleted > 0 ? 'DELETED' : 'NOT FOUND'}: ${key} (count: ${deleted})`
+        `[invalidateCache] Redis key ${deleted > 0 ? 'DELETED' : 'NOT FOUND'}: ${redisCacheKey} (count: ${deleted})`
       )
     } else {
-      await redis.flushall()
-      console.log(`[invalidateCache] Redis flushed all keys`)
+      // Delete only keys in the 'cache:' namespace — avoids wiping unrelated data (e.g. agent history)
+      const keys = await redis.keys('cache:*')
+      if (keys.length > 0) {
+        await redis.del(...keys)
+      }
+      console.log(`[invalidateCache] Redis flushed ${keys.length} cache key(s)`)
     }
   }
 }

@@ -571,8 +571,12 @@ export default class AgentToolsService {
                 return false
             }
 
-            // ─ Date range filter
-            const createdMs = new Date(photo.createdAt.toString()).getTime()
+            // ─ Date range filter (prefer EXIF dateTaken, fall back to createdAt)
+            const exifData = (photo.descriptions?.EXIF ?? {}) as Record<string, any>
+            const dateTakenRaw = exifData.dateTaken as string | undefined
+            const createdMs = dateTakenRaw
+              ? new Date(dateTakenRaw).getTime()
+              : new Date(photo.createdAt.toString()).getTime()
             if (dateFromMs !== null && createdMs < dateFromMs) return false
             if (dateToMs !== null && createdMs > dateToMs) return false
 
@@ -731,13 +735,13 @@ export default class AgentToolsService {
                 id: c.id,
                 name: c.name,
                 description: c.description,
-                samplePhotoIds: c.photos.slice(0, 10).map((p) => p.id),
+                samplePhotoIds: c.photos.slice(0, 15).map((p) => p.id),
               })),
               series: series.map((s) => ({
                 id: s.id,
                 name: s.name,
                 description: s.description,
-                samplePhotoIds: s.photos.slice(0, 10).map((p) => p.id),
+                samplePhotoIds: s.photos.slice(0, 15).map((p) => p.id),
               })),
             },
             null,

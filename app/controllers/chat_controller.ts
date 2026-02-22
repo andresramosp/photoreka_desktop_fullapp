@@ -73,11 +73,11 @@ export default class ChatController {
    *   message: string — success message
    * }
    */
-  public reset({ response, auth }: HttpContext) {
+  public async reset({ response, auth }: HttpContext) {
     try {
       const user = auth.use('api').user!
 
-      LangchainAgentService.clearHistory(user.id)
+      await LangchainAgentService.clearHistory(user.id)
 
       return response.ok({
         message: 'Chat history cleared successfully.',

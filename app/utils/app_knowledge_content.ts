@@ -79,6 +79,84 @@ The app is available on desktop and mobile, although some tools are desktop-only
 
 ---
 
+## REGISTRATION & PROFILE SETUP
+
+### Sign-Up Process
+New users create an account and are presented with two permanent configuration choices that define their workflow: **Import Mode** and **Photography Profile**. These choices cannot be changed after setup.
+
+### Import Mode Selection
+
+Users must choose how they prefer to manage photo imports. This decision affects the primary workflow and available tools.
+
+#### Web-first Workflow
+- Your main photo import flow is through the **Photoreka web interface**
+- Upload photos from multiple sources with ease
+- Includes: Import from computer (drag & drop or browse) · Connect Google Photos and sync automatically · Works from any device with a browser · Lightroom plugin available as optional secondary source
+- **Best for:** Photographers using multiple sources or preferring web-based management
+
+#### Lightroom-first Workflow
+- Your photo imports must **always be done from the Lightroom Plugin** to maintain synchronization
+- Full access to all Photoreka web tools and features
+- Search tool integrated directly into Lightroom
+- Perfect for photographers who organize everything in Lightroom
+- **Important:** If you upload photos directly through the web, they will be analyzed but won't appear in your Lightroom catalog, causing workflow inconsistencies
+- **Best for:** Photographers using Lightroom as their primary photo management system
+
+**Note:** Import Mode is locked after registration and cannot be changed. Choose carefully based on your current workflow.
+
+### Photography Profile Selection
+
+#### General Profile
+
+**General Photography**
+- Perfect for everyday photos, family moments, travel, and mixed collections
+- The engine adapts to any type of photography without requiring specific categorization
+- No particular bias—balanced evaluation across all photographic styles
+
+#### Single Profiles
+
+**Street Photography**
+- Optimized for candid moments and urban life documentation
+- Biased toward: Authentic, unposed moments · Strong composition in urban contexts · Human subjects and environmental storytelling · Humor and visual games in everyday life
+
+**Documentary Photography**
+- Optimized for storytelling and real-world documentation
+- Biased toward: Narrative strength and emotional impact · Context and environmental awareness · Authenticity over stylized aesthetics · Series coherence and photo essay potential
+
+**Artistic Photography**
+- Optimized for creative expression and fine art
+- Biased toward: Creative vision and conceptual execution · Technical mastery · Color theory, light, and visual poetry · Unique perspectives and experimental approaches
+
+#### Dual Profiles (Combination Mode)
+
+**Artistic + Documentary**
+- Storytelling through artistic expression
+- Combines: Narrative strength with creative visual language · Real-world subjects treated artistically · Conceptual depth in documentary projects · Aesthetic beauty without compromising authenticity
+
+**Artistic + Street Photography**
+- Creative urban documentation with artistic flair
+- Emphasizes: Candid moments elevated through artistic composition · Experimental approaches to street scenes · Visual poetry in everyday urban life · Technical mastery in spontaneous situations
+
+**Documentary + Street Photography**
+- Narrative urban storytelling
+- Balances: Candid moments with strong narrative context · Urban environments as stages for human stories · Authenticity in composition and decisive timing · Series work documenting social reality
+
+### How Profile Affects the App
+
+**Artistic Scores Weighting**
+The selected profile influences how AI assigns and weights artistic scores (1–10 scale) across your catalog. It creates a "slight preference" in evaluation—emphasizing qualities relevant to your chosen style.
+
+**Search & Recommendations**
+Semantic search and assistant recommendations are subtly influenced by your profile, surfacing photos that align with your declared photographic sensibility.
+
+**Atlas & Visualizations**
+The 3D and 2D Atlas organize photos based on similarity. Your profile helps determine which visual and conceptual relationships are prioritized.
+
+**Important Note**
+✦ **Your profile does not restrict uploads.** You can upload photos of any type regardless of your chosen profile. The profile only creates a slight preference in how the engine evaluates and organizes your work, ensuring scores and recommendations align with your artistic vision.
+
+---
+
 ## PHOTO LIFE CYCLE
 
 Photos move through several internal states:
@@ -327,7 +405,40 @@ Global rating = weighted average.
 
 ---
 
-## 13. SETTINGS (/settings)
+## 13. CHAT (/chat)
+
+**Purpose:** AI assistant for photo analysis, recommendations, and collection management. Desktop and mobile.
+
+**Key Features:**
+
+### Photo Analysis & Discovery
+- Ask questions about your catalog
+- Get curated photo recommendations
+- Receive contextual insights about collections
+- Explore themes and visual patterns
+
+### Photo Curation with Assistant Guidance
+The assistant can show you relevant photos from your catalog and provides an **"Add to..." button** for quick collection/series management:
+
+- **Add to Collection**: Send displayed photos directly to an existing collection or create a new one
+- **Add to Series**: Organize displayed photos into a series, maintaining narrative order
+
+**Workflow:**
+1. Open Chat with the assistant
+2. Describe what you're looking for or ask about your catalog
+3. Assistant displays relevant photos with "Add to..." button
+4. Click "Add to..." → Select destination (Collection or Series)
+5. Photos are instantly added to your chosen grouping
+
+### Benefits
+- Avoid manual searching and tagging
+- Curate selections directly from assistant recommendations
+- Build collections/series conversationally
+- Organize photos based on semantic understanding rather than metadata alone
+
+---
+
+## 14. SETTINGS (/settings)
 
 - Account
 - Preferences
@@ -349,11 +460,11 @@ Global rating = weighted average.
 ## SIDEBAR NAVIGATION
 
 Sync Area  
-Library: Workspace · Collections · Series  
-Explore: Search · Report · Atlas  
-Create: Canvas · Framer · Grid Maker · Project Builder  
-System: Chat · Settings · Help · Plan  
-
+Library: Workspace · Collections  
+Explore: Search · Report · Atlas (3D & 2D)
+Create: Canvas · Framer · Series
+Chat
+System : Settings · Help
 ---
 
 ## FAQ

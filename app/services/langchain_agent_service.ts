@@ -6,6 +6,9 @@ import PhotoManager from '../managers/photo_manager.js'
 import SearchTextService from './search_text_service.js'
 import AgentToolsService from './agent_tools_service.js'
 import QueryService from './query_service.js'
+import User from '#models/user'
+import Photo from '#models/photo'
+import redis from '@adonisjs/redis/services/main'
 
 // ─────────────────────────────────────────────────────────────
 // Model config
@@ -109,11 +112,41 @@ const FINAL_ANSWER_SCHEMA = {
 } as const
 
 // ─────────────────────────────────────────────────────────────
-// In-memory session store (userId → conversation history)
+// Redis-backed session store (userId → conversation history)
 // ─────────────────────────────────────────────────────────────
 
-const sessionHistories = new Map<number, ChatMessage[]>()
 const MAX_HISTORY_TURNS = 4 // max user+assistant message pairs kept in memory
+const HISTORY_TTL_SECONDS = 7200 // 2 hours sliding TTL
+
+function redisHistoryKey(userId: number): string {
+  return `agent:history:${userId}`
+}
+
+async function getHistory(userId: number): Promise<ChatMessage[]> {
+  try {
+    const data = await redis.get(redisHistoryKey(userId))
+    return data ? (JSON.parse(data) as ChatMessage[]) : []
+  } catch (err) {
+    console.warn('[Agent] Failed to read history from Redis', err)
+    return []
+  }
+}
+
+async function setHistory(userId: number, history: ChatMessage[]): Promise<void> {
+  try {
+    await redis.set(redisHistoryKey(userId), JSON.stringify(history), 'EX', HISTORY_TTL_SECONDS)
+  } catch (err) {
+    console.warn('[Agent] Failed to write history to Redis', err)
+  }
+}
+
+async function deleteHistory(userId: number): Promise<void> {
+  try {
+    await redis.del(redisHistoryKey(userId))
+  } catch (err) {
+    console.warn('[Agent] Failed to delete history from Redis', err)
+  }
+}
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -192,6 +225,49 @@ function extractTextContent(content: any): string {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Phase 2 helper — structured final answer with retry
+//
+// "Unexpected end of JSON input" in parseJsonMarkdown is caused by truncated
+// JSON output. Most likely causes:
+//   1. Token limit too tight — multimodal tool-result payloads (images from
+//      get_photo_info) leave almost no room for the structured response.
+//   2. Transient API / network errors returning an empty or partial body.
+//
+// Fix: higher fixed token budget (6 000) + up to 3 retries with back-off.
+// Same model, same messages, same schema on every attempt — no behaviour change.
+// ─────────────────────────────────────────────────────────────
+
+/** Invokes the structured final-answer model with up to 3 retries.
+ *  Uses a 6 000-token budget to prevent JSON truncation. */
+async function invokeStructuredFinalAnswer(
+  modelName: ModelName,
+  messages: any[]
+): Promise<{ text: string; photo_ids: number[] }> {
+  const MAX_ATTEMPTS = 3
+  const TOKEN_BUDGET = 6000
+  const model = createChatModel(modelName, TOKEN_BUDGET, 'medium').withStructuredOutput(
+    FINAL_ANSWER_SCHEMA
+  )
+
+  let lastError: any
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    try {
+      console.log(`[Agent] 🏁 Phase 2 attempt ${attempt + 1}/${MAX_ATTEMPTS}…`)
+      return (await model.invoke(messages)) as { text: string; photo_ids: number[] }
+    } catch (err: any) {
+      lastError = err
+      console.warn(
+        `[Agent] ⚠️  Phase 2 attempt ${attempt + 1}/${MAX_ATTEMPTS} failed: ${err.message}`
+      )
+      if (attempt < MAX_ATTEMPTS - 1) {
+        await new Promise((r) => setTimeout(r, 600 * (attempt + 1)))
+      }
+    }
+  }
+  throw lastError
+}
+
+// ─────────────────────────────────────────────────────────────
 // Main service
 // ─────────────────────────────────────────────────────────────
 
@@ -212,9 +288,9 @@ export default class LangchainAgentService {
   // Main chat method — manual tool-calling loop (LangChain v1.x)
   // ───────────────────────────────────────────────────────────
 
-  /** Clears the in-memory conversation history for a user. */
-  public static clearHistory(userId: number): void {
-    sessionHistories.delete(userId)
+  /** Clears the conversation history for a user. */
+  public static async clearHistory(userId: number): Promise<void> {
+    await deleteHistory(userId)
   }
 
   // ───────────────────────────────────────────────────────────
@@ -232,11 +308,47 @@ export default class LangchainAgentService {
   }
 
   // ───────────────────────────────────────────────────────────
+  // Fetches key user attributes and returns a short context paragraph
+  // to be appended to the system prompt at runtime.
+  // ───────────────────────────────────────────────────────────
+
+  private async buildUserContext(userId: number): Promise<string> {
+    const [user, photoCount] = await Promise.all([
+      User.find(userId),
+      Photo.query()
+        .where('user_id', userId)
+        .count('* as total')
+        .then((r) => Number(r[0].$extras.total ?? 0)),
+    ])
+    if (!user) return ''
+
+    const lines: string[] = ['## Current user context']
+    lines.push(`- Name: ${user.name}`)
+    if (user.preferredSource) lines.push(`- Preferred upload source: ${user.preferredSource}`)
+    if (user.profiles) lines.push(`- Photography profile: ${user.profiles}`)
+    lines.push(`- Catalog size: ${photoCount} photo${photoCount !== 1 ? 's' : ''}`)
+
+    const hasPatterns = user.catalogPatterns && Object.keys(user.catalogPatterns).length > 0
+    if (photoCount < 100 || !hasPatterns) {
+      lines.push(
+        `- Note: this user is relatively new to the app and their catalog is still in its early stages. Be cautious with broad generalisations about their photography or overall style and mention the need for more photos in order to elaborate a better analysis.`
+      )
+    }
+
+    return lines.join('\n')
+  }
+
+  // ───────────────────────────────────────────────────────────
   // Builds the full messages array: system prompt + hydrated history + current turn.
   // ───────────────────────────────────────────────────────────
 
-  private buildMessageList(history: ChatMessage[], currentUserMessage: HumanMessage): any[] {
-    const messages: any[] = [new SystemMessage(SYSTEM_PROMPT)]
+  private buildMessageList(
+    history: ChatMessage[],
+    currentUserMessage: HumanMessage,
+    userContext: string = ''
+  ): any[] {
+    const systemContent = userContext ? `${SYSTEM_PROMPT}\n\n${userContext}` : SYSTEM_PROMPT
+    const messages: any[] = [new SystemMessage(systemContent)]
 
     for (const m of history) {
       if (typeof m.content !== 'string' || m.content.trim().length === 0) continue
@@ -320,14 +432,14 @@ export default class LangchainAgentService {
   // history, capped at MAX_HISTORY_TURNS pairs. No-ops on empty output.
   // ───────────────────────────────────────────────────────────
 
-  private persistHistory(
+  private async persistHistory(
     userId: number,
     history: ChatMessage[],
     message: string,
     contextPhotoIds: number[],
     output: string,
     foundPhotoIds: number[]
-  ): void {
+  ): Promise<void> {
     if (!output.trim()) return
     const updatedHistory = [
       ...history,
@@ -338,7 +450,7 @@ export default class LangchainAgentService {
       },
       { role: 'assistant' as const, content: output, photoIds: [...foundPhotoIds] },
     ]
-    sessionHistories.set(userId, updatedHistory.slice(-(MAX_HISTORY_TURNS * 2)))
+    await setHistory(userId, updatedHistory.slice(-(MAX_HISTORY_TURNS * 2)))
   }
 
   // ───────────────────────────────────────────────────────────
@@ -350,7 +462,7 @@ export default class LangchainAgentService {
     message: string,
     contextPhotoIds: number[] = []
   ): Promise<AgentChatResult> {
-    const history: ChatMessage[] = sessionHistories.get(userId) ?? []
+    const history: ChatMessage[] = await getHistory(userId)
 
     const foundPhotoIds: number[] = []
     const { model: modelName, isCuratorial } = await routeModel(message, this.queryService)
@@ -371,7 +483,8 @@ export default class LangchainAgentService {
     const toolMap = Object.fromEntries(tools.map((t) => [t.name, t]))
 
     const currentUserMessage = this.buildCurrentUserMessage(message, contextPhotoIds)
-    const messages = this.buildMessageList(history, currentUserMessage)
+    const userContext = await this.buildUserContext(userId)
+    const messages = this.buildMessageList(history, currentUserMessage, userContext)
 
     const toolsUsed: string[] = []
     const intermediateSteps: IntermediateStep[] = []
@@ -427,20 +540,13 @@ export default class LangchainAgentService {
       messages.push(...toolResults)
     }
 
-    // ── Phase 2: structured final answer ─────────────────────────────────────
+    // ── Phase 2: structured final answer (with retry) ───────────────────────
     // The model produces text + photo_ids in a single structured call.
     // withStructuredOutput ensures the model consciously selects which photos
     // to surface, with no extra round-trips and no side-effect tool needed.
-    console.log(`[Agent] 🏁 Requesting structured final answer…`)
-    // Use a higher token budget for Phase 2 — the structured output wraps the
-    // entire response in JSON, so it needs more room than the data-fetching calls.
-    const finalAnswerModel = createChatModel(modelName, 3000, 'medium').withStructuredOutput(
-      FINAL_ANSWER_SCHEMA
-    )
-    const structured = (await finalAnswerModel.invoke(messages)) as {
-      text: string
-      photo_ids: number[]
-    }
+    // invokeStructuredFinalAnswer retries up to 3 times with a 6 000-token
+    // budget to prevent JSON truncation errors.
+    const structured = await invokeStructuredFinalAnswer(modelName, messages)
     // Strip any leaked internal-context annotations the model may have echoed.
     const rawOutput = structured.text ?? ''
     const output = rawOutput.replace(/\[(?:Shown photos|INTERNAL_CONTEXT)[^\]]*\]\s*/gi, '').trim()
@@ -452,7 +558,7 @@ export default class LangchainAgentService {
     console.log(
       `[Agent] 📤 Output preview: "${output.slice(0, 200)}${output.length > 200 ? '…' : ''}"`
     )
-    this.persistHistory(userId, history, message, contextPhotoIds, output, foundPhotoIds)
+    await this.persistHistory(userId, history, message, contextPhotoIds, output, foundPhotoIds)
     return {
       output,
       photoIds: foundPhotoIds,
