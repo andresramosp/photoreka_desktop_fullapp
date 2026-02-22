@@ -1,27 +1,53 @@
-{
+﻿{
   "topics": [
     {
       "id": "getting-started",
       "title": "Getting Started",
       "icon": "rocket",
-      "description": "Learn the basics of Photoreka",
+      "description": "What Photoreka is and how the core workflow works",
       "subtopics": [
         {
           "id": "what-is-photoreka",
           "title": "What is Photoreka?",
-          "content": "Photoreka is a photo management platform that helps you organize, search, and enhance your photo collection. Using advanced AI analysis, Photoreka automatically tags your photos with rich descriptions, making it easy to find exactly what you're looking for.",
+          "content": "Photoreka is an **intelligent photo curation and organization platform** designed for photographers. It uses artificial intelligence to analyze, classify, score, and help you rediscover photos in your catalog.\n\nThe core workflow is:\n1. **Upload photos** — Sync Area → Lightbox\n2. **Process with AI** — Sync Area → Analysis\n3. **Explore and create** — Search, Canvas, Collections, Atlas, and more\n\nThe app is available on desktop and mobile, although some tools are desktop-only (Canvas, 3D Atlas, Series).",
           "image": null
         },
         {
-          "id": "first-steps",
-          "title": "Your First Steps",
-          "content": "1. **Connect your photos**: Import photos from Google Photos or upload directly from your device.\n2. **Analyze your photos**: Let our AI analyze your photos to generate smart tags and descriptions.\n3. **Search & Discover**: Use natural language to find photos (e.g., \"sunset at the beach\").\n4. **Create & Share**: Use Canvas to create collages or Framer to prepare photos for social media.",
+          "id": "photo-lifecycle",
+          "title": "Photo Life Cycle",
+          "content": "Photos move through several internal states as they are processed:\n\n| State | Description |\n|---|---|\n| **uploaded** | Just uploaded, not analyzed |\n| **preprocessing** | Basic pre-analysis in progress |\n| **preprocessed** | Ready for full AI analysis |\n| **processing** | Full AI analysis in progress |\n| **processed** | Fully analyzed and available in all tools |\n\nPhotos only appear in Search, Collections, Atlas, Canvas, etc. when they are in the **processed** state. Photos in earlier states are only visible in the Sync Area.\n\n> **Tip:** If photos do not appear in Search or Workspace, they likely haven't been analyzed yet. Go to **Sync Area → Lightbox** and click **Analyze Photos**.",
           "image": null
         },
         {
           "id": "dashboard-overview",
-          "title": "Dashboard Overview",
-          "content": "Your Dashboard is the central hub where you can:\n- View your recent activity and photo insights\n- Access quick actions for common tasks\n- Monitor your storage usage\n- Get daily \"Eureka\" discoveries about your photos",
+          "title": "Dashboard",
+          "content": "The Dashboard is your home screen after signing in. It acts as a navigation hub and status overview.\n\n**What you'll find:**\n- Personalized greeting with your name\n- **Daily Eureka Card** — one photo selected from your catalog for rediscovery\n- Quick access to main tools: Canvas (with saved canvas preview), Workspace, Report, Atlas\n- **Recent Collections & Series** section\n\n**Notes:**\n- If you have no processed photos yet, most shortcuts appear locked\n- On mobile, desktop-only tools are hidden or replaced (e.g., Explorer instead of Canvas)\n- The Daily Eureka Card only appears once you have processed photos",
+          "image": null
+        }
+      ]
+    },
+    {
+      "id": "registration-profile",
+      "title": "Registration & Profile",
+      "icon": "sparkles",
+      "description": "Import mode, photography profile, and how they affect the app",
+      "subtopics": [
+        {
+          "id": "import-mode",
+          "title": "Choosing Your Import Mode",
+          "content": "During registration you choose how you prefer to manage photo imports. **This decision is permanent and cannot be changed after setup.**\n\n### Web-first Workflow\nYour main import flow is through the Photoreka web interface.\n- Upload from your computer (drag & drop or browse)\n- Connect Google Photos and sync automatically\n- Works from any device with a browser\n- Lightroom plugin available as an optional secondary source\n- **Best for:** Photographers using multiple sources or preferring web-based management\n\n### Lightroom-first Workflow\nPhoto imports must **always be done from the Lightroom Plugin** to maintain synchronization.\n- Full access to all Photoreka web tools\n- Search integrated directly into Lightroom\n- **Important:** Uploading photos through the web still works, but those photos won't appear in your Lightroom catalog, causing workflow inconsistencies\n- **Best for:** Photographers who organize everything in Lightroom",
+          "image": null
+        },
+        {
+          "id": "photography-profile",
+          "title": "Photography Profile",
+          "content": "During registration you also choose a Photography Profile. **This is also permanent.** It influences how the AI evaluates and organizes your work.\n\n### General Photography\nBalanced evaluation across all photographic styles. Ideal for everyday, family, travel, and mixed collections.\n\n### Street Photography\nBiased toward candid moments, urban life, human subjects, humor, and visual games in everyday life.\n\n### Documentary Photography\nBiased toward narrative strength, emotional impact, authenticity, and photo essay potential.\n\n### Artistic Photography\nBiased toward creative vision, conceptual execution, color theory, light, and unique perspectives.\n\n### Dual Profiles\nCombination modes are also available:\n- **Artistic + Documentary** — Storytelling through artistic expression\n- **Artistic + Street** — Creative urban documentation with artistic flair\n- **Documentary + Street** — Narrative urban storytelling",
+          "image": null
+        },
+        {
+          "id": "how-profile-affects-app",
+          "title": "How Your Profile Affects the App",
+          "content": "Your Photography Profile creates a **slight preference** in how the AI engine evaluates your work:\n\n- **Artistic Scores:** The AI weights qualities relevant to your chosen style when assigning 1–10 scores\n- **Search & Recommendations:** Semantic search and Chat recommendations subtly surface photos that align with your declared sensibility\n- **Atlas & Visualizations:** The 3D and 2D Atlas prioritize visual and conceptual relationships relevant to your profile\n\n> **Important:** Your profile does **not** restrict uploads. You can upload any type of photo regardless of your chosen profile. The profile only creates a slight preference in how the engine evaluates and organizes your work.",
           "image": null
         }
       ]
@@ -30,212 +56,164 @@
       "id": "importing-photos",
       "title": "Importing Photos",
       "icon": "cloud-upload",
-      "description": "How to add photos to your library",
+      "description": "Sync Area, Lightbox, and the analysis workflow",
       "subtopics": [
+        {
+          "id": "sync-area-explained",
+          "title": "The Sync Area",
+          "content": "The Sync Area is your entry point for importing and processing photos — the first tool new users should use.\n\nIt has two tabs:\n\n### Lightbox Tab\n- Lists all photos in **uploaded**, **preprocessing**, or **preprocessed** states\n- Upload new photos via drag & drop or file selector\n- Connect external sources: **Lightroom Plugin** and **Google Photos**\n- Select photos individually or in bulk to send for analysis\n- A floating **Analyze Photos** button appears when photos are ready\n\n### Analyses Tab\n- Shows photos currently in the **processing** state\n- Displays analysis progress\n- Allows navigating back to Lightbox",
+          "image": null
+        },
+        {
+          "id": "uploading-photos",
+          "title": "Uploading Photos",
+          "content": "Upload photos directly from your computer or mobile device:\n\n1. Go to **Sync Area → Lightbox**\n2. Click the upload area or drag and drop files\n3. Supported formats: JPG, PNG, WebP, HEIC\n4. Maximum file size: 20 MB per photo\n\nAfter upload, photos enter the **preprocessing** stage automatically before becoming ready for full analysis.",
+          "image": null
+        },
         {
           "id": "google-photos-import",
           "title": "Import from Google Photos",
-          "content": "Connect your Google Photos account to import your entire library or select specific albums:\n1. Go to **Settings > Connections**\n2. Click **Connect** next to Google Photos\n3. Authorize Photoreka to access your photos\n4. Select albums or photos to import from the Sync Area",
+          "content": "Connect your Google Photos account to sync your library:\n\n1. Go to **Settings → Integrations**\n2. Click **Connect** next to Google Photos\n3. Authorize Photoreka to access your photos\n4. Return to **Sync Area → Lightbox** to see synced photos ready for analysis",
           "image": null
         },
         {
-          "id": "local-upload",
-          "title": "Upload from Device",
-          "content": "Upload photos directly from your computer or mobile device:\n1. Go to **Sync Area > Lightbox**\n2. Click the upload button or drag and drop files\n3. Supported formats: JPG, PNG, WebP, HEIC\n4. Maximum file size: 20MB per photo",
-          "image": null
-        },
-        {
-          "id": "sync-area-explained",
-          "title": "Understanding the Sync Area",
-          "content": "The Sync Area is your photo processing hub with two main sections:\n- **Lightbox**: Where imported photos land before analysis. Review and select photos here.\n- **Analyses**: Track the progress of your photo processing jobs and view completed analyses.",
+          "id": "analyzing-photos",
+          "title": "Analyzing Photos",
+          "content": "Once photos are in the Lightbox (preprocessed state), you can send them for AI analysis:\n\n1. Select the photos you want to analyze (or select all)\n2. Click the floating **Analyze Photos** button\n3. Photos move to the **Analyses** tab while processing\n4. When complete, they become **processed** and appear in all tools\n\n> **Tip:** You can analyze photos in batches. You don't need to wait for all photos to finish — tools become available with each photo as it completes.",
           "image": null
         }
       ]
     },
     {
-      "id": "photo-analysis",
-      "title": "Photo Analysis",
-      "icon": "sparkles",
-      "description": "AI-powered photo understanding",
+      "id": "library",
+      "title": "Library",
+      "icon": "folder",
+      "description": "Workspace, Collections, and Photo Info",
       "subtopics": [
         {
-          "id": "how-analysis-works",
-          "title": "How Analysis Works",
-          "content": "Our AI analyzes your photos to extract:\n- **Descriptive tags**: Objects, scenes, activities, and concepts\n- **Technical metadata**: Camera settings, composition analysis\n- **Emotional context**: Mood, atmosphere, and storytelling elements\n- **Quality scores**: Technical and artistic quality assessment",
+          "id": "workspace",
+          "title": "Workspace",
+          "content": "The Workspace (/workspace) is your main library view — a grid of all **processed** photos in your catalog.\n\n**Features:**\n- Adjustable grid layout\n- Click any photo to open the Photo Info panel\n- Multi-select for batch actions (add to collection, send to tool, download)\n- Photo counter on mobile\n\nIf the Workspace is empty, it will guide you to the Sync Area to upload and analyze photos.",
           "image": null
         },
         {
-          "id": "starting-analysis",
-          "title": "Starting an Analysis",
-          "content": "To analyze photos:\n1. Select photos in the **Lightbox**\n2. Click the floating **Analyze** button\n3. Wait for processing (typically 2-5 seconds per photo)\n4. View results in your library or the Analyses tab",
+          "id": "collections",
+          "title": "Collections",
+          "content": "Collections are **unordered thematic groups** — the equivalent of albums. Ideal for projects, clients, events, or editorial stages.\n\n**To create a collection:**\n1. Go to **Collections** in the sidebar\n2. Click **New Collection**\n3. Give it a name\n4. Add photos by dragging, multi-selecting, or using the **Add to Collection** action from Search or Chat\n\n**Managing collections:**\n- Rename a collection by clicking its name\n- Delete a collection — photos are **not** deleted\n- Photos can belong to multiple collections",
           "image": null
         },
         {
-          "id": "analysis-credits",
-          "title": "Analysis Credits",
-          "content": "Each photo analysis consumes credits from your plan:\n- **Free Plan**: Limited monthly analyses\n- **Pro Plan**: Increased monthly quota\n- **Premium Plan**: Unlimited analyses\n\nCheck your remaining credits in Settings > Plans & Storage.",
+          "id": "photo-info",
+          "title": "Photo Info Panel",
+          "content": "The Photo Info panel shows a detailed view of any individual photo. Open it by clicking a photo in the Workspace, Search, Canvas, or any other tool.\n\n**Sections:**\n- **Metadata** — EXIF data, GPS location, technical specs\n- **Tags** — Contextual, Technical, Miscellaneous, and Artistic tags generated by AI\n- **Artistic Scores** — AI-assigned ratings on a 1–10 scale across multiple dimensions\n- **Genre Presets** — Predefined weight configurations for the global rating\n- **Notes** — Personal annotations\n- **AI Insights** — Contextual analysis from the AI (limited per session)\n\nThe **Global Rating** is a configurable weighted average of the individual artistic scores.",
           "image": null
         }
       ]
     },
     {
-      "id": "search",
-      "title": "Search & Discovery",
+      "id": "explore",
+      "title": "Explore",
       "icon": "search",
-      "description": "Find your photos instantly",
+      "description": "Search, Atlas (3D & 2D), and Report",
       "subtopics": [
         {
-          "id": "natural-language-search",
-          "title": "Natural Language Search",
-          "content": "Search your photos using everyday language:\n- \"Photos of my dog at the park\"\n- \"Sunset beach vacation 2023\"\n- \"Birthday party with friends\"\n- \"Black and white portraits\"\n\nThe AI understands context and finds relevant matches even without exact tag matches.",
+          "id": "semantic-search",
+          "title": "Semantic Search",
+          "content": "Write a natural description to find photos by visual and conceptual meaning:\n\n- \"market at sunset\"\n- \"child running in the rain\"\n- \"minimalist architecture\"\n- \"portrait with bokeh\"\n\nThe AI identifies photos matching the meaning of your query. The exact words don't need to appear in any metadata — the engine understands context and visual concepts.",
           "image": null
         },
         {
           "id": "tag-search",
-          "title": "Tag-Based Search",
-          "content": "Search by specific tags assigned to your photos:\n1. Switch to **Tags** mode in the search bar\n2. Type a tag name to see suggestions\n3. Click tags to add them to your search\n4. Combine multiple tags for precise results",
+          "title": "Tag Search",
+          "content": "Search by the AI-generated tags assigned to your photos during analysis:\n\n1. Switch to **Tags** mode in the search bar\n2. Type a tag name — autocomplete suggests existing tags from your catalog\n3. Click tags to **include** them (logical AND)\n4. You can also **exclude** specific tags\n5. Combine multiple tags for precise filtering",
           "image": null
         },
         {
           "id": "search-modes",
           "title": "Search Modes",
-          "content": "Choose the right search mode for your needs:\n- **Fast Mode**: Quick results using efficient algorithms\n- **Deep Mode**: Thorough search with more comprehensive matching\n- **Precise Mode**: Exact matching for specific requirements",
+          "content": "Choose the mode that best fits your query:\n\n### Broad\nLight scan across the entire library. Best for **moods**, **compositional aspects**, and **general visual style**. Ideal as a starting point for exploration.\n\n### Adaptive\nContext-aware search that enriches your query with related concepts. Best for **metaphors**, **cultural references**, and nuanced conceptual searches.\n\n### Precise\nHighly analytical and focused. Best for **specific objects** and **taxonomic distinctions** when you know exactly what you're looking for.\n\n> **Tip:** Start with Broad for exploration. Use Precise when you know exactly what you want. Choose Adaptive for conceptual or metaphorical queries.",
           "image": null
         },
         {
-          "id": "filters",
-          "title": "Using Filters",
-          "content": "Refine your search results with filters:\n- **Date Range**: Filter by when photos were taken\n- **Collections**: Search within specific albums\n- **Quality**: Filter by technical or artistic scores\n- **Tags**: Include or exclude specific tags",
+          "id": "search-filters",
+          "title": "Filters & Results",
+          "content": "Refine your search results with filters:\n- **Visual Aspects** — color, orientation, lighting, depth of field, genre, perspective, and more\n- **Artistic Scores** — filter by AI-assigned quality ratings\n- **Collections** — search within specific albums\n\n**Result features:**\n- Relevance rating (1–3 stars) shown per photo\n- High match indicator for strongest results\n- Progressive pagination with **Load more**\n\n**Actions from results:**\n- Open Photo Info panel\n- Multi-select photos\n- Add to Collection or Series\n- Send to another tool\n- Download as ZIP",
+          "image": null
+        },
+        {
+          "id": "3d-atlas",
+          "title": "3D Atlas",
+          "content": "The 3D Atlas is an **immersive three-dimensional visualization** of your catalog based on AI semantic similarity (vector embeddings). Photos that are visually and conceptually similar cluster together. Desktop only.\n\n**Navigation:**\n- Orbit, zoom, and pan with mouse or trackpad\n- Click any photo to open its info panel\n\n**Features:**\n- **Filters** — Visual aspects, artistic scores, time range\n- **Inflate factor** — Spread clusters apart for easier exploration\n- **Grid relaxation** — Adjust cluster density\n- **Floating semantic tags** — Topic labels that emerge from photo clusters\n- **Auto tour** — Automated flythrough of your catalog\n- **Public shareable URL** — Share your Atlas with anyone",
+          "image": null
+        },
+        {
+          "id": "2d-atlas",
+          "title": "2D Atlas",
+          "content": "The 2D Atlas is a flat semantic map of your catalog — the same AI similarity layout as the 3D Atlas, but as a navigable 2D plane. Mobile compatible.\n\nAll the same filters apply: visual aspects, artistic scores, and time range. Use this on mobile or whenever you prefer a flat overhead view of your photo clusters.",
+          "image": null
+        },
+        {
+          "id": "report",
+          "title": "Report & Statistics",
+          "content": "The Report section provides a **deep analysis of your entire catalog**.\n\n**Sections:**\n- **Usage Patterns** — When and how often you photograph\n- **Visual Aspects** — Distribution of colors, orientations, lighting styles, genres, and more\n- **Artistic Scores Distribution** — Histogram of AI quality ratings across the catalog\n- **Portfolio Consistency** — How cohesive your body of work is\n\nUse the Report to understand patterns in your photography and identify strengths or gaps in your catalog.",
           "image": null
         }
       ]
     },
     {
-      "id": "canvas",
-      "title": "Canvas",
+      "id": "create",
+      "title": "Create",
       "icon": "easel",
-      "description": "Create stunning collages",
+      "description": "Canvas, Series, and Framer",
       "subtopics": [
         {
-          "id": "canvas-basics",
-          "title": "Canvas Basics",
-          "content": "Canvas is your creative workspace for arranging photos:\n- Drag and drop photos onto the canvas\n- Resize and rotate freely\n- Arrange layers with precision\n- Export high-quality images",
+          "id": "canvas-overview",
+          "title": "Canvas",
+          "content": "Canvas is an **infinite freeform visual board** for composition, sequencing, and collage. Desktop only.\n\n**Core features:**\n- Drag & drop photos onto the board\n- Zoom, pan, resize, and rotate freely\n- Multi-select and group photos\n- Save your board manually (Canvas does **not** auto-save)\n\n**Adding photos:**\n1. Open the photos panel within Canvas\n2. Drag photos directly onto the board, or use the built-in search to find and add them",
           "image": null
         },
         {
-          "id": "adding-photos-canvas",
-          "title": "Adding Photos to Canvas",
-          "content": "Add photos to your canvas in multiple ways:\n1. **Drag from Library**: Open the photos panel and drag photos directly\n2. **Search & Add**: Use the built-in search to find and add photos\n3. **Import**: Upload new photos directly to the canvas",
+          "id": "canvas-expansion",
+          "title": "Canvas Expansion",
+          "content": "Expansion is Canvas's key feature — it automatically **adds related photos** to your board based on similarity.\n\n**Expansion types:**\n- **General** — Semantic and compositional similarity\n- **Chromatic** — Color palette similarity\n- **Narrative** — Contextual and thematic similarity\n\n**Expand from:**\n- Your full catalog\n- Only the photos already on the canvas\n\n> **Note:** If Canvas shows a \"Basic Mode\" indicator, it means some photos on the board are unprocessed and full expansion features are limited.",
           "image": null
         },
         {
-          "id": "canvas-tools",
-          "title": "Canvas Tools",
-          "content": "Available tools for editing:\n- **Select Tool**: Click to select, drag to move\n- **Multi-select**: Hold Shift or draw a selection box\n- **Zoom**: Use mouse wheel or pinch gestures\n- **Pan**: Hold Space and drag, or use two fingers\n- **Align**: Auto-align photos to grid or each other",
+          "id": "series",
+          "title": "Series",
+          "content": "Series are **ordered photo sequences** with narrative intent — designed for photo essays, books, and presentations. Desktop only.\n\n**Features:**\n- Drag-and-drop reordering\n- Fullscreen slideshow playback\n- Public shareable URL for presenting your work\n\n**Collection vs Series:**\n- **Collections** are unordered thematic groups\n- **Series** are ordered narrative sequences meant for storytelling and presentation",
           "image": null
         },
         {
-          "id": "exporting-canvas",
-          "title": "Exporting Your Creation",
-          "content": "Export your canvas creation:\n1. Click the **Export** button in the toolbar\n2. Choose your preferred resolution\n3. Select format (PNG or JPG)\n4. Download or share directly",
+          "id": "framer",
+          "title": "Framer",
+          "content": "Framer lets you add **presentation frames** to your photos — perfect for social media posts and print preparation.\n\n**Supported formats:**\n- Instagram Posts (1:1, 4:5)\n- Instagram Stories (9:16)\n- Facebook & Twitter/X Posts\n- Print ratios (4:3, 16:9)\n- Custom aspect ratios\n\n**Frame settings:**\n- **Margin size** — Adjust border width with a slider\n- **Frame color** — Choose from presets or a custom color\n- **Background** — Solid colors or blur effects\n- **Alignment** — Center, top, or bottom positioning\n\nOnce configured, preview and download your framed photo.",
           "image": null
         }
       ]
     },
     {
-      "id": "framer",
-      "title": "Framer",
-      "icon": "image",
-      "description": "Prepare photos for social media",
+      "id": "ai-assistant",
+      "title": "AI Assistant",
+      "icon": "help-circle",
+      "description": "Chat with the AI to explore and curate your catalog",
       "subtopics": [
         {
-          "id": "framer-overview",
-          "title": "What is Framer?",
-          "content": "Framer helps you prepare photos for social media with perfect aspect ratios:\n- Instagram Posts (1:1, 4:5)\n- Instagram Stories (9:16)\n- Facebook Posts\n- Twitter/X Posts\n- Custom ratios",
+          "id": "chat-overview",
+          "title": "What the Assistant Does",
+          "content": "The AI Assistant (Chat) lets you explore and curate your photo catalog through natural conversation. Available on desktop and mobile.\n\n**Key capabilities:**\n- Ask questions about your catalog and get contextual insights\n- Request curated photo recommendations based on themes, mood, or style\n- Explore visual patterns and recurring subjects across your work\n- Get analysis of specific photos or collections\n\nThe assistant has full knowledge of your processed catalog and uses semantic understanding — not just keyword matching.",
           "image": null
         },
         {
-          "id": "using-framer",
-          "title": "Using Framer",
-          "content": "Create perfectly framed photos:\n1. Select a photo from your library\n2. Choose a frame style (aspect ratio)\n3. Adjust margin size and color\n4. Preview and download",
+          "id": "chat-curation",
+          "title": "Curating with the Assistant",
+          "content": "The assistant can surface relevant photos and let you add them directly to Collections or Series — without manual searching.\n\n**Workflow:**\n1. Open Chat and describe what you're looking for\n2. The assistant displays matching photos with an **Add to...** button\n3. Click **Add to...** → choose **Collection** or **Series**\n4. Select an existing one or create new — photos are added instantly\n\nThis lets you build curated groupings conversationally, based on semantic understanding rather than metadata alone.",
           "image": null
         },
         {
-          "id": "frame-settings",
-          "title": "Frame Settings",
-          "content": "Customize your frame:\n- **Margin Size**: Adjust the border width (0-200px)\n- **Frame Color**: Choose from presets or custom colors\n- **Background**: Solid colors or blur effects\n- **Position**: Center, top, or bottom alignment",
-          "image": null
-        }
-      ]
-    },
-    {
-      "id": "collections",
-      "title": "Collections",
-      "icon": "folder",
-      "description": "Organize your photos",
-      "subtopics": [
-        {
-          "id": "creating-collections",
-          "title": "Creating Collections",
-          "content": "Organize photos into collections:\n1. Go to the **Collections** view\n2. Click **New Collection**\n3. Name your collection\n4. Add photos by dragging or selecting",
-          "image": null
-        },
-        {
-          "id": "managing-collections",
-          "title": "Managing Collections",
-          "content": "Keep your collections organized:\n- **Rename**: Click the collection name to edit\n- **Delete**: Remove collections (photos are not deleted)\n- **Reorder**: Drag and drop to arrange\n- **Share**: Generate shareable links (coming soon)",
-          "image": null
-        }
-      ]
-    },
-    {
-      "id": "account",
-      "title": "Account & Settings",
-      "icon": "settings",
-      "description": "Manage your account",
-      "subtopics": [
-        {
-          "id": "profile-settings",
-          "title": "Profile Settings",
-          "content": "Manage your profile information:\n- Display name\n- Email address\n- Password changes\n- Account preferences",
-          "image": null
-        },
-        {
-          "id": "connections",
-          "title": "Connected Services",
-          "content": "Manage your connected accounts:\n- **Google Photos**: Import and sync your photo library\n- **Instagram**: Coming soon\n- **Dropbox**: Coming soon\n\nConnect or disconnect services in Settings > Connections.",
-          "image": null
-        },
-        {
-          "id": "theme-preferences",
-          "title": "Theme & Display",
-          "content": "Customize your experience:\n- **Dark Mode**: Easier on the eyes, great for low light\n- **Light Mode**: Clean and bright interface\n- **Language**: English (more languages coming soon)",
-          "image": null
-        }
-      ]
-    },
-    {
-      "id": "plans-storage",
-      "title": "Plans & Storage",
-      "icon": "credit-card",
-      "description": "Subscription and usage",
-      "subtopics": [
-        {
-          "id": "available-plans",
-          "title": "Available Plans",
-          "content": "Choose the plan that fits your needs:\n\n**Free Plan**\n- Limited photo storage\n- Basic AI analysis\n- Standard search features\n\n**Pro Plan**\n- Increased storage\n- Priority AI processing\n- Advanced search modes\n\n**Premium Plan**\n- Unlimited storage\n- Unlimited analyses\n- All features unlocked",
-          "image": null
-        },
-        {
-          "id": "storage-usage",
-          "title": "Understanding Storage",
-          "content": "Your storage usage includes:\n- Analyzed photos in your library\n- Photos in the Lightbox awaiting analysis\n\nOriginal high-resolution files are not stored permanently. Only optimized versions for fast loading and AI analysis are kept.",
-          "image": null
-        },
-        {
-          "id": "upgrading",
-          "title": "Upgrading Your Plan",
-          "content": "To upgrade your plan:\n1. Go to **Settings > Plans & Storage**\n2. Click **View Plans**\n3. Select your preferred plan\n4. Complete the payment process\n\nUpgrades are effective immediately.",
+          "id": "chat-tips",
+          "title": "Tips for Better Results",
+          "content": "Get the most out of the AI Assistant:\n\n- **Be descriptive:** \"Show me my strongest street photos from the last year\" works better than \"show photos\"\n- **Ask for comparisons:** \"Which of my photos have the best light?\"\n- **Request curation:** \"Help me build a 10-photo series about urban isolation\"\n- **Explore themes:** \"What subjects appear most often in my catalog?\"\n- **Combine with tools:** After the assistant surfaces photos, send them directly to Canvas or a Series for further work\n\n> **Note:** The assistant's AI Insights feature on individual photos has a session usage limit.",
           "image": null
         }
       ]
@@ -244,24 +222,30 @@
       "id": "privacy-terms",
       "title": "Privacy & Terms",
       "icon": "shield",
-      "description": "Your data and rights",
+      "description": "Image ownership, AI processing policy, and your data rights",
       "subtopics": [
         {
-          "id": "data-privacy",
-          "title": "Your Data Privacy",
-          "content": "We take your privacy seriously:\n- **You own your photos**: 100% ownership and copyright retained\n- **No selling**: We never sell, license, or redistribute your images\n- **Encrypted storage**: All data encrypted in transit and at rest\n- **Low-res processing**: Only reduced versions stored for analysis",
+          "id": "image-ownership",
+          "title": "Image Ownership & Storage",
+          "content": "Your images are yours:\n- You retain **100% ownership and copyright** of all images uploaded\n- Photoreka does not sell, license, or redistribute your images without your explicit consent\n- Only **reduced, low-resolution versions** are stored on secure servers (Cloudflare R2) for analysis, search, and previews\n- **Original high-resolution files are not permanently stored**\n- All data is encrypted in transit and at rest",
           "image": null
         },
         {
-          "id": "ai-processing",
+          "id": "ai-processing-policy",
           "title": "AI Processing Policy",
-          "content": "How we handle AI processing:\n- Images are analyzed, never edited or altered\n- Processing uses secure, paid AI services\n- Third-party providers don't train on your images\n- Temporary transmission only, under strict agreements",
+          "content": "How your images are handled during AI analysis:\n- Images are **analyzed only** — they are never edited, transformed, or altered during processing\n- Processing uses proprietary open-source AI models and third-party AI services (including Google) under paid/private plans **that do not use images to train their models**\n- Images may be temporarily transmitted to providers solely for the requested analysis, under confidentiality agreements — they are **not stored** by these providers\n\n**Consent:** By using Photoreka, you acknowledge and accept that your images will be processed using AI models as described. If you do not agree, refrain from uploading images or using the platform.",
+          "image": null
+        },
+        {
+          "id": "data-rights",
+          "title": "Your Data Rights",
+          "content": "You are in control of your data:\n- **Delete anytime:** You can delete your images at any time\n- **Removal timeline:** Upon deletion, stored copies and derived data are removed within 30 days, except where legal retention obligations apply\n- **No public sharing:** Images are never shared publicly or with unauthorized third parties\n- **Third-party access:** Service providers may access images only as strictly necessary for platform functionality and under binding confidentiality obligations\n\n**Sensitive content disclaimer:** Photoreka is intended for artistic or documentary photographic work suitable for public or professional presentation. The platform is **not recommended** for sensitive, private, or personal images. Users are strongly advised not to upload images containing personal or confidential content.",
           "image": null
         },
         {
           "id": "terms-of-use",
           "title": "Terms of Use",
-          "content": "Key terms to know:\n- You're responsible for content you upload\n- Don't upload content that infringes others' rights\n- We may suspend accounts violating terms\n- See full Terms of Use for complete details",
+          "content": "Key terms to know:\n- You are responsible for maintaining the confidentiality of your account\n- You must ensure uploaded content does not infringe third-party rights\n- You are responsible for the legality and appropriateness of uploaded content\n- Photoreka may suspend accounts violating these terms\n- Photoreka provides services \"as is\" and is not liable for indirect damages arising from use of the platform\n- By uploading images, you grant Photoreka a limited, non-exclusive, revocable license to store, process, and analyze images solely to provide platform functionalities",
           "image": null,
           "link": {
             "text": "Read Full Terms",
@@ -271,70 +255,12 @@
         {
           "id": "privacy-policy",
           "title": "Privacy Policy",
-          "content": "Our privacy commitments:\n- Minimal data collection\n- No third-party advertising\n- Right to data deletion\n- Transparent practices",
+          "content": "Our privacy commitments:\n- **Minimal data collection** — we only collect what is needed to provide the service\n- **No third-party advertising** — your data is never used for ads\n- **Right to deletion** — request full removal of your data at any time\n- **Transparent practices** — we document how data flows through the platform\n\nFor questions about privacy or data handling, contact us at support@photoreka.com.",
           "image": null,
           "link": {
             "text": "Read Privacy Policy",
             "route": "/privacy"
           }
-        }
-      ]
-    },
-    {
-      "id": "troubleshooting",
-      "title": "Troubleshooting",
-      "icon": "help-circle",
-      "description": "Common issues and solutions",
-      "subtopics": [
-        {
-          "id": "photos-not-loading",
-          "title": "Photos Not Loading",
-          "content": "If photos aren't loading:\n1. Check your internet connection\n2. Try refreshing the page\n3. Clear your browser cache\n4. Ensure Google Photos is connected (if importing)\n5. Check if the photo format is supported",
-          "image": null
-        },
-        {
-          "id": "analysis-stuck",
-          "title": "Analysis Stuck or Failed",
-          "content": "If photo analysis seems stuck:\n1. Check the Analyses tab for status\n2. Large batches may take longer\n3. Try analyzing fewer photos at once\n4. Ensure you have remaining analysis credits\n5. Contact support if issues persist",
-          "image": null
-        },
-        {
-          "id": "search-no-results",
-          "title": "Search Returns No Results",
-          "content": "If searches aren't finding photos:\n1. Ensure photos have been analyzed\n2. Try different search terms\n3. Switch between Natural Language and Tags mode\n4. Use broader or more specific terms\n5. Check if filters are limiting results",
-          "image": null
-        },
-        {
-          "id": "connection-issues",
-          "title": "Google Photos Connection Issues",
-          "content": "If Google Photos won't connect:\n1. Ensure you're signed into Google\n2. Try disconnecting and reconnecting\n3. Check browser popup blockers\n4. Clear cookies and try again\n5. Use a different browser if issues persist",
-          "image": null
-        }
-      ]
-    },
-    {
-      "id": "contact",
-      "title": "Contact & Support",
-      "icon": "mail",
-      "description": "Get help from our team",
-      "subtopics": [
-        {
-          "id": "contact-support",
-          "title": "Contact Support",
-          "content": "Need help? Reach out to us:\n- **Email**: support@photoreka.com\n- **Response time**: Usually within 24 hours\n\nWhen contacting support, please include:\n- Your account email\n- Description of the issue\n- Steps to reproduce (if applicable)\n- Screenshots if helpful",
-          "image": null
-        },
-        {
-          "id": "feature-requests",
-          "title": "Feature Requests",
-          "content": "We love hearing your ideas!\n- Share feature suggestions via email\n- Vote on upcoming features (coming soon)\n- Join our community discussions",
-          "image": null
-        },
-        {
-          "id": "bug-reports",
-          "title": "Report a Bug",
-          "content": "Found a bug? Help us fix it:\n1. Note what you were doing when it occurred\n2. Capture any error messages\n3. Try to reproduce the issue\n4. Send details to support@photoreka.com\n\nWe appreciate detailed bug reports!",
-          "image": null
         }
       ]
     }
