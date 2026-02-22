@@ -130,11 +130,13 @@
       :show-delete="false"
       :show-add-to-collection="true"
       :show-move-to-tool="true"
+      :show-send-to-chat="true"
       :is-downloading="isDownloading"
       @clear-selection="localClearAllSelections"
       @download="handleDownloadMultiple"
       @add-to-collection="handleAddToCollection"
       @move-to-tool="openToolSelector"
+      @send-to-chat="handleSendToChat"
     />
   </div>
 </template>
@@ -195,6 +197,7 @@ const {
   isProcessing: isProcessingTool,
   showToolSelector,
   takeToTool,
+  takeToChat,
   openToolSelector,
   closeToolSelector,
 } = usePhotoToolSelection();
@@ -415,6 +418,10 @@ const handleToolSelected = async (toolId) => {
 
   await takeToTool(toolId, idsToUse, clearCallback);
   closeToolSelector();
+};
+
+const handleSendToChat = async () => {
+  await takeToChat(localSelectedPhotoIds.value, localClearAllSelections);
 };
 
 const handleDownloadMultiple = async () => {

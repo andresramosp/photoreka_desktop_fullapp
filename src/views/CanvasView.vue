@@ -487,6 +487,21 @@
           >
         </n-button>
 
+        <!-- Send to Chat Button - Only show when photos are selected -->
+        <n-button
+          v-if="selectedPhotosCount > 0"
+          type="info"
+          @click="handleSendToChat"
+          :disabled="isProcessingTool"
+        >
+          <template #icon>
+            <n-icon> <RobotOutlined /> </n-icon>
+          </template>
+          <span v-if="selectedPhotosCount > 1"
+            >({{ selectedPhotosCount }})</span
+          >
+        </n-button>
+
         <n-button
           :disabled="isSaved"
           @click="handleSaveCanvas"
@@ -703,6 +718,7 @@ import {
   AddOutline,
   RemoveOutline,
 } from "@vicons/ionicons5";
+import { RobotOutlined } from "@vicons/antd";
 import { usePhotosStore } from "@/stores/photos";
 import {
   ref,
@@ -777,6 +793,7 @@ const {
   isProcessing: isProcessingTool,
   showToolSelector,
   takeToTool,
+  takeToChat,
   openToolSelector,
   closeToolSelector,
 } = usePhotoToolSelection();
@@ -1313,6 +1330,18 @@ const handleToolSelected = async (toolId) => {
   // Use the composable function to take photos to tool
   await takeToTool(toolId, selectedIds, clearSelections);
   closeToolSelector();
+};
+
+const handleSendToChat = async () => {
+  const selectedIds = photos.value
+    .filter((photo) => photo.selected)
+    .map((photo) => photo.id);
+  const clearSelections = () => {
+    photos.value.forEach((photo) => {
+      if (photo.selected) photo.selected = false;
+    });
+  };
+  await takeToChat(selectedIds, clearSelections);
 };
 
 const openPhotoInfo = (photo, event) => {

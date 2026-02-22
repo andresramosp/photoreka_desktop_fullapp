@@ -194,20 +194,20 @@
     },
     {
       "id": "ai-assistant",
-      "title": "AI Assistant",
-      "icon": "help-circle",
-      "description": "Chat with the AI to explore and curate your catalog",
+      "title": "ChatLab",
+      "icon": "robot",
+      "description": "ChatLab - Talk to your photos and curate your catalog with our AI assistant",
       "subtopics": [
         {
           "id": "chat-overview",
           "title": "What the Assistant Does",
-          "content": "The AI Assistant (Chat) lets you explore and curate your photo catalog through natural conversation. Available on desktop and mobile.\n\n**Key capabilities:**\n- Ask questions about your catalog and get contextual insights\n- Request curated photo recommendations based on themes, mood, or style\n- Explore visual patterns and recurring subjects across your work\n- Get analysis of specific photos or collections\n\nThe assistant has full knowledge of your processed catalog and uses semantic understanding — not just keyword matching.",
+          "content": "The Photoreka's Assistant (ChatLab) lets you explore and curate your photo catalog through natural conversation. Available on desktop and mobile.\n\n**Key capabilities:**\n- Ask questions about your catalog and get contextual insights\n- Request curated photo recommendations based on themes, mood, or style\n- Explore visual patterns and recurring subjects across your work\n- Get analysis of specific photos or collections\n\nThe assistant has full knowledge of your processed catalog and uses semantic understanding — not just keyword matching.",
           "image": null
         },
         {
           "id": "chat-curation",
           "title": "Curating with the Assistant",
-          "content": "The assistant can surface relevant photos and let you add them directly to Collections or Series — without manual searching.\n\n**Workflow:**\n1. Open Chat and describe what you're looking for\n2. The assistant displays matching photos with an **Add to...** button\n3. Click **Add to...** → choose **Collection** or **Series**\n4. Select an existing one or create new — photos are added instantly\n\nThis lets you build curated groupings conversationally, based on semantic understanding rather than metadata alone.",
+          "content": "The assistant can surface relevant photos and let you add them directly to Collections or Series — without manual searching.\n\n**Workflow:**\n1. Open ChatLab and describe what you're looking for\n2. The assistant displays matching photos with an **Add to...** button\n3. Click **Add to...** → choose **Collection** or **Series**\n4. Select an existing one or create new — photos are added instantly\n\nThis lets you build curated groupings conversationally, based on semantic understanding rather than metadata alone.",
           "image": null
         },
         {

@@ -18,8 +18,8 @@ import {
   HelpCircleOutline,
   Image,
   DesktopOutline,
-  ChatbubblesOutline,
 } from "@vicons/ionicons5";
+import { RobotOutlined } from "@vicons/antd";
 
 export const TOOL_AVAILABILITY = {
   DESKTOP_ONLY: "desktop",
@@ -46,7 +46,7 @@ export const TOOL_ICONS = {
   HelpCircleOutline,
   Image,
   DesktopOutline,
-  ChatbubblesOutline,
+  RobotOutlined,
 };
 
 export const TOOLS_CONFIG = [
@@ -146,10 +146,10 @@ export const TOOLS_CONFIG = [
   },
   {
     id: "chat",
-    name: "Chat",
+    name: "ChatLab",
     description: "Chat with AI about your photos",
-    icon: "ChatbubblesOutline",
-    route: "/chat",
+    icon: "RobotOutlined",
+    route: "/chat-lab",
     availableOn: TOOL_AVAILABILITY.BOTH,
     menuSection: "global",
     showInPhotoSelector: false,

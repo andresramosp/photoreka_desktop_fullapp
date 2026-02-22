@@ -107,10 +107,12 @@
             :showDelete="false"
             :showAddToCollection="!isPlayground"
             :showMoveToTool="!isPlayground"
+            :showSendToChat="!isPlayground"
             :isDownloading="isDownloading"
             @download="handleDownloadPhotos"
             @add-to-collection="handleAddToCollection"
             @move-to-tool="handleMoveToTool"
+            @send-to-chat="handleSendToChat"
           />
         </div>
         <button
@@ -268,6 +270,7 @@ const {
   isProcessing: isProcessingTool,
   showToolSelector,
   takeToTool,
+  takeToChat,
   openToolSelector,
   closeToolSelector,
 } = usePhotoToolSelection();
@@ -2081,6 +2084,10 @@ const handleMoveToTool = () => {
     );
     openToolSelector();
   }
+};
+
+const handleSendToChat = async () => {
+  await takeToChat(selectedPhotoIds.value, () => {});
 };
 
 const handleToolSelected = async (toolId) => {

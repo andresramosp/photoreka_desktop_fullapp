@@ -23,13 +23,13 @@
       <div v-if="messages.length === 0" class="chat-welcome">
         <div class="welcome-content">
           <n-icon :size="isMobile ? 48 : 64" class="welcome-icon">
-            <ChatBubbleIcon />
+            <RobotOutlined />
           </n-icon>
 
-          <h2 class="welcome-title">Chat with your photos</h2>
+          <h2 class="welcome-title">Talk to your photos</h2>
           <p class="welcome-description">
             Ask questions about your library, get curation advice, or explore
-            your catalog with AI assistance.
+            your catalog with Photoreka's ChatLab assistance.
           </p>
 
           <div class="suggestion-cards">
@@ -313,7 +313,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted, onUnmounted } from "vue";
+import { ref, nextTick, onMounted, onUnmounted, onActivated } from "vue";
 import { NIcon, useMessage } from "naive-ui";
 import PhotosDialog from "@/components/PhotosDialog.vue";
 import PhotoCardHub from "@/components/photoCards/PhotoCardHub.vue";
@@ -328,7 +328,6 @@ import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { marked } from "marked";
 import {
-  ChatbubblesOutline as ChatBubbleIcon,
   ImagesOutline as ImagesIcon,
   ImageOutline as ImageIcon,
   CloseOutline as CloseIcon,
@@ -345,7 +344,7 @@ import {
   BookmarksOutline,
 } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
-import { PlusCircleFilled } from "@vicons/antd";
+import { PlusCircleFilled, RobotOutlined } from "@vicons/antd";
 
 defineOptions({ name: "ChatView" });
 
@@ -511,9 +510,30 @@ const checkMobile = () => {
   isMobile.value = window.innerWidth < 768;
 };
 
+const loadPendingChatPhotos = () => {
+  const pending = sessionStorage.getItem("chat_context_photos");
+  if (!pending) return;
+  sessionStorage.removeItem("chat_context_photos");
+  try {
+    const photos: ContextPhoto[] = JSON.parse(pending);
+    if (!Array.isArray(photos) || photos.length === 0) return;
+    const existingIds = new Set(contextPhotos.value.map((p) => p.id));
+    const newPhotos = photos.filter((p) => !existingIds.has(p.id));
+    contextPhotos.value.push(...newPhotos);
+  } catch {
+    // ignore parse errors
+  }
+};
+
 onMounted(() => {
   resetChat();
+  loadPendingChatPhotos();
   window.addEventListener("resize", checkMobile);
+});
+
+// Also fires on keep-alive re-activation (e.g. navigating back to /chat)
+onActivated(() => {
+  loadPendingChatPhotos();
 });
 
 onUnmounted(() => {

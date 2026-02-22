@@ -348,8 +348,8 @@ const router = createRouter({
       },
     },
     {
-      path: "/chat",
-      name: "chat",
+      path: "/chat-lab",
+      name: "chat-lab",
       component: ChatView,
       meta: {
         requiresAuth: true,

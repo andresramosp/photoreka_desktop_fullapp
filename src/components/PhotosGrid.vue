@@ -367,6 +367,7 @@
       :show-delete="true"
       :show-add-to-collection="displayAddToCollection"
       :show-move-to-tool="displayMoveToTool"
+      :show-send-to-chat="displaySendToChat"
       :is-deleting="isDeletingPhotos"
       :is-downloading="isDownloading"
       @clear-selection="clearAllSelections"
@@ -374,6 +375,7 @@
       @download="handleDownloadMultiple"
       @add-to-collection="handleAddToCollection"
       @move-to-tool="openToolSelector"
+      @send-to-chat="handleSendToChat"
     />
   </div>
 </template>
@@ -431,6 +433,10 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  displaySendToChat: {
+    type: Boolean,
+    default: true,
+  },
   hideControls: {
     type: Boolean,
     default: false,
@@ -457,6 +463,7 @@ const {
   isProcessing: isProcessingTool,
   showToolSelector,
   takeToTool,
+  takeToChat,
   openToolSelector,
   closeToolSelector,
 } = usePhotoToolSelection();
@@ -1237,6 +1244,10 @@ const handleDownloadMultiple = async () => {
 const handleToolSelected = async (toolId) => {
   await takeToTool(toolId, selectedPhotoIds.value, clearAllSelections);
   closeToolSelector();
+};
+
+const handleSendToChat = async () => {
+  await takeToChat(selectedPhotoIds.value, clearAllSelections);
 };
 </script>
 

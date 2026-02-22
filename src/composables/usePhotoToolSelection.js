@@ -233,6 +233,67 @@ export function usePhotoToolSelection() {
   };
 
   /**
+   * Takes selected photos to Chat (attaches them as context)
+   * @param {Array} photoIds - Array of photo IDs to attach
+   * @param {Function} clearSelections - Function to clear current selections
+   */
+  const takeToChat = async (photoIds, clearSelections) => {
+    try {
+      isProcessing.value = true;
+
+      if (!photoIds || photoIds.length === 0) {
+        message.warning("Please select at least one photo");
+        return;
+      }
+
+      // Build minimal photo payloads now, while the store is populated
+      await Promise.all(photoIds.map((id) => photosStore.fetchPhoto(id)));
+
+      const photosData = photoIds
+        .slice(0, 10)
+        .map((id) =>
+          photosStore.photos.find((p) => String(p.id) === String(id)),
+        )
+        .filter(Boolean)
+        .map((photo) => ({
+          id: String(photo.id),
+          title: photo.title || photo.name || "Photo",
+          name: photo.name || photo.title || "Photo",
+          url: photo.url,
+          thumbnailUrl: photo.thumbnailUrl || photo.url,
+          rating: photo.rating ?? 0,
+          isUploading: false,
+          file: null,
+          needProcess: false,
+          isDuplicate: false,
+          originalFileName:
+            photo.originalFileName || photo.name || photo.title || "photo",
+          isCheckingDuplicates: false,
+          status: "processed",
+        }));
+
+      if (photosData.length === 0) {
+        message.error("Could not find selected photos");
+        return;
+      }
+
+      // Store full photo data so ChatView doesn't need the store to be loaded
+      sessionStorage.setItem("chat_context_photos", JSON.stringify(photosData));
+
+      // Clear selections before navigating
+      clearSelections();
+
+      // Navigate to chat
+      await router.push("/chat-lab");
+    } catch (error) {
+      console.error("Error taking photos to Chat:", error);
+      message.error("Failed to navigate to Chat");
+    } finally {
+      isProcessing.value = false;
+    }
+  };
+
+  /**
    * Takes photos to a specific tool
    * @param {string} toolId - The tool to take photos to ('canvas', 'framer', or '3d-atlas')
    * @param {Array} photoIds - Array of photo IDs
@@ -287,6 +348,7 @@ export function usePhotoToolSelection() {
     takeTo2D,
     takeToAtlas,
     takeToTool,
+    takeToChat,
     openToolSelector,
     closeToolSelector,
   };

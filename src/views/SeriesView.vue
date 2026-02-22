@@ -415,12 +415,14 @@
       :show-delete="false"
       :show-add-to-collection="false"
       :show-move-to-tool="true"
+      :show-send-to-chat="true"
       :is-downloading="isDownloading"
       @clear-selection="localClearAllSelections"
       @download="handleDownloadMultiple"
       @delete="handleRemoveSelectedFromSeries"
       @add-to-collection="handleAddToCollection"
       @move-to-tool="handleMoveToTool"
+      @send-to-chat="handleSendToChat"
     />
 
     <!-- Photo Tool Selector Modal -->
@@ -510,6 +512,7 @@ const {
   isProcessing: isProcessingTool,
   showToolSelector,
   takeToTool,
+  takeToChat,
   openToolSelector,
   closeToolSelector,
 } = usePhotoToolSelection();
@@ -936,6 +939,10 @@ const handleMoveToTool = () => {
     return;
   }
   openToolSelector();
+};
+
+const handleSendToChat = async () => {
+  await takeToChat(localSelectedPhotoIds.value, localClearAllSelections);
 };
 
 const handleToolSelected = async (toolId) => {

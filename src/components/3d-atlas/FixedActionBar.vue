@@ -58,6 +58,25 @@
         </template>
         <span>Take selected photos to a tool</span>
       </n-tooltip>
+
+      <!-- Send to Chat Button -->
+      <n-tooltip v-if="showSendToChat" placement="top" trigger="hover">
+        <template #trigger>
+          <n-button
+            type="info"
+            size="tiny"
+            @click="$emit('send-to-chat')"
+            :disabled="selectedCount === 0"
+          >
+            <template #icon>
+              <n-icon color="var(--color-primary)" size="16">
+                <RobotOutlined />
+              </n-icon>
+            </template>
+          </n-button>
+        </template>
+        <span>Send selected photos to ChatLab</span>
+      </n-tooltip>
     </div>
   </div>
 </template>
@@ -66,6 +85,7 @@
 import { NButton, NIcon, NTooltip } from "naive-ui";
 import { AlbumsOutline, CloudDownloadOutline } from "@vicons/ionicons5";
 import { MagicWand } from "@vicons/carbon";
+import { RobotOutlined } from "@vicons/antd";
 
 defineProps({
   selectedCount: {
@@ -80,13 +100,17 @@ defineProps({
     type: Boolean,
     default: true,
   },
+  showSendToChat: {
+    type: Boolean,
+    default: false,
+  },
   isDownloading: {
     type: Boolean,
     default: false,
   },
 });
 
-defineEmits(["download", "add-to-collection", "move-to-tool"]);
+defineEmits(["download", "add-to-collection", "move-to-tool", "send-to-chat"]);
 </script>
 
 <style scoped>

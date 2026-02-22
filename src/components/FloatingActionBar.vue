@@ -112,7 +112,26 @@
             <span>Take selected photos to a tool</span>
           </n-tooltip>
 
-          <!-- Attach to Chat Button -->
+          <!-- Send to Chat Button (from any external view) -->
+          <n-tooltip v-if="showSendToChat" placement="top" trigger="hover">
+            <template #trigger>
+              <n-button
+                type="info"
+                size="medium"
+                @click="$emit('send-to-chat')"
+                :disabled="selectedCount === 0"
+              >
+                <template #icon>
+                  <n-icon>
+                    <RobotOutlined />
+                  </n-icon>
+                </template>
+              </n-button>
+            </template>
+            <span>Send selected photos to ChatLab</span>
+          </n-tooltip>
+
+          <!-- Attach to Chat Button (inside ChatView only) -->
           <n-tooltip v-if="showAttachToChat" placement="top" trigger="hover">
             <template #trigger>
               <n-button
@@ -143,6 +162,7 @@ import {
   CloudDownloadOutline,
   AttachOutline,
 } from "@vicons/ionicons5";
+import { RobotOutlined } from "@vicons/antd";
 import { MagicWand } from "@vicons/carbon";
 import { useMobilePhotoSelection } from "@/composables/useMobilePhotoSelection";
 
@@ -166,6 +186,10 @@ defineProps({
     type: Boolean,
     default: true,
   },
+  showSendToChat: {
+    type: Boolean,
+    default: false,
+  },
   showAttachToChat: {
     type: Boolean,
     default: false,
@@ -186,6 +210,7 @@ const emit = defineEmits([
   "download",
   "add-to-collection",
   "move-to-tool",
+  "send-to-chat",
   "attach-to-chat",
 ]);
 

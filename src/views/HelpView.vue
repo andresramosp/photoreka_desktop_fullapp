@@ -293,6 +293,7 @@ import {
   MailOutline,
 } from "@vicons/ionicons5";
 import helpData from "@/assets/helpData.json";
+import { RobotOutlined } from "@vicons/antd";
 
 defineOptions({
   name: "HelpView",
@@ -346,6 +347,7 @@ const iconMap: Record<string, any> = {
   shield: ShieldCheckmarkOutline,
   "help-circle": HelpCircleOutline,
   mail: MailOutline,
+  robot: RobotOutlined,
 };
 
 // Get icon component
@@ -365,7 +367,7 @@ const loadFromQueryParams = () => {
 
       if (subtopicId) {
         const subtopic = topic.subtopics.find(
-          (st: Subtopic) => st.id === subtopicId
+          (st: Subtopic) => st.id === subtopicId,
         );
         if (subtopic) {
           selectedSubtopic.value = subtopic;
@@ -406,7 +408,7 @@ watch(
   () => route.query,
   () => {
     loadFromQueryParams();
-  }
+  },
 );
 
 // Filtered topics based on search
@@ -422,7 +424,7 @@ const filteredTopics = computed(() => {
     const subtopicMatch = topic.subtopics.some(
       (st: Subtopic) =>
         st.title.toLowerCase().includes(query) ||
-        st.content.toLowerCase().includes(query)
+        st.content.toLowerCase().includes(query),
     );
     return topicMatch || subtopicMatch;
   });
@@ -452,7 +454,7 @@ const searchResults = computed((): SearchResult[] => {
 const previousSubtopic = computed(() => {
   if (!selectedTopic.value || !selectedSubtopic.value) return null;
   const index = selectedTopic.value.subtopics.findIndex(
-    (st: Subtopic) => st.id === selectedSubtopic.value?.id
+    (st: Subtopic) => st.id === selectedSubtopic.value?.id,
   );
   return index > 0 ? selectedTopic.value.subtopics[index - 1] : null;
 });
@@ -460,7 +462,7 @@ const previousSubtopic = computed(() => {
 const nextSubtopic = computed(() => {
   if (!selectedTopic.value || !selectedSubtopic.value) return null;
   const index = selectedTopic.value.subtopics.findIndex(
-    (st: Subtopic) => st.id === selectedSubtopic.value?.id
+    (st: Subtopic) => st.id === selectedSubtopic.value?.id,
   );
   return index < selectedTopic.value.subtopics.length - 1
     ? selectedTopic.value.subtopics[index + 1]

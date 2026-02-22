@@ -309,8 +309,8 @@ export function useMainMenu(closeMobileMenu?: () => void) {
 
   // Chat option (global, like Sync Area)
   const chatOption = computed<MenuOption>(() => ({
-    label: "Chat",
-    key: "chat",
+    label: "ChatLab",
+    key: "chat-lab",
     icon: renderIcon(toolIcon("chat")),
     disabled: isDemoUser.value,
   }));
