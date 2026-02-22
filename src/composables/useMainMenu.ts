@@ -312,7 +312,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     label: "ChatLab",
     key: "chat-lab",
     icon: renderIcon(toolIcon("chat")),
-    disabled: isDemoUser.value,
+    disabled: false,
   }));
 
   // Complete menu structure
