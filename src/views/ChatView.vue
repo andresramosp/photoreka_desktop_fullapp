@@ -2,7 +2,7 @@
   <div class="chat-view">
     <!-- Chat Header (shown only while a conversation is active) -->
     <div v-if="messages.length > 0" class="chat-header">
-      <span class="chat-header-title">Chat</span>
+      <span class="chat-header-title">ChatLab</span>
       <n-button
         quaternary
         size="small"
@@ -849,7 +849,6 @@ const resetChat = async () => {
   font-weight: var(--font-weight-semibold);
   color: var(--text-tertiary);
   letter-spacing: 0.03em;
-  text-transform: uppercase;
 }
 
 .new-chat-btn {
