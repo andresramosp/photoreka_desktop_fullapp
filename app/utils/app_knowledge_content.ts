@@ -418,7 +418,7 @@ Global rating = weighted average.
 - Explore themes and visual patterns
 
 ### Photo Curation with Assistant Guidance
-The assistant can show you relevant photos from your catalog and provides an **"Add to..." button** for quick collection/series management:
+The assistant can show you relevant photos from your catalog and provides an **"Add to Collection" button** for quick collection/series management:
 
 - **Add to Collection**: Send displayed photos directly to an existing collection or create a new one
 - **Add to Series**: Organize displayed photos into a series, maintaining narrative order
@@ -426,8 +426,8 @@ The assistant can show you relevant photos from your catalog and provides an **"
 **Workflow:**
 1. Open Chat with the assistant
 2. Describe what you're looking for or ask about your catalog
-3. Assistant displays relevant photos with "Add to..." button
-4. Click "Add to..." → Select destination (Collection or Series)
+3. Assistant displays relevant photos with "Add to Collection" button
+4. Click "Add to Collection" → Select destination (Collection or Series)
 5. Photos are instantly added to your chosen grouping
 
 ### Benefits
