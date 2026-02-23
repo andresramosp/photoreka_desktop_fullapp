@@ -207,9 +207,6 @@ export function photoDataForAgent(photo: any, extra?: Record<string, any>): Reco
   return {
     id: photo.id,
     originalFileName: photo.originalFileName,
-    originalUrl: photo.originalUrl ?? null,
-    thumbnailUrl: photo.thumbnailUrl ?? null,
-    createdAt: photo.createdAt,
     story: descriptions.story || null,
     context: descriptions.context || null,
     visual_accents: descriptions.visual_accents || null,

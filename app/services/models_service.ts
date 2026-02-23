@@ -40,7 +40,7 @@ export type ModelName =
   | 'gemini-3-flash-preview'
   | 'gemini-3-pro-preview'
 
-const PRICES = {
+export const PRICES = {
   'gpt-4o': {
     input_cache_miss: 2.5 / 1_000_000,
     input_cache_hit: 1.25 / 1_000_000,
@@ -126,7 +126,7 @@ export type EndpointType =
   | 'logic_gpu_lb'
   | 'image'
 
-const USD_TO_EUR = 0.92
+export const USD_TO_EUR = 0.92
 
 export default class ModelsService {
   constructor() {

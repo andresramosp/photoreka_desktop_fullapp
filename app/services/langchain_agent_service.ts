@@ -2,13 +2,167 @@ import { ChatOpenAI } from '@langchain/openai'
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
 import { HarmBlockThreshold, HarmCategory } from '@google/generative-ai'
 import { HumanMessage, AIMessage, ToolMessage, SystemMessage } from '@langchain/core/messages'
+import { BaseCallbackHandler } from '@langchain/core/callbacks/base'
 import PhotoManager from '../managers/photo_manager.js'
 import SearchTextService from './search_text_service.js'
 import AgentToolsService from './agent_tools_service.js'
 import QueryService from './query_service.js'
+import { PRICES, USD_TO_EUR } from './models_service.js'
 import User from '#models/user'
 import Photo from '#models/photo'
 import redis from '@adonisjs/redis/services/main'
+
+// ─────────────────────────────────────────────────────────────
+// Debug payload capture
+//
+// _debug.calls   → one entry per LLM invocation, in order:
+//                  calls[0] = Phase 1 iter 0 (only system + user, no tool results yet)
+//                  calls[1] = Phase 1 iter 1 (includes first tool results)
+//                  calls[N] = Phase 2 (final structured answer call)
+//
+// Each entry: { label, messages: [{ role, content, tool_calls?, tool_call_id? }] }
+//   role    → 'system' | 'human' | 'ai' | 'tool'
+//   content → plain string (or stringified JSON for tool messages)
+//             NOTE: tool messages from photo-search tools are COMPRESSED after
+//             the first iteration — content becomes { totalMatched, photos:[{id,originalFileName}] }
+//
+// Add to VS Code Watch panel:
+//   _debug.calls                       → all calls
+//   _debug.calls[0].messages           → first call (no tool results)
+//   _debug.calls[1].messages           → second call (with first tool results)
+//   _debug.calls.at(-1).messages       → last call (Phase 2)
+//   _debug.calls.at(-1).messages.length → total messages in Phase 2
+// Reset automatically at the start of each chat() call.
+// ─────────────────────────────────────────────────────────────
+
+/** Converts a LangChain BaseMessage into a plain, readable debug object. */
+function serializeMessageForDebug(msg: any): Record<string, any> {
+  const base: Record<string, any> = { role: msg.type ?? 'unknown' }
+
+  // content: string or multimodal array
+  if (typeof msg.content === 'string') {
+    base.content = msg.content
+  } else if (Array.isArray(msg.content)) {
+    // multimodal — show types only to avoid huge base64 blobs
+    base.content = msg.content.map((p: any) =>
+      p?.type === 'image_url' || p?.type === 'image'
+        ? { type: p.type, source: '[image data omitted]' }
+        : p
+    )
+  }
+
+  // AIMessage with tool calls
+  if (msg.tool_calls?.length) {
+    base.tool_calls = msg.tool_calls.map((tc: any) => ({
+      name: tc.name,
+      args: tc.args,
+      id: tc.id,
+    }))
+  }
+
+  // ToolMessage
+  if (msg.tool_call_id !== undefined) {
+    base.tool_call_id = msg.tool_call_id
+  }
+
+  return base
+}
+
+const _debug: {
+  calls: Array<{ label: string; messages: Array<Record<string, any>> }>
+} = {
+  calls: [],
+}
+
+function makeDebugCallback(label: string): BaseCallbackHandler {
+  return BaseCallbackHandler.fromMethods({
+    handleChatModelStart(_llm: any, messages: any[][]) {
+      _debug.calls.push({
+        label,
+        messages: messages[0].map(serializeMessageForDebug),
+      })
+    },
+  })
+}
+
+// ─────────────────────────────────────────────────────────────
+// Cost tracking
+// ─────────────────────────────────────────────────────────────
+
+export type TokenUsageEntry = {
+  /** Human-readable label, e.g. "phase1-iter-0" or "phase2" */
+  label: string
+  inputTokens: number
+  /** Subset of inputTokens served from cache (prompt-cache hit) */
+  cachedTokens: number
+  outputTokens: number
+  totalTokens: number
+  costEur: number
+}
+
+export type AgentCostBreakdown = {
+  /** One entry per Phase-1 LLM invocation (tool-calling iterations) */
+  iterations: TokenUsageEntry[]
+  /** The Phase-2 structured final-answer call */
+  phase2: TokenUsageEntry
+  /** Sum of all above */
+  total: TokenUsageEntry
+}
+
+/**
+ * Converts a LangChain usage_metadata object into a TokenUsageEntry.
+ * Falls back to zeroes if the model does not return usage data.
+ */
+function computeCallCost(label: string, model: ModelName, usageMeta: any): TokenUsageEntry {
+  const inputTokens = usageMeta?.input_tokens ?? 0
+  const outputTokens = usageMeta?.output_tokens ?? 0
+  const cachedTokens = usageMeta?.input_token_details?.cache_read ?? 0
+  const totalTokens = usageMeta?.total_tokens ?? inputTokens + outputTokens
+
+  const prices = (
+    PRICES as Record<string, { input_cache_miss: number; input_cache_hit: number; output: number }>
+  )[model]
+  let costEur = 0
+  if (prices) {
+    const cacheMiss = inputTokens - cachedTokens
+    costEur =
+      (cacheMiss * prices.input_cache_miss +
+        cachedTokens * prices.input_cache_hit +
+        outputTokens * prices.output) *
+      USD_TO_EUR
+  }
+
+  return { label, inputTokens, cachedTokens, outputTokens, totalTokens, costEur }
+}
+
+/**
+ * Returns a callback that captures usage_metadata from the raw LLM response.
+ * Works with `withStructuredOutput` which returns a plain object — the raw
+ * AIMessage (with usage) is captured via the handleLLMEnd hook.
+ */
+function makeUsageCallback(collector: { usage?: any }): BaseCallbackHandler {
+  return BaseCallbackHandler.fromMethods({
+    handleLLMEnd(output: any) {
+      const msg = output?.generations?.[0]?.[0]?.message
+      if (msg?.usage_metadata) collector.usage = msg.usage_metadata
+    },
+  })
+}
+
+/** Sums a list of TokenUsageEntries into a single total entry. */
+function sumUsageEntries(entries: TokenUsageEntry[]): TokenUsageEntry {
+  return entries.reduce(
+    (acc, e) => ({
+      label: 'total',
+      inputTokens: acc.inputTokens + e.inputTokens,
+      cachedTokens: acc.cachedTokens + e.cachedTokens,
+      outputTokens: acc.outputTokens + e.outputTokens,
+      totalTokens: acc.totalTokens + e.totalTokens,
+      costEur: acc.costEur + e.costEur,
+    }),
+    { label: 'total', inputTokens: 0, cachedTokens: 0, outputTokens: 0, totalTokens: 0, costEur: 0 }
+  )
+}
 
 // ─────────────────────────────────────────────────────────────
 // Model config
@@ -171,6 +325,7 @@ export type AgentChatResult = {
   toolsUsed: string[]
   intermediateSteps: IntermediateStep[]
   totalIterations: number
+  cost: AgentCostBreakdown
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -189,15 +344,19 @@ export type AgentChatResult = {
 const SYSTEM_PROMPT = `You are Photoreka's intelligent photo catalog assistant.
 You help photographers explore, understand, and get insights from their photo library.
 
-## Guidelines
-- You can chain multiple tools in one turn when it helps answer the question better.
+## Behavior
 - Be kind, specific and helpful. Summarize key data rather than dumping raw JSON. Aim for responses under 200 words unless the question genuinely requires more depth (e.g. a full catalog critique). Never pad or repeat yourself.
-- If you need to reference a concrete photo by text, you can use the filename, never the ID.
-- Artistic scores are from 0 to 10. Scores >= 7 are considered strong. Use scores for your internal reasoning, but do not mention them unless they are relevant to the user's question. Don't evaluate photos solely based on scores — always consider the actual image/descriptions provided.
 - Always respond in the same language the user writes in (but for some tools you will need english prompts — that's fine, just keep the final output in the user's language).
-- Your role is only to assist with Photoreka and you cannot provide any information, advice, or insights that are not directly related to the user's photo catalog and photographic practice. If the user asks for anything outside of that scope, politely decline and steer them back to photography-related topics. 
+- Your role is only to assist with Photoreka and you cannot provide any information, advice, or insights that are not directly related to the user's photo catalog and photographic practice. If the user asks for anything outside of that scope, politely decline and steer them back to photography-related topics.
 - Internal agent tools are only for your use and should never be mentioned in the final output to the user. The user only can know about Photoreka's features listed on 'app_knowledge' tool.
 - At the end of your response, you can suggest concrete next steps or questions the user can ask to explore further, always based on what you can actually do with the tools available to you. Be conservative with suggestions; do not suggest if you are not sure you can do that with the tools.
+
+## Working with photos and scores
+- If you need to reference a concrete photo by text, you can use the filename, never the ID.
+- Artistic scores are from 0 to 10. Scores >= 7 are considered strong. Use scores for your internal reasoning, but do not mention them unless they are relevant to the user's question. Don't evaluate photos solely based on scores — always consider the actual image/descriptions provided.
+
+## Tool usage
+- When you need to use multiple [PHOTO_SEARCH] tools, call them one at a time so you can pass the results of one as candidate_ids to the next, enabling progressive filtering and precise intersection. Never call two search tools in the same step.
 
 ## CRITICAL — the tool get_photo_info MUST be called before discussing any specific photo
 1. The user's message includes attached photo IDs (listed as [Attached photo IDs: ...]). Call get_photo_info with ALL of those IDs as your very first action, before doing anything else.
@@ -237,12 +396,75 @@ function extractTextContent(content: any): string {
 // Same model, same messages, same schema on every attempt — no behaviour change.
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * Attempts to slim a single ToolMessage to id + originalFileName only.
+ * Skips multimodal ToolMessages (content is an array — e.g. get_photo_info with images),
+ * since their value lies in the visual data and cannot be summarised as IDs.
+ * Returns the original message unchanged on any parse failure.
+ */
+function slimToolMessage(msg: ToolMessage): ToolMessage {
+  // Never compress multimodal content (image arrays from get_photo_info)
+  if (Array.isArray(msg.content)) return msg
+  try {
+    const parsed = JSON.parse(typeof msg.content === 'string' ? msg.content : '{}')
+    const photos = parsed.photos ?? parsed.results ?? []
+    // Already slim or not a photo payload — leave it
+    if (photos.length === 0) return msg
+    const slim = {
+      totalMatched: parsed.totalMatched ?? parsed.totalFound ?? photos.length,
+      photos: photos.map((p: any) => ({ id: p.id, originalFileName: p.originalFileName })),
+    }
+    return new ToolMessage({ content: JSON.stringify(slim), tool_call_id: msg.tool_call_id })
+  } catch {
+    return msg
+  }
+}
+
+/**
+ * After pushing a new batch of ToolMessages in Phase 1, compress all *prior*
+ * ToolMessages in the messages array (i.e. everything except the last `freshCount`
+ * messages). Once the model has acted on a tool result and emitted its next
+ * tool_call, the full photo payload is no longer needed — only the IDs remain
+ * relevant (as potential candidate_ids). This keeps each successive Phase 1
+ * iteration lighter and also reduces Phase 2 input size.
+ */
+function compressPriorToolMessages(messages: any[], freshCount: number): void {
+  const cutoff = messages.length - freshCount
+  for (let i = 0; i < cutoff; i++) {
+    if (messages[i] instanceof ToolMessage) {
+      messages[i] = slimToolMessage(messages[i])
+    }
+  }
+}
+
+/**
+ * Final compression pass before Phase 2.
+ * By the time this runs, all intermediate ToolMessages are already slim
+ * (compressed in-loop by compressPriorToolMessages). This function ensures
+ * the very last ToolMessage — the one Phase 2 needs for the final answer —
+ * is kept intact, and acts as a safety net for any edge cases.
+ */
+function compressMessagesForPhase2(messages: any[]): any[] {
+  let lastToolIdx = -1
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i] instanceof ToolMessage) {
+      lastToolIdx = i
+      break
+    }
+  }
+  return messages.map((msg, idx) => {
+    if (!(msg instanceof ToolMessage)) return msg
+    if (idx === lastToolIdx) return msg // keep last ToolMessage full for Phase 2
+    return slimToolMessage(msg) // all others: ensure they're slim (likely already are)
+  })
+}
+
 /** Invokes the structured final-answer model with up to 3 retries.
  *  Uses a 6 000-token budget to prevent JSON truncation. */
 async function invokeStructuredFinalAnswer(
   modelName: ModelName,
   messages: any[]
-): Promise<{ text: string; photo_ids: number[] }> {
+): Promise<{ text: string; photo_ids: number[]; usage?: any }> {
   const MAX_ATTEMPTS = 3
   const TOKEN_BUDGET = 6000
   const model = createChatModel(modelName, TOKEN_BUDGET, 'medium').withStructuredOutput(
@@ -253,7 +475,11 @@ async function invokeStructuredFinalAnswer(
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
       console.log(`[Agent] 🏁 Phase 2 attempt ${attempt + 1}/${MAX_ATTEMPTS}…`)
-      return (await model.invoke(messages)) as { text: string; photo_ids: number[] }
+      const usageCollector: { usage?: any } = {}
+      const result = (await model.invoke(messages, {
+        callbacks: [makeDebugCallback('phase2'), makeUsageCallback(usageCollector)],
+      })) as { text: string; photo_ids: number[] }
+      return { ...result, usage: usageCollector.usage }
     } catch (err: any) {
       lastError = err
       console.warn(
@@ -488,7 +714,9 @@ export default class LangchainAgentService {
 
     const toolsUsed: string[] = []
     const intermediateSteps: IntermediateStep[] = []
+    const iterationUsages: TokenUsageEntry[] = []
     const MAX_ITERATIONS = 5
+    _debug.calls = []
 
     console.log(
       `\n[Agent] ▶ Starting | userId=${userId} | message="${message.slice(0, 100)}${message.length > 100 ? '…' : ''}"`
@@ -507,7 +735,13 @@ export default class LangchainAgentService {
       // directly without fetching any data. Subsequent iterations use auto so the
       // model can exit the loop once it has everything it needs.
       const activeModel = modelWithTools //iter === 0 ? modelWithToolsForced : modelWithTools
-      const response = await activeModel.invoke(messages)
+      const response = await activeModel.invoke(messages, {
+        callbacks: [makeDebugCallback(`phase1-iter-${iter}`)],
+      })
+      // Capture token usage for this iteration (available directly on the AIMessage)
+      iterationUsages.push(
+        computeCallCost(`phase1-iter-${iter}`, modelName, response.usage_metadata)
+      )
       const toolCalls = response.tool_calls ?? []
 
       if (toolCalls.length === 0) {
@@ -538,6 +772,9 @@ export default class LangchainAgentService {
         intermediateSteps
       )
       messages.push(...toolResults)
+      // Compress all ToolMessages that pre-date this batch — the model has already
+      // acted on them (used IDs as candidate_ids) and no longer needs full photo data.
+      compressPriorToolMessages(messages, toolResults.length)
     }
 
     // ── Phase 2: structured final answer (with retry) ───────────────────────
@@ -546,14 +783,25 @@ export default class LangchainAgentService {
     // to surface, with no extra round-trips and no side-effect tool needed.
     // invokeStructuredFinalAnswer retries up to 3 times with a 6 000-token
     // budget to prevent JSON truncation errors.
-    const structured = await invokeStructuredFinalAnswer(modelName, messages)
+    const structured = await invokeStructuredFinalAnswer(
+      modelName,
+      compressMessagesForPhase2(messages)
+    )
     // Strip any leaked internal-context annotations the model may have echoed.
     const rawOutput = structured.text ?? ''
     const output = rawOutput.replace(/\[(?:Shown photos|INTERNAL_CONTEXT)[^\]]*\]\s*/gi, '').trim()
     foundPhotoIds.push(...(structured.photo_ids ?? []))
 
+    // ── Build cost breakdown ──────────────────────────────────────────────────
+    const phase2Usage = computeCallCost('phase2', modelName, structured.usage)
+    const total = sumUsageEntries([...iterationUsages, phase2Usage])
+    const cost: AgentCostBreakdown = { iterations: iterationUsages, phase2: phase2Usage, total }
+
     console.log(
       `[Agent] ✅ Done. Tools used: [${toolsUsed.join(', ') || 'none'}] | Photos: [${foundPhotoIds.join(', ')}]`
+    )
+    console.log(
+      `[Agent] 💰 Cost: €${total.costEur.toFixed(6)} | Tokens in=${total.inputTokens} (cached=${total.cachedTokens}) out=${total.outputTokens}`
     )
     console.log(
       `[Agent] 📤 Output preview: "${output.slice(0, 200)}${output.length > 200 ? '…' : ''}"`
@@ -565,6 +813,7 @@ export default class LangchainAgentService {
       toolsUsed,
       intermediateSteps,
       totalIterations: totalIter,
+      cost,
     }
   }
 }
