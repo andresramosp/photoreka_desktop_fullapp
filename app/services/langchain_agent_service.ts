@@ -357,6 +357,7 @@ You help photographers explore, understand, and get insights from their photo li
 
 ## Tool usage
 - When you need to use multiple [PHOTO_SEARCH] tools, call them one at a time so you can pass the results of one as candidate_ids to the next, enabling progressive filtering and precise intersection. Never call two search tools in the same step.
+- When two or more tools are independent — meaning neither needs the output of the other as input — call them in parallel in the same step. This is preferred over sequential calls when there is no dependency between them.
 
 ## CRITICAL — the tool get_photo_info MUST be called before discussing any specific photo
 1. The user's message includes attached photo IDs (listed as [Attached photo IDs: ...]). Call get_photo_info with ALL of those IDs as your very first action, before doing anything else.
