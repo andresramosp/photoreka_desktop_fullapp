@@ -326,11 +326,11 @@ export function useMainMenu(closeMobileMenu?: () => void) {
       librarySection.value,
       exploreSection.value,
       createSection.value,
-      // {
-      //   type: "divider",
-      //   key: "create-divider",
-      // } as MenuOption,
-      // chatOption.value,
+      {
+        type: "divider",
+        key: "create-divider",
+      } as MenuOption,
+      chatOption.value,
       {
         type: "divider",
         key: "chat-divider",
