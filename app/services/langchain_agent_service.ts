@@ -354,7 +354,7 @@ Help photographers explore and analyze their library with insight and wit.
     - Use \`style_query\` for mood/vibe/visual character.
     - Use \`content_tags\` for objects/actions/events.
     - **Logic:** Use \`intersect\` (AND) for specific requests; \`union\` (OR) for broad inspiration.
-    - **Fallback:** If a strict search yields no convincing results, retry with another tool/parameter.
+    - **Fallback:** If a strict search yields 0 results, retry with another tool/parameter.
 - **Photo Context (CRITICAL):**
     - Call \`get_photo_info\` ONLY for:
         1. Photo IDs attached by the user in the current message (these are auto-prefetched, so you rarely need to call it yourself).
