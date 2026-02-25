@@ -337,13 +337,13 @@ function reciprocalRankFusion(rankedLists: number[][], k = 60): number[] {
 
 export const TOOL_DESCRIPTIONS = {
   get_photo_info:
-    '[BASIC_TOOLS] Get a summary of one or more photos by their IDs. MUST be called before discussing, comparing, or operating on any photo — including photos the user has attached (prefixed as [Attached photo IDs: ...] in the message) and photos referenced from conversation history. Pass multiple IDs in a single call to batch-fetch. Returns: story (scene narrative), genre, and date taken. Full metadata (artistic scores, visual aspects, EXIF) and thumbnail images are provided automatically in the final evaluation step — no need to request them separately.',
+    '[BASIC_TOOLS] Get a summary of one or more photos by their IDs. Call this ONLY for: (1) photo IDs attached by the user in the current message, (2) photo IDs referenced from conversation history that you need to discuss again. Do NOT call this on photos already returned by search_advanced — those results already contain the same data. Pass multiple IDs in a single call to batch-fetch. Returns: story (scene narrative), genre, and date taken. Full metadata (artistic scores, visual aspects, EXIF) and thumbnail images are provided automatically in the final evaluation step — no need to request them separately.',
 
   fetch_collections:
     "[BASIC_TOOLS] Get all the user's collections and series, each with their name, description, and up to 10 sample photo IDs. Use this when the user asks about their collections, series, albums, or organized groups of photos — for example 'what collections do I have?', 'show me my series', 'which albums exist?'. Returns two separate arrays: 'collections' (manually curated groups) and 'series' (ordered sequences/stories).",
 
   search_advanced:
-    '[PHOTO_SEARCH] **The primary search tool.** Combine multiple search strategies in a single call and merge their results with intersect (AND) or union (OR). You can specify any combination of: (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) filter — metadata/score/visual-aspect filtering, (4) similar_to — similarity to reference photos. All specified sub-searches run in parallel; their full ID sets are combined via the chosen operation; only the final result is sampled and returned with full photo data. This eliminates result loss from sequential filtering. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) with intersect. "Photos of cats or dogs" → content_tags(["cat"]) + content_tags(["dog"]) — not possible, use two calls or a single content_tags(["cat", "dog"]). "Melancholic portraits" → style_query("melancholic mood") + filter(genre=portrait) with intersect.',
+    '[PHOTO_SEARCH] **The primary search tool.** Combine multiple search strategies in a single call and merge their results with intersect (AND) or union (OR). You can specify any combination of: (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) filter — metadata/score/visual-aspect filtering, (4) similar_to — similarity to reference photos. All specified sub-searches run in parallel; their full ID sets are combined via the chosen operation; only the final result is sampled and returned with photo summaries (story, genre, date). Full metadata and thumbnail images are provided automatically in the final evaluation step. **Do NOT call get_photo_info on these results — they already contain the same summary data.** This eliminates result loss from sequential filtering. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) with intersect. "Photos of cats or dogs" → content_tags(["cat"]) + content_tags(["dog"]) — not possible, use two calls or a single content_tags(["cat", "dog"]). "Melancholic portraits" → style_query("melancholic mood") + filter(genre=portrait) with intersect.',
 
   overall_catalog_view:
     '[CATALOG_INSIGHT] Get a single combined report of the entire catalog: catalog patterns (recurring themes, subjects, narrative motifs), visual aspects distribution, and artistic scores statistics. Use this as the FIRST tool whenever the user asks for advice on improving their photography, critique of their catalog, identification of weak points or strengths, general feedback on their style, or any holistic question about their photographic practice. This tool replaces calling get_catalog_patterns + stats_visual_aspects + stats_artistic_scores individually — it returns all of that data in one shot.',
@@ -627,14 +627,15 @@ export default class AgentToolsService {
           const clampedLimit = Math.min(Math.max(limit, 1), 50)
           const sampledIds = combinedIds.slice(0, clampedLimit)
 
-          // Fetch full photo data for the sample
+          // Fetch slim photo data for Phase 1 — full data + images are
+          // provided exclusively in Phase 2 via buildPhase2VisualContext.
           const photos = await photoManager.getPhotosByIds(sampledIds)
           const photoMap = new Map(photos.map((p) => [p.id, p]))
           const formatted = sampledIds
             .map((id) => {
               const p = photoMap.get(id)
               if (!p) return null
-              return photoDataForAgent(p)
+              return photoDataForAgentSlim(p)
             })
             .filter(Boolean)
 
