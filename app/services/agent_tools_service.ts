@@ -381,6 +381,41 @@ export function formatCatalogPatternsForAgent(catalogPatterns: any, reviewType: 
 }
 
 // ─────────────────────────────────────────────────────────────
+// Ranking utilities
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Reciprocal Rank Fusion — merges multiple ranked ID lists into a single
+ * ranked list that reflects combined relevance across all sources.
+ *
+ * For each photo ID, its RRF score accumulates across every list it appears in:
+ *   score(id) = Σ  1 / (k + rank_i)
+ * where rank_i is the 1-based position of the ID in list i.
+ * IDs absent from a list contribute 0 for that list.
+ * k = 60 is the standard constant that dampens the dominance of top positions
+ * while still rewarding high ranks.
+ *
+ * A photo that ranks highly in multiple sub-searches naturally floats to the top;
+ * a photo that only appears in one list gets a modest score proportional to its rank.
+ *
+ * @param rankedLists  Ordered arrays of photo IDs (best first) from each sub-search.
+ * @param k            Smoothing constant (default 60).
+ * @returns            Deduplicated IDs sorted by descending RRF score.
+ */
+function reciprocalRankFusion(rankedLists: number[][], k = 60): number[] {
+  const scores = new Map<number, number>()
+
+  for (const list of rankedLists) {
+    list.forEach((id, index) => {
+      const rank = index + 1 // 1-based
+      scores.set(id, (scores.get(id) ?? 0) + 1 / (k + rank))
+    })
+  }
+
+  return [...scores.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id)
+}
+
+// ─────────────────────────────────────────────────────────────
 // Tool descriptions (centralised)
 // ─────────────────────────────────────────────────────────────
 
@@ -390,18 +425,6 @@ export const TOOL_DESCRIPTIONS = {
 
   fetch_collections:
     "[BASIC_TOOLS] Get all the user's collections and series, each with their name, description, and up to 10 sample photo IDs. Use this when the user asks about their collections, series, albums, or organized groups of photos — for example 'what collections do I have?', 'show me my series', 'which albums exist?'. Returns two separate arrays: 'collections' (manually curated groups) and 'series' (ordered sequences/stories).",
-
-  // filter_photos:
-  //   '[PHOTO_SEARCH] Filter and sort the user\'s photo catalog. All filter types can be freely combined. Available filters: (1) scoreFilters — numeric artistic scores 0–10: aesthetic_quality, composition, storytelling, strangeness, message, humor, visual_games, candidness (use with sortByScore + sortOrder to rank results). (2) visualAspects — categorical labels (OR within a key, AND across keys): genre: abstract|documentary|street|landscape|portrait; framing: close-up|medium shot|wide shot; focus: blurry|nitid; lighting: natural|artificial|backlit|frontlit|side lit; lighting_scheme: low key|high key|balanced; depth_of_field: shallow|deep|medium; perspective: normal|high angle|low angle; stylistic: long exposure|motion blur|silhouettes|bokeh|grain; orientation: portrait|landscape|square; temperature: warm|cold|neutral; palette: color|black and white. (3) dateFrom / dateTo — ISO 8601 date range (e.g. 2024-01-01). (4) filenameLike — substring match on filename. (5) limit — max results (default 20). Use this tool when the user asks things like "my funniest photos", "most surreal shot", "high visual games score", "close-up portraits", "landscape shots from 2024", "shallow depth of field", "vertical photos", "warm-toned", "black and white", "photos from last summer", "RAW files from March", etc. Returns matching photo IDs — include the relevant ones (drop results that don\'t match the user\'s intent) in your final answer\'s photo_ids.',
-
-  // search_semantic_overall_style:
-  //   "[PHOTO_SEARCH] Search for photos by overall visual style, compositional feel, mood, color palette, or general atmosphere — broad semantic embedding search. Use this for open-ended style descriptions such as 'melancholic blue-toned street scenes' or 'minimalist high-key compositions'. Do NOT use for concrete subjects or narrative content — use search_semantic_content instead. Extract the query from user input but do not modify it or enrich it. Returns a ranked list of matching photo IDs — include the relevant ones (drop results that don't match the user's intent) in your final answer's photo_ids.",
-
-  // search_semantic_content:
-  //   "[PHOTO_SEARCH] Search for photos containing specific subjects, narrative elements, or concrete content using 1 to 3 keyword tags (e.g. ['dog'], ['market', 'crowd'], ['child', 'bicycle']). Use this when the user is looking for photos of particular things, people, actions, or scenes — not for abstract style or mood queries (use search_semantic_overall_style for those). Returns a ranked list of matching photo IDs — include the relevant ones (drop results that don't match the user's intent) in your final answer's photo_ids.",
-
-  // find_photos_from_photo:
-  //   "[PHOTO_SEARCH] Find photos visually or semantically similar to one or more reference photos (provided by their IDs). Use this tool whenever the user asks to find photos similar to a specific photo, or wants more photos like a given one. Choose the criteria based on the intent: use 'embedding' for overall visual likeness (default), 'story' for narrative similarity, 'context' for situational/environmental similarity, or 'chromatic' for color palette similarity. Returns a ranked list of matching photo IDs — include the relevant ones in your final answer's photo_ids.",
 
   search_advanced:
     '[PHOTO_SEARCH] **The primary search tool.** Combine multiple search strategies in a single call and merge their results with intersect (AND) or union (OR). You can specify any combination of: (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) filter — metadata/score/visual-aspect filtering, (4) similar_to — similarity to reference photos. All specified sub-searches run in parallel; their full ID sets are combined via the chosen operation; only the final result is sampled and returned with full photo data. This eliminates result loss from sequential filtering. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) with intersect. "Photos of cats or dogs" → content_tags(["cat"]) + content_tags(["dog"]) — not possible, use two calls or a single content_tags(["cat", "dog"]). "Melancholic portraits" → style_query("melancholic mood") + filter(genre=portrait) with intersect.',
@@ -733,23 +756,18 @@ export default class AgentToolsService {
             `[Agent]   🔎 search_advanced sub-results: ${logParts.join(', ')} | operation=${operation}`
           )
 
-          // Combine using intersect or union
+          // Combine using RRF to preserve ranking signal from all sub-searches,
+          // then apply intersect/union as the set operation.
+          const rrfRanked = reciprocalRankFusion(results)
+
           let combinedIds: number[]
           if (operation === 'intersect') {
-            // Start with the smallest set for efficiency
-            const sorted = results
-              .map((ids, i) => ({ ids: new Set(ids), label: subLabels[i] }))
-              .sort((a, b) => a.ids.size - b.ids.size)
-            combinedIds = [...sorted[0].ids].filter((id) =>
-              sorted.slice(1).every((s) => s.ids.has(id))
-            )
+            // Keep only IDs present in every sub-search result, ordered by RRF score
+            const sets = results.map((ids) => new Set(ids))
+            combinedIds = rrfRanked.filter((id) => sets.every((s) => s.has(id)))
           } else {
-            // Union — deduplicate
-            const seen = new Set<number>()
-            for (const ids of results) {
-              for (const id of ids) seen.add(id)
-            }
-            combinedIds = [...seen]
+            // Union — all IDs already deduplicated and ranked by RRF
+            combinedIds = rrfRanked
           }
 
           console.log(
@@ -793,249 +811,6 @@ export default class AgentToolsService {
         name: 'search_advanced',
         description: TOOL_DESCRIPTIONS.search_advanced,
         schema: SearchAdvancedSchema,
-      }
-    )
-
-    // ─────────────────────────────────────────────────────────
-    // DISABLED — individual search tools replaced by search_advanced
-    // Kept for reference / potential standalone use.
-    // ─────────────────────────────────────────────────────────
-
-    // ── (DISABLED) Tool 2: search_semantic_overall_style ──────────────
-    const searchSemanticOverallStyle = tool(
-      async ({ query, pageSize = 20, minMatchScore, candidate_ids }): Promise<string> => {
-        try {
-          const clampedPageSize = 8 //Math.min(Math.max(pageSize, 1), 50)
-          const result = await searchService.searchSemanticSync(query, userId, {
-            searchMode: 'broad',
-            pageSize: clampedPageSize,
-            iteration: 1,
-            minMatchScore: minMatchScore ?? 0.2,
-            withInsights: false,
-            ...(candidate_ids && candidate_ids.length > 0 ? { candidateIds: candidate_ids } : {}),
-          })
-          return formatSearchResultsForAgent(result)
-        } catch (error) {
-          return JSON.stringify({ error: `Search failed: ${error.message}` })
-        }
-      },
-      {
-        name: 'search_semantic_overall_style',
-        description: TOOL_DESCRIPTIONS.search_semantic_overall_style,
-        schema: SearchSemanticOverallStyleSchema,
-      }
-    )
-
-    // ── (DISABLED) Tool 3: search_semantic_content ───────────────────
-    const searchSemanticContent = tool(
-      async ({ tags, limit = 20, candidate_ids }): Promise<string> => {
-        try {
-          const scoringService = new ScoringService()
-          const allPhotoIds = await photoManager.getPhotosIdsForSearch(userId.toString())
-          const photoIds =
-            candidate_ids && candidate_ids.length > 0
-              ? allPhotoIds.filter((id) => (candidate_ids as number[]).includes(id))
-              : allPhotoIds
-          const scored = await scoringService.getScoredPhotosByTags(
-            photoIds,
-            tags,
-            [],
-            'adaptive',
-            userId.toString()
-          )
-
-          if (!scored || scored.length === 0) {
-            return JSON.stringify({ totalFound: 0, photos: [] })
-          }
-
-          const topScored = scored.slice(0, Math.min(limit, 50))
-          const topIds = topScored.map((s) => s.id)
-          const photos = await photoManager.getPhotosByIds(topIds)
-          const photoMap = new Map(photos.map((p) => [p.id, p]))
-
-          const formatted = topScored.map((s) => {
-            const p = photoMap.get(s.id)
-            if (!p) return { id: s.id, matchScore: s.totalScore }
-            return photoDataForAgent(p, { matchScore: Math.round((s.totalScore ?? 0) * 100) / 100 })
-          })
-
-          return JSON.stringify({ totalFound: scored.length, photos: formatted }, null, 2)
-        } catch (error) {
-          return JSON.stringify({ error: `Content search failed: ${error.message}` })
-        }
-      },
-      {
-        name: 'search_semantic_content',
-        description: TOOL_DESCRIPTIONS.search_semantic_content,
-        schema: SearchSemanticContentSchema,
-      }
-    )
-
-    // ── (DISABLED) Tool 4: filter_photos ───────────────────────────────
-    const filterPhotos = tool(
-      async ({
-        scoreFilters,
-        sortByScore,
-        sortOrder = 'desc',
-        visualAspects,
-        filenameLike,
-        dateFrom,
-        dateTo,
-        limit = 20,
-        candidate_ids,
-      }): Promise<string> => {
-        try {
-          const photosQuery = Photo.query()
-            .where('user_id', userId)
-            .select('id', 'original_file_name', 'descriptions', 'created_at')
-            .orderBy('created_at', 'desc')
-          if (candidate_ids && candidate_ids.length > 0) {
-            photosQuery.whereIn('id', candidate_ids)
-          }
-          const photos = await photosQuery
-
-          const dateFromMs = dateFrom ? new Date(dateFrom).getTime() : null
-          const dateToMs = dateTo ? new Date(dateTo + 'T23:59:59').getTime() : null
-
-          let filtered = photos.filter((photo) => {
-            const scores = (photo.descriptions?.artistic_scores ?? {}) as Record<string, number>
-            const aspects = (photo.descriptions?.visual_aspects ?? {}) as Record<string, string[]>
-
-            // ─ Score filters (AND)
-            if (scoreFilters && scoreFilters.length > 0) {
-              for (const sf of scoreFilters) {
-                const val = scores[sf.field]
-                if (val === undefined) return false
-                if (sf.min !== undefined && val < sf.min) return false
-                if (sf.max !== undefined && val > sf.max) return false
-              }
-            }
-
-            // ─ Visual aspect filters (OR within key, AND across keys)
-            if (visualAspects) {
-              for (const [key, accepted] of Object.entries(visualAspects)) {
-                if (!accepted || accepted.length === 0) continue
-
-                // Orientation: resolve from visual_aspects or derive from EXIF dimensions
-                if (key === 'orientation') {
-                  const storedOrientation: string = (aspects['orientation'] as any) ?? ''
-                  let resolvedOrientation = storedOrientation.toLowerCase()
-                  if (!resolvedOrientation) {
-                    const exif = (photo.descriptions?.EXIF ?? {}) as Record<string, any>
-                    const w = exif.ImageWidth ?? exif.ExifImageWidth ?? 0
-                    const h = exif.ImageHeight ?? exif.ExifImageHeight ?? 0
-                    if (w > 0 && h > 0) {
-                      resolvedOrientation = w > h ? 'landscape' : w < h ? 'portrait' : 'square'
-                    }
-                  }
-                  if (!resolvedOrientation) continue // no data — skip filter
-                  const matches = accepted.some((v) => v.toLowerCase() === resolvedOrientation)
-                  if (!matches) return false
-                  continue
-                }
-
-                const photoValues: string[] = aspects[key] ?? []
-                const matches = accepted.some((v) =>
-                  photoValues.some((pv) => pv.toLowerCase() === v.toLowerCase())
-                )
-                if (!matches) return false
-              }
-            }
-
-            // ─ Filename filter
-            if (filenameLike) {
-              if (!photo.originalFileName.toLowerCase().includes(filenameLike.toLowerCase()))
-                return false
-            }
-
-            // ─ Date range filter (prefer EXIF dateTaken, fall back to createdAt)
-            const exifData = (photo.descriptions?.EXIF ?? {}) as Record<string, any>
-            const dateTakenRaw = exifData.dateTaken as string | undefined
-            const createdMs = dateTakenRaw
-              ? new Date(dateTakenRaw).getTime()
-              : new Date(photo.createdAt.toString()).getTime()
-            if (dateFromMs !== null && createdMs < dateFromMs) return false
-            if (dateToMs !== null && createdMs > dateToMs) return false
-
-            return true
-          })
-
-          // ─ Sorting
-          if (sortByScore) {
-            filtered.sort((a, b) => {
-              const aScore =
-                ((a.descriptions?.artistic_scores as Record<string, number>) ?? {})[sortByScore] ??
-                -1
-              const bScore =
-                ((b.descriptions?.artistic_scores as Record<string, number>) ?? {})[sortByScore] ??
-                -1
-              return sortOrder === 'asc' ? aScore - bScore : bScore - aScore
-            })
-          } else if (sortOrder === 'asc') {
-            filtered.reverse()
-          }
-
-          const limited = filtered.slice(0, Math.min(limit, 50))
-
-          const formatted = limited.map((p) => photoDataForAgent(p))
-
-          return JSON.stringify({ totalMatched: filtered.length, photos: formatted }, null, 2)
-        } catch (error) {
-          return JSON.stringify({ error: `Filter failed: ${error.message}` })
-        }
-      },
-      {
-        name: 'filter_photos',
-        description: TOOL_DESCRIPTIONS.filter_photos,
-        schema: FilterPhotosSchema,
-      }
-    )
-
-    // ── (DISABLED) Tool 5: find_photos_from_photo ──────────────────────
-    const findPhotosFromPhoto = tool(
-      async ({
-        anchor_photo_ids,
-        criteria,
-        limit = 10,
-        opposite = false,
-        candidate_ids,
-      }): Promise<string> => {
-        try {
-          const searchPhotoService = new SearchPhotoService()
-          const results = await searchPhotoService.searchByPhotos(
-            {
-              anchorIds: anchor_photo_ids,
-              currentPhotosIds: anchor_photo_ids,
-              criteria,
-              tagIds: [],
-              boxesIds: [],
-              descriptionCategories: [],
-              opposite,
-              inverted: false,
-              resultLength: Math.min(limit, 50),
-              ...(candidate_ids && candidate_ids.length > 0
-                ? { candidatePoolIds: candidate_ids }
-                : {}),
-            },
-            userId
-          )
-
-          const formatted = results.map((p: any) =>
-            photoDataForAgent(p, {
-              score: Math.round((p.score ?? 0) * 100) / 100,
-              labelScore: p.labelScore,
-            })
-          )
-
-          return JSON.stringify({ totalFound: formatted.length, photos: formatted }, null, 2)
-        } catch (error) {
-          return JSON.stringify({ error: `Similar photo search failed: ${error.message}` })
-        }
-      },
-      {
-        name: 'find_photos_from_photo',
-        description: TOOL_DESCRIPTIONS.find_photos_from_photo,
-        schema: FindPhotosFromPhotoSchema,
       }
     )
 
@@ -1135,17 +910,6 @@ export default class AgentToolsService {
       }
     )
 
-    return [
-      getPhotoInfo,
-      appKnowledge,
-      searchAdvanced,
-      // DISABLED — replaced by search_advanced:
-      // searchSemanticOverallStyle,
-      // searchSemanticContent,
-      // findPhotosFromPhoto,
-      // filterPhotos,
-      fetchCollections,
-      overallCatalogView,
-    ]
+    return [getPhotoInfo, appKnowledge, searchAdvanced, fetchCollections, overallCatalogView]
   }
 }
