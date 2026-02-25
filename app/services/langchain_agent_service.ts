@@ -5,11 +5,12 @@ import { HumanMessage, AIMessage, ToolMessage, SystemMessage } from '@langchain/
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base'
 import PhotoManager from '../managers/photo_manager.js'
 import SearchTextService from './search_text_service.js'
-import AgentToolsService from './agent_tools_service.js'
+import AgentToolsService, { photoDataForAgent } from './agent_tools_service.js'
 import QueryService from './query_service.js'
 import { PRICES, USD_TO_EUR } from './models_service.js'
 import User from '#models/user'
 import Photo from '#models/photo'
+import PhotoImageService from './photo_image_service.js'
 import redis from '@adonisjs/redis/services/main'
 
 // ─────────────────────────────────────────────────────────────
@@ -271,6 +272,11 @@ const FINAL_ANSWER_SCHEMA = {
 
 const MAX_HISTORY_TURNS = 4 // max user+assistant message pairs kept in memory
 const HISTORY_TTL_SECONDS = 7200 // 2 hours sliding TTL
+const PHASE2_ATTACHED_IMAGE_LIMIT = 5 // max thumbnail images for user-attached photos in Phase 2
+// Single source of truth for search result size. Must match the `limit` default in
+// SearchAdvancedSchema (agent_tools_service.ts) — Phase 1 fetches exactly this many photos
+// so Phase 2 has thumbnails + descriptions for all of them, with no wasted overhead.
+const PHASE2_RESULTS_IMAGE_LIMIT = 15
 
 function redisHistoryKey(userId: number): string {
   return `agent:history:${userId}`
@@ -354,6 +360,7 @@ Help photographers explore and analyze their library with insight and wit.
         1. Any photo IDs attached in the current message.
         2. Any photo mentioned in history you need to discuss again.
     - Never trust visual details from memory/history; always re-fetch.
+    - \`get_photo_info\` returns a story summary + genre + date. Full metadata and thumbnail images are injected automatically before your final answer — do NOT call it again to get more detail.
 
 ## Curatorial Intelligence
 - **Scoring (1-10):** Use for internal ranking. Only mention if relevant.
@@ -398,25 +405,28 @@ function extractTextContent(content: any): string {
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Attempts to slim a single ToolMessage to id + originalFileName only.
- * Skips multimodal ToolMessages (content is an array — e.g. get_photo_info with images),
- * since their value lies in the visual data and cannot be summarised as IDs.
+ * Slims a ToolMessage to id + originalFileName only.
+ * Used to compress older tool results that the model has already acted on.
  * Returns the original message unchanged on any parse failure.
+ *
+ * Handles two payload shapes:
+ *   - get_photo_info:   raw array  [{id, originalFileName, story, …}, …]
+ *   - search_advanced:  {photos: [{id, originalFileName, story, …}, …], totalFound, …}
  */
 function slimToolMessage(msg: ToolMessage): ToolMessage {
-  // For multimodal content (image arrays from get_photo_info), strip image parts
-  // and keep only the text parts — the model has already seen the images in the
-  // iteration where they were first delivered; resending them in every subsequent
-  // call multiplies image token cost by the number of iterations.
-  if (Array.isArray(msg.content)) {
-    const textOnly = (msg.content as any[]).filter((part: any) => part.type === 'text')
-    if (textOnly.length === 0) return msg // edge case: no text parts, leave untouched
-    return new ToolMessage({ content: textOnly, tool_call_id: msg.tool_call_id })
-  }
+  if (typeof msg.content !== 'string') return msg
   try {
-    const parsed = JSON.parse(typeof msg.content === 'string' ? msg.content : '{}')
+    const parsed = JSON.parse(msg.content)
+
+    // Shape 1: raw array (get_photo_info)
+    if (Array.isArray(parsed)) {
+      if (parsed.length === 0 || !parsed[0]?.id) return msg
+      const slim = parsed.map((p: any) => ({ id: p.id, originalFileName: p.originalFileName }))
+      return new ToolMessage({ content: JSON.stringify(slim), tool_call_id: msg.tool_call_id })
+    }
+
+    // Shape 2: object with photos/results array (search_advanced)
     const photos = parsed.photos ?? parsed.results ?? []
-    // Already slim or not a photo payload — leave it
     if (photos.length === 0) return msg
     const slim = {
       totalMatched: parsed.totalMatched ?? parsed.totalFound ?? photos.length,
@@ -429,80 +439,78 @@ function slimToolMessage(msg: ToolMessage): ToolMessage {
 }
 
 /**
- * Checks if a message is an injected HumanMessage carrying only image context
- * (from the Gemini image extraction path in executeToolCalls).
- */
-function isImageContextMessage(msg: any): boolean {
-  if (!(msg instanceof HumanMessage)) return false
-  if (!Array.isArray(msg.content)) return false
-  return msg.content.some(
-    (p: any) =>
-      p.type === 'text' && typeof p.text === 'string' && p.text.startsWith('[Visual context:')
-  )
-}
-
-/**
  * After pushing a new batch of ToolMessages in Phase 1, compress all *prior*
  * ToolMessages in the messages array (i.e. everything except the last `freshCount`
- * messages). Also removes prior image-context HumanMessages entirely — the model
- * has already seen those images and no longer needs them.
+ * messages). Phase 1 is text-only, so no image handling is needed.
  */
 function compressPriorToolMessages(messages: any[], freshCount: number): void {
   const cutoff = messages.length - freshCount
   for (let i = cutoff - 1; i >= 0; i--) {
     if (messages[i] instanceof ToolMessage) {
       messages[i] = slimToolMessage(messages[i])
-    } else if (isImageContextMessage(messages[i])) {
-      // Remove image-context HumanMessages from prior iterations entirely
-      messages.splice(i, 1)
     }
   }
-}
-
-/**
- * Strips image parts from a ToolMessage while preserving all text parts.
- * Used for Phase 2 where the model only generates text and never needs images.
- */
-function stripImagesFromToolMessage(msg: ToolMessage): ToolMessage {
-  if (!Array.isArray(msg.content)) return msg
-  const textOnly = (msg.content as any[]).filter((part: any) => part.type === 'text')
-  if (textOnly.length === 0) return msg
-  return new ToolMessage({ content: textOnly, tool_call_id: msg.tool_call_id })
 }
 
 /**
  * Final compression pass before Phase 2.
- * Phase 2 only generates a structured text response — it never needs images.
- * Strip image parts from ALL ToolMessages (keep text parts on the last one so
- * the model still has photo descriptions/scores for the final answer);
- * fully slim all prior ToolMessages to id+filename only.
- * Also removes ALL image-context HumanMessages — Phase 2 never needs images.
+ * Phase 2 receives visual context exclusively via dedicated HumanMessages
+ * (user attachments + top tool results) — each with interleaved description + thumbnail.
+ * All ToolMessages are slimmed to id+filename only: the visual HumanMessages already
+ * carry the full text descriptions for the photos shown, so keeping full ToolMessage
+ * payloads would only duplicate tokens without adding information.
  */
 function compressMessagesForPhase2(messages: any[]): any[] {
-  // First remove image-context HumanMessages — Phase 2 never needs images
-  const filtered = messages.filter((msg) => !isImageContextMessage(msg))
-
-  // Find the last ToolMessage in the filtered array
-  let lastToolIdx = -1
-  for (let i = filtered.length - 1; i >= 0; i--) {
-    if (filtered[i] instanceof ToolMessage) {
-      lastToolIdx = i
-      break
-    }
-  }
-
-  return filtered.map((msg, idx) => {
+  return messages.map((msg) => {
     if (!(msg instanceof ToolMessage)) return msg
-    if (idx === lastToolIdx) return stripImagesFromToolMessage(msg) // keep text, strip images
-    return slimToolMessage(msg) // all others: id+filename only
+    return slimToolMessage(msg) // all tool results: id+filename only
   })
+}
+
+// ─────────────────────────────────────────────────────────────
+// Phase 2 visual context — extract photo IDs from tool results
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Scans intermediateSteps in reverse to find the last tool call that returned
+ * photo data (search_advanced or get_photo_info). Returns the ordered photo IDs.
+ */
+function extractPhotoIdsFromLastToolResult(steps: IntermediateStep[]): number[] {
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const step = steps[i]
+
+    if (step.tool === 'search_advanced') {
+      try {
+        const parsed = JSON.parse(step.output)
+        const photos = parsed.photos ?? []
+        if (Array.isArray(photos) && photos.length > 0) {
+          return photos.map((p: any) => p.id).filter((id: any) => typeof id === 'number')
+        }
+      } catch {}
+      continue
+    }
+
+    if (step.tool === 'get_photo_info') {
+      // Use input IDs directly — they're guaranteed correct
+      const ids = step.input?.photoIds
+      if (Array.isArray(ids) && ids.length > 0) {
+        return ids.filter((id: any) => typeof id === 'number')
+      }
+      continue
+    }
+
+    // Skip non-photo tools (overall_catalog_view, app_knowledge, fetch_collections)
+  }
+  return []
 }
 
 // Appended as the last message in Phase 2 to give the model an explicit
 // "judge" role: synthesise from gathered data, be selective, curate.
 const PHASE2_SYNTHESIS_PROMPT = `Now produce your final response to the user.
 
-You have gathered all the data you need in the previous steps. Act as a discerning curator:
+You have gathered all the data you need in the previous steps. You also have visual access to thumbnail images — each paired with its full description — for the user's attached photos and the top search results (if any). Use them for visual verification and curatorial judgment.
+
+Act as a discerning curator:
 - For searching/curating photos: only include photos in \`photo_ids\` that genuinely match the user's request or add clear value to your answer. Discard any that are tangential, redundant, or low relevance — even if they were returned by a search tool.
 - Order \`photo_ids\` deliberately: the sequence IS your editorial statement (best first, chronological, thematic grouping, etc.).
 - Keep \`text\` concise and insightful (max 200 words). Do not list raw filenames or IDs in the text.
@@ -655,6 +663,125 @@ export default class LangchainAgentService {
   }
 
   // ───────────────────────────────────────────────────────────
+  // Builds visual context HumanMessages for Phase 2 (the judge).
+  // Returns 0–2 HumanMessages with interleaved description + thumbnail:
+  //   1. User's attached photos (up to PHASE2_ATTACHED_IMAGE_LIMIT)
+  //   2. Top tool results (up to PHASE2_RESULTS_IMAGE_LIMIT)
+  // Each photo gets its full text description followed by its thumbnail
+  // image, so the model has perfect text↔image association.
+  // ───────────────────────────────────────────────────────────
+
+  private async buildPhase2VisualContext(
+    contextPhotoIds: number[],
+    intermediateSteps: IntermediateStep[],
+    provider: ModelProvider
+  ): Promise<HumanMessage[]> {
+    const result: HumanMessage[] = []
+    const photoImageService = PhotoImageService.getInstance()
+
+    /**
+     * Fetches photos and builds interleaved content parts: text description + thumbnail per photo.
+     * Returns the content parts array and the count of successfully fetched photos.
+     */
+    const fetchInterleavedParts = async (
+      photoIds: number[],
+      limit: number
+    ): Promise<{ parts: any[]; count: number }> => {
+      const idsToFetch = photoIds.slice(0, limit)
+      const photos = await this.photoManager.getPhotosByIds(idsToFetch)
+      const photoMap = new Map(photos.map((p) => [p.id, p]))
+      const parts: any[] = []
+      let count = 0
+
+      for (const id of idsToFetch) {
+        const photo = photoMap.get(id)
+        if (!photo) continue
+
+        // Text description
+        const data = photoDataForAgent(photo)
+        parts.push({
+          type: 'text',
+          text: `[Photo ID ${photo.id} — ${photo.originalFileName}]\n${JSON.stringify(data, null, 2)}`,
+        })
+
+        // Thumbnail image
+        try {
+          if (provider === 'openai') {
+            const url = photo.thumbnailUrl
+            if (url) {
+              parts.push({ type: 'image_url', image_url: { url } })
+              count++
+            }
+          } else {
+            const base64 = await photoImageService.getImageBase64FromR2(photo.thumbnailName, false)
+            if (base64) {
+              parts.push({
+                type: 'image_url',
+                image_url: { url: `data:image/jpeg;base64,${base64}` },
+              })
+              count++
+            }
+          }
+        } catch {
+          // Image fetch failed — text description is still included
+        }
+      }
+      return { parts, count }
+    }
+
+    // 1. User's attached photos
+    if (contextPhotoIds.length > 0) {
+      const { parts, count } = await fetchInterleavedParts(
+        contextPhotoIds,
+        PHASE2_ATTACHED_IMAGE_LIMIT
+      )
+      if (parts.length > 0) {
+        result.push(
+          new HumanMessage({
+            content: [
+              {
+                type: 'text',
+                text: `[User's attached photos — ${count} photo(s) with description + thumbnail for visual reference]`,
+              },
+              ...parts,
+            ],
+          })
+        )
+        console.log(`[Agent] 👁️  Phase 2 visual: ${count} user attachment image(s)`)
+      }
+    }
+
+    // 2. Last tool result photos
+    const lastToolPhotoIds = extractPhotoIdsFromLastToolResult(intermediateSteps)
+    if (lastToolPhotoIds.length > 0) {
+      // Exclude photos already shown as user attachments
+      const attachedSet = new Set(contextPhotoIds)
+      const resultIds = lastToolPhotoIds.filter((id) => !attachedSet.has(id))
+      if (resultIds.length > 0) {
+        const { parts, count } = await fetchInterleavedParts(resultIds, PHASE2_RESULTS_IMAGE_LIMIT)
+        if (parts.length > 0) {
+          result.push(
+            new HumanMessage({
+              content: [
+                {
+                  type: 'text',
+                  text: `[Top search results — ${count} of ${resultIds.length} photo(s) with description + thumbnail for visual verification]`,
+                },
+                ...parts,
+              ],
+            })
+          )
+          console.log(
+            `[Agent] 👁️  Phase 2 visual: ${count} of ${resultIds.length} tool result image(s)`
+          )
+        }
+      }
+    }
+
+    return result
+  }
+
+  // ───────────────────────────────────────────────────────────
   // Executes all tool calls from one model iteration in parallel.
   // Returns an array of ToolMessages to append to the conversation.
   // ───────────────────────────────────────────────────────────
@@ -663,12 +790,8 @@ export default class LangchainAgentService {
     toolCalls: any[],
     toolMap: Record<string, any>,
     toolsUsed: string[],
-    intermediateSteps: IntermediateStep[],
-    provider: ModelProvider = 'openai'
-  ): Promise<{ toolMessages: ToolMessage[]; imageMessages: HumanMessage[] }> {
-    const toolMessages: ToolMessage[] = []
-    const imageMessages: HumanMessage[] = []
-
+    intermediateSteps: IntermediateStep[]
+  ): Promise<ToolMessage[]> {
     const results = await Promise.all(
       toolCalls.map(async (tc: any) => {
         const t = toolMap[tc.name]
@@ -695,54 +818,11 @@ export default class LangchainAgentService {
 
         intermediateSteps.push({ tool: tc.name, input: tc.args, output: result, durationMs })
 
-        return { tc, result }
+        return new ToolMessage({ content: result, tool_call_id: tc.id })
       })
     )
 
-    for (const { tc, result } of results) {
-      let toolMessageContent: string | any[] = result
-      let extractedImages: any[] | null = null
-
-      try {
-        const parsed = JSON.parse(result)
-        if (parsed._multimodalContent && Array.isArray(parsed._multimodalContent)) {
-          if (provider === 'gemini') {
-            // Gemini: put only text in the ToolMessage (functionResponse).
-            // Images inside functionResponse are serialised as JSON text tokens
-            // (~67k tokens per image) instead of native image tokens (~258 tokens).
-            toolMessageContent = parsed._textContent ?? []
-            extractedImages = parsed._imageContent ?? []
-          } else {
-            // OpenAI: put everything in the ToolMessage — OpenAI handles
-            // image_url parts in tool results natively.
-            toolMessageContent = parsed._multimodalContent
-          }
-        }
-      } catch {
-        // not JSON — use raw string
-      }
-
-      toolMessages.push(new ToolMessage({ content: toolMessageContent, tool_call_id: tc.id }))
-
-      // For Gemini, inject images as a separate HumanMessage.
-      // LangChain converts HumanMessage image_url parts to native Gemini
-      // inlineData, so images are processed as real image tokens.
-      if (extractedImages && extractedImages.length > 0) {
-        imageMessages.push(
-          new HumanMessage({
-            content: [
-              {
-                type: 'text',
-                text: '[Visual context: thumbnail images for the photos returned by the tool above]',
-              },
-              ...extractedImages,
-            ],
-          })
-        )
-      }
-    }
-
-    return { toolMessages, imageMessages }
+    return results
   }
 
   // ───────────────────────────────────────────────────────────
@@ -814,12 +894,16 @@ export default class LangchainAgentService {
       `\n[Agent] ▶ Starting | userId=${userId} | message="${message.slice(0, 100)}${message.length > 100 ? '…' : ''}"`
     )
 
-    // ── Pre-fetch attached photos ────────────────────────────────────────────
+    // ── Pre-fetch attached photos (text only) ────────────────────────────────
     // When the user attaches photos, call get_photo_info programmatically and
     // inject the AIMessage + ToolMessage pair directly into the message history.
     // The model sees the call as already resolved — no iteration wasted, and no
     // temptation to repeat it. The [Attached photo IDs] prefix on the HumanMessage
     // is kept as an informational reference for future history turns.
+    //
+    // Phase 1 is text-only — no images. Thumbnail images are injected exclusively
+    // in Phase 2 (buildPhase2VisualContext) where the judge can use them for
+    // visual verification alongside each photo's full text description.
     if (contextPhotoIds.length > 0) {
       const prefetchCallId = `prefetch-get_photo_info-${Date.now()}`
       const prefetchToolCall = {
@@ -827,19 +911,18 @@ export default class LangchainAgentService {
         args: { photoIds: contextPhotoIds },
         id: prefetchCallId,
       }
-      console.log(`[Agent] 📎 Pre-fetching ${contextPhotoIds.length} attached photo(s)…`)
-      const { toolMessages: prefetchToolMsgs, imageMessages: prefetchImgMsgs } =
-        await this.executeToolCalls(
-          [prefetchToolCall],
-          toolMap,
-          toolsUsed,
-          intermediateSteps,
-          provider
-        )
+      console.log(
+        `[Agent] 📎 Pre-fetching ${contextPhotoIds.length} attached photo(s) (text only)…`
+      )
+      const prefetchToolMsgs = await this.executeToolCalls(
+        [prefetchToolCall],
+        toolMap,
+        toolsUsed,
+        intermediateSteps
+      )
       messages.push(
         new AIMessage({ content: '', tool_calls: [prefetchToolCall] }),
-        ...prefetchToolMsgs,
-        ...prefetchImgMsgs
+        ...prefetchToolMsgs
       )
     }
 
@@ -886,15 +969,9 @@ export default class LangchainAgentService {
       console.log(
         `[Agent] 🔧 Tool calls (${toolCalls.length}): ${toolCalls.map((tc: any) => tc.name).join(', ')}`
       )
-      const { toolMessages: toolMsgs, imageMessages: imgMsgs } = await this.executeToolCalls(
-        toolCalls,
-        toolMap,
-        toolsUsed,
-        intermediateSteps,
-        provider
-      )
-      const freshMessageCount = toolMsgs.length + imgMsgs.length
-      messages.push(...toolMsgs, ...imgMsgs)
+      const toolMsgs = await this.executeToolCalls(toolCalls, toolMap, toolsUsed, intermediateSteps)
+      const freshMessageCount = toolMsgs.length
+      messages.push(...toolMsgs)
       // Compress all ToolMessages that pre-date this batch — the model has already
       // acted on them (used IDs as candidate_ids) and no longer needs full photo data.
       compressPriorToolMessages(messages, freshMessageCount)
@@ -906,10 +983,24 @@ export default class LangchainAgentService {
     // to surface, with no extra round-trips and no side-effect tool needed.
     // invokeStructuredFinalAnswer retries up to 3 times with a 6 000-token
     // budget to prevent JSON truncation errors.
-    const structured = await invokeStructuredFinalAnswer(
-      modelName,
-      compressMessagesForPhase2(messages)
+    //
+    // Visual context: the judge receives interleaved description + thumbnail for:
+    //   1. User's attached photos (up to PHASE2_ATTACHED_IMAGE_LIMIT = 5)
+    //   2. Top tool results (up to PHASE2_RESULTS_IMAGE_LIMIT = 15)
+    // These are injected as dedicated HumanMessages after the compressed
+    // conversation and before the synthesis prompt.
+    // All ToolMessages are slimmed to id+filename only — full descriptions
+    // are already included in the visual HumanMessages, so no duplication.
+    const compressedMessages = compressMessagesForPhase2(messages)
+    const phase2VisualContext = await this.buildPhase2VisualContext(
+      contextPhotoIds,
+      intermediateSteps,
+      provider
     )
+    const structured = await invokeStructuredFinalAnswer(modelName, [
+      ...compressedMessages,
+      ...phase2VisualContext,
+    ])
     // Strip any leaked internal-context annotations the model may have echoed.
     const rawOutput = structured.text ?? ''
     const output = rawOutput.replace(/\[(?:Shown photos|INTERNAL_CONTEXT)[^\]]*\]\s*/gi, '').trim()

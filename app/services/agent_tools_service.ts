@@ -5,7 +5,6 @@ import PhotoManager from '../managers/photo_manager.js'
 import SearchTextService from './search_text_service.js'
 import { APP_KNOWLEDGE_SECTIONS, AppKnowledgeSection } from '../utils/app_knowledge_content.js'
 import ScoringService from './scoring_service.js'
-import PhotoImageService from './photo_image_service.js'
 import StatsService from './stats_service.js'
 import SearchPhotoService from './search_photo_service.js'
 import User from '#models/user'
@@ -174,119 +173,14 @@ export const SearchAdvancedSchema = z.object({
     })
     .optional()
     .describe('Find photos similar to reference photos. Triggers similarity search.'),
+  // NOTE: keep this default in sync with PHASE2_RESULTS_IMAGE_LIMIT in langchain_agent_service.ts.
+  // Phase 2 only provides thumbnails + descriptions for up to that many photos, so returning
+  // more results here just wastes Phase 1 tokens with data that will never reach the judge.
   limit: z
     .number()
     .optional()
-    .default(20)
-    .describe('Maximum number of final results to return after combining (default 20, max 50).'),
-})
-
-export const FilterPhotosSchema = z.object({
-  scoreFilters: z
-    .array(
-      z.object({
-        field: ScoreField.describe('Artistic score field to filter on'),
-        min: z.number().optional().describe('Minimum score (inclusive), 0–10'),
-        max: z.number().optional().describe('Maximum score (inclusive), 0–10'),
-      })
-    )
-    .optional()
-    .describe(
-      'Filter by numeric artistic score fields (aesthetic_quality, composition, storytelling, strangeness, message, humor, visual_games, candidness). These are ALL numeric scores 0–10. Multiple entries are ANDed. Omit to skip score filtering. NEVER put score names inside visualAspects.'
-    ),
-  sortByScore: ScoreField.optional().describe(
-    'Sort results by this artistic score (use with sortOrder). Omit to sort by date.'
-  ),
-  sortOrder: z
-    .enum(['asc', 'desc'])
-    .optional()
-    .default('desc')
-    .describe('Sort direction (default desc — highest first / most recent first)'),
-  visualAspects: z
-    .object({
-      genre: z.array(z.string()).optional(),
-      framing: z.array(z.string()).optional(),
-      focus: z.array(z.string()).optional(),
-      lighting: z.array(z.string()).optional(),
-      lighting_scheme: z.array(z.string()).optional(),
-      depth_of_field: z.array(z.string()).optional(),
-      perspective: z.array(z.string()).optional(),
-      stylistic: z.array(z.string()).optional(),
-      orientation: z.array(z.string()).optional(),
-      temperature: z.array(z.string()).optional(),
-      palette: z.array(z.string()).optional(),
-    })
-    .optional()
-    .describe(
-      'Filter by categorical visual aspect values. ONLY these keys are valid: genre, framing, focus, lighting, lighting_scheme, depth_of_field, perspective, stylistic, orientation, temperature, palette. Do NOT place artistic score names (e.g. visual_games, humor, strangeness) here — those are numeric scores and belong in scoreFilters. Each key accepts an array of valid values (OR within a key, AND across keys). Accepted values per key — genre: abstract|documentary|street|landscape|portrait; framing: close-up|medium shot|wide shot; focus: blurry|nitid; lighting: natural|artificial|backlit|frontlit|side lit; lighting_scheme: low key|high key|balanced; depth_of_field: shallow|deep|medium; perspective: normal|high angle|low angle; stylistic: long exposure|motion blur|silhouettes|bokeh|grain; orientation: portrait|landscape|square; temperature: warm|cold|neutral; palette: color|black and white.'
-    ),
-  filenameLike: z
-    .string()
-    .optional()
-    .describe('Filter photos whose filename contains this string (case-insensitive)'),
-  dateFrom: z
-    .string()
-    .optional()
-    .describe('Include only photos taken on or after this date (ISO 8601, e.g. 2024-01-01)'),
-  dateTo: z
-    .string()
-    .optional()
-    .describe('Include only photos taken on or before this date (ISO 8601, e.g. 2024-12-31)'),
-  limit: z
-    .number()
-    .optional()
-    .default(20)
-    .describe('Maximum number of results to return (default 20)'),
-  candidate_ids: z
-    .array(z.number())
-    .optional()
-    .describe(
-      'Optional array of photo IDs to restrict filtering to a pre-selected pool. When provided, only these photos are considered. Use this to chain multiple search/filter steps.'
-    ),
-})
-
-export const SearchSemanticOverallStyleSchema = z.object({
-  query: z
-    .string()
-    .describe(
-      'Natural language description of the visual style to find. Focus on style, composition, mood, color palette, atmosphere. Always in english, regardless of user language.'
-    ),
-  pageSize: z
-    .number()
-    .optional()
-    .default(20)
-    .describe('Number of results to return (default 20, max 50)'),
-  minMatchScore: z
-    .number()
-    .optional()
-    .describe('Minimum match score threshold from 0 to 1 (default 0.2 for broad search)'),
-  candidate_ids: z
-    .array(z.number())
-    .optional()
-    .describe(
-      'Optional array of photo IDs to restrict the search pool. When provided, semantic style search is performed only among these photos. Use this to chain with a previous filter_photos or search result.'
-    ),
-})
-
-export const SearchSemanticContentSchema = z.object({
-  tags: z
-    .array(z.string())
-    .min(1)
-    .max(3)
-    .describe(
-      'Between 1 and 3 keywords describing concrete subjects, narrative elements, or specific content present in the photos (e.g. ["dog", "running"] or ["market", "crowd"]). Always in english, regardless of user language.'
-    ),
-  limit: z
-    .number()
-    .optional()
-    .default(20)
-    .describe('Maximum number of results to return (default 20)'),
-  candidate_ids: z
-    .array(z.number())
-    .optional()
-    .describe(
-      'Optional array of photo IDs to restrict the search pool. When provided, content search is performed only among these photos. Use this to chain with a previous filter_photos or search result.'
-    ),
+    .default(15)
+    .describe('Maximum number of final results to return after combining (default 15, max 50).'),
 })
 
 // ─────────────────────────────────────────────────────────────
@@ -306,6 +200,28 @@ export function photoDataForAgent(photo: any, extra?: Record<string, any>): Reco
     exif: descriptions.EXIF || null,
     notes: descriptions.notes || null,
     ...extra,
+  }
+}
+
+/**
+ * Lightweight photo summary for Phase 1 (data-gathering / tool-routing).
+ * Returns only the fields the router needs to decide whether it has enough
+ * data and whether to call more tools. Full data + thumbnail images are
+ * provided exclusively in Phase 2 via buildPhase2VisualContext.
+ *
+ * ~155 tokens/photo vs ~450 tokens for the full photoDataForAgent payload.
+ */
+export function photoDataForAgentSlim(photo: any): Record<string, any> {
+  const descriptions = photo.descriptions || {}
+  const exif = descriptions.EXIF || {}
+  const visualAspects = descriptions.visual_aspects || {}
+  return {
+    id: photo.id,
+    originalFileName: photo.originalFileName,
+    context: descriptions.context || null,
+    story: descriptions.story || null,
+    genre: visualAspects.genre ?? null,
+    dateTaken: exif.dateTaken ?? null,
   }
 }
 
@@ -421,7 +337,7 @@ function reciprocalRankFusion(rankedLists: number[][], k = 60): number[] {
 
 export const TOOL_DESCRIPTIONS = {
   get_photo_info:
-    '[BASIC_TOOLS] Get full details and thumbnail image of one or more photos by their IDs. MUST be called before discussing, comparing, or operating on any photo — including photos the user has attached (prefixed as [Attached photo IDs: ...] in the message) and photos referenced from conversation history. Pass multiple IDs in a single call to batch-fetch. Returns full photo data (artistic scores, story, context, visual aspects, visual accents, EXIF, tags) plus the thumbnail image for visual analysis.',
+    '[BASIC_TOOLS] Get a summary of one or more photos by their IDs. MUST be called before discussing, comparing, or operating on any photo — including photos the user has attached (prefixed as [Attached photo IDs: ...] in the message) and photos referenced from conversation history. Pass multiple IDs in a single call to batch-fetch. Returns: story (scene narrative), genre, and date taken. Full metadata (artistic scores, visual aspects, EXIF) and thumbnail images are provided automatically in the final evaluation step — no need to request them separately.',
 
   fetch_collections:
     "[BASIC_TOOLS] Get all the user's collections and series, each with their name, description, and up to 10 sample photo IDs. Use this when the user asks about their collections, series, albums, or organized groups of photos — for example 'what collections do I have?', 'show me my series', 'which albums exist?'. Returns two separate arrays: 'collections' (manually curated groups) and 'series' (ordered sequences/stories).",
@@ -455,92 +371,21 @@ export default class AgentToolsService {
     const { photoManager, searchService } = this
 
     // ── Tool 1: get_photo_info ──────────────────────────────
+    // Returns a slim summary (story + genre + dateTaken) for Phase 1 routing.
+    // Full metadata and thumbnail images are injected in Phase 2 by
+    // buildPhase2VisualContext — no need to include them here.
     const getPhotoInfo = tool(
       async ({ photoIds: ids }): Promise<string> => {
-        const photoImageService = PhotoImageService.getInstance()
-
-        const fetchImages = ids.length < 5
-
         const photos = await photoManager.getPhotosByIds(ids)
         const photoMap = new Map(photos.map((p) => [p.id, p]))
 
-        const results = await Promise.all(
-          ids.map(async (photoId: number) => {
-            const photo = photoMap.get(photoId)
-            if (!photo)
-              return {
-                text: JSON.stringify({ photoId, error: `Photo ${photoId} not found` }),
-                imageUrl: null,
-                base64: null,
-              }
-
-            // OpenAI: pass the thumbnail URL directly (no R2 fetch needed).
-            // Gemini: fetch from R2 and send as inline base64 (native Gemini format).
-            let imageUrl: string | null = null
-            let base64: string | null = null
-
-            if (fetchImages) {
-              if (provider === 'openai') {
-                imageUrl = photo.thumbnailUrl ?? null
-              } else {
-                // Gemini — inline base64
-                try {
-                  base64 = (await photoImageService.getImageBase64FromR2(
-                    photo.thumbnailName,
-                    false
-                  )) as string
-                } catch {
-                  // image fetch failed — continue without image
-                }
-              }
-            }
-
-            return { text: formatPhotoForAgent(photo), imageUrl, base64 }
-          })
-        )
-
-        // Build content parts — only include images if they were fetched
-        const hasImages = results.some(
-          ({ base64, imageUrl }) => base64 !== null || imageUrl !== null
-        )
-
-        if (!hasImages) {
-          // Text-only response — return plain JSON array
-          return JSON.stringify(results.map(({ text }) => JSON.parse(text)))
-        }
-
-        // Multimodal response — interleave photo info text + thumbnail image per photo
-        const contentParts: any[] = []
-        for (const { text, imageUrl, base64 } of results) {
-          contentParts.push({ type: 'text', text })
-          if (imageUrl) {
-            // OpenAI: direct HTTPS URL — model fetches server-side
-            contentParts.push({
-              type: 'image_url',
-              image_url: { url: imageUrl },
-            })
-          } else if (base64) {
-            // Gemini: inline base64 data URI
-            contentParts.push({
-              type: 'image_url',
-              image_url: { url: `data:image/jpeg;base64,${base64}` },
-            })
-          }
-        }
-
-        // Split text and image parts into separate sentinels.
-        // For Gemini, images MUST NOT go in the ToolMessage (functionResponse)
-        // because Gemini serialises functionResponse content as JSON text tokens,
-        // not as native image tokens. Images will be injected as a separate
-        // HumanMessage by executeToolCalls, where LangChain correctly converts
-        // them to native inlineData parts.
-        const textParts = contentParts.filter((p: any) => p.type === 'text')
-        const imageParts = contentParts.filter((p: any) => p.type === 'image_url')
-        return JSON.stringify({
-          _multimodalContent: contentParts, // full content (used by OpenAI)
-          _textContent: textParts, // text only (used by Gemini ToolMessage)
-          _imageContent: imageParts, // images only (used by Gemini HumanMessage)
+        const results = ids.map((photoId: number) => {
+          const photo = photoMap.get(photoId)
+          if (!photo) return { photoId, error: `Photo ${photoId} not found` }
+          return photoDataForAgentSlim(photo)
         })
+
+        return JSON.stringify(results)
       },
       {
         name: 'get_photo_info',
@@ -717,7 +562,7 @@ export default class AgentToolsService {
         content_tags,
         filter,
         similar_to,
-        limit = 20,
+        limit = 15,
       }): Promise<string> => {
         try {
           // Dispatch all sub-searches in parallel
