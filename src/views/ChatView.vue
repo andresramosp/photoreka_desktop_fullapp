@@ -32,7 +32,37 @@
             your catalog with Photoreka's ChatLab assistance.
           </p>
 
-          <div class="suggestion-cards">
+          <!-- Sub-queries panel (shown after clicking a card with subQueries) -->
+          <div v-if="activeSuggestion" class="subquery-panel">
+            <button class="subquery-back-btn" @click="activeSuggestion = null">
+              <n-icon :size="14"><ArrowBackIcon /></n-icon>
+              <span>Back</span>
+            </button>
+            <div class="subquery-panel-header">
+              <n-icon :size="18" class="subquery-panel-icon">
+                <component :is="activeSuggestion.icon" />
+              </n-icon>
+              <span class="subquery-panel-title">{{
+                activeSuggestion.title
+              }}</span>
+            </div>
+            <div class="subquery-list">
+              <button
+                v-for="(sq, sqIdx) in activeSuggestion.subQueries"
+                :key="sqIdx"
+                class="subquery-item"
+                @click="handleSubQueryClick(sq)"
+              >
+                <n-icon :size="14" class="subquery-item-icon"
+                  ><ChevronForwardIcon
+                /></n-icon>
+                <span>{{ sq.title }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Main suggestion cards -->
+          <div v-else class="suggestion-cards">
             <div
               v-for="(suggestion, index) in suggestions"
               :key="index"
@@ -50,6 +80,13 @@
                   suggestion.description
                 }}</span>
               </div>
+              <n-icon
+                v-if="suggestion.subQueries && suggestion.subQueries.length"
+                :size="14"
+                class="suggestion-expand-icon"
+              >
+                <ChevronForwardIcon />
+              </n-icon>
             </div>
           </div>
         </div>
@@ -342,11 +379,30 @@ import {
   TrendingUpOutline as TrendingIcon,
   CreateOutline as CreateIcon,
   BookmarksOutline,
+  ChevronForwardOutline as ChevronForwardIcon,
+  ArrowBackOutline as ArrowBackIcon,
 } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
 import { PlusCircleFilled, RobotOutlined } from "@vicons/antd";
 
 defineOptions({ name: "ChatView" });
+
+interface SubQuery {
+  title: string;
+  prompt: string;
+  needsPhotos: boolean;
+  autoSend: boolean;
+}
+
+interface Suggestion {
+  title: string;
+  description: string;
+  icon: any;
+  prompt: string;
+  needsPhotos: boolean;
+  autoSend: boolean;
+  subQueries?: SubQuery[];
+}
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -446,7 +502,7 @@ const isMobile = ref(window.innerWidth < 768);
 const showPhotoInfoDialog = ref(false);
 const selectedDialogPhoto = ref<any>(null);
 
-const suggestions = [
+const suggestions: Suggestion[] = [
   {
     title: "Help me find some photos",
     description:
@@ -455,6 +511,43 @@ const suggestions = [
     prompt: "Hello, I'm looking for photos that ",
     needsPhotos: false,
     autoSend: false,
+    subQueries: [
+      {
+        title: "Chasing the Golden Hour",
+        prompt:
+          "Search my library for photos with 'Golden Hour' lighting. I'm looking for that specific warm, low-sun character, long shadows, and a strong sense of atmosphere. Rank them by visual impact.",
+        needsPhotos: false,
+        autoSend: true,
+      },
+      {
+        title: "My Most Impactful Landscapes",
+        prompt:
+          "Find my strongest landscape and nature photos. Focus on those with high dynamic range, compelling depth, and 'Remarkable' (7.5+) visual quality. Help me understand what makes their composition work.",
+        needsPhotos: false,
+        autoSend: true,
+      },
+      {
+        title: "Candid Portraits & Natural Light",
+        prompt:
+          "Search for portrait photos that prioritize 'natural light' and 'candidness'. I'm interested in moments that feel authentic, focusing on the storytelling and the mood of the light.",
+        needsPhotos: false,
+        autoSend: true,
+      },
+      {
+        title: "Street Photography Gems",
+        prompt:
+          "Scour my library for 'Street Photography' gems. I'm looking for high 'candidness', 'strangeness', or interesting 'visual games'. Show me the ones that feel most like a 'decisive moment'.",
+        needsPhotos: false,
+        autoSend: true,
+      },
+      {
+        title: "Atmospheric & Moody Searches",
+        prompt:
+          "I want to explore photos with a specific vibe. Find photos in my library that evoke a mood of [TYPE YOUR MOOD HERE, e.g., 'melancholy', 'cinematic', 'minimalist']. Focus on the visual character and palette.",
+        needsPhotos: false,
+        autoSend: false,
+      },
+    ],
   },
 
   {
@@ -475,6 +568,36 @@ const suggestions = [
       "Analyze my photo library and give me portfolio insights. Where do I excel and what areas could I develop further?",
     needsPhotos: false,
     autoSend: true,
+    subQueries: [
+      {
+        title: "Genre-Specific Deep Dive",
+        prompt:
+          "Analyze my library based on genre weights. For 'Documentary' work, prioritize storytelling and candidness; for 'Artistic' shots, focus on message and strangeness. Which genre shows the most 'Remarkable' consistency?",
+        needsPhotos: false,
+        autoSend: true,
+      },
+      {
+        title: "Editing Style & Consistency",
+        prompt:
+          "Evaluate the consistency of my visual character across my catalog. Look at color grading, tonal contrast, and exposure patterns. Am I developing a unique 'signature style' or is it still evolving?",
+        needsPhotos: false,
+        autoSend: true,
+      },
+      {
+        title: "Identifying Portfolio Gaps",
+        prompt:
+          "Based on my current clusters, what subjects or aesthetic styles are underrepresented? Suggest a concrete next step to strengthen the 'strangeness' or 'narrative depth' of my portfolio.",
+        needsPhotos: false,
+        autoSend: true,
+      },
+      {
+        title: "Overall Portfolio Assessment",
+        prompt:
+          "Review my entire photo library and provide an honest assessment. Give me an internal ranking of my clusters and identify which pieces reach that 'Unique' (10/10) level of impact.",
+        needsPhotos: false,
+        autoSend: true,
+      },
+    ],
   },
   {
     title: "Find similar photos to these",
@@ -503,8 +626,40 @@ const suggestions = [
     prompt: "Please explain how to use Photoreka to ",
     needsPhotos: false,
     autoSend: false,
+    subQueries: [
+      {
+        title: "How do I create and manage collections?",
+        prompt:
+          "How do I create collections in Photoreka and add photos to them?",
+        needsPhotos: false,
+        autoSend: true,
+      },
+      {
+        title: "How does the search feature work?",
+        prompt:
+          "Explain how the search feature works in Photoreka, including filters and semantic search.",
+        needsPhotos: false,
+        autoSend: true,
+      },
+      {
+        title: "How do I organize my photos into series?",
+        prompt:
+          "How do I create photo series in Photoreka and what are they used for?",
+        needsPhotos: false,
+        autoSend: true,
+      },
+      {
+        title: "How do I rate or cull my photos?",
+        prompt:
+          "Explain the best workflow for rating, flagging, and culling photos in Photoreka.",
+        needsPhotos: false,
+        autoSend: true,
+      },
+    ],
   },
 ];
+
+const activeSuggestion = ref<Suggestion | null>(null);
 
 const checkMobile = () => {
   isMobile.value = window.innerWidth < 768;
@@ -610,17 +765,17 @@ const renderMarkdown = (content: string): string => {
   return marked(content) as string;
 };
 
-const handleSuggestionClick = (suggestion: {
-  title: string;
-  prompt: string;
-  needsPhotos: boolean;
-  autoSend: boolean;
-}) => {
-  // Always pre-fill first so it's ready when photos are added
+const handleSuggestionClick = (suggestion: Suggestion) => {
+  // If card has sub-queries, drill into them instead of firing immediately
+  if (suggestion.subQueries && suggestion.subQueries.length > 0) {
+    activeSuggestion.value = suggestion;
+    return;
+  }
+
+  // No sub-queries: original behaviour
   inputText.value = suggestion.prompt;
 
   if (suggestion.needsPhotos && contextPhotos.value.length === 0) {
-    // Open the photo picker — when user confirms, text is already set
     photosDialogVisible.value = true;
     return;
   }
@@ -628,7 +783,21 @@ const handleSuggestionClick = (suggestion: {
   if (suggestion.autoSend) {
     sendMessage();
   }
-  // else: just pre-fills the input so the user can complete and send manually
+};
+
+const handleSubQueryClick = (sq: SubQuery) => {
+  activeSuggestion.value = null;
+
+  inputText.value = sq.prompt;
+
+  if (sq.needsPhotos && contextPhotos.value.length === 0) {
+    photosDialogVisible.value = true;
+    return;
+  }
+
+  if (sq.autoSend) {
+    sendMessage();
+  }
 };
 
 const handleKeyDown = (e: KeyboardEvent) => {
@@ -641,10 +810,20 @@ const handleKeyDown = (e: KeyboardEvent) => {
 // Context photos management — PhotosDialog emits an array of photo IDs
 const onPhotosSelected = (photoIds: string[]) => {
   const existingIds = new Set(contextPhotos.value.map((p) => p.id));
-  const remaining = 10 - contextPhotos.value.length;
+  const remaining = 5 - contextPhotos.value.length;
 
   const newPhotos: ContextPhoto[] = [];
+  let attemptedCount = 0;
+
   for (const id of photoIds) {
+    // Contar intentos de fotos válidas (no duplicadas, existentes)
+    if (
+      !existingIds.has(id) &&
+      photosStore.photos.find((p: any) => p.id === id)
+    ) {
+      attemptedCount++;
+    }
+
     if (newPhotos.length >= remaining) break;
     if (existingIds.has(id)) continue;
 
@@ -672,6 +851,17 @@ const onPhotosSelected = (photoIds: string[]) => {
 
   contextPhotos.value.push(...newPhotos);
   photosDialogVisible.value = false;
+
+  // Show message if tried to add more photos
+  if (attemptedCount > newPhotos.length) {
+    if (newPhotos.length === 0) {
+      message.warning("Can't add more photos. 5 photo limit reached.");
+    } else {
+      message.warning(
+        `Only ${newPhotos.length} photo(s) added. 5 photo limit reached.`,
+      );
+    }
+  }
 };
 
 const getPhotosForMessage = (photoIds: number[]): ContextPhoto[] => {
@@ -760,12 +950,21 @@ const handleToolSelected = async (toolId: string) => {
 
 const handleAttachToChat = () => {
   const existingIds = new Set(contextPhotos.value.map((p) => p.id));
-  const remaining = 10 - contextPhotos.value.length;
+  const remaining = 5 - contextPhotos.value.length;
   const newPhotos: ContextPhoto[] = [];
+  let attemptedCount = 0;
 
   for (const id of selectedPhotoIds.value) {
-    if (newPhotos.length >= remaining) break;
     const strId = String(id);
+    // Contar intentos de fotos válidas (no duplicadas, existentes)
+    if (
+      !existingIds.has(strId) &&
+      photosStore.photos.find((p: any) => String(p.id) === strId)
+    ) {
+      attemptedCount++;
+    }
+
+    if (newPhotos.length >= remaining) break;
     if (existingIds.has(strId)) continue;
 
     const photo = photosStore.photos.find((p: any) => String(p.id) === strId);
@@ -792,6 +991,17 @@ const handleAttachToChat = () => {
 
   contextPhotos.value.push(...newPhotos);
   clearAllSelectionsAndScopes();
+
+  // Show message if tried to add more photos
+  if (attemptedCount > newPhotos.length) {
+    if (newPhotos.length === 0) {
+      message.warning("Can't add more photos. 5 photo limit reached.");
+    } else {
+      message.warning(
+        `Only ${newPhotos.length} photo(s) added. 5 photo limit reached.`,
+      );
+    }
+  }
 };
 
 const showPhotoInfo = async (photo: ContextPhoto) => {
@@ -822,6 +1032,7 @@ const resetChat = async () => {
   contextPhotos.value = [];
   inputText.value = "";
   perMessageSelections.value = {};
+  activeSuggestion.value = null;
 };
 </script>
 
@@ -994,6 +1205,7 @@ const resetChat = async () => {
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   text-align: left;
+  position: relative;
 }
 
 .suggestion-card:hover {
@@ -1006,6 +1218,20 @@ const resetChat = async () => {
 .suggestion-icon {
   color: var(--accent-color);
   opacity: 0.8;
+}
+
+.suggestion-expand-icon {
+  position: absolute;
+  bottom: var(--spacing-sm);
+  right: var(--spacing-sm);
+  color: var(--text-tertiary);
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+.suggestion-card:hover .suggestion-expand-icon {
+  opacity: 1;
+  color: var(--accent-color);
 }
 
 .suggestion-content {
@@ -1025,6 +1251,101 @@ const resetChat = async () => {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   line-height: var(--line-height-relaxed);
+}
+
+/* ── Sub-queries Panel ── */
+.subquery-panel {
+  max-width: 640px;
+  margin: 0 auto;
+  width: 100%;
+  animation: fadeSlideIn 0.2s ease;
+}
+
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.subquery-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  padding: 0 0 var(--spacing-sm) 0;
+  transition: color 0.15s;
+}
+
+.subquery-back-btn:hover {
+  color: var(--accent-color);
+}
+
+.subquery-panel-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.subquery-panel-icon {
+  color: var(--accent-color);
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+.subquery-panel-title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+}
+
+.subquery-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.subquery-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.subquery-item:hover {
+  border-color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 5%, var(--bg-surface));
+  color: var(--text-primary);
+  transform: translateX(3px);
+}
+
+.subquery-item-icon {
+  color: var(--accent-color);
+  opacity: 0.7;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+
+.subquery-item:hover .subquery-item-icon {
+  opacity: 1;
 }
 
 /* ── Chat Messages ── */
@@ -1225,6 +1546,10 @@ const resetChat = async () => {
 
   .suggestion-desc {
     display: none;
+  }
+
+  .subquery-item {
+    font-size: var(--font-size-xs);
   }
 }
 
