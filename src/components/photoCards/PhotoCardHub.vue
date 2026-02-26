@@ -302,6 +302,7 @@ interface PhotoInfo {
     artistic_scores?: Record<string, number>;
     source?: {
       type?: string;
+      productUrl?: string; // Direct Google Photos link (from mediaItem.productUrl)
       [key: string]: any;
     };
     [key: string]: any;
@@ -423,6 +424,18 @@ const onImageError = () => {
 };
 
 const openInGooglePhotos = () => {
+  // Direct link takes priority — exact photo, no search noise
+  const googlePhotoId = props.photo.descriptions?.source?.googlePhotoId;
+  const productUrl = props.photo.descriptions?.source?.productUrl;
+  const directUrl =
+    productUrl ||
+    (googlePhotoId ? `https://photos.google.com/photo/${googlePhotoId}` : null);
+  if (directUrl) {
+    window.open(directUrl, "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  // Fallback: search by date if available, otherwise by filename
   const rawDate = props.photo.date || props.photo.uploadDate;
   let query = "";
 
@@ -432,13 +445,16 @@ const openInGooglePhotos = () => {
       const month = d.toLocaleString("en-US", { month: "long" });
       const day = d.getDate();
       const year = d.getFullYear();
-      // No comma — avoids %2C breaking Google Photos SPA routing
       query = `${month} ${day} ${year}`;
     }
   }
 
+  if (!query) {
+    query = removeExtension(props.photo.originalFileName || props.photo.name);
+  }
+
   const url = query
-    ? `https://photos.google.com/search/${query.replace(/ /g, "%20")}`
+    ? `https://photos.google.com/search/${encodeURIComponent(query)}`
     : "https://photos.google.com/";
   window.open(url, "_blank", "noopener,noreferrer");
 };

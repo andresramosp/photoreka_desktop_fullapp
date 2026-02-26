@@ -76,7 +76,13 @@ export function usePhotoUpload() {
     const payload = {
       fileType: resizedBlob.type,
       originalName: fileName,
-      source: srcType === "google" ? { type: "google" } : { type: "local" },
+      source:
+        srcType === "google"
+          ? {
+              type: "google",
+              googlePhotoId: source.googlePhotoMediaItem?.id || null,
+            }
+          : { type: "local" },
       exifData: exifData, // Incluir datos EXIF básicos
     };
 
