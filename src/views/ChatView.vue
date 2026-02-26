@@ -513,39 +513,26 @@ const suggestions: Suggestion[] = [
     autoSend: false,
     subQueries: [
       {
-        title: "Chasing the Golden Hour",
+        title: "Best Travel Shots from Last Year",
         prompt:
-          "Search my library for photos with 'Golden Hour' lighting. I'm looking for that specific warm, low-sun character, long shadows, and a strong sense of atmosphere. Rank them by visual impact.",
+          "Search my library for my strongest travel photos from last year. Only in colour and landscape format. Rank them by visual impact, storytelling, and overall cohesion.",
         needsPhotos: false,
         autoSend: true,
       },
-      {
-        title: "My Most Impactful Landscapes",
-        prompt:
-          "Find my strongest landscape and nature photos. Focus on those with high dynamic range, compelling depth, and 'Remarkable' (7.5+) visual quality. Help me understand what makes their composition work.",
-        needsPhotos: false,
-        autoSend: true,
-      },
-      {
-        title: "Candid Portraits & Natural Light",
-        prompt:
-          "Search for portrait photos that prioritize 'natural light' and 'candidness'. I'm interested in moments that feel authentic, focusing on the storytelling and the mood of the light.",
-        needsPhotos: false,
-        autoSend: true,
-      },
+
       {
         title: "Street Photography Gems",
         prompt:
-          "Scour my library for 'Street Photography' gems. I'm looking for high 'candidness', 'strangeness', or interesting 'visual games'. Show me the ones that feel most like a 'decisive moment'.",
+          "Look for photos that clearly capture a decisive moment, or funny situations that may not stand out as much in terms of aesthetics or composition and have gone unnoticed by me.",
         needsPhotos: false,
         autoSend: true,
       },
       {
-        title: "Atmospheric & Moody Searches",
+        title: "Curating Decay Study",
         prompt:
-          "I want to explore photos with a specific vibe. Find photos in my library that evoke a mood of [TYPE YOUR MOOD HERE, e.g., 'melancholy', 'cinematic', 'minimalist']. Focus on the visual character and palette.",
+          "Find images with dark, decaying environments. Emphasize shadow, texture, abandonment, and emotional weight. Rank by atmospheric intensity.",
         needsPhotos: false,
-        autoSend: false,
+        autoSend: true,
       },
     ],
   },
@@ -556,7 +543,7 @@ const suggestions: Suggestion[] = [
       "Get suggestions for sequencing photos into a series or collection",
     icon: LayersIcon,
     prompt:
-      "Can you create a sequence using these photos? Suggest a compelling order and explain the narrative or thematic flow you see. If possible, recommend a title for the series.",
+      "Can you create a sequence using these photos? Suggest a compelling order and explain the narrativeflow you see. Recommend a title for the series.",
     needsPhotos: true,
     autoSend: true,
   },
@@ -570,13 +557,6 @@ const suggestions: Suggestion[] = [
     autoSend: true,
     subQueries: [
       {
-        title: "Genre-Specific Deep Dive",
-        prompt:
-          "Analyze my library based on genre weights. For 'Documentary' work, prioritize storytelling and candidness; for 'Artistic' shots, focus on message and strangeness. Which genre shows the most 'Remarkable' consistency?",
-        needsPhotos: false,
-        autoSend: true,
-      },
-      {
         title: "Editing Style & Consistency",
         prompt:
           "Evaluate the consistency of my visual character across my catalog. Look at color grading, tonal contrast, and exposure patterns. Am I developing a unique 'signature style' or is it still evolving?",
@@ -586,14 +566,14 @@ const suggestions: Suggestion[] = [
       {
         title: "Identifying Portfolio Gaps",
         prompt:
-          "Based on my current clusters, what subjects or aesthetic styles are underrepresented? Suggest a concrete next step to strengthen the 'strangeness' or 'narrative depth' of my portfolio.",
+          "Based on my current patterns, what subjects or aesthetic styles are underrepresented? Suggest a concrete next step to strengthen the 'strangeness' or 'narrative depth' of my portfolio.",
         needsPhotos: false,
         autoSend: true,
       },
       {
         title: "Overall Portfolio Assessment",
         prompt:
-          "Review my entire photo library and provide an honest assessment. Give me an internal ranking of my clusters and identify which pieces reach that 'Unique' (10/10) level of impact.",
+          "Review my entire photo library and provide an honest assessment. Give me an internal ranking of my usage patterns and identify which pieces reach that 'Unique' (10/10) level of impact.",
         needsPhotos: false,
         autoSend: true,
       },
@@ -615,7 +595,7 @@ const suggestions: Suggestion[] = [
       "I'm unsure which version of a photo to keep. Help me choose the best one",
     icon: StarIcon,
     prompt:
-      "I have multiple versions of the same shot and I can't decide which to keep. Please compare these photos technically and artistically — sharpness, exposure, composition, expression — and recommend the strongest one with a clear reason.",
+      "I have multiple versions of the same shot and I can't decide which to keep. Please compare these photos technically and artistically and recommend the strongest one with a clear reason.",
     needsPhotos: true,
     autoSend: true,
   },
@@ -628,16 +608,16 @@ const suggestions: Suggestion[] = [
     autoSend: false,
     subQueries: [
       {
-        title: "How do I create and manage collections?",
+        title: "How does the search feature work?",
         prompt:
-          "How do I create collections in Photoreka and add photos to them?",
+          "Explain how the search feature works in Photoreka, including filters and different search modes.",
         needsPhotos: false,
         autoSend: true,
       },
       {
-        title: "How does the search feature work?",
+        title: "How do I create and manage collections?",
         prompt:
-          "Explain how the search feature works in Photoreka, including filters and semantic search.",
+          "How do I create collections in Photoreka and add photos to them?",
         needsPhotos: false,
         autoSend: true,
       },
@@ -649,9 +629,16 @@ const suggestions: Suggestion[] = [
         autoSend: true,
       },
       {
-        title: "How do I rate or cull my photos?",
+        title: "How do I share my work from Photoreka?",
         prompt:
-          "Explain the best workflow for rating, flagging, and culling photos in Photoreka.",
+          "What are the ways to share my photos or series from Photoreka?",
+        needsPhotos: false,
+        autoSend: true,
+      },
+      {
+        title: "How does photo analysis work?",
+        prompt:
+          "How does Photoreka analyze my photos, how is the data stored, and how is my privacy protected?",
         needsPhotos: false,
         autoSend: true,
       },
@@ -768,6 +755,7 @@ const renderMarkdown = (content: string): string => {
 const handleSuggestionClick = (suggestion: Suggestion) => {
   // If card has sub-queries, drill into them instead of firing immediately
   if (suggestion.subQueries && suggestion.subQueries.length > 0) {
+    inputText.value = "";
     activeSuggestion.value = suggestion;
     return;
   }
@@ -1211,7 +1199,6 @@ const resetChat = async () => {
 .suggestion-card:hover {
   border-color: var(--accent-color);
   background: color-mix(in srgb, var(--accent-color) 5%, var(--bg-surface));
-  transform: translateY(-2px);
   box-shadow: var(--shadow-md);
 }
 
@@ -1334,7 +1321,6 @@ const resetChat = async () => {
   border-color: var(--accent-color);
   background: color-mix(in srgb, var(--accent-color) 5%, var(--bg-surface));
   color: var(--text-primary);
-  transform: translateX(3px);
 }
 
 .subquery-item-icon {
