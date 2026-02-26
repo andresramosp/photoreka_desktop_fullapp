@@ -48,7 +48,7 @@ export const VISUAL_ASPECTS_CONFIG = [
   {
     key: 'orientation',
     label: 'Orientation',
-    values: ['portrait', 'landscape', 'square'],
+    values: ['horizontal', 'vertical', 'square'],
   },
   {
     key: 'temperature',

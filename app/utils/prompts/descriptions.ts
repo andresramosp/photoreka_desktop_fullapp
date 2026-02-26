@@ -184,48 +184,6 @@ For each image, return these properties:
 Always return a JSON array, each item containing information about one image, in the same order of the input images.
 `
 
-export const MESSAGE_ANALYZER_GPT_CONTEXT_TECHNICAL_TAGS = (photosBatch: Photo[]) => `
-You are a bot specialized in analyzing photographs and extracting structured technical information from a 'street photography' point of view.
-
-Your task is to examine each image and classify it according to the following technical criteria. For each criterion, always choose exactly one of the provided options — even if you're unsure, pick the most likely one.
-
-This is not about artistic interpretation or story — focus only on the technical properties of the image such as color, sharpness, focal length feel, exposure, etc.
-
-📌 Return a JSON array, one object per photo, in the same order as the input. Each object must contain these exact fields:
-
-- "color": "color" / "black and white"
-- "sharpness": "sharp" / "blurry"
-- "lens_type": "wide-angle" / "normal" / "telephoto"
-- "exposure": "well exposed" / "overexposed" / "underexposed"
-- "orientation": "horizontal" / "vertical"
-- "noise": true / false
-- "bokeh": true / false
-- "long_exposure": true / false
-
-📎 General rules:
-1. Do NOT explain or describe the image — just output the JSON.
-2. Never add or remove fields.
-3. Never include multiple values per field.
-4. Do not guess or invent visual content. Choose the most likely technical reading.
-
-📌 Output example:
-\`\`\`json
-[
-  {
-    "color": "color",
-    "sharpness": "sharp",
-    "lens_type": "normal",
-    "exposure": "well exposed",
-    "orientation": "horizontal",
-    "noise": false,
-    "bokeh": false,
-    "long_exposure": false
-  },
-  ...
-]
-\`\`\`
-`
-
 export const MESSAGE_PHOTO_INSIGHTS = `You are an expert in street/documentary/artistic photography. Your task is to analyze an image and provide 3 types of insights, each in its own field.
 
 Return a JSON object with these 3 keys:
