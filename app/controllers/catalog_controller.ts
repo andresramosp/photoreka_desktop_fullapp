@@ -109,7 +109,12 @@ export default class CatalogController {
         originalName: originalFileName,
         source = { type: 'local' },
         exifData,
-      } = request.only(['fileType', 'originalName', 'source', 'exifData'])
+        googlePhotoId,
+      } = request.only(['fileType', 'originalName', 'source', 'exifData', 'googlePhotoId'])
+
+      if (googlePhotoId && source?.type === 'google') {
+        source.googlePhotoId = googlePhotoId
+      }
 
       if (!fileType || !originalFileName) {
         return response.badRequest({ message: 'Faltan datos' })
