@@ -302,7 +302,6 @@ interface PhotoInfo {
     artistic_scores?: Record<string, number>;
     source?: {
       type?: string;
-      productUrl?: string; // Direct Google Photos link (from mediaItem.productUrl)
       [key: string]: any;
     };
     [key: string]: any;
@@ -424,19 +423,12 @@ const onImageError = () => {
 };
 
 const openInGooglePhotos = () => {
-  // Direct link takes priority — exact photo, no search noise
-  const googlePhotoId = props.photo.descriptions?.source?.googlePhotoId;
-  const productUrl = props.photo.descriptions?.source?.productUrl;
-  const directUrl =
-    productUrl ||
-    (googlePhotoId ? `https://photos.google.com/photo/${googlePhotoId}` : null);
-  if (directUrl) {
-    window.open(directUrl, "_blank", "noopener,noreferrer");
-    return;
-  }
-
-  // Fallback: search by date if available, otherwise by filename
-  const rawDate = props.photo.date || props.photo.uploadDate;
+  // Google Photos Picker API does not expose a usable web URL per photo.
+  // Search by exact capture date from EXIF, falling back to filename.
+  const rawDate =
+    props.photo.descriptions?.EXIF?.dateTaken ||
+    props.photo.date ||
+    props.photo.uploadDate;
   let query = "";
 
   if (rawDate) {
