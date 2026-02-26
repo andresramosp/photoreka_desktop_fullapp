@@ -474,22 +474,6 @@ export default class AgentToolsService {
         if (visualAspects) {
           for (const [key, accepted] of Object.entries(visualAspects)) {
             if (!accepted || accepted.length === 0) continue
-            if (key === 'orientation') {
-              const storedOrientation: string = (aspects['orientation'] as any) ?? ''
-              let resolvedOrientation = storedOrientation.toLowerCase()
-              if (!resolvedOrientation) {
-                const exif = (photo.descriptions?.EXIF ?? {}) as Record<string, any>
-                const w = exif.ImageWidth ?? exif.ExifImageWidth ?? 0
-                const h = exif.ImageHeight ?? exif.ExifImageHeight ?? 0
-                if (w > 0 && h > 0) {
-                  resolvedOrientation = w > h ? 'horizontal' : w < h ? 'vertical' : 'square'
-                }
-              }
-              if (!resolvedOrientation) continue
-              const matches = accepted.some((v) => v.toLowerCase() === resolvedOrientation)
-              if (!matches) return false
-              continue
-            }
             const photoValues: string[] = aspects[key] ?? []
             const matches = accepted.some((v) =>
               photoValues.some((pv) => pv.toLowerCase() === v.toLowerCase())

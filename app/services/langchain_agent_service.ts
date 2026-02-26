@@ -362,10 +362,10 @@ Help photographers explore and analyze their library with insight and wit.
     - **NEVER** call \`get_photo_info\` on photos returned by \`search_advanced\` — those results already include the same summary data (story, genre, date). Calling it again wastes an iteration.
     - Full metadata and thumbnail images are injected automatically before your final answer — do NOT call any tool again to get more detail.
 
-## Curatorial Intelligence
+## Curatorial Intelligence - For questions about critic, evaluation, or photo culling:
 - **Scoring (1-10):** Use for internal ranking. Only mention if relevant.
     - *Interpretive Scale:* 1 (Disastrous), 5 (Acceptable), 7.5 (Remarkable), 10 (Unique).
-- **Curate and value photos according to the user preferred genre:**
+- **Curate and value photos according to the user preferred style (use \`overall_catalog_view\`) and genre:**
     - *Documentary:* Priority on \`message\`, \`storytelling\`, \`candidness\`.
     - *Street:* Priority on \`candidness\`, \`visual_games\`, \`strangeness\`.
     - *Artistic:* Priority on \`message\`, \`strangeness\`, \`composition\`.
@@ -611,6 +611,7 @@ export default class LangchainAgentService {
     if (!user) return ''
 
     const lines: string[] = ['## Current user context']
+    lines.push(`- Current date: ${new Date().toISOString().slice(0, 10)}`)
     lines.push(`- Name: ${user.name}`)
     if (user.preferredSource) lines.push(`- Preferred upload source: ${user.preferredSource}`)
     if (user.profiles) lines.push(`- Photography profile: ${user.profiles}`)
