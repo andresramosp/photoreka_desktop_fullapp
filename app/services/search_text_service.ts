@@ -54,6 +54,7 @@ export type SearchOptions = {
   searchId?: string
   /** When provided, restricts the search pool to only these photo IDs (after collection/aspect filters). */
   candidateIds?: number[]
+  skipStructureQuery?: boolean // Cuando lo usa el chatbot-agentico la query ya viene en ingles y limpia, por lo que se puede saltar el structureQuery y usarla directamente para scoring y modelo
 }
 
 export type SearchTagsOptions = SearchOptions & {
@@ -239,6 +240,7 @@ export default class SearchTextService {
       withInsights = false,
       searchId, // 👈 nuevo
       candidateIds,
+      skipStructureQuery = false,
     } = options
 
     if (searchMode === 'curation') {
@@ -259,7 +261,8 @@ export default class SearchTextService {
 
     const { structuredResult, useImage, expansionCost } = await this.queryService.structureQuery(
       query,
-      searchMode
+      searchMode,
+      skipStructureQuery
     )
 
     // Guardar refs en Redis si hay searchId

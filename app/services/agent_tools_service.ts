@@ -173,87 +173,49 @@ export const SearchAdvancedSchema = z.object({
     })
     .optional()
     .describe('Find photos similar to reference photos. Triggers similarity search.'),
-  // NOTE: keep this default in sync with PHASE2_RESULTS_IMAGE_LIMIT in langchain_agent_service.ts.
-  // Phase 2 only provides thumbnails + descriptions for up to that many photos, so returning
-  // more results here just wastes Phase 1 tokens with data that will never reach the judge.
-  limit: z
-    .number()
-    .optional()
-    .default(15)
-    .describe('Maximum number of final results to return after combining (default 15, max 50).'),
 })
 
 // ─────────────────────────────────────────────────────────────
 // Formatters
 // ─────────────────────────────────────────────────────────────
 
-export function photoDataForAgent(photo: any, extra?: Record<string, any>): Record<string, any> {
-  const descriptions = photo.descriptions || {}
-  return {
-    id: photo.id,
-    originalFileName: photo.originalFileName,
-    story: descriptions.story || null,
-    context: descriptions.context || null,
-    visual_accents: descriptions.visual_accents || null,
-    visual_aspects: descriptions.visual_aspects || null,
-    artistic_scores: descriptions.artistic_scores || null,
-    exif: descriptions.EXIF || null,
-    notes: descriptions.notes || null,
-    ...extra,
-  }
-}
-
 /**
- * Lightweight photo summary for Phase 1 (data-gathering / tool-routing).
- * Returns only the fields the router needs to decide whether it has enough
- * data and whether to call more tools. Full data + thumbnail images are
- * provided exclusively in Phase 2 via buildPhase2VisualContext.
- *
- * ~155 tokens/photo vs ~450 tokens for the full photoDataForAgent payload.
+ * Standard photo data for tools that need meaningful context (get_photo_info,
+ * Phase 2 visual context). Includes narrative fields so the model can
+ * understand what the photo depicts, but omits heavy metadata (scores,
+ * visual_aspects, EXIF, notes) — those are injected automatically in Phase 2
+ * via buildPhase2VisualContext with full data + thumbnail images.
  */
-export function photoDataForAgentSlim(photo: any): Record<string, any> {
+export function photoDataForAgent(photo: any): Record<string, any> {
   const descriptions = photo.descriptions || {}
   const exif = descriptions.EXIF || {}
   const visualAspects = descriptions.visual_aspects || {}
   return {
     id: photo.id,
     originalFileName: photo.originalFileName,
-    context: descriptions.context || null,
     story: descriptions.story || null,
+    context: descriptions.context || null,
     genre: visualAspects.genre ?? null,
     dateTaken: exif.dateTaken ?? null,
   }
 }
 
-export function formatPhotoForAgent(photo: any): string {
-  return JSON.stringify(photoDataForAgent(photo), null, 2)
-}
-
-export function formatSearchResultsForAgent(result: any): string {
-  const raw = result.data.results[1] || []
-  const photosArray = Array.isArray(raw) ? raw : []
-
-  const formatted = photosArray.slice(0, 50).map((entry: any) => {
-    const p = entry.photo ?? entry
-    const matchScore = p.matchScore !== undefined ? Math.round(p.matchScore * 100) / 100 : undefined
-    return photoDataForAgent(p, matchScore !== undefined ? { matchScore } : undefined)
-  })
-
-  return JSON.stringify({ totalFound: photosArray.length, photos: formatted }, null, 2)
-}
-
-export function formatContextPhotoBasic(photo: any): string {
-  const descriptions = photo.descriptions || {}
-
-  return JSON.stringify(
-    {
-      id: photo.id,
-      originalFileName: photo.originalFileName,
-      visual_aspects: descriptions.visual_aspects || null,
-    },
-    null,
-    2
-  )
+/**
+ * Minimal photo stub for search-result listings in Phase 1.
+ * Only identification + genre — deliberately excludes narrative fields
+ * (story, context) to prevent the model from qualitatively evaluating
+ * results and over-iterating. Full data + thumbnails are provided
+ * exclusively in Phase 2 via buildPhase2VisualContext.
+ *
+ * ~25 tokens/photo vs ~155 tokens for photoDataForAgent.
+ */
+export function photoDataForAgentSlim(photo: any): Record<string, any> {
+  const visualAspects = (photo.descriptions || {}).visual_aspects || {}
+  return {
+    id: photo.id,
+    originalFileName: photo.originalFileName,
+    genre: visualAspects.genre ?? null,
+  }
 }
 
 export function formatCatalogPatternsForAgent(catalogPatterns: any, reviewType: string): string {
@@ -337,13 +299,13 @@ function reciprocalRankFusion(rankedLists: number[][], k = 60): number[] {
 
 export const TOOL_DESCRIPTIONS = {
   get_photo_info:
-    '[BASIC_TOOLS] Get a summary of one or more photos by their IDs. Call this ONLY for: (1) photo IDs attached by the user in the current message, (2) photo IDs referenced from conversation history that you need to discuss again. Do NOT call this on photos already returned by search_advanced — those results already contain the same data. Pass multiple IDs in a single call to batch-fetch. Returns: story (scene narrative), genre, and date taken. Full metadata (artistic scores, visual aspects, EXIF) and thumbnail images are provided automatically in the final evaluation step — no need to request them separately.',
+    '[BASIC_TOOLS] Get detailed info for one or more photos by their IDs. Call this ONLY for: (1) photo IDs attached by the user in the current message (these are auto-prefetched), (2) photo IDs referenced from conversation history that you need to discuss again. Do NOT call this on photos returned by search_advanced — a later phase automatically injects full descriptions and thumbnails. Pass multiple IDs in a single call to batch-fetch. Returns: story (scene narrative), context, genre, and date taken. Full visual metadata and thumbnail images are provided automatically in the final evaluation step.',
 
   fetch_collections:
     "[BASIC_TOOLS] Get all the user's collections and series, each with their name, description, and up to 10 sample photo IDs. Use this when the user asks about their collections, series, albums, or organized groups of photos — for example 'what collections do I have?', 'show me my series', 'which albums exist?'. Returns two separate arrays: 'collections' (manually curated groups) and 'series' (ordered sequences/stories).",
 
   search_advanced:
-    '[PHOTO_SEARCH] **The primary search tool.** Combine multiple search strategies in a single call and merge their results with intersect (AND) or union (OR). You can specify any combination of: (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) filter — metadata/score/visual-aspect filtering, (4) similar_to — similarity to reference photos. All specified sub-searches run in parallel; their full ID sets are combined via the chosen operation; only the final result is sampled and returned with photo summaries (story, genre, date). Full metadata and thumbnail images are provided automatically in the final evaluation step. **Do NOT call get_photo_info on these results — they already contain the same summary data.** This eliminates result loss from sequential filtering. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) with intersect. "Photos of cats or dogs" → content_tags(["cat"]) + content_tags(["dog"]) — not possible, use two calls or a single content_tags(["cat", "dog"]). "Melancholic portraits" → style_query("melancholic mood") + filter(genre=portrait) with intersect.',
+    '[PHOTO_SEARCH] **The primary search tool.** Combine multiple search strategies in a single call and merge their results with intersect (AND) or union (OR). You can specify any combination of: (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) filter — metadata/score/visual-aspect filtering, (4) similar_to — similarity to reference photos. All specified sub-searches run in parallel; their full ID sets are combined via the chosen operation; only the final result is sampled and returned with photo ID, filename, and genre. Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) with intersect. "Photos of cats or dogs" → content_tags(["cat"]) + content_tags(["dog"]) — not possible, use two calls or a single content_tags(["cat", "dog"]). "Melancholic portraits" → style_query("melancholic mood") + filter(genre=portrait) with intersect.',
 
   overall_catalog_view:
     '[CATALOG_INSIGHT] Get a single combined report of the entire catalog: catalog patterns (recurring themes, subjects, narrative motifs), visual aspects distribution, and artistic scores statistics. Use this as the FIRST tool whenever the user asks for advice on improving their photography, critique of their catalog, identification of weak points or strengths, general feedback on their style, or any holistic question about their photographic practice. This tool replaces calling get_catalog_patterns + stats_visual_aspects + stats_artistic_scores individually — it returns all of that data in one shot.',
@@ -371,7 +333,7 @@ export default class AgentToolsService {
     const { photoManager, searchService } = this
 
     // ── Tool 1: get_photo_info ──────────────────────────────
-    // Returns a slim summary (story + genre + dateTaken) for Phase 1 routing.
+    // Returns story + context + genre + dateTaken for attached/referenced photos.
     // Full metadata and thumbnail images are injected in Phase 2 by
     // buildPhase2VisualContext — no need to include them here.
     const getPhotoInfo = tool(
@@ -382,7 +344,7 @@ export default class AgentToolsService {
         const results = ids.map((photoId: number) => {
           const photo = photoMap.get(photoId)
           if (!photo) return { photoId, error: `Photo ${photoId} not found` }
-          return photoDataForAgentSlim(photo)
+          return photoDataForAgent(photo)
         })
 
         return JSON.stringify(results)
@@ -403,10 +365,11 @@ export default class AgentToolsService {
     const _getIdsByStyle = async (query: string): Promise<number[]> => {
       const result = await searchService.searchSemanticSync(query, userId, {
         searchMode: 'broad',
-        pageSize: 500,
+        pageSize: 250,
         iteration: 1,
         minMatchScore: 0.2,
         withInsights: false,
+        skipStructureQuery: true,
       })
       const raw = result.data.results[1] || []
       const photosArray = Array.isArray(raw) ? raw : []
@@ -531,7 +494,7 @@ export default class AgentToolsService {
           descriptionCategories: [],
           opposite: args.opposite ?? false,
           inverted: false,
-          resultLength: 500,
+          resultLength: 250,
         },
         userId
       )
@@ -540,14 +503,11 @@ export default class AgentToolsService {
 
     // ── Tool: search_advanced ───────────────────────────────
     const searchAdvanced = tool(
-      async ({
-        operation,
-        style_query,
-        content_tags,
-        filter,
-        similar_to,
-        limit = 15,
-      }): Promise<string> => {
+      async ({ operation, style_query, content_tags, filter, similar_to }): Promise<string> => {
+        // Limit is intentionally not exposed to the model — Phase 1 always returns
+        // the maximum so Phase 2 (the curator) can make the final selection.
+        // Keep in sync with PHASE2_RESULTS_IMAGE_LIMIT in langchain_agent_service.ts.
+        const limit = 15
         try {
           // Dispatch all sub-searches in parallel
           const subSearches: Promise<number[]>[] = []
@@ -604,7 +564,13 @@ export default class AgentToolsService {
           )
 
           if (combinedIds.length === 0) {
-            return JSON.stringify({ totalFound: 0, operation, subSearches: subLabels, photos: [] })
+            return JSON.stringify({
+              returned: 0,
+              // hasMore: false,
+              operation,
+              subSearches: subLabels,
+              photos: [],
+            })
           }
 
           // Sample to limit
@@ -625,7 +591,8 @@ export default class AgentToolsService {
 
           return JSON.stringify(
             {
-              totalFound: combinedIds.length,
+              returned: formatted.length,
+              // hasMore: combinedIds.length > formatted.length,
               operation,
               subSearches: subLabels,
               photos: formatted,

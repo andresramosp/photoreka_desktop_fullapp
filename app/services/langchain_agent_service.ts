@@ -3,9 +3,11 @@ import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
 import { HarmBlockThreshold, HarmCategory } from '@google/generative-ai'
 import { HumanMessage, AIMessage, ToolMessage, SystemMessage } from '@langchain/core/messages'
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base'
+import { tool } from '@langchain/core/tools'
+import { z } from 'zod'
 import PhotoManager from '../managers/photo_manager.js'
 import SearchTextService from './search_text_service.js'
-import AgentToolsService, { photoDataForAgent } from './agent_tools_service.js'
+import AgentToolsService from './agent_tools_service.js'
 import QueryService from './query_service.js'
 import { PRICES, USD_TO_EUR } from './models_service.js'
 import User from '#models/user'
@@ -35,6 +37,15 @@ import redis from '@adonisjs/redis/services/main'
 //   _debug.calls.at(-1).messages.length → total messages in Phase 2
 // Reset automatically at the start of each chat() call.
 // ─────────────────────────────────────────────────────────────
+
+/**
+ * Collapses a JSON string into a compact one-liner for log previews.
+ * Strips all unnecessary whitespace so multi-line payloads never pollute the log.
+ */
+function compactPreview(json: string, maxLen = 220): string {
+  const oneliner = json.replace(/\s+/g, ' ').trim()
+  return oneliner.length > maxLen ? `${oneliner.slice(0, maxLen)}…` : oneliner
+}
 
 /** Converts a LangChain BaseMessage into a plain, readable debug object. */
 function serializeMessageForDebug(msg: any): Record<string, any> {
@@ -338,15 +349,13 @@ export type AgentChatResult = {
 // System prompt
 // ─────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are Photoreka's intelligent photo assistant.
+const SYSTEM_PROMPT_BASE = `You are Photoreka's intelligent photo assistant.
 Help photographers explore and analyze their library with insight and wit.
 
 ## Behavior
-- **Conciseness:** Max 200 words. No fluff, no raw JSON. Summarize insights unless explicitly asked for details.
 - **Language:** Always match the user's language. But use English always for internal tool calls.
 - **Scope:** Strictly photography and Photoreka features. Polite refusal for outside topics.
-- **Stealth:** Never mention tool names or internal IDs to the user. Use filenames for reference.
-- **Proactivity:** Suggest 1 concrete next step based ONLY on available tools.
+- **Stealth:** Never mention tool names or internal IDs to the user.
 
 ## Search & Tool Strategy
 - **Parallelism:** Call independent tools simultaneously in one step.
@@ -359,21 +368,50 @@ Help photographers explore and analyze their library with insight and wit.
     - Call \`get_photo_info\` ONLY for:
         1. Photo IDs attached by the user in the current message (these are auto-prefetched, so you rarely need to call it yourself).
         2. Photo IDs referenced from conversation history that you need to discuss again.
-    - **NEVER** call \`get_photo_info\` on photos returned by \`search_advanced\` — those results already include the same summary data (story, genre, date). Calling it again wastes an iteration.
-    - Full metadata and thumbnail images are injected automatically before your final answer — do NOT call any tool again to get more detail.
+    - **NEVER** call \`get_photo_info\` on photos returned by \`search_advanced\` — search results are intentionally minimal (ID, filename, genre). A later phase automatically injects full descriptions and thumbnail images for visual evaluation.
+    - Full metadata and thumbnail images are injected automatically before your final answer — do NOT call any tool again to get more detail.`
 
-## Curatorial Intelligence - For questions about critic, evaluation, or photo culling:
-- **Scoring (1-10):** Use for internal ranking. Only mention if relevant.
-    - *Interpretive Scale:* 1 (Disastrous), 5 (Acceptable), 7.5 (Remarkable), 10 (Unique).
-- **Curate and value photos according to the user preferred style (use \`overall_catalog_view\`) and genre:**
-    - *Documentary:* Priority on \`message\`, \`storytelling\`, \`candidness\`.
-    - *Street:* Priority on \`candidness\`, \`visual_games\`, \`strangeness\`.
-    - *Artistic:* Priority on \`message\`, \`strangeness\`, \`composition\`.
-- **Analysis:** Use \`overall_catalog_view\` for critiques. Look for patterns/imbalances across clusters, not just average scores.
+// Phase 1 addendum: data-gathering role + curatorial data strategy (which tools to call).
+const PHASE1_ROLE_ADDENDUM = `
+
+## Your current role: DATA COLLECTOR
+You are in the data-gathering phase. Your ONLY job is to call the right tools to fetch the data the user needs.
+- **DO NOT** compose a response, summary, or evaluation of the results.
+- **DO NOT** assess whether search results are "good enough" qualitatively — a later phase with visual access to thumbnails handles that.
+- **DO re-search** ONLY if there is a clear quantitative gap (e.g. user asked for 5 photos and you got 2).
+- When you have all the data you need, call the \`done\` tool to signal completion. You MUST always end by calling \`done\`.
+
+## Curatorial data strategy
+For questions about critique, evaluation, portfolio review, or photo culling:
+- Call \`overall_catalog_view\` to retrieve the user's catalog-level patterns, style profile, and cluster analysis. This is essential context for any evaluative question.
+- Call \`search_advanced\` to find the specific photos relevant to the query.
+- Call both in parallel when possible.
+- Do NOT attempt to evaluate or score the photos yourself — just gather the data.`
+
+// Phase 2 addendum: evaluation criteria, judgment, and communication style.
+// Phase 2 has NO access to tools — only to the data already gathered.
+const PHASE2_ROLE_ADDENDUM = `
+
+## Curatorial judgment strategy
+Evaluate and respond using the data gathered in previous steps, if any.
+- **Scoring (1-10):** Use for internal ranking. Only surface scores if the user asks or it adds clear value.
+    - *Scale:* 1 (Disastrous), 5 (Acceptable), 7.5 (Remarkable), 10 (Unique).
+- **Genre-specific priorities** — weight criteria according to the photographer's preferred style:
+    - *Documentary:* \`message\`, \`storytelling\`, \`candidness\`.
+    - *Street:* \`candidness\`, \`visual_games\`, \`strangeness\`.
+    - *Artistic:* \`message\`, \`strangeness\`, \`composition\`.
+- **Catalog analysis:** Look for patterns and imbalances across clusters, not just average scores.
+
+## Communication
+- **Conciseness:** Max 200 words. No fluff, no raw JSON. Summarize insights unless explicitly asked for details.
+- **Proactivity:** Suggest 1 concrete next step the user can take within the app.
+- Use filenames for reference in your text, never raw IDs or tool names.
+- Respond in the user's language.
 
 ## Visual Output
-- Always populate the \`photo_ids\` field in your response when the user expects a visual result (rankings, selections, or sets).
-- The order in \`photo_ids\` defines the display order for the user and is relevant.`
+- Always populate the \`photo_ids\` field when the user expects a visual result (rankings, selections, or sets).
+- The order in \`photo_ids\` defines the display order and IS your editorial statement.
+- Leave \`photo_ids\` empty only when no specific photos are relevant.`
 
 // ─────────────────────────────────────────────────────────────
 // Helper: extract plain text from a model response's content
@@ -411,10 +449,23 @@ function extractTextContent(content: any): string {
  *
  * Handles two payload shapes:
  *   - get_photo_info:   raw array  [{id, originalFileName, story, …}, …]
- *   - search_advanced:  {photos: [{id, originalFileName, story, …}, …], totalFound, …}
+ *   - search_advanced:  {photos: [{id, originalFileName, genre}, …], returned, …}
+ *
+ * Non-photo tools (overall_catalog_view, app_knowledge, fetch_collections, done) are
+ * always preserved in full — their content is needed by Phase 2 as context.
  */
+/** Tools whose full payload must survive compression (not photo-list tools). */
+const NON_PHOTO_TOOLS = new Set([
+  'overall_catalog_view',
+  'app_knowledge',
+  'fetch_collections',
+  'done',
+])
+
 function slimToolMessage(msg: ToolMessage): ToolMessage {
   if (typeof msg.content !== 'string') return msg
+  // Explicitly preserve tools that carry non-photo context (catalog analysis, etc.)
+  if (msg.name && NON_PHOTO_TOOLS.has(msg.name)) return msg
   try {
     const parsed = JSON.parse(msg.content)
 
@@ -429,7 +480,7 @@ function slimToolMessage(msg: ToolMessage): ToolMessage {
     const photos = parsed.photos ?? parsed.results ?? []
     if (photos.length === 0) return msg
     const slim = {
-      totalMatched: parsed.totalMatched ?? parsed.totalFound ?? photos.length,
+      returned: photos.length,
       photos: photos.map((p: any) => ({ id: p.id, originalFileName: p.originalFileName })),
     }
     return new ToolMessage({ content: JSON.stringify(slim), tool_call_id: msg.tool_call_id })
@@ -459,9 +510,17 @@ function compressPriorToolMessages(messages: any[], freshCount: number): void {
  * All ToolMessages are slimmed to id+filename only: the visual HumanMessages already
  * carry the full text descriptions for the photos shown, so keeping full ToolMessage
  * payloads would only duplicate tokens without adding information.
+ *
+ * Also swaps the system prompt from Phase 1 (data collector) to Phase 2 (curator/judge).
  */
-function compressMessagesForPhase2(messages: any[]): any[] {
-  return messages.map((msg) => {
+function compressMessagesForPhase2(messages: any[], userContext: string = ''): any[] {
+  return messages.map((msg, idx) => {
+    // Swap system prompt: replace Phase 1 role with Phase 2 role
+    if (idx === 0 && msg instanceof SystemMessage) {
+      const phase2Prompt = SYSTEM_PROMPT_BASE + PHASE2_ROLE_ADDENDUM
+      const content = userContext ? `${phase2Prompt}\n\n${userContext}` : phase2Prompt
+      return new SystemMessage(content)
+    }
     if (!(msg instanceof ToolMessage)) return msg
     return slimToolMessage(msg) // all tool results: id+filename only
   })
@@ -636,7 +695,8 @@ export default class LangchainAgentService {
     currentUserMessage: HumanMessage,
     userContext: string = ''
   ): any[] {
-    const systemContent = userContext ? `${SYSTEM_PROMPT}\n\n${userContext}` : SYSTEM_PROMPT
+    const phase1Prompt = SYSTEM_PROMPT_BASE + PHASE1_ROLE_ADDENDUM
+    const systemContent = userContext ? `${phase1Prompt}\n\n${userContext}` : phase1Prompt
     const messages: any[] = [new SystemMessage(systemContent)]
 
     for (const m of history) {
@@ -698,11 +758,23 @@ export default class LangchainAgentService {
         const photo = photoMap.get(id)
         if (!photo) continue
 
-        // Text description
-        const data = photoDataForAgent(photo)
+        // Full text description for Phase 2 curatorial judgment — includes
+        // all metadata fields the judge needs (scores, visual aspects, EXIF, etc.)
+        const descriptions = photo.descriptions || {}
+        const fullData = {
+          id: photo.id,
+          originalFileName: photo.originalFileName,
+          story: descriptions.story || null,
+          context: descriptions.context || null,
+          visual_accents: descriptions.visual_accents || null,
+          visual_aspects: descriptions.visual_aspects || null,
+          artistic_scores: descriptions.artistic_scores || null,
+          exif: descriptions.EXIF || null,
+          notes: descriptions.notes || null,
+        }
         parts.push({
           type: 'text',
-          text: `[Photo ID ${photo.id} — ${photo.originalFileName}]\n${JSON.stringify(data, null, 2)}`,
+          text: `[Photo ID ${photo.id} — ${photo.originalFileName}]\n${JSON.stringify(fullData, null, 2)}`,
         })
 
         // Thumbnail image
@@ -798,7 +870,9 @@ export default class LangchainAgentService {
         const t = toolMap[tc.name]
         if (!toolsUsed.includes(tc.name)) toolsUsed.push(tc.name)
 
-        console.log(`[Agent]   ⚙️  Calling tool "${tc.name}" with args: ${JSON.stringify(tc.args)}`)
+        console.log(
+          `[Agent]   ⚙️  Calling tool "${tc.name}" with args: ${compactPreview(JSON.stringify(tc.args))}`
+        )
         const t0 = Date.now()
 
         let result: string
@@ -813,13 +887,11 @@ export default class LangchainAgentService {
         }
 
         const durationMs = Date.now() - t0
-        console.log(
-          `[Agent]   ✔️  Tool "${tc.name}" returned in ${durationMs}ms. Preview: ${result.slice(0, 150)}${result.length > 150 ? '…' : ''}`
-        )
+        console.log(`[Agent]   ✔️  Tool "${tc.name}" → ${durationMs}ms | ${compactPreview(result)}`)
 
         intermediateSteps.push({ tool: tc.name, input: tc.args, output: result, durationMs })
 
-        return new ToolMessage({ content: result, tool_call_id: tc.id })
+        return new ToolMessage({ content: result, tool_call_id: tc.id, name: tc.name })
       })
     )
 
@@ -869,17 +941,26 @@ export default class LangchainAgentService {
     console.log(`[Agent] 🤖 Routed to model: ${modelName} (${provider.toUpperCase()})`)
     console.log(`[Agent] 🔍 Query classified as: ${isCuratorial ? 'CURATORIAL' : 'GENERAL'}`)
     const tools = this.toolsService.createTools(userId, foundPhotoIds, provider)
-    // For Gemini, tool_choice defaults to 'auto', which lets it bypass tool calls entirely
-    // and answer the user directly (e.g. "Fetching your collections." with no actual fetch).
-    // We create a second binding with tool_choice:'any' to force at least one tool call on
-    // the first Phase-1 iteration; subsequent iterations revert to 'auto' so the model can
-    // naturally signal it has all the data it needs and exit the loop.
-    const modelWithTools = createChatModel(modelName, undefined, 'low').bindTools(tools)
-    // const modelWithToolsForced =
-    //   provider === 'gemini'
-    //     ? createChatModel(modelName, undefined, 'low').bindTools(tools, { tool_choice: 'any' })
-    //     : modelWithTools
-    const toolMap = Object.fromEntries(tools.map((t) => [t.name, t]))
+
+    // ── Signal tool: `done` ────────────────────────────────────────────────
+    // Lightweight tool the model calls to exit the Phase 1 loop.
+    // Combined with tool_choice:'any', this makes phantom text structurally
+    // impossible: the model MUST call a tool on every iteration.
+    const doneTool = tool(async () => 'ok', {
+      name: 'done',
+      description:
+        'Signal that data collection is complete. Call this (alone) when you have gathered all the information needed to answer the user. Do NOT call any other tool in the same step as done.',
+      schema: z.object({}),
+    })
+    const allTools = [...tools, doneTool]
+
+    // tool_choice 'any' forces the model to always call at least one tool,
+    // preventing free-text responses (phantom text). The model exits the loop
+    // by calling `done`. Works for both OpenAI and Gemini providers.
+    const modelWithTools = createChatModel(modelName, undefined, 'low').bindTools(allTools, {
+      tool_choice: 'any',
+    })
+    const toolMap = Object.fromEntries(allTools.map((t) => [t.name, t]))
 
     const currentUserMessage = this.buildCurrentUserMessage(message, contextPhotoIds)
     const userContext = await this.buildUserContext(userId)
@@ -888,7 +969,7 @@ export default class LangchainAgentService {
     const toolsUsed: string[] = []
     const intermediateSteps: IntermediateStep[] = []
     const iterationUsages: TokenUsageEntry[] = []
-    const MAX_ITERATIONS = 5
+    const MAX_ITERATIONS = 3
     _debug.calls = []
 
     console.log(
@@ -928,19 +1009,14 @@ export default class LangchainAgentService {
     }
 
     // ── Phase 1: data-fetching loop ─────────────────────────────────────────
-    // Run tool calls until the model signals it has all the data it needs.
-    // add_photos_to_result is intentionally absent — photo IDs are collected
-    // via structured output in Phase 2, preserving the model's own selection.
+    // tool_choice:'any' forces a tool call every iteration.
+    // The model calls `done` to signal it has all the data it needs.
     let totalIter = 0
     for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
       totalIter = iter + 1
       console.log(`[Agent] 🔄 Iteration ${totalIter}/${MAX_ITERATIONS} — calling model…`)
 
-      // First Gemini iteration: force at least one tool call so it doesn't answer
-      // directly without fetching any data. Subsequent iterations use auto so the
-      // model can exit the loop once it has everything it needs.
-      const activeModel = modelWithTools //iter === 0 ? modelWithToolsForced : modelWithTools
-      const response = await activeModel.invoke(messages, {
+      const response = await modelWithTools.invoke(messages, {
         callbacks: [makeDebugCallback(`phase1-iter-${iter}`)],
       })
       // Capture token usage for this iteration (available directly on the AIMessage)
@@ -949,33 +1025,71 @@ export default class LangchainAgentService {
       )
       const toolCalls = response.tool_calls ?? []
 
-      if (toolCalls.length === 0) {
-        // No more tool calls — Phase 2 will generate the final answer from
-        // the current messages state (ends at HumanMessage or last ToolMessage).
-        // Do NOT push this response: it would leave an AIMessage as the last
-        // message, which breaks OpenAI's structured output parsing.
-        console.log(`[Agent] ✅ Data phase complete after ${totalIter} iteration(s).`)
+      // Check if the model called `done` (exit signal)
+      const calledDone = toolCalls.some((tc: any) => tc.name === 'done')
+      // Separate real tool calls from the `done` signal
+      const realToolCalls = toolCalls.filter((tc: any) => tc.name !== 'done')
+
+      // Log any phantom text that slipped through despite tool_choice:'any'
+      const phantomText = extractTextContent(response.content).trim()
+      if (phantomText) {
+        const phantomTokenEstimate = Math.ceil(phantomText.length / 4)
+        console.warn(
+          `[Agent] 👻 PHANTOM TEXT in Phase 1 iter ${totalIter}: ` +
+            `~${phantomTokenEstimate} tokens wasted | ` +
+            `Preview: "${phantomText.slice(0, 300)}${phantomText.length > 300 ? '…' : ''}"`
+        )
+      }
+
+      if (calledDone && realToolCalls.length === 0) {
+        // Pure done signal — no real tools called, just exit.
+        // Do NOT push the response: the last message stays as HumanMessage or ToolMessage
+        // which is what Phase 2 expects.
+        console.log(`[Agent] ✅ Data phase complete after ${totalIter} iteration(s) (done signal).`)
         break
       }
 
-      // Strip any intermediate reasoning text from tool-call responses so the
-      // final answer is self-contained and not fragmented across turns.
-      if (!!extractTextContent(response.content).trim()) {
-        console.log(`[Agent]   ℹ️  Stripping intermediate text from tool-call response`)
-        messages.push(new AIMessage({ content: '', tool_calls: toolCalls }))
-      } else {
-        messages.push(response)
+      // Defensive fallback: tool_choice:'any' should prevent this, but if the
+      // model returns 0 tool calls, treat it as an implicit done.
+      if (toolCalls.length === 0) {
+        console.warn(
+          `[Agent] ⚠️  No tool calls returned despite tool_choice:'any' — treating as done.`
+        )
+        break
       }
 
-      console.log(
-        `[Agent] 🔧 Tool calls (${toolCalls.length}): ${toolCalls.map((tc: any) => tc.name).join(', ')}`
-      )
-      const toolMsgs = await this.executeToolCalls(toolCalls, toolMap, toolsUsed, intermediateSteps)
-      const freshMessageCount = toolMsgs.length
-      messages.push(...toolMsgs)
-      // Compress all ToolMessages that pre-date this batch — the model has already
-      // acted on them (used IDs as candidate_ids) and no longer needs full photo data.
-      compressPriorToolMessages(messages, freshMessageCount)
+      // Execute real tool calls (ignore `done` — it's just a signal)
+      if (realToolCalls.length > 0) {
+        // Strip any text content from the AIMessage to keep Phase 1 text-free
+        messages.push(new AIMessage({ content: '', tool_calls: toolCalls }))
+
+        console.log(
+          `[Agent] 🔧 Tool calls (${realToolCalls.length}): ${realToolCalls.map((tc: any) => tc.name).join(', ')}${calledDone ? ' + done' : ''}`
+        )
+
+        // We must respond to ALL tool_calls (including done) to keep the message
+        // sequence valid for the provider. Execute real tools; reply 'ok' for done.
+        const allToolMsgs = await Promise.all(
+          toolCalls.map(async (tc: any) => {
+            if (tc.name === 'done') {
+              return new ToolMessage({ content: 'ok', tool_call_id: tc.id })
+            }
+            // Execute real tool
+            const results = await this.executeToolCalls([tc], toolMap, toolsUsed, intermediateSteps)
+            return results[0]
+          })
+        )
+        const freshMessageCount = allToolMsgs.length
+        messages.push(...allToolMsgs)
+        compressPriorToolMessages(messages, freshMessageCount)
+      }
+
+      if (calledDone) {
+        console.log(
+          `[Agent] ✅ Data phase complete after ${totalIter} iteration(s) (done + tools).`
+        )
+        break
+      }
     }
 
     // ── Phase 2: structured final answer (with retry) ───────────────────────
@@ -992,7 +1106,7 @@ export default class LangchainAgentService {
     // conversation and before the synthesis prompt.
     // All ToolMessages are slimmed to id+filename only — full descriptions
     // are already included in the visual HumanMessages, so no duplication.
-    const compressedMessages = compressMessagesForPhase2(messages)
+    const compressedMessages = compressMessagesForPhase2(messages, userContext)
     const phase2VisualContext = await this.buildPhase2VisualContext(
       contextPhotoIds,
       intermediateSteps,

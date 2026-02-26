@@ -34,7 +34,7 @@ export default class NLPService {
     return terms.map((term) => {
       const numberOfWords = term.trim().split(/\s+/).length
       const normalized = numberOfWords < 2 ? pluralize.singular(term.toLowerCase()) : term
-      console.log(`[EmbeddingStoreService] Normalizado: '${term}' → '${normalized}'`)
+      // console.log(`[EmbeddingStoreService] Normalizado: '${term}' → '${normalized}'`)
       return normalized
     })
   }

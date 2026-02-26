@@ -41,7 +41,21 @@ export default class QueryService {
     }
   }
 
-  public async structureQuery(query: string, searchMode: SearchMode) {
+  public async structureQuery(query: string, searchMode: SearchMode, skipStructureQuery = false) {
+    // Agentic flow: query is already clean English — skip LLM entirely.
+    if (skipStructureQuery) {
+      return {
+        structuredResult: {
+          original: query,
+          positive_segments: [],
+          nuances_segments: [],
+          no_prefix: query,
+        },
+        useImage: false,
+        expansionCost: 0,
+      }
+    }
+
     const numberOfWords = query.split(' ').length
     const emptyResult = {
       structuredResult: {

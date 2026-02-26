@@ -17,9 +17,9 @@ export class EmbeddingStoreService {
     const targetMap = type === EmbeddingType.CLIP ? this.embeddingsMapCLIP : this.embeddingsMap
     for (const { key, value } of pairs) {
       targetMap[key] = value
-      console.log(
-        `[EmbeddingStoreService] Embedding ${type} almacenado para clave '${key}' (dimensión: ${value.length})`
-      )
+      // console.log(
+      //   `[EmbeddingStoreService] Embedding ${type} almacenado para clave '${key}' (dimensión: ${value.length})`
+      // )
     }
   }
 
@@ -79,9 +79,9 @@ export class EmbeddingStoreService {
   ): Promise<void> {
     if (newTerms.length === 0) return
 
-    console.log(
-      `[EmbeddingStoreService] Calculando embeddings Text para ${newTerms.length} nuevos términos...`
-    )
+    // console.log(
+    //   `[EmbeddingStoreService] Calculando embeddings Text para ${newTerms.length} nuevos términos...`
+    // )
 
     const { embeddings } = await modelsService.getEmbeddingsCPU(newTerms)
 
@@ -98,11 +98,11 @@ export class EmbeddingStoreService {
 
     this.addEmbeddings(pairs, EmbeddingType.Text)
 
-    console.log(
-      `[EmbeddingStoreService] Embeddings Text calculados y almacenados para claves: [${newTerms.join(
-        ', '
-      )}]`
-    )
+    // console.log(
+    //   `[EmbeddingStoreService] Embeddings Text calculados y almacenados para claves: [${newTerms.join(
+    //     ', '
+    //   )}]`
+    // )
   }
 
   private static async calculateCLIPEmbeddings(
@@ -111,9 +111,9 @@ export class EmbeddingStoreService {
   ): Promise<void> {
     if (newTermsCLIP.length === 0) return
 
-    console.log(
-      `[EmbeddingStoreService] Calculando embeddings CLIP para ${newTermsCLIP.length} nuevos términos...`
-    )
+    // console.log(
+    //   `[EmbeddingStoreService] Calculando embeddings CLIP para ${newTermsCLIP.length} nuevos términos...`
+    // )
 
     const { embeddings: embeddingsCLIP } = await modelsService.getCLIPEmbeddingsCPU(newTermsCLIP)
 
@@ -130,11 +130,11 @@ export class EmbeddingStoreService {
 
     this.addEmbeddings(pairsCLIP, EmbeddingType.CLIP)
 
-    console.log(
-      `[EmbeddingStoreService] Embeddings CLIP calculados y almacenados para claves: [${newTermsCLIP.join(
-        ', '
-      )}]`
-    )
+    // console.log(
+    //   `[EmbeddingStoreService] Embeddings CLIP calculados y almacenados para claves: [${newTermsCLIP.join(
+    //     ', '
+    //   )}]`
+    // )
   }
 
   public static async calculateEmbeddings(
@@ -150,9 +150,9 @@ export class EmbeddingStoreService {
       : []
 
     if (newTerms.length === 0 && newTermsCLIP.length === 0) {
-      console.log(
-        `[EmbeddingStoreService] Todos los términos ya tienen embeddings almacenados. Nada que calcular.`
-      )
+      // console.log(
+      //   `[EmbeddingStoreService] Todos los términos ya tienen embeddings almacenados. Nada que calcular.`
+      // )
       return
     }
 
