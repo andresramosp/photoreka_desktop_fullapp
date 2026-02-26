@@ -122,7 +122,7 @@
         placement="top"
       >
         <template #trigger>
-          <div class="google-photos-indicator">
+          <div class="google-photos-indicator" @click.stop="openInGooglePhotos">
             <img
               src="@/assets/logos/google_photos.png"
               alt="Google Photos"
@@ -130,7 +130,7 @@
             />
           </div>
         </template>
-        Photo imported from Google Photos
+        Click to search in Google Photos
       </n-tooltip>
       <!-- Duplicate indicator in top-left corner when footer is hidden -->
       <n-tooltip
@@ -422,6 +422,27 @@ const onImageError = () => {
   imageError.value = true;
 };
 
+const openInGooglePhotos = () => {
+  const rawDate = props.photo.date || props.photo.uploadDate;
+  let query = "";
+
+  if (rawDate) {
+    const d = new Date(rawDate);
+    if (!isNaN(d.getTime())) {
+      const month = d.toLocaleString("en-US", { month: "long" });
+      const day = d.getDate();
+      const year = d.getFullYear();
+      // No comma — avoids %2C breaking Google Photos SPA routing
+      query = `${month} ${day} ${year}`;
+    }
+  }
+
+  const url = query
+    ? `https://photos.google.com/search/${query.replace(/ /g, "%20")}`
+    : "https://photos.google.com/";
+  window.open(url, "_blank", "noopener,noreferrer");
+};
+
 // Cleanup on unmount
 onUnmounted(() => {
   cleanup();
@@ -682,6 +703,15 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.google-photos-indicator:hover {
+  transform: scale(1.15);
+  opacity: 0.85;
 }
 
 .google-photos-logo {

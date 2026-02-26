@@ -513,9 +513,9 @@ const suggestions: Suggestion[] = [
     autoSend: false,
     subQueries: [
       {
-        title: "Best Portrait Shots from Last Year",
+        title: "Best Portrait Shots from Last 3 Years",
         prompt:
-          "Search my library for my strongest portrait photos from last year. Only in colour and vertical format. Rank them by visual impact, storytelling, and overall cohesion.",
+          "Search my library for my strongest portrait photos from the last 3 years. Only in colour and vertical format. Rank them by visual impact, storytelling, and overall cohesion.",
         needsPhotos: false,
         autoSend: true,
       },
