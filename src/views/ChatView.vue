@@ -236,6 +236,7 @@
               :showDelete="false"
               :showDuplicate="false"
               :isUploading="photo.isUploading"
+              @info="showPhotoInfo"
             />
             <button
               class="remove-photo-btn"
