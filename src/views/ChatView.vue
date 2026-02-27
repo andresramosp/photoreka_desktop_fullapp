@@ -578,6 +578,20 @@ const suggestions: Suggestion[] = [
         needsPhotos: false,
         autoSend: true,
       },
+      {
+        title: "Gender Presence in Street Work",
+        prompt:
+          "Analyze my street photography archive and determine whether men or women appear more frequently as primary subjects. Break down the distribution and explain if this reflects a stylistic bias, contextual coincidence, or recurring thematic inclination.",
+        needsPhotos: false,
+        autoSend: true,
+      },
+      {
+        title: "Recurring Subtle Pattern Detection",
+        prompt:
+          "Scan my entire photo library and identify a subtle recurring pattern, object, gesture, symbol, or specific real-world detail that appears across multiple images. Detect any unconscious fixation I may repeatedly photograph without realizing it.",
+        needsPhotos: false,
+        autoSend: true,
+      },
     ],
   },
   {
