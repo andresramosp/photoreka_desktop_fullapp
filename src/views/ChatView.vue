@@ -157,10 +157,7 @@
             ></div>
             <!-- Photo results: single flat list (label === 'result') -->
             <div
-              v-if="
-                message.photoLists &&
-                message.photoLists.length === 1
-              "
+              v-if="message.photoLists && message.photoLists.length === 1"
               class="message-photos"
             >
               <div class="message-photos-grid">
