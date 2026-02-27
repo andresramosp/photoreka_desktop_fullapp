@@ -322,18 +322,11 @@ export function formatCatalogPatternsForAgent(catalogPatterns: any, reviewType: 
     const cleaned = Object.fromEntries(
       Object.entries(patternData).map(([k, v]) => [k, stripClusterPhotos(v)])
     )
-    return JSON.stringify(cleaned, null, 2)
+    return JSON.stringify(cleaned)
   }
 
   const requested = patternData[reviewType]
-  return JSON.stringify(
-    {
-      reviewType,
-      patterns: stripClusterPhotos(requested) || [],
-    },
-    null,
-    2
-  )
+  return JSON.stringify({ reviewType, patterns: stripClusterPhotos(requested) || [] })
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -678,17 +671,13 @@ export default class AgentToolsService {
             })
             .filter(Boolean)
 
-          return JSON.stringify(
-            {
-              returned: formatted.length,
-              // hasMore: combinedIds.length > formatted.length,
-              operation,
-              subSearches: subLabels,
-              photos: formatted,
-            },
-            null,
-            2
-          )
+          return JSON.stringify({
+            returned: formatted.length,
+            // hasMore: combinedIds.length > formatted.length,
+            operation,
+            subSearches: subLabels,
+            photos: formatted,
+          })
         } catch (error) {
           return JSON.stringify({ error: `Advanced search failed: ${error.message}` })
         }
@@ -722,7 +711,7 @@ export default class AgentToolsService {
             artistic_scores_stats: artisticScoresStats,
           }
 
-          return JSON.stringify(report, null, 2)
+          return JSON.stringify(report)
         } catch (error) {
           return JSON.stringify({ error: `Failed to build overall catalog view: ${error.message}` })
         }
@@ -739,10 +728,10 @@ export default class AgentToolsService {
       async ({ section = 'all' }): Promise<string> => {
         try {
           if (section === 'all') {
-            return JSON.stringify(APP_KNOWLEDGE_SECTIONS, null, 2)
+            return JSON.stringify(APP_KNOWLEDGE_SECTIONS)
           }
           const key = section as AppKnowledgeSection
-          return JSON.stringify({ section: key, content: APP_KNOWLEDGE_SECTIONS[key] }, null, 2)
+          return JSON.stringify({ section: key, content: APP_KNOWLEDGE_SECTIONS[key] })
         } catch (error) {
           return JSON.stringify({ error: `Failed to retrieve app knowledge: ${error.message}` })
         }
@@ -767,24 +756,20 @@ export default class AgentToolsService {
               .preload('photos', (q) => q.select('id')),
           ])
 
-          return JSON.stringify(
-            {
-              collections: collections.map((c) => ({
-                id: c.id,
-                name: c.name,
-                description: c.description,
-                samplePhotoIds: c.photos.slice(0, 15).map((p) => p.id),
-              })),
-              series: series.map((s) => ({
-                id: s.id,
-                name: s.name,
-                description: s.description,
-                samplePhotoIds: s.photos.slice(0, 15).map((p) => p.id),
-              })),
-            },
-            null,
-            2
-          )
+          return JSON.stringify({
+            collections: collections.map((c) => ({
+              id: c.id,
+              name: c.name,
+              description: c.description,
+              samplePhotoIds: c.photos.slice(0, 15).map((p) => p.id),
+            })),
+            series: series.map((s) => ({
+              id: s.id,
+              name: s.name,
+              description: s.description,
+              samplePhotoIds: s.photos.slice(0, 15).map((p) => p.id),
+            })),
+          })
         } catch (error) {
           return JSON.stringify({ error: `Failed to fetch collections: ${error.message}` })
         }
@@ -912,7 +897,7 @@ export default class AgentToolsService {
             resultBuckets.push({
               period,
               total_in_period: bucketPhotos.length,
-              photos: selected.map((s) => photoDataForAgentRich(s.photo)),
+              photos: selected.map((s) => photoDataForAgentSlim(s.photo)),
             })
             totalSampled += selected.length
           }
@@ -923,7 +908,7 @@ export default class AgentToolsService {
               (genreSet ? ` [genre: ${[...genreSet].join(', ')}]` : '')
           )
 
-          return JSON.stringify({ total_sampled: totalSampled, buckets: resultBuckets }, null, 2)
+          return JSON.stringify({ total_sampled: totalSampled, buckets: resultBuckets })
         } catch (error) {
           return JSON.stringify({ error: `Catalog sampling failed: ${error.message}` })
         }

@@ -643,7 +643,7 @@ export default class LangchainAgentService {
 
         parts.push({
           type: 'text',
-          text: `[Photo ID ${photo.id} — ${photo.originalFileName}]\n${JSON.stringify(photoDataForAgentPreview(photo), null, 2)}`,
+          text: `[Photo ID ${photo.id} — ${photo.originalFileName}]\n${JSON.stringify(photoDataForAgentPreview(photo))}`, // compact: no whitespace to save tokens
         })
 
         try {
@@ -686,7 +686,7 @@ export default class LangchainAgentService {
 
         parts.push({
           type: 'text',
-          text: `[Photo ID ${photo.id} — ${photo.originalFileName} (text-only)]\n${JSON.stringify(formatter(photo), null, 2)}`,
+          text: `[Photo ID ${photo.id} — ${photo.originalFileName} (text-only)]\n${JSON.stringify(formatter(photo))}`, // compact: no whitespace to save tokens
         })
       }
       return parts
