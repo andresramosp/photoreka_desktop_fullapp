@@ -577,6 +577,13 @@ const suggestions: Suggestion[] = [
         needsPhotos: false,
         autoSend: true,
       },
+      {
+        title: "Finding photos for awards",
+        prompt:
+          "Help me find photos for photography awards. They must be from the last year to meet the requirements. Give me suggestions for each specific award.",
+        needsPhotos: false,
+        autoSend: true,
+      },
     ],
   },
 
@@ -806,7 +813,8 @@ const sendMessage = async () => {
 };
 
 const renderMarkdown = (content: string): string => {
-  return marked(content) as string;
+  const unescaped = content.replace(/\\n/g, "\n");
+  return marked(unescaped) as string;
 };
 
 const handleSuggestionClick = (suggestion: Suggestion) => {
