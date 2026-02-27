@@ -256,8 +256,8 @@ function createChatModel(
 // ─────────────────────────────────────────────────────────────
 // Structured output schema for the final answer
 // Both OpenAI and Gemini support withStructuredOutput with JSON schema.
-// The model fills `text` with its response and `photo_ids` with the IDs
-// of photos it actually references — preserving its own curation intent.
+// The model fills `text` with its response and `photo_groups` with labelled
+// groups of photo IDs — preserving its own curation and grouping intent.
 // ─────────────────────────────────────────────────────────────
 
 const FINAL_ANSWER_SCHEMA = {
@@ -267,14 +267,35 @@ const FINAL_ANSWER_SCHEMA = {
       type: 'string',
       description: 'The complete response text to show to the user',
     },
-    photo_ids: {
+    photo_groups: {
       type: 'array',
-      items: { type: 'integer' },
       description:
-        'Ordered list of photo IDs to display alongside your response. This field is your primary tool for visual communication: use it not only to reference photos mentioned in your text, but also to express any intentional sequence — a curated ranking, a chronological progression, a before/after pair, a grouped selection, a re-ordered set from photos the user provided, etc. The order you choose IS the message: index 0 is shown first and carries the most visual weight. Leave empty only when no specific photos are relevant.',
+        'Grouped photo results. Each group has a descriptive label and an ordered list of photo IDs. ' +
+        'Use a SINGLE group with label "result" when the response is a flat list or there is no natural subdivision. ' +
+        'Use MULTIPLE groups when the answer benefits from thematic, temporal, or categorical separation ' +
+        '(e.g. "Portraits", "Landscapes", "Before / After", "Top picks", "Honorable mentions"). ' +
+        "There is NO cost to including photo IDs — include as many as are pertinent to the user's request. " +
+        'Order within each group IS your editorial statement: index 0 carries the most visual weight. ' +
+        'Leave the array empty only when no specific photos are relevant.',
+      items: {
+        type: 'object',
+        properties: {
+          label: {
+            type: 'string',
+            description:
+              'Short, descriptive group name in the user\'s language (e.g. "Retratos", "Paisajes", "result").',
+          },
+          photo_ids: {
+            type: 'array',
+            items: { type: 'integer' },
+            description: 'Ordered photo IDs for this group.',
+          },
+        },
+        required: ['label', 'photo_ids'],
+      },
     },
   },
-  required: ['text', 'photo_ids'],
+  required: ['text', 'photo_groups'],
 } as const
 
 // ─────────────────────────────────────────────────────────────
@@ -283,11 +304,13 @@ const FINAL_ANSWER_SCHEMA = {
 
 const MAX_HISTORY_TURNS = 4 // max user+assistant message pairs kept in memory
 const HISTORY_TTL_SECONDS = 7200 // 2 hours sliding TTL
-const PHASE2_ATTACHED_IMAGE_LIMIT = 5 // max thumbnail images for user-attached photos in Phase 2
-// Single source of truth for search result size. Must match the `limit` default in
-// SearchAdvancedSchema (agent_tools_service.ts) — Phase 1 fetches exactly this many photos
-// so Phase 2 has thumbnails + descriptions for all of them, with no wasted overhead.
-const PHASE2_RESULTS_IMAGE_LIMIT = 15
+// Total visual budget for Phase 2: user attachments always come first (all of them),
+// remaining slots are filled with tool-result photos. Must match `limit` in
+// search_advanced (agent_tools_service.ts) so Phase 1 fetches exactly this many photos.
+const PHASE2_TOTAL_IMAGE_LIMIT = 20
+// Hard cap on total photos (thumbnail + text-only) across all groups in Phase 2.
+// Prevents excessive token usage when multiple iterations return large result sets.
+const PHASE2_TOTAL_PHOTO_LIMIT = 30
 
 function redisHistoryKey(userId: number): string {
   return `agent:history:${userId}`
@@ -323,10 +346,16 @@ async function deleteHistory(userId: number): Promise<void> {
 // Types
 // ─────────────────────────────────────────────────────────────
 
+export type PhotoGroup = {
+  label: string
+  photoIds: number[]
+}
+
 export type ChatMessage = {
   role: 'user' | 'assistant'
   content: string
   photoIds?: number[]
+  photoGroups?: PhotoGroup[]
 }
 
 export type IntermediateStep = {
@@ -338,7 +367,7 @@ export type IntermediateStep = {
 
 export type AgentChatResult = {
   output: string
-  photoIds: number[]
+  photoGroups: PhotoGroup[]
   toolsUsed: string[]
   intermediateSteps: IntermediateStep[]
   totalIterations: number
@@ -355,21 +384,7 @@ Help photographers explore and analyze their library with insight and wit.
 ## Behavior
 - **Language:** Always match the user's language. But use English always for internal tool calls.
 - **Scope:** Strictly photography and Photoreka features. Polite refusal for outside topics.
-- **Stealth:** Never mention tool names or internal IDs to the user.
-
-## Search & Tool Strategy
-- **Parallelism:** Call independent tools simultaneously in one step.
-- **Advanced Search (\`search_advanced\`):**
-    - Use \`style_query\` for mood/vibe/visual character.
-    - Use \`content_tags\` for objects/actions/events.
-    - **Logic:** Use \`intersect\` (AND) for specific requests; \`union\` (OR) for broad inspiration.
-    - **Fallback:** If a strict search yields 0 results, retry with another tool/parameter.
-- **Photo Context (CRITICAL):**
-    - Call \`get_photo_info\` ONLY for:
-        1. Photo IDs attached by the user in the current message (these are auto-prefetched, so you rarely need to call it yourself).
-        2. Photo IDs referenced from conversation history that you need to discuss again.
-    - **NEVER** call \`get_photo_info\` on photos returned by \`search_advanced\` — search results are intentionally minimal (ID, filename, genre). A later phase automatically injects full descriptions and thumbnail images for visual evaluation.
-    - Full metadata and thumbnail images are injected automatically before your final answer — do NOT call any tool again to get more detail.`
+- **Stealth:** Never mention tool names or internal IDs to the user.`
 
 // Phase 1 addendum: data-gathering role + curatorial data strategy (which tools to call).
 const PHASE1_ROLE_ADDENDUM = `
@@ -381,12 +396,41 @@ You are in the data-gathering phase. Your ONLY job is to call the right tools to
 - **DO re-search** ONLY if there is a clear quantitative gap (e.g. user asked for 5 photos and you got 2).
 - When you have all the data you need, call the \`done\` tool to signal completion. You MUST always end by calling \`done\`.
 
+## Search & Tool Strategy
+- **Parallelism:** Call independent tools simultaneously in one step.
+- **Advanced Search (\`search_advanced\`):**
+    - Use for targeted photo searches with specific criteria.
+    - Use \`style_query\` for visual style queries (e.g. "dark moody portraits", "high-key minimalism").
+    - Use \`content_tags\` for concrete objects/actions/events.
+    - Use \`filter\` for metadata, scores, visual aspects, dates.
+    - Use \`similar_to\` for finding photos similar to reference photo/s.
+    - **Logic:** Use \`intersect\` (AND) for specific requests; \`union\` (OR) for broad inspiration.
+    - **Fallback:** If a strict search yields 0 results, retry with another tool/parameter.
+    - **NEVER** call more than ONE \`search_advanced\` in the same step — combine criteria within a single call, using intersect/union logic.
+- **Catalog Exploration (\`catalog_sample\`):**
+    - Use for evolution, progress-over-time, or broad catalog cross-section questions.
+    - NEVER use \`search_advanced\` for these — \`catalog_sample\` is the right tool.
+    - Always call \`catalog_sample\` + \`overall_catalog_view\` in parallel.
+    - Use the \`genre\` filter to narrow to a specific genre (e.g. street photography evolution).
+- **Photo Context (CRITICAL):**
+    - Call \`get_photo_info\` ONLY for:
+        1. Photo IDs attached by the user in the current message (these are auto-prefetched, so you rarely need to call it yourself).
+        2. Photo IDs referenced from conversation history that you need to discuss again.
+    - **NEVER** call \`get_photo_info\` on photos returned by \`search_advanced\` or \`catalog_sample\` — a later phase automatically injects full descriptions and thumbnail images for visual evaluation.
+    - Full metadata and thumbnail images are injected automatically before your final answer — do NOT call any tool again to get more detail.
+
 ## Curatorial data strategy
 For questions about critique, evaluation, portfolio review, or photo culling:
 - Call \`overall_catalog_view\` to retrieve the user's catalog-level patterns, style profile, and cluster analysis. This is essential context for any evaluative question.
-- Call \`search_advanced\` to find the specific photos relevant to the query.
-- Call both in parallel when possible.
-- Do NOT attempt to evaluate or score the photos yourself — just gather the data.`
+- Call \`search_advanced\` OR \`catalog_sample\` to find the specific photos relevant to the query. Never call both simultaneously.
+- Do NOT attempt to evaluate or score the photos yourself — just gather the data.
+
+## Catalog exploration & evolution questions
+For questions about photographic evolution, progress over time, or broad catalog sampling:
+- Call \`overall_catalog_view\` AND \`catalog_sample\` in parallel — always both together.
+- \`catalog_sample\` returns structured buckets with date ranges and sampled photos per period — use it for temporal cross-sections.
+- Use the \`genre\` filter in \`catalog_sample\` to narrow to specific genres (e.g. street photography evolution).
+- Do NOT use \`search_advanced\` for exploration/evolution questions — \`catalog_sample\` is the dedicated tool for that.`
 
 // Phase 2 addendum: evaluation criteria, judgment, and communication style.
 // Phase 2 has NO access to tools — only to the data already gathered.
@@ -398,20 +442,26 @@ Evaluate and respond using the data gathered in previous steps, if any.
     - *Scale:* 1 (Disastrous), 5 (Acceptable), 7.5 (Remarkable), 10 (Unique).
 - **Genre-specific priorities** — weight criteria according to the photographer's preferred style:
     - *Documentary:* \`message\`, \`storytelling\`, \`candidness\`.
-    - *Street:* \`candidness\`, \`visual_games\`, \`strangeness\`.
-    - *Artistic:* \`message\`, \`strangeness\`, \`composition\`.
+    - *Street:* \`candidness\`, \`visual_games\`, \`originality\`.
+    - *Artistic:* \`message\`, \`originality\`, \`composition\`.
 - **Catalog analysis:** Look for patterns and imbalances across clusters, not just average scores.
 
 ## Communication
 - **Conciseness:** Max 200 words. No fluff, no raw JSON. Summarize insights unless explicitly asked for details.
+- **Paragraphs:** Always split the 'text' field into short, distinct paragraphs (2–4 sentences each). Never write a single continuous block of text. Each paragraph should address one idea: e.g. overall impression → specific highlights → weakness or suggestion.
 - **Proactivity:** Suggest 1 concrete next step the user can take within the app.
+- **Honesty:** Don't flatter the user or their photos. Be honest, constructive, and insightful — even if that means delivering tough feedback.
 - Use filenames for reference in your text, never raw IDs or tool names.
 - Respond in the user's language.
 
-## Visual Output
-- Always populate the \`photo_ids\` field when the user expects a visual result (rankings, selections, or sets).
-- The order in \`photo_ids\` defines the display order and IS your editorial statement.
-- Leave \`photo_ids\` empty only when no specific photos are relevant.`
+## Visual Output — photo_groups
+- Always populate \`photo_groups\` when the user expects a visual result (rankings, selections, or sets).
+- Use a SINGLE group with label \`"result"\` when the photos form one flat list with no natural subdivision.
+- Use MULTIPLE groups when the answer benefits from thematic, temporal, or categorical separation (e.g. \`"Portraits"\`, \`"Landscapes"\`, \`"Top picks"\`, \`"Honorable mentions"\`, \`"Before / After"\`).
+- Group labels should be in the user's language and concise.
+- The order within each group defines display order and IS your editorial statement (index 0 = most prominent).
+- There is NO cost or penalty for including photo IDs — include every photo that is pertinent to the user's request. Be generous, not restrictive.
+- Leave \`photo_groups\` empty only when no specific photos are relevant.`
 
 // ─────────────────────────────────────────────────────────────
 // Helper: extract plain text from a model response's content
@@ -459,6 +509,7 @@ const NON_PHOTO_TOOLS = new Set([
   'overall_catalog_view',
   'app_knowledge',
   'fetch_collections',
+  'catalog_sample',
   'done',
 ])
 
@@ -527,15 +578,26 @@ function compressMessagesForPhase2(messages: any[], userContext: string = ''): a
 }
 
 // ─────────────────────────────────────────────────────────────
-// Phase 2 visual context — extract photo IDs from tool results
+// Phase 2 visual context — extract photo IDs from ALL tool results
 // ─────────────────────────────────────────────────────────────
 
+type PhotoIdGroup = {
+  tool: string
+  ids: number[]
+  /** Index in intermediateSteps — later = more recent */
+  stepIndex: number
+}
+
 /**
- * Scans intermediateSteps in reverse to find the last tool call that returned
- * photo data (search_advanced or get_photo_info). Returns the ordered photo IDs.
+ * Scans ALL intermediateSteps and collects photo IDs from every photo-returning
+ * tool call (search_advanced, catalog_sample, get_photo_info), preserving order.
+ * Returns groups sorted chronologically (earliest first, most recent last).
+ * Phase 2 uses the most recent group for thumbnails and earlier groups for text-only context.
  */
-function extractPhotoIdsFromLastToolResult(steps: IntermediateStep[]): number[] {
-  for (let i = steps.length - 1; i >= 0; i--) {
+function extractAllPhotoIdsGrouped(steps: IntermediateStep[]): PhotoIdGroup[] {
+  const groups: PhotoIdGroup[] = []
+
+  for (let i = 0; i < steps.length; i++) {
     const step = steps[i]
 
     if (step.tool === 'search_advanced') {
@@ -543,24 +605,39 @@ function extractPhotoIdsFromLastToolResult(steps: IntermediateStep[]): number[] 
         const parsed = JSON.parse(step.output)
         const photos = parsed.photos ?? []
         if (Array.isArray(photos) && photos.length > 0) {
-          return photos.map((p: any) => p.id).filter((id: any) => typeof id === 'number')
+          const ids = photos.map((p: any) => p.id).filter((id: any) => typeof id === 'number')
+          if (ids.length > 0) groups.push({ tool: step.tool, ids, stepIndex: i })
+        }
+      } catch {}
+      continue
+    }
+
+    if (step.tool === 'catalog_sample') {
+      try {
+        const parsed = JSON.parse(step.output)
+        const buckets = parsed.buckets ?? []
+        if (Array.isArray(buckets) && buckets.length > 0) {
+          const ids = buckets
+            .flatMap((b: any) => (b.photos ?? []).map((p: any) => p.id))
+            .filter((id: any) => typeof id === 'number')
+          if (ids.length > 0) groups.push({ tool: step.tool, ids, stepIndex: i })
         }
       } catch {}
       continue
     }
 
     if (step.tool === 'get_photo_info') {
-      // Use input IDs directly — they're guaranteed correct
       const ids = step.input?.photoIds
       if (Array.isArray(ids) && ids.length > 0) {
-        return ids.filter((id: any) => typeof id === 'number')
+        const validIds = ids.filter((id: any) => typeof id === 'number')
+        if (validIds.length > 0) groups.push({ tool: step.tool, ids: validIds, stepIndex: i })
       }
       continue
     }
 
     // Skip non-photo tools (overall_catalog_view, app_knowledge, fetch_collections)
   }
-  return []
+  return groups
 }
 
 // Appended as the last message in Phase 2 to give the model an explicit
@@ -570,9 +647,14 @@ const PHASE2_SYNTHESIS_PROMPT = `Now produce your final response to the user.
 You have gathered all the data you need in the previous steps. You also have visual access to thumbnail images — each paired with its full description — for the user's attached photos and the top search results (if any). Use them for visual verification and curatorial judgment.
 
 Act as a discerning curator:
-- For searching/curating photos: only include photos in \`photo_ids\` that genuinely match the user's request or add clear value to your answer. Discard any that are tangential, redundant, or low relevance — even if they were returned by a search tool.
-- Order \`photo_ids\` deliberately: the sequence IS your editorial statement (best first, chronological, thematic grouping, etc.).
+- For searching/curating photos: only include photos in \`photo_groups\` that genuinely match the user's request or add clear value to your answer. Discard any that are tangential, redundant, or low relevance — even if they were returned by a search tool.
+- Organize results into \`photo_groups\`: use a single group labeled \"result\" for flat lists, or multiple groups when the answer benefits from thematic/temporal/categorical separation (e.g. \"Portraits\", \"Landscapes\", \"Top picks\", etc.).
+- Group labels should be in the user's language and concise.
+- Order within each group deliberately: the sequence IS your editorial statement (best first, chronological, etc.).
+- There is NO cost or limit to including photo IDs — include every pertinent photo. Be generous.
+- You may have received photos with thumbnails (for visual evaluation) AND photos with text-only descriptions (from earlier search iterations). Both are valid candidates for your \`photo_groups\` — use thumbnail photos for visual judgment, and text-described photos when their metadata clearly fits the request.
 - Keep \`text\` concise and insightful (max 200 words). Do not list raw filenames or IDs in the text.
+- **Structure \`text\` as multiple short paragraphs** (2–4 sentences each, separated by a blank line). Never write a single unbroken block of prose. Each paragraph should cover one distinct idea (e.g. overall impression, specific highlights, weakness or pattern, actionable suggestion).
 - Respond in the user's language.`
 
 /** Invokes the structured final-answer model with up to 3 retries.
@@ -580,7 +662,11 @@ Act as a discerning curator:
 async function invokeStructuredFinalAnswer(
   modelName: ModelName,
   messages: any[]
-): Promise<{ text: string; photo_ids: number[]; usage?: any }> {
+): Promise<{
+  text: string
+  photo_groups: Array<{ label: string; photo_ids: number[] }>
+  usage?: any
+}> {
   const MAX_ATTEMPTS = 3
   const TOKEN_BUDGET = 6000
   const model = createChatModel(modelName, TOKEN_BUDGET, 'medium').withStructuredOutput(
@@ -598,7 +684,7 @@ async function invokeStructuredFinalAnswer(
       const usageCollector: { usage?: any } = {}
       const result = (await model.invoke(phase2Messages, {
         callbacks: [makeDebugCallback('phase2'), makeUsageCallback(usageCollector)],
-      })) as { text: string; photo_ids: number[] }
+      })) as { text: string; photo_groups: Array<{ label: string; photo_ids: number[] }> }
       return { ...result, usage: usageCollector.usage }
     } catch (err: any) {
       lastError = err
@@ -726,8 +812,8 @@ export default class LangchainAgentService {
   // ───────────────────────────────────────────────────────────
   // Builds visual context HumanMessages for Phase 2 (the judge).
   // Returns 0–2 HumanMessages with interleaved description + thumbnail:
-  //   1. User's attached photos (up to PHASE2_ATTACHED_IMAGE_LIMIT)
-  //   2. Top tool results (up to PHASE2_RESULTS_IMAGE_LIMIT)
+  //   1. User's attached photos (ALL of them, up to PHASE2_TOTAL_IMAGE_LIMIT)
+  //   2. Top tool results (remaining slots: PHASE2_TOTAL_IMAGE_LIMIT − attached count)
   // Each photo gets its full text description followed by its thumbnail
   // image, so the model has perfect text↔image association.
   // ───────────────────────────────────────────────────────────
@@ -766,11 +852,7 @@ export default class LangchainAgentService {
           originalFileName: photo.originalFileName,
           story: descriptions.story || null,
           context: descriptions.context || null,
-          visual_accents: descriptions.visual_accents || null,
-          visual_aspects: descriptions.visual_aspects || null,
           artistic_scores: descriptions.artistic_scores || null,
-          exif: descriptions.EXIF || null,
-          notes: descriptions.notes || null,
         }
         parts.push({
           type: 'text',
@@ -802,11 +884,41 @@ export default class LangchainAgentService {
       return { parts, count }
     }
 
-    // 1. User's attached photos
+    /**
+     * Fetches photos and builds text-only content parts (no thumbnails).
+     * Used for photos from earlier iterations that exceed the image budget.
+     */
+    const fetchTextOnlyParts = async (photoIds: number[]): Promise<any[]> => {
+      if (photoIds.length === 0) return []
+      const photos = await this.photoManager.getPhotosByIds(photoIds)
+      const photoMap = new Map(photos.map((p) => [p.id, p]))
+      const parts: any[] = []
+
+      for (const id of photoIds) {
+        const photo = photoMap.get(id)
+        if (!photo) continue
+
+        const descriptions = photo.descriptions || {}
+        const fullData = {
+          id: photo.id,
+          originalFileName: photo.originalFileName,
+          story: descriptions.story || null,
+          context: descriptions.context || null,
+          artistic_scores: descriptions.artistic_scores || null,
+        }
+        parts.push({
+          type: 'text',
+          text: `[Photo ID ${photo.id} — ${photo.originalFileName} (text-only, no thumbnail)]\n${JSON.stringify(fullData, null, 2)}`,
+        })
+      }
+      return parts
+    }
+
+    // 1. User's attached photos — always include all of them (up to total budget)
     if (contextPhotoIds.length > 0) {
       const { parts, count } = await fetchInterleavedParts(
         contextPhotoIds,
-        PHASE2_ATTACHED_IMAGE_LIMIT
+        PHASE2_TOTAL_IMAGE_LIMIT
       )
       if (parts.length > 0) {
         result.push(
@@ -824,30 +936,99 @@ export default class LangchainAgentService {
       }
     }
 
-    // 2. Last tool result photos
-    const lastToolPhotoIds = extractPhotoIdsFromLastToolResult(intermediateSteps)
-    if (lastToolPhotoIds.length > 0) {
-      // Exclude photos already shown as user attachments
-      const attachedSet = new Set(contextPhotoIds)
-      const resultIds = lastToolPhotoIds.filter((id) => !attachedSet.has(id))
-      if (resultIds.length > 0) {
-        const { parts, count } = await fetchInterleavedParts(resultIds, PHASE2_RESULTS_IMAGE_LIMIT)
-        if (parts.length > 0) {
-          result.push(
-            new HumanMessage({
-              content: [
-                {
-                  type: 'text',
-                  text: `[Top search results — ${count} of ${resultIds.length} photo(s) with description + thumbnail for visual verification]`,
-                },
-                ...parts,
-              ],
-            })
+    // 2. Tool result photos from ALL iterations
+    //    Most recent group gets thumbnail+text (visual budget), earlier groups get text-only.
+    const allGroups = extractAllPhotoIdsGrouped(intermediateSteps)
+    const attachedSet = new Set(contextPhotoIds)
+    let remainingImageSlots = Math.max(
+      0,
+      PHASE2_TOTAL_IMAGE_LIMIT - Math.min(contextPhotoIds.length, PHASE2_TOTAL_IMAGE_LIMIT)
+    )
+    // Total photo budget (thumbnail + text-only) for tool results, excluding user attachments
+    let remainingPhotoSlots = Math.max(
+      0,
+      PHASE2_TOTAL_PHOTO_LIMIT - Math.min(contextPhotoIds.length, PHASE2_TOTAL_PHOTO_LIMIT)
+    )
+
+    if (allGroups.length > 0) {
+      // Log overview of all groups
+      console.log(
+        `[Agent] 👁️  Phase 2 visual context: ${allGroups.length} photo group(s) from tool results:`
+      )
+      for (const g of allGroups) {
+        console.log(
+          `[Agent]     📦 ${g.tool} (step ${g.stepIndex}): ${g.ids.length} photo(s) → [${g.ids.slice(0, 8).join(', ')}${g.ids.length > 8 ? ', …' : ''}]`
+        )
+      }
+
+      // Process groups in reverse order (most recent first) for thumbnail priority
+      const reversedGroups = [...allGroups].reverse()
+
+      for (const group of reversedGroups) {
+        if (remainingPhotoSlots <= 0) break
+
+        const groupIds = group.ids.filter((id) => !attachedSet.has(id))
+        if (groupIds.length === 0) continue
+
+        // Cap this group to remaining total photo budget
+        const cappedGroupIds = groupIds.slice(0, remainingPhotoSlots)
+
+        if (remainingImageSlots > 0) {
+          // This group gets thumbnails (up to remaining budget)
+          const withImageIds = cappedGroupIds.slice(0, remainingImageSlots)
+          const textOnlyIds = cappedGroupIds.slice(remainingImageSlots)
+
+          const { parts: imageParts, count: imageCount } = await fetchInterleavedParts(
+            withImageIds,
+            remainingImageSlots
           )
-          console.log(
-            `[Agent] 👁️  Phase 2 visual: ${count} of ${resultIds.length} tool result image(s)`
-          )
+
+          // Text-only for overflow within this group
+          const textParts = await fetchTextOnlyParts(textOnlyIds)
+
+          const allParts = [...imageParts, ...textParts]
+          if (allParts.length > 0) {
+            result.push(
+              new HumanMessage({
+                content: [
+                  {
+                    type: 'text',
+                    text: `[${group.tool} results — ${imageCount} photo(s) with thumbnail + ${textOnlyIds.length} text-only]`,
+                  },
+                  ...allParts,
+                ],
+              })
+            )
+            console.log(
+              `[Agent] 👁️  Phase 2 — ${group.tool} (step ${group.stepIndex}): ${imageCount} with thumbnail, ${textOnlyIds.length} text-only`
+            )
+          }
+          remainingImageSlots -= imageCount
+          remainingPhotoSlots -= cappedGroupIds.length
+        } else {
+          // No image budget left — all text-only
+          const textParts = await fetchTextOnlyParts(cappedGroupIds)
+          if (textParts.length > 0) {
+            result.push(
+              new HumanMessage({
+                content: [
+                  {
+                    type: 'text',
+                    text: `[${group.tool} results — ${cappedGroupIds.length} photo(s), text-only descriptions (from earlier iteration)]`,
+                  },
+                  ...textParts,
+                ],
+              })
+            )
+            console.log(
+              `[Agent] 👁️  Phase 2 — ${group.tool} (step ${group.stepIndex}): ${cappedGroupIds.length} text-only (no image budget)`
+            )
+          }
+          remainingPhotoSlots -= cappedGroupIds.length
         }
+
+        // Add these IDs to the attached set so they're not duplicated
+        for (const id of cappedGroupIds) attachedSet.add(id)
       }
     }
 
@@ -909,9 +1090,11 @@ export default class LangchainAgentService {
     message: string,
     contextPhotoIds: number[],
     output: string,
-    foundPhotoIds: number[]
+    photoGroups: PhotoGroup[]
   ): Promise<void> {
     if (!output.trim()) return
+    // Flat list for backward-compatible history annotations
+    const allPhotoIds = photoGroups.flatMap((g) => g.photoIds)
     const updatedHistory = [
       ...history,
       {
@@ -919,7 +1102,12 @@ export default class LangchainAgentService {
         content: message,
         photoIds: contextPhotoIds.length > 0 ? contextPhotoIds : undefined,
       },
-      { role: 'assistant' as const, content: output, photoIds: [...foundPhotoIds] },
+      {
+        role: 'assistant' as const,
+        content: output,
+        photoIds: allPhotoIds.length > 0 ? allPhotoIds : undefined,
+        photoGroups: photoGroups.length > 0 ? photoGroups : undefined,
+      },
     ]
     await setHistory(userId, updatedHistory.slice(-(MAX_HISTORY_TURNS * 2)))
   }
@@ -1093,15 +1281,15 @@ export default class LangchainAgentService {
     }
 
     // ── Phase 2: structured final answer (with retry) ───────────────────────
-    // The model produces text + photo_ids in a single structured call.
+    // The model produces text + photo_groups in a single structured call.
     // withStructuredOutput ensures the model consciously selects which photos
     // to surface, with no extra round-trips and no side-effect tool needed.
     // invokeStructuredFinalAnswer retries up to 3 times with a 6 000-token
     // budget to prevent JSON truncation errors.
     //
     // Visual context: the judge receives interleaved description + thumbnail for:
-    //   1. User's attached photos (up to PHASE2_ATTACHED_IMAGE_LIMIT = 5)
-    //   2. Top tool results (up to PHASE2_RESULTS_IMAGE_LIMIT = 15)
+    //   1. User's attached photos (all of them, up to PHASE2_TOTAL_IMAGE_LIMIT = 20)
+    //   2. Top tool results (remaining slots up to PHASE2_TOTAL_IMAGE_LIMIT = 20 total)
     // These are injected as dedicated HumanMessages after the compressed
     // conversation and before the synthesis prompt.
     // All ToolMessages are slimmed to id+filename only — full descriptions
@@ -1119,7 +1307,15 @@ export default class LangchainAgentService {
     // Strip any leaked internal-context annotations the model may have echoed.
     const rawOutput = structured.text ?? ''
     const output = rawOutput.replace(/\[(?:Shown photos|INTERNAL_CONTEXT)[^\]]*\]\s*/gi, '').trim()
-    foundPhotoIds.push(...(structured.photo_ids ?? []))
+
+    // Convert structured photo_groups to typed PhotoGroup[]
+    const photoGroups: PhotoGroup[] = (structured.photo_groups ?? []).map((g) => ({
+      label: g.label,
+      photoIds: g.photo_ids ?? [],
+    }))
+    // Flat list of all photo IDs across groups (for history context & logging)
+    const allPhotoIds = photoGroups.flatMap((g) => g.photoIds)
+    foundPhotoIds.push(...allPhotoIds)
 
     // ── Build cost breakdown ──────────────────────────────────────────────────
     const phase2Usage = computeCallCost('phase2', modelName, structured.usage)
@@ -1127,7 +1323,7 @@ export default class LangchainAgentService {
     const cost: AgentCostBreakdown = { iterations: iterationUsages, phase2: phase2Usage, total }
 
     console.log(
-      `[Agent] ✅ Done. Tools used: [${toolsUsed.join(', ') || 'none'}] | Photos: [${foundPhotoIds.join(', ')}]`
+      `[Agent] ✅ Done. Tools used: [${toolsUsed.join(', ') || 'none'}] | Photo groups: ${photoGroups.length} (${allPhotoIds.length} total IDs)`
     )
     console.log(
       `[Agent] 💰 Cost: €${total.costEur.toFixed(6)} | Tokens in=${total.inputTokens} (cached=${total.cachedTokens}) out=${total.outputTokens}`
@@ -1135,10 +1331,10 @@ export default class LangchainAgentService {
     console.log(
       `[Agent] 📤 Output preview: "${output.slice(0, 200)}${output.length > 200 ? '…' : ''}"`
     )
-    await this.persistHistory(userId, history, message, contextPhotoIds, output, foundPhotoIds)
+    await this.persistHistory(userId, history, message, contextPhotoIds, output, photoGroups)
     return {
       output,
-      photoIds: foundPhotoIds,
+      photoGroups,
       toolsUsed,
       intermediateSteps,
       totalIterations: totalIter,

@@ -36,12 +36,18 @@ export const ScoreField = z.enum([
   'aesthetic_quality',
   'composition',
   'storytelling',
-  'strangeness',
+  'originality',
   'message',
   'humor',
   'visual_games',
   'candidness',
 ])
+
+/** Maps model-facing score field names to the internal storage keys in `artistic_scores`. */
+const SCORE_FIELD_MAP: Record<string, string> = {
+  originality: 'strangeness',
+}
+const toInternalField = (field: string): string => SCORE_FIELD_MAP[field] ?? field
 
 export const FindPhotosFromPhotoSchema = z.object({
   anchor_photo_ids: z
@@ -175,6 +181,57 @@ export const SearchAdvancedSchema = z.object({
     .describe('Find photos similar to reference photos. Triggers similarity search.'),
 })
 
+export const CatalogSampleSchema = z.object({
+  buckets: z
+    .number()
+    .min(2)
+    .max(20)
+    .optional()
+    .default(5)
+    .describe(
+      'Number of equal time periods to divide the catalog timeline into (default 5). ' +
+        'E.g. 5 buckets over a 5-year catalog = 1 bucket per year.'
+    ),
+  per_bucket: z
+    .number()
+    .min(1)
+    .max(10)
+    .optional()
+    .default(3)
+    .describe('Number of photos to sample from each time bucket (default 3).'),
+  sort_within: z
+    .enum([
+      'aesthetic_quality',
+      'composition',
+      'storytelling',
+      'originality',
+      'message',
+      'humor',
+      'visual_games',
+      'candidness',
+    ])
+    .optional()
+    .describe(
+      'If set, pick the top-scoring photos per bucket on this artistic dimension instead of random sampling. ' +
+        'E.g. sort_within="aesthetic_quality" returns the best-rated photos per period.'
+    ),
+  date_from: z
+    .string()
+    .optional()
+    .describe('Restrict sampling to photos taken on or after this date (ISO 8601).'),
+  date_to: z
+    .string()
+    .optional()
+    .describe('Restrict sampling to photos taken on or before this date (ISO 8601).'),
+  genre: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Filter photos by genre before sampling. Accepted values: abstract, documentary, street, landscape, portrait. ' +
+        'E.g. ["street"] to sample only street photography evolution.'
+    ),
+})
+
 // ─────────────────────────────────────────────────────────────
 // Formatters
 // ─────────────────────────────────────────────────────────────
@@ -305,7 +362,10 @@ export const TOOL_DESCRIPTIONS = {
     "[BASIC_TOOLS] Get all the user's collections and series, each with their name, description, and up to 10 sample photo IDs. Use this when the user asks about their collections, series, albums, or organized groups of photos — for example 'what collections do I have?', 'show me my series', 'which albums exist?'. Returns two separate arrays: 'collections' (manually curated groups) and 'series' (ordered sequences/stories).",
 
   search_advanced:
-    '[PHOTO_SEARCH] **The primary search tool.** Combine multiple search strategies in a single call and merge their results with intersect (AND) or union (OR). You can specify any combination of: (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) filter — metadata/score/visual-aspect filtering, (4) similar_to — similarity to reference photos. All specified sub-searches run in parallel; their full ID sets are combined via the chosen operation; only the final result is sampled and returned with photo ID, filename, and genre. Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) with intersect. "Photos of cats or dogs" → content_tags(["cat"]) + content_tags(["dog"]) — not possible, use two calls or a single content_tags(["cat", "dog"]). "Melancholic portraits" → style_query("melancholic mood") + filter(genre=portrait) with intersect.',
+    '[PHOTO_SEARCH] **The primary search tool.** Combine multiple search strategies in a single call and merge their results with intersect (AND) or union (OR). You can specify any combination of: (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) filter — metadata/score/visual-aspect filtering, (4) similar_to — similarity to reference photos. All specified sub-searches run in parallel; their full ID sets are combined via the chosen operation; only the final result is sampled and returned with photo ID, filename, and genre. Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) with intersect. "moody portraits or landscapes" → style_query("dark moody") + filter(genre=[portrait,landscape]) with union.',
+
+  catalog_sample:
+    '[CATALOG_INSIGHT] **Temporal catalog sampling for broad exploration.** Divides the catalog timeline into equal time buckets and samples representative photos from each period. Returns structured data: an array of buckets, each with its date range and sampled photos. Use this for evolution questions, progress over time, or getting a representative cross-section of the catalog. Always pair with `overall_catalog_view` in parallel for holistic context. NEVER use this for targeted searches — use `search_advanced` instead. Optional filters: genre (e.g. ["street"] for street photography evolution), date_from/date_to, sort_within (pick best-scored photos per period instead of random). Examples: "How has my photography evolved?" → catalog_sample(buckets=6) + overall_catalog_view in parallel. "Street photography evolution" → catalog_sample(buckets=5, genre=["street"]) + overall_catalog_view in parallel.',
 
   overall_catalog_view:
     '[CATALOG_INSIGHT] Get a single combined report of the entire catalog: catalog patterns (recurring themes, subjects, narrative motifs), visual aspects distribution, and artistic scores statistics. Use this as the FIRST tool whenever the user asks for advice on improving their photography, critique of their catalog, identification of weak points or strengths, general feedback on their style, or any holistic question about their photographic practice. This tool replaces calling get_catalog_patterns + stats_visual_aspects + stats_artistic_scores individually — it returns all of that data in one shot.',
@@ -427,7 +487,8 @@ export default class AgentToolsService {
 
         if (scoreFilters && scoreFilters.length > 0) {
           for (const sf of scoreFilters) {
-            const val = scores[sf.field]
+            const internalField = toInternalField(sf.field)
+            const val = scores[internalField]
             if (val === undefined) return false
             if (sf.min !== undefined && val < sf.min) return false
             if (sf.max !== undefined && val > sf.max) return false
@@ -463,11 +524,16 @@ export default class AgentToolsService {
 
       // Sort if requested
       if (sortByScore) {
+        const internalSortField = toInternalField(sortByScore)
         filtered.sort((a, b) => {
           const aScore =
-            ((a.descriptions?.artistic_scores as Record<string, number>) ?? {})[sortByScore] ?? -1
+            ((a.descriptions?.artistic_scores as Record<string, number>) ?? {})[
+              internalSortField
+            ] ?? -1
           const bScore =
-            ((b.descriptions?.artistic_scores as Record<string, number>) ?? {})[sortByScore] ?? -1
+            ((b.descriptions?.artistic_scores as Record<string, number>) ?? {})[
+              internalSortField
+            ] ?? -1
           return sortOrder === 'asc' ? aScore - bScore : bScore - aScore
         })
       } else if (sortOrder === 'asc') {
@@ -501,13 +567,15 @@ export default class AgentToolsService {
       return results.map((p: any) => p.id as number)
     }
 
+    // (catalog_sample is now a standalone tool — see below)
+
     // ── Tool: search_advanced ───────────────────────────────
     const searchAdvanced = tool(
       async ({ operation, style_query, content_tags, filter, similar_to }): Promise<string> => {
         // Limit is intentionally not exposed to the model — Phase 1 always returns
         // the maximum so Phase 2 (the curator) can make the final selection.
-        // Keep in sync with PHASE2_RESULTS_IMAGE_LIMIT in langchain_agent_service.ts.
-        const limit = 15
+        // Keep in sync with PHASE2_TOTAL_IMAGE_LIMIT in langchain_agent_service.ts.
+        const limit = 20
         try {
           // Dispatch all sub-searches in parallel
           const subSearches: Promise<number[]>[] = []
@@ -707,6 +775,148 @@ export default class AgentToolsService {
       }
     )
 
-    return [getPhotoInfo, appKnowledge, searchAdvanced, fetchCollections, overallCatalogView]
+    // ── Tool: catalog_sample ────────────────────────────────
+    const catalogSample = tool(
+      async ({
+        buckets = 5,
+        per_bucket = 3,
+        sort_within,
+        date_from,
+        date_to,
+        genre,
+      }): Promise<string> => {
+        try {
+          // Fetch all photos with date info
+          const photos = await Photo.query()
+            .where('user_id', userId)
+            .select('id', 'original_file_name', 'descriptions', 'created_at')
+            .orderBy('created_at', 'asc')
+
+          // Extract date for each photo and apply filters
+          const dateFromMs = date_from ? new Date(date_from).getTime() : null
+          const dateToMs = date_to ? new Date(date_to + 'T23:59:59').getTime() : null
+          const genreSet =
+            genre && genre.length > 0 ? new Set(genre.map((g: string) => g.toLowerCase())) : null
+
+          const withDate = photos
+            .map((photo) => {
+              const descriptions = photo.descriptions || {}
+              const exifData = (descriptions.EXIF ?? {}) as Record<string, any>
+              const visualAspects = (descriptions.visual_aspects ?? {}) as Record<string, any>
+              const dateTakenRaw = exifData.dateTaken as string | undefined
+              const ms = dateTakenRaw
+                ? new Date(dateTakenRaw).getTime()
+                : new Date(photo.createdAt.toString()).getTime()
+              return { photo, ms, genre: (visualAspects.genre as string) ?? null }
+            })
+            .filter(({ ms, genre: photoGenre }) => {
+              if (dateFromMs !== null && ms < dateFromMs) return false
+              if (dateToMs !== null && ms > dateToMs) return false
+              if (genreSet && (!photoGenre || !genreSet.has(photoGenre.toLowerCase()))) return false
+              return true
+            })
+            .sort((a, b) => a.ms - b.ms)
+
+          if (withDate.length === 0) {
+            return JSON.stringify({ total_sampled: 0, buckets: [] })
+          }
+
+          // Divide timeline into equal buckets
+          const minMs = withDate[0].ms
+          const maxMs = withDate[withDate.length - 1].ms
+          const range = maxMs - minMs
+
+          const effectiveBuckets = range === 0 ? 1 : Math.min(buckets, withDate.length)
+          const bucketSize = range === 0 ? 1 : range / effectiveBuckets
+
+          // Assign photos to buckets
+          const bucketMap = new Map<number, typeof withDate>()
+          for (const entry of withDate) {
+            const bucketIdx =
+              range === 0
+                ? 0
+                : Math.min(Math.floor((entry.ms - minMs) / bucketSize), effectiveBuckets - 1)
+            if (!bucketMap.has(bucketIdx)) bucketMap.set(bucketIdx, [])
+            bucketMap.get(bucketIdx)!.push(entry)
+          }
+
+          // Sample from each bucket and build structured output
+          const resultBuckets: any[] = []
+          let totalSampled = 0
+
+          for (let b = 0; b < effectiveBuckets; b++) {
+            const bucketPhotos = bucketMap.get(b) ?? []
+            if (bucketPhotos.length === 0) continue
+
+            let selected: typeof withDate
+            if (sort_within) {
+              const internalSortWithin = toInternalField(sort_within)
+              selected = [...bucketPhotos]
+                .sort((a, b_) => {
+                  const aScore =
+                    ((a.photo.descriptions?.artistic_scores as Record<string, number>) ?? {})[
+                      internalSortWithin
+                    ] ?? -1
+                  const bScore =
+                    ((b_.photo.descriptions?.artistic_scores as Record<string, number>) ?? {})[
+                      internalSortWithin
+                    ] ?? -1
+                  return bScore - aScore
+                })
+                .slice(0, per_bucket)
+            } else {
+              const pool = [...bucketPhotos]
+              const count = Math.min(per_bucket, pool.length)
+              for (let i = 0; i < count; i++) {
+                const j = i + Math.floor(Math.random() * (pool.length - i))
+                ;[pool[i], pool[j]] = [pool[j], pool[i]]
+              }
+              selected = pool.slice(0, count)
+            }
+
+            // Preserve chronological order within bucket
+            selected.sort((a, b_) => a.ms - b_.ms)
+
+            // Build period label
+            const periodStart = new Date(bucketPhotos[0].ms).toISOString().slice(0, 10)
+            const periodEnd = new Date(bucketPhotos[bucketPhotos.length - 1].ms)
+              .toISOString()
+              .slice(0, 10)
+            const period = periodStart === periodEnd ? periodStart : `${periodStart} → ${periodEnd}`
+
+            resultBuckets.push({
+              period,
+              total_in_period: bucketPhotos.length,
+              photos: selected.map((s) => photoDataForAgentSlim(s.photo)),
+            })
+            totalSampled += selected.length
+          }
+
+          console.log(
+            `[Agent]   🎲 catalog_sample: ${effectiveBuckets} buckets, ${totalSampled} photos sampled` +
+              (sort_within ? ` (top by ${sort_within})` : ' (random)') +
+              (genreSet ? ` [genre: ${[...genreSet].join(', ')}]` : '')
+          )
+
+          return JSON.stringify({ total_sampled: totalSampled, buckets: resultBuckets }, null, 2)
+        } catch (error) {
+          return JSON.stringify({ error: `Catalog sampling failed: ${error.message}` })
+        }
+      },
+      {
+        name: 'catalog_sample',
+        description: TOOL_DESCRIPTIONS.catalog_sample,
+        schema: CatalogSampleSchema,
+      }
+    )
+
+    return [
+      getPhotoInfo,
+      appKnowledge,
+      searchAdvanced,
+      fetchCollections,
+      overallCatalogView,
+      catalogSample,
+    ]
   }
 }
