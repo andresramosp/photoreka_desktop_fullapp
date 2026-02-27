@@ -155,13 +155,19 @@
               class="message-text markdown-content"
               v-html="renderMarkdown(message.content)"
             ></div>
+            <!-- Photo results: single flat list (label === 'result') -->
             <div
-              v-if="message.photoIds && message.photoIds.length > 0"
+              v-if="
+                message.photoLists &&
+                message.photoLists.length === 1
+              "
               class="message-photos"
             >
               <div class="message-photos-grid">
                 <div
-                  v-for="photo in getPhotosForMessage(message.photoIds)"
+                  v-for="photo in getPhotosForMessage(
+                    message.photoLists[0].photoIds,
+                  )"
                   :key="photo.id"
                   class="message-photo-item"
                 >
@@ -181,6 +187,40 @@
                 </div>
               </div>
             </div>
+            <!-- Photo results: multiple labeled lists -->
+            <div
+              v-else-if="message.photoLists && message.photoLists.length > 0"
+              class="message-photo-lists"
+            >
+              <div
+                v-for="(list, listIdx) in message.photoLists"
+                :key="listIdx"
+                class="message-photo-list"
+              >
+                <div class="message-photo-list-label">{{ list.label }}</div>
+                <div class="message-photos-grid">
+                  <div
+                    v-for="photo in getPhotosForMessage(list.photoIds)"
+                    :key="photo.id"
+                    class="message-photo-item"
+                  >
+                    <PhotoCardHub
+                      :photo="photo"
+                      :showName="true"
+                      :showFooter="false"
+                      :showDelete="false"
+                      :showDuplicate="false"
+                      :isUploading="photo.isUploading"
+                      :selected="isPhotoSelectedInMessage(index, photo.id)"
+                      @select="
+                        (photoId) => toggleMessagePhotoSelection(index, photoId)
+                      "
+                      @info="showPhotoInfo"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
             <div class="message-footer">
               <span class="message-time">{{
                 formatTime(message.timestamp)
@@ -188,13 +228,13 @@
               <n-button
                 v-if="
                   message.role === 'assistant' &&
-                  message.photoIds &&
-                  message.photoIds.length > 0
+                  message.photoLists &&
+                  message.photoLists.length > 0
                 "
                 class="msg-add-to-btn"
                 type="primary"
                 secondary
-                @click="handleAddMessagePhotosToCollection(message.photoIds)"
+                @click="handleAddMessagePhotosToCollection(message.photoLists)"
               >
                 <template #icon>
                   <n-icon :size="11"><BookmarksOutline /></n-icon>
@@ -405,12 +445,17 @@ interface Suggestion {
   subQueries?: SubQuery[];
 }
 
+interface PhotoList {
+  label: string;
+  photoIds: number[];
+}
+
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
   isError?: boolean;
-  photoIds?: number[];
+  photoLists?: PhotoList[];
   attachedPhotos?: ContextPhoto[];
 }
 
@@ -516,7 +561,7 @@ const suggestions: Suggestion[] = [
       {
         title: "Best Portrait Shots from Last 3 Years",
         prompt:
-          "Search my library for my strongest portrait photos from the last 3 years. Only in colour and vertical format. Rank them by visual impact, storytelling, and overall cohesion.",
+          "Search my library for my strongest portrait photos from the last 3 years. Only in colour and horizontal format. Rank them by visual impact, storytelling, and overall cohesion.",
         needsPhotos: false,
         autoSend: true,
       },
@@ -567,7 +612,7 @@ const suggestions: Suggestion[] = [
       {
         title: "Identifying Portfolio Gaps",
         prompt:
-          "Based on my current patterns, what subjects or aesthetic styles are underrepresented? Suggest a concrete next step to strengthen the 'strangeness' or 'narrative depth' of my portfolio.",
+          "Based on my current patterns, what subjects or aesthetic styles are underrepresented? Suggest specific steps to enrich my catalogue with new styles or themes.",
         needsPhotos: false,
         autoSend: true,
       },
@@ -744,7 +789,7 @@ const sendMessage = async () => {
       role: "assistant",
       content: data.output,
       timestamp: new Date(),
-      photoIds: data.photoIds,
+      photoLists: data.photoGroups,
     });
   } catch (error: any) {
     const errMsg =
@@ -867,6 +912,10 @@ const onPhotosSelected = (photoIds: string[]) => {
   }
 };
 
+const getAllPhotoIdsFromLists = (photoLists: PhotoList[]): number[] => {
+  return photoLists.flatMap((list) => list.photoIds);
+};
+
 const getPhotosForMessage = (photoIds: number[]): ContextPhoto[] => {
   return photoIds
     .map((id) => {
@@ -934,9 +983,10 @@ const handleAddToCollection = () => {
   }
 };
 
-const handleAddMessagePhotosToCollection = (photoIds: number[]) => {
-  if (photoIds && photoIds.length > 0) {
-    collectionModalPhotoIds.value = [...photoIds];
+const handleAddMessagePhotosToCollection = (photoLists: PhotoList[]) => {
+  const allIds = getAllPhotoIdsFromLists(photoLists);
+  if (allIds.length > 0) {
+    collectionModalPhotoIds.value = [...allIds];
     showCollectionModal.value = true;
   }
 };
@@ -1392,7 +1442,7 @@ const resetChat = async () => {
 }
 
 .message-bubble {
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: 15px;
   border-radius: var(--radius-lg);
   max-width: 90%;
   position: relative;
@@ -1585,6 +1635,27 @@ const resetChat = async () => {
   padding-top: var(--spacing-sm);
 }
 
+.message-photo-lists {
+  margin-top: var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.message-photo-list {
+  border-top: 1px solid var(--border-color);
+  padding-top: var(--spacing-sm);
+}
+
+.message-photo-list-label {
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: var(--spacing-xs);
+}
+
 .message-photos--user {
   margin-top: 0;
   margin-bottom: var(--spacing-sm);
@@ -1633,6 +1704,7 @@ const resetChat = async () => {
   line-height: var(--line-height-relaxed);
   word-break: break-word;
   margin: 0;
+  text-align: justify;
 }
 
 .message-assistant .message-bubble :deep(.markdown-content p) {
