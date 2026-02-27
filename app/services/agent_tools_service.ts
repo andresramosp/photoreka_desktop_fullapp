@@ -185,7 +185,7 @@ export const CatalogSampleSchema = z.object({
   buckets: z
     .number()
     .min(2)
-    .max(20)
+    .max(10)
     .optional()
     .default(5)
     .describe(
@@ -197,8 +197,8 @@ export const CatalogSampleSchema = z.object({
     .min(1)
     .max(10)
     .optional()
-    .default(3)
-    .describe('Number of photos to sample from each time bucket (default 3).'),
+    .default(5)
+    .describe('Number of photos to sample from each time bucket (default 5).'),
   sort_within: z
     .enum([
       'aesthetic_quality',
@@ -243,7 +243,7 @@ export const CatalogSampleSchema = z.object({
  * visual_aspects, EXIF, notes) — those are injected automatically in Phase 2
  * via buildPhase2VisualContext with full data + thumbnail images.
  */
-export function photoDataForAgent(photo: any): Record<string, any> {
+export function photoDataForAgentPreview(photo: any): Record<string, any> {
   const descriptions = photo.descriptions || {}
   const exif = descriptions.EXIF || {}
   const visualAspects = descriptions.visual_aspects || {}
@@ -272,6 +272,27 @@ export function photoDataForAgentSlim(photo: any): Record<string, any> {
     id: photo.id,
     originalFileName: photo.originalFileName,
     genre: visualAspects.genre ?? null,
+  }
+}
+
+/**
+ * Rich text-only photo data for Phase 2 contexts where no thumbnail is available
+ * (e.g. catalog_sample). Includes all narrative, scoring, and visual metadata so
+ * the model can evaluate the photo without seeing it.
+ *
+ * ~300 tokens/photo.
+ */
+export function photoDataForAgentRich(photo: any): Record<string, any> {
+  const descriptions = photo.descriptions || {}
+  const exif = descriptions.EXIF || {}
+  return {
+    id: photo.id,
+    originalFileName: photo.originalFileName,
+    story: descriptions.story || null,
+    context: descriptions.context || null,
+    artistic_scores: descriptions.artistic_scores || null,
+    visualAspects: descriptions.visual_aspects || {},
+    dateTaken: exif.dateTaken ?? null,
   }
 }
 
@@ -404,7 +425,7 @@ export default class AgentToolsService {
         const results = ids.map((photoId: number) => {
           const photo = photoMap.get(photoId)
           if (!photo) return { photoId, error: `Photo ${photoId} not found` }
-          return photoDataForAgent(photo)
+          return photoDataForAgentPreview(photo)
         })
 
         return JSON.stringify(results)
@@ -779,7 +800,7 @@ export default class AgentToolsService {
     const catalogSample = tool(
       async ({
         buckets = 5,
-        per_bucket = 3,
+        per_bucket = 5,
         sort_within,
         date_from,
         date_to,
@@ -807,7 +828,11 @@ export default class AgentToolsService {
               const ms = dateTakenRaw
                 ? new Date(dateTakenRaw).getTime()
                 : new Date(photo.createdAt.toString()).getTime()
-              return { photo, ms, genre: (visualAspects.genre as string) ?? null }
+              const rawGenre = visualAspects.genre
+              const genreValue: string | null = Array.isArray(rawGenre)
+                ? (rawGenre[0] ?? null)
+                : ((rawGenre as string) ?? null)
+              return { photo, ms, genre: genreValue }
             })
             .filter(({ ms, genre: photoGenre }) => {
               if (dateFromMs !== null && ms < dateFromMs) return false
@@ -887,7 +912,7 @@ export default class AgentToolsService {
             resultBuckets.push({
               period,
               total_in_period: bucketPhotos.length,
-              photos: selected.map((s) => photoDataForAgentSlim(s.photo)),
+              photos: selected.map((s) => photoDataForAgentRich(s.photo)),
             })
             totalSampled += selected.length
           }
