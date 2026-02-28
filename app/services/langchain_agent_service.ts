@@ -14,7 +14,7 @@ import { PRICES, USD_TO_EUR } from './models_service.js'
 import User from '#models/user'
 import Photo from '#models/photo'
 import PhotoImageService from './photo_image_service.js'
-import redis from '@adonisjs/redis/services/main'
+import ConversationService from './conversation_service.js'
 import {
   _debug,
   compactPreview,
@@ -172,6 +172,8 @@ export type AgentCostBreakdown = {
 export type PhotoGroup = {
   label: string
   photoIds: number[]
+  /** id (as string) → "filename — context". Stored in DB for LLM recall; stripped before sending to frontend. */
+  photoDescriptions?: Record<string, string>
 }
 
 export type ChatMessage = {
@@ -229,8 +231,6 @@ type ChatSession = {
 // CONSTANTS
 // ══════════════════════════════════════════════════════════════
 
-const MAX_HISTORY_TURNS = 4
-const HISTORY_TTL_SECONDS = 7200
 const PHASE2_MAX_PHOTOS = 80 // total photos sent to the model (with or without thumbnail)
 const PHASE2_MAX_THUMBNAILS = 20 // how many of those can carry a thumbnail image
 // → the remaining (PHASE2_MAX_PHOTOS - PHASE2_MAX_THUMBNAILS = 60) are text-only
@@ -260,16 +260,13 @@ export default class LangchainAgentService {
 
   // ── Public API ──────────────────────────────────────────────
 
-  public static async clearHistory(userId: number): Promise<void> {
-    await LangchainAgentService.deleteHistory(userId)
-  }
-
   public async chat(
     userId: number,
+    conversationId: number,
     message: string,
     contextPhotoIds: number[] = []
   ): Promise<AgentChatResult> {
-    const session = await this.initChatSession(userId, message, contextPhotoIds)
+    const session = await this.initChatSession(userId, conversationId, message, contextPhotoIds)
     await this.prefetchAttachedPhotos(session, contextPhotoIds)
     await this.runPhase1Loop(session)
     const structured = await this.runPhase2(session, contextPhotoIds)
@@ -280,10 +277,12 @@ export default class LangchainAgentService {
 
   private async initChatSession(
     userId: number,
+    conversationId: number,
     message: string,
     contextPhotoIds: number[]
   ): Promise<ChatSession> {
-    const history = await LangchainAgentService.getHistory(userId)
+    const convService = new ConversationService()
+    const history = await convService.getLLMContext(conversationId)
     const foundPhotoIds: number[] = []
     const modelName = DEFAULT_MODEL_PHASE1
     const provider = LangchainAgentService.getProviderFromModel(modelName)
@@ -420,16 +419,62 @@ export default class LangchainAgentService {
           m.photoIds && m.photoIds.length > 0 ? `\n[Photo IDs: ${m.photoIds.join(', ')}]` : ''
         messages.push(new HumanMessage(m.content + photoSuffix))
       } else {
+        // Assistant messages: append photo IDs + per-photo descriptions so the LLM
+        // can match user references like "la de la niña" to the correct photo.
+        const shownIds = m.photoGroups?.flatMap((g) => g.photoIds) ?? []
         const photoNote =
-          m.photoIds && m.photoIds.length > 0
-            ? `\n[INTERNAL_CONTEXT: shown_photo_ids=${m.photoIds.join(',')}]`
-            : ''
-        messages.push(new AIMessage(m.content + photoNote))
+          shownIds.length > 0 ? `\n[INTERNAL_CONTEXT: shown_photo_ids=${shownIds.join(',')}]` : ''
+
+        let descNote = ''
+        if (m.photoGroups && m.photoGroups.length > 0) {
+          const descLines: string[] = []
+          for (const group of m.photoGroups) {
+            if (group.photoDescriptions && Object.keys(group.photoDescriptions).length > 0) {
+              descLines.push(`Group "${group.label}":`)
+              for (const [id, desc] of Object.entries(group.photoDescriptions)) {
+                descLines.push(`  - ID ${id}: ${desc}`)
+              }
+            }
+          }
+          if (descLines.length > 0) {
+            descNote = '\n[Photo references from this response:]\n' + descLines.join('\n')
+          }
+        }
+
+        messages.push(new AIMessage(m.content + photoNote + descNote))
       }
     }
 
+    // Push currentUserMessage BEFORE merging so it is included in the alternation fix.
+    // This matters when an assistant error was filtered out (isError=true), leaving two
+    // consecutive HumanMessages — the merge loop below will collapse them correctly.
     messages.push(currentUserMessage)
-    return messages
+
+    // Gemini requires strict user/model alternation — merge consecutive same-role messages
+    // to avoid an unstructured API error that LangChain's error handler cannot surface properly.
+    const merged: any[] = [messages[0]] // always keep SystemMessage first
+    for (let i = 1; i < messages.length; i++) {
+      const prev = merged[merged.length - 1]
+      const curr = messages[i]
+      if (prev instanceof HumanMessage && curr instanceof HumanMessage) {
+        const prevText = LangchainAgentService.extractTextContent(prev.content)
+        const currText = LangchainAgentService.extractTextContent(curr.content)
+        merged[merged.length - 1] = new HumanMessage(prevText + '\n' + currText)
+      } else if (
+        prev instanceof AIMessage &&
+        curr instanceof AIMessage &&
+        !(prev instanceof ToolMessage) &&
+        !(curr instanceof ToolMessage)
+      ) {
+        const prevText = LangchainAgentService.extractTextContent(prev.content)
+        const currText = LangchainAgentService.extractTextContent(curr.content)
+        merged[merged.length - 1] = new AIMessage(prevText + '\n' + currText)
+      } else {
+        merged.push(curr)
+      }
+    }
+
+    return merged
   }
 
   // ── Phase 1 ──────────────────────────────────────────────────
@@ -440,9 +485,20 @@ export default class LangchainAgentService {
       session.totalIter = iter + 1
       console.log(`[Agent] 🔄 Iteration ${session.totalIter}/${MAX_ITERATIONS} — calling model…`)
 
-      const response = await session.modelWithTools.invoke(session.messages, {
-        callbacks: [makeDebugCallback(`phase1-iter-${iter}`)],
-      })
+      let response: any
+      try {
+        response = await session.modelWithTools.invoke(session.messages, {
+          callbacks: [makeDebugCallback(`phase1-iter-${iter}`)],
+        })
+      } catch (err: any) {
+        // LangChain sometimes loses the original error and throws on undefined.message —
+        // log the raw error object so we can see what actually went wrong.
+        console.error(
+          `[Agent] ❌ Phase 1 model invoke failed (iter ${session.totalIter}):`,
+          err?.message ?? err
+        )
+        throw err
+      }
       session.iterationUsages.push(
         LangchainAgentService.computeCallCost(
           `phase1-iter-${iter}`,
@@ -815,6 +871,7 @@ export default class LangchainAgentService {
       label: g.label,
       photoIds: g.photo_ids ?? [],
     }))
+    await this.enrichPhotoGroupsWithDescriptions(photoGroups)
     const allPhotoIds = photoGroups.flatMap((g) => g.photoIds)
     session.foundPhotoIds.push(...allPhotoIds)
 
@@ -840,14 +897,7 @@ export default class LangchainAgentService {
       `[Agent] 📤 Output preview: "${output.slice(0, 200)}${output.length > 200 ? '…' : ''}"`
     )
 
-    await this.persistHistory(
-      session.userId,
-      session.history,
-      session.message,
-      contextPhotoIds,
-      output,
-      photoGroups
-    )
+    // History persistence is now handled by ChatController via ConversationService
     return {
       output,
       photoGroups,
@@ -858,31 +908,43 @@ export default class LangchainAgentService {
     }
   }
 
-  private async persistHistory(
-    userId: number,
-    history: ChatMessage[],
-    message: string,
-    contextPhotoIds: number[],
-    output: string,
-    photoGroups: PhotoGroup[]
-  ): Promise<void> {
-    if (!output.trim()) return
-    const allPhotoIds = photoGroups.flatMap((g) => g.photoIds)
-    const updatedHistory = [
-      ...history,
-      {
-        role: 'user' as const,
-        content: message,
-        photoIds: contextPhotoIds.length > 0 ? contextPhotoIds : undefined,
-      },
-      {
-        role: 'assistant' as const,
-        content: output,
-        photoIds: allPhotoIds.length > 0 ? allPhotoIds : undefined,
-        photoGroups: photoGroups.length > 0 ? photoGroups : undefined,
-      },
-    ]
-    await LangchainAgentService.setHistory(userId, updatedHistory.slice(-(MAX_HISTORY_TURNS * 2)))
+  /**
+   * For each photo group, fetch `descriptions.context` + `originalFileName` and
+   * store them as a compact string map so the LLM can recall photos by content
+   * across conversation turns.
+   */
+  private async enrichPhotoGroupsWithDescriptions(photoGroups: PhotoGroup[]): Promise<void> {
+    const allIds = photoGroups.flatMap((g) => g.photoIds)
+    if (allIds.length === 0) return
+    const photos = await this.photoManager.getPhotosByIds(allIds)
+
+    /** Split text into sentences (splitting on '. ', '! ', '? '). */
+    const firstSentences = (text: string, n: number): string => {
+      if (!text) return ''
+      const sentences = text.match(/[^.!?]+[.!?]+/g) ?? [text]
+      return sentences.slice(0, n).join(' ').trim()
+    }
+
+    const descMap = new Map<number, string>()
+    for (const photo of photos) {
+      const filename = photo.originalFileName ?? ''
+      const contextSnippet = firstSentences(photo.descriptions?.context ?? '', 1)
+      const storySnippet = firstSentences(photo.descriptions?.story ?? '', 1)
+      const parts = [contextSnippet, storySnippet].filter(Boolean).join(' | ')
+      if (filename || parts) {
+        descMap.set(photo.id, parts ? `${filename} — ${parts}` : filename)
+      }
+    }
+    for (const group of photoGroups) {
+      const descriptions: Record<string, string> = {}
+      for (const id of group.photoIds) {
+        const desc = descMap.get(id)
+        if (desc) descriptions[String(id)] = desc
+      }
+      if (Object.keys(descriptions).length > 0) {
+        group.photoDescriptions = descriptions
+      }
+    }
   }
 
   // ── Model management ─────────────────────────────────────────
@@ -1120,42 +1182,5 @@ export default class LangchainAgentService {
       }
     }
     throw lastError
-  }
-
-  // ── History (Redis) ───────────────────────────────────────────
-
-  private static redisHistoryKey(userId: number): string {
-    return `agent:history:${userId}`
-  }
-
-  private static async getHistory(userId: number): Promise<ChatMessage[]> {
-    try {
-      const data = await redis.get(LangchainAgentService.redisHistoryKey(userId))
-      return data ? (JSON.parse(data) as ChatMessage[]) : []
-    } catch (err) {
-      console.warn('[Agent] Failed to read history from Redis', err)
-      return []
-    }
-  }
-
-  private static async setHistory(userId: number, history: ChatMessage[]): Promise<void> {
-    try {
-      await redis.set(
-        LangchainAgentService.redisHistoryKey(userId),
-        JSON.stringify(history),
-        'EX',
-        HISTORY_TTL_SECONDS
-      )
-    } catch (err) {
-      console.warn('[Agent] Failed to write history to Redis', err)
-    }
-  }
-
-  private static async deleteHistory(userId: number): Promise<void> {
-    try {
-      await redis.del(LangchainAgentService.redisHistoryKey(userId))
-    } catch (err) {
-      console.warn('[Agent] Failed to delete history from Redis', err)
-    }
   }
 }

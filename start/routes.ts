@@ -260,6 +260,12 @@ router
 router
   .group(() => {
     router.get('/api/chat/reset', [ChatController, 'reset'])
+
+    // Conversation management endpoints
+    router.get('/api/conversations', [ChatController, 'listConversations'])
+    router.get('/api/conversations/:id', [ChatController, 'getConversation'])
+    router.patch('/api/conversations/:id', [ChatController, 'updateConversation'])
+    router.delete('/api/conversations/:id', [ChatController, 'deleteConversation'])
   })
   .use([middleware.auth(), middleware.readOnly()])
 
