@@ -1,17 +1,104 @@
 <template>
   <div class="chat-view">
-    <!-- Chat Header (shown only while a conversation is active) -->
-    <div v-if="messages.length > 0" class="chat-header">
-      <span class="chat-header-title">CHATLAB</span>
+    <!-- Sidebar Backdrop -->
+    <transition name="backdrop-fade">
+      <div
+        v-if="showSidebar"
+        class="sidebar-backdrop"
+        @click="showSidebar = false"
+      />
+    </transition>
+
+    <!-- Conversations Sidebar -->
+    <transition name="sidebar-slide">
+      <div v-if="showSidebar" class="chat-sidebar">
+        <div class="sidebar-header">
+          <span class="sidebar-title">Conversations</span>
+          <n-button
+            quaternary
+            size="small"
+            @click="handleNewChat"
+            title="New conversation"
+          >
+            <template #icon>
+              <n-icon :size="16"><CreateIcon /></n-icon>
+            </template>
+          </n-button>
+        </div>
+
+        <div v-if="chatStore.isLoadingConversations" class="sidebar-loading">
+          <n-spin size="small" />
+          <span>Loading…</span>
+        </div>
+
+        <div
+          v-else-if="chatStore.conversations.length === 0"
+          class="sidebar-empty"
+        >
+          <n-icon :size="28" class="sidebar-empty-icon"><LayersIcon /></n-icon>
+          <span>No conversations yet</span>
+        </div>
+
+        <div v-else class="sidebar-list">
+          <div
+            v-for="conv in chatStore.conversations"
+            :key="conv.id"
+            class="sidebar-item"
+            :class="{ active: chatStore.activeConversationId === conv.id }"
+            @click="handleLoadConversation(conv.id)"
+          >
+            <div class="sidebar-item-content">
+              <span class="sidebar-item-title">{{
+                conv.title || "Untitled"
+              }}</span>
+              <span class="sidebar-item-date">{{
+                formatRelativeDate(conv.updatedAt)
+              }}</span>
+            </div>
+            <n-button
+              quaternary
+              size="tiny"
+              class="sidebar-item-delete"
+              @click.stop="handleDeleteConversation(conv.id)"
+              title="Delete conversation"
+            >
+              <template #icon>
+                <n-icon :size="13"><CloseIcon /></n-icon>
+              </template>
+            </n-button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- Persistent Top Bar (always visible) -->
+    <div class="chat-topbar">
+      <div class="chat-topbar-left">
+        <n-button
+          quaternary
+          size="small"
+          class="sidebar-toggle-btn"
+          :class="{ active: showSidebar }"
+          title="Conversations"
+          @click="showSidebar = !showSidebar"
+        >
+          <template #icon>
+            <n-icon :size="17"><LayersIcon /></n-icon>
+          </template>
+        </n-button>
+        <span v-if="chatStore.messages.length > 0" class="chat-topbar-title"
+          >CHATLAB</span
+        >
+      </div>
       <n-button
+        v-if="chatStore.messages.length > 0"
         quaternary
         size="small"
-        @click="resetChat"
         class="new-chat-btn"
-        title="New chat"
+        @click="handleNewChat"
       >
         <template #icon>
-          <n-icon :size="16"><CreateIcon /></n-icon>
+          <n-icon :size="15"><CreateIcon /></n-icon>
         </template>
         New chat
       </n-button>
@@ -20,7 +107,7 @@
     <!-- Main Chat Area -->
     <div class="chat-main" ref="chatMainRef">
       <!-- Welcome / Suggestions (visible before chatting) -->
-      <div v-if="messages.length === 0" class="chat-welcome">
+      <div v-if="chatStore.messages.length === 0" class="chat-welcome">
         <div class="welcome-content">
           <n-icon :size="isMobile ? 48 : 64" class="welcome-icon">
             <RobotOutlined />
@@ -89,13 +176,58 @@
               </n-icon>
             </div>
           </div>
+
+          <!-- Recent conversations (welcome screen) -->
+          <div
+            v-if="!activeSuggestion && chatStore.conversations.length > 0"
+            class="recent-convs"
+          >
+            <div class="recent-convs-header">
+              <n-icon :size="13" class="recent-convs-icon"
+                ><LayersIcon
+              /></n-icon>
+              <span class="recent-convs-title">Recent conversations</span>
+            </div>
+            <div class="recent-convs-list">
+              <button
+                v-for="conv in chatStore.conversations.slice(0, 5)"
+                :key="conv.id"
+                class="recent-conv-item"
+                @click="handleLoadConversation(conv.id)"
+              >
+                <span class="recent-conv-title">{{
+                  conv.title || "Untitled"
+                }}</span>
+                <span class="recent-conv-date">{{
+                  formatRelativeDate(conv.updatedAt)
+                }}</span>
+              </button>
+              <button
+                v-if="chatStore.conversations.length > 5"
+                class="recent-conv-more"
+                @click="showSidebar = true"
+              >
+                <span
+                  >View all
+                  {{ chatStore.conversations.length }} conversations</span
+                >
+                <n-icon :size="13"><ChevronForwardIcon /></n-icon>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- Chat Messages -->
       <div v-else class="chat-messages" ref="messagesRef">
+        <!-- Loading indicator when loading a conversation -->
+        <div v-if="chatStore.isLoadingMessages" class="loading-messages">
+          <n-spin size="medium" />
+          <span>Loading conversation…</span>
+        </div>
+
         <div
-          v-for="(message, index) in messages"
+          v-for="(message, index) in chatStore.messages"
           :key="index"
           class="message-row"
           :class="{
@@ -397,7 +529,7 @@ import FloatingActionBar from "@/components/FloatingActionBar.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import { usePhotosStore } from "@/stores/photos.js";
-import { api } from "@/utils/axios.js";
+import { useChatStore } from "@/stores/chat.js";
 import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection.js";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
@@ -473,6 +605,7 @@ interface ContextPhoto {
 }
 
 const photosStore = usePhotosStore();
+const chatStore = useChatStore();
 const message = useMessage();
 
 const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
@@ -534,7 +667,6 @@ const collectionModalPhotoIds = ref<(string | number)[]>([]);
 const isDeletingPhotos = ref(false);
 
 const inputText = ref("");
-const messages = ref<ChatMessage[]>([]);
 const isTyping = ref(false);
 const isSending = ref(false);
 const photosDialogVisible = ref(false);
@@ -544,6 +676,7 @@ const messagesRef = ref<HTMLElement | null>(null);
 const isMobile = ref(window.innerWidth < 768);
 const showPhotoInfoDialog = ref(false);
 const selectedDialogPhoto = ref<any>(null);
+const showSidebar = ref(false);
 
 const suggestions: Suggestion[] = [
   {
@@ -732,7 +865,7 @@ const loadPendingChatPhotos = () => {
 };
 
 onMounted(() => {
-  resetChat();
+  chatStore.fetchConversations();
   loadPendingChatPhotos();
   window.addEventListener("resize", checkMobile);
 });
@@ -764,47 +897,23 @@ const sendMessage = async () => {
   // Snapshot and clear attached photos before sending
   const attachedPhotos = [...contextPhotos.value];
   contextPhotos.value = [];
-
-  // Add user message with attached photos
-  messages.value.push({
-    role: "user",
-    content: text,
-    timestamp: new Date(),
-    attachedPhotos: attachedPhotos.length > 0 ? attachedPhotos : undefined,
-  });
   inputText.value = "";
-  scrollToBottom();
+
+  const contextPhotoIds = attachedPhotos
+    .map((p) => parseInt(p.id, 10))
+    .filter((id) => !isNaN(id));
 
   isTyping.value = true;
   isSending.value = true;
   scrollToBottom();
 
   try {
-    const contextPhotoIds = attachedPhotos
-      .map((p) => parseInt(p.id, 10))
-      .filter((id) => !isNaN(id));
-
-    const { data } = await api.post("/api/chat", {
-      message: text,
-      ...(contextPhotoIds.length > 0 && { contextPhotoIds }),
-    });
-
-    messages.value.push({
-      role: "assistant",
-      content: data.output,
-      timestamp: new Date(),
-      photoLists: data.photoGroups,
-    });
+    await chatStore.sendMessage(text, contextPhotoIds, attachedPhotos);
   } catch (error: any) {
     const errMsg =
       error?.response?.data?.message ||
       "Something went wrong. Please try again.";
-    messages.value.push({
-      role: "assistant",
-      content: errMsg,
-      timestamp: new Date(),
-      isError: true,
-    });
+    chatStore.addErrorMessage(errMsg);
   } finally {
     isTyping.value = false;
     isSending.value = false;
@@ -1081,16 +1190,54 @@ const clearContextPhotos = () => {
 };
 
 const resetChat = async () => {
-  try {
-    api.get("/api/chat/reset");
-  } catch {
-    // silently ignore reset errors
-  }
-  messages.value = [];
+  chatStore.startNewConversation();
   contextPhotos.value = [];
   inputText.value = "";
   perMessageSelections.value = {};
   activeSuggestion.value = null;
+};
+
+const handleNewChat = () => {
+  resetChat();
+  showSidebar.value = false;
+};
+
+const handleLoadConversation = async (conversationId: number) => {
+  try {
+    await chatStore.loadConversation(conversationId);
+    contextPhotos.value = [];
+    inputText.value = "";
+    perMessageSelections.value = {};
+    activeSuggestion.value = null;
+    showSidebar.value = false;
+    scrollToBottom();
+  } catch {
+    message.error("Failed to load conversation");
+  }
+};
+
+const handleDeleteConversation = async (conversationId: number) => {
+  try {
+    await chatStore.deleteConversation(conversationId);
+    message.success("Conversation deleted");
+  } catch {
+    message.error("Failed to delete conversation");
+  }
+};
+
+const formatRelativeDate = (dateStr: string) => {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return "now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
 };
 </script>
 
@@ -1103,21 +1250,207 @@ const resetChat = async () => {
   overflow: hidden;
 }
 
-/* ── Chat Header ── */
-.chat-header {
+/* ── Sidebar Backdrop ── */
+.sidebar-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 99;
+  /* backdrop-filter: blur(1px); */
+}
+
+.backdrop-fade-enter-active,
+.backdrop-fade-leave-active {
+  transition: opacity 0.22s ease;
+}
+.backdrop-fade-enter-from,
+.backdrop-fade-leave-to {
+  opacity: 0;
+}
+
+/* ── Sidebar Panel ── */
+.chat-sidebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 280px;
+  z-index: 100;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
+}
+
+.sidebar-slide-enter-active,
+.sidebar-slide-leave-active {
+  transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.sidebar-slide-enter-from,
+.sidebar-slide-leave-to {
+  transform: translateX(-100%);
+}
+
+.sidebar-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-sm) var(--spacing-lg);
+  padding: var(--spacing-md) var(--spacing-md) var(--spacing-md)
+    var(--spacing-lg);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 
-.chat-header-title {
+.sidebar-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.sidebar-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  flex: 1;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.sidebar-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  flex: 1;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  padding: var(--spacing-xl);
+}
+
+.sidebar-empty-icon {
+  opacity: 0.35;
+}
+
+.sidebar-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-xs) 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.sidebar-list::-webkit-scrollbar {
+  width: 3px;
+}
+.sidebar-list::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 2px;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-sm) var(--spacing-sm)
+    var(--spacing-lg);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+  min-height: 52px;
+}
+
+.sidebar-item:hover {
+  background: color-mix(in srgb, var(--accent-color) 6%, var(--bg-surface));
+}
+
+.sidebar-item.active {
+  background: color-mix(in srgb, var(--accent-color) 10%, var(--bg-surface));
+  border-left-color: var(--accent-color);
+}
+
+.sidebar-item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-item-title {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: var(--line-height-tight);
+}
+
+.sidebar-item.active .sidebar-item-title {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.sidebar-item-date {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  opacity: 0.7;
+}
+
+.sidebar-item-delete {
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+  color: var(--text-tertiary) !important;
+}
+
+.sidebar-item:hover .sidebar-item-delete {
+  opacity: 1;
+}
+
+/* ── Persistent Top Bar ── */
+.chat-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  min-height: 44px;
+}
+
+.chat-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.chat-topbar-title {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--text-tertiary);
   letter-spacing: 0.03em;
+}
+
+.sidebar-toggle-btn {
+  color: var(--text-tertiary) !important;
+  transition:
+    color 0.15s,
+    background 0.15s !important;
+}
+
+.sidebar-toggle-btn.active {
+  color: var(--accent-color) !important;
+  background: color-mix(
+    in srgb,
+    var(--accent-color) 10%,
+    transparent
+  ) !important;
 }
 
 .new-chat-btn {
@@ -1818,5 +2151,122 @@ const resetChat = async () => {
   border: none;
   border-top: 1px solid var(--border-color);
   margin: var(--spacing-md) 0;
+}
+
+/* ── Recent Conversations (welcome screen) ── */
+.recent-convs {
+  margin-top: var(--spacing-2xl);
+  max-width: 480px;
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.recent-convs-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-sm);
+  padding: 0 var(--spacing-xs);
+}
+
+.recent-convs-icon {
+  color: var(--text-tertiary);
+  opacity: 0.6;
+}
+
+.recent-convs-title {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-tertiary);
+}
+
+.recent-convs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.recent-conv-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.recent-conv-item:hover {
+  background: color-mix(in srgb, var(--accent-color) 6%, var(--bg-surface));
+  border-color: var(--accent-color);
+}
+
+.recent-conv-title {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.recent-conv-item:hover .recent-conv-title {
+  color: var(--text-primary);
+}
+
+.recent-conv-date {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.recent-conv-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  width: 100%;
+  padding: var(--spacing-xs) var(--spacing-md);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  transition: color 0.15s;
+  margin-top: 2px;
+}
+
+.recent-conv-more:hover {
+  color: var(--accent-color);
+}
+
+/* ── Loading messages state ── */
+.loading-messages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xl);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+/* ── Responsive sidebar ── */
+@media (max-width: 768px) {
+  .chat-sidebar {
+    width: 88vw;
+    max-width: 320px;
+  }
 }
 </style>
