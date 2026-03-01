@@ -8,6 +8,12 @@ export default class Invite extends BaseModel {
   @column()
   declare code: string
 
+  @column()
+  declare maxUses: number
+
+  @column()
+  declare useCount: number
+
   @column.dateTime()
   declare usedAt: DateTime | null
 
@@ -21,10 +27,10 @@ export default class Invite extends BaseModel {
   declare updatedAt: DateTime
 
   get isUsed() {
-    return !!this.usedAt
+    return this.useCount >= this.maxUses
   }
 
   get isValid() {
-    return !this.usedAt
+    return this.useCount < this.maxUses
   }
 }

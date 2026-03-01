@@ -110,7 +110,8 @@ export default class AuthController {
         console.error('Error sending admin notification email:', adminEmailError)
       }
 
-      // Mark invitation as used
+      // Mark invitation use
+      invite.useCount += 1
       invite.usedAt = DateTime.now()
       await invite.save()
 
@@ -823,11 +824,12 @@ export default class AuthController {
 
         console.log('[Google OAuth] New user created:', user.id)
 
-        // Mark invitation as used
+        // Mark invitation use
         if (invite) {
+          invite.useCount += 1
           invite.usedAt = DateTime.now()
           await invite.save()
-          console.log('[Google OAuth] Invitation code marked as used')
+          console.log('[Google OAuth] Invitation code use count incremented')
         }
 
         // Send welcome email

@@ -200,7 +200,7 @@ export type AgentChatResult = {
 }
 
 type ModelName = string
-type ModelProvider = 'openai' | 'gemini'
+type ModelProvider = 'openai' | 'gemini' | 'deepseek'
 
 type PhotoIdGroup = {
   tool: string
@@ -285,9 +285,10 @@ export default class LangchainAgentService {
     const history = await convService.getLLMContext(conversationId)
     const foundPhotoIds: number[] = []
     const modelName = DEFAULT_MODEL_PHASE1
-    const provider = LangchainAgentService.getProviderFromModel(modelName)
+    const provider: ModelProvider = LangchainAgentService.getProviderFromModel(modelName)
     const modelNamePhase2 = DEFAULT_MODEL_PHASE2
-    const providerPhase2 = LangchainAgentService.getProviderFromModel(modelNamePhase2)
+    const providerPhase2: ModelProvider =
+      LangchainAgentService.getProviderFromModel(modelNamePhase2)
     console.log(
       `[Agent] 🤖 Phase 1 model: ${modelName} (${provider.toUpperCase()})` +
         (modelName !== modelNamePhase2
@@ -298,11 +299,12 @@ export default class LangchainAgentService {
     const tools = this.toolsService.createTools(userId, foundPhotoIds, provider)
     const doneTool = this.createDoneTool()
     const allTools = [...tools, doneTool]
+    const toolChoice = provider === 'deepseek' ? 'auto' : 'any'
     const modelWithTools = LangchainAgentService.createChatModel(
       modelName,
       undefined,
       'low'
-    ).bindTools(allTools, { tool_choice: 'any' })
+    ).bindTools(allTools, { tool_choice: toolChoice })
     const toolMap = Object.fromEntries(allTools.map((t) => [t.name, t]))
 
     const userContext = await this.buildUserContext(userId)
@@ -702,6 +704,9 @@ export default class LangchainAgentService {
           text: `[Photo ID ${photo.id} — ${photo.originalFileName}]\n${JSON.stringify(photoDataForAgentPreview(photo))}`, // compact: no whitespace to save tokens
         })
 
+        // DeepSeek models do not support vision — skip image parts entirely
+        if (provider === 'deepseek') continue
+
         try {
           if (provider === 'openai') {
             const url = photo.thumbnailUrl
@@ -710,6 +715,7 @@ export default class LangchainAgentService {
               count++
             }
           } else {
+            // gemini: base64
             const base64 = await photoImageService.getImageBase64FromR2(photo.thumbnailName, false)
             if (base64) {
               parts.push({
@@ -950,7 +956,9 @@ export default class LangchainAgentService {
   // ── Model management ─────────────────────────────────────────
 
   private static getProviderFromModel(model: ModelName): ModelProvider {
-    return model.startsWith('gemini') ? 'gemini' : 'openai'
+    if (model.startsWith('gemini')) return 'gemini'
+    if (model.startsWith('deepseek')) return 'deepseek'
+    return 'openai'
   }
 
   private static createChatModel(
@@ -982,6 +990,16 @@ export default class LangchainAgentService {
             threshold: HarmBlockThreshold.BLOCK_NONE,
           },
         ],
+      })
+    }
+    if (provider === 'deepseek') {
+      return new ChatOpenAI({
+        apiKey: process.env.DEEPSEEK_KEY,
+        model,
+        maxTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
+        configuration: {
+          baseURL: process.env.DEEPSEEK_BASEURL ?? 'https://api.deepseek.com',
+        },
       })
     }
     return new ChatOpenAI({

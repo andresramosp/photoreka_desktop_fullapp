@@ -26,7 +26,7 @@ export default class InvitesController {
   /**
    * Generate invitation codes (admin only)
    */
-  async generateInvite({ auth, response }: HttpContext) {
+  async generateInvite({ auth, request, response }: HttpContext) {
     try {
       await auth.use('api').check()
       const user = auth.use('api').user! as unknown as User
@@ -37,10 +37,18 @@ export default class InvitesController {
       //   return response.unauthorized({ message: 'Admin access required' })
       // }
 
+      const generateInviteValidator = vine.compile(
+        vine.object({
+          maxUses: vine.number().min(1).optional(),
+        })
+      )
+      const payload = await request.validateUsing(generateInviteValidator)
+
       const code = this.generateInviteCode()
       const invite = await Invite.create({
         code,
         createdBy: user.id,
+        maxUses: payload.maxUses ?? 1,
       })
 
       return response.created({
@@ -48,6 +56,8 @@ export default class InvitesController {
         invite: {
           id: invite.id,
           code: invite.code,
+          maxUses: invite.maxUses,
+          useCount: invite.useCount,
           createdAt: invite.createdAt,
         },
       })
@@ -79,6 +89,8 @@ export default class InvitesController {
           id: invite.id,
           code: invite.code,
           isUsed: invite.isUsed,
+          maxUses: invite.maxUses,
+          useCount: invite.useCount,
           usedAt: invite.usedAt,
           createdBy: invite.createdBy,
           createdAt: invite.createdAt,
@@ -110,6 +122,7 @@ export default class InvitesController {
       const sendInviteValidator = vine.compile(
         vine.object({
           email: vine.string().email().normalizeEmail(),
+          maxUses: vine.number().min(1).optional(),
         })
       )
 
@@ -135,6 +148,7 @@ export default class InvitesController {
       const invite = await Invite.create({
         code,
         createdBy: user.id,
+        maxUses: payload.maxUses ?? 1,
       })
 
       // Create registration URL with invite code
@@ -164,6 +178,8 @@ export default class InvitesController {
         invite: {
           id: invite.id,
           code: invite.code,
+          maxUses: invite.maxUses,
+          useCount: invite.useCount,
           sentTo: payload.email,
           createdAt: invite.createdAt,
         },
@@ -188,6 +204,7 @@ export default class InvitesController {
       const sendGrantValidator = vine.compile(
         vine.object({
           email: vine.string().email().normalizeEmail(),
+          maxUses: vine.number().min(1).optional(),
         })
       )
 
@@ -213,6 +230,7 @@ export default class InvitesController {
       const invite = await Invite.create({
         code,
         createdBy: user.id,
+        maxUses: payload.maxUses ?? 1,
       })
 
       // Create registration URL with invite code
@@ -241,6 +259,8 @@ export default class InvitesController {
         invite: {
           id: invite.id,
           code: invite.code,
+          maxUses: invite.maxUses,
+          useCount: invite.useCount,
           sentTo: payload.email,
           createdAt: invite.createdAt,
         },

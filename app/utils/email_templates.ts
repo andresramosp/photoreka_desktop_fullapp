@@ -360,7 +360,7 @@ export function inviteUserTemplate(
       </p>
       <p style="margin: 0 0 10px; font-size: 13px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
         This invitation includes a complimentary package of 
-        <strong style="color: ${TEXT_COLOR};">1,500 photos processed free of charge</strong>, 
+        <strong style="color: ${TEXT_COLOR};">1,000 photos processed free of charge</strong>, 
         so you can fully explore your archive and experience the platform.
       </p>
       <p style="margin: 0 0 10px; font-size: 12px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
@@ -420,7 +420,7 @@ export function grantUserTemplate(
 
       <p style="margin: 0 0 16px;">
         During this early phase, you can upload and process up to 
-        <strong>1,500 photos free of charge</strong> to explore the platform and work with your archive.
+        <strong>1,000 photos free of charge</strong> to explore the platform and work with your archive.
       </p>
 
       <p style="margin: 0 0 16px;">

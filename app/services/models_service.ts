@@ -33,6 +33,7 @@ export type ModelName =
   | 'gpt-5-chat-latest'
   | 'gpt-4o-mini'
   | 'deepseek-chat'
+  | 'deepseek-reasoner'
   | 'qwen-vl-max'
   // | 'gemini-2.0-flash'
   | 'gemini-2.5-flash'
@@ -82,9 +83,14 @@ export const PRICES = {
     output: 0.6 / 1_000_000,
   },
   'deepseek-chat': {
-    input_cache_miss: 0.27 / 1_000_000,
-    input_cache_hit: 0.07 / 1_000_000,
-    output: 1.1 / 1_000_000,
+    input_cache_miss: 0.28 / 1_000_000,
+    input_cache_hit: 0.028 / 1_000_000,
+    output: 0.42 / 1_000_000,
+  },
+  'deepseek-reasoner': {
+    input_cache_miss: 0.55 / 1_000_000, // Estimated ~2x markup for thinking mode (official pricing TBD)
+    input_cache_hit: 0.055 / 1_000_000,
+    output: 2.19 / 1_000_000, // Estimated ~5.2x output multiplier
   },
   'qwen-vl-max': {
     input_cache_miss: 1.6 / 1_000_000,

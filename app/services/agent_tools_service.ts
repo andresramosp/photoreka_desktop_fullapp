@@ -403,7 +403,11 @@ export default class AgentToolsService {
    * @param userId       The authenticated user's ID
    * @param foundPhotoIds Mutable array that accumulates photo IDs surfaced to the client
    */
-  createTools(userId: number, foundPhotoIds: number[], provider: 'openai' | 'gemini' = 'openai') {
+  createTools(
+    userId: number,
+    foundPhotoIds: number[],
+    provider: 'openai' | 'gemini' | 'deepseek' = 'openai'
+  ) {
     const { photoManager, searchService } = this
 
     // ── Tool 1: get_photo_info ──────────────────────────────
