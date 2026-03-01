@@ -59,9 +59,9 @@ export default class LlmRateLimitMiddleware {
           .then(() => auth.user)
           .catch(() => null))
       if (demoEmail && user?.email === demoEmail) {
-        limits.perMinute = 5
-        limits.perHour = 10
-        limits.perDay = 15
+        limits.perMinute = 3
+        limits.perHour = 5
+        limits.perDay = 10
       }
     } catch (error) {
       // Si hay error al obtener el usuario, continuar con límites normales
