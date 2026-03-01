@@ -75,6 +75,7 @@
     <div class="chat-topbar">
       <div class="chat-topbar-left">
         <n-button
+          v-if="!isDemoUser"
           quaternary
           size="small"
           class="sidebar-toggle-btn"
@@ -179,7 +180,11 @@
 
           <!-- Recent conversations (welcome screen) -->
           <div
-            v-if="!activeSuggestion && chatStore.conversations.length > 0"
+            v-if="
+              !isDemoUser &&
+              !activeSuggestion &&
+              chatStore.conversations.length > 0
+            "
             class="recent-convs"
           >
             <div class="recent-convs-header">
@@ -520,7 +525,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted, onUnmounted, onActivated } from "vue";
+import {
+  ref,
+  computed,
+  nextTick,
+  onMounted,
+  onUnmounted,
+  onActivated,
+} from "vue";
 import { NIcon, useMessage } from "naive-ui";
 import PhotosDialog from "@/components/PhotosDialog.vue";
 import PhotoCardHub from "@/components/photoCards/PhotoCardHub.vue";
@@ -530,6 +542,7 @@ import CollectionModal from "@/components/CollectionModal.vue";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useChatStore } from "@/stores/chat.js";
+import { useUserStore } from "@/stores/userStore";
 import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection.js";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
@@ -606,7 +619,12 @@ interface ContextPhoto {
 
 const photosStore = usePhotosStore();
 const chatStore = useChatStore();
+const userStore = useUserStore();
 const message = useMessage();
+
+const isDemoUser = computed(
+  () => userStore.user?.email === "demo@photorekatest.com",
+);
 
 const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
 const {
@@ -865,7 +883,7 @@ const loadPendingChatPhotos = () => {
 };
 
 onMounted(() => {
-  chatStore.fetchConversations();
+  if (!isDemoUser.value) chatStore.fetchConversations();
   loadPendingChatPhotos();
   window.addEventListener("resize", checkMobile);
 });
@@ -1205,6 +1223,13 @@ const handleNewChat = () => {
 const handleLoadConversation = async (conversationId: number) => {
   try {
     await chatStore.loadConversation(conversationId);
+    // Resolve persisted contextPhotoIds → attachedPhotos for display
+    for (const msg of chatStore.messages as any[]) {
+      if (msg.role === "user" && msg.contextPhotoIds?.length) {
+        msg.attachedPhotos = getPhotosForMessage(msg.contextPhotoIds);
+        delete msg.contextPhotoIds;
+      }
+    }
     contextPhotos.value = [];
     inputText.value = "";
     perMessageSelections.value = {};
