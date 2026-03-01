@@ -197,8 +197,8 @@ export const CatalogSampleSchema = z.object({
     .min(1)
     .max(10)
     .optional()
-    .default(5)
-    .describe('Number of photos to sample from each time bucket (default 5).'),
+    .default(8)
+    .describe('Number of photos to sample from each time bucket (default 8).'),
   sort_within: z
     .enum([
       'aesthetic_quality',
@@ -789,7 +789,7 @@ export default class AgentToolsService {
     const catalogSample = tool(
       async ({
         buckets = 5,
-        per_bucket = 5,
+        per_bucket = 8,
         sort_within,
         date_from,
         date_to,
