@@ -239,15 +239,13 @@ const PHASE2_MAX_THUMBNAILS = 20 // how many of those can carry a thumbnail imag
 /** Tools whose Phase 2 photo results are eligible for thumbnail images. */
 const IMAGE_ELIGIBLE_TOOLS = new Set(['search_advanced', 'get_photo_info', 'fetch_collections'])
 
-const NON_PHOTO_TOOLS = new Set(['overall_catalog_view', 'app_knowledge', 'catalog_sample', 'done'])
-
 /**
  * Phase 1 model selection — driven by `needs_advanced_reasoning_phase1`.
  * true  → reasoning-capable model for complex tool orchestration / curatorial logic.
  * false → fast lightweight model for simple retrieval.
  */
 const MODEL_PHASE1_REASONING: ModelName = 'gemini-3-flash-preview'
-const MODEL_PHASE1_FAST: ModelName = 'deepseek-chat'
+const MODEL_PHASE1_FAST: ModelName = 'gemini-3-flash-preview'
 
 /**
  * Phase 2 model selection — driven by `has_photo_intent`.
@@ -688,9 +686,10 @@ export default class LangchainAgentService {
     session: ChatSession,
     contextPhotoIds: number[]
   ): Promise<Awaited<ReturnType<typeof LangchainAgentService.invokeStructuredFinalAnswer>>> {
-    const compressedMessages = LangchainAgentService.compressMessagesForPhase2(
+    const phase2Messages = LangchainAgentService.buildPhase2Messages(
       session.messages,
-      session.userContext
+      session.userContext,
+      session.intermediateSteps
     )
     const phase2VisualContext = await this.buildPhase2VisualContext(
       contextPhotoIds,
@@ -698,7 +697,7 @@ export default class LangchainAgentService {
       session.providerPhase2
     )
     return LangchainAgentService.invokeStructuredFinalAnswer(session.modelNamePhase2, [
-      ...compressedMessages,
+      ...phase2Messages,
       ...phase2VisualContext,
     ])
   }
@@ -1063,9 +1062,85 @@ export default class LangchainAgentService {
 
   private static slimToolMessage(msg: ToolMessage): ToolMessage {
     if (typeof msg.content !== 'string') return msg
-    if (msg.name && NON_PHOTO_TOOLS.has(msg.name)) return msg
+    if (msg.name === 'done') return msg
     try {
       const parsed = JSON.parse(msg.content)
+      if (parsed.error || parsed._compressed) return msg
+
+      // ── Non-photo tools: compress to structured digest ──
+
+      if (msg.name === 'overall_catalog_view') {
+        const patterns = parsed.catalog_patterns ?? {}
+        const patternKeys = Object.keys(patterns)
+        const clusterCount = patternKeys.reduce((sum: number, key: string) => {
+          const arr = patterns[key]
+          return sum + (Array.isArray(arr) ? arr.length : 0)
+        }, 0)
+        const slim = {
+          _compressed: true,
+          summary: `Catalog analysis retrieved: ${patternKeys.length} pattern type(s) with ${clusterCount} cluster(s), visual_aspects_stats and artistic_scores_stats included. Full data available for evaluation phase.`,
+        }
+        return new ToolMessage({
+          content: JSON.stringify(slim),
+          tool_call_id: msg.tool_call_id,
+          name: msg.name,
+        })
+      }
+
+      if (msg.name === 'catalog_sample') {
+        const buckets = parsed.buckets ?? []
+        const slim = {
+          _compressed: true,
+          total_sampled: parsed.total_sampled ?? 0,
+          buckets: buckets.map((b: any) => ({
+            period: b.period,
+            total_in_period: b.total_in_period,
+            photo_ids: (b.photos ?? []).map((p: any) => p.id),
+          })),
+        }
+        return new ToolMessage({
+          content: JSON.stringify(slim),
+          tool_call_id: msg.tool_call_id,
+          name: msg.name,
+        })
+      }
+
+      if (msg.name === 'app_knowledge') {
+        const isSpecific = parsed.section !== undefined
+        const sections = isSpecific ? [parsed.section] : Object.keys(parsed)
+        const slim = {
+          _compressed: true,
+          summary: `App knowledge retrieved: ${sections.length} section(s) [${sections.join(', ')}]. Full content available for evaluation phase.`,
+        }
+        return new ToolMessage({
+          content: JSON.stringify(slim),
+          tool_call_id: msg.tool_call_id,
+          name: msg.name,
+        })
+      }
+
+      if (msg.name === 'fetch_collections') {
+        const slim = {
+          _compressed: true,
+          collections: (parsed.collections ?? []).map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            photoCount: (c.samplePhotoIds ?? []).length,
+          })),
+          series: (parsed.series ?? []).map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            photoCount: (s.samplePhotoIds ?? []).length,
+          })),
+        }
+        return new ToolMessage({
+          content: JSON.stringify(slim),
+          tool_call_id: msg.tool_call_id,
+          name: msg.name,
+        })
+      }
+
+      // ── Photo tools: keep only id + filename ──
 
       // Shape 1: raw array (get_photo_info)
       if (Array.isArray(parsed)) {
@@ -1096,16 +1171,61 @@ export default class LangchainAgentService {
     }
   }
 
-  private static compressMessagesForPhase2(messages: any[], userContext: string = ''): any[] {
-    return messages.map((msg, idx) => {
+  private static buildPhase2Messages(
+    messages: any[],
+    userContext: string = '',
+    intermediateSteps: IntermediateStep[] = []
+  ): any[] {
+    // Build a queue of full outputs per restorable tool so we can replace
+    // the compressed ToolMessages inline instead of duplicating data.
+    const RESTORABLE_TOOLS = new Set(['overall_catalog_view', 'app_knowledge', 'fetch_collections'])
+    const restoreQueues = new Map<string, string[]>()
+    for (const step of intermediateSteps) {
+      if (!RESTORABLE_TOOLS.has(step.tool)) continue
+      try {
+        const parsed = JSON.parse(step.output)
+        if (parsed.error) continue
+        if (!restoreQueues.has(step.tool)) restoreQueues.set(step.tool, [])
+        restoreQueues.get(step.tool)!.push(step.output)
+      } catch {
+        continue
+      }
+    }
+
+    const restoredCount = { n: 0 }
+    const result = messages.map((msg, idx) => {
       if (idx === 0 && msg instanceof SystemMessage) {
         const phase2Prompt = SYSTEM_PROMPT_BASE + PHASE2_ROLE_ADDENDUM
         const content = userContext ? `${phase2Prompt}\n\n${userContext}` : phase2Prompt
         return new SystemMessage(content)
       }
       if (!(msg instanceof ToolMessage)) return msg
+
+      // For restorable tools, inject the full output from intermediateSteps
+      // instead of the compressed version — Phase 2 needs the complete data.
+      if (msg.name && RESTORABLE_TOOLS.has(msg.name)) {
+        const queue = restoreQueues.get(msg.name)
+        if (queue && queue.length > 0) {
+          const fullOutput = queue.shift()!
+          restoredCount.n++
+          return new ToolMessage({
+            content: fullOutput,
+            tool_call_id: msg.tool_call_id,
+            name: msg.name,
+          })
+        }
+      }
+
       return LangchainAgentService.slimToolMessage(msg)
     })
+
+    if (restoredCount.n > 0) {
+      console.log(
+        `[Agent] 📋 Phase 2 messages: restored ${restoredCount.n} full tool output(s) inline`
+      )
+    }
+
+    return result
   }
 
   private static extractAllPhotoIdsGrouped(steps: IntermediateStep[]): PhotoIdGroup[] {
@@ -1146,6 +1266,18 @@ export default class LangchainAgentService {
           const validIds = ids.filter((id: any) => typeof id === 'number')
           if (validIds.length > 0) groups.push({ tool: step.tool, ids: validIds, stepIndex: i })
         }
+        continue
+      }
+
+      if (step.tool === 'fetch_collections') {
+        try {
+          const parsed = JSON.parse(step.output)
+          const ids = [
+            ...(parsed.collections ?? []).flatMap((c: any) => c.samplePhotoIds ?? []),
+            ...(parsed.series ?? []).flatMap((s: any) => s.samplePhotoIds ?? []),
+          ].filter((id: any) => typeof id === 'number')
+          if (ids.length > 0) groups.push({ tool: step.tool, ids, stepIndex: i })
+        } catch {}
         continue
       }
     }
