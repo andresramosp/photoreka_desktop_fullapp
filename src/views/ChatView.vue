@@ -871,14 +871,21 @@ const loadPendingChatPhotos = () => {
   const pending = sessionStorage.getItem("chat_context_photos");
   const pendingMessage = sessionStorage.getItem("chat_pending_message");
 
+  if (!pending && !pendingMessage) return;
+
+  // Always start a fresh conversation when arriving with pending content
+  chatStore.startNewConversation();
+  contextPhotos.value = [];
+  inputText.value = "";
+  perMessageSelections.value = {};
+  activeSuggestion.value = null;
+
   if (pending) {
     sessionStorage.removeItem("chat_context_photos");
     try {
       const photos: ContextPhoto[] = JSON.parse(pending);
       if (Array.isArray(photos) && photos.length > 0) {
-        const existingIds = new Set(contextPhotos.value.map((p) => p.id));
-        const newPhotos = photos.filter((p) => !existingIds.has(p.id));
-        contextPhotos.value.push(...newPhotos);
+        contextPhotos.value = photos;
       }
     } catch {
       // ignore parse errors
