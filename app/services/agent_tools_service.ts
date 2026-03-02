@@ -107,7 +107,7 @@ export const SearchAdvancedSchema = z.object({
     .string()
     .optional()
     .describe(
-      'Natural language description of the visual style to find. Focus on style, composition, mood, color palette, atmosphere. Always in english. Triggers an embedding-based semantic style search.'
+      'Natural language description of the visual style to find. Focus on style, composition, mood, color palette, atmosphere. **MUST ALWAYS BE IN ENGLISH ONLY.** Triggers an embedding-based semantic style search.'
     ),
   content_tags: z
     .array(z.string())
@@ -115,7 +115,7 @@ export const SearchAdvancedSchema = z.object({
     .max(3)
     .optional()
     .describe(
-      'Between 1 and 3 keywords describing concrete subjects, narrative elements, or specific content (e.g. ["dog", "running"]). Always in english. Triggers a tag-based content search.'
+      'Between 1 and 3 keywords describing concrete subjects, narrative elements, or specific content (e.g. ["dog", "running"]). **EACH KEYWORD MUST ALWAYS BE IN ENGLISH ONLY.** Triggers a tag-based content search.'
     ),
   filter: z
     .object({
@@ -227,7 +227,7 @@ export const CatalogSampleSchema = z.object({
     .array(z.string())
     .optional()
     .describe(
-      'Filter photos by genre before sampling. Accepted values: abstract, documentary, street, landscape, portrait. ' +
+      'Filter photos by genre before sampling. **Accepted values MUST ALWAYS BE IN ENGLISH ONLY:** abstract, documentary, street, landscape, portrait. ' +
         'E.g. ["street"] to sample only street photography evolution.'
     ),
 })
@@ -376,10 +376,10 @@ export const TOOL_DESCRIPTIONS = {
     "[BASIC_TOOLS] Get all the user's collections and series, each with their name, description, and up to 10 sample photo IDs. Use this when the user asks about their collections, series, albums, or organized groups of photos — for example 'what collections do I have?', 'show me my series', 'which albums exist?'. Returns two separate arrays: 'collections' (manually curated groups) and 'series' (ordered sequences/stories).",
 
   search_advanced:
-    '[PHOTO_SEARCH] **The primary search tool.** Combine multiple search strategies in a single call and merge their results with intersect (AND) or union (OR). You can specify any combination of: (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) filter — metadata/score/visual-aspect filtering, (4) similar_to — similarity to reference photos. All specified sub-searches run in parallel; their full ID sets are combined via the chosen operation; only the final result is sampled and returned with photo ID, filename, and genre. Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) with intersect. "moody portraits or landscapes" → style_query("dark moody") + filter(genre=[portrait,landscape]) with union.',
+    '[PHOTO_SEARCH] **The primary search tool.** Combine multiple search strategies in a single call and merge their results with intersect (AND) or union (OR). You can specify any combination of: (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) filter — metadata/score/visual-aspect filtering, (4) similar_to — similarity to reference photos. **ALL parameters MUST ALWAYS BE SPECIFIED IN ENGLISH ONLY** — style descriptions, keywords, and filter values must be in English. All specified sub-searches run in parallel; their full ID sets are combined via the chosen operation; only the final result is sampled and returned with photo ID, filename, and genre. Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) with intersect. "moody portraits or landscapes" → style_query("dark moody") + filter(genre=[portrait,landscape]) with union.',
 
   catalog_sample:
-    '[CATALOG_INSIGHT] **Temporal catalog sampling for broad exploration.** Divides the catalog timeline into equal time buckets and samples representative photos from each period. Returns structured data: an array of buckets, each with its date range and sampled photos. Use this for evolution questions, progress over time, or getting a representative cross-section of the catalog. Always pair with `overall_catalog_view` in parallel for holistic context. NEVER use this for targeted searches — use `search_advanced` instead. Optional filters: genre (e.g. ["street"] for street photography evolution), date_from/date_to, sort_within (pick best-scored photos per period instead of random). Examples: "How has my photography evolved?" → catalog_sample(buckets=6) + overall_catalog_view in parallel. "Street photography evolution" → catalog_sample(buckets=5, genre=["street"]) + overall_catalog_view in parallel.',
+    '[CATALOG_INSIGHT] **Temporal catalog sampling for broad exploration.** Divides the catalog timeline into equal time buckets and samples representative photos from each period. Returns structured data: an array of buckets, each with its date range and sampled photos. Use this for evolution questions, progress over time, or getting a representative cross-section of the catalog. Always pair with `overall_catalog_view` in parallel for holistic context. NEVER use this for targeted searches — use `search_advanced` instead. Optional filters: **genre values MUST ALWAYS BE IN ENGLISH ONLY** (e.g. ["street"] for street photography evolution), date_from/date_to, sort_within (pick best-scored photos per period instead of random). Examples: "How has my photography evolved?" → catalog_sample(buckets=6) + overall_catalog_view in parallel. "Street photography evolution" → catalog_sample(buckets=5, genre=["street"]) + overall_catalog_view in parallel.',
 
   overall_catalog_view:
     '[CATALOG_INSIGHT] Get a single combined report of the entire catalog: catalog patterns (recurring themes, subjects, narrative motifs), visual aspects distribution, and artistic scores statistics. Use this as the FIRST tool whenever the user asks for advice on improving their photography, critique of their catalog, identification of weak points or strengths, general feedback on their style, or any holistic question about their photographic practice. This tool replaces calling get_catalog_patterns + stats_visual_aspects + stats_artistic_scores individually — it returns all of that data in one shot.',
@@ -406,7 +406,7 @@ export default class AgentToolsService {
   createTools(
     userId: number,
     foundPhotoIds: number[],
-    provider: 'openai' | 'gemini' | 'deepseek' = 'openai'
+    provider: 'openai' | 'gemini' | 'deepseek' | 'xai' = 'openai'
   ) {
     const { photoManager, searchService } = this
 

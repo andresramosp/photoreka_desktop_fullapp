@@ -40,6 +40,11 @@ export type ModelName =
   | 'gemini-2.5-flash-lite'
   | 'gemini-3-flash-preview'
   | 'gemini-3-pro-preview'
+  | 'grok-4-fast-reasoning'
+  | 'grok-4-fast-non-reasoning'
+  | 'grok-4-1-fast-reasoning'
+  | 'grok-4-1-fast-non-reasoning'
+  | 'grok-3-mini'
 
 export const PRICES = {
   'gpt-4o': {
@@ -121,6 +126,34 @@ export const PRICES = {
     input_cache_miss: 2.0 / 1_000_000, // USD per input token
     input_cache_hit: 1.0 / 1_000_000, // USD per cached input token (estimate, not official)
     output: 12.0 / 1_000_000, // USD per output token
+  },
+  // grok-4-fast: $0.20 input · $0.50 output per million tokens
+  'grok-4-fast-reasoning': {
+    input_cache_miss: 0.2 / 1_000_000,
+    input_cache_hit: 0.05 / 1_000_000, // 25% of input (xAI standard)
+    output: 0.5 / 1_000_000,
+  },
+  'grok-4-fast-non-reasoning': {
+    input_cache_miss: 0.2 / 1_000_000,
+    input_cache_hit: 0.05 / 1_000_000,
+    output: 0.5 / 1_000_000,
+  },
+  // grok-4-1-fast: $0.20 input · $0.50 output per million tokens
+  'grok-4-1-fast-reasoning': {
+    input_cache_miss: 0.2 / 1_000_000,
+    input_cache_hit: 0.05 / 1_000_000,
+    output: 0.5 / 1_000_000,
+  },
+  'grok-4-1-fast-non-reasoning': {
+    input_cache_miss: 0.2 / 1_000_000,
+    input_cache_hit: 0.05 / 1_000_000,
+    output: 0.5 / 1_000_000,
+  },
+  // grok-3-mini: $0.30 input · $0.50 output per million tokens
+  'grok-3-mini': {
+    input_cache_miss: 0.3 / 1_000_000,
+    input_cache_hit: 0.075 / 1_000_000,
+    output: 0.5 / 1_000_000,
   },
 }
 

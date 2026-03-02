@@ -43,13 +43,14 @@ router
 
 // Invites routes (require authentication)
 const InvitesController = () => import('#controllers/invites_controller')
-router.group(() => {
-  router.post('/api/invites/generate', [InvitesController, 'generateInvite'])
-  router.get('/api/invites', [InvitesController, 'listInvites'])
-  router.post('/api/invites/send', [InvitesController, 'sendInvite'])
-  router.post('/api/invites/send-grant', [InvitesController, 'sendGrant'])
-})
-// .use(middleware.auth())
+router
+  .group(() => {
+    router.post('/api/invites/generate', [InvitesController, 'generateInvite'])
+    router.get('/api/invites', [InvitesController, 'listInvites'])
+    router.post('/api/invites/send', [InvitesController, 'sendInvite'])
+    router.post('/api/invites/send-grant', [InvitesController, 'sendGrant'])
+  })
+  .use(middleware.auth())
 
 router
   .group(() => {
@@ -277,5 +278,5 @@ router
   .use([
     middleware.auth(),
     middleware.readOnly(),
-    middleware.llmRateLimit({ perMinute: 3, perHour: 10, perDay: 15, keyPrefix: 'chat' }),
+    middleware.llmRateLimit({ perMinute: 3, perHour: 10, perDay: 10, keyPrefix: 'chat' }),
   ])

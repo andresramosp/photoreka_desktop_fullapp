@@ -15,11 +15,12 @@ export default class ChatController {
    *   message: string              — current user message
    *   conversationId?: number      — existing conversation ID (null = create new)
    *   contextPhotoIds?: number[]   — up to 10 photo IDs to attach as visual context
+   *   ephemeral?: boolean          — if true, no conversation or history is created (one-time calls)
    * }
    *
    * Response:
    * {
-   *   conversationId: number       — conversation ID (new or existing)
+   *   conversationId: number       — conversation ID (new or existing; omitted for ephemeral)
    *   output: string               — agent reply
    *   toolsUsed: string[]          — tools invoked in this turn
    *   photoGroups: [...]           — grouped photo results
@@ -29,11 +30,14 @@ export default class ChatController {
     try {
       const user = auth.use('api').user!
 
-      const { message, conversationId, contextPhotoIds } = request.only([
+      const { message, conversationId, contextPhotoIds, ephemeral } = request.only([
         'message',
         'conversationId',
         'contextPhotoIds',
+        'ephemeral',
       ])
+
+      const isEphemeral = ephemeral === true
 
       if (!message || typeof message !== 'string' || message.trim().length === 0) {
         return response.badRequest({
@@ -58,10 +62,12 @@ export default class ChatController {
           .slice(0, 10)
       }
 
-      // Resolve or create conversation
+      // Resolve or create conversation (skipped for ephemeral calls)
       let resolvedConversationId: number
 
-      if (conversationId) {
+      if (isEphemeral) {
+        resolvedConversationId = 0 // no conversation — agent will receive empty history
+      } else if (conversationId) {
         const conv = await this.conversationService.verifyOwnership(conversationId, user.id)
         if (!conv) {
           return response.notFound({ message: 'Conversation not found.' })
@@ -72,12 +78,14 @@ export default class ChatController {
         resolvedConversationId = conv.id
       }
 
-      // Persist user message in DB
-      await this.conversationService.addUserMessage(
-        resolvedConversationId,
-        message.trim(),
-        validatedPhotoIds
-      )
+      // Persist user message in DB (skipped for ephemeral calls)
+      if (!isEphemeral) {
+        await this.conversationService.addUserMessage(
+          resolvedConversationId,
+          message.trim(),
+          validatedPhotoIds
+        )
+      }
 
       // Run the agent
       const agentService = new LangchainAgentService()
@@ -88,26 +96,28 @@ export default class ChatController {
         validatedPhotoIds
       )
 
-      // Persist assistant message in DB (with cost & metadata)
-      await this.conversationService.addAssistantMessage(
-        resolvedConversationId,
-        result.output,
-        result.photoGroups,
-        false,
-        result.cost?.total?.costEur,
-        {
-          toolsUsed: result.toolsUsed,
-          totalIterations: result.totalIterations,
-          costEur: result.cost?.total?.costEur,
-          tokens: result.cost?.total
-            ? {
-                input: result.cost.total.inputTokens,
-                cached: result.cost.total.cachedTokens,
-                output: result.cost.total.outputTokens,
-              }
-            : undefined,
-        }
-      )
+      // Persist assistant message in DB (skipped for ephemeral calls)
+      if (!isEphemeral) {
+        await this.conversationService.addAssistantMessage(
+          resolvedConversationId,
+          result.output,
+          result.photoGroups,
+          false,
+          result.cost?.total?.costEur,
+          {
+            toolsUsed: result.toolsUsed,
+            totalIterations: result.totalIterations,
+            costEur: result.cost?.total?.costEur,
+            tokens: result.cost?.total
+              ? {
+                  input: result.cost.total.inputTokens,
+                  cached: result.cost.total.cachedTokens,
+                  output: result.cost.total.outputTokens,
+                }
+              : undefined,
+          }
+        )
+      }
 
       // Strip photoDescriptions before sending to frontend (LLM-only field)
       const photoGroupsForFrontend = result.photoGroups.map(
@@ -115,7 +125,7 @@ export default class ChatController {
       )
 
       return response.ok({
-        conversationId: resolvedConversationId,
+        ...(isEphemeral ? {} : { conversationId: resolvedConversationId }),
         ...result,
         photoGroups: photoGroupsForFrontend,
       })

@@ -4,7 +4,8 @@ import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
 import { withCache } from '../decorators/withCache.js'
 import withCost from '../decorators/withCost.js'
 import {
-  MESSAGE_QUERY_CURATORIAL_CLASSIFICATION,
+  MESSAGE_QUERY_CLASSIFICATION,
+  // MESSAGE_QUERY_CURATORIAL_CLASSIFICATION,
   MESSAGE_QUERY_METADATA,
   MESSAGE_QUERY_NO_PREFIX_AND_TRANSLATION,
   MESSAGE_QUERY_STRUCTURE,
@@ -27,19 +28,39 @@ export default class QueryService {
     this.analyzerService = new AnalyzerService()
   }
 
-  public async classifyCuratorialQuery(query: string): Promise<boolean> {
+  public async classifyQuery(
+    query: string
+  ): Promise<{ has_photo_intent: boolean; needs_advanced_reasoning_phase1: boolean }> {
+    const fallback = { has_photo_intent: false, needs_advanced_reasoning_phase1: false }
     try {
       const { result } = await this.modelsService.getGeminiResponse(
-        MESSAGE_QUERY_CURATORIAL_CLASSIFICATION,
+        MESSAGE_QUERY_CLASSIFICATION,
         JSON.stringify({ query }),
         'gemini-2.5-flash-lite'
       )
-      return result?.is_curatorial === true
+      return {
+        has_photo_intent: result?.has_photo_intent === true,
+        needs_advanced_reasoning_phase1: result?.needs_advanced_reasoning_phase1 === true,
+      }
     } catch (error) {
-      console.error('[QueryService] classifyCuratorialQuery error:', error)
-      return false
+      console.error('[QueryService] classifyQuery error:', error)
+      return fallback
     }
   }
+
+  // public async classifyCuratorialQuery(query: string): Promise<boolean> {
+  //   try {
+  //     const { result } = await this.modelsService.getGeminiResponse(
+  //       MESSAGE_QUERY_CURATORIAL_CLASSIFICATION,
+  //       JSON.stringify({ query }),
+  //       'gemini-2.5-flash-lite'
+  //     )
+  //     return result?.is_curatorial === true
+  //   } catch (error) {
+  //     console.error('[QueryService] classifyCuratorialQuery error:', error)
+  //     return false
+  //   }
+  // }
 
   public async structureQuery(query: string, searchMode: SearchMode, skipStructureQuery = false) {
     // Agentic flow: query is already clean English — skip LLM entirely.

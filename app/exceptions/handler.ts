@@ -23,6 +23,18 @@ export default class HttpExceptionHandler extends ExceptionHandler {
    * @note You should not attempt to send a response from this method.
    */
   async report(error: unknown, ctx: HttpContext) {
+    const err = error as any
+    // Always log the full cause chain so module-load and unexpected errors
+    // leave a readable trace regardless of environment or AdonisJS error formatting.
+    const isExpected = err?.status && err.status < 500
+    if (!isExpected) {
+      console.error(
+        `[ExceptionHandler] ${ctx.request.method()} ${ctx.request.url()} → ${err?.status ?? '???'} ${err?.code ?? ''}`
+      )
+      console.error(`[ExceptionHandler] Message: ${err?.message ?? String(error)}`)
+      if (err?.cause) console.error(`[ExceptionHandler] Cause:`, err.cause)
+      if (err?.stack) console.error(`[ExceptionHandler] Stack:\n${err.stack}`)
+    }
     return super.report(error, ctx)
   }
 }

@@ -15,6 +15,7 @@ import User from '#models/user'
 import Photo from '#models/photo'
 import PhotoImageService from './photo_image_service.js'
 import ConversationService from './conversation_service.js'
+import QueryService from './query_service.js'
 import {
   _debug,
   compactPreview,
@@ -30,7 +31,7 @@ const SYSTEM_PROMPT_BASE = `You are Photoreka's intelligent photo assistant.
 Help photographers explore and analyze their library with insight and wit.
 
 ## Behavior
-- **Language:** Always match the user's language. Use English only for internal tool calls.
+- **Language:** Always match the user's language. Use English ALWAYS for internal tool calls.
 - **Scope:** Strictly photography and Photoreka features. Polite refusal for outside topics.
 - **Stealth:** Never mention tool names or internal IDs to the user.`
 
@@ -100,7 +101,7 @@ Photos may arrive with thumbnails (for visual evaluation) or text-only descripti
 - **Conciseness:** Max 200 words. No fluff, no raw JSON. Summarize insights unless explicitly asked for details.
 - **Paragraphs:** Split the \`text\` field into short, distinct paragraphs (2–4 sentences each). Never a single continuous block. Each paragraph = one idea: overall impression → highlights → weakness/suggestion.
 - **Proactivity:** Suggest 1 concrete next step the user can take within the app.
-- **Honesty:** Be honest, constructive, and insightful — even if that means tough feedback.
+- **Honesty:** Be honest, constructive, and insightful — even if that means tough feedback. Do not flatter the user gratuitously.
 - **Formatting:** Use **bold** for filenames, key concepts, and any term worth emphasizing. Use it sparingly — only for genuinely important words, not decoration.
 - Use filenames for reference in your text, never raw IDs or tool names.
 
@@ -200,7 +201,7 @@ export type AgentChatResult = {
 }
 
 type ModelName = string
-type ModelProvider = 'openai' | 'gemini' | 'deepseek'
+type ModelProvider = 'openai' | 'gemini' | 'deepseek' | 'xai'
 
 type PhotoIdGroup = {
   tool: string
@@ -240,8 +241,21 @@ const IMAGE_ELIGIBLE_TOOLS = new Set(['search_advanced', 'get_photo_info', 'fetc
 
 const NON_PHOTO_TOOLS = new Set(['overall_catalog_view', 'app_knowledge', 'catalog_sample', 'done'])
 
-const DEFAULT_MODEL_PHASE1: ModelName = 'gemini-3-flash-preview'
-const DEFAULT_MODEL_PHASE2: ModelName = 'gemini-3-flash-preview'
+/**
+ * Phase 1 model selection — driven by `needs_advanced_reasoning_phase1`.
+ * true  → reasoning-capable model for complex tool orchestration / curatorial logic.
+ * false → fast lightweight model for simple retrieval.
+ */
+const MODEL_PHASE1_REASONING: ModelName = 'gemini-3-flash-preview'
+const MODEL_PHASE1_FAST: ModelName = 'deepseek-chat'
+
+/**
+ * Phase 2 model selection — driven by `has_photo_intent`.
+ * true  → reasoning-capable model; will receive thumbnails + rich descriptions.
+ * false → fast model; no visual content passed.
+ */
+const MODEL_PHASE2_REASONING: ModelName = 'gemini-3-flash-preview'
+const MODEL_PHASE2_FAST: ModelName = 'gemini-2.5-flash'
 
 // ══════════════════════════════════════════════════════════════
 // SERVICE
@@ -251,11 +265,13 @@ export default class LangchainAgentService {
   private photoManager: PhotoManager
   private searchService: SearchTextService
   private toolsService: AgentToolsService
+  private queryService: QueryService
 
   constructor() {
     this.photoManager = new PhotoManager()
     this.searchService = new SearchTextService()
     this.toolsService = new AgentToolsService(this.photoManager, this.searchService)
+    this.queryService = new QueryService()
   }
 
   // ── Public API ──────────────────────────────────────────────
@@ -282,11 +298,19 @@ export default class LangchainAgentService {
     contextPhotoIds: number[]
   ): Promise<ChatSession> {
     const convService = new ConversationService()
-    const history = await convService.getLLMContext(conversationId)
+    const [history, classification] = await Promise.all([
+      convService.getLLMContext(conversationId),
+      this.queryService.classifyQuery(message),
+    ])
+    const { has_photo_intent, needs_advanced_reasoning_phase1 } = classification
+    const modelName = needs_advanced_reasoning_phase1 ? MODEL_PHASE1_REASONING : MODEL_PHASE1_FAST
+    const modelNamePhase2 = has_photo_intent ? MODEL_PHASE2_REASONING : MODEL_PHASE2_FAST
+    console.log(
+      `[Agent] 🔍 Query classification: reasoning=${needs_advanced_reasoning_phase1} photo=${has_photo_intent}` +
+        ` → Phase1=${modelName} | Phase2=${modelNamePhase2}`
+    )
     const foundPhotoIds: number[] = []
-    const modelName = DEFAULT_MODEL_PHASE1
     const provider: ModelProvider = LangchainAgentService.getProviderFromModel(modelName)
-    const modelNamePhase2 = DEFAULT_MODEL_PHASE2
     const providerPhase2: ModelProvider =
       LangchainAgentService.getProviderFromModel(modelNamePhase2)
     console.log(
@@ -299,10 +323,13 @@ export default class LangchainAgentService {
     const tools = this.toolsService.createTools(userId, foundPhotoIds, provider)
     const doneTool = this.createDoneTool()
     const allTools = [...tools, doneTool]
-    const toolChoice = provider === 'deepseek' ? 'auto' : 'any'
+    // 'any' = Gemini, 'required' = OpenAI/xAI (forces tool call, prevents phantom text), 'auto' = DeepSeek
+    const toolChoice = provider === 'deepseek' ? 'auto' : provider === 'xai' ? 'required' : 'any'
+    // Phase 1 only emits tool calls — cap output tokens to avoid paying for phantom text.
+    const PHASE1_MAX_OUTPUT_TOKENS = 500
     const modelWithTools = LangchainAgentService.createChatModel(
       modelName,
-      undefined,
+      PHASE1_MAX_OUTPUT_TOKENS,
       'low'
     ).bindTools(allTools, { tool_choice: toolChoice })
     const toolMap = Object.fromEntries(allTools.map((t) => [t.name, t]))
@@ -708,10 +735,11 @@ export default class LangchainAgentService {
         if (provider === 'deepseek') continue
 
         try {
-          if (provider === 'openai') {
+          if (provider === 'openai' || provider === 'xai') {
+            // OpenAI and xAI both accept image_url with a direct URL
             const url = photo.thumbnailUrl
             if (url) {
-              parts.push({ type: 'image_url', image_url: { url } })
+              parts.push({ type: 'image_url', image_url: { url, detail: 'low' } })
               count++
             }
           } else {
@@ -958,6 +986,7 @@ export default class LangchainAgentService {
   private static getProviderFromModel(model: ModelName): ModelProvider {
     if (model.startsWith('gemini')) return 'gemini'
     if (model.startsWith('deepseek')) return 'deepseek'
+    if (model.startsWith('grok')) return 'xai'
     return 'openai'
   }
 
@@ -999,6 +1028,16 @@ export default class LangchainAgentService {
         maxTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
         configuration: {
           baseURL: process.env.DEEPSEEK_BASEURL ?? 'https://api.deepseek.com',
+        },
+      })
+    }
+    if (provider === 'xai') {
+      return new ChatOpenAI({
+        apiKey: process.env.XAI_API_KEY,
+        model,
+        maxTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
+        configuration: {
+          baseURL: 'https://api.x.ai/v1',
         },
       })
     }

@@ -367,25 +367,73 @@ Always returns a JSON, and only JSON, in the output format.
 
 `
 
-export const MESSAGE_QUERY_CURATORIAL_CLASSIFICATION = `
-You are a classifier for a photo assistant chatbot. Your task is to determine whether a user message is a "curatorial" query.
+export const MESSAGE_QUERY_CLASSIFICATION = `
+You are a routing classifier for a photo assistant chatbot.
 
-A query is CURATORIAL (return true) if and only if it meets BOTH of these conditions:
-1. It asks for artistic or aesthetic evaluation, judgment, or curation — for example: critiquing photos, evaluating a catalog, advice for photo contests or awards, ranking or sequencing photos under an aesthetic criterion, identifying strengths or weaknesses of a set of photos, selecting the best images for a portfolio, or any task that clearly requires artistic sensibility.
-2. It ONLY asks for that. It does NOT mix the curatorial request with other operations such as searching for specific photos by content, filtering by metadata, listing or fetching collections, or any other data-retrieval task.
+Analyze the user query and return two independent boolean flags.
+Each flag controls which AI model is selected for a specific processing phase — so precision matters.
 
-If the query combines a curatorial task with a retrieval or search task, it is NOT curatorial — return false.
+Return ONLY this JSON object:
+{
+  "has_photo_intent": true | false,
+  "needs_advanced_reasoning_phase1": true | false
+}
 
-Return ONLY a JSON object with a single boolean field:
-{ "is_curatorial": true } or { "is_curatorial": false }
+---
 
-#### Examples:
-{ "query": "What are the weakest photos in my catalog?" } → { "is_curatorial": true }
-{ "query": "Rank my photos aesthetically and tell me which is best" } → { "is_curatorial": true }
-{ "query": "Which photos would work best for a photography award?" } → { "is_curatorial": true }
-{ "query": "Give me feedback on my portfolio" } → { "is_curatorial": true }
-{ "query": "Find my photos from last summer and tell me which is best" } → { "is_curatorial": false }
-{ "query": "Show me all photos with people" } → { "is_curatorial": false }
-{ "query": "Search for street photos and critique them" } → { "is_curatorial": false }
-{ "query": "How many photos do I have?" } → { "is_curatorial": false }
+## has_photo_intent
+Controls the Phase 2 model (final answer generation).
+
+true  → a vision-capable model is used; it will receive photo thumbnails and rich descriptions.
+        Set this when the user expects actual photos to be shown, selected, ranked, compared, or visually analyzed.
+
+false → a text-only model is used; no visual content will be passed.
+        Set this for purely informational, statistical, or app-functionality questions
+        where the answer contains no photo results.
+
+## needs_advanced_reasoning_phase1
+Controls the Phase 1 model (tool orchestration / data gathering).
+
+true  → a reasoning-capable model is used; it can handle multi-step logic and abstract interpretation.
+        Set this when fulfilling the request requires combining multiple criteria, implicit logic,
+        comparative or curatorial reasoning, similarity searches, temporal evolution analysis,
+        portfolio evaluation, or any non-trivial tool orchestration.
+
+false → a fast, lightweight model is used.
+        Set this for simple retrieval: single phrase search, single-parameter filters, basic listings,
+        counting, direct metadata queries, or straightforward app questions.
+
+---
+
+Examples:
+
+"Show me my street photos"
+→ { "has_photo_intent": true, "needs_advanced_reasoning_phase1": false }
+
+"Find photos that look award-worthy but have low originality"
+→ { "has_photo_intent": true, "needs_advanced_reasoning_phase1": true }
+
+"Which of these two photos is stronger and why?"
+→ { "has_photo_intent": true, "needs_advanced_reasoning_phase1": true }
+
+"How many photos do I have?"
+→ { "has_photo_intent": false, "needs_advanced_reasoning_phase1": false }
+
+"How has my photography evolved over time?"
+→ { "has_photo_intent": true, "needs_advanced_reasoning_phase1": true }
+
+"What does the originality score mean?"
+→ { "has_photo_intent": false, "needs_advanced_reasoning_phase1": false }
+
+"Select the best 5 portraits for my portfolio"
+→ { "has_photo_intent": true, "needs_advanced_reasoning_phase1": true }
+
+"Show me photos taken in Paris"
+→ { "has_photo_intent": true, "needs_advanced_reasoning_phase1": false }
+
+"Show me photos with dark mood and ghostly figures"
+→ { "has_photo_intent": true, "needs_advanced_reasoning_phase1": false }
+
+If uncertain, default both values to false.
+Do not include explanations.
 `
