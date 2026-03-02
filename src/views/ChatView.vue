@@ -869,16 +869,26 @@ const checkMobile = () => {
 
 const loadPendingChatPhotos = () => {
   const pending = sessionStorage.getItem("chat_context_photos");
-  if (!pending) return;
-  sessionStorage.removeItem("chat_context_photos");
-  try {
-    const photos: ContextPhoto[] = JSON.parse(pending);
-    if (!Array.isArray(photos) || photos.length === 0) return;
-    const existingIds = new Set(contextPhotos.value.map((p) => p.id));
-    const newPhotos = photos.filter((p) => !existingIds.has(p.id));
-    contextPhotos.value.push(...newPhotos);
-  } catch {
-    // ignore parse errors
+  const pendingMessage = sessionStorage.getItem("chat_pending_message");
+
+  if (pending) {
+    sessionStorage.removeItem("chat_context_photos");
+    try {
+      const photos: ContextPhoto[] = JSON.parse(pending);
+      if (Array.isArray(photos) && photos.length > 0) {
+        const existingIds = new Set(contextPhotos.value.map((p) => p.id));
+        const newPhotos = photos.filter((p) => !existingIds.has(p.id));
+        contextPhotos.value.push(...newPhotos);
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }
+
+  if (pendingMessage) {
+    sessionStorage.removeItem("chat_pending_message");
+    inputText.value = pendingMessage;
+    nextTick(() => sendMessage());
   }
 };
 

@@ -119,6 +119,18 @@
         >
           Explore Your Photos
         </n-button>
+        <n-button
+          secondary
+          type="info"
+          size="large"
+          class="chatlab-btn"
+          @click="handleAskChatlab"
+        >
+          <template #icon>
+            <n-icon><RobotOutlined /></n-icon>
+          </template>
+          Ask Chatlab
+        </n-button>
       </div>
     </div>
   </n-modal>
@@ -138,6 +150,8 @@ import {
   CheckmarkCircleOutline,
   CloseOutline as DismissRegular,
 } from "@vicons/ionicons5";
+import { RobotOutlined } from "@vicons/antd";
+
 import { Trophy20Regular } from "@vicons/fluent";
 import PhotoCardHub from "../photoCards/PhotoCardHub.vue";
 import ConfettiEffect from "../ConfettiEffect.vue";
@@ -194,12 +208,47 @@ watch(
 function handleClose() {
   showModal.value = false;
   showConfettiEffect.value = false;
+  selectedPhotoForInfo.value = null;
+  showPhotoInfoDialog.value = false;
   emit("close");
 }
 
 function handleExplorePhotos() {
   handleClose();
   router.push("/workspace");
+}
+
+async function handleAskChatlab() {
+  const photos = topPhotos.value.map((h) => ({
+    id: String(h.photo.id),
+    title: h.photo.name || h.photo.originalFileName || String(h.photo.id),
+    name: h.photo.name || h.photo.originalFileName || String(h.photo.id),
+    url: h.photo.url || h.photo.thumbnailUrl || "",
+    thumbnailUrl: h.photo.thumbnailUrl || h.photo.url || "",
+    rating: 0,
+    isUploading: false,
+    file: null,
+    needProcess: false,
+    isDuplicate: false,
+    originalFileName: h.photo.originalFileName || h.photo.name || "",
+    isCheckingDuplicates: false,
+    status: h.photo.status || "processed",
+  }));
+
+  sessionStorage.setItem("chat_context_photos", JSON.stringify(photos));
+  sessionStorage.setItem(
+    "chat_pending_message",
+    "I just added these photos to my catalog. What do you suggest I do with them? Please give me actionable, specific tips based on their characteristics.",
+  );
+
+  // Cierra el modal completamente
+  handleClose();
+
+  // Espera a que el cierre se procese antes de navegar
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+
+  // Navega al chat
+  router.push("/chat-lab");
 }
 
 async function handleShowPhotoInfo(photo) {
@@ -912,11 +961,17 @@ const topPhotos = computed(() => {
 .summary-footer {
   display: flex;
   justify-content: center;
+  gap: 12px;
   padding-top: 4px;
+  flex-wrap: wrap;
 }
 
 .explore-btn {
-  min-width: 200px;
+  min-width: 180px;
+  font-weight: 600;
+}
+
+.chatlab-btn {
   font-weight: 600;
 }
 
