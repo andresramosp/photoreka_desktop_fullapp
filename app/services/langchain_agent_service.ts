@@ -1115,7 +1115,7 @@ export default class LangchainAgentService {
 
         parts.push({
           type: 'text',
-          text: `[Photo ID ${photo.id} — ${photo.originalFileName}]\n${JSON.stringify(photoDataForAgentPreview(photo))}`, // compact: no whitespace to save tokens
+          text: `[${photo.originalFileName} — id:${photo.id}]\n${JSON.stringify(photoDataForAgentPreview(photo))}`, // compact: no whitespace to save tokens
         })
 
         // DeepSeek and Qwen Phase 1 models do not support vision — skip image parts entirely
@@ -1163,7 +1163,7 @@ export default class LangchainAgentService {
 
         parts.push({
           type: 'text',
-          text: `[Photo ID ${photo.id} — ${photo.originalFileName} (text-only)]\n${JSON.stringify(formatter(photo))}`, // compact: no whitespace to save tokens
+          text: `[${photo.originalFileName} — id:${photo.id} (text-only)]\n${JSON.stringify(formatter(photo))}`, // compact: no whitespace to save tokens
         })
       }
       return parts
@@ -1291,7 +1291,8 @@ export default class LangchainAgentService {
     contextPhotoIds: number[]
   ): Promise<AgentChatResult> {
     const rawOutput = structured.text ?? ''
-    const output = rawOutput.replace(/\[(?:Shown photos|INTERNAL_CONTEXT)[^\]]*\]\s*/gi, '').trim()
+    const cleaned = rawOutput.replace(/\[(?:Shown photos|INTERNAL_CONTEXT)[^\]]*\]\s*/gi, '').trim()
+    const output = await this.replacePhotoIdsWithFilenames(cleaned, session.userId)
 
     const photoGroups: PhotoGroup[] = (structured.photo_groups ?? []).map((g) => ({
       label: g.label,
@@ -1347,6 +1348,38 @@ export default class LangchainAgentService {
       totalIterations: session.totalIter,
       cost,
     }
+  }
+
+  /**
+   * Post-processing pass: scan the output text for bare numeric IDs, check each
+   * against the user's photo catalog, and replace matched IDs with the original
+   * filename so no raw ID leaks through to the frontend.
+   */
+  private async replacePhotoIdsWithFilenames(text: string, userId: number): Promise<string> {
+    // Match standalone numbers (word-boundary delimited, at least 3 digits)
+    const numberPattern = /\b(\d{3,})\b/g
+    const matches = [...text.matchAll(numberPattern)]
+    if (matches.length === 0) return text
+
+    const candidateIds = [...new Set(matches.map((m) => Number(m[1])))]
+    const photos = await Photo.query()
+      .whereIn('id', candidateIds)
+      .where('user_id', userId)
+      .select(['id', 'original_file_name'])
+
+    if (photos.length === 0) return text
+
+    const idToFilename = new Map<number, string>(photos.map((p) => [p.id, p.originalFileName]))
+    const replaced = text.replace(/\b(\d{3,})\b/g, (match) => {
+      const id = Number(match)
+      const filename = idToFilename.get(id)
+      if (filename) {
+        console.log(`[Agent] 🔁 Post-process: replaced ID ${id} → "${filename}" in output text`)
+        return `[[photo:${id}|${filename}]]`
+      }
+      return match
+    })
+    return replaced
   }
 
   /**
