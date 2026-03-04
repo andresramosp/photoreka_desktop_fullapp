@@ -406,7 +406,7 @@ export default class AgentToolsService {
   createTools(
     userId: number,
     foundPhotoIds: number[],
-    provider: 'openai' | 'gemini' | 'deepseek' | 'xai' = 'openai'
+    provider: 'openai' | 'gemini' | 'deepseek' | 'xai' | 'qwen' = 'openai'
   ) {
     const { photoManager, searchService } = this
 

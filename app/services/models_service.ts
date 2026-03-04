@@ -35,6 +35,11 @@ export type ModelName =
   | 'deepseek-chat'
   | 'deepseek-reasoner'
   | 'qwen-vl-max'
+  | 'qwen-max-latest'
+  | 'qwen-plus-latest'
+  | 'qwen-turbo-latest'
+  | 'qwen3.5-flash'
+  | 'qwen-flash'
   // | 'gemini-2.0-flash'
   | 'gemini-2.5-flash'
   | 'gemini-2.5-flash-lite'
@@ -97,11 +102,15 @@ export const PRICES = {
     input_cache_hit: 0.055 / 1_000_000,
     output: 2.19 / 1_000_000, // Estimated ~5.2x output multiplier
   },
-  'qwen-vl-max': {
-    input_cache_miss: 1.6 / 1_000_000,
-    input_cache_hit: 0.2 / 1_000_000,
-    output: 6.4 / 1_000_000,
+
+  // qwen3.5-flash: $0.1 input · $0.4 output per million tokens (newest flash, Qwen 3.5 gen)
+  'qwen3.5-flash': {
+    input_cache_miss: 0.1 / 1_000_000,
+    input_cache_hit: 0.025 / 1_000_000,
+    output: 0.4 / 1_000_000,
   },
+  // qwen-flash: $0.05 input · $0.4 output per million tokens (Qwen 3 gen, cheapest)
+
   // 'gemini-2.0-flash': {
   //   input_cache_miss: 0.1 / 1_000_000,
   //   input_cache_hit: 0.05 / 1_000_000,
@@ -121,6 +130,11 @@ export const PRICES = {
     input_cache_miss: 0.5 / 1_000_000, // USD per input token
     input_cache_hit: 0.25 / 1_000_000, // USD per cached input token (estimate, not official)
     output: 3.0 / 1_000_000, // USD per output token
+  },
+  'gemini-3.1-flash-lite-preview': {
+    input_cache_miss: 0.25 / 1_000_000, // USD per input token
+    input_cache_hit: 0.25 / 1_000_000, // USD per cached input token (estimate, not official)
+    output: 1.5 / 1_000_000, // USD per output token
   },
   'gemini-3-pro-preview': {
     input_cache_miss: 2.0 / 1_000_000, // USD per input token

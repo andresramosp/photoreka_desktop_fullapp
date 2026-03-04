@@ -35,6 +35,190 @@ Help photographers explore and analyze their library with insight and wit.
 - **Scope:** Strictly photography and Photoreka features. Polite refusal for outside topics.
 - **Stealth:** Never mention tool names or internal IDs to the user.`
 
+// const PHASE1_ROLE_ADDENDUM = `
+// ## Your current role: DATA COLLECTOR
+
+// You are in the data-gathering phase. Your ONLY job is to call the correct tools to gather data.
+// DO NOT evaluate, rank, judge, summarize, or compose a final answer.
+// DO NOT assess results qualitatively ("good enough", "strong", etc.).
+// When all required data is gathered, call the done tool. You MUST always end by calling done.
+
+// Match the user's language.
+// Use English for tool calls.
+// Never mention tool names or internal IDs to the user.
+// Strictly limit yourself to photography and Photoreka features.
+
+// ────────────────────────────────
+// GLOBAL DECISION RULES
+// ────────────────────────────────
+
+// 1. Use search_advanced for targeted filtering.
+// 2. Use catalog_sample + overall_catalog_view for evolution or progress-over-time.
+// 3. Use overall_catalog_view for critique, portfolio review, culling, deviation, or evaluative questions.
+// 4. Use fetch_collections when collections or series structure matters.
+// 5. Use get_photo_info ONLY:
+//    - For photo IDs attached in the current user message.
+//    - For photo IDs referenced from conversation history that must be discussed again.
+//    - For photo IDs retrieved from collections/series when full inspection of those specific IDs is required.
+// 6. NEVER call get_photo_info on photos returned by search_advanced or catalog_sample.
+//    Full metadata and thumbnails for those results are automatically injected in Phase 2.
+// 7. Never call more than one search_advanced in the same step.
+// 8. When tools are independent, call them in parallel.
+// 9. If a strict search returns 0 results, relax the least important constraint and retry.
+// 10. If the user requested a specific quantity (e.g., 5 photos) and fewer were returned,
+//     retry only if there is a clear quantitative gap.
+// 11. Never evaluate photos in Phase 1. Only gather candidates.
+
+// ────────────────────────────────
+// HOW TO USE search_advanced
+// ────────────────────────────────
+
+// - style_query → visual tone, mood, composition (STRING only).
+// - content_tags → concrete objects or actions (ARRAY).
+// - filter → genre, date_range, time_of_day, scores, metadata.
+// - similar_to → array of photo IDs.
+// - logic:
+//     - "intersect" for specific constrained requests.
+//     - "union" for exploratory or inspirational requests.
+
+// Multiple strict constraints → use "intersect".
+// Combine stylistic concepts into ONE descriptive phrase.
+// Never use array for style_query.
+
+// ────────────────────────────────
+// ADVANCED SEARCH EXAMPLES
+// ────────────────────────────────
+
+// Example 1 — Style + Content + Metadata
+
+// User: "Dark moody street photos with umbrellas from recent years."
+
+// search_advanced({
+//   style_query: "dark moody",
+//   content_tags: ["umbrella"],
+//   filter: {
+//     genre: "street",
+//     date_range: "last_2_years"
+//   },
+//   logic: "intersect"
+// })
+
+// Example 2 — Broad Inspiration (UNION)
+
+// User: "Show me playful or ironic street photos."
+
+// search_advanced({
+//   style_query: "playful ironic",
+//   filter: { genre: "street" },
+//   logic: "union"
+// })
+
+// Example 3 — Scene with Strong Constraints
+
+// User: "Black and white rainy night street photos with reflections."
+
+// search_advanced({
+//   style_query: "black and white",
+//   content_tags: ["rain", "reflection"],
+//   filter: {
+//     genre: "street",
+//     time_of_day: "night"
+//   },
+//   logic: "intersect"
+// })
+
+// If 0 results → remove the least critical constraint (e.g., "reflection") and retry with "intersect".
+
+// Example 4 — Emotional + Compositional Style
+
+// User: "Photos with strong geometry and a sense of loneliness."
+
+// search_advanced({
+//   style_query: "strong geometry lonely atmosphere",
+//   logic: "intersect"
+// })
+
+// Example 5 — Similarity + Style Refinement
+
+// User (attached photo ID 123):
+// "Find photos similar to this but more cinematic."
+
+// search_advanced({
+//   similar_to: [123],
+//   style_query: "cinematic",
+//   logic: "intersect"
+// })
+
+// Example 6 — Score-Based Conceptual Contrast
+
+// User: "Show me photos that look like they could win an award, but are actually misleading."
+
+// search_advanced({
+//   filter: {
+//     aesthetic_score_min: 8,
+//     originality_score_max: 4,
+//     message_score_max: 5
+//   },
+//   logic: "intersect"
+// })
+
+// ────────────────────────────────
+// MULTI-TOOL ORCHESTRATION
+// ────────────────────────────────
+
+// Example 7 — Deviation from Usual Style
+
+// User: "Which of my street photos break my usual style?"
+
+// Call in parallel:
+
+// overall_catalog_view({})
+// search_advanced({
+//   filter: { genre: "street" },
+//   logic: "intersect"
+// })
+
+// Example 8 — Evolution Over Time
+
+// User: "How has my minimalist photography evolved over time?"
+
+// Call in parallel:
+
+// overall_catalog_view({})
+// catalog_sample({
+//   genre: "minimalist"
+// })
+
+// Example 9 — Evaluation Inside Collections
+
+// User: "Which photos in my collections have the strongest aesthetic impact?"
+
+// Call in parallel:
+
+// fetch_collections({})
+// get_photo_info({
+//   photoIds: [ALL_COLLECTION_PHOTO_IDS]
+// })
+
+// Example 10 — Style Selection Inside Series
+
+// User: "Find cinematic images inside my travel series."
+
+// Call in parallel:
+
+// fetch_collections({})
+// get_photo_info({
+//   photoIds: [TRAVEL_SERIES_PHOTO_IDS]
+// })
+
+// FINAL INSTRUCTION
+
+// You are a deterministic planner.
+// Apply rules and patterns from the examples.
+// Gather all necessary data.
+// Then call done.
+// `
+
 const PHASE1_ROLE_ADDENDUM = `
 
 ## Your current role: DATA COLLECTOR
@@ -70,7 +254,7 @@ You are in the data-gathering phase. Your ONLY job is to call the right tools to
 ## Curatorial data strategy
 For questions about critique, evaluation, portfolio review, or photo culling:
 - Call \`overall_catalog_view\` to retrieve the user's catalog-level patterns, style profile, and cluster analysis. This is essential context for any evaluative question.
-- Call \`search_advanced\` OR \`catalog_sample\` to find the specific photos relevant to the query. 
+- Call \`search_advanced\` OR \`catalog_sample\` to find the specific photos relevant to the query.
 - Do NOT attempt to evaluate or score the photos yourself — just gather the data.
 
 ## Catalog exploration & evolution questions
@@ -118,6 +302,115 @@ const PHASE2_TRIGGER = `Now produce your final response to the user.
 Use the thumbnails and descriptions provided for visual verification.
 Act as a discerning curator: discard tangential results, keep only what genuinely matches.
 Text-only described photos (from earlier iterations) are also valid candidates for photo_groups.`
+
+// ── Phase 2 compressed addendum (skeleton mode for Phase 3 expansion) ──
+
+const PHASE2_COMPRESSED_ROLE_ADDENDUM = `
+
+## Your current role: CURATOR & JUDGE (COMPRESSED OUTPUT)
+You have all gathered data from previous steps. You also have visual access to thumbnail images paired with full descriptions for the user's attached photos and top search results. Use them for visual verification and curatorial judgment.
+
+Photos may arrive with thumbnails (for visual evaluation) or text-only descriptions (from earlier search iterations). Both are valid candidates for your response.
+
+## Curatorial judgment
+- **Selectivity:** Only include photos that genuinely match the user's request. Discard tangential or low-relevance results — even if returned by a search tool.
+- **Scoring (1-10):** Use for internal ranking. Surface scores only if the user asks or it adds clear value.
+    - *Scale:* 1 (Disastrous), 5 (Acceptable), 7.5 (Remarkable), 10 (Unique).
+- **Genre-specific priorities** — weight criteria by the photographer's style:
+    - *Documentary:* \`message\`, \`storytelling\`, \`candidness\`.
+    - *Street:* \`candidness\`, \`visual_games\`, \`originality\`.
+    - *Artistic:* \`message\`, \`originality\`, \`composition\`.
+- **Catalog analysis:** Look for patterns and imbalances across clusters, not just average scores.
+
+## CRITICAL: Compressed skeleton output
+You MUST output a SKELETON — a maximally compressed blueprint. Another model will expand it into prose.
+ALL curatorial decisions, photo selections, and aesthetic judgments MUST be made HERE — the expansion model has NO visual access and CANNOT make editorial choices.
+
+Return your \`text\` field using this MANDATORY notation:
+
+TONE: <warm|neutral|critical|encouraging>+<lang: es/en/fr/…>
+THESIS: <core takeaway — no filler>
+POINTS:
+- LABEL: filename1+filename2=insight → impact
+- LABEL: filename=quality1+quality2
+- <max 5 points>
+WEAK: <filename=specific flaw → consequence> | "none"
+NEXT: <1 actionable suggestion in-app>
+
+### Symbol grammar (saves tokens):
+- \`=\`  means: is / represents / captures
+- \`→\`  means: leads to / results in / for
+- \`/\`  means: versus / against / contrast between
+- \`+\`  means: and / combined with / multiple files
+- \`;\`  separates multiple photos within the same point
+- \`★\`  marks top award/portfolio candidate
+- LABEL = short thematic tag (STREET, COLOR, HUMAN, COMP, CULTURE, etc.)
+
+### Skeleton rules:
+- Every point MUST use the photo's **filename** (e.g. DSC04948.jpg) — NEVER use numeric IDs.
+- No articles, no transitions, no filler words. Operators replace connectors.
+- ALL aesthetic judgments must be made HERE. The expansion model has NO visual access.
+- Diagnose specifically: "rojo/nieve → impacto cinemático" not "good composition".
+- The skeleton must be EXHAUSTIVE in ideas and CLOSED in interpretation — zero ambiguity for the expander.
+
+## Visual Output — photo_groups
+- Populate \`photo_groups\` when the user expects visual results (rankings, selections, or sets).
+- SINGLE group labeled \`"result"\` for flat lists with no natural subdivision.
+- MULTIPLE groups for thematic/temporal/categorical separation (e.g. \`"Portraits"\`, \`"Landscapes"\`, \`"Top picks"\`, \`"Honorable mentions"\`).
+- Group labels: in the user's language, concise.
+- Order within each group IS your editorial statement (index 0 = most prominent).
+- No cost or limit to including photo IDs — include every pertinent photo. Be generous.
+- Leave empty only when no specific photos are relevant.`
+
+const PHASE2_COMPRESSED_TRIGGER = `Now produce your compressed skeleton response.
+Use the thumbnails and descriptions for visual verification. Discard tangential results.
+Text-only described photos are also valid candidates for photo_groups.
+CRITICAL: output ONLY the compressed skeleton notation in the text field (TONE/THESIS/POINTS/WEAK/NEXT). Use symbol grammar (=, →, /, +, ★). Use filenames NOT numeric IDs. No prose. ALL editorial decisions happen NOW.`
+
+// ── Phase 3 expansion prompt ──
+
+const PHASE3_SYSTEM_PROMPT = `You are a professional writer and formatter for Photoreka, a photography assistant app.
+You receive a compressed skeleton from a visual curator who analyzed the user's photos with full visual access.
+Your ONLY job: expand this skeleton into a polished, natural response.
+
+## Skeleton notation key
+- \`=\` = is / represents / captures
+- \`→\` = leads to / results in / for
+- \`/\` = contrast between / versus
+- \`+\` = and / combined with
+- \`;\` = separates multiple photos in the same point
+- \`★\` = top award or portfolio candidate
+- LABEL (e.g. STREET, COLOR, HUMAN) = thematic category of the point
+- NEXT = the actionable suggestion to include at the end
+
+## Rules
+- Follow the skeleton's TONE and language EXACTLY.
+- Every POINT in the skeleton MUST appear in your output — do not omit any.
+- Do NOT add new insights, evaluations, or photo references not in the skeleton.
+- Do NOT invent visual descriptions — you have NOT seen the photos.
+- Be warm but honest, matching the indicated tone.
+- Use the conversation history for context on what the user asked, but NEVER contradict the skeleton's conclusions.
+- Suggest the NEXT from the skeleton naturally at the end.
+- Do NOT mention the skeleton, the expansion process, or any internal mechanics.
+- Max 200 words.
+
+## MANDATORY formatting (Markdown rendered in front-end)
+- **Bold:** wrap filenames and key concepts in double asterisks: **filename.jpg**, **composition**. Use sparingly — only genuinely important words.
+- **Paragraphs:** separate each paragraph with a blank line (\\n\\n). NEVER output a single continuous block of text.
+  - Structure: overall impression → highlights (one paragraph per standout photo or insight) → weakness → next step.
+  - Each paragraph = 2–4 sentences MAX.
+- Output plain Markdown text only — no bullet lists, no headers, no code blocks.`
+
+const PHASE3_EXPANSION_SCHEMA = {
+  type: 'object',
+  properties: {
+    text: {
+      type: 'string',
+      description: 'The expanded, polished response text to show to the user.',
+    },
+  },
+  required: ['text'],
+} as const
 
 const FINAL_ANSWER_SCHEMA = {
   type: 'object',
@@ -167,6 +460,7 @@ export type TokenUsageEntry = {
 export type AgentCostBreakdown = {
   iterations: TokenUsageEntry[]
   phase2: TokenUsageEntry
+  phase3?: TokenUsageEntry
   total: TokenUsageEntry
 }
 
@@ -201,7 +495,7 @@ export type AgentChatResult = {
 }
 
 type ModelName = string
-type ModelProvider = 'openai' | 'gemini' | 'deepseek' | 'xai'
+type ModelProvider = 'openai' | 'gemini' | 'deepseek' | 'xai' | 'qwen'
 
 type PhotoIdGroup = {
   tool: string
@@ -244,8 +538,8 @@ const IMAGE_ELIGIBLE_TOOLS = new Set(['search_advanced', 'get_photo_info', 'fetc
  * true  → reasoning-capable model for complex tool orchestration / curatorial logic.
  * false → fast lightweight model for simple retrieval.
  */
-const MODEL_PHASE1_REASONING: ModelName = 'gemini-3-flash-preview'
-const MODEL_PHASE1_FAST: ModelName = 'gemini-3-flash-preview'
+const MODEL_PHASE1_REASONING: ModelName = 'gemini-3.1-flash-lite-preview'
+const MODEL_PHASE1_FAST: ModelName = 'gemini-3.1-flash-lite-preview'
 
 /**
  * Phase 2 model selection — driven by `has_photo_intent`.
@@ -253,7 +547,17 @@ const MODEL_PHASE1_FAST: ModelName = 'gemini-3-flash-preview'
  * false → fast model; no visual content passed.
  */
 const MODEL_PHASE2_REASONING: ModelName = 'gemini-3-flash-preview'
-const MODEL_PHASE2_FAST: ModelName = 'gemini-2.5-flash'
+const MODEL_PHASE2_FAST: ModelName = 'gemini-3.1-flash-lite-preview'
+
+/**
+ * Phase 3 (optional expansion) — a cheap model that expands a compressed
+ * skeleton from Phase 2 into polished prose. Only runs when:
+ *   1. PHASE3_ENABLED is true, AND
+ *   2. Phase 2 used the REASONING (expensive) model.
+ * When Phase 2 already uses the FAST model, Phase 3 is skipped.
+ */
+const PHASE3_ENABLED = false
+const MODEL_PHASE3: ModelName = 'gemini-3.1-flash-lite-preview'
 
 // ══════════════════════════════════════════════════════════════
 // SERVICE
@@ -283,7 +587,27 @@ export default class LangchainAgentService {
     const session = await this.initChatSession(userId, conversationId, message, contextPhotoIds)
     await this.prefetchAttachedPhotos(session, contextPhotoIds)
     await this.runPhase1Loop(session)
-    const structured = await this.runPhase2(session, contextPhotoIds)
+
+    // Determine if Phase 3 expansion should run:
+    // Phase 3 only makes sense when Phase 2 uses the expensive model (REASONING).
+    // When Phase 2 already uses the cheap model, the skeleton → expansion split
+    // would add latency without saving cost.
+    const usePhase3 = PHASE3_ENABLED && session.modelNamePhase2 !== MODEL_PHASE2_FAST
+
+    if (usePhase3) {
+      console.log(
+        `[Agent] 📝 Phase 3 enabled — Phase 2 will output compressed skeleton, Phase 3 will expand`
+      )
+    }
+
+    const structured = await this.runPhase2(session, contextPhotoIds, usePhase3)
+
+    if (usePhase3) {
+      const expandedText = await this.runPhase3(session, structured.text)
+      structured.text = expandedText.text
+      structured.phase3Usage = expandedText.usage
+    }
+
     return this.finalizeResult(session, structured, contextPhotoIds)
   }
 
@@ -322,7 +646,13 @@ export default class LangchainAgentService {
     const doneTool = this.createDoneTool()
     const allTools = [...tools, doneTool]
     // 'any' = Gemini, 'required' = OpenAI/xAI (forces tool call, prevents phantom text), 'auto' = DeepSeek
-    const toolChoice = provider === 'deepseek' ? 'auto' : provider === 'xai' ? 'required' : 'any'
+    // 'any' = Gemini, 'required' = OpenAI/xAI (forces tool call, prevents phantom text), 'auto' = DeepSeek/Qwen
+    const toolChoice =
+      provider === 'deepseek' || provider === 'qwen'
+        ? 'auto'
+        : provider === 'xai'
+          ? 'required'
+          : 'any'
     // Phase 1 only emits tool calls — cap output tokens to avoid paying for phantom text.
     const PHASE1_MAX_OUTPUT_TOKENS = 500
     const modelWithTools = LangchainAgentService.createChatModel(
@@ -583,9 +913,6 @@ export default class LangchainAgentService {
     realTCs: any[],
     calledDone: boolean
   ): Promise<void> {
-    // ── Guard: enforce max 1 call per tool name per step ──
-    const allowedIds = LangchainAgentService.deduplicateToolCalls(allTCs)
-
     session.messages.push(new AIMessage({ content: '', tool_calls: allTCs }))
     console.log(
       `[Agent] 🔧 Tool calls (${realTCs.length}): ${realTCs.map((tc: any) => tc.name).join(', ')}${calledDone ? ' + done' : ''}`
@@ -593,22 +920,6 @@ export default class LangchainAgentService {
     const toolMsgs = await Promise.all(
       allTCs.map(async (tc: any) => {
         if (tc.name === 'done') return new ToolMessage({ content: 'ok', tool_call_id: tc.id })
-
-        // Block duplicate calls for the same tool in this step
-        if (!allowedIds.has(tc.id)) {
-          console.warn(
-            `[Agent]   🚫 Blocked duplicate "${tc.name}" (id=${tc.id}) — only one call per tool per step allowed.`
-          )
-          return new ToolMessage({
-            content: JSON.stringify({
-              error:
-                `Only one "${tc.name}" call is allowed per step. ` +
-                'Combine criteria within a single call, or call it again in the next step.',
-            }),
-            tool_call_id: tc.id,
-            name: tc.name,
-          })
-        }
 
         const results = await this.executeToolCalls(
           [tc],
@@ -621,27 +932,6 @@ export default class LangchainAgentService {
     )
     session.messages.push(...toolMsgs)
     LangchainAgentService.compressPriorToolMessages(session.messages, toolMsgs.length)
-  }
-
-  /**
-   * Returns a Set of tool-call IDs that are allowed to execute.
-   * For each tool name, only the first occurrence is kept; subsequent
-   * duplicates are excluded so the model gets an error and can retry
-   * in the next iteration.
-   */
-  private static deduplicateToolCalls(toolCalls: any[]): Set<string> {
-    const allowed = new Set<string>()
-    const seenTools = new Set<string>()
-    for (const tc of toolCalls) {
-      if (tc.name === 'done') {
-        allowed.add(tc.id)
-        continue
-      }
-      if (seenTools.has(tc.name)) continue // skip duplicate
-      seenTools.add(tc.name)
-      allowed.add(tc.id)
-    }
-    return allowed
   }
 
   private async executeToolCalls(
@@ -684,22 +974,120 @@ export default class LangchainAgentService {
 
   private async runPhase2(
     session: ChatSession,
-    contextPhotoIds: number[]
-  ): Promise<Awaited<ReturnType<typeof LangchainAgentService.invokeStructuredFinalAnswer>>> {
+    contextPhotoIds: number[],
+    compressed = false
+  ): Promise<{
+    text: string
+    photo_groups: Array<{ label: string; photo_ids: number[] }>
+    usage?: any
+    phase3Usage?: any
+  }> {
     const phase2Messages = LangchainAgentService.buildPhase2Messages(
       session.messages,
       session.userContext,
-      session.intermediateSteps
+      session.intermediateSteps,
+      compressed
     )
     const phase2VisualContext = await this.buildPhase2VisualContext(
       contextPhotoIds,
       session.intermediateSteps,
       session.providerPhase2
     )
-    return LangchainAgentService.invokeStructuredFinalAnswer(session.modelNamePhase2, [
-      ...phase2Messages,
-      ...phase2VisualContext,
-    ])
+    return LangchainAgentService.invokeStructuredFinalAnswer(
+      session.modelNamePhase2,
+      [...phase2Messages, ...phase2VisualContext],
+      compressed
+    )
+  }
+
+  // ── Phase 3 (optional expansion) ─────────────────────────────
+
+  private async runPhase3(
+    session: ChatSession,
+    skeleton: string
+  ): Promise<{ text: string; usage?: any }> {
+    console.log(`[Agent] ✍️  Phase 3 — expanding skeleton with ${MODEL_PHASE3}…`)
+    console.log(
+      `[Agent]    Skeleton preview: "${skeleton.slice(0, 300)}${skeleton.length > 300 ? '…' : ''}"`
+    )
+
+    // Build minimal context: system prompt + conversation history + user question + skeleton
+    const messages: any[] = [new SystemMessage(PHASE3_SYSTEM_PROMPT)]
+
+    // Add conversation history (text only — no tool messages, no images)
+    for (const m of session.history) {
+      if (typeof m.content !== 'string' || m.content.trim().length === 0) continue
+      if (m.role === 'user') {
+        messages.push(new HumanMessage(m.content))
+      } else {
+        messages.push(new AIMessage(m.content))
+      }
+    }
+
+    // Current user message
+    messages.push(new HumanMessage(session.message))
+
+    // The skeleton to expand
+    messages.push(
+      new HumanMessage(
+        `Below is the curator's compressed skeleton. Expand it into a polished response following your rules.\n\n---\n${skeleton}\n---`
+      )
+    )
+
+    // Gemini alternation fix
+    const merged: any[] = [messages[0]]
+    for (let i = 1; i < messages.length; i++) {
+      const prev = merged[merged.length - 1]
+      const curr = messages[i]
+      if (prev instanceof HumanMessage && curr instanceof HumanMessage) {
+        const prevText = LangchainAgentService.extractTextContent(prev.content)
+        const currText = LangchainAgentService.extractTextContent(curr.content)
+        merged[merged.length - 1] = new HumanMessage(prevText + '\n' + currText)
+      } else if (
+        prev instanceof AIMessage &&
+        curr instanceof AIMessage &&
+        !(prev instanceof ToolMessage) &&
+        !(curr instanceof ToolMessage)
+      ) {
+        const prevText = LangchainAgentService.extractTextContent(prev.content)
+        const currText = LangchainAgentService.extractTextContent(curr.content)
+        merged[merged.length - 1] = new AIMessage(prevText + '\n' + currText)
+      } else {
+        merged.push(curr)
+      }
+    }
+
+    const MAX_ATTEMPTS = 2
+    const TOKEN_BUDGET = 3000
+    const model = LangchainAgentService.createChatModel(
+      MODEL_PHASE3,
+      TOKEN_BUDGET,
+      'low'
+    ).withStructuredOutput(PHASE3_EXPANSION_SCHEMA)
+
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      try {
+        console.log(`[Agent] ✍️  Phase 3 attempt ${attempt + 1}/${MAX_ATTEMPTS}…`)
+        const usageCollector: { usage?: any } = {}
+        const result = (await model.invoke(merged, {
+          callbacks: [makeDebugCallback('phase3'), makeUsageCallback(usageCollector)],
+        })) as { text: string }
+        console.log(
+          `[Agent] ✍️  Phase 3 expanded: "${result.text.slice(0, 200)}${result.text.length > 200 ? '…' : ''}"`
+        )
+        return { text: result.text, usage: usageCollector.usage }
+      } catch (err: any) {
+        console.warn(
+          `[Agent] ⚠️  Phase 3 attempt ${attempt + 1}/${MAX_ATTEMPTS} failed: ${err.message}`
+        )
+        if (attempt < MAX_ATTEMPTS - 1) {
+          await new Promise((r) => setTimeout(r, 400 * (attempt + 1)))
+        }
+      }
+    }
+    // If Phase 3 fails, fall back to the raw skeleton
+    console.error(`[Agent] ❌ Phase 3 failed after ${MAX_ATTEMPTS} attempts — using raw skeleton`)
+    return { text: skeleton }
   }
 
   private async buildPhase2VisualContext(
@@ -730,8 +1118,8 @@ export default class LangchainAgentService {
           text: `[Photo ID ${photo.id} — ${photo.originalFileName}]\n${JSON.stringify(photoDataForAgentPreview(photo))}`, // compact: no whitespace to save tokens
         })
 
-        // DeepSeek models do not support vision — skip image parts entirely
-        if (provider === 'deepseek') continue
+        // DeepSeek and Qwen Phase 1 models do not support vision — skip image parts entirely
+        if (provider === 'deepseek' || provider === 'qwen') continue
 
         try {
           if (provider === 'openai' || provider === 'xai') {
@@ -894,7 +1282,12 @@ export default class LangchainAgentService {
 
   private async finalizeResult(
     session: ChatSession,
-    structured: Awaited<ReturnType<typeof LangchainAgentService.invokeStructuredFinalAnswer>>,
+    structured: {
+      text: string
+      photo_groups: Array<{ label: string; photo_ids: number[] }>
+      usage?: any
+      phase3Usage?: any
+    },
     contextPhotoIds: number[]
   ): Promise<AgentChatResult> {
     const rawOutput = structured.text ?? ''
@@ -913,12 +1306,27 @@ export default class LangchainAgentService {
       session.modelNamePhase2,
       structured.usage
     )
-    const total = LangchainAgentService.sumUsageEntries([...session.iterationUsages, phase2Usage])
+    const costEntries = [...session.iterationUsages, phase2Usage]
     const cost: AgentCostBreakdown = {
       iterations: session.iterationUsages,
       phase2: phase2Usage,
-      total,
+    } as AgentCostBreakdown
+
+    if (structured.phase3Usage) {
+      const phase3Usage = LangchainAgentService.computeCallCost(
+        'phase3',
+        MODEL_PHASE3,
+        structured.phase3Usage
+      )
+      cost.phase3 = phase3Usage
+      costEntries.push(phase3Usage)
+      console.log(
+        `[Agent] ✍️  Phase 3 cost: €${phase3Usage.costEur.toFixed(6)} | in=${phase3Usage.inputTokens} out=${phase3Usage.outputTokens}`
+      )
     }
+
+    cost.total = LangchainAgentService.sumUsageEntries(costEntries)
+    const total = cost.total
 
     console.log(
       `[Agent] ✅ Done. Tools used: [${session.toolsUsed.join(', ') || 'none'}] | Photo groups: ${photoGroups.length} (${allPhotoIds.length} total IDs)`
@@ -986,6 +1394,7 @@ export default class LangchainAgentService {
     if (model.startsWith('gemini')) return 'gemini'
     if (model.startsWith('deepseek')) return 'deepseek'
     if (model.startsWith('grok')) return 'xai'
+    if (model.startsWith('qwen')) return 'qwen'
     return 'openai'
   }
 
@@ -1027,6 +1436,16 @@ export default class LangchainAgentService {
         maxTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
         configuration: {
           baseURL: process.env.DEEPSEEK_BASEURL ?? 'https://api.deepseek.com',
+        },
+      })
+    }
+    if (provider === 'qwen') {
+      return new ChatOpenAI({
+        apiKey: process.env.DASHSCOPE_API_KEY,
+        model,
+        maxTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
+        configuration: {
+          baseURL: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
         },
       })
     }
@@ -1174,7 +1593,8 @@ export default class LangchainAgentService {
   private static buildPhase2Messages(
     messages: any[],
     userContext: string = '',
-    intermediateSteps: IntermediateStep[] = []
+    intermediateSteps: IntermediateStep[] = [],
+    compressed = false
   ): any[] {
     // Build a queue of full outputs per restorable tool so we can replace
     // the compressed ToolMessages inline instead of duplicating data.
@@ -1195,7 +1615,8 @@ export default class LangchainAgentService {
     const restoredCount = { n: 0 }
     const result = messages.map((msg, idx) => {
       if (idx === 0 && msg instanceof SystemMessage) {
-        const phase2Prompt = SYSTEM_PROMPT_BASE + PHASE2_ROLE_ADDENDUM
+        const roleAddendum = compressed ? PHASE2_COMPRESSED_ROLE_ADDENDUM : PHASE2_ROLE_ADDENDUM
+        const phase2Prompt = SYSTEM_PROMPT_BASE + roleAddendum
         const content = userContext ? `${phase2Prompt}\n\n${userContext}` : phase2Prompt
         return new SystemMessage(content)
       }
@@ -1336,20 +1757,24 @@ export default class LangchainAgentService {
 
   private static async invokeStructuredFinalAnswer(
     modelName: ModelName,
-    messages: any[]
+    messages: any[],
+    compressed = false
   ): Promise<{
     text: string
     photo_groups: Array<{ label: string; photo_ids: number[] }>
     usage?: any
+    phase3Usage?: any
   }> {
     const MAX_ATTEMPTS = 3
-    const TOKEN_BUDGET = 6000
+    // Compressed mode uses less prose but still needs enough room for the full skeleton + photo_groups JSON
+    const TOKEN_BUDGET = compressed ? 3000 : 6000
     const model = LangchainAgentService.createChatModel(
       modelName,
       TOKEN_BUDGET,
-      'medium'
+      compressed ? 'low' : 'medium'
     ).withStructuredOutput(FINAL_ANSWER_SCHEMA)
-    const phase2Messages = [...messages, new HumanMessage(PHASE2_TRIGGER)]
+    const trigger = compressed ? PHASE2_COMPRESSED_TRIGGER : PHASE2_TRIGGER
+    const phase2Messages = [...messages, new HumanMessage(trigger)]
 
     let lastError: any
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
