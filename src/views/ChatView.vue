@@ -292,6 +292,8 @@
               class="message-text markdown-content"
               v-html="renderMarkdown(message.content)"
               @click="handleMarkdownClick"
+              @mouseover="handleMarkdownMouseOver"
+              @mouseout="handleMarkdownMouseOut"
             ></div>
             <!-- Photo results: single flat list (label === 'result') -->
             <div
@@ -305,6 +307,7 @@
                   )"
                   :key="photo.id"
                   class="message-photo-item"
+                  :data-photo-id="photo.id"
                 >
                   <PhotoCardHub
                     :photo="photo"
@@ -338,6 +341,7 @@
                     v-for="photo in getPhotosForMessage(list.photoIds)"
                     :key="photo.id"
                     class="message-photo-item"
+                    :data-photo-id="photo.id"
                   >
                     <PhotoCardHub
                       :photo="photo"
@@ -958,10 +962,19 @@ const sendMessage = async () => {
 };
 
 const PHOTO_TOKEN = /\[\[photo:(\d+)\|([^\]]+)\]\]/g;
+// Matches nested tokens like [[photo:[[photo:123|name.jpg]]|name.jpg]]
+const NESTED_PHOTO_TOKEN = /\[\[photo:\[\[photo:(\d+)\|([^\]]+)\]\][^\]]*\]\]/g;
+
+const normalizePhotoTokens = (text: string): string =>
+  text.replace(
+    NESTED_PHOTO_TOKEN,
+    (_, id, filename) => `[[photo:${id}|${filename}]]`,
+  );
 
 const renderMarkdown = (content: string): string => {
   const unescaped = content.replace(/\\n/g, "\n");
-  const html = marked(unescaped) as string;
+  const normalized = normalizePhotoTokens(unescaped);
+  const html = marked(normalized) as string;
   return html.replace(
     PHOTO_TOKEN,
     (_, id, filename) =>
@@ -980,6 +993,34 @@ const handleMarkdownClick = (e: MouseEvent) => {
   if (photo) {
     showPhotoInfo({ id: photoId } as any);
   }
+};
+
+const handleMarkdownMouseOver = (e: MouseEvent) => {
+  const token = (e.target as HTMLElement).closest(
+    ".photo-inline-link",
+  ) as HTMLElement | null;
+  if (!token) return;
+  const photoId = token.dataset.photoId;
+  if (!photoId) return;
+  const bubble = (e.currentTarget as HTMLElement).closest(".message-bubble");
+  if (!bubble) return;
+  bubble
+    .querySelectorAll<HTMLElement>(
+      `.message-photo-item[data-photo-id="${photoId}"]`,
+    )
+    .forEach((el) => el.classList.add("photo-token-hover"));
+};
+
+const handleMarkdownMouseOut = (e: MouseEvent) => {
+  const token = (e.target as HTMLElement).closest(
+    ".photo-inline-link",
+  ) as HTMLElement | null;
+  if (!token) return;
+  const bubble = (e.currentTarget as HTMLElement).closest(".message-bubble");
+  if (!bubble) return;
+  bubble
+    .querySelectorAll<HTMLElement>(".photo-token-hover")
+    .forEach((el) => el.classList.remove("photo-token-hover"));
 };
 
 const handleSuggestionClick = (suggestion: Suggestion) => {
@@ -2075,6 +2116,13 @@ const formatRelativeDate = (dateStr: string) => {
 .message-photo-item {
   border-radius: var(--radius-md);
   aspect-ratio: 1;
+  transition: transform 0.15s ease;
+}
+
+.message-photo-item.photo-token-hover {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+  transform: scale(1.04);
 }
 
 @media (max-width: 768px) {
@@ -2232,12 +2280,6 @@ const formatRelativeDate = (dateStr: string) => {
   transition:
     background 0.15s,
     color 0.15s;
-}
-
-.message-assistant .message-bubble :deep(.photo-inline-link::before) {
-  content: "🖼";
-  font-size: 0.8em;
-  opacity: 0.8;
 }
 
 .message-assistant .message-bubble :deep(.photo-inline-link:hover) {
