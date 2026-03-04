@@ -291,6 +291,7 @@
               v-else
               class="message-text markdown-content"
               v-html="renderMarkdown(message.content)"
+              @click="handleMarkdownClick"
             ></div>
             <!-- Photo results: single flat list (label === 'result') -->
             <div
@@ -956,9 +957,29 @@ const sendMessage = async () => {
   }
 };
 
+const PHOTO_TOKEN = /\[\[photo:(\d+)\|([^\]]+)\]\]/g;
+
 const renderMarkdown = (content: string): string => {
   const unescaped = content.replace(/\\n/g, "\n");
-  return marked(unescaped) as string;
+  const html = marked(unescaped) as string;
+  return html.replace(
+    PHOTO_TOKEN,
+    (_, id, filename) =>
+      `<span class="photo-inline-link" data-photo-id="${id}" data-photo-name="${filename}" title="${filename}">${filename}</span>`,
+  );
+};
+
+const handleMarkdownClick = (e: MouseEvent) => {
+  const target = (e.target as HTMLElement).closest(
+    "[data-photo-id]",
+  ) as HTMLElement | null;
+  if (!target) return;
+  const photoId = target.dataset.photoId;
+  if (!photoId) return;
+  const photo = photosStore.photos.find((p: any) => String(p.id) === photoId);
+  if (photo) {
+    showPhotoInfo({ id: photoId } as any);
+  }
 };
 
 const handleSuggestionClick = (suggestion: Suggestion) => {
@@ -2193,6 +2214,35 @@ const formatRelativeDate = (dateStr: string) => {
   border: none;
   border-top: 1px solid var(--border-color);
   margin: var(--spacing-md) 0;
+}
+
+/* ── Inline photo token links ── */
+.message-assistant .message-bubble :deep(.photo-inline-link) {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--accent-color);
+  cursor: pointer;
+  font-weight: var(--font-weight-semibold);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  border-radius: var(--radius-sm);
+  padding: 0 3px;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.message-assistant .message-bubble :deep(.photo-inline-link::before) {
+  content: "🖼";
+  font-size: 0.8em;
+  opacity: 0.8;
+}
+
+.message-assistant .message-bubble :deep(.photo-inline-link:hover) {
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  text-decoration-style: solid;
 }
 
 /* ── Recent Conversations (welcome screen) ── */
