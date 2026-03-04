@@ -531,7 +531,7 @@ const PHASE2_MAX_THUMBNAILS = 20 // how many of those can carry a thumbnail imag
 // → the remaining (PHASE2_MAX_PHOTOS - PHASE2_MAX_THUMBNAILS = 60) are text-only
 
 /** Tools whose Phase 2 photo results are eligible for thumbnail images. */
-const IMAGE_ELIGIBLE_TOOLS = new Set(['search_advanced', 'get_photo_info', 'fetch_collections'])
+const IMAGE_ELIGIBLE_TOOLS = new Set(['search_advanced', 'get_photo_info'])
 
 /**
  * Phase 1 model selection — driven by `needs_advanced_reasoning_phase1`.
@@ -1754,17 +1754,9 @@ export default class LangchainAgentService {
         continue
       }
 
-      if (step.tool === 'fetch_collections') {
-        try {
-          const parsed = JSON.parse(step.output)
-          const ids = [
-            ...(parsed.collections ?? []).flatMap((c: any) => c.samplePhotoIds ?? []),
-            ...(parsed.series ?? []).flatMap((s: any) => s.samplePhotoIds ?? []),
-          ].filter((id: any) => typeof id === 'number')
-          if (ids.length > 0) groups.push({ tool: step.tool, ids, stepIndex: i })
-        } catch {}
-        continue
-      }
+      // fetch_collections intentionally excluded: it only provides collection metadata.
+      // The agent must call get_photo_info explicitly for any photos it wants to evaluate.
+      if (step.tool === 'fetch_collections') continue
     }
     return groups
   }
