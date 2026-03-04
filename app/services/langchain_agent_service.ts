@@ -1292,8 +1292,8 @@ export default class LangchainAgentService {
   ): Promise<AgentChatResult> {
     const rawOutput = structured.text ?? ''
     const cleaned = rawOutput.replace(/\[(?:Shown photos|INTERNAL_CONTEXT)[^\]]*\]\s*/gi, '').trim()
-    const output = await this.replacePhotoIdsWithFilenames(cleaned, session.userId)
 
+    // Build photoGroups first so their IDs feed the filename→token replacement
     const photoGroups: PhotoGroup[] = (structured.photo_groups ?? []).map((g) => ({
       label: g.label,
       photoIds: g.photo_ids ?? [],
@@ -1301,6 +1301,8 @@ export default class LangchainAgentService {
     await this.enrichPhotoGroupsWithDescriptions(photoGroups)
     const allPhotoIds = photoGroups.flatMap((g) => g.photoIds)
     session.foundPhotoIds.push(...allPhotoIds)
+
+    const output = await this.injectPhotoTokens(cleaned, session.userId, allPhotoIds)
 
     const phase2Usage = LangchainAgentService.computeCallCost(
       'phase2',
@@ -1351,17 +1353,25 @@ export default class LangchainAgentService {
   }
 
   /**
-   * Post-processing pass: scan the output text for bare numeric IDs, check each
-   * against the user's photo catalog, and replace matched IDs with the original
-   * filename so no raw ID leaks through to the frontend.
+   * Post-processing pass: inject [[photo:ID|filename]] tokens into the output text.
+   *
+   * Primary path  — scan for known filenames (from photo_groups). The model almost
+   *   always writes filenames directly, so this is the common case. Also strips
+   *   surrounding ** bold markers so the token becomes the sole formatting.
+   * Fallback path — scan for bare numeric IDs in case any leaked through.
+   *
+   * @param knownPhotoIds  IDs already present in photo_groups (pre-fetched, cheap).
    */
-  private async replacePhotoIdsWithFilenames(text: string, userId: number): Promise<string> {
-    // Match standalone numbers (word-boundary delimited, at least 3 digits)
-    const numberPattern = /\b(\d{3,})\b/g
-    const matches = [...text.matchAll(numberPattern)]
-    if (matches.length === 0) return text
+  private async injectPhotoTokens(
+    text: string,
+    userId: number,
+    knownPhotoIds: number[]
+  ): Promise<string> {
+    // Collect any additional numeric IDs that may have leaked into the text
+    const numericIds = [...text.matchAll(/\b(\d{3,})\b/g)].map((m) => Number(m[1]))
+    const candidateIds = [...new Set([...knownPhotoIds, ...numericIds])]
+    if (candidateIds.length === 0) return text
 
-    const candidateIds = [...new Set(matches.map((m) => Number(m[1])))]
     const photos = await Photo.query()
       .whereIn('id', candidateIds)
       .where('user_id', userId)
@@ -1370,16 +1380,37 @@ export default class LangchainAgentService {
     if (photos.length === 0) return text
 
     const idToFilename = new Map<number, string>(photos.map((p) => [p.id, p.originalFileName]))
-    const replaced = text.replace(/\b(\d{3,})\b/g, (match) => {
+    const filenameToId = new Map<string, number>(photos.map((p) => [p.originalFileName, p.id]))
+
+    let result = text
+
+    // ── 1. Replace known filenames (possibly wrapped in **bold**) with tokens ──
+    // Sort longest-first to avoid partial matches on filenames that share a prefix.
+    const filenames = [...filenameToId.keys()].sort((a, b) => b.length - a.length)
+    for (const filename of filenames) {
+      const id = filenameToId.get(filename)!
+      const escaped = filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      // Match the filename with 0–2 surrounding asterisks on each side
+      const pattern = new RegExp(`\\*{0,2}${escaped}\\*{0,2}`, 'g')
+      result = result.replace(pattern, (match) => {
+        if (match.startsWith('[[photo:')) return match // already tokenised
+        console.log(`[Agent] 🔁 Post-process: "${filename}" (id:${id}) → token`)
+        return `[[photo:${id}|${filename}]]`
+      })
+    }
+
+    // ── 2. Fallback: replace any remaining bare numeric IDs ──
+    result = result.replace(/\b(\d{3,})\b/g, (match) => {
       const id = Number(match)
       const filename = idToFilename.get(id)
       if (filename) {
-        console.log(`[Agent] 🔁 Post-process: replaced ID ${id} → "${filename}" in output text`)
+        console.log(`[Agent] 🔁 Post-process: bare ID ${id} → token`)
         return `[[photo:${id}|${filename}]]`
       }
       return match
     })
-    return replaced
+
+    return result
   }
 
   /**
