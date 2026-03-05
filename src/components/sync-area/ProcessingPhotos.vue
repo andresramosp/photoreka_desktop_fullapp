@@ -214,7 +214,7 @@ const route = useRoute();
 const emit = defineEmits(["navigate-to-tab", "on-add-to-collection"]);
 
 // Estado del modal de resumen de procesamiento
-const showSummaryModal = ref(true);
+const showSummaryModal = ref(false);
 const summaryModalJob = ref(null);
 
 // Estado del modal de colecciones
