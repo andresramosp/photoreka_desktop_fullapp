@@ -532,12 +532,16 @@ const suggestPhotosForCollection = async () => {
   suggestedPhotos.value = null;
   suggestDialogVisible.value = true;
   try {
-    // Sample 25% of photos, max 50, uniformly distributed
-    const sampleCount = Math.min(Math.ceil(photos.length * 0.25), 50);
-    const step = photos.length / sampleCount;
-    const anchorIds = [];
-    for (let i = 0; i < sampleCount; i++) {
-      anchorIds.push(photos[Math.floor(i * step)].id);
+    // If more than 20 photos, sample 25% (max 50) uniformly; otherwise send all
+    let anchorIds = [];
+    if (photos.length > 20) {
+      const sampleCount = Math.min(Math.ceil(photos.length * 0.25), 50);
+      const step = photos.length / sampleCount;
+      for (let i = 0; i < sampleCount; i++) {
+        anchorIds.push(photos[Math.floor(i * step)].id);
+      }
+    } else {
+      anchorIds = photos.map((p) => p.id);
     }
 
     const currentPhotosIds = photos.map((p) => p.id);
