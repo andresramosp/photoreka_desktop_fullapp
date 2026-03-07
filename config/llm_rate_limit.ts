@@ -37,7 +37,7 @@ export default {
    */
   limits: {
     // Límite por minuto - protección contra burst attacks
-    perMinute: getNumberFromEnv('LLM_RATE_LIMIT_PER_MINUTE', 10),
+    perMinute: getNumberFromEnv('LLM_RATE_LIMIT_PER_MINUTE', 20),
 
     // Límite por hora - prevención de abuso moderado
     perHour: getNumberFromEnv('LLM_RATE_LIMIT_PER_HOUR', 60),
