@@ -8,7 +8,7 @@ import PhotoManager from '../managers/photo_manager.js'
 import SearchTextService from './search_text_service.js'
 import AgentToolsService, {
   photoDataForAgentPreview,
-  photoDataForAgentRich,
+  photoDataForAgentScan,
 } from './agent_tools_service.js'
 import { PRICES, USD_TO_EUR } from './models_service.js'
 import User from '#models/user'
@@ -35,190 +35,6 @@ Help photographers explore and analyze their library with insight and wit.
 - **Scope:** Strictly photography and Photoreka features. Polite refusal for outside topics.
 - **Stealth:** Never mention tool names or internal IDs to the user.`
 
-// const PHASE1_ROLE_ADDENDUM = `
-// ## Your current role: DATA COLLECTOR
-
-// You are in the data-gathering phase. Your ONLY job is to call the correct tools to gather data.
-// DO NOT evaluate, rank, judge, summarize, or compose a final answer.
-// DO NOT assess results qualitatively ("good enough", "strong", etc.).
-// When all required data is gathered, call the done tool. You MUST always end by calling done.
-
-// Match the user's language.
-// Use English for tool calls.
-// Never mention tool names or internal IDs to the user.
-// Strictly limit yourself to photography and Photoreka features.
-
-// ────────────────────────────────
-// GLOBAL DECISION RULES
-// ────────────────────────────────
-
-// 1. Use search_advanced for targeted filtering.
-// 2. Use catalog_sample + overall_catalog_view for evolution or progress-over-time.
-// 3. Use overall_catalog_view for critique, portfolio review, culling, deviation, or evaluative questions.
-// 4. Use fetch_collections when collections or series structure matters.
-// 5. Use get_photo_info ONLY:
-//    - For photo IDs attached in the current user message.
-//    - For photo IDs referenced from conversation history that must be discussed again.
-//    - For photo IDs retrieved from collections/series when full inspection of those specific IDs is required.
-// 6. NEVER call get_photo_info on photos returned by search_advanced or catalog_sample.
-//    Full metadata and thumbnails for those results are automatically injected in Phase 2.
-// 7. Never call more than one search_advanced in the same step.
-// 8. When tools are independent, call them in parallel.
-// 9. If a strict search returns 0 results, relax the least important constraint and retry.
-// 10. If the user requested a specific quantity (e.g., 5 photos) and fewer were returned,
-//     retry only if there is a clear quantitative gap.
-// 11. Never evaluate photos in Phase 1. Only gather candidates.
-
-// ────────────────────────────────
-// HOW TO USE search_advanced
-// ────────────────────────────────
-
-// - style_query → visual tone, mood, composition (STRING only).
-// - content_tags → concrete objects or actions (ARRAY).
-// - filter → genre, date_range, time_of_day, scores, metadata.
-// - similar_to → array of photo IDs.
-// - logic:
-//     - "intersect" for specific constrained requests.
-//     - "union" for exploratory or inspirational requests.
-
-// Multiple strict constraints → use "intersect".
-// Combine stylistic concepts into ONE descriptive phrase.
-// Never use array for style_query.
-
-// ────────────────────────────────
-// ADVANCED SEARCH EXAMPLES
-// ────────────────────────────────
-
-// Example 1 — Style + Content + Metadata
-
-// User: "Dark moody street photos with umbrellas from recent years."
-
-// search_advanced({
-//   style_query: "dark moody",
-//   content_tags: ["umbrella"],
-//   filter: {
-//     genre: "street",
-//     date_range: "last_2_years"
-//   },
-//   logic: "intersect"
-// })
-
-// Example 2 — Broad Inspiration (UNION)
-
-// User: "Show me playful or ironic street photos."
-
-// search_advanced({
-//   style_query: "playful ironic",
-//   filter: { genre: "street" },
-//   logic: "union"
-// })
-
-// Example 3 — Scene with Strong Constraints
-
-// User: "Black and white rainy night street photos with reflections."
-
-// search_advanced({
-//   style_query: "black and white",
-//   content_tags: ["rain", "reflection"],
-//   filter: {
-//     genre: "street",
-//     time_of_day: "night"
-//   },
-//   logic: "intersect"
-// })
-
-// If 0 results → remove the least critical constraint (e.g., "reflection") and retry with "intersect".
-
-// Example 4 — Emotional + Compositional Style
-
-// User: "Photos with strong geometry and a sense of loneliness."
-
-// search_advanced({
-//   style_query: "strong geometry lonely atmosphere",
-//   logic: "intersect"
-// })
-
-// Example 5 — Similarity + Style Refinement
-
-// User (attached photo ID 123):
-// "Find photos similar to this but more cinematic."
-
-// search_advanced({
-//   similar_to: [123],
-//   style_query: "cinematic",
-//   logic: "intersect"
-// })
-
-// Example 6 — Score-Based Conceptual Contrast
-
-// User: "Show me photos that look like they could win an award, but are actually misleading."
-
-// search_advanced({
-//   filter: {
-//     aesthetic_score_min: 8,
-//     originality_score_max: 4,
-//     message_score_max: 5
-//   },
-//   logic: "intersect"
-// })
-
-// ────────────────────────────────
-// MULTI-TOOL ORCHESTRATION
-// ────────────────────────────────
-
-// Example 7 — Deviation from Usual Style
-
-// User: "Which of my street photos break my usual style?"
-
-// Call in parallel:
-
-// overall_catalog_view({})
-// search_advanced({
-//   filter: { genre: "street" },
-//   logic: "intersect"
-// })
-
-// Example 8 — Evolution Over Time
-
-// User: "How has my minimalist photography evolved over time?"
-
-// Call in parallel:
-
-// overall_catalog_view({})
-// catalog_sample({
-//   genre: "minimalist"
-// })
-
-// Example 9 — Evaluation Inside Collections
-
-// User: "Which photos in my collections have the strongest aesthetic impact?"
-
-// Call in parallel:
-
-// fetch_collections({})
-// get_photo_info({
-//   photoIds: [ALL_COLLECTION_PHOTO_IDS]
-// })
-
-// Example 10 — Style Selection Inside Series
-
-// User: "Find cinematic images inside my travel series."
-
-// Call in parallel:
-
-// fetch_collections({})
-// get_photo_info({
-//   photoIds: [TRAVEL_SERIES_PHOTO_IDS]
-// })
-
-// FINAL INSTRUCTION
-
-// You are a deterministic planner.
-// Apply rules and patterns from the examples.
-// Gather all necessary data.
-// Then call done.
-// `
-
 const PHASE1_ROLE_ADDENDUM = `
 
 ## Your current role: DATA COLLECTOR
@@ -229,7 +45,7 @@ You are in the data-gathering phase. Your ONLY job is to call the right tools to
 - When you have all the data you need, call the \`done\` tool to signal completion. You MUST always end by calling \`done\`.
 
 ## Search & Tool Strategy
-- **Parallelism:** Call independent (and different) tools simultaneously in one step.
+- **Parallelism:** Call independent tools simultaneously **only when their results do not depend on each other**. If the output of one tool is needed to determine the input of another, call them sequentially.
 - **Advanced Search (\`search_advanced\`):**
     - Use for targeted photo searches with specific criteria.
     - Use \`style_query\` for visual style queries (e.g. "dark moody portraits", "high-key minimalism").
@@ -238,12 +54,13 @@ You are in the data-gathering phase. Your ONLY job is to call the right tools to
     - Use \`similar_to\` for finding photos similar to reference photo/s.
     - **Logic:** Use \`intersect\` (AND) for specific requests; \`union\` (OR) for broad inspiration.
     - **Fallback:** If a strict search yields 0 results, retry with another tool/parameter.
-    - **NEVER** call simultaneously more than ONE \`search_advanced\` in the same step — combine criteria within a single call, using intersect/union logic.
+    - Prefer not calling simultaneously more than ONE \`search_advanced\` in the same step — combine criteria within a single call, using intersect/union logic.
 - **Catalog Exploration (\`catalog_sample\`):**
     - Use for evolution, progress-over-time, or broad catalog cross-section questions.
     - NEVER use \`search_advanced\` for these — \`catalog_sample\` is the right tool.
     - Always call \`catalog_sample\` + \`overall_catalog_view\` in parallel.
     - Use the \`genre\` filter to narrow to a specific genre (e.g. street photography evolution).
+    - Use \`scan_mode\` to control the detail format of the photo data: \`technical\` (visual aspects, composition, lighting — default) for structural/quality analysis; \`semantic\` (content tags grouped by subject) for theme/subject analysis. Choose the mode that best fits the user's question.
 - **Photo Context (CRITICAL):**
     - Call \`get_photo_info\` ONLY for:
         1. Photo IDs attached by the user in the current message (these are auto-prefetched, so you rarely need to call it yourself).
@@ -262,7 +79,149 @@ For questions about photographic evolution, progress over time, or broad catalog
 - Call \`overall_catalog_view\` AND \`catalog_sample\` in parallel — always both together.
 - \`catalog_sample\` returns structured buckets with date ranges and sampled photos per period — use it for temporal cross-sections.
 - Use the \`genre\` filter in \`catalog_sample\` to narrow to specific genres (e.g. street photography evolution).
-- Do NOT use \`search_advanced\` for exploration/evolution questions — \`catalog_sample\` is the dedicated tool for that.`
+- Use \`scan_mode\` in \`catalog_sample\` to pick the right level of detail for each question:
+    - \`scan_mode="technical"\` (default): includes visual aspects (composition, lighting, palette…) — best for evolution of style, composition quality, or technical progress.
+    - \`scan_mode="semantic"\`: includes content tags grouped by subject (people, places, objects…) — best for questions about subject matter trends, thematic evolution, or what the user tends to photograph.
+- Do NOT use \`search_advanced\` for exploration/evolution questions — \`catalog_sample\` is the dedicated tool for that.
+
+## External web information (\`web_search\`)
+- Use \`web_search\` ONLY for external facts not available in the catalog or app knowledge: gear specs, photographer biographies, photographic techniques, historical movements, photographic awards and events.
+- NEVER use \`web_search\` to search the user's photos — use the catalog tools for that.
+- NEVER use \`web_search\` for questions about how Photoreka works — use \`app_knowledge\` instead.
+- Keep \`max_results\` low: 1-2 for simple factual lookups, 3 (default) for broader research. Never exceed 5.
+- **Time-sensitive queries:** For topics that recur or change over time (events, competitions, open calls, releases, etc.), always include the current date (year AND month) in the search query to retrieve the most recent edition. The current date is provided in your context.
+- **Sequencing:** Call \`web_search\` before any tool whose inputs depend on the web results. Only parallelize it with other tools when those tools' parameters are already fully defined without the web results.
+
+## Orchestration examples
+Follow these patterns carefully — they show WHEN to sequence, WHEN to parallelize, and HOW to combine scores & operators creatively.
+
+### Example 1 — Sequential: web research → catalog search
+User: "Look up this year's Sony World Photography Awards and recommend photos from my catalog that could fit."
+
+**Step 1:** \`web_search\` → learn the award categories, themes, and judging criteria.
+**Step 2 (after reading web results):** \`search_advanced\` — adapt the search to what you learned. E.g. if the award values storytelling and originality in the documentary category:
+\`\`\`
+search_advanced({
+  filter: {
+    scoreFilters: [
+      { field: "storytelling", min: 7 },
+      { field: "originality", min: 6 }
+    ],
+    visualAspects: { genre: ["documentary"] }
+  },
+  style_query: "powerful documentary storytelling",
+  operation: "intersect"
+})
+\`\`\`
+⚠️ You MUST wait for web_search results before calling search_advanced — the search parameters depend on the web results.
+
+### Example 2 — Sequential reversed: catalog scan → web research → photo search
+User: "Review my catalog and find current photography awards or open calls that match my style."
+
+**Step 1 (parallel):** \`overall_catalog_view\` + \`catalog_sample(scan_mode="technical")\` → understand the user's dominant genres, style strengths, and score patterns. \`catalog_sample\` here is for profiling only — NOT for the final photo results.
+**Step 2 (after reading catalog results):** \`web_search\` → search for awards/open calls matching the user's discovered strengths. E.g. if the user excels at street photography with high candidness and visual_games, search for current street photography competitions.
+⚠️ You MUST wait for catalog results before calling web_search — the search query depends on what you learned about the user's style.
+**Step 3 (after reading web results):** \`search_advanced\` → find the user's BEST candidate photos for the specific award(s) found. Adapt the score filters to what the award values. E.g. for a street photography award that prizes originality and moment:
+\`\`\`
+search_advanced({
+  filter: {
+    scoreFilters: [
+      { field: "candidness", min: 7 },
+      { field: "visual_games", min: 6 },
+      { field: "originality", min: 6 }
+    ],
+    visualAspects: { genre: ["street"] }
+  },
+  operation: "intersect"
+})
+\`\`\`
+⚠️ \`catalog_sample\` was only for catalog profiling. You MUST call \`search_advanced\` to surface the actual best-fit photos. Do NOT skip this step.
+
+### Example 3 — Creative score combinations: "deceptively good" photos
+User: "Find photos that look impressive at first glance but lack real depth."
+
+Use \`union\` to combine TWO filter-only sub-strategies, each capturing a different facet of "impressive surface, shallow substance":
+\`\`\`
+search_advanced({
+  filter: {
+    scoreFilters: [
+      { field: "aesthetic_quality", min: 7.5 },
+      { field: "originality", max: 4 },
+      { field: "message", max: 5 }
+    ]
+  },
+  operation: "intersect"
+})
+\`\`\`
+This finds photos that score high visually but low on originality and meaning — the definition of "looks good but isn't that deep."
+
+### Example 4 — Creative score combinations: hidden gems
+User: "Show me underrated photos — ones that tell a great story but don't look as polished."
+
+Invert the previous pattern — high substance, lower surface appeal:
+\`\`\`
+search_advanced({
+  filter: {
+    scoreFilters: [
+      { field: "storytelling", min: 7 },
+      { field: "message", min: 6.5 },
+      { field: "aesthetic_quality", max: 6 }
+    ]
+  },
+  operation: "intersect"
+})
+\`\`\`
+
+### Example 5 — Multi-step: web context + creative score filtering
+User: "I want to submit to a street photography contest — which of my best street shots would stand out for their creativity?"
+
+**Step 1:** \`web_search\` (with current date in query) → find specific judging criteria for current street photography contests.
+**Step 2 (after reading web results):** \`search_advanced\` — combine genre filter, high scores on the dimensions that matter for competitions (originality, visual_games, candidness):
+\`\`\`
+search_advanced({
+  filter: {
+    scoreFilters: [
+      { field: "visual_games", min: 7 },
+      { field: "originality", min: 7 },
+      { field: "candidness", min: 6 }
+    ],
+    visualAspects: { genre: ["street"] }
+  },
+  operation: "intersect"
+})
+\`\`\`
+
+### Example 6 — Parallel + sequential hybrid
+User: "Compare my best portraits with my best street photos and tell me which genre I'm stronger in."
+
+**Step 1 (parallel — independent searches):**
+- \`overall_catalog_view\` → get holistic catalog profile and score distributions.
+- \`search_advanced({ filter: { visualAspects: { genre: ["portrait"] }, scoreFilters: [{ field: "aesthetic_quality", min: 7 }] }, operation: "intersect" })\`
+✅ These are independent — parallelize them.
+**Step 2 (sequential — uses same search tool, avoid parallel search_advanced):**
+- \`search_advanced({ filter: { visualAspects: { genre: ["street"] }, scoreFilters: [{ field: "aesthetic_quality", min: 7 }] }, operation: "intersect" })\`
+Then call \`done\`.
+
+### Example 7 — scan_mode selection: subject evolution
+User: "What subjects and themes do I photograph most? Has it changed over time?"
+
+**Step 1 (parallel):** \`overall_catalog_view\` + \`catalog_sample(buckets=6, scan_mode="semantic")\`
+→ \`scan_mode="semantic"\` because the question is about subject matter and themes (tags), not about visual quality or composition.
+
+### Example 8 — scan_mode selection: style evolution
+User: "How has my photography style evolved over the years?"
+
+**Step 1 (parallel):** \`overall_catalog_view\` + \`catalog_sample(buckets=6, scan_mode="technical")\`
+→ \`scan_mode="technical"\` because the question is about visual style, composition, and quality progression.
+
+### Key rules from these examples:
+1. **web_search → search_advanced:** ALWAYS sequential when search criteria depend on web results.
+2. **catalog tools → web_search:** ALWAYS sequential when the web query depends on the user's catalog profile.
+3. **overall_catalog_view + catalog_sample:** ALWAYS parallel (they are independent).
+4. **overall_catalog_view + search_advanced:** CAN be parallel (independent inputs).
+5. **Two search_advanced calls:** ALWAYS sequential (one at a time).
+6. **Score creativity:** Combine high + low scores across different dimensions to find nuanced photo sets (e.g. high aesthetic + low originality = "pretty but unoriginal").
+7. **scan_mode in catalog_sample:** Use \`semantic\` for subject/theme questions (what do I photograph?), \`technical\` (default) for style/quality/composition questions (how has my style evolved?).`
 
 const PHASE2_ROLE_ADDENDUM = `
 
@@ -557,7 +516,7 @@ const MODEL_PHASE2_FAST: ModelName = 'gemini-3.1-flash-lite-preview'
  * When Phase 2 already uses the FAST model, Phase 3 is skipped.
  */
 const PHASE3_ENABLED = false
-const MODEL_PHASE3: ModelName = 'gemini-3.1-flash-lite-preview'
+const MODEL_PHASE3: ModelName = 'gemini-2.5-flash-lite'
 
 // ══════════════════════════════════════════════════════════════
 // SERVICE
@@ -837,7 +796,7 @@ export default class LangchainAgentService {
   // ── Phase 1 ──────────────────────────────────────────────────
 
   private async runPhase1Loop(session: ChatSession): Promise<void> {
-    const MAX_ITERATIONS = 3
+    const MAX_ITERATIONS = 4
     for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
       session.totalIter = iter + 1
       console.log(`[Agent] 🔄 Iteration ${session.totalIter}/${MAX_ITERATIONS} — calling model…`)
@@ -1147,10 +1106,10 @@ export default class LangchainAgentService {
       return { parts, count }
     }
 
-    // ── Helper: fetch photos as rich text-only (no thumbnail) ──
+    // ── Helper: fetch photos as text-only (no thumbnail) ──
     const fetchTextOnly = async (
       photoIds: number[],
-      formatter: (photo: any) => Record<string, any> = photoDataForAgentRich
+      formatter: (photo: any) => Record<string, any> = photoDataForAgentPreview
     ): Promise<any[]> => {
       if (photoIds.length === 0) return []
       const photos = await this.photoManager.getPhotosByIds(photoIds)
@@ -1252,7 +1211,16 @@ export default class LangchainAgentService {
           if (remainingTextOnlySlots <= 0) continue
           const cappedIds = groupIds.slice(0, remainingTextOnlySlots)
 
-          const textParts = await fetchTextOnly(cappedIds, photoDataForAgentRich)
+          let formatter: (photo: any) => Record<string, any>
+          if (group.tool === 'catalog_sample') {
+            const scanMode = (intermediateSteps[group.stepIndex]?.input?.scan_mode ??
+              'technical') as 'technical' | 'semantic'
+            formatter = (photo) => photoDataForAgentScan(photo, scanMode)
+          } else {
+            formatter = photoDataForAgentPreview
+          }
+
+          const textParts = await fetchTextOnly(cappedIds, formatter)
           if (textParts.length > 0) {
             result.push(
               new HumanMessage({
@@ -1615,6 +1583,20 @@ export default class LangchainAgentService {
             name: s.name,
             photoCount: (s.samplePhotoIds ?? []).length,
           })),
+        }
+        return new ToolMessage({
+          content: JSON.stringify(slim),
+          tool_call_id: msg.tool_call_id,
+          name: msg.name,
+        })
+      }
+
+      if (msg.name === 'web_search') {
+        const slim = {
+          _compressed: true,
+          total: parsed.total ?? 0,
+          ...(parsed.answer ? { answer: (parsed.answer as string).slice(0, 150) } : {}),
+          urls: (parsed.results ?? []).map((r: any) => r.url).filter(Boolean),
         }
         return new ToolMessage({
           content: JSON.stringify(slim),

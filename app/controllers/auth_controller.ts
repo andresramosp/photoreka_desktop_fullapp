@@ -41,6 +41,13 @@ export default class AuthController {
   private getFrontendUrl(): string {
     return process.env.FRONTEND_URL || 'https://app.photoreka.com'
   }
+
+  /**
+   * Returns true when registration is open to everyone (no invite code required)
+   */
+  private isOpenMode(): boolean {
+    return process.env.REGISTRATION_MODE === 'open'
+  }
   /**
    * Register a new user
    */
@@ -48,13 +55,20 @@ export default class AuthController {
     try {
       const payload = await request.validateUsing(createAuthValidator)
 
-      // Validate invitation code
-      const invite = await Invite.findBy('code', payload.inviteCode)
-
-      if (!invite || invite.isUsed) {
-        return response.unauthorized({
-          message: 'Invalid or already used invitation code',
-        })
+      // Validate invitation code (only required in waiting_list mode)
+      let invite: Invite | null = null
+      if (!this.isOpenMode()) {
+        if (!payload.inviteCode) {
+          return response.unauthorized({
+            message: 'An invitation code is required to register',
+          })
+        }
+        invite = await Invite.findBy('code', payload.inviteCode)
+        if (!invite || invite.isUsed) {
+          return response.unauthorized({
+            message: 'Invalid or already used invitation code',
+          })
+        }
       }
 
       // Verificar si el email ya está registrado
@@ -111,9 +125,11 @@ export default class AuthController {
       }
 
       // Mark invitation use
-      invite.useCount += 1
-      invite.usedAt = DateTime.now()
-      await invite.save()
+      if (invite) {
+        invite.useCount += 1
+        invite.usedAt = DateTime.now()
+        await invite.save()
+      }
 
       // Create access token (user can do some things before confirming email)
       const token = await User.accessTokens.create(user, ['*'])
@@ -789,19 +805,22 @@ export default class AuthController {
       } else {
         console.log('[Google OAuth] Creating new user')
 
-        // For new users, validate invitation code
-        if (!inviteCode) {
-          return response.redirect(
-            `${this.getFrontendUrl()}/auth/error?message=Invitation code required for new registrations`
-          )
-        }
+        // For new users, validate invitation code (only required in waiting_list mode)
+        let invite: Invite | null = null
+        if (!this.isOpenMode()) {
+          if (!inviteCode) {
+            return response.redirect(
+              `${this.getFrontendUrl()}/auth/error?message=Invitation code required for new registrations`
+            )
+          }
 
-        const invite = await Invite.findBy('code', inviteCode)
+          invite = await Invite.findBy('code', inviteCode)
 
-        if (!invite || invite.isUsed) {
-          return response.redirect(
-            `${this.getFrontendUrl()}/auth/error?message=Invalid or already used invitation code`
-          )
+          if (!invite || invite.isUsed) {
+            return response.redirect(
+              `${this.getFrontendUrl()}/auth/error?message=Invalid or already used invitation code`
+            )
+          }
         }
 
         // Create new user

@@ -44,6 +44,9 @@ export default {
 
     // Límite por día - cuota diaria total
     perDay: getNumberFromEnv('LLM_RATE_LIMIT_PER_DAY', 200),
+
+    // Límite por mes - cuota mensual total
+    perMonth: getNumberFromEnv('LLM_RATE_LIMIT_PER_MONTH', 2000),
   },
 
   /**

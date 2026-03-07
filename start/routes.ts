@@ -278,5 +278,11 @@ router
   .use([
     middleware.auth(),
     middleware.readOnly(),
-    middleware.llmRateLimit({ perMinute: 3, perHour: 10, perDay: 15, keyPrefix: 'chat' }),
+    middleware.llmRateLimit({
+      perMinute: 3,
+      perHour: 10,
+      perDay: 15,
+      perMonth: 100,
+      keyPrefix: 'chat',
+    }),
   ])

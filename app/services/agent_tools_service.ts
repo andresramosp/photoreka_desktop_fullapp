@@ -197,8 +197,8 @@ export const CatalogSampleSchema = z.object({
     .min(1)
     .max(10)
     .optional()
-    .default(8)
-    .describe('Number of photos to sample from each time bucket (default 8).'),
+    .default(10)
+    .describe('Number of photos to sample from each time bucket (default 10).'),
   sort_within: z
     .enum([
       'aesthetic_quality',
@@ -229,6 +229,33 @@ export const CatalogSampleSchema = z.object({
     .describe(
       'Filter photos by genre before sampling. **Accepted values MUST ALWAYS BE IN ENGLISH ONLY:** abstract, documentary, street, landscape, portrait. ' +
         'E.g. ["street"] to sample only street photography evolution.'
+    ),
+  scan_mode: z
+    .enum(['technical', 'semantic'])
+    .optional()
+    .default('technical')
+    .describe(
+      'Controls the detail format used when photos are shown for evaluation. ' +
+        '`technical`: includes visual aspects (composition, lighting, palette, etc.) for structural analysis. ' +
+        '`semantic`: includes content tags grouped by subject category (people, places, objects, etc.) for theme/subject analysis. ' +
+        'Choose based on the type of evolution you want to analyze (default: technical).'
+    ),
+})
+
+export const WebSearchSchema = z.object({
+  query: z
+    .string()
+    .describe(
+      'Search query in English. Be specific and concise. Used to look up external information on the web.'
+    ),
+  max_results: z
+    .number()
+    .min(1)
+    .max(5)
+    .optional()
+    .default(3)
+    .describe(
+      'Number of web results to return (1–5, default 3). Use 1-2 for quick factual lookups, 3-5 for comparative or broader research.'
     ),
 })
 
@@ -276,24 +303,47 @@ export function photoDataForAgentSlim(photo: any): Record<string, any> {
 }
 
 /**
- * Rich text-only photo data for Phase 2 contexts where no thumbnail is available
- * (e.g. catalog_sample). Includes all narrative, scoring, and visual metadata so
- * the model can evaluate the photo without seeing it.
+ * Structured photo data for catalog_sample in Phase 2, where no thumbnail is available.
+ * Always includes id, originalFileName, dateTaken, and artistic_scores.
  *
- * ~300 tokens/photo.
+ * `technical` mode (~150 tokens/photo): adds visualAspects for structural/compositional analysis.
+ * `semantic` mode (~100 tokens/photo): adds content tags grouped by category (misc excluded)
+ *   for subject/theme analysis.
  */
-export function photoDataForAgentRich(photo: any): Record<string, any> {
+export function photoDataForAgentScan(
+  photo: any,
+  mode: 'technical' | 'semantic' = 'technical'
+): Record<string, any> {
   const descriptions = photo.descriptions || {}
   const exif = descriptions.EXIF || {}
-  return {
+  const base: Record<string, any> = {
     id: photo.id,
     originalFileName: photo.originalFileName,
-    story: descriptions.story || null,
-    context: descriptions.context || null,
-    artistic_scores: descriptions.artistic_scores || null,
-    visualAspects: descriptions.visual_aspects || {},
     dateTaken: exif.dateTaken ?? null,
+    artistic_scores: descriptions.artistic_scores || null,
   }
+  if (mode === 'technical') {
+    base.visualAspects = descriptions.visual_aspects || {}
+    return base
+  }
+  // semantic: flat tag list, misc/scores/visual_aspects excluded
+  const tags: any[] = photo.tags ?? []
+  const tagList: string[] = []
+  for (const tagPhoto of tags) {
+    const group: string | undefined = tagPhoto.group ?? tagPhoto.tag?.group
+    const name: string | undefined = tagPhoto.name ?? tagPhoto.tag?.name
+    if (
+      !group ||
+      group === 'misc' ||
+      group === 'artistic_scores' ||
+      group === 'visual_aspects' ||
+      !name
+    )
+      continue
+    tagList.push(name)
+  }
+  base.tags = tagList
+  return base
 }
 
 export function formatCatalogPatternsForAgent(catalogPatterns: any, reviewType: string): string {
@@ -379,13 +429,16 @@ export const TOOL_DESCRIPTIONS = {
     '[PHOTO_SEARCH] **The primary search tool.** Combine multiple search strategies in a single call and merge their results with intersect (AND) or union (OR). You can specify any combination of: (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) filter — metadata/score/visual-aspect filtering, (4) similar_to — similarity to reference photos. **ALL parameters MUST ALWAYS BE SPECIFIED IN ENGLISH ONLY** — style descriptions, keywords, and filter values must be in English. All specified sub-searches run in parallel; their full ID sets are combined via the chosen operation; only the final result is sampled and returned with photo ID, filename, and genre. Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) with intersect. "moody portraits or landscapes" → style_query("dark moody") + filter(genre=[portrait,landscape]) with union.',
 
   catalog_sample:
-    '[CATALOG_INSIGHT] **Temporal catalog sampling for broad exploration.** Divides the catalog timeline into equal time buckets and samples representative photos from each period. Returns structured data: an array of buckets, each with its date range and sampled photos. Use this for evolution questions, progress over time, or getting a representative cross-section of the catalog. Always pair with `overall_catalog_view` in parallel for holistic context. NEVER use this for targeted searches — use `search_advanced` instead. Optional filters: **genre values MUST ALWAYS BE IN ENGLISH ONLY** (e.g. ["street"] for street photography evolution), date_from/date_to, sort_within (pick best-scored photos per period instead of random). Examples: "How has my photography evolved?" → catalog_sample(buckets=6) + overall_catalog_view in parallel. "Street photography evolution" → catalog_sample(buckets=5, genre=["street"]) + overall_catalog_view in parallel.',
+    '[CATALOG_INSIGHT] **Temporal catalog sampling for broad exploration.** Divides the catalog timeline into equal time buckets and samples representative photos from each period. Returns structured data: an array of buckets, each with its date range and sampled photos. Use this for evolution questions, progress over time, or getting a representative cross-section of the catalog. Always pair with `overall_catalog_view` in parallel for holistic context. NEVER use this for targeted searches — use `search_advanced` instead. Optional filters: **genre values MUST ALWAYS BE IN ENGLISH ONLY** (e.g. ["street"] for street photography evolution), date_from/date_to, sort_within (pick best-scored photos per period instead of random), scan_mode (technical for compositional/visual analysis, semantic for subject/theme analysis). Examples: "How has my photography evolved?" → catalog_sample(buckets=6, scan_mode=technical) + overall_catalog_view in parallel. "What subjects appear most in my street work?" → catalog_sample(buckets=5, genre=["street"], scan_mode=semantic) + overall_catalog_view in parallel.',
 
   overall_catalog_view:
     '[CATALOG_INSIGHT] Get a single combined report of the entire catalog: catalog patterns (recurring themes, subjects, narrative motifs), visual aspects distribution, and artistic scores statistics. Use this as the FIRST tool whenever the user asks for advice on improving their photography, critique of their catalog, identification of weak points or strengths, general feedback on their style, or any holistic question about their photographic practice. This tool replaces calling get_catalog_patterns + stats_visual_aspects + stats_artistic_scores individually — it returns all of that data in one shot.',
 
   app_knowledge:
     "[BASIC_TOOLS] Get useful information about the Photoreka application itself. Use this whenever the user asks about how the app works, what features are available, how to use a specific feature, pricing, data limits, privacy policy, terms of use, data handling, account management, or any general help question unrelated to their photo catalog. Returns one or both sections: 'terms_and_privacy' (legal terms and privacy policy) and 'usage_and_help' (feature overview, FAQ, tips).",
+
+  web_search:
+    '[EXTERNAL_INFO] Search the internet for factual, current, or external information not present in the photo catalog. Use ONLY for: photography techniques and tutorials, camera/lens gear specs and reviews, photographer biographies and references, photographic movements and history, software tools, or any external context the user explicitly asks about. Do NOT use for questions that can be answered from the catalog or app knowledge. Use max_results=1-2 for simple factual lookups (e.g. "what is the hyperfocal distance formula"), 3-5 for comparative or research questions. **Sequencing:** call this tool FIRST whenever the results of this search are needed to determine the parameters of a subsequent tool call. Only call it in parallel with other tools when those tools\u2019 parameters are already fully defined without the web results.',
 } as const
 
 // ─────────────────────────────────────────────────────────────
@@ -789,12 +842,14 @@ export default class AgentToolsService {
     const catalogSample = tool(
       async ({
         buckets = 5,
-        per_bucket = 8,
+        per_bucket = 10,
         sort_within,
         date_from,
         date_to,
         genre,
+        scan_mode = 'technical',
       }): Promise<string> => {
+        void scan_mode // consumed in Phase 2 via intermediateStep.input.scan_mode
         try {
           // Fetch all photos with date info
           const photos = await Photo.query()
@@ -924,6 +979,54 @@ export default class AgentToolsService {
       }
     )
 
+    const webSearch = tool(
+      async ({ query, max_results = 3 }): Promise<string> => {
+        const apiKey = process.env.TAVILY_API_KEY
+        if (!apiKey) {
+          return JSON.stringify({ error: 'TAVILY_API_KEY not configured.' })
+        }
+        try {
+          const res = await fetch('https://api.tavily.com/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              api_key: apiKey,
+              query,
+              max_results,
+              include_answer: true,
+              include_raw_content: false,
+              include_images: false,
+            }),
+          })
+          if (!res.ok) {
+            return JSON.stringify({ error: `Tavily API error: ${res.status} ${res.statusText}` })
+          }
+          const data: any = await res.json()
+          // Compact output: answer summary + trimmed snippets only
+          const results = (data.results ?? []).map((r: any) => ({
+            title: (r.title ?? '').slice(0, 120),
+            url: r.url ?? '',
+            snippet: (r.content ?? '').slice(0, 350),
+          }))
+          const output: any = { total: results.length, results }
+          if (data.answer) output.answer = (data.answer as string).slice(0, 400)
+          console.log(
+            `[Agent]   🌐 web_search: "${query}" → ${results.length} result(s)${
+              data.answer ? ' + answer summary' : ''
+            }`
+          )
+          return JSON.stringify(output)
+        } catch (error: any) {
+          return JSON.stringify({ error: `Web search failed: ${error.message}` })
+        }
+      },
+      {
+        name: 'web_search',
+        description: TOOL_DESCRIPTIONS.web_search,
+        schema: WebSearchSchema,
+      }
+    )
+
     return [
       getPhotoInfo,
       appKnowledge,
@@ -931,6 +1034,7 @@ export default class AgentToolsService {
       fetchCollections,
       overallCatalogView,
       catalogSample,
+      webSearch,
     ]
   }
 }

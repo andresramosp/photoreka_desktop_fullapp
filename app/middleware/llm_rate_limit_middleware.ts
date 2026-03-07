@@ -10,6 +10,7 @@ export type LlmRateLimitOptions = {
   perMinute?: number
   perHour?: number
   perDay?: number
+  perMonth?: number
   cooldownSeconds?: number
   keyPrefix?: string // permite namespace separado en Redis (ej: 'chat')
 }
@@ -45,6 +46,7 @@ export default class LlmRateLimitMiddleware {
       perMinute: options.perMinute ?? llmRateLimitConfig.limits.perMinute,
       perHour: options.perHour ?? llmRateLimitConfig.limits.perHour,
       perDay: options.perDay ?? llmRateLimitConfig.limits.perDay,
+      perMonth: options.perMonth ?? llmRateLimitConfig.limits.perMonth,
     }
     const cooldownSeconds = options.cooldownSeconds ?? llmRateLimitConfig.cooldownSeconds
     const keyPrefix = options.keyPrefix ? `llm_rate_limit_${options.keyPrefix}` : 'llm_rate_limit'
@@ -62,6 +64,7 @@ export default class LlmRateLimitMiddleware {
         limits.perMinute = 3
         limits.perHour = 5
         limits.perDay = 10
+        limits.perMonth = 100
       }
     } catch (error) {
       // Si hay error al obtener el usuario, continuar con límites normales
@@ -100,22 +103,26 @@ export default class LlmRateLimitMiddleware {
       const minuteKey = `${keyPrefix}:minute:${identifier}:${this.getCurrentMinute()}`
       const hourKey = `${keyPrefix}:hour:${identifier}:${this.getCurrentHour()}`
       const dayKey = `${keyPrefix}:day:${identifier}:${this.getCurrentDay()}`
+      const monthKey = `${keyPrefix}:month:${identifier}:${this.getCurrentMonth()}`
 
       // Obtener contadores actuales
-      const [minuteCount, hourCount, dayCount] = await Promise.all([
+      const [minuteCount, hourCount, dayCount, monthCount] = await Promise.all([
         redis.get(minuteKey),
         redis.get(hourKey),
         redis.get(dayKey),
+        redis.get(monthKey),
       ])
 
       const currentMinute = parseInt(minuteCount || '0', 10)
       const currentHour = parseInt(hourCount || '0', 10)
       const currentDay = parseInt(dayCount || '0', 10)
+      const currentMonth = parseInt(monthCount || '0', 10)
 
       // Calcular límites restantes
       const remainingMinute = limits.perMinute - currentMinute
       const remainingHour = limits.perHour - currentHour
       const remainingDay = limits.perDay - currentDay
+      const remainingMonth = limits.perMonth - currentMonth
 
       // Verificar límites (el más restrictivo primero)
       let limitExceeded = false
@@ -134,15 +141,21 @@ export default class LlmRateLimitMiddleware {
         limitExceeded = true
         limitType = 'day'
         retryAfter = 86400
+      } else if (currentMonth >= limits.perMonth) {
+        limitExceeded = true
+        limitType = 'month'
+        retryAfter = this.getSecondsUntilNextMonth()
       }
 
       // Agregar headers informativos
       response.header('X-RateLimit-Limit-Minute', limits.perMinute.toString())
       response.header('X-RateLimit-Limit-Hour', limits.perHour.toString())
       response.header('X-RateLimit-Limit-Day', limits.perDay.toString())
+      response.header('X-RateLimit-Limit-Month', limits.perMonth.toString())
       response.header('X-RateLimit-Remaining-Minute', Math.max(0, remainingMinute).toString())
       response.header('X-RateLimit-Remaining-Hour', Math.max(0, remainingHour).toString())
       response.header('X-RateLimit-Remaining-Day', Math.max(0, remainingDay).toString())
+      response.header('X-RateLimit-Remaining-Month', Math.max(0, remainingMonth).toString())
 
       if (limitExceeded) {
         // Activar cooldown
@@ -157,6 +170,7 @@ export default class LlmRateLimitMiddleware {
             minute: { limit: limits.perMinute, remaining: remainingMinute },
             hour: { limit: limits.perHour, remaining: remainingHour },
             day: { limit: limits.perDay, remaining: remainingDay },
+            month: { limit: limits.perMonth, remaining: remainingMonth },
           },
           type: limitType,
         })
@@ -174,6 +188,9 @@ export default class LlmRateLimitMiddleware {
       pipeline.incr(dayKey)
       pipeline.expire(dayKey, 86400)
 
+      pipeline.incr(monthKey)
+      pipeline.expire(monthKey, this.getSecondsUntilNextMonth())
+
       await pipeline.exec()
 
       // Log para monitoreo
@@ -188,7 +205,7 @@ export default class LlmRateLimitMiddleware {
 
       if (llmRateLimitConfig.logLevel === 'all') {
         console.log(
-          `[LLM Rate Limit] Usuario ${userId} - Minute: ${currentMinute + 1}/${limits.perMinute}, Hour: ${currentHour + 1}/${limits.perHour}, Day: ${currentDay + 1}/${limits.perDay}`
+          `[LLM Rate Limit] Usuario ${userId} - Minute: ${currentMinute + 1}/${limits.perMinute}, Hour: ${currentHour + 1}/${limits.perHour}, Day: ${currentDay + 1}/${limits.perDay}, Month: ${currentMonth + 1}/${limits.perMonth}`
         )
       }
 
@@ -242,6 +259,22 @@ export default class LlmRateLimitMiddleware {
   }
 
   /**
+   * Obtiene el mes actual como YYYY-MM
+   */
+  private getCurrentMonth(): string {
+    return new Date().toISOString().slice(0, 7)
+  }
+
+  /**
+   * Calcula los segundos restantes hasta el inicio del próximo mes
+   */
+  private getSecondsUntilNextMonth(): number {
+    const now = new Date()
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    return Math.ceil((nextMonth.getTime() - now.getTime()) / 1000)
+  }
+
+  /**
    * Genera un mensaje de error apropiado según el tipo de límite excedido
    */
   private getErrorMessage(limitType: string): string {
@@ -249,6 +282,7 @@ export default class LlmRateLimitMiddleware {
       minute: 'You have exceeded the request limit per minute. Please wait before retrying.',
       hour: 'You have exceeded the request limit per hour. Please try again later.',
       day: 'You have reached your daily analysis quota. Your limit will reset tomorrow.',
+      month: 'You have reached your monthly analysis quota. Your limit will reset next month.',
     }
     return messages[limitType as keyof typeof messages] || 'Request limit exceeded.'
   }

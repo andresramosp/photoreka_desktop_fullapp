@@ -19,6 +19,7 @@ const schema = {
   GOOGLE_CLIENT_SECRET: Env.schema.string(),
   GOOGLE_OAUTH_REDIRECT_URI: Env.schema.string(),
   FRONTEND_URL: Env.schema.string(),
+  REGISTRATION_MODE: Env.schema.enum.optional(['open', 'waiting_list'] as const),
 }
 
 // Fallback env.get() compatible wrapper
