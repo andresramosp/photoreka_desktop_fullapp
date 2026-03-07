@@ -55,17 +55,36 @@
                 formatRelativeDate(conv.updatedAt)
               }}</span>
             </div>
-            <n-button
-              quaternary
-              size="tiny"
-              class="sidebar-item-delete"
-              @click.stop="handleDeleteConversation(conv.id)"
-              title="Delete conversation"
-            >
-              <template #icon>
-                <n-icon :size="13"><CloseIcon /></n-icon>
+            <div class="sidebar-item-delete-wrap" @click.stop>
+              <template v-if="pendingDeleteId === conv.id">
+                <n-button
+                  size="tiny"
+                  type="error"
+                  class="sidebar-item-confirm-btn"
+                  @click.stop="handleDeleteConversation(conv.id)"
+                  >Delete</n-button
+                >
+                <n-button
+                  size="tiny"
+                  quaternary
+                  class="sidebar-item-confirm-btn"
+                  @click.stop="pendingDeleteId = null"
+                  >Cancel</n-button
+                >
               </template>
-            </n-button>
+              <n-button
+                v-else
+                quaternary
+                size="tiny"
+                class="sidebar-item-delete"
+                @click.stop="pendingDeleteId = conv.id"
+                title="Delete conversation"
+              >
+                <template #icon>
+                  <n-icon :size="13"><CloseIcon /></n-icon>
+                </template>
+              </n-button>
+            </div>
           </div>
         </div>
       </div>
@@ -700,6 +719,7 @@ const isMobile = ref(window.innerWidth < 768);
 const showPhotoInfoDialog = ref(false);
 const selectedDialogPhoto = ref<any>(null);
 const showSidebar = ref(false);
+const pendingDeleteId = ref<number | null>(null);
 
 const suggestions: Suggestion[] = [
   {
@@ -1321,6 +1341,7 @@ const handleLoadConversation = async (conversationId: number) => {
 };
 
 const handleDeleteConversation = async (conversationId: number) => {
+  pendingDeleteId.value = null;
   try {
     await chatStore.deleteConversation(conversationId);
     message.success("Conversation deleted");
@@ -1506,15 +1527,22 @@ const formatRelativeDate = (dateStr: string) => {
   opacity: 0.7;
 }
 
-.sidebar-item-delete {
+.sidebar-item-delete-wrap {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.15s;
-  color: var(--text-tertiary) !important;
 }
 
-.sidebar-item:hover .sidebar-item-delete {
-  opacity: 1;
+.sidebar-item-confirm-btn {
+  font-size: 11px !important;
+  padding: 0 6px !important;
+  height: 20px !important;
+}
+
+.sidebar-item-delete {
+  flex-shrink: 0;
+  color: var(--text-tertiary) !important;
 }
 
 /* ── Persistent Top Bar ── */
