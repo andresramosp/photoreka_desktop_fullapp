@@ -7,6 +7,8 @@ import { APP_KNOWLEDGE_SECTIONS, AppKnowledgeSection } from '../utils/app_knowle
 import ScoringService from './scoring_service.js'
 import StatsService from './stats_service.js'
 import SearchPhotoService from './search_photo_service.js'
+import VectorService from './vector_service.js'
+import { EmbeddingStoreService, EmbeddingType } from './embeddings_store_service.js'
 import User from '#models/user'
 import Photo from '#models/photo'
 import Collection from '#models/collection'
@@ -492,22 +494,22 @@ export default class AgentToolsService {
     // Used by search_advanced to get full result sets before intersect/union.
     // ─────────────────────────────────────────────────────────
 
-    /** Semantic style search → returns all matching photo IDs (no limit). */
+    /** Semantic style search → direct CLIP vector search, returns IDs ordered by cosine similarity. */
     const _getIdsByStyle = async (query: string): Promise<number[]> => {
-      const result = await searchService.searchSemanticSync(query, userId, {
-        searchMode: 'broad',
-        pageSize: 250,
-        iteration: 1,
-        minMatchScore: 0.2,
-        withInsights: false,
-        skipStructureQuery: true,
-      })
-      const raw = result.data.results[1] || []
-      const photosArray = Array.isArray(raw) ? raw : []
-      return photosArray.map((entry: any) => {
-        const p = entry.photo ?? entry
-        return p.id as number
-      })
+      await EmbeddingStoreService.calculateEmbeddings([query], true, false)
+      const embedding = EmbeddingStoreService.getEmbedding(query, EmbeddingType.CLIP)
+      if (!embedding) return []
+
+      const allPhotoIds = await photoManager.getPhotosIdsForSearch(userId.toString())
+      const vectorService = new VectorService()
+      const results = await vectorService.findSimilarPhotoToEmbedding(
+        embedding,
+        0.15,
+        250,
+        'cosine_similarity',
+        allPhotoIds
+      )
+      return results.map((r: any) => r.id as number)
     }
 
     /** Content/tag search → returns all matching photo IDs (no limit). */

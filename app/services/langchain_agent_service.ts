@@ -56,7 +56,7 @@ Your ONLY job is to call the right tools to gather data. A later phase with visu
 - Always pair with \`overall_catalog_view\` in parallel.
 - \`scan_mode="technical"\` (default) for style/quality analysis; \`scan_mode="semantic"\` for subject/theme analysis.
 
-**\`get_photo_info\`** — only for user-attached photo IDs or IDs from conversation history. Full data for search results is injected automatically later.
+**\`get_photo_info\`** — ONLY for user-attached photo IDs or IDs from conversation history. NEVER call it on IDs returned by \`search_advanced\` or \`catalog_sample\` — those are fully populated with descriptions, scores, and thumbnails automatically in a later phase.
 
 **\`web_search\`** — only for external facts (gear, techniques, awards, photographer bios). For time-sensitive topics, include current date in the query. Call before any tool whose inputs depend on the web results.
 
@@ -386,8 +386,8 @@ const IMAGE_ELIGIBLE_TOOLS = new Set(['search_advanced', 'get_photo_info'])
  * true  → reasoning-capable model for complex tool orchestration / curatorial logic.
  * false → fast lightweight model for simple retrieval.
  */
-const MODEL_PHASE1_REASONING: ModelName = 'gemini-3.1-flash-lite-preview'
-const MODEL_PHASE1_FAST: ModelName = 'gemini-3.1-flash-lite-preview'
+const MODEL_PHASE1_REASONING: ModelName = 'gemini-3-flash-preview'
+const MODEL_PHASE1_FAST: ModelName = 'gemini-3-flash-preview'
 
 /**
  * Phase 2 model selection — driven by `has_photo_intent`.
@@ -502,11 +502,15 @@ export default class LangchainAgentService {
           ? 'required'
           : 'any'
     // Phase 1 only emits tool calls — cap output tokens to avoid paying for phantom text.
+    // Disable thinking for Phase 1: thinking models (e.g. gemini-3-flash) consume
+    // maxOutputTokens for both thinking AND tool-call JSON. With a tight budget (500),
+    // thinking eats all tokens → empty response → premature "done".
     const PHASE1_MAX_OUTPUT_TOKENS = 500
     const modelWithTools = LangchainAgentService.createChatModel(
       modelName,
       PHASE1_MAX_OUTPUT_TOKENS,
-      'low'
+      'low',
+      true // disableThinking — Phase 1 is tool-only, no reasoning needed
     ).bindTools(allTools, { tool_choice: toolChoice })
     const toolMap = Object.fromEntries(allTools.map((t) => [t.name, t]))
 
@@ -1322,7 +1326,8 @@ export default class LangchainAgentService {
   private static createChatModel(
     model: ModelName = 'gpt-5.1',
     maxTokensOverride?: number,
-    effortOverride?: 'low' | 'medium' | 'high'
+    effortOverride?: 'low' | 'medium' | 'high',
+    disableThinking = false
   ) {
     const provider = LangchainAgentService.getProviderFromModel(model)
     if (provider === 'gemini') {
@@ -1330,6 +1335,7 @@ export default class LangchainAgentService {
         apiKey: process.env.GEMINI_API_KEY,
         model,
         maxOutputTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
+        ...(disableThinking ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
         safetySettings: [
           {
             category: HarmCategory.HARM_CATEGORY_HARASSMENT,
