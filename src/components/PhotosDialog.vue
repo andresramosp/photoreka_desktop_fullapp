@@ -437,7 +437,7 @@
                   ? `Add (${totalSelectedCount})`
                   : `Add ${totalSelectedCount} ${
                       totalSelectedCount === 1 ? "Photo" : "Photos"
-                    } to Canvas`
+                    }`
           }}
         </n-button>
       </div>
