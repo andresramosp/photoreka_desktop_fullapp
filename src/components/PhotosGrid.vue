@@ -279,6 +279,18 @@
         :artistic-score="getPhotoArtisticScore(photo)"
         :matched-tags="photo.matchedTags"
       />
+      <!-- Suggest Photos Button -->
+      <div
+        v-if="props.showSuggestButton && displayedPhotos.length > 0"
+        class="suggest-photos-card"
+        @click="emit('suggest-photos')"
+        title="Suggest similar photos to add"
+      >
+        <n-icon size="48" color="var(--primary-color)">
+          <AddOutline />
+        </n-icon>
+        <span class="suggest-label">Suggest Photos</span>
+      </div>
     </div>
 
     <!-- Loading indicator for infinite scroll -->
@@ -394,7 +406,7 @@ import {
   useMessage,
   NTooltip,
 } from "naive-ui";
-import { DuplicateOutline, CloseOutline } from "@vicons/ionicons5";
+import { DuplicateOutline, CloseOutline, AddOutline } from "@vicons/ionicons5";
 import { SquareOutline } from "@vicons/ionicons5";
 import { useRouter } from "vue-router";
 import PhotoCardHub from "./photoCards/PhotoCardHub.vue";
@@ -415,7 +427,11 @@ import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { CheckmarkSquare24Filled, SelectAllOn24Regular } from "@vicons/fluent";
 
-const emit = defineEmits(["refreshCollection", "selection-change"]);
+const emit = defineEmits([
+  "refreshCollection",
+  "selection-change",
+  "suggest-photos",
+]);
 const props = defineProps({
   photos: {
     type: Array,
@@ -438,6 +454,10 @@ const props = defineProps({
     default: true,
   },
   hideControls: {
+    type: Boolean,
+    default: false,
+  },
+  showSuggestButton: {
     type: Boolean,
     default: false,
   },
@@ -1592,5 +1612,36 @@ const handleSendToChat = async () => {
   .photo-grid-base.grid-cols-10 {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* Suggest Photos Card */
+.suggest-photos-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border: 2px dashed var(--border-color, #e0e0e0);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: transparent;
+  gap: 8px;
+}
+
+.suggest-photos-card:hover {
+  border-color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 5%, transparent);
+}
+
+.suggest-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-align: center;
+}
+
+.suggest-photos-card:hover .suggest-label {
+  color: var(--primary-color);
 }
 </style>

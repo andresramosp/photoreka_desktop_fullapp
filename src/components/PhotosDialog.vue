@@ -17,8 +17,88 @@
     </template>
 
     <div class="dialog-content">
+      <!-- Suggested Photos Mode (no search, no tabs) -->
+      <div
+        v-if="suggestedPhotos !== null || loadingSuggestions"
+        class="suggested-container"
+      >
+        <!-- Loading state -->
+        <div v-if="loadingSuggestions" class="suggestions-loading">
+          <n-spin size="large" />
+          <p class="suggestions-loading-text">Looking for similar photos...</p>
+        </div>
+
+        <template v-else>
+          <div class="stats-bar">
+            <div class="stats-section">
+              <div class="stats-info">
+                <span class="stats-text">
+                  {{ processedPhotos.length }}
+                  {{
+                    processedPhotos.length === 1 ? "suggestion" : "suggestions"
+                  }}
+                  <span v-if="selectedIds.length > 0" class="selected-count">
+                    &bull; {{ selectedIds.length }} selected
+                  </span>
+                </span>
+              </div>
+              <div class="stats-actions">
+                <n-button
+                  v-if="selectedIds.length > 0"
+                  text
+                  type="primary"
+                  @click="selectAll"
+                >
+                  Select All
+                </n-button>
+                <n-button
+                  v-if="selectedIds.length > 0"
+                  text
+                  type="warning"
+                  @click="clearSelection"
+                >
+                  Clear Selection
+                </n-button>
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-if="processedPhotos.length > 0"
+            class="photos-grid photo-grid-base"
+            :class="`grid-cols-${6}`"
+          >
+            <PhotoCard
+              v-for="photo in processedPhotos"
+              :key="photo.id"
+              :photo="photo"
+              :selected="selectedIds.includes(photo.id)"
+              mode="default"
+              @select="toggleSelection"
+              @info="showPhotoInfo"
+              :show-stars="false"
+              :show-tags="false"
+              :show-info-button="false"
+              :require-long-press="false"
+            />
+          </div>
+
+          <div v-else class="empty-state">
+            <div class="empty-state-content">
+              <n-icon size="64" class="empty-state-icon">
+                <ImageIcon />
+              </n-icon>
+              <h3 class="empty-state-title">No suggestions found</h3>
+              <p class="empty-state-description">
+                Could not find similar photos to suggest for this collection.
+              </p>
+            </div>
+          </div>
+        </template>
+      </div>
+
       <!-- Tabs (desktop only) -->
-      <div v-if="!isTrash && !isMobile" class="tabs-container">
+      <div v-else-if="!isTrash && !isMobile" class="tabs-container">
         <n-tabs v-model:value="activeTab" type="line" animated>
           <n-tab-pane name="catalog" tab="From Workspace">
             <!-- Search and Stats Bar -->
@@ -417,6 +497,14 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  suggestedPhotos: {
+    type: Array,
+    default: null,
+  },
+  loadingSuggestions: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits(["update:modelValue", "add-photos"]);
@@ -459,6 +547,11 @@ const allCatalogPhotos = ref([]);
 
 // Computed photos for different contexts
 const processedPhotos = computed(() => {
+  // If suggestedPhotos are provided, use them directly
+  if (props.suggestedPhotos && props.suggestedPhotos.length > 0) {
+    return props.suggestedPhotos;
+  }
+
   const hasSearch = searchQuery.value.trim();
   const hasResults = searchResults.value && searchResults.value.length > 0;
 
@@ -699,6 +792,21 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.suggestions-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 280px;
+  gap: 20px;
+}
+
+.suggestions-loading-text {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin: 0;
+}
+
 /* Dialog Header */
 .dialog-header {
   text-align: center;

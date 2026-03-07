@@ -180,7 +180,9 @@
         <PhotosGrid
           :collectionId="route.params.id"
           :photos="viewingCollection.photos || []"
+          :showSuggestButton="(viewingCollection.photos || []).length > 0"
           @refreshCollection="refreshCollection"
+          @suggest-photos="suggestPhotosForCollection"
         />
       </div>
     </div>
@@ -307,6 +309,20 @@
       @add-photos="onPhotosSelected"
     />
 
+    <!-- Suggested Photos Dialog -->
+    <PhotosDialog
+      v-model="suggestDialogVisible"
+      :is-trash="false"
+      :title="`Suggested Photos for ${
+        viewingCollection?.name || viewingCollection?.title || 'Collection'
+      }`"
+      :displayLightboxTab="false"
+      :displaySearch="false"
+      :suggestedPhotos="suggestedPhotos"
+      :loadingSuggestions="isSuggestingPhotos"
+      @add-photos="onPhotosSelected"
+    />
+
     <!-- Delete Collection Confirmation Dialog -->
     <n-modal
       v-model:show="deleteConfirmationVisible"
@@ -374,6 +390,7 @@ import PhotosGrid from "@/components/PhotosGrid.vue";
 import CollectionCard from "@/components/CollectionCard.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
+import { api } from "@/utils/axios";
 
 const route = useRoute();
 const router = useRouter();
@@ -384,6 +401,9 @@ const collectionsStore = useCollectionsStore();
 // State
 const createDialogVisible = ref(false);
 const photosDialogVisible = ref(false);
+const suggestDialogVisible = ref(false);
+const suggestedPhotos = ref(null);
+const isSuggestingPhotos = ref(false);
 const deleteConfirmationVisible = ref(false);
 const formRef = ref(null);
 const viewingCollection = ref(null); // Collection being viewed
@@ -503,6 +523,55 @@ const showAddPhotosDialog = () => {
   photosDialogVisible.value = true;
 };
 
+const suggestPhotosForCollection = async () => {
+  if (!viewingCollection.value) return;
+  const photos = viewingCollection.value.photos || [];
+  if (photos.length === 0) return;
+
+  isSuggestingPhotos.value = true;
+  suggestedPhotos.value = null;
+  suggestDialogVisible.value = true;
+  try {
+    // Sample 25% of photos, max 50, uniformly distributed
+    const sampleCount = Math.min(Math.ceil(photos.length * 0.25), 50);
+    const step = photos.length / sampleCount;
+    const anchorIds = [];
+    for (let i = 0; i < sampleCount; i++) {
+      anchorIds.push(photos[Math.floor(i * step)].id);
+    }
+
+    const currentPhotosIds = photos.map((p) => p.id);
+
+    const response = await api.post(`/api/search/byPhotos`, {
+      anchorIds,
+      currentPhotosIds,
+      criteria: "embedding",
+      opposite: false,
+      inverted: false,
+      resultLength: 200,
+    });
+
+    const backendPhotos = Array.isArray(response.data)
+      ? response.data
+      : [response.data];
+
+    // Resolve full photo objects from the store
+    const fullPhotos = backendPhotos
+      .map(
+        (bp) => photosStore.processedPhotos.find((p) => p.id === bp.id) || bp,
+      )
+      .filter(Boolean);
+
+    suggestedPhotos.value = fullPhotos;
+    suggestDialogVisible.value = true;
+  } catch (error) {
+    console.error("Error suggesting photos:", error);
+    message.error("Could not find suggested photos");
+  } finally {
+    isSuggestingPhotos.value = false;
+  }
+};
+
 const onPhotosSelected = async (photoIds) => {
   if (!photoIds || photoIds.length === 0) {
     message.warning("Please select at least one photo");
@@ -523,6 +592,7 @@ const onPhotosSelected = async (photoIds) => {
         } to the collection.`,
       );
       photosDialogVisible.value = false;
+      suggestDialogVisible.value = false;
       await refreshCollection();
     } catch (error) {
       console.error("Error adding photos to collection:", error);
