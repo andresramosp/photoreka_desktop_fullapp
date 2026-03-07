@@ -386,8 +386,8 @@ const IMAGE_ELIGIBLE_TOOLS = new Set(['search_advanced', 'get_photo_info'])
  * true  → reasoning-capable model for complex tool orchestration / curatorial logic.
  * false → fast lightweight model for simple retrieval.
  */
-const MODEL_PHASE1_REASONING: ModelName = 'gemini-3-flash-preview'
-const MODEL_PHASE1_FAST: ModelName = 'gemini-3-flash-preview'
+const MODEL_PHASE1_REASONING: ModelName = 'gemini-3.1-flash-lite-preview'
+const MODEL_PHASE1_FAST: ModelName = 'gemini-3.1-flash-lite-preview'
 
 /**
  * Phase 2 model selection — driven by `has_photo_intent`.
