@@ -284,11 +284,11 @@
         </div>
       </div>
 
-      <div class="first-import-footer">
+      <!-- <div class="first-import-footer">
         <span class="format-text"
-          >Supports JPG, PNG and major RAW formats (ARW, RAF, etc.)</span
+          >Supports JPG, PNG and major image formats</span
         >
-      </div>
+      </div> -->
     </div>
 
     <!-- Empty State Section -->
