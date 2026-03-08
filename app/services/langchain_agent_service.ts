@@ -33,7 +33,8 @@ Help photographers explore and analyze their library with insight and wit.
 ## Behavior
 - **Language:** Always match the user's language. Use English ALWAYS for internal tool calls.
 - **Scope:** Strictly photography and Photoreka features. Polite refusal for outside topics.
-- **Stealth:** Never mention tool names or internal IDs to the user.`
+- **Stealth:** Never mention tool names or internal IDs to the user.
+- **Grounding:** NEVER fabricate photo filenames, descriptions, scores, locations, or content. Only reference photos that were explicitly returned by tool calls. If a tool returns zero results, say so honestly — do not invent data to fill the gap.`
 
 const PHASE1_ROLE_ADDENDUM = `
 
@@ -121,6 +122,7 @@ Photos may arrive with thumbnails (for visual evaluation) or text-only descripti
 
 ## Curatorial judgment
 - **Selectivity:** Only include photos that genuinely match the user's request. Discard tangential or low-relevance results — even if returned by a search tool.
+- **Grounding:** Your response MUST be based EXCLUSIVELY on data returned by tools. If no photos were found or all tools returned empty results, state this clearly — NEVER invent filenames, descriptions, or photo content to fill the gap. An empty \`photo_groups\` array is correct when there are no real results.
 - **Scoring (1-10):** Use for internal ranking. Surface scores only if the user asks or it adds clear value.
     - *Scale:* 1 (Disastrous), 5 (Acceptable), 7.5 (Remarkable), 10 (Unique).
 - **Genre-specific priorities** — weight criteria by the photographer's style:
@@ -162,6 +164,7 @@ Photos may arrive with thumbnails (for visual evaluation) or text-only descripti
 
 ## Curatorial judgment
 - **Selectivity:** Only include photos that genuinely match the user's request. Discard tangential or low-relevance results — even if returned by a search tool.
+- **Grounding:** Your response MUST be based EXCLUSIVELY on data returned by tools. If no photos were found or all tools returned empty results, state this clearly — NEVER invent filenames, descriptions, or photo content to fill the gap. An empty \`photo_groups\` array is correct when there are no real results.
 - **Scoring (1-10):** Use for internal ranking. Surface scores only if the user asks or it adds clear value.
     - *Scale:* 1 (Disastrous), 5 (Acceptable), 7.5 (Remarkable), 10 (Unique).
 - **Genre-specific priorities** — weight criteria by the photographer's style:
@@ -585,10 +588,16 @@ export default class LangchainAgentService {
   }
 
   private async buildUserContext(userId: number): Promise<string> {
-    const [user, photoCount] = await Promise.all([
+    const [user, photoCount, analyzedCount] = await Promise.all([
       User.find(userId),
       Photo.query()
         .where('user_id', userId)
+        .count('* as total')
+        .then((r) => Number(r[0].$extras.total ?? 0)),
+      Photo.query()
+        .where('user_id', userId)
+        .whereNotNull('descriptions')
+        .whereRaw(`descriptions->>'artistic_scores' IS NOT NULL`)
         .count('* as total')
         .then((r) => Number(r[0].$extras.total ?? 0)),
     ])
@@ -599,10 +608,20 @@ export default class LangchainAgentService {
     lines.push(`- Name: ${user.name}`)
     if (user.preferredSource) lines.push(`- Preferred upload source: ${user.preferredSource}`)
     if (user.profiles) lines.push(`- Photography profile: ${user.profiles}`)
-    lines.push(`- Catalog size: ${photoCount} photo${photoCount !== 1 ? 's' : ''}`)
+    lines.push(
+      `- Catalog size: ${photoCount} photo${photoCount !== 1 ? 's' : ''} (${analyzedCount} analyzed)`
+    )
 
     const hasPatterns = user.catalogPatterns && Object.keys(user.catalogPatterns).length > 0
-    if (photoCount < 100 || !hasPatterns) {
+    if (photoCount === 0) {
+      lines.push(
+        `- ⚠️ CRITICAL: This catalog is EMPTY (0 photos). The user has not uploaded any photos yet. There is NOTHING to search, display, analyze, or reference. Do NOT fabricate any photo filenames, descriptions, or content. Inform the user that they need to upload photos first. Return empty photo_groups.`
+      )
+    } else if (analyzedCount === 0) {
+      lines.push(
+        `- ⚠️ CRITICAL: The user has ${photoCount} photo(s) uploaded but NONE have been analyzed yet. The photos exist in the Sync Area but are NOT searchable, scoreable, or describable — no descriptions, no scores, no visual data is available. Do NOT fabricate any photo filenames, descriptions, or content. Tools like search_advanced, catalog_sample, and overall_catalog_view will return empty results — this is expected. Inform the user that their photos need to be analyzed first (via the Analyze button in the Sync Area) before they can be explored or evaluated. Return empty photo_groups.`
+      )
+    } else if (analyzedCount < 100 || !hasPatterns) {
       lines.push(
         `- Note: this user is relatively new to the app and their catalog is still in its early stages. Be cautious with broad generalisations about their photography or overall style and mention the need for more photos in order to elaborate a better analysis.`
       )
