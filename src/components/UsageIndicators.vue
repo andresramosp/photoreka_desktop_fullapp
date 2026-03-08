@@ -37,7 +37,7 @@
   </div> -->
 
   <!-- Desktop: Full card -->
-  <div class="usage-indicators">
+  <div class="usage-indicators" :class="{ 'settings-mode': settingsMode }">
     <div class="usage-card">
       <div class="usage-header">
         <div class="usage-title">
@@ -54,48 +54,75 @@
         <div
           class="progress-fill analysis-progress"
           :style="{ width: analysisPercentage + '%' }"
+          :class="{
+            warning: analysisPercentage > 80,
+            critical: analysisPercentage > 95,
+          }"
         ></div>
       </div>
       <div class="usage-footer">
         <span class="remaining-text"
           >{{ analyzedPhotosRemaining }} analyses remaining</span
         >
+        <n-button
+          v-if="settingsMode"
+          type="primary"
+          size="small"
+          @click="() => {}"
+        >
+          <template #icon>
+            <n-icon>
+              <AddOutline />
+            </n-icon>
+          </template>
+          Add Analysis Credit
+        </n-button>
       </div>
     </div>
 
-    <!-- <div class="usage-card">
+    <div class="usage-card">
       <div class="usage-header">
         <div class="usage-title">
-          <n-icon size="16" color="var(--primary-color)">
-            <InProgress />
+          <n-icon size="16" color="var(--info-color)">
+            <DriveFolderUploadFilled />
           </n-icon>
-          Analysis Usage
+          Photo Upload
         </div>
-        <span class="usage-count"
-          >{{ analyzedPhotosUsed }} / {{ analyzedPhotosLimit }}</span
-        >
+        <span class="usage-count">{{ photosUsage }} / {{ photosLimit }}</span>
       </div>
       <div class="progress-bar">
         <div
-          class="progress-fill analysis-progress"
-          :style="{ width: analysisPercentage + '%' }"
+          class="progress-fill upload-progress"
+          :style="{ width: uploadPercentage + '%' }"
+          :class="{
+            warning: uploadPercentage > 80,
+            critical: uploadPercentage > 95,
+          }"
         ></div>
       </div>
       <div class="usage-footer">
         <span class="remaining-text"
-          >{{ analyzedPhotosRemaining }} analyses remaining</span
+          >{{ photosRemaining }} photos remaining</span
         >
       </div>
-    </div> -->
+    </div>
   </div>
 </template>
 
 <script setup>
 import { computed } from "vue";
 import { useUserStore } from "@/stores/userStore";
-import { NPopover, NButton, NIcon } from "naive-ui";
+import { NButton, NIcon } from "naive-ui";
 import { DriveFolderUploadFilled } from "@vicons/material";
 import { InProgress } from "@vicons/carbon";
+import { AddOutline } from "@vicons/ionicons5";
+
+const props = defineProps({
+  settingsMode: {
+    type: Boolean,
+    default: false,
+  },
+});
 
 const userStore = useUserStore();
 
@@ -190,9 +217,22 @@ const analysisPercentage = computed(() => {
   background-color: var(--primary-color);
 }
 
+.progress-fill.warning {
+  background-color: var(--warning-color);
+}
+
+.progress-fill.critical {
+  background-color: var(--error-color);
+}
+
+.usage-indicators.settings-mode {
+  flex-direction: column;
+}
+
 .usage-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .remaining-text {

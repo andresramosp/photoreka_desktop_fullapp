@@ -181,6 +181,7 @@
           :collectionId="route.params.id"
           :photos="viewingCollection.photos || []"
           :showSuggestButton="(viewingCollection.photos || []).length > 0"
+          :findDuplicatesEnabled="false"
           @refreshCollection="refreshCollection"
           @suggest-photos="suggestPhotosForCollection"
         />

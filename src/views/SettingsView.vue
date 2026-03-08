@@ -271,40 +271,40 @@
               </div>
             </div>
 
-            <!-- Storage Usage -->
+            <!-- Analysis Usage -->
             <div class="storage-usage-container">
               <div class="storage-header">
                 <div class="storage-title-row">
-                  <n-icon size="20" color="var(--info-color)">
-                    <DriveFolderUploadFilled />
+                  <n-icon size="20" color="var(--primary-color)">
+                    <InProgress />
                   </n-icon>
-                  <span class="storage-title">Photo Storage</span>
+                  <span class="storage-title">Analyzed Photos</span>
                 </div>
                 <span class="storage-count"
-                  >{{ photosUsage }} / {{ photosLimit }}</span
+                  >{{ analyzedPhotosUsed }} / {{ analyzedPhotosLimit }}</span
                 >
               </div>
               <div class="storage-progress-bar">
                 <div
                   class="storage-progress-fill"
-                  :style="{ width: uploadPercentage + '%' }"
+                  :style="{ width: analysisPercentage + '%' }"
                   :class="{
-                    warning: uploadPercentage > 80,
-                    critical: uploadPercentage > 95,
+                    warning: analysisPercentage > 80,
+                    critical: analysisPercentage > 95,
                   }"
                 ></div>
               </div>
               <div class="storage-footer">
                 <span class="storage-remaining"
-                  >{{ photosRemaining }} photos remaining</span
+                  >{{ analyzedPhotosRemaining }} analyses remaining</span
                 >
-                <n-button disabled type="primary" size="small">
+                <n-button type="primary" size="small" @click="() => {}">
                   <template #icon>
                     <n-icon>
                       <AddOutline />
                     </n-icon>
                   </template>
-                  Get More Storage
+                  Add Analysis Credit
                 </n-button>
               </div>
             </div>
@@ -336,7 +336,7 @@ import {
   MailOutline,
   SendOutline,
 } from "@vicons/ionicons5";
-import { DriveFolderUploadFilled } from "@vicons/material";
+import { InProgress } from "@vicons/carbon";
 import googlePhotosIconUrl from "@/assets/logos/google_photos.png";
 import { useUserStore } from "@/stores/userStore";
 import { useTheme } from "@/composables/useTheme.js";
@@ -440,15 +440,22 @@ const disconnectGooglePhotos = () => {
   message.info("Google Photos disconnected");
 };
 
-// Storage (real data from userStore)
-const photosUsage = computed(() => userStore.user?.usage?.photosUsage || 0);
-const photosLimit = computed(() => userStore.user?.usage?.photosLimit || 0);
-const photosRemaining = computed(
-  () => userStore.user?.usage?.photosRemaining || 0,
+// Analysis usage (real data from userStore)
+const analyzedPhotosUsed = computed(
+  () => userStore.user?.usage?.analyzedPhotosUsed || 0,
 );
-const uploadPercentage = computed(() => {
-  if (photosLimit.value === 0) return 0;
-  return Math.min((photosUsage.value / photosLimit.value) * 100, 100);
+const analyzedPhotosLimit = computed(
+  () => userStore.user?.usage?.analyzedPhotosLimit || 0,
+);
+const analyzedPhotosRemaining = computed(
+  () => userStore.user?.usage?.analyzedPhotosRemaining || 0,
+);
+const analysisPercentage = computed(() => {
+  if (analyzedPhotosLimit.value === 0) return 0;
+  return Math.min(
+    (analyzedPhotosUsed.value / analyzedPhotosLimit.value) * 100,
+    100,
+  );
 });
 
 // Actions
@@ -692,7 +699,7 @@ const saveSettings = () => {
   margin: 0;
 }
 
-/* Storage Usage Styles */
+/* Storage/Analysis Usage Styles */
 .storage-usage-container {
   padding: var(--spacing-lg);
   border-radius: var(--radius-md);
@@ -737,7 +744,7 @@ const saveSettings = () => {
 .storage-progress-fill {
   height: 100%;
   border-radius: var(--radius-full);
-  background-color: var(--info-color);
+  background-color: var(--primary-color);
   transition: width 0.3s ease;
 }
 

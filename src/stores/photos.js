@@ -334,39 +334,55 @@ export const usePhotosStore = defineStore("photos", {
       }
     },
 
-    async checkExactDuplicates(photoIds = null) {
+    async checkExactDuplicates(photoIds = null, scope = "lightbox") {
       try {
-        const payload = photoIds ? { newPhotoIds: photoIds } : {};
+        const payload = { scope };
+        if (photoIds) payload.newPhotoIds = photoIds;
         const res = await api.post(
           "/api/catalog/checkExactDuplicates",
           payload,
         );
         const duplicatesMap = res.data;
 
-        // Classify each photo's duplicates: lightbox-only vs workspace (processed/processing)
-        const processedIds = new Set(
-          this.photos
-            .filter(
-              (p) => p.status === "processed" || p.status === "processing",
-            )
-            .map((p) => p.id),
-        );
+        if (scope === "workspace") {
+          // Workspace: all duplicates are among processed photos, no "already analyzed" concept
+          for (const photo of this.photos) {
+            if (!photoIds || photoIds.includes(photo.id)) {
+              const allDupIds = duplicatesMap[photo.id] || [];
+              this.updatePhoto(photo.id, {
+                exactDuplicates: allDupIds,
+                isExactDuplicate: allDupIds.length > 0,
+                alreadyAnalyzedIds: [],
+                isAlreadyAnalyzed: false,
+              });
+            }
+          }
+        } else {
+          // Lightbox: classify duplicates into lightbox-only vs workspace (processed/processing)
+          const processedIds = new Set(
+            this.photos
+              .filter(
+                (p) => p.status === "processed" || p.status === "processing",
+              )
+              .map((p) => p.id),
+          );
 
-        for (const photo of this.photos) {
-          if (!photoIds || photoIds.includes(photo.id)) {
-            const allDupIds = duplicatesMap[photo.id] || [];
-            const lightboxDupIds = allDupIds.filter(
-              (id) => !processedIds.has(id),
-            );
-            const workspaceDupIds = allDupIds.filter((id) =>
-              processedIds.has(id),
-            );
-            this.updatePhoto(photo.id, {
-              exactDuplicates: lightboxDupIds,
-              isExactDuplicate: lightboxDupIds.length > 0,
-              alreadyAnalyzedIds: workspaceDupIds,
-              isAlreadyAnalyzed: workspaceDupIds.length > 0,
-            });
+          for (const photo of this.photos) {
+            if (!photoIds || photoIds.includes(photo.id)) {
+              const allDupIds = duplicatesMap[photo.id] || [];
+              const lightboxDupIds = allDupIds.filter(
+                (id) => !processedIds.has(id),
+              );
+              const workspaceDupIds = allDupIds.filter((id) =>
+                processedIds.has(id),
+              );
+              this.updatePhoto(photo.id, {
+                exactDuplicates: lightboxDupIds,
+                isExactDuplicate: lightboxDupIds.length > 0,
+                alreadyAnalyzedIds: workspaceDupIds,
+                isAlreadyAnalyzed: workspaceDupIds.length > 0,
+              });
+            }
           }
         }
 

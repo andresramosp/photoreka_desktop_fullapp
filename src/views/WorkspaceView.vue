@@ -63,7 +63,7 @@
       <div v-else class="catalog-section">
         <div class="catalog-photos">
           <!-- Photos Grid Component -->
-          <PhotosGrid :photos="processedPhotos" />
+          <PhotosGrid :photos="processedPhotos" context="workspace" />
         </div>
       </div>
     </div>
@@ -71,7 +71,7 @@
     <div v-else class="catalog-section">
       <div class="catalog-photos">
         <!-- Photos Grid Component -->
-        <PhotosGrid :photos="processedPhotos" />
+        <PhotosGrid :photos="processedPhotos" context="workspace" />
       </div>
     </div>
   </div>

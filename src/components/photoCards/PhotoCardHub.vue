@@ -570,8 +570,8 @@ onUnmounted(() => {
 .duplicate-indicator {
   background-color: rgba(245, 158, 11, 0.9);
   border-radius: 50%;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
