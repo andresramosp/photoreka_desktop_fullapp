@@ -56,9 +56,8 @@ export type Usage = {
   creditsUsed: number // Créditos gastados
   analyzedPhotosUsed: number // Contador acumulativo de fotos analizadas (no se reduce al borrar)
 
-  // Datos calculados (opcionales para compatibilidad)
+  // Datos calculados (opcionales)
   photosUsage?: number // Fotos actualmente subidas
-  analyzedPhotosUsage?: number // Total acumulativo de fotos analizadas
   photosRemaining?: number // Fotos restantes por subir
   analyzedPhotosRemaining?: number // Análisis restantes
 }
@@ -96,7 +95,6 @@ export default class UsageService {
     return {
       ...baseUsage,
       photosUsage,
-      analyzedPhotosUsage: analyzedPhotosUsed,
       photosRemaining: Math.max(0, baseUsage.photosLimit - photosUsage),
       analyzedPhotosRemaining: Math.max(0, baseUsage.analyzedPhotosLimit - analyzedPhotosUsed),
     }
