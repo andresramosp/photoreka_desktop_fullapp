@@ -88,6 +88,9 @@ export default class Photo extends BaseModel {
   @column({ serializeAs: null })
   declare colorHistogramDominant: string | number[]
 
+  @column({ serializeAs: null })
+  declare dhash: string | null
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 

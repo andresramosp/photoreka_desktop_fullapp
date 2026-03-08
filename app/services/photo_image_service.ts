@@ -3,7 +3,6 @@ import Logger, { LogLevel } from '../utils/logger.js'
 import Photo from '#models/photo'
 
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
-import { Readable } from 'node:stream'
 
 const s3 = new S3Client({
   region: 'auto',
@@ -12,6 +11,10 @@ const s3 = new S3Client({
     accessKeyId: process.env.R2_ACCESS_KEY!,
     secretAccessKey: process.env.R2_SECRET_KEY!,
   },
+  requestHandler: {
+    requestTimeout: 30_000,
+    httpsAgent: { maxSockets: 25 },
+  } as any,
 })
 
 const logger = Logger.getInstance('PhotoImageService')
@@ -45,12 +48,7 @@ export default class PhotoImageService {
       throw new Error(`No se encontró el archivo ${filename} en R2`)
     }
 
-    const chunks: Buffer[] = []
-    for await (const chunk of s3Response.Body as Readable) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-    }
-
-    const buffer = Buffer.concat(chunks)
+    const buffer = Buffer.from(await s3Response.Body.transformToByteArray())
 
     // Si no se necesitan líneas guía, devolver el buffer original
     if (!withGuideLines) {
@@ -86,18 +84,15 @@ export default class PhotoImageService {
       Key: filename,
     })
 
-    const s3Response = await s3.send(command)
+    const s3Response = await s3.send(command, {
+      abortSignal: AbortSignal.timeout(30_000),
+    })
 
     if (!s3Response.Body) {
       throw new Error(`No se encontró el archivo ${filename} en R2`)
     }
 
-    const chunks: Buffer[] = []
-    for await (const chunk of s3Response.Body as Readable) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-    }
-
-    return Buffer.concat(chunks)
+    return Buffer.from(await s3Response.Body.transformToByteArray())
   }
 
   // public async getPhotoImages(

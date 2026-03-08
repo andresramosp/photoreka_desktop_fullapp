@@ -4,6 +4,8 @@ import Photo from '#models/photo'
 import PhotoManager from '../../managers/photo_manager.js'
 import { S3Client, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
 import sharp from 'sharp'
+import axios from 'axios'
+import { computeDHash } from '../../utils/dhash.js'
 
 const logger = Logger.getInstance('AnalyzerProcess', 'MetadataTask')
 logger.setLevel(LogLevel.DEBUG)
@@ -11,6 +13,10 @@ logger.setLevel(LogLevel.DEBUG)
 const s3 = new S3Client({
   region: 'auto',
   endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  requestHandler: {
+    requestTimeout: 30_000,
+    httpsAgent: { maxSockets: 25 },
+  } as any,
   credentials: {
     accessKeyId: process.env.R2_ACCESS_KEY!,
     secretAccessKey: process.env.R2_SECRET_KEY!,
@@ -26,6 +32,7 @@ interface PhotoMetadata {
   fileSize?: number
   format?: string
   exif?: any
+  dhash?: string
 }
 
 export class MetadataTask extends AnalyzerTask {
@@ -177,6 +184,18 @@ export class MetadataTask extends AnalyzerTask {
       // Limpiar buffer para liberar memoria
       chunks.length = 0
 
+      // Generar dHash a partir del thumbnail público (solo si no existe ya)
+      let dhash: string | undefined = photo.dhash ?? undefined
+      if (!dhash) {
+        try {
+          const thumbRes = await axios.get(photo.thumbnailUrl, { responseType: 'arraybuffer' })
+          const thumbBuffer = Buffer.from(thumbRes.data)
+          dhash = await computeDHash(thumbBuffer)
+        } catch (err) {
+          logger.error(`Error generando dHash para foto ${photo.id}:`, err)
+        }
+      }
+
       return {
         orientation: [orientation],
         temperature: [temperature],
@@ -186,6 +205,7 @@ export class MetadataTask extends AnalyzerTask {
         fileSize,
         format: sharpMetadata.format,
         exif: sharpMetadata.exif ? this.parseExifData(sharpMetadata.exif) : null,
+        dhash,
       }
     } catch (error) {
       logger.error(`Error extrayendo metadatos para ${photo.name}:`, error)
@@ -312,9 +332,18 @@ export class MetadataTask extends AnalyzerTask {
       const photoIds = batch.map((p) => p.id)
 
       await Promise.all(
-        photoIds.map((photoId: number) => {
+        photoIds.map(async (photoId: number) => {
           const metadata = this.data[photoId]
-          if (!metadata) return Promise.resolve(null)
+          if (!metadata) return null
+
+          // Guardar dHash directamente en la foto si se generó
+          if (metadata.dhash) {
+            const photo = batch.find((p) => p.id === photoId)
+            if (photo && !photo.dhash) {
+              photo.dhash = metadata.dhash
+              await photo.save()
+            }
+          }
 
           // Estructurar los datos como visual_aspects siguiendo el patrón de visionDescriptionTask
           const visualAspectsData = {

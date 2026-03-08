@@ -21,6 +21,9 @@ import {
 } from '../utils/prompts/descriptions.js'
 import PhotoImageService from '#services/photo_image_service'
 import DescriptionChunk from '#models/descriptionChunk'
+import { computeDHash, hammingDistance, DHASH_DUPLICATE_THRESHOLD } from '../utils/dhash.js'
+import pLimit from 'p-limit'
+import axios from 'axios'
 
 const s3 = new S3Client({
   region: 'auto',
@@ -259,51 +262,69 @@ export default class CatalogController {
     const user = auth.use('api').user! as any
     const userId = user.id.toString()
 
-    const { newPhotoIds } = request.only(['newPhotoIds'])
+    const { newPhotoIds, scope } = request.only(['newPhotoIds', 'scope'])
 
-    const userPhotos = await Photo.query().where('user_id', userId)
+    let userPhotos: Photo[]
+
+    if (scope === 'workspace') {
+      // Workspace: only compare processed photos (finished, non-preprocess analyzer)
+      userPhotos = await Photo.query()
+        .where('user_id', userId)
+        .whereHas('analyzerProcess', (query) => {
+          query.where('is_preprocess', false).where('current_stage', 'finished')
+        })
+    } else {
+      // Lightbox: compare against all user photos
+      userPhotos = await Photo.query().where('user_id', userId)
+    }
 
     const photosToCheck =
       !newPhotoIds || newPhotoIds.length === 0
         ? userPhotos
         : userPhotos.filter((p) => newPhotoIds.includes(p.id))
 
-    const photoImageService = PhotoImageService.getInstance()
+    // Compute dHash on-the-fly: use cached DB value if available, otherwise download via public URL
+    const limit = pLimit(10)
+    const photoHashes: { id: number; hash: string }[] = []
 
-    // Compute MD5 for ALL user photos (not just photosToCheck) so that
-    // lightbox photos can be matched against workspace photos and vice-versa.
-    const hashGroups: Record<string, number[]> = {}
-
-    const CONCURRENCY = 10
-    for (let i = 0; i < userPhotos.length; i += CONCURRENCY) {
-      const batch = userPhotos.slice(i, i + CONCURRENCY)
-      await Promise.all(
-        batch.map(async (photo) => {
+    await Promise.all(
+      userPhotos.map((photo) =>
+        limit(async () => {
           try {
-            const buffer = await photoImageService.getImageBufferFromR2(photo.thumbnailName)
-            const hash = crypto.createHash('md5').update(buffer).digest('hex')
-
-            if (!hashGroups[hash]) {
-              hashGroups[hash] = []
+            let hash = photo.dhash
+            if (!hash) {
+              const res = await axios.get(photo.thumbnailUrl, { responseType: 'arraybuffer' })
+              const buffer = Buffer.from(res.data)
+              hash = await computeDHash(buffer)
+              photo.dhash = hash
+              await photo.save()
             }
-            hashGroups[hash].push(photo.id)
+            photoHashes.push({ id: photo.id, hash })
           } catch {
-            // Skip photos whose thumbnails can't be fetched
+            // skip photo if unreachable
           }
         })
       )
-    }
+    )
 
-    // Build results: only return entries for photos in photosToCheck,
-    // but their duplicate arrays may include photos outside photosToCheck
-    // (e.g. workspace photos when called from lightbox context).
+    // Compare dHashes pairwise using Hamming distance
     const photosToCheckIds = new Set(photosToCheck.map((p) => p.id))
     const results: Record<number, number[]> = {}
-    for (const ids of Object.values(hashGroups)) {
-      if (ids.length < 2) continue
-      for (const id of ids) {
-        if (!photosToCheckIds.has(id)) continue
-        results[id] = ids.filter((otherId) => otherId !== id)
+
+    for (let i = 0; i < photoHashes.length; i++) {
+      for (let j = i + 1; j < photoHashes.length; j++) {
+        const a = photoHashes[i]
+        const b = photoHashes[j]
+        if (hammingDistance(a.hash, b.hash) <= DHASH_DUPLICATE_THRESHOLD) {
+          if (photosToCheckIds.has(a.id)) {
+            if (!results[a.id]) results[a.id] = []
+            results[a.id].push(b.id)
+          }
+          if (photosToCheckIds.has(b.id)) {
+            if (!results[b.id]) results[b.id] = []
+            results[b.id].push(a.id)
+          }
+        }
       }
     }
 
