@@ -32,35 +32,29 @@
         </div>
 
         <div class="duplicates-controls-container desktop-only">
-          <!-- Review Duplicates Button -->
+          <!-- Find Exact Duplicates Button -->
           <n-tooltip placement="bottom" trigger="hover">
             <template #trigger>
               <n-button
                 type="primary"
                 size="small"
                 secondary
-                @click="handleReviewDuplicates"
-                :disabled="
-                  duplicatesReviewed ||
-                  isDemoUser ||
-                  !props.findDuplicatesEnabled
-                "
+                :disabled="duplicatesReviewed || isDemoUser"
                 :loading="isCheckingDuplicates"
+                @click="handleReviewDuplicates('exact')"
               >
                 <template #icon v-if="!isCheckingDuplicates">
                   <n-icon>
                     <DuplicateOutline />
                   </n-icon>
                 </template>
-                {{ "Find duplicates" }}
+                Find duplicates
               </n-button>
             </template>
             <span>{{
               isDemoUser
                 ? "Not available in demo mode"
-                : !props.findDuplicatesEnabled
-                  ? "Only up to 50 photos can be checked for duplicates in the Lightbox"
-                  : "Review duplicate photos in your selection"
+                : "Find exact duplicate photos in your selection"
             }}</span>
           </n-tooltip>
 
@@ -77,6 +71,39 @@
               Filter duplicates
             </n-checkbox>
           </div>
+
+          <!-- Bulk delete actions (only when filtering duplicates) -->
+          <template v-if="filterDuplicates && hasDuplicates">
+            <n-dropdown
+              v-if="props.context === 'lightbox'"
+              :options="lightboxCleanOptions"
+              @select="handleLightboxCleanSelect"
+              trigger="click"
+            >
+              <n-button
+                type="warning"
+                size="small"
+                :loading="isDeletingBulkDuplicates"
+              >
+                <template #icon>
+                  <n-icon><SparklesOutline /></n-icon>
+                </template>
+                Clean duplicates
+              </n-button>
+            </n-dropdown>
+            <n-button
+              v-else-if="props.context === 'workspace'"
+              type="warning"
+              size="small"
+              :loading="isDeletingBulkDuplicates"
+              @click="handleDeleteAllDuplicates"
+            >
+              <template #icon>
+                <n-icon><SparklesOutline /></n-icon>
+              </template>
+              Clean duplicates
+            </n-button>
+          </template>
         </div>
       </div>
 
@@ -327,6 +354,8 @@
     <DuplicatePhotosDialog
       v-model="showDuplicatesDialog"
       :duplicates="selectedDuplicatesData"
+      :context="props.context"
+      :duplicate-type="lastDuplicateType || 'similar'"
     />
 
     <!-- Collection Modal -->
@@ -409,10 +438,16 @@ import {
   NModal,
   NCard,
   NSelect,
+  NDropdown,
   useMessage,
   NTooltip,
 } from "naive-ui";
-import { DuplicateOutline, CloseOutline, AddOutline } from "@vicons/ionicons5";
+import {
+  DuplicateOutline,
+  CloseOutline,
+  AddOutline,
+  SparklesOutline,
+} from "@vicons/ionicons5";
 import { SquareOutline } from "@vicons/ionicons5";
 import { useRouter } from "vue-router";
 import PhotoCardHub from "./photoCards/PhotoCardHub.vue";
@@ -467,6 +502,11 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  context: {
+    type: String,
+    default: "workspace",
+    validator: (v) => ["workspace", "lightbox"].includes(v),
+  },
   showSuggestButton: {
     type: Boolean,
     default: false,
@@ -509,8 +549,10 @@ const isDemoUser = computed(() => {
 const gridColumns = ref(8);
 const filterDuplicates = ref(false);
 const isCheckingDuplicates = ref(false);
+const isDeletingBulkDuplicates = ref(false);
 const duplicatesReviewed = ref(false);
 const hasDuplicates = ref(false);
+const lastDuplicateType = ref(null); // 'exact' or 'similar'
 
 // Select all banner state
 const showSelectAllBanner = ref(false);
@@ -813,32 +855,47 @@ const handleArtisticScoresChange = (filters) => {
 };
 
 // Handle review duplicates (preprocess and check)
-const handleReviewDuplicates = async () => {
+const handleReviewDuplicates = async (type = "similar") => {
   isCheckingDuplicates.value = true;
+  lastDuplicateType.value = type;
   try {
-    // First, get all photo IDs that need preprocessing
     const photoIds = props.photos.map((photo) => photo.id);
 
-    // Call preprocessPhotos first (this is idempotent if already processed)
-    await preprocessPhotos(photoIds);
+    if (type === "exact") {
+      // MD5-based exact duplicate detection (no preprocessing needed)
+      await photosStore.checkExactDuplicates(photoIds);
 
-    // Then check for duplicates
-    await photosStore.checkDuplicates(photoIds);
+      const duplicatesCount = props.photos.filter(
+        (photo) => photo.isExactDuplicate || photo.isAlreadyAnalyzed,
+      ).length;
 
-    // Count how many duplicates we found
-    const duplicatesCount = props.photos.filter(
-      (photo) => photo.isDuplicate,
-    ).length;
+      duplicatesReviewed.value = true;
+      hasDuplicates.value = duplicatesCount > 0;
 
-    duplicatesReviewed.value = true;
-    hasDuplicates.value = duplicatesCount > 0;
-
-    if (duplicatesCount > 0) {
-      message.info(
-        `Found ${duplicatesCount} duplicate photos. Use the filter checkbox to view them.`,
-      );
+      if (duplicatesCount > 0) {
+        filterDuplicates.value = true;
+        message.info(`Found ${duplicatesCount} exact duplicate photos.`);
+      } else {
+        message.success("No exact duplicate photos found.");
+      }
     } else {
-      message.success("No duplicate photos found.");
+      // CLIP-based similar duplicate detection
+      await preprocessPhotos(photoIds);
+      await photosStore.checkDuplicates(photoIds);
+
+      const duplicatesCount = props.photos.filter(
+        (photo) => photo.isDuplicate,
+      ).length;
+
+      duplicatesReviewed.value = true;
+      hasDuplicates.value = duplicatesCount > 0;
+
+      if (duplicatesCount > 0) {
+        filterDuplicates.value = true;
+        message.info(`Found ${duplicatesCount} similar duplicate photos.`);
+      } else {
+        message.success("No similar duplicate photos found.");
+      }
     }
   } catch (error) {
     console.error("Error reviewing duplicates:", error);
@@ -852,13 +909,145 @@ const handleFilterDuplicatesChange = (checked) => {
   filterDuplicates.value = checked;
 };
 
+// Lightbox clean duplicates dropdown options (computed to show live counts)
+const lightboxCleanOptions = computed(() => {
+  const alreadyAnalyzedCount = props.photos.filter(
+    (p) => p.isAlreadyAnalyzed,
+  ).length;
+  return [
+    { label: "Within Lightbox (keep one per group)", key: "within-upload" },
+    {
+      label: `Already in workspace${alreadyAnalyzedCount > 0 ? ` (${alreadyAnalyzedCount})` : ""}`,
+      key: "already-analyzed",
+      disabled: alreadyAnalyzedCount === 0,
+    },
+  ];
+});
+
+const handleLightboxCleanSelect = (key) => {
+  if (key === "within-upload") handleDeleteDuplicatesWithinUpload();
+  else if (key === "already-analyzed") handleDeleteAlreadyAnalyzed();
+};
+
+// Helper to reset duplicate state after bulk delete
+const resetDuplicateState = () => {
+  duplicatesReviewed.value = false;
+  hasDuplicates.value = false;
+  filterDuplicates.value = false;
+  lastDuplicateType.value = null;
+};
+
+// Lightbox: delete duplicate non-processed photos, keeping one per group
+const handleDeleteDuplicatesWithinUpload = async () => {
+  isDeletingBulkDuplicates.value = true;
+  const visited = new Set();
+  const toDelete = [];
+
+  for (const photo of filteredAndSortedPhotos.value) {
+    if (visited.has(photo.id) || photo.status === "processed") continue;
+    visited.add(photo.id);
+    const dupIds = (photo.exactDuplicates || []).filter((id) => {
+      const p = photosStore.photos.find((ph) => ph.id === id);
+      return p && p.status !== "processed" && !visited.has(id);
+    });
+    for (const id of dupIds) {
+      toDelete.push(id);
+      visited.add(id);
+    }
+  }
+
+  if (toDelete.length === 0) {
+    message.info("No duplicates to remove within upload.");
+    isDeletingBulkDuplicates.value = false;
+    return;
+  }
+
+  try {
+    await photosStore.deletePhotos(toDelete);
+    message.success(`Removed ${toDelete.length} duplicate(s) within upload.`);
+    resetDuplicateState();
+  } catch (error) {
+    console.error("Error removing duplicates within upload:", error);
+  } finally {
+    isDeletingBulkDuplicates.value = false;
+  }
+};
+
+// Lightbox: delete non-processed photos that already exist as processed in workspace
+const handleDeleteAlreadyAnalyzed = async () => {
+  isDeletingBulkDuplicates.value = true;
+
+  const toDelete = props.photos
+    .filter((photo) => photo.isAlreadyAnalyzed)
+    .map((p) => p.id);
+
+  if (toDelete.length === 0) {
+    message.info("No uploaded photos already analyzed in workspace.");
+    isDeletingBulkDuplicates.value = false;
+    return;
+  }
+
+  try {
+    await photosStore.deletePhotos(toDelete);
+    message.success(
+      `Removed ${toDelete.length} photo(s) already analyzed in workspace.`,
+    );
+    resetDuplicateState();
+  } catch (error) {
+    console.error("Error removing already analyzed photos:", error);
+  } finally {
+    isDeletingBulkDuplicates.value = false;
+  }
+};
+
+// Workspace: delete all duplicate processed photos, keeping one per group
+const handleDeleteAllDuplicates = async () => {
+  isDeletingBulkDuplicates.value = true;
+
+  const visited = new Set();
+  const toDelete = [];
+
+  for (const photo of filteredAndSortedPhotos.value) {
+    if (visited.has(photo.id)) continue;
+    visited.add(photo.id);
+    const dupIds = (photo.exactDuplicates || []).filter(
+      (id) => !visited.has(id),
+    );
+    for (const id of dupIds) {
+      toDelete.push(id);
+      visited.add(id);
+    }
+  }
+
+  if (toDelete.length === 0) {
+    message.info("No duplicates to remove.");
+    isDeletingBulkDuplicates.value = false;
+    return;
+  }
+
+  try {
+    await photosStore.deletePhotos(toDelete);
+    message.success(
+      `Removed ${toDelete.length} duplicate(s), keeping one per group.`,
+    );
+    resetDuplicateState();
+  } catch (error) {
+    console.error("Error removing all duplicates:", error);
+  } finally {
+    isDeletingBulkDuplicates.value = false;
+  }
+};
+
 // Function to group duplicates (same as WorkspacePhotos)
-function groupDuplicates(photos) {
+function groupDuplicates(photos, type = "similar") {
   const groupMap = new Map();
   const added = new Set();
+  const isDupKey = type === "exact" ? "isExactDuplicate" : "isDuplicate";
+  const dupsKey = type === "exact" ? "exactDuplicates" : "duplicates";
+
   photos.forEach((photo) => {
-    if (!photo.isDuplicate) return;
-    const groupIds = [photo.id, ...(photo.duplicates || [])].sort((a, b) =>
+    if (!photo[isDupKey]) return;
+    const groupIds = [photo.id, ...(photo[dupsKey] || [])].sort((a, b) =>
       String(a).localeCompare(String(b)),
     );
     const groupKey = groupIds.join("-");
@@ -868,8 +1057,8 @@ function groupDuplicates(photos) {
 
   const result = [];
   photos.forEach((photo) => {
-    if (!photo.isDuplicate) return;
-    const groupIds = [photo.id, ...(photo.duplicates || [])].sort((a, b) =>
+    if (!photo[isDupKey]) return;
+    const groupIds = [photo.id, ...(photo[dupsKey] || [])].sort((a, b) =>
       String(a).localeCompare(String(b)),
     );
     const groupKey = groupIds.join("-");
@@ -964,7 +1153,20 @@ const filteredAndSortedPhotos = computed(() => {
 
   // Apply duplicates filter
   if (filterDuplicates.value) {
-    filtered = groupDuplicates(filtered.filter((photo) => photo.isDuplicate));
+    if (lastDuplicateType.value === "exact") {
+      const exactDuplicatePhotos = filtered.filter(
+        (photo) => photo.isExactDuplicate,
+      );
+      const alreadyAnalyzedPhotos = filtered.filter(
+        (photo) => photo.isAlreadyAnalyzed && !photo.isExactDuplicate,
+      );
+      filtered = [
+        ...groupDuplicates(exactDuplicatePhotos, "exact"),
+        ...alreadyAnalyzedPhotos,
+      ];
+    } else {
+      filtered = groupDuplicates(filtered.filter((photo) => photo.isDuplicate));
+    }
   }
 
   // Apply sorting by artistic score

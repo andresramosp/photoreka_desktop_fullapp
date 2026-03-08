@@ -12,7 +12,7 @@
     </template>
     <template #header>
       <div class="dialog-header">
-        <h2 class="dialog-title">Duplicate Photos</h2>
+        <h2 class="dialog-title">{{ dialogTitle }}</h2>
       </div>
     </template>
 
@@ -25,6 +25,44 @@
           </span>
         </div>
         <div class="actions-right">
+          <!-- Context-aware action buttons -->
+          <!-- Lightbox: Remove duplicates within upload -->
+          <n-button
+            v-if="context === 'lightbox' && lightboxOnlyDuplicates.length > 0"
+            type="warning"
+            size="small"
+            @click="handleRemoveDuplicatesWithinUpload"
+          >
+            <template #icon>
+              <n-icon><CleanIcon /></n-icon>
+            </template>
+            Remove duplicates within upload
+          </n-button>
+          <!-- Lightbox: Remove already existing in workspace -->
+          <n-button
+            v-if="context === 'lightbox' && alreadyInWorkspace.length > 0"
+            type="warning"
+            size="small"
+            @click="handleRemoveAlreadyInWorkspace"
+          >
+            <template #icon>
+              <n-icon><CleanIcon /></n-icon>
+            </template>
+            Remove already existing in workspace
+          </n-button>
+          <!-- Workspace: Remove all duplicates -->
+          <n-button
+            v-if="context === 'workspace' && duplicatePhotos.length > 1"
+            type="warning"
+            size="small"
+            @click="handleRemoveAllDuplicates"
+          >
+            <template #icon>
+              <n-icon><CleanIcon /></n-icon>
+            </template>
+            Remove all duplicates
+          </n-button>
+          <!-- Legacy: Delete Non-processed -->
           <n-button
             v-if="showDeleteButton"
             type="warning"
@@ -182,6 +220,16 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  context: {
+    type: String,
+    default: "workspace",
+    validator: (v) => ["workspace", "lightbox"].includes(v),
+  },
+  duplicateType: {
+    type: String,
+    default: "similar",
+    validator: (v) => ["exact", "similar"].includes(v),
+  },
 });
 
 const emit = defineEmits(["update:modelValue"]);
@@ -197,11 +245,37 @@ const visible = computed({
 
 const selectedPhotoIds = ref([]);
 
+// Dialog title based on context and type
+const dialogTitle = computed(() => {
+  const typeLabel = props.duplicateType === "exact" ? "Exact" : "Similar";
+  return `${typeLabel} Duplicate Photos`;
+});
+
 // Get full photo objects from the duplicates array
 const duplicatePhotos = computed(() => {
   return props.duplicates
     .map((photoId) => photosStore.photos.find((p) => p.id === photoId))
     .filter(Boolean);
+});
+
+// Lightbox context: photos that are only duplicated within the upload (non-processed)
+const lightboxOnlyDuplicates = computed(() => {
+  return duplicatePhotos.value.filter((photo) => photo.status !== "processed");
+});
+
+// Lightbox context: uploaded photos that already exist in workspace (processed)
+const alreadyInWorkspace = computed(() => {
+  // Find non-processed photos whose duplicates include a processed photo
+  return duplicatePhotos.value.filter((photo) => {
+    if (photo.status === "processed") return false;
+    const dupsKey =
+      props.duplicateType === "exact" ? "exactDuplicates" : "duplicates";
+    const dupIds = photo[dupsKey] || [];
+    return dupIds.some((dupId) => {
+      const dupPhoto = photosStore.photos.find((p) => p.id === dupId);
+      return dupPhoto && dupPhoto.status === "processed";
+    });
+  });
 });
 
 // Check if all photos are selected
@@ -298,6 +372,100 @@ const handleDeleteWorseVersions = async () => {
     photosStore.checkDuplicates();
     message.success("Non-processed photos deleted successfully");
   } catch (error) {}
+};
+
+// Lightbox: Remove duplicates within upload (keep one per group, only among non-processed)
+const handleRemoveDuplicatesWithinUpload = async () => {
+  const dupsKey =
+    props.duplicateType === "exact" ? "exactDuplicates" : "duplicates";
+  const isDupKey =
+    props.duplicateType === "exact" ? "isExactDuplicate" : "isDuplicate";
+
+  // Group duplicates
+  const visited = new Set();
+  const toDelete = [];
+  for (const photo of duplicatePhotos.value) {
+    if (visited.has(photo.id) || photo.status === "processed") continue;
+    visited.add(photo.id);
+    const dupIds = (photo[dupsKey] || []).filter((id) => {
+      const p = photosStore.photos.find((ph) => ph.id === id);
+      return p && p.status !== "processed" && !visited.has(id);
+    });
+    // Mark all but the first as to-delete
+    for (const id of dupIds) {
+      toDelete.push(id);
+      visited.add(id);
+    }
+  }
+
+  if (toDelete.length === 0) {
+    message.info("No duplicates to remove within upload.");
+    return;
+  }
+
+  try {
+    await photosStore.deletePhotos(toDelete);
+    selectedPhotoIds.value = selectedPhotoIds.value.filter(
+      (id) => !toDelete.includes(id),
+    );
+    message.success(`Removed ${toDelete.length} duplicate(s) within upload.`);
+  } catch (error) {
+    console.error("Error removing duplicates within upload:", error);
+  }
+};
+
+// Lightbox: Remove already existing in workspace
+const handleRemoveAlreadyInWorkspace = async () => {
+  const ids = alreadyInWorkspace.value.map((p) => p.id);
+  if (ids.length === 0) {
+    message.info("No uploaded photos already exist in workspace.");
+    return;
+  }
+
+  try {
+    await photosStore.deletePhotos(ids);
+    selectedPhotoIds.value = selectedPhotoIds.value.filter(
+      (id) => !ids.includes(id),
+    );
+    message.success(`Removed ${ids.length} photo(s) already in workspace.`);
+  } catch (error) {
+    console.error("Error removing photos already in workspace:", error);
+  }
+};
+
+// Workspace: Remove all duplicates (keep one per group)
+const handleRemoveAllDuplicates = async () => {
+  const dupsKey =
+    props.duplicateType === "exact" ? "exactDuplicates" : "duplicates";
+
+  const visited = new Set();
+  const toDelete = [];
+  for (const photo of duplicatePhotos.value) {
+    if (visited.has(photo.id)) continue;
+    visited.add(photo.id);
+    const dupIds = (photo[dupsKey] || []).filter((id) => !visited.has(id));
+    for (const id of dupIds) {
+      toDelete.push(id);
+      visited.add(id);
+    }
+  }
+
+  if (toDelete.length === 0) {
+    message.info("No duplicates to remove.");
+    return;
+  }
+
+  try {
+    await photosStore.deletePhotos(toDelete);
+    selectedPhotoIds.value = selectedPhotoIds.value.filter(
+      (id) => !toDelete.includes(id),
+    );
+    message.success(
+      `Removed ${toDelete.length} duplicate(s), keeping one per group.`,
+    );
+  } catch (error) {
+    console.error("Error removing all duplicates:", error);
+  }
 };
 
 const close = () => {

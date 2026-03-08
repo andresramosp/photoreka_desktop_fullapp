@@ -41,22 +41,24 @@
     <div class="usage-card">
       <div class="usage-header">
         <div class="usage-title">
-          <n-icon size="16" color="var(--info-color)">
-            <DriveFolderUploadFilled />
+          <n-icon size="16" color="var(--primary-color)">
+            <InProgress />
           </n-icon>
-          Upload Usage
+          Analyzed Photos
         </div>
-        <span class="usage-count">{{ photosUsage }} / {{ photosLimit }}</span>
+        <span class="usage-count"
+          >{{ analyzedPhotosUsage }} / {{ analyzedPhotosLimit }}</span
+        >
       </div>
       <div class="progress-bar">
         <div
-          class="progress-fill upload-progress"
-          :style="{ width: uploadPercentage + '%' }"
+          class="progress-fill analysis-progress"
+          :style="{ width: analysisPercentage + '%' }"
         ></div>
       </div>
       <div class="usage-footer">
         <span class="remaining-text"
-          >{{ photosRemaining }} photos remaining</span
+          >{{ analyzedPhotosRemaining }} analyses remaining</span
         >
       </div>
     </div>

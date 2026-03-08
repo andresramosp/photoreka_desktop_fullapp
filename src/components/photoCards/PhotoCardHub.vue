@@ -134,7 +134,12 @@
       </n-tooltip>
       <!-- Duplicate indicator in top-left corner when footer is hidden -->
       <n-tooltip
-        v-if="photo.isDuplicate && showDuplicate && !showFooter"
+        v-if="
+          photo.isDuplicate &&
+          !photo.isAlreadyAnalyzed &&
+          showDuplicate &&
+          !showFooter
+        "
         trigger="hover"
         placement="top"
       >
@@ -149,6 +154,23 @@
           </div>
         </template>
         Click to view duplicates
+      </n-tooltip>
+      <!-- Already-analyzed indicator in top-left corner when footer is hidden -->
+      <n-tooltip
+        v-else-if="photo.isAlreadyAnalyzed && showDuplicate && !showFooter"
+        trigger="hover"
+        placement="top"
+      >
+        <template #trigger>
+          <div
+            class="duplicate-indicator top-left-duplicate-indicator already-analyzed-indicator"
+          >
+            <n-icon size="16">
+              <WarningIcon />
+            </n-icon>
+          </div>
+        </template>
+        Already analyzed in workspace
       </n-tooltip>
 
       <!-- File name in top-right corner of photo (if showName) -->
@@ -238,9 +260,9 @@
           Valid in all tools
         </n-tooltip>
       </div>
-      <!-- Duplicate indicator in footer, right-aligned -->
+      <!-- Duplicate indicator: lightbox-vs-lightbox duplicate (opens dialog) -->
       <n-tooltip
-        v-if="photo.isDuplicate && showDuplicate"
+        v-if="photo.isDuplicate && !photo.isAlreadyAnalyzed && showDuplicate"
         trigger="hover"
         placement="top"
       >
@@ -255,6 +277,23 @@
           </div>
         </template>
         Click to view duplicates
+      </n-tooltip>
+      <!-- Already-analyzed indicator: lightbox photo matched to workspace (tooltip only, no dialog) -->
+      <n-tooltip
+        v-else-if="photo.isAlreadyAnalyzed && showDuplicate"
+        trigger="hover"
+        placement="top"
+      >
+        <template #trigger>
+          <div
+            class="duplicate-indicator footer-duplicate-indicator already-analyzed-indicator"
+          >
+            <n-icon size="16">
+              <WarningIcon />
+            </n-icon>
+          </div>
+        </template>
+        Already analyzed in workspace
       </n-tooltip>
     </div>
   </div>
@@ -286,6 +325,8 @@ interface PhotoInfo {
   date?: string;
   isDuplicate?: boolean;
   duplicates?: string[];
+  isAlreadyAnalyzed?: boolean;
+  alreadyAnalyzedIds?: string[];
   status?:
     | "uploaded"
     | "preprocessing"
@@ -542,6 +583,11 @@ onUnmounted(() => {
   position: static;
   margin-left: auto;
   margin-right: 0;
+}
+
+.already-analyzed-indicator {
+  cursor: default;
+  background-color: rgba(245, 158, 11, 0.6);
 }
 
 .top-left-duplicate-indicator {

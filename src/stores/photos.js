@@ -334,6 +334,52 @@ export const usePhotosStore = defineStore("photos", {
       }
     },
 
+    async checkExactDuplicates(photoIds = null) {
+      try {
+        const payload = photoIds ? { newPhotoIds: photoIds } : {};
+        const res = await api.post(
+          "/api/catalog/checkExactDuplicates",
+          payload,
+        );
+        const duplicatesMap = res.data;
+
+        // Classify each photo's duplicates: lightbox-only vs workspace (processed/processing)
+        const processedIds = new Set(
+          this.photos
+            .filter(
+              (p) => p.status === "processed" || p.status === "processing",
+            )
+            .map((p) => p.id),
+        );
+
+        for (const photo of this.photos) {
+          if (!photoIds || photoIds.includes(photo.id)) {
+            const allDupIds = duplicatesMap[photo.id] || [];
+            const lightboxDupIds = allDupIds.filter(
+              (id) => !processedIds.has(id),
+            );
+            const workspaceDupIds = allDupIds.filter((id) =>
+              processedIds.has(id),
+            );
+            this.updatePhoto(photo.id, {
+              exactDuplicates: lightboxDupIds,
+              isExactDuplicate: lightboxDupIds.length > 0,
+              alreadyAnalyzedIds: workspaceDupIds,
+              isAlreadyAnalyzed: workspaceDupIds.length > 0,
+            });
+          }
+        }
+
+        return duplicatesMap;
+      } catch (error) {
+        console.warn(
+          "API not available for checkExactDuplicates:",
+          error.message,
+        );
+        return {};
+      }
+    },
+
     // Acciones de selección global - solo para PhotoHub (PhotosCatalog y PhotosUpload)
     togglePhotoSelection(photoId) {
       this.selectedPhotosRecord[photoId] = !this.selectedPhotosRecord[photoId];
