@@ -8,7 +8,7 @@ interface Usage {
   creditsAvailable: number;
   analyzedPhotosLimit: number;
   photosUsage: number;
-  analyzedPhotosUsage: number;
+  analyzedPhotosUsed: number;
   photosRemaining: number;
   analyzedPhotosRemaining: number;
 }

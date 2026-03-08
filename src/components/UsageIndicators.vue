@@ -47,7 +47,7 @@
           Analyzed Photos
         </div>
         <span class="usage-count"
-          >{{ analyzedPhotosUsage }} / {{ analyzedPhotosLimit }}</span
+          >{{ analyzedPhotosUsed }} / {{ analyzedPhotosLimit }}</span
         >
       </div>
       <div class="progress-bar">
@@ -72,7 +72,7 @@
           Analysis Usage
         </div>
         <span class="usage-count"
-          >{{ analyzedPhotosUsage }} / {{ analyzedPhotosLimit }}</span
+          >{{ analyzedPhotosUsed }} / {{ analyzedPhotosLimit }}</span
         >
       </div>
       <div class="progress-bar">
@@ -103,8 +103,8 @@ const userStore = useUserStore();
 const photosUsage = computed(() => userStore.user?.usage?.photosUsage || 0);
 const photosLimit = computed(() => userStore.user?.usage?.photosLimit || 5000);
 const photosRemaining = computed(() => userStore.user?.usage?.photosRemaining);
-const analyzedPhotosUsage = computed(
-  () => userStore.user?.usage?.analyzedPhotosUsage || 0,
+const analyzedPhotosUsed = computed(
+  () => userStore.user?.usage?.analyzedPhotosUsed || 0,
 );
 const analyzedPhotosLimit = computed(
   () => userStore.user?.usage?.analyzedPhotosLimit || 2000,
@@ -123,7 +123,7 @@ const uploadPercentage = computed(() => {
 const analysisPercentage = computed(() => {
   if (analyzedPhotosLimit.value === 0) return 0;
   return Math.min(
-    (analyzedPhotosUsage.value / analyzedPhotosLimit.value) * 100,
+    (analyzedPhotosUsed.value / analyzedPhotosLimit.value) * 100,
     100,
   );
 });
