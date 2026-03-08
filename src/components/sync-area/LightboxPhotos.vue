@@ -445,6 +445,7 @@
         :displayAddToCollection="false"
         :displayMoveToTool="false"
         :hideControls="true"
+        :findDuplicatesEnabled="filteredPhotos.length < 50"
         @selection-change="handleSelectionChange"
       />
     </div>

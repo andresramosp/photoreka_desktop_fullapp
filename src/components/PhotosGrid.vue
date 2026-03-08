@@ -40,7 +40,11 @@
                 size="small"
                 secondary
                 @click="handleReviewDuplicates"
-                :disabled="duplicatesReviewed || isDemoUser"
+                :disabled="
+                  duplicatesReviewed ||
+                  isDemoUser ||
+                  !props.findDuplicatesEnabled
+                "
                 :loading="isCheckingDuplicates"
               >
                 <template #icon v-if="!isCheckingDuplicates">
@@ -54,7 +58,9 @@
             <span>{{
               isDemoUser
                 ? "Not available in demo mode"
-                : "Review duplicate photos in your selection"
+                : !props.findDuplicatesEnabled
+                  ? "Only up to 50 photos can be checked for duplicates in the Lightbox"
+                  : "Review duplicate photos in your selection"
             }}</span>
           </n-tooltip>
 
@@ -456,6 +462,10 @@ const props = defineProps({
   hideControls: {
     type: Boolean,
     default: false,
+  },
+  findDuplicatesEnabled: {
+    type: Boolean,
+    default: true,
   },
   showSuggestButton: {
     type: Boolean,
