@@ -1,6 +1,8 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import LangchainAgentService from '#services/langchain_agent_service'
+import LangchainAgentKnowledgeService from '#services/langchain_agent_knowledge_service'
 import ConversationService from '#services/conversation_service'
+import Photo from '#models/photo'
 
 export default class ChatController {
   private conversationService = new ConversationService()
@@ -87,14 +89,29 @@ export default class ChatController {
         )
       }
 
-      // Run the agent
-      const agentService = new LangchainAgentService()
-      const result = await agentService.chat(
-        user.id,
-        resolvedConversationId,
-        message.trim(),
-        validatedPhotoIds
-      )
+      // Route to knowledge-only agent when the user has no analyzed photos.
+      // This prevents Phase 1 tool orchestration from hallucinating on empty results.
+      const analyzedCount = await Photo.query()
+        .where('user_id', user.id)
+        .whereNotNull('descriptions')
+        .whereRaw(`descriptions->>'artistic_scores' IS NOT NULL`)
+        .count('* as total')
+        .then((r) => Number(r[0].$extras.total ?? 0))
+
+      let result
+      if (analyzedCount === 0) {
+        console.log(`[ChatController] 📭 No analyzed photos — routing to knowledge agent`)
+        const knowledgeService = new LangchainAgentKnowledgeService()
+        result = await knowledgeService.chat(user.id, resolvedConversationId, message.trim())
+      } else {
+        const agentService = new LangchainAgentService()
+        result = await agentService.chat(
+          user.id,
+          resolvedConversationId,
+          message.trim(),
+          validatedPhotoIds
+        )
+      }
 
       // Persist assistant message in DB (skipped for ephemeral calls)
       if (!isEphemeral) {

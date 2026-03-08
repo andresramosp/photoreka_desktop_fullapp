@@ -80,6 +80,26 @@ export default class PhotoImageService {
     return imageWithGuideBuffer.toString('base64')
   }
 
+  public async getImageBufferFromR2(filename: string): Promise<Buffer> {
+    const command = new GetObjectCommand({
+      Bucket: process.env.R2_BUCKET!,
+      Key: filename,
+    })
+
+    const s3Response = await s3.send(command)
+
+    if (!s3Response.Body) {
+      throw new Error(`No se encontró el archivo ${filename} en R2`)
+    }
+
+    const chunks: Buffer[] = []
+    for await (const chunk of s3Response.Body as Readable) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    }
+
+    return Buffer.concat(chunks)
+  }
+
   // public async getPhotoImages(
   //   process: AnalyzerProcess,
   //   useGuides: boolean = false

@@ -104,6 +104,7 @@ router
     router.post('/api/catalog/uploadPhoto', [CatalogController, 'uploadPhoto'])
 
     router.post('/api/catalog/checkDuplicates', [CatalogController, 'checkDuplicates'])
+    router.post('/api/catalog/checkExactDuplicates', [CatalogController, 'checkExactDuplicates'])
     router.post('/api/catalog/deleteDuplicates', [CatalogController, 'deleteDuplicates'])
 
     router.post('/api/catalog/:id/note', [CatalogController, 'savePhotoNote'])

@@ -68,6 +68,7 @@ export default class UsageController {
         'analyzedPhotosLimit',
         'creditsAvailable',
         'creditsUsed',
+        'analyzedPhotosUsed',
       ]) as Usage
 
       // Validación básica
@@ -75,11 +76,12 @@ export default class UsageController {
         !usageData.photosLimit ||
         !usageData.analyzedPhotosLimit ||
         usageData.creditsAvailable === undefined ||
-        usageData.creditsUsed === undefined
+        usageData.creditsUsed === undefined ||
+        usageData.analyzedPhotosUsed === undefined
       ) {
         return response.status(400).json({
           error:
-            'Missing required fields: photoLimit, analyzedPhotoLimit, creditsAvailable, creditsUsed',
+            'Missing required fields: photosLimit, analyzedPhotosLimit, creditsAvailable, creditsUsed, analyzedPhotosUsed',
         })
       }
 
@@ -88,7 +90,8 @@ export default class UsageController {
         usageData.photosLimit < 0 ||
         usageData.analyzedPhotosLimit < 0 ||
         usageData.creditsAvailable < 0 ||
-        usageData.creditsUsed < 0
+        usageData.creditsUsed < 0 ||
+        usageData.analyzedPhotosUsed < 0
       ) {
         return response.status(400).json({
           error: 'All usage values must be positive numbers',

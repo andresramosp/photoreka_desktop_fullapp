@@ -254,6 +254,62 @@ export default class CatalogController {
     return response.ok(results)
   }
 
+  public async checkExactDuplicates({ request, response, auth }: HttpContext) {
+    await auth.use('api').check()
+    const user = auth.use('api').user! as any
+    const userId = user.id.toString()
+
+    const { newPhotoIds } = request.only(['newPhotoIds'])
+
+    const userPhotos = await Photo.query().where('user_id', userId)
+
+    const photosToCheck =
+      !newPhotoIds || newPhotoIds.length === 0
+        ? userPhotos
+        : userPhotos.filter((p) => newPhotoIds.includes(p.id))
+
+    const photoImageService = PhotoImageService.getInstance()
+
+    // Compute MD5 for ALL user photos (not just photosToCheck) so that
+    // lightbox photos can be matched against workspace photos and vice-versa.
+    const hashGroups: Record<string, number[]> = {}
+
+    const CONCURRENCY = 10
+    for (let i = 0; i < userPhotos.length; i += CONCURRENCY) {
+      const batch = userPhotos.slice(i, i + CONCURRENCY)
+      await Promise.all(
+        batch.map(async (photo) => {
+          try {
+            const buffer = await photoImageService.getImageBufferFromR2(photo.thumbnailName)
+            const hash = crypto.createHash('md5').update(buffer).digest('hex')
+
+            if (!hashGroups[hash]) {
+              hashGroups[hash] = []
+            }
+            hashGroups[hash].push(photo.id)
+          } catch {
+            // Skip photos whose thumbnails can't be fetched
+          }
+        })
+      )
+    }
+
+    // Build results: only return entries for photos in photosToCheck,
+    // but their duplicate arrays may include photos outside photosToCheck
+    // (e.g. workspace photos when called from lightbox context).
+    const photosToCheckIds = new Set(photosToCheck.map((p) => p.id))
+    const results: Record<number, number[]> = {}
+    for (const ids of Object.values(hashGroups)) {
+      if (ids.length < 2) continue
+      for (const id of ids) {
+        if (!photosToCheckIds.has(id)) continue
+        results[id] = ids.filter((otherId) => otherId !== id)
+      }
+    }
+
+    return response.ok(results)
+  }
+
   public async deleteDuplicates({ request, response, auth }: HttpContext) {
     try {
       await auth.use('api').check()

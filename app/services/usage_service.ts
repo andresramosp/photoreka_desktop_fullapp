@@ -9,7 +9,10 @@ export enum UsageTier {
   PREMIUM = 'PREMIUM',
 }
 
-export const UsageTierLimits: Record<UsageTier, Omit<Usage, 'creditsUsed'>> = {
+export const UsageTierLimits: Record<
+  UsageTier,
+  Omit<Usage, 'creditsUsed' | 'analyzedPhotosUsed'>
+> = {
   [UsageTier.TESTER]: {
     photosLimit: 2000,
     analyzedPhotosLimit: 2000,
@@ -42,6 +45,7 @@ export function getDefaultUsageByTier(tier: UsageTier): Usage {
   return {
     ...limits,
     creditsUsed: 0,
+    analyzedPhotosUsed: 0,
   }
 }
 export type Usage = {
@@ -50,10 +54,11 @@ export type Usage = {
   analyzedPhotosLimit: number // Cantidad de fotos analizadas permitidas
   creditsAvailable: number // Créditos disponibles
   creditsUsed: number // Créditos gastados
+  analyzedPhotosUsed: number // Contador acumulativo de fotos analizadas (no se reduce al borrar)
 
   // Datos calculados (opcionales para compatibilidad)
   photosUsage?: number // Fotos actualmente subidas
-  analyzedPhotosUsage?: number // Fotos actualmente analizadas
+  analyzedPhotosUsage?: number // Total acumulativo de fotos analizadas
   photosRemaining?: number // Fotos restantes por subir
   analyzedPhotosRemaining?: number // Análisis restantes
 }
@@ -81,21 +86,19 @@ export default class UsageService {
       await user.save()
     }
 
-    // Obtener conteos en paralelo para mayor eficiencia
-    const [photosUsageResult, photos] = await Promise.all([
-      Photo.query().where('userId', userId).count('* as total'),
-      Photo.query().where('userId', userId).preload('analyzerProcess'),
-    ])
-
+    // Conteo actual de fotos para límite de subida
+    const photosUsageResult = await Photo.query().where('userId', userId).count('* as total')
     const photosUsage = Number(photosUsageResult[0]?.$extras.total || 0)
-    const analyzedPhotosUsage = photos.filter((photo) => photo.status === 'processed').length
+
+    // Usar contador acumulativo para análisis (no se reduce al borrar fotos)
+    const analyzedPhotosUsed = baseUsage.analyzedPhotosUsed || 0
 
     return {
       ...baseUsage,
       photosUsage,
-      analyzedPhotosUsage,
+      analyzedPhotosUsage: analyzedPhotosUsed,
       photosRemaining: Math.max(0, baseUsage.photosLimit - photosUsage),
-      analyzedPhotosRemaining: Math.max(0, baseUsage.analyzedPhotosLimit - analyzedPhotosUsage),
+      analyzedPhotosRemaining: Math.max(0, baseUsage.analyzedPhotosLimit - analyzedPhotosUsed),
     }
   }
 
@@ -116,6 +119,17 @@ export default class UsageService {
     if (!currentUsage) return
 
     currentUsage.creditsUsed += amount
+    await this.updateUsage(userId, currentUsage)
+  }
+
+  /**
+   * Incrementa el contador acumulativo de fotos analizadas
+   */
+  static async incrementAnalyzedPhotosUsed(userId: number, amount: number): Promise<void> {
+    const currentUsage = await this.getBaseUsage(userId)
+    if (!currentUsage) return
+
+    currentUsage.analyzedPhotosUsed = (currentUsage.analyzedPhotosUsed || 0) + amount
     await this.updateUsage(userId, currentUsage)
   }
 
