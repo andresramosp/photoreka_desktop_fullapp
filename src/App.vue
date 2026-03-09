@@ -297,6 +297,11 @@ watch(
           route.path === "/auth" ||
           route.path === "/auth/callback"
         ) {
+          // Si el usuario no tiene perfil configurado, ir a profile-setup primero
+          if (!userStore.user?.profiles) {
+            router.replace("/profile-setup");
+            return;
+          }
           const target =
             photosStore.appAccessMode === "blocked"
               ? "/sync-area#upload"
@@ -327,9 +332,18 @@ watch(
 
 // Safety: si un usuario autenticado acaba en "/" (por cualquier flujo), redirigir al destino correcto
 watch(
-  [() => route.path, () => photosStore.isInitialized, () => userStore.isAuthenticated],
+  [
+    () => route.path,
+    () => photosStore.isInitialized,
+    () => userStore.isAuthenticated,
+  ],
   ([path, photosReady, isAuth]) => {
     if (path === "/" && photosReady && isAuth) {
+      // Si el usuario no tiene perfil configurado, ir a profile-setup primero
+      if (!userStore.user?.profiles) {
+        router.replace("/profile-setup");
+        return;
+      }
       const target =
         photosStore.appAccessMode === "blocked"
           ? "/sync-area#upload"
