@@ -72,6 +72,7 @@ const UsageController = () => import('#controllers/usage_controller')
 const ThreeDViewController = () => import('#controllers/3dview_controller')
 const PortfolioReviewController = () => import('#controllers/portfolio_review_controller')
 const ChatController = () => import('#controllers/chat_controller')
+const CanvasController = () => import('#controllers/canvas_controller')
 
 // Landing page endpoints (no auth required)
 router.post('/api/landing/waiting-list', [LandingController, 'waitingList'])
@@ -128,6 +129,11 @@ router
     router.delete('/api/collections/:id', [CollectionsController, 'destroy'])
     router.post('/api/collections/:id/photos', [CollectionsController, 'addPhotos'])
     router.delete('/api/collections/:id/photos', [CollectionsController, 'removePhotos'])
+
+    // Canvas endpoints
+    router.get('/api/canvas', [CanvasController, 'getCanvas'])
+    router.put('/api/canvas', [CanvasController, 'saveCanvas'])
+    router.delete('/api/canvas', [CanvasController, 'deleteCanvas'])
 
     // Series endpoints
     router.get('/api/series', [SeriesController, 'index'])
