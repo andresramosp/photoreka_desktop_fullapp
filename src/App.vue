@@ -289,10 +289,16 @@ watch(
       collectionsStore.resetStore();
       seriesStore.resetStore();
 
-      // Cargar catálogo y luego redirigir si venimos del login
-      const isComingFromAuth = route.name === "auth";
+      // Redirigir a la página correcta una vez que sepamos si el usuario tiene fotos.
+      // Cubre: login normal (/auth), OAuth (/auth-callback), y acceso directo a / o /dashboard.
+      const isEntryNavigation = [
+        "auth",
+        "auth-callback",
+        "dashboard",
+        null,
+      ].includes(route.name);
       photosStore.getOrFetch(true).then(() => {
-        if (isComingFromAuth) {
+        if (isEntryNavigation) {
           redirectToEntryPage(router, true);
         }
       });
