@@ -22,6 +22,8 @@ interface CanvasData {
 }
 
 export default class Canvas extends BaseModel {
+  static table = 'canvases'
+
   @column({ isPrimary: true })
   declare id: number
 
