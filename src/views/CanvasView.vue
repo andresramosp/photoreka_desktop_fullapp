@@ -691,6 +691,36 @@
     >
       🗑️
     </div>
+
+    <!-- Unsaved Changes Dialog -->
+    <n-modal
+      v-model:show="showUnsavedModal"
+      preset="dialog"
+      title="Unsaved Changes"
+      positive-text="Save & Leave"
+      negative-text="Leave Without Saving"
+      type="warning"
+      :mask-closable="false"
+      style="width: 524px"
+      @positive-click="handleSaveAndLeave"
+      @negative-click="handleLeaveWithoutSaving"
+      @close="handleStayOnCanvas"
+    >
+      <div class="unsaved-changes-confirmation">
+        <p>You have unsaved changes on the canvas.</p>
+        <p class="unsaved-warning">
+          <n-icon size="16" style="margin-right: 8px; flex-shrink: 0">
+            <svg viewBox="0 0 24 24">
+              <path
+                fill="currentColor"
+                d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"
+              />
+            </svg>
+          </n-icon>
+          If you leave now, your canvas layout and photo positions will be lost.
+        </p>
+      </div>
+    </n-modal>
   </div>
 </template>
 
@@ -731,11 +761,12 @@ import {
   nextTick,
   defineOptions,
 } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, onBeforeRouteLeave } from "vue-router";
 import {
   NButton,
   NButtonGroup,
   NIcon,
+  NModal,
   NSpace,
   NSwitch,
   NInputNumber,
@@ -861,6 +892,10 @@ const showPlaygroundUpgradeModal = ref(false);
 
 // Collection modal state
 const showCollectionModal = ref(false);
+
+// Unsaved changes navigation guard state
+const showUnsavedModal = ref(false);
+let pendingNavigation = null;
 
 // Expandable dropdown state
 const canvasModeIsExpanded = ref(false);
@@ -1224,6 +1259,44 @@ const fitStageToPhotos = (extraPaddingRatio = 0.1) => {
 const openConfig = () => {
   showConfigMenu.value = !showConfigMenu.value;
 };
+
+// Unsaved changes modal handlers
+const handleLeaveWithoutSaving = () => {
+  showUnsavedModal.value = false;
+  if (pendingNavigation) {
+    const next = pendingNavigation;
+    pendingNavigation = null;
+    next();
+  }
+};
+
+const handleStayOnCanvas = () => {
+  showUnsavedModal.value = false;
+  if (pendingNavigation) {
+    const next = pendingNavigation;
+    pendingNavigation = null;
+    next(false);
+  }
+};
+
+const handleSaveAndLeave = async () => {
+  await saveCanvas();
+  showUnsavedModal.value = false;
+  if (pendingNavigation) {
+    const next = pendingNavigation;
+    pendingNavigation = null;
+    next();
+  }
+};
+
+onBeforeRouteLeave((_to, _from, next) => {
+  if (hasUnsavedChanges.value && !isPlayground.value) {
+    pendingNavigation = next;
+    showUnsavedModal.value = true;
+  } else {
+    next();
+  }
+});
 
 const toggleInteractionMode = () => {
   interactionMode.value = interactionMode.value === "pan" ? "select" : "pan";
@@ -1846,12 +1919,6 @@ onMounted(async () => {
   }
 
   // Start periodic image validation check (every 5 seconds)
-  imageValidationInterval = setInterval(checkImageValidity, 5000);
-
-  // Auto-save canvas every 10 seconds
-  const autoSaveInterval = setInterval(() => {
-    handleSaveCanvas();
-  }, 10000);
 
   // Fetch collections for filter dropdown (only in non-playground mode)
   if (!isPlayground.value) {
@@ -2288,6 +2355,27 @@ onUnmounted(() => {
     transform 0.2s ease,
     background-color 0.2s ease,
     border-color 0.2s ease;
+}
+
+/* Unsaved Changes Dialog */
+.unsaved-changes-confirmation {
+  padding: var(--spacing-md) 0;
+}
+
+.unsaved-changes-confirmation p {
+  margin: 0 0 var(--spacing-md) 0;
+  line-height: 1.5;
+}
+
+.unsaved-warning {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--warning-color-suppl, rgba(245, 166, 35, 0.1));
+  border: 1px solid var(--warning-color, rgba(245, 166, 35, 0.3));
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
 }
 
 /* Canvas background colors */

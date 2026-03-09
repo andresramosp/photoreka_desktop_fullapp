@@ -142,7 +142,7 @@ export function useCanvasPersistence() {
       if (allIds.length > 0) {
         try {
           const response = await api.post("/api/catalog/photosByIds", {
-            ids: allIds,
+            photosIds: allIds,
           });
           fetchedPhotos = response.data || [];
         } catch (err) {
@@ -162,6 +162,7 @@ export function useCanvasPersistence() {
         .filter((id) => photosMap[id])
         .map((id) => ({
           ...photosMap[id],
+          src: photosMap[id].thumbnailUrl,
           config: allPhotoConfigs[id],
           selected: false,
           hovered: false,
@@ -179,6 +180,7 @@ export function useCanvasPersistence() {
         .filter((id) => photosMap[id])
         .map((id) => ({
           ...photosMap[id],
+          src: photosMap[id].thumbnailUrl,
           config: allPhotoConfigs[id],
           selected: false,
           hovered: false,
