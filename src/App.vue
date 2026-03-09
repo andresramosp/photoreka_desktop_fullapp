@@ -289,12 +289,13 @@ watch(
       collectionsStore.resetStore();
       seriesStore.resetStore();
 
-      // Si el usuario se autentica pero aún está en la página de auth, redirigir inmediatamente
-      if (route.name === "auth") {
-        redirectToEntryPage(router, true);
-      }
-      // Cargar catálogo inmediatamente cuando se autentica
-      photosStore.getOrFetch(true);
+      // Cargar catálogo y luego redirigir si venimos del login
+      const isComingFromAuth = route.name === "auth";
+      photosStore.getOrFetch(true).then(() => {
+        if (isComingFromAuth) {
+          redirectToEntryPage(router, true);
+        }
+      });
       collectionsStore.getOrFetch(true);
       seriesStore.getOrFetch(true);
       userStore.processPatterns();
@@ -319,7 +320,9 @@ watch(
   [() => userStore.isAuthenticated, () => route.name],
   ([isAuth, routeName]) => {
     if (isAuth && routeName === "auth") {
-      redirectToEntryPage(router, true);
+      photosStore.getOrFetch().then(() => {
+        redirectToEntryPage(router, true);
+      });
     }
   },
   { immediate: true },
