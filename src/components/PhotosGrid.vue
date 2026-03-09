@@ -43,8 +43,7 @@
                 type="info"
                 size="small"
                 secondary
-                :disabled="isDemoUser"
-                v-show="!duplicatesReviewed"
+                :disabled="isDemoUser || duplicatesReviewed"
                 :loading="isCheckingDuplicates"
                 @click="handleReviewDuplicates('exact')"
               >
@@ -1069,12 +1068,18 @@ const handleDeleteDuplicatesWithinUpload = () => {
       await photosStore.deletePhotos(toDelete);
       message.success(`Removed ${toDelete.length} duplicate(s) within upload.`);
 
-      // Check if there are still duplicates remaining after deletion
-      const remainingDuplicates = props.photos.filter(
-        (photo) => photo.isExactDuplicate || photo.isAlreadyAnalyzed,
-      ).length;
-
-      if (remainingDuplicates === 0) {
+      const deletedIds = new Set(toDelete);
+      const remainingPhotos = props.photos.filter((p) => !deletedIds.has(p.id));
+      const remainingIds = new Set(remainingPhotos.map((p) => p.id));
+      const stillHasAlreadyAnalyzed = remainingPhotos.some(
+        (p) => p.isAlreadyAnalyzed,
+      );
+      const stillHasWithinLightboxPairs = remainingPhotos.some(
+        (p) =>
+          p.isExactDuplicate &&
+          (p.exactDuplicates || []).some((id) => remainingIds.has(id)),
+      );
+      if (!stillHasAlreadyAnalyzed && !stillHasWithinLightboxPairs) {
         resetDuplicateState();
       }
     } catch (error) {
@@ -1104,12 +1109,15 @@ const handleDeleteAlreadyAnalyzed = () => {
         `Removed ${toDelete.length} photo(s) already analyzed in workspace.`,
       );
 
-      // Check if there are still duplicates remaining after deletion
-      const remainingDuplicates = props.photos.filter(
-        (photo) => photo.isExactDuplicate || photo.isAlreadyAnalyzed,
-      ).length;
-
-      if (remainingDuplicates === 0) {
+      const deletedIds = new Set(toDelete);
+      const remainingPhotos = props.photos.filter((p) => !deletedIds.has(p.id));
+      const remainingIds = new Set(remainingPhotos.map((p) => p.id));
+      const stillHasWithinLightboxPairs = remainingPhotos.some(
+        (p) =>
+          p.isExactDuplicate &&
+          (p.exactDuplicates || []).some((id) => remainingIds.has(id)),
+      );
+      if (!stillHasWithinLightboxPairs) {
         resetDuplicateState();
       }
     } catch (error) {
@@ -1163,12 +1171,15 @@ const handleDeleteAllDuplicates = () => {
         `Removed ${toDelete.length} duplicate(s), keeping one per group.`,
       );
 
-      // Check if there are still duplicates remaining after deletion
-      const remainingDuplicates = props.photos.filter(
-        (photo) => photo.isExactDuplicate || photo.isAlreadyAnalyzed,
-      ).length;
-
-      if (remainingDuplicates === 0) {
+      const deletedIds = new Set(toDelete);
+      const remainingPhotos = props.photos.filter((p) => !deletedIds.has(p.id));
+      const remainingIds = new Set(remainingPhotos.map((p) => p.id));
+      const stillHasPairs = remainingPhotos.some(
+        (p) =>
+          p.isExactDuplicate &&
+          (p.exactDuplicates || []).some((id) => remainingIds.has(id)),
+      );
+      if (!stillHasPairs) {
         resetDuplicateState();
       }
     } catch (error) {
