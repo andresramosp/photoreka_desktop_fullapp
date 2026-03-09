@@ -1167,9 +1167,8 @@ const getPhotoStrokeColor = (photo) => {
 
 const handleSaveCanvas = async () => {
   try {
-    const success = saveCanvas();
+    const success = await saveCanvas();
     if (success) {
-      // Mostrar feedback visual si es necesario
       console.log("Canvas saved successfully");
     } else {
       console.error("Failed to save canvas");
@@ -1179,7 +1178,7 @@ const handleSaveCanvas = async () => {
   }
 };
 
-const handleClearCanvas = () => {
+const handleClearCanvas = async () => {
   // Clean up blob URLs for all photos before clearing
   [...canvasStore.photos, ...canvasStore.discardedPhotos].forEach((photo) => {
     if (photo.src && photo.src.startsWith("blob:")) {
@@ -1201,8 +1200,8 @@ const handleClearCanvas = () => {
   canvasStore.$patch({ photos: [] });
   canvasStore.$patch({ discardedPhotos: [] });
 
-  // Limpiar el canvas guardado en localStorage
-  clearSavedCanvas();
+  // Limpiar el canvas guardado
+  await clearSavedCanvas();
 
   // Resetear zoom y posición del stage
   const stage = stageRef.value.getStage();
@@ -1804,7 +1803,7 @@ onMounted(async () => {
   try {
     const hasLoaded = await loadCanvas();
     if (hasLoaded) {
-      console.log("Canvas loaded from localStorage");
+      console.log("Canvas loaded successfully");
       // Fit stage to loaded photos after a short delay
       setTimeout(() => {
         fitStageToPhotos();

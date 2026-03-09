@@ -1,12 +1,14 @@
 import { ref, computed, watch } from "vue";
 import { useCanvasStore } from "@/stores/canvas";
+import { api } from "@/utils/axios";
+import { useUserStore } from "@/stores/userStore";
 
-// Clave para localStorage
+// Clave para localStorage (fallback para playground/offline)
 const CANVAS_STORAGE_KEY = "photoreka_canvas_data";
-const CANVAS_LIST_KEY = "photoreka_canvas_list";
 
 export function useCanvasPersistence() {
   const canvasStore = useCanvasStore();
+  const userStore = useUserStore();
 
   // Estado para controlar si hay cambios sin guardar
   const hasUnsavedChanges = ref(false);
@@ -15,20 +17,71 @@ export function useCanvasPersistence() {
   // Flag para evitar detección de cambios durante la carga
   const isLoading = ref(false);
 
+  // Flag para evitar saves concurrentes
+  const isSaving = ref(false);
+
+  // Cache para saber si existe canvas guardado
+  const _hasSavedCanvas = ref(false);
+
   // Computed para el estado de guardado
   const isSaved = computed(() => !hasUnsavedChanges.value);
 
   /**
-   * Serializa el estado actual del canvas para guardado
+   * Verifica si el usuario está autenticado (usar backend) o no (usar localStorage)
+   */
+  const useBackend = () => {
+    return userStore.isAuthenticated;
+  };
+
+  /**
+   * Serializa el estado actual del canvas para detección de cambios
    */
   const serializeCanvas = () => {
     return {
-      id: "current", // Por ahora solo un canvas, pero preparado para múltiples
+      id: "current",
       name: "Current Canvas",
       timestamp: new Date().toISOString(),
       data: {
         photos: canvasStore.photos.map((photo) => ({
-          // Guardar datos esenciales de la foto
+          id: photo.id,
+          config: { ...photo.config },
+        })),
+        discardedPhotos: canvasStore.discardedPhotos.map((photo) => ({
+          id: photo.id,
+          config: { ...photo.config },
+        })),
+        currentZIndex: canvasStore.currentZIndex,
+      },
+    };
+  };
+
+  /**
+   * Serializa la data para enviar al backend (solo IDs + configs)
+   */
+  const serializeForBackend = () => {
+    return {
+      photos: canvasStore.photos.map((photo) => ({
+        id: photo.id,
+        config: { ...photo.config },
+      })),
+      discardedPhotos: canvasStore.discardedPhotos.map((photo) => ({
+        id: photo.id,
+        config: { ...photo.config },
+      })),
+      currentZIndex: canvasStore.currentZIndex,
+    };
+  };
+
+  /**
+   * Serializa la data completa para localStorage (incluye src/thumbnail para offline)
+   */
+  const serializeForLocalStorage = () => {
+    return {
+      id: "current",
+      name: "Current Canvas",
+      timestamp: new Date().toISOString(),
+      data: {
+        photos: canvasStore.photos.map((photo) => ({
           id: photo.id,
           src: photo.src,
           thumbnailUrl: photo.thumbnailUrl,
@@ -36,7 +89,6 @@ export function useCanvasPersistence() {
           tags: photo.tags,
           status: photo.status,
           detectionAreas: photo.detectionAreas,
-          // No guardamos estados temporales como selected, hovered, loading, etc.
         })),
         discardedPhotos: canvasStore.discardedPhotos.map((photo) => ({
           id: photo.id,
@@ -54,21 +106,63 @@ export function useCanvasPersistence() {
   };
 
   /**
-   * Deserializa y restaura el estado del canvas
+   * Deserializa y restaura el estado del canvas desde datos del backend
+   * (re-hidrata fotos haciendo fetch por IDs)
    */
-  const deserializeCanvas = async (canvasData) => {
-    if (!canvasData || !canvasData.data) return false;
+  const deserializeFromBackend = async (canvasResponse) => {
+    if (!canvasResponse || !canvasResponse.data) return false;
 
     isLoading.value = true;
 
     try {
-      const { data } = canvasData;
+      const { data } = canvasResponse;
 
-      // Restaurar fotos principales
+      // Recoger todos los photo IDs para re-hidratar
+      const allPhotoConfigs = {};
+      const photoIds = [];
+      const discardedIds = [];
+
       if (data.photos && Array.isArray(data.photos)) {
-        const photosToRestore = data.photos.map((photo) => ({
-          ...photo,
-          // Restaurar estados temporales en su valor por defecto
+        data.photos.forEach((p) => {
+          photoIds.push(p.id);
+          allPhotoConfigs[p.id] = p.config;
+        });
+      }
+
+      if (data.discardedPhotos && Array.isArray(data.discardedPhotos)) {
+        data.discardedPhotos.forEach((p) => {
+          discardedIds.push(p.id);
+          allPhotoConfigs[p.id] = p.config;
+        });
+      }
+
+      // Fetch completo de las fotos desde la API
+      const allIds = [...photoIds, ...discardedIds];
+      let fetchedPhotos = [];
+      if (allIds.length > 0) {
+        try {
+          const response = await api.post("/api/catalog/photosByIds", {
+            ids: allIds,
+          });
+          fetchedPhotos = response.data || [];
+        } catch (err) {
+          console.error("Error fetching photos for canvas:", err);
+          return false;
+        }
+      }
+
+      // Crear un mapa de fotos por ID
+      const photosMap = {};
+      fetchedPhotos.forEach((p) => {
+        photosMap[p.id] = p;
+      });
+
+      // Restaurar fotos principales (solo las que aún existen en la BD)
+      const restoredPhotos = photoIds
+        .filter((id) => photosMap[id])
+        .map((id) => ({
+          ...photosMap[id],
+          config: allPhotoConfigs[id],
           selected: false,
           hovered: false,
           showButton: false,
@@ -78,11 +172,68 @@ export function useCanvasPersistence() {
           inTrash: false,
         }));
 
-        // Usar el método del store pero sin auto-fit y sin efectos
-        canvasStore.photos = photosToRestore;
-      }
+      canvasStore.photos = restoredPhotos;
 
       // Restaurar fotos descartadas
+      const restoredDiscarded = discardedIds
+        .filter((id) => photosMap[id])
+        .map((id) => ({
+          ...photosMap[id],
+          config: allPhotoConfigs[id],
+          selected: false,
+          hovered: false,
+          showButton: false,
+          loading: false,
+          image: null,
+          isNew: false,
+          inTrash: false,
+        }));
+
+      canvasStore.discardedPhotos = restoredDiscarded;
+
+      // Restaurar otros estados
+      if (typeof data.currentZIndex === "number") {
+        canvasStore.currentZIndex = data.currentZIndex;
+      }
+
+      canvasStore.updateBasicMode();
+
+      lastSavedState.value = JSON.stringify(serializeCanvas());
+      hasUnsavedChanges.value = false;
+
+      return true;
+    } catch (error) {
+      console.error("Error deserializing canvas from backend:", error);
+      return false;
+    } finally {
+      isLoading.value = false;
+    }
+  };
+
+  /**
+   * Deserializa y restaura el estado del canvas desde localStorage
+   */
+  const deserializeFromLocalStorage = async (canvasData) => {
+    if (!canvasData || !canvasData.data) return false;
+
+    isLoading.value = true;
+
+    try {
+      const { data } = canvasData;
+
+      if (data.photos && Array.isArray(data.photos)) {
+        canvasStore.photos = data.photos.map((photo) => ({
+          ...photo,
+          selected: false,
+          hovered: false,
+          showButton: false,
+          loading: false,
+          image: null,
+          isNew: false,
+          inTrash: false,
+        }));
+      }
+
       if (data.discardedPhotos && Array.isArray(data.discardedPhotos)) {
         canvasStore.discardedPhotos = data.discardedPhotos.map((photo) => ({
           ...photo,
@@ -96,21 +247,18 @@ export function useCanvasPersistence() {
         }));
       }
 
-      // Restaurar otros estados
       if (typeof data.currentZIndex === "number") {
         canvasStore.currentZIndex = data.currentZIndex;
       }
 
-      // Actualizar basicMode basado en las fotos restauradas
       canvasStore.updateBasicMode();
 
-      // Actualizar el último estado guardado
       lastSavedState.value = JSON.stringify(serializeCanvas());
       hasUnsavedChanges.value = false;
 
       return true;
     } catch (error) {
-      console.error("Error deserializing canvas:", error);
+      console.error("Error deserializing canvas from localStorage:", error);
       return false;
     } finally {
       isLoading.value = false;
@@ -118,95 +266,143 @@ export function useCanvasPersistence() {
   };
 
   /**
-   * Guarda el canvas actual en localStorage
+   * Guarda el canvas actual
    */
-  const saveCanvas = () => {
+  const saveCanvas = async () => {
+    if (isSaving.value) return false;
+    isSaving.value = true;
+
     try {
-      const canvasData = serializeCanvas();
-
-      // Guardar canvas actual
-      localStorage.setItem(CANVAS_STORAGE_KEY, JSON.stringify(canvasData));
-
-      // Actualizar lista de canvas (preparado para múltiples canvas en el futuro)
-      const canvasList = getCanvasList();
-      const existingIndex = canvasList.findIndex((c) => c.id === canvasData.id);
-
-      if (existingIndex >= 0) {
-        canvasList[existingIndex] = {
-          id: canvasData.id,
-          name: canvasData.name,
-          timestamp: canvasData.timestamp,
-        };
+      if (useBackend()) {
+        const data = serializeForBackend();
+        await api.put("/api/canvas", { data });
       } else {
-        canvasList.push({
-          id: canvasData.id,
-          name: canvasData.name,
-          timestamp: canvasData.timestamp,
-        });
+        const canvasData = serializeForLocalStorage();
+        localStorage.setItem(CANVAS_STORAGE_KEY, JSON.stringify(canvasData));
       }
 
-      localStorage.setItem(CANVAS_LIST_KEY, JSON.stringify(canvasList));
-
-      // Actualizar estado
-      lastSavedState.value = JSON.stringify(canvasData);
+      lastSavedState.value = JSON.stringify(serializeCanvas());
       hasUnsavedChanges.value = false;
+      _hasSavedCanvas.value = true;
 
       return true;
     } catch (error) {
       console.error("Error saving canvas:", error);
+      // Fallback a localStorage si el backend falla
+      try {
+        const canvasData = serializeForLocalStorage();
+        localStorage.setItem(CANVAS_STORAGE_KEY, JSON.stringify(canvasData));
+        lastSavedState.value = JSON.stringify(serializeCanvas());
+        hasUnsavedChanges.value = false;
+        _hasSavedCanvas.value = true;
+        return true;
+      } catch (lsError) {
+        console.error("Error saving to localStorage fallback:", lsError);
+        return false;
+      }
+    } finally {
+      isSaving.value = false;
+    }
+  };
+
+  /**
+   * Migra el canvas de localStorage al backend si el backend no tiene canvas.
+   * Retorna true si migró algo.
+   */
+  const migrateLocalStorageToBackend = async () => {
+    const savedData = localStorage.getItem(CANVAS_STORAGE_KEY);
+    if (!savedData) return false;
+
+    try {
+      const canvasData = JSON.parse(savedData);
+      if (!canvasData?.data) return false;
+
+      // Cargar en el store primero
+      const loaded = await deserializeFromLocalStorage(canvasData);
+      if (!loaded) return false;
+
+      // Persistir en backend
+      await api.put("/api/canvas", { data: serializeForBackend() });
+
+      // Limpiar localStorage (ya migrado)
+      localStorage.removeItem(CANVAS_STORAGE_KEY);
+
+      lastSavedState.value = JSON.stringify(serializeCanvas());
+      hasUnsavedChanges.value = false;
+      _hasSavedCanvas.value = true;
+
+      console.log("Canvas migrated from localStorage to backend");
+      return true;
+    } catch (err) {
+      console.error("Error migrating canvas from localStorage:", err);
       return false;
     }
   };
 
   /**
-   * Carga el canvas guardado desde localStorage
+   * Carga el canvas guardado
    */
   const loadCanvas = async () => {
     try {
-      const savedData = localStorage.getItem(CANVAS_STORAGE_KEY);
-      if (!savedData) return false;
-
-      const canvasData = JSON.parse(savedData);
-      return await deserializeCanvas(canvasData);
+      if (useBackend()) {
+        const response = await api.get("/api/canvas");
+        if (response.data) {
+          _hasSavedCanvas.value = true;
+          return await deserializeFromBackend(response.data);
+        }
+        // Backend sin canvas: intentar migrar desde localStorage
+        const migrated = await migrateLocalStorageToBackend();
+        if (migrated) return true;
+        _hasSavedCanvas.value = false;
+        return false;
+      } else {
+        const savedData = localStorage.getItem(CANVAS_STORAGE_KEY);
+        if (!savedData) {
+          _hasSavedCanvas.value = false;
+          return false;
+        }
+        const canvasData = JSON.parse(savedData);
+        _hasSavedCanvas.value = true;
+        return await deserializeFromLocalStorage(canvasData);
+      }
     } catch (error) {
       console.error("Error loading canvas:", error);
-      return false;
+      // Fallback: intentar cargar desde localStorage
+      try {
+        const savedData = localStorage.getItem(CANVAS_STORAGE_KEY);
+        if (!savedData) return false;
+        const canvasData = JSON.parse(savedData);
+        _hasSavedCanvas.value = true;
+        return await deserializeFromLocalStorage(canvasData);
+      } catch (lsError) {
+        console.error("Error loading from localStorage fallback:", lsError);
+        return false;
+      }
     }
   };
 
   /**
-   * Borra el canvas actual del localStorage
+   * Borra el canvas guardado
    */
-  const clearSavedCanvas = () => {
+  const clearSavedCanvas = async () => {
     try {
+      if (useBackend()) {
+        await api.delete("/api/canvas");
+      }
+      // Limpiar también localStorage siempre
       localStorage.removeItem(CANVAS_STORAGE_KEY);
 
-      // Actualizar lista de canvas
-      const canvasList = getCanvasList();
-      const updatedList = canvasList.filter((c) => c.id !== "current");
-      localStorage.setItem(CANVAS_LIST_KEY, JSON.stringify(updatedList));
-
-      // Resetear estado
       lastSavedState.value = null;
       hasUnsavedChanges.value = false;
+      _hasSavedCanvas.value = false;
 
       return true;
     } catch (error) {
       console.error("Error clearing saved canvas:", error);
+      // Limpiar localStorage de todas formas
+      localStorage.removeItem(CANVAS_STORAGE_KEY);
+      _hasSavedCanvas.value = false;
       return false;
-    }
-  };
-
-  /**
-   * Obtiene la lista de canvas disponibles (preparado para futuro)
-   */
-  const getCanvasList = () => {
-    try {
-      const list = localStorage.getItem(CANVAS_LIST_KEY);
-      return list ? JSON.parse(list) : [];
-    } catch (error) {
-      console.error("Error getting canvas list:", error);
-      return [];
     }
   };
 
@@ -214,14 +410,22 @@ export function useCanvasPersistence() {
    * Verifica si hay un canvas guardado
    */
   const hasSavedCanvas = () => {
-    return localStorage.getItem(CANVAS_STORAGE_KEY) !== null;
+    return _hasSavedCanvas.value;
+  };
+
+  /**
+   * Obtiene la lista de canvas disponibles (preparado para futuro)
+   */
+  const getCanvasList = () => {
+    // Por ahora devuelve lista vacía, preparado para múltiples canvas
+    return [];
   };
 
   /**
    * Compara el estado actual con el último guardado para detectar cambios
    */
   const detectChanges = () => {
-    if (isLoading.value) return; // No detectar cambios durante la carga
+    if (isLoading.value) return;
 
     try {
       const currentState = JSON.stringify(serializeCanvas());
@@ -236,23 +440,20 @@ export function useCanvasPersistence() {
    * Inicializa el watcher para detectar cambios automáticamente
    */
   const initializeChangeDetection = () => {
-    // Watch para cambios en las fotos
     watch(
       () => [
         canvasStore.photos.length,
         canvasStore.photos.map((p) => ({
           id: p.id,
           config: { ...p.config },
-          // Solo incluir propiedades que afecten el estado guardado
         })),
         canvasStore.discardedPhotos.length,
         canvasStore.currentZIndex,
       ],
       detectChanges,
-      { deep: true }
+      { deep: true },
     );
 
-    // Watch específico para cambios en configuración de fotos (posición, tamaño, etc.)
     watch(
       () =>
         canvasStore.photos.map((p) => ({
@@ -263,17 +464,16 @@ export function useCanvasPersistence() {
           zIndex: p.config.zIndex,
         })),
       detectChanges,
-      { deep: true }
+      { deep: true },
     );
 
-    // Watch para cambios en fotos descartadas
     watch(() => canvasStore.discardedPhotos.map((p) => p.id), detectChanges, {
       deep: true,
     });
   };
 
   /**
-   * Marca el canvas como guardado (útil para sincronizar con API en el futuro)
+   * Marca el canvas como guardado
    */
   const markAsSaved = () => {
     lastSavedState.value = JSON.stringify(serializeCanvas());
@@ -298,6 +498,7 @@ export function useCanvasPersistence() {
 
     // Para uso interno/futuro
     serializeCanvas,
-    deserializeCanvas,
+    deserializeFromBackend,
+    deserializeFromLocalStorage,
   };
 }
