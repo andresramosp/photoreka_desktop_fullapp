@@ -143,6 +143,7 @@ import ConfettiEffect from "./components/ConfettiEffect.vue";
 import AppInitLoader from "./components/AppInitLoader.vue";
 import { useThemeInit } from "@/composables/useTheme.js";
 import MobileWelcomeBanner from "./components/MobileWelcomeBanner.vue";
+import { redirectToEntryPage } from "@/composables/useEntryPageRedirect";
 
 const route = useRoute();
 const router = useRouter();
@@ -290,7 +291,7 @@ watch(
 
       // Si el usuario se autentica pero aún está en la página de auth, redirigir inmediatamente
       if (route.name === "auth") {
-        router.replace("/dashboard");
+        redirectToEntryPage(router, true);
       }
       // Cargar catálogo inmediatamente cuando se autentica
       photosStore.getOrFetch(true);
@@ -318,7 +319,7 @@ watch(
   [() => userStore.isAuthenticated, () => route.name],
   ([isAuth, routeName]) => {
     if (isAuth && routeName === "auth") {
-      router.replace("/dashboard");
+      redirectToEntryPage(router, true);
     }
   },
   { immediate: true },

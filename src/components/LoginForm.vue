@@ -86,6 +86,7 @@ import AuthProviders from "./AuthProviders.vue";
 import ForgotPasswordDialog from "./ForgotPasswordDialog.vue";
 import { MailOutline, LockClosedOutline } from "@vicons/ionicons5";
 import { MailOutlined } from "@vicons/material";
+import { redirectToEntryPage } from "@/composables/useEntryPageRedirect";
 
 const emit = defineEmits(["switch-mode"]);
 
@@ -139,7 +140,7 @@ const handleSubmit = async () => {
 
     if (result.success) {
       // Usar replace para evitar que quede en el historial y forzar navegación inmediata
-      router.replace("/dashboard");
+      redirectToEntryPage(router, true);
     } else {
       message.error(result.error || "Error logging in", { duration: 10000 });
     }

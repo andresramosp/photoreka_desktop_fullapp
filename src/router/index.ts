@@ -3,6 +3,7 @@ import { useIsMobile } from "../composables/useIsMobile";
 import { useUserStore } from "../stores/userStore";
 import { useMaintenanceMode } from "../composables/useMaintenanceMode";
 import { trackPageView } from "../utils/analytics";
+import { getEntryPagePath } from "../composables/useEntryPageRedirect";
 import DashboardView from "../views/DashboardView.vue";
 import CanvasView from "../views/CanvasView.vue";
 import SearchView from "../views/SearchView.vue";
@@ -41,7 +42,7 @@ const router = createRouter({
       redirect: () => {
         // Use composable to detect mobile (returns { isMobile })
         const { isMobile } = useIsMobile();
-        return isMobile.value ? "/workspace" : "/dashboard";
+        return isMobile.value ? "/workspace" : getEntryPagePath();
       },
     },
     // Landing page moved to separate app
@@ -494,7 +495,7 @@ router.beforeEach(async (to, from, next) => {
   }
   // Check if route requires guest (not authenticated)
   else if (to.meta.requiresGuest && userStore.isAuthenticated) {
-    next("/dashboard");
+    next(getEntryPagePath());
   }
   // If accessing root and not authenticated, go to auth
   else next();

@@ -33,6 +33,7 @@ import { ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useUserStore } from "../stores/userStore";
 import { useMessage } from "naive-ui";
+import { redirectToEntryPage } from "@/composables/useEntryPageRedirect";
 
 // Icon components for social providers
 const GoogleIcon = () =>
@@ -132,7 +133,7 @@ const handleProviderLogin = async (provider: "google" | "facebook") => {
             provider === "google" ? "Google" : "Facebook"
           }.`,
         );
-        router.push("/dashboard");
+        redirectToEntryPage(router);
       }
     } else {
       message.error(result.error || "Error logging in");

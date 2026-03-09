@@ -12,6 +12,7 @@ import { onMounted, ref, computed } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useUserStore } from "../stores/userStore";
 import { useMessage } from "naive-ui";
+import { redirectToEntryPage } from "@/composables/useEntryPageRedirect";
 
 const router = useRouter();
 const route = useRoute();
@@ -53,7 +54,7 @@ onMounted(async () => {
     const hasConfiguredProfile = !!userStore.user?.profiles;
 
     if (hasConfiguredProfile) {
-      router.replace("/dashboard");
+      redirectToEntryPage(router, true);
     } else {
       router.replace("/profile-setup");
     }
@@ -85,7 +86,9 @@ onMounted(async () => {
   padding: 40px;
   background: var(--bg-primary);
   border-radius: 12px;
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  box-shadow:
+    0 4px 6px -1px rgb(0 0 0 / 0.1),
+    0 2px 4px -2px rgb(0 0 0 / 0.1);
   max-width: 400px;
   width: 100%;
 }
