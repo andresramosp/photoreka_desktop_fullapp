@@ -44,6 +44,7 @@
             key="lightbox-photos"
             @on-analyze="analyze"
             @selection-change="handleLightboxSelectionChange"
+            @duplicates-filter-change="handleDuplicatesFilterChange"
           />
         </KeepAlive>
         <KeepAlive>
@@ -96,15 +97,25 @@ const emailConfirmationMessageId = ref(null);
 const activeTab = ref("upload");
 const lightboxRef = ref(null);
 const lightboxSelectedCount = ref(0);
+const isDuplicateFilterActive = ref(false);
 
 // Handle selection changes from LightboxPhotos
 const handleLightboxSelectionChange = (selectionData) => {
   lightboxSelectedCount.value = selectionData.selectedCount;
 };
 
-// Computed for floating button - solo mostrar en tab upload
+// Handle duplicates filter changes from LightboxPhotos
+const handleDuplicatesFilterChange = (isActive) => {
+  isDuplicateFilterActive.value = isActive;
+};
+
+// Computed for floating button - solo mostrar en tab upload y cuando no hay filtro de duplicados activo
 const shouldShowProcessButton = computed(() => {
-  return activeTab.value === "upload" && photosStore.lightboxPhotos?.length > 0;
+  return (
+    activeTab.value === "upload" &&
+    photosStore.lightboxPhotos?.length > 0 &&
+    !isDuplicateFilterActive.value
+  );
 });
 
 const isProcessButtonDisabled = computed(() => {

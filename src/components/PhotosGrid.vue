@@ -40,7 +40,7 @@
           >
             <template #trigger>
               <n-button
-                type="primary"
+                type="info"
                 size="small"
                 secondary
                 :disabled="isDemoUser"
@@ -53,7 +53,7 @@
                     <DuplicateOutline />
                   </n-icon>
                 </template>
-                Find duplicates
+                Check duplicates
               </n-button>
             </template>
             <span>{{
@@ -86,8 +86,9 @@
               trigger="click"
             >
               <n-button
-                type="warning"
+                type="info"
                 size="small"
+                secondary
                 :loading="isDeletingBulkDuplicates"
               >
                 <template #icon>
@@ -98,8 +99,9 @@
             </n-dropdown>
             <n-button
               v-else
-              type="warning"
+              type="info"
               size="small"
+              secondary
               :loading="isDeletingBulkDuplicates"
               @click="handleDeleteAllDuplicates"
             >
@@ -435,6 +437,53 @@
       </template>
     </n-modal>
 
+    <!-- Checking Duplicates Modal -->
+    <n-modal
+      :show="isCheckingDuplicates"
+      :mask-closable="false"
+      :close-on-esc="false"
+    >
+      <div class="dup-check-modal">
+        <span class="dup-check-title">Finding duplicates</span>
+        <n-spin size="large" />
+        <p class="dup-check-subtitle">
+          Analyzing {{ props.photos.length }} photos for duplicates...
+        </p>
+        <n-button @click="cancelDuplicatesCheck">Cancel</n-button>
+      </div>
+    </n-modal>
+
+    <!-- Delete Duplicates Confirmation Modal -->
+    <n-modal
+      v-model:show="showDeleteDuplicatesConfirmDialog"
+      preset="dialog"
+      title="Confirm Deletion"
+    >
+      <template #header>
+        <div style="font-size: 18px; font-weight: 600">Confirm Deletion</div>
+      </template>
+      <div style="padding: 16px 0">
+        <p style="margin-bottom: 16px; font-size: 16px">
+          Are you sure you want to delete
+          <strong>{{ duplicatesToDeleteCount }}</strong>
+          {{ duplicatesToDeleteCount === 1 ? "photo" : "photos" }}?
+        </p>
+        <p style="color: #d03050; font-size: 14px; margin: 0">
+          This action cannot be undone.
+        </p>
+      </div>
+      <template #action>
+        <div style="display: flex; gap: 8px; justify-content: flex-end">
+          <n-button @click="showDeleteDuplicatesConfirmDialog = false">
+            Cancel
+          </n-button>
+          <n-button type="error" @click="confirmDeleteDuplicates">
+            Delete
+          </n-button>
+        </div>
+      </template>
+    </n-modal>
+
     <!-- Floating Action Bar -->
     <FloatingActionBar
       :selected-count="selectedPhotoIds.length"
@@ -498,6 +547,7 @@ const emit = defineEmits([
   "refreshCollection",
   "selection-change",
   "suggest-photos",
+  "duplicates-filter-change",
 ]);
 const props = defineProps({
   photos: {
@@ -578,6 +628,10 @@ const isDeletingBulkDuplicates = ref(false);
 const duplicatesReviewed = ref(false);
 const hasDuplicates = ref(false);
 const lastDuplicateType = ref(null); // 'exact' or 'similar'
+const duplicatesCheckCancelled = ref(false);
+const showDeleteDuplicatesConfirmDialog = ref(false);
+const duplicatesToDeleteCount = ref(0);
+let pendingDeleteAction = null;
 
 // Select all banner state
 const showSelectAllBanner = ref(false);
@@ -758,6 +812,12 @@ watch(
   },
 );
 
+// Emit event when duplicates filter changes
+watch([filterDuplicates, duplicatesReviewed], ([newFilter, newReviewed]) => {
+  const isDuplicateFilterActive = newFilter && newReviewed;
+  emit("duplicates-filter-change", isDuplicateFilterActive);
+});
+
 // Grid functions
 const setGridColumns = (columns) => {
   gridColumns.value = columns;
@@ -880,6 +940,7 @@ const handleArtisticScoresChange = (filters) => {
 // Handle review duplicates (preprocess and check)
 const handleReviewDuplicates = async (type = "exact") => {
   isCheckingDuplicates.value = true;
+  duplicatesCheckCancelled.value = false;
   lastDuplicateType.value = "exact";
   try {
     const photoIds = props.photos.map((photo) => photo.id);
@@ -887,6 +948,8 @@ const handleReviewDuplicates = async (type = "exact") => {
 
     // dHash-based exact duplicate detection
     await photosStore.checkExactDuplicates(photoIds, scope);
+
+    if (duplicatesCheckCancelled.value) return;
 
     const duplicatesCount = props.photos.filter(
       (photo) => photo.isExactDuplicate || photo.isAlreadyAnalyzed,
@@ -902,10 +965,17 @@ const handleReviewDuplicates = async (type = "exact") => {
       message.success("No duplicate photos found.");
     }
   } catch (error) {
-    console.error("Error reviewing duplicates:", error);
+    if (!duplicatesCheckCancelled.value) {
+      console.error("Error reviewing duplicates:", error);
+    }
   } finally {
     isCheckingDuplicates.value = false;
   }
+};
+
+const cancelDuplicatesCheck = () => {
+  duplicatesCheckCancelled.value = true;
+  isCheckingDuplicates.value = false;
 };
 
 // Handle filter duplicates change (just toggle the filter)
@@ -919,7 +989,7 @@ const lightboxCleanOptions = computed(() => {
     (p) => p.isAlreadyAnalyzed,
   ).length;
   return [
-    { label: "Within Lightbox (keep one per group)", key: "within-upload" },
+    { label: "Within Lightbox", key: "within-upload" },
     {
       label: `Already in Workspace${alreadyAnalyzedCount > 0 ? ` (${alreadyAnalyzedCount})` : ""}`,
       key: "already-analyzed",
@@ -941,201 +1011,211 @@ const resetDuplicateState = () => {
   lastDuplicateType.value = null;
 };
 
+const showDeleteDuplicatesConfirm = (count, action) => {
+  duplicatesToDeleteCount.value = count;
+  pendingDeleteAction = action;
+  showDeleteDuplicatesConfirmDialog.value = true;
+};
+
+const confirmDeleteDuplicates = async () => {
+  showDeleteDuplicatesConfirmDialog.value = false;
+  if (pendingDeleteAction) {
+    await pendingDeleteAction();
+    pendingDeleteAction = null;
+  }
+};
+
 // Lightbox: delete duplicate non-processed photos, keeping one per group
-const handleDeleteDuplicatesWithinUpload = async () => {
-  isDeletingBulkDuplicates.value = true;
-
-  // Build connected components using union-find
-  const parent = new Map();
-  function find(id) {
-    if (!parent.has(id)) parent.set(id, id);
-    if (parent.get(id) !== id) parent.set(id, find(parent.get(id)));
-    return parent.get(id);
-  }
-  function union(a, b) {
-    const ra = find(a),
-      rb = find(b);
-    if (ra !== rb) parent.set(ra, rb);
-  }
-
+const handleDeleteDuplicatesWithinUpload = () => {
   const lightboxPhotos = filteredAndSortedPhotos.value.filter(
     (p) =>
       p.status !== "processed" && (p.isExactDuplicate || p.isAlreadyAnalyzed),
   );
 
-  // Union via direct exactDuplicates (lightbox-to-lightbox)
-  lightboxPhotos.forEach((photo) => {
-    (photo.exactDuplicates || []).forEach((dupId) => {
-      const p = photosStore.photos.find((ph) => ph.id === dupId);
-      if (p && p.status !== "processed") union(photo.id, dupId);
-    });
-  });
+  const lightboxIdSet = new Set(lightboxPhotos.map((p) => p.id));
+  const lightboxMap = new Map(lightboxPhotos.map((p) => [p.id, p]));
+  const assigned = new Set();
+  const groupsList = [];
 
-  // Union lightbox photos that share the same alreadyAnalyzedIds entry
-  // (both are duplicates of the same processed photo → duplicates of each other)
-  const workspaceIdToLightbox = new Map();
+  // Group by direct bidirectional exactDuplicates (lightbox-to-lightbox)
   lightboxPhotos.forEach((photo) => {
-    (photo.alreadyAnalyzedIds || []).forEach((wsId) => {
-      if (workspaceIdToLightbox.has(wsId)) {
-        union(photo.id, workspaceIdToLightbox.get(wsId));
-      } else {
-        workspaceIdToLightbox.set(wsId, photo.id);
+    if (assigned.has(photo.id)) return;
+    const group = [photo.id];
+    assigned.add(photo.id);
+    (photo.exactDuplicates || []).forEach((dupId) => {
+      if (!lightboxIdSet.has(dupId) || assigned.has(dupId)) return;
+      const dupPhoto = lightboxMap.get(dupId);
+      if (dupPhoto && (dupPhoto.exactDuplicates || []).includes(photo.id)) {
+        group.push(dupId);
+        assigned.add(dupId);
       }
     });
-  });
-
-  // Group by root, keep first of each group, delete rest
-  const groups = new Map();
-  lightboxPhotos.forEach((photo) => {
-    const root = find(photo.id);
-    if (!groups.has(root)) groups.set(root, []);
-    groups.get(root).push(photo.id);
+    if (group.length >= 2) groupsList.push(group);
   });
 
   const toDelete = [];
-  for (const ids of groups.values()) {
+  for (const ids of groupsList) {
     if (ids.length > 1) toDelete.push(...ids.slice(1));
   }
 
   if (toDelete.length === 0) {
     message.info("No duplicates to remove within upload.");
-    isDeletingBulkDuplicates.value = false;
     return;
   }
 
-  try {
-    await photosStore.deletePhotos(toDelete);
-    message.success(`Removed ${toDelete.length} duplicate(s) within upload.`);
-    resetDuplicateState();
-  } catch (error) {
-    console.error("Error removing duplicates within upload:", error);
-  } finally {
-    isDeletingBulkDuplicates.value = false;
-  }
+  showDeleteDuplicatesConfirm(toDelete.length, async () => {
+    isDeletingBulkDuplicates.value = true;
+    try {
+      await photosStore.deletePhotos(toDelete);
+      message.success(`Removed ${toDelete.length} duplicate(s) within upload.`);
+
+      // Check if there are still duplicates remaining after deletion
+      const remainingDuplicates = props.photos.filter(
+        (photo) => photo.isExactDuplicate || photo.isAlreadyAnalyzed,
+      ).length;
+
+      if (remainingDuplicates === 0) {
+        resetDuplicateState();
+      }
+    } catch (error) {
+      console.error("Error removing duplicates within upload:", error);
+    } finally {
+      isDeletingBulkDuplicates.value = false;
+    }
+  });
 };
 
 // Lightbox: delete non-processed photos that already exist as processed in workspace
-const handleDeleteAlreadyAnalyzed = async () => {
-  isDeletingBulkDuplicates.value = true;
-
+const handleDeleteAlreadyAnalyzed = () => {
   const toDelete = props.photos
     .filter((photo) => photo.isAlreadyAnalyzed)
     .map((p) => p.id);
 
   if (toDelete.length === 0) {
     message.info("No uploaded photos already analyzed in workspace.");
-    isDeletingBulkDuplicates.value = false;
     return;
   }
 
-  try {
-    await photosStore.deletePhotos(toDelete);
-    message.success(
-      `Removed ${toDelete.length} photo(s) already analyzed in workspace.`,
-    );
-    resetDuplicateState();
-  } catch (error) {
-    console.error("Error removing already analyzed photos:", error);
-  } finally {
-    isDeletingBulkDuplicates.value = false;
-  }
+  showDeleteDuplicatesConfirm(toDelete.length, async () => {
+    isDeletingBulkDuplicates.value = true;
+    try {
+      await photosStore.deletePhotos(toDelete);
+      message.success(
+        `Removed ${toDelete.length} photo(s) already analyzed in workspace.`,
+      );
+
+      // Check if there are still duplicates remaining after deletion
+      const remainingDuplicates = props.photos.filter(
+        (photo) => photo.isExactDuplicate || photo.isAlreadyAnalyzed,
+      ).length;
+
+      if (remainingDuplicates === 0) {
+        resetDuplicateState();
+      }
+    } catch (error) {
+      console.error("Error removing already analyzed photos:", error);
+    } finally {
+      isDeletingBulkDuplicates.value = false;
+    }
+  });
 };
 
 // Workspace: delete all duplicate processed photos, keeping one per group
-const handleDeleteAllDuplicates = async () => {
-  isDeletingBulkDuplicates.value = true;
-
-  // Build connected components using union-find
-  const parent = new Map();
-  function find(id) {
-    if (!parent.has(id)) parent.set(id, id);
-    if (parent.get(id) !== id) parent.set(id, find(parent.get(id)));
-    return parent.get(id);
-  }
-  function union(a, b) {
-    const ra = find(a),
-      rb = find(b);
-    if (ra !== rb) parent.set(ra, rb);
-  }
-
+const handleDeleteAllDuplicates = () => {
   const dupPhotos = filteredAndSortedPhotos.value.filter(
     (p) => p.isExactDuplicate,
   );
+  const dupIdSet = new Set(dupPhotos.map((p) => p.id));
+  const assigned = new Set();
 
+  // Build groups using direct bidirectional links only
+  const groupsList = [];
   dupPhotos.forEach((photo) => {
-    (photo.exactDuplicates || []).forEach((dupId) => union(photo.id, dupId));
-  });
-
-  // Group by root, keep first of each group, delete rest
-  const groups = new Map();
-  dupPhotos.forEach((photo) => {
-    const root = find(photo.id);
-    if (!groups.has(root)) groups.set(root, []);
-    groups.get(root).push(photo.id);
+    if (assigned.has(photo.id)) return;
+    const group = [photo.id];
+    assigned.add(photo.id);
+    (photo.exactDuplicates || []).forEach((dupId) => {
+      if (!dupIdSet.has(dupId) || assigned.has(dupId)) return;
+      const dupPhoto = dupPhotos.find((p) => p.id === dupId);
+      if (dupPhoto && (dupPhoto.exactDuplicates || []).includes(photo.id)) {
+        group.push(dupId);
+        assigned.add(dupId);
+      }
+    });
+    if (group.length >= 2) groupsList.push(group);
   });
 
   const toDelete = [];
-  for (const ids of groups.values()) {
+  for (const ids of groupsList) {
     if (ids.length > 1) toDelete.push(...ids.slice(1));
   }
 
   if (toDelete.length === 0) {
     message.info("No duplicates to remove.");
-    isDeletingBulkDuplicates.value = false;
     return;
   }
 
-  try {
-    await photosStore.deletePhotos(toDelete);
-    message.success(
-      `Removed ${toDelete.length} duplicate(s), keeping one per group.`,
-    );
-    resetDuplicateState();
-  } catch (error) {
-    console.error("Error removing all duplicates:", error);
-  } finally {
-    isDeletingBulkDuplicates.value = false;
-  }
+  showDeleteDuplicatesConfirm(toDelete.length, async () => {
+    isDeletingBulkDuplicates.value = true;
+    try {
+      await photosStore.deletePhotos(toDelete);
+      message.success(
+        `Removed ${toDelete.length} duplicate(s), keeping one per group.`,
+      );
+
+      // Check if there are still duplicates remaining after deletion
+      const remainingDuplicates = props.photos.filter(
+        (photo) => photo.isExactDuplicate || photo.isAlreadyAnalyzed,
+      ).length;
+
+      if (remainingDuplicates === 0) {
+        resetDuplicateState();
+      }
+    } catch (error) {
+      console.error("Error removing all duplicates:", error);
+    } finally {
+      isDeletingBulkDuplicates.value = false;
+    }
+  });
 };
 
-// Function to group duplicates using connected components (union-find)
+// Function to group duplicates using direct links only (no transitive merging)
 function groupDuplicates(photos, type = "similar") {
   const isDupKey = type === "exact" ? "isExactDuplicate" : "isDuplicate";
   const dupsKey = type === "exact" ? "exactDuplicates" : "duplicates";
 
-  // Union-Find to build connected components
-  const parent = new Map();
-  function find(id) {
-    if (!parent.has(id)) parent.set(id, id);
-    if (parent.get(id) !== id) parent.set(id, find(parent.get(id)));
-    return parent.get(id);
-  }
-  function union(a, b) {
-    const ra = find(a),
-      rb = find(b);
-    if (ra !== rb) parent.set(ra, rb);
-  }
-
-  // Build connections from duplicate relationships
-  photos.forEach((photo) => {
-    if (!photo[isDupKey]) return;
-    (photo[dupsKey] || []).forEach((dupId) => union(photo.id, dupId));
-  });
-
-  // Group photos by their connected component root
-  const groups = new Map();
-  photos.forEach((photo) => {
-    if (!photo[isDupKey]) return;
-    const root = find(photo.id);
-    if (!groups.has(root)) groups.set(root, []);
-    groups.get(root).push(photo);
-  });
-
-  // Flatten groups into result (only groups with 2+ photos present in the list)
+  const photoSet = new Set(photos.map((p) => p.id));
+  const photoMap = new Map(photos.map((p) => [p.id, p]));
+  const assigned = new Set();
   const result = [];
-  for (const group of groups.values()) {
-    result.push(...group);
-  }
+
+  // For each duplicate photo, form a group with its direct visible duplicates
+  photos.forEach((photo) => {
+    if (!photo[isDupKey] || assigned.has(photo.id)) return;
+    const directDups = (photo[dupsKey] || []).filter(
+      (dupId) => photoSet.has(dupId) && !assigned.has(dupId),
+    );
+    if (directDups.length === 0 && assigned.has(photo.id)) return;
+
+    // Build a group: this photo + its direct duplicates that also reference it back
+    const group = [photo];
+    assigned.add(photo.id);
+    directDups.forEach((dupId) => {
+      const dupPhoto = photoMap.get(dupId);
+      if (dupPhoto && !assigned.has(dupId)) {
+        // Only add if the other photo also references this one (bidirectional link)
+        const backLinks = dupPhoto[dupsKey] || [];
+        if (backLinks.includes(photo.id)) {
+          group.push(dupPhoto);
+          assigned.add(dupId);
+        }
+      }
+    });
+
+    if (group.length >= 2) {
+      result.push(...group);
+    }
+  });
   return result;
 }
 
@@ -1148,35 +1228,47 @@ const photoGroupMap = computed(() => {
   );
   if (photos.length === 0) return new Map();
 
-  // Union-Find
-  const parent = new Map();
-  function find(id) {
-    if (!parent.has(id)) parent.set(id, id);
-    if (parent.get(id) !== id) parent.set(id, find(parent.get(id)));
-    return parent.get(id);
-  }
-  function union(a, b) {
-    const ra = find(a),
-      rb = find(b);
-    if (ra !== rb) parent.set(ra, rb);
-  }
-
-  photos.forEach((photo) => {
-    (photo.exactDuplicates || []).forEach((dupId) => union(photo.id, dupId));
-    (photo.alreadyAnalyzedIds || []).forEach((dupId) => union(photo.id, dupId));
-  });
-
-  // Assign sequential group indices in order of first appearance
-  const rootToIndex = new Map();
-  let nextIndex = 0;
+  const visibleIds = new Set(photos.map((p) => p.id));
+  const assigned = new Set();
   const map = new Map();
+  let nextIndex = 0;
 
+  // Group by direct bidirectional links only — no transitive merging
   photos.forEach((photo) => {
-    const root = find(photo.id);
-    if (!rootToIndex.has(root)) {
-      rootToIndex.set(root, nextIndex++);
+    if (assigned.has(photo.id)) return;
+
+    // Collect direct duplicates that are visible and link back to this photo
+    const allDupIds = [
+      ...(photo.exactDuplicates || []),
+      ...(photo.alreadyAnalyzedIds || []),
+    ];
+    const groupMembers = [photo.id];
+    assigned.add(photo.id);
+
+    allDupIds.forEach((dupId) => {
+      if (!visibleIds.has(dupId) || assigned.has(dupId)) return;
+      // Check bidirectional: the other photo must also reference this one
+      const dupPhoto = photos.find((p) => p.id === dupId);
+      if (dupPhoto) {
+        const backLinks = [
+          ...(dupPhoto.exactDuplicates || []),
+          ...(dupPhoto.alreadyAnalyzedIds || []),
+        ];
+        if (backLinks.includes(photo.id)) {
+          groupMembers.push(dupId);
+          assigned.add(dupId);
+        }
+      }
+    });
+
+    // Assign a group index if there are 2+ members OR if it's a single alreadyAnalyzed photo
+    if (
+      groupMembers.length >= 2 ||
+      (groupMembers.length === 1 && photo.isAlreadyAnalyzed)
+    ) {
+      const groupIdx = nextIndex++;
+      groupMembers.forEach((id) => map.set(id, groupIdx));
     }
-    map.set(photo.id, rootToIndex.get(root));
   });
 
   return map;
@@ -1983,6 +2075,34 @@ const handleSendToChat = async () => {
 
 .suggest-photos-card:hover .suggest-label {
   color: var(--primary-color);
+}
+
+/* Checking duplicates modal */
+.dup-check-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  width: 320px;
+  padding: 40px 32px 32px;
+  background: var(--bg-card);
+  border-radius: 12px;
+}
+
+.dup-check-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.dup-check-subtitle {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-color);
+  opacity: 0.7;
+  text-align: center;
+  line-height: 1.5;
 }
 
 /* Duplicate group color indicators - alternating colors per group */

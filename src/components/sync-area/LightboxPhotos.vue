@@ -119,7 +119,10 @@
       <n-icon size="18" color="var(--primary-color)">
         <BookInformation20Regular />
       </n-icon>
-      <h3 class="sync-area-title">Photo upload and preview area.</h3>
+      <h3 class="sync-area-title">
+        Photo upload and preview area. Click on Analyze Photos to
+        <strong>start processing</strong>
+      </h3>
     </div>
 
     <!-- Maintenance Mode Section -->
@@ -448,6 +451,7 @@
         :findDuplicatesEnabled="filteredPhotos.length < 100"
         context="lightbox"
         @selection-change="handleSelectionChange"
+        @duplicates-filter-change="handleDuplicatesFilterChange"
       />
     </div>
 
@@ -489,7 +493,11 @@ const isMaintenanceMode = computed(
   () => import.meta.env.VITE_MAINTENANCE_MODE === "true",
 );
 
-const emit = defineEmits(["on-analyze", "selection-change"]);
+const emit = defineEmits([
+  "on-analyze",
+  "selection-change",
+  "duplicates-filter-change",
+]);
 const photosStore = usePhotosStore();
 const userStore = useUserStore();
 const message = useMessage();
@@ -737,6 +745,14 @@ const handleSelectionChange = (selectionData) => {
   localSelectedIds.value = selectionData.selectedIds;
   // Emitir el evento al padre
   emit("selection-change", selectionData);
+};
+
+// Duplicates filter state
+const isDuplicateFilterActive = ref(false);
+
+const handleDuplicatesFilterChange = (isActive) => {
+  isDuplicateFilterActive.value = isActive;
+  emit("duplicates-filter-change", isActive);
 };
 
 // Use local selection state for the analyze dialog
