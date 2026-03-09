@@ -78,7 +78,6 @@
 
 <script setup lang="ts">
 import { ref, reactive } from "vue";
-import { useRouter } from "vue-router";
 import { useUserStore } from "../stores/userStore";
 import { useMessage } from "naive-ui";
 import type { FormInst, FormRules } from "naive-ui";
@@ -86,11 +85,9 @@ import AuthProviders from "./AuthProviders.vue";
 import ForgotPasswordDialog from "./ForgotPasswordDialog.vue";
 import { MailOutline, LockClosedOutline } from "@vicons/ionicons5";
 import { MailOutlined } from "@vicons/material";
-import { redirectToEntryPage } from "@/composables/useEntryPageRedirect";
 
 const emit = defineEmits(["switch-mode"]);
 
-const router = useRouter();
 const userStore = useUserStore();
 const message = useMessage();
 
@@ -139,8 +136,8 @@ const handleSubmit = async () => {
     const result = await userStore.login(formData.email, formData.password);
 
     if (result.success) {
-      // Usar replace para evitar que quede en el historial y forzar navegación inmediata
-      redirectToEntryPage(router, true);
+      // No navegar aquí - el watcher de isAuthenticated en App.vue se encarga
+      // de redirigir al destino correcto tras cargar el catálogo
     } else {
       message.error(result.error || "Error logging in", { duration: 10000 });
     }

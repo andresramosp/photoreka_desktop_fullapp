@@ -11,15 +11,12 @@
 import { onMounted, ref, computed } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useUserStore } from "../stores/userStore";
-import { usePhotosStore } from "@/stores/photos.js";
 import { useMessage } from "naive-ui";
-import { redirectToEntryPage } from "@/composables/useEntryPageRedirect";
 
 const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
 const message = useMessage();
-const photosStore = usePhotosStore();
 const displayMessage = ref("Processing authentication...");
 const loadingColor = ref("#2563eb");
 
@@ -55,12 +52,11 @@ onMounted(async () => {
     // Si ya tiene perfil configurado, ir directamente al dashboard
     const hasConfiguredProfile = !!userStore.user?.profiles;
 
-    if (hasConfiguredProfile) {
-      await photosStore.getOrFetch(true);
-      redirectToEntryPage(router, true);
-    } else {
+    if (!hasConfiguredProfile) {
       router.replace("/profile-setup");
     }
+    // Si ya tiene perfil, no navegar - el watcher de isAuthenticated en App.vue
+    // redirige al destino correcto tras cargar el catálogo
   } else {
     displayMessage.value = "Authentication failed";
     loadingColor.value = "#ef4444";

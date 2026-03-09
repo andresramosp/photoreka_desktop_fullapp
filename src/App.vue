@@ -143,7 +143,6 @@ import ConfettiEffect from "./components/ConfettiEffect.vue";
 import AppInitLoader from "./components/AppInitLoader.vue";
 import { useThemeInit } from "@/composables/useTheme.js";
 import MobileWelcomeBanner from "./components/MobileWelcomeBanner.vue";
-import { redirectToEntryPage } from "@/composables/useEntryPageRedirect";
 
 const route = useRoute();
 const router = useRouter();
@@ -289,17 +288,22 @@ watch(
       collectionsStore.resetStore();
       seriesStore.resetStore();
 
-      // Redirigir a la página correcta una vez que sepamos si el usuario tiene fotos.
-      // Cubre: login normal (/auth), OAuth (/auth-callback), y acceso directo a / o /dashboard.
-      const isEntryNavigation = [
-        "auth",
-        "auth-callback",
-        "dashboard",
-        null,
-      ].includes(route.name);
+      // Esperar a cargar el catálogo y decidir a dónde ir
       photosStore.getOrFetch(true).then(() => {
-        if (isEntryNavigation) {
-          redirectToEntryPage(router, true);
+        console.log(route.path);
+        if (
+          route.path === "/" ||
+          route.path === "/dashboard" ||
+          route.path === "/auth" ||
+          route.path === "/auth/callback"
+        ) {
+          const target =
+            photosStore.appAccessMode === "blocked"
+              ? "/sync-area#upload"
+              : isMobile.value
+                ? "/workspace"
+                : "/dashboard";
+          router.replace(target);
         }
       });
       collectionsStore.getOrFetch(true);
@@ -321,17 +325,20 @@ watch(
   { immediate: true }, // Ejecutar inmediatamente para capturar estado inicial
 );
 
-// Watcher adicional para forzar redirección si el usuario autenticado está en auth
+// Safety: si un usuario autenticado acaba en "/" (por cualquier flujo), redirigir al destino correcto
 watch(
-  [() => userStore.isAuthenticated, () => route.name],
-  ([isAuth, routeName]) => {
-    if (isAuth && routeName === "auth") {
-      photosStore.getOrFetch().then(() => {
-        redirectToEntryPage(router, true);
-      });
+  [() => route.path, () => photosStore.isInitialized, () => userStore.isAuthenticated],
+  ([path, photosReady, isAuth]) => {
+    if (path === "/" && photosReady && isAuth) {
+      const target =
+        photosStore.appAccessMode === "blocked"
+          ? "/sync-area#upload"
+          : isMobile.value
+            ? "/workspace"
+            : "/dashboard";
+      router.replace(target);
     }
   },
-  { immediate: true },
 );
 
 onUnmounted(() => {

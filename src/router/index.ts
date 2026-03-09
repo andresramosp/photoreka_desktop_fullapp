@@ -1,9 +1,8 @@
 import { createRouter, createWebHistory } from "vue-router";
-import { useIsMobile } from "../composables/useIsMobile";
+import AppInitLoader from "../components/AppInitLoader.vue";
 import { useUserStore } from "../stores/userStore";
 import { useMaintenanceMode } from "../composables/useMaintenanceMode";
 import { trackPageView } from "../utils/analytics";
-import { getEntryPagePath } from "../composables/useEntryPageRedirect";
 import DashboardView from "../views/DashboardView.vue";
 import CanvasView from "../views/CanvasView.vue";
 import SearchView from "../views/SearchView.vue";
@@ -39,11 +38,8 @@ const router = createRouter({
   routes: [
     {
       path: "/",
-      redirect: () => {
-        // Use composable to detect mobile (returns { isMobile })
-        const { isMobile } = useIsMobile();
-        return isMobile.value ? "/workspace" : getEntryPagePath();
-      },
+      name: "home",
+      component: AppInitLoader,
     },
     // Landing page moved to separate app
     // {
@@ -492,13 +488,10 @@ router.beforeEach(async (to, from, next) => {
   // Check if route requires authentication
   if (to.meta.requiresAuth && !userStore.isAuthenticated) {
     next("/auth");
+    return;
   }
-  // Check if route requires guest (not authenticated)
-  else if (to.meta.requiresGuest && userStore.isAuthenticated) {
-    next(getEntryPagePath());
-  }
-  // If accessing root and not authenticated, go to auth
-  else next();
+
+  next();
 });
 
 // Track page views after navigation

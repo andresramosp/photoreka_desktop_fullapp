@@ -433,7 +433,6 @@ import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useMessage } from "naive-ui";
 import ProfileLayout from "../components/ProfileLayout.vue";
-import { redirectToEntryPage } from "@/composables/useEntryPageRedirect";
 
 const router = useRouter();
 const message = useMessage();
@@ -505,7 +504,7 @@ const completeSetup = () => {
   console.log("Total Price:", getTotalPrice());
 
   message.success("Setup completed! Welcome to Photoreka.");
-  redirectToEntryPage(router);
+  router.push("/");
 };
 
 const goBack = () => {
