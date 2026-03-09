@@ -311,11 +311,16 @@ export default class CatalogController {
     const photosToCheckIds = new Set(photosToCheck.map((p) => p.id))
     const results: Record<number, number[]> = {}
 
+    // DEBUG: Log all hash values and all pairs with their distances
+    console.log(`[checkExactDuplicates] Total photos with hashes: ${photoHashes.length}`)
+
     for (let i = 0; i < photoHashes.length; i++) {
       for (let j = i + 1; j < photoHashes.length; j++) {
         const a = photoHashes[i]
         const b = photoHashes[j]
-        if (hammingDistance(a.hash, b.hash) <= DHASH_DUPLICATE_THRESHOLD) {
+        const dist = hammingDistance(a.hash, b.hash)
+
+        if (dist <= DHASH_DUPLICATE_THRESHOLD) {
           if (photosToCheckIds.has(a.id)) {
             if (!results[a.id]) results[a.id] = []
             results[a.id].push(b.id)
