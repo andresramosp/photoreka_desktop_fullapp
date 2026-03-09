@@ -92,7 +92,8 @@ export default class AuthController {
         password: payload.password,
         isActive: true,
         usage,
-        preferredSource: payload.preferredSource,
+        preferredSource: 'web',
+        profiles: 'general',
         emailConfirmationToken,
         emailConfirmationSentAt: DateTime.now(),
         // emailConfirmedAt remains null until confirmed
