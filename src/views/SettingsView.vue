@@ -74,7 +74,7 @@
                     </template>
                     <template v-else>
                       Give your friends access to Photoreka with a free batch of
-                      1500 photos.
+                      1000 photos.
                     </template>
                   </span>
                 </div>
