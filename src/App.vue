@@ -282,6 +282,7 @@ onMounted(() => {
 watch(
   () => userStore.isAuthenticated,
   (isAuth, wasAuth) => {
+    debugger;
     if (isAuth) {
       // Resetear todos los stores antes de cargar datos nuevos (limpia datos de sesiones previas)
       photosStore.resetStore();
@@ -338,6 +339,7 @@ watch(
     () => userStore.isAuthenticated,
   ],
   ([path, photosReady, isAuth]) => {
+    debugger;
     if (path === "/" && photosReady && isAuth) {
       // Si el usuario no tiene perfil configurado, ir a profile-setup primero.
       if (!userStore.user?.profiles) {

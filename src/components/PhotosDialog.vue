@@ -409,37 +409,52 @@
 
     <template #action>
       <div class="dialog-actions">
-        <n-button @click="close">Cancel</n-button>
-        <n-button
-          type="primary"
-          :disabled="totalSelectedCount === 0"
-          @click="confirmSelection"
-          :loading="isSubmitting"
-        >
-          <template #icon>
-            <n-icon>
-              <ArrowUndoIcon v-if="isTrash" />
-              <AddIcon v-else />
-            </n-icon>
-          </template>
-          {{
-            isTrash
-              ? isMobile
-                ? `Restore (${selectedIds.length})`
-                : `Restore ${selectedIds.length} ${
-                    selectedIds.length === 1 ? "Photo" : "Photos"
-                  }`
-              : props.singleSelection
+        <div class="dialog-actions-left">
+          <n-button
+            v-if="isTrash && trashPhotos.length > 0"
+            type="error"
+            ghost
+            @click="clearTrash"
+          >
+            <template #icon>
+              <n-icon><DeleteIcon /></n-icon>
+            </template>
+            Empty Trash
+          </n-button>
+        </div>
+        <div class="dialog-actions-right">
+          <n-button @click="close">Cancel</n-button>
+          <n-button
+            type="primary"
+            :disabled="totalSelectedCount === 0"
+            @click="confirmSelection"
+            :loading="isSubmitting"
+          >
+            <template #icon>
+              <n-icon>
+                <ArrowUndoIcon v-if="isTrash" />
+                <AddIcon v-else />
+              </n-icon>
+            </template>
+            {{
+              isTrash
                 ? isMobile
-                  ? "Select"
-                  : "Select Photo"
-                : isMobile
-                  ? `Add (${totalSelectedCount})`
-                  : `Add ${totalSelectedCount} ${
-                      totalSelectedCount === 1 ? "Photo" : "Photos"
+                  ? `Restore (${selectedIds.length})`
+                  : `Restore ${selectedIds.length} ${
+                      selectedIds.length === 1 ? "Photo" : "Photos"
                     }`
-          }}
-        </n-button>
+                : props.singleSelection
+                  ? isMobile
+                    ? "Select"
+                    : "Select Photo"
+                  : isMobile
+                    ? `Add (${totalSelectedCount})`
+                    : `Add ${totalSelectedCount} ${
+                        totalSelectedCount === 1 ? "Photo" : "Photos"
+                      }`
+            }}
+          </n-button>
+        </div>
       </div>
     </template>
   </n-modal>
@@ -664,6 +679,20 @@ async function confirmSelection() {
   } finally {
     isSubmitting.value = false;
   }
+}
+
+function clearTrash() {
+  // Remove all photos from discardedPhotos so they can appear as similarity results again
+  canvasStore.discardedPhotos.forEach((photo) => {
+    if (photo.src && photo.src.startsWith("blob:")) {
+      URL.revokeObjectURL(photo.src);
+    }
+    if (photo.thumbnailUrl && photo.thumbnailUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(photo.thumbnailUrl);
+    }
+  });
+  canvasStore.discardedPhotos = [];
+  selectedIds.value = [];
 }
 
 function close() {
@@ -928,7 +957,18 @@ onMounted(async () => {
 .dialog-actions {
   display: flex;
   gap: var(--spacing-md);
-  justify-content: flex-end;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.dialog-actions-left {
+  display: flex;
+  gap: var(--spacing-md);
+}
+
+.dialog-actions-right {
+  display: flex;
+  gap: var(--spacing-md);
 }
 
 /* Responsive Design */

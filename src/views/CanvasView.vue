@@ -502,8 +502,22 @@
           >
         </n-button>
 
+        <!-- Canvas Manager -->
+        <CanvasManagerPopover
+          :is-playground="isPlayground"
+          :active-canvas-id="activeCanvasId"
+          :canvas-list="canvasList"
+          :current-canvas-name="currentCanvasName"
+          :is-switching="isSwitchingCanvas"
+          @switch-canvas="handleSwitchCanvas"
+          @create-canvas="handleCreateCanvas"
+          @rename-canvas="handleRenameCanvas"
+          @delete-canvas="handleDeleteCanvas"
+        />
+
         <n-button
           :disabled="isSaved"
+          :loading="isSaving"
           @click="handleSaveCanvas"
           secondary
           :type="hasUnsavedChanges ? 'primary' : 'default'"
@@ -789,6 +803,7 @@ import { SelectAllFilled } from "@vicons/material";
 import { MagicWand, Workspace } from "@vicons/carbon";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { useCanvasPersistence } from "@/composables/useCanvasPersistence.js";
+import CanvasManagerPopover from "@/components/canvas/CanvasManagerPopover.vue";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { usePhotoQueryParams } from "@/composables/usePhotoQueryParams.js";
 import { useTheme } from "@/composables/useTheme.js";
@@ -809,9 +824,17 @@ const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
 const {
   hasUnsavedChanges,
   isSaved,
+  isSaving,
+  activeCanvasId,
+  canvasList,
+  currentCanvasName,
   saveCanvas,
   loadCanvas,
   clearSavedCanvas,
+  createCanvas,
+  switchCanvas,
+  renameCanvas,
+  deleteCanvas,
   hasSavedCanvas,
   initializeChangeDetection,
 } = useCanvasPersistence();
@@ -1211,6 +1234,51 @@ const handleSaveCanvas = async () => {
   } catch (error) {
     console.error("Error saving canvas:", error);
   }
+};
+
+const isSwitchingCanvas = ref(false);
+
+const handleSwitchCanvas = async (id) => {
+  // Auto-save current canvas before switching
+  if (hasUnsavedChanges.value) {
+    await saveCanvas();
+  }
+  isSwitchingCanvas.value = true;
+  try {
+    const ok = await switchCanvas(id);
+    if (ok) {
+      setTimeout(() => fitStageToPhotos(), 100);
+    }
+  } finally {
+    isSwitchingCanvas.value = false;
+  }
+};
+
+const handleCreateCanvas = async () => {
+  // Auto-save current canvas before creating new
+  if (hasUnsavedChanges.value) {
+    await saveCanvas();
+  }
+  const newId = await createCanvas();
+  if (newId) {
+    // store already cleared by composable; reset stage
+    const stage = stageRef.value.getStage();
+    stage.scale({ x: 1, y: 1 });
+    stage.position({ x: 0, y: 0 });
+    stage.batchDraw();
+    toolbarState.value.zoomLevel = 1;
+    updateStageOffset();
+  }
+};
+
+const handleRenameCanvas = async (id, name) => {
+  await renameCanvas(id, name);
+};
+
+const handleDeleteCanvas = async (id) => {
+  await deleteCanvas(id);
+  // If the active canvas changed (deleted), fit stage to new canvas photos
+  setTimeout(() => fitStageToPhotos(), 100);
 };
 
 const handleClearCanvas = async () => {
@@ -1888,6 +1956,14 @@ onMounted(async () => {
   } catch (error) {
     console.error("Error loading canvas:", error);
     fitStageToPhotos();
+  }
+
+  // Process pending photos queued from other views (e.g. takeToCanvas)
+  if (canvasStore.pendingPhotosToAdd.length > 0) {
+    const pending = [...canvasStore.pendingPhotosToAdd];
+    canvasStore.pendingPhotosToAdd = [];
+    await canvasStore.addPhotos(pending, false, true);
+    console.log(`✅ Added ${pending.length} pending photos to canvas`);
   }
 
   // Load photos from query params if present (e.g., ?source=lightroom&ids=123,456)

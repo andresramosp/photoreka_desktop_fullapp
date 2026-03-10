@@ -38,8 +38,8 @@ export function usePhotoToolSelection() {
       // Clear selections before navigating
       clearSelections();
 
-      // Add photos to canvas store
-      canvasStore.addPhotos(photosToAdd, false, true);
+      // Queue photos for canvas (will be added after canvas loads)
+      canvasStore.pendingPhotosToAdd = [...photosToAdd];
 
       // Navigate to canvas
       await router.push("/canvas");
