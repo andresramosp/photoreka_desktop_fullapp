@@ -80,13 +80,22 @@ export const useUserStore = defineStore("user", () => {
 
         // Fetch usage data after successful profile load
         await fetchUsage();
-      } catch (error) {
-        // Si el token no es válido, limpiar estado
-        token.value = null;
-        isAuthenticated.value = false;
-        user.value = null;
-        localStorage.removeItem("auth_token");
-        sessionStorage.removeItem("auth_token");
+      } catch (error: any) {
+        // Solo limpiar el token si el servidor rechaza explícitamente las credenciales (401/403).
+        // Errores 5xx (caída de BD, servidor, etc.) son transitorios y NO deben invalidar el token.
+        const status = error?.response?.status;
+        if (status === 401 || status === 403) {
+          token.value = null;
+          isAuthenticated.value = false;
+          user.value = null;
+          localStorage.removeItem("auth_token");
+          sessionStorage.removeItem("auth_token");
+        } else {
+          // Error de servidor/red: mantener el token, marcar como no autenticado por ahora
+          // pero sin borrar las credenciales para que el usuario pueda reintentar.
+          isAuthenticated.value = false;
+          user.value = null;
+        }
       }
     }
     // Marcar como inicializado independientemente del resultado

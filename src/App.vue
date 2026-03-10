@@ -282,7 +282,6 @@ onMounted(() => {
 watch(
   () => userStore.isAuthenticated,
   (isAuth, wasAuth) => {
-    debugger;
     if (isAuth) {
       // Resetear todos los stores antes de cargar datos nuevos (limpia datos de sesiones previas)
       photosStore.resetStore();
@@ -323,7 +322,6 @@ watch(
         collectionsStore.resetStore();
         seriesStore.resetStore();
       }
-      showWelcomeModal.value = false;
       // Si no está autenticado, marcar photosStore como inicializado para no bloquear la app
       photosStore.isInitialized = true;
     }
@@ -331,30 +329,36 @@ watch(
   { immediate: true }, // Ejecutar inmediatamente para capturar estado inicial
 );
 
-// Safety: si un usuario autenticado acaba en "/" (por cualquier flujo), redirigir al destino correcto
+// Safety: si un usuario acaba en "/" (por cualquier flujo), redirigir al destino correcto
 watch(
   [
     () => route.path,
     () => photosStore.isInitialized,
     () => userStore.isAuthenticated,
+    () => userStore.isInitialized,
   ],
-  ([path, photosReady, isAuth]) => {
-    debugger;
-    if (path === "/" && photosReady && isAuth) {
-      // Si el usuario no tiene perfil configurado, ir a profile-setup primero.
-      if (!userStore.user?.profiles) {
-        router.replace("/profile-setup");
-        return;
+  ([path, photosReady, isAuth, userReady]) => {
+    if (path === "/" && userReady) {
+      if (isAuth && photosReady) {
+        // Si el usuario no tiene perfil configurado, ir a profile-setup primero.
+        if (!userStore.user?.profiles) {
+          router.replace("/profile-setup");
+          return;
+        }
+        const target =
+          photosStore.appAccessMode === "blocked"
+            ? "/sync-area#upload"
+            : isMobile.value
+              ? "/workspace"
+              : "/dashboard";
+        router.replace(target);
+      } else if (!isAuth) {
+        // Usuario no autenticado en "/" → redirigir a auth
+        router.replace("/auth");
       }
-      const target =
-        photosStore.appAccessMode === "blocked"
-          ? "/sync-area#upload"
-          : isMobile.value
-            ? "/workspace"
-            : "/dashboard";
-      router.replace(target);
     }
   },
+  { immediate: true },
 );
 
 onUnmounted(() => {

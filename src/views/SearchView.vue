@@ -582,7 +582,6 @@ async function searchPhotos() {
     const currentState = searchStore.currentSearchState;
 
     // Generate searchId for adaptive mode on first iteration
-    debugger;
     if (searchStore.searchMode === "adaptive" && currentState.iteration === 1) {
       currentSearchId.value = generateSearchId();
       searchReferences.value = [];
