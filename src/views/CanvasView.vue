@@ -768,6 +768,7 @@ import {
   ref,
   onMounted,
   onUnmounted,
+  onActivated,
   computed,
   h,
   watch,
@@ -2001,6 +2002,27 @@ onMounted(async () => {
     collectionsStore.getOrFetch().catch((err) => {
       console.error("Failed to load collections for filter:", err);
     });
+  }
+});
+
+// onActivated fires on BOTH first-mount and KeepAlive re-entries.
+// On first mount, onMounted (async) handles loadCanvas + pending photos.
+// We must skip the first activation so we don't race with loadCanvas.
+let _canvasActivatedOnce = false;
+onActivated(async () => {
+  if (!_canvasActivatedOnce) {
+    // First activation coincides with onMounted — let onMounted handle everything.
+    _canvasActivatedOnce = true;
+    return;
+  }
+  // Subsequent activations: onMounted won't run, so process pending photos here.
+  if (canvasStore.pendingPhotosToAdd.length > 0) {
+    const pending = [...canvasStore.pendingPhotosToAdd];
+    canvasStore.pendingPhotosToAdd = [];
+    await canvasStore.addPhotos(pending, false, true);
+    console.log(
+      `✅ Added ${pending.length} pending photos to canvas (re-activated)`,
+    );
   }
 });
 
