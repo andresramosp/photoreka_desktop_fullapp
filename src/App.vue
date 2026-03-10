@@ -272,6 +272,14 @@ const checkIsMobile = () => {
   }
 };
 
+// Flag para saber si el router ya resolvió la navegación inicial.
+// Evita que el safety watcher redirija a /auth antes de que route.path
+// refleje la URL real (ej. /auth/callback durante OAuth).
+const routerReady = ref(false);
+router.isReady().then(() => {
+  routerReady.value = true;
+});
+
 onMounted(() => {
   checkIsMobile();
   window.addEventListener("resize", checkIsMobile);
@@ -336,8 +344,14 @@ watch(
     () => photosStore.isInitialized,
     () => userStore.isAuthenticated,
     () => userStore.isInitialized,
+    routerReady,
   ],
-  ([path, photosReady, isAuth, userReady]) => {
+  ([path, photosReady, isAuth, userReady, isRouterReady]) => {
+    // No actuar hasta que el router haya resuelto la navegación inicial.
+    // Sin esto, route.path es "/" (START_LOCATION) y el watcher redirige
+    // a /auth antes de que el flujo OAuth en /auth/callback pueda ejecutarse.
+    if (!isRouterReady) return;
+
     if (path === "/" && userReady) {
       if (isAuth && photosReady) {
         // Si el usuario no tiene perfil configurado, ir a profile-setup primero.
