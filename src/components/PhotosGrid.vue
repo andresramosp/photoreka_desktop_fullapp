@@ -62,22 +62,25 @@
             }}</span>
           </n-tooltip>
 
-          <!-- Filter Duplicates Checkbox (only show if duplicates were reviewed and found) -->
+          <!-- Duplicates filter (only show if duplicates were reviewed and found) -->
           <div
             v-if="duplicatesReviewed && hasDuplicates"
             class="filter-duplicates-checkbox"
           >
-            <n-checkbox
-              :checked="filterDuplicates"
-              @update:checked="handleFilterDuplicatesChange"
+            <n-radio-group
+              :value="filterDuplicates"
+              @update:value="handleFilterDuplicatesChange"
               size="small"
+              name="duplicates-filter"
             >
-              Filter duplicates
-            </n-checkbox>
+              <n-radio-button value="all">All</n-radio-button>
+              <n-radio-button value="duplicates">Duplicates</n-radio-button>
+              <n-radio-button value="non-duplicates">Unique</n-radio-button>
+            </n-radio-group>
           </div>
 
           <!-- Bulk delete actions (only when filtering duplicates) -->
-          <template v-if="filterDuplicates && hasDuplicates">
+          <template v-if="filterDuplicates === 'duplicates' && hasDuplicates">
             <n-dropdown
               v-if="props.context === 'lightbox'"
               :options="lightboxCleanOptions"
@@ -509,7 +512,8 @@ import {
   NButtonGroup,
   NIcon,
   NSpin,
-  NCheckbox,
+  NRadioGroup,
+  NRadioButton,
   NModal,
   NCard,
   NSelect,
@@ -621,7 +625,7 @@ const isDemoUser = computed(() => {
 
 // Grid columns state
 const gridColumns = ref(8);
-const filterDuplicates = ref(false);
+const filterDuplicates = ref("all"); // 'all' | 'duplicates' | 'non-duplicates'
 const isCheckingDuplicates = ref(false);
 const isDeletingBulkDuplicates = ref(false);
 const duplicatesReviewed = ref(false);
@@ -806,14 +810,14 @@ watch(
     if (newLength > (oldLength || 0)) {
       duplicatesReviewed.value = false;
       hasDuplicates.value = false;
-      filterDuplicates.value = false;
+      filterDuplicates.value = "all";
     }
   },
 );
 
 // Emit event when duplicates filter changes
 watch([filterDuplicates, duplicatesReviewed], ([newFilter, newReviewed]) => {
-  const isDuplicateFilterActive = newFilter && newReviewed;
+  const isDuplicateFilterActive = newFilter !== "all" && newReviewed;
   emit("duplicates-filter-change", isDuplicateFilterActive);
 });
 
@@ -958,7 +962,7 @@ const handleReviewDuplicates = async (type = "exact") => {
     hasDuplicates.value = duplicatesCount > 0;
 
     if (duplicatesCount > 0) {
-      filterDuplicates.value = true;
+      filterDuplicates.value = "duplicates";
       message.info(`Found ${duplicatesCount} duplicate photos.`);
     } else {
       message.success("No duplicate photos found.");
@@ -977,9 +981,9 @@ const cancelDuplicatesCheck = () => {
   isCheckingDuplicates.value = false;
 };
 
-// Handle filter duplicates change (just toggle the filter)
-const handleFilterDuplicatesChange = (checked) => {
-  filterDuplicates.value = checked;
+// Handle filter duplicates change
+const handleFilterDuplicatesChange = (value) => {
+  filterDuplicates.value = value;
 };
 
 // Lightbox clean duplicates dropdown options (computed to show live counts)
@@ -1006,7 +1010,7 @@ const handleLightboxCleanSelect = (key) => {
 const resetDuplicateState = () => {
   duplicatesReviewed.value = false;
   hasDuplicates.value = false;
-  filterDuplicates.value = false;
+  filterDuplicates.value = "all";
   lastDuplicateType.value = null;
 };
 
@@ -1232,7 +1236,7 @@ function groupDuplicates(photos, type = "similar") {
 
 // Maps each visible duplicate photo to its group index (for color coding)
 const photoGroupMap = computed(() => {
-  if (!filterDuplicates.value) return new Map();
+  if (filterDuplicates.value !== "duplicates") return new Map();
 
   const photos = displayedPhotos.value.filter(
     (p) => p.isExactDuplicate || p.isAlreadyAnalyzed,
@@ -1287,7 +1291,8 @@ const photoGroupMap = computed(() => {
 
 // Groups displayed duplicate photos by group index for band rendering
 const groupedPhotoChunks = computed(() => {
-  if (!filterDuplicates.value || photoGroupMap.value.size === 0) return [];
+  if (filterDuplicates.value !== "duplicates" || photoGroupMap.value.size === 0)
+    return [];
 
   const chunkMap = new Map(); // groupIndex → { groupIndex, photos: [] }
   for (const photo of displayedPhotos.value) {
@@ -1383,7 +1388,7 @@ const filteredAndSortedPhotos = computed(() => {
   }
 
   // Apply duplicates filter
-  if (filterDuplicates.value) {
+  if (filterDuplicates.value === "duplicates") {
     if (props.context === "workspace") {
       // Workspace: show all exact duplicates grouped
       filtered = groupDuplicates(
@@ -1403,6 +1408,11 @@ const filteredAndSortedPhotos = computed(() => {
         ...alreadyAnalyzedPhotos,
       ];
     }
+  } else if (filterDuplicates.value === "non-duplicates") {
+    // Show only photos that are not duplicates
+    filtered = filtered.filter(
+      (photo) => !photo.isExactDuplicate && !photo.isAlreadyAnalyzed,
+    );
   }
 
   // Apply sorting by artistic score
