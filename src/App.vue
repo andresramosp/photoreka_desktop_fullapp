@@ -339,7 +339,7 @@ watch(
   ],
   ([path, photosReady, isAuth]) => {
     if (path === "/" && photosReady && isAuth) {
-      // Si el usuario no tiene perfil configurado, ir a profile-setup primero
+      // Si el usuario no tiene perfil configurado, ir a profile-setup primero.
       if (!userStore.user?.profiles) {
         router.replace("/profile-setup");
         return;
