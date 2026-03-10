@@ -21,9 +21,10 @@ import {
 } from '../utils/prompts/descriptions.js'
 import PhotoImageService from '#services/photo_image_service'
 import DescriptionChunk from '#models/descriptionChunk'
-import { computeDHash, hammingDistance, DHASH_DUPLICATE_THRESHOLD } from '../utils/dhash.js'
+import { computeDHash, DHASH_DUPLICATE_THRESHOLD } from '../utils/dhash.js'
 import pLimit from 'p-limit'
 import axios from 'axios'
+import CpuWorkerPool from '#services/cpu_worker_pool'
 
 const s3 = new S3Client({
   region: 'auto',
@@ -307,31 +308,13 @@ export default class CatalogController {
       )
     )
 
-    // Compare dHashes pairwise using Hamming distance
-    const photosToCheckIds = new Set(photosToCheck.map((p) => p.id))
-    const results: Record<number, number[]> = {}
-
-    // DEBUG: Log all hash values and all pairs with their distances
-    console.log(`[checkExactDuplicates] Total photos with hashes: ${photoHashes.length}`)
-
-    for (let i = 0; i < photoHashes.length; i++) {
-      for (let j = i + 1; j < photoHashes.length; j++) {
-        const a = photoHashes[i]
-        const b = photoHashes[j]
-        const dist = hammingDistance(a.hash, b.hash)
-
-        if (dist <= DHASH_DUPLICATE_THRESHOLD) {
-          if (photosToCheckIds.has(a.id)) {
-            if (!results[a.id]) results[a.id] = []
-            results[a.id].push(b.id)
-          }
-          if (photosToCheckIds.has(b.id)) {
-            if (!results[b.id]) results[b.id] = []
-            results[b.id].push(a.id)
-          }
-        }
-      }
-    }
+    // Offload CPU-heavy pairwise comparison to a worker thread
+    const photosToCheckIds = photosToCheck.map((p) => p.id)
+    const results = await CpuWorkerPool.run<Record<number, number[]>>('dhash_compare', {
+      photoHashes,
+      photosToCheckIds,
+      threshold: DHASH_DUPLICATE_THRESHOLD,
+    })
 
     return response.ok(results)
   }
