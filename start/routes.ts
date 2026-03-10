@@ -131,9 +131,12 @@ router
     router.delete('/api/collections/:id/photos', [CollectionsController, 'removePhotos'])
 
     // Canvas endpoints
-    router.get('/api/canvas', [CanvasController, 'getCanvas'])
-    router.put('/api/canvas', [CanvasController, 'saveCanvas'])
-    router.delete('/api/canvas', [CanvasController, 'deleteCanvas'])
+    router.get('/api/canvas', [CanvasController, 'index'])
+    router.post('/api/canvas', [CanvasController, 'store'])
+    router.get('/api/canvas/:id', [CanvasController, 'show'])
+    router.put('/api/canvas/:id', [CanvasController, 'update'])
+    router.patch('/api/canvas/:id', [CanvasController, 'rename'])
+    router.delete('/api/canvas/:id', [CanvasController, 'destroy'])
 
     // Series endpoints
     router.get('/api/series', [SeriesController, 'index'])

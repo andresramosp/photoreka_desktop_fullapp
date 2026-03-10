@@ -14,13 +14,18 @@ const dbConfig = defineConfig({
         user: env.get('DB_USER'),
         password: env.get('DB_PASSWORD'),
         database: env.get('DB_DATABASE'),
+        keepAlive: true,
+        keepAliveInitialDelayMillis: 10000,
       },
       pool: {
-        min: 5,
+        min: 2,
         max: 50,
         acquireTimeoutMillis: 120000,
-        idleTimeoutMillis: 30000,
+        // Evict idle connections after 10s — well before the server/proxy kills them
+        idleTimeoutMillis: 10000,
         reapIntervalMillis: 1000,
+        // Don't let a failed connection creation abort pending acquisitions
+        propagateCreateError: false,
       },
       migrations: {
         naturalSort: true,

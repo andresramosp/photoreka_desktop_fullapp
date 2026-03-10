@@ -2,31 +2,54 @@ import type { HttpContext } from '@adonisjs/core/http'
 import Canvas from '#models/canvas'
 import { inject } from '@adonisjs/core'
 
+const EMPTY_CANVAS_DATA = { photos: [], discardedPhotos: [], currentZIndex: 1 }
+
 @inject()
 export default class CanvasController {
   /**
-   * Obtener el canvas del usuario autenticado
+   * Listar todos los canvas del usuario (sin campo data para response ligero)
    */
-  async getCanvas({ auth, response }: HttpContext) {
+  async index({ auth, response }: HttpContext) {
     try {
       await auth.use('api').check()
       const user = auth.use('api').user! as any
 
-      const canvas = await Canvas.query()
-        .where('userId', user.id)
-        .orderBy('updatedAt', 'desc')
-        .first()
+      const canvases = await Canvas.query().where('userId', user.id).orderBy('updatedAt', 'desc')
+
+      return response.ok(
+        canvases.map((c) => ({
+          id: c.id,
+          name: c.name,
+          photoCount: c.data?.photos?.length ?? 0,
+          updatedAt: c.updatedAt,
+          createdAt: c.createdAt,
+        }))
+      )
+    } catch (error) {
+      return response.badRequest('Error fetching canvases')
+    }
+  }
+
+  /**
+   * Obtener un canvas completo con toda su data
+   */
+  async show({ auth, params, response }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as any
+
+      const canvas = await Canvas.query().where('id', params.id).where('userId', user.id).first()
 
       if (!canvas) {
-        return response.ok(null)
+        return response.notFound('Canvas not found')
       }
 
       return response.ok({
         id: canvas.id,
         name: canvas.name,
         data: canvas.data,
-        createdAt: canvas.createdAt,
         updatedAt: canvas.updatedAt,
+        createdAt: canvas.createdAt,
       })
     } catch (error) {
       return response.badRequest('Error fetching canvas')
@@ -34,29 +57,59 @@ export default class CanvasController {
   }
 
   /**
-   * Crear o actualizar el canvas del usuario (upsert)
+   * Crear un nuevo canvas (opcionalmente con data inicial)
    */
-  async saveCanvas({ auth, request, response }: HttpContext) {
+  async store({ auth, request, response }: HttpContext) {
     try {
       await auth.use('api').check()
       const user = auth.use('api').user! as any
 
       const { name, data } = request.only(['name', 'data'])
 
+      const canvas = await Canvas.create({
+        userId: user.id,
+        name: name || 'New Canvas',
+        data: data || EMPTY_CANVAS_DATA,
+      })
+
+      return response.created({
+        id: canvas.id,
+        name: canvas.name,
+        data: canvas.data,
+        updatedAt: canvas.updatedAt,
+        createdAt: canvas.createdAt,
+      })
+    } catch (error) {
+      return response.badRequest('Error creating canvas')
+    }
+  }
+
+  /**
+   * Actualizar la data de un canvas
+   */
+  async update({ auth, params, request, response }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as any
+
+      const canvas = await Canvas.query().where('id', params.id).where('userId', user.id).first()
+
+      if (!canvas) {
+        return response.notFound('Canvas not found')
+      }
+
+      const { data } = request.only(['data'])
+
       if (!data) {
         return response.badRequest('Missing canvas data')
       }
 
-      const canvas = await Canvas.updateOrCreate(
-        { userId: user.id },
-        { name: name || 'My Canvas', data }
-      )
+      canvas.data = data
+      await canvas.save()
 
       return response.ok({
         id: canvas.id,
         name: canvas.name,
-        data: canvas.data,
-        createdAt: canvas.createdAt,
         updatedAt: canvas.updatedAt,
       })
     } catch (error) {
@@ -65,14 +118,43 @@ export default class CanvasController {
   }
 
   /**
-   * Eliminar el canvas del usuario
+   * Renombrar un canvas
    */
-  async deleteCanvas({ auth, response }: HttpContext) {
+  async rename({ auth, params, request, response }: HttpContext) {
     try {
       await auth.use('api').check()
       const user = auth.use('api').user! as any
 
-      const canvas = await Canvas.query().where('userId', user.id).first()
+      const canvas = await Canvas.query().where('id', params.id).where('userId', user.id).first()
+
+      if (!canvas) {
+        return response.notFound('Canvas not found')
+      }
+
+      const { name } = request.only(['name'])
+
+      if (!name || name.trim().length === 0) {
+        return response.badRequest('Name cannot be empty')
+      }
+
+      canvas.name = name.trim()
+      await canvas.save()
+
+      return response.ok({ id: canvas.id, name: canvas.name })
+    } catch (error) {
+      return response.badRequest('Error renaming canvas')
+    }
+  }
+
+  /**
+   * Eliminar un canvas
+   */
+  async destroy({ auth, params, response }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as any
+
+      const canvas = await Canvas.query().where('id', params.id).where('userId', user.id).first()
 
       if (!canvas) {
         return response.notFound('Canvas not found')
