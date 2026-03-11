@@ -107,15 +107,13 @@ export default class CollectionsController {
 
       // Si se proporcionaron fotos iniciales, añadirlas a la colección
       if (photoIds && Array.isArray(photoIds) && photoIds.length > 0) {
-        // Verificar que las fotos pertenecen al usuario
+        // Filtrar solo las fotos que existen y pertenecen al usuario
         const photos = await Photo.query().whereIn('id', photoIds).where('userId', user.id)
+        const validPhotoIds = photos.map((photo) => photo.id)
 
-        if (photos.length !== photoIds.length) {
-          return response.badRequest('Some photos not found or do not belong to user')
+        if (validPhotoIds.length > 0) {
+          await collection.related('photos').attach(validPhotoIds)
         }
-
-        // Usar la relación many-to-many para asociar las fotos
-        await collection.related('photos').attach(photoIds)
       }
 
       // Cargar la colección con sus fotos para devolverla
@@ -234,17 +232,14 @@ export default class CollectionsController {
         return response.notFound('Collection not found')
       }
 
-      // Verificar que las fotos pertenecen al usuario
+      // Filtrar solo las fotos que existen y pertenecen al usuario
       const photos = await Photo.query().whereIn('id', photoIds).where('userId', user.id)
-
-      if (photos.length !== photoIds.length) {
-        return response.badRequest('Some photos not found or do not belong to user')
-      }
+      const validPhotoIds = photos.map((photo) => photo.id)
 
       // Cargar las fotos existentes en la colección
       await collection.load('photos')
       const existingPhotoIds = collection.photos.map((photo) => photo.id)
-      const newPhotoIds = photoIds.filter((id: number) => !existingPhotoIds.includes(id))
+      const newPhotoIds = validPhotoIds.filter((id: number) => !existingPhotoIds.includes(id))
 
       if (newPhotoIds.length === 0) {
         return response.badRequest('All photos are already in the collection')
