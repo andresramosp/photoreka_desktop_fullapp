@@ -150,6 +150,17 @@
             </div>
 
             <div class="pattern-meta">
+              <n-button
+                type="primary"
+                size="tiny"
+                secondary
+                @click.stop="openCollectionModal(pattern)"
+              >
+                <template #icon>
+                  <n-icon size="11"><BookmarksOutline /></n-icon>
+                </template>
+                Save as Collection
+              </n-button>
               <span class="pattern-strength" :class="pattern.strength">
                 <n-icon
                   :size="14"
@@ -179,14 +190,70 @@
       v-model="showPhotoInfoDialog"
       :selected-photo="selectedDialogPhoto"
     />
+
+    <!-- Create Collection from Pattern Dialog -->
+    <n-modal
+      v-model:show="showCreateCollectionDialog"
+      preset="dialog"
+      title="Create Collection from Pattern"
+      positive-text="Create Collection"
+      negative-text="Cancel"
+      @positive-click="createCollectionFromPattern"
+      @negative-click="showCreateCollectionDialog = false"
+    >
+      <div class="create-form">
+        <n-form
+          ref="formRef"
+          :model="collectionFormData"
+          :rules="collectionFormRules"
+        >
+          <n-form-item label="Name" path="title">
+            <n-input
+              v-model:value="collectionFormData.title"
+              placeholder="Enter collection name..."
+              maxlength="100"
+              show-count
+            />
+          </n-form-item>
+          <n-form-item label="Description" path="description">
+            <n-input
+              v-model:value="collectionFormData.description"
+              type="textarea"
+              placeholder="Add a description (optional)..."
+              :rows="3"
+              maxlength="500"
+              show-count
+            />
+          </n-form-item>
+        </n-form>
+        <p class="collection-photo-count">
+          {{ collectionPhotoIds.length }} photo{{
+            collectionPhotoIds.length === 1 ? "" : "s"
+          }}
+          will be added
+        </p>
+      </div>
+    </n-modal>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from "vue";
+import { ref, onMounted, computed, watch, h } from "vue";
+import {
+  NIcon,
+  NModal,
+  NForm,
+  NFormItem,
+  NInput,
+  NButton,
+  useMessage,
+  useNotification,
+} from "naive-ui";
 import theme from "@/config/theme.js";
 import { useUserStore } from "@/stores/userStore";
 import { usePhotosStore } from "@/stores/photos.js";
+import { useCollectionsStore } from "@/stores/collections.js";
+import { useRouter } from "vue-router";
 import PhotoCardHub from "@/components/photoCards/PhotoCardHub.vue";
 import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
 
@@ -202,6 +269,7 @@ import {
   Star as StarIcon,
   EllipseOutline as EllipseIcon,
   TrendingUpOutline as TrendingUpIcon,
+  BookmarksOutline,
 } from "@vicons/ionicons5";
 
 defineOptions({
@@ -210,10 +278,27 @@ defineOptions({
 
 const userStore = useUserStore();
 const photosStore = usePhotosStore();
+const collectionsStore = useCollectionsStore();
+const message = useMessage();
+const notification = useNotification();
+const router = useRouter();
 
 const patternSections = ref([]);
 const showPhotoInfoDialog = ref(false);
 const selectedDialogPhoto = ref(null);
+
+// Create collection dialog state
+const showCreateCollectionDialog = ref(false);
+const collectionPhotoIds = ref([]);
+const formRef = ref(null);
+const collectionFormData = ref({ title: "", description: "" });
+const collectionFormRules = {
+  title: {
+    required: true,
+    message: "Please enter a name",
+    trigger: "blur",
+  },
+};
 
 // Carousel refs and state
 const carouselRefs = ref({});
@@ -303,6 +388,7 @@ const loadPatternsData = () => {
           description: pattern.description,
           photoCount: pattern.photoCount,
           strength: pattern.strength,
+          clusterPhotos: pattern.clusterPhotos || [],
           examples: (pattern.samplePhotos || [])
             .map((photo) => ({
               id: photo.id,
@@ -476,6 +562,71 @@ const showPhotoInfo = async (photo) => {
     showPhotoInfoDialog.value = true;
   } catch (error) {
     console.error("Error fetching photo info:", error);
+  }
+};
+
+// Collection modal handlers
+const openCollectionModal = (pattern) => {
+  const photoIds = pattern.clusterPhotos || [];
+  if (photoIds.length === 0) {
+    message.warning("No photos associated with this pattern");
+    return;
+  }
+  collectionPhotoIds.value = photoIds;
+  collectionFormData.value = {
+    title: pattern.title || "",
+    description: pattern.description || "",
+  };
+  showCreateCollectionDialog.value = true;
+};
+
+const createCollectionFromPattern = async () => {
+  try {
+    await formRef.value?.validate();
+
+    const newCollection = await collectionsStore.createCollection({
+      title: collectionFormData.value.title,
+      description: collectionFormData.value.description,
+      photoIds: collectionPhotoIds.value,
+    });
+
+    notification.success({
+      title: "Collection created",
+      content: `"${collectionFormData.value.title}" created with ${collectionPhotoIds.value.length} photo${collectionPhotoIds.value.length === 1 ? "" : "s"}`,
+      action: () =>
+        h(
+          "button",
+          {
+            style: {
+              color: "var(--accent-color)",
+              fontWeight: "600",
+              padding: "6px 12px",
+              background: "rgba(139, 92, 246, 0.1)",
+              borderRadius: "6px",
+              border: "1px solid rgba(139, 92, 246, 0.3)",
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+            },
+            onMouseover: (e) => {
+              e.target.style.background = "rgba(139, 92, 246, 0.2)";
+            },
+            onMouseout: (e) => {
+              e.target.style.background = "rgba(139, 92, 246, 0.1)";
+            },
+            onClick: () => {
+              router.push(`/collections/${newCollection.id}`);
+            },
+          },
+          "View collection",
+        ),
+      duration: 5000,
+    });
+
+    showCreateCollectionDialog.value = false;
+    collectionPhotoIds.value = [];
+    collectionFormData.value = { title: "", description: "" };
+  } catch (error) {
+    console.error("Error creating collection from pattern:", error);
   }
 };
 
@@ -777,13 +928,23 @@ onMounted(() => {
 
 .pattern-meta {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   gap: var(--spacing-md);
   flex-shrink: 0;
   border-top: 1px solid var(--border-color);
   padding-top: var(--spacing-lg);
   margin-top: auto;
+}
+
+.create-form {
+  padding-top: 16px;
+}
+
+.collection-photo-count {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  margin: var(--spacing-sm) 0 0 0;
 }
 
 .pattern-strength {
