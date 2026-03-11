@@ -2005,7 +2005,7 @@ onMounted(async () => {
   }
 });
 
-// onActivated fires on BOTH first-mount and KeepAlive re-entries.
+// onActivated fires on BOTH first-mount and KeepAlive re-entries
 // On first mount, onMounted (async) handles loadCanvas + pending photos.
 // We must skip the first activation so we don't race with loadCanvas.
 let _canvasActivatedOnce = false;
