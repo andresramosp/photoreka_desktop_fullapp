@@ -590,7 +590,7 @@ const hasOpenSelect = ref(false);
 const hoverDebounceTimer = ref(null);
 const leaveDebounceTimer = ref(null);
 const HOVER_DEBOUNCE_MS = 250; // Debounce de 250ms para entrada
-const LEAVE_DEBOUNCE_MS = 750; // Debounce de 500ms para salida
+const LEAVE_DEBOUNCE_MS = 750; // Debounce de 750ms para salida
 
 // Visual Aspects Filters
 const selectedFilters = ref({});
