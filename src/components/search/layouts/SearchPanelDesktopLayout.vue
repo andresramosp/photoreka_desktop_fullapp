@@ -588,7 +588,9 @@ const collectionsStore = useCollectionsStore();
 const isHovering = ref(false);
 const hasOpenSelect = ref(false);
 const hoverDebounceTimer = ref(null);
-const HOVER_DEBOUNCE_MS = 250; // Debounce de 200ms para pasadas rápidas
+const leaveDebounceTimer = ref(null);
+const HOVER_DEBOUNCE_MS = 250; // Debounce de 250ms para entrada
+const LEAVE_DEBOUNCE_MS = 750; // Debounce de 500ms para salida
 
 // Visual Aspects Filters
 const selectedFilters = ref({});
@@ -761,6 +763,12 @@ function updateWithInsights(value) {
 
 // Handle hover for expanding toolbar when collapsed
 function handleMouseEnter() {
+  // Cancelar timer de salida si existe
+  if (leaveDebounceTimer.value) {
+    clearTimeout(leaveDebounceTimer.value);
+    leaveDebounceTimer.value = null;
+  }
+
   if (props.isToolbarCollapsed) {
     // Clear existing timer if any
     if (hoverDebounceTimer.value) {
@@ -775,14 +783,23 @@ function handleMouseEnter() {
 }
 
 function handleMouseLeave() {
-  // Clear debounce timer
+  // Clear debounce timer de entrada
   if (hoverDebounceTimer.value) {
     clearTimeout(hoverDebounceTimer.value);
     hoverDebounceTimer.value = null;
   }
+
   // No colapsar si hay un select abierto
   if (!hasOpenSelect.value) {
-    isHovering.value = false;
+    // Cancelar timer anterior si existe
+    if (leaveDebounceTimer.value) {
+      clearTimeout(leaveDebounceTimer.value);
+    }
+    // Establecer nuevo timer para cerrar después de 500ms
+    leaveDebounceTimer.value = setTimeout(() => {
+      isHovering.value = false;
+      leaveDebounceTimer.value = null;
+    }, LEAVE_DEBOUNCE_MS);
   }
 }
 
