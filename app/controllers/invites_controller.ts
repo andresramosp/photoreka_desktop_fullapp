@@ -4,6 +4,7 @@ import { HttpContext } from '@adonisjs/core/http'
 import MailService from '#services/mail_service'
 import crypto from 'crypto'
 import { inviteUserTemplate, grantUserTemplate } from '../utils/email_templates.js'
+import { UsageTier, UsageTierLimits } from '#services/usage_service'
 import vine from '@vinejs/vine'
 
 export default class InvitesController {
@@ -161,7 +162,12 @@ export default class InvitesController {
           to: payload.email,
           subject: `${user.name} invited you to try Photoreka (Early Access) 🚀`,
 
-          body: inviteUserTemplate(user.name, code, registerUrl),
+          body: inviteUserTemplate(
+            user.name,
+            code,
+            registerUrl,
+            UsageTierLimits[UsageTier.PROMOTIONAL].analyzedPhotosLimit
+          ),
         })
       } catch (emailError) {
         console.error('Error sending invitation email:', emailError)
@@ -242,7 +248,12 @@ export default class InvitesController {
           from: 'The Photoreka Team <hello@photoreka.com>',
           to: payload.email,
           subject: 'Your Photoreka early access is ready 🚀',
-          body: grantUserTemplate(user.name, code, registerUrl),
+          body: grantUserTemplate(
+            user.name,
+            code,
+            registerUrl,
+            UsageTierLimits[UsageTier.PROMOTIONAL].analyzedPhotosLimit
+          ),
         })
       } catch (emailError) {
         console.error('Error sending grant email:', emailError)

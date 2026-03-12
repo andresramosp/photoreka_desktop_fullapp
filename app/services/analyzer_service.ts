@@ -136,11 +136,14 @@ export default class AnalyzerProcessRunner {
 
     // Incrementar contador acumulativo de fotos analizadas (solo para procesos no-preprocess y modos nuevos)
     if (!this.process.isPreprocess && this.process.userId) {
-      const shouldCount = !['remake_all', 'remake_task', 'remake_process'].includes(
-        this.process.mode
-      )
+      const shouldCount = ![
+        'remake_all',
+        'remake_task',
+        'remake_process',
+        'retry_process',
+      ].includes(this.process.mode)
       if (shouldCount) {
-        const successfulPhotos = this.getSuccessfulPhotosCount()
+        const successfulPhotos = await this.getSuccessfulPhotosCount()
         if (successfulPhotos > 0) {
           await UsageService.incrementAnalyzedPhotosUsed(this.process.userId, successfulPhotos)
           logger.info(
@@ -369,21 +372,13 @@ export default class AnalyzerProcessRunner {
   }
 
   /**
-   * Cuenta las fotos que completaron exitosamente todas las tareas del proceso
+   * Cuenta las fotos asociadas al proceso (consulta directa a DB)
    */
-  private getSuccessfulPhotosCount(): number {
-    const sheet = this.process.processSheet || {}
-    const totalPhotos = this.process.photos?.length || 0
-
-    // Obtener IDs únicos de fotos que siguen pendientes en alguna tarea
-    const pendingIds = new Set<number>()
-    for (const task of Object.values(sheet)) {
-      for (const id of (task as any).pendingPhotoIds || []) {
-        pendingIds.add(id)
-      }
-    }
-
-    return totalPhotos - pendingIds.size
+  private async getSuccessfulPhotosCount(): Promise<number> {
+    const result = await Photo.query()
+      .where('analyzer_process_id', this.process.id)
+      .count('* as total')
+    return Number(result[0]?.$extras?.total || 0)
   }
 
   // NUEVO: Función privada para manejar el autoRetry

@@ -317,8 +317,10 @@ If you didn't request this, you can safely ignore this message.
 export function inviteUserTemplate(
   inviterName: string,
   inviteCode: string,
-  registerUrl: string
+  registerUrl: string,
+  photosAllowance: number = 500
 ): string {
+  const formattedPhotos = photosAllowance.toLocaleString()
   const content = `
     <h1 style="margin: 0 0 20px; font-size: 28px; font-weight: 700; color: ${TEXT_COLOR}; text-align: center;">
       You're Invited to Photoreka
@@ -360,7 +362,7 @@ export function inviteUserTemplate(
       </p>
       <p style="margin: 0 0 10px; font-size: 13px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
         This invitation includes a complimentary package of 
-        <strong style="color: ${TEXT_COLOR};">1,000 photos processed free of charge</strong>, 
+        <strong style="color: ${TEXT_COLOR};">${formattedPhotos} photos processed free of charge</strong>, 
         so you can fully explore your archive and experience the platform.
       </p>
       <p style="margin: 0 0 10px; font-size: 12px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
@@ -392,8 +394,10 @@ export function inviteUserTemplate(
 export function grantUserTemplate(
   inviterName: string,
   inviteCode: string,
-  registerUrl: string
+  registerUrl: string,
+  photosAllowance: number = 500
 ): string {
+  const formattedPhotos = photosAllowance.toLocaleString()
   const content = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
                 font-size: 15px; 
@@ -420,7 +424,7 @@ export function grantUserTemplate(
 
       <p style="margin: 0 0 16px;">
         During this early phase, you can upload and process up to 
-        <strong>1,000 photos free of charge</strong> to explore the platform and work with your archive.
+        <strong>${formattedPhotos} photos free of charge</strong> to explore the platform and work with your archive.
       </p>
 
       <p style="margin: 0 0 16px;">
