@@ -2,8 +2,9 @@
   <div class="photos-grid-container">
     <!-- Photos Grid Controls -->
     <PhotosGridControls
-      v-if="!props.hiddeControls"
+      v-if="!props.hideControls"
       :basic-sort-active="basicSortActive"
+      :photos="props.photos"
       @filters-change="handleFiltersChange"
       @sorting-change="handleSortingChange"
       @sort-order-change="handleSortOrderChange"
@@ -11,61 +12,29 @@
       @genre-change="handleGenreChange"
       @sorting-type-change="handleSortingTypeChange"
       @custom-weights-change="handleCustomWeightsChange"
+      @filename-search-change="handleFilenameSearchChange"
+      @time-range-change="handleTimeRangeChange"
+      @tag-search="handleTagSearch"
+      @artistic-scores-change="handleArtisticScoresChange"
     />
 
     <!-- Grid Controls -->
     <div class="grid-controls grid-controls-base">
-      <div class="controls-left">
+      <!-- Row 1: Photos count + Duplicates button -->
+      <div class="controls-row-1">
         <div class="results-info results-info-base">
           <span class="results-count results-count-base">
-            {{ displayedPhotos.length }}{{ hasMorePhotos ? "+" : "" }} of
-            {{ filteredAndSortedPhotos.length }} photos
+            <span class="desktop-count">
+              {{ displayedPhotos.length }}{{ hasMorePhotos ? "+" : "" }} of
+              {{ filteredAndSortedPhotos.length }} photos
+            </span>
           </span>
         </div>
 
-        <!-- Action buttons (show when photos are selected) -->
-        <div v-if="selectedPhotoIds.length > 0" class="action-buttons">
-          <n-tooltip placement="bottom" trigger="hover">
-            <template #trigger>
-              <n-button
-                type="error"
-                size="small"
-                @click="handleDeleteMultiple"
-                :disabled="selectedPhotoIds.length === 0"
-                :loading="isDeletingPhotos"
-              >
-                <template #icon v-if="!isDeletingPhotos">
-                  <n-icon>
-                    <svg viewBox="0 0 24 24">
-                      <path
-                        fill="currentColor"
-                        d="M9 3v1H4v2h1v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6h1V4h-5V3H9M7 6h10v13H7V6Z"
-                      />
-                    </svg>
-                  </n-icon>
-                </template>
-              </n-button>
-            </template>
-            <span>Delete selected photos</span>
-          </n-tooltip>
-          <n-tooltip placement="bottom" trigger="hover">
-            <template #trigger>
-              <n-button
-                type="info"
-                size="small"
-                @click="handleDownloadMultiple"
-                :disabled="selectedPhotoIds.length === 0 || isDownloading"
-                :loading="isDownloading"
-              >
-                <template #icon>
-                  <n-icon> <CloudDownloadOutline /> </n-icon>
-                </template>
-              </n-button>
-            </template>
-            <span>Download selected photos</span>
-          </n-tooltip>
+        <div class="duplicates-controls-container desktop-only">
+          <!-- Find Exact Duplicates Button -->
           <n-tooltip
-            v-if="displayAddToCollection"
+            v-if="findDuplicatesEnabled"
             placement="bottom"
             trigger="hover"
           >
@@ -73,84 +42,87 @@
               <n-button
                 type="info"
                 size="small"
-                @click="handleAddToCollection"
-                :disabled="selectedPhotoIds.length === 0"
-              >
-                <template #icon>
-                  <n-icon>
-                    <AlbumsOutline />
-                  </n-icon>
-                </template>
-              </n-button>
-            </template>
-            <span>Add selected photos to a collection</span>
-          </n-tooltip>
-
-          <n-tooltip
-            placement="bottom"
-            trigger="hover"
-            v-if="displayMoveToTool"
-          >
-            <template #trigger>
-              <n-button
-                type="info"
-                size="small"
-                @click="openToolSelector"
-                :disabled="selectedPhotoIds.length === 0"
-              >
-                <template #icon>
-                  <n-icon> <MagicWand /> </n-icon>
-                </template>
-              </n-button>
-            </template>
-            <span>Take selected photos to a tool</span>
-          </n-tooltip>
-        </div>
-        <div class="duplicates-controls-container">
-          <!-- Review Duplicates Button -->
-          <n-tooltip placement="bottom" trigger="hover">
-            <template #trigger>
-              <n-button
-                type="warning"
-                size="small"
-                @click="handleReviewDuplicates"
-                :disabled="duplicatesReviewed"
+                secondary
+                :disabled="isDemoUser || duplicatesReviewed"
                 :loading="isCheckingDuplicates"
+                @click="handleReviewDuplicates('exact')"
               >
                 <template #icon v-if="!isCheckingDuplicates">
                   <n-icon>
                     <DuplicateOutline />
                   </n-icon>
                 </template>
-                {{ "Find duplicates" }}
+                Check duplicates
               </n-button>
             </template>
-            <span>Review duplicate photos in your selection</span>
+            <span>{{
+              isDemoUser
+                ? "Not available in demo mode"
+                : "Find exact duplicate photos in your selection"
+            }}</span>
           </n-tooltip>
 
-          <!-- Filter Duplicates Checkbox (only show if duplicates were reviewed and found) -->
+          <!-- Duplicates filter (only show if duplicates were reviewed and found) -->
           <div
             v-if="duplicatesReviewed && hasDuplicates"
             class="filter-duplicates-checkbox"
           >
-            <n-checkbox
-              :checked="filterDuplicates"
-              @update:checked="handleFilterDuplicatesChange"
+            <n-radio-group
+              :value="filterDuplicates"
+              @update:value="handleFilterDuplicatesChange"
               size="small"
+              name="duplicates-filter"
             >
-              Filter duplicates
-            </n-checkbox>
+              <n-radio-button value="all">All</n-radio-button>
+              <n-radio-button value="duplicates">Duplicates</n-radio-button>
+              <n-radio-button value="non-duplicates">Unique</n-radio-button>
+            </n-radio-group>
           </div>
+
+          <!-- Bulk delete actions (only when filtering duplicates) -->
+          <template v-if="filterDuplicates === 'duplicates' && hasDuplicates">
+            <n-dropdown
+              v-if="props.context === 'lightbox'"
+              :options="lightboxCleanOptions"
+              @select="handleLightboxCleanSelect"
+              trigger="click"
+            >
+              <n-button
+                type="info"
+                size="small"
+                secondary
+                :loading="isDeletingBulkDuplicates"
+              >
+                <template #icon>
+                  <n-icon><TrashOutline /></n-icon>
+                </template>
+                Clean duplicates
+              </n-button>
+            </n-dropdown>
+            <n-button
+              v-else
+              type="info"
+              size="small"
+              secondary
+              :loading="isDeletingBulkDuplicates"
+              @click="handleDeleteAllDuplicates"
+            >
+              <template #icon>
+                <n-icon><TrashOutline /></n-icon>
+              </template>
+              Clean duplicates
+            </n-button>
+          </template>
         </div>
       </div>
 
-      <div class="controls-right">
-        <div class="filter-controls" v-if="!props.collectionId"></div>
-        <div class="grid-size-controls grid-size-controls-base">
-          <span class="grid-label grid-label-base">Columns:</span>
+      <!-- Row 2: Columns + Sort (Desktop) -->
+      <div v-if="!isMobile" class="controls-row-2-desktop">
+        <div class="grid-size-controls">
+          <span class="grid-label">Columns:</span>
           <n-button-group>
             <n-button
-              v-for="size in [4, 6, 8, 10]"
+              v-for="size in columnOptions"
               :key="size"
               :type="gridColumns === size ? 'primary' : 'default'"
               size="small"
@@ -161,18 +133,18 @@
           </n-button-group>
         </div>
 
-        <!-- Basic Sort Controls -->
-        <div class="sort-controls sort-controls-base">
-          <span class="sort-label sort-label-base">Sort:</span>
+        <div class="sort-controls">
+          <span class="sort-label">Sort:</span>
           <n-select
             v-model:value="basicSortType"
             :options="sortOptions"
             size="small"
-            style="width: 100px"
+            style="width: 120px"
             clearable
-            placeholder="None"
+            placeholder="Sort"
             :disabled="sortByQuality"
             @update:value="handleBasicSortChange"
+            :filterable="false"
           />
           <n-button
             v-if="basicSortActive"
@@ -189,13 +161,11 @@
           >
             <n-icon size="18">
               <svg viewBox="0 0 24 24" style="width: 18px; height: 18px">
-                <!-- Desc (Descending) - Sort descending icon -->
                 <path
                   v-if="basicSortOrder === 'desc'"
                   d="M19,17H22L18,21L14,17H17V3H19V17M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
                   fill="currentColor"
                 />
-                <!-- Asc (Ascending) - Sort ascending icon -->
                 <path
                   v-else
                   d="M19,7H22L18,3L14,7H17V21H19V7M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
@@ -206,42 +176,191 @@
           </n-button>
         </div>
 
-        <!-- Select All button (always visible) -->
-        <n-button type="default" size="small" @click="handleSelectAll">
+        <n-button
+          size="small"
+          :type="allSelected ? 'primary' : 'default'"
+          @click="handleSelectAllToggle"
+          class="select-all-btn"
+        >
           <template #icon>
             <n-icon>
-              <svg viewBox="0 0 24 24">
+              <template v-if="allSelected">
+                <SelectAllOn24Regular />
+              </template>
+              <template v-else>
+                <SelectAllOn24Regular />
+              </template>
+            </n-icon>
+          </template>
+          <span>{{ allSelected ? "Deselect All" : "Select All" }}</span>
+        </n-button>
+      </div>
+
+      <!-- Row 2: Controls (Mobile) -->
+      <div v-else class="controls-row-2-mobile">
+        <div class="mobile-control mobile-sort-control">
+          <n-button
+            text
+            size="tiny"
+            @click="toggleBasicSortOrder"
+            class="sort-order-icon mobile-sort-icon"
+            :disabled="sortByQuality"
+            :title="
+              basicSortOrder === 'desc'
+                ? 'Descending (click for Ascending)'
+                : 'Ascending (click for Descending)'
+            "
+          >
+            <n-icon size="18">
+              <svg viewBox="0 0 24 24" style="width: 18px; height: 18px">
                 <path
+                  v-if="basicSortOrder === 'desc'"
+                  d="M19,17H22L18,21L14,17H17V3H19V17M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
                   fill="currentColor"
-                  d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"
+                />
+                <path
+                  v-else
+                  d="M19,7H22L18,3L14,7H17V21H19V7M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
+                  fill="currentColor"
                 />
               </svg>
             </n-icon>
-          </template>
-          {{ allSelected ? "Deselect All" : "Select All" }}
-        </n-button>
+          </n-button>
+          <n-select
+            v-model:value="basicSortType"
+            :options="sortOptions"
+            size="small"
+            style="width: 100%; flex: 1"
+            clearable
+            placeholder="None"
+            :disabled="sortByQuality"
+            @update:value="handleBasicSortChange"
+          />
+        </div>
+
+        <div class="mobile-control">
+          <n-button-group style="width: 100%">
+            <n-button
+              v-for="size in columnOptions"
+              :key="size"
+              :type="gridColumns === size ? 'primary' : 'default'"
+              size="small"
+              @click="setGridColumns(size)"
+              style="flex: 1"
+            >
+              {{ size }}
+            </n-button>
+          </n-button-group>
+        </div>
+
+        <div class="mobile-control">
+          <n-button
+            size="small"
+            :type="allSelected ? 'primary' : 'default'"
+            @click="handleSelectAllToggle"
+            style="width: 100%"
+          >
+            <template #icon>
+              <n-icon>
+                <template v-if="allSelected">
+                  <SelectAllOn24Regular />
+                </template>
+                <template v-else>
+                  <SelectAllOn24Regular />
+                </template>
+              </n-icon>
+            </template>
+          </n-button>
+        </div>
+
+        <!-- <div class="mobile-control">
+          <span class="mobile-photo-count">
+            {{ filteredAndSortedPhotos.length }} photos
+          </span>
+        </div> -->
       </div>
+    </div>
+
+    <!-- Select All Banner -->
+    <div v-if="showSelectAllBanner" class="select-all-banner">
+      <span class="banner-text">
+        {{ displayedPhotos.length }} photos selected.
+        <a @click="handleSelectAllFiltered" class="select-all-link">
+          Select all {{ filteredAndSortedPhotos.length }} photos?
+        </a>
+      </span>
+      <n-button
+        text
+        size="tiny"
+        @click="showSelectAllBanner = false"
+        class="banner-close"
+      >
+        <n-icon size="18">
+          <CloseOutline />
+        </n-icon>
+      </n-button>
     </div>
 
     <!-- Photo Grid -->
     <div
       class="photos-grid photo-grid-base"
       :class="`grid-cols-${gridColumns}`"
+      :style="{ '--grid-cols': gridColumns }"
     >
-      <PhotoCardHub
-        v-for="photo in displayedPhotos"
-        :key="photo.id"
-        :photo="photo"
-        :selected="selectedPhotosRecord[photo.id]"
-        @info="showPhotoInfo"
-        @select="togglePhotoSelection"
-        @show-duplicates="showDuplicates"
-        :show-delete="true"
-        :show-name="true"
-        :show-footer="false"
-        :showDuplicate="true"
-        :artistic-score="getPhotoArtisticScore(photo)"
-      />
+      <!-- Grouped band view when filtering duplicates -->
+      <template v-if="filterDuplicates && groupedPhotoChunks.length > 0">
+        <div
+          v-for="chunk in groupedPhotoChunks"
+          :key="chunk.groupIndex"
+          class="dup-group-band"
+          :class="`dup-group-color-${chunk.groupIndex % 2}`"
+        >
+          <PhotoCardHub
+            v-for="photo in chunk.photos"
+            :key="photo.id"
+            :photo="photo"
+            :selected="selectedPhotosRecord[photo.id]"
+            @info="showPhotoInfo"
+            @select="togglePhotoSelection"
+            :show-delete="true"
+            :show-name="true"
+            :show-footer="false"
+            :showDuplicate="true"
+            :artistic-score="getPhotoArtisticScore(photo)"
+            :matched-tags="photo.matchedTags"
+          />
+        </div>
+      </template>
+
+      <!-- Normal flat view -->
+      <template v-else>
+        <PhotoCardHub
+          v-for="photo in displayedPhotos"
+          :key="photo.id"
+          :photo="photo"
+          :selected="selectedPhotosRecord[photo.id]"
+          @info="showPhotoInfo"
+          @select="togglePhotoSelection"
+          :show-delete="true"
+          :show-name="true"
+          :show-footer="false"
+          :showDuplicate="true"
+          :artistic-score="getPhotoArtisticScore(photo)"
+          :matched-tags="photo.matchedTags"
+        />
+        <!-- Suggest Photos Button -->
+        <div
+          v-if="props.showSuggestButton && displayedPhotos.length > 0"
+          class="suggest-photos-card"
+          @click="emit('suggest-photos')"
+          title="Suggest similar photos to add"
+        >
+          <n-icon size="48" color="var(--primary-color)">
+            <AddOutline />
+          </n-icon>
+          <span class="suggest-label">Suggest Photos</span>
+        </div>
+      </template>
     </div>
 
     <!-- Loading indicator for infinite scroll -->
@@ -265,10 +384,9 @@
     <PhotoInfoDialog
       v-model="showPhotoInfoDialog"
       :selected-photo="selectedDialogPhoto"
-    />
-    <DuplicatePhotosDialog
-      v-model="showDuplicatesDialog"
-      :duplicates="selectedDuplicatesData"
+      :all-photos="displayedPhotos"
+      :current-photo-index="currentPhotoIndex"
+      @photo-navigate="handlePhotoNavigate"
     />
 
     <!-- Collection Modal -->
@@ -277,6 +395,7 @@
       :photo-count="selectedPhotoIds.length"
       :photo-ids="selectedPhotoIds"
       @add-to-collection="handleCollectionAdded"
+      @add-to-series="handleCollectionAdded"
       @cancel="handleCollectionModalCancel"
     />
 
@@ -284,7 +403,6 @@
     <PhotoToolSelector
       :show="showToolSelector"
       :photo-count="selectedPhotoIds.length"
-      :tools="availableTools"
       :is-processing="isProcessingTool"
       @tool-selected="handleToolSelected"
       @close="closeToolSelector"
@@ -294,12 +412,10 @@
     <n-modal
       v-model:show="showDeleteConfirmDialog"
       preset="dialog"
-      title="Confirmar eliminación"
+      title="Confirm Deletion"
     >
       <template #header>
-        <div style="font-size: 18px; font-weight: 600">
-          Confirmar eliminación
-        </div>
+        <div style="font-size: 18px; font-weight: 600">Confirm Deletion</div>
       </template>
       <div style="padding: 16px 0">
         <p style="margin-bottom: 16px; font-size: 16px">
@@ -317,11 +433,75 @@
             Cancelar
           </n-button>
           <n-button type="error" @click="confirmDeletePhotos">
-            Eliminar
+            Delete
           </n-button>
         </div>
       </template>
     </n-modal>
+
+    <!-- Checking Duplicates Modal -->
+    <n-modal
+      :show="isCheckingDuplicates"
+      :mask-closable="false"
+      :close-on-esc="false"
+    >
+      <div class="dup-check-modal">
+        <span class="dup-check-title">Finding duplicates</span>
+        <n-spin size="large" />
+        <p class="dup-check-subtitle">
+          Analyzing {{ props.photos.length }} photos for duplicates...
+        </p>
+        <n-button @click="cancelDuplicatesCheck">Cancel</n-button>
+      </div>
+    </n-modal>
+
+    <!-- Delete Duplicates Confirmation Modal -->
+    <n-modal
+      v-model:show="showDeleteDuplicatesConfirmDialog"
+      preset="dialog"
+      title="Confirm Deletion"
+    >
+      <template #header>
+        <div style="font-size: 18px; font-weight: 600">Confirm Deletion</div>
+      </template>
+      <div style="padding: 16px 0">
+        <p style="margin-bottom: 16px; font-size: 16px">
+          Are you sure you want to delete
+          <strong>{{ duplicatesToDeleteCount }}</strong>
+          {{ duplicatesToDeleteCount === 1 ? "photo" : "photos" }}?
+        </p>
+        <p style="color: #d03050; font-size: 14px; margin: 0">
+          This action cannot be undone.
+        </p>
+      </div>
+      <template #action>
+        <div style="display: flex; gap: 8px; justify-content: flex-end">
+          <n-button @click="showDeleteDuplicatesConfirmDialog = false">
+            Cancel
+          </n-button>
+          <n-button type="error" @click="confirmDeleteDuplicates">
+            Delete
+          </n-button>
+        </div>
+      </template>
+    </n-modal>
+
+    <!-- Floating Action Bar -->
+    <FloatingActionBar
+      :selected-count="selectedPhotoIds.length"
+      :show-delete="true"
+      :show-add-to-collection="displayAddToCollection"
+      :show-move-to-tool="displayMoveToTool"
+      :show-send-to-chat="displaySendToChat"
+      :is-deleting="isDeletingPhotos"
+      :is-downloading="isDownloading"
+      @clear-selection="clearAllSelections"
+      @delete="handleDeleteMultiple"
+      @download="handleDownloadMultiple"
+      @add-to-collection="handleAddToCollection"
+      @move-to-tool="openToolSelector"
+      @send-to-chat="handleSendToChat"
+    />
   </div>
 </template>
 
@@ -332,38 +512,46 @@ import {
   NButtonGroup,
   NIcon,
   NSpin,
-  NCheckbox,
+  NRadioGroup,
+  NRadioButton,
   NModal,
   NCard,
   NSelect,
+  NDropdown,
   useMessage,
   NTooltip,
 } from "naive-ui";
 import {
-  AlbumsOutline,
-  CloudDownloadOutline,
   DuplicateOutline,
-  EyeOutline,
-  RepeatOutline,
-  WarningOutline,
+  CloseOutline,
+  AddOutline,
+  SparklesOutline,
+  TrashOutline,
 } from "@vicons/ionicons5";
+import { SquareOutline } from "@vicons/ionicons5";
 import { useRouter } from "vue-router";
 import PhotoCardHub from "./photoCards/PhotoCardHub.vue";
 import PhotoInfoDialog from "./PhotoInfoDialog.vue";
-import DuplicatePhotosDialog from "./DuplicatePhotosDialog.vue";
 import CollectionModal from "./CollectionModal.vue";
 import PhotosGridControls from "./PhotosGridControls.vue";
 import PhotoToolSelector from "./PhotoToolSelector.vue";
+import FloatingActionBar from "./FloatingActionBar.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
+import { useUserStore } from "@/stores/userStore";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
-import { usePhotoUpload } from "@/composables/usePhotoUpload.js";
 import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
-import { MagicWand } from "@vicons/carbon";
+import { useIsMobile } from "@/composables/useIsMobile.js";
+import { CheckmarkSquare24Filled, SelectAllOn24Regular } from "@vicons/fluent";
 
-const emit = defineEmits(["refreshCollection", "selection-change"]);
+const emit = defineEmits([
+  "refreshCollection",
+  "selection-change",
+  "suggest-photos",
+  "duplicates-filter-change",
+]);
 const props = defineProps({
   photos: {
     type: Array,
@@ -381,7 +569,24 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
-  hiddeControls: {
+  displaySendToChat: {
+    type: Boolean,
+    default: true,
+  },
+  hideControls: {
+    type: Boolean,
+    default: false,
+  },
+  findDuplicatesEnabled: {
+    type: Boolean,
+    default: true,
+  },
+  context: {
+    type: String,
+    default: "workspace",
+    validator: (v) => ["workspace", "lightbox"].includes(v),
+  },
+  showSuggestButton: {
     type: Boolean,
     default: false,
   },
@@ -391,8 +596,8 @@ const message = useMessage();
 const router = useRouter();
 const photosStore = usePhotosStore();
 const collectionsStore = useCollectionsStore();
+const userStore = useUserStore();
 const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
-const { preprocessPhotos } = usePhotoUpload();
 const {
   selectedPhotosRecord,
   selectedPhotoIds,
@@ -405,18 +610,63 @@ const {
 const {
   isProcessing: isProcessingTool,
   showToolSelector,
-  availableTools,
   takeToTool,
+  takeToChat,
   openToolSelector,
   closeToolSelector,
 } = usePhotoToolSelection();
 
+const { isMobile } = useIsMobile();
+
+// Check if user is demo
+const isDemoUser = computed(() => {
+  return userStore.user?.email === "demo@photorekatest.com";
+});
+
 // Grid columns state
 const gridColumns = ref(8);
-const filterDuplicates = ref(false);
+const filterDuplicates = ref("all"); // 'all' | 'duplicates' | 'non-duplicates'
 const isCheckingDuplicates = ref(false);
+const isDeletingBulkDuplicates = ref(false);
 const duplicatesReviewed = ref(false);
 const hasDuplicates = ref(false);
+const lastDuplicateType = ref(null); // 'exact' or 'similar'
+const duplicatesCheckCancelled = ref(false);
+const showDeleteDuplicatesConfirmDialog = ref(false);
+const duplicatesToDeleteCount = ref(0);
+let pendingDeleteAction = null;
+
+// Select all banner state
+const showSelectAllBanner = ref(false);
+const allFilteredSelected = ref(false);
+
+// Responsive state for column options
+const windowWidth = ref(
+  typeof window !== "undefined" ? window.innerWidth : 1200,
+);
+
+// Column options based on screen width
+const columnOptions = computed(() => {
+  if (windowWidth.value < 480) {
+    return [1, 2]; // Very small screens: 1 or 2 columns
+  } else if (windowWidth.value < 768) {
+    return [2, 3, 4]; // Mobile: 2, 3, or 4 columns
+  } else {
+    return [4, 6, 8, 10]; // Desktop: original options
+  }
+});
+
+// Adjust gridColumns if current value is not in available options
+watch(
+  columnOptions,
+  (newOptions) => {
+    if (!newOptions.includes(gridColumns.value)) {
+      // Set to the closest available option
+      gridColumns.value = newOptions[Math.min(1, newOptions.length - 1)];
+    }
+  },
+  { immediate: true },
+);
 
 // Infinite scroll state
 const PHOTOS_PER_PAGE = 50; // Número de fotos a cargar por página
@@ -425,6 +675,10 @@ const isLoadingMore = ref(false);
 
 // State for filters and sorting (managed by PhotosGridControls)
 const selectedFilters = ref({});
+const filenameSearch = ref("");
+const timeRange = ref(null);
+const tagFilterResults = ref(null); // Array of photo IDs from tag search
+const artisticScoreFilters = ref({}); // Minimum score thresholds per criterion
 const sortingType = ref("none"); // 'none', 'criteria' or 'genre'
 const selectedCriteria = ref([]);
 const selectedGenre = ref("street");
@@ -496,7 +750,7 @@ const getPhotoArtisticScore = (photo) => {
     const scoreResult = calculateArtisticScore(
       photo.descriptions.artistic_scores,
       "custom",
-      customWeights
+      customWeights,
     );
 
     return scoreResult.average;
@@ -507,14 +761,14 @@ const getPhotoArtisticScore = (photo) => {
       const scoreResult = calculateArtisticScore(
         photo.descriptions.artistic_scores,
         "custom",
-        customWeights.value
+        customWeights.value,
       );
       return scoreResult.average;
     } else {
       // Use genre preset
       const scoreResult = calculateArtisticScore(
         photo.descriptions.artistic_scores,
-        selectedGenre.value
+        selectedGenre.value,
       );
       return scoreResult.average;
     }
@@ -526,8 +780,6 @@ const getPhotoArtisticScore = (photo) => {
 // Dialog states
 const showPhotoInfoDialog = ref(false);
 const selectedDialogPhoto = ref();
-const showDuplicatesDialog = ref(false);
-const selectedDuplicatesData = ref([]);
 const showCollectionModal = ref(false);
 const showDeleteConfirmDialog = ref(false);
 const isDeletingPhotos = ref(false);
@@ -540,8 +792,14 @@ watch(
       selectedCount: newSelection.length,
       selectedIds: [...newSelection],
     });
+
+    // Hide banner if selection is cleared
+    if (newSelection.length === 0) {
+      showSelectAllBanner.value = false;
+      allFilteredSelected.value = false;
+    }
   },
-  { immediate: true, deep: true }
+  { immediate: true, deep: true },
 );
 
 // Watch for photos changes to reset duplicate review state
@@ -552,37 +810,25 @@ watch(
     if (newLength > (oldLength || 0)) {
       duplicatesReviewed.value = false;
       hasDuplicates.value = false;
-      filterDuplicates.value = false;
+      filterDuplicates.value = "all";
     }
-  }
+  },
 );
+
+// Emit event when duplicates filter changes
+watch([filterDuplicates, duplicatesReviewed], ([newFilter, newReviewed]) => {
+  const isDuplicateFilterActive = newFilter !== "all" && newReviewed;
+  emit("duplicates-filter-change", isDuplicateFilterActive);
+});
 
 // Grid functions
 const setGridColumns = (columns) => {
   gridColumns.value = columns;
 };
 
-// Sorting functions
-const toggleSortByQuality = () => {
-  sortByQuality.value = !sortByQuality.value;
-  if (!sortByQuality.value) {
-    // Reset to all criteria when disabled
-    selectedCriteria.value = availableCriteria.map((c) => c.value);
-  }
-};
-
-const toggleSortOrder = () => {
-  sortOrder.value = sortOrder.value === "desc" ? "asc" : "desc";
-};
-
 // Basic sort order toggle
 const toggleBasicSortOrder = () => {
   basicSortOrder.value = basicSortOrder.value === "desc" ? "asc" : "desc";
-};
-
-// Clear basic sort
-const clearBasicSort = () => {
-  basicSortActive.value = false;
 };
 
 // Handle basic sort selection change
@@ -606,6 +852,36 @@ const activateBasicSort = () => {
   basicSortActive.value = true;
   // Optionally, you could reset scores sorting here if needed
   // sortingType.value = "none";
+};
+
+// Handle select all toggle
+const handleSelectAllToggle = () => {
+  if (allSelected.value || allFilteredSelected.value) {
+    // Deselect all
+    clearAllSelections();
+    showSelectAllBanner.value = false;
+    allFilteredSelected.value = false;
+  } else {
+    // Select all displayed photos
+    const photoIds = displayedPhotos.value.map((photo) => photo.id);
+    selectAllPhotos(photoIds);
+
+    // Show banner if there are more photos to select
+    if (displayedPhotos.value.length < filteredAndSortedPhotos.value.length) {
+      showSelectAllBanner.value = true;
+      allFilteredSelected.value = false;
+    } else {
+      allFilteredSelected.value = true;
+    }
+  }
+};
+
+// Handle select all filtered photos
+const handleSelectAllFiltered = () => {
+  const photoIds = filteredAndSortedPhotos.value.map((photo) => photo.id);
+  selectAllPhotos(photoIds);
+  allFilteredSelected.value = true;
+  showSelectAllBanner.value = false;
 };
 
 // Handler functions for PhotosGridControls events
@@ -648,83 +924,437 @@ const handleCustomWeightsChange = (newWeights) => {
   customWeights.value = newWeights;
 };
 
+const handleFilenameSearchChange = (searchValue) => {
+  filenameSearch.value = searchValue;
+};
+
+const handleTimeRangeChange = (range) => {
+  timeRange.value = range;
+};
+
+const handleTagSearch = (results) => {
+  tagFilterResults.value = results;
+};
+
+const handleArtisticScoresChange = (filters) => {
+  artisticScoreFilters.value = filters;
+};
+
 // Handle review duplicates (preprocess and check)
-const handleReviewDuplicates = async () => {
+const handleReviewDuplicates = async (type = "exact") => {
   isCheckingDuplicates.value = true;
+  duplicatesCheckCancelled.value = false;
+  lastDuplicateType.value = "exact";
   try {
-    // First, get all photo IDs that need preprocessing
     const photoIds = props.photos.map((photo) => photo.id);
+    const scope = props.context === "workspace" ? "workspace" : "lightbox";
 
-    // Call preprocessPhotos first (this is idempotent if already processed)
-    await preprocessPhotos(photoIds);
+    // dHash-based exact duplicate detection
+    await photosStore.checkExactDuplicates(photoIds, scope);
 
-    // Then check for duplicates
-    await photosStore.checkDuplicates(photoIds);
+    if (duplicatesCheckCancelled.value) return;
 
-    // Count how many duplicates we found
     const duplicatesCount = props.photos.filter(
-      (photo) => photo.isDuplicate
+      (photo) => photo.isExactDuplicate || photo.isAlreadyAnalyzed,
     ).length;
 
     duplicatesReviewed.value = true;
     hasDuplicates.value = duplicatesCount > 0;
 
     if (duplicatesCount > 0) {
-      message.info(
-        `Found ${duplicatesCount} duplicate photos. Use the filter checkbox to view them.`
-      );
+      filterDuplicates.value = "duplicates";
+      message.info(`Found ${duplicatesCount} duplicate photos.`);
     } else {
       message.success("No duplicate photos found.");
     }
   } catch (error) {
-    console.error("Error reviewing duplicates:", error);
-    message.error("Error reviewing duplicates");
+    if (!duplicatesCheckCancelled.value) {
+      console.error("Error reviewing duplicates:", error);
+    }
   } finally {
     isCheckingDuplicates.value = false;
   }
 };
 
-// Handle filter duplicates change (just toggle the filter)
-const handleFilterDuplicatesChange = (checked) => {
-  filterDuplicates.value = checked;
+const cancelDuplicatesCheck = () => {
+  duplicatesCheckCancelled.value = true;
+  isCheckingDuplicates.value = false;
 };
 
-// Function to group duplicates (same as WorkspacePhotos)
-function groupDuplicates(photos) {
-  const groupMap = new Map();
-  const added = new Set();
-  photos.forEach((photo) => {
-    if (!photo.isDuplicate) return;
-    const groupIds = [photo.id, ...(photo.duplicates || [])].sort((a, b) =>
-      String(a).localeCompare(String(b))
-    );
-    const groupKey = groupIds.join("-");
-    if (!groupMap.has(groupKey)) groupMap.set(groupKey, []);
-    groupMap.get(groupKey).push(photo);
+// Handle filter duplicates change
+const handleFilterDuplicatesChange = (value) => {
+  filterDuplicates.value = value;
+};
+
+// Lightbox clean duplicates dropdown options (computed to show live counts)
+const lightboxCleanOptions = computed(() => {
+  const alreadyAnalyzedCount = props.photos.filter(
+    (p) => p.isAlreadyAnalyzed,
+  ).length;
+  return [
+    { label: "Within Lightbox", key: "within-upload" },
+    {
+      label: `Already in Workspace${alreadyAnalyzedCount > 0 ? ` (${alreadyAnalyzedCount})` : ""}`,
+      key: "already-analyzed",
+      disabled: alreadyAnalyzedCount === 0,
+    },
+  ];
+});
+
+const handleLightboxCleanSelect = (key) => {
+  if (key === "within-upload") handleDeleteDuplicatesWithinUpload();
+  else if (key === "already-analyzed") handleDeleteAlreadyAnalyzed();
+};
+
+// Helper to reset duplicate state after bulk delete
+const resetDuplicateState = () => {
+  duplicatesReviewed.value = false;
+  hasDuplicates.value = false;
+  filterDuplicates.value = "all";
+  lastDuplicateType.value = null;
+};
+
+const showDeleteDuplicatesConfirm = (count, action) => {
+  duplicatesToDeleteCount.value = count;
+  pendingDeleteAction = action;
+  showDeleteDuplicatesConfirmDialog.value = true;
+};
+
+const confirmDeleteDuplicates = async () => {
+  showDeleteDuplicatesConfirmDialog.value = false;
+  if (pendingDeleteAction) {
+    await pendingDeleteAction();
+    pendingDeleteAction = null;
+  }
+};
+
+// Lightbox: delete duplicate non-processed photos, keeping one per group
+const handleDeleteDuplicatesWithinUpload = () => {
+  const lightboxPhotos = filteredAndSortedPhotos.value.filter(
+    (p) =>
+      p.status !== "processed" && (p.isExactDuplicate || p.isAlreadyAnalyzed),
+  );
+
+  const lightboxIdSet = new Set(lightboxPhotos.map((p) => p.id));
+  const lightboxMap = new Map(lightboxPhotos.map((p) => [p.id, p]));
+  const assigned = new Set();
+  const groupsList = [];
+
+  // Group by direct bidirectional exactDuplicates (lightbox-to-lightbox)
+  lightboxPhotos.forEach((photo) => {
+    if (assigned.has(photo.id)) return;
+    const group = [photo.id];
+    assigned.add(photo.id);
+    (photo.exactDuplicates || []).forEach((dupId) => {
+      if (!lightboxIdSet.has(dupId) || assigned.has(dupId)) return;
+      const dupPhoto = lightboxMap.get(dupId);
+      if (dupPhoto && (dupPhoto.exactDuplicates || []).includes(photo.id)) {
+        group.push(dupId);
+        assigned.add(dupId);
+      }
+    });
+    if (group.length >= 2) groupsList.push(group);
   });
 
+  const toDelete = [];
+  for (const ids of groupsList) {
+    if (ids.length > 1) toDelete.push(...ids.slice(1));
+  }
+
+  if (toDelete.length === 0) {
+    message.info("No duplicates to remove within upload.");
+    return;
+  }
+
+  showDeleteDuplicatesConfirm(toDelete.length, async () => {
+    isDeletingBulkDuplicates.value = true;
+    try {
+      await photosStore.deletePhotos(toDelete);
+      message.success(`Removed ${toDelete.length} duplicate(s) within upload.`);
+
+      const deletedIds = new Set(toDelete);
+      const remainingPhotos = props.photos.filter((p) => !deletedIds.has(p.id));
+      const remainingIds = new Set(remainingPhotos.map((p) => p.id));
+      const stillHasAlreadyAnalyzed = remainingPhotos.some(
+        (p) => p.isAlreadyAnalyzed,
+      );
+      const stillHasWithinLightboxPairs = remainingPhotos.some(
+        (p) =>
+          p.isExactDuplicate &&
+          (p.exactDuplicates || []).some((id) => remainingIds.has(id)),
+      );
+      if (!stillHasAlreadyAnalyzed && !stillHasWithinLightboxPairs) {
+        resetDuplicateState();
+      }
+    } catch (error) {
+      console.error("Error removing duplicates within upload:", error);
+    } finally {
+      isDeletingBulkDuplicates.value = false;
+    }
+  });
+};
+
+// Lightbox: delete non-processed photos that already exist as processed in workspace
+const handleDeleteAlreadyAnalyzed = () => {
+  const toDelete = props.photos
+    .filter((photo) => photo.isAlreadyAnalyzed)
+    .map((p) => p.id);
+
+  if (toDelete.length === 0) {
+    message.info("No uploaded photos already analyzed in workspace.");
+    return;
+  }
+
+  showDeleteDuplicatesConfirm(toDelete.length, async () => {
+    isDeletingBulkDuplicates.value = true;
+    try {
+      await photosStore.deletePhotos(toDelete);
+      message.success(
+        `Removed ${toDelete.length} photo(s) already analyzed in workspace.`,
+      );
+
+      const deletedIds = new Set(toDelete);
+      const remainingPhotos = props.photos.filter((p) => !deletedIds.has(p.id));
+      const remainingIds = new Set(remainingPhotos.map((p) => p.id));
+      const stillHasWithinLightboxPairs = remainingPhotos.some(
+        (p) =>
+          p.isExactDuplicate &&
+          (p.exactDuplicates || []).some((id) => remainingIds.has(id)),
+      );
+      if (!stillHasWithinLightboxPairs) {
+        resetDuplicateState();
+      }
+    } catch (error) {
+      console.error("Error removing already analyzed photos:", error);
+    } finally {
+      isDeletingBulkDuplicates.value = false;
+    }
+  });
+};
+
+// Workspace: delete all duplicate processed photos, keeping one per group
+const handleDeleteAllDuplicates = () => {
+  const dupPhotos = filteredAndSortedPhotos.value.filter(
+    (p) => p.isExactDuplicate,
+  );
+  const dupIdSet = new Set(dupPhotos.map((p) => p.id));
+  const assigned = new Set();
+
+  // Build groups using direct bidirectional links only
+  const groupsList = [];
+  dupPhotos.forEach((photo) => {
+    if (assigned.has(photo.id)) return;
+    const group = [photo.id];
+    assigned.add(photo.id);
+    (photo.exactDuplicates || []).forEach((dupId) => {
+      if (!dupIdSet.has(dupId) || assigned.has(dupId)) return;
+      const dupPhoto = dupPhotos.find((p) => p.id === dupId);
+      if (dupPhoto && (dupPhoto.exactDuplicates || []).includes(photo.id)) {
+        group.push(dupId);
+        assigned.add(dupId);
+      }
+    });
+    if (group.length >= 2) groupsList.push(group);
+  });
+
+  const toDelete = [];
+  for (const ids of groupsList) {
+    if (ids.length > 1) toDelete.push(...ids.slice(1));
+  }
+
+  if (toDelete.length === 0) {
+    message.info("No duplicates to remove.");
+    return;
+  }
+
+  showDeleteDuplicatesConfirm(toDelete.length, async () => {
+    isDeletingBulkDuplicates.value = true;
+    try {
+      await photosStore.deletePhotos(toDelete);
+      message.success(
+        `Removed ${toDelete.length} duplicate(s), keeping one per group.`,
+      );
+
+      const deletedIds = new Set(toDelete);
+      const remainingPhotos = props.photos.filter((p) => !deletedIds.has(p.id));
+      const remainingIds = new Set(remainingPhotos.map((p) => p.id));
+      const stillHasPairs = remainingPhotos.some(
+        (p) =>
+          p.isExactDuplicate &&
+          (p.exactDuplicates || []).some((id) => remainingIds.has(id)),
+      );
+      if (!stillHasPairs) {
+        resetDuplicateState();
+      }
+    } catch (error) {
+      console.error("Error removing all duplicates:", error);
+    } finally {
+      isDeletingBulkDuplicates.value = false;
+    }
+  });
+};
+
+// Function to group duplicates using direct links only (no transitive merging)
+function groupDuplicates(photos, type = "similar") {
+  const isDupKey = type === "exact" ? "isExactDuplicate" : "isDuplicate";
+  const dupsKey = type === "exact" ? "exactDuplicates" : "duplicates";
+
+  const photoSet = new Set(photos.map((p) => p.id));
+  const photoMap = new Map(photos.map((p) => [p.id, p]));
+  const assigned = new Set();
   const result = [];
+
+  // For each duplicate photo, form a group with its direct visible duplicates
   photos.forEach((photo) => {
-    if (!photo.isDuplicate) return;
-    const groupIds = [photo.id, ...(photo.duplicates || [])].sort((a, b) =>
-      String(a).localeCompare(String(b))
+    if (!photo[isDupKey] || assigned.has(photo.id)) return;
+    const directDups = (photo[dupsKey] || []).filter(
+      (dupId) => photoSet.has(dupId) && !assigned.has(dupId),
     );
-    const groupKey = groupIds.join("-");
-    if (groupMap.has(groupKey) && !added.has(groupKey)) {
-      result.push(...groupMap.get(groupKey));
-      added.add(groupKey);
+    if (directDups.length === 0 && assigned.has(photo.id)) return;
+
+    // Build a group: this photo + its direct duplicates that also reference it back
+    const group = [photo];
+    assigned.add(photo.id);
+    directDups.forEach((dupId) => {
+      const dupPhoto = photoMap.get(dupId);
+      if (dupPhoto && !assigned.has(dupId)) {
+        // Only add if the other photo also references this one (bidirectional link)
+        const backLinks = dupPhoto[dupsKey] || [];
+        if (backLinks.includes(photo.id)) {
+          group.push(dupPhoto);
+          assigned.add(dupId);
+        }
+      }
+    });
+
+    if (group.length >= 2) {
+      result.push(...group);
     }
   });
   return result;
 }
 
+// Maps each visible duplicate photo to its group index (for color coding)
+const photoGroupMap = computed(() => {
+  if (filterDuplicates.value !== "duplicates") return new Map();
+
+  const photos = displayedPhotos.value.filter(
+    (p) => p.isExactDuplicate || p.isAlreadyAnalyzed,
+  );
+  if (photos.length === 0) return new Map();
+
+  const visibleIds = new Set(photos.map((p) => p.id));
+  const assigned = new Set();
+  const map = new Map();
+  let nextIndex = 0;
+
+  // Group by direct bidirectional links only — no transitive merging
+  photos.forEach((photo) => {
+    if (assigned.has(photo.id)) return;
+
+    // Collect direct duplicates that are visible and link back to this photo
+    const allDupIds = [
+      ...(photo.exactDuplicates || []),
+      ...(photo.alreadyAnalyzedIds || []),
+    ];
+    const groupMembers = [photo.id];
+    assigned.add(photo.id);
+
+    allDupIds.forEach((dupId) => {
+      if (!visibleIds.has(dupId) || assigned.has(dupId)) return;
+      // Check bidirectional: the other photo must also reference this one
+      const dupPhoto = photos.find((p) => p.id === dupId);
+      if (dupPhoto) {
+        const backLinks = [
+          ...(dupPhoto.exactDuplicates || []),
+          ...(dupPhoto.alreadyAnalyzedIds || []),
+        ];
+        if (backLinks.includes(photo.id)) {
+          groupMembers.push(dupId);
+          assigned.add(dupId);
+        }
+      }
+    });
+
+    // Assign a group index if there are 2+ members OR if it's a single alreadyAnalyzed photo
+    if (
+      groupMembers.length >= 2 ||
+      (groupMembers.length === 1 && photo.isAlreadyAnalyzed)
+    ) {
+      const groupIdx = nextIndex++;
+      groupMembers.forEach((id) => map.set(id, groupIdx));
+    }
+  });
+
+  return map;
+});
+
+// Groups displayed duplicate photos by group index for band rendering
+const groupedPhotoChunks = computed(() => {
+  if (filterDuplicates.value !== "duplicates" || photoGroupMap.value.size === 0)
+    return [];
+
+  const chunkMap = new Map(); // groupIndex → { groupIndex, photos: [] }
+  for (const photo of displayedPhotos.value) {
+    const groupIdx = photoGroupMap.value.get(photo.id);
+    if (groupIdx === undefined) continue;
+    if (!chunkMap.has(groupIdx))
+      chunkMap.set(groupIdx, { groupIndex: groupIdx, photos: [] });
+    chunkMap.get(groupIdx).photos.push(photo);
+  }
+
+  return Array.from(chunkMap.values());
+});
+
 // Filter and sort ALL photos (without pagination limit)
 const filteredAndSortedPhotos = computed(() => {
   let filtered = props.photos;
 
+  // Apply tag filter first (if active)
+  if (
+    tagFilterResults.value !== null &&
+    Array.isArray(tagFilterResults.value)
+  ) {
+    // Filter photos to only include those in tagFilterResults
+    const tagPhotoIds = new Set(tagFilterResults.value.map((p) => p.photoId));
+    filtered = filtered.filter((photo) => tagPhotoIds.has(photo.id));
+  }
+
+  // Apply filename search filter
+  if (filenameSearch.value && filenameSearch.value.trim() !== "") {
+    const searchTerm = filenameSearch.value.toLowerCase().trim();
+    filtered = filtered.filter((photo) => {
+      const filename = (photo.originalFileName || "").toLowerCase();
+      return filename.includes(searchTerm);
+    });
+  }
+
+  // Apply time range filter
+  if (timeRange.value && timeRange.value.length === 2) {
+    filtered = filtered.filter((photo) => {
+      const photoDate = new Date(photo.descriptions?.EXIF?.dateTaken).getTime();
+      if (isNaN(photoDate)) return false;
+      return photoDate >= timeRange.value[0] && photoDate <= timeRange.value[1];
+    });
+  }
+
+  // Apply artistic score minimum filters
+  if (Object.keys(artisticScoreFilters.value).length > 0) {
+    filtered = filtered.filter((photo) => {
+      const scores = photo.descriptions?.artistic_scores;
+      if (!scores) return false;
+      return Object.entries(artisticScoreFilters.value).every(
+        ([criterion, minValue]) => {
+          const score = scores[criterion];
+          return score !== undefined && score !== null && score >= minValue;
+        },
+      );
+    });
+  }
+
   // Apply visual aspects filters
   const hasActiveFilters = Object.values(selectedFilters.value).some(
-    (filters) => filters.length > 0
+    (filters) => filters.length > 0,
   );
 
   if (hasActiveFilters) {
@@ -750,16 +1380,39 @@ const filteredAndSortedPhotos = computed(() => {
 
           // Photo must have at least one of the selected values in this category
           return selectedValues.some((selectedValue) =>
-            photoAspects.includes(selectedValue)
+            photoAspects.includes(selectedValue),
           );
-        }
+        },
       );
     });
   }
 
   // Apply duplicates filter
-  if (filterDuplicates.value) {
-    filtered = groupDuplicates(filtered.filter((photo) => photo.isDuplicate));
+  if (filterDuplicates.value === "duplicates") {
+    if (props.context === "workspace") {
+      // Workspace: show all exact duplicates grouped
+      filtered = groupDuplicates(
+        filtered.filter((photo) => photo.isExactDuplicate),
+        "exact",
+      );
+    } else {
+      // Lightbox: show exact duplicates within lightbox + already analyzed photos
+      const exactDuplicatePhotos = filtered.filter(
+        (photo) => photo.isExactDuplicate,
+      );
+      const alreadyAnalyzedPhotos = filtered.filter(
+        (photo) => photo.isAlreadyAnalyzed && !photo.isExactDuplicate,
+      );
+      filtered = [
+        ...groupDuplicates(exactDuplicatePhotos, "exact"),
+        ...alreadyAnalyzedPhotos,
+      ];
+    }
+  } else if (filterDuplicates.value === "non-duplicates") {
+    // Show only photos that are not duplicates
+    filtered = filtered.filter(
+      (photo) => !photo.isExactDuplicate && !photo.isAlreadyAnalyzed,
+    );
   }
 
   // Apply sorting by artistic score
@@ -821,11 +1474,38 @@ const displayedPhotos = computed(() => {
   const totalPhotosToShow = currentPage.value * PHOTOS_PER_PAGE;
   const result = filteredAndSortedPhotos.value.slice(0, totalPhotosToShow);
 
+  // If there are tag filter results, enrich photos with matchedTags
+  if (
+    tagFilterResults.value !== null &&
+    Array.isArray(tagFilterResults.value)
+  ) {
+    const tagMap = new Map(
+      tagFilterResults.value.map((item) => [
+        item.photoId,
+        item.matchedIncluded,
+      ]),
+    );
+
+    return result.map((photo) => {
+      const matchedTags = tagMap.get(photo.id);
+      if (matchedTags && matchedTags.length > 0) {
+        return {
+          ...photo,
+          matchedTags: matchedTags,
+        };
+      }
+      return photo;
+    });
+  }
+
   return result;
 });
 
 // Check if all photos are selected
 const allSelected = computed(() => {
+  if (allFilteredSelected.value) {
+    return true;
+  }
   return (
     displayedPhotos.value.length > 0 &&
     displayedPhotos.value.every((photo) => selectedPhotosRecord.value[photo.id])
@@ -874,6 +1554,10 @@ const resetPagination = () => {
 watch(
   [
     selectedFilters,
+    filenameSearch,
+    timeRange,
+    tagFilterResults,
+    artisticScoreFilters,
     sortingType,
     selectedCriteria,
     selectedGenre,
@@ -886,8 +1570,10 @@ watch(
   ],
   () => {
     resetPagination();
+    showSelectAllBanner.value = false;
+    allFilteredSelected.value = false;
   },
-  { deep: true }
+  { deep: true },
 );
 
 // Watch for props.photos changes to reset pagination
@@ -895,7 +1581,7 @@ watch(
   () => props.photos.length,
   (newLength, oldLength) => {
     resetPagination();
-  }
+  },
 );
 
 // Lifecycle hooks for scroll listener
@@ -911,7 +1597,15 @@ onMounted(() => {
 
     // Debug initial state
   });
+
+  // Add resize listener for responsive column options
+  window.addEventListener("resize", handleResize);
 });
+
+// Handle window resize for responsive columns
+const handleResize = () => {
+  windowWidth.value = window.innerWidth;
+};
 
 onUnmounted(() => {
   const container = document.querySelector(".view-container");
@@ -920,19 +1614,18 @@ onUnmounted(() => {
   } else if (container && container.removeEventListener) {
     container.removeEventListener("scroll", handleScroll);
   }
+
+  // Remove resize listener
+  window.removeEventListener("resize", handleResize);
 });
 
-// Selection functions
-const handleSelectAll = () => {
-  const shouldDeselectAll = allSelected.value;
-  const photoIds = displayedPhotos.value.map((photo) => photo.id);
-
-  if (shouldDeselectAll) {
-    deselectAllPhotos(photoIds);
-  } else {
-    selectAllPhotos(photoIds);
-  }
-};
+// Computed for current photo index in displayed photos
+const currentPhotoIndex = computed(() => {
+  if (!selectedDialogPhoto.value) return -1;
+  return displayedPhotos.value.findIndex(
+    (photo) => photo.id === selectedDialogPhoto.value.id,
+  );
+});
 
 // Photo actions
 const showPhotoInfo = async (photo) => {
@@ -941,9 +1634,13 @@ const showPhotoInfo = async (photo) => {
   showPhotoInfoDialog.value = true;
 };
 
-const showDuplicates = (duplicates) => {
-  selectedDuplicatesData.value = duplicates;
-  showDuplicatesDialog.value = true;
+// Handle photo navigation in dialog
+const handlePhotoNavigate = async (newIndex) => {
+  if (newIndex < 0 || newIndex >= displayedPhotos.value.length) return;
+
+  const photo = displayedPhotos.value[newIndex];
+  const fullPhoto = await photosStore.fetchPhoto(photo.id);
+  selectedDialogPhoto.value = fullPhoto;
 };
 
 // Batch actions
@@ -958,13 +1655,11 @@ const handleDeleteMultiple = async () => {
   try {
     await collectionsStore.removePhotosFromCollection(
       props.collectionId,
-      selectedPhotoIds.value
+      selectedPhotoIds.value,
     );
     // Recargar la ruta actual para refrescar la colección (sin reload completo)
     emit("refreshCollection");
-  } catch (e) {
-    message.error("Error removing photos from collection");
-  }
+  } catch (e) {}
   clearAllSelections();
 };
 
@@ -976,7 +1671,6 @@ const confirmDeletePhotos = async () => {
     await photosStore.deletePhotos(selectedPhotoIds.value);
     clearAllSelections();
   } catch (error) {
-    message.error("Error eliminando las fotos");
     console.error("Error deleting photos:", error);
   } finally {
     isDeletingPhotos.value = false;
@@ -1024,6 +1718,10 @@ const handleToolSelected = async (toolId) => {
   await takeToTool(toolId, selectedPhotoIds.value, clearAllSelections);
   closeToolSelector();
 };
+
+const handleSendToChat = async () => {
+  await takeToChat(selectedPhotoIds.value, clearAllSelections);
+};
 </script>
 
 <style scoped>
@@ -1034,28 +1732,62 @@ const handleToolSelected = async (toolId) => {
 /* Grid Controls */
 .grid-controls-base {
   display: flex;
+  flex-direction: row;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
   gap: 16px;
 }
 
-.controls-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
+.desktop-count {
+  display: inline;
 }
 
-.controls-right {
+.desktop-only {
   display: flex;
+}
+
+/* Row 1: Photos count + Duplicates */
+.controls-row-1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Row 2: Desktop Version */
+.controls-row-2-desktop {
+  display: flex;
+  flex: 1;
+  justify-content: flex-end;
   align-items: center;
   gap: 12px;
 }
 
-.action-buttons {
+/* Row 2: Mobile Version */
+.controls-row-2-mobile {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr; /* Photo count | Columns | Sort | Select */
+  /* CAMBIAR PROPORCIONES: Por ejemplo 1fr 0.6fr 1.4fr 1fr */
+  gap: 8px;
+  width: 100%;
+  align-items: center;
+}
+
+.mobile-control {
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+}
+
+.mobile-photo-count {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: center;
+  white-space: nowrap;
 }
 
 .results-info-base {
@@ -1065,46 +1797,100 @@ const handleToolSelected = async (toolId) => {
 }
 
 .results-count-base {
-  font-size: 16px;
   font-weight: 500;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
-.grid-size-controls-base {
+.grid-size-controls {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.grid-label-base {
+.grid-label {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   font-weight: 500;
 }
 
-.sort-controls-base {
+.sort-controls {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.sort-label-base {
+.sort-label {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   font-weight: 500;
 }
 
 .sort-order-icon {
-  color: #ffffff73;
+  color: var(--text-primary);
   transition: all 0.2s ease;
-  margin-left: 8px;
   opacity: 0.7;
 }
 
 .sort-order-icon:hover {
-  color: #8b5cf6;
+  color: var(--accent-color);
   opacity: 1;
   transform: scale(1.1);
+}
+
+.mobile-sort-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mobile-sort-icon {
+  flex-shrink: 0;
+}
+
+.select-all-btn {
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
+/* Select All Banner */
+.select-all-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: var(--primary-color);
+  border-radius: 8px;
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.banner-text {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.select-all-link {
+  color: white;
+  text-decoration: underline;
+  cursor: pointer;
+  font-weight: 600;
+  margin-left: 4px;
+  transition: opacity 0.2s ease;
+}
+
+.select-all-link:hover {
+  opacity: 0.85;
+}
+
+.banner-close {
+  color: white;
+  opacity: 0.9;
+  transition: opacity 0.2s ease;
+}
+
+.banner-close:hover {
+  opacity: 1;
 }
 
 .filter-duplicates-container {
@@ -1126,7 +1912,15 @@ const handleToolSelected = async (toolId) => {
 /* Photo Grid */
 .photo-grid-base {
   display: grid;
-  gap: 20px;
+  gap: 17px;
+}
+
+.photo-grid-base.grid-cols-1 {
+  grid-template-columns: 1fr;
+}
+
+.photo-grid-base.grid-cols-2 {
+  grid-template-columns: repeat(2, 1fr);
 }
 
 .photo-grid-base.grid-cols-3 {
@@ -1164,13 +1958,13 @@ const handleToolSelected = async (toolId) => {
 }
 
 .end-of-results {
-  color: #ffffff73;
+  color: var(--text-primary);
   font-size: 14px;
   opacity: 0.7;
 }
 
 .loading-more-container {
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 /* Responsive */
@@ -1194,26 +1988,73 @@ const handleToolSelected = async (toolId) => {
 }
 
 @media (max-width: 768px) {
+  .desktop-only {
+    display: none !important;
+  }
+
+  .desktop-count {
+    display: none;
+  }
+
   .grid-controls-base {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
+    margin-bottom: 16px;
+  }
+
+  .controls-row-1 {
+    display: none !important;
+  }
+
+  .results-info-base {
+    display: none;
+  }
+
+  .photo-grid-base {
     gap: 12px;
   }
 
-  .controls-left,
-  .controls-right {
-    width: 100%;
-    justify-content: space-between;
+  .photo-grid-base.grid-cols-1 {
+    grid-template-columns: 1fr;
   }
 
-  .action-buttons {
-    flex-wrap: wrap;
-    gap: 6px;
+  .photo-grid-base.grid-cols-2 {
+    grid-template-columns: repeat(2, 1fr);
   }
 
-  .grid-size-controls-base {
-    width: 100%;
-    justify-content: space-between;
+  .photo-grid-base.grid-cols-3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .photo-grid-base.grid-cols-4 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .photo-grid-base.grid-cols-5,
+  .photo-grid-base.grid-cols-6,
+  .photo-grid-base.grid-cols-8,
+  .photo-grid-base.grid-cols-10 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .mobile-photo-count {
+    font-size: 13px;
+  }
+
+  .select-all-banner {
+    flex-direction: row;
+    padding: 10px 12px;
+  }
+
+  .banner-text {
+    font-size: 13px;
+    flex: 1;
+  }
+
+  .photo-grid-base {
+    gap: 10px;
   }
 
   .photo-grid-base.grid-cols-3,
@@ -1223,18 +2064,82 @@ const handleToolSelected = async (toolId) => {
   .photo-grid-base.grid-cols-8,
   .photo-grid-base.grid-cols-10 {
     grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
   }
 }
 
-@media (max-width: 480px) {
-  .photo-grid-base.grid-cols-3,
-  .photo-grid-base.grid-cols-4,
-  .photo-grid-base.grid-cols-5,
-  .photo-grid-base.grid-cols-6,
-  .photo-grid-base.grid-cols-8,
-  .photo-grid-base.grid-cols-10 {
-    grid-template-columns: 1fr;
-  }
+/* Suggest Photos Card */
+.suggest-photos-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border: 2px dashed var(--border-color, #e0e0e0);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: transparent;
+  gap: 8px;
+}
+
+.suggest-photos-card:hover {
+  border-color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 5%, transparent);
+}
+
+.suggest-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-align: center;
+}
+
+.suggest-photos-card:hover .suggest-label {
+  color: var(--primary-color);
+}
+
+/* Checking duplicates modal */
+.dup-check-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  width: 320px;
+  padding: 40px 32px 32px;
+  background: var(--bg-card);
+  border-radius: 12px;
+}
+
+.dup-check-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.dup-check-subtitle {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-color);
+  opacity: 0.7;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* Duplicate group color indicators - alternating colors per group */
+.dup-group-band {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(var(--grid-cols, 8), 1fr);
+  gap: 17px;
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.dup-group-color-0 {
+  background-color: color-mix(in srgb, var(--primary-color) 10%, transparent);
+}
+.dup-group-color-1 {
+  background-color: color-mix(in srgb, var(--info-color) 10%, transparent);
 }
 </style>

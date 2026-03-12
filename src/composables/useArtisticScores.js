@@ -1,5 +1,28 @@
 import { ref } from "vue";
 
+import {
+  Sparkle20Regular,
+  Grid20Regular,
+  DocumentBulletList20Regular,
+  StarEmphasis20Regular,
+  Comment20Regular,
+  Emoji20Regular,
+  Eye20Regular,
+} from "@vicons/fluent";
+import { PersonRound } from "@vicons/material";
+
+// Icon mapping for criteria
+const criterionIcons = {
+  aesthetic_quality: Sparkle20Regular,
+  composition: Grid20Regular,
+  storytelling: DocumentBulletList20Regular,
+  strangeness: StarEmphasis20Regular,
+  message: Comment20Regular,
+  humor: Emoji20Regular,
+  visual_games: Eye20Regular,
+  candidness: PersonRound,
+};
+
 // Score scale configuration
 const scoreScale = {
   min: 1,
@@ -58,6 +81,40 @@ const scoreScale = {
   ],
 };
 
+// Consistency scale configuration
+const consistencyScale = {
+  levels: [
+    {
+      value: 0,
+      maxStdDev: 0.5,
+      label: "Very Consistent",
+      description: "Remarkably uniform scores across the portfolio",
+      color: "#10b981",
+    },
+    {
+      value: 1,
+      maxStdDev: 1.0,
+      label: "Mostly Consistent",
+      description: "Fairly uniform with minor variations",
+      color: "#22d3ee",
+    },
+    {
+      value: 2,
+      maxStdDev: 1.5,
+      label: "Variable",
+      description: "Moderate variations in scores",
+      color: "#f59e0b",
+    },
+    {
+      value: 3,
+      maxStdDev: Infinity,
+      label: "Highly Variable",
+      description: "Wide range of scores across the portfolio",
+      color: "#ef4444",
+    },
+  ],
+};
+
 // All available artistic score criteria organized by groups
 // Esta es la fuente de verdad - solo los criterios aquí definidos estarán disponibles
 const artisticScores = {
@@ -68,18 +125,22 @@ const artisticScores = {
       {
         value: "aesthetic_quality",
         label: "Aesthetic Quality",
+        icon: criterionIcons.aesthetic_quality,
       },
       {
         value: "composition",
         label: "Composition",
+        icon: criterionIcons.composition,
       },
       {
         value: "storytelling",
         label: "Storytelling",
+        icon: criterionIcons.storytelling,
       },
       {
         value: "strangeness",
         label: "Originality",
+        icon: criterionIcons.strangeness,
       },
     ],
   },
@@ -90,18 +151,22 @@ const artisticScores = {
       {
         value: "message",
         label: "Message",
+        icon: criterionIcons.message,
       },
       {
         value: "humor",
         label: "Humor",
+        icon: criterionIcons.humor,
       },
       {
         value: "visual_games",
         label: "Visual Games",
+        icon: criterionIcons.visual_games,
       },
       {
         value: "candidness",
         label: "Candidness",
+        icon: criterionIcons.candidness,
       },
     ],
   },
@@ -159,15 +224,15 @@ const genrePresets = Object.fromEntries(
       getAllCriteriaKeys().map((criterion) => [
         criterion,
         config[criterion] !== undefined ? config[criterion] : 1, // Default weight is 1 if not specified, but preserve 0 values
-      ])
+      ]),
     ),
-  ])
+  ]),
 );
 
 export function useArtisticScores() {
   // Reactive weights for custom configuration - default to weight 1 for all criteria
   const artisticScoreWeights = ref(
-    Object.fromEntries(getAllCriteriaKeys().map((key) => [key, 1]))
+    Object.fromEntries(getAllCriteriaKeys().map((key) => [key, 1])),
   );
   const selectedGenre = ref("street");
 
@@ -192,7 +257,7 @@ export function useArtisticScores() {
    */
   const resetWeights = () => {
     artisticScoreWeights.value = Object.fromEntries(
-      getAllCriteriaKeys().map((key) => [key, 1])
+      getAllCriteriaKeys().map((key) => [key, 1]),
     );
     selectedGenre.value = "custom";
   };
@@ -294,7 +359,7 @@ export function useArtisticScores() {
   const calculateArtisticScore = (
     artistic_scores,
     genre = "street",
-    customWeights = null
+    customWeights = null,
   ) => {
     if (!artistic_scores || typeof artistic_scores !== "object") {
       return { average: 0, rating: "N/A", total: 0, count: 0 };
@@ -334,22 +399,22 @@ export function useArtisticScores() {
     // Calculate weighted average: sum of (score * weight) / sum of weights
     const weightedSum = weightedScores.reduce(
       (sum, item) => sum + item.weightedValue,
-      0
+      0,
     );
     const average = weightedSum / totalWeight;
 
     // Keep the original score range
     const clampedAverage = Math.max(
       scoreScale.min,
-      Math.min(scoreScale.max, average)
+      Math.min(scoreScale.max, average),
     );
 
     // Find the appropriate rating based on score levels
     const sortedLevels = [...scoreScale.levels].sort(
-      (a, b) => b.value - a.value
+      (a, b) => b.value - a.value,
     );
     const matchingLevel = sortedLevels.find(
-      (level) => clampedAverage >= level.value
+      (level) => clampedAverage >= level.value,
     );
     const rating = matchingLevel
       ? matchingLevel.label
@@ -370,7 +435,7 @@ export function useArtisticScores() {
    */
   const getScoreColorClass = (score) => {
     const sortedLevels = [...scoreScale.levels].sort(
-      (a, b) => b.value - a.value
+      (a, b) => b.value - a.value,
     );
     const level = sortedLevels.find((l) => score >= l.value);
     return level ? level.color : scoreScale.levels[0].color;
@@ -383,7 +448,7 @@ export function useArtisticScores() {
    */
   const getScoreBgColor = (score) => {
     const sortedLevels = [...scoreScale.levels].sort(
-      (a, b) => b.value - a.value
+      (a, b) => b.value - a.value,
     );
     const level = sortedLevels.find((l) => score >= l.value);
     return level ? level.bgColor : scoreScale.levels[0].bgColor;
@@ -441,10 +506,10 @@ export function useArtisticScores() {
           percentage === 0
             ? "#ef4444"
             : percentage >= 80
-            ? "#10b981"
-            : percentage >= 50
-            ? "#f59e0b"
-            : "#ffffff73"
+              ? "#10b981"
+              : percentage >= 50
+                ? "#f59e0b"
+                : "var(--text-primary)"
         }">${percentage}%</span>`;
         tooltip += `</div>`;
       });
@@ -456,6 +521,109 @@ export function useArtisticScores() {
     return tooltip;
   };
 
+  /**
+   * Calculate consistency level based on standard deviation
+   * @param {number} stdDev - The standard deviation of scores
+   * @returns {Object} - { level, label, description, color }
+   */
+  const getConsistencyLevel = (stdDev) => {
+    const level = consistencyScale.levels.find((l) => stdDev <= l.maxStdDev);
+    return level || consistencyScale.levels[consistencyScale.levels.length - 1];
+  };
+
+  /**
+   * Calculate global statistics for all artistic scores
+   * @param {Array} photos - Array of photo objects
+   * @returns {Object} - Statistics for each score criterion
+   */
+  const calculateGlobalArtisticScores = (photos) => {
+    if (!photos || photos.length === 0) {
+      return {};
+    }
+
+    const criteriaStats = {};
+    const allCriteria = getAllCriteriaKeys();
+
+    allCriteria.forEach((criterion) => {
+      const values = [];
+
+      // Collect all values for this criterion (excluding 0/N/A)
+      photos.forEach((photo) => {
+        const artistic_scores = photo.descriptions?.artistic_scores;
+        if (artistic_scores && artistic_scores[criterion] > 0) {
+          values.push(artistic_scores[criterion]);
+        }
+      });
+
+      if (values.length === 0) {
+        criteriaStats[criterion] = null;
+        return;
+      }
+
+      // Calculate mean
+      const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+
+      // Calculate standard deviation
+      const variance =
+        values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) /
+        values.length;
+      const stdDev = Math.sqrt(variance);
+
+      // Get consistency level
+      const consistency = getConsistencyLevel(stdDev);
+
+      // Get score label
+      const sortedLevels = [...scoreScale.levels].sort(
+        (a, b) => b.value - a.value,
+      );
+      const matchingLevel = sortedLevels.find((level) => mean >= level.value);
+      const rating = matchingLevel
+        ? matchingLevel.label
+        : scoreScale.levels[0].label;
+
+      criteriaStats[criterion] = {
+        mean: Math.round(mean * 10) / 10,
+        stdDev: Math.round(stdDev * 100) / 100,
+        rating,
+        consistency,
+        count: values.length,
+        total: photos.length,
+      };
+    });
+
+    return criteriaStats;
+  };
+
+  /**
+   * Get icon component for a criterion
+   * @param {string} criterion - The criterion name
+   * @returns {Component|null} - The icon component or null
+   */
+  const getCriterionIcon = (criterion) => {
+    return criterionIcons[criterion] || null;
+  };
+
+  /**
+   * Get criterion info including icon and group
+   * @param {string} criterionValue - The criterion value
+   * @returns {Object|null} - { label, icon, group, groupColor } or null
+   */
+  const getCriterionInfo = (criterionValue) => {
+    for (const [groupKey, group] of Object.entries(artisticScores)) {
+      const criterion = group.criteria.find((c) => c.value === criterionValue);
+      if (criterion) {
+        return {
+          label: criterion.label,
+          icon: criterion.icon,
+          group: groupKey,
+          groupColor: group.color,
+          groupLabel: group.label,
+        };
+      }
+    }
+    return null;
+  };
+
   return {
     // State
     artisticScoreWeights,
@@ -463,8 +631,10 @@ export function useArtisticScores() {
 
     // Constants
     scoreScale,
+    consistencyScale,
     genrePresets,
     artisticScores,
+    criterionIcons,
 
     // Functions
     calculateArtisticScore,
@@ -477,5 +647,9 @@ export function useArtisticScores() {
     getCompleteArtisticScores,
     getActiveArtisticScores,
     getOrderedArtisticScores,
+    getConsistencyLevel,
+    calculateGlobalArtisticScores,
+    getCriterionIcon,
+    getCriterionInfo,
   };
 }

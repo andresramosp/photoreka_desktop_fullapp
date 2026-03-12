@@ -4,24 +4,24 @@
 }
 
 html {
-  background-color: #101014;
+  /* background-color: #101014; */
 }
 
 body {
   margin: 0;
   padding: 0;
-  background-color: #101014;
-  color: #ffffffd1;
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu",
-    "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  /* background-color: #101014; */
+  color: var(--text-secondary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+    "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 #app {
   height: 100vh;
-  background-color: #101014;
+  /* background-color: #101014; */
 }
 
 /* Scrollbar styles for dark theme */
@@ -31,14 +31,8 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #16161a;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2c2c32;
   border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #3c3c42;
 }

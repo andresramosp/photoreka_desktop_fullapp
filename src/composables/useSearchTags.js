@@ -17,7 +17,19 @@ export function useSearchTags() {
       const response = await api.get("/api/tags/search", {
         params: { term: query },
       });
-      return response.data.result.map((tag) => tag.name);
+      // Return full tag objects and deduplicate by id
+      const tags = response.data.result;
+      const uniqueTags = new Map();
+      tags.forEach((tag) => {
+        if (!uniqueTags.has(tag.id)) {
+          uniqueTags.set(tag.id, {
+            label: tag.name,
+            value: tag.name, // Keep name as value for search compatibility
+            id: tag.id,
+          });
+        }
+      });
+      return Array.from(uniqueTags.values());
     } catch (error) {
       console.error("Error fetching tag suggestions", error);
       return [];
@@ -31,8 +43,14 @@ export function useSearchTags() {
       includedTagSuggestions.value = [];
       return;
     }
+    // Clear previous suggestions immediately to avoid duplicates
+    includedTagSuggestions.value = [];
     debounceIncluded = setTimeout(async () => {
-      includedTagSuggestions.value = await fetchTagSuggestions(val);
+      const newSuggestions = await fetchTagSuggestions(val);
+      // Only update if this is still the latest search
+      if (searchInputIncluded.value === val) {
+        includedTagSuggestions.value = newSuggestions;
+      }
     }, 500);
   }
 
@@ -43,8 +61,14 @@ export function useSearchTags() {
       excludedTagSuggestions.value = [];
       return;
     }
+    // Clear previous suggestions immediately to avoid duplicates
+    excludedTagSuggestions.value = [];
     debounceExcluded = setTimeout(async () => {
-      excludedTagSuggestions.value = await fetchTagSuggestions(val);
+      const newSuggestions = await fetchTagSuggestions(val);
+      // Only update if this is still the latest search
+      if (searchInputExcluded.value === val) {
+        excludedTagSuggestions.value = newSuggestions;
+      }
     }, 300);
   }
 

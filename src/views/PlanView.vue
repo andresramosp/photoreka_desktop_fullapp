@@ -382,7 +382,7 @@
                       <polyline
                         :points="generateChartLine(curationsData)"
                         fill="none"
-                        stroke="var(--secondary-color)"
+                        stroke="var(--accent-color)"
                         stroke-width="3"
                         stroke-linecap="round"
                         stroke-linejoin="round"
@@ -418,7 +418,7 @@
                           :cx="80 + index * 60"
                           :cy="220 - (point / 20) * 200"
                           r="4"
-                          fill="var(--secondary-color)"
+                          fill="var(--accent-color)"
                           stroke="var(--bg-surface)"
                           stroke-width="2"
                         />
@@ -682,13 +682,13 @@ const subscriptionPlans = ref([
 // Actions
 const handlePurchase = () => {
   message.info(
-    `Purchase functionality would be implemented here for ${selectedExpansion.value} photos`
+    `Purchase functionality would be implemented here for ${selectedExpansion.value} photos`,
   );
 };
 
 const handlePlanChange = (planId: string) => {
   message.info(
-    `Plan change functionality would be implemented here for ${planId} plan`
+    `Plan change functionality would be implemented here for ${planId} plan`,
   );
 };
 </script>
@@ -946,7 +946,7 @@ const handlePlanChange = (planId: string) => {
 }
 
 .legend-line.secondary {
-  background-color: var(--secondary-color);
+  background-color: var(--accent-color);
 }
 
 .legend-line.success {
@@ -990,7 +990,9 @@ const handlePlanChange = (planId: string) => {
 
 .plan-card.plan-current {
   border-color: var(--success-color);
-  box-shadow: 0 0 0 1px var(--success-color), var(--shadow-success);
+  box-shadow:
+    0 0 0 1px var(--success-color),
+    var(--shadow-success);
 }
 
 .plan-header {

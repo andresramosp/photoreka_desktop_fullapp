@@ -4,6 +4,7 @@
     :class="{
       'playground-mode': isPlayground,
       'show-dots': toolbarState.showDots,
+      [`bg-${canvasBackgroundId}`]: true,
     }"
   >
     <div
@@ -33,7 +34,7 @@
               y: selectionRect.y,
               width: selectionRect.width,
               height: selectionRect.height,
-              stroke: secondaryColor,
+              stroke: accentColor,
               strokeWidth: 2,
               fill: 'rgba(37, 99, 235, 0.1)',
               dash: [5, 3],
@@ -49,7 +50,7 @@
               y: photo.config.y,
               draggable: true,
               zIndex: photo.config.zIndex,
-              opacity: photo.imageBroken ? 0.6 : photo.config.opacity ?? 1,
+              opacity: photo.imageBroken ? 0.6 : (photo.config.opacity ?? 1),
               _isPhoto: true,
             }"
             @dragstart="handleDragStart(photo, $event)"
@@ -206,7 +207,7 @@
                     photo.hovered
                   "
                   :photo="photo"
-                  :fill="secondaryColor"
+                  :fill="accentColor"
                   icon="+"
                   font-size="30"
                   @click="handleAddPhotoFromPhoto"
@@ -234,10 +235,11 @@
     <RelatedPhotosToolbar
       ref="relatedPhotosToolbarRef"
       v-if="showRelatedPhotos && isExpansionEnabled"
-      :base-image="selectedPhotoForToolbar"
+      :base-images="selectedPhotosForToolbar"
       :is-visible="showRelatedPhotos"
       :is-loading="isLoadingRelatedPhotos"
       :toolbar-state="toolbarState"
+      :filter-context="filterContext"
       @close="hideRelatedPhotos"
       @loading="isLoadingRelatedPhotos = $event"
       @photos-selected="onPhotosSelected"
@@ -273,7 +275,9 @@
       :show="showCollectionModal"
       :photo-count="selectedPhotosCount"
       :photo-ids="selectedPhotoIds"
+      :photo-positions="selectedPhotoPositions"
       @add-to-collection="handleCollectionAdded"
+      @add-to-series="handleCollectionAdded"
       @cancel="handleCollectionModalCancel"
     />
 
@@ -281,7 +285,7 @@
     <PhotoToolSelector
       :show="showToolSelector"
       :photo-count="selectedPhotosCount"
-      :tools="availableTools"
+      current-tool="canvas"
       :is-processing="isProcessingTool"
       @tool-selected="handleToolSelected"
       @close="closeToolSelector"
@@ -306,7 +310,7 @@
 
         <n-tooltip placement="bottom" trigger="hover">
           <template #trigger>
-            <n-button @click="handleClearCanvas">
+            <n-button type="primary" secondary @click="handleClearCanvas">
               <template #icon>
                 <n-icon>
                   <ReloadOutline />
@@ -318,7 +322,7 @@
         </n-tooltip>
 
         <div class="config-menu-container" ref="configMenuRef">
-          <n-button @click="openConfig">
+          <n-button secondary type="primary" @click="openConfig">
             <template #icon>
               <n-icon>
                 <svg viewBox="0 0 24 24">
@@ -333,6 +337,21 @@
 
           <!-- Config Menu Dropdown -->
           <div v-if="showConfigMenu" class="config-dropdown" @click.stop>
+            <!-- Filters Section -->
+            <div v-if="!isPlayground" class="config-section">
+              <h4 class="section-title">Filters</h4>
+              <div class="config-item">
+                <span class="config-label">Collection</span>
+                <n-select
+                  v-model:value="selectedCollectionFilter"
+                  :options="collectionsOptions"
+                  placeholder="All Photos"
+                  size="tiny"
+                  style="width: 185px"
+                />
+              </div>
+            </div>
+
             <!-- Canvas Section -->
             <div class="config-section">
               <h4 class="section-title">Canvas</h4>
@@ -343,6 +362,10 @@
               <div class="config-item">
                 <span class="config-label">Show Dots</span>
                 <n-switch v-model:value="toolbarState.showDots" />
+              </div>
+              <div class="config-item">
+                <span class="config-label">Background</span>
+                <ColorPickerPills v-model="toolbarState.canvasBackground" />
               </div>
             </div>
 
@@ -464,9 +487,39 @@
           >
         </n-button>
 
+        <!-- Send to Chat Button - Only show when photos are selected -->
+        <n-button
+          v-if="selectedPhotosCount > 0"
+          type="info"
+          @click="handleSendToChat"
+          :disabled="isProcessingTool"
+        >
+          <template #icon>
+            <n-icon> <RobotOutlined /> </n-icon>
+          </template>
+          <span v-if="selectedPhotosCount > 1"
+            >({{ selectedPhotosCount }})</span
+          >
+        </n-button>
+
+        <!-- Canvas Manager -->
+        <CanvasManagerPopover
+          :is-playground="isPlayground"
+          :active-canvas-id="activeCanvasId"
+          :canvas-list="canvasList"
+          :current-canvas-name="currentCanvasName"
+          :is-switching="isSwitchingCanvas"
+          @switch-canvas="handleSwitchCanvas"
+          @create-canvas="handleCreateCanvas"
+          @rename-canvas="handleRenameCanvas"
+          @delete-canvas="handleDeleteCanvas"
+        />
+
         <n-button
           :disabled="isSaved"
+          :loading="isSaving"
           @click="handleSaveCanvas"
+          secondary
           :type="hasUnsavedChanges ? 'primary' : 'default'"
           :title="hasUnsavedChanges ? 'Save changes' : 'No changes to save'"
         >
@@ -482,12 +535,7 @@
     <!-- Playground Logo - Top Right -->
     <div v-if="isPlayground" class="canvas-controls playground-logo">
       <div class="logo-container-playground">
-        <!-- <img
-          :src="logoName"
-          alt="Photoreka"
-          class="logo-brand-image-playground"
-        /> -->
-        <AppLogo :height="50" :showText="false" />
+        <AppLogo layout="horizontal" :height="45" />
       </div>
     </div>
 
@@ -531,7 +579,7 @@
                   </template>
                   <span v-if="canvasModeIsExpanded" class="button-text">{{
                     expansionTypeOptions.find(
-                      (opt) => opt.value == toolbarState.expansion.type
+                      (opt) => opt.value == toolbarState.expansion.type,
                     ).label
                   }}</span>
                   <n-icon v-if="canvasModeIsExpanded" class="dropdown-arrow">
@@ -557,9 +605,9 @@
                 ]"
                 @click="!option.disabled && selectOption(option)"
               >
-                <n-icon class="option-icon">
+                <!-- <n-icon class="option-icon">
                   <component :is="option.icon" />
-                </n-icon>
+                </n-icon> -->
                 <span>{{ option.label }}</span>
               </div>
             </div>
@@ -575,17 +623,8 @@
           <template #trigger>
             <n-button @click="zoomTick(1)" size="small">
               <template #icon>
-                <n-icon>
-                  <svg viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5C16 5.91 13.09 3 9.5 3S3 5.91 3 9.5S5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14z"
-                    />
-                    <path
-                      fill="currentColor"
-                      d="M12 10h-2v2H9v-2H7V9h2V7h1v2h2v1z"
-                    />
-                  </svg>
+                <n-icon color="currentColor">
+                  <AddOutline />
                 </n-icon>
               </template>
             </n-button>
@@ -598,13 +637,7 @@
             <n-button @click="zoomTick(-1)" size="small">
               <template #icon>
                 <n-icon>
-                  <svg viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5C16 5.91 13.09 3 9.5 3S3 5.91 3 9.5S5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14z"
-                    />
-                    <path fill="currentColor" d="M7 9h5v1H7z" />
-                  </svg>
+                  <RemoveOutline />
                 </n-icon>
               </template>
             </n-button>
@@ -617,12 +650,7 @@
             <n-button @click="fitStageToPhotos(0.1)" size="small">
               <template #icon>
                 <n-icon>
-                  <svg viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M9 9H15V15H9V9M11 11V13H13V11H11M2 3H8V5H4V9H2V3M22 3V9H20V5H16V3H22M2 21V15H4V19H8V21H2M22 21H16V19H20V15H22V21Z"
-                    />
-                  </svg>
+                  <ExpandAltOutlined />
                 </n-icon>
               </template>
             </n-button>
@@ -677,6 +705,36 @@
     >
       🗑️
     </div>
+
+    <!-- Unsaved Changes Dialog -->
+    <n-modal
+      v-model:show="showUnsavedModal"
+      preset="dialog"
+      title="Unsaved Changes"
+      positive-text="Save & Leave"
+      negative-text="Leave Without Saving"
+      type="warning"
+      :mask-closable="false"
+      style="width: 524px"
+      @positive-click="handleSaveAndLeave"
+      @negative-click="handleLeaveWithoutSaving"
+      @close="handleStayOnCanvas"
+    >
+      <div class="unsaved-changes-confirmation">
+        <p>You have unsaved changes on the canvas.</p>
+        <p class="unsaved-warning">
+          <n-icon size="16" style="margin-right: 8px; flex-shrink: 0">
+            <svg viewBox="0 0 24 24">
+              <path
+                fill="currentColor"
+                d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"
+              />
+            </svg>
+          </n-icon>
+          If you leave now, your canvas layout and photo positions will be lost.
+        </p>
+      </div>
+    </n-modal>
   </div>
 </template>
 
@@ -690,6 +748,7 @@ import {
 import { useCanvasPhoto } from "@/composables/canvas/useCanvasPhoto.js";
 import { usePhotoAnimations } from "@/composables/canvas/usePhotoAnimations";
 import { useCanvasStore, expansionTypeOptions } from "@/stores/canvas.js";
+import { useCollectionsStore } from "@/stores/collections.js";
 // import PhotoDetectionAreas from "@/components/canvas/PhotoControls/PhotoDetectionAreas.vue";
 import {
   AlbumsOutline,
@@ -700,12 +759,16 @@ import {
   RefreshOutline,
   ReloadOutline,
   TrashOutline,
+  AddOutline,
+  RemoveOutline,
 } from "@vicons/ionicons5";
+import { RobotOutlined } from "@vicons/antd";
 import { usePhotosStore } from "@/stores/photos";
 import {
   ref,
   onMounted,
   onUnmounted,
+  onActivated,
   computed,
   h,
   watch,
@@ -713,15 +776,17 @@ import {
   nextTick,
   defineOptions,
 } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, onBeforeRouteLeave } from "vue-router";
 import {
   NButton,
   NButtonGroup,
   NIcon,
+  NModal,
   NSpace,
   NSwitch,
   NInputNumber,
   NTooltip,
+  NSelect,
 } from "naive-ui";
 import { storeToRefs } from "pinia";
 import PhotosDialog from "@/components/PhotosDialog.vue";
@@ -737,11 +802,15 @@ import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import { SaveOutline, CloudDownloadOutline } from "@vicons/ionicons5";
 import { SelectAllFilled } from "@vicons/material";
 import { MagicWand, Workspace } from "@vicons/carbon";
-import logoName from "@/assets/logos/logo_name_sub_white.png";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { useCanvasPersistence } from "@/composables/useCanvasPersistence.js";
+import CanvasManagerPopover from "@/components/canvas/CanvasManagerPopover.vue";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
+import { usePhotoQueryParams } from "@/composables/usePhotoQueryParams.js";
+import { useTheme } from "@/composables/useTheme.js";
 import AppLogo from "@/components/AppLogo.vue";
+import { ExpandAltOutlined } from "@vicons/antd";
+import ColorPickerPills from "@/components/ColorPickerPills.vue";
 
 // Define component name for KeepAlive
 defineOptions({
@@ -750,37 +819,39 @@ defineOptions({
 
 const canvasStore = useCanvasStore();
 const photosStore = usePhotosStore();
+const collectionsStore = useCollectionsStore();
 const route = useRoute();
 const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
 const {
   hasUnsavedChanges,
   isSaved,
+  isSaving,
+  activeCanvasId,
+  canvasList,
+  currentCanvasName,
   saveCanvas,
   loadCanvas,
   clearSavedCanvas,
+  createCanvas,
+  switchCanvas,
+  renameCanvas,
+  deleteCanvas,
   hasSavedCanvas,
   initializeChangeDetection,
 } = useCanvasPersistence();
 
-// Photo tool selection (only Framer available from Canvas)
-const canvasTools = [
-  {
-    id: "framer",
-    name: "Framer",
-    description: "Add frames and borders to photos",
-    icon: "ImageFrame",
-    route: "/framer",
-  },
-];
+// Photo query params handling (e.g., ?source=lightroom&ids=123,456)
+const { getPhotoIdsFromQuery } = usePhotoQueryParams();
 
+// Photo tool selection
 const {
   isProcessing: isProcessingTool,
   showToolSelector,
-  availableTools,
   takeToTool,
+  takeToChat,
   openToolSelector,
   closeToolSelector,
-} = usePhotoToolSelection(canvasTools);
+} = usePhotoToolSelection();
 
 // Playground mode detection
 const isPlayground = computed(() => route.meta?.playground === true);
@@ -800,6 +871,9 @@ const setPhotoRef = (id) => (el) => {
   if (el) photoRefs.value[id] = el;
 };
 
+// Get theme composable
+const { isDarkMode } = useTheme();
+
 const toolbarState = ref({
   mouseMode: "move",
   zoomLevel: 0,
@@ -811,10 +885,18 @@ const toolbarState = ref({
     enabled: true, // New property to enable/disable expansion functionality
   },
   showDots: true, // toggle grid dots background
+  canvasBackground: isDarkMode.value ? "default" : "white", // Initial ID, ColorPickerPills will replace with object
   photoOptions: {
     count: 3,
     spreadMode: "perpendicular",
   },
+});
+
+// Computed to get background color ID for CSS class
+const canvasBackgroundId = computed(() => {
+  const bg = toolbarState.value.canvasBackground;
+  if (!bg) return "default";
+  return typeof bg === "object" ? bg.id : bg;
 });
 
 // State
@@ -825,7 +907,7 @@ const showRelatedPhotos = ref(false);
 const showPhotosDialog = ref(false);
 const showTrashDialog = ref(false);
 const showPhotoInfoDialog = ref(false);
-const selectedPhotoForToolbar = ref(null);
+const selectedPhotosForToolbar = ref([]);
 const selectedDialogPhoto = ref(null);
 const isLoadingRelatedPhotos = ref(false);
 
@@ -835,6 +917,10 @@ const showPlaygroundUpgradeModal = ref(false);
 // Collection modal state
 const showCollectionModal = ref(false);
 
+// Unsaved changes navigation guard state
+const showUnsavedModal = ref(false);
+let pendingNavigation = null;
+
 // Expandable dropdown state
 const canvasModeIsExpanded = ref(false);
 const isDropdownOpen = ref(false);
@@ -843,10 +929,13 @@ const isDropdownOpen = ref(false);
 const showConfigMenu = ref(false);
 const configMenuRef = ref(null);
 
+// Filter state
+const selectedCollectionFilter = ref(null);
+
 // Dropdown options with SVG icons
 
-const secondaryColor = getComputedStyle(document.documentElement)
-  .getPropertyValue("--secondary-color")
+const accentColor = getComputedStyle(document.documentElement)
+  .getPropertyValue("--accent-color")
   .trim();
 
 const {
@@ -899,7 +988,7 @@ watch(
     } else if (expansionMode.value === null) {
       expansionMode.value = "catalog";
     }
-  }
+  },
 );
 
 // Count selected photos
@@ -914,6 +1003,22 @@ const selectedPhotoIds = computed(() => {
     .map((photo) => photo.id);
 });
 
+// Get selected photo positions for ordering in series (canvas only)
+// Keys are stringified IDs for consistent lookup
+const selectedPhotoPositions = computed(() => {
+  const positions = {};
+  photos.value
+    .filter((photo) => photo.selected)
+    .forEach((photo) => {
+      // Use string key for consistent lookup
+      positions[String(photo.id)] = {
+        x: photo.config.x,
+        y: photo.config.y,
+      };
+    });
+  return positions;
+});
+
 // Computed property to filter expansion options based on basicMode
 const filteredExpansionTypeOptions = computed(() => {
   return expansionTypeOptions.map((opt) => {
@@ -923,6 +1028,36 @@ const filteredExpansionTypeOptions = computed(() => {
     return { ...opt, disabled: false };
   });
 });
+
+// Collections for filter dropdown
+const collectionsOptions = computed(() => {
+  const collections = collectionsStore.allCollections || [];
+  return [
+    { label: "All Photos", value: null },
+    ...collections.map((col) => ({
+      label: col.name || col.title,
+      value: col.id,
+    })),
+  ];
+});
+
+// Get photo IDs from selected collection for filtering
+const collectionPhotoIds = computed(() => {
+  if (!selectedCollectionFilter.value) return null;
+
+  const collection = collectionsStore.getCollectionById(
+    selectedCollectionFilter.value,
+  );
+  if (!collection || !collection.photos) return [];
+
+  return collection.photos.map((p) => p.id);
+});
+
+// Filter context to pass to expansion components
+const filterContext = computed(() => ({
+  collectionId: selectedCollectionFilter.value,
+  photoIds: collectionPhotoIds.value,
+}));
 
 // Event handlers
 
@@ -1000,7 +1135,20 @@ function handleAddPhotoFromPhoto(event) {
   if (expansionMode.value == "canvas") {
     handleAddPhotosToCanvas(event);
   } else {
-    selectedPhotoForToolbar.value = event.photo;
+    // Para expansión por tags, siempre usar solo la foto clicada
+    // (los tags siempre se seleccionan de la foto principal)
+    if (toolbarState.value.expansion.type === "tags") {
+      selectedPhotosForToolbar.value = [event.photo];
+    } else {
+      // Para otros tipos: si la foto clicada NO está seleccionada, usar solo esa foto
+      // Si SÍ está seleccionada, usar todas las fotos seleccionadas
+      if (!event.photo.selected) {
+        selectedPhotosForToolbar.value = [event.photo];
+      } else {
+        const selectedPhotos = photos.value.filter((photo) => photo.selected);
+        selectedPhotosForToolbar.value = selectedPhotos;
+      }
+    }
     showRelatedPhotos.value = true;
   }
 }
@@ -1035,7 +1183,9 @@ const handleAddPhotosToCanvas = async (event) => {
       basePosition,
       toolbarState.value.expansion.opposite,
       toolbarState.value.expansion.inverted,
-      true
+      true,
+      false, // autoFit
+      filterContext.value, // Pass filter context
     );
 
     if (
@@ -1049,7 +1199,7 @@ const handleAddPhotosToCanvas = async (event) => {
         position,
         offsetX,
         offsetY,
-        toolbarState.value.photoOptions.spreadMode
+        toolbarState.value.photoOptions.spreadMode,
       );
     } else {
       animatePhotoGroupExplosion(photoRefs, photos, basePosition, position);
@@ -1068,17 +1218,16 @@ const getPhotoStrokeColor = (photo) => {
       ? "rgba(255, 165, 0, 0.8)"
       : "rgba(128, 128, 128, 0.4)";
   if (photo.inTrash) return "rgba(250, 11, 11, 0.5)";
-  if (photo.selected) return secondaryColor;
+  if (photo.selected) return accentColor;
   if (photo.isNew) return "#22d3ee";
-  // if (photo.hovered) return primaryColor;
+  // if (photo.hovered) return accentColor;
   return "gray";
 };
 
 const handleSaveCanvas = async () => {
   try {
-    const success = saveCanvas();
+    const success = await saveCanvas();
     if (success) {
-      // Mostrar feedback visual si es necesario
       console.log("Canvas saved successfully");
     } else {
       console.error("Failed to save canvas");
@@ -1088,7 +1237,52 @@ const handleSaveCanvas = async () => {
   }
 };
 
-const handleClearCanvas = () => {
+const isSwitchingCanvas = ref(false);
+
+const handleSwitchCanvas = async (id) => {
+  // Auto-save current canvas before switching
+  if (hasUnsavedChanges.value) {
+    await saveCanvas();
+  }
+  isSwitchingCanvas.value = true;
+  try {
+    const ok = await switchCanvas(id);
+    if (ok) {
+      setTimeout(() => fitStageToPhotos(), 100);
+    }
+  } finally {
+    isSwitchingCanvas.value = false;
+  }
+};
+
+const handleCreateCanvas = async () => {
+  // Auto-save current canvas before creating new
+  if (hasUnsavedChanges.value) {
+    await saveCanvas();
+  }
+  const newId = await createCanvas();
+  if (newId) {
+    // store already cleared by composable; reset stage
+    const stage = stageRef.value.getStage();
+    stage.scale({ x: 1, y: 1 });
+    stage.position({ x: 0, y: 0 });
+    stage.batchDraw();
+    toolbarState.value.zoomLevel = 1;
+    updateStageOffset();
+  }
+};
+
+const handleRenameCanvas = async (id, name) => {
+  await renameCanvas(id, name);
+};
+
+const handleDeleteCanvas = async (id) => {
+  await deleteCanvas(id);
+  // If the active canvas changed (deleted), fit stage to new canvas photos
+  setTimeout(() => fitStageToPhotos(), 100);
+};
+
+const handleClearCanvas = async () => {
   // Clean up blob URLs for all photos before clearing
   [...canvasStore.photos, ...canvasStore.discardedPhotos].forEach((photo) => {
     if (photo.src && photo.src.startsWith("blob:")) {
@@ -1110,8 +1304,8 @@ const handleClearCanvas = () => {
   canvasStore.$patch({ photos: [] });
   canvasStore.$patch({ discardedPhotos: [] });
 
-  // Limpiar el canvas guardado en localStorage
-  clearSavedCanvas();
+  // Limpiar el canvas guardado
+  await clearSavedCanvas();
 
   // Resetear zoom y posición del stage
   const stage = stageRef.value.getStage();
@@ -1134,6 +1328,44 @@ const fitStageToPhotos = (extraPaddingRatio = 0.1) => {
 const openConfig = () => {
   showConfigMenu.value = !showConfigMenu.value;
 };
+
+// Unsaved changes modal handlers
+const handleLeaveWithoutSaving = () => {
+  showUnsavedModal.value = false;
+  if (pendingNavigation) {
+    const next = pendingNavigation;
+    pendingNavigation = null;
+    next();
+  }
+};
+
+const handleStayOnCanvas = () => {
+  showUnsavedModal.value = false;
+  if (pendingNavigation) {
+    const next = pendingNavigation;
+    pendingNavigation = null;
+    next(false);
+  }
+};
+
+const handleSaveAndLeave = async () => {
+  await saveCanvas();
+  showUnsavedModal.value = false;
+  if (pendingNavigation) {
+    const next = pendingNavigation;
+    pendingNavigation = null;
+    next();
+  }
+};
+
+onBeforeRouteLeave((_to, _from, next) => {
+  if (hasUnsavedChanges.value && !isPlayground.value) {
+    pendingNavigation = next;
+    showUnsavedModal.value = true;
+  } else {
+    next();
+  }
+});
 
 const toggleInteractionMode = () => {
   interactionMode.value = interactionMode.value === "pan" ? "select" : "pan";
@@ -1241,6 +1473,18 @@ const handleToolSelected = async (toolId) => {
   closeToolSelector();
 };
 
+const handleSendToChat = async () => {
+  const selectedIds = photos.value
+    .filter((photo) => photo.selected)
+    .map((photo) => photo.id);
+  const clearSelections = () => {
+    photos.value.forEach((photo) => {
+      if (photo.selected) photo.selected = false;
+    });
+  };
+  await takeToChat(selectedIds, clearSelections);
+};
+
 const openPhotoInfo = (photo, event) => {
   event.cancelBubble = true;
   selectedDialogPhoto.value = photo;
@@ -1281,11 +1525,17 @@ const handleClickOutside = (event) => {
 };
 
 const handleKeyDown = (event) => {
-  // Check if user is typing in an input field
+  // Check if user is typing in an input field (including Naive UI inputs)
+  const targetElement = event.target;
   const isTyping =
-    ["INPUT", "TEXTAREA"].includes(event.target.tagName) ||
-    event.target.contentEditable === "true" ||
-    event.target.isContentEditable;
+    ["INPUT", "TEXTAREA"].includes(targetElement.tagName) ||
+    targetElement.contentEditable === "true" ||
+    targetElement.isContentEditable ||
+    targetElement.getAttribute?.("contenteditable") === "true" ||
+    // Check if typing in any input-like component (Naive UI, etc.)
+    targetElement.closest?.("input, textarea, [contenteditable]") !== null ||
+    document.activeElement?.tagName === "INPUT" ||
+    document.activeElement?.tagName === "TEXTAREA";
 
   // Delete selected photos ONLY when Delete (Supr) key is pressed
   // Backspace is reserved for text editing and should not delete photos
@@ -1303,23 +1553,23 @@ const handleKeyDown = (event) => {
     }
   }
 
-  // Zoom in with 'A' key
-  if (event.key === "a" || event.key === "A") {
-    // Only if not typing in an input field
-    if (!isTyping) {
-      event.preventDefault();
-      zoomTick(1);
-    }
-  }
+  // Zoom in with 'A' key - DISABLED
+  // if (event.key === "a" || event.key === "A") {
+  //   // Only if not typing in an input field
+  //   if (!isTyping) {
+  //     event.preventDefault();
+  //     zoomTick(1);
+  //   }
+  // }
 
-  // Zoom out with 'Z' key
-  if (event.key === "z" || event.key === "Z") {
-    // Only if not typing in an input field
-    if (!isTyping) {
-      event.preventDefault();
-      zoomTick(-1);
-    }
-  }
+  // Zoom out with 'Z' key - DISABLED
+  // if (event.key === "z" || event.key === "Z") {
+  //   // Only if not typing in an input field
+  //   if (!isTyping) {
+  //     event.preventDefault();
+  //     zoomTick(-1);
+  //   }
+  // }
 
   // Escape key to deselect all photos
   if (event.key === "Escape") {
@@ -1399,7 +1649,7 @@ const handleTouchEnd = (event) => {
     const touchDuration = Date.now() - event.target._stageTouchStartTime;
     const touchDistance = Math.sqrt(
       Math.pow(touch.clientX - event.target._stageTouchStartPos.x, 2) +
-        Math.pow(touch.clientY - event.target._stageTouchStartPos.y, 2)
+        Math.pow(touch.clientY - event.target._stageTouchStartPos.y, 2),
     );
 
     // Consider it a tap if duration < 300ms and distance < 15px (more responsive for stage)
@@ -1483,7 +1733,7 @@ const handlePhotoTouchEnd = (photo, event) => {
     const touchDuration = Date.now() - photo._touchStartTime;
     const touchDistance = Math.sqrt(
       Math.pow(touch.clientX - photo._touchStartPos.x, 2) +
-        Math.pow(touch.clientY - photo._touchStartPos.y, 2)
+        Math.pow(touch.clientY - photo._touchStartPos.y, 2),
     );
 
     // Consider it a tap if duration < 500ms and distance < 10px
@@ -1595,7 +1845,7 @@ watch(
       }
     });
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 watch(basicMode, (val) => {
@@ -1645,7 +1895,7 @@ watch(
       }
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 onMounted(async () => {
@@ -1676,7 +1926,7 @@ onMounted(async () => {
     canvasContainerEl.addEventListener("touchDrop", (e) => {
       handlePhotoDrop(
         e.detail,
-        relatedPhotosToolbarRef.value.removePhotoFromList
+        relatedPhotosToolbarRef.value.removePhotoFromList,
       );
     });
   }
@@ -1695,7 +1945,7 @@ onMounted(async () => {
   try {
     const hasLoaded = await loadCanvas();
     if (hasLoaded) {
-      console.log("Canvas loaded from localStorage");
+      console.log("Canvas loaded successfully");
       // Fit stage to loaded photos after a short delay
       setTimeout(() => {
         fitStageToPhotos();
@@ -1709,18 +1959,71 @@ onMounted(async () => {
     fitStageToPhotos();
   }
 
+  // Process pending photos queued from other views (e.g. takeToCanvas)
+  if (canvasStore.pendingPhotosToAdd.length > 0) {
+    const pending = [...canvasStore.pendingPhotosToAdd];
+    canvasStore.pendingPhotosToAdd = [];
+    await canvasStore.addPhotos(pending, false, true);
+    console.log(`✅ Added ${pending.length} pending photos to canvas`);
+  }
+
+  // Load photos from query params if present (e.g., ?source=lightroom&ids=123,456)
+  // Sigue el mismo patrón que PhotosDialog: obtener photoIds y usar handleAddPhotos
+  const photoIdsFromQuery = getPhotoIdsFromQuery({
+    clearAfterLoad: true,
+    // Callback para cuando el store se cargue después (caso async)
+    onReady: async (photoIds) => {
+      if (photoIds.length > 0) {
+        await handleAddPhotos(photoIds);
+        console.log(
+          `✅ Added ${photoIds.length} photos from URL to canvas (async)`,
+        );
+      }
+    },
+  });
+
+  // Caso sync: si el store ya estaba cargado, añadir las fotos inmediatamente
+  if (photoIdsFromQuery.length > 0) {
+    await handleAddPhotos(photoIdsFromQuery);
+    console.log(
+      `✅ Added ${photoIdsFromQuery.length} photos from URL to canvas`,
+    );
+  }
+
   // Auto-open photos dialog in playground mode
   if (isPlayground.value) {
     showPhotosDialog.value = true;
   }
 
   // Start periodic image validation check (every 5 seconds)
-  imageValidationInterval = setInterval(checkImageValidity, 5000);
 
-  // Auto-save canvas every 10 seconds
-  const autoSaveInterval = setInterval(() => {
-    handleSaveCanvas();
-  }, 10000);
+  // Fetch collections for filter dropdown (only in non-playground mode)
+  if (!isPlayground.value) {
+    collectionsStore.getOrFetch().catch((err) => {
+      console.error("Failed to load collections for filter:", err);
+    });
+  }
+});
+
+// onActivated fires on BOTH first-mount and KeepAlive re-entries
+// On first mount, onMounted (async) handles loadCanvas + pending photos.
+// We must skip the first activation so we don't race with loadCanvas.
+let _canvasActivatedOnce = false;
+onActivated(async () => {
+  if (!_canvasActivatedOnce) {
+    // First activation coincides with onMounted — let onMounted handle everything.
+    _canvasActivatedOnce = true;
+    return;
+  }
+  // Subsequent activations: onMounted won't run, so process pending photos here.
+  if (canvasStore.pendingPhotosToAdd.length > 0) {
+    const pending = [...canvasStore.pendingPhotosToAdd];
+    canvasStore.pendingPhotosToAdd = [];
+    await canvasStore.addPhotos(pending, false, true);
+    console.log(
+      `✅ Added ${pending.length} pending photos to canvas (re-activated)`,
+    );
+  }
 });
 
 onUnmounted(() => {
@@ -1764,7 +2067,7 @@ onUnmounted(() => {
 .canvas-container {
   position: relative;
   width: 100%;
-  height: calc(100vh - 64px); /* Subtract header height */
+  height: calc(100vh); /* Subtract header height */
   overflow: hidden;
   background: var(--bg-canvas, #1a1a1a);
   touch-action: none; /* Disable default touch behaviors */
@@ -1812,11 +2115,10 @@ onUnmounted(() => {
 
 .logo-container-playground {
   border-radius: 12px;
-  padding: 5px;
+  padding: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .logo-brand-image-playground {
@@ -1875,7 +2177,7 @@ onUnmounted(() => {
 }
 
 .expandable-container.expanded {
-  width: 125px; /* Expanded width to fit text and dropdown arrow */
+  width: 150px; /* Expanded width to fit text and dropdown arrow */
   overflow: visible; /* Allow dropdown to show outside container */
 }
 
@@ -1890,7 +2192,7 @@ onUnmounted(() => {
 }
 
 .button-text {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 500;
   opacity: 0;
   animation: fadeIn 0.2s ease-in 0.1s forwards;
@@ -1914,7 +2216,7 @@ onUnmounted(() => {
   right: 0;
   background: var(--bg-container, rgba(30, 30, 30, 0.95));
   backdrop-filter: blur(12px);
-  border-radius: 12px;
+
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   z-index: 1000;
@@ -1937,9 +2239,9 @@ onUnmounted(() => {
 .dropdown-item {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
+  padding: 12px 8px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-secondary, rgba(255, 255, 255, 0.8));
   transition: all 0.2s ease;
   border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
@@ -1987,12 +2289,12 @@ onUnmounted(() => {
   left: 0;
   background: var(--bg-container, rgba(30, 30, 30, 0.95));
   backdrop-filter: blur(12px);
-  border-radius: 12px;
+  /* border-radius: 12px; */
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   z-index: 1000;
   margin-top: 8px;
-  min-width: 280px;
+  min-width: 300px;
   animation: slideDown 0.2s ease-out;
 }
 
@@ -2076,7 +2378,7 @@ onUnmounted(() => {
   }
 
   .expandable-container.expanded {
-    width: 120px; /* Slightly smaller on tablets */
+    width: 150px; /* Slightly smaller on tablets */
   }
 }
 
@@ -2111,7 +2413,7 @@ onUnmounted(() => {
   }
 
   .expandable-container.expanded {
-    width: 100px; /* Even smaller on mobile */
+    width: 150px; /* Even smaller on mobile */
   }
 
   .button-text {
@@ -2133,7 +2435,10 @@ onUnmounted(() => {
   align-items: center;
   line-height: 90px;
 
-  transition: background-color 0.2s, border-color 0.2s, transform 0.2s ease;
+  transition:
+    background-color 0.2s,
+    border-color 0.2s,
+    transform 0.2s ease;
   transform: rotate(0deg) scale(1);
   align-content: center;
   justify-content: center;
@@ -2144,19 +2449,69 @@ onUnmounted(() => {
   background-color: rgba(255, 0, 0, 0.25);
   border-color: darkred;
   transform: rotate(8deg) scale(1.08);
-  transition: transform 0.2s ease, background-color 0.2s ease,
+  transition:
+    transform 0.2s ease,
+    background-color 0.2s ease,
     border-color 0.2s ease;
 }
 
-.canvas-container {
-  background-color: black !important;
+/* Unsaved Changes Dialog */
+.unsaved-changes-confirmation {
+  padding: var(--spacing-md) 0;
 }
 
-.canvas-container.show-dots {
-  background-color: black !important;
+.unsaved-changes-confirmation p {
+  margin: 0 0 var(--spacing-md) 0;
+  line-height: 1.5;
+}
+
+.unsaved-warning {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--warning-color-suppl, rgba(245, 166, 35, 0.1));
+  border: 1px solid var(--warning-color, rgba(245, 166, 35, 0.3));
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+/* Canvas background colors */
+.canvas-container.bg-default {
+  background-color: #000000 !important;
+}
+
+.canvas-container.bg-white {
+  background-color: #ffffff !important;
+}
+
+.canvas-container.bg-lightGray {
+  background-color: #d3d3d3 !important;
+}
+
+/* Dots overlay for each background */
+.canvas-container.show-dots.bg-default {
   background-image: radial-gradient(
     circle,
-    rgba(255, 255, 255, 0.11) 1.2px,
+    rgba(255, 255, 255, 0.15) 1.2px,
+    transparent 1.2px
+  );
+  background-size: 45px 45px;
+}
+
+.canvas-container.show-dots.bg-white {
+  background-image: radial-gradient(
+    circle,
+    rgba(0, 0, 0, 0.15) 1.2px,
+    transparent 1.2px
+  );
+  background-size: 45px 45px;
+}
+
+.canvas-container.show-dots.bg-lightGray {
+  background-image: radial-gradient(
+    circle,
+    rgba(0, 0, 0, 0.15) 1.2px,
     transparent 1.2px
   );
   background-size: 45px 45px;

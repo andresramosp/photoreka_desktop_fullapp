@@ -27,8 +27,6 @@
               :step="0.1"
               :label="criterion.label"
               :value-display="modelValue[criterion.value]?.toFixed(1) || '0.0'"
-              :color="'white'"
-              fill-color="linear-gradient(90deg, #8b5cf6, #a855f7)"
             />
           </div>
         </div>
@@ -95,7 +93,7 @@ const updateWeight = (criterion, value) => {
 .weights-subtitle {
   margin: 0;
   font-size: 13px;
-  color: #ffffff73;
+  color: var(--text-primary);
   line-height: 1.4;
 }
 
@@ -123,7 +121,7 @@ const updateWeight = (criterion, value) => {
   margin: 0;
   font-size: 12px;
   font-weight: 600;
-  color: #8b5cf6;
+  color: var(--accent-color);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -145,7 +143,7 @@ const updateWeight = (criterion, value) => {
 }
 
 .weights-container::-webkit-scrollbar-track {
-  background: #1a1a1f;
+  background: var(--bg-body);
   border-radius: 3px;
 }
 

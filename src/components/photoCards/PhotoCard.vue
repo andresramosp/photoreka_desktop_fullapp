@@ -6,8 +6,14 @@
       'curation-mode': mode === 'curation',
       'selection-mode': mode === 'selection',
       'is-new': props.isNew,
+      'show-hover': showHoverOverlay,
     }"
-    @click="mode !== 'curation' && toggleSelection()"
+    @click="handleClick"
+    @touchstart="handleTouchStart"
+    @touchmove="handleTouchMove"
+    @touchend="handleTouchEnd"
+    @touchcancel="handleTouchCancel"
+    @contextmenu.prevent="() => {}"
     @mouseenter="handleMouseEnter"
     @mouseleave="handleMouseLeave"
     :style="mode === 'curation' ? 'cursor: default;' : ''"
@@ -23,9 +29,12 @@
         :style="shouldBlur ? 'filter: blur(8px); transition: filter 0.3s;' : ''"
       />
 
-      <!-- AI Reasoning Tooltip (for curation mode) -->
+      <!-- AI Reasoning Tooltip (for curation mode or default mode with reasoning) -->
       <div
-        v-if="mode === 'curation' && (showTooltip || showAnalyzing)"
+        v-if="
+          (mode === 'curation' || (mode === 'default' && photo.reasoning)) &&
+          (showTooltip || showAnalyzing)
+        "
         class="ai-reasoning-tooltip"
       >
         <p class="reasoning-text">
@@ -40,7 +49,10 @@
 
       <!-- Match Score Stars (visible en todos los modos) -->
       <div
-        v-if="props.showStars && (computedStars > 0 || showLowRelevanceIcon)"
+        v-if="
+          props.showStars &&
+          (props.highMatch || computedStars > 0 || showLowRelevanceIcon)
+        "
         class="match-score-indicator"
       >
         <!-- Icono de poca relevancia para labelScore 'poor' -->
@@ -55,6 +67,17 @@
               >Low relevance: The photo may not be relevant to this
               criterion.</span
             >
+          </n-tooltip>
+        </div>
+        <!-- Diamante para highMatch -->
+        <div v-else-if="props.highMatch" class="diamond-indicator">
+          <n-tooltip trigger="hover" placement="top">
+            <template #trigger>
+              <n-icon size="16" class="diamond-icon">
+                <DiamondIcon />
+              </n-icon>
+            </template>
+            <span>High-quality match</span>
           </n-tooltip>
         </div>
         <!-- Estrellas para matchScore > 0 -->
@@ -81,15 +104,31 @@
         </div>
       </div>
 
-      <!-- Action Buttons (center overlay) - only show when not in curation mode -->
-      <div v-if="showInfoButton" class="action-buttons-overlay">
+      <!-- Notes Indicator (top-left corner) -->
+      <div v-if="hasNotesChunk" class="notes-indicator">
+        <n-tooltip trigger="hover" placement="top">
+          <template #trigger>
+            <n-icon size="14" class="notes-icon">
+              <NotesIcon />
+            </n-icon>
+          </template>
+          <span>Contains notes</span>
+        </n-tooltip>
+      </div>
+
+      <!-- Action Buttons (center overlay or top-left if reasoning exists) -->
+      <div
+        v-if="showInfoButton && !isSelectionModeActive"
+        class="action-buttons-overlay"
+        :class="{ 'has-reasoning': photo.reasoning }"
+      >
         <n-button
-          size="medium"
+          :size="photo.reasoning ? 'small' : 'medium'"
           class="action-button info-button"
           @click.stop="showInfo"
         >
           <template #icon>
-            <n-icon>
+            <n-icon :size="photo.reasoning ? 14 : 20">
               <InfoIcon />
             </n-icon>
           </template>
@@ -172,9 +211,20 @@
       </div>
 
       <!-- Selection indicator -->
-      <div v-if="isSelected" class="selection-indicator">
+      <!-- <div v-if="isSelected" class="selection-indicator">
         <n-icon size="20" color="#ffffff">
           <CheckCircleIcon />
+        </n-icon>
+      </div> -->
+
+      <!-- Delete button (top-right corner) -->
+      <div
+        v-if="props.showDeleteButton"
+        class="delete-button"
+        @click.stop="handleDelete"
+      >
+        <n-icon size="16" color="#ffffff">
+          <TrashIcon />
         </n-icon>
       </div>
     </div>
@@ -182,8 +232,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, onUnmounted } from "vue";
 import { NIcon, NTooltip, NButton } from "naive-ui";
+import { useMobilePhotoSelection } from "@/composables/useMobilePhotoSelection";
 
 // Import @vicons icons from ionicons5 for reliability
 import {
@@ -192,6 +243,9 @@ import {
   CheckmarkCircleOutline as CheckCircleIcon,
   HelpCircleOutline as HelpIcon,
   InformationCircleOutline as InfoIcon,
+  TrashOutline as TrashIcon,
+  DocumentTextOutline as NotesIcon,
+  DiamondOutline as DiamondIcon,
 } from "@vicons/ionicons5";
 
 import { usePhotoScored } from "@/composables/usePhotoScored.js";
@@ -210,6 +264,14 @@ const showLowRelevanceIcon = computed(() => {
   return props.showLowRelevanceIcon ?? shouldShowLowRelevanceIcon(props.photo);
 });
 
+// Check if photo has a notes chunk
+const hasNotesChunk = computed(() => {
+  return (
+    props.photo.matchingChunks &&
+    props.photo.matchingChunks.some((chunk) => chunk.category === "notes")
+  );
+});
+
 export interface Photo {
   id: string;
   url: string;
@@ -219,6 +281,7 @@ export interface Photo {
   reasoning?: string;
   matchScore?: number; // AI-generated match score (0 = not scored yet, 1-3 stars)
   labelScore?: "excellent" | "good" | "fair" | "poor"; // New enum-based scoring system
+  highMatch?: boolean; // High-quality match indicator (shows diamond instead of stars)
   matchingTags?: any[];
   matchingChunks?: any[]; // AI-generated matching description chunks
   width?: number;
@@ -241,7 +304,10 @@ interface Props {
   isNew?: boolean; // Mark photo as newly arrived
   computedStars?: number; // Pre-computed stars (0-3)
   showLowRelevanceIcon?: boolean; // Pre-computed low relevance indicator
+  highMatch?: boolean; // High-quality match indicator (shows diamond instead of stars)
   showInfoButton?: boolean; // Control visibility of info button
+  showDeleteButton?: boolean; // Control visibility of delete button
+  requireLongPress?: boolean; // Require long press for mobile selection (default: true)
 }
 
 interface Emits {
@@ -249,6 +315,7 @@ interface Emits {
   (e: "info", photo: Photo): void;
   (e: "move-to-selection", photoId: string): void; // For curation mode
   (e: "move-to-curation", photoId: string): void; // For selection mode
+  (e: "delete", photoId: string): void; // For deleting individual photos
 }
 
 const props = withDefaults(defineProps<Props & { isThinking?: boolean }>(), {
@@ -259,18 +326,32 @@ const props = withDefaults(defineProps<Props & { isThinking?: boolean }>(), {
   showTags: true,
   showReturnButton: true,
   isNew: false,
+  requireLongPress: true,
 });
 // Show "Reviewing..." label and blur if isThinking and reasoning is "Reviewing..."
 const showAnalyzing = computed(
   () =>
     props.mode === "curation" &&
     props.isThinking &&
-    (!props.photo.reasoning || props.photo.reasoning === "Reviewing...")
+    (!props.photo.reasoning || props.photo.reasoning === "Reviewing..."),
 );
 
 const shouldBlur = computed(() => showAnalyzing.value);
 
 const emit = defineEmits<Emits>();
+
+// Mobile selection composable
+const {
+  isSelectionModeActive,
+  showHoverOverlay,
+  isMobile,
+  handleTouchStart: baseTouchStart,
+  handleTouchMove: baseTouchMove,
+  handleTouchEnd: baseTouchEnd,
+  handleTouchCancel: baseTouchCancel,
+  handleClick: baseHandleClick,
+  cleanup,
+} = useMobilePhotoSelection();
 
 const showInfo = () => {
   emit("info", props.photo);
@@ -283,7 +364,7 @@ const showTooltip = ref(false);
 const showHoverContent = ref(false);
 
 const uniqueMatchingTags = computed(() =>
-  Array.from(new Set(props.photo.matchingTags))
+  Array.from(new Set(props.photo.matchingTags)),
 );
 
 // Computed for formatted matching chunks
@@ -291,12 +372,44 @@ const formattedMatchingChunks = computed(() => {
   if (!props.photo.matchingChunks || props.photo.matchingChunks.length === 0) {
     return "";
   }
-  return props.photo.matchingChunks.map((mc) => mc.chunk).join("... ");
+  // Prioritize chunks with category "notes"
+  const notesChunks = props.photo.matchingChunks.filter(
+    (mc) => mc.category === "notes",
+  );
+  const chunksToUse =
+    notesChunks.length > 0 ? notesChunks : props.photo.matchingChunks;
+  return chunksToUse.map((mc) => mc.chunk).join("... ");
 });
 
 // New computed property for tags to display
 const tagsToDisplay = computed(() => {
-  // If there are matchingTags, use them as before
+  // Priority 1: Always check for chunks with category "notes" first
+  if (props.photo.matchingChunks && props.photo.matchingChunks.length > 0) {
+    const notesChunk = props.photo.matchingChunks.find(
+      (chunk) => chunk.category === "notes",
+    );
+
+    if (notesChunk) {
+      // Truncate to 5 words + "..."
+      const words = notesChunk.chunk.split(" ");
+      const truncatedText =
+        words.length > 5
+          ? words.slice(0, 5).join(" ") + "..."
+          : notesChunk.chunk;
+
+      return [
+        {
+          text: truncatedText,
+          fullText: notesChunk.chunk,
+          score: notesChunk.score,
+          isChunk: true,
+          key: `chunk-notes-${notesChunk.score}`,
+        },
+      ];
+    }
+  }
+
+  // Priority 2: If no "notes" chunks, use matchingTags
   if (uniqueMatchingTags.value && uniqueMatchingTags.value.length > 0) {
     return uniqueMatchingTags.value.map((tag) => ({
       text: typeof tag === "object" ? tag.name || tag : tag,
@@ -310,33 +423,69 @@ const tagsToDisplay = computed(() => {
     }));
   }
 
-  // If no matchingTags, use the highest scoring chunk
+  // Priority 3: If no "notes" chunks and no matchingTags, use highest scoring chunk
   if (props.photo.matchingChunks && props.photo.matchingChunks.length > 0) {
-    // Find the chunk with the highest score
-    const highestScoreChunk = props.photo.matchingChunks.reduce(
-      (prev, current) => (current.score > prev.score ? current : prev)
+    const selectedChunk = props.photo.matchingChunks.reduce((prev, current) =>
+      current.score > prev.score ? current : prev,
     );
 
     // Truncate to 5 words + "..."
-    const words = highestScoreChunk.chunk.split(" ");
+    const words = selectedChunk.chunk.split(" ");
     const truncatedText =
       words.length > 5
         ? words.slice(0, 5).join(" ") + "..."
-        : highestScoreChunk.chunk;
+        : selectedChunk.chunk;
 
     return [
       {
         text: truncatedText,
-        fullText: highestScoreChunk.chunk,
-        score: highestScoreChunk.score,
+        fullText: selectedChunk.chunk,
+        score: selectedChunk.score,
         isChunk: true,
-        key: `chunk-${highestScoreChunk.score}`,
+        key: `chunk-${selectedChunk.score}`,
       },
     ];
   }
 
   return [];
 });
+
+// Event handlers for mobile touch and click
+const handleTouchStart = (event: TouchEvent) => {
+  if (props.mode === "curation") return;
+  baseTouchStart(
+    event,
+    props.photo.id,
+    (id) => emit("select", id),
+    props.requireLongPress,
+  );
+};
+
+const handleTouchMove = (event: TouchEvent) => {
+  if (props.mode === "curation") return;
+  baseTouchMove(event);
+};
+
+const handleTouchEnd = (event: TouchEvent) => {
+  if (props.mode === "curation") return;
+  baseTouchEnd(
+    event,
+    props.photo.id,
+    (id) => emit("select", id),
+    showInfo,
+    props.requireLongPress,
+  );
+};
+
+const handleTouchCancel = () => {
+  if (props.mode === "curation") return;
+  baseTouchCancel();
+};
+
+const handleClick = (event: MouseEvent) => {
+  if (props.mode === "curation") return;
+  baseHandleClick(event, props.photo.id, (id) => emit("select", id));
+};
 
 const toggleSelection = () => {
   if (props.mode === "curation") return;
@@ -359,10 +508,18 @@ const moveToCuration = () => {
   emit("move-to-curation", props.photo.id);
 };
 
+const handleDelete = () => {
+  emit("delete", props.photo.id);
+};
+
 const handleMouseEnter = () => {
   if (props.mode === "curation") {
     showTooltip.value = true;
-  } else {
+  } else if (props.mode === "default") {
+    // Show reasoning tooltip if photo has reasoning
+    if (props.photo.reasoning) {
+      showTooltip.value = true;
+    }
     // Show hover content for other modes when there are tags to display
     if (tagsToDisplay.value && tagsToDisplay.value.length > 0) {
       showHoverContent.value = true;
@@ -374,6 +531,11 @@ const handleMouseLeave = () => {
   showTooltip.value = false;
   showHoverContent.value = false;
 };
+
+// Cleanup on unmount
+onUnmounted(() => {
+  cleanup();
+});
 </script>
 
 <style scoped>
@@ -388,17 +550,19 @@ const handleMouseLeave = () => {
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: 2px solid transparent;
-  background-color: #2c2c32;
+  background-color: var(--bg-surface);
 }
 
-/* .photo-card:hover {
-  transform: translateY(-2px);
+.photo-card:hover,
+.photo-card.show-hover {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-} */
+}
 
 .photo-card.selected {
-  border-color: #8b5cf6;
-  box-shadow: 0 0 0 1px #8b5cf640, 0 8px 24px rgba(139, 92, 246, 0.2);
+  border-color: var(--accent-color);
+  box-shadow:
+    0 0 0 1px var(--accent-color) 40,
+    0 8px 24px var(--bg-surface);
 }
 
 .photo-container {
@@ -420,30 +584,7 @@ const handleMouseLeave = () => {
   z-index: 2;
 }
 
-/* AI Reasoning Tooltip */
-.ai-reasoning-tooltip {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background-color: transparent;
-  color: white;
-  padding: 16px;
-  border-radius: 6px;
-  font-size: 12px;
-  line-height: 1.4;
-  z-index: 5;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
-  animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  text-align: center;
-  width: 87%;
-  font-weight: 500;
-  background: rgba(0, 0, 0, 0.5);
-}
-
-.reasoning-text {
-  margin: 0;
-}
+/* AI Reasoning Tooltip - styles moved to global.scss */
 
 /* Hover Content Overlay (for chunks and tags) */
 .hover-content-overlay {
@@ -480,11 +621,9 @@ const handleMouseLeave = () => {
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.9);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
   }
 }
 
@@ -516,13 +655,20 @@ const handleMouseLeave = () => {
   left: 50%;
   transform: translate(-50%, -50%);
   opacity: 0;
-  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 3;
   display: flex;
   gap: 8px;
 }
 
-.photo-card:hover .action-buttons-overlay {
+.action-buttons-overlay.has-reasoning {
+  top: 8px;
+  left: 8px;
+  transform: none;
+}
+
+.photo-card:hover .action-buttons-overlay,
+.photo-card.show-hover .action-buttons-overlay {
   opacity: 1;
 }
 
@@ -556,15 +702,6 @@ const handleMouseLeave = () => {
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
 }
 
-.photo-card.selection-mode {
-  border-color: rgba(34, 197, 94, 0.3);
-}
-
-.photo-card.selection-mode:hover {
-  border-color: var(--success-color);
-  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.2);
-}
-
 .matched-tags {
   display: flex;
   flex-wrap: wrap;
@@ -572,7 +709,7 @@ const handleMouseLeave = () => {
 }
 
 .tag {
-  background-color: color-mix(in srgb, var(--secondary-color), transparent 50%);
+  background-color: color-mix(in srgb, var(--accent-color), transparent 50%);
   color: #ffffff;
   font-size: 10px;
   /* font-weight: 500; */
@@ -623,6 +760,29 @@ const handleMouseLeave = () => {
   color: rgba(255, 255, 255, 0.3); /* Semi-transparent white for empty stars */
 }
 
+/* Diamond Indicator */
+.diamond-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.diamond-icon {
+  color: #60a5fa; /* Blue color for diamond */
+  filter: drop-shadow(0 0 4px rgba(96, 165, 250, 0.5));
+  animation: diamondPulse 2s ease-in-out infinite;
+}
+
+@keyframes diamondPulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 4px rgba(96, 165, 250, 0.5));
+  }
+  50% {
+    filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.8));
+  }
+}
+
 /* Low Relevance Icon */
 .low-relevance-icon {
   display: flex;
@@ -634,6 +794,30 @@ const handleMouseLeave = () => {
 .warning-icon {
   color: var(--warning-color);
   transition: color 0.2s ease;
+}
+
+/* Notes Indicator */
+.notes-indicator {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  backdrop-filter: blur(4px);
+  background-color: color-mix(in srgb, var(--accent-color), transparent 80%);
+  border-radius: 8px;
+  padding: 4px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notes-icon {
+  color: var(--text-on-secondary);
+  transition: color 0.2s ease;
+}
+
+.notes-indicator:hover .notes-icon {
+  color: color-mix(in srgb, var(--accent-color), white 20%);
 }
 
 .selection-indicator {
@@ -650,9 +834,36 @@ const handleMouseLeave = () => {
   z-index: 4;
 }
 
+/* Delete button */
+.delete-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background-color: rgba(239, 68, 68, 0.9);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s ease;
+}
+
+.photo-card:hover .delete-button {
+  opacity: 1;
+}
+
+.delete-button:hover {
+  background-color: rgba(239, 68, 68, 1);
+  transform: scale(1.1);
+}
+
 .photo-card-info.selected {
-  border-color: #8b5cf6;
-  box-shadow: 0 0 0 1px #8b5cf640, 0 8px 24px rgba(139, 92, 246, 0.2);
+  border-color: var(--accent-color);
+  /* box-shadow: 0 0 0 1px var(--accent-color)40, 0 8px 24px rgba(139, 92, 246, 0.2); */
 }
 
 /* Loading states */
@@ -718,18 +929,24 @@ const handleMouseLeave = () => {
 /* New photo highlight - thick and bright border with glow */
 .photo-card.is-new {
   border: 3px solid #22d3ee;
-  box-shadow: 0 0 0 1px #22d3ee40, 0 0 20px rgba(34, 211, 238, 0.4),
+  box-shadow:
+    0 0 0 1px #22d3ee40,
+    0 0 20px rgba(34, 211, 238, 0.4),
     0 4px 12px rgba(34, 211, 238, 0.2);
   animation: newPhotoGlow 2s ease-in-out infinite alternate;
 }
 
 @keyframes newPhotoGlow {
   0% {
-    box-shadow: 0 0 0 1px #22d3ee40, 0 0 15px rgba(34, 211, 238, 0.3),
+    box-shadow:
+      0 0 0 1px #22d3ee40,
+      0 0 15px rgba(34, 211, 238, 0.3),
       0 4px 12px rgba(34, 211, 238, 0.15);
   }
   100% {
-    box-shadow: 0 0 0 1px #22d3ee60, 0 0 25px rgba(34, 211, 238, 0.5),
+    box-shadow:
+      0 0 0 1px #22d3ee60,
+      0 0 25px rgba(34, 211, 238, 0.5),
       0 4px 12px rgba(34, 211, 238, 0.25);
   }
 }

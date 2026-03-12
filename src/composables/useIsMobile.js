@@ -5,8 +5,6 @@ import { ref, onMounted, onUnmounted } from "vue";
  * @returns {Object} { isMobile: Ref<boolean> }
  */
 export function useIsMobile() {
-  const isMobile = ref(false);
-
   const checkIsMobile = () => {
     // Check both screen width and user agent
     const width = window.innerWidth;
@@ -21,16 +19,23 @@ export function useIsMobile() {
     const isTablet = /ipad|android(?!.*mobile)/i.test(userAgent);
 
     // Consider mobile if width is less than 768px OR it's a mobile user agent (but not tablet)
-    isMobile.value = width < 768 || (isMobileAgent && !isTablet);
+    return width < 768 || (isMobileAgent && !isTablet);
+  };
+
+  // 🔧 CRÍTICO: Inicializar inmediatamente para que el valor esté disponible desde el primer uso
+  const isMobile = ref(checkIsMobile());
+
+  const updateIsMobile = () => {
+    isMobile.value = checkIsMobile();
   };
 
   onMounted(() => {
-    checkIsMobile();
-    window.addEventListener("resize", checkIsMobile);
+    updateIsMobile();
+    window.addEventListener("resize", updateIsMobile);
   });
 
   onUnmounted(() => {
-    window.removeEventListener("resize", checkIsMobile);
+    window.removeEventListener("resize", updateIsMobile);
   });
 
   return {

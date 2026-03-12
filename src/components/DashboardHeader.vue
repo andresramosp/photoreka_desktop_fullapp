@@ -1,12 +1,13 @@
 <template>
   <n-layout-header bordered class="header">
-    <div class="header-content">
-      <div class="header-left">
+    <div class="header-content" :class="{ 'search-expanded': searchExpanded }">
+      <div class="header-left" :class="{ 'search-expanded': searchExpanded }">
         <n-button
           v-if="isMobile"
           quaternary
           circle
           class="hamburger-btn"
+          :class="{ hidden: searchExpanded }"
           @click="$emit('toggle-mobile-menu')"
         >
           <template #icon>
@@ -16,25 +17,38 @@
           </template>
         </n-button>
 
-        <div class="search-container">
-          <n-input
-            disabled
-            placeholder="Search photos, projects, collections..."
-            class="search-input"
-            size="medium"
-            clearable
-            round
+        <div
+          v-if="!isMobile"
+          class="search-container"
+          :class="{ expanded: searchExpanded }"
+        >
+          <GlobalSearchAutocomplete
+            @search-focus="handleSearchFocus"
+            @search-blur="handleSearchBlur"
+          />
+        </div>
+        <!-- Esto habria que centrar el logo -->
+        <div
+          style="
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex: 1;
+          "
+          v-else
+        >
+          <a
+            href="https://www.photoreka.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="display: flex; align-items: center"
           >
-            <template #prefix>
-              <n-icon :color="'var(--icon-tertiary)'">
-                <SearchIcon />
-              </n-icon>
-            </template>
-          </n-input>
+            <AppLogo layout="horizontal" />
+          </a>
         </div>
       </div>
 
-      <div class="header-right">
+      <div class="header-right" :class="{ hidden: searchExpanded }">
         <n-space>
           <!-- <n-button circle quaternary class="header-icon-btn">
             <template #icon>
@@ -51,6 +65,25 @@
               </n-icon>
             </template>
           </n-button> -->
+
+          <n-button
+            v-if="canToggleTheme(false)"
+            circle
+            quaternary
+            class="header-icon-btn"
+            @click="toggleTheme"
+            :aria-label="`Switch to ${
+              themeMode === 'dark' ? 'light' : 'dark'
+            } mode`"
+          >
+            <template #icon>
+              <n-icon size="20">
+                <component
+                  :is="themeMode === 'dark' ? SunnyOutline : MoonOutline"
+                />
+              </n-icon>
+            </template>
+          </n-button>
 
           <n-dropdown
             :options="userMenuOptions"
@@ -81,19 +114,27 @@ import { useUserStore } from "../stores/userStore";
 
 // Import @vicons icons from ionicons5 for reliability
 import {
-  SearchOutline as SearchIcon,
   NotificationsOutline as NotificationsIcon,
   SettingsOutline as SettingsIcon,
   MenuOutline,
   PersonOutline as PersonIcon,
   LogOutOutline as LogOutIcon,
+  SunnyOutline,
+  MoonOutline,
 } from "@vicons/ionicons5";
+import { useTheme } from "../composables/useTheme.js";
+import GlobalSearchAutocomplete from "./GlobalSearchAutocomplete.vue";
+import AppLogo from "./AppLogo.vue";
 
 const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
 const message = useMessage();
 const isMobile = ref(false);
+const searchExpanded = ref(false);
+
+// Theme management
+const { themeMode, toggleTheme, canToggleTheme } = useTheme();
 
 defineEmits(["toggle-mobile-menu"]);
 
@@ -104,7 +145,7 @@ const userMenuOptions = [
         h(
           "div",
           { class: "user-email-main" },
-          userStore.user?.email || "user@photoreka.app"
+          userStore.user?.email || "user@photoreka.app",
         ),
       ]),
     key: "user-info",
@@ -113,11 +154,7 @@ const userMenuOptions = [
   {
     type: "divider",
   },
-  {
-    label: "Profile",
-    key: "profile",
-    icon: () => h(NIcon, null, { default: () => h(PersonIcon) }),
-  },
+
   {
     label: "Settings",
     key: "settings",
@@ -150,6 +187,16 @@ const checkIsMobile = () => {
   isMobile.value = window.innerWidth < 768;
 };
 
+const handleSearchFocus = () => {
+  // if (isMobile.value) {
+  //   searchExpanded.value = true;
+  // }
+};
+
+const handleSearchBlur = () => {
+  searchExpanded.value = false;
+};
+
 onMounted(() => {
   checkIsMobile();
   window.addEventListener("resize", checkIsMobile);
@@ -168,6 +215,7 @@ onUnmounted(() => {
   height: 64px;
   display: flex;
   align-items: center;
+  position: relative;
 }
 
 .header-content {
@@ -275,19 +323,75 @@ onUnmounted(() => {
 
   .header-content {
     gap: 16px;
+    transition: gap 0.25s ease;
+  }
+
+  .header-content.search-expanded {
+    gap: 0;
+  }
+
+  .header-left {
+    transition: flex 0.25s ease;
+  }
+
+  .header-left.search-expanded {
+    flex: 1;
+    max-width: 100%;
   }
 
   .search-container {
     min-width: 150px;
     max-width: none;
+    transition: all 0.25s ease;
+  }
+
+  .search-container.expanded {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    flex: none;
+    min-width: unset;
+    max-width: unset;
+    width: calc(100% - 24px);
+    z-index: 1001;
   }
 
   .search-input {
     font-size: 14px;
   }
 
+  .hamburger-btn {
+    transition:
+      opacity 0.2s ease,
+      transform 0.2s ease;
+  }
+
+  .hamburger-btn.hidden {
+    opacity: 0;
+    transform: scale(0.8);
+    pointer-events: none;
+    width: 0;
+    min-width: 0;
+    padding: 0;
+    margin: 0;
+  }
+
   .header-right {
     gap: 8px;
+    transition:
+      opacity 0.2s ease,
+      transform 0.2s ease;
+  }
+
+  .header-right.hidden {
+    opacity: 0;
+    transform: scale(0.8);
+    pointer-events: none;
+    width: 0;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .header-right :deep(.n-space) {

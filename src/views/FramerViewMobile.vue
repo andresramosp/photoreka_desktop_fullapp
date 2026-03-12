@@ -11,7 +11,7 @@
             class="mobile-preview-logo-container"
           >
             <router-link to="/" class="logo-link" aria-label="Inicio">
-              <AppLogo size="tiny" />
+              <AppLogo layout="icon" size="tiny" />
             </router-link>
           </div>
           <!-- Title for authenticated mode -->
@@ -83,7 +83,7 @@
           <div class="section-header">
             <h4>Frames</h4>
           </div>
-          <div class="frame-styles-grid">
+          <div class="frame-styles-row">
             <div
               v-for="frame in allFrames"
               :key="frame.id"
@@ -194,7 +194,7 @@
               @click="openPhotoDialog"
               :class="{ processing: isProcessingFiles }"
             >
-              <n-icon :size="20">
+              <n-icon :size="20" color="var(--primary-color)">
                 <AddIcon v-if="!isProcessingFiles" />
                 <n-spin v-else :size="20" />
               </n-icon>
@@ -211,6 +211,7 @@
               :show-stars="false"
               :show-tags="false"
               :show-return-button="false"
+              :require-long-press="false"
               @select="selectPhoto"
               @move-to-curation="removePhoto"
               class="mobile-photo-card"
@@ -249,7 +250,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
+import { useRoute } from "vue-router";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useMessage } from "naive-ui";
 import PhotoCard from "@/components/photoCards/PhotoCard.vue";
@@ -287,6 +289,7 @@ import {
 } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
 
+const route = useRoute();
 const photosStore = usePhotosStore();
 const message = useMessage();
 const { downloadFramedPhoto, downloadFramedPhotosZip, isDownloading } =
@@ -395,28 +398,28 @@ const allFrames = ref([
     id: "golden-3-2",
     ratio: "3:2",
     aspectRatio: "3/2",
-    color: "#8B5CF6",
+    color: "var(--accent-color)",
     category: "photo",
   },
   {
     id: "cinema-2-3",
     ratio: "2:3",
     aspectRatio: "2/3",
-    color: "#8B5CF6",
+    color: "var(--accent-color)",
     category: "photo",
   },
   {
     id: "portrait-3-4",
     ratio: "3:4",
     aspectRatio: "3/4",
-    color: "#8B5CF6",
+    color: "var(--accent-color)",
     category: "photo",
   },
   {
     id: "landscape-4-3",
     ratio: "4:3",
     aspectRatio: "4/3",
-    color: "#8B5CF6",
+    color: "var(--accent-color)",
     category: "photo",
   },
   {
@@ -550,7 +553,7 @@ const triggerFileSelect = () => {
 
 const handleFileSelect = async (event) => {
   const files = Array.from(event.target.files).filter((file) =>
-    file.type.startsWith("image/")
+    file.type.startsWith("image/"),
   );
 
   if (files.length > 0) {
@@ -617,7 +620,7 @@ const processLocalFiles = async (files) => {
       message.success(
         `Added ${processedPhotos.length} photo${
           processedPhotos.length > 1 ? "s" : ""
-        }`
+        }`,
       );
     }
   } catch (error) {
@@ -656,7 +659,7 @@ const handlePhotosAdded = (photoIds) => {
   }
 
   message.success(
-    `Added ${photoObjects.length} photo${photoObjects.length > 1 ? "s" : ""}`
+    `Added ${photoObjects.length} photo${photoObjects.length > 1 ? "s" : ""}`,
   );
 };
 
@@ -675,7 +678,7 @@ const handlePlaygroundPhotosAdded = (photoObjects) => {
   }
 
   message.success(
-    `Added ${photoObjects.length} photo${photoObjects.length > 1 ? "s" : ""}`
+    `Added ${photoObjects.length} photo${photoObjects.length > 1 ? "s" : ""}`,
   );
 };
 
@@ -702,7 +705,7 @@ const removePhoto = (photoId) => {
       if (selectedCount.value > 0) {
         const firstSelectedId = Array.from(selectedPhotoIds.value)[0];
         currentPhoto.value = selectedPhotos.value.find(
-          (p) => p.id === firstSelectedId
+          (p) => p.id === firstSelectedId,
         );
       } else {
         currentPhoto.value =
@@ -752,14 +755,14 @@ const downloadPhotos = async () => {
       photosToDownload[0],
       frameConfig,
       props.playgroundMode,
-      frameVisualizerRef.value
+      frameVisualizerRef.value,
     );
   } else {
     await downloadFramedPhotosZip(
       photosToDownload,
       frameConfig,
       props.playgroundMode,
-      frameVisualizerRef.value
+      frameVisualizerRef.value,
     );
   }
 };
@@ -772,12 +775,100 @@ const onImageError = () => {
   message.error("Failed to load image");
 };
 
+// Function to process photos from sessionStorage
+const processPhotosFromSessionStorage = () => {
+  console.log("🔍 Checking sessionStorage for photos to add...");
+  const photosToAddData = sessionStorage.getItem("framer_photos_to_add");
+
+  if (photosToAddData) {
+    console.log("📦 Found photos in sessionStorage");
+    try {
+      const photosData = JSON.parse(photosToAddData);
+      if (Array.isArray(photosData) && photosData.length > 0) {
+        console.log(
+          `📸 Processing ${photosData.length} photos from sessionStorage`,
+        );
+
+        // Convert stored data back to photo objects
+        const photoObjects = photosData
+          .map((data) => data.photoObject)
+          .filter(Boolean);
+
+        if (photoObjects.length > 0) {
+          // Add new photos to existing ones (accumulate instead of replace)
+          selectedPhotos.value.push(...photoObjects);
+
+          // Add photo IDs to selected set
+          photoObjects.forEach((photo) => {
+            selectedPhotoIds.value.add(photo.id);
+          });
+
+          // Auto-select first photo if none selected
+          if (!currentPhoto.value) {
+            currentPhoto.value = photoObjects[0];
+          }
+
+          // Auto-select first frame if none selected
+          if (!selectedFrame.value) {
+            selectedFrame.value = allFrames.value[0];
+          }
+
+          console.log(
+            `✅ Successfully added ${photoObjects.length} photos to Framer (Mobile)`,
+          );
+
+          message.success(
+            `Added ${photoObjects.length} photo${
+              photoObjects.length > 1 ? "s" : ""
+            } to Framer`,
+          );
+        }
+      }
+
+      // Clear the sessionStorage after processing
+      sessionStorage.removeItem("framer_photos_to_add");
+      console.log("🧹 Cleared sessionStorage");
+    } catch (error) {
+      console.error("❌ Error processing photos from sessionStorage:", error);
+      sessionStorage.removeItem("framer_photos_to_add");
+    }
+  } else {
+    console.log("ℹ️ No photos found in sessionStorage");
+  }
+};
+
+// Watch for route changes to detect when coming back to framer with new photos
+// Only process if we're already mounted (avoid double processing on initial mount)
+let hasMounted = false;
+
 onMounted(async () => {
+  console.log("📱 FramerViewMobile onMounted");
+
   // Only load photos from store in authenticated mode
   if (!props.playgroundMode && photosStore.photos?.length === 0) {
     await photosStore.getOrFetch(false);
   }
+
+  // Check for photos to add from other views (via sessionStorage)
+  // Use small delay to ensure everything is ready
+  setTimeout(() => {
+    processPhotosFromSessionStorage();
+    hasMounted = true; // Mark as mounted after processing
+  }, 50);
 });
+
+watch(
+  () => route.fullPath,
+  () => {
+    // Only process on route changes AFTER initial mount
+    if (hasMounted) {
+      console.log("🔄 Route changed, checking for new photos...");
+      setTimeout(() => {
+        processPhotosFromSessionStorage();
+      }, 50);
+    }
+  },
+);
 </script>
 
 <style scoped>
@@ -852,12 +943,18 @@ onMounted(async () => {
 
 /* Background with checkered pattern only when photo is present */
 .mobile-photo-preview {
-  background: linear-gradient(45deg, #f8fafc 25%, transparent 25%),
+  /* background:
+    linear-gradient(45deg, #f8fafc 25%, transparent 25%),
     linear-gradient(-45deg, #f8fafc 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, #f8fafc 75%),
-    linear-gradient(-45deg, transparent 75%, #f8fafc 75%);
+    linear-gradient(-45deg, transparent 75%, #f8fafc 75%); */
+  background-color: var(--bg-container);
   background-size: 15px 15px;
-  background-position: 0 0, 0 7px, 7px -7px, -7px 0px;
+  background-position:
+    0 0,
+    0 7px,
+    7px -7px,
+    -7px 0px;
 }
 
 .no-photo-preview {
@@ -937,27 +1034,25 @@ onMounted(async () => {
 }
 
 .frame-styles-container {
-  padding: var(--spacing-sm);
-  max-height: 220px; /* Increased height */
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
 }
 
-.frame-styles-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+.frame-styles-row {
+  display: flex;
+  overflow-x: auto;
   gap: var(--spacing-sm);
-  grid-auto-rows: minmax(min-content, max-content);
-  align-items: start;
-  justify-items: center;
+  padding: var(--spacing-sm);
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
 .mobile-frame-option {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-md);
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm);
   border-radius: var(--border-radius-lg);
   border: 2px solid var(--border-color);
   background-color: var(--bg-body);
@@ -967,7 +1062,9 @@ onMounted(async () => {
   justify-content: center;
   position: relative;
   overflow: visible;
-  width: 100%;
+  width: 85px;
+  min-width: 85px;
+  flex-shrink: 0;
   box-sizing: border-box;
 }
 
@@ -1309,25 +1406,25 @@ onMounted(async () => {
 }
 
 /* Custom scrollbars for mobile */
-.frame-styles-container::-webkit-scrollbar,
+.frame-styles-row::-webkit-scrollbar,
 .mobile-photos-scroll::-webkit-scrollbar {
   width: 4px;
   height: 4px;
 }
 
-.frame-styles-container::-webkit-scrollbar-track,
+.frame-styles-row::-webkit-scrollbar-track,
 .mobile-photos-scroll::-webkit-scrollbar-track {
   background: var(--bg-tertiary);
   border-radius: var(--border-radius-sm);
 }
 
-.frame-styles-container::-webkit-scrollbar-thumb,
+.frame-styles-row::-webkit-scrollbar-thumb,
 .mobile-photos-scroll::-webkit-scrollbar-thumb {
   background: var(--border-color);
   border-radius: var(--border-radius-sm);
 }
 
-.frame-styles-container::-webkit-scrollbar-thumb:hover,
+.frame-styles-row::-webkit-scrollbar-thumb:hover,
 .mobile-photos-scroll::-webkit-scrollbar-thumb:hover {
   background: var(--border-color-hover);
 }
@@ -1348,6 +1445,8 @@ onMounted(async () => {
 
   .mobile-frame-option {
     padding: var(--spacing-xs);
+    width: 75px;
+    min-width: 75px;
     /* Keep aspect-ratio: 1 for squares */
   }
 
@@ -1392,10 +1491,6 @@ onMounted(async () => {
     flex: 1;
   }
 
-  .frame-styles-container {
-    max-height: 200px; /* Reduced for small screens */
-  }
-
   .section-header {
     padding: var(--spacing-xs);
   }
@@ -1421,15 +1516,13 @@ onMounted(async () => {
   .mobile-frame-option {
     /* Keep aspect-ratio: 1 for squares */
     padding: var(--spacing-xs);
+    width: 70px;
+    min-width: 70px;
   }
 
   .mobile-color-option {
     width: 20px;
     height: 20px;
-  }
-
-  .frame-styles-container {
-    max-height: 120px;
   }
 
   .mobile-photos-section {

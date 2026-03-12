@@ -3,13 +3,20 @@
     <div class="auth-container">
       <div class="auth-content">
         <div class="auth-header">
-          <router-link to="/" class="logo-link" aria-label="Inicio">
-            <AppLogo size="large" />
-          </router-link>
+          <div class="logo-wrapper" aria-label="Inicio">
+            <AppLogo
+              layout="horizontal"
+              :with-claim="true"
+              :height="85"
+              :click-to-home="true"
+            />
+          </div>
         </div>
 
-        <div class="auth-form-container">
-          <slot />
+        <div class="auth-form-wrapper">
+          <div class="auth-form-container">
+            <slot />
+          </div>
         </div>
 
         <div class="auth-footer">
@@ -34,7 +41,7 @@ import AppLogo from "./AppLogo.vue";
 .auth-layout {
   width: 100vw;
   height: 100vh;
-  background-color: #101014;
+  /* background-color: #101014; */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -53,7 +60,7 @@ import AppLogo from "./AppLogo.vue";
 }
 
 .auth-content {
-  background-color: #1a1a1f;
+  background-color: var(--bg-body);
   border-radius: 12px;
   border: 1px solid #2c2c32;
   padding: 20px;
@@ -66,14 +73,13 @@ import AppLogo from "./AppLogo.vue";
   margin-bottom: 12px;
 }
 
-.logo-link {
+.logo-wrapper {
   display: inline-block;
   cursor: pointer;
   color: inherit;
-  text-decoration: none;
 }
 
-.logo-link:focus {
+.logo-wrapper:focus {
   outline: 2px solid rgba(37, 99, 235, 0.35);
   border-radius: 8px;
 }
@@ -81,18 +87,23 @@ import AppLogo from "./AppLogo.vue";
 .auth-subtitle {
   margin: 8px 0 0 0;
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-secondary);
   font-weight: 400;
 }
 
-.auth-form-container {
+.auth-form-wrapper {
   margin-bottom: 12px;
+}
+
+.auth-form-container {
+  /* Contenedor del formulario */
 }
 
 .auth-footer {
   text-align: center;
   padding-top: 16px;
   border-top: 1px solid #2c2c32;
+  flex-shrink: 0;
 }
 
 .footer-text {
@@ -117,19 +128,19 @@ import AppLogo from "./AppLogo.vue";
   left: 0;
   right: 0;
   bottom: 0;
-  background-image: radial-gradient(
+  background-image:
+    radial-gradient(
       circle at 25% 25%,
       rgba(37, 99, 235, 0.1) 0%,
       transparent 50%
     ),
-    radial-gradient(
-      circle at 75% 75%,
-      rgba(139, 92, 246, 0.1) 0%,
-      transparent 50%
-    );
-  background-size: 800px 800px, 600px 600px;
-  background-position: 0 0, 200px 200px;
-  animation: float 20s infinite ease-in-out;
+    radial-gradient(circle at 75% 75%, var(--bg-surface) 0%, transparent 50%);
+  background-size:
+    800px 800px,
+    600px 600px;
+  background-position:
+    0 0,
+    200px 200px;
 }
 
 .bg-gradient {
@@ -143,19 +154,6 @@ import AppLogo from "./AppLogo.vue";
     rgba(37, 99, 235, 0.05) 0%,
     transparent 70%
   );
-}
-
-@keyframes float {
-  0%,
-  100% {
-    transform: translate(0, 0) rotate(0deg);
-  }
-  33% {
-    transform: translate(30px, -30px) rotate(1deg);
-  }
-  66% {
-    transform: translate(-20px, 20px) rotate(-1deg);
-  }
 }
 
 /* Responsive design */
@@ -176,24 +174,59 @@ import AppLogo from "./AppLogo.vue";
 
 @media (max-width: 480px) {
   .auth-layout {
-    padding: 12px;
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .auth-container {
+    max-width: 100%;
+    height: 100vh;
+    height: 100dvh; /* Dynamic viewport height para móviles */
   }
 
   .auth-content {
-    padding: 24px 20px;
-    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 24px 20px 20px 20px;
+    border-radius: 0;
     border: none;
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+    box-shadow: none;
+    animation: none !important;
   }
 
   .auth-header {
+    flex-shrink: 0;
+    margin-bottom: 20px;
+    margin-top: 16px;
+  }
+
+  .logo-link :deep(svg),
+  .logo-link :deep(img) {
+    height: 65px !important;
+    width: auto;
+  }
+
+  .auth-form-wrapper {
+    flex: 1;
+    min-height: 0;
     margin-bottom: 16px;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .auth-footer {
+    flex-shrink: 0;
+    padding-top: 16px;
+    padding-bottom: 16px;
   }
 }
 
-/* Animation for content entrance */
-.auth-content {
-  animation: slideUp 0.6s ease-out;
+/* Animation for content entrance - only desktop */
+@media (min-width: 481px) {
+  .auth-content {
+    animation: slideUp 0.6s ease-out;
+  }
 }
 
 @keyframes slideUp {

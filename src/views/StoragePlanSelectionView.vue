@@ -504,7 +504,7 @@ const completeSetup = () => {
   console.log("Total Price:", getTotalPrice());
 
   message.success("Setup completed! Welcome to Photoreka.");
-  router.push("/dashboard");
+  router.push("/");
 };
 
 const goBack = () => {
@@ -527,14 +527,14 @@ const goBack = () => {
   margin: 16px 0 8px 0;
   font-size: 32px;
   font-weight: 700;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   letter-spacing: -0.025em;
 }
 
 .storage-plan-subtitle {
   margin: 0 0 24px 0;
   font-size: 16px;
-  color: #ffffff73;
+  color: var(--text-primary);
   font-weight: 400;
 }
 
@@ -542,13 +542,13 @@ const goBack = () => {
   margin: 0 0 8px 0;
   font-size: 20px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .section-subtitle {
   margin: 0 0 24px 0;
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   font-weight: 400;
 }
 
@@ -609,7 +609,7 @@ const goBack = () => {
 
 .storage-icon {
   margin-bottom: 16px;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .storage-option-card.selected .storage-icon {
@@ -620,7 +620,7 @@ const goBack = () => {
   margin: 0 0 8px 0;
   font-size: 18px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .storage-photos {
@@ -633,7 +633,7 @@ const goBack = () => {
 .storage-description {
   margin: 0 0 16px 0;
   font-size: 13px;
-  color: #ffffff73;
+  color: var(--text-primary);
   line-height: 1.4;
   flex: 1;
 }
@@ -641,7 +641,7 @@ const goBack = () => {
 .storage-price {
   font-size: 16px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .storage-notes {
@@ -826,7 +826,7 @@ const goBack = () => {
   margin: 0 0 12px 0;
   font-size: 20px;
   font-weight: 700;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .plan-price {
@@ -845,13 +845,13 @@ const goBack = () => {
 
 .price-period {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
 }
 
 .plan-description {
   margin: 0;
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   line-height: 1.4;
 }
 
@@ -867,7 +867,7 @@ const goBack = () => {
   align-items: center;
   gap: 12px;
   font-size: 14px;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .feature-item.disabled {
@@ -887,7 +887,7 @@ const goBack = () => {
   margin: 0 0 16px 0;
   font-size: 18px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
 }
 
 .summary-details {
@@ -911,11 +911,11 @@ const goBack = () => {
 }
 
 .summary-label {
-  color: #ffffff73;
+  color: var(--text-primary);
 }
 
 .summary-value {
-  color: #ffffffd1;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
@@ -944,7 +944,7 @@ const goBack = () => {
 
 .back-button {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
 }
 
 /* Responsive design */

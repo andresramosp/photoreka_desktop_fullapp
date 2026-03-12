@@ -2,6 +2,12 @@ import { defineStore } from "pinia";
 import { ref, reactive, computed } from "vue";
 import { useArtisticScores } from "@/composables/useArtisticScores";
 
+// ===== CONFIGURACIÓN DE ESTADO =====
+// Cambiar a true para usar un estado compartido único (grid y queries compartidos)
+// Cambiar a false para usar estados separados por type+mode
+const USE_SHARED_STATE = true;
+// ===================================
+
 // Export visualAspectsOptions for reuse in other components
 
 export const visualAspectsOptions = [
@@ -10,8 +16,8 @@ export const visualAspectsOptions = [
     label: "Palette",
     key: "palette",
     children: [
-      { label: "Black and white", value: "black and white" },
       { label: "Color", value: "color" },
+      { label: "Monochrome", value: "black and white" },
     ],
   },
   {
@@ -33,25 +39,25 @@ export const visualAspectsOptions = [
       { label: "Neutral", value: "neutral" },
     ],
   },
-  {
-    type: "group",
-    label: "Focus",
-    key: "focus",
-    children: [
-      { label: "Blurry", value: "blurry" },
-      { label: "Nitid", value: "nitid" },
-    ],
-  },
-  {
-    type: "group",
-    label: "Lighting Scheme",
-    key: "lighting_scheme",
-    children: [
-      { label: "Low key", value: "low key" },
-      { label: "High key", value: "high key" },
-      { label: "Balanced", value: "balanced" },
-    ],
-  },
+  // {
+  //   type: "group",
+  //   label: "Focus",
+  //   key: "focus",
+  //   children: [
+  //     { label: "Blurry", value: "blurry" },
+  //     { label: "Nitid", value: "nitid" },
+  //   ],
+  // },
+  // {
+  //   type: "group",
+  //   label: "Lighting Scheme",
+  //   key: "lighting_scheme",
+  //   children: [
+  //     { label: "Low key", value: "low key" },
+  //     { label: "High key", value: "high key" },
+  //     { label: "Balanced", value: "balanced" },
+  //   ],
+  // },
   {
     type: "group",
     label: "Stylistic",
@@ -141,9 +147,12 @@ export function createArtisticScoresTreeOptions() {
 export const useSearchStore = defineStore("search", () => {
   // Estado global del search
   const activeSearchType = ref("semantic");
-  const searchMode = ref("logical");
+  const searchMode = ref("broad");
   const isSearching = ref(false);
   const isLoadingMore = ref(false);
+
+  // Collections filter state
+  const selectedCollections = ref([]);
 
   // Visual aspects filter state
   const selectedVisualAspects = ref([]);
@@ -151,63 +160,68 @@ export const useSearchStore = defineStore("search", () => {
   // Artistic scores filter state
   const selectedArtisticScores = ref([]);
 
-  // Estado específico para cada tipo de búsqueda
+  // Helper function to create empty mode state with query fields
+  const createModeState = () => ({
+    // Semantic search
+    query: "",
+    // Tags search
+    includedTags: [],
+    excludedTags: [],
+    // Pagination
+    iterationsRecord: {},
+    iteration: 1,
+    hasMoreIterations: false,
+    maxPageAttempts: false,
+    hasSearched: false,
+    lastCursor: null, // ID of last photo for cursor-based pagination
+    // Options
+    withInsights: false,
+  });
+
+  // Estado compartido único (cuando USE_SHARED_STATE = true)
+  const sharedState = reactive(createModeState());
+
+  // Estado específico para cada tipo de búsqueda con modos independientes
   const searchStates = reactive({
     semantic: {
-      query: "",
-      results: [],
-      iterationsRecord: {},
-      iteration: 1,
-      hasMoreIterations: false,
-      maxPageAttempts: false,
-      hasSearched: false,
-      lastCursor: null, // ID of last photo for cursor-based pagination
+      modes: {
+        broad: createModeState(),
+        adaptive: createModeState(),
+        precise: createModeState(),
+      },
     },
     tags: {
-      includedTags: [],
-      excludedTags: [],
-      results: [],
-      iterationsRecord: {},
-      iteration: 1,
-      hasMoreIterations: false,
-      maxPageAttempts: false,
-      hasSearched: false,
-      lastCursor: null, // ID of last photo for cursor-based pagination
-    },
-    topological: {
-      left: "",
-      center: "",
-      right: "",
-      results: [],
-      iterationsRecord: {},
-      iteration: 1,
-      hasMoreIterations: false,
-      maxPageAttempts: false,
-      hasSearched: false,
-      lastCursor: null, // ID of last photo for cursor-based pagination
+      modes: {
+        broad: createModeState(),
+        adaptive: createModeState(),
+        precise: createModeState(),
+      },
     },
   });
 
-  // Computed para el estado actual
-  const currentSearchState = computed(
-    () => searchStates[activeSearchType.value]
-  );
+  // Computed para el estado actual (incluye el modo actual)
+  const currentSearchState = computed(() => {
+    if (USE_SHARED_STATE) {
+      return sharedState;
+    }
+    return searchStates[activeSearchType.value].modes[searchMode.value];
+  });
 
   // Computed para verificar si hay query
   const hasSearchQuery = computed(() => {
-    const state = currentSearchState.value;
+    const modeState = currentSearchState.value;
+
+    if (!modeState) return false;
 
     switch (activeSearchType.value) {
       case "semantic":
-        return state.query.trim().length > 0;
+        return (modeState.query || "").trim().length > 0;
       case "tags":
-        return state.includedTags.length > 0 || state.excludedTags.length > 0;
-      case "topological":
         return (
-          state.left.trim().length > 0 ||
-          state.center.trim().length > 0 ||
-          state.right.trim().length > 0
+          modeState.includedTags.length > 0 || modeState.excludedTags.length > 0
         );
+      default:
+        return false;
     }
   });
 
@@ -253,31 +267,50 @@ export const useSearchStore = defineStore("search", () => {
 
   // Actions
   function setSearchType(type) {
-    if (["semantic", "tags", "topological"].includes(type)) {
+    if (["semantic", "tags"].includes(type)) {
       activeSearchType.value = type;
     }
   }
 
   function setSearchMode(mode) {
+    const previousMode = searchMode.value;
     searchMode.value = mode;
+
+    // Si el modo cambió, no resetear nada - cada modo mantiene su propio estado
+    // El cambio de modo simplemente cambia qué resultados se muestran
+  }
+
+  function setWithInsights(value) {
+    const modeState = currentSearchState.value;
+    if (modeState) {
+      modeState.withInsights = value;
+    }
   }
 
   function updateSemanticQuery(query) {
-    searchStates.semantic.query = query;
+    const modeState = currentSearchState.value;
+    if (modeState) {
+      modeState.query = query;
+    }
   }
 
   function updateTagsSearch(included, excluded) {
-    searchStates.tags.includedTags = included;
-    searchStates.tags.excludedTags = excluded;
+    const modeState = currentSearchState.value;
+    if (modeState) {
+      modeState.includedTags = included;
+      modeState.excludedTags = excluded;
+    }
   }
 
-  function updateTopologicalSearch(left, center, right) {
-    searchStates.topological.left = left;
-    searchStates.topological.center = center;
-    searchStates.topological.right = right;
+  function setSelectedCollections(collections) {
+    selectedCollections.value = collections;
   }
 
   function updateVisualAspects(visualAspects) {
+    selectedVisualAspects.value = visualAspects;
+  }
+
+  function setSelectedVisualAspects(visualAspects) {
     selectedVisualAspects.value = visualAspects;
   }
 
@@ -289,28 +322,40 @@ export const useSearchStore = defineStore("search", () => {
     selectedArtisticScores.value = artisticScores;
   }
 
+  function setSelectedArtisticScores(artisticScores) {
+    selectedArtisticScores.value = artisticScores;
+  }
+
   function clearArtisticScores() {
     selectedArtisticScores.value = [];
   }
 
   function clearCurrentSearch() {
-    const state = currentSearchState.value;
+    const modeState = currentSearchState.value;
 
-    // Limpiar solo el tipo de búsqueda actual
-    switch (activeSearchType.value) {
-      case "semantic":
-        state.query = "";
-        break;
-      case "tags":
-        state.includedTags = [];
-        state.excludedTags = [];
-        break;
-      case "topological":
-        state.left = "";
-        state.center = "";
-        state.right = "";
-        break;
+    if (!modeState) return;
+
+    // En modo compartido, limpiamos TODAS las queries de todos los tipos
+    // En modo separado, solo limpiamos el modo actual del tipo actual
+    if (USE_SHARED_STATE) {
+      modeState.query = "";
+      modeState.includedTags = [];
+      modeState.excludedTags = [];
+    } else {
+      // Limpiar solo el modo actual del tipo de búsqueda actual
+      switch (activeSearchType.value) {
+        case "semantic":
+          modeState.query = "";
+          break;
+        case "tags":
+          modeState.includedTags = [];
+          modeState.excludedTags = [];
+          break;
+      }
     }
+
+    // Limpiar collections
+    selectedCollections.value = [];
 
     // Limpiar visual aspects
     selectedVisualAspects.value = [];
@@ -318,36 +363,53 @@ export const useSearchStore = defineStore("search", () => {
     // Limpiar artistic scores
     selectedArtisticScores.value = [];
 
-    // Limpiar resultados y estado de paginación
-    state.results = [];
-    state.iterationsRecord = {};
-    state.iteration = 1;
-    state.hasMoreIterations = false;
-    state.maxPageAttempts = false;
-    state.hasSearched = false;
+    // Limpiar resultados y estado de paginación solo del modo actual
+    modeState.iterationsRecord = {};
+    modeState.iteration = 1;
+    modeState.hasMoreIterations = false;
+    modeState.maxPageAttempts = false;
+    modeState.hasSearched = false;
+    modeState.lastCursor = null;
   }
 
   function clearAllSearches() {
-    Object.keys(searchStates).forEach((type) => {
-      const state = searchStates[type];
-      if (type === "semantic") {
-        state.query = "";
-      } else if (type === "tags") {
-        state.includedTags = [];
-        state.excludedTags = [];
-      } else if (type === "topological") {
-        state.left = "";
-        state.center = "";
-        state.right = "";
-      }
+    if (USE_SHARED_STATE) {
+      // En modo compartido, solo limpiamos el estado compartido
+      sharedState.query = "";
+      sharedState.includedTags = [];
+      sharedState.excludedTags = [];
+      sharedState.iterationsRecord = {};
+      sharedState.iteration = 1;
+      sharedState.hasMoreIterations = false;
+      sharedState.maxPageAttempts = false;
+      sharedState.hasSearched = false;
+      sharedState.lastCursor = null;
+    } else {
+      // En modo separado, limpiamos todos los tipos y modos
+      Object.keys(searchStates).forEach((type) => {
+        const typeState = searchStates[type];
+        if (type === "semantic") {
+          typeState.query = "";
+        } else if (type === "tags") {
+          typeState.includedTags = [];
+          typeState.excludedTags = [];
+        }
 
-      state.results = [];
-      state.iterationsRecord = {};
-      state.iteration = 1;
-      state.hasMoreIterations = false;
-      state.maxPageAttempts = false;
-      state.hasSearched = false;
-    });
+        // Limpiar todos los modos
+        Object.keys(typeState.modes).forEach((mode) => {
+          const modeState = typeState.modes[mode];
+          modeState.iterationsRecord = {};
+          modeState.iteration = 1;
+          modeState.hasMoreIterations = false;
+          modeState.maxPageAttempts = false;
+          modeState.hasSearched = false;
+          modeState.lastCursor = null;
+        });
+      });
+    }
+
+    // Limpiar collections
+    selectedCollections.value = [];
 
     // Limpiar visual aspects
     selectedVisualAspects.value = [];
@@ -411,6 +473,7 @@ export const useSearchStore = defineStore("search", () => {
     isSearching,
     isLoadingMore,
     searchStates,
+    selectedCollections,
     selectedVisualAspects,
     selectedArtisticScores,
     visualAspectsOptions,
@@ -425,12 +488,15 @@ export const useSearchStore = defineStore("search", () => {
     // Actions
     setSearchType,
     setSearchMode,
+    setWithInsights,
     updateSemanticQuery,
     updateTagsSearch,
-    updateTopologicalSearch,
+    setSelectedCollections,
     updateVisualAspects,
+    setSelectedVisualAspects,
     clearVisualAspects,
     updateArtisticScores,
+    setSelectedArtisticScores,
     clearArtisticScores,
     clearCurrentSearch,
     clearAllSearches,

@@ -174,6 +174,7 @@
 
         <div class="area-actions">
           <n-button
+            secondary
             :loading="isSearching || isLoadingMore || isThinking"
             @click="searchMorePhotos"
             class="search-more-button"
@@ -248,6 +249,7 @@
           <n-button
             @click="moveToCanvas"
             size="large"
+            secondary
             :disabled="curatedPhotos.length == 0"
           >
             <template #icon>
@@ -265,6 +267,7 @@
           <n-button
             @click="handleAddToCollection"
             size="large"
+            secondary
             :disabled="curatedPhotos.length == 0"
           >
             <template #icon>
@@ -284,64 +287,10 @@
     </div>
 
     <!-- Empty State -->
-    <div v-else class="empty-state">
-      <div class="empty-content">
-        <n-icon
-          size="64"
-          color="#6b7280"
-          class="empty-icon"
-          :component="ImagesOutline"
-        />
-
-        <h2 class="empty-title">Start Building Projects</h2>
-        <p class="empty-description">
-          Project Builder is a tool designed to help you compile photos under a
-          concept, theme, or style. Enter what you're looking for in rich,
-          natural language.
-        </p>
-        <div class="instructions-list">
-          <div class="instruction-item">
-            <n-icon>
-              <Language />
-            </n-icon>
-
-            <span>
-              Your search will be automatically enriched with nuances and
-              associations.</span
-            >
-          </div>
-          <div class="instruction-item">
-            <n-icon>
-              <StarHalf />
-            </n-icon>
-
-            <span>
-              Each proposed photo will be accompanied by a comment and a
-              score.</span
-            >
-          </div>
-          <div class="instruction-item">
-            <n-icon>
-              <LogOutOutline />
-            </n-icon>
-            <span
-              >Select the ones you consider valid by moving them to the right
-              side of the screen.</span
-            >
-          </div>
-        </div>
-        <div class="examples-carousel">
-          <span>Try something like...</span>
-          <div class="carousel-container">
-            <div class="carousel-item" :class="{ sliding: isSliding }">
-              <button class="example-card" @click="handleExampleClick">
-                <p class="example-text">«{{ currentExampleText }}»</p>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <SearchPlaceHolder
+      v-else
+      :onExampleClick="handleSearchPlaceholderExample"
+    />
 
     <!-- Collection Selection Modal -->
     <CollectionModal
@@ -349,6 +298,7 @@
       :photo-count="curatedPhotos.length"
       :photo-ids="curatedPhotos.map((photo) => photo.id)"
       @add-to-collection="handleCollectionAdded"
+      @add-to-series="handleCollectionAdded"
       @cancel="cancelCollectionModal"
     />
   </div>
@@ -372,8 +322,8 @@ defineOptions({
 
 import PhotoCard from "../components/photoCards/PhotoCard.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
+import SearchPlaceHolder from "@/components/SearchPlaceHolder.vue";
 import { useUserStore } from "@/stores/userStore";
-import { useQueryExamples } from "@/composables/useQueryExamples";
 import {
   NRate,
   NSelect,
@@ -381,13 +331,7 @@ import {
   NTooltip,
   useMessage,
 } from "naive-ui";
-import {
-  FolderOpenOutline,
-  ImagesOutline,
-  Language,
-  LogOutOutline,
-  StarHalf,
-} from "@vicons/ionicons5";
+import { FolderOpenOutline, ImagesOutline } from "@vicons/ionicons5";
 import { usePhotosStore } from "@/stores/photos";
 import { useCanvasStore } from "@/stores/canvas.js";
 import { useCollectionsStore } from "@/stores/collections.js";
@@ -412,7 +356,7 @@ const showCollectionModal = ref(false);
 async function moveToCanvas() {
   // Buscar los datos completos de las fotos por id (si no están ya en el store)
   await Promise.all(
-    curatedPhotos.value.map((photo) => photoStore.fetchPhoto(photo.id))
+    curatedPhotos.value.map((photo) => photoStore.fetchPhoto(photo.id)),
   );
   // Obtener los objetos completos de las fotos
   const photosToAdd = curatedPhotos.value
@@ -569,7 +513,7 @@ const registerSocketListeners = () => {
         iterNum
       ].photos.map((existing) => {
         const updated = richPhotos.find(
-          (item) => item.photo.id === existing.id
+          (item) => item.photo.id === existing.id,
         );
         if (updated) {
           // Add to newly arrived photos when insights arrive (photo is now complete)
@@ -658,7 +602,7 @@ const onSearchChange = (value) => {
 const showMaxPageAttemptsNotification = () => {
   // Calcular cuántas fotos válidas tenemos actualmente
   const currentValidPhotos = candidatePhotos.value.filter(
-    (photo) => photo.matchScore >= minMatchScore.value
+    (photo) => photo.matchScore >= minMatchScore.value,
   ).length;
 
   notification.warning({
@@ -676,7 +620,7 @@ const showMaxPageAttemptsNotification = () => {
               notification.destroyAll();
             },
           },
-          "Continue"
+          "Continue",
         ),
         h(
           "button",
@@ -689,7 +633,7 @@ const showMaxPageAttemptsNotification = () => {
               notification.destroyAll();
             },
           },
-          "Reduce score"
+          "Reduce score",
         ),
       ]);
     },
@@ -787,7 +731,7 @@ const clearSelection = () => {
     if (typeof photo.originalIndex === "number" && photo.originalIndex >= 0) {
       const targetIndex = Math.min(
         photo.originalIndex,
-        candidatePhotos.value.length
+        candidatePhotos.value.length,
       );
       candidatePhotos.value.splice(targetIndex, 0, {
         ...photo,
@@ -836,7 +780,7 @@ const moveToCuration = (photoId) => {
   if (typeof photo.originalIndex === "number" && photo.originalIndex >= 0) {
     const targetIndex = Math.min(
       photo.originalIndex,
-      candidatePhotos.value.length
+      candidatePhotos.value.length,
     );
     candidatePhotos.value.splice(targetIndex, 0, {
       ...photo,
@@ -871,7 +815,7 @@ const onRatingChange = (rating) => {
   if (candidatePhotos.value.length > 0) {
     const filteredCount = filteredCandidatePhotos.value.length;
     console.log(
-      `Showing ${filteredCount} of ${candidatePhotos.value.length} photos`
+      `Showing ${filteredCount} of ${candidatePhotos.value.length} photos`,
     );
   }
 };
@@ -897,6 +841,12 @@ const cancelCollectionModal = () => {
 
 const handleCollectionAdded = (data) => {
   showCollectionModal.value = false;
+};
+
+// Handle example click from SearchPlaceHolder
+const handleSearchPlaceholderExample = (exampleText) => {
+  searchQuery.value = exampleText;
+  performSearch();
 };
 
 // Lifecycle hooks
@@ -925,26 +875,8 @@ watch(
       registerSocketListeners();
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
-
-// Query examples functionality
-const searchType = ref("curation");
-
-function handleCurationExampleClick(example, exampleText, searchType) {
-  if (searchType === "curation") {
-    searchQuery.value = exampleText;
-    performSearch();
-  }
-}
-
-const {
-  exampleIndex,
-  isSliding,
-  currentExamples,
-  currentExampleText,
-  handleExampleClick,
-} = useQueryExamples(searchType, ref("strict"), handleCurationExampleClick);
 </script>
 
 <style scoped>
@@ -1094,6 +1026,7 @@ const {
   overflow-y: auto;
   align-content: start;
   place-items: start;
+  background-color: var(--bg-container);
 }
 
 .photos-grid > * {
@@ -1134,60 +1067,6 @@ const {
 
 .search-more-button {
   min-width: 160px;
-}
-
-.empty-state {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--spacing-6xl);
-}
-
-.empty-content {
-  text-align: center;
-  max-width: 600px;
-}
-
-.empty-icon {
-  margin-bottom: var(--spacing-lg);
-}
-
-.empty-title {
-  font-size: var(--font-size-2xl);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  margin: 0 0 0 0;
-}
-
-.empty-description {
-  font-size: var(--font-size-md);
-  color: var(--text-primary);
-  margin-top: 10px;
-  margin-bottom: 5px;
-  line-height: var(--line-height-relaxed);
-}
-
-.instructions-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-lg);
-  /* background-color: rgba(107, 114, 128, 0.05); */
-  border-radius: var(--radius-md);
-  /* border: 1px solid rgba(107, 114, 128, 0.1); */
-  margin-bottom: var(--spacing-lg);
-  align-content: center;
-  justify-content: center;
-  align-items: center;
-}
-
-.instruction-item {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
 }
 
 .photo-skeleton {
@@ -1332,69 +1211,8 @@ const {
 .examples-title {
   font-size: 20px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 0 0 var(--spacing-lg) 0;
   text-align: center;
-}
-
-.examples-carousel {
-  /* display: flex
-; */
-  justify-content: center;
-  /* width: 100%; */
-  padding: var(--spacing-sm) 0;
-  background-color: rgba(107, 114, 128, 0.05);
-  border-radius: var(--radius-md);
-  border: 1px solid rgba(107, 114, 128, 0.1);
-  padding: var(--spacing-lg);
-  align-content: center;
-  align-items: center;
-}
-
-.carousel-container {
-  width: 100%;
-  max-width: 600px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.carousel-item {
-  width: 100%;
-  opacity: 1;
-  transform: translateX(0);
-  transition: all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-
-.carousel-item.sliding {
-  opacity: 0;
-  transform: translateX(-80px);
-}
-
-.example-card {
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 48px;
-  width: 100%;
-  background: transparent;
-  border: none;
-  padding: 0;
-}
-
-.example-card:hover .example-text {
-  color: #2563eb;
-  transform: scale(1.02);
-}
-
-.example-text {
-  font-size: 16px;
-  color: #ffffff73;
-  line-height: 1.4;
-  text-align: center;
-  font-style: italic;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 </style>

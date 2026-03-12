@@ -24,20 +24,22 @@ export function useTagDisplay(tagsSource) {
       }
     }
     return Array.from(seen.values()).sort(
-      (t1, t2) => (t2.tag || t2).name.length - (t1.tag || t1).name.length
+      (t1, t2) => (t2.tag || t2).name.length - (t1.tag || t1).name.length,
     );
   });
 
   const selectedColor = getComputedStyle(document.documentElement)
-    .getPropertyValue("--secondary-color")
+    .getPropertyValue("--primary-color")
     .trim();
 
-  const hoverColor = "rgba(37, 99, 235, 1);";
+  const hoverColor = getComputedStyle(document.documentElement)
+    .getPropertyValue("--border-color-hover")
+    .trim();
   const defaultColor = getComputedStyle(document.documentElement)
-    .getPropertyValue("--bg-tag")
+    .getPropertyValue("--bg-tag-pill")
     .trim();
   const textColor = getComputedStyle(document.documentElement)
-    .getPropertyValue("--text-primary")
+    .getPropertyValue("--text-on-primary")
     .trim();
   const pillHeight = 18;
 

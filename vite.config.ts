@@ -24,5 +24,10 @@ export default defineConfig({
     hmr: {
       overlay: false,
     },
+    headers: {
+      // Remover COOP restrictivo para permitir OAuth popups de Google
+      // "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+      // "Cross-Origin-Embedder-Policy": "require-corp",
+    },
   },
 });

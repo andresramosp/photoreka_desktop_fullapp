@@ -3,7 +3,11 @@
     <div class="profile-container">
       <div class="profile-content">
         <div class="profile-header">
-          <AppLogo size="large" />
+          <AppLogo
+            layout="horizontal"
+            :with-claim="false"
+            :height="isMobile ? 45 : 70"
+          />
         </div>
 
         <div class="profile-form-container">
@@ -25,14 +29,17 @@
 </template>
 
 <script setup lang="ts">
+import { useIsMobile } from "@/composables/useIsMobile.js";
+
 import AppLogo from "./AppLogo.vue";
+const { isMobile } = useIsMobile();
 </script>
 
 <style scoped>
 .profile-layout {
   position: relative;
   width: 100vw;
-  background-color: #101014;
+  /* background-color: #101014; */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -54,10 +61,10 @@ import AppLogo from "./AppLogo.vue";
 }
 
 .profile-content {
-  background-color: #1a1a1f;
+  background-color: var(--bg-container);
   border-radius: 16px;
   border: 1px solid #2c2c32;
-  padding: 40px;
+  padding: 30px;
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
   width: 100%;
   /* max-height: calc(100vh - 40px);
@@ -66,13 +73,13 @@ import AppLogo from "./AppLogo.vue";
 
 .profile-header {
   text-align: center;
-  margin-bottom: 24px;
+  margin-bottom: 32px;
 }
 
 .profile-subtitle {
   margin: 12px 0 0 0;
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   font-weight: 400;
 }
 
@@ -94,12 +101,13 @@ import AppLogo from "./AppLogo.vue";
 
 /* Background decoration */
 .profile-background {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
   z-index: 1;
+  pointer-events: none;
 }
 
 .bg-pattern {
@@ -108,19 +116,19 @@ import AppLogo from "./AppLogo.vue";
   left: 0;
   right: 0;
   bottom: 0;
-  background-image: radial-gradient(
+  background-image:
+    radial-gradient(
       circle at 25% 25%,
       rgba(37, 99, 235, 0.1) 0%,
       transparent 50%
     ),
-    radial-gradient(
-      circle at 75% 75%,
-      rgba(139, 92, 246, 0.1) 0%,
-      transparent 50%
-    );
-  background-size: 800px 800px, 600px 600px;
-  background-position: 0 0, 200px 200px;
-  animation: float 20s infinite ease-in-out;
+    radial-gradient(circle at 75% 75%, var(--bg-surface) 0%, transparent 50%);
+  background-size:
+    800px 800px,
+    600px 600px;
+  background-position:
+    0 0,
+    200px 200px;
 }
 
 .bg-gradient {
@@ -134,19 +142,6 @@ import AppLogo from "./AppLogo.vue";
     rgba(37, 99, 235, 0.05) 0%,
     transparent 70%
   );
-}
-
-@keyframes float {
-  0%,
-  100% {
-    transform: translate(0, 0) rotate(0deg);
-  }
-  33% {
-    transform: translate(30px, -30px) rotate(1deg);
-  }
-  66% {
-    transform: translate(-20px, 20px) rotate(-1deg);
-  }
 }
 
 /* Responsive design */
@@ -172,25 +167,37 @@ import AppLogo from "./AppLogo.vue";
   }
 
   .profile-header {
-    margin-bottom: 20px;
+    margin-bottom: 32px;
   }
 }
 
 @media (max-width: 480px) {
   .profile-layout {
-    padding: 12px;
+    padding: 0;
+    width: 100vw;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .profile-container {
+    min-height: 100vh;
+    max-width: 100%;
+    width: 100%;
   }
 
   .profile-content {
     padding: 24px 20px;
-    border-radius: 8px;
+    padding-top: 24px;
+    border-radius: 0;
     border: none;
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
-    max-height: calc(100vh - 24px);
+    box-shadow: none;
+    width: 100%;
+    min-height: 100vh;
+    box-sizing: border-box;
   }
 
   .profile-header {
-    margin-bottom: 16px;
+    margin-bottom: 32px;
   }
 }
 

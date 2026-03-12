@@ -7,16 +7,16 @@
     @mouseover="hovered = true"
     @mouseleave="hovered = false"
     :style="{
-      opacity: 0.9,
-      'border-radius': pillHeight / 2 + 'px',
+      opacity: 1,
+      // 'border-radius': pillHeight / 2 + 'px',
       'background-color': isSelected
         ? selectedColor
         : hovered
-        ? hoverColor
-        : defaultColor,
+          ? hoverColor
+          : defaultColor,
       color: textColor,
       'font-size': fontSize + 'px',
-      width: pillWidth + 'px',
+
       'justify-content': 'center',
       cursor: 'pointer',
     }"
@@ -48,11 +48,6 @@ const isSelected = computed({
 });
 
 const fontSize = 12;
-const textPadding = 2;
 
 const shortened = computed(() => props.tag.name);
-const pillWidth = computed(() => {
-  const approxWidth = shortened.value.length * (fontSize * 0.5);
-  return approxWidth + textPadding + 7;
-});
 </script>

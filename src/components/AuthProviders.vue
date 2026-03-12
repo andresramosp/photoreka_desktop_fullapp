@@ -2,18 +2,18 @@
   <div class="auth-providers">
     <div class="providers-grid">
       <n-button
+        size="large"
         class="provider-button provider-google"
         :loading="isLoading && activeProvider === 'google'"
         @click="handleProviderLogin('google')"
-        :disabled="true"
       >
         <template #icon>
           <GoogleIcon />
         </template>
-        Google
+        Continue with Google
       </n-button>
 
-      <n-button
+      <!-- <n-button
         class="provider-button provider-facebook"
         :loading="isLoading && activeProvider === 'facebook'"
         @click="handleProviderLogin('facebook')"
@@ -23,14 +23,14 @@
           <FacebookIcon />
         </template>
         Facebook
-      </n-button>
+      </n-button> -->
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute } from "vue-router";
 import { useUserStore } from "../stores/userStore";
 import { useMessage } from "naive-ui";
 
@@ -61,7 +61,7 @@ const GoogleIcon = () =>
         d: "M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z",
         fill: "#EA4335",
       }),
-    ]
+    ],
   );
 
 const FacebookIcon = () =>
@@ -77,7 +77,7 @@ const FacebookIcon = () =>
       h("path", {
         d: "M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z",
       }),
-    ]
+    ],
   );
 
 interface Props {
@@ -88,7 +88,7 @@ const props = withDefaults(defineProps<Props>(), {
   mode: "login",
 });
 
-const router = useRouter();
+const route = useRoute();
 const userStore = useUserStore();
 const message = useMessage();
 
@@ -100,30 +100,33 @@ const handleProviderLogin = async (provider: "google" | "facebook") => {
   activeProvider.value = provider;
 
   try {
-    const result = await userStore.loginWithProvider(provider);
+    // Obtener inviteCode de la query string si existe (para registro)
+    const inviteCode = route.query.inviteCode as string | undefined;
 
+    const result = await userStore.loginWithProvider(
+      provider,
+      props.mode,
+      inviteCode,
+    );
+
+    // Si es Google, la redirección ocurre automáticamente
+    // No necesitamos hacer nada más aquí
+    if (provider === "google" && result.success) {
+      // La página se redirigirá al backend OAuth
+      return;
+    }
+
+    // Para otros providers (como Facebook) o si hay error
     if (result.success) {
-      if (props.mode === "register") {
-        message.success(
-          `Welcome! You've signed up with ${
-            provider === "google" ? "Google" : "Facebook"
-          }.`
-        );
-        router.push("/profile-setup");
-      } else {
-        message.success(
-          `Welcome back! You've logged in with ${
-            provider === "google" ? "Google" : "Facebook"
-          }.`
-        );
-        router.push("/dashboard");
-      }
+      // No navegar — el watcher de isAuthenticated en App.vue
+      // se encarga de redirigir al destino correcto
     } else {
       message.error(result.error || "Error logging in");
+      isLoading.value = false;
+      activeProvider.value = null;
     }
   } catch (error) {
     message.error("Unexpected error logging in");
-  } finally {
     isLoading.value = false;
     activeProvider.value = null;
   }
@@ -150,34 +153,32 @@ export default {
   left: 0;
   right: 0;
   height: 1px;
-  background-color: #2c2c32;
+  background-color: var(--bg-body);
 }
 
 .divider-text {
-  background-color: #1a1a1f;
+  background-color: var(--bg-body);
   padding: 0 16px;
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-secondary);
   position: relative;
   z-index: 1;
 }
 
 .providers-grid {
   display: grid !important;
-  grid-template-columns: 1fr 1fr !important;
+  grid-template-columns: 1fr !important;
   gap: 8px !important;
   width: 100% !important;
 }
 
 .provider-button {
   width: 100%;
-  height: 36px;
   border-radius: 6px;
   font-weight: 500;
   font-size: 13px;
-  border: 1px solid #2c2c32;
-  background-color: #2c2c32 !important;
-  color: #ffffffd1 !important;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary) !important;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -204,7 +205,7 @@ export default {
 
 /* Loading state adjustments */
 .provider-button.n-button--loading {
-  background-color: #2c2c32 !important;
+  background-color: var(--bg-surface) !important;
 }
 
 /* Force horizontal layout with deep selectors */
@@ -221,11 +222,10 @@ export default {
 @media (max-width: 480px) {
   .providers-grid {
     gap: 6px !important;
-    grid-template-columns: 1fr 1fr !important;
+    /* grid-template-columns: 1fr 1fr !important; */
   }
 
   .provider-button {
-    height: 32px !important;
     font-size: 12px !important;
   }
 }

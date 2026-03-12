@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = "PhotorekaCache";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = "photoImages";
 
 // Global DB instance
@@ -32,13 +32,14 @@ const initDB = async () => {
 
     request.onupgradeneeded = (event) => {
       const db = event.target.result;
-
-      // Create object store if it doesn't exist
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        const objectStore = db.createObjectStore(STORE_NAME, { keyPath: "id" });
-        objectStore.createIndex("timestamp", "timestamp", { unique: false });
-        console.log("📦 Created IndexedDB object store:", STORE_NAME);
+      // Elimina todos los object stores existentes (borrado total)
+      for (let i = 0; i < db.objectStoreNames.length; i++) {
+        db.deleteObjectStore(db.objectStoreNames[i]);
       }
+      // Crea el nuevo object store desde cero
+      const objectStore = db.createObjectStore(STORE_NAME, { keyPath: "id" });
+      objectStore.createIndex("timestamp", "timestamp", { unique: false });
+      console.log("📦 Recreated IndexedDB object store:", STORE_NAME);
     };
   });
 };

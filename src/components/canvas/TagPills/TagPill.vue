@@ -12,7 +12,11 @@
       :config="{
         width: pillWidth,
         height: pillHeight,
-        fill: isSelected ? selectedColor : isHovered ? '#2563eb' : defaultColor,
+        fill: isSelected
+          ? selectedColor
+          : isHovered
+            ? hoverColor
+            : defaultColor,
         opacity: 0.7,
         cornerRadius: pillHeight / 2,
       }"
@@ -57,9 +61,8 @@ const isHovered = ref(false);
 
 const fontSize = 11;
 const textPadding = 2;
-const { selectedColor, defaultColor, textColor, pillHeight } = useTagDisplay(
-  () => props.tags
-);
+const { selectedColor, defaultColor, textColor, pillHeight, hoverColor } =
+  useTagDisplay(() => props.tags);
 
 const pillWidth = computed(() => {
   const approxWidth = props.tag.name.length * (fontSize * 0.5);
@@ -69,7 +72,7 @@ const pillWidth = computed(() => {
 const computedX = computed(() =>
   props.offsetX !== null
     ? props.offsetX
-    : (props.photo.config.width - pillWidth.value) / 2
+    : (props.photo.config.width - pillWidth.value) / 2,
 );
 const computedY = computed(() => (props.offsetY !== null ? props.offsetY : 10));
 

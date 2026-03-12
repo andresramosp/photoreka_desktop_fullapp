@@ -26,7 +26,7 @@
           class="form-input"
         >
           <template #prefix>
-            <n-icon :component="EmailIcon" />
+            <n-icon :component="MailOutlined" />
           </template>
         </n-input>
       </n-form-item>
@@ -41,7 +41,7 @@
           show-password-on="click"
         >
           <template #prefix>
-            <n-icon :component="LockIcon" />
+            <n-icon :component="LockClosedOutline" />
           </template>
         </n-input>
       </n-form-item>
@@ -50,7 +50,12 @@
         <n-checkbox v-model:checked="rememberMe" class="remember-checkbox">
           Remember me
         </n-checkbox>
-        <n-button text type="primary" class="forgot-password">
+        <n-button
+          text
+          type="primary"
+          class="forgot-password"
+          @click="showForgotPassword = true"
+        >
           Forgot password?
         </n-button>
       </div>
@@ -66,81 +71,29 @@
       </n-button>
     </n-form>
 
-    <div class="form-footer">
-      <span class="footer-text">Don't have an account?</span>
-      <n-button
-        text
-        type="primary"
-        @click="$emit('switch-mode', 'register')"
-        class="switch-button"
-      >
-        Sign up here
-      </n-button>
-    </div>
+    <!-- Forgot Password Dialog -->
+    <ForgotPasswordDialog v-model:show="showForgotPassword" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive } from "vue";
-import { useRouter } from "vue-router";
 import { useUserStore } from "../stores/userStore";
 import { useMessage } from "naive-ui";
 import type { FormInst, FormRules } from "naive-ui";
 import AuthProviders from "./AuthProviders.vue";
-
-// Icons
-const EmailIcon = () =>
-  h(
-    "svg",
-    {
-      width: "16",
-      height: "16",
-      viewBox: "0 0 24 24",
-      fill: "none",
-      stroke: "currentColor",
-      "stroke-width": "2",
-    },
-    [
-      h("path", {
-        d: "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z",
-      }),
-      h("polyline", { points: "22,6 12,13 2,6" }),
-    ]
-  );
-
-const LockIcon = () =>
-  h(
-    "svg",
-    {
-      width: "16",
-      height: "16",
-      viewBox: "0 0 24 24",
-      fill: "none",
-      stroke: "currentColor",
-      "stroke-width": "2",
-    },
-    [
-      h("rect", {
-        x: "3",
-        y: "11",
-        width: "18",
-        height: "11",
-        rx: "2",
-        ry: "2",
-      }),
-      h("circle", { cx: "12", cy: "16", r: "1" }),
-      h("path", { d: "M7 11V7a5 5 0 0 1 10 0v4" }),
-    ]
-  );
+import ForgotPasswordDialog from "./ForgotPasswordDialog.vue";
+import { MailOutline, LockClosedOutline } from "@vicons/ionicons5";
+import { MailOutlined } from "@vicons/material";
 
 const emit = defineEmits(["switch-mode"]);
 
-const router = useRouter();
 const userStore = useUserStore();
 const message = useMessage();
 
 const formRef = ref<FormInst | null>(null);
 const rememberMe = ref(false);
+const showForgotPassword = ref(false);
 
 const formData = reactive({
   email: "",
@@ -183,9 +136,8 @@ const handleSubmit = async () => {
     const result = await userStore.login(formData.email, formData.password);
 
     if (result.success) {
-      message.success("Welcome back!");
-      // Usar replace para evitar que quede en el historial y forzar navegación inmediata
-      router.replace("/dashboard");
+      // No navegar aquí - el watcher de isAuthenticated en App.vue se encarga
+      // de redirigir al destino correcto tras cargar el catálogo
     } else {
       message.error(result.error || "Error logging in", { duration: 10000 });
     }
@@ -196,8 +148,6 @@ const handleSubmit = async () => {
 </script>
 
 <script lang="ts">
-import { h } from "vue";
-
 export default {
   name: "LoginForm",
 };
@@ -210,15 +160,15 @@ export default {
 
 .form-header {
   text-align: center;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   font-size: 16px;
-  color: #ffffff73;
+  color: var(--text-secondary);
   font-weight: 400;
   line-height: 1.6;
 }
 
 .form-item {
-  margin-bottom: 15px;
+  margin-bottom: 12px;
 }
 
 .form-item :deep(.n-form-item-feedback-wrapper) {
@@ -240,7 +190,7 @@ export default {
 
 .form-input :deep(.n-input__border),
 .form-input :deep(.n-input__state-border) {
-  border-color: #2c2c32;
+  border-color: var(--border-color);
 }
 
 .form-input :deep(.n-input--focus .n-input__border),
@@ -258,7 +208,7 @@ export default {
 
 .remember-checkbox :deep(.n-checkbox__label) {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-secondary);
 }
 
 .forgot-password {
@@ -273,7 +223,7 @@ export default {
   border-radius: 6px;
   font-weight: 600;
   font-size: 14px;
-  margin-bottom: 10px;
+  margin-bottom: 0;
 }
 
 .email-divider {
@@ -289,14 +239,14 @@ export default {
   left: 0;
   right: 0;
   height: 1px;
-  background-color: #2c2c32;
+  background-color: var(--border-color);
 }
 
 .divider-text {
-  background-color: #1a1a1f;
+  background-color: var(--bg-body);
   padding: 0 16px;
   font-size: 13px;
-  color: #ffffff73;
+  color: var(--text-secondary);
   position: relative;
   z-index: 1;
 }
@@ -312,7 +262,7 @@ export default {
 
 .footer-text {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-secondary);
 }
 
 .switch-button {
@@ -325,7 +275,7 @@ export default {
 /* Mobile responsive */
 @media (max-width: 480px) {
   .form-header {
-    margin-bottom: 24px;
+    /* margin-bottom: 24px; */
   }
 
   .form-input,

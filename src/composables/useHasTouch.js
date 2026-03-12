@@ -1,31 +1,22 @@
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, onMounted } from "vue";
 
 /**
- * Composable to detect if the current device has touch capabilities
- * Works for mobile, tablets, laptops with touchscreens, etc.
+ * Composable to detect if the device is mobile or tablet.
+ * Returns true for mobile/tablet devices, false for laptops/desktops.
  * @returns {Object} { hasTouch: Ref<boolean> }
  */
 export function useHasTouch() {
   const hasTouch = ref(false);
 
-  const checkHasTouch = () => {
-    // Check multiple ways to detect touch capability
-    const hasTouchScreen =
-      "ontouchstart" in window ||
-      navigator.maxTouchPoints > 0 ||
-      navigator.msMaxTouchPoints > 0;
-
-    hasTouch.value = hasTouchScreen;
+  const isMobileOrTablet = () => {
+    const userAgent = navigator.userAgent.toLowerCase();
+    const mobileRegex =
+      /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i;
+    return mobileRegex.test(userAgent);
   };
 
   onMounted(() => {
-    checkHasTouch();
-    // Touch capability doesn't change, but we add a listener just in case
-    window.addEventListener("resize", checkHasTouch);
-  });
-
-  onUnmounted(() => {
-    window.removeEventListener("resize", checkHasTouch);
+    hasTouch.value = isMobileOrTablet();
   });
 
   return {

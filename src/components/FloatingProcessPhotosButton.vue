@@ -72,7 +72,7 @@
 </template>
 
 <script setup>
-import { MIN_PHOTOS_THRESHOLD } from "@/stores/photos";
+import { MIN_PHOTOS_THRESHOLD, ONBOARDING_SOFT } from "@/stores/photos";
 import { InProgress } from "@vicons/carbon";
 import { Rocket } from "@vicons/ionicons5";
 import { RocketLaunchOutlined } from "@vicons/material";

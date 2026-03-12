@@ -5,7 +5,7 @@
         <!-- Logo -->
         <div class="maintenance-logo">
           <router-link to="/" class="logo-link" aria-label="Home">
-            <img :src="logoName" alt="Photoreka" class="logo-image" />
+            <AppLogo layout="horizontal" :height="50" />
           </router-link>
         </div>
 
@@ -102,7 +102,7 @@ import {
 } from "@vicons/ionicons5";
 import { useRouter } from "vue-router";
 import { useMaintenanceMode } from "@/composables/useMaintenanceMode";
-import logoName from "@/assets/logos/logo_name_white.png";
+import AppLogo from "@/components/AppLogo.vue";
 import { Workspace } from "@vicons/carbon";
 
 const router = useRouter();
@@ -111,7 +111,7 @@ const { isBypassActive, clearBypass } = useMaintenanceMode();
 const isMobileDevice = () => {
   return (
     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-      navigator.userAgent
+      navigator.userAgent,
     ) || window.innerWidth <= 768
   );
 };
@@ -257,16 +257,13 @@ const handleClearBypass = () => {
   left: 0;
   width: 100%;
   height: 100%;
-  background-image: radial-gradient(
+  background-image:
+    radial-gradient(
       circle at 20% 50%,
       rgba(37, 99, 235, 0.03) 0%,
       transparent 50%
     ),
-    radial-gradient(
-      circle at 80% 20%,
-      rgba(139, 92, 246, 0.03) 0%,
-      transparent 50%
-    ),
+    radial-gradient(circle at 80% 20%, var(--bg-surface) 0%, transparent 50%),
     radial-gradient(
       circle at 40% 80%,
       rgba(245, 158, 11, 0.02) 0%,
@@ -294,9 +291,8 @@ const handleClearBypass = () => {
   background: linear-gradient(
     45deg,
     rgba(37, 99, 235, 0.08),
-    rgba(139, 92, 246, 0.04)
+    var(--bg-surface)
   );
-  animation: float 8s ease-in-out infinite;
 }
 
 .decoration-1 {
@@ -320,19 +316,6 @@ const handleClearBypass = () => {
   height: 100px;
   bottom: 20%;
   left: 20%;
-  animation-delay: -6s;
-}
-
-@keyframes float {
-  0%,
-  100% {
-    transform: translateY(0px) rotate(0deg);
-    opacity: 0.4;
-  }
-  50% {
-    transform: translateY(-15px) rotate(180deg);
-    opacity: 0.7;
-  }
 }
 
 /* Responsive design */

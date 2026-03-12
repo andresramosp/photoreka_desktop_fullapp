@@ -94,17 +94,43 @@ export function formatExifDate(exifDate) {
   try {
     // Si ya es un objeto Date
     if (exifDate instanceof Date) {
-      return exifDate.toISOString();
+      return `${exifDate.getFullYear()}-${String(
+        exifDate.getMonth() + 1
+      ).padStart(2, "0")}-${String(exifDate.getDate()).padStart(
+        2,
+        "0"
+      )} ${String(exifDate.getHours()).padStart(2, "0")}:${String(
+        exifDate.getMinutes()
+      ).padStart(2, "0")}:${String(exifDate.getSeconds()).padStart(2, "0")}`;
     }
 
-    // Si es una string, intentar convertirla
+    // Si es una string, limpiar casos problemáticos
     if (typeof exifDate === "string") {
       // EXIF dates are usually in format "YYYY:MM:DD HH:MM:SS"
-      const normalizedDate = exifDate.replace(/:/g, "-", 2).replace(/ /, "T");
+      let normalizedDate = exifDate.replace(/:/g, "-", 2).replace(/ /, "T");
+      // Si tiene offset y Z, elimina la Z y lo que sigue
+      normalizedDate = normalizedDate.replace(
+        /([+-]\d{2}:\d{2})(\.\d+)?Z$/,
+        "$1"
+      );
+      // Si tiene offset y .000Z, elimina solo la Z
+      normalizedDate = normalizedDate.replace(/([+-]\d{2}:\d{2})\.\d+Z$/, "$1");
+      // Si tiene solo .000Z, elimina la Z
+      normalizedDate = normalizedDate.replace(/(\.\d+)Z$/, "$1");
+      // Si tiene ambos, offset y Z, elimina la Z
+      normalizedDate = normalizedDate.replace(/([+-]\d{2}:\d{2})Z$/, "$1");
       const date = new Date(normalizedDate);
 
       if (!isNaN(date.getTime())) {
-        return date.toISOString();
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+          2,
+          "0"
+        )}-${String(date.getDate()).padStart(2, "0")} ${String(
+          date.getHours()
+        ).padStart(2, "0")}:${String(date.getMinutes()).padStart(
+          2,
+          "0"
+        )}:${String(date.getSeconds()).padStart(2, "0")}`;
       }
     }
 

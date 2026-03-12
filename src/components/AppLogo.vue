@@ -1,53 +1,102 @@
 <template>
   <div
     class="photoreka-logo"
-    :class="{
-      'logo-large': size === 'large',
-      'logo-tiny': size === 'tiny',
-      'logo-inline': inline,
-    }"
+    :class="{ clickable: props.clickToHome }"
+    @click="handleLogoClick"
   >
-    <div
-      class="logo-icon"
-      :class="{
-        'logo-small': size === 'small',
-        'logo-tiny': size === 'tiny',
-        'logo-inline': inline,
-      }"
-    >
-      <img
-        :src="inline ? logoNameInline : logoName"
-        alt="Photoreka"
-        class="logo-image"
-        :class="{
-          'logo-small-image': size === 'small',
-          'logo-tiny-image': size === 'tiny',
-          'logo-inline-image': inline,
-        }"
-        :style="props.height ? { height: props.height + 'px' } : {}"
-      />
-    </div>
+    <img
+      :src="logoSrc"
+      alt="Photoreka"
+      class="logo-image"
+      :class="[`logo-size-${size}`, `logo-layout-${layout}`]"
+      :style="props.height ? { height: props.height + 'px !important' } : {}"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { NIcon } from "naive-ui";
-import { CameraOutline } from "@vicons/ionicons5";
-import logoName from "@/assets/logos/logo_name_sub_white.png";
-import logoNameInline from "@/assets/logos/logo_name_white.png";
+import { useTheme } from "@/composables/useTheme";
+
+// Nuevos logos (marca)
+import iconDark from "@/assets/logos/marca/icon-dark-dark.png";
+import iconLight from "@/assets/logos/marca/icon-light.png";
+import horizontalDark from "@/assets/logos/marca/horizontal-dark.png";
+
+import horizontalLight from "@/assets/logos/marca/horizontal-light.png";
+import horizontalClaimDark from "@/assets/logos/marca/horizontal-claim-dark.png";
+import horizontalClaimLight from "@/assets/logos/marca/horizontal-claim-light.png";
+import verticalDark from "@/assets/logos/marca/vertical-dark.png";
+
+import verticalLight from "@/assets/logos/marca/vertical-light.png";
+import verticalClaimDark from "@/assets/logos/marca/vertical-claim-dark.png";
+import verticalClaimLight from "@/assets/logos/marca/vertical-claim-light.png";
+
+type LogoLayout = "horizontal" | "vertical" | "icon";
 
 interface Props {
   size?: "normal" | "large" | "small" | "tiny";
-  showText?: boolean;
   height?: number; // altura en px, prevalece sobre size
-  inline?: boolean; // usa el logo horizontal con texto
+  layout?: LogoLayout; // horizontal, vertical o solo icono
+  withClaim?: boolean; // incluir el claim/tagline
+  clickToHome?: boolean; // hace el logo clickeable para ir a www.photoreka.com
 }
 
 const props = withDefaults(defineProps<Props>(), {
   size: "normal",
-  showText: true,
-  inline: false,
+  layout: "vertical",
+  withClaim: false,
+  clickToHome: false,
+});
+
+// Obtener el tema internamente
+const { themeMode } = useTheme();
+
+// Manejador de clic para ir a www.photoreka.com
+const handleLogoClick = () => {
+  if (props.clickToHome) {
+    window.location.href = "https://www.photoreka.com";
+  }
+};
+
+// Mapa de logos según layout y themeMode
+const logoMap = {
+  icon: {
+    dark: iconDark,
+    light: iconLight,
+  },
+  horizontal: {
+    dark: {
+      withClaim: horizontalClaimDark,
+      noClaim: horizontalDark,
+    },
+    light: {
+      withClaim: horizontalClaimLight,
+      noClaim: horizontalLight,
+    },
+  },
+  vertical: {
+    dark: {
+      withClaim: verticalClaimDark,
+      noClaim: verticalDark,
+    },
+    light: {
+      withClaim: verticalClaimLight,
+      noClaim: verticalLight,
+    },
+  },
+};
+
+const logoSrc = computed(() => {
+  const variant = themeMode.value;
+
+  if (props.layout === "icon") {
+    return logoMap.icon[variant];
+  }
+
+  const layoutLogos = logoMap[props.layout];
+  const variantLogos = layoutLogos[variant];
+  return props.withClaim ? variantLogos.withClaim : variantLogos.noClaim;
 });
 </script>
 
@@ -61,97 +110,83 @@ export default {
 .photoreka-logo {
   display: flex;
   align-items: center;
+  justify-content: center;
   opacity: 0.8;
-  gap: 12px;
-  color: #2563eb;
-  justify-content: center;
 }
 
-.photoreka-logo.logo-large {
-  gap: 16px;
+.photoreka-logo.clickable {
+  cursor: pointer;
+  transition: opacity 0.2s ease;
 }
 
-.logo-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+.photoreka-logo.clickable:hover {
+  opacity: 1;
 }
 
 .logo-image {
-  height: 170px;
   width: auto;
   object-fit: contain;
+  flex-shrink: 0;
+  /* transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  filter: drop-shadow(0 0 8px rgba(37, 99, 235, 0.3)); */
 }
 
-.logo-large .logo-image {
-  height: 100px;
+/* ============================
+   LAYOUT DEFAULTS
+   Solo aplican cuando NO hay size específico
+   ============================ */
+
+/* Vertical layout: uses size as-is (no override) */
+.logo-layout-vertical {
+  /* Size classes apply directly */
 }
 
-.logo-small-image {
-  height: 70px;
+/* Horizontal layout: tamaño por defecto para navbars */
+.logo-layout-horizontal:not([class*="logo-size-"]) {
+  height: 45px;
 }
 
-.logo-tiny-image {
-  height: 40px;
-}
-
-.logo-inline-image {
+/* Icon only: tamaño por defecto para iconos */
+.logo-layout-icon:not([class*="logo-size-"]) {
   height: 50px;
 }
 
-.logo-text {
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  color: #ffffffd1;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
-    sans-serif;
+/* ============================
+   SIZE SYSTEM (prevalece sobre layout)
+   Predefined heights for size prop
+   ============================ */
+
+.logo-size-tiny {
+  height: 30px !important;
 }
 
-.logo-large .logo-text {
-  font-size: 32px;
+.logo-size-small {
+  height: 55px !important;
 }
 
-.logo-small .logo-text {
-  font-size: 18px;
+.logo-size-normal {
+  height: 130px !important;
 }
 
-.logo-tiny .logo-text {
-  font-size: 12px;
+.logo-size-large {
+  height: 180px !important;
 }
 
-/* Animation for the camera icon */
-.photoreka-logo:hover .logo-icon {
-  transform: scale(1.05);
-}
-
-/* Subtle glow effect */
-.logo-icon {
-  filter: drop-shadow(0 0 8px rgba(37, 99, 235, 0.3));
-}
-
-/* Mobile responsive styles */
+/* ============================
+   MOBILE RESPONSIVE
+   All sizes capped on mobile
+   ============================ */
 @media (max-width: 768px) {
-  .logo-image {
-    height: 40px !important;
+  .logo-size-normal,
+  .logo-size-large,
+  .logo-size-small,
+  .logo-layout-horizontal,
+  .logo-layout-icon {
+    height: 35px !important;
   }
 
-  .logo-inline-image {
-    height: 40px !important;
-  }
-
-  .logo-large .logo-image {
-    height: 40px !important;
-  }
-
-  .logo-small-image {
-    height: 40px !important;
-  }
-
-  .logo-tiny-image {
-    height: 40px !important;
+  .logo-size-tiny {
+    height: 25px !important;
   }
 }
 </style>

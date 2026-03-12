@@ -32,20 +32,29 @@
           :selected-color="selectedColor"
           :hover-color="hoverColor"
           :default-color="defaultColor"
-          text-color="white"
+          :text-color="textColor"
           :pill-height="pillHeight"
         />
       </div>
       <img
-        :src="baseImage.thumbnailUrl"
-        :alt="baseImage.title"
+        :src="primaryBaseImage.thumbnailUrl"
+        :alt="primaryBaseImage.title"
         class="photo-base-image"
       />
+      <!-- Badge contador para múltiples fotos (no mostrar en modo tags) -->
+      <div
+        v-if="hasMultiplePhotos && toolbarState.expansion.type !== 'tags'"
+        class="photo-count-badge"
+      >
+        +{{ baseImages.length - 1 }}
+      </div>
       <div
         v-show="toolbarState.expansion.type !== 'tags'"
         class="base-image-overlay"
       >
-        <span class="base-image-label">Source photo</span>
+        <span class="base-image-label">
+          {{ hasMultiplePhotos ? "Source photos" : "Source photo" }}
+        </span>
       </div>
     </div>
   </div>
@@ -60,13 +69,31 @@ import { debounce } from "lodash";
 import SelectableTagChip from "../wrappers/SelectableTagChip.vue";
 
 const props = defineProps({
-  baseImage: { type: Object, required: true },
+  baseImages: { type: Array, required: true, default: () => [] },
   toolbarState: { type: Object, required: true },
+  filterContext: { type: Object, default: null },
 });
 
 const emit = defineEmits(["photos-generated", "loading"]);
 
 const canvasStore = useCanvasStore();
+
+// Computed para la foto principal (primera del array)
+const primaryBaseImage = computed(() => {
+  return props.baseImages && props.baseImages.length > 0
+    ? props.baseImages[0]
+    : null;
+});
+
+// Computed para saber si hay múltiples fotos (no aplica en modo tags)
+const hasMultiplePhotos = computed(() => {
+  return (
+    props.baseImages &&
+    props.baseImages.length > 1 &&
+    props.toolbarState.expansion.type !== "tags"
+  );
+});
+
 const filteredExpansionTypeOptions = computed(() => {
   return expansionTypeOptions.map((opt) => {
     if (
@@ -79,24 +106,33 @@ const filteredExpansionTypeOptions = computed(() => {
   });
 });
 
-const { filteredTags, selectedColor, hoverColor, defaultColor, pillHeight } =
-  useTagDisplay(() => props.baseImage?.tags);
+const {
+  filteredTags,
+  selectedColor,
+  hoverColor,
+  defaultColor,
+  textColor,
+  pillHeight,
+} = useTagDisplay(() => primaryBaseImage.value?.tags);
 
 const tagsOverlay = ref(null);
 const pageSize = 100;
 
 const loadPhotosFromToolbar = async () => {
-  if (!props.baseImage) return;
+  if (!props.baseImages || props.baseImages.length === 0) return;
   emit("loading", true);
   const basePosition = { x: 0, y: 0 };
 
   const result = await canvasStore.addPhotosFromPhoto(
-    [props.baseImage],
+    props.baseImages,
     props.toolbarState.expansion.type,
     100,
     basePosition,
     props.toolbarState.expansion.opposite,
-    props.toolbarState.expansion.inverted
+    props.toolbarState.expansion.inverted,
+    false, // onCanvas
+    false, // autoFit
+    props.filterContext, // filterContext
   );
 
   await nextTick();
@@ -105,7 +141,7 @@ const loadPhotosFromToolbar = async () => {
 };
 
 const loadPhotosFromSelections = debounce(async () => {
-  if (!props.baseImage) return;
+  if (!props.baseImages || props.baseImages.length === 0) return;
 
   const hasSelections =
     props.toolbarState.expansion.type === "tags" &&
@@ -120,12 +156,15 @@ const loadPhotosFromSelections = debounce(async () => {
   const basePosition = { x: 0, y: 0 };
 
   const result = await canvasStore.addPhotosFromPhoto(
-    [props.baseImage],
+    props.baseImages,
     props.toolbarState.expansion.type,
     100,
     basePosition,
     props.toolbarState.expansion.opposite,
-    props.toolbarState.expansion.inverted
+    props.toolbarState.expansion.inverted,
+    false, // onCanvas
+    false, // autoFit
+    props.filterContext, // filterContext
   );
 
   await nextTick();
@@ -167,19 +206,19 @@ watch(
       loadPhotosFromSelections();
     }
   },
-  { deep: true }
+  { deep: true },
 );
 
 watch(
-  () => [props.baseImage, props.toolbarState.expansion.type],
-  async ([photo, type]) => {
+  () => [props.baseImages, props.toolbarState.expansion.type],
+  async ([photos, type]) => {
     resetAllTags();
     const isInteractive = ["tags", "composition"].includes(type);
     const skip = isInteractive && !props.toolbarState.expansion.onCanvas;
-    if (!photo || skip) return;
+    if (!photos || photos.length === 0 || skip) return;
     await loadPhotosFromToolbar();
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 watch(
@@ -197,7 +236,7 @@ watch(
     } else {
       loadPhotosFromToolbar();
     }
-  }
+  },
 );
 
 watch(
@@ -206,7 +245,7 @@ watch(
     if (newCriteria === "tags" || newCriteria === "composition") {
       emit("photos-generated", []);
     }
-  }
+  },
 );
 
 function resetAllTags() {
@@ -253,6 +292,22 @@ onMounted(() => {
   width: 100%;
   height: 160px;
   overflow: hidden;
+}
+
+.photo-count-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--accent-color, #007bff);
+  color: var(--text-on-accent, #fff);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+  min-width: 24px;
+  text-align: center;
 }
 
 .base-image-overlay {

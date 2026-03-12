@@ -32,16 +32,22 @@ export function usePhotoUpload() {
   // Función principal para procesar cualquier tipo de fuente de foto
   async function processPhotoSource(
     source,
-    type = "local",
-    originalName = null
+    srcType = "local",
+    originalName = null,
   ) {
     let file;
     let fileName;
 
-    if (type === "google") {
-      // Para Google Photos, source es { url, token, name }
-      // file = await downloadGooglePhoto(source.url, source.token);
-      // fileName = source.name;
+    if (srcType === "google") {
+      // Para Google Photos, source es { googlePhotoBlob, googlePhotoMediaItem }
+      file = source.googlePhotoBlob;
+      const mediaItem = source.googlePhotoMediaItem;
+      // Obtener el nombre del archivo - soportar ambos formatos
+      const photoData = mediaItem?.mediaFile || mediaItem;
+      fileName =
+        photoData?.filename ||
+        photoData?.name ||
+        `google-photo-${Date.now()}.jpg`;
     } else {
       // Para archivos locales, source es un File object
       file = source;
@@ -70,7 +76,7 @@ export function usePhotoUpload() {
     const payload = {
       fileType: resizedBlob.type,
       originalName: fileName,
-      source: type === "google" ? "google" : "local",
+      source: srcType === "google" ? { type: "google" } : { type: "local" },
       exifData: exifData, // Incluir datos EXIF básicos
     };
 
@@ -84,18 +90,18 @@ export function usePhotoUpload() {
         thumbnailUploadUrl,
         thumbnailBlob,
         fileName,
-        "thumbnail"
+        "thumbnail",
       ),
     ]);
 
     // Verificar que ambas subidas fueron exitosas
     const failedUploads = uploadResults.filter(
-      (result) => result.status === "rejected"
+      (result) => result.status === "rejected",
     );
     if (failedUploads.length > 0) {
       console.error(`❌ Failed uploads for ${fileName}:`, failedUploads);
       throw new Error(
-        `Failed to upload ${failedUploads.length} of 2 files for ${fileName}`
+        `Failed to upload ${failedUploads.length} of 2 files for ${fileName}`,
       );
     }
 
@@ -116,7 +122,12 @@ export function usePhotoUpload() {
   async function handlePostUpload(photosToUpload) {
     // Solo proceder si tenemos fotos exitosas
     if (photosToUpload.length === 0) {
-      message.error("No photos were uploaded successfully.");
+      // Verificar si el email no está confirmado
+      if (!userStore.user?.isEmailConfirmed) {
+        message.error("Please confirm your email before importing photos.");
+      } else {
+        // message.error("No photos were uploaded successfully.");
+      }
       return false;
     }
 
@@ -162,7 +173,7 @@ export function usePhotoUpload() {
       // Si falla la llamada, borrar las fotos y mostrar notificación
       await photosStore.deletePhotos(photoIds);
       message.error(
-        "There was an error processing the photos. Please try again later."
+        "There was an error processing the photos. Please try again later.",
       );
       return false;
     }
@@ -213,7 +224,7 @@ export function usePhotoUpload() {
   }
 
   // Función principal para manejar el upload con progreso y errores
-  async function handleUploadFlow(sources, type = "local") {
+  async function handleUploadFlow(sources, srcType = "local") {
     if (sources.length === 0) return;
 
     // Validar límites antes de iniciar la subida
@@ -234,35 +245,36 @@ export function usePhotoUpload() {
       // Ambos tipos usan el mismo flujo individual con pLimit
       const uploadPromises = sources.map((source) =>
         limit(() =>
-          processPhotoSource(source, type)
+          processPhotoSource(source, srcType)
             .then((photo) => {
               if (photo) photosToUpload.push(photo);
             })
             .catch((error) => {
-              const fileName = type === "google" ? source.name : source.name;
+              const fileName =
+                srcType === "google"
+                  ? source.googlePhotoMediaItem?.filename ||
+                    source.googlePhotoMediaItem?.name ||
+                    "unknown"
+                  : source.name;
               console.error(`❌ Failed to upload ${fileName}:`, error);
               failedUploads.push({ file: fileName, error: error.message });
               uploadedCount.value++;
-            })
-        )
+            }),
+        ),
       );
 
       await Promise.all(uploadPromises);
 
-      // Mostrar resumen de la subida
-      if (failedUploads.length > 0) {
-        console.warn(
-          `⚠️ Upload completed with ${failedUploads.length} failures:`,
-          failedUploads
-        );
-        message.warning(
-          `${photosToUpload.length} photos uploaded successfully. ${failedUploads.length} photos failed to upload.`
-        );
-      } else {
-        console.log(
-          `✅ All ${photosToUpload.length} photos uploaded successfully`
-        );
-      }
+      // // Mostrar resumen de la subida
+      // if (failedUploads.length > 0) {
+      //   message.warning(
+      //     `${photosToUpload.length} photos uploaded successfully. ${failedUploads.length} photos failed to upload.`
+      //   );
+      // } else {
+      //   console.log(
+      //     `✅ All ${photosToUpload.length} photos uploaded successfully`
+      //   );
+      // }
 
       // Post-procesamiento común
       await handlePostUpload(photosToUpload);

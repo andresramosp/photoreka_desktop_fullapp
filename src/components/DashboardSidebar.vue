@@ -12,56 +12,21 @@
     <div v-if="props.mobileMenuOpen" class="mobile-sidebar">
       <div class="logo-container">
         <div class="logo clickable-logo" @click="goToDashboard">
-          <div class="logo-icon">
-            <img
-              :src="logoImagoName"
-              alt="Photoreka"
-              class="logo-brand-image"
-            />
-          </div>
-          <div class="logo-text">
-            <img :src="logoName" alt="Photoreka" class="logo-brand-image" />
-            <div class="app-subtitle">Photo Lab</div>
-          </div>
+          <AppLogo layout="horizontal" :height="36" />
         </div>
       </div>
 
-      <!-- First Menu Section: Photo Hub, Collections -->
+      <!-- Unified Menu -->
       <n-menu
         :collapsed="false"
         :collapsed-width="64"
         :collapsed-icon-size="22"
-        :options="firstSectionOptions"
+        :options="menuOptions"
         :value="activeKey"
+        :expanded-keys="expandedKeys"
+        :accordion="exclusiveMenuMode"
         @update:value="handleMenuSelect"
-        class="sidebar-menu"
-      />
-
-      <!-- First Divider -->
-      <div class="menu-divider"></div>
-
-      <!-- Second Menu Section: Search, Canvas, Curation -->
-      <n-menu
-        :collapsed="false"
-        :collapsed-width="64"
-        :collapsed-icon-size="22"
-        :options="secondSectionOptions"
-        :value="activeKey"
-        @update:value="handleMenuSelect"
-        class="sidebar-menu"
-      />
-
-      <!-- Second Divider -->
-      <div class="menu-divider"></div>
-
-      <!-- Third Menu Section: Settings, Help -->
-      <n-menu
-        :collapsed="false"
-        :collapsed-width="64"
-        :collapsed-icon-size="22"
-        :options="thirdSectionOptions"
-        :value="activeKey"
-        @update:value="handleMenuSelect"
+        @update:expanded-keys="handleExpandedKeysChange"
         class="sidebar-menu"
       />
     </div>
@@ -73,7 +38,7 @@
     bordered
     collapse-mode="width"
     :collapsed-width="64"
-    :width="240"
+    :width="260"
     :collapsed="collapsed"
     class="sidebar"
     @mouseenter="handleMouseEnter"
@@ -104,102 +69,51 @@
       <div class="logo-container">
         <div class="logo clickable-logo" @click="goToDashboard">
           <div v-if="collapsed" class="logo-icon">
-            <img
-              :src="logoImagoName"
-              alt="Photoreka"
-              class="logo-brand-image"
-            />
+            <AppLogo layout="icon" :height="42" />
           </div>
           <div v-if="!collapsed" class="logo-text">
-            <AppLogo :height="43" :showText="true" :inline="true" />
+            <AppLogo layout="horizontal" :height="36" />
           </div>
         </div>
       </div>
 
-      <!-- First Menu Section: Photo Hub, Collections -->
+      <!-- Unified Menu -->
       <n-menu
         :collapsed="collapsed"
         :collapsed-width="64"
         :collapsed-icon-size="22"
-        :options="firstSectionOptions"
+        :options="menuOptions"
         :value="activeKey"
+        :expanded-keys="expandedKeys"
+        :accordion="exclusiveMenuMode"
         @update:value="handleMenuSelect"
+        @update:expanded-keys="handleExpandedKeysChange"
         class="sidebar-menu"
       />
 
-      <!-- First Divider -->
-      <div class="menu-divider" :class="{ collapsed }"></div>
-
-      <!-- Second Menu Section: Search, Canvas, Curation -->
-      <n-menu
-        :collapsed="collapsed"
-        :collapsed-width="64"
-        :collapsed-icon-size="22"
-        :options="secondSectionOptions"
-        :value="activeKey"
-        @update:value="handleMenuSelect"
-        class="sidebar-menu"
-      />
-
-      <!-- Second Divider -->
-      <div class="menu-divider" :class="{ collapsed }"></div>
-
-      <!-- Third Menu Section: Settings, Help -->
-      <n-menu
-        :collapsed="collapsed"
-        :collapsed-width="64"
-        :collapsed-icon-size="22"
-        :options="thirdSectionOptions"
-        :value="activeKey"
-        @update:value="handleMenuSelect"
-        class="sidebar-menu"
-      />
+      <!-- Usage Indicators -->
+      <div v-if="!collapsed" class="usage-indicators-section">
+        <UsageIndicators />
+      </div>
     </div>
   </n-layout-sider>
 </template>
 
 <script setup lang="ts">
-import { ref, h, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
-import { NIcon } from "naive-ui";
-import type { MenuOption } from "naive-ui";
-import { usePhotosStore } from "@/stores/photos.js";
-
-import { Workspace as CanvasIcon } from "@vicons/carbon";
-import logoName from "@/assets/logos/logo_name_sub_white.png";
-import logoImagoName from "@/assets/logos/logo_imago_white.png";
-
-// Import @vicons icons from ionicons5 for reliability
+import { useMainMenu } from "@/composables/useMainMenu";
 import {
-  GridOutline as DashboardIcon,
-  CameraOutline as PhotoHubIcon,
-  AlbumsOutline as CollectionsIcon,
-  ApertureOutline as StylerIcon,
-  SearchOutline as SearchIcon,
-  ImagesOutline as CurationIcon,
-  AnalyticsOutline as AnalyticsIcon,
-  CubeOutline as CubeIcon,
-  // ColorPaletteOutline as StylerIcon,
-  AppsOutline as GridIcon,
-  SettingsOutline as SettingsIcon,
-  HelpCircleOutline as HelpIcon,
-  PersonOutline,
-  LogOutOutline,
   ChevronForwardOutline as ChevronRightIcon,
   ChevronBackOutline as ChevronLeftIcon,
-  ConstructOutline as ConstructionIcon,
-  ConstructOutline,
-  SquareOutline as FramerIcon,
 } from "@vicons/ionicons5";
-import { ConstructionOutlined, ConstructionSharp } from "@vicons/material";
 import AppLogo from "./AppLogo.vue";
+import UsageIndicators from "./UsageIndicators.vue";
 
 const router = useRouter();
 const route = useRoute();
-const photosStore = usePhotosStore();
-const collapsed = ref(true); // Default collapsed (showing only icons)
-const isMobile = ref(window.innerWidth < 768); // Initialize immediately
-const menuMode = ref<"hover" | "toggle">("toggle"); // 'hover' for original behavior, 'toggle' for new behavior
+const collapsed = ref(true);
+const menuMode = ref<"hover" | "toggle">("toggle");
 
 const props = defineProps<{
   mobileMenuOpen?: boolean;
@@ -207,254 +121,80 @@ const props = defineProps<{
 
 const emit = defineEmits(["close-mobile-menu"]);
 
-const activeKey = computed(() => route.name as string);
-const appAccessMode = computed(() => photosStore.appAccessMode);
-
-// First section: Photo Hub, Collections
-const firstSectionOptions = computed(() => [
-  {
-    label: createMenuLabel("Photo Hub"),
-    key: "catalog",
-    // icon: createIconWithIndicator(PhotoHubIcon, "#2563eb"),
-    icon: () =>
-      h(
-        "div",
-        {
-          style:
-            "position: relative; display: flex; align-items: center; justify-content: center;",
-        },
-        [
-          // Use theme primary color variable so the icon follows the app theme
-          h(
-            NIcon,
-            { color: "var(--primary-color)" },
-            { default: () => h(PhotoHubIcon) }
-          ),
-          // Visual indicator when blocked (visible in both collapsed and expanded states)
-          appAccessMode.value === "blocked"
-            ? h("div", {
-                class: "photo-hub-indicator",
-                style:
-                  "position: absolute; top: -2px; right: -2px; width: 8px; height: 8px; background: #22c55e; border-radius: 50%; box-shadow: 0 0 6px #22c55e; animation: pulse 2s infinite;",
-              })
-            : null,
-        ]
-      ),
-  },
-  {
-    label: createMenuLabel("Collections", false),
-    key: "collections",
-    disabled: appAccessMode.value === "blocked",
-    icon: createIconWithIndicator(CollectionsIcon, "#10b981"), // Green color for collections
-  },
-]);
-
-// Function to create icon with premium or coming soon indicator
-const createIconWithIndicator = (
-  IconComponent: any,
-  color: string,
-  isPremium = false,
-  isComingSoon = false
-) => {
-  return () =>
-    h(
-      "div",
-      {
-        style:
-          "position: relative; display: flex; align-items: center; justify-content: center;",
-      },
-      [
-        h(
-          NIcon,
-          { color },
-          {
-            default: () => h(IconComponent),
-          }
-        ),
-        // Premium indicator (diamond shape)
-        isPremium
-          ? h("div", {
-              class: "premium-indicator-diamond",
-              style: `
-                position: absolute;
-                top: -4px;
-                right: -4px;
-                width: 8px;
-                height: 8px;
-                background: linear-gradient(135deg, #f59e0b, #d97706);
-                transform: rotate(45deg);
-                box-shadow: 0 0 4px rgba(245, 158, 11, 0.4);
-                border: 1px solid #16161a;
-              `,
-            })
-          : null,
-        // Coming soon indicator (construction icon overlay)
-        isComingSoon
-          ? h(
-              "div",
-              {
-                style: `
-                position: absolute;
-                top: -2px;
-                right: -2px;
-                width: 12px;
-                height: 12px;
-                background: #6b7280;
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                border: 1px solid #16161a;
-                box-shadow: 0 0 4px rgba(107, 114, 128, 0.4);
-              `,
-              },
-              [
-                h(
-                  NIcon,
-                  {
-                    size: 9,
-                    color: "#ffffff",
-                  },
-                  {
-                    default: () => h(ConstructionSharp),
-                  }
-                ),
-              ]
-            )
-          : null,
-      ]
-    );
+// Function to close mobile menu
+const closeMobileMenu = () => {
+  if (isMobile.value) {
+    emit("close-mobile-menu");
+  }
 };
 
-// Function to create menu label with coming soon styling
-const createMenuLabel = (label: string, isComingSoon = false) => {
-  return () =>
-    h(
-      "span",
-      {
-        style: isComingSoon ? "font-style: italic; opacity: 0.7;" : "",
-      },
-      label
-    );
-};
+// Use the main menu composable with mobile menu close callback
+const {
+  menuOptions,
+  defaultExpandedKeys,
+  isMobile,
+  updateIsMobile,
+  exclusiveMenuMode,
+} = useMainMenu(closeMobileMenu);
 
-// Second section: Explorer, Canvas, Curation, Grids, Styler
-const secondSectionOptions = computed(() => {
-  const isBlocked = appAccessMode.value === "blocked";
-  const isFull = appAccessMode.value === "full";
+const activeKey = computed(() => {
+  const routeName = route.name as string;
 
-  return [
-    {
-      label: createMenuLabel("Explorer"),
-      key: "search",
-      disabled: isBlocked,
-      comingSoon: false,
-      props: isBlocked
-        ? {
-            title: "Add photos to your catalog",
-          }
-        : {},
-      icon: createIconWithIndicator(SearchIcon, "#60b6d4"), // Info color for search functionality
-    },
-    {
-      label: createMenuLabel("3D Atlas"),
-      key: "atlas",
-      disabled: isBlocked,
-      comingSoon: false,
-      props: isBlocked
-        ? {
-            title: "Add photos to your catalog",
-          }
-        : {},
-      icon: createIconWithIndicator(CubeIcon, "#8b5cf6", false, false), // Purple color for 3D view
-    },
-    {
-      label: createMenuLabel("Canvas"),
-      key: "canvas",
-      disabled: isBlocked,
-      comingSoon: false,
-      props: isBlocked
-        ? {
-            title: "Add photos to your catalog",
-          }
-        : {},
-      icon: createIconWithIndicator(CanvasIcon, "#8b5cf6", false, false), // Secondary color for creative tools
-    },
+  // Handle collection detail routes
+  if (routeName === "collection-detail" && route.params.id) {
+    return `collection-${route.params.id}`;
+  }
 
-    {
-      label: createMenuLabel("Grid Maker"),
-      key: "grid-maker",
-      disabled: isBlocked,
-      comingSoon: false,
-      props: {
-        title: "Coming soon",
-      },
-      icon: createIconWithIndicator(GridIcon, "#15803d", false, false), // Green color for grids
-    },
-    {
-      label: createMenuLabel("Project Builder"),
-      key: "project-builder",
-      disabled: isBlocked,
-      comingSoon: false,
-      props: isBlocked
-        ? {
-            title: "Add photos to your catalog",
-          }
-        : {},
-      icon: createIconWithIndicator(CurationIcon, "#f59e0b", true), // Warning color for curation + premium
-    },
+  // Handle series detail routes
+  if (routeName === "series-detail" && route.params.id) {
+    return `series-${route.params.id}`;
+  }
 
-    // {
-    //   label: createMenuLabel("Reports"),
-    //   key: "portfolio-report",
-    //   disabled: isBlocked,
-    //   comingSoon: false,
-    //   props: isBlocked
-    //     ? {
-    //         title: "Add photos to your catalog",
-    //       }
-    //     : {},
-    //   icon: createIconWithIndicator(AnalyticsIcon, "#06b6d4", false, false), // Cyan color for analytics
-    // },
-    {
-      label: createMenuLabel("Framer"),
-      key: "framer",
-      disabled: isBlocked,
-      comingSoon: false,
-      props: isBlocked
-        ? {
-            title: "Add photos to your catalog",
-          }
-        : {},
-      icon: createIconWithIndicator(FramerIcon, "#dc2626", false, false), // Red color for framer
-    },
-  ];
+  // Handle collections list view - mark the group as active
+  if (routeName === "collections") {
+    return "collections-group";
+  }
+
+  // Handle series list view - mark the group as active
+  if (routeName === "series") {
+    return "series-group";
+  }
+
+  return routeName;
 });
-
-// Third section: Settings, Help (always enabled)
-const thirdSectionOptions: MenuOption[] = [
-  {
-    label: "Settings",
-    key: "settings",
-    icon: () => h(NIcon, null, { default: () => h(SettingsIcon) }),
-  },
-  {
-    label: "Help",
-    key: "help",
-    icon: () => h(NIcon, null, { default: () => h(HelpIcon) }),
-  },
-];
+const expandedKeys = ref<string[]>([...defaultExpandedKeys.value]);
 
 const handleMenuSelect = (key: string) => {
-  if (key === "catalog") {
-    router.push({ name: "photo-hub", hash: "#catalog" });
+  // Skip navigation for section headers (they don't have routes)
+  if (key.endsWith("-section") || key.endsWith("-group")) {
+    return;
+  }
+
+  if (key === "sync-area") {
+    router.push({ name: "sync-area", hash: "#upload" });
+  } else if (key.startsWith("collection-") || key.startsWith("series-")) {
+    // Navegación usando /id en vez de query string
+    if (key.startsWith("collection-")) {
+      // Extraer el id después de "collection-"
+      const id = key.replace("collection-", "");
+      router.push(`/collections/${id}`);
+    } else {
+      // Extraer el id después de "series-"
+      const id = key.replace("series-", "");
+      router.push(`/series/${id}`);
+    }
   } else {
     router.push({ name: key });
   }
+
   // On mobile, close menu after selection
   if (isMobile.value) {
     emit("close-mobile-menu");
   }
+};
+
+const handleExpandedKeysChange = (keys: string[]) => {
+  expandedKeys.value = keys;
 };
 
 const goToDashboard = () => {
@@ -500,7 +240,7 @@ defineExpose({
 });
 
 const checkIsMobile = () => {
-  isMobile.value = window.innerWidth < 768;
+  updateIsMobile();
   // On mobile, keep collapsed by default and close mobile menu
   if (isMobile.value) {
     collapsed.value = true;
@@ -519,8 +259,6 @@ onUnmounted(() => {
 
 <style scoped>
 .sidebar {
-  background-color: #16161a !important;
-  border-right: 1px solid #2c2c32 !important;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
   z-index: 100 !important;
   overflow: visible !important;
@@ -535,7 +273,7 @@ onUnmounted(() => {
 
 .logo-container {
   padding: 0 16px;
-  border-bottom: 1px solid #2c2c32;
+  border-bottom: 1px solid var(--border-color);
   transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   height: 64px;
   display: flex;
@@ -600,7 +338,7 @@ onUnmounted(() => {
 .app-name {
   font-size: 18px;
   font-weight: 600;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   line-height: 1.2;
   white-space: nowrap;
 }
@@ -608,30 +346,32 @@ onUnmounted(() => {
 .app-subtitle {
   font-size: 12px;
   font-weight: 400;
-  color: #ffffff73;
+  color: var(--text-primary);
   line-height: 1.2;
   white-space: nowrap;
 }
 
 .sidebar-menu {
-  margin-top: 8px;
+  margin-top: 4px;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
-.menu-divider {
-  margin: 16px 20px;
-  height: 1px;
-  background-color: #2c2c32;
-  transition: margin 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+.usage-indicators-section {
+  /* margin-top: auto; */
+  margin-bottom: 39px;
+  padding: 16px;
+  border-top: 1px solid var(--border-color);
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.menu-divider.collapsed {
-  margin: 16px 12px;
-}
+/* Remove the old divider styles - no longer needed */
 
 .user-profile-section {
   margin-top: auto;
   padding: 16px;
-  border-top: 1px solid #2c2c32;
+  border-top: 1px solid;
   transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -677,7 +417,7 @@ onUnmounted(() => {
 .user-name {
   font-size: 14px;
   font-weight: 500;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   line-height: 1.2;
   margin-bottom: 2px;
   white-space: nowrap;
@@ -685,7 +425,7 @@ onUnmounted(() => {
 
 .user-email {
   font-size: 12px;
-  color: #ffffff73;
+  color: var(--text-primary);
   line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -754,13 +494,13 @@ onUnmounted(() => {
 
 /* Mobile sidebar */
 .mobile-sidebar {
+  background-color: var(--bg-container);
   position: fixed;
   top: 0;
   left: 0;
-  width: 240px;
+  width: 260px;
   height: 100vh;
-  background-color: #16161a;
-  border-right: 1px solid #2c2c32;
+
   z-index: 1000;
   box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
   animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -770,39 +510,10 @@ onUnmounted(() => {
 
 @keyframes slideIn {
   from {
-    left: -240px;
+    left: -260px;
   }
   to {
     left: 0;
   }
-}
-
-@keyframes pulse {
-  0% {
-    transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
-  }
-
-  70% {
-    transform: scale(1);
-    box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
-  }
-
-  100% {
-    transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
-  }
-}
-
-.premium-indicator-diamond {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  width: 8px;
-  height: 8px;
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  transform: rotate(45deg);
-  box-shadow: 0 0 4px rgba(245, 158, 11, 0.4);
-  border: 1px solid #16161a;
 }
 </style>

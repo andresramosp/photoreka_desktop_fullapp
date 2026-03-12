@@ -112,7 +112,7 @@ const UserIcon = () =>
     [
       h("path", { d: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" }),
       h("circle", { cx: "12", cy: "7", r: "4" }),
-    ]
+    ],
   );
 
 const EmailIcon = () =>
@@ -131,7 +131,7 @@ const EmailIcon = () =>
         d: "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z",
       }),
       h("polyline", { points: "22,6 12,13 2,6" }),
-    ]
+    ],
   );
 
 const LockIcon = () =>
@@ -156,7 +156,7 @@ const LockIcon = () =>
       }),
       h("circle", { cx: "12", cy: "16", r: "1" }),
       h("path", { d: "M7 11V7a5 5 0 0 1 10 0v4" }),
-    ]
+    ],
   );
 
 const emit = defineEmits(["switch-mode"]);
@@ -225,20 +225,20 @@ const handleSubmit = async () => {
   try {
     await formRef.value.validate();
 
-    // Obtener authCode de la query string si existe
-    const authCode = route.query.authCode as string | undefined;
+    // Obtener inviteCode de la query string si existe
+    const inviteCode = route.query.inviteCode as string | undefined;
 
     const result = await userStore.register(
       formData.email,
       formData.password,
       formData.name,
-      authCode
+      inviteCode,
     );
 
     if (result.success) {
-      message.success(
-        "Account created successfully! Let's set up your profile."
-      );
+      // message.success(
+      //   "Account created successfully! Let's set up your profile.",
+      // );
       router.push("/profile-setup");
     } else {
       message.error(result.error || "Error creating account");
@@ -261,15 +261,15 @@ const goToTerms = () => {
 
 .form-header {
   text-align: center;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   font-size: 16px;
-  color: #ffffff73;
+  color: var(--text-primary);
   font-weight: 400;
   line-height: 1.6;
 }
 
 .form-item {
-  margin-bottom: 15px;
+  margin-bottom: 12px;
 }
 
 .form-item :deep(.n-form-item-feedback-wrapper) {
@@ -291,7 +291,7 @@ const goToTerms = () => {
 
 .form-input :deep(.n-input__border),
 .form-input :deep(.n-input__state-border) {
-  border-color: #2c2c32;
+  border-color: var(--border-color);
 }
 
 .form-input :deep(.n-input--focus .n-input__border),
@@ -306,7 +306,7 @@ const goToTerms = () => {
 
 .terms-checkbox :deep(.n-checkbox__label) {
   font-size: 14px;
-  color: #ffffff73;
+  color: var(--text-primary);
   line-height: 1.5;
 }
 
@@ -328,7 +328,7 @@ const goToTerms = () => {
   border-radius: 6px;
   font-weight: 600;
   font-size: 14px;
-  margin-bottom: 10px;
+  margin-bottom: 0;
 }
 
 .submit-button:disabled {
@@ -349,14 +349,14 @@ const goToTerms = () => {
   left: 0;
   right: 0;
   height: 1px;
-  background-color: #2c2c32;
+  background-color: var(--border-color);
 }
 
 .divider-text {
-  background-color: #1a1a1f;
+  background-color: var(--bg-body);
   padding: 0 16px;
   font-size: 13px;
-  color: #ffffff73;
+  color: var(--text-primary);
   position: relative;
   z-index: 1;
 }
@@ -364,11 +364,11 @@ const goToTerms = () => {
 /* Mobile responsive */
 @media (max-width: 480px) {
   .form-header {
-    margin-bottom: 24px;
+    /* margin-bottom: 24px; */
   }
 
   .form-title {
-    font-size: 24px;
+    /* font-size: 24px; */
   }
 
   .form-description {

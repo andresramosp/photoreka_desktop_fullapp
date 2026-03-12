@@ -3,10 +3,14 @@
     <!-- Collection View (when viewing a specific collection) -->
     <div v-if="showCollectionView && viewingCollection" class="collection-view">
       <!-- Collection Header -->
-      <div class="collection-header">
-        <div class="collection-header-content">
-          <div class="collection-header-actions">
-            <n-button text @click="backToCollections" class="back-button">
+      <div class="detail-header">
+        <div class="detail-header-content">
+          <div class="detail-header-actions">
+            <n-button
+              text
+              @click="backToCollections"
+              class="detail-back-button"
+            >
               <template #icon>
                 <n-icon>
                   <svg viewBox="0 0 24 24">
@@ -19,7 +23,8 @@
               </template>
               Back to Collections
             </n-button>
-            <div style="display: flex; gap: 12px">
+            <!-- Desktop buttons -->
+            <div class="header-actions-buttons desktop-actions">
               <n-button
                 type="primary"
                 ghost
@@ -31,13 +36,13 @@
                     <AddOutline />
                   </n-icon>
                 </template>
-                Añadir Fotos
+                Add Photos
               </n-button>
               <n-button
                 type="error"
                 ghost
                 @click="showDeleteConfirmation"
-                class="delete-button"
+                class="detail-delete-button"
               >
                 <template #icon>
                   <n-icon>
@@ -52,20 +57,121 @@
                 Delete Collection
               </n-button>
             </div>
+            <!-- Mobile overflow menu -->
+            <div class="mobile-actions">
+              <n-dropdown
+                trigger="click"
+                :options="dropdownOptions"
+                @select="handleDropdownSelect"
+              >
+                <n-button text class="overflow-menu-button">
+                  <template #icon>
+                    <n-icon size="24">
+                      <EllipsisVertical />
+                    </n-icon>
+                  </template>
+                </n-button>
+              </n-dropdown>
+            </div>
           </div>
-          <h1 class="collection-title">
-            {{ viewingCollection.name || viewingCollection.title }}
-          </h1>
-          <p
-            class="collection-description"
-            v-if="viewingCollection.description"
-          >
-            {{ viewingCollection.description }}
-          </p>
-          <p class="collection-meta">
+          <div class="title-row">
+            <div v-if="!editingTitle" class="title-display">
+              <h1 class="detail-title">
+                {{ viewingCollection.name || viewingCollection.title }}
+              </h1>
+              <n-button
+                text
+                class="edit-button"
+                @click="startEditTitle"
+                title="Edit collection name"
+              >
+                <template #icon>
+                  <n-icon size="20">
+                    <CreateOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </div>
+            <div v-else class="title-edit">
+              <n-input
+                v-model:value="editedTitle"
+                placeholder="Enter collection name..."
+                maxlength="100"
+              />
+              <n-button
+                text
+                class="action-button"
+                @click="saveTitle"
+                :loading="isSavingTitle"
+              >
+                <template #icon>
+                  <n-icon size="20">
+                    <CheckmarkOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+              <n-button text class="action-button" @click="cancelEditTitle">
+                <template #icon>
+                  <n-icon size="20">
+                    <CloseOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </div>
+          </div>
+          <div v-if="!editingDescription" class="description-display">
+            <p class="detail-description" v-if="viewingCollection.description">
+              {{ viewingCollection.description }}
+            </p>
+            <n-button
+              text
+              class="edit-button"
+              @click="startEditDescription"
+              title="Edit collection description"
+            >
+              <template #icon>
+                <n-icon size="20">
+                  <CreateOutline />
+                </n-icon>
+              </template>
+            </n-button>
+          </div>
+          <div v-else class="description-edit">
+            <n-input
+              v-model:value="editedDescription"
+              placeholder="Enter collection description (optional)..."
+              maxlength="500"
+            />
+            <div class="description-actions">
+              <n-button
+                text
+                class="action-button"
+                @click="saveDescription"
+                :loading="isSavingDescription"
+              >
+                <template #icon>
+                  <n-icon size="20">
+                    <CheckmarkOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+              <n-button
+                text
+                class="action-button"
+                @click="cancelEditDescription"
+              >
+                <template #icon>
+                  <n-icon size="20">
+                    <CloseOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </div>
+          </div>
+          <!-- <p class="detail-meta">
             {{ (viewingCollection.photos || []).length }} photos • Updated
             {{ formatDate(viewingCollection.updatedAt) }}
-          </p>
+          </p> -->
         </div>
       </div>
 
@@ -74,7 +180,10 @@
         <PhotosGrid
           :collectionId="route.params.id"
           :photos="viewingCollection.photos || []"
+          :showSuggestButton="(viewingCollection.photos || []).length > 0"
+          :findDuplicatesEnabled="false"
           @refreshCollection="refreshCollection"
+          @suggest-photos="suggestPhotosForCollection"
         />
       </div>
     </div>
@@ -86,8 +195,8 @@
         <div class="header-content">
           <h1 class="page-title">Collections</h1>
           <p class="page-subtitle">
-            Organize your photos into beautiful collections for better
-            management and storytelling.
+            Manage and categorize your photographs into collections for
+            efficient organization and professional presentation.
           </p>
         </div>
       </div>
@@ -99,11 +208,11 @@
         </n-spin>
       </div>
 
-      <div v-else class="collections-grid">
+      <div v-else class="card-grid">
         <!-- Create New Collection Card (only show when there are existing collections) -->
         <div
           v-if="collections.length > 0"
-          class="collection-card create-card"
+          class="card create-card"
           @click="showCreateDialog"
         >
           <div class="create-preview">
@@ -113,63 +222,30 @@
               </n-icon>
             </div>
           </div>
-          <div class="collection-info">
-            <h3 class="collection-title">Create New Collection</h3>
-            <p class="collection-meta">Start organizing your photos</p>
+          <div class="card-info">
+            <h3 class="card-title">Create New Collection</h3>
+            <p class="card-meta">Start organizing your photos</p>
           </div>
         </div>
 
         <!-- Existing Collections -->
-        <div
+        <CollectionCard
           v-for="collection in collections"
           :key="collection.id"
-          class="collection-card"
+          :item="collection"
+          type="collection"
           @click="openCollection(collection)"
-        >
-          <div class="collection-preview">
-            <div
-              v-if="collection.photos && collection.photos.length > 0"
-              class="photo-stack"
-            >
-              <div
-                v-for="(photo, index) in collection.photos.slice(0, 4)"
-                :key="photo.id"
-                class="photo-item"
-                :class="`photo-${index + 1}`"
-              >
-                <div
-                  class="photo-placeholder"
-                  :style="{ background: photo.gradient }"
-                ></div>
-              </div>
-            </div>
-            <div v-else class="empty-preview">
-              <n-icon size="40" color="#ffffff73">
-                <ImagesOutline />
-              </n-icon>
-            </div>
-          </div>
-          <div class="collection-info">
-            <h3 class="collection-title">
-              {{ collection.name || collection.title }}
-            </h3>
-            <p class="collection-meta">
-              {{ (collection.photos || []).length }} photos • Updated
-              {{ formatDate(collection.updatedAt) }}
-            </p>
-          </div>
-        </div>
+        />
 
         <!-- Empty State (when no collections exist) -->
         <div v-if="collections.length === 0" class="empty-collections-state">
           <div class="empty-collections-content">
             <n-icon size="64" class="empty-collections-icon">
-              <ImagesOutline />
+              <GridOutline />
             </n-icon>
             <h3 class="empty-collections-title">No collections yet</h3>
             <p class="empty-collections-description">
-              Create your first collection to start organizing your photos into
-              beautiful collections.
+              Create your first collection to start organizing your photos.
             </p>
             <n-button
               type="primary"
@@ -234,6 +310,20 @@
       @add-photos="onPhotosSelected"
     />
 
+    <!-- Suggested Photos Dialog -->
+    <PhotosDialog
+      v-model="suggestDialogVisible"
+      :is-trash="false"
+      :title="`Suggested Photos for ${
+        viewingCollection?.name || viewingCollection?.title || 'Collection'
+      }`"
+      :displayLightboxTab="false"
+      :displaySearch="false"
+      :suggestedPhotos="suggestedPhotos"
+      :loadingSuggestions="isSuggestingPhotos"
+      @add-photos="onPhotosSelected"
+    />
+
     <!-- Delete Collection Confirmation Dialog -->
     <n-modal
       v-model:show="deleteConfirmationVisible"
@@ -271,7 +361,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from "vue";
+import { ref, onMounted, computed, watch, h } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 defineOptions({
@@ -285,13 +375,23 @@ import {
   NFormItem,
   NInput,
   NSpin,
+  NDropdown,
   useMessage,
 } from "naive-ui";
-import { AddOutline, ImagesOutline } from "@vicons/ionicons5";
+import {
+  AddOutline,
+  CreateOutline,
+  CheckmarkOutline,
+  CloseOutline,
+  EllipsisVertical,
+  GridOutline,
+} from "@vicons/ionicons5";
 import PhotosDialog from "@/components/PhotosDialog.vue";
 import PhotosGrid from "@/components/PhotosGrid.vue";
+import CollectionCard from "@/components/CollectionCard.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
+import { api } from "@/utils/axios";
 
 const route = useRoute();
 const router = useRouter();
@@ -302,10 +402,21 @@ const collectionsStore = useCollectionsStore();
 // State
 const createDialogVisible = ref(false);
 const photosDialogVisible = ref(false);
+const suggestDialogVisible = ref(false);
+const suggestedPhotos = ref(null);
+const isSuggestingPhotos = ref(false);
 const deleteConfirmationVisible = ref(false);
 const formRef = ref(null);
 const viewingCollection = ref(null); // Collection being viewed
 const showCollectionView = ref(false); // Whether to show collection view or grid view
+
+// Edit states for title and description
+const editingTitle = ref(false);
+const editingDescription = ref(false);
+const editedTitle = ref("");
+const editedDescription = ref("");
+const isSavingTitle = ref(false);
+const isSavingDescription = ref(false);
 
 // Form data
 const formData = ref({
@@ -319,6 +430,39 @@ const formRules = {
     message: "Please enter a name",
     trigger: "blur",
   },
+};
+
+// Dropdown options for mobile
+const dropdownOptions = [
+  {
+    label: "Add Photos",
+    key: "add-photos",
+    icon: () => h(NIcon, null, { default: () => h(AddOutline) }),
+  },
+  {
+    label: "Delete Collection",
+    key: "delete-collection",
+    icon: () =>
+      h(NIcon, null, {
+        default: () =>
+          h(
+            "svg",
+            { viewBox: "0 0 24 24" },
+            h("path", {
+              fill: "currentColor",
+              d: "M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z",
+            }),
+          ),
+      }),
+  },
+];
+
+const handleDropdownSelect = (key) => {
+  if (key === "add-photos") {
+    showAddPhotosDialog();
+  } else if (key === "delete-collection") {
+    showDeleteConfirmation();
+  }
 };
 
 // Computed para saber si se puede mostrar la grid de colecciones
@@ -356,12 +500,11 @@ const proceedToPhotoSelection = async () => {
       photoIds: [], // Colección vacía
     };
 
-    const newCollection = await collectionsStore.createCollection(
-      collectionData
-    );
+    const newCollection =
+      await collectionsStore.createCollection(collectionData);
 
     message.success(
-      `Collection "${formData.value.title}" created successfully`
+      `Collection "${formData.value.title}" created successfully`,
     );
 
     // Limpiar el formulario
@@ -374,12 +517,64 @@ const proceedToPhotoSelection = async () => {
     });
   } catch (error) {
     console.error("Error creating collection:", error);
-    message.error("Failed to create collection. Please try again.");
   }
 };
 
 const showAddPhotosDialog = () => {
   photosDialogVisible.value = true;
+};
+
+const suggestPhotosForCollection = async () => {
+  if (!viewingCollection.value) return;
+  const photos = viewingCollection.value.photos || [];
+  if (photos.length === 0) return;
+
+  isSuggestingPhotos.value = true;
+  suggestedPhotos.value = null;
+  suggestDialogVisible.value = true;
+  try {
+    // If more than 20 photos, sample 25% (max 50) uniformly; otherwise send all
+    let anchorIds = [];
+    if (photos.length > 20) {
+      const sampleCount = Math.min(Math.ceil(photos.length * 0.25), 50);
+      const step = photos.length / sampleCount;
+      for (let i = 0; i < sampleCount; i++) {
+        anchorIds.push(photos[Math.floor(i * step)].id);
+      }
+    } else {
+      anchorIds = photos.map((p) => p.id);
+    }
+
+    const currentPhotosIds = photos.map((p) => p.id);
+
+    const response = await api.post(`/api/search/byPhotos`, {
+      anchorIds,
+      currentPhotosIds,
+      criteria: "embedding",
+      opposite: false,
+      inverted: false,
+      resultLength: 200,
+    });
+
+    const backendPhotos = Array.isArray(response.data)
+      ? response.data
+      : [response.data];
+
+    // Resolve full photo objects from the store
+    const fullPhotos = backendPhotos
+      .map(
+        (bp) => photosStore.processedPhotos.find((p) => p.id === bp.id) || bp,
+      )
+      .filter(Boolean);
+
+    suggestedPhotos.value = fullPhotos;
+    suggestDialogVisible.value = true;
+  } catch (error) {
+    console.error("Error suggesting photos:", error);
+    message.error("Could not find suggested photos");
+  } finally {
+    isSuggestingPhotos.value = false;
+  }
 };
 
 const onPhotosSelected = async (photoIds) => {
@@ -393,19 +588,19 @@ const onPhotosSelected = async (photoIds) => {
     try {
       await collectionsStore.addPhotosToCollection(
         viewingCollection.value.id,
-        photoIds
+        photoIds,
       );
 
       message.success(
         `Added ${photoIds.length} photo${
           photoIds.length > 1 ? "s" : ""
-        } to the collection.`
+        } to the collection.`,
       );
       photosDialogVisible.value = false;
+      suggestDialogVisible.value = false;
       await refreshCollection();
     } catch (error) {
       console.error("Error adding photos to collection:", error);
-      message.error("Failed to add photos. Please try again.");
     }
   }
 };
@@ -431,7 +626,7 @@ const deleteCollection = async () => {
     message.success(
       `Collection "${
         viewingCollection.value.name || viewingCollection.value.title
-      }" deleted successfully`
+      }" deleted successfully`,
     );
     deleteConfirmationVisible.value = false;
 
@@ -439,8 +634,71 @@ const deleteCollection = async () => {
     router.push({ name: "collections" });
   } catch (error) {
     console.error("Error deleting collection:", error);
-    message.error("Failed to delete collection. Please try again.");
   }
+};
+
+// Edit title methods
+const startEditTitle = () => {
+  editedTitle.value =
+    viewingCollection.value.name || viewingCollection.value.title || "";
+  editingTitle.value = true;
+};
+
+const saveTitle = async () => {
+  if (!viewingCollection.value || !editedTitle.value.trim()) {
+    message.warning("Collection name cannot be empty");
+    return;
+  }
+
+  isSavingTitle.value = true;
+  try {
+    await collectionsStore.updateCollection(viewingCollection.value.id, {
+      title: editedTitle.value.trim(),
+      description: viewingCollection.value.description,
+    });
+    message.success("Collection name updated");
+    editingTitle.value = false;
+    updateViewingCollection();
+  } catch (error) {
+    console.error("Error updating collection name:", error);
+  } finally {
+    isSavingTitle.value = false;
+  }
+};
+
+const cancelEditTitle = () => {
+  editingTitle.value = false;
+  editedTitle.value = "";
+};
+
+// Edit description methods
+const startEditDescription = () => {
+  editedDescription.value = viewingCollection.value.description || "";
+  editingDescription.value = true;
+};
+
+const saveDescription = async () => {
+  if (!viewingCollection.value) return;
+
+  isSavingDescription.value = true;
+  try {
+    await collectionsStore.updateCollection(viewingCollection.value.id, {
+      title: viewingCollection.value.name || viewingCollection.value.title,
+      description: editedDescription.value.trim() || "",
+    });
+    message.success("Collection description updated");
+    editingDescription.value = false;
+    updateViewingCollection();
+  } catch (error) {
+    console.error("Error updating collection description:", error);
+  } finally {
+    isSavingDescription.value = false;
+  }
+};
+
+const cancelEditDescription = () => {
+  editingDescription.value = false;
+  editedDescription.value = "";
 };
 
 const formatDate = (date) => {
@@ -453,7 +711,7 @@ const updateViewingCollection = () => {
   if (id && collections.value.length > 0) {
     const collection = collectionsStore.getCollectionWithFullPhotos(
       id,
-      photosStore
+      photosStore,
     );
     if (collection) {
       viewingCollection.value = collection;
@@ -474,17 +732,18 @@ onMounted(async () => {
     updateViewingCollection();
   } catch (error) {
     console.error("Error loading data:", error);
-    message.error("Failed to load collections");
   }
 });
 
 watch(
   [() => route.params.id, collections, () => photosStore.allPhotos],
-  updateViewingCollection
+  updateViewingCollection,
 );
 </script>
 
 <style scoped>
+@import "@/assets/shared-card-styles.scss";
+
 .collections-view {
   padding: var(--spacing-2xl);
   margin: 0 auto;
@@ -510,10 +769,8 @@ watch(
   font-size: var(--font-size-lg);
   color: var(--text-secondary);
   margin: 0;
-  max-width: 600px;
 }
 
-/* Collections Grid */
 .loading-state {
   display: flex;
   justify-content: center;
@@ -528,231 +785,92 @@ watch(
   font-size: var(--font-size-md);
 }
 
-.collections-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 24px;
-}
-
-.collection-card {
-  background-color: #18181c;
-  border: 1px solid #2c2c32;
-  border-radius: 16px;
-  padding: 20px;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-}
-
-.collection-card:hover {
-  border-color: #2563eb;
-  transform: translateY(-4px);
-  box-shadow: 0 12px 32px rgba(37, 99, 235, 0.2);
-}
-
-.collection-preview {
-  position: relative;
-  height: 120px;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.photo-stack {
-  position: relative;
-  width: 80px;
-  height: 80px;
-  perspective: 1000px;
-}
-
-.photo-item {
-  position: absolute;
-  width: 60px;
-  height: 60px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-}
-
-.photo-placeholder {
-  width: 100%;
-  height: 100%;
-  border-radius: 8px;
-}
-
-/* Fan arrangement of photos */
-.photo-item.photo-1 {
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(-12deg) translateY(-10px);
-  z-index: 4;
-}
-
-.photo-item.photo-2 {
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(-4deg) translateY(-5px);
-  z-index: 3;
-}
-
-.photo-item.photo-3 {
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(4deg) translateY(-5px);
-  z-index: 2;
-}
-
-.photo-item.photo-4 {
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(12deg) translateY(-10px);
-  z-index: 1;
-}
-
-/* Hover effects for photo stack */
-.collection-card:hover .photo-item.photo-1 {
-  transform: translate(-50%, -50%) rotate(-16deg) translateY(-15px) scale(1.05);
-}
-
-.collection-card:hover .photo-item.photo-2 {
-  transform: translate(-50%, -50%) rotate(-6deg) translateY(-10px) scale(1.03);
-}
-
-.collection-card:hover .photo-item.photo-3 {
-  transform: translate(-50%, -50%) rotate(6deg) translateY(-10px) scale(1.03);
-}
-
-.collection-card:hover .photo-item.photo-4 {
-  transform: translate(-50%, -50%) rotate(16deg) translateY(-15px) scale(1.05);
-}
-
-.empty-preview {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.collection-info {
-  text-align: center;
-}
-
-.collection-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #ffffffd1;
-  margin: 0 0 8px 0;
-  line-height: 1.3;
-}
-
-.collection-meta {
-  font-size: 14px;
-  color: #ffffff73;
-  margin: 0;
-  line-height: 1.4;
-}
-
-/* Create Card Specific Styles */
-.create-card {
-  border: 2px dashed #2c2c32;
-  background-color: transparent;
-}
-
-.create-card:hover {
-  border-color: #2563eb;
-  background-color: rgba(37, 99, 235, 0.05);
-}
-
-.create-preview {
-  position: relative;
-  height: 120px;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.create-icon {
-  padding: 20px;
-  border-radius: 50%;
-  background-color: rgba(37, 99, 235, 0.1);
-  transition: all 0.3s ease;
-}
-
-.create-card:hover .create-icon {
-  background-color: rgba(37, 99, 235, 0.2);
-  transform: scale(1.1);
-}
-
-/* Create Form */
-.create-form {
-  padding-top: var(--spacing-md);
-}
-
-/* Collection View Styles */
-.collection-view {
-  padding: var(--spacing-2xl);
-  margin: 0 auto;
-  background-color: var(--bg-body);
-}
-
-.collection-header {
-  margin-bottom: var(--spacing-3xl);
-}
-
-.collection-header-content {
-  text-align: left;
-}
-
-.collection-header-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-lg);
-}
-
-.back-button {
-  color: var(--text-secondary);
-  font-size: var(--font-size-md);
-}
-
-.back-button:hover {
-  color: var(--primary-color);
-}
-
-.delete-button {
-  font-size: var(--font-size-sm);
-}
-
-.delete-button:hover {
-  color: #ef4444 !important;
-  border-color: #ef4444 !important;
-}
-
-.collection-title {
-  font-size: var(--font-size-4xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
-  margin: 0 0 var(--spacing-md) 0;
-}
-
-.collection-description {
-  font-size: var(--font-size-lg);
-  color: var(--text-secondary);
-  margin: 0 0 var(--spacing-sm) 0;
-  max-width: 600px;
-  line-height: 1.6;
-}
-
-.collection-meta {
-  font-size: var(--font-size-md);
-  color: var(--text-tertiary);
-  margin: 0;
-}
+/* Photo stack styles are in global.scss */
 
 .collection-photos {
   width: 100%;
+}
+
+/* Edit mode styles */
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.title-display {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.title-edit {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+}
+
+.title-edit :deep(.n-input) {
+  max-width: 600px;
+}
+
+.title-edit :deep(.n-input__input) {
+  font-size: var(--font-size-4xl);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.2;
+}
+
+.description-display {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+}
+
+.description-display .detail-description {
+  margin: 0;
+}
+
+.description-edit {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+  align-items: flex-start;
+}
+
+.description-edit :deep(.n-input) {
+  max-width: 400px;
+}
+
+.description-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+.edit-button {
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+  flex-shrink: 0;
+  padding: 0;
+  min-width: 32px;
+}
+
+.edit-button:hover {
+  color: var(--primary-color);
+}
+
+.action-button {
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+  padding: 0;
+  min-width: 32px;
+  flex-shrink: 0;
+}
+
+.action-button:hover {
+  color: var(--primary-color);
 }
 
 /* Empty Collections State */
@@ -761,7 +879,7 @@ watch(
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 400px;
+  min-height: calc(100vh - 300px);
   text-align: center;
 }
 
@@ -793,25 +911,27 @@ watch(
   padding: var(--spacing-md) var(--spacing-xl);
 }
 
-/* Delete Confirmation Dialog */
-.delete-confirmation {
-  padding: var(--spacing-md) 0;
-}
-
-.delete-confirmation p {
-  margin: 0 0 var(--spacing-md) 0;
-  line-height: 1.5;
-}
-
-.delete-warning {
+/* Header Actions Buttons */
+.header-actions-buttons {
   display: flex;
-  align-items: center;
-  padding: var(--spacing-sm) var(--spacing-md);
-  background-color: rgba(245, 166, 35, 0.1);
-  border: 1px solid rgba(245, 166, 35, 0.3);
-  border-radius: 8px;
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
+  gap: 12px;
+}
+
+.desktop-actions {
+  display: flex;
+}
+
+.mobile-actions {
+  display: none;
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 10;
+}
+
+.overflow-menu-button {
+  color: var(--text-primary);
+  padding: var(--spacing-sm);
 }
 
 /* Mobile Responsive */
@@ -823,30 +943,8 @@ watch(
   .page-title {
     font-size: var(--font-size-3xl);
   }
-
-  .collection-header-actions {
-    flex-direction: column;
-    gap: var(--spacing-sm);
-    align-items: flex-start;
-  }
-
-  .delete-button {
-    align-self: flex-end;
-    font-size: var(--font-size-xs);
-  }
-
-  .collections-grid {
-    grid-template-columns: 1fr;
-    gap: 20px;
-  }
-
-  .collection-card {
-    padding: 16px;
-  }
-
-  .collection-preview {
-    height: 100px;
-    margin-bottom: 12px;
+  .page-subtitle {
+    font-size: var(--font-size-sm);
   }
 
   .photo-stack {
@@ -858,17 +956,35 @@ watch(
     width: 50px;
     height: 50px;
   }
-}
 
-@media (max-width: 1024px) {
-  .collections-grid {
-    grid-template-columns: repeat(3, 1fr);
+  /* Show mobile menu, hide desktop buttons */
+  .desktop-actions {
+    display: none;
   }
-}
 
-@media (min-width: 1600px) {
-  .collections-grid {
-    grid-template-columns: repeat(4, 1fr);
+  .mobile-actions {
+    display: flex;
+  }
+
+  .detail-header {
+    position: relative;
+  }
+
+  .detail-back-button {
+    font-size: var(--font-size-sm);
+  }
+
+  /* Make title and description more compact on mobile */
+  .detail-title {
+    font-size: var(--font-size-2xl);
+  }
+
+  .title-edit :deep(.n-input__input) {
+    font-size: var(--font-size-2xl);
+  }
+
+  .detail-description {
+    font-size: var(--font-size-sm);
   }
 }
 </style>

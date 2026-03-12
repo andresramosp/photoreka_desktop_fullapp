@@ -16,21 +16,31 @@
 
       <div class="tools-grid">
         <div
-          v-for="tool in tools"
+          v-for="tool in availableTools"
           :key="tool.id"
           class="tool-option"
-          :class="{ processing: isProcessing && selectedTool === tool.id }"
-          @click="handleToolSelect(tool.id)"
+          :class="{
+            processing: isProcessing && selectedTool === tool.id,
+            disabled: isToolDisabled(tool),
+          }"
+          @click="handleToolSelect(tool)"
         >
           <div class="tool-icon">
             <n-icon :size="32">
-              <Workspace v-if="tool.icon === 'Workspace'" />
-              <SquareOutline v-else-if="tool.icon === 'ImageFrame'" />
+              <component :is="getIconComponent(tool.icon)" />
             </n-icon>
           </div>
           <div class="tool-info">
             <h4 class="tool-name">{{ tool.name }}</h4>
-            <p class="tool-description">{{ tool.description }}</p>
+            <p class="tool-description">
+              {{ tool.description }}
+              <span
+                v-if="tool.singlePhotoOnly && photoCount > 1"
+                class="single-photo-warning"
+              >
+                (Select only 1 photo)
+              </span>
+            </p>
           </div>
           <div
             v-if="isProcessing && selectedTool === tool.id"
@@ -53,10 +63,10 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, computed, h } from "vue";
 import { NModal, NButton, NIcon, NSpin } from "naive-ui";
-import { Workspace } from "@vicons/carbon";
-import { SquareOutline } from "@vicons/ionicons5";
+import { useToolsAvailability } from "@/composables/useToolsAvailability.js";
+import { getIconComponent } from "@/config/toolsConfig";
 
 const props = defineProps({
   show: {
@@ -69,7 +79,11 @@ const props = defineProps({
   },
   tools: {
     type: Array,
-    default: () => [],
+    default: null, // Optional - if not provided, uses device-aware tools
+  },
+  currentTool: {
+    type: String,
+    default: null, // Current tool context (e.g., 'canvas') - will be excluded from list
   },
   isProcessing: {
     type: Boolean,
@@ -81,11 +95,45 @@ const emit = defineEmits(["close", "tool-selected"]);
 
 const selectedTool = ref(null);
 
-const handleToolSelect = (toolId) => {
-  if (props.isProcessing) return;
+// Get device-aware tools automatically
+const { photoSelectorTools } = useToolsAvailability();
 
-  selectedTool.value = toolId;
-  emit("tool-selected", toolId);
+// Use provided tools or fall back to device-filtered tools, excluding current tool
+const availableTools = computed(() => {
+  let tools = [];
+
+  // If tools prop is explicitly provided, use those
+  if (props.tools && props.tools.length > 0) {
+    tools = props.tools;
+  } else {
+    // Otherwise use device-aware tools from config
+    tools = photoSelectorTools.value.map((tool) => ({
+      id: tool.id,
+      name: tool.name,
+      description: tool.description,
+      icon: tool.icon,
+      singlePhotoOnly: tool.singlePhotoOnly || false,
+    }));
+  }
+
+  // Exclude current tool if specified (e.g., don't show "Canvas" when already in Canvas)
+  if (props.currentTool) {
+    tools = tools.filter((tool) => tool.id !== props.currentTool);
+  }
+
+  return tools;
+});
+
+const isToolDisabled = (tool) => {
+  return tool.singlePhotoOnly && props.photoCount > 1;
+};
+
+const handleToolSelect = (tool) => {
+  if (props.isProcessing) return;
+  if (isToolDisabled(tool)) return;
+
+  selectedTool.value = tool.id;
+  emit("tool-selected", tool.id);
 };
 </script>
 
@@ -132,6 +180,22 @@ const handleToolSelect = (toolId) => {
 .tool-option.processing:hover {
   border-color: var(--border-color);
   background: var(--card-color);
+}
+
+.tool-option.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tool-option.disabled:hover {
+  border-color: var(--border-color);
+  background: var(--card-color);
+}
+
+.single-photo-warning {
+  color: var(--warning-color);
+  font-size: 12px;
+  font-style: italic;
 }
 
 .tool-icon {

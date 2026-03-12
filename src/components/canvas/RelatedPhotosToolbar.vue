@@ -3,8 +3,9 @@
     <div class="toolbar-content">
       <!-- Base Image Section (Fixed Left) -->
       <PhotoBase
-        :baseImage="props.baseImage"
+        :base-images="props.baseImages"
         :toolbar-state="toolbarState"
+        :filter-context="props.filterContext"
         @photos-generated="handleGeneratedPhotos"
         @loading="handleLoadingState"
       />
@@ -82,9 +83,10 @@ import PhotoBase from "./PhotoBase.vue";
 
 interface Props {
   isVisible: boolean;
-  baseImage?: Photo;
+  baseImages?: Photo[];
   toolbarState: Object;
   isLoading?: boolean;
+  filterContext?: Object;
 }
 
 interface Emits {
@@ -275,7 +277,7 @@ function createCustomDragImage(ev: any, photo: Photo, photoCount: number = 1) {
     // For async case, try to estimate dimensions from the image element itself
     // Look for existing img elements in the toolbar to get better fallback dimensions
     const photoCards = document.querySelectorAll(
-      ".related-photos-grid .photo-card img"
+      ".related-photos-grid .photo-card img",
     );
     let estimatedDimensions = { width: 100, height: 100 }; // default fallback
 
@@ -421,11 +423,11 @@ function handleGlobalTouchMove(ev: TouchEvent) {
       // Check if over canvas area for visual feedback
       const elementBelow = document.elementFromPoint(
         touch.clientX,
-        touch.clientY
+        touch.clientY,
       );
       const canvasContainer = document.querySelector(".canvas-container");
       const toolbarContainer = document.querySelector(
-        ".related-photos-toolbar"
+        ".related-photos-toolbar",
       );
 
       const isOverCanvas =
@@ -470,7 +472,7 @@ function handleGlobalTouchEnd(ev: TouchEvent) {
     // Find drop target
     const elementBelow = document.elementFromPoint(
       touch.clientX,
-      touch.clientY
+      touch.clientY,
     );
     const canvasContainer = document.querySelector(".canvas-container");
     const toolbarContainer = document.querySelector(".related-photos-toolbar");
@@ -505,7 +507,7 @@ function handleGlobalTouchEnd(ev: TouchEvent) {
       "Touch Y:",
       touch.clientY,
       "Toolbar zone starts at:",
-      viewportHeight - toolbarHeight
+      viewportHeight - toolbarHeight,
     );
     console.log("Is in toolbar zone:", isInToolbarZone);
     console.log("Should drop on canvas:", shouldDropOnCanvas);
@@ -518,7 +520,7 @@ function handleGlobalTouchEnd(ev: TouchEvent) {
 
       console.log(
         "Simulating drop event for photo:",
-        touchDragState.value.photo?.id
+        touchDragState.value.photo?.id,
       );
       // Simulate drop event
       simulateDropEvent(touch.clientX, touch.clientY);
@@ -606,7 +608,7 @@ function cancelTouchDrag() {
 
 // Helper function to calculate drag element dimensions based on photo aspect ratio
 function calculateDragElementDimensions(
-  photo: Photo
+  photo: Photo,
 ):
   | { width: number; height: number }
   | Promise<{ width: number; height: number }> {
@@ -655,7 +657,7 @@ function calculateDragElementDimensions(
 
       const calculated = calculateDimensions(
         img.naturalWidth,
-        img.naturalHeight
+        img.naturalHeight,
       );
       resolve(calculated);
     };
@@ -685,7 +687,7 @@ function createDragElement(x: number, y: number) {
         if (touchDragState.value.dragElement) {
           updateDragElementDimensions(dimensions);
         }
-      }
+      },
     );
   } else {
     // Sync case - we have dimensions from config
@@ -696,7 +698,7 @@ function createDragElement(x: number, y: number) {
 function createDragElementWithDimensions(
   x: number,
   y: number,
-  dimensions: { width: number; height: number }
+  dimensions: { width: number; height: number },
 ) {
   const photo = touchDragState.value.photo;
   if (!photo) return;

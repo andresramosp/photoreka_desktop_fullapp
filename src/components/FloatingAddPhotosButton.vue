@@ -27,11 +27,13 @@ const router = useRouter();
 const hiddenRoutes = [
   "canvas",
   "grid-maker",
-  "photo-hub",
+  "sync-area",
   "settings",
   "help",
   "plan",
   "3d-view",
+  "atlas",
+  "2d-view",
 ];
 
 // Calcular si el botón debe mostrarse
@@ -41,13 +43,13 @@ const shouldShow = computed(() => {
 
 // Manejar click del botón
 const handleClick = async () => {
-  // Navegar a photo-hub con el hash para la pestaña upload
-  await router.push("/photo-hub#upload");
+  // Navegar a sync-area con el hash para la pestaña upload
+  await router.push("/sync-area#upload");
 
   // Esperar un tick para que se renderice la vista
   setTimeout(() => {
     const chooseFilesButton = document.querySelector(
-      ".upload-btn, .compact-upload-btn"
+      ".upload-btn, .compact-upload-btn",
     );
     if (chooseFilesButton) {
       chooseFilesButton.click();

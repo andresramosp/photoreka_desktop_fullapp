@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
+import AppInitLoader from "../components/AppInitLoader.vue";
 import { useUserStore } from "../stores/userStore";
 import { useMaintenanceMode } from "../composables/useMaintenanceMode";
 import { trackPageView } from "../utils/analytics";
@@ -6,7 +7,9 @@ import DashboardView from "../views/DashboardView.vue";
 import CanvasView from "../views/CanvasView.vue";
 import SearchView from "../views/SearchView.vue";
 import CollectionsView from "../views/CollectionsView.vue";
-import PhotoHubView from "../views/PhotoHubView.vue";
+import SeriesView from "../views/SeriesView.vue";
+import SyncAreaView from "../views/SyncAreaView.vue";
+import WorkspaceView from "../views/WorkspaceView.vue";
 import ProjectBuilderView from "../views/ProjectBuilderView.vue";
 import FramerView from "../views/FramerView.vue";
 import PortfolioReportView from "../views/PortfolioReportView.vue";
@@ -17,31 +20,41 @@ import AuthView from "../views/AuthView.vue";
 import ProfileSelectionView from "../views/ProfileSelectionView.vue";
 import StoragePlanSelectionView from "../views/StoragePlanSelectionView.vue";
 import GridMaker from "../views/GridMakerView.vue";
-import LandingView from "../views/LandingView.vue";
+import ChatView from "../views/ChatView.vue";
+// import LandingView from "../views/LandingView.vue";
+import LandingViewPremium from "../views/LandingViewPremium.vue";
 import TermsView from "../views/TermsView.vue";
 import MaintenanceView from "../views/MaintenanceView.vue";
 import ThreeDView from "../views/3DView.vue";
+import TwoDView from "../views/2DView.vue";
+import WorldMapView from "../views/WorldMapView.vue";
+import ResetPasswordView from "../views/ResetPasswordView.vue";
+import ConfirmEmailView from "../views/ConfirmEmailView.vue";
+import AuthCallback from "../views/AuthCallback.vue";
+import AuthError from "../views/AuthError.vue";
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    // {
-    //   path: "/",
-    //   redirect: "/landing",
-    // },
     {
       path: "/",
-      name: "landing",
-      component: LandingView,
-      meta: {
-        requiresGuest: false, // Accessible to both guests and authenticated users
-        title: "Photoreka - Photo Management and Curation Platform",
-        description:
-          "Transform your photos with AI-powered enhancement tools. Create stunning canvases, photo frames, and artistic compositions with Photoreka's free tools.",
-        keywords:
-          "photo enhancement, AI photo tools, canvas maker, photo frames, image editor, photo culling, photo organizer",
-      },
+      name: "home",
+      component: AppInitLoader,
     },
+    // Landing page moved to separate app
+    // {
+    //   path: "/",
+    //   name: "landing",
+    //   component: LandingViewPremium,
+    //   meta: {
+    //     requiresGuest: false,
+    //     title: "Photoreka - Curation Lab",
+    //     description:
+    //       "Organize and curate your photo library with advanced tools. Search photos using natural language, arrange them on the canvas, and discover related images based on narrative or color similarity. Rank your photos by aesthetic scores and navigate your catalog in 3D.",
+    //     keywords:
+    //       "photo enhancement, AI photo tools, canvas maker, photo frames, image editor, photo culling, photo organizer",
+    //   },
+    // },
 
     {
       path: "/maintenance",
@@ -72,6 +85,46 @@ const router = createRouter({
       component: AuthView,
       meta: {
         requiresGuest: true,
+      },
+    },
+
+    {
+      path: "/reset-password",
+      name: "reset-password",
+      component: ResetPasswordView,
+      meta: {
+        requiresGuest: false, // Accessible to both guests and authenticated users
+        layout: false, // Use standalone layout like auth
+      },
+    },
+
+    {
+      path: "/confirm-email",
+      name: "confirm-email",
+      component: ConfirmEmailView,
+      meta: {
+        requiresGuest: false, // Accessible to both guests and authenticated users
+        layout: false, // Use standalone layout like auth
+      },
+    },
+
+    {
+      path: "/auth/callback",
+      name: "auth-callback",
+      component: AuthCallback,
+      meta: {
+        requiresGuest: false, // Accessible during OAuth flow
+        layout: false, // Use standalone layout
+      },
+    },
+
+    {
+      path: "/auth/error",
+      name: "auth-error",
+      component: AuthError,
+      meta: {
+        requiresGuest: false, // Accessible to show errors
+        layout: false, // Use standalone layout
       },
     },
 
@@ -116,9 +169,9 @@ const router = createRouter({
         playground: true,
         title: "Free Canvas Playground - Photoreka",
         description:
-          "Try our free photo canvas maker without registration. Create artistic compositions and enhance your photos with AI-powered tools.",
+          "Sequence and arrange your photos with Photoreka's canvas tool without registration. Find related images by narrative or color similarity and create stunning photo compositions.",
         keywords:
-          "free canvas maker, photo playground, no registration photo editor, AI photo enhancement",
+          "free canvas maker, photo playground, no registration photo editor, sequence photos, photo arrangement",
       },
     },
     {
@@ -146,9 +199,47 @@ const router = createRouter({
       },
     },
     {
-      path: "/photo-hub",
-      name: "photo-hub",
-      component: PhotoHubView,
+      path: "/series",
+      name: "series",
+      component: SeriesView,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
+      path: "/series/:id",
+      name: "series-detail",
+      component: SeriesView,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
+      path: "/shared-series/:userId/:serieName",
+      name: "shared-series",
+      component: SeriesView,
+      meta: {
+        requiresGuest: false, // Accessible without authentication
+        playground: true,
+        title: "Photo Series - Photoreka",
+        description:
+          "View a curated photo series. Browse through a sequential photo story in fullscreen mode.",
+        keywords:
+          "photo series, photo story, sequential photos, photo gallery, fullscreen viewer",
+      },
+    },
+    {
+      path: "/sync-area",
+      name: "sync-area",
+      component: SyncAreaView,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
+      path: "/workspace",
+      name: "workspace",
+      component: WorkspaceView,
       meta: {
         requiresAuth: true,
       },
@@ -161,6 +252,23 @@ const router = createRouter({
         requiresAuth: true,
       },
     },
+    {
+      path: "/world-map",
+      name: "world-map",
+      component: WorldMapView,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
+      path: "/2d-view",
+      name: "2d-view",
+      component: TwoDView,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+
     {
       path: "/3d-catalog/:userId",
       name: "3d-catalog",
@@ -220,8 +328,8 @@ const router = createRouter({
       },
     },
     {
-      path: "/portfolio-report",
-      name: "portfolio-report",
+      path: "/report",
+      name: "report",
       component: PortfolioReportView,
       meta: {
         requiresAuth: true,
@@ -232,6 +340,14 @@ const router = createRouter({
       path: "/grid-maker",
       name: "grid-maker",
       component: GridMaker,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
+      path: "/chat-lab",
+      name: "chat-lab",
+      component: ChatView,
       meta: {
         requiresAuth: true,
       },
@@ -264,9 +380,91 @@ const router = createRouter({
 });
 
 // Navigation guards
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore();
   const { shouldBlockRoute } = useMaintenanceMode();
+
+  // Manejar demo login silenciosamente
+  if (to.path === "/demo") {
+    const result = await userStore.demoLogin();
+    if (result.success) {
+      next("/workspace");
+    } else {
+      next("/auth");
+    }
+    return;
+  }
+
+  // Detectar y consumir token de handoff de Lightroom ANTES de cualquier otra verificación
+  let handoffToken: string | null = null;
+  let isFromHash = false;
+
+  // 1. Buscar primero en query string normal
+  if (to.query.lr_handoff && typeof to.query.lr_handoff === "string") {
+    handoffToken = to.query.lr_handoff;
+    isFromHash = false;
+  }
+  // 2. Si no está en query, buscar en el hash (formato: #catalog?lr_handoff=token)
+  else if (to.hash && to.hash.includes("lr_handoff")) {
+    const hashQueryMatch = to.hash.match(/\?(.*)/);
+    if (hashQueryMatch) {
+      const hashParams = new URLSearchParams(hashQueryMatch[1]);
+      const tokenFromHash = hashParams.get("lr_handoff");
+      if (tokenFromHash) {
+        handoffToken = tokenFromHash;
+        isFromHash = true;
+      }
+    }
+  }
+
+  // Si se detectó un token de handoff, procesarlo
+  if (handoffToken) {
+    try {
+      const result = await userStore.consumeHandoff(handoffToken);
+
+      if (result.success) {
+        // Construir la nueva navegación sin el parámetro lr_handoff
+        if (isFromHash) {
+          // Limpiar lr_handoff del hash
+          const hashQueryMatch = to.hash.match(/^(#[^?]*)\?(.*)/);
+          let newHash = to.hash;
+
+          if (hashQueryMatch) {
+            const hashBase = hashQueryMatch[1];
+            const hashParams = new URLSearchParams(hashQueryMatch[2]);
+            hashParams.delete("lr_handoff");
+            const remainingParams = hashParams.toString();
+            newHash = remainingParams
+              ? `${hashBase}?${remainingParams}`
+              : hashBase;
+          }
+
+          next({
+            path: to.path,
+            query: to.query,
+            hash: newHash,
+            replace: true,
+          });
+        } else {
+          // Limpiar lr_handoff de query
+          const newQuery = { ...to.query };
+          delete newQuery.lr_handoff;
+
+          next({
+            path: to.path,
+            query: newQuery,
+            hash: to.hash,
+            replace: true,
+          });
+        }
+        return;
+      } else {
+        console.error("Handoff authentication failed:", result.error);
+      }
+    } catch (error) {
+      console.error("Error processing handoff token:", error);
+    }
+  }
 
   // Check if bypass is active via URL parameter or localStorage
   const urlBypass = to.query.isMe === "true";
@@ -287,20 +485,13 @@ router.beforeEach((to, from, next) => {
     return;
   }
 
-  if (to.path === "/") {
-    next();
-  }
-
   // Check if route requires authentication
   if (to.meta.requiresAuth && !userStore.isAuthenticated) {
     next("/auth");
+    return;
   }
-  // Check if route requires guest (not authenticated)
-  else if (to.meta.requiresGuest && userStore.isAuthenticated) {
-    next("/dashboard");
-  }
-  // If accessing root and not authenticated, go to auth
-  else next();
+
+  next();
 });
 
 // Track page views after navigation
@@ -312,7 +503,7 @@ router.afterEach((to) => {
   // Update meta description
   const description =
     (to.meta?.description as string) ||
-    "Transform your photos with AI-powered enhancement tools. Create stunning canvases, photo frames, and artistic compositions with Photoreka.";
+    "Organize and curate your photo library with advanced tools. Search photos using natural language, arrange them on the canvas, and discover related images based on narrative or color similarity. Rank your photos by aesthetic scores and navigate your catalog in 3D.";
   updateMetaTag("name", "description", description);
 
   // Update meta keywords
@@ -332,7 +523,7 @@ router.afterEach((to) => {
   updateMetaTag(
     "property",
     "twitter:url",
-    `https://photoreka.com${to.fullPath}`
+    `https://photoreka.com${to.fullPath}`,
   );
 
   // Update canonical URL
@@ -345,7 +536,7 @@ router.afterEach((to) => {
 // Helper function to update meta tags
 function updateMetaTag(attribute: string, value: string, content: string) {
   let element = document.querySelector(
-    `meta[${attribute}="${value}"]`
+    `meta[${attribute}="${value}"]`,
   ) as HTMLMetaElement;
   if (element) {
     element.content = content;
@@ -360,7 +551,7 @@ function updateMetaTag(attribute: string, value: string, content: string) {
 // Helper function to update canonical URL
 function updateCanonicalUrl(url: string) {
   let canonical = document.querySelector(
-    'link[rel="canonical"]'
+    'link[rel="canonical"]',
   ) as HTMLLinkElement;
   if (canonical) {
     canonical.href = url;

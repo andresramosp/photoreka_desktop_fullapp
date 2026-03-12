@@ -5,8 +5,16 @@
       selected: isSelected,
       duplicate: photo.isDuplicate,
       'with-footer': showFooter,
+      'show-hover': showHoverOverlay,
     }"
-    @click="toggleSelection()"
+    @click="handleClick"
+    @touchstart="handleTouchStart"
+    @touchmove="handleTouchMove"
+    @touchend="handleTouchEnd"
+    @touchcancel="handleTouchCancel"
+    @contextmenu.prevent="() => {}"
+    @mouseenter="handleMouseEnter"
+    @mouseleave="handleMouseLeave"
     :style="{
       cursor: 'pointer',
     }"
@@ -27,7 +35,8 @@
         v-if="
           !photo.isCheckingDuplicates &&
           !isUploading &&
-          (photo.status === 'processed' || photo.status === 'preprocessed')
+          (photo.status === 'processed' || photo.status === 'preprocessed') &&
+          !isSelectionModeActive
         "
         class="action-buttons-overlay"
       >
@@ -61,24 +70,24 @@
 
       <!-- Checking duplicates overlay with static clock icon -->
       <div v-if="photo.isCheckingDuplicates" class="processing-overlay">
-        <n-icon size="32" color="#ffffffd1">
+        <n-icon size="32" color="var(--text-secondary)">
           <TimeOutline />
         </n-icon>
       </div>
 
       <!-- Preprocessing overlay with static clock icon -->
       <div v-if="photo.status === 'preprocessing'" class="processing-overlay">
-        <n-icon size="32" color="#ffffffd1">
+        <n-icon size="32" color="var(--text-secondary)">
           <TimeOutline />
         </n-icon>
       </div>
 
       <!-- Selection indicator -->
-      <div v-if="isSelected" class="selection-indicator">
+      <!-- <div v-if="isSelected" class="selection-indicator">
         <n-icon size="20" color="#ffffff">
           <CheckCircleIcon />
         </n-icon>
-      </div>
+      </div> -->
 
       <!-- Artistic Score indicator -->
       <div
@@ -89,9 +98,48 @@
         {{ artisticScore.toFixed(1) }}
       </div>
 
+      <!-- Lightroom source indicator -->
+      <n-tooltip
+        v-if="photo.descriptions?.source?.type === 'lightroom'"
+        trigger="hover"
+        placement="top"
+      >
+        <template #trigger>
+          <div class="lightroom-indicator">
+            <img
+              src="@/assets/logos/lightroom_logo.png"
+              alt="Lightroom"
+              class="lightroom-logo"
+            />
+          </div>
+        </template>
+        Photo synced with Lightroom
+      </n-tooltip>
+      <!-- Google Photos source indicator -->
+      <n-tooltip
+        v-if="photo.descriptions?.source?.type === 'google'"
+        trigger="hover"
+        placement="top"
+      >
+        <template #trigger>
+          <div class="google-photos-indicator" @click.stop="openInGooglePhotos">
+            <img
+              src="@/assets/logos/google_photos.png"
+              alt="Google Photos"
+              class="google-photos-logo"
+            />
+          </div>
+        </template>
+        Click to search in Google Photos
+      </n-tooltip>
       <!-- Duplicate indicator in top-left corner when footer is hidden -->
       <n-tooltip
-        v-if="photo.isDuplicate && showDuplicate && !showFooter"
+        v-if="
+          photo.isDuplicate &&
+          !photo.isAlreadyAnalyzed &&
+          showDuplicate &&
+          !showFooter
+        "
         trigger="hover"
         placement="top"
       >
@@ -107,18 +155,57 @@
         </template>
         Click to view duplicates
       </n-tooltip>
-    </div>
+      <!-- Already-analyzed indicator in top-left corner when footer is hidden -->
+      <n-tooltip
+        v-else-if="photo.isAlreadyAnalyzed && showDuplicate && !showFooter"
+        trigger="hover"
+        placement="top"
+      >
+        <template #trigger>
+          <div
+            class="duplicate-indicator top-left-duplicate-indicator already-analyzed-indicator"
+          >
+            <n-icon size="16">
+              <WarningIcon />
+            </n-icon>
+          </div>
+        </template>
+        Already analyzed in workspace
+      </n-tooltip>
 
-    <!-- File name in top-right corner of photo (if showName) -->
-    <div v-if="showName" class="photo-filename-topright" :title="cleanFileName">
-      {{ cleanFileName }}
+      <!-- File name in top-right corner of photo (if showName) -->
+      <div
+        v-if="showName"
+        class="photo-filename-topright"
+        :title="cleanFileName"
+      >
+        {{ cleanFileName }}
+      </div>
+
+      <!-- Bottom overlay with matched tags -->
+      <div
+        v-if="matchedTags && matchedTags.length > 0 && showHoverContent"
+        class="bottom-overlay"
+      >
+        <div class="matched-tags">
+          <span
+            v-for="(tag, index) in matchedTags.slice(0, 3)"
+            :key="index"
+            class="tag"
+          >
+            {{ tag }}
+          </span>
+          <span v-if="matchedTags.length > 3" class="tag-more">
+            +{{ matchedTags.length - 3 }}
+          </span>
+        </div>
+      </div>
     </div>
 
     <!-- Footer with detailed information -->
     <div v-if="showFooter" class="photo-footer">
       <div class="photo-status">
         <!-- Status tags -->
-
         <n-tag
           v-if="photo.status == 'uploaded' || photo.status == 'preprocessing'"
           size="small"
@@ -173,9 +260,9 @@
           Valid in all tools
         </n-tooltip>
       </div>
-      <!-- Duplicate indicator in footer, right-aligned -->
+      <!-- Duplicate indicator: lightbox-vs-lightbox duplicate (opens dialog) -->
       <n-tooltip
-        v-if="photo.isDuplicate && showDuplicate"
+        v-if="photo.isDuplicate && !photo.isAlreadyAnalyzed && showDuplicate"
         trigger="hover"
         placement="top"
       >
@@ -191,13 +278,31 @@
         </template>
         Click to view duplicates
       </n-tooltip>
+      <!-- Already-analyzed indicator: lightbox photo matched to workspace (tooltip only, no dialog) -->
+      <n-tooltip
+        v-else-if="photo.isAlreadyAnalyzed && showDuplicate"
+        trigger="hover"
+        placement="top"
+      >
+        <template #trigger>
+          <div
+            class="duplicate-indicator footer-duplicate-indicator already-analyzed-indicator"
+          >
+            <n-icon size="16">
+              <WarningIcon />
+            </n-icon>
+          </div>
+        </template>
+        Already analyzed in workspace
+      </n-tooltip>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onUnmounted } from "vue";
 import { NIcon, NSpin, NTooltip } from "naive-ui";
+import { useMobilePhotoSelection } from "@/composables/useMobilePhotoSelection";
 
 // Import @vicons icons from ionicons5 for reliability
 import {
@@ -220,6 +325,8 @@ interface PhotoInfo {
   date?: string;
   isDuplicate?: boolean;
   duplicates?: string[];
+  isAlreadyAnalyzed?: boolean;
+  alreadyAnalyzedIds?: string[];
   status?:
     | "uploaded"
     | "preprocessing"
@@ -234,6 +341,10 @@ interface PhotoInfo {
   isCheckingDuplicates: boolean;
   descriptions?: {
     artistic_scores?: Record<string, number>;
+    source?: {
+      type?: string;
+      [key: string]: any;
+    };
     [key: string]: any;
   };
 }
@@ -247,6 +358,7 @@ interface Props {
   isUploading: boolean;
   showDuplicate: boolean;
   artisticScore?: number | null;
+  matchedTags?: string[];
 }
 
 interface Emits {
@@ -258,10 +370,24 @@ interface Emits {
 
 const props = withDefaults(defineProps<Props>(), {
   selected: false,
+  matchedTags: () => [],
 });
 
 const emit = defineEmits<Emits>();
 const { getScoreBgColor } = useArtisticScores();
+
+// Mobile selection composable
+const {
+  isSelectionModeActive,
+  showHoverOverlay,
+  isMobile,
+  handleTouchStart: baseTouchStart,
+  handleTouchMove: baseTouchMove,
+  handleTouchEnd: baseTouchEnd,
+  handleTouchCancel: baseTouchCancel,
+  handleClick: baseHandleClick,
+  cleanup,
+} = useMobilePhotoSelection();
 
 // Utilidad para limpiar extensión y acortar nombre
 function removeExtension(filename: string): string {
@@ -269,7 +395,7 @@ function removeExtension(filename: string): string {
 }
 
 const cleanFileName = computed(() =>
-  removeExtension(props.photo.originalFileName)
+  removeExtension(props.photo.originalFileName),
 );
 
 const scoreBackgroundColor = computed(() => {
@@ -282,9 +408,35 @@ const scoreBackgroundColor = computed(() => {
 const isSelected = computed(() => props.selected);
 const imageLoaded = ref(false);
 const imageError = ref(false);
+const showHoverContent = ref(false);
 
-const toggleSelection = () => {
-  emit("select", props.photo.id);
+// Event handlers for mobile touch
+const handleTouchStart = (event: TouchEvent) => {
+  baseTouchStart(event, props.photo.id, (id) => emit("select", id));
+};
+
+const handleTouchMove = (event: TouchEvent) => {
+  baseTouchMove(event);
+};
+
+const handleTouchEnd = (event: TouchEvent) => {
+  baseTouchEnd(event, props.photo.id, (id) => emit("select", id), showInfo);
+};
+
+const handleTouchCancel = () => {
+  baseTouchCancel();
+};
+
+const handleClick = (event: MouseEvent) => {
+  baseHandleClick(event, props.photo.id, (id) => emit("select", id));
+};
+
+const handleMouseEnter = () => {
+  showHoverContent.value = true;
+};
+
+const handleMouseLeave = () => {
+  showHoverContent.value = false;
 };
 
 const showInfo = () => {
@@ -310,6 +462,40 @@ const onImageLoad = () => {
 const onImageError = () => {
   imageError.value = true;
 };
+
+const openInGooglePhotos = () => {
+  // Google Photos Picker API does not expose a usable web URL per photo.
+  // Search by exact capture date from EXIF, falling back to filename.
+  const rawDate =
+    props.photo.descriptions?.EXIF?.dateTaken ||
+    props.photo.date ||
+    props.photo.uploadDate;
+  let query = "";
+
+  if (rawDate) {
+    const d = new Date(rawDate);
+    if (!isNaN(d.getTime())) {
+      const month = d.toLocaleString("en-US", { month: "long" });
+      const day = d.getDate();
+      const year = d.getFullYear();
+      query = `${month} ${day} ${year}`;
+    }
+  }
+
+  if (!query) {
+    query = removeExtension(props.photo.originalFileName || props.photo.name);
+  }
+
+  const url = query
+    ? `https://photos.google.com/search/${encodeURIComponent(query)}`
+    : "https://photos.google.com/";
+  window.open(url, "_blank", "noopener,noreferrer");
+};
+
+// Cleanup on unmount
+onUnmounted(() => {
+  cleanup();
+});
 </script>
 
 <style scoped>
@@ -323,34 +509,30 @@ const onImageError = () => {
   border-radius: 12px;
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 2px solid transparent;
-  background-color: #2c2c32;
+  background-color: var(--bg-container);
   display: flex;
   flex-direction: column;
 
   /* Habilitar container queries */
   container-type: inline-size;
   container-name: photo-card;
+
+  box-sizing: border-box;
+  border: 2px solid transparent;
+  transition: border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .photo-card-info.with-footer {
   aspect-ratio: 3/4 !important;
 }
 
-.photo-card-info:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-}
-
 .photo-card-info.selected {
-  border-color: #8b5cf6;
-  box-shadow: 0 0 0 1px #8b5cf640, 0 8px 24px rgba(139, 92, 246, 0.2);
+  border: solid 2px var(--accent-color);
 }
 
 .photo-container {
   position: relative;
   width: 100%;
-  background-color: #2c2c32;
   flex: 1;
   min-height: 0; /* Allow shrinking */
 }
@@ -361,7 +543,7 @@ const onImageError = () => {
   object-fit: contain;
   object-position: center;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  background-color: #2c2c32;
+  background-color: var(--bg-surface);
 }
 
 /* Note: Photo skeleton styles moved to global.scss */
@@ -379,7 +561,8 @@ const onImageError = () => {
   gap: 8px;
 }
 
-.photo-card-info:hover .action-buttons-overlay {
+.photo-card-info:hover .action-buttons-overlay,
+.photo-card-info.show-hover .action-buttons-overlay {
   opacity: 1;
 }
 
@@ -387,8 +570,8 @@ const onImageError = () => {
 .duplicate-indicator {
   background-color: rgba(245, 158, 11, 0.9);
   border-radius: 50%;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -400,6 +583,11 @@ const onImageError = () => {
   position: static;
   margin-left: auto;
   margin-right: 0;
+}
+
+.already-analyzed-indicator {
+  cursor: default;
+  background-color: rgba(245, 158, 11, 0.6);
 }
 
 .top-left-duplicate-indicator {
@@ -507,7 +695,7 @@ const onImageError = () => {
   position: absolute;
   top: 8px;
   right: 8px;
-  background-color: rgba(139, 92, 246, 0.9);
+  background-color: var(--accent-color);
   border-radius: 50%;
   width: 32px;
   height: 32px;
@@ -534,6 +722,58 @@ const onImageError = () => {
   text-align: center;
 }
 
+/* Lightroom source indicator */
+.lightroom-indicator {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  border-radius: 6px;
+  padding: 4px;
+  opacity: 0.8;
+  background-color: rgba(49, 168, 240, 0.9);
+  z-index: 4;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lightroom-logo {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+/* Google Photos source indicator */
+.google-photos-indicator {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  border-radius: 6px;
+  padding: 4px;
+  opacity: 1;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.google-photos-indicator:hover {
+  transform: scale(1.15);
+  opacity: 0.85;
+}
+
+.google-photos-logo {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
 /* Variantes responsivas para el indicador de selección */
 @container photo-card (max-width: 200px) {
   .selection-indicator {
@@ -552,6 +792,17 @@ const onImageError = () => {
     padding: 3px 6px;
     bottom: 6px;
     left: 6px;
+  }
+
+  .lightroom-indicator {
+    bottom: 6px;
+    right: 6px;
+    padding: 3px;
+  }
+
+  .lightroom-logo {
+    width: 18px;
+    height: 18px;
   }
 }
 
@@ -572,6 +823,28 @@ const onImageError = () => {
     padding: 2px 5px;
     bottom: 4px;
     left: 4px;
+  }
+
+  .lightroom-indicator {
+    bottom: 4px;
+    right: 4px;
+    padding: 2px;
+  }
+
+  .lightroom-logo {
+    width: 16px;
+    height: 16px;
+  }
+
+  .google-photos-indicator {
+    bottom: 4px;
+    right: 4px;
+    padding: 2px;
+  }
+
+  .google-photos-logo {
+    width: 16px;
+    height: 16px;
   }
 }
 
@@ -594,6 +867,28 @@ const onImageError = () => {
     bottom: 6px;
     left: 6px;
   }
+
+  .lightroom-indicator {
+    bottom: 6px;
+    right: 6px;
+    padding: 3px;
+  }
+
+  .lightroom-logo {
+    width: 18px;
+    height: 18px;
+  }
+
+  .google-photos-indicator {
+    bottom: 6px;
+    right: 6px;
+    padding: 3px;
+  }
+
+  .google-photos-logo {
+    width: 18px;
+    height: 18px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -614,12 +909,34 @@ const onImageError = () => {
     bottom: 4px;
     left: 4px;
   }
+
+  .lightroom-indicator {
+    bottom: 4px;
+    right: 4px;
+    padding: 2px;
+  }
+
+  .lightroom-logo {
+    width: 16px;
+    height: 16px;
+  }
+
+  .google-photos-indicator {
+    bottom: 4px;
+    right: 4px;
+    padding: 2px;
+  }
+
+  .google-photos-logo {
+    width: 16px;
+    height: 16px;
+  }
 }
 
 /* Photo footer */
 .photo-footer {
   padding: 9px;
-  background-color: #1a1a1f;
+  background-color: var(--bg-body);
   display: flex;
   border-top: 1px solid #2c2c32;
   align-items: center;
@@ -630,7 +947,7 @@ const onImageError = () => {
 .photo-title {
   font-size: 12px;
   /* font-weight: 500; */
-  color: #ffffffd1;
+  color: var(--text-secondary);
   margin: 0 0 4px 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -717,5 +1034,54 @@ const onImageError = () => {
     /* padding: 3px 5px; */
     max-width: 80%;
   }
+}
+
+/* Bottom overlay with matched tags */
+.bottom-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 10;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.matched-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  background-color: color-mix(in srgb, var(--accent-color), transparent 50%);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  font-size: 11px;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.tag-more {
+  display: inline-block;
+  padding: 2px 8px;
+  background-color: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  font-size: 11px;
+  color: #ffffff;
+  font-weight: 600;
 }
 </style>

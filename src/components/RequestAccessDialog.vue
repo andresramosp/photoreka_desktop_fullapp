@@ -2,30 +2,35 @@
   <n-modal
     v-model:show="visible"
     preset="dialog"
-    title="Request Access"
+    title="Join the Waiting List"
     :mask-closable="true"
     :closable="true"
     :auto-focus="false"
     :icon="undefined"
-    style="width: 660px; max-width: 90vw"
+    style="width: 740px; max-width: 90vw"
   >
     <template #icon>
       <n-icon size="24" color="#2563eb">
-        <RocketOutline />
+        <KeyOutline />
       </n-icon>
     </template>
 
     <template #header>
       <div class="dialog-header">
-        <span class="dialog-title">Request Access</span>
+        <span class="dialog-title">Join the Waiting List</span>
       </div>
     </template>
 
     <div class="dialog-content">
       <p class="intro-text">
-        Photoreka is currently in beta testing phase. We welcome photographers
-        who want to collaborate and help us improve the platform. Please fill
-        out the form below to request early access.
+        Photoreka is currently rolling out access in small batches. New users
+        are invited progressively in groups of 20, so we can closely monitor
+        quality and performance.
+      </p>
+
+      <p class="intro-text">
+        Leave your email below to join the waiting list. We will notify you as
+        soon as your batch is ready.
       </p>
 
       <n-form
@@ -45,33 +50,24 @@
           />
         </n-form-item>
 
-        <!-- <n-form-item label="Reason for testing" path="reason" required>
-          <n-select
-            v-model:value="formData.reason"
-            placeholder="Select your main interest"
-            :options="reasonOptions"
-            :disabled="loading"
-          />
-        </n-form-item> -->
-
-        <n-form-item label="Portfolio/Social Media Link" path="portfolioLink">
+        <n-form-item label="Portfolio / Social link" path="portfolioLink">
           <n-input
             v-model:value="formData.portfolioLink"
-            placeholder="https://your-portfolio.com or Instagram handle"
+            placeholder="https://your-portfolio.com or Instagram"
             :disabled="loading"
           />
           <template #feedback>
-            <span class="optional-text"
-              >Optional but very helpful for us to understand your work</span
-            >
+            <span class="optional-text">
+              Optional. Helps us prioritize photographers with active work.
+            </span>
           </template>
         </n-form-item>
 
         <n-form-item path="hasLargeCollection" class="switch-form-item">
           <div class="switch-container">
-            <span class="switch-label"
-              >I have a photo collection with more than 500 photos</span
-            >
+            <span class="switch-label">
+              I manage a photo collection larger than 500 images
+            </span>
             <n-switch
               v-model:value="formData.hasLargeCollection"
               :disabled="loading"
@@ -80,38 +76,17 @@
           </div>
           <template #feedback v-if="!formData.hasLargeCollection">
             <span class="info-message">
-              Photoreka is a tool designed to work with large photo collections,
-              but we will consider your request anyway.
+              Photoreka is optimized for large libraries, but smaller
+              collections are still welcome on the waiting list.
             </span>
           </template>
         </n-form-item>
-
-        <!-- <n-form-item path="noAIConcerns" class="switch-form-item">
-          <div class="switch-container">
-            <span class="switch-label"
-              >I agree to have my photos analyzed by AI (without model
-              training)</span
-            >
-            <n-switch
-              v-model:value="formData.noAIConcerns"
-              :disabled="loading"
-              size="medium"
-            />
-          </div>
-          <template #feedback v-if="!formData.noAIConcerns">
-            <span class="info-message">
-              Photoreka requires linguistic and visual analysis of the images.
-              If you have concerns about this, or about AI in general, we
-              recommend considering whether this platform is right for you.
-            </span>
-          </template>
-        </n-form-item> -->
       </n-form>
     </div>
 
     <template #action>
       <div class="dialog-actions">
-        <n-button @click="handleCancel" :disabled="loading"> Cancel </n-button>
+        <n-button @click="handleCancel" :disabled="loading">Cancel</n-button>
         <n-button
           type="primary"
           @click="handleSubmit"
@@ -121,7 +96,7 @@
           <template #icon>
             <n-icon><SendOutline /></n-icon>
           </template>
-          Request Access
+          Join Waiting List
         </n-button>
       </div>
     </template>
@@ -141,7 +116,7 @@ import {
   NSwitch,
   useMessage,
 } from "naive-ui";
-import { RocketOutline, SendOutline } from "@vicons/ionicons5";
+import { KeyOutline, RocketOutline, SendOutline } from "@vicons/ionicons5";
 import { api } from "@/utils/axios.js";
 import { trackEvent, trackUserAction } from "@/utils/analytics";
 
@@ -223,7 +198,7 @@ const handleSubmit = async () => {
       agrees_to_ai: formData.noAIConcerns,
     });
 
-    const response = await api.post("/api/landing/request", {
+    const response = await api.post("/api/landing/waiting-list", {
       email: formData.email,
       reason: formData.reason,
       portfolioLink: formData.portfolioLink || null,
@@ -237,7 +212,7 @@ const handleSubmit = async () => {
     });
 
     message.success(
-      "Access request submitted successfully! We'll be in touch soon."
+      "Access request submitted successfully! We'll be in touch soon.",
     );
 
     // Reset form
@@ -260,12 +235,10 @@ const handleSubmit = async () => {
 
     if (error.response?.status === 409) {
       message.warning(
-        "You have already submitted a request with this email address."
+        "You have already submitted a request with this email address.",
       );
     } else if (error.response?.status === 400) {
       message.error("Please check your information and try again.");
-    } else {
-      message.error("Failed to submit request. Please try again later.");
     }
   } finally {
     loading.value = false;

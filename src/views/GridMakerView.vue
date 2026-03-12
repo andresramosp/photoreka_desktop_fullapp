@@ -162,145 +162,30 @@
               'is-generating': cell.isGenerating,
             }"
           >
-            <!-- Empty Cell with Add Button -->
-            <template v-if="!cell.photo">
-              <div
-                v-if="!cell.isGenerating && !isGenerating"
-                class="empty-cell"
-              >
-                <n-button
-                  circle
-                  size="large"
-                  class="add-photo-btn"
-                  @click="openPhotoSelector(index)"
-                >
-                  <template #icon>
-                    <n-icon size="24">
-                      <AddOutline />
-                    </n-icon>
-                  </template>
-                </n-button>
-                <span class="cell-label">Add Photo</span>
-              </div>
-              <!-- Generating Skeleton -->
-              <div v-else-if="cell.isGenerating" class="generating-cell">
-                <n-skeleton height="100%" width="100%" />
-                <div v-if="showSpinnerOverlay" class="generating-overlay">
-                  <n-spin size="medium" />
-                </div>
-              </div>
-            </template>
-            <!-- Photo Cell -->
-            <div v-else class="filled-cell">
-              <img
-                :src="cell.photo.thumbnailUrl"
-                :alt="cell.photo.name || cell.photo.title"
-                class="cell-photo"
-              />
-              <div class="cell-overlay">
-                <n-button
-                  circle
-                  size="small"
-                  class="remove-photo-btn"
-                  @click="removePhoto(index)"
-                >
-                  <template #icon>
-                    <n-icon><CloseOutline /></n-icon>
-                  </template>
-                </n-button>
-              </div>
-
-              <!-- Movement Controls -->
-              <div class="movement-controls">
-                <!-- Up Arrow -->
-                <n-button
-                  v-if="canMoveUp(index)"
-                  circle
-                  size="small"
-                  class="move-btn move-up"
-                  @click="movePhoto(index, 'up')"
-                >
-                  <template #icon>
-                    <n-icon size="16"><ChevronUpOutline /></n-icon>
-                  </template>
-                </n-button>
-
-                <!-- Down Arrow -->
-                <n-button
-                  v-if="canMoveDown(index)"
-                  circle
-                  size="small"
-                  class="move-btn move-down"
-                  @click="movePhoto(index, 'down')"
-                >
-                  <template #icon>
-                    <n-icon size="16"><ChevronDownOutline /></n-icon>
-                  </template>
-                </n-button>
-
-                <!-- Left Arrow -->
-                <n-button
-                  v-if="canMoveLeft(index)"
-                  circle
-                  size="small"
-                  class="move-btn move-left"
-                  @click="movePhoto(index, 'left')"
-                >
-                  <template #icon>
-                    <n-icon size="16"><ChevronBackOutline /></n-icon>
-                  </template>
-                </n-button>
-
-                <!-- Right Arrow -->
-                <n-button
-                  v-if="canMoveRight(index)"
-                  circle
-                  size="small"
-                  class="move-btn move-right"
-                  @click="movePhoto(index, 'right')"
-                >
-                  <template #icon>
-                    <n-icon size="16"><ChevronForwardOutline /></n-icon>
-                  </template>
-                </n-button>
-              </div>
-              <!-- Photo info badge -->
-              <!-- <div v-if="cell.photo.sourcePhotoId" class="photo-info-badge">
-                <n-tooltip trigger="hover" placement="top">
-                  <template #trigger>
-                    <span class="generation-info">
-                      {{ cell.photo.generationDepth || 0 }}
-                      <span class="criteria-indicator">{{
-                        cell.photo.criteria === "chromatic" ? "🎨" : "🧠"
-                      }}</span>
-                    </span>
-                  </template>
-                  <span>
-                    Generation depth: {{ cell.photo.generationDepth || 0
-                    }}<br />
-                    Criteria:
-                    {{
-                      cell.photo.criteria === "chromatic"
-                        ? "Chromatic (color-based)"
-                        : "Embedding (semantic)"
-                    }}
-                  </span>
-                </n-tooltip>
-              </div> -->
-              <!-- Original photo indicator -->
-              <div
-                v-if="!cell.photo.sourcePhotoId && !cell.photo.sourcePhotoIds"
-                class="original-photo-badge"
-              >
-                <n-icon size="12"><BookmarkOutline /></n-icon>
-              </div>
-            </div>
+            <PhotoSequenceCard
+              mode="grid"
+              :photo="cell.photo"
+              :is-generating="cell.isGenerating"
+              :show-spinner="showSpinnerOverlay"
+              :can-move-up="canMoveUp(index)"
+              :can-move-down="canMoveDown(index)"
+              :can-move-left="canMoveLeft(index)"
+              :can-move-right="canMoveRight(index)"
+              :is-original="
+                cell.photo &&
+                !cell.photo.sourcePhotoId &&
+                !cell.photo.sourcePhotoIds
+              "
+              @add-photo="openPhotoSelector(index)"
+              @remove="removePhoto(index)"
+              @move="(dir) => movePhoto(index, dir)"
+            />
           </div>
         </div>
       </div>
 
       <!-- Grid Actions -->
-      <div class="grid-actions-bottom">
+      <!-- <div class="grid-actions-bottom">
         <n-button @click="exportGrid" type="primary">
           <template #icon>
             <n-icon><DownloadOutline /></n-icon>
@@ -314,7 +199,7 @@
           </template>
           Save as Template
         </n-button>
-      </div>
+      </div> -->
     </div>
 
     <!-- Photo Selection Dialog -->
@@ -332,6 +217,7 @@
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useMessage, NSelect, NButton, NTooltip } from "naive-ui";
 import PhotosDialog from "@/components/PhotosDialog.vue";
+import PhotoSequenceCard from "@/components/PhotoSequenceCard.vue";
 import { usePhotosStore } from "@/stores/photos";
 import { api } from "@/utils/axios";
 
@@ -343,10 +229,6 @@ import {
   CloseOutline,
   DownloadOutline,
   BookmarkOutline,
-  ChevronUpOutline,
-  ChevronDownOutline,
-  ChevronBackOutline,
-  ChevronForwardOutline,
 } from "@vicons/ionicons5";
 
 defineOptions({
@@ -977,8 +859,10 @@ onMounted(async () => {
 <style scoped>
 .grid-maker-container {
   padding: var(--spacing-2xl);
-
   margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .grid-maker-header {
@@ -1082,6 +966,8 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2xl);
+  max-height: 100vh;
+  overflow-y: auto;
 }
 
 .grid-controls {
@@ -1093,6 +979,9 @@ onMounted(async () => {
   padding: var(--spacing-lg);
   background-color: var(--bg-surface);
   border-radius: var(--border-radius-lg);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .control-group {
@@ -1154,218 +1043,6 @@ onMounted(async () => {
   border-radius: var(--border-radius-md);
   overflow: hidden;
   position: relative;
-  background-color: var(--bg-container);
-  border: 2px solid var(--border-color);
-  transition: all 0.3s ease;
-}
-
-.photo-cell:hover {
-  /* border-color: var(--primary-color); */
-}
-
-/* Empty Cell */
-.empty-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  gap: var(--spacing-sm);
-  color: var(--text-secondary);
-}
-
-.add-photo-btn {
-  background-color: var(--bg-container) !important;
-  border: 2px dashed var(--border-color) !important;
-  transition: all 0.3s ease;
-}
-
-.add-photo-btn:hover {
-  border-color: var(--primary-color) !important;
-  background-color: var(--primary-color-hover) !important;
-}
-
-.cell-label {
-  font-size: 12px;
-  font-weight: 500;
-}
-
-/* Generating Cell */
-.generating-cell {
-  position: relative;
-  height: 100%;
-}
-
-.generating-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.7);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-sm);
-  z-index: 2;
-}
-
-/* Filled Cell */
-.filled-cell {
-  position: relative;
-  height: 100%;
-}
-
-.cell-photo {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  background: #f5f5f5;
-  transition: transform 0.3s ease;
-}
-
-.cell-overlay {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  display: flex;
-  gap: 4px;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  z-index: 3;
-}
-
-.photo-cell:hover .cell-overlay {
-  opacity: 1;
-}
-
-.remove-photo-btn,
-.replace-photo-btn {
-  background-color: rgba(0, 0, 0, 0.7) !important;
-  border: none !important;
-  color: white !important;
-}
-
-/* Movement Controls */
-.movement-controls {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  opacity: 0;
-  transition: opacity 0.1s ease;
-  z-index: 2;
-  pointer-events: none;
-}
-
-.photo-cell:hover .movement-controls {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.move-btn {
-  background-color: rgba(255, 255, 255, 0.95) !important;
-  color: var(--text-primary) !important;
-  width: 28px !important;
-  height: 28px !important;
-  min-width: 28px !important;
-  transition: background-color 0.2s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  position: absolute;
-}
-
-.move-btn:hover {
-  background-color: var(--primary-color) !important;
-  color: white !important;
-}
-
-/* Forzar visibilidad de iconos en botones direccionales */
-.move-btn {
-  background-color: var(--primary-color-suppl) !important;
-  color: white !important;
-}
-
-.move-up {
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.move-down {
-  bottom: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.move-left {
-  left: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-.move-right {
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-/* Animation for moving photos */
-.moving-photo {
-  transition: transform 0.1s ease;
-  z-index: 10;
-}
-
-/* Photo Info Badges */
-.photo-info-badge {
-  position: absolute;
-  bottom: 6px;
-  left: 6px;
-  background-color: rgba(139, 92, 246, 0.9);
-  color: white;
-  border-radius: 12px;
-  padding: 2px 6px;
-  font-size: 10px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.photo-info-badge:hover {
-  background-color: rgba(139, 92, 246, 1);
-}
-
-.generation-info {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 10px;
-}
-
-.criteria-indicator {
-  font-size: 8px;
-  opacity: 0.9;
-}
-
-.generation-depth {
-  font-size: 10px;
-}
-
-.original-photo-badge {
-  position: absolute;
-  bottom: 6px;
-  left: 6px;
-  background-color: rgba(34, 197, 94, 0.9);
-  color: white;
-  border-radius: 50%;
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 /* Bottom Actions */

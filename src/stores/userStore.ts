@@ -1,6 +1,6 @@
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import { defineStore } from "pinia";
-import { api } from "../utils/axios";
+import { api, api_analyzer } from "../utils/axios";
 
 interface Usage {
   creditsUsed: number;
@@ -8,10 +8,19 @@ interface Usage {
   creditsAvailable: number;
   analyzedPhotosLimit: number;
   photosUsage: number;
-  analyzedPhotosUsage: number;
+  analyzedPhotosUsed: number;
   photosRemaining: number;
   analyzedPhotosRemaining: number;
 }
+
+export type UserProfile =
+  | "general"
+  | "street-photography"
+  | "documentary"
+  | "artistic"
+  | "street-photography|artistic"
+  | "documentary|artistic"
+  | "street-photography|documentary";
 
 interface User {
   id: string;
@@ -20,6 +29,9 @@ interface User {
   avatar?: string;
   provider?: "email" | "google" | "facebook";
   usage?: Usage;
+  preferredSource: "web" | "ligthroom";
+  isEmailConfirmed: boolean;
+  profiles?: UserProfile;
 }
 
 export const useUserStore = defineStore("user", () => {
@@ -27,6 +39,13 @@ export const useUserStore = defineStore("user", () => {
   const token = ref<string | null>(null);
   const user = ref<User | null>(null);
   const isLoading = ref(false);
+  const isInitialized = ref(false); // Indica si la inicialización (auth + profile) está completa
+
+  // Getter para el shortname (primer nombre del usuario)
+  const userShortName = computed(() => {
+    if (!user.value?.name) return null;
+    return user.value.name.split(" ")[0];
+  });
 
   // Mock usage limits state by section
   const usageLimits = ref({
@@ -44,46 +63,76 @@ export const useUserStore = defineStore("user", () => {
 
   // Check for existing token on store initialization
   const initAuth = async () => {
-    const savedToken = localStorage.getItem("auth_token");
+    // Verificar primero localStorage (usuarios normales), luego sessionStorage (modo demo)
+    const savedToken =
+      localStorage.getItem("auth_token") ||
+      sessionStorage.getItem("auth_token");
+    const isDemo =
+      !localStorage.getItem("auth_token") &&
+      !!sessionStorage.getItem("auth_token");
+
     if (savedToken) {
       token.value = savedToken;
-      isAuthenticated.value = true;
+      // NO establecer isAuthenticated aquí; se establece después de cargar el perfil
+      // para evitar que el watcher de App.vue compruebe user.profiles antes de que esté disponible
       try {
         const response = await api.get("/api/auth/profile");
         user.value = response.data.user;
+        isAuthenticated.value = true;
 
         // Fetch usage data after successful profile load
         await fetchUsage();
-      } catch (error) {
-        // Si el token no es válido, limpiar estado
-        token.value = null;
-        isAuthenticated.value = false;
-        user.value = null;
-        localStorage.removeItem("auth_token");
+      } catch (error: any) {
+        // Solo limpiar el token si el servidor rechaza explícitamente las credenciales (401/403).
+        // Errores 5xx (caída de BD, servidor, etc.) son transitorios y NO deben invalidar el token.
+        const status = error?.response?.status;
+        if (status === 401 || status === 403) {
+          token.value = null;
+          isAuthenticated.value = false;
+          user.value = null;
+          localStorage.removeItem("auth_token");
+          sessionStorage.removeItem("auth_token");
+        } else {
+          // Error de servidor/red: mantener el token, marcar como no autenticado por ahora
+          // pero sin borrar las credenciales para que el usuario pueda reintentar.
+          isAuthenticated.value = false;
+          user.value = null;
+        }
       }
     }
+    // Marcar como inicializado independientemente del resultado
+    isInitialized.value = true;
   };
 
   const login = async (
     email: string,
-    password: string
+    password: string,
   ): Promise<{ success: boolean; error?: string }> => {
     isLoading.value = true;
+    // Resetear estado de inicialización al hacer login para forzar recarga completa
+    isInitialized.value = false;
 
     try {
       const response = await api.post("/api/auth/login", { email, password });
       const { token: receivedToken } = response.data;
 
+      // Limpiar cualquier sesión de demo anterior
+      sessionStorage.removeItem("auth_token");
+
       token.value = receivedToken;
-      isAuthenticated.value = true;
       localStorage.setItem("auth_token", receivedToken);
 
-      // Obtener datos reales del usuario desde /profile
+      // Obtener datos reales del usuario desde /profile ANTES de marcar como autenticado
+      // para evitar race condition con el watcher de App.vue que comprueba user.profiles
       const profileResponse = await api.get("/api/auth/profile");
       user.value = profileResponse.data.user;
+      isAuthenticated.value = true;
 
       // Fetch usage data after successful login
       await fetchUsage();
+
+      // Marcar como inicializado después de cargar todo
+      isInitialized.value = true;
 
       return { success: true };
     } catch (error: any) {
@@ -100,9 +149,11 @@ export const useUserStore = defineStore("user", () => {
     email: string,
     password: string,
     name: string,
-    authCode?: string
+    inviteCode?: string,
   ): Promise<{ success: boolean; error?: string }> => {
     isLoading.value = true;
+    // Resetear estado de inicialización al hacer registro para forzar recarga completa
+    isInitialized.value = false;
 
     try {
       const payload: any = {
@@ -111,21 +162,26 @@ export const useUserStore = defineStore("user", () => {
         name,
       };
 
-      if (authCode) {
-        payload.authCode = authCode;
+      if (inviteCode) {
+        payload.inviteCode = inviteCode;
       }
 
       const response = await api.post("/api/auth/register", payload);
       const { token: receivedToken, user: receivedUser } = response.data;
 
-      token.value = receivedToken;
-      isAuthenticated.value = true;
-      user.value = receivedUser;
+      // Limpiar cualquier sesión de demo anterior
+      sessionStorage.removeItem("auth_token");
 
+      token.value = receivedToken;
+      user.value = receivedUser;
       localStorage.setItem("auth_token", receivedToken);
+      isAuthenticated.value = true;
 
       // Fetch usage data after successful registration
       await fetchUsage();
+
+      // Marcar como inicializado después de cargar todo
+      isInitialized.value = true;
 
       return { success: true };
     } catch (error: any) {
@@ -139,55 +195,43 @@ export const useUserStore = defineStore("user", () => {
   };
 
   const loginWithProvider = async (
-    provider: "google" | "facebook"
+    provider: "google" | "facebook",
+    mode: "login" | "register" = "login",
+    inviteCode?: string,
   ): Promise<{ success: boolean; error?: string }> => {
-    isLoading.value = true;
+    if (provider === "google") {
+      // Redirigir al backend que maneja OAuth
+      const backendUrl =
+        import.meta.env.VITE_MAIN_API_BASE_URL || "http://localhost:3333";
 
-    try {
-      // Mock social authentication - replace with real OAuth implementation
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Construir URL con parámetros
+      const params = new URLSearchParams();
+      params.append("mode", mode);
+      if (inviteCode) {
+        params.append("inviteCode", inviteCode);
+      }
 
-      const mockToken = `mock_token_${provider}_${Date.now()}_${Math.random()
-        .toString(36)
-        .substr(2, 9)}`;
+      window.location.href = `${backendUrl}/api/auth/google/redirect?${params.toString()}`;
 
-      token.value = mockToken;
-      isAuthenticated.value = true;
-      user.value = {
-        id: `user_${provider}_${Date.now()}`,
-        email: `user@${provider === "google" ? "gmail.com" : "facebook.com"}`,
-        name: `${provider === "google" ? "Google" : "Facebook"} User`,
-        provider,
-        usage: {
-          creditsUsed: 0,
-          photosLimit: 5000,
-          creditsAvailable: 100,
-          analyzedPhotosLimit: 2000,
-          photosUsage: 1212,
-          analyzedPhotosUsage: 1211,
-          photosRemaining: 3788,
-          analyzedPhotosRemaining: 789,
-        },
-      };
-
-      localStorage.setItem("auth_token", mockToken);
-
+      // La función retorna pero no se completa aquí
+      // El flujo continúa en el componente AuthCallback
       return { success: true };
-    } catch (error) {
-      return {
-        success: false,
-        error: `Error logging in with ${provider}. Please try again.`,
-      };
-    } finally {
-      isLoading.value = false;
     }
+
+    // Facebook aún no implementado
+    return {
+      success: false,
+      error: "Facebook login not implemented yet",
+    };
   };
 
   const logout = () => {
     token.value = null;
     isAuthenticated.value = false;
     user.value = null;
+    isInitialized.value = false;
     localStorage.removeItem("auth_token");
+    sessionStorage.removeItem("auth_token");
   };
 
   const dismissUsageWarning = (section: "search" | "curation") => {
@@ -211,22 +255,317 @@ export const useUserStore = defineStore("user", () => {
     }
   };
 
-  // Initialize auth state
-  // Llamar de forma asíncrona para no bloquear la carga
-  initAuth();
+  // Función para traducir array de profiles a UserProfile
+  const translateProfilesToUserProfile = (profiles: string[]): UserProfile => {
+    if (profiles.length === 0) {
+      return "general";
+    }
+
+    // Ordenar alfabéticamente y unir con pipes
+    return profiles.sort().join("|") as UserProfile;
+  };
+
+  const updateProfile = async (
+    profileData: any,
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!isAuthenticated.value || !token.value) {
+      return {
+        success: false,
+        error: "User is not authenticated.",
+      };
+    }
+
+    try {
+      // Traducir profiles array a UserProfile si existen
+      const translatedData = { ...profileData };
+      if (profileData.profiles && Array.isArray(profileData.profiles)) {
+        translatedData.profiles = translateProfilesToUserProfile(
+          profileData.profiles,
+        );
+      }
+
+      const response = await api.put("/api/auth/profile", translatedData);
+
+      // Update local user data if successful
+      if (user.value && response.data.user) {
+        user.value = { ...user.value, ...response.data.user };
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.message || "Error updating profile.",
+      };
+    }
+  };
+
+  const confirmEmail = async (
+    token: string,
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      await api.post("/api/auth/confirm-email", { token });
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.message || "Error confirming email.",
+      };
+    }
+  };
+
+  const resendConfirmation = async (
+    email: string,
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      await api.post("/api/auth/resend-confirmation", { email });
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error:
+          error.response?.data?.message ||
+          "Error resending confirmation email.",
+      };
+    }
+  };
+
+  const forgotPassword = async (
+    email: string,
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      await api.post("/api/auth/forgot-password", { email });
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error:
+          error.response?.data?.message ||
+          "Error sending password reset email.",
+      };
+    }
+  };
+
+  const resetPassword = async (
+    token: string,
+    newPassword: string,
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      await api.post("/api/auth/reset-password", { token, newPassword });
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.message || "Error resetting password.",
+      };
+    }
+  };
+
+  const changePassword = async (
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!isAuthenticated.value || !token.value) {
+      return {
+        success: false,
+        error: "User is not authenticated.",
+      };
+    }
+
+    try {
+      await api.post("/api/auth/change-password", {
+        currentPassword,
+        newPassword,
+      });
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.message || "Error changing password.",
+      };
+    }
+  };
+
+  const processOAuthCallback = async (
+    receivedToken: string,
+  ): Promise<{ success: boolean; error?: string }> => {
+    isLoading.value = true;
+    // Resetear estado de inicialización al hacer OAuth login para forzar recarga completa
+    isInitialized.value = false;
+
+    try {
+      // Limpiar cualquier sesión de demo anterior
+      sessionStorage.removeItem("auth_token");
+
+      // Guardar token
+      token.value = receivedToken;
+      localStorage.setItem("auth_token", receivedToken);
+
+      // Obtener perfil del usuario ANTES de marcar como autenticado
+      const profileResponse = await api.get("/api/auth/profile");
+      user.value = profileResponse.data.user;
+      isAuthenticated.value = true;
+
+      // Obtener usage
+      await fetchUsage();
+
+      // Marcar como inicializado después de cargar todo
+      isInitialized.value = true;
+
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.message || "Error processing OAuth login",
+      };
+    } finally {
+      isLoading.value = false;
+    }
+  };
+
+  const consumeHandoff = async (
+    handoffToken: string,
+  ): Promise<{ success: boolean; error?: string }> => {
+    isLoading.value = true;
+
+    try {
+      const response = await api.post("/api/auth_lr/consume-handoff", {
+        handoffToken,
+      });
+      const { token: receivedToken } = response.data;
+
+      // Limpiar cualquier sesión de demo anterior
+      sessionStorage.removeItem("auth_token");
+
+      // Actualizar estado de autenticación
+      token.value = receivedToken;
+      localStorage.setItem("auth_token", receivedToken);
+
+      // Obtener datos del usuario ANTES de marcar como autenticado
+      const profileResponse = await api.get("/api/auth/profile");
+      user.value = profileResponse.data.user;
+      isAuthenticated.value = true;
+
+      // Obtener datos de uso
+      await fetchUsage();
+
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error:
+          error.response?.data?.message || "Error consuming handoff token.",
+      };
+    } finally {
+      isLoading.value = false;
+    }
+  };
+
+  const demoLogin = async (): Promise<{ success: boolean; error?: string }> => {
+    isLoading.value = true;
+    // Resetear estado de inicialización al hacer demo login para forzar recarga completa
+    isInitialized.value = false;
+
+    try {
+      const response = await api.post("/api/auth/demo-login");
+      const { token: receivedToken } = response.data;
+
+      // Limpiar cualquier sesión anterior (usuario normal)
+      localStorage.removeItem("auth_token");
+
+      token.value = receivedToken;
+      // Usar sessionStorage para demo - se borra al cerrar la pestaña
+      sessionStorage.setItem("auth_token", receivedToken);
+
+      // Obtener datos reales del usuario desde /profile ANTES de marcar como autenticado
+      const profileResponse = await api.get("/api/auth/profile");
+      user.value = profileResponse.data.user;
+      isAuthenticated.value = true;
+
+      // Fetch usage data after successful demo login
+      await fetchUsage();
+
+      // Marcar como inicializado después de cargar todo
+      isInitialized.value = true;
+
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error:
+          error.response?.data?.message ||
+          "Error logging in with demo account.",
+      };
+    } finally {
+      isLoading.value = false;
+    }
+  };
+
+  const processPatterns = async () => {
+    if (!isAuthenticated.value || !token.value) {
+      return;
+    }
+
+    try {
+      const response = await api_analyzer.get(
+        "/api/portfolio-review/should-build",
+      );
+      const { action } = response.data;
+
+      console.log("Portfolio review action:", action);
+
+      // Si hay un build en progreso o se requiere rebuild, establecer polling
+      if (action === "BUILDING" || action === "RE-BUILDING") {
+        console.log(
+          `Portfolio patterns ${action.toLowerCase()}, will refresh profile in 5 minutes`,
+        );
+
+        // Establecer intervalo de 5 minutos (300000ms) para refrescar el perfil
+        setTimeout(async () => {
+          try {
+            console.log("Refreshing user profile after pattern processing");
+            const profileResponse = await api.get("/api/auth/profile");
+            if (user.value && profileResponse.data.user) {
+              user.value = profileResponse.data.user;
+              console.log("User profile updated with new patterns");
+            }
+          } catch (error) {
+            console.error(
+              "Error refreshing profile after pattern processing:",
+              error,
+            );
+          }
+        }, 300000); // 5 minutos
+      }
+    } catch (error) {
+      console.error("Error processing patterns:", error);
+    }
+  };
 
   return {
     isAuthenticated,
     token,
     user,
     isLoading,
+    isInitialized,
+    userShortName,
     usageLimits,
     dismissUsageWarning,
     fetchUsage,
+    updateProfile,
     login,
     register,
     loginWithProvider,
+    processOAuthCallback,
     logout,
     initAuth,
+    confirmEmail,
+    resendConfirmation,
+    forgotPassword,
+    resetPassword,
+    changePassword,
+    consumeHandoff,
+    demoLogin,
+    processPatterns,
   };
 });

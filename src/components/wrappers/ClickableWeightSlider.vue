@@ -58,7 +58,7 @@ const props = defineProps({
   },
   color: {
     type: String,
-    default: "#8b5cf6",
+    default: "var(--text-on-primary)",
   },
   fillColor: {
     type: String,
@@ -81,7 +81,7 @@ const fillBackground = computed(() => {
 });
 
 const labelColor = computed(() => {
-  return "#ffffffd1";
+  return "var(--text-on-primary)";
 });
 
 const valueColor = computed(() => {
@@ -159,7 +159,7 @@ onUnmounted(() => {
 .slider-track {
   width: 100%;
   height: 44px;
-  background: #1a1a1f;
+  background: var(--bg-body);
   border: 1px solid #2c2c32;
   border-radius: 8px;
   position: relative;
@@ -169,12 +169,12 @@ onUnmounted(() => {
 }
 
 .slider-track:hover {
-  border-color: #8b5cf6;
+  border-color: var(--accent-color);
   transform: translateY(-1px);
 }
 
 .slider-track.dragging {
-  border-color: #a855f7;
+  border-color: var(--border-color);
   cursor: grabbing;
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
@@ -187,12 +187,7 @@ onUnmounted(() => {
   position: absolute;
   top: 0;
   left: 0;
-  background: linear-gradient(
-    90deg,
-    rgba(139, 92, 246, 0.8) 0%,
-    rgba(139, 92, 246, 0.4) 80%,
-    rgba(139, 92, 246, 0.1) 100%
-  );
+  background-color: var(--primary-color);
 }
 
 .dragging .slider-fill {
@@ -221,7 +216,7 @@ onUnmounted(() => {
 .slider-label {
   font-size: 13px;
   font-weight: 500;
-  color: #ffffffd1;
+  color: var(--text-secondary);
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
@@ -239,7 +234,7 @@ onUnmounted(() => {
 /* Dark theme support */
 @media (prefers-color-scheme: dark) {
   .slider-track {
-    background: #1a1a1f;
+    background: var(--bg-body);
     border-color: #2c2c32;
   }
 }

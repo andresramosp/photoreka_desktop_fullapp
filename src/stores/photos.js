@@ -3,6 +3,20 @@
 // Umbral mínimo de fotos requeridas para desbloquear funcionalidades
 export const MIN_PHOTOS_THRESHOLD = 50;
 
+// Modo de onboarding: si true, el umbral actúa como recomendación en vez de requisito estricto
+// false = modo estricto (requiere 50 fotos procesadas para desbloquear herramientas)
+// true = modo suave (herramientas siempre disponibles, 50 fotos es solo una recomendación)
+export const ONBOARDING_SOFT = true;
+
+// Dictionary to transform category names to custom labels
+export const tagCategoryNameMap = {
+  // Add your custom category mappings here
+  context_story: "contextual",
+  visual_aspects: "technical",
+  visual_accents: "miscellaneous",
+  artistic_scores: "artistic",
+};
+
 import { defineStore } from "pinia";
 import { api } from "@/utils/axios";
 import { useUserStore } from "@/stores/userStore.ts";
@@ -12,8 +26,8 @@ export const usePhotosStore = defineStore("photos", {
   state: () => ({
     photos: null,
     isLoading: false,
+    isInitialized: false, // Indica si la carga inicial del catálogo está completa
     selectedPhotosRecord: {},
-    catalogSingleView: false, // Nuevo modo single view
     showUploadProgress: false, // Controla si se muestra el progreso de subida especial
     duplicatesChecked: false, // Indica si ya se han verificado duplicados
   }),
@@ -32,14 +46,14 @@ export const usePhotosStore = defineStore("photos", {
             (p) =>
               p.status == "uploaded" ||
               p.status == "preprocessing" ||
-              p.status == "preprocessed"
+              p.status == "preprocessed",
           )
         : [],
 
     workspacePhotos: (state) =>
       Array.isArray(state.photos)
         ? state.photos.filter(
-            (p) => p.status == "processing" || p.status == "processed"
+            (p) => p.status == "processing" || p.status == "processed",
           )
         : [],
 
@@ -72,12 +86,16 @@ export const usePhotosStore = defineStore("photos", {
     allPhotos: (state) => (Array.isArray(state.photos) ? state.photos : []),
 
     appAccessMode: (state) => {
-      // Count processed photos
       const processedCount = state.photos?.filter(
-        (photo) => photo.status === "processed"
+        (photo) => photo.status === "processed",
       ).length;
 
-      // App is unlocked when user has 100+ processed photos
+      // En modo soft, desbloquear con al menos 1 foto procesada
+      if (ONBOARDING_SOFT) {
+        return processedCount >= 1 ? "full" : "blocked";
+      }
+
+      // Modo estricto: App is unlocked when user has MIN_PHOTOS_THRESHOLD+ processed photos
       if (processedCount >= MIN_PHOTOS_THRESHOLD) {
         return "full";
       }
@@ -89,18 +107,19 @@ export const usePhotosStore = defineStore("photos", {
     // New getter: determines if process button should be enabled/disabled
     processButtonState: (state) => {
       const processedCount = state.photos?.filter(
-        (photo) => photo.status === "processed"
+        (photo) => photo.status === "processed",
       ).length;
       const uploadedOrPreprocessedCount = state.photos?.filter(
         (photo) =>
-          photo.status === "preprocessed" || photo.status === "uploaded"
+          photo.status === "preprocessed" || photo.status === "uploaded",
       ).length;
       const processingCount = state.photos?.filter(
-        (photo) => photo.status === "processing"
+        (photo) => photo.status === "processing",
       ).length;
       const checkingDuplicatesCount = state.photos?.filter(
-        (photo) => photo.isCheckingDuplicates
+        (photo) => photo.isCheckingDuplicates,
       ).length;
+
       // If there are photos currently processing, show processing state
       if (processingCount > 0) {
         return "processing";
@@ -111,7 +130,20 @@ export const usePhotosStore = defineStore("photos", {
         return "processing";
       }
 
-      // If app is already unlocked (≥100 processed photos), always enabled
+      // En modo soft, habilitar el botón si hay al menos 1 foto subida/preprocesada
+      if (ONBOARDING_SOFT) {
+        // Si ya hay fotos procesadas, siempre habilitado
+        if (processedCount >= 1) {
+          return "enabled";
+        }
+        // Si hay al menos 1 foto lista para procesar, habilitar
+        if (uploadedOrPreprocessedCount >= 1) {
+          return "enabled";
+        }
+        return "disabled";
+      }
+
+      // Modo estricto: If app is already unlocked (≥MIN_PHOTOS_THRESHOLD processed photos), always enabled
       if (processedCount >= MIN_PHOTOS_THRESHOLD) {
         return "enabled";
       }
@@ -127,20 +159,25 @@ export const usePhotosStore = defineStore("photos", {
     // New getter: progress toward unlocking process button (0-100%)
     processButtonProgress: (state) => {
       const processedCount = state.photos?.filter(
-        (photo) => photo.status === "processed"
+        (photo) => photo.status === "processed",
+      ).length;
+      const uploadedOrPreprocessedCount = state.photos?.filter(
+        (photo) =>
+          photo.status === "preprocessed" || photo.status === "uploaded",
       ).length;
 
-      // If app is already unlocked, always 100% progress
+      // En modo soft, no hay requisito de umbral, por lo que no mostramos progreso
+      // Retornamos 100% para que no se muestre la barra de progreso
+      if (ONBOARDING_SOFT) {
+        return 100;
+      }
+
+      // Modo estricto: If app is already unlocked, always 100% progress
       if (processedCount >= MIN_PHOTOS_THRESHOLD) {
         return 100;
       }
 
       // Calculate progress based on preprocessed + processed photos toward threshold
-      const uploadedOrPreprocessedCount = state.photos?.filter(
-        (photo) =>
-          photo.status === "preprocessed" || photo.status === "uploaded"
-      ).length;
-
       const totalProgressPhotos = uploadedOrPreprocessedCount + processedCount;
 
       return Math.min((totalProgressPhotos / MIN_PHOTOS_THRESHOLD) * 100, 100);
@@ -148,6 +185,16 @@ export const usePhotosStore = defineStore("photos", {
   },
 
   actions: {
+    // Resetear el store completamente (para cambios de usuario)
+    resetStore() {
+      this.photos = null;
+      this.isLoading = false;
+      this.isInitialized = false;
+      this.selectedPhotosRecord = {};
+      this.showUploadProgress = false;
+      this.duplicatesChecked = false;
+    },
+
     async getOrFetch(force) {
       if (force || (this.photos?.length === 0 && !this.isLoading)) {
         this.isLoading = true;
@@ -166,6 +213,7 @@ export const usePhotosStore = defineStore("photos", {
           console.warn("API not available, using mock data:", error.message);
         } finally {
           this.isLoading = false;
+          this.isInitialized = true; // Marcar como inicializado después de la primera carga
         }
       }
       return this.photos;
@@ -212,7 +260,7 @@ export const usePhotosStore = defineStore("photos", {
           delete this.selectedPhotosRecord[id];
         });
         this.photos = this.photos.filter(
-          (photo) => !photoIds.includes(photo.id)
+          (photo) => !photoIds.includes(photo.id),
         );
         // Reset duplicates check when photos are deleted
         this.duplicatesChecked = false;
@@ -223,7 +271,7 @@ export const usePhotosStore = defineStore("photos", {
       } catch (error) {
         console.warn(
           "API not available for deletePhotos, using local delete:",
-          error.message
+          error.message,
         );
       }
     },
@@ -245,7 +293,7 @@ export const usePhotosStore = defineStore("photos", {
       } catch (error) {
         console.warn(
           "API not available for deleteDuplicates, using local delete:",
-          error.message
+          error.message,
         );
         // Fallback: delete locally
         this.photos = this.photos.filter((p) => !photosIds.includes(p.id));
@@ -282,6 +330,68 @@ export const usePhotosStore = defineStore("photos", {
       } catch (error) {
         console.warn("API not available for checkDuplicates:", error.message);
         // Return empty duplicates map as fallback
+        return {};
+      }
+    },
+
+    async checkExactDuplicates(photoIds = null, scope = "lightbox") {
+      try {
+        const payload = { scope };
+        if (photoIds) payload.newPhotoIds = photoIds;
+        const res = await api.post(
+          "/api/catalog/checkExactDuplicates",
+          payload,
+        );
+        const duplicatesMap = res.data;
+
+        if (scope === "workspace") {
+          // Workspace: all duplicates are among processed photos, no "already analyzed" concept
+          for (const photo of this.photos) {
+            if (!photoIds || photoIds.includes(photo.id)) {
+              const allDupIds = duplicatesMap[photo.id] || [];
+              this.updatePhoto(photo.id, {
+                exactDuplicates: allDupIds,
+                isExactDuplicate: allDupIds.length > 0,
+                alreadyAnalyzedIds: [],
+                isAlreadyAnalyzed: false,
+              });
+            }
+          }
+        } else {
+          // Lightbox: classify duplicates into lightbox-only vs workspace (processed/processing)
+          const processedIds = new Set(
+            this.photos
+              .filter(
+                (p) => p.status === "processed" || p.status === "processing",
+              )
+              .map((p) => p.id),
+          );
+
+          for (const photo of this.photos) {
+            if (!photoIds || photoIds.includes(photo.id)) {
+              const allDupIds = duplicatesMap[photo.id] || [];
+              const lightboxDupIds = allDupIds.filter(
+                (id) => !processedIds.has(id),
+              );
+              const workspaceDupIds = allDupIds.filter((id) =>
+                processedIds.has(id),
+              );
+              this.updatePhoto(photo.id, {
+                exactDuplicates: lightboxDupIds,
+                isExactDuplicate: lightboxDupIds.length > 0,
+                alreadyAnalyzedIds: workspaceDupIds,
+                isAlreadyAnalyzed: workspaceDupIds.length > 0,
+              });
+            }
+          }
+        }
+
+        return duplicatesMap;
+      } catch (error) {
+        console.warn(
+          "API not available for checkExactDuplicates:",
+          error.message,
+        );
         return {};
       }
     },
