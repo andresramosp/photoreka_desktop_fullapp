@@ -3,6 +3,7 @@ import LangchainAgentService from '#services/langchain_agent_service'
 import LangchainAgentKnowledgeService from '#services/langchain_agent_knowledge_service'
 import ConversationService from '#services/conversation_service'
 import Photo from '#models/photo'
+import UserCostService from '#services/user_cost_service'
 
 export default class ChatController {
   private conversationService = new ConversationService()
@@ -134,6 +135,11 @@ export default class ChatController {
               : undefined,
           }
         )
+      }
+
+      // Record chat cost to user history
+      if (result.cost?.total?.costEur) {
+        UserCostService.record(user.id, 'chat', result.cost.total.costEur).catch(() => {})
       }
 
       // Strip photoDescriptions before sending to frontend (LLM-only field)

@@ -9,6 +9,8 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { invalidateCache } from '../decorators/withCache.js'
 import VectorService from '#services/vector_service'
 import ModelsService from '#services/models_service'
+import UserCostService from '#services/user_cost_service'
+import { CostTracker, createTrackedModelsService } from '../utils/cost_tracker.js'
 
 import HealthPhotoService from '#services/health_photo_service'
 import {
@@ -398,7 +400,8 @@ export default class CatalogController {
         photo = userPhotos[randomIndex]
       }
 
-      const modelsService = new ModelsService()
+      const tracker = new CostTracker('other')
+      const modelsService = createTrackedModelsService(new ModelsService(), tracker)
       let systemPrompt: string
 
       if (withScores && photo.descriptions?.artistic_scores) {
@@ -452,6 +455,8 @@ export default class CatalogController {
         imagePayload.inlineData.data = ''
         insights = geminiResponse.result || []
       }
+
+      UserCostService.recordFromTracker(user.id, tracker).catch(() => {})
 
       return response.ok({
         photo: {
@@ -518,7 +523,8 @@ export default class CatalogController {
       }
 
       // Seleccionar el prompt según el tipo
-      const modelsService = new ModelsService()
+      const tracker2 = new CostTracker('other')
+      const modelsService = createTrackedModelsService(new ModelsService(), tracker2)
       let systemPrompt: string
 
       switch (insightType) {
@@ -593,6 +599,8 @@ export default class CatalogController {
         imagePayload.inlineData.data = ''
         insights = geminiResponse.result || []
       }
+
+      UserCostService.recordFromTracker(user.id, tracker2).catch(() => {})
 
       return response.ok({
         photo: {

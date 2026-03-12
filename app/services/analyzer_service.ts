@@ -21,6 +21,7 @@ import { VisualColorEmbeddingTask } from '#models/analyzer/visualColorEmbeddingT
 import { VisualDetectionTask } from '#models/analyzer/visualDetectionTask'
 import { GlobalEmbeddingsTagsTask } from '#models/analyzer/globalEmbeddingsTagsTask'
 import UsageService from '#services/usage_service'
+import UserCostService from '#services/user_cost_service'
 
 const logger = Logger.getInstance('AnalyzerProcess')
 logger.setLevel(LogLevel.DEBUG)
@@ -135,12 +136,9 @@ export default class AnalyzerProcessRunner {
 
     // Incrementar contador acumulativo de fotos analizadas (solo para procesos no-preprocess y modos nuevos)
     if (!this.process.isPreprocess && this.process.userId) {
-      const shouldCount = ![
-        'remake_all',
-        'remake_task',
-        'remake_process',
-        'retry_process',
-      ].includes(this.process.mode)
+      const shouldCount = !['remake_all', 'remake_task', 'remake_process'].includes(
+        this.process.mode
+      )
       if (shouldCount) {
         const successfulPhotos = this.getSuccessfulPhotosCount()
         if (successfulPhotos > 0) {
@@ -156,6 +154,17 @@ export default class AnalyzerProcessRunner {
     const processUserId = this.process.userId?.toString()
     await invalidateCache(`getPhotos_${processUserId}`)
     await invalidateCache(`getPhotosIdsForSearch${processUserId}`)
+
+    // Persistir cost report
+    this.process.costReport = this.process.costTracker.getSummary()
+    await this.process.save()
+
+    // Registrar coste en el historial del usuario
+    if (this.process.userId) {
+      UserCostService.recordFromTracker(this.process.userId, this.process.costTracker).catch(
+        () => {}
+      )
+    }
 
     // Limpiar cache de health solo si se precargó
     if (this.process.mode === 'retry_process') {
@@ -242,6 +251,7 @@ export default class AnalyzerProcessRunner {
         )
       }
 
+      this.process.costTracker.setCurrentTask(task.name)
       logger.info(
         `${indent}-> Ejecutando ${taskName} en ${executionType} | Fotos: ${pendingPhotos.length}`
       )
@@ -325,6 +335,7 @@ export default class AnalyzerProcessRunner {
 
     for (const task of this.process.tasks.filter((t) => t.isGlobal)) {
       try {
+        this.process.costTracker.setCurrentTask(task.name)
         await this.changeStage(
           `*** Iniciando tarea GLOBAL *** | ${task.getName()} | ${this.process.mode.toUpperCase()}`,
           task.name

@@ -3,6 +3,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import ws from '#services/ws'
 import SearchTextService from '#services/search_text_service'
 import SearchPhotoService from '#services/search_photo_service'
+import UserCostService from '#services/user_cost_service'
 
 export default class SearchController {
   /**
@@ -29,6 +30,8 @@ export default class SearchController {
         source: query.options.source || null,
         searchId: query.options.searchId || null,
       })
+
+      UserCostService.recordFromTracker(user.id, searchService.costTracker).catch(() => {})
 
       return response.ok(result)
     } catch (error) {
@@ -57,6 +60,8 @@ export default class SearchController {
       for await (const result of stream) {
         ws.io?.to(user.id.toString()).emit(result.type, result.data)
       }
+
+      UserCostService.recordFromTracker(user.id, searchService.costTracker).catch(() => {})
 
       return response.ok({ message: 'Search process initiated' })
     } catch (error) {
@@ -89,6 +94,8 @@ export default class SearchController {
         user.id
       )
 
+      UserCostService.recordFromTracker(user.id, searchService.costTracker).catch(() => {})
+
       return response.ok(result)
     } catch (error) {
       console.error('Error fetching photos:', error)
@@ -110,6 +117,8 @@ export default class SearchController {
         mode,
         semantic
       )
+
+      UserCostService.recordFromTracker(user.id, searchService.costTracker).catch(() => {})
 
       return response.ok(result)
     } catch (error) {

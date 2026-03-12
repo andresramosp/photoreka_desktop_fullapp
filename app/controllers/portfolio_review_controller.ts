@@ -5,6 +5,7 @@ import type { ReviewType } from '../managers/portfolio_review_manager.js'
 import User from '#models/user'
 import Photo from '#models/photo'
 import AnalyzerProcess from '#models/analyzer/analyzerProcess'
+import UserCostService from '#services/user_cost_service'
 
 const REVIEW_TYPES: ReviewType[] = ['general', 'story', 'context']
 const BUILD_THRESHOLD_PHOTOS = 200
@@ -89,6 +90,10 @@ export default class PortfolioReviewController {
         ...filteredCatalogPatterns,
       }
       await userModel.save()
+
+      if (totalCostInEur > 0) {
+        UserCostService.record(user.id, 'portfolio_review', totalCostInEur).catch(() => {})
+      }
 
       return response.ok({
         message: 'Patterns construidos y almacenados exitosamente',
@@ -294,6 +299,10 @@ export default class PortfolioReviewController {
       const portfolioReviewManager = new PortfolioReviewManager()
       const result = await portfolioReviewManager.getPatterns(userId, reviewType)
 
+      if (result?.cost?.totalCostInEur) {
+        UserCostService.record(user.id, 'portfolio_review', result.cost.totalCostInEur).catch(() => {})
+      }
+
       return response.ok(result)
     } catch (error) {
       console.error('Error en getPatterns:', error)
@@ -314,6 +323,10 @@ export default class PortfolioReviewController {
       const reviewTypeParam = (reviewType || 'general') as ReviewType
       const portfolioReviewManager = new PortfolioReviewManager()
       const result = await portfolioReviewManager.getPatterns(userId, reviewTypeParam)
+
+      if (result?.cost?.totalCostInEur) {
+        UserCostService.record(parseInt(userId), 'portfolio_review', result.cost.totalCostInEur).catch(() => {})
+      }
 
       return response.ok(result)
     } catch (error) {

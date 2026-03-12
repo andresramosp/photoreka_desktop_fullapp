@@ -5,6 +5,7 @@ import { compose } from '@adonisjs/core/helpers'
 import hash from '@adonisjs/core/services/hash'
 import { DbAccessTokensProvider } from '@adonisjs/auth/access_tokens'
 import type { Usage } from '#services/usage_service'
+import type { CostHistory } from '#services/user_cost_service'
 
 export type PreferredSource = 'web' | 'lightroom' | null
 export type UserProvider = 'email' | 'google'
@@ -41,6 +42,9 @@ export default class User extends compose(BaseModel, AuthFinder) {
 
   @column()
   declare usage: Usage | null
+
+  @column()
+  declare costHistory: CostHistory | null
 
   @column()
   declare preferredSource: PreferredSource

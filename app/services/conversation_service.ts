@@ -2,6 +2,7 @@ import Conversation from '#models/conversation'
 import ConversationMessage from '#models/conversation_message'
 import type { PhotoGroup } from '#models/conversation_message'
 import ModelsService from './models_service.js'
+import UserCostService from './user_cost_service.js'
 
 const MAX_CONVERSATIONS_PER_USER = 50
 const MAX_LLM_CONTEXT_TURNS = 5
@@ -68,7 +69,7 @@ export default class ConversationService {
 
     // Fire-and-forget: generate a proper title with LLM in the background
     if (firstMessage) {
-      this.generateTitleAsync(conversation.id, firstMessage).catch((err) =>
+      this.generateTitleAsync(conversation.id, firstMessage, userId).catch((err) =>
         console.warn('[ConversationService] Title generation failed:', err?.message)
       )
     }
@@ -80,7 +81,11 @@ export default class ConversationService {
    * Generate a concise conversation title using Gemini and update the DB.
    * Called fire-and-forget from create().
    */
-  private async generateTitleAsync(conversationId: number, firstMessage: string): Promise<void> {
+  private async generateTitleAsync(
+    conversationId: number,
+    firstMessage: string,
+    userId: number
+  ): Promise<void> {
     const modelsService = new ModelsService()
     const systemPrompt =
       'You are a conversation title generator for a photography app.' +
@@ -88,13 +93,17 @@ export default class ConversationService {
       ' Match the language of the message.' +
       ' Respond ONLY with valid JSON: {"result": "<title>"}'
 
-    const { result } = await modelsService.getGeminiResponse(
+    const { result, cost } = await modelsService.getGeminiResponse(
       systemPrompt,
       [firstMessage.slice(0, 300)],
       'gemini-2.5-flash-lite',
       { temperature: 0.4 },
       false // no cache — every title should be unique
     )
+
+    if (cost?.totalCostInEur) {
+      UserCostService.record(userId, 'chat', cost.totalCostInEur).catch(() => {})
+    }
 
     const title = typeof result === 'string' ? result.trim().slice(0, 255) : null
     if (!title) return

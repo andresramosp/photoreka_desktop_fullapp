@@ -4,6 +4,7 @@ import Photo from '#models/photo'
 import fs from 'fs/promises'
 
 import ModelsService from './models_service.js'
+import { CostTracker, createTrackedModelsService } from '../utils/cost_tracker.js'
 import path from 'path'
 import sharp from 'sharp'
 import QueryService from './query_service.js'
@@ -63,15 +64,18 @@ export type SearchTagsOptions = SearchOptions & {
 
 export default class SearchTextService {
   public modelsService: ModelsService = null
+  public costTracker: CostTracker
   public photoManager: PhotoManager = null
   public queryService: QueryService = null
   public scoringService: ScoringService = null
   public vectorService: VectorService = null
 
   constructor() {
-    this.modelsService = new ModelsService()
+    this.costTracker = new CostTracker('search')
+    this.modelsService = createTrackedModelsService(new ModelsService(), this.costTracker)
     this.photoManager = new PhotoManager()
     this.queryService = new QueryService()
+    this.queryService.modelsService = this.modelsService
     this.scoringService = new ScoringService()
     this.vectorService = new VectorService()
   }

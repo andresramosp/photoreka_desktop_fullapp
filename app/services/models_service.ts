@@ -342,17 +342,26 @@ export default class ModelsService {
         }
       }
 
+      const promptTokens = data.usage?.prompt_tokens || 0
+      const completionTokens = data.usage?.completion_tokens || 0
+      const modelPrices = PRICES[model as keyof typeof PRICES]
+      const totalCostInEur = modelPrices
+        ? (promptTokens * modelPrices.input_cache_miss + completionTokens * modelPrices.output) *
+          USD_TO_EUR
+        : 0
+
       const result = {
         result: parsedResult?.result
           ? parsedResult.result
           : parsedResult?.results
             ? parsedResult.results
             : parsedResult,
-        // Qwen puede no devolver uso/coste, así que solo tokens si existen
         cost: {
+          totalCostInEur,
           totalTokens: data.usage?.total_tokens,
-          promptTokens: data.usage?.prompt_tokens,
-          completionTokens: data.usage?.completion_tokens,
+          promptCacheMissTokens: promptTokens,
+          promptCacheHitTokens: 0,
+          completionTokens,
         },
       }
 
