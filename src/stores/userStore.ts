@@ -73,10 +73,12 @@ export const useUserStore = defineStore("user", () => {
 
     if (savedToken) {
       token.value = savedToken;
-      isAuthenticated.value = true;
+      // NO establecer isAuthenticated aquí; se establece después de cargar el perfil
+      // para evitar que el watcher de App.vue compruebe user.profiles antes de que esté disponible
       try {
         const response = await api.get("/api/auth/profile");
         user.value = response.data.user;
+        isAuthenticated.value = true;
 
         // Fetch usage data after successful profile load
         await fetchUsage();
@@ -118,12 +120,13 @@ export const useUserStore = defineStore("user", () => {
       sessionStorage.removeItem("auth_token");
 
       token.value = receivedToken;
-      isAuthenticated.value = true;
       localStorage.setItem("auth_token", receivedToken);
 
-      // Obtener datos reales del usuario desde /profile
+      // Obtener datos reales del usuario desde /profile ANTES de marcar como autenticado
+      // para evitar race condition con el watcher de App.vue que comprueba user.profiles
       const profileResponse = await api.get("/api/auth/profile");
       user.value = profileResponse.data.user;
+      isAuthenticated.value = true;
 
       // Fetch usage data after successful login
       await fetchUsage();
@@ -397,12 +400,12 @@ export const useUserStore = defineStore("user", () => {
 
       // Guardar token
       token.value = receivedToken;
-      isAuthenticated.value = true;
       localStorage.setItem("auth_token", receivedToken);
 
-      // Obtener perfil del usuario
+      // Obtener perfil del usuario ANTES de marcar como autenticado
       const profileResponse = await api.get("/api/auth/profile");
       user.value = profileResponse.data.user;
+      isAuthenticated.value = true;
 
       // Obtener usage
       await fetchUsage();
@@ -437,12 +440,12 @@ export const useUserStore = defineStore("user", () => {
 
       // Actualizar estado de autenticación
       token.value = receivedToken;
-      isAuthenticated.value = true;
       localStorage.setItem("auth_token", receivedToken);
 
-      // Obtener datos del usuario
+      // Obtener datos del usuario ANTES de marcar como autenticado
       const profileResponse = await api.get("/api/auth/profile");
       user.value = profileResponse.data.user;
+      isAuthenticated.value = true;
 
       // Obtener datos de uso
       await fetchUsage();
@@ -472,13 +475,13 @@ export const useUserStore = defineStore("user", () => {
       localStorage.removeItem("auth_token");
 
       token.value = receivedToken;
-      isAuthenticated.value = true;
       // Usar sessionStorage para demo - se borra al cerrar la pestaña
       sessionStorage.setItem("auth_token", receivedToken);
 
-      // Obtener datos reales del usuario desde /profile
+      // Obtener datos reales del usuario desde /profile ANTES de marcar como autenticado
       const profileResponse = await api.get("/api/auth/profile");
       user.value = profileResponse.data.user;
+      isAuthenticated.value = true;
 
       // Fetch usage data after successful demo login
       await fetchUsage();
