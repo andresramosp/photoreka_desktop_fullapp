@@ -30,7 +30,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { useRouter, useRoute } from "vue-router";
+import { useRoute } from "vue-router";
 import { useUserStore } from "../stores/userStore";
 import { useMessage } from "naive-ui";
 
@@ -88,7 +88,6 @@ const props = withDefaults(defineProps<Props>(), {
   mode: "login",
 });
 
-const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
 const message = useMessage();
@@ -119,21 +118,8 @@ const handleProviderLogin = async (provider: "google" | "facebook") => {
 
     // Para otros providers (como Facebook) o si hay error
     if (result.success) {
-      if (props.mode === "register") {
-        message.success(
-          `Welcome! You've signed up with ${
-            provider === "google" ? "Google" : "Facebook"
-          }.`,
-        );
-        router.push("/profile-setup");
-      } else {
-        message.success(
-          `Welcome back! You've logged in with ${
-            provider === "google" ? "Google" : "Facebook"
-          }.`,
-        );
-        router.push("/");
-      }
+      // No navegar — el watcher de isAuthenticated en App.vue
+      // se encarga de redirigir al destino correcto
     } else {
       message.error(result.error || "Error logging in");
       isLoading.value = false;

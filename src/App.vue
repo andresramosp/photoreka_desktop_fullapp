@@ -194,6 +194,13 @@ const collectionsStore = useCollectionsStore();
 const seriesStore = useSeriesStore();
 const userStore = useUserStore();
 
+// Punto único de decisión de destino post-autenticación
+const resolvePostAuthTarget = () => {
+  if (!userStore.user?.profiles) return "/profile-setup";
+  if (photosStore.appAccessMode === "blocked") return "/sync-area#upload";
+  return isMobile.value ? "/workspace" : "/dashboard";
+};
+
 // La app está lista cuando:
 // 1. userStore.isInitialized es true (se completó initAuth y fetchUsage)
 // 2. Si el usuario está autenticado, photosStore.isInitialized también debe ser true
@@ -298,25 +305,13 @@ watch(
 
       // Esperar a cargar el catálogo y decidir a dónde ir
       photosStore.getOrFetch(true).then(() => {
-        console.log(route.path);
         if (
           route.path === "/" ||
           route.path === "/dashboard" ||
           route.path === "/auth" ||
           route.path === "/auth/callback"
         ) {
-          // Si el usuario no tiene perfil configurado, ir a profile-setup primero
-          if (!userStore.user?.profiles) {
-            router.replace("/profile-setup");
-            return;
-          }
-          const target =
-            photosStore.appAccessMode === "blocked"
-              ? "/sync-area#upload"
-              : isMobile.value
-                ? "/workspace"
-                : "/dashboard";
-          router.replace(target);
+          router.replace(resolvePostAuthTarget());
         }
       });
       collectionsStore.getOrFetch(true);
@@ -354,20 +349,8 @@ watch(
 
     if (path === "/" && userReady) {
       if (isAuth && photosReady) {
-        // Si el usuario no tiene perfil configurado, ir a profile-setup primero.
-        if (!userStore.user?.profiles) {
-          router.replace("/profile-setup");
-          return;
-        }
-        const target =
-          photosStore.appAccessMode === "blocked"
-            ? "/sync-area#upload"
-            : isMobile.value
-              ? "/workspace"
-              : "/dashboard";
-        router.replace(target);
+        router.replace(resolvePostAuthTarget());
       } else if (!isAuth) {
-        // Usuario no autenticado en "/" → redirigir a auth
         router.replace("/auth");
       }
     }

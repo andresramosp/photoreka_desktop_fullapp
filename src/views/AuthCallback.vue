@@ -46,17 +46,8 @@ onMounted(async () => {
     displayMessage.value = "Success! Redirecting...";
     loadingColor.value = "#10b981";
     message.success("Welcome to Photoreka!");
-
-    // Verificar si el usuario ya tiene su perfil configurado
-    // Si no tiene perfil configurado (null, undefined, o "general"), ir a profile-setup
-    // Si ya tiene perfil configurado, ir directamente al dashboard
-    const hasConfiguredProfile = !!userStore.user?.profiles;
-
-    if (!hasConfiguredProfile) {
-      router.replace("/profile-setup");
-    }
-    // Si ya tiene perfil, no navegar - el watcher de isAuthenticated en App.vue
-    // redirige al destino correcto tras cargar el catálogo
+    // No navegar aquí — el watcher de isAuthenticated en App.vue
+    // se encarga de redirigir al destino correcto para todos los flujos
   } else {
     displayMessage.value = "Authentication failed";
     loadingColor.value = "#ef4444";

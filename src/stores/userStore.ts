@@ -173,10 +173,9 @@ export const useUserStore = defineStore("user", () => {
       sessionStorage.removeItem("auth_token");
 
       token.value = receivedToken;
-      isAuthenticated.value = true;
       user.value = receivedUser;
-
       localStorage.setItem("auth_token", receivedToken);
+      isAuthenticated.value = true;
 
       // Fetch usage data after successful registration
       await fetchUsage();
