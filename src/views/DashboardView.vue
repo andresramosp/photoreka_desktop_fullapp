@@ -26,8 +26,8 @@
           <WorkspacePreview :photos="recentPhotos" />
         </div> -->
 
-        <!-- Canvas Card with Preview - Hidden on mobile -->
-        <div
+        <!-- Canvas Card with Preview - Disabled, always show the action card -->
+        <!-- <div
           v-if="
             !isMobileLimitedMode &&
             canvasData &&
@@ -43,17 +43,29 @@
             v-if="!isMobileLimitedMode"
             :canvas-data="canvasData"
           />
-        </div>
+        </div> -->
 
         <DashboardActionCard
-          v-else-if="!isMobileLimitedMode"
+          v-if="!isMobileLimitedMode"
           :icon="Workspace"
           title="Canvas"
-          description="Arrange and storyboard your photos"
           additional-classes="explorer"
           icon-color="var(--primary-color)"
           @click="goToTool('canvas')"
-        />
+        >
+          <template #description>
+            <div
+              v-if="canvasCount > 0"
+              style="display: flex; flex-direction: column; gap: 4px"
+            >
+              <span>{{ activeCanvasName }}</span>
+              <span style="font-size: 0.85em; opacity: 0.8"
+                >(+{{ canvasCount - 1 }} more)</span
+              >
+            </div>
+            <span v-else>Arrange and storyboard your photos</span>
+          </template>
+        </DashboardActionCard>
 
         <DashboardActionCard
           :icon="LayersOutline"
@@ -234,6 +246,33 @@ const isLoadingCollections = computed(
 // Canvas data from localStorage
 const canvasData = ref<any>(null);
 
+// Canvas count and active name
+const canvasCount = ref(0);
+const activeCanvasName = ref("");
+
+const loadCanvasInfo = async () => {
+  try {
+    if (userStore.isAuthenticated) {
+      const res = await api.get("/api/canvas");
+      const list = res.data || [];
+      canvasCount.value = list.length;
+      if (list.length > 0) {
+        const activeId = localStorage.getItem("photoreka_active_canvas_id");
+        const active = activeId
+          ? list.find((c: any) => String(c.id) === String(activeId))
+          : null;
+        activeCanvasName.value = (active || list[0]).name || "My Canvas";
+      }
+    } else {
+      const savedCanvas = localStorage.getItem("photoreka_canvas_data");
+      canvasCount.value = savedCanvas ? 1 : 0;
+      activeCanvasName.value = savedCanvas ? "My Canvas" : "";
+    }
+  } catch (error) {
+    console.error("Error loading canvas info:", error);
+  }
+};
+
 // Recent photos for workspace preview
 const photos = computed(() => {
   if (!photosStore.photos || !Array.isArray(photosStore.photos)) {
@@ -330,6 +369,7 @@ const loadCanvasData = () => {
 // Load canvas on mount
 onMounted(() => {
   loadCanvasData();
+  loadCanvasInfo();
 });
 </script>
 
