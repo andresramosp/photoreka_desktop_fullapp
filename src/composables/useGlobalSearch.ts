@@ -3,8 +3,12 @@ import { ref, computed, watch } from "vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useSeriesStore } from "@/stores/series.js";
+import { useUserStore } from "@/stores/userStore.js";
+import { api } from "@/utils/axios.js";
 import helpData from "@/assets/helpData.json";
 import type { Ref } from "vue";
+
+const CANVAS_STORAGE_KEY = "photoreka_canvas_data";
 
 // Types for search results
 export interface SearchResultPhoto {
@@ -54,12 +58,21 @@ export interface SearchResultHelp {
   route: string;
 }
 
+export interface SearchResultCanvas {
+  type: "canvas";
+  id: number | string;
+  name: string;
+  photoCount: number;
+  updatedAt?: string;
+}
+
 export type SearchResult =
   | SearchResultPhoto
   | SearchResultCollection
   | SearchResultSeries
   | SearchResultTool
-  | SearchResultHelp;
+  | SearchResultHelp
+  | SearchResultCanvas;
 
 export interface GroupedResults {
   tools: SearchResultTool[];
@@ -67,6 +80,7 @@ export interface GroupedResults {
   collections: SearchResultCollection[];
   series: SearchResultSeries[];
   photos: SearchResultPhoto[];
+  canvases: SearchResultCanvas[];
 }
 
 // Available tools in the app
@@ -273,10 +287,14 @@ export function useGlobalSearch() {
   const photosStore = usePhotosStore();
   const collectionsStore = useCollectionsStore();
   const seriesStore = useSeriesStore();
+  const userStore = useUserStore();
 
   const searchQuery = ref("");
   const isSearching = ref(false);
   const maxResultsPerCategory = ref(5);
+
+  // Canvas list cache
+  const canvasList = ref<SearchResultCanvas[]>([]);
 
   // Normalize string for search (lowercase, trim, remove accents)
   const normalizeString = (str: string): string => {
@@ -447,6 +465,14 @@ export function useGlobalSearch() {
     return results;
   };
 
+  // Search canvases
+  const searchCanvases = (query: string): SearchResultCanvas[] => {
+    if (!query || query.length < 2) return [];
+    return canvasList.value
+      .filter((c) => matchesQuery(c.name, query))
+      .slice(0, maxResultsPerCategory.value);
+  };
+
   // Combined search results
   const searchResults = computed<GroupedResults>(() => {
     const query = searchQuery.value.trim();
@@ -458,6 +484,7 @@ export function useGlobalSearch() {
         collections: [],
         series: [],
         photos: [],
+        canvases: [],
       };
     }
 
@@ -467,6 +494,7 @@ export function useGlobalSearch() {
       collections: searchCollections(query),
       series: searchSeries(query),
       photos: searchPhotos(query),
+      canvases: searchCanvases(query),
     };
   });
 
@@ -478,7 +506,8 @@ export function useGlobalSearch() {
       results.help.length +
       results.collections.length +
       results.series.length +
-      results.photos.length
+      results.photos.length +
+      results.canvases.length
     );
   });
 
@@ -490,6 +519,7 @@ export function useGlobalSearch() {
     const results = searchResults.value;
     return [
       ...results.tools,
+      ...results.canvases,
       ...results.collections,
       ...results.series,
       ...results.photos,
@@ -502,6 +532,37 @@ export function useGlobalSearch() {
     searchQuery.value = "";
   };
 
+  // Load canvas list for search
+  const loadCanvases = async () => {
+    try {
+      if (userStore.isAuthenticated) {
+        const res = await api.get("/api/canvas");
+        canvasList.value = (res.data || []).map((c: any) => ({
+          type: "canvas" as const,
+          id: c.id,
+          name: c.name || "My Canvas",
+          photoCount: c.photoCount || 0,
+          updatedAt: c.updatedAt,
+        }));
+      } else {
+        const saved = localStorage.getItem(CANVAS_STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          canvasList.value = [
+            {
+              type: "canvas" as const,
+              id: "local",
+              name: "My Canvas",
+              photoCount: parsed?.data?.photos?.length || 0,
+            },
+          ];
+        }
+      }
+    } catch (error) {
+      console.error("Error loading canvases for search:", error);
+    }
+  };
+
   // Initialize stores if needed
   const ensureDataLoaded = async () => {
     isSearching.value = true;
@@ -510,6 +571,7 @@ export function useGlobalSearch() {
         photosStore.getOrFetch(false),
         collectionsStore.getOrFetch(false),
         seriesStore.getOrFetch(false),
+        loadCanvases(),
       ]);
     } catch (error) {
       console.error("Error loading search data:", error);

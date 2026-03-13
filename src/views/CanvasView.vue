@@ -2000,6 +2000,16 @@ onMounted(async () => {
     }
     await canvasStore.addPhotos(pending, false, true);
     console.log(`✅ Added ${pending.length} pending photos to canvas`);
+  } else if (canvasStore.pendingCanvasId !== null) {
+    // No photos to add, but a specific canvas was requested (e.g. from global search)
+    const targetId = canvasStore.pendingCanvasId;
+    canvasStore.pendingCanvasId = null;
+    if (targetId === "new") {
+      await createCanvas();
+    } else {
+      await switchCanvas(targetId);
+    }
+    setTimeout(() => fitStageToPhotos(), 100);
   }
 
   // Load photos from query params if present (e.g., ?source=lightroom&ids=123,456)
@@ -2067,6 +2077,16 @@ onActivated(async () => {
     console.log(
       `✅ Added ${pending.length} pending photos to canvas (re-activated)`,
     );
+  } else if (canvasStore.pendingCanvasId !== null) {
+    // No photos to add, but a specific canvas was requested (e.g. from global search)
+    const targetId = canvasStore.pendingCanvasId;
+    canvasStore.pendingCanvasId = null;
+    if (targetId === "new") {
+      await createCanvas();
+    } else {
+      await switchCanvas(targetId);
+    }
+    setTimeout(() => fitStageToPhotos(), 100);
   }
 });
 

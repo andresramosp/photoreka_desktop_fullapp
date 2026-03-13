@@ -90,6 +90,42 @@
             </div>
           </div>
 
+          <!-- Canvases Section -->
+          <div v-if="searchResults.canvases.length > 0" class="results-section">
+            <div class="section-header">
+              <n-icon size="14">
+                <WorkspaceIcon />
+              </n-icon>
+              <span>Canvases</span>
+            </div>
+            <div class="section-items">
+              <div
+                v-for="canvas in searchResults.canvases"
+                :key="`canvas-${canvas.id}`"
+                class="result-item canvas-item"
+                :class="{ active: isActiveItem('canvas', canvas.id) }"
+                @click="handleSelectCanvas(canvas)"
+                @touchend.prevent="handleSelectCanvas(canvas)"
+                @mouseenter="setActiveItem('canvas', canvas.id)"
+              >
+                <div class="item-icon canvas-icon">
+                  <n-icon size="18">
+                    <WorkspaceIcon />
+                  </n-icon>
+                </div>
+                <div class="item-content">
+                  <div class="item-name">{{ canvas.name }}</div>
+                  <div class="item-description">
+                    {{ canvas.photoCount }} photos
+                  </div>
+                </div>
+                <n-icon size="14" class="item-arrow">
+                  <ChevronForward />
+                </n-icon>
+              </div>
+            </div>
+          </div>
+
           <!-- Collections Section -->
           <div
             v-if="searchResults.collections.length > 0"
@@ -295,17 +331,19 @@ import {
   SettingsOutline,
   HelpCircleOutline,
 } from "@vicons/ionicons5";
-import { Workspace } from "@vicons/carbon";
+import { Workspace as WorkspaceIcon } from "@vicons/carbon";
 import {
   useGlobalSearch,
   type SearchResult,
   type SearchResultPhoto,
 } from "@/composables/useGlobalSearch";
 import { usePhotosStore } from "@/stores/photos.js";
+import { useCanvasStore } from "@/stores/canvas.js";
 import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
 
 const router = useRouter();
 const photosStore = usePhotosStore();
+const canvasStore = useCanvasStore();
 
 // Emit events to parent
 const emit = defineEmits(["search-focus", "search-blur"]);
@@ -337,7 +375,7 @@ const selectedPhoto = ref<any>(null);
 // Icon mapping for tools
 const iconComponents: Record<string, any> = {
   SearchOutline: SearchIcon,
-  Workspace: Workspace,
+  Workspace: WorkspaceIcon,
   CubeOutline: CubeOutline,
   FlaskOutline: FlaskOutline,
   SquareOutline: SquareOutline,
@@ -492,6 +530,9 @@ const handleSelectItem = (item: SearchResult) => {
     case "photo":
       handleSelectPhoto(item);
       break;
+    case "canvas":
+      handleSelectCanvas(item);
+      break;
   }
 };
 
@@ -517,6 +558,15 @@ const handleSelectSeries = (series: any) => {
   showDropdown.value = false;
   clearSearch();
   router.push({ name: "series-detail", params: { id: series.id } });
+};
+
+const handleSelectCanvas = (canvas: any) => {
+  showDropdown.value = false;
+  clearSearch();
+  if (canvas.id !== "local") {
+    canvasStore.pendingCanvasId = canvas.id;
+  }
+  router.push({ name: "canvas" });
 };
 
 const handleSelectPhoto = async (photo: SearchResultPhoto) => {
@@ -789,6 +839,11 @@ onUnmounted(() => {
 .help-icon {
   background: var(--info-color-opacity-10);
   color: var(--info-color);
+}
+
+.canvas-icon {
+  background: var(--primary-color-opacity-10);
+  color: var(--primary-color);
 }
 
 /* Item content */
