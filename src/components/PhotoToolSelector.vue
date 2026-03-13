@@ -147,7 +147,11 @@ const props = defineProps({
   },
   currentTool: {
     type: String,
-    default: null, // Current tool context (e.g., 'canvas') - will be excluded from list
+    default: null, // Current tool context - will be excluded from list (except 'canvas', handled via activeCanvasId)
+  },
+  activeCanvasId: {
+    type: Number,
+    default: null, // ID of the currently active canvas - excluded from canvas sub-selector
   },
   isProcessing: {
     type: Boolean,
@@ -196,8 +200,9 @@ const availableTools = computed(() => {
     }));
   }
 
-  // Exclude current tool if specified (e.g., don't show "Canvas" when already in Canvas)
-  if (props.currentTool) {
+  // Exclude current tool if specified, but never exclude 'canvas' — it's handled
+  // via activeCanvasId filtering in the sub-selector so the user can pick a different canvas
+  if (props.currentTool && props.currentTool !== "canvas") {
     tools = tools.filter((tool) => tool.id !== props.currentTool);
   }
 
@@ -218,7 +223,9 @@ const handleToolSelect = async (tool) => {
     showCanvasSelector.value = true;
     try {
       const res = await api.get("/api/canvas");
-      canvasList.value = res.data || [];
+      canvasList.value = (res.data || []).filter(
+        (c) => c.id !== props.activeCanvasId,
+      );
     } catch (e) {
       canvasList.value = [];
     } finally {

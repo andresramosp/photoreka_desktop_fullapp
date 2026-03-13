@@ -286,6 +286,7 @@
       :show="showToolSelector"
       :photo-count="selectedPhotosCount"
       current-tool="canvas"
+      :active-canvas-id="activeCanvasId"
       :is-processing="isProcessingTool"
       @tool-selected="handleToolSelected"
       @close="closeToolSelector"
