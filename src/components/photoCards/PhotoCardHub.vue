@@ -44,6 +44,7 @@
           v-if="photo.status == 'processed'"
           size="medium"
           class="action-button info-button"
+          :loading="!imageLoaded"
           @click.stop="showInfo"
         >
           <template #icon>

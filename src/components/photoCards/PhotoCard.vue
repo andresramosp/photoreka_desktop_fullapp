@@ -125,6 +125,7 @@
         <n-button
           :size="photo.reasoning ? 'small' : 'medium'"
           class="action-button info-button"
+          :loading="!imageLoaded"
           @click.stop="showInfo"
         >
           <template #icon>
