@@ -1227,8 +1227,16 @@ const handleCollectionAdded = () => {
   showCollectionModal.value = false;
 };
 
-const handleToolSelected = async (toolId: string) => {
-  await takeToTool(toolId, selectedPhotoIds.value, clearAllSelectionsAndScopes);
+const handleToolSelected = async (
+  toolId: string,
+  canvasId: number | null = null,
+) => {
+  await takeToTool(
+    toolId,
+    selectedPhotoIds.value,
+    clearAllSelectionsAndScopes,
+    canvasId,
+  );
   closeToolSelector();
 };
 

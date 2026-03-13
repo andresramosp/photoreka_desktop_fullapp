@@ -1719,8 +1719,13 @@ const handleDownloadMultiple = async () => {
   }
 };
 
-const handleToolSelected = async (toolId) => {
-  await takeToTool(toolId, selectedPhotoIds.value, clearAllSelections);
+const handleToolSelected = async (toolId, canvasId = null) => {
+  await takeToTool(
+    toolId,
+    selectedPhotoIds.value,
+    clearAllSelections,
+    canvasId,
+  );
   closeToolSelector();
 };
 

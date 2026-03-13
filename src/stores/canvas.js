@@ -99,6 +99,7 @@ export const useCanvasStore = defineStore("canvas", {
     photos: [],
     discardedPhotos: [],
     pendingPhotosToAdd: [], // Photos queued from other views (e.g. takeToCanvas)
+    pendingCanvasId: null, // Canvas ID to switch to when pending photos are processed
     currentZIndex: 1,
     basicMode: false, // true si hay alguna foto .status === "uploaded"
     stageRef: null, // Reference to the stage for auto-fitting

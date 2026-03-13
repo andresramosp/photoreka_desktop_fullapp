@@ -945,7 +945,7 @@ const handleSendToChat = async () => {
   await takeToChat(localSelectedPhotoIds.value, localClearAllSelections);
 };
 
-const handleToolSelected = async (toolId) => {
+const handleToolSelected = async (toolId, canvasId = null) => {
   // Para el atlas, ordenar los IDs según el orden de la serie
   let photoIds = localSelectedPhotoIds.value;
 
@@ -959,7 +959,7 @@ const handleToolSelected = async (toolId) => {
     console.log("🎬 Atlas: IDs ordenados según serie:", photoIds);
   }
 
-  await takeToTool(toolId, photoIds, localClearAllSelections);
+  await takeToTool(toolId, photoIds, localClearAllSelections, canvasId);
   closeToolSelector();
 };
 

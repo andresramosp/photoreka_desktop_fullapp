@@ -1453,7 +1453,7 @@ const handleCollectionModalCancel = () => {
   showCollectionModal.value = false;
 };
 
-const handleToolSelected = async (toolId) => {
+const handleToolSelected = async (toolId, canvasId = null) => {
   // Get selected photo IDs
   const selectedIds = photos.value
     .filter((photo) => photo.selected)
@@ -1469,7 +1469,7 @@ const handleToolSelected = async (toolId) => {
   };
 
   // Use the composable function to take photos to tool
-  await takeToTool(toolId, selectedIds, clearSelections);
+  await takeToTool(toolId, selectedIds, clearSelections, canvasId);
   closeToolSelector();
 };
 
@@ -1963,6 +1963,15 @@ onMounted(async () => {
   if (canvasStore.pendingPhotosToAdd.length > 0) {
     const pending = [...canvasStore.pendingPhotosToAdd];
     canvasStore.pendingPhotosToAdd = [];
+    // If a specific canvas was requested, switch to it first
+    if (canvasStore.pendingCanvasId === "new") {
+      canvasStore.pendingCanvasId = null;
+      await createCanvas();
+    } else if (canvasStore.pendingCanvasId !== null) {
+      const targetId = canvasStore.pendingCanvasId;
+      canvasStore.pendingCanvasId = null;
+      await switchCanvas(targetId);
+    }
     await canvasStore.addPhotos(pending, false, true);
     console.log(`✅ Added ${pending.length} pending photos to canvas`);
   }
@@ -2019,6 +2028,15 @@ onActivated(async () => {
   if (canvasStore.pendingPhotosToAdd.length > 0) {
     const pending = [...canvasStore.pendingPhotosToAdd];
     canvasStore.pendingPhotosToAdd = [];
+    // If a specific canvas was requested, switch to it first
+    if (canvasStore.pendingCanvasId === "new") {
+      canvasStore.pendingCanvasId = null;
+      await createCanvas();
+    } else if (canvasStore.pendingCanvasId !== null) {
+      const targetId = canvasStore.pendingCanvasId;
+      canvasStore.pendingCanvasId = null;
+      await switchCanvas(targetId);
+    }
     await canvasStore.addPhotos(pending, false, true);
     console.log(
       `✅ Added ${pending.length} pending photos to canvas (re-activated)`,

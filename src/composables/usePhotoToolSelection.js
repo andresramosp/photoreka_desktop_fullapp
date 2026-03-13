@@ -18,7 +18,7 @@ export function usePhotoToolSelection() {
    * @param {Array} photoIds - Array of photo IDs to add to canvas
    * @param {Function} clearSelections - Function to clear current selections
    */
-  const takeToCanvas = async (photoIds, clearSelections) => {
+  const takeToCanvas = async (photoIds, clearSelections, canvasId = null) => {
     try {
       isProcessing.value = true;
 
@@ -38,8 +38,9 @@ export function usePhotoToolSelection() {
       // Clear selections before navigating
       clearSelections();
 
-      // Queue photos for canvas (will be added after canvas loads)
+      // Queue photos and target canvas for canvas view to process on mount/activation
       canvasStore.pendingPhotosToAdd = [...photosToAdd];
+      canvasStore.pendingCanvasId = canvasId;
 
       // Navigate to canvas
       await router.push("/canvas");
@@ -299,7 +300,12 @@ export function usePhotoToolSelection() {
    * @param {Array} photoIds - Array of photo IDs
    * @param {Function} clearSelections - Function to clear current selections
    */
-  const takeToTool = async (toolId, photoIds, clearSelections) => {
+  const takeToTool = async (
+    toolId,
+    photoIds,
+    clearSelections,
+    canvasId = null,
+  ) => {
     if (photoIds.length === 0) {
       message.warning("Please select at least one photo");
       return;
@@ -307,7 +313,7 @@ export function usePhotoToolSelection() {
 
     switch (toolId) {
       case "canvas":
-        await takeToCanvas(photoIds, clearSelections);
+        await takeToCanvas(photoIds, clearSelections, canvasId);
         break;
       case "framer":
         await takeToFramer(photoIds, clearSelections);

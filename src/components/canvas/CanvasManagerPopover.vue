@@ -115,19 +115,39 @@
                 ><n-icon size="11"><PencilOutline /></n-icon
               ></template>
             </n-button>
-            <n-button
-              quaternary
-              circle
-              size="tiny"
-              class="action-btn delete-btn"
-              title="Delete canvas"
-              :disabled="canvasList.length <= 1"
-              @click.stop="handleDelete(canvas.id)"
-            >
-              <template #icon
-                ><n-icon size="11"><TrashOutline /></n-icon
-              ></template>
-            </n-button>
+            <div class="item-delete-wrap" @click.stop>
+              <template v-if="pendingDeleteId === canvas.id">
+                <n-button
+                  size="tiny"
+                  type="error"
+                  class="item-confirm-btn"
+                  :disabled="canvasList.length <= 1"
+                  @click.stop="handleDelete(canvas.id)"
+                  >Delete</n-button
+                >
+                <n-button
+                  size="tiny"
+                  quaternary
+                  class="item-confirm-btn"
+                  @click.stop="pendingDeleteId = null"
+                  >Cancel</n-button
+                >
+              </template>
+              <n-button
+                v-else
+                quaternary
+                circle
+                size="tiny"
+                class="action-btn delete-btn"
+                title="Delete canvas"
+                :disabled="canvasList.length <= 1"
+                @click.stop="pendingDeleteId = canvas.id"
+              >
+                <template #icon
+                  ><n-icon size="11"><TrashOutline /></n-icon
+                ></template>
+              </n-button>
+            </div>
           </div>
 
           <!-- Loading spinner -->
@@ -170,6 +190,7 @@ const loadingId = ref(null);
 const renamingId = ref(null);
 const renameValue = ref("");
 const renameInputRef = ref(null);
+const pendingDeleteId = ref(null);
 
 // ─── Relative time ────────────────────────────────────────────────────────────
 
@@ -239,6 +260,7 @@ function confirmRename(id) {
 }
 
 function handleDelete(id) {
+  pendingDeleteId.value = null;
   emit("delete-canvas", id);
 }
 </script>
@@ -331,6 +353,10 @@ function handleDelete(id) {
   opacity: 1;
 }
 
+.item-actions:has(.item-confirm-btn) {
+  opacity: 1;
+}
+
 .canvas-item.active {
   background: var(--bg-surface, rgba(255, 255, 255, 0.05));
 }
@@ -392,6 +418,19 @@ function handleDelete(id) {
 
 .delete-btn:hover {
   color: rgba(239, 68, 68, 0.9) !important;
+}
+
+.item-delete-wrap {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.item-confirm-btn {
+  font-size: 11px !important;
+  padding: 0 6px !important;
+  height: 20px !important;
 }
 
 .rename-input {

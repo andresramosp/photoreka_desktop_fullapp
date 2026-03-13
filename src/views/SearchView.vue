@@ -401,7 +401,7 @@ const handleCuratorTakeToTool = (photoIds) => {
   openToolSelector();
 };
 
-const handleToolSelected = async (toolId) => {
+const handleToolSelected = async (toolId, canvasId = null) => {
   // Use curator photo ids if available, otherwise use local selection
   const idsToUse =
     curatorPhotoIds.value.length > 0
@@ -416,7 +416,7 @@ const handleToolSelected = async (toolId) => {
     curatorPhotoIds.value = [];
   };
 
-  await takeToTool(toolId, idsToUse, clearCallback);
+  await takeToTool(toolId, idsToUse, clearCallback, canvasId);
   closeToolSelector();
 };
 

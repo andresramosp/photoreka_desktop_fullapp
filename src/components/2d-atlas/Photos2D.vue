@@ -2095,9 +2095,9 @@ const handleSendToChat = async () => {
   await takeToChat(selectedPhotoIds.value, () => {});
 };
 
-const handleToolSelected = async (toolId) => {
+const handleToolSelected = async (toolId, canvasId = null) => {
   // No pasar clearSelection para mantener la selección
-  await takeToTool(toolId, selectedPhotoIds.value, () => {});
+  await takeToTool(toolId, selectedPhotoIds.value, () => {}, canvasId);
   closeToolSelector();
 };
 
