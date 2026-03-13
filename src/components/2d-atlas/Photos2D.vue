@@ -684,9 +684,14 @@ const filteredPhotos = computed(() => {
     filtered = filtered.filter((photo) => {
       const scores = photo.descriptions?.artistic_scores || {};
       return Object.entries(artisticScoreFilters.value).every(
-        ([key, minValue]) => {
+        ([key, filterVal]) => {
           const score = scores[key];
-          return score !== undefined && score >= minValue;
+          if (score === undefined) return false;
+          const value =
+            typeof filterVal === "object" ? filterVal.value : filterVal;
+          const operator =
+            typeof filterVal === "object" ? (filterVal.operator ?? ">=") : ">=";
+          return operator === ">=" ? score >= value : score <= value;
         },
       );
     });

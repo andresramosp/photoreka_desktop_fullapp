@@ -1338,15 +1338,20 @@ const filteredAndSortedPhotos = computed(() => {
     });
   }
 
-  // Apply artistic score minimum filters
+  // Apply artistic score filters
   if (Object.keys(artisticScoreFilters.value).length > 0) {
     filtered = filtered.filter((photo) => {
       const scores = photo.descriptions?.artistic_scores;
       if (!scores) return false;
       return Object.entries(artisticScoreFilters.value).every(
-        ([criterion, minValue]) => {
+        ([criterion, filterVal]) => {
           const score = scores[criterion];
-          return score !== undefined && score !== null && score >= minValue;
+          if (score === undefined || score === null) return false;
+          const value =
+            typeof filterVal === "object" ? filterVal.value : filterVal;
+          const operator =
+            typeof filterVal === "object" ? (filterVal.operator ?? ">=") : ">=";
+          return operator === ">=" ? score >= value : score <= value;
         },
       );
     });

@@ -1762,6 +1762,12 @@
 .score-slider {
   margin: 0 !important;
 }
+
+/* Slightly smaller slider handle globally so it doesn't clip against the rail ends */
+.n-slider .n-slider-handle {
+  width: 15px !important;
+  height: 15px !important;
+}
 /* ==========================================================================
    GRADIENT BACKGROUNDS - REUSABLE CLASSES
    ========================================================================== */

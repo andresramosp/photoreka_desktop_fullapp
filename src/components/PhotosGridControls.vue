@@ -110,24 +110,12 @@
                 :key="criterion.value"
                 class="score-slider-item"
               >
-                <div class="score-slider-header">
-                  <span class="score-slider-label">{{ criterion.label }}</span>
-                  <span
-                    v-if="artisticScoreFilters[criterion.value]"
-                    class="score-slider-value"
-                  >
-                    ≥ {{ artisticScoreFilters[criterion.value] }}
-                  </span>
-                </div>
-                <n-slider
-                  :value="artisticScoreFilters[criterion.value] || 1"
-                  @update:value="
-                    (value) => handleArtisticScoreChange(criterion.value, value)
+                <ScoreOperatorSlider
+                  :label="criterion.label"
+                  :model-value="artisticScoreFilters[criterion.value] ?? null"
+                  @update:model-value="
+                    (v) => handleArtisticScoreChange(criterion.value, v)
                   "
-                  :min="1"
-                  :max="10"
-                  :step="0.5"
-                  class="score-slider"
                 />
               </div>
             </div>
@@ -559,6 +547,7 @@ import { useIsMobile } from "@/composables/useIsMobile.js";
 import { useSearchTags } from "@/composables/useSearchTags.js";
 import CustomArtisticWeights from "./CustomArtisticWeights.vue";
 import TimeRangeFilter from "./TimeRangeFilter.vue";
+import ScoreOperatorSlider from "@/components/controls/ScoreOperatorSlider.vue";
 import { api } from "@/utils/axios";
 import {
   NButton,
@@ -571,7 +560,6 @@ import {
   NTooltip,
   NInput,
   NSwitch,
-  NSlider,
   useMessage,
 } from "naive-ui";
 import {
@@ -751,15 +739,15 @@ const hasActiveScoreFilters = computed(
   () => Object.keys(artisticScoreFilters.value).length > 0,
 );
 
-const handleArtisticScoreChange = (key, value) => {
-  if (value === 1) {
+const handleArtisticScoreChange = (key, filterVal) => {
+  if (!filterVal) {
     const updated = { ...artisticScoreFilters.value };
     delete updated[key];
     artisticScoreFilters.value = updated;
   } else {
     artisticScoreFilters.value = {
       ...artisticScoreFilters.value,
-      [key]: value,
+      [key]: filterVal,
     };
   }
   emit("artistic-scores-change", { ...artisticScoreFilters.value });

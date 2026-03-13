@@ -1171,9 +1171,18 @@ const applyFilters = () => {
       } else {
         // Para pasar el filtro, la foto debe cumplir TODOS los umbrales configurados
         passesArtisticScores = Object.entries(artisticScoreFilters.value).every(
-          ([scoreKey, threshold]) => {
+          ([scoreKey, filterVal]) => {
             const scoreValue = photo.descriptions?.artistic_scores?.[scoreKey];
-            return scoreValue !== undefined && scoreValue >= threshold;
+            if (scoreValue === undefined) return false;
+            const threshold =
+              typeof filterVal === "object" ? filterVal.value : filterVal;
+            const operator =
+              typeof filterVal === "object"
+                ? (filterVal.operator ?? ">=")
+                : ">=";
+            return operator === ">="
+              ? scoreValue >= threshold
+              : scoreValue <= threshold;
           },
         );
       }

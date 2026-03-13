@@ -19,9 +19,7 @@
       v-if="isExpanded"
       class="control-panel"
       @click.stop
-      @mousedown.stop
-      @mouseup.stop
-      @mousemove.stop
+      @pointerdown.stop
       @wheel.stop
       @touchstart.stop
       @touchmove.stop
@@ -188,29 +186,16 @@
                     :key="criterion.value"
                     class="score-slider-item"
                   >
-                    <div class="score-slider-header">
-                      <span class="score-slider-label">{{
-                        criterion.label
-                      }}</span>
-                      <span
-                        v-if="localArtisticScoreFilters[criterion.value]"
-                        class="score-slider-value"
-                      >
-                        ≥ {{ localArtisticScoreFilters[criterion.value] }}
-                      </span>
-                    </div>
-                    <n-slider
-                      :value="localArtisticScoreFilters[criterion.value]"
-                      @update:value="
-                        (value) =>
-                          handleArtisticScoreChange(criterion.value, value)
+                    <ScoreOperatorSlider
+                      :label="criterion.label"
+                      :model-value="
+                        localArtisticScoreFilters[criterion.value] ?? null
                       "
-                      :min="1"
-                      :max="10"
-                      :step="0.5"
+                      @update:model-value="
+                        (v) => handleArtisticScoreChange(criterion.value, v)
+                      "
                       :disabled="showDiscreteLoader"
                       @click.stop
-                      class="score-slider"
                     />
                   </div>
                 </div>
@@ -837,6 +822,7 @@ import {
 } from "@vicons/antd";
 import { AppsOutline } from "@vicons/ionicons5";
 import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
+import ScoreOperatorSlider from "@/components/controls/ScoreOperatorSlider.vue";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import EmbeddingInfoModal3D from "./EmbeddingInfoModal3D.vue";
@@ -1092,8 +1078,12 @@ const handleVisualAspectsChange = (value) => {
   emit("visual-aspects-change", value);
 };
 
-const handleArtisticScoreChange = (criterion, value) => {
-  localArtisticScoreFilters.value[criterion] = value;
+const handleArtisticScoreChange = (criterion, filterVal) => {
+  if (!filterVal) {
+    delete localArtisticScoreFilters.value[criterion];
+  } else {
+    localArtisticScoreFilters.value[criterion] = filterVal;
+  }
   emit("update:artisticScoreFilters", { ...localArtisticScoreFilters.value });
   emit("artistic-scores-change", { ...localArtisticScoreFilters.value });
 };

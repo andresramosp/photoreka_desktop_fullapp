@@ -94,29 +94,13 @@
             :key="criterion.value"
             class="score-slider-item"
           >
-            <div class="score-slider-header">
-              <span class="score-slider-label">{{ criterion.label }}</span>
-              <span
-                v-if="localArtisticScoreFilters[criterion.value]"
-                class="score-slider-value"
-              >
-                ≥ {{ localArtisticScoreFilters[criterion.value] }}
-              </span>
-            </div>
-            <n-slider
-              :value="localArtisticScoreFilters[criterion.value] || 1"
-              @update:value="
-                (value) => handleArtisticScoreChange(criterion.value, value)
+            <ScoreOperatorSlider
+              :label="criterion.label"
+              :model-value="localArtisticScoreFilters[criterion.value] ?? null"
+              @update:model-value="
+                (v) => handleArtisticScoreChange(criterion.value, v)
               "
-              :min="1"
-              :max="10"
-              :step="0.5"
               :disabled="showDiscreteLoader"
-              @click.stop
-              @mousedown.stop
-              @keydown.stop
-              @keyup.stop
-              class="score-slider"
             />
           </div>
         </div>
@@ -224,16 +208,10 @@
 
 <script setup>
 import { ref, computed, watch } from "vue";
-import {
-  NTreeSelect,
-  NTooltip,
-  NIcon,
-  NSlider,
-  NSelect,
-  NSwitch,
-} from "naive-ui";
+import { NTreeSelect, NTooltip, NIcon, NSelect, NSwitch } from "naive-ui";
 import { InfoCircleFilled, CloseOutlined } from "@vicons/antd";
 import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
+import ScoreOperatorSlider from "@/components/controls/ScoreOperatorSlider.vue";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
@@ -348,11 +326,11 @@ const handleVisualAspectsChange = (value) => {
   emit("visual-aspects-change", value);
 };
 
-const handleArtisticScoreChange = (key, value) => {
-  if (value === 1) {
+const handleArtisticScoreChange = (key, filterVal) => {
+  if (!filterVal) {
     delete localArtisticScoreFilters.value[key];
   } else {
-    localArtisticScoreFilters.value[key] = value;
+    localArtisticScoreFilters.value[key] = filterVal;
   }
   emit("update:artisticScoreFilters", { ...localArtisticScoreFilters.value });
   emit("artistic-scores-change", { ...localArtisticScoreFilters.value });
@@ -579,35 +557,13 @@ const clearTags = () => {
   gap: 4px;
 }
 
-.score-slider-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.score-slider-label {
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-
-.score-slider-value {
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 500;
-}
-
 .time-range-container {
   margin-top: 8px;
 }
 
 :deep(.n-slider) {
-  --n-fill-color: #4ade80;
-  --n-fill-color-hover: #22c55e;
-}
-
-:deep(.n-slider-handle) {
-  background: #4ade80;
-  border-color: #4ade80;
+  --n-fill-color: var(--primary-color);
+  --n-fill-color-hover: var(--primary-color-hover, var(--primary-color));
 }
 
 .tags-select {
