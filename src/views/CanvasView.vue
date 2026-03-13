@@ -1469,7 +1469,32 @@ const handleToolSelected = async (toolId, canvasId = null) => {
     });
   };
 
-  // Use the composable function to take photos to tool
+  // When the destination is a canvas and we're already in CanvasView,
+  // router.push('/canvas') would be a no-op (same route), so handle it directly.
+  if (toolId === "canvas") {
+    if (selectedIds.length === 0) return;
+
+    await Promise.all(selectedIds.map((id) => photosStore.fetchPhoto(id)));
+    const photosToAdd = selectedIds
+      .map((id) => photosStore.photos.find((p) => p.id == id))
+      .filter(Boolean);
+
+    if (photosToAdd.length === 0) return;
+
+    clearSelections();
+    closeToolSelector();
+
+    if (canvasId === "new") {
+      await handleCreateCanvas();
+    } else if (canvasId !== null) {
+      await handleSwitchCanvas(canvasId);
+    }
+
+    await canvasStore.addPhotos(photosToAdd, false, true);
+    return;
+  }
+
+  // For all other tools, use the composable (which navigates away)
   await takeToTool(toolId, selectedIds, clearSelections, canvasId);
   closeToolSelector();
 };
