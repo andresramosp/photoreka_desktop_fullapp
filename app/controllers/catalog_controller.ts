@@ -1,6 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, DeleteObjectsCommand } from '@aws-sdk/client-s3'
 import crypto from 'crypto'
 import Photo, { PhotoDescriptions } from '#models/photo'
 import User from '#models/user'
@@ -691,6 +691,98 @@ export default class CatalogController {
     } catch (error) {
       console.error('Error guardando nota de foto:', error)
       return response.internalServerError({ message: 'Error guardando nota de la foto' })
+    }
+  }
+
+  /**
+   * Reemplaza fotos analizadas en workspace con una nueva foto de lightbox.
+   * La nueva foto física (R2 keys) reemplaza a las analizadas, que conservan sus datos de análisis.
+   * POST /catalog/swapPhotos
+   * Body: { newPhotoId: number, targetPhotoIds: number[] }
+   */
+  public async swapPhotos({ request, response, auth }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as any
+      const userId = user.id.toString()
+
+      const { newPhotoId, targetPhotoIds } = request.only(['newPhotoId', 'targetPhotoIds'])
+
+      if (
+        !newPhotoId ||
+        !targetPhotoIds ||
+        !Array.isArray(targetPhotoIds) ||
+        targetPhotoIds.length === 0
+      ) {
+        return response.badRequest({ message: 'newPhotoId and targetPhotoIds[] are required' })
+      }
+
+      // Verify the new (lightbox) photo exists and belongs to user
+      const newPhoto = await Photo.query().where('id', newPhotoId).where('user_id', userId).first()
+
+      if (!newPhoto) {
+        return response.notFound({ message: 'New photo not found' })
+      }
+
+      // Verify all target photos exist and belong to user
+      const targetPhotos = await Photo.query()
+        .whereIn('id', targetPhotoIds)
+        .where('user_id', userId)
+
+      if (targetPhotos.length === 0) {
+        return response.notFound({ message: 'No target photos found' })
+      }
+
+      // Collect old R2 keys from targets that will be replaced
+      const oldR2Keys: string[] = []
+      for (const target of targetPhotos) {
+        oldR2Keys.push(target.name)
+        if (target.thumbnailName) oldR2Keys.push(target.thumbnailName)
+      }
+
+      // Update each target photo's R2 keys to point to the new photo's files
+      const swapped: number[] = []
+      for (const target of targetPhotos) {
+        target.name = newPhoto.name
+        target.thumbnailName = newPhoto.thumbnailName
+        target.originalFileName = newPhoto.originalFileName
+        // Reset dhash so it gets recomputed on next duplicate check
+        target.dhash = null
+        await target.save()
+        swapped.push(target.id)
+      }
+
+      // Delete old R2 files that are no longer referenced
+      if (oldR2Keys.length > 0) {
+        try {
+          await s3.send(
+            new DeleteObjectsCommand({
+              Bucket: process.env.R2_BUCKET,
+              Delete: {
+                Objects: oldR2Keys.map((Key) => ({ Key })),
+                Quiet: true,
+              },
+            })
+          )
+        } catch (err) {
+          console.warn('⚠️ Failed to delete old R2 files during swap:', err)
+        }
+      }
+
+      // Soft-delete the new photo record (its R2 files are now used by targets)
+      newPhoto.deletedAt = (await import('luxon')).DateTime.now()
+      await newPhoto.save()
+
+      await this.invalidateUserCache(userId)
+
+      return response.ok({
+        message: 'Photos swapped successfully',
+        swapped,
+        deletedNewPhotoId: newPhotoId,
+      })
+    } catch (error) {
+      console.error('Error swapping photos:', error)
+      return response.internalServerError({ message: 'Error swapping photos' })
     }
   }
 }
