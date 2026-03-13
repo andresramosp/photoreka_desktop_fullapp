@@ -35,7 +35,9 @@
         v-if="
           !photo.isCheckingDuplicates &&
           !isUploading &&
-          (photo.status === 'processed' || photo.status === 'preprocessed') &&
+          (photo.status === 'processed' ||
+            photo.status === 'preprocessed' ||
+            photo.isAlreadyAnalyzed) &&
           !isSelectionModeActive
         "
         class="action-buttons-overlay"
@@ -53,18 +55,19 @@
             </n-icon>
           </template>
         </n-button>
-        <!-- <n-button
+        <!-- Swap button for lightbox photos already analyzed in workspace -->
+        <n-button
+          v-if="photo.isAlreadyAnalyzed && photo.alreadyAnalyzedIds?.length > 0"
           size="medium"
-          class="action-button delete-button"
-          @click.stop="deletePhoto"
-          v-if="showDelete"
+          class="action-button swap-button"
+          @click.stop="swapPhoto"
         >
           <template #icon>
             <n-icon>
-              <DeleteIcon />
+              <SwapHorizontalOutline />
             </n-icon>
           </template>
-        </n-button> -->
+        </n-button>
       </div>
 
       <!-- (Eliminado: el indicador de duplicados ahora va en el footer) -->
@@ -313,6 +316,7 @@ import {
   CheckmarkCircleOutline as CheckCircleIcon,
   TrashOutline as DeleteIcon,
   TimeOutline,
+  SwapHorizontalOutline,
 } from "@vicons/ionicons5";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 
@@ -367,6 +371,7 @@ interface Emits {
   (e: "info", photo: PhotoInfo): void;
   (e: "delete", photoId: string): void;
   (e: "show-duplicates", duplicates: string[]): void;
+  (e: "swap-photo", newPhotoId: string, targetIds: string[]): void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -453,6 +458,15 @@ const showDuplicates = () => {
     // Include the current photo plus its duplicates
     const allDuplicates = [props.photo.id, ...props.photo.duplicates];
     emit("show-duplicates", allDuplicates);
+  }
+};
+
+const swapPhoto = () => {
+  if (
+    props.photo.alreadyAnalyzedIds &&
+    props.photo.alreadyAnalyzedIds.length > 0
+  ) {
+    emit("swap-photo", props.photo.id, props.photo.alreadyAnalyzedIds);
   }
 };
 
@@ -683,6 +697,11 @@ onUnmounted(() => {
 
 .info-button {
   background-color: var(--info-color) !important;
+  color: white !important;
+}
+
+.swap-button {
+  background-color: var(--warning-color, #f59e0b) !important;
   color: white !important;
 }
 

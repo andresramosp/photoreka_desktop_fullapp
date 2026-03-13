@@ -322,6 +322,7 @@
             :selected="selectedPhotosRecord[photo.id]"
             @info="showPhotoInfo"
             @select="togglePhotoSelection"
+            @swap-photo="handleSwapPhoto"
             :show-delete="true"
             :show-name="true"
             :show-footer="false"
@@ -341,6 +342,7 @@
           :selected="selectedPhotosRecord[photo.id]"
           @info="showPhotoInfo"
           @select="togglePhotoSelection"
+          @swap-photo="handleSwapPhoto"
           :show-delete="true"
           :show-name="true"
           :show-footer="false"
@@ -486,6 +488,14 @@
       </template>
     </n-modal>
 
+    <!-- Swap Photo Dialog -->
+    <SwapPhotoDialog
+      v-model="showSwapDialog"
+      :new-photo-id="swapNewPhotoId"
+      :target-ids="swapTargetIds"
+      @swap-complete="handleSwapComplete"
+    />
+
     <!-- Floating Action Bar -->
     <FloatingActionBar
       :selected-count="selectedPhotoIds.length"
@@ -536,6 +546,7 @@ import CollectionModal from "./CollectionModal.vue";
 import PhotosGridControls from "./PhotosGridControls.vue";
 import PhotoToolSelector from "./PhotoToolSelector.vue";
 import FloatingActionBar from "./FloatingActionBar.vue";
+import SwapPhotoDialog from "./SwapPhotoDialog.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useUserStore } from "@/stores/userStore";
@@ -783,6 +794,11 @@ const selectedDialogPhoto = ref();
 const showCollectionModal = ref(false);
 const showDeleteConfirmDialog = ref(false);
 const isDeletingPhotos = ref(false);
+
+// Swap dialog state
+const showSwapDialog = ref(false);
+const swapNewPhotoId = ref(null);
+const swapTargetIds = ref([]);
 
 // Watch for selection changes and emit to parent
 watch(
@@ -1731,6 +1747,17 @@ const handleToolSelected = async (toolId, canvasId = null) => {
 
 const handleSendToChat = async () => {
   await takeToChat(selectedPhotoIds.value, clearAllSelections);
+};
+
+const handleSwapPhoto = (newPhotoId, targetIds) => {
+  swapNewPhotoId.value = newPhotoId;
+  swapTargetIds.value = targetIds;
+  showSwapDialog.value = true;
+};
+
+const handleSwapComplete = () => {
+  // Reset duplicate state after swap
+  resetDuplicateState();
 };
 </script>
 
