@@ -1,6 +1,6 @@
 import { useUserStore } from "./stores/userStore";
 
-export function initializeAuth() {
+export async function initializeAuth() {
   const userStore = useUserStore();
-  userStore.initAuth();
+  await userStore.initAuth();
 }

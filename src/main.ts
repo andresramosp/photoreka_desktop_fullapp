@@ -80,10 +80,13 @@ app.use(pinia);
 // Inicializar Google Analytics
 initGA();
 
-// Inicializar autenticación después de registrar Pinia
-initializeAuth();
-
-app.use(router);
-app.use(naive);
-app.use(VueKonva);
-app.mount("#app");
+// Inicializar autenticación antes de montar la app para que el
+// router guard vea isAuthenticated correctamente en la navegación inicial
+async function bootstrap() {
+  await initializeAuth();
+  app.use(router);
+  app.use(naive);
+  app.use(VueKonva);
+  app.mount("#app");
+}
+bootstrap();
