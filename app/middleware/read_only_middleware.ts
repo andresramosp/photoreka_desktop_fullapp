@@ -30,6 +30,7 @@ export default class ReadOnlyMiddleware {
     '/api/search/tags/direct',
     '/api/chat',
     '/api/chat/reset',
+    'api/catalog/photosByIds',
   ]
 
   /**
