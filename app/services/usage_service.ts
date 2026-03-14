@@ -2,41 +2,24 @@ import Photo from '#models/photo'
 import User from '#models/user'
 
 export enum UsageTier {
-  TESTER = 'TESTER',
-  PROMOTIONAL = 'PROMOTIONAL',
   BASIC = 'BASIC',
-  PRO = 'PRO',
-  PREMIUM = 'PREMIUM',
+  PROMOTIONAL = 'PROMOTIONAL',
 }
 
 export const UsageTierLimits: Record<
   UsageTier,
   Omit<Usage, 'creditsUsed' | 'analyzedPhotosUsed'>
 > = {
-  [UsageTier.TESTER]: {
-    photosLimit: 2000,
-    analyzedPhotosLimit: 2000,
-    creditsAvailable: 100,
-  },
-  [UsageTier.PROMOTIONAL]: {
+  [UsageTier.BASIC]: {
     photosLimit: 500,
     analyzedPhotosLimit: 500,
-    creditsAvailable: 50,
+    creditsAvailable: 100,
   },
-  [UsageTier.BASIC]: {
-    photosLimit: 100,
-    analyzedPhotosLimit: 100,
-    creditsAvailable: 1000,
-  },
-  [UsageTier.PRO]: {
+
+  [UsageTier.PROMOTIONAL]: {
     photosLimit: 1000,
     analyzedPhotosLimit: 1000,
-    creditsAvailable: 10000,
-  },
-  [UsageTier.PREMIUM]: {
-    photosLimit: 10000,
-    analyzedPhotosLimit: 10000,
-    creditsAvailable: 100000,
+    creditsAvailable: 100,
   },
 }
 
@@ -77,9 +60,8 @@ export default class UsageService {
   static async getUsage(userId: number): Promise<Usage | null> {
     let baseUsage = await this.getBaseUsage(userId)
     if (!baseUsage) {
-      // Si el usuario no tiene usage, asignar el tier máximo y guardar
-      const { UsageTier, getDefaultUsageByTier } = await import('#services/usage_service')
-      baseUsage = getDefaultUsageByTier(UsageTier.TESTER)
+      // Fallback para usuarios legacy sin usage asignado
+      baseUsage = getDefaultUsageByTier(UsageTier.BASIC)
       const user = await User.findOrFail(userId)
       user.usage = baseUsage
       await user.save()

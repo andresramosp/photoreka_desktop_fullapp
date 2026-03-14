@@ -1,5 +1,6 @@
 import { DateTime } from 'luxon'
 import { BaseModel, column } from '@adonisjs/lucid/orm'
+import { UsageTier } from '#services/usage_service'
 
 export default class Invite extends BaseModel {
   @column({ isPrimary: true })
@@ -7,6 +8,9 @@ export default class Invite extends BaseModel {
 
   @column()
   declare code: string
+
+  @column()
+  declare tier: UsageTier
 
   @column()
   declare maxUses: number

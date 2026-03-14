@@ -41,6 +41,7 @@ export default class InvitesController {
       const generateInviteValidator = vine.compile(
         vine.object({
           maxUses: vine.number().min(1).optional(),
+          tier: vine.enum(Object.values(UsageTier)).optional(),
         })
       )
       const payload = await request.validateUsing(generateInviteValidator)
@@ -50,6 +51,7 @@ export default class InvitesController {
         code,
         createdBy: user.id,
         maxUses: payload.maxUses ?? 1,
+        tier: (payload.tier as UsageTier) ?? UsageTier.BASIC,
       })
 
       return response.created({
@@ -57,6 +59,7 @@ export default class InvitesController {
         invite: {
           id: invite.id,
           code: invite.code,
+          tier: invite.tier,
           maxUses: invite.maxUses,
           useCount: invite.useCount,
           createdAt: invite.createdAt,
@@ -144,12 +147,13 @@ export default class InvitesController {
         })
       }
 
-      // Generate invitation code
+      // Generate invitation code (user-generated invites are always BASIC tier)
       const code = this.generateInviteCode()
       const invite = await Invite.create({
         code,
         createdBy: user.id,
         maxUses: payload.maxUses ?? 1,
+        tier: UsageTier.PROMOTIONAL,
       })
 
       // Create registration URL with invite code
@@ -211,6 +215,7 @@ export default class InvitesController {
         vine.object({
           email: vine.string().email().normalizeEmail(),
           maxUses: vine.number().min(1).optional(),
+          tier: vine.enum(Object.values(UsageTier)).optional(),
         })
       )
 
@@ -233,10 +238,12 @@ export default class InvitesController {
 
       // Generate invitation code
       const code = this.generateInviteCode()
+      const grantTier = (payload.tier as UsageTier) ?? UsageTier.PROMOTIONAL
       const invite = await Invite.create({
         code,
         createdBy: user.id,
         maxUses: payload.maxUses ?? 1,
+        tier: grantTier,
       })
 
       // Create registration URL with invite code
@@ -252,7 +259,7 @@ export default class InvitesController {
             user.name,
             code,
             registerUrl,
-            UsageTierLimits[UsageTier.PROMOTIONAL].analyzedPhotosLimit
+            UsageTierLimits[grantTier].analyzedPhotosLimit
           ),
         })
       } catch (emailError) {

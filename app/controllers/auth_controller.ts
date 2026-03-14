@@ -69,6 +69,10 @@ export default class AuthController {
             message: 'Invalid or already used invitation code',
           })
         }
+      } else if (payload.inviteCode) {
+        // Open mode: invite code is optional, but resolve it for tier assignment
+        invite = await Invite.findBy('code', payload.inviteCode)
+        if (invite?.isUsed) invite = null
       }
 
       // Verificar si el email ya está registrado
@@ -79,8 +83,8 @@ export default class AuthController {
         })
       }
 
-      // Importar enum y función para usage
-      const tier = UsageTier.PROMOTIONAL
+      // Determine usage tier: from invite type, or BASIC if registering without invite
+      const tier = invite ? invite.tier : UsageTier.BASIC
       const usage = getDefaultUsageByTier(tier)
 
       // Generate email confirmation token
@@ -822,10 +826,14 @@ export default class AuthController {
               `${this.getFrontendUrl()}/auth/error?message=Invalid or already used invitation code`
             )
           }
+        } else if (inviteCode) {
+          // Open mode: invite code is optional, but resolve it for tier assignment
+          invite = await Invite.findBy('code', inviteCode)
+          if (invite?.isUsed) invite = null
         }
 
         // Create new user
-        const tier = UsageTier.PROMOTIONAL
+        const tier = invite ? invite.tier : UsageTier.BASIC
         const usage = getDefaultUsageByTier(tier)
 
         user = await User.create({

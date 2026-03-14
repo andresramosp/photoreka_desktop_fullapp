@@ -92,7 +92,8 @@ export default class ChatController {
       const hasCredits = await CreditService.canAfford(user.id)
       if (!hasCredits) {
         return response.status(402).json({
-          message: 'No credits remaining. Please purchase more credits to continue.',
+          message:
+            'No credits remaining. Please purchase more credits to continue. {url:/settings}',
         })
       }
 
