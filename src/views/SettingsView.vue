@@ -256,19 +256,14 @@
           </div>
           <div class="section-content">
             <!-- Current Plan -->
-            <div class="plan-card-container">
-              <div class="current-plan-card">
-                <div class="plan-info">
-                  <div class="plan-badge-wrapper">
-                    <n-tag type="info" size="small">Current Plan</n-tag>
-                  </div>
-                  <h3 class="plan-name">Free Plan</h3>
-                  <p class="plan-description">
-                    Basic features with limited storage
-                  </p>
-                </div>
-                <n-button type="primary" ghost> View Plans </n-button>
+            <div class="current-plan-card">
+              <div class="plan-info">
+                <span class="plan-name">Free Plan</span>
+                <n-tag type="info" size="small">Current Plan</n-tag>
               </div>
+              <n-button type="primary" ghost size="small">
+                View Plans
+              </n-button>
             </div>
 
             <!-- Analysis Usage -->
@@ -279,6 +274,19 @@
                     <InProgress />
                   </n-icon>
                   <span class="storage-title">Analyzed Photos</span>
+                  <n-tooltip trigger="hover" placement="top">
+                    <template #trigger>
+                      <n-icon
+                        size="13"
+                        color="var(--text-secondary)"
+                        style="cursor: help"
+                      >
+                        <InfoCircleFilled />
+                      </n-icon>
+                    </template>
+                    Total number of photos that have been analyzed by Photoreka
+                    since your account was created.
+                  </n-tooltip>
                 </div>
                 <span class="storage-count"
                   >{{ analyzedPhotosUsed }} / {{ analyzedPhotosLimit }}</span
@@ -298,13 +306,73 @@
                 <span class="storage-remaining"
                   >{{ analyzedPhotosRemaining }} analyses remaining</span
                 >
-                <n-button type="primary" size="small" @click="() => {}">
+                <n-button
+                  type="primary"
+                  size="small"
+                  @click="showPlansModal = true"
+                >
                   <template #icon>
                     <n-icon>
                       <AddOutline />
                     </n-icon>
                   </template>
-                  Add Analysis Credit
+                  Add photos
+                </n-button>
+              </div>
+            </div>
+
+            <!-- Credits Usage -->
+            <div class="storage-usage-container">
+              <div class="storage-header">
+                <div class="storage-title-row">
+                  <n-icon size="20" color="var(--accent-color)">
+                    <StarOutline />
+                  </n-icon>
+                  <span class="storage-title">Consumed Credits</span>
+                  <n-tooltip trigger="hover" placement="top">
+                    <template #trigger>
+                      <n-icon
+                        size="13"
+                        color="var(--text-secondary)"
+                        style="cursor: help"
+                      >
+                        <InfoCircleFilled />
+                      </n-icon>
+                    </template>
+                    Credits consumed by PRO tools such as the AI chat and
+                    advanced semantic searches.
+                  </n-tooltip>
+                </div>
+                <span class="storage-count"
+                  >{{ creditsUsed }} / {{ creditsAvailable }}</span
+                >
+              </div>
+              <div class="storage-progress-bar">
+                <div
+                  class="storage-progress-fill credits"
+                  :style="{ width: creditsPercentage + '%' }"
+                  :class="{
+                    warning: creditsPercentage > 80,
+                    critical: creditsPercentage > 95,
+                  }"
+                ></div>
+              </div>
+              <div class="storage-footer">
+                <span class="storage-remaining"
+                  >{{ creditsAvailable - creditsUsed }} credits remaining</span
+                >
+                <n-button
+                  type="warning"
+                  size="small"
+                  ghost
+                  @click="showPlansModal = true"
+                >
+                  <template #icon>
+                    <n-icon>
+                      <AddOutline />
+                    </n-icon>
+                  </template>
+                  Get more credits
                 </n-button>
               </div>
             </div>
@@ -320,11 +388,97 @@
       </div>
     </div>
   </div>
+
+  <!-- Plans & Credits Modal -->
+  <n-modal
+    v-model:show="showPlansModal"
+    :style="{ width: '480px', maxWidth: '92vw' }"
+  >
+    <n-card
+      :bordered="false"
+      role="dialog"
+      aria-modal="true"
+      class="plans-modal-card"
+    >
+      <template #header-extra>
+        <n-button text @click="showPlansModal = false" aria-label="Close">
+          <n-icon size="18" color="var(--text-secondary)">
+            <svg viewBox="0 0 24 24">
+              <path
+                fill="currentColor"
+                d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z"
+              />
+            </svg>
+          </n-icon>
+        </n-button>
+      </template>
+
+      <div class="plans-modal-content">
+        <div class="plans-modal-icon-wrapper">
+          <n-icon size="32" color="var(--primary-color)">
+            <CloudOutline />
+          </n-icon>
+        </div>
+        <h3 class="plans-modal-title">Plans & Credits — Coming Soon</h3>
+        <p class="plans-modal-body">
+          We're working on a full plans and credits system that will let you
+          expand your analysis quota and replenish credits directly from here.
+        </p>
+
+        <div class="plans-modal-highlight">
+          <n-icon size="16" color="var(--accent-color)">
+            <MailOutline />
+          </n-icon>
+          <span>
+            In the meantime, reach out to us at
+            <a href="mailto:hello@photoreka.com" class="plans-modal-link"
+              >hello@photoreka.com</a
+            >
+            and we'll be happy to grant a courtesy increase.
+          </span>
+        </div>
+
+        <div class="plans-modal-highlight plans-modal-highlight--bonus">
+          <n-icon size="16" color="var(--warning-color)">
+            <StarOutline />
+          </n-icon>
+          <span>
+            <strong>Coming soon:</strong> earn bonus photos and credits for
+            every friend you invite to Photoreka.
+          </span>
+        </div>
+      </div>
+
+      <template #action>
+        <div class="plans-modal-actions">
+          <n-button @click="showPlansModal = false">Close</n-button>
+          <n-button
+            type="primary"
+            tag="a"
+            href="mailto:hello@photoreka.com"
+            @click="showPlansModal = false"
+          >
+            Contact us
+          </n-button>
+        </div>
+      </template>
+    </n-card>
+  </n-modal>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import { NInput, NSelect, NButton, NIcon, NTag, useMessage } from "naive-ui";
+import {
+  NInput,
+  NSelect,
+  NButton,
+  NIcon,
+  NTag,
+  NTooltip,
+  NModal,
+  NCard,
+  useMessage,
+} from "naive-ui";
 import {
   PersonOutline,
   SettingsOutline,
@@ -335,8 +489,10 @@ import {
   LogoInstagram,
   MailOutline,
   SendOutline,
+  StarOutline,
 } from "@vicons/ionicons5";
 import { InProgress } from "@vicons/carbon";
+import { InfoCircleFilled } from "@vicons/antd";
 import googlePhotosIconUrl from "@/assets/logos/google_photos.png";
 import { useUserStore } from "@/stores/userStore";
 import { useTheme } from "@/composables/useTheme.js";
@@ -457,6 +613,19 @@ const analysisPercentage = computed(() => {
     100,
   );
 });
+
+// Credits usage (real data from userStore)
+const creditsUsed = computed(() => userStore.user?.usage?.creditsUsed || 0);
+const creditsAvailable = computed(
+  () => userStore.user?.usage?.creditsAvailable || 0,
+);
+const creditsPercentage = computed(() => {
+  if (creditsAvailable.value === 0) return 0;
+  return Math.min((creditsUsed.value / creditsAvailable.value) * 100, 100);
+});
+
+// Plans modal
+const showPlansModal = ref(false);
 
 // Actions
 const saveSettings = () => {
@@ -662,46 +831,31 @@ const saveSettings = () => {
 }
 
 /* Plan Card Styles */
-.plan-card-container {
-  margin-bottom: var(--spacing-md);
-}
-
 .current-plan-card {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--spacing-lg);
+  padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--bg-elevated), var(--bg-container));
+  background-color: var(--bg-container);
   border: 1px solid var(--border-color);
 }
 
 .plan-info {
   display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-}
-
-.plan-badge-wrapper {
-  margin-bottom: var(--spacing-2xs);
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
 .plan-name {
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-base);
   font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
-  margin: 0;
-}
-
-.plan-description {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  margin: 0;
 }
 
 /* Storage/Analysis Usage Styles */
 .storage-usage-container {
-  padding: var(--spacing-lg);
+  padding: var(--spacing-md);
   border-radius: var(--radius-md);
   background-color: var(--bg-container);
   border: 1px solid var(--border-color);
@@ -756,6 +910,10 @@ const saveSettings = () => {
   background-color: var(--error-color);
 }
 
+.storage-progress-fill.credits {
+  background-color: var(--accent-color);
+}
+
 .storage-footer {
   display: flex;
   justify-content: space-between;
@@ -805,16 +963,6 @@ const saveSettings = () => {
   .connection-actions {
     width: 100%;
     justify-content: space-between;
-  }
-
-  .current-plan-card {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--spacing-md);
-  }
-
-  .current-plan-card .n-button {
-    width: 100%;
   }
 
   .storage-footer {
@@ -945,5 +1093,81 @@ const saveSettings = () => {
   .settings-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Plans Modal */
+.plans-modal-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+}
+
+.plans-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) 0;
+}
+
+.plans-modal-icon-wrapper {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plans-modal-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.plans-modal-body {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.plans-modal-highlight {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.plans-modal-highlight .n-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.plans-modal-highlight--bonus {
+  border-color: rgba(var(--warning-color-rgb, 234, 179, 8), 0.25);
+  background-color: rgba(var(--warning-color-rgb, 234, 179, 8), 0.05);
+}
+
+.plans-modal-link {
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.plans-modal-link:hover {
+  text-decoration: underline;
+}
+
+.plans-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
 }
 </style>

@@ -64,19 +64,6 @@
         <span class="remaining-text"
           >{{ analyzedPhotosRemaining }} analyses remaining</span
         >
-        <n-button
-          v-if="settingsMode"
-          type="primary"
-          size="small"
-          @click="() => {}"
-        >
-          <template #icon>
-            <n-icon>
-              <AddOutline />
-            </n-icon>
-          </template>
-          Add Analysis Credit
-        </n-button>
       </div>
     </div>
 

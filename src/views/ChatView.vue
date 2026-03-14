@@ -558,6 +558,7 @@ import {
   onActivated,
 } from "vue";
 import { NIcon, useMessage } from "naive-ui";
+import { useRouter } from "vue-router";
 import PhotosDialog from "@/components/PhotosDialog.vue";
 import PhotoCardHub from "@/components/photoCards/PhotoCardHub.vue";
 import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
@@ -645,6 +646,7 @@ const photosStore = usePhotosStore();
 const chatStore = useChatStore();
 const userStore = useUserStore();
 const message = useMessage();
+const router = useRouter();
 
 const isDemoUser = computed(
   () => userStore.user?.email === "demo@photorekatest.com",
@@ -984,6 +986,8 @@ const sendMessage = async () => {
 const PHOTO_TOKEN = /\[\[photo:(\d+)\|([^\]]+)\]\]/g;
 // Matches nested tokens like [[photo:[[photo:123|name.jpg]]|name.jpg]]
 const NESTED_PHOTO_TOKEN = /\[\[photo:\[\[photo:(\d+)\|([^\]]+)\]\][^\]]*\]\]/g;
+// Matches app-internal URL tokens like {url:/settings} or {url:/settings|Settings}
+const URL_TOKEN = /\{url:(\/[^|}\s]*)(?:\|([^}]*))?\}/g;
 
 const normalizePhotoTokens = (text: string): string =>
   text.replace(
@@ -995,14 +999,33 @@ const renderMarkdown = (content: string): string => {
   const unescaped = content.replace(/\\n/g, "\n");
   const normalized = normalizePhotoTokens(unescaped);
   const html = marked(normalized) as string;
-  return html.replace(
-    PHOTO_TOKEN,
-    (_, id, filename) =>
-      `<span class="photo-inline-link" data-photo-id="${id}" data-photo-name="${filename}" title="${filename}">${filename}</span>`,
-  );
+  return html
+    .replace(
+      PHOTO_TOKEN,
+      (_, id, filename) =>
+        `<span class="photo-inline-link" data-photo-id="${id}" data-photo-name="${filename}" title="${filename}">${filename}</span>`,
+    )
+    .replace(
+      URL_TOKEN,
+      (_, path, label) =>
+        `<span class="app-url-link" data-app-url="${path}">${label || path}</span>`,
+    );
 };
 
 const handleMarkdownClick = (e: MouseEvent) => {
+  // Handle app-internal URL links
+  const urlTarget = (e.target as HTMLElement).closest(
+    "[data-app-url]",
+  ) as HTMLElement | null;
+  if (urlTarget) {
+    const appUrl = urlTarget.dataset.appUrl;
+    if (appUrl) {
+      router.push(appUrl);
+      return;
+    }
+  }
+
+  // Handle photo inline links
   const target = (e.target as HTMLElement).closest(
     "[data-photo-id]",
   ) as HTMLElement | null;
@@ -2319,6 +2342,31 @@ const formatRelativeDate = (dateStr: string) => {
 }
 
 .message-assistant .message-bubble :deep(.photo-inline-link:hover) {
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  text-decoration-style: solid;
+}
+
+/* ── Inline app URL links ── */
+.message-assistant .message-bubble :deep(.app-url-link),
+.message-bubble :deep(.app-url-link) {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--accent-color);
+  cursor: pointer;
+  font-weight: var(--font-weight-semibold);
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-underline-offset: 2px;
+  border-radius: var(--radius-sm);
+  padding: 0 3px;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.message-assistant .message-bubble :deep(.app-url-link:hover),
+.message-bubble :deep(.app-url-link:hover) {
   background: color-mix(in srgb, var(--accent-color) 12%, transparent);
   text-decoration-style: solid;
 }
