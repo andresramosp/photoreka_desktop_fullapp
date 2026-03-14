@@ -21,6 +21,8 @@ const s3 = new S3Client({
     accessKeyId: process.env.R2_ACCESS_KEY!,
     secretAccessKey: process.env.R2_SECRET_KEY!,
   },
+  requestChecksumCalculation: 'WHEN_REQUIRED',
+  responseChecksumValidation: 'WHEN_REQUIRED',
 })
 
 interface PhotoMetadata {
