@@ -153,116 +153,6 @@ Use the thumbnails and descriptions provided for visual verification.
 Act as a discerning curator: discard tangential results, keep only what genuinely matches.
 Text-only described photos (from earlier iterations) are also valid candidates for photo_groups.`
 
-// ── Phase 2 compressed addendum (skeleton mode for Phase 3 expansion) ──
-
-const PHASE2_COMPRESSED_ROLE_ADDENDUM = `
-
-## Your current role: CURATOR & JUDGE (COMPRESSED OUTPUT)
-You have all gathered data from previous steps. You also have visual access to thumbnail images paired with full descriptions for the user's attached photos and top search results. Use them for visual verification and curatorial judgment.
-
-Photos may arrive with thumbnails (for visual evaluation) or text-only descriptions (from earlier search iterations). Both are valid candidates for your response.
-
-## Curatorial judgment
-- **Selectivity:** Only include photos that genuinely match the user's request. Discard tangential or low-relevance results — even if returned by a search tool.
-- **Grounding:** Your response MUST be based EXCLUSIVELY on data returned by tools. If no photos were found or all tools returned empty results, state this clearly — NEVER invent filenames, descriptions, or photo content to fill the gap. An empty \`photo_groups\` array is correct when there are no real results.
-- **Scoring (1-10):** Use for internal ranking. Surface scores only if the user asks or it adds clear value.
-    - *Scale:* 1 (Disastrous), 5 (Acceptable), 7.5 (Remarkable), 10 (Unique).
-- **Genre-specific priorities** — weight criteria by the photographer's style:
-    - *Documentary:* \`message\`, \`storytelling\`, \`candidness\`.
-    - *Street:* \`candidness\`, \`visual_games\`, \`originality\`.
-    - *Artistic:* \`message\`, \`originality\`, \`composition\`.
-- **Catalog analysis:** Look for patterns and imbalances across clusters, not just average scores.
-
-## CRITICAL: Compressed skeleton output
-You MUST output a SKELETON — a maximally compressed blueprint. Another model will expand it into prose.
-ALL curatorial decisions, photo selections, and aesthetic judgments MUST be made HERE — the expansion model has NO visual access and CANNOT make editorial choices.
-
-Return your \`text\` field using this MANDATORY notation:
-
-TONE: <warm|neutral|critical|encouraging>+<lang: es/en/fr/…>
-THESIS: <core takeaway — no filler>
-POINTS:
-- LABEL: filename1+filename2=insight → impact
-- LABEL: filename=quality1+quality2
-- <max 5 points>
-WEAK: <filename=specific flaw → consequence> | "none"
-NEXT: <1 actionable suggestion in-app>
-
-### Symbol grammar (saves tokens):
-- \`=\`  means: is / represents / captures
-- \`→\`  means: leads to / results in / for
-- \`/\`  means: versus / against / contrast between
-- \`+\`  means: and / combined with / multiple files
-- \`;\`  separates multiple photos within the same point
-- \`★\`  marks top award/portfolio candidate
-- LABEL = short thematic tag (STREET, COLOR, HUMAN, COMP, CULTURE, etc.)
-
-### Skeleton rules:
-- Every point MUST use the photo's **filename** (e.g. DSC04948.jpg) — NEVER use numeric IDs.
-- No articles, no transitions, no filler words. Operators replace connectors.
-- ALL aesthetic judgments must be made HERE. The expansion model has NO visual access.
-- Diagnose specifically: "rojo/nieve → impacto cinemático" not "good composition".
-- The skeleton must be EXHAUSTIVE in ideas and CLOSED in interpretation — zero ambiguity for the expander.
-
-## Visual Output — photo_groups
-- Populate \`photo_groups\` when the user expects visual results (rankings, selections, or sets).
-- SINGLE group labeled \`"result"\` for flat lists with no natural subdivision.
-- MULTIPLE groups for thematic/temporal/categorical separation (e.g. \`"Portraits"\`, \`"Landscapes"\`, \`"Top picks"\`, \`"Honorable mentions"\`).
-- Group labels: in the user's language, concise.
-- Order within each group IS your editorial statement (index 0 = most prominent).
-- No cost or limit to including photo IDs — include every pertinent photo. Be generous.
-- Leave empty only when no specific photos are relevant.`
-
-const PHASE2_COMPRESSED_TRIGGER = `Now produce your compressed skeleton response.
-Use the thumbnails and descriptions for visual verification. Discard tangential results.
-Text-only described photos are also valid candidates for photo_groups.
-CRITICAL: output ONLY the compressed skeleton notation in the text field (TONE/THESIS/POINTS/WEAK/NEXT). Use symbol grammar (=, →, /, +, ★). Use filenames NOT numeric IDs. No prose. ALL editorial decisions happen NOW.`
-
-// ── Phase 3 expansion prompt ──
-
-const PHASE3_SYSTEM_PROMPT = `You are a professional writer and formatter for Photoreka, a photography assistant app.
-You receive a compressed skeleton from a visual curator who analyzed the user's photos with full visual access.
-Your ONLY job: expand this skeleton into a polished, natural response.
-
-## Skeleton notation key
-- \`=\` = is / represents / captures
-- \`→\` = leads to / results in / for
-- \`/\` = contrast between / versus
-- \`+\` = and / combined with
-- \`;\` = separates multiple photos in the same point
-- \`★\` = top award or portfolio candidate
-- LABEL (e.g. STREET, COLOR, HUMAN) = thematic category of the point
-- NEXT = the actionable suggestion to include at the end
-
-## Rules
-- Follow the skeleton's TONE and language EXACTLY.
-- Every POINT in the skeleton MUST appear in your output — do not omit any.
-- Do NOT add new insights, evaluations, or photo references not in the skeleton.
-- Do NOT invent visual descriptions — you have NOT seen the photos.
-- Be warm but honest, matching the indicated tone.
-- Use the conversation history for context on what the user asked, but NEVER contradict the skeleton's conclusions.
-- Suggest the NEXT from the skeleton naturally at the end.
-- Do NOT mention the skeleton, the expansion process, or any internal mechanics.
-- Max 200 words.
-
-## MANDATORY formatting (Markdown rendered in front-end)
-- **Bold:** wrap filenames and key concepts in double asterisks: **filename.jpg**, **composition**. Use sparingly — only genuinely important words.
-- **Paragraphs:** separate each paragraph with a blank line (\\n\\n). NEVER output a single continuous block of text.
-  - Structure: overall impression → highlights (one paragraph per standout photo or insight) → weakness → next step.
-  - Each paragraph = 2–4 sentences MAX.
-- Output plain Markdown text only — no bullet lists, no headers, no code blocks.`
-
-const PHASE3_EXPANSION_SCHEMA = {
-  type: 'object',
-  properties: {
-    text: {
-      type: 'string',
-      description: 'The expanded, polished response text to show to the user.',
-    },
-  },
-  required: ['text'],
-} as const
-
 const FINAL_ANSWER_SCHEMA = {
   type: 'object',
   properties: {
@@ -311,7 +201,6 @@ export type TokenUsageEntry = {
 export type AgentCostBreakdown = {
   iterations: TokenUsageEntry[]
   phase2: TokenUsageEntry
-  phase3?: TokenUsageEntry
   total: TokenUsageEntry
 }
 
@@ -384,31 +273,18 @@ const PHASE2_MAX_THUMBNAILS = 20 // how many of those can carry a thumbnail imag
 /** Tools whose Phase 2 photo results are eligible for thumbnail images. */
 const IMAGE_ELIGIBLE_TOOLS = new Set(['search_advanced', 'get_photo_info'])
 
-/**
- * Phase 1 model selection — driven by `needs_advanced_reasoning_phase1`.
- * true  → reasoning-capable model for complex tool orchestration / curatorial logic.
- * false → fast lightweight model for simple retrieval.
- */
-const MODEL_PHASE1_REASONING: ModelName = 'gemini-3-flash-preview'
-const MODEL_PHASE1_FAST: ModelName = 'gemini-3-flash-preview'
+/** Phase 1 model — fixed, no classification needed. */
+const MODEL_PHASE1: ModelName = 'gemini-3-flash-preview'
 
 /**
- * Phase 2 model selection — driven by `has_photo_intent`.
- * true  → reasoning-capable model; will receive thumbnails + rich descriptions.
- * false → fast model; no visual content passed.
+ * Phase 2 model selection — driven by `has_photo_intent` + `needs_artistic_evaluation`.
+ * No photo intent           → lite model (cheapest, text-only answer).
+ * Photo intent, no artistic → cheap model (handles photos but no deep evaluation).
+ * Photo intent + artistic   → expensive model (full curatorial / aesthetic reasoning).
  */
-const MODEL_PHASE2_REASONING: ModelName = 'gemini-3-flash-preview'
-const MODEL_PHASE2_FAST: ModelName = 'gemini-3.1-flash-lite-preview'
-
-/**
- * Phase 3 (optional expansion) — a cheap model that expands a compressed
- * skeleton from Phase 2 into polished prose. Only runs when:
- *   1. PHASE3_ENABLED is true, AND
- *   2. Phase 2 used the REASONING (expensive) model.
- * When Phase 2 already uses the FAST model, Phase 3 is skipped.
- */
-const PHASE3_ENABLED = false
-const MODEL_PHASE3: ModelName = 'gemini-2.5-flash-lite'
+const MODEL_PHASE2_EXPENSIVE: ModelName = 'gpt-5.1'
+const MODEL_PHASE2_CHEAP: ModelName = 'gemini-3-flash-preview'
+const MODEL_PHASE2_LITE: ModelName = 'gemini-3.1-flash-lite-preview'
 
 // ══════════════════════════════════════════════════════════════
 // SERVICE
@@ -429,35 +305,28 @@ export default class LangchainAgentService {
 
   // ── Public API ──────────────────────────────────────────────
 
+  /**
+   * @param forceCheapModel  When true, Phase 2 always uses the cheap model
+   *                         regardless of classification (e.g. user ran out of credits).
+   */
   public async chat(
     userId: number,
     conversationId: number,
     message: string,
-    contextPhotoIds: number[] = []
+    contextPhotoIds: number[] = [],
+    forceCheapModel = false
   ): Promise<AgentChatResult> {
-    const session = await this.initChatSession(userId, conversationId, message, contextPhotoIds)
+    const session = await this.initChatSession(
+      userId,
+      conversationId,
+      message,
+      contextPhotoIds,
+      forceCheapModel
+    )
     await this.prefetchAttachedPhotos(session, contextPhotoIds)
     await this.runPhase1Loop(session)
 
-    // Determine if Phase 3 expansion should run:
-    // Phase 3 only makes sense when Phase 2 uses the expensive model (REASONING).
-    // When Phase 2 already uses the cheap model, the skeleton → expansion split
-    // would add latency without saving cost.
-    const usePhase3 = PHASE3_ENABLED && session.modelNamePhase2 !== MODEL_PHASE2_FAST
-
-    if (usePhase3) {
-      console.log(
-        `[Agent] 📝 Phase 3 enabled — Phase 2 will output compressed skeleton, Phase 3 will expand`
-      )
-    }
-
-    const structured = await this.runPhase2(session, contextPhotoIds, usePhase3)
-
-    if (usePhase3) {
-      const expandedText = await this.runPhase3(session, structured.text)
-      structured.text = expandedText.text
-      structured.phase3Usage = expandedText.usage
-    }
+    const structured = await this.runPhase2(session, contextPhotoIds)
 
     return this.finalizeResult(session, structured, contextPhotoIds)
   }
@@ -468,18 +337,29 @@ export default class LangchainAgentService {
     userId: number,
     conversationId: number,
     message: string,
-    contextPhotoIds: number[]
+    contextPhotoIds: number[],
+    forceCheapModel: boolean
   ): Promise<ChatSession> {
     const convService = new ConversationService()
     const [history, classification] = await Promise.all([
       convService.getLLMContext(conversationId),
       this.queryService.classifyQuery(message),
     ])
-    const { has_photo_intent, needs_advanced_reasoning_phase1 } = classification
-    const modelName = needs_advanced_reasoning_phase1 ? MODEL_PHASE1_REASONING : MODEL_PHASE1_FAST
-    const modelNamePhase2 = has_photo_intent ? MODEL_PHASE2_REASONING : MODEL_PHASE2_FAST
+    const { has_photo_intent, needs_artistic_evaluation } = classification
+    const modelName = MODEL_PHASE1
+    let modelNamePhase2: ModelName
+    if (forceCheapModel) {
+      modelNamePhase2 = MODEL_PHASE2_LITE
+    } else if (!has_photo_intent) {
+      modelNamePhase2 = MODEL_PHASE2_LITE
+    } else if (needs_artistic_evaluation) {
+      modelNamePhase2 = MODEL_PHASE2_EXPENSIVE
+    } else {
+      modelNamePhase2 = MODEL_PHASE2_CHEAP
+    }
     console.log(
-      `[Agent] 🔍 Query classification: reasoning=${needs_advanced_reasoning_phase1} photo=${has_photo_intent}` +
+      `[Agent] 🔍 Query classification: photo=${has_photo_intent} artistic=${needs_artistic_evaluation}` +
+        (forceCheapModel ? ' (overridden → lite)' : '') +
         ` → Phase1=${modelName} | Phase2=${modelNamePhase2}`
     )
     const foundPhotoIds: number[] = []
@@ -840,120 +720,26 @@ export default class LangchainAgentService {
 
   private async runPhase2(
     session: ChatSession,
-    contextPhotoIds: number[],
-    compressed = false
+    contextPhotoIds: number[]
   ): Promise<{
     text: string
     photo_groups: Array<{ label: string; photo_ids: number[] }>
     usage?: any
-    phase3Usage?: any
   }> {
     const phase2Messages = LangchainAgentService.buildPhase2Messages(
       session.messages,
       session.userContext,
-      session.intermediateSteps,
-      compressed
+      session.intermediateSteps
     )
     const phase2VisualContext = await this.buildPhase2VisualContext(
       contextPhotoIds,
       session.intermediateSteps,
       session.providerPhase2
     )
-    return LangchainAgentService.invokeStructuredFinalAnswer(
-      session.modelNamePhase2,
-      [...phase2Messages, ...phase2VisualContext],
-      compressed
-    )
-  }
-
-  // ── Phase 3 (optional expansion) ─────────────────────────────
-
-  private async runPhase3(
-    session: ChatSession,
-    skeleton: string
-  ): Promise<{ text: string; usage?: any }> {
-    console.log(`[Agent] ✍️  Phase 3 — expanding skeleton with ${MODEL_PHASE3}…`)
-    console.log(
-      `[Agent]    Skeleton preview: "${skeleton.slice(0, 300)}${skeleton.length > 300 ? '…' : ''}"`
-    )
-
-    // Build minimal context: system prompt + conversation history + user question + skeleton
-    const messages: any[] = [new SystemMessage(PHASE3_SYSTEM_PROMPT)]
-
-    // Add conversation history (text only — no tool messages, no images)
-    for (const m of session.history) {
-      if (typeof m.content !== 'string' || m.content.trim().length === 0) continue
-      if (m.role === 'user') {
-        messages.push(new HumanMessage(m.content))
-      } else {
-        messages.push(new AIMessage(m.content))
-      }
-    }
-
-    // Current user message
-    messages.push(new HumanMessage(session.message))
-
-    // The skeleton to expand
-    messages.push(
-      new HumanMessage(
-        `Below is the curator's compressed skeleton. Expand it into a polished response following your rules.\n\n---\n${skeleton}\n---`
-      )
-    )
-
-    // Gemini alternation fix
-    const merged: any[] = [messages[0]]
-    for (let i = 1; i < messages.length; i++) {
-      const prev = merged[merged.length - 1]
-      const curr = messages[i]
-      if (prev instanceof HumanMessage && curr instanceof HumanMessage) {
-        const prevText = LangchainAgentService.extractTextContent(prev.content)
-        const currText = LangchainAgentService.extractTextContent(curr.content)
-        merged[merged.length - 1] = new HumanMessage(prevText + '\n' + currText)
-      } else if (
-        prev instanceof AIMessage &&
-        curr instanceof AIMessage &&
-        !(prev instanceof ToolMessage) &&
-        !(curr instanceof ToolMessage)
-      ) {
-        const prevText = LangchainAgentService.extractTextContent(prev.content)
-        const currText = LangchainAgentService.extractTextContent(curr.content)
-        merged[merged.length - 1] = new AIMessage(prevText + '\n' + currText)
-      } else {
-        merged.push(curr)
-      }
-    }
-
-    const MAX_ATTEMPTS = 2
-    const TOKEN_BUDGET = 3000
-    const model = LangchainAgentService.createChatModel(
-      MODEL_PHASE3,
-      TOKEN_BUDGET,
-      'low'
-    ).withStructuredOutput(PHASE3_EXPANSION_SCHEMA)
-
-    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      try {
-        console.log(`[Agent] ✍️  Phase 3 attempt ${attempt + 1}/${MAX_ATTEMPTS}…`)
-        const usageCollector: { usage?: any } = {}
-        const result = (await model.invoke(merged, {
-          callbacks: [makeDebugCallback('phase3'), makeUsageCallback(usageCollector)],
-        })) as { text: string }
-        console.log(
-          `[Agent] ✍️  Phase 3 expanded: "${result.text.slice(0, 200)}${result.text.length > 200 ? '…' : ''}"`
-        )
-        return { text: result.text, usage: usageCollector.usage }
-      } catch (err: any) {
-        console.warn(
-          `[Agent] ⚠️  Phase 3 attempt ${attempt + 1}/${MAX_ATTEMPTS} failed: ${err.message}`
-        )
-        if (attempt < MAX_ATTEMPTS - 1) {
-          await new Promise((r) => setTimeout(r, 400 * (attempt + 1)))
-        }
-      }
-    }
-    // If Phase 3 fails, fall back to the raw skeleton
-    console.error(`[Agent] ❌ Phase 3 failed after ${MAX_ATTEMPTS} attempts — using raw skeleton`)
-    return { text: skeleton }
+    return LangchainAgentService.invokeStructuredFinalAnswer(session.modelNamePhase2, [
+      ...phase2Messages,
+      ...phase2VisualContext,
+    ])
   }
 
   private async buildPhase2VisualContext(
@@ -1161,9 +947,8 @@ export default class LangchainAgentService {
       text: string
       photo_groups: Array<{ label: string; photo_ids: number[] }>
       usage?: any
-      phase3Usage?: any
     },
-    contextPhotoIds: number[]
+    _contextPhotoIds: number[]
   ): Promise<AgentChatResult> {
     const rawOutput = structured.text ?? ''
     const cleaned = rawOutput.replace(/\[(?:Shown photos|INTERNAL_CONTEXT)[^\]]*\]\s*/gi, '').trim()
@@ -1189,19 +974,6 @@ export default class LangchainAgentService {
       iterations: session.iterationUsages,
       phase2: phase2Usage,
     } as AgentCostBreakdown
-
-    if (structured.phase3Usage) {
-      const phase3Usage = LangchainAgentService.computeCallCost(
-        'phase3',
-        MODEL_PHASE3,
-        structured.phase3Usage
-      )
-      cost.phase3 = phase3Usage
-      costEntries.push(phase3Usage)
-      console.log(
-        `[Agent] ✍️  Phase 3 cost: €${phase3Usage.costEur.toFixed(6)} | in=${phase3Usage.inputTokens} out=${phase3Usage.outputTokens}`
-      )
-    }
 
     cost.total = LangchainAgentService.sumUsageEntries(costEntries)
     const total = cost.total
@@ -1548,8 +1320,7 @@ export default class LangchainAgentService {
   private static buildPhase2Messages(
     messages: any[],
     userContext: string = '',
-    intermediateSteps: IntermediateStep[] = [],
-    compressed = false
+    intermediateSteps: IntermediateStep[] = []
   ): any[] {
     // Build a queue of full outputs per restorable tool so we can replace
     // the compressed ToolMessages inline instead of duplicating data.
@@ -1570,7 +1341,7 @@ export default class LangchainAgentService {
     const restoredCount = { n: 0 }
     const result = messages.map((msg, idx) => {
       if (idx === 0 && msg instanceof SystemMessage) {
-        const roleAddendum = compressed ? PHASE2_COMPRESSED_ROLE_ADDENDUM : PHASE2_ROLE_ADDENDUM
+        const roleAddendum = PHASE2_ROLE_ADDENDUM
         const phase2Prompt = SYSTEM_PROMPT_BASE + roleAddendum
         const content = userContext ? `${phase2Prompt}\n\n${userContext}` : phase2Prompt
         return new SystemMessage(content)
@@ -1704,24 +1475,20 @@ export default class LangchainAgentService {
 
   private static async invokeStructuredFinalAnswer(
     modelName: ModelName,
-    messages: any[],
-    compressed = false
+    messages: any[]
   ): Promise<{
     text: string
     photo_groups: Array<{ label: string; photo_ids: number[] }>
     usage?: any
-    phase3Usage?: any
   }> {
     const MAX_ATTEMPTS = 3
-    // Compressed mode uses less prose but still needs enough room for the full skeleton + photo_groups JSON
-    const TOKEN_BUDGET = compressed ? 3000 : 6000
+    const TOKEN_BUDGET = 6000
     const model = LangchainAgentService.createChatModel(
       modelName,
       TOKEN_BUDGET,
-      compressed ? 'low' : 'medium'
+      'medium'
     ).withStructuredOutput(FINAL_ANSWER_SCHEMA)
-    const trigger = compressed ? PHASE2_COMPRESSED_TRIGGER : PHASE2_TRIGGER
-    const phase2Messages = [...messages, new HumanMessage(trigger)]
+    const phase2Messages = [...messages, new HumanMessage(PHASE2_TRIGGER)]
 
     let lastError: any
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {

@@ -33,12 +33,9 @@ export default class ChatController {
     try {
       const user = auth.use('api').user!
 
-      const { message, conversationId, contextPhotoIds, ephemeral } = request.only([
-        'message',
-        'conversationId',
-        'contextPhotoIds',
-        'ephemeral',
-      ])
+      const { message, conversationId, contextPhotoIds, ephemeral, forceCheapModel } = request.only(
+        ['message', 'conversationId', 'contextPhotoIds', 'ephemeral', 'forceCheapModel']
+      )
 
       const isEphemeral = ephemeral === true
 
@@ -110,7 +107,8 @@ export default class ChatController {
           user.id,
           resolvedConversationId,
           message.trim(),
-          validatedPhotoIds
+          validatedPhotoIds,
+          forceCheapModel === true
         )
       }
 

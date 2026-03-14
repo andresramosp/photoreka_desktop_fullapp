@@ -30,8 +30,8 @@ export default class QueryService {
 
   public async classifyQuery(
     query: string
-  ): Promise<{ has_photo_intent: boolean; needs_advanced_reasoning_phase1: boolean }> {
-    const fallback = { has_photo_intent: false, needs_advanced_reasoning_phase1: false }
+  ): Promise<{ has_photo_intent: boolean; needs_artistic_evaluation: boolean }> {
+    const fallback = { has_photo_intent: false, needs_artistic_evaluation: false }
     try {
       const { result } = await this.modelsService.getGeminiResponse(
         MESSAGE_QUERY_CLASSIFICATION,
@@ -40,7 +40,7 @@ export default class QueryService {
       )
       return {
         has_photo_intent: result?.has_photo_intent === true,
-        needs_advanced_reasoning_phase1: result?.needs_advanced_reasoning_phase1 === true,
+        needs_artistic_evaluation: result?.needs_artistic_evaluation === true,
       }
     } catch (error) {
       console.error('[QueryService] classifyQuery error:', error)
