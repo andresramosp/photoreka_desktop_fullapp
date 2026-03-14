@@ -4,6 +4,7 @@ import LangchainAgentKnowledgeService from '#services/langchain_agent_knowledge_
 import ConversationService from '#services/conversation_service'
 import Photo from '#models/photo'
 import UserCostService from '#services/user_cost_service'
+import CreditService from '#services/credit_service'
 
 export default class ChatController {
   private conversationService = new ConversationService()
@@ -87,6 +88,14 @@ export default class ChatController {
         )
       }
 
+      // ── Credit gate ──────────────────────────────────────
+      const hasCredits = await CreditService.canAfford(user.id)
+      if (!hasCredits) {
+        return response.status(402).json({
+          message: 'No credits remaining. Please purchase more credits to continue.',
+        })
+      }
+
       // Route to knowledge-only agent when the user has no analyzed photos.
       // This prevents Phase 1 tool orchestration from hallucinating on empty results.
       const analyzedCount = await Photo.query()
@@ -135,9 +144,14 @@ export default class ChatController {
         )
       }
 
-      // Record chat cost to user history
+      // Record chat cost to user history (analytics)
       if (result.cost?.total?.costEur) {
         UserCostService.record(user.id, 'chat', result.cost.total.costEur).catch(() => {})
+      }
+
+      // Charge credits based on real cost
+      if (result.cost?.total?.costEur) {
+        CreditService.charge(user.id, result.cost.total.costEur).catch(() => {})
       }
 
       // Strip photoDescriptions before sending to frontend (LLM-only field)

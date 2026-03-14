@@ -158,6 +158,7 @@ export default class UsageService {
     const usage = await this.getBaseUsage(userId)
     if (!usage) return false
 
-    return usage.creditsAvailable >= requiredCredits
+    const remaining = usage.creditsAvailable - (usage.creditsUsed || 0)
+    return remaining >= requiredCredits
   }
 }
