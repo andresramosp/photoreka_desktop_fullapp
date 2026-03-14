@@ -467,7 +467,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onMounted } from "vue";
 import {
   NInput,
   NSelect,
@@ -504,6 +504,11 @@ const userStore = useUserStore();
 const { isDarkMode, setTheme } = useTheme();
 const googlePhotos = useGooglePhotos();
 const message = useMessage();
+
+// Refresh usage on component mount
+onMounted(async () => {
+  await userStore.fetchUsage();
+});
 
 // Check if user is demo
 const isDemoUser = computed(() => {
