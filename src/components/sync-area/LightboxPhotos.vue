@@ -448,7 +448,7 @@
         :displayAddToCollection="false"
         :displayMoveToTool="false"
         :hideControls="true"
-        :findDuplicatesEnabled="filteredPhotos.length < 100"
+        :findDuplicatesEnabled="true"
         context="lightbox"
         @selection-change="handleSelectionChange"
         @duplicates-filter-change="handleDuplicatesFilterChange"
