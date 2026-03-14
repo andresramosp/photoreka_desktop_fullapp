@@ -13,13 +13,13 @@ export const UsageTierLimits: Record<
   [UsageTier.BASIC]: {
     photosLimit: 500,
     analyzedPhotosLimit: 500,
-    creditsAvailable: 100,
+    creditsAvailable: 1000,
   },
 
   [UsageTier.PROMOTIONAL]: {
     photosLimit: 1000,
     analyzedPhotosLimit: 1000,
-    creditsAvailable: 100,
+    creditsAvailable: 1500,
   },
 }
 

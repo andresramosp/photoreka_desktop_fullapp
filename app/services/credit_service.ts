@@ -2,8 +2,8 @@ import UsageService from '#services/usage_service'
 
 // ─── Constants ───────────────────────────────────────────
 
-/** 1 credit = €0.01 */
-const EUR_PER_CREDIT = 0.01
+/** 1 credit = €0.001 */
+const EUR_PER_CREDIT = 0.001
 
 // ─── Service ─────────────────────────────────────────────
 
