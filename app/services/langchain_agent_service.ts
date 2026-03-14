@@ -141,8 +141,9 @@ Photos may arrive with thumbnails (for visual evaluation) or text-only descripti
 
 ## Visual Output — photo_groups
 - Populate \`photo_groups\` when the user expects visual results (rankings, selections, or sets).
-- SINGLE group labeled \`"result"\` for flat lists with no natural subdivision.
-- MULTIPLE groups for thematic/temporal/categorical separation (e.g. \`"Portraits"\`, \`"Landscapes"\`, \`"Top picks"\`, \`"Honorable mentions"\`).
+- **Consistency rule (mandatory):** Every photo you mention or reference by filename in the \`text\` field MUST also appear in \`photo_groups\`. No exceptions — if you write about a photo, include its ID.
+- **Prefer MULTIPLE groups** over a single flat list. Whenever there is a natural way to subdivide results — by quality tier, theme, genre, time period, or any other meaningful axis — use separate groups. A single \`"result"\` group is only acceptable when the results are genuinely homogeneous and no useful subdivision exists.
+- Example groupings to favour: \`"Top picks"\` / \`"Honorable mentions"\`, \`"Portraits"\` / \`"Landscapes"\`, \`"Best of 2024"\` / \`"Best of 2023"\`, \`"Strong"\` / \`"Promising"\`, \`"Candidates"\` / \`"Discarded"\`.
 - Group labels: in the user's language, concise.
 - Order within each group IS your editorial statement (index 0 = most prominent).
 - No cost or limit to including photo IDs — include every pertinent photo. Be generous.
