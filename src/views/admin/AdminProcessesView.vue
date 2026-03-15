@@ -50,25 +50,27 @@
     <!-- Processes Table -->
     <div class="table-wrapper">
       <div class="table-body">
-        <n-spin :show="loading">
-          <n-data-table
-            :columns="columns"
-            :data="paginatedProcesses"
-            :row-key="(row: ProcessRow) => row.id"
-            :row-class-name="rowClassName"
-            :row-props="
-              (row: ProcessRow) => ({
-                onClick: () => selectProcess(row),
-                style: 'cursor: pointer',
-              })
-            "
-            :bordered="false"
-            size="small"
-            :max-height="360"
-            striped
-            @update:sorter="handleSort"
-          />
-        </n-spin>
+        <div v-if="loading" class="table-loading-state">
+          <n-spin show />
+        </div>
+        <n-data-table
+          v-else
+          :columns="columns"
+          :data="paginatedProcesses"
+          :row-key="(row: ProcessRow) => row.id"
+          :row-class-name="rowClassName"
+          :row-props="
+            (row: ProcessRow) => ({
+              onClick: () => selectProcess(row),
+              style: 'cursor: pointer',
+            })
+          "
+          :bordered="false"
+          size="small"
+          :max-height="360"
+          striped
+          @update:sorter="handleSort"
+        />
       </div>
       <div class="table-pagination">
         <n-pagination
@@ -766,6 +768,13 @@ onMounted(() => {
 
 .table-body {
   min-height: 0;
+}
+
+.table-loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 0;
 }
 
 .table-pagination {

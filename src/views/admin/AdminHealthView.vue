@@ -197,24 +197,26 @@
         </n-button>
       </div>
       <div class="table-body">
-        <n-spin :show="overviewLoading">
-          <n-data-table
-            :columns="columns"
-            :data="paginatedUsers"
-            :row-key="(row: UserHealthRow) => row.userId"
-            :row-class-name="rowClassName"
-            :row-props="
-              (row: UserHealthRow) => ({
-                onClick: () => selectUser(row),
-                style: 'cursor: pointer',
-              })
-            "
-            :bordered="false"
-            size="small"
-            :max-height="360"
-            striped
-          />
-        </n-spin>
+        <div v-if="overviewLoading" class="table-loading-state">
+          <n-spin show />
+        </div>
+        <n-data-table
+          v-else
+          :columns="columns"
+          :data="paginatedUsers"
+          :row-key="(row: UserHealthRow) => row.userId"
+          :row-class-name="rowClassName"
+          :row-props="
+            (row: UserHealthRow) => ({
+              onClick: () => selectUser(row),
+              style: 'cursor: pointer',
+            })
+          "
+          :bordered="false"
+          size="small"
+          :max-height="360"
+          striped
+        />
       </div>
       <div class="table-pagination">
         <n-pagination
@@ -846,6 +848,13 @@ onMounted(() => {
 
 .table-body {
   min-height: 0;
+}
+
+.table-loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 0;
 }
 
 .table-pagination {

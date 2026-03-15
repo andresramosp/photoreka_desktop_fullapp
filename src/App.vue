@@ -12,7 +12,7 @@
 
   <!-- Main App (dark theme) -->
   <n-config-provider
-    v-else
+    v-else-if="routerReady"
     :theme="darkTheme"
     :theme-overrides="themeOverrides"
   >
@@ -71,8 +71,12 @@
                 }"
               >
                 <!-- Mostrar loader mientras la app se inicializa (solo en vistas autenticadas) -->
-                <AppInitLoader v-if="!isAppReady" />
-                <router-view v-else v-slot="{ Component, route }">
+                <!-- routerReady evita que el loader aparezca brevemente en rutas admin -->
+                <AppInitLoader v-if="!isAppReady && routerReady" />
+                <router-view
+                  v-else-if="isAppReady"
+                  v-slot="{ Component, route }"
+                >
                   <KeepAlive :include="getKeepAliveComponents()">
                     <component :is="Component" />
                   </KeepAlive>
@@ -108,8 +112,12 @@
                 }"
               >
                 <!-- Mostrar loader mientras la app se inicializa (solo en vistas autenticadas) -->
-                <AppInitLoader v-if="!isAppReady" />
-                <router-view v-else v-slot="{ Component, route }">
+                <!-- routerReady evita que el loader aparezca brevemente en rutas admin -->
+                <AppInitLoader v-if="!isAppReady && routerReady" />
+                <router-view
+                  v-else-if="isAppReady"
+                  v-slot="{ Component, route }"
+                >
                   <KeepAlive :include="getKeepAliveComponents()">
                     <component :is="Component" />
                   </KeepAlive>
