@@ -350,7 +350,7 @@ import {
   CloseOutline as CloseIcon,
   AnalyticsOutline as AnalyticsIcon,
 } from "@vicons/ionicons5";
-import { api } from "../../utils/axios";
+import { api, api_analyzer } from "../../utils/axios";
 import { useAutoRefresh } from "../../composables/useAutoRefresh";
 import HealthReportModal from "../../components/admin/HealthReportModal.vue";
 import type { HealthReport } from "../../components/admin/HealthReportModal.vue";
@@ -678,7 +678,7 @@ async function launchRetry() {
   if (!selectedProcess.value) return;
   retryLoading.value = true;
   try {
-    const { data } = await api.post(
+    const { data } = await api_analyzer.post(
       `/api/admin/processes/${selectedProcess.value.id}/retry`,
     );
     message.success(`Retry launched for Process #${data.processId}`);
