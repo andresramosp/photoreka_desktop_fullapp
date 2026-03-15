@@ -112,6 +112,7 @@ import { useUserStore } from "@/stores/userStore";
 import { useTheme } from "@/composables/useTheme";
 import AppLogo from "@/components/AppLogo.vue";
 import {
+  GridOutline as DashboardIcon,
   AnalyticsOutline as AnalyzerIcon,
   PeopleOutline as UsersIcon,
   WalletOutline as CostsIcon,
@@ -133,13 +134,14 @@ const isMobile = ref(false);
 const collapsed = ref(false);
 
 const menuItems = [
+  { label: "Dashboard", key: "admin-dashboard", icon: DashboardIcon },
   { label: "Processes", key: "admin-processes", icon: AnalyzerIcon },
   { label: "Users", key: "admin-users", icon: UsersIcon },
   { label: "Costs", key: "admin-costs", icon: CostsIcon },
   { label: "Health", key: "admin-health", icon: HealthIcon },
 ];
 
-const activeKey = computed(() => (route.name as string) || "admin-processes");
+const activeKey = computed(() => (route.name as string) || "admin-dashboard");
 
 const userInitials = computed(() => {
   const name = userStore.user?.name || "";

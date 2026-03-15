@@ -298,6 +298,7 @@
               <div class="activity-card-header">
                 <h4>Activity Log</h4>
                 <div class="activity-controls">
+                  <span class="activity-live-badge">● LIVE</span>
                   <n-select
                     v-model:value="activityFilter"
                     placeholder="All types"
@@ -314,7 +315,9 @@
                     title="Refresh activities"
                     @click="fetchActivities(activityPage)"
                   >
-                    <template #icon><n-icon size="14"><RefreshIcon /></n-icon></template>
+                    <template #icon
+                      ><n-icon size="14"><RefreshIcon /></n-icon
+                    ></template>
                   </n-button>
                 </div>
               </div>
@@ -353,7 +356,11 @@
                     </div>
                     <!-- Expandable chat content -->
                     <template
-                      v-if="act.type === 'chat_message' && act.metadata && (act.metadata.question || act.metadata.answer)"
+                      v-if="
+                        act.type === 'chat_message' &&
+                        act.metadata &&
+                        (act.metadata.question || act.metadata.answer)
+                      "
                     >
                       <button
                         class="activity-expand-btn"
@@ -551,7 +558,10 @@ watch(selectedUser, (u) => {
     activityPage.value = 1;
     activityFilter.value = null;
     fetchActivities(1);
-    activityRefreshTimer = setInterval(() => fetchActivities(activityPage.value), 20000);
+    activityRefreshTimer = setInterval(
+      () => fetchActivities(activityPage.value),
+      20000,
+    );
   } else {
     activities.value = [];
     activityMeta.value = null;
@@ -683,7 +693,7 @@ function activitySummary(act: ActivityItem): string {
     case "series_remove_photos":
       return `-${m.photoCount} photos`;
     case "portfolio_build":
-      return `${m.action || ""} · ${m.photosAnalyzed ?? "?"} photos`;
+      return `${m.action || ""} · ${m.currentPhotos ?? "?"} photos`;
     case "view_3d":
       return `${m.chunkCategory || "all"} · ${m.photoCount ?? "?"} photos · ${m.outputDims}D`;
     case "login":
@@ -1379,6 +1389,24 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: #e2e8f0 transparent;
+}
+
+.activity-timeline::-webkit-scrollbar {
+  width: 4px;
+}
+
+.activity-timeline::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.activity-timeline::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 4px;
 }
 
 .activity-item {
@@ -1502,6 +1530,24 @@ onMounted(() => {
   padding-top: 10px;
   display: flex;
   justify-content: center;
+}
+
+.activity-live-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #22c55e;
+  letter-spacing: 0.5px;
+  animation: live-pulse 2s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
 
 /* ===== Transition ===== */

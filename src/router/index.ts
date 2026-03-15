@@ -37,6 +37,7 @@ import AuthError from "../views/AuthError.vue";
 // NOTE: AdminLoginView kept as layout reference for a potential standalone admin domain
 // import AdminLoginView from "../views/admin/AdminLoginView.vue";
 import AdminLayout from "../views/admin/AdminLayout.vue";
+import AdminDashboardView from "../views/admin/AdminDashboardView.vue";
 import AdminProcessesView from "../views/admin/AdminProcessesView.vue";
 import AdminUsersView from "../views/admin/AdminUsersView.vue";
 import AdminCostsView from "../views/admin/AdminCostsView.vue";
@@ -398,8 +399,8 @@ const router = createRouter({
       children: [
         {
           path: "",
-          name: "admin",
-          redirect: { name: "admin-processes" },
+          name: "admin-dashboard",
+          component: AdminDashboardView,
         },
         {
           path: "processes",
