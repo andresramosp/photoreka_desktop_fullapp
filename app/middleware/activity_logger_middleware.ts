@@ -1,237 +1,352 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
-
 import type { ActivityType } from '#models/user_activity'
-import LoggerManager from '../managers/logger_manager.js'
+import UserActivity from '#models/user_activity'
+
+/**
+ * Route descriptor: maps an endpoint pattern to an activity type
+ * and an optional metadata extractor that pulls business-relevant
+ * data from the request body / params / response body.
+ */
+interface RouteDescriptor {
+  method: string
+  pattern: RegExp
+  type: ActivityType
+  meta?: (body: any, params: Record<string, any>, resBody: any) => Record<string, any> | null
+}
+
+function truncate(str: any, max: number): string | null {
+  if (typeof str !== 'string') return null
+  return str.length > max ? str.slice(0, max) + '…' : str
+}
+
+/**
+ * Declarative route map — the single place where we decide
+ * WHAT gets logged and WHICH metadata is captured.
+ */
+const ROUTE_MAP: RouteDescriptor[] = [
+  // ─── Auth ───
+  {
+    method: 'POST',
+    pattern: /\/auth\/login$/,
+    type: 'login',
+    meta: (b) => ({ provider: b?.provider || 'email' }),
+  },
+  {
+    method: 'POST',
+    pattern: /\/auth\/register$/,
+    type: 'register',
+    meta: (b) => ({ provider: b?.provider || 'email' }),
+  },
+  {
+    method: 'POST',
+    pattern: /\/auth\/demo-login$/,
+    type: 'login',
+    meta: () => ({ provider: 'demo' }),
+  },
+
+  // ─── Search ───
+  {
+    method: 'POST',
+    pattern: /\/search\/semantic\/(stream|sync)$/,
+    type: 'search_semantic',
+    meta: (b, _p, r) => ({
+      query: truncate(b?.description, 200),
+      searchMode: b?.options?.searchMode,
+      resultCount: r?.photos?.length ?? r?.totalResults ?? null,
+    }),
+  },
+  {
+    method: 'POST',
+    pattern: /\/search\/tags\/(sync|direct)$/,
+    type: 'search_tags',
+    meta: (b, _p, r) => ({
+      includedTags: b?.included,
+      excludedTags: b?.excluded,
+      searchMode: b?.searchMode,
+      semantic: b?.semantic ?? false,
+      resultCount: r?.photos?.length ?? null,
+    }),
+  },
+  {
+    method: 'POST',
+    pattern: /\/search\/byPhotos$/,
+    type: 'search_visual',
+    meta: (b, _p, r) => ({
+      sourcePhotoIds: b?.photoIds ?? b?.queryPhotoId,
+      resultCount: r?.photos?.length ?? null,
+    }),
+  },
+
+  // ─── Chat ───
+  {
+    method: 'POST',
+    pattern: /\/chat$/,
+    type: 'chat_message',
+    meta: (b, _p, r) => ({
+      question: truncate(b?.message, 300),
+      answer: truncate(r?.output, 500),
+      toolsUsed: r?.toolsUsed ?? null,
+      conversationId: r?.conversationId ?? b?.conversationId ?? null,
+      isEphemeral: b?.ephemeral ?? false,
+      costEur: r?.cost?.total?.costEur ?? null,
+    }),
+  },
+
+  // ─── Photo operations ───
+  {
+    method: 'POST',
+    pattern: /\/catalog\/uploadPhoto$/,
+    type: 'photo_upload',
+    meta: (b) => ({
+      source: b?.source ?? 'local',
+      fileName: b?.originalName ?? null,
+    }),
+  },
+  {
+    method: 'POST',
+    pattern: /\/analyzer\/?$/,
+    type: 'photo_analyze',
+    meta: (b, _p, r) => ({
+      photoCount: Array.isArray(b?.photos) ? b.photos.length : 1,
+      processId: r?.processId ?? r?.id ?? null,
+    }),
+  },
+  {
+    method: 'POST',
+    pattern: /\/catalog\/delete$/,
+    type: 'photo_delete',
+    meta: (b) => ({
+      count: Array.isArray(b?.ids) ? b.ids.length : 0,
+    }),
+  },
+  {
+    method: 'POST',
+    pattern: /\/download-photo$/,
+    type: 'photo_download',
+    meta: (b) => ({
+      count: Array.isArray(b?.ids) ? b.ids.length : 0,
+      format: Array.isArray(b?.ids) && b.ids.length > 1 ? 'zip' : 'single',
+    }),
+  },
+  {
+    method: 'POST',
+    pattern: /\/catalog\/check(Exact)?Duplicates$/,
+    type: 'photo_duplicates',
+    meta: (b, _p, r) => ({
+      scope: b?.scope ?? null,
+      checkedCount: Array.isArray(b?.newPhotoIds) ? b.newPhotoIds.length : null,
+      matchCount: r ? Object.keys(r).length : null,
+    }),
+  },
+  {
+    method: 'GET',
+    pattern: /\/catalog\/photoInsight\//,
+    type: 'photo_insight',
+    meta: (_b, p) => ({ photoId: p?.id ?? null }),
+  },
+  {
+    method: 'POST',
+    pattern: /\/catalog\/photoInsightSpecific\//,
+    type: 'photo_insight',
+    meta: (b, p, r) => ({
+      photoId: p?.id ?? null,
+      insightType: b?.type ?? null,
+      provider: b?.provider ?? null,
+      costEur: r?.cost?.costEur ?? null,
+    }),
+  },
+  {
+    method: 'POST',
+    pattern: /\/catalog\/swapPhotos$/,
+    type: 'photo_swap',
+    meta: (b) => ({
+      newPhotoId: b?.newPhotoId,
+      targetCount: Array.isArray(b?.targetPhotoIds) ? b.targetPhotoIds.length : 0,
+    }),
+  },
+  {
+    method: 'POST',
+    pattern: /\/catalog\/\d+\/note$/,
+    type: 'photo_note',
+    meta: (b, p) => ({
+      photoId: p?.id ?? null,
+      noteLength: b?.note?.length ?? 0,
+    }),
+  },
+
+  // ─── Collections ───
+  {
+    method: 'POST',
+    pattern: /\/collections$/,
+    type: 'collection_create',
+    meta: (b) => ({
+      name: b?.name,
+      initialPhotos: Array.isArray(b?.photoIds) ? b.photoIds.length : 0,
+    }),
+  },
+  {
+    method: 'PUT',
+    pattern: /\/collections\/\d+$/,
+    type: 'collection_update',
+    meta: (b, p) => ({ collectionId: p?.id, name: b?.name }),
+  },
+  {
+    method: 'DELETE',
+    pattern: /\/collections\/\d+$/,
+    type: 'collection_delete',
+    meta: (_b, p) => ({ collectionId: p?.id }),
+  },
+  {
+    method: 'POST',
+    pattern: /\/collections\/\d+\/photos$/,
+    type: 'collection_add_photos',
+    meta: (b, p) => ({
+      collectionId: p?.id,
+      photoCount: Array.isArray(b?.photoIds) ? b.photoIds.length : 0,
+    }),
+  },
+  {
+    method: 'DELETE',
+    pattern: /\/collections\/\d+\/photos$/,
+    type: 'collection_remove_photos',
+    meta: (b, p) => ({
+      collectionId: p?.id,
+      photoCount: Array.isArray(b?.photoIds) ? b.photoIds.length : 0,
+    }),
+  },
+
+  // ─── Series ───
+  {
+    method: 'POST',
+    pattern: /\/series$/,
+    type: 'series_create',
+    meta: (b) => ({
+      name: b?.name,
+      initialPhotos: Array.isArray(b?.photoIds) ? b.photoIds.length : 0,
+    }),
+  },
+  {
+    method: 'PUT',
+    pattern: /\/series\/\d+$/,
+    type: 'series_update',
+    meta: (b, p) => ({ seriesId: p?.id, name: b?.name }),
+  },
+  {
+    method: 'DELETE',
+    pattern: /\/series\/\d+$/,
+    type: 'series_delete',
+    meta: (_b, p) => ({ seriesId: p?.id }),
+  },
+  {
+    method: 'POST',
+    pattern: /\/series\/\d+\/photos$/,
+    type: 'series_add_photos',
+    meta: (b, p) => ({
+      seriesId: p?.id,
+      photoCount: Array.isArray(b?.photoIds) ? b.photoIds.length : 0,
+    }),
+  },
+  {
+    method: 'DELETE',
+    pattern: /\/series\/\d+\/photos$/,
+    type: 'series_remove_photos',
+    meta: (b, p) => ({
+      seriesId: p?.id,
+      photoCount: Array.isArray(b?.photoIds) ? b.photoIds.length : 0,
+    }),
+  },
+
+  // ─── Portfolio & 3D ───
+  {
+    method: 'GET',
+    pattern: /\/portfolio-review\/should-build$/,
+    type: 'portfolio_build',
+    meta: (_b, _p, r) => ({
+      action: r?.action ?? null,
+      photosAnalyzed: r?.stats?.photosAnalyzed ?? null,
+    }),
+  },
+  {
+    method: 'POST',
+    pattern: /\/3d\/photos$/,
+    type: 'view_3d',
+    meta: (b, _p, r) => ({
+      chunkCategory: b?.chunkName ?? null,
+      outputDims: b?.outputDims ?? 3,
+      photoCount: r?.photos?.length ?? null,
+    }),
+  },
+
+  // ─── Embeddings ───
+  {
+    method: 'POST',
+    pattern: /\/embeddings\/?$/,
+    type: 'generate_embeddings',
+    meta: (b) => ({
+      photoCount: Array.isArray(b?.photos) ? b.photos.length : null,
+    }),
+  },
+
+  // ─── Canvas ───
+  {
+    method: 'POST',
+    pattern: /\/canvas$/,
+    type: 'canvas_create',
+    meta: (b) => ({ name: b?.name }),
+  },
+  {
+    method: 'DELETE',
+    pattern: /\/canvas\/\d+$/,
+    type: 'canvas_delete',
+    meta: (_b, p) => ({ canvasId: p?.id }),
+  },
+]
 
 export default class ActivityLoggerMiddleware {
-  private loggerManager: LoggerManager
-
-  constructor() {
-    this.loggerManager = new LoggerManager()
-  }
-
   async handle(ctx: HttpContext, next: NextFn) {
+    await next()
+
+    // Fire-and-forget: log in background, never block the response
+    this.tryLog(ctx).catch(() => {})
+  }
+
+  private async tryLog(ctx: HttpContext) {
     const { request, response, auth } = ctx
-    const startTime = Date.now()
+    const method = request.method()
+    const url = request.url()
 
+    // Find matching route descriptor
+    const descriptor = ROUTE_MAP.find((r) => r.method === method && r.pattern.test(url))
+    if (!descriptor) return
+
+    // Only log successful responses (2xx/3xx)
+    const status = response.getStatus()
+    if (status >= 400) return
+
+    // Get authenticated user
+    let userId: number | null = null
     try {
-      // Ejecutar el siguiente middleware/controller
-      await next()
-
-      // Intentar obtener el usuario para logging
-      const responseTime = Date.now() - startTime
-      const statusCode = response.getStatus()
-      let userId: number | null = null
-
-      // Intenta obtener el usuario de diferentes maneras
-      try {
-        // Verificar primero si hay un usuario autenticado usando el patrón correcto
-        await auth.use('api').check()
-        const user = auth.use('api').user!
-        userId = user.id
-      } catch (authError) {
-        // Para endpoints como login/register, podemos extraer el userId de la response
-        if (statusCode >= 200 && statusCode < 300) {
-          const responseBody = response.getBody()
-          if (responseBody && typeof responseBody === 'object') {
-            // Login/Register devuelven el user en la response
-            if ('user' in responseBody && responseBody.user && 'id' in responseBody.user) {
-              userId = responseBody.user.id
-            }
-          }
-        }
-      }
-
-      // Solo loggear si tenemos un userId
-      if (userId) {
-        const activityType = this.getActivityTypeFromEndpoint(request.url(), request.method())
-
-        if (activityType) {
-          // Extraer información del request
-          const requestData = this.extractRequestData(request)
-
-          // Log con información detallada del request (sin api_call genérico)
-          await this.loggerManager.logActivity({
-            userId,
-            type: activityType,
-            action: `${request.method()} ${request.url()}`,
-            level: statusCode >= 400 ? 'error' : statusCode >= 300 ? 'warning' : 'info',
-            ipAddress: request.ip(),
-            userAgent: request.header('user-agent'),
-            endpoint: request.url(),
-            statusCode,
-            responseTime,
-            metadata: {
-              method: request.method(),
-              queryString: request.qs(),
-              payload: requestData.payload,
-
-              ...requestData.additional,
-            },
-          })
-        }
-      }
-    } catch (error) {
-      // Para errores, solo loggear si tenemos un usuario autenticado
-      let userId: number | null = null
-      try {
-        await auth.use('api').check()
-        const user = auth.use('api').user!
-        userId = user.id
-      } catch (authError) {
-        // Sin usuario autenticado, no loggeamos errores (evita spam)
-      }
-
-      if (userId) {
-        const responseTime = Date.now() - startTime
-        const requestData = this.extractRequestData(request)
-
-        await this.loggerManager.logError(
-          userId,
-          `Error in ${request.method()} ${request.url()}`,
-          error as Error,
-          {
-            endpoint: request.url(),
-            method: request.method(),
-            responseTime,
-            ipAddress: request.ip(),
-            userAgent: request.header('user-agent'),
-            queryString: request.qs(),
-            payload: requestData.payload,
-            contentType: request.header('content-type'),
-            referer: request.header('referer'),
-            ...requestData.additional,
-          }
-        )
-      }
-
-      throw error
+      await auth.use('api').check()
+      userId = auth.use('api').user?.id ?? null
+    } catch {
+      // For login/register, extract userId from response body
+      const resBody = response.getBody()
+      if (resBody?.user?.id) userId = resBody.user.id
     }
-  } /**
-   * Determina el tipo de actividad basado en el endpoint y método HTTP
-   */
-  private getActivityTypeFromEndpoint(url: string, method: string): ActivityType | null {
-    // Mapeo de endpoints a tipos de actividad
-    const endpointMap: { pattern: RegExp; type: ActivityType }[] = [
-      { pattern: /\/auth\/login/, type: 'login' },
-      { pattern: /\/auth\/register/, type: 'register' },
-      // DESHABILITADO - Solo se registran login y register
-      // { pattern: /\/auth\/logout/, type: 'logout' },
-      // { pattern: /\/auth\/profile/, type: 'update_profile' },
-      // { pattern: /\/auth\/change-password/, type: 'change_password' },
-      // { pattern: /\/search\/semantic/, type: 'search_text' },
-      // { pattern: /\/search\/byPhotos/, type: 'search_visual' },
-      // { pattern: /\/search\/tags/, type: 'search' },
-      // {
-      //   pattern: /\/collections.*/,
-      //   type:
-      //     method === 'POST'
-      //       ? 'create_collection'
-      //       : method === 'DELETE'
-      //         ? 'delete_collection'
-      //         : 'view_catalog',
-      // },
-      // {
-      //   pattern: /\/photos.*/,
-      //   type:
-      //     method === 'POST'
-      //       ? 'upload_photo'
-      //       : method === 'DELETE'
-      //         ? 'delete_photo'
-      //         : 'view_catalog',
-      // },
-      // {
-      //   pattern: /\/tags.*/,
-      //   type:
-      //     method === 'POST' ? 'create_tag' : method === 'DELETE' ? 'delete_tag' : 'view_catalog',
-      // },
-      // { pattern: /\/catalog/, type: 'view_catalog' },
-      // { pattern: /\/usage/, type: 'view_usage' },
-      // { pattern: /\/analyzer/, type: 'analyze_photo' },
-      // { pattern: /\/warmup/, type: 'warmup_system' },
-    ]
+    if (!userId) return
 
-    for (const { pattern, type } of endpointMap) {
-      if (pattern.test(url)) {
-        return type
-      }
-    }
+    // Extract metadata
+    const body = request.body()
+    const params = request.params()
+    const resBody = response.getBody()
+    const metadata = descriptor.meta ? descriptor.meta(body, params, resBody) : null
 
-    // Si no coincide con ningún patrón específico, no loggear (devolver null)
-    return null
-  }
-
-  /**
-   * Extrae información segura del request para logging
-   */
-  private extractRequestData(request: any): { payload: any; additional: Record<string, any> } {
-    let payload: any = null
-    const additional: Record<string, any> = {}
-
-    try {
-      // Obtener el body del request de forma segura
-      const body = request.body()
-
-      if (body && typeof body === 'object') {
-        // Filtrar campos sensibles como passwords
-        payload = this.sanitizePayload(body)
-      }
-
-      // Información adicional del request
-      additional.contentLength = request.header('content-length')
-      additional.origin = request.header('origin')
-      additional.acceptLanguage = request.header('accept-language')
-
-      // Extraer parámetros de la URL si existen
-      const params = request.params()
-      if (params && Object.keys(params).length > 0) {
-        additional.urlParams = params
-      }
-    } catch (error) {
-      // Si hay error extrayendo datos, no fallar el middleware
-      additional.extractionError = 'Failed to extract request data'
-    }
-
-    return { payload, additional }
-  }
-
-  /**
-   * Sanitiza el payload removiendo información sensible
-   */
-  private sanitizePayload(payload: any): any {
-    if (!payload || typeof payload !== 'object') {
-      return payload
-    }
-
-    const sensitiveFields = [
-      'password',
-      'currentPassword',
-      'newPassword',
-      'token',
-      'accessToken',
-      'refreshToken',
-      'secret',
-      'key',
-      'authCode',
-    ]
-
-    const sanitized = { ...payload }
-
-    // Remover campos sensibles
-    for (const field of sensitiveFields) {
-      if (field in sanitized) {
-        sanitized[field] = '[REDACTED]'
-      }
-    }
-
-    // Si hay nested objects, sanitizar recursivamente
-    for (const key in sanitized) {
-      if (sanitized[key] && typeof sanitized[key] === 'object') {
-        sanitized[key] = this.sanitizePayload(sanitized[key])
-      }
-    }
-
-    return sanitized
+    await UserActivity.create({
+      userId,
+      type: descriptor.type,
+      action: `${method} ${url}`,
+      metadata,
+    })
   }
 }

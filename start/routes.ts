@@ -293,6 +293,7 @@ router
     router.patch('/api/admin/users/:id/toggle-active', [UsersAdminController, 'toggleActive'])
     router.delete('/api/admin/users/:id', [UsersAdminController, 'destroy'])
     router.put('/api/admin/users/:id/usage', [UsersAdminController, 'updateUsage'])
+    router.get('/api/admin/users/:id/activities', [UsersAdminController, 'activities'])
 
     // Admin Processes management
     router.get('/api/admin/processes', [ProcessesAdminController, 'index'])

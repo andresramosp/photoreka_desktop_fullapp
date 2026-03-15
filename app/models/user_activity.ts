@@ -4,39 +4,44 @@ import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 import User from './user.js'
 
 export type ActivityType =
+  // Auth
   | 'login'
-  | 'logout'
   | 'register'
-  | 'upload_photo'
-  | 'delete_photo'
-  | 'update_photo'
-  | 'view_photo'
-  | 'get_photos_batch'
-  | 'check_duplicates'
-  | 'delete_duplicates'
-  | 'photo_insight'
-  | 'search'
-  | 'search_text'
+  // Search
+  | 'search_semantic'
+  | 'search_tags'
   | 'search_visual'
-  | 'create_collection'
-  | 'update_collection'
-  | 'delete_collection'
-  | 'add_photo_to_collection'
-  | 'remove_photo_from_collection'
-  | 'analyze_photo'
-  | 'tag_photo'
-  | 'create_tag'
-  | 'delete_tag'
+  // Chat
+  | 'chat_message'
+  // Photos
+  | 'photo_upload'
+  | 'photo_analyze'
+  | 'photo_delete'
+  | 'photo_download'
+  | 'photo_duplicates'
+  | 'photo_insight'
+  | 'photo_swap'
+  | 'photo_note'
+  // Collections
+  | 'collection_create'
+  | 'collection_update'
+  | 'collection_delete'
+  | 'collection_add_photos'
+  | 'collection_remove_photos'
+  // Series
+  | 'series_create'
+  | 'series_update'
+  | 'series_delete'
+  | 'series_add_photos'
+  | 'series_remove_photos'
+  // Portfolio & Visualization
+  | 'portfolio_build'
+  | 'view_3d'
+  // Embeddings
   | 'generate_embeddings'
-  | 'update_profile'
-  | 'change_password'
-  | 'view_catalog'
-  | 'view_usage'
-  | 'warmup_system'
-  | 'api_call'
-  | 'error'
-
-export type ActivityLevel = 'info' | 'warning' | 'error'
+  // Canvas
+  | 'canvas_create'
+  | 'canvas_delete'
 
 export default class UserActivity extends BaseModel {
   @column({ isPrimary: true })
@@ -49,9 +54,6 @@ export default class UserActivity extends BaseModel {
   declare type: ActivityType
 
   @column()
-  declare level: ActivityLevel
-
-  @column()
   declare action: string
 
   @column()
@@ -60,28 +62,9 @@ export default class UserActivity extends BaseModel {
   @column()
   declare metadata: Record<string, any> | null
 
-  @column()
-  declare ipAddress: string | null
-
-  @column()
-  declare userAgent: string | null
-
-  @column()
-  declare endpoint: string | null
-
-  @column()
-  declare statusCode: number | null
-
-  @column()
-  declare responseTime: number | null
-
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
-  @column.dateTime({ autoCreate: true, autoUpdate: true })
-  declare updatedAt: DateTime
-
-  // Relación con User
   @belongsTo(() => User)
   declare user: BelongsTo<typeof User>
 }

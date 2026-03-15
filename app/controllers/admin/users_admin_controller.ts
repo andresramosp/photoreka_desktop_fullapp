@@ -2,6 +2,7 @@
 
 import type { HttpContext } from '@adonisjs/core/http'
 import AdminUsersService from '#services/admin/admin_users_service'
+import UserActivity from '#models/user_activity'
 import vine from '@vinejs/vine'
 
 const updateUsageValidator = vine.compile(
@@ -98,6 +99,42 @@ export default class UsersAdminController {
     } catch (error) {
       return response.internalServerError({
         message: 'Failed to update usage',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
+   * Get paginated activity log for a user
+   */
+  async activities({ params, request, response }: HttpContext) {
+    try {
+      const page = Number(request.input('page', 1))
+      const limit = Math.min(Number(request.input('limit', 30)), 100)
+      const type = request.input('type') || undefined
+
+      const query = UserActivity.query().where('userId', params.id).orderBy('createdAt', 'desc')
+
+      if (type) {
+        query.where('type', type)
+      }
+
+      const result = await query.paginate(page, limit)
+
+      return response.ok({
+        activities: result.all().map((a) => ({
+          id: a.id,
+          type: a.type,
+          action: a.action,
+          description: a.description,
+          metadata: a.metadata,
+          createdAt: a.createdAt.toISO(),
+        })),
+        meta: result.getMeta(),
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to fetch activities',
         error: error.message,
       })
     }
