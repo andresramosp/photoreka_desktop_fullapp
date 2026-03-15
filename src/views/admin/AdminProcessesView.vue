@@ -30,6 +30,16 @@
         @update:value="fetchProcesses"
       />
 
+      <n-select
+        v-model:value="filterMode"
+        placeholder="Mode"
+        clearable
+        size="small"
+        style="width: 140px"
+        :options="modeOptions"
+        @update:value="fetchProcesses"
+      />
+
       <div class="filters-spacer" />
 
       <n-tag :bordered="false" size="small" type="info">
@@ -182,6 +192,12 @@
                 >
                   <span class="info-label">Mode</span>
                   <n-tag size="tiny" type="info">Admin Retry</n-tag>
+                </div>
+                <div v-if="selectedProcess.notes" class="info-row">
+                  <span class="info-label">Source</span>
+                  <span class="info-value notes-value">{{
+                    selectedProcess.notes
+                  }}</span>
                 </div>
               </div>
 
@@ -373,6 +389,7 @@ interface ProcessRow {
   costReport?: any;
   processSheetSummary?: any[];
   hadRetry?: boolean;
+  notes?: string | null;
 }
 
 const STAGE_LABELS: Record<string, string> = {
@@ -406,6 +423,7 @@ const detailLoading = ref(false);
 
 const searchQuery = ref("");
 const filterStage = ref<string | null>(null);
+const filterMode = ref<string | null>(null);
 const sortBy = ref<string | null>(null);
 const sortDir = ref<string | null>(null);
 
@@ -424,6 +442,12 @@ const stageOptions = [
   { label: "Vision", value: "vision_context_story_accents" },
   { label: "Tags", value: "tags_context_story" },
   { label: "Clip Embeddings", value: "clip_embeddings" },
+];
+
+const modeOptions = [
+  { label: "Normal", value: "adding" },
+  { label: "Auto-retry", value: "retry_process" },
+  { label: "Admin Retry", value: "admin_retry" },
 ];
 
 const filteredCount = computed(() => processes.value.length);
@@ -580,6 +604,7 @@ async function fetchProcesses(silent = false) {
     const params: Record<string, string> = {};
     if (searchQuery.value) params.search = searchQuery.value;
     if (filterStage.value) params.stage = filterStage.value;
+    if (filterMode.value) params.mode = filterMode.value;
     if (sortBy.value) {
       params.sortBy = sortBy.value;
       params.sortDir = sortDir.value || "desc";
@@ -1001,6 +1026,14 @@ onMounted(() => {
 .pending-badge {
   color: #ef4444;
   font-weight: 600;
+}
+
+.notes-value {
+  font-size: 12px;
+  color: #6366f1;
+  font-style: italic;
+  max-width: 200px;
+  text-align: right;
 }
 
 /* ===== Actions ===== */
