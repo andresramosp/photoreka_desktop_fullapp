@@ -73,8 +73,8 @@
             {{ userInitials }}
           </n-avatar>
           <div v-if="!collapsed || isMobile" class="user-info">
-            <span class="user-name">{{ adminStore.user?.name }}</span>
-            <span class="user-email">{{ adminStore.user?.email }}</span>
+            <span class="user-name">{{ userStore.user?.name }}</span>
+            <span class="user-email">{{ userStore.user?.email }}</span>
           </div>
         </div>
         <button
@@ -108,7 +108,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
-import { useAdminStore } from "@/stores/adminStore";
+import { useUserStore } from "@/stores/userStore";
 import { useTheme } from "@/composables/useTheme";
 import AppLogo from "@/components/AppLogo.vue";
 import {
@@ -124,7 +124,7 @@ import {
 
 const router = useRouter();
 const route = useRoute();
-const adminStore = useAdminStore();
+const userStore = useUserStore();
 const { setTheme, isDarkMode } = useTheme();
 let prevDark: boolean;
 
@@ -142,7 +142,7 @@ const menuItems = [
 const activeKey = computed(() => (route.name as string) || "admin-processes");
 
 const userInitials = computed(() => {
-  const name = adminStore.user?.name || "";
+  const name = userStore.user?.name || "";
   return name
     .split(" ")
     .map((w: string) => w[0])
@@ -151,9 +151,9 @@ const userInitials = computed(() => {
     .slice(0, 2);
 });
 
-async function handleLogout() {
-  await adminStore.logout();
-  router.replace("/admin/login");
+function handleLogout() {
+  userStore.logout();
+  router.replace("/auth");
 }
 
 function checkMobile() {

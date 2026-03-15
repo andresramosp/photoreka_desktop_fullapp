@@ -34,7 +34,8 @@ import AuthCallback from "../views/AuthCallback.vue";
 import AuthError from "../views/AuthError.vue";
 
 // Admin views
-import AdminLoginView from "../views/admin/AdminLoginView.vue";
+// NOTE: AdminLoginView kept as layout reference for a potential standalone admin domain
+// import AdminLoginView from "../views/admin/AdminLoginView.vue";
 import AdminLayout from "../views/admin/AdminLayout.vue";
 import AdminProcessesView from "../views/admin/AdminProcessesView.vue";
 import AdminUsersView from "../views/admin/AdminUsersView.vue";
@@ -388,16 +389,8 @@ const router = createRouter({
     // ==========================================
     // Admin Backoffice Routes
     // ==========================================
-    {
-      path: "/admin/login",
-      name: "admin-login",
-      component: AdminLoginView,
-      meta: {
-        requiresGuest: false,
-        layout: false,
-        isAdmin: true,
-      },
-    },
+    // NOTE: /admin/login route removed — admin auth uses the main app auth flow.
+    // AdminLoginView.vue is kept as reference in case admin is ever split to its own domain.
     {
       path: "/admin",
       component: AdminLayout,
@@ -438,25 +431,19 @@ router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore();
   const { shouldBlockRoute } = useMaintenanceMode();
 
-  // Admin routes guard - separate auth flow
-  if (to.matched.some((r) => r.meta.isAdmin || r.meta.requiresAdmin)) {
-    const { useAdminStore } = await import("../stores/adminStore");
-    const adminStore = useAdminStore();
-
-    // Initialize admin auth if not done
-    if (!adminStore.isAuthenticated) {
-      await adminStore.initAuth();
+  // Admin routes guard — reuses main app auth, checks role === 'admin'
+  if (to.matched.some((r) => r.meta.requiresAdmin)) {
+    if (!userStore.isInitialized) {
+      await userStore.initAuth();
     }
 
-    // Admin login page: if already authenticated, redirect to admin dashboard
-    if (to.name === "admin-login" && adminStore.isAuthenticated) {
-      next({ name: "admin-processes" });
+    if (!userStore.isAuthenticated) {
+      next({ path: "/auth", query: { redirect: to.fullPath } });
       return;
     }
 
-    // Protected admin routes: require admin auth
-    if (to.meta.requiresAdmin && !adminStore.isAuthenticated) {
-      next({ name: "admin-login" });
+    if (userStore.user?.role !== "admin") {
+      next({ path: "/workspace" });
       return;
     }
 

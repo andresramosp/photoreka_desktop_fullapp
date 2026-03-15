@@ -26,6 +26,7 @@ interface User {
   id: string;
   email: string;
   name: string;
+  role?: "user" | "admin";
   avatar?: string;
   provider?: "email" | "google" | "facebook";
   usage?: Usage;

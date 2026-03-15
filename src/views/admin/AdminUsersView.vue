@@ -307,6 +307,15 @@
                     :options="activityTypeOptions"
                     @update:value="fetchActivities(1)"
                   />
+                  <n-button
+                    size="tiny"
+                    quaternary
+                    :loading="activitiesLoading"
+                    title="Refresh activities"
+                    @click="fetchActivities(activityPage)"
+                  >
+                    <template #icon><n-icon size="14"><RefreshIcon /></n-icon></template>
+                  </n-button>
                 </div>
               </div>
 
@@ -344,7 +353,7 @@
                     </div>
                     <!-- Expandable chat content -->
                     <template
-                      v-if="act.type === 'chat_message' && act.metadata"
+                      v-if="act.type === 'chat_message' && act.metadata && (act.metadata.question || act.metadata.answer)"
                     >
                       <button
                         class="activity-expand-btn"
@@ -410,7 +419,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, h } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch, h } from "vue";
 import {
   NButton,
   NTag,
@@ -432,6 +441,7 @@ import {
   TrashOutline as TrashIcon,
   BanOutline as BanIcon,
   CheckmarkCircleOutline as ActivateIcon,
+  RefreshOutline as RefreshIcon,
 } from "@vicons/ionicons5";
 import { api } from "../../utils/axios";
 
@@ -530,15 +540,26 @@ const activityTypeOptions = [
   { label: "Register", value: "register" },
 ];
 
+let activityRefreshTimer: ReturnType<typeof setInterval> | null = null;
+
 watch(selectedUser, (u) => {
+  if (activityRefreshTimer) {
+    clearInterval(activityRefreshTimer);
+    activityRefreshTimer = null;
+  }
   if (u) {
     activityPage.value = 1;
     activityFilter.value = null;
     fetchActivities(1);
+    activityRefreshTimer = setInterval(() => fetchActivities(activityPage.value), 20000);
   } else {
     activities.value = [];
     activityMeta.value = null;
   }
+});
+
+onUnmounted(() => {
+  if (activityRefreshTimer) clearInterval(activityRefreshTimer);
 });
 
 async function fetchActivities(page: number = 1) {
