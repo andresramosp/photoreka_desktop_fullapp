@@ -166,8 +166,9 @@ export default class AnalyzerProcessRunner {
     this.process.costReport = this.process.costTracker.getSummary()
     await this.process.save()
 
-    // Registrar coste en el historial del usuario (no para admin_retry)
-    if (this.process.userId && this.process.mode !== 'admin_retry') {
+    // Registrar coste en el historial del usuario
+    // (incluido admin_retry: el coste es real, solo no se descuenta del crédito del usuario)
+    if (this.process.userId) {
       UserCostService.recordFromTracker(this.process.userId, this.process.costTracker).catch(
         () => {}
       )

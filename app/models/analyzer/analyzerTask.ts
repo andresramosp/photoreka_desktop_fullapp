@@ -34,7 +34,7 @@ export abstract class AnalyzerTask {
   async prepare(process: AnalyzerProcess): Promise<Photo[]> {
     let targetPhotos: Photo[]
 
-    if (process.mode === 'retry_process') {
+    if (process.mode === 'retry_process' || process.mode === 'admin_retry') {
       const allPhotos = process.photos
       targetPhotos = allPhotos.filter((photo) => {
         const health = process.getPhotoHealthFromCache(photo.id)
