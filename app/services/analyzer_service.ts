@@ -56,7 +56,10 @@ export default class AnalyzerProcessRunner {
     await invalidateCache(`getPhotos_${finalUserId}`)
     await invalidateCache(`getPhotosIdsForSearch${finalUserId}`)
 
-    if ((mode === 'retry_process' || mode === 'remake_process') && processId) {
+    if (
+      (mode === 'retry_process' || mode === 'remake_process' || mode === 'admin_retry') &&
+      processId
+    ) {
       this.process = await AnalyzerProcess.query()
         .where('id', processId)
         .preload('photos')
@@ -107,10 +110,10 @@ export default class AnalyzerProcessRunner {
       logger.info('No hay tareas para ejecutar en este proceso')
       return { hasFailed: false, processId: this.process.id }
     }
-    // Precargar health en paralelo solo si es retry_process
-    if (this.process.mode === 'retry_process') {
+    // Precargar health en paralelo solo si es retry
+    if (this.process.mode === 'retry_process' || this.process.mode === 'admin_retry') {
       await this.changeStage('*** Precargando health de fotos ***')
-      await this.process.preloadPhotoHealthBatch() // Versión optimizada con batch queries
+      await this.process.preloadPhotoHealthBatch()
     }
 
     // CAMBIO: Usar stages directamente en lugar de getTaskList
@@ -141,13 +144,14 @@ export default class AnalyzerProcessRunner {
         'remake_task',
         'remake_process',
         'retry_process',
+        'admin_retry',
       ].includes(this.process.mode)
       if (shouldCount) {
-        const successfulPhotos = await this.getSuccessfulPhotosCount()
-        if (successfulPhotos > 0) {
-          await UsageService.incrementAnalyzedPhotosUsed(this.process.userId, successfulPhotos)
+        const totalPhotos = await this.getTotalProcessPhotos()
+        if (totalPhotos > 0) {
+          await UsageService.incrementAnalyzedPhotosUsed(this.process.userId, totalPhotos)
           logger.info(
-            `Incrementado contador de fotos analizadas en ${successfulPhotos} para usuario ${this.process.userId}`
+            `Incrementado contador de fotos analizadas en ${totalPhotos} para usuario ${this.process.userId}`
           )
         }
       }
@@ -162,19 +166,22 @@ export default class AnalyzerProcessRunner {
     this.process.costReport = this.process.costTracker.getSummary()
     await this.process.save()
 
-    // Registrar coste en el historial del usuario
-    if (this.process.userId) {
+    // Registrar coste en el historial del usuario (no para admin_retry)
+    if (this.process.userId && this.process.mode !== 'admin_retry') {
       UserCostService.recordFromTracker(this.process.userId, this.process.costTracker).catch(
         () => {}
       )
     }
 
     // Limpiar cache de health solo si se precargó
-    if (this.process.mode === 'retry_process') {
+    if (this.process.mode === 'retry_process' || this.process.mode === 'admin_retry') {
       this.process.clearHealthCache()
     }
 
-    this.handleAutoRetry()
+    // No lanzar autoRetry para admin_retry (el admin decide manualmente)
+    if (this.process.mode !== 'admin_retry') {
+      this.handleAutoRetry()
+    }
 
     return { hasFailed, processId: this.process.id }
   }
@@ -374,7 +381,7 @@ export default class AnalyzerProcessRunner {
   /**
    * Cuenta las fotos asociadas al proceso (consulta directa a DB)
    */
-  private async getSuccessfulPhotosCount(): Promise<number> {
+  private async getTotalProcessPhotos(): Promise<number> {
     const result = await Photo.query()
       .where('analyzer_process_id', this.process.id)
       .count('* as total')

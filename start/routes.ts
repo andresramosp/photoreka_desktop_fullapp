@@ -268,6 +268,38 @@ router
   })
   .use([middleware.auth(), middleware.readOnly(), middleware.llmRateLimit()]) // Apply auth, readOnly and LLM rate limiting
 
+// ==========================================
+// Admin Backoffice Routes
+// ==========================================
+const AuthAdminController = () => import('#controllers/admin/auth_admin_controller')
+
+// Admin auth (no middleware - login endpoint)
+router.post('/api/admin/auth/login', [AuthAdminController, 'login'])
+
+// Admin protected routes
+const UsersAdminController = () => import('#controllers/admin/users_admin_controller')
+const ProcessesAdminController = () => import('#controllers/admin/processes_admin_controller')
+
+router
+  .group(() => {
+    router.get('/api/admin/auth/profile', [AuthAdminController, 'profile'])
+    router.post('/api/admin/auth/logout', [AuthAdminController, 'logout'])
+
+    // Admin Users management
+    router.get('/api/admin/users', [UsersAdminController, 'index'])
+    router.get('/api/admin/users/:id', [UsersAdminController, 'show'])
+    router.patch('/api/admin/users/:id/toggle-active', [UsersAdminController, 'toggleActive'])
+    router.delete('/api/admin/users/:id', [UsersAdminController, 'destroy'])
+    router.put('/api/admin/users/:id/usage', [UsersAdminController, 'updateUsage'])
+
+    // Admin Processes management
+    router.get('/api/admin/processes', [ProcessesAdminController, 'index'])
+    router.get('/api/admin/processes/:id', [ProcessesAdminController, 'show'])
+    router.post('/api/admin/processes/:id/health', [ProcessesAdminController, 'healthCheck'])
+    router.post('/api/admin/processes/:id/retry', [ProcessesAdminController, 'retry'])
+  })
+  .use([middleware.auth(), middleware.admin()])
+
 // Chat reset endpoint - no rate limiting
 router
   .group(() => {

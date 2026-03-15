@@ -18,6 +18,7 @@ export type AnalyzerMode =
   | 'remake_task'
   | 'remake_process'
   | 'retry_process'
+  | 'admin_retry'
   | 'upgrade_with_package'
 export type ModelType = 'GPT' | 'Molmo' | 'Qwen' | 'Gemini'
 export type StageType =
@@ -156,7 +157,8 @@ export default class AnalyzerProcess extends BaseModel {
     userId?: number
   ) {
     this.mode = mode
-    this.packageId = this.mode == 'retry_process' ? this.packageId : packageId
+    this.packageId =
+      this.mode === 'retry_process' || this.mode === 'admin_retry' ? this.packageId : packageId
 
     // Cargar el perfil del usuario si está disponible
     if (userId) {
@@ -176,14 +178,14 @@ export default class AnalyzerProcess extends BaseModel {
     this.tasks = taskStructure.flat()
 
     this.currentStage = 'init'
-    this.autoRetry = true
+    this.autoRetry = this.mode !== 'admin_retry'
     this.maxAttempts = 2
     this.isFastMode = isFastMode
     this.userId = userId || null
     await this.save()
 
     await this.setProcessPhotos(photosForProcess)
-    if (this.mode !== 'retry_process') {
+    if (this.mode !== 'retry_process' && this.mode !== 'admin_retry') {
       this.initializeProcessSheet()
       await this.save()
     }

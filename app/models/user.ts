@@ -9,6 +9,7 @@ import type { CostHistory } from '#services/user_cost_service'
 
 export type PreferredSource = 'web' | 'lightroom' | null
 export type UserProvider = 'email' | 'google'
+export type UserRole = 'user' | 'admin'
 export type UserProfile =
   | 'general'
   | 'street-photography'
@@ -39,6 +40,9 @@ export default class User extends compose(BaseModel, AuthFinder) {
 
   @column()
   declare isActive: boolean
+
+  @column()
+  declare role: UserRole
 
   @column()
   declare usage: Usage | null
