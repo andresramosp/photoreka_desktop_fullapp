@@ -292,6 +292,99 @@
                 <p v-else class="no-data">No cost data</p>
               </div>
             </div>
+
+            <!-- Activity Log Card -->
+            <div class="activity-card">
+              <div class="activity-card-header">
+                <h4>Activity Log</h4>
+                <div class="activity-controls">
+                  <n-select
+                    v-model:value="activityFilter"
+                    placeholder="All types"
+                    clearable
+                    size="tiny"
+                    style="width: 170px"
+                    :options="activityTypeOptions"
+                    @update:value="fetchActivities(1)"
+                  />
+                </div>
+              </div>
+
+              <div
+                v-if="activitiesLoading && activities.length === 0"
+                class="activity-loading"
+              >
+                <n-spin size="small" />
+              </div>
+              <div v-else-if="activities.length === 0" class="activity-empty">
+                No activity recorded yet
+              </div>
+              <div v-else class="activity-timeline">
+                <div
+                  v-for="act in activities"
+                  :key="act.id"
+                  class="activity-item"
+                >
+                  <div class="activity-dot" :class="activityColor(act.type)" />
+                  <div class="activity-content">
+                    <div class="activity-top">
+                      <n-tag
+                        size="tiny"
+                        :bordered="false"
+                        :type="activityTagType(act.type)"
+                      >
+                        {{ activityLabel(act.type) }}
+                      </n-tag>
+                      <span class="activity-time">{{
+                        formatDateTime(act.createdAt)
+                      }}</span>
+                    </div>
+                    <div class="activity-meta">
+                      {{ activitySummary(act) }}
+                    </div>
+                    <!-- Expandable chat content -->
+                    <template
+                      v-if="act.type === 'chat_message' && act.metadata"
+                    >
+                      <button
+                        class="activity-expand-btn"
+                        @click="act._expanded = !act._expanded"
+                      >
+                        {{ act._expanded ? "Collapse" : "Show conversation" }}
+                      </button>
+                      <div v-if="act._expanded" class="activity-chat-detail">
+                        <div
+                          v-if="act.metadata.question"
+                          class="chat-bubble chat-q"
+                        >
+                          <span class="chat-label">User</span>
+                          {{ act.metadata.question }}
+                        </div>
+                        <div
+                          v-if="act.metadata.answer"
+                          class="chat-bubble chat-a"
+                        >
+                          <span class="chat-label">Agent</span>
+                          {{ act.metadata.answer }}
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </div>
+              <div
+                v-if="activityMeta && activityMeta.lastPage > 1"
+                class="activity-pagination"
+              >
+                <n-pagination
+                  v-model:page="activityPage"
+                  :page-size="activityMeta.perPage"
+                  :item-count="activityMeta.total"
+                  size="small"
+                  @update:page="fetchActivities"
+                />
+              </div>
+            </div>
           </div>
         </n-spin>
       </div>
@@ -317,7 +410,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, h } from "vue";
+import { ref, computed, onMounted, watch, h } from "vue";
 import {
   NButton,
   NTag,
@@ -394,6 +487,212 @@ const editUsage = ref({
   analyzedPhotosLimit: 0,
   creditsAvailable: 0,
 });
+
+// ─── Activity Log ───
+interface ActivityItem {
+  id: number;
+  type: string;
+  action: string;
+  description: string | null;
+  metadata: Record<string, any> | null;
+  createdAt: string;
+  _expanded?: boolean;
+}
+
+const activities = ref<ActivityItem[]>([]);
+const activitiesLoading = ref(false);
+const activityPage = ref(1);
+const activityFilter = ref<string | null>(null);
+const activityMeta = ref<{
+  total: number;
+  perPage: number;
+  currentPage: number;
+  lastPage: number;
+} | null>(null);
+
+const activityTypeOptions = [
+  { label: "Search (semantic)", value: "search_semantic" },
+  { label: "Search (tags)", value: "search_tags" },
+  { label: "Search (visual)", value: "search_visual" },
+  { label: "Chat", value: "chat_message" },
+  { label: "Photo upload", value: "photo_upload" },
+  { label: "Photo analyze", value: "photo_analyze" },
+  { label: "Photo delete", value: "photo_delete" },
+  { label: "Photo download", value: "photo_download" },
+  { label: "Photo duplicates", value: "photo_duplicates" },
+  { label: "Photo insight", value: "photo_insight" },
+  { label: "Collection", value: "collection_create" },
+  { label: "Series", value: "series_create" },
+  { label: "Portfolio build", value: "portfolio_build" },
+  { label: "3D View", value: "view_3d" },
+  { label: "Embeddings", value: "generate_embeddings" },
+  { label: "Login", value: "login" },
+  { label: "Register", value: "register" },
+];
+
+watch(selectedUser, (u) => {
+  if (u) {
+    activityPage.value = 1;
+    activityFilter.value = null;
+    fetchActivities(1);
+  } else {
+    activities.value = [];
+    activityMeta.value = null;
+  }
+});
+
+async function fetchActivities(page: number = 1) {
+  if (!selectedUser.value) return;
+  activitiesLoading.value = true;
+  try {
+    const params: Record<string, any> = { page, limit: 30 };
+    if (activityFilter.value) params.type = activityFilter.value;
+    const { data } = await api.get(
+      `/api/admin/users/${selectedUser.value.id}/activities`,
+      { params },
+    );
+    activities.value = data.activities.map((a: any) => ({
+      ...a,
+      _expanded: false,
+    }));
+    activityMeta.value = data.meta;
+    activityPage.value = page;
+  } catch {
+    message.error("Failed to load activities");
+  } finally {
+    activitiesLoading.value = false;
+  }
+}
+
+const ACTIVITY_LABELS: Record<string, string> = {
+  login: "Login",
+  register: "Register",
+  search_semantic: "Semantic search",
+  search_tags: "Tag search",
+  search_visual: "Visual search",
+  chat_message: "Chat",
+  photo_upload: "Photo upload",
+  photo_analyze: "Analysis",
+  photo_delete: "Photo delete",
+  photo_download: "Download",
+  photo_duplicates: "Duplicates check",
+  photo_insight: "Photo insight",
+  photo_swap: "Photo swap",
+  photo_note: "Photo note",
+  collection_create: "Collection created",
+  collection_update: "Collection updated",
+  collection_delete: "Collection deleted",
+  collection_add_photos: "Collection +photos",
+  collection_remove_photos: "Collection -photos",
+  series_create: "Series created",
+  series_update: "Series updated",
+  series_delete: "Series deleted",
+  series_add_photos: "Series +photos",
+  series_remove_photos: "Series -photos",
+  portfolio_build: "Portfolio build",
+  view_3d: "3D View",
+  generate_embeddings: "Embeddings",
+  canvas_create: "Canvas created",
+  canvas_delete: "Canvas deleted",
+};
+
+function activityLabel(type: string): string {
+  return ACTIVITY_LABELS[type] || type;
+}
+
+function activityTagType(
+  type: string,
+): "default" | "info" | "success" | "warning" | "error" {
+  if (type.startsWith("search_")) return "info";
+  if (type === "chat_message") return "warning";
+  if (type.startsWith("photo_delete") || type.includes("delete"))
+    return "error";
+  if (type.startsWith("photo_") || type === "generate_embeddings")
+    return "success";
+  if (
+    type.startsWith("collection_") ||
+    type.startsWith("series_") ||
+    type.startsWith("canvas_")
+  )
+    return "default";
+  if (type === "login" || type === "register") return "info";
+  return "default";
+}
+
+function activityColor(type: string): string {
+  if (type.startsWith("search_")) return "dot-blue";
+  if (type === "chat_message") return "dot-amber";
+  if (type.includes("delete")) return "dot-red";
+  if (type.startsWith("photo_")) return "dot-green";
+  if (type === "portfolio_build" || type === "view_3d") return "dot-purple";
+  return "dot-gray";
+}
+
+function activitySummary(act: ActivityItem): string {
+  const m = act.metadata;
+  if (!m) return "";
+  switch (act.type) {
+    case "search_semantic":
+      return `"${m.query || ""}" — ${m.resultCount ?? "?"} results`;
+    case "search_tags":
+      return `${(m.includedTags || []).join(", ")} — ${m.resultCount ?? "?"} results`;
+    case "search_visual":
+      return `${m.resultCount ?? "?"} similar photos found`;
+    case "chat_message":
+      return `${m.toolsUsed?.length || 0} tools · ${m.costEur != null ? "€" + Number(m.costEur).toFixed(4) : ""}`;
+    case "photo_upload":
+      return `${m.fileName || "photo"} (${m.source})`;
+    case "photo_analyze":
+      return `${m.photoCount} photo(s)`;
+    case "photo_delete":
+      return `${m.count} photo(s) deleted`;
+    case "photo_download":
+      return `${m.count} photo(s) · ${m.format}`;
+    case "photo_duplicates":
+      return `${m.checkedCount ?? "?"} checked · ${m.matchCount ?? 0} matches`;
+    case "photo_insight":
+      return `${m.insightType || "general"} · ${m.provider || ""}`;
+    case "collection_create":
+    case "series_create":
+      return `"${m.name || ""}" · ${m.initialPhotos || 0} photos`;
+    case "collection_add_photos":
+    case "series_add_photos":
+      return `+${m.photoCount} photos`;
+    case "collection_remove_photos":
+    case "series_remove_photos":
+      return `-${m.photoCount} photos`;
+    case "portfolio_build":
+      return `${m.action || ""} · ${m.photosAnalyzed ?? "?"} photos`;
+    case "view_3d":
+      return `${m.chunkCategory || "all"} · ${m.photoCount ?? "?"} photos · ${m.outputDims}D`;
+    case "login":
+      return m.provider || "email";
+    case "register":
+      return m.provider || "email";
+    default:
+      return "";
+  }
+}
+
+function formatDateTime(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "Just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `${diffH}h ago`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD < 7) return `${diffD}d ago`;
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 const roleOptions = [
   { label: "User", value: "user" },
@@ -1013,6 +1312,175 @@ onMounted(() => {
 .cat-name {
   font-weight: 500;
   word-break: break-all;
+}
+
+/* ===== Activity Log ===== */
+.activity-card {
+  grid-column: 1 / -1;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-top: 16px;
+}
+
+.activity-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.activity-card-header h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.activity-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.activity-loading,
+.activity-empty {
+  text-align: center;
+  padding: 24px 0;
+  color: #94a3b8;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.activity-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.activity-item {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.activity-item:last-child {
+  border-bottom: none;
+}
+
+.activity-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+.dot-blue {
+  background: #3b82f6;
+}
+.dot-amber {
+  background: #f59e0b;
+}
+.dot-red {
+  background: #ef4444;
+}
+.dot-green {
+  background: #22c55e;
+}
+.dot-purple {
+  background: #8b5cf6;
+}
+.dot-gray {
+  background: #94a3b8;
+}
+
+.activity-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.activity-time {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.activity-meta {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 3px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.activity-expand-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #6366f1;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.activity-expand-btn:hover {
+  text-decoration: underline;
+}
+
+.activity-chat-detail {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-bubble {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chat-q {
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  color: #1e40af;
+}
+
+.chat-a {
+  background: #f0fdf4;
+  border: 1px solid #dcfce7;
+  color: #166534;
+}
+
+.chat-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 4px;
+  opacity: 0.7;
+}
+
+.activity-pagination {
+  padding-top: 10px;
+  display: flex;
+  justify-content: center;
 }
 
 /* ===== Transition ===== */
