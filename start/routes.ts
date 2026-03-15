@@ -280,6 +280,7 @@ router.post('/api/admin/auth/login', [AuthAdminController, 'login'])
 const UsersAdminController = () => import('#controllers/admin/users_admin_controller')
 const ProcessesAdminController = () => import('#controllers/admin/processes_admin_controller')
 const HealthAdminController = () => import('#controllers/admin/health_admin_controller')
+const CostsAdminController = () => import('#controllers/admin/costs_admin_controller')
 
 router
   .group(() => {
@@ -301,6 +302,9 @@ router
 
     // Admin Health dashboard
     router.get('/api/admin/health/overview', [HealthAdminController, 'overview'])
+
+    // Admin Costs dashboard
+    router.get('/api/admin/costs/overview', [CostsAdminController, 'overview'])
     router.post('/api/admin/health/users/:id/check', [HealthAdminController, 'userCheck'])
     router.post('/api/admin/health/users/:id/retry', [HealthAdminController, 'userRetry'])
     router.get('/api/admin/health/global-embeddings', [
