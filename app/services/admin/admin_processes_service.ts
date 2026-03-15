@@ -43,6 +43,7 @@ export default class AdminProcessesService {
   static async list(filters?: {
     search?: string
     stage?: string
+    mode?: string
     sortBy?: string
     sortDir?: string
   }): Promise<ProcessListItem[]> {
@@ -54,6 +55,10 @@ export default class AdminProcessesService {
 
     if (filters?.stage) {
       query = query.where('currentStage', filters.stage)
+    }
+
+    if (filters?.mode) {
+      query = query.where('mode', filters.mode)
     }
 
     if (filters?.sortBy) {
@@ -121,6 +126,7 @@ export default class AdminProcessesService {
         totalCostEur: p.costReport?.totalCostInEur ?? 0,
         createdAt: p.createdAt.toISO()!,
         updatedAt: p.updatedAt.toISO()!,
+        notes: (p as any).notes ?? null,
       }
     })
   }
@@ -181,6 +187,7 @@ export default class AdminProcessesService {
       costReport: p.costReport ?? null,
       processSheetSummary,
       hadRetry: p.mode === 'retry_process',
+      notes: (p as any).notes ?? null,
     }
   }
 
@@ -266,6 +273,12 @@ export default class AdminProcessesService {
       Number(p.id),
       String(p.userId)
     )
+
+    // Tag the process with its origin
+    if (runner['process']) {
+      runner['process'].notes = `Manual retry from Processes view`
+      await runner['process'].save()
+    }
 
     // Fire and forget
     runner.runAll().catch(() => {})

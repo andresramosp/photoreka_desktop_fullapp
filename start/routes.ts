@@ -279,6 +279,7 @@ router.post('/api/admin/auth/login', [AuthAdminController, 'login'])
 // Admin protected routes
 const UsersAdminController = () => import('#controllers/admin/users_admin_controller')
 const ProcessesAdminController = () => import('#controllers/admin/processes_admin_controller')
+const HealthAdminController = () => import('#controllers/admin/health_admin_controller')
 
 router
   .group(() => {
@@ -297,6 +298,24 @@ router
     router.get('/api/admin/processes/:id', [ProcessesAdminController, 'show'])
     router.post('/api/admin/processes/:id/health', [ProcessesAdminController, 'healthCheck'])
     router.post('/api/admin/processes/:id/retry', [ProcessesAdminController, 'retry'])
+
+    // Admin Health dashboard
+    router.get('/api/admin/health/overview', [HealthAdminController, 'overview'])
+    router.post('/api/admin/health/users/:id/check', [HealthAdminController, 'userCheck'])
+    router.post('/api/admin/health/users/:id/retry', [HealthAdminController, 'userRetry'])
+    router.get('/api/admin/health/global-embeddings', [
+      HealthAdminController,
+      'globalEmbeddingsStatus',
+    ])
+    router.post('/api/admin/health/global-embeddings/run', [
+      HealthAdminController,
+      'runGlobalEmbeddings',
+    ])
+    router.get('/api/admin/health/global-clip', [HealthAdminController, 'globalClipStatus'])
+    router.post('/api/admin/health/global-clip/run', [
+      HealthAdminController,
+      'runGlobalClipEmbeddings',
+    ])
   })
   .use([middleware.auth(), middleware.admin()])
 

@@ -58,9 +58,12 @@ export default class PortfolioReviewController {
           )
           catalogPatterns[reviewType] = result
 
-          // Acumular costo
+          // Acumular costo y registrar inmediatamente (así queda guardado aunque el build falle en steps posteriores)
           if (result?.cost?.totalCostInEur) {
             totalCostInEur += result.cost.totalCostInEur
+            UserCostService.record(user.id, 'portfolio_review', result.cost.totalCostInEur).catch(
+              () => {}
+            )
           }
 
           return result
@@ -90,10 +93,6 @@ export default class PortfolioReviewController {
         ...filteredCatalogPatterns,
       }
       await userModel.save()
-
-      if (totalCostInEur > 0) {
-        UserCostService.record(user.id, 'portfolio_review', totalCostInEur).catch(() => {})
-      }
 
       return response.ok({
         message: 'Patterns construidos y almacenados exitosamente',
@@ -300,7 +299,9 @@ export default class PortfolioReviewController {
       const result = await portfolioReviewManager.getPatterns(userId, reviewType)
 
       if (result?.cost?.totalCostInEur) {
-        UserCostService.record(user.id, 'portfolio_review', result.cost.totalCostInEur).catch(() => {})
+        UserCostService.record(user.id, 'portfolio_review', result.cost.totalCostInEur).catch(
+          () => {}
+        )
       }
 
       return response.ok(result)
@@ -325,7 +326,11 @@ export default class PortfolioReviewController {
       const result = await portfolioReviewManager.getPatterns(userId, reviewTypeParam)
 
       if (result?.cost?.totalCostInEur) {
-        UserCostService.record(parseInt(userId), 'portfolio_review', result.cost.totalCostInEur).catch(() => {})
+        UserCostService.record(
+          parseInt(userId),
+          'portfolio_review',
+          result.cost.totalCostInEur
+        ).catch(() => {})
       }
 
       return response.ok(result)

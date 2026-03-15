@@ -136,6 +136,9 @@ export default class AnalyzerProcess extends BaseModel {
   declare isPreprocess: boolean
 
   @column()
+  declare notes: string | null
+
+  @column()
   declare costReport: CostSummary | null
 
   @column.dateTime({ autoCreate: true })

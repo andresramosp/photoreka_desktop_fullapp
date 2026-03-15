@@ -12,6 +12,7 @@ export default class ProcessesAdminController {
       const filters = {
         search: request.input('search'),
         stage: request.input('stage'),
+        mode: request.input('mode'),
         sortBy: request.input('sortBy'),
         sortDir: request.input('sortDir'),
       }
