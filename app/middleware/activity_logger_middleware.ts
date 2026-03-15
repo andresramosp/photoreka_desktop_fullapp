@@ -20,6 +20,16 @@ function truncate(str: any, max: number): string | null {
   return str.length > max ? str.slice(0, max) + '…' : str
 }
 
+/** Count photos from the search response's `data.results` map of iterations → photo arrays */
+function countSearchResults(r: any): number | null {
+  const results = r?.data?.results
+  if (!results || typeof results !== 'object') return null
+  return Object.values(results).reduce(
+    (sum: number, arr: any) => sum + (Array.isArray(arr) ? arr.length : 0),
+    0
+  ) as number
+}
+
 /**
  * Declarative route map — the single place where we decide
  * WHAT gets logged and WHICH metadata is captured.
@@ -53,7 +63,7 @@ const ROUTE_MAP: RouteDescriptor[] = [
     meta: (b, _p, r) => ({
       query: truncate(b?.description, 200),
       searchMode: b?.options?.searchMode,
-      resultCount: r?.photos?.length ?? r?.totalResults ?? null,
+      resultCount: countSearchResults(r),
     }),
   },
   {
@@ -65,7 +75,7 @@ const ROUTE_MAP: RouteDescriptor[] = [
       excludedTags: b?.excluded,
       searchMode: b?.searchMode,
       semantic: b?.semantic ?? false,
-      resultCount: r?.photos?.length ?? null,
+      resultCount: countSearchResults(r) ?? (Array.isArray(r) ? r.length : null),
     }),
   },
   {
@@ -74,7 +84,7 @@ const ROUTE_MAP: RouteDescriptor[] = [
     type: 'search_visual',
     meta: (b, _p, r) => ({
       sourcePhotoIds: b?.photoIds ?? b?.queryPhotoId,
-      resultCount: r?.photos?.length ?? null,
+      resultCount: Array.isArray(r) ? r.length : null,
     }),
   },
 
@@ -264,7 +274,7 @@ const ROUTE_MAP: RouteDescriptor[] = [
     type: 'portfolio_build',
     meta: (_b, _p, r) => ({
       action: r?.action ?? null,
-      photosAnalyzed: r?.stats?.photosAnalyzed ?? null,
+      currentPhotos: r?.stats?.currentPhotos ?? null,
     }),
   },
   {
@@ -339,7 +349,32 @@ export default class ActivityLoggerMiddleware {
     // Extract metadata
     const body = request.body()
     const params = request.params()
-    const resBody = response.getBody()
+    const resBodyRaw = response.getBody()
+    // AdonisJS 6 serialises the body to JSON string before storing it —
+    // parse it back so extractors can access properties normally.
+    const resBody =
+      typeof resBodyRaw === 'string'
+        ? (() => {
+            try {
+              return JSON.parse(resBodyRaw)
+            } catch {
+              return {}
+            }
+          })()
+        : (resBodyRaw ?? {})
+
+    // DEBUG: log response shape for chat to diagnose missing answer
+    if (descriptor.type === 'chat_message') {
+      console.log('[ActivityLogger] chat resBody type:', typeof resBodyRaw)
+      console.log('[ActivityLogger] chat resBody keys:', resBody ? Object.keys(resBody) : 'null')
+      console.log(
+        '[ActivityLogger] chat output:',
+        typeof resBody?.output,
+        resBody?.output ? resBody.output.slice(0, 80) : 'null'
+      )
+      console.log('[ActivityLogger] chat toolsUsed:', resBody?.toolsUsed)
+    }
+
     const metadata = descriptor.meta ? descriptor.meta(body, params, resBody) : null
 
     await UserActivity.create({

@@ -277,6 +277,7 @@ const AuthAdminController = () => import('#controllers/admin/auth_admin_controll
 router.post('/api/admin/auth/login', [AuthAdminController, 'login'])
 
 // Admin protected routes
+const DashboardAdminController = () => import('#controllers/admin/dashboard_admin_controller')
 const UsersAdminController = () => import('#controllers/admin/users_admin_controller')
 const ProcessesAdminController = () => import('#controllers/admin/processes_admin_controller')
 const HealthAdminController = () => import('#controllers/admin/health_admin_controller')
@@ -286,6 +287,9 @@ router
   .group(() => {
     router.get('/api/admin/auth/profile', [AuthAdminController, 'profile'])
     router.post('/api/admin/auth/logout', [AuthAdminController, 'logout'])
+
+    // Admin Dashboard
+    router.get('/api/admin/dashboard', [DashboardAdminController, 'overview'])
 
     // Admin Users management
     router.get('/api/admin/users', [UsersAdminController, 'index'])

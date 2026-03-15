@@ -359,6 +359,7 @@ export default class AuthController {
           id: user.id,
           name: user.name,
           email: user.email,
+          role: user.role,
           isActive: user.isActive,
           isEmailConfirmed: user.isEmailConfirmed,
           usage,
