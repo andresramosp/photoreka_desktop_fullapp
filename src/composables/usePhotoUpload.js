@@ -151,46 +151,6 @@ export function usePhotoUpload() {
     return true;
   }
 
-  // Función para preprocesar fotos (análisis y detección de duplicados)
-  async function preprocessPhotos(photoIds) {
-    if (photoIds.length === 0) {
-      message.error("No photos to preprocess.");
-      return false;
-    }
-
-    // Set photos to checking duplicates state (for UI spinner)
-    photoIds.forEach((id) => {
-      photosStore.updatePhoto(id, { isCheckingDuplicates: true });
-    });
-
-    // Check duplicates and restore normal state
-    try {
-      await api_analyzer.post(`/api/analyzer`, {
-        packageId: "preprocess",
-        mode: "adding",
-      });
-    } catch (error) {
-      // Si falla la llamada, borrar las fotos y mostrar notificación
-      await photosStore.deletePhotos(photoIds);
-      message.error(
-        "There was an error processing the photos. Please try again later.",
-      );
-      return false;
-    }
-
-    await photosStore.checkDuplicates(photoIds);
-
-    // Clear checking duplicates flag before refreshing from backend
-    photoIds.forEach((id) => {
-      photosStore.updatePhoto(id, { isCheckingDuplicates: false });
-    });
-
-    // Refresh all photos from backend to get updated status
-    await photosStore.getOrFetch(true);
-
-    return true;
-  }
-
   // Función para validar límites de subida
   function validateUploadLimits(filesToUploadCount) {
     const user = userStore.user;
@@ -297,7 +257,6 @@ export function usePhotoUpload() {
     handleUploadFlow,
     processPhotoSource,
     handlePostUpload,
-    preprocessPhotos,
     validateUploadLimits,
   };
 }

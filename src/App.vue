@@ -1,5 +1,21 @@
 <template>
-  <n-config-provider :theme="darkTheme" :theme-overrides="themeOverrides">
+  <!-- Admin Backoffice (completely separate, light theme) -->
+  <n-config-provider v-if="isAdminRoute" :theme="null" :theme-overrides="{}">
+    <n-notification-provider>
+      <n-dialog-provider>
+        <n-message-provider>
+          <router-view />
+        </n-message-provider>
+      </n-dialog-provider>
+    </n-notification-provider>
+  </n-config-provider>
+
+  <!-- Main App (dark theme) -->
+  <n-config-provider
+    v-else
+    :theme="darkTheme"
+    :theme-overrides="themeOverrides"
+  >
     <n-notification-provider>
       <n-message-provider>
         <!-- Landing Page Layout (no sidebar) -->
@@ -146,6 +162,11 @@ import MobileWelcomeBanner from "./components/MobileWelcomeBanner.vue";
 
 const route = useRoute();
 const router = useRouter();
+
+// Check if current route is an admin route
+const isAdminRoute = computed(() => {
+  return route.matched.some((r) => r.meta.isAdmin || r.meta.requiresAdmin);
+});
 
 // Inicializar tema centralizado
 const {

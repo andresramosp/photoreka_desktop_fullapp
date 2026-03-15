@@ -33,6 +33,14 @@ import ConfirmEmailView from "../views/ConfirmEmailView.vue";
 import AuthCallback from "../views/AuthCallback.vue";
 import AuthError from "../views/AuthError.vue";
 
+// Admin views
+import AdminLoginView from "../views/admin/AdminLoginView.vue";
+import AdminLayout from "../views/admin/AdminLayout.vue";
+import AdminProcessesView from "../views/admin/AdminProcessesView.vue";
+import AdminUsersView from "../views/admin/AdminUsersView.vue";
+import AdminCostsView from "../views/admin/AdminCostsView.vue";
+import AdminHealthView from "../views/admin/AdminHealthView.vue";
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -376,6 +384,52 @@ const router = createRouter({
         requiresAuth: true,
       },
     },
+
+    // ==========================================
+    // Admin Backoffice Routes
+    // ==========================================
+    {
+      path: "/admin/login",
+      name: "admin-login",
+      component: AdminLoginView,
+      meta: {
+        requiresGuest: false,
+        layout: false,
+        isAdmin: true,
+      },
+    },
+    {
+      path: "/admin",
+      component: AdminLayout,
+      meta: { requiresAdmin: true, isAdmin: true },
+      children: [
+        {
+          path: "",
+          name: "admin",
+          redirect: { name: "admin-processes" },
+        },
+        {
+          path: "processes",
+          name: "admin-processes",
+          component: AdminProcessesView,
+        },
+        {
+          path: "users",
+          name: "admin-users",
+          component: AdminUsersView,
+        },
+        {
+          path: "costs",
+          name: "admin-costs",
+          component: AdminCostsView,
+        },
+        {
+          path: "health",
+          name: "admin-health",
+          component: AdminHealthView,
+        },
+      ],
+    },
   ],
 });
 
@@ -383,6 +437,32 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore();
   const { shouldBlockRoute } = useMaintenanceMode();
+
+  // Admin routes guard - separate auth flow
+  if (to.matched.some((r) => r.meta.isAdmin || r.meta.requiresAdmin)) {
+    const { useAdminStore } = await import("../stores/adminStore");
+    const adminStore = useAdminStore();
+
+    // Initialize admin auth if not done
+    if (!adminStore.isAuthenticated) {
+      await adminStore.initAuth();
+    }
+
+    // Admin login page: if already authenticated, redirect to admin dashboard
+    if (to.name === "admin-login" && adminStore.isAuthenticated) {
+      next({ name: "admin-processes" });
+      return;
+    }
+
+    // Protected admin routes: require admin auth
+    if (to.meta.requiresAdmin && !adminStore.isAuthenticated) {
+      next({ name: "admin-login" });
+      return;
+    }
+
+    next();
+    return;
+  }
 
   // Manejar demo login silenciosamente
   if (to.path === "/demo") {

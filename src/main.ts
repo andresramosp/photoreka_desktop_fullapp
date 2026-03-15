@@ -32,6 +32,7 @@ import {
   NCheckbox,
   NMessageProvider,
   NNotificationProvider,
+  NDialogProvider,
 } from "naive-ui";
 
 import App from "./App.vue";
@@ -70,6 +71,7 @@ const naive = create({
     NCheckbox,
     NMessageProvider,
     NNotificationProvider,
+    NDialogProvider,
   ],
 });
 

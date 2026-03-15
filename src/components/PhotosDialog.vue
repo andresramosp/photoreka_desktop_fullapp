@@ -97,117 +97,105 @@
         </template>
       </div>
 
-      <!-- Tabs (desktop only) -->
-      <div v-else-if="!isTrash && !isMobile" class="tabs-container">
-        <n-tabs v-model:value="activeTab" type="line" animated>
-          <n-tab-pane name="catalog" tab="From Workspace">
-            <!-- Search and Stats Bar -->
-            <div class="stats-bar">
-              <div v-if="displaySearch" class="search-section">
-                <n-input
-                  v-model:value="searchQuery"
-                  placeholder="Search photos..."
-                  size="small"
-                  :clearable="!isSearching"
-                  class="text-search"
-                  @input="onSearchChange"
-                  @clear="clearSearch"
-                >
-                  <template #prefix>
-                    <n-icon size="16">
-                      <svg viewBox="0 0 24 24">
-                        <path
-                          fill="currentColor"
-                          d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14z"
-                        />
-                      </svg>
-                    </n-icon>
-                  </template>
-                  <template #suffix>
-                    <n-spin
-                      size="small"
-                      class="spinner-search spinner-medium spinner-centered"
-                      v-if="isSearching"
-                    />
-                  </template>
-                </n-input>
-              </div>
-              <div class="stats-section">
-                <div class="stats-info">
-                  <span class="stats-text">
-                    {{ processedPhotos.length }}
-                    {{ processedPhotos.length === 1 ? "photo" : "photos" }}
-                    available
-                    <span v-if="selectedIds.length > 0" class="selected-count">
-                      • {{ selectedIds.length }} selected
-                    </span>
-                  </span>
-                </div>
-                <div class="stats-actions">
-                  <n-button
-                    v-if="selectedIds.length > 0"
-                    text
-                    type="primary"
-                    @click="selectAll"
-                  >
-                    Select All
-                  </n-button>
-                  <n-button
-                    v-if="selectedIds.length > 0"
-                    text
-                    type="warning"
-                    @click="clearSelection"
-                  >
-                    Clear Selection
-                  </n-button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Photos Grid -->
-            <div
-              v-if="processedPhotos.length > 0"
-              class="photos-grid photo-grid-base"
-              :class="`grid-cols-${6}`"
+      <!-- Catalog (desktop only) -->
+      <div v-else-if="!isTrash && !isMobile" class="catalog-container">
+        <!-- Search and Stats Bar -->
+        <div class="stats-bar">
+          <div v-if="displaySearch" class="search-section">
+            <n-input
+              v-model:value="searchQuery"
+              placeholder="Search photos..."
+              size="small"
+              :clearable="!isSearching"
+              class="text-search"
+              @input="onSearchChange"
+              @clear="clearSearch"
             >
-              <PhotoCard
-                v-for="photo in processedPhotos"
-                :key="photo.id"
-                :photo="photo"
-                :selected="selectedIds.includes(photo.id)"
-                mode="default"
-                @select="toggleSelection"
-                @info="showPhotoInfo"
-                :show-stars="false"
-                :show-tags="false"
-                :show-info-button="false"
-                :require-long-press="false"
-              />
-            </div>
-
-            <!-- Empty State -->
-            <div v-else class="empty-state">
-              <div class="empty-state-content">
-                <n-icon size="64" class="empty-state-icon">
-                  <ImageIcon />
+              <template #prefix>
+                <n-icon size="16">
+                  <svg viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14z"
+                    />
+                  </svg>
                 </n-icon>
-                <h3 class="empty-state-title">No photos available</h3>
-                <p class="empty-state-description">
-                  You don't have any photos here. Import them to Lightbox and
-                  click Analyze Photos to start building your Workspace.
-                </p>
-              </div>
+              </template>
+              <template #suffix>
+                <n-spin
+                  size="small"
+                  class="spinner-search spinner-medium spinner-centered"
+                  v-if="isSearching"
+                />
+              </template>
+            </n-input>
+          </div>
+          <div class="stats-section">
+            <div class="stats-info">
+              <span class="stats-text">
+                {{ processedPhotos.length }}
+                {{ processedPhotos.length === 1 ? "photo" : "photos" }}
+                available
+                <span v-if="selectedIds.length > 0" class="selected-count">
+                  • {{ selectedIds.length }} selected
+                </span>
+              </span>
             </div>
-          </n-tab-pane>
+            <div class="stats-actions">
+              <n-button
+                v-if="selectedIds.length > 0"
+                text
+                type="primary"
+                @click="selectAll"
+              >
+                Select All
+              </n-button>
+              <n-button
+                v-if="selectedIds.length > 0"
+                text
+                type="warning"
+                @click="clearSelection"
+              >
+                Clear Selection
+              </n-button>
+            </div>
+          </div>
+        </div>
 
-          <n-tab-pane v-if="displayLightboxTab" name="sync" tab="Upload Files">
-            <PhotosLightboxTab
-              :selected-ids="syncSelectedIds"
-              @update:selected-ids="syncSelectedIds = $event"
-              @photos-added="handlePhotosAdded"
-            />
-          </n-tab-pane>
-        </n-tabs>
+        <!-- Photos Grid -->
+        <div
+          v-if="processedPhotos.length > 0"
+          class="photos-grid photo-grid-base"
+          :class="`grid-cols-${6}`"
+        >
+          <PhotoCard
+            v-for="photo in processedPhotos"
+            :key="photo.id"
+            :photo="photo"
+            :selected="selectedIds.includes(photo.id)"
+            mode="default"
+            @select="toggleSelection"
+            @info="showPhotoInfo"
+            :show-stars="false"
+            :show-tags="false"
+            :show-info-button="false"
+            :require-long-press="false"
+          />
+        </div>
+
+        <!-- Empty State -->
+        <div v-else class="empty-state">
+          <div class="empty-state-content">
+            <n-icon size="64" class="empty-state-icon">
+              <ImageIcon />
+            </n-icon>
+            <h3 class="empty-state-title">No photos available</h3>
+            <p class="empty-state-description">
+              You don't have any photos here. Import them to Lightbox and click
+              Analyze Photos to start building your Workspace.
+            </p>
+          </div>
+        </div>
       </div>
 
       <!-- Mobile catalog (no tabs) -->
@@ -466,17 +454,8 @@ import { usePhotosStore } from "@/stores/photos";
 import { useCanvasStore } from "@/stores/canvas";
 import { useIsMobile } from "@/composables/useIsMobile";
 import PhotoCard from "@/components/photoCards/PhotoCard.vue";
-import PhotosLightboxTab from "@/components/canvas/PhotosLightboxTab.vue";
 
-import {
-  NModal,
-  NButton,
-  NIcon,
-  NInput,
-  NTabs,
-  NTabPane,
-  NSpin,
-} from "naive-ui";
+import { NModal, NButton, NIcon, NInput, NSpin } from "naive-ui";
 import { api } from "@/utils/axios";
 
 // Import @vicons icons from ionicons5 for reliability
@@ -503,10 +482,6 @@ const props = defineProps({
   title: {
     type: String,
     default: "",
-  },
-  displayLightboxTab: {
-    type: Boolean,
-    default: true,
   },
   displaySearch: {
     type: Boolean,
@@ -552,10 +527,8 @@ const modalStyle = computed(() => {
 
 // Component state
 const selectedIds = ref([]);
-const syncSelectedIds = ref([]);
 const isSubmitting = ref(false);
 const searchQuery = ref("");
-const activeTab = ref("catalog");
 const isSearching = ref(false);
 const searchResults = ref([]);
 const allCatalogPhotos = ref([]);
@@ -599,16 +572,8 @@ const photos = computed(() => {
   }
 });
 
-// Total selected count across all tabs
-const totalSelectedCount = computed(() => {
-  if (props.isTrash) {
-    return selectedIds.value.length;
-  } else {
-    return activeTab.value === "catalog"
-      ? selectedIds.value.length
-      : syncSelectedIds.value.length;
-  }
-});
+// Total selected count
+const totalSelectedCount = computed(() => selectedIds.value.length);
 
 // Selection methods
 function toggleSelection(photoId) {
@@ -626,19 +591,11 @@ function toggleSelection(photoId) {
 }
 
 function selectAll() {
-  if (activeTab.value === "catalog" || props.isTrash) {
-    selectedIds.value = photos.value.map((p) => p.id);
-  } else if (activeTab.value === "sync") {
-    syncSelectedIds.value = photosStore.lightboxPhotos.map((p) => p.id);
-  }
+  selectedIds.value = photos.value.map((p) => p.id);
 }
 
 function clearSelection() {
-  if (activeTab.value === "catalog" || props.isTrash) {
-    selectedIds.value = [];
-  } else if (activeTab.value === "sync") {
-    syncSelectedIds.value = [];
-  }
+  selectedIds.value = [];
 }
 
 function showPhotoInfo(photo) {
@@ -659,12 +616,7 @@ async function confirmSelection() {
     );
     photosToAdd = selectedIds.value;
   } else {
-    // Determine which photos to add based on active tab
-    if (activeTab.value === "catalog") {
-      photosToAdd = selectedIds.value;
-    } else if (activeTab.value === "sync") {
-      photosToAdd = syncSelectedIds.value;
-    }
+    photosToAdd = selectedIds.value;
 
     if (photosToAdd.length === 0) return;
   }
@@ -697,15 +649,7 @@ function clearTrash() {
 
 function close() {
   selectedIds.value = [];
-  syncSelectedIds.value = [];
-  activeTab.value = "catalog";
   emit("update:modelValue", false);
-}
-
-function handlePhotosAdded(photos) {
-  // This is called when new photos are uploaded in the sync tab
-  // Photos are automatically available in the sync photos list
-  console.log("Photos added to sync:", photos);
 }
 
 // Search functionality
@@ -789,8 +733,6 @@ watch(
   async (isOpen) => {
     if (isOpen) {
       selectedIds.value = [];
-      syncSelectedIds.value = [];
-      activeTab.value = "catalog";
       clearSearch();
 
       // Ensure photos are loaded
@@ -858,7 +800,7 @@ onMounted(async () => {
   overflow: hidden;
 }
 
-.tabs-container {
+.catalog-container {
   flex: 1;
   overflow: hidden;
 }
@@ -1010,28 +952,11 @@ onMounted(async () => {
     min-height: 200px;
   }
 
-  .tabs-container {
+  .catalog-container {
     flex: 1;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-  }
-
-  :deep(.n-tabs) {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-  }
-
-  :deep(.n-tabs-pane-wrapper) {
-    flex: 1;
-    overflow: hidden;
-  }
-
-  :deep(.n-tab-pane) {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
   }
 
   .stats-bar {

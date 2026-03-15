@@ -40,6 +40,7 @@ interface Props {
   layout?: LogoLayout; // horizontal, vertical o solo icono
   withClaim?: boolean; // incluir el claim/tagline
   clickToHome?: boolean; // hace el logo clickeable para ir a www.photoreka.com
+  theme?: "dark" | "light"; // fuerza un tema concreto ignorando el global
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -88,7 +89,7 @@ const logoMap = {
 };
 
 const logoSrc = computed(() => {
-  const variant = themeMode.value;
+  const variant = props.theme ?? themeMode.value;
 
   if (props.layout === "icon") {
     return logoMap.icon[variant];
