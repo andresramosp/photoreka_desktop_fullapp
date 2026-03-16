@@ -625,32 +625,53 @@ async function launchUserRetry() {
 }
 
 function confirmGlobalTagEmbeddings() {
-  dialog.warning({
+  const d = dialog.warning({
     title: "Repair Tag Embeddings",
     content: `This will generate text embeddings for all ${overview.value?.tagsWithoutEmbedding ?? 0} tags that are missing them. This also processes chunk embeddings.`,
     positiveText: "Run",
     negativeText: "Cancel",
-    onPositiveClick: () => runGlobalEmbeddings(),
+    onPositiveClick: () => {
+      runGlobalEmbeddings();
+      d.content =
+        "Task launched. Tag and chunk embeddings will be generated in the background.";
+      d.positiveText = undefined;
+      d.negativeText = "OK";
+      return false;
+    },
   });
 }
 
 function confirmGlobalChunkEmbeddings() {
-  dialog.warning({
+  const d = dialog.warning({
     title: "Repair Chunk Embeddings",
     content: `This will generate text embeddings for all ${overview.value?.chunksWithoutEmbedding ?? 0} description chunks that are missing them. This also processes tag embeddings.`,
     positiveText: "Run",
     negativeText: "Cancel",
-    onPositiveClick: () => runGlobalEmbeddings(),
+    onPositiveClick: () => {
+      runGlobalEmbeddings();
+      d.content =
+        "Task launched. Chunk and tag embeddings will be generated in the background.";
+      d.positiveText = undefined;
+      d.negativeText = "OK";
+      return false;
+    },
   });
 }
 
 function confirmGlobalClip() {
-  dialog.warning({
+  const d = dialog.warning({
     title: "Repair CLIP Embeddings",
     content: `This will download images and generate CLIP visual embeddings for all ${overview.value?.missingEmbeddings ?? 0} photos missing them. This is resource-intensive and may take a while.`,
     positiveText: "Run",
     negativeText: "Cancel",
-    onPositiveClick: () => runGlobalClipEmbeddings(),
+    onPositiveClick: () => {
+      runGlobalClipEmbeddings();
+      d.content =
+        "Task launched. CLIP embeddings will be generated in the background. This may take a while.";
+      d.positiveText = undefined;
+      d.negativeText = "OK";
+      return false;
+    },
   });
 }
 

@@ -1,6 +1,11 @@
 <template>
   <!-- Admin Backoffice (completely separate, light theme) -->
-  <n-config-provider v-if="isAdminRoute" :theme="null" :theme-overrides="{}">
+  <n-config-provider
+    v-if="isAdminRoute"
+    key="admin"
+    :theme="null"
+    :theme-overrides="{}"
+  >
     <n-notification-provider>
       <n-dialog-provider>
         <n-message-provider>
@@ -13,6 +18,7 @@
   <!-- Main App (dark theme) -->
   <n-config-provider
     v-else-if="routerReady"
+    key="app"
     :theme="darkTheme"
     :theme-overrides="themeOverrides"
   >
@@ -184,10 +190,13 @@ const {
 } = useThemeInit();
 
 // Re-aplicar tema cuando cambia la ruta (para temas forzados por landing/app)
+// Skip admin routes — AdminLayout handles its own light theme
 watch(
   () => route.path,
   () => {
-    initTheme();
+    if (!isAdminRoute.value) {
+      initTheme();
+    }
   },
   { immediate: false },
 );

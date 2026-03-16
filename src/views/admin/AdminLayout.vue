@@ -127,7 +127,10 @@ const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
 const { setTheme, isDarkMode } = useTheme();
-let prevDark: boolean;
+// Force light theme immediately (before first render) so CSS variables are correct
+// even when navigating from a dark-themed page — onMounted would be too late
+const prevDark = isDarkMode.value;
+setTheme(false, false);
 
 const sidebarOpen = ref(false);
 const isMobile = ref(false);
@@ -164,8 +167,6 @@ function checkMobile() {
 }
 
 onMounted(() => {
-  prevDark = isDarkMode.value;
-  setTheme(false, false); // force light in admin, non-persistent
   checkMobile();
   window.addEventListener("resize", checkMobile);
 });
