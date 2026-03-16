@@ -339,7 +339,7 @@ import {
   CloseOutline as CloseIcon,
   PersonOutline as PersonIcon,
 } from "@vicons/ionicons5";
-import { api } from "../../utils/axios";
+import { api, api_analyzer } from "../../utils/axios";
 import HealthReportModal from "../../components/admin/HealthReportModal.vue";
 import type { HealthReport } from "../../components/admin/HealthReportModal.vue";
 
@@ -610,7 +610,7 @@ async function launchUserRetry() {
   if (!selectedUser.value) return;
   retryLoading.value = true;
   try {
-    const { data } = await api.post(
+    const { data } = await api_analyzer.post(
       `/api/admin/health/users/${selectedUser.value.userId}/retry`,
     );
     message.success(
@@ -678,7 +678,9 @@ function confirmGlobalClip() {
 async function runGlobalEmbeddings() {
   globalEmbLoading.value = true;
   try {
-    const { data } = await api.post("/api/admin/health/global-embeddings/run");
+    const { data } = await api_analyzer.post(
+      "/api/admin/health/global-embeddings/run",
+    );
     message.success(
       `Global embeddings task launched (${data.tagsToProcess} tags, ${data.chunksToProcess} chunks remaining)`,
     );
@@ -693,7 +695,9 @@ async function runGlobalEmbeddings() {
 async function runGlobalClipEmbeddings() {
   globalClipLoading.value = true;
   try {
-    const { data } = await api.post("/api/admin/health/global-clip/run");
+    const { data } = await api_analyzer.post(
+      "/api/admin/health/global-clip/run",
+    );
     message.success(
       `CLIP embeddings task launched (${data.photosToProcess} photos to process)`,
     );
