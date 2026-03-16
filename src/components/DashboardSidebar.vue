@@ -100,7 +100,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useMainMenu } from "@/composables/useMainMenu";
 import {
@@ -109,11 +109,31 @@ import {
 } from "@vicons/ionicons5";
 import AppLogo from "./AppLogo.vue";
 import UsageIndicators from "./UsageIndicators.vue";
+import { useUserStore } from "@/stores/userStore";
 
 const router = useRouter();
 const route = useRoute();
-const collapsed = ref(true);
+const userStore = useUserStore();
+const isDemoUser = computed(
+  () => userStore.user?.email === "demo@photorekatest.com",
+);
+
+const SIDEBAR_KEY = "sidebar-collapsed";
+
+const getSavedCollapsed = () => {
+  const saved = localStorage.getItem(SIDEBAR_KEY);
+  return saved !== null ? saved === "true" : false; // default: open
+};
+
+const collapsed = ref(getSavedCollapsed());
 const menuMode = ref<"hover" | "toggle">("toggle");
+
+// Persist collapsed state, except for demo users
+watch(collapsed, (newVal) => {
+  if (!isDemoUser.value) {
+    localStorage.setItem(SIDEBAR_KEY, String(newVal));
+  }
+});
 
 const props = defineProps<{
   mobileMenuOpen?: boolean;
