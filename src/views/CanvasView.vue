@@ -765,6 +765,7 @@ import {
 } from "@vicons/ionicons5";
 import { RobotOutlined } from "@vicons/antd";
 import { usePhotosStore } from "@/stores/photos";
+import { useUserStore } from "@/stores/userStore";
 import {
   ref,
   onMounted,
@@ -821,6 +822,10 @@ defineOptions({
 const canvasStore = useCanvasStore();
 const photosStore = usePhotosStore();
 const collectionsStore = useCollectionsStore();
+const userStore = useUserStore();
+const isDemoUser = computed(
+  () => userStore.user?.email === "demo@photorekatest.com",
+);
 const route = useRoute();
 const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
 const {
@@ -875,23 +880,60 @@ const setPhotoRef = (id) => (el) => {
 // Get theme composable
 const { isDarkMode } = useTheme();
 
-const toolbarState = ref({
-  mouseMode: "move",
-  zoomLevel: 0,
+const CANVAS_CONFIG_KEY = "canvas-toolbar-config";
+
+const getDefaultConfig = () => ({
   expansion: {
     type: "embedding",
     inverted: false,
     opposite: false,
     autoAlign: false,
-    enabled: true, // New property to enable/disable expansion functionality
+    enabled: true,
   },
-  showDots: true, // toggle grid dots background
-  canvasBackground: isDarkMode.value ? "default" : "white", // Initial ID, ColorPickerPills will replace with object
+  showDots: true,
+  canvasBackground: isDarkMode.value ? "default" : "white",
   photoOptions: {
     count: 3,
     spreadMode: "perpendicular",
   },
 });
+
+const getSavedConfig = () => {
+  try {
+    const saved = localStorage.getItem(CANVAS_CONFIG_KEY);
+    if (!saved) return getDefaultConfig();
+    return { ...getDefaultConfig(), ...JSON.parse(saved) };
+  } catch {
+    return getDefaultConfig();
+  }
+};
+
+const savedConfig = getSavedConfig();
+
+const toolbarState = ref({
+  mouseMode: "move",
+  zoomLevel: 0,
+  expansion: savedConfig.expansion,
+  showDots: savedConfig.showDots,
+  canvasBackground: savedConfig.canvasBackground,
+  photoOptions: savedConfig.photoOptions,
+});
+
+// Persist user preferences (not session state) to localStorage, except for demo users
+watch(
+  () => ({
+    expansion: toolbarState.value.expansion,
+    showDots: toolbarState.value.showDots,
+    canvasBackground: toolbarState.value.canvasBackground,
+    photoOptions: toolbarState.value.photoOptions,
+  }),
+  (config) => {
+    if (!isDemoUser.value) {
+      localStorage.setItem(CANVAS_CONFIG_KEY, JSON.stringify(config));
+    }
+  },
+  { deep: true },
+);
 
 // Computed to get background color ID for CSS class
 const canvasBackgroundId = computed(() => {
