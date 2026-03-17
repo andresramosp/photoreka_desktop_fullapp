@@ -2,6 +2,7 @@
 
 import type { HttpContext } from '@adonisjs/core/http'
 import AdminHealthService from '#services/admin/admin_health_service'
+import HealthRepairTracker from '#services/admin/health_repair_tracker'
 
 export default class HealthAdminController {
   async overview({ response }: HttpContext) {
@@ -41,6 +42,7 @@ export default class HealthAdminController {
         message: 'Admin retry launched for user',
         processId: result.processId,
         photosCount: result.photosCount,
+        taskId: result.taskId,
       })
     } catch (error) {
       return response.internalServerError({
@@ -99,6 +101,18 @@ export default class HealthAdminController {
     } catch (error) {
       return response.internalServerError({
         message: 'Failed to launch global CLIP embeddings task',
+        error: error.message,
+      })
+    }
+  }
+
+  async activeTasks({ response }: HttpContext) {
+    try {
+      const tasks = HealthRepairTracker.getRecentTasks()
+      return response.ok({ tasks })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to fetch active tasks',
         error: error.message,
       })
     }

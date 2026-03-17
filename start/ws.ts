@@ -12,5 +12,10 @@ app.ready(() => {
       socket.join(userId.toString())
       console.log(`User ${userId} joined room`)
     })
+
+    // Handle admin joining health monitoring room
+    socket.on('admin:join-health', () => {
+      socket.join('admin-health')
+    })
   })
 })

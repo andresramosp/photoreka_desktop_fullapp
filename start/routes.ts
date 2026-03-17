@@ -325,6 +325,7 @@ router
       HealthAdminController,
       'runGlobalClipEmbeddings',
     ])
+    router.get('/api/admin/health/tasks', [HealthAdminController, 'activeTasks'])
   })
   .use([middleware.auth(), middleware.admin()])
 

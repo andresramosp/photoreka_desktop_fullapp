@@ -9,6 +9,7 @@ import AnalyzerProcessRunner from '#services/analyzer_service'
 import { GlobalEmbeddingsTagsTask } from '#models/analyzer/globalEmbeddingsTagsTask'
 import PhotoImageService from '#services/photo_image_service'
 import ModelsService from '#services/models_service'
+import HealthRepairTracker from '#services/admin/health_repair_tracker'
 
 export interface UserHealthRow {
   userId: number
@@ -171,7 +172,7 @@ export default class AdminHealthService {
    */
   static async userRetry(
     userId: number
-  ): Promise<{ processId: string; photosCount: number; error?: string } | null> {
+  ): Promise<{ processId: string; photosCount: number; taskId?: string; error?: string } | null> {
     // Run health to find unhealthy photos
     const photoIds = await Photo.query()
       .where('userId', userId)
@@ -214,10 +215,22 @@ export default class AdminHealthService {
       await runner['process'].save()
     }
 
-    // Fire and forget
-    runner.runAll().catch(() => {})
+    // Track repair task
+    const taskId = HealthRepairTracker.start(
+      'user-retry',
+      unhealthyIds.length,
+      `Repairing ${unhealthyIds.length} photos for user #${userId}`
+    )
 
-    return { processId: String(processId), photosCount: unhealthyIds.length }
+    // Fire and forget with tracking
+    runner
+      .runAll()
+      .then(() =>
+        HealthRepairTracker.complete(taskId, `Repair completed: ${unhealthyIds.length} photos`)
+      )
+      .catch((err) => HealthRepairTracker.fail(taskId, err?.message || 'Repair failed'))
+
+    return { processId: String(processId), photosCount: unhealthyIds.length, taskId }
   }
 
   /**
@@ -242,27 +255,41 @@ export default class AdminHealthService {
   /**
    * Launch global embeddings repair task (tags + chunks without embeddings)
    */
-  static async runGlobalEmbeddings(): Promise<{ tagsToProcess: number; chunksToProcess: number }> {
-    const task = new GlobalEmbeddingsTagsTask(new AnalyzerProcess())
+  static async runGlobalEmbeddings(): Promise<{
+    tagsToProcess: number
+    chunksToProcess: number
+    taskId: string
+  }> {
+    // Get counts first
+    const [tagsCountResult, chunksCountResult] = await Promise.all([
+      db.rawQuery(`SELECT COUNT(*)::int AS cnt FROM tags WHERE embedding IS NULL`),
+      db.rawQuery(`SELECT COUNT(*)::int AS cnt FROM descriptions_chunks WHERE embedding IS NULL`),
+    ])
 
-    // process() finds tags/chunks without embeddings
-    await task.process([], undefined)
+    const tagsToProcess = tagsCountResult.rows[0]?.cnt ?? 0
+    const chunksToProcess = chunksCountResult.rows[0]?.cnt ?? 0
+    const total = tagsToProcess + chunksToProcess
 
-    // commit() generates and saves the embeddings
-    task.commit().catch(() => {})
-
-    // Return the counts found
-    const tagsCount = await db.rawQuery(
-      `SELECT COUNT(*)::int AS cnt FROM tags WHERE embedding IS NULL`
+    const taskId = HealthRepairTracker.start(
+      'global-embeddings',
+      total,
+      `Processing ${tagsToProcess} tags and ${chunksToProcess} chunks`
     )
-    const chunksCount = await db.rawQuery(
-      `SELECT COUNT(*)::int AS cnt FROM descriptions_chunks WHERE embedding IS NULL`
-    )
 
-    return {
-      tagsToProcess: tagsCount.rows[0]?.cnt ?? 0,
-      chunksToProcess: chunksCount.rows[0]?.cnt ?? 0,
-    }
+    const embTask = new GlobalEmbeddingsTagsTask(new AnalyzerProcess())
+    await embTask.process([], undefined)
+
+    embTask
+      .commit()
+      .then(() =>
+        HealthRepairTracker.complete(
+          taskId,
+          `Embeddings completed: ${tagsToProcess} tags, ${chunksToProcess} chunks`
+        )
+      )
+      .catch((err) => HealthRepairTracker.fail(taskId, err?.message || 'Embeddings failed'))
+
+    return { tagsToProcess, chunksToProcess, taskId }
   }
 
   /**
@@ -287,38 +314,57 @@ export default class AdminHealthService {
    * downloads images from R2, generates embeddings, and saves them.
    * Runs in fire-and-forget mode.
    */
-  static async runGlobalClipEmbeddings(): Promise<{ photosToProcess: number }> {
+  static async runGlobalClipEmbeddings(): Promise<{ photosToProcess: number; taskId: string }> {
     const photos = await Photo.query()
       .whereNull('embedding')
       .whereNull('deletedAt')
       .select('id', 'name')
 
     if (photos.length === 0) {
-      return { photosToProcess: 0 }
+      return { photosToProcess: 0, taskId: '' }
     }
 
     const count = photos.length
 
-    // Fire and forget the actual processing
-    AdminHealthService.processClipEmbeddingsBatch(photos).catch(() => {})
+    const taskId = HealthRepairTracker.start(
+      'global-clip',
+      count,
+      `Processing CLIP embeddings for ${count} photos`
+    )
 
-    return { photosToProcess: count }
+    // Fire and forget with tracking
+    AdminHealthService.processClipEmbeddingsBatch(photos, taskId).catch((err) => {
+      HealthRepairTracker.fail(taskId, err?.message || 'CLIP processing failed')
+    })
+
+    return { photosToProcess: count, taskId }
   }
 
   /**
    * Internal: process CLIP embeddings in batches (fire-and-forget)
    */
-  private static async processClipEmbeddingsBatch(photos: Photo[]) {
+  private static async processClipEmbeddingsBatch(photos: Photo[], taskId?: string) {
     const batchSize = 12
     const photoImageService = PhotoImageService.getInstance()
     const modelsService = new ModelsService()
+    let processed = 0
 
     for (let i = 0; i < photos.length; i += batchSize) {
       const batch = photos.slice(i, i + batchSize)
 
       try {
         const validImages = await photoImageService.getValidPhotosWithImages(batch, false)
-        if (validImages.length === 0) continue
+        if (validImages.length === 0) {
+          processed += batch.length
+          if (taskId) {
+            HealthRepairTracker.progress(
+              taskId,
+              processed,
+              `Processed ${processed}/${photos.length} photos`
+            )
+          }
+          continue
+        }
 
         const payload = validImages.map(({ photo, base64 }) => ({ id: photo.id, base64 }))
         const { embeddings } = await modelsService.getEmbeddingsImages(payload)
@@ -334,8 +380,24 @@ export default class AdminHealthService {
         // Continue with next batch on error
       }
 
+      processed += batch.length
+      if (taskId) {
+        HealthRepairTracker.progress(
+          taskId,
+          processed,
+          `Processed ${processed}/${photos.length} photos`
+        )
+      }
+
       // Small delay between batches
       await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+
+    if (taskId) {
+      HealthRepairTracker.complete(
+        taskId,
+        `CLIP embeddings completed: ${processed} photos processed`
+      )
     }
   }
 }
