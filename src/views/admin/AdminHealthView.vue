@@ -784,7 +784,7 @@ async function fetchActiveTasks() {
 }
 
 onMounted(() => {
-  socket = io(import.meta.env.VITE_API_WS_URL);
+  socket = io(import.meta.env.VITE_ANALYZER_WS_URL);
   socket.emit("admin:join-health");
   socket.on("health:task:update", handleTaskUpdate);
 
