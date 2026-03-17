@@ -132,7 +132,8 @@ export default class AdminHealthService {
   }
 
   /**
-   * Full health check for a single user's photos
+   * Full health check for a single user's photos.
+   * Processes in batches to avoid OOM on users with 3k+ photos.
    */
   static async userHealthCheck(userId: number) {
     const photoIds = await Photo.query()
@@ -144,17 +145,25 @@ export default class AdminHealthService {
       return { userId, totalPhotos: 0, healthyPhotos: 0, unhealthyPhotos: 0, photos: [] }
     }
 
-    const reports = await HealthPhotoService.healthForPhotoIdsBatch(photoIds)
+    const batchSize = 500
+    const photos: any[] = []
 
-    const photos = reports.map((r: any) => ({
-      photoId: r.photoId,
-      ok: r.ok,
-      totalChecks: r.checks.length,
-      passedChecks: r.checks.filter((c: any) => c.ok).length,
-      failedChecks: r.checks.filter((c: any) => !c.ok).length,
-      missing: r.missing,
-      checks: r.checks,
-    }))
+    for (let i = 0; i < photoIds.length; i += batchSize) {
+      const batchIds = photoIds.slice(i, i + batchSize)
+      const reports = await HealthPhotoService.healthForPhotoIdsBatch(batchIds)
+
+      for (const r of reports) {
+        photos.push({
+          photoId: r.photoId,
+          ok: r.ok,
+          totalChecks: r.checks.length,
+          passedChecks: r.checks.filter((c: any) => c.ok).length,
+          failedChecks: r.checks.filter((c: any) => !c.ok).length,
+          missing: r.missing,
+          checks: r.checks,
+        })
+      }
+    }
 
     const healthyPhotos = photos.filter((p: any) => p.ok).length
 
@@ -183,8 +192,16 @@ export default class AdminHealthService {
       return { processId: '', photosCount: 0, error: 'User has no photos' }
     }
 
-    const reports = await HealthPhotoService.healthForPhotoIdsBatch(photoIds)
-    const unhealthyIds = reports.filter((r: any) => !r.ok).map((r: any) => r.photoId)
+    // Batch health check to avoid OOM on large users
+    const batchSize = 500
+    const unhealthyIds: number[] = []
+    for (let i = 0; i < photoIds.length; i += batchSize) {
+      const batchIds = photoIds.slice(i, i + batchSize)
+      const reports = await HealthPhotoService.healthForPhotoIdsBatch(batchIds)
+      for (const r of reports) {
+        if (!r.ok) unhealthyIds.push(r.photoId)
+      }
+    }
 
     if (unhealthyIds.length === 0) {
       return { processId: '', photosCount: 0, error: 'All photos are healthy — nothing to retry' }
@@ -198,7 +215,7 @@ export default class AdminHealthService {
       .orderBy('createdAt', 'desc')
       .first()
 
-    const packageId = lastProcess?.packageId ?? 'process'
+    const packageId = 'process'
 
     // Load the actual Photo models for unhealthy photos
     const photos = await Photo.query().whereIn('id', unhealthyIds)

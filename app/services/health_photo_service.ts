@@ -124,10 +124,16 @@ export default class HealthPhotoService {
   private static async loadPhotosWithRelationsBatch(photoIds: number[]) {
     if (photoIds.length === 0) return []
 
-    // 1) Cargar fotos base
-    const photos = await Photo.query()
+    // 1) Cargar fotos base — solo booleans de existencia, no los vectores/JSON completos
+    const photos = await db
+      .from('photos')
+      .select(
+        'id',
+        db.raw('(embedding IS NOT NULL) as has_embedding'),
+        'descriptions',
+        db.raw('(color_histogram IS NOT NULL) as has_color_histogram')
+      )
       .whereIn('id', photoIds)
-      .select('id', 'embedding', 'descriptions', 'color_histogram')
       .orderBy('id', 'asc')
 
     // 2) Batch queries para relaciones
@@ -139,14 +145,14 @@ export default class HealthPhotoService {
           'tags_photos.photo_id',
           'tags_photos.category',
           'tags_photos.tag_id',
-          'tags.embedding as tag_embedding'
+          db.raw('(tags.embedding IS NOT NULL) as tag_embedding')
         )
         .leftJoin('tags', 'tags.id', 'tags_photos.tag_id')
         .whereIn('tags_photos.photo_id', photoIds),
 
       db
         .from('descriptions_chunks')
-        .select('id', 'photo_id', 'embedding')
+        .select('id', 'photo_id', db.raw('(embedding IS NOT NULL) as has_embedding'))
         .whereIn('photo_id', photoIds),
     ])
 
@@ -165,13 +171,16 @@ export default class HealthPhotoService {
     })
 
     // 4) Retornar datos estructurados
-    return photos.map((photo) => ({
+    return photos.map((photo: any) => ({
       id: photo.id,
-      embedding: photo.embedding,
+      embedding: photo.has_embedding,
       descriptions: photo.descriptions,
-      colorHistogram: photo.colorHistogram,
+      colorHistogram: photo.has_color_histogram,
       tags: tagsByPhoto.get(photo.id) || [],
-      chunks: chunksByPhoto.get(photo.id) || [],
+      chunks: (chunksByPhoto.get(photo.id) || []).map((c: any) => ({
+        id: c.id,
+        embedding: c.has_embedding,
+      })),
     }))
   }
 
