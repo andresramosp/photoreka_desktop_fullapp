@@ -79,13 +79,19 @@
           <n-button
             size="small"
             type="warning"
-            :loading="globalClipLoading"
+            :loading="globalClipLoading || isClipRunning"
             :disabled="
-              globalClipLoading || (overview?.missingEmbeddings ?? 0) === 0
+              globalClipLoading ||
+              isClipRunning ||
+              (overview?.missingEmbeddings ?? 0) === 0
             "
-            @click="confirmGlobalClip"
+            @click="
+              isClipRunning
+                ? (progressModalVisible = true)
+                : confirmGlobalClip()
+            "
           >
-            Repair CLIP
+            {{ isClipRunning ? "Running…" : "Repair CLIP" }}
           </n-button>
         </div>
       </div>
@@ -119,13 +125,19 @@
           <n-button
             size="small"
             type="warning"
-            :loading="globalEmbLoading"
+            :loading="globalEmbLoading || isEmbeddingsRunning"
             :disabled="
-              globalEmbLoading || (overview?.tagsWithoutEmbedding ?? 0) === 0
+              globalEmbLoading ||
+              isEmbeddingsRunning ||
+              (overview?.tagsWithoutEmbedding ?? 0) === 0
             "
-            @click="confirmGlobalTagEmbeddings"
+            @click="
+              isEmbeddingsRunning
+                ? (progressModalVisible = true)
+                : confirmGlobalTagEmbeddings()
+            "
           >
-            Repair Tags
+            {{ isEmbeddingsRunning ? "Running…" : "Repair Tags" }}
           </n-button>
         </div>
       </div>
@@ -159,13 +171,19 @@
           <n-button
             size="small"
             type="warning"
-            :loading="globalEmbLoading"
+            :loading="globalEmbLoading || isEmbeddingsRunning"
             :disabled="
-              globalEmbLoading || (overview?.chunksWithoutEmbedding ?? 0) === 0
+              globalEmbLoading ||
+              isEmbeddingsRunning ||
+              (overview?.chunksWithoutEmbedding ?? 0) === 0
             "
-            @click="confirmGlobalChunkEmbeddings"
+            @click="
+              isEmbeddingsRunning
+                ? (progressModalVisible = true)
+                : confirmGlobalChunkEmbeddings()
+            "
           >
-            Repair Chunks
+            {{ isEmbeddingsRunning ? "Running…" : "Repair Chunks" }}
           </n-button>
         </div>
       </div>
@@ -187,6 +205,17 @@
           </template>
         </n-input>
         <div class="filters-spacer" />
+        <n-button
+          v-if="hasRunningTasks"
+          size="small"
+          type="info"
+          quaternary
+          @click="progressModalVisible = true"
+        >
+          <template #icon><n-spin :size="14" /></template>
+          {{ runningTaskCount }} task{{ runningTaskCount !== 1 ? "s" : "" }}
+          running
+        </n-button>
         <n-button
           size="small"
           quaternary
@@ -296,11 +325,15 @@
             <n-button
               size="small"
               type="primary"
-              :loading="retryLoading"
-              :disabled="retryLoading"
-              @click="confirmUserRetry"
+              :loading="retryLoading || isUserRetryRunning"
+              :disabled="retryLoading || isUserRetryRunning"
+              @click="
+                isUserRetryRunning
+                  ? (progressModalVisible = true)
+                  : confirmUserRetry()
+              "
             >
-              Repair All Unhealthy
+              {{ isUserRetryRunning ? "Repairing…" : "Repair All Unhealthy" }}
             </n-button>
           </div>
         </div>
@@ -316,11 +349,17 @@
       :error="healthError"
       @retry="runUserHealthCheck"
     />
+
+    <!-- Repair Progress Modal -->
+    <RepairProgressModal
+      v-model:show="progressModalVisible"
+      :tasks="taskList"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, h } from "vue";
+import { ref, computed, onMounted, onUnmounted, h } from "vue";
 import {
   NButton,
   NTag,
@@ -340,8 +379,11 @@ import {
   PersonOutline as PersonIcon,
 } from "@vicons/ionicons5";
 import { api, api_analyzer } from "../../utils/axios";
+import { io, type Socket } from "socket.io-client";
 import HealthReportModal from "../../components/admin/HealthReportModal.vue";
 import type { HealthReport } from "../../components/admin/HealthReportModal.vue";
+import RepairProgressModal from "../../components/admin/RepairProgressModal.vue";
+import type { RepairTaskInfo } from "../../components/admin/RepairProgressModal.vue";
 
 interface UserHealthRow {
   userId: number;
@@ -390,6 +432,32 @@ const retryLoading = ref(false);
 // Global embeddings state
 const globalEmbLoading = ref(false);
 const globalClipLoading = ref(false);
+
+// Socket and repair task tracking
+let socket: Socket | null = null;
+const activeTasks = ref<Record<string, RepairTaskInfo>>({});
+const progressModalVisible = ref(false);
+
+const taskList = computed(() => Object.values(activeTasks.value));
+const hasRunningTasks = computed(() =>
+  taskList.value.some((t) => t.status === "running"),
+);
+const runningTaskCount = computed(
+  () => taskList.value.filter((t) => t.status === "running").length,
+);
+const isClipRunning = computed(() =>
+  taskList.value.some(
+    (t) => t.type === "global-clip" && t.status === "running",
+  ),
+);
+const isEmbeddingsRunning = computed(() =>
+  taskList.value.some(
+    (t) => t.type === "global-embeddings" && t.status === "running",
+  ),
+);
+const isUserRetryRunning = computed(() =>
+  taskList.value.some((t) => t.type === "user-retry" && t.status === "running"),
+);
 
 function scoreClass(score: number | undefined) {
   if (score === undefined) return "";
@@ -566,7 +634,7 @@ const columns = computed<DataTableColumn<UserHealthRow>[]>(() => [
 async function fetchOverview() {
   overviewLoading.value = true;
   try {
-    const { data } = await api.get("/api/admin/health/overview");
+    const { data } = await api_analyzer.get("/api/admin/health/overview");
     overview.value = data;
     allUsers.value = data.users;
   } catch {
@@ -583,7 +651,7 @@ async function runUserHealthCheck() {
   healthCheckLoading.value = true;
   healthModalVisible.value = true;
   try {
-    const { data } = await api.post(
+    const { data } = await api_analyzer.post(
       `/api/admin/health/users/${selectedUser.value.userId}/check`,
     );
     healthReport.value = data.report;
@@ -616,6 +684,7 @@ async function launchUserRetry() {
     message.success(
       `Retry launched: ${data.photosCount} photos in Process #${data.processId}`,
     );
+    progressModalVisible.value = true;
   } catch (err: any) {
     const msg = err?.response?.data?.message || "Failed to launch repair";
     message.error(msg);
@@ -625,52 +694,37 @@ async function launchUserRetry() {
 }
 
 function confirmGlobalTagEmbeddings() {
-  const d = dialog.warning({
+  dialog.warning({
     title: "Repair Tag Embeddings",
     content: `This will generate text embeddings for all ${overview.value?.tagsWithoutEmbedding ?? 0} tags that are missing them. This also processes chunk embeddings.`,
     positiveText: "Run",
     negativeText: "Cancel",
     onPositiveClick: () => {
       runGlobalEmbeddings();
-      d.content =
-        "Task launched. Tag and chunk embeddings will be generated in the background.";
-      d.positiveText = undefined;
-      d.negativeText = "OK";
-      return false;
     },
   });
 }
 
 function confirmGlobalChunkEmbeddings() {
-  const d = dialog.warning({
+  dialog.warning({
     title: "Repair Chunk Embeddings",
     content: `This will generate text embeddings for all ${overview.value?.chunksWithoutEmbedding ?? 0} description chunks that are missing them. This also processes tag embeddings.`,
     positiveText: "Run",
     negativeText: "Cancel",
     onPositiveClick: () => {
       runGlobalEmbeddings();
-      d.content =
-        "Task launched. Chunk and tag embeddings will be generated in the background.";
-      d.positiveText = undefined;
-      d.negativeText = "OK";
-      return false;
     },
   });
 }
 
 function confirmGlobalClip() {
-  const d = dialog.warning({
+  dialog.warning({
     title: "Repair CLIP Embeddings",
     content: `This will download images and generate CLIP visual embeddings for all ${overview.value?.missingEmbeddings ?? 0} photos missing them. This is resource-intensive and may take a while.`,
     positiveText: "Run",
     negativeText: "Cancel",
     onPositiveClick: () => {
       runGlobalClipEmbeddings();
-      d.content =
-        "Task launched. CLIP embeddings will be generated in the background. This may take a while.";
-      d.positiveText = undefined;
-      d.negativeText = "OK";
-      return false;
     },
   });
 }
@@ -684,7 +738,7 @@ async function runGlobalEmbeddings() {
     message.success(
       `Global embeddings task launched (${data.tagsToProcess} tags, ${data.chunksToProcess} chunks remaining)`,
     );
-    setTimeout(() => fetchOverview(), 3000);
+    progressModalVisible.value = true;
   } catch {
     message.error("Failed to launch global embeddings task");
   } finally {
@@ -701,7 +755,7 @@ async function runGlobalClipEmbeddings() {
     message.success(
       `CLIP embeddings task launched (${data.photosToProcess} photos to process)`,
     );
-    setTimeout(() => fetchOverview(), 5000);
+    progressModalVisible.value = true;
   } catch {
     message.error("Failed to launch CLIP embeddings task");
   } finally {
@@ -709,8 +763,38 @@ async function runGlobalClipEmbeddings() {
   }
 }
 
+function handleTaskUpdate(data: RepairTaskInfo) {
+  activeTasks.value = { ...activeTasks.value, [data.taskId]: data };
+  if (data.status === "completed") {
+    setTimeout(() => fetchOverview(), 2000);
+  }
+}
+
+async function fetchActiveTasks() {
+  try {
+    const { data } = await api_analyzer.get("/api/admin/health/tasks");
+    const tasks: Record<string, RepairTaskInfo> = {};
+    for (const task of data.tasks) {
+      tasks[task.taskId] = task;
+    }
+    activeTasks.value = tasks;
+  } catch {
+    // Ignore
+  }
+}
+
 onMounted(() => {
+  socket = io(import.meta.env.VITE_API_WS_URL);
+  socket.emit("admin:join-health");
+  socket.on("health:task:update", handleTaskUpdate);
+
+  fetchActiveTasks();
   fetchOverview();
+});
+
+onUnmounted(() => {
+  socket?.disconnect();
+  socket = null;
 });
 </script>
 
