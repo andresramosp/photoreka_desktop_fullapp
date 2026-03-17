@@ -161,7 +161,9 @@ export default class AnalyzerProcess extends BaseModel {
   ) {
     this.mode = mode
     this.packageId =
-      this.mode === 'retry_process' || this.mode === 'admin_retry' ? this.packageId : packageId
+      (this.mode === 'retry_process' || this.mode === 'admin_retry') && this.packageId
+        ? this.packageId
+        : packageId
 
     // Cargar el perfil del usuario si está disponible
     if (userId) {
