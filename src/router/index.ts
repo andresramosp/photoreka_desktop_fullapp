@@ -453,10 +453,11 @@ router.beforeEach(async (to, from, next) => {
   }
 
   // Manejar demo login silenciosamente
-  if (to.path === "/demo") {
+  if (to.path === "/demo" || to.path.startsWith("/demo/")) {
     const result = await userStore.demoLogin();
     if (result.success) {
-      next("/workspace");
+      const subPath = to.path.slice("/demo".length);
+      next(subPath || "/workspace");
     } else {
       next("/auth");
     }
