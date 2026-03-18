@@ -2173,10 +2173,8 @@ const cleanup = () => {
 
 // Lifecycle
 onMounted(async () => {
-  await nextTick();
-  await initPixi();
-
-  // Listen for custom event to fly to a specific photo (from photo selector)
+  // Register event listener BEFORE any async work (initPixi, loadAllPhotos, etc.)
+  // so that events dispatched shortly after router.push are never lost.
   const handleFlyToPhotoEvent = (event) => {
     const { photoId } = event.detail;
     console.log("📍 Received 2d:flyToPhoto event", photoId);
@@ -2223,6 +2221,9 @@ onMounted(async () => {
   window._2dAtlasEventCleanup = () => {
     window.removeEventListener("2d:flyToPhoto", handleFlyToPhotoEvent);
   };
+
+  await nextTick();
+  await initPixi();
 
   // Start fetching catalog photos in background so originalUrl becomes available.
   // If it fails, we still render thumbnails.
