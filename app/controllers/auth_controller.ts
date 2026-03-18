@@ -36,6 +36,26 @@ export default class AuthController {
   }
 
   /**
+   * Generate a unique username from an email address
+   */
+  private async generateUsername(email: string): Promise<string> {
+    let base = email.split('@')[0]
+    base = base.replace(/[^a-zA-Z0-9._-]/g, '').toLowerCase()
+    if (base.length < 3) base = base + '_user'
+    base = base.substring(0, 50)
+
+    let username = base
+    let suffix = 2
+    while (true) {
+      const existing = await User.query().where('username', username).first()
+      if (!existing) break
+      username = `${base.substring(0, 46)}${suffix}`
+      suffix++
+    }
+    return username
+  }
+
+  /**
    * Get the frontend URL from environment or default
    */
   private getFrontendUrl(): string {
@@ -90,9 +110,13 @@ export default class AuthController {
       // Generate email confirmation token
       const emailConfirmationToken = this.generateToken()
 
+      // Auto-generate username from email
+      const username = await this.generateUsername(payload.email)
+
       const user = await User.create({
         name: payload.name,
         email: payload.email,
+        username,
         password: payload.password,
         isActive: true,
         usage,
@@ -358,6 +382,7 @@ export default class AuthController {
         user: {
           id: user.id,
           name: user.name,
+          username: user.username,
           email: user.email,
           role: user.role,
           isActive: user.isActive,
@@ -397,6 +422,20 @@ export default class AuthController {
         }
       }
 
+      // Check if username is being changed and if it's already taken
+      if (payload.username && payload.username !== user.username) {
+        const existingUser = await User.query()
+          .where('username', payload.username.toLowerCase())
+          .whereNot('id', user.id)
+          .first()
+        if (existingUser) {
+          return response.badRequest({
+            message: 'Username already in use',
+          })
+        }
+        payload.username = payload.username.toLowerCase()
+      }
+
       // Update the user
       const updatedUser = await User.findOrFail(user.id)
       updatedUser.merge(payload)
@@ -407,6 +446,7 @@ export default class AuthController {
         user: {
           id: updatedUser.id,
           name: updatedUser.name,
+          username: updatedUser.username,
           preferredSource: updatedUser.preferredSource,
           email: updatedUser.email,
           isActive: updatedUser.isActive,
@@ -837,9 +877,13 @@ export default class AuthController {
         const tier = invite ? invite.tier : UsageTier.BASIC
         const usage = getDefaultUsageByTier(tier)
 
+        // Auto-generate username from email
+        const username = await this.generateUsername(googleUser.email)
+
         user = await User.create({
           name: googleUser.name,
           email: googleUser.email,
+          username,
           googleId: googleUser.googleId,
           provider: 'google',
           avatar: googleUser.avatar?.substring(0, 255) ?? null,

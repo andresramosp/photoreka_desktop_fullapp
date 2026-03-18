@@ -73,6 +73,7 @@ const ThreeDViewController = () => import('#controllers/3dview_controller')
 const PortfolioReviewController = () => import('#controllers/portfolio_review_controller')
 const ChatController = () => import('#controllers/chat_controller')
 const CanvasController = () => import('#controllers/canvas_controller')
+const ShareController = () => import('#controllers/share_controller')
 
 // Landing page endpoints (no auth required)
 router.post('/api/landing/waiting-list', [LandingController, 'waitingList'])
@@ -80,8 +81,11 @@ router.post('/api/landing/waiting-list', [LandingController, 'waitingList'])
 // 3D Visualization public endpoint (no auth required)
 router.post('/api/3d/catalog/:id', [ThreeDViewController, 'get3DPhotosByIdOrUsername'])
 
-// Series public endpoint (no auth required)
+// Series public endpoint (no auth required) — LEGACY, kept for backward compatibility
 router.get('/api/series/by-name/:name', [SeriesController, 'showByName'])
+
+// Unified sharing - public resolve endpoint (no auth required)
+router.get('/api/shared/:username/:resourceType/:slug?', [ShareController, 'resolve'])
 
 // Portfolio Review public endpoint (no auth required)
 router.get('/api/portfolio-review/:reviewType/user/:userId', [
@@ -153,6 +157,11 @@ router
     // 3D Visualization endpoints
     router.post('/api/3d/photos', [ThreeDViewController, 'get3DPhotos'])
     router.get('/api/3d/categories', [ThreeDViewController, 'getAvailableCategories'])
+
+    // Sharing endpoints
+    router.get('/api/share/:resourceType/:resourceId?', [ShareController, 'show'])
+    router.put('/api/share/:resourceType/:resourceId?', [ShareController, 'toggle'])
+    router.patch('/api/share/:resourceType/:resourceId?/slug', [ShareController, 'updateSlug'])
 
     // Portfolio Review endpoints
     // router.get('/api/portfolio-review/:reviewType', [PortfolioReviewController, 'getPatterns'])
