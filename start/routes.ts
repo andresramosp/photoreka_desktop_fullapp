@@ -122,6 +122,7 @@ router
     router.post('/api/search/tags/direct', [SearchController, 'searchByTagsDirect'])
     router.post('/api/search/byPhotos', [SearchController, 'searchByPhotos'])
     router.get('/api/search/refs/:searchId', [SearchController, 'getSearchRefs'])
+    router.post('/api/search/semantic/sync', [SearchController, 'searchSemanticSync'])
     router.get('/api/warmUp/:endpointType', [WarmupController, 'warmUp'])
 
     router.get('/api/tags/search', [TagsController, 'search'])
@@ -268,7 +269,6 @@ router
 
     // Semantic search endpoints - AI-powered search
     router.post('/api/search/semantic/stream', [SearchController, 'searchSemanticStream'])
-    router.post('/api/search/semantic/sync', [SearchController, 'searchSemanticSync'])
     router.get('/api/catalog/photoInsight/:id?', [CatalogController, 'photoInsight'])
     router.post('/api/catalog/photoInsightSpecific/:id?', [
       CatalogController,
