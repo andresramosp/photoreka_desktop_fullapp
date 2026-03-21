@@ -39,88 +39,12 @@
         v-if="isFiltersExpanded"
         class="filter-controls-tab-container filters-expanded-content"
       >
-        <!-- Visual Aspects sub-section -->
-        <div class="filter-subsection-label">Visual aspects</div>
-        <div class="filter-controls-row">
-          <div
-            v-for="aspectGroup in visualAspectsOptions"
-            :key="aspectGroup.key"
-            class="filter-controls-item"
-          >
-            <n-select
-              v-model:value="selectedFilters[aspectGroup.key]"
-              v-model:show="visualAspectsDropdownShow[aspectGroup.key]"
-              multiple
-              :placeholder="`${
-                aspectGroup.label.charAt(0).toUpperCase() +
-                aspectGroup.label.slice(1)
-              }`"
-              :options="aspectGroup.children"
-              :max-tag-count="1"
-              clearable
-              :filterable="false"
-              class="filter-controls-select"
-              size="small"
-              @update:value="() => handleVisualAspectChange(aspectGroup.key)"
-            />
-          </div>
-        </div>
-
-        <!-- Visual Scores sub-section -->
-        <div class="score-filters-section">
-          <div class="score-filters-header">
-            <div style="display: flex; align-items: center; gap: 6px">
-              <div class="filter-subsection-label" style="margin-bottom: 0">
-                Visual scores
-              </div>
-              <n-tooltip trigger="hover" placement="top">
-                <template #trigger>
-                  <n-icon
-                    size="14"
-                    style="
-                      color: var(--text-secondary);
-                      cursor: help;
-                      opacity: 0.7;
-                    "
-                  >
-                    <Info16Regular />
-                  </n-icon>
-                </template>
-                Filter photos by minimum score threshold (1–10)
-              </n-tooltip>
-            </div>
-            <n-button
-              v-if="hasActiveScoreFilters"
-              size="tiny"
-              quaternary
-              @click="clearArtisticScores"
-              style="font-size: 11px; color: var(--text-secondary)"
-              >Clear</n-button
-            >
-          </div>
-          <div class="score-filters-grid">
-            <div
-              v-for="(group, groupKey) in artisticScores"
-              :key="groupKey"
-              class="score-group-col"
-            >
-              <div class="score-group-col-header">{{ group.label }}</div>
-              <div
-                v-for="criterion in group.criteria"
-                :key="criterion.value"
-                class="score-slider-item"
-              >
-                <ScoreOperatorSlider
-                  :label="criterion.label"
-                  :model-value="artisticScoreFilters[criterion.value] ?? null"
-                  @update:model-value="
-                    (v) => handleArtisticScoreChange(criterion.value, v)
-                  "
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+        <VisualFiltersPanel
+          :visual-aspects="selectedFilters"
+          :score-filters="artisticScoreFilters"
+          @update:visual-aspects="handleVisualAspectsPanelChange"
+          @update:score-filters="handleScoreFiltersPanelChange"
+        />
       </div>
     </div>
 
@@ -547,7 +471,7 @@ import { useIsMobile } from "@/composables/useIsMobile.js";
 import { useSearchTags } from "@/composables/useSearchTags.js";
 import CustomArtisticWeights from "./CustomArtisticWeights.vue";
 import TimeRangeFilter from "./TimeRangeFilter.vue";
-import ScoreOperatorSlider from "@/components/controls/ScoreOperatorSlider.vue";
+import VisualFiltersPanel from "@/components/photos-grid/VisualFiltersPanel.vue";
 import { api } from "@/utils/axios";
 import {
   NButton,
@@ -686,7 +610,6 @@ const apertureOptions = [
 
 // Visual Aspects Filters
 const selectedFilters = ref({});
-const visualAspectsDropdownShow = reactive({});
 const isFiltersExpanded = ref(false); // Will be set based on mobile on mount
 
 // Date Range Filter
@@ -821,10 +744,12 @@ const hasActiveFilters = computed(() => {
 
 // Computed for total count of active filters
 const totalActiveFilters = computed(() => {
-  return Object.values(selectedFilters.value).reduce(
+  const aspectsCount = Object.values(selectedFilters.value).reduce(
     (total, filters) => total + filters.length,
     0,
   );
+  const scoreFiltersCount = Object.keys(artisticScoreFilters.value).length;
+  return aspectsCount + scoreFiltersCount;
 });
 
 // Computed for checking if sorting is active
@@ -937,9 +862,14 @@ const handleFilterChange = () => {
   emit("filters-change", selectedFilters.value);
 };
 
-const handleVisualAspectChange = (key) => {
-  if (isMobile.value) visualAspectsDropdownShow[key] = false;
+const handleVisualAspectsPanelChange = (newFilters) => {
+  selectedFilters.value = newFilters;
   handleFilterChange();
+};
+
+const handleScoreFiltersPanelChange = (newScoreFilters) => {
+  artisticScoreFilters.value = newScoreFilters;
+  emit("artistic-scores-change", { ...newScoreFilters });
 };
 
 const handleCriteriaChange = () => {
@@ -1393,78 +1323,6 @@ watch(
   flex-direction: column;
   gap: 10px;
   padding: 8px 12px 12px;
-}
-
-.filter-subsection-label {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-secondary);
-  opacity: 0.6;
-  margin-bottom: 2px;
-}
-
-.score-filters-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border-color);
-}
-
-.score-filters-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-/* Desktop: all 8 sliders in a single inline row */
-.score-filters-grid {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 6px 12px;
-  align-items: start;
-}
-
-.score-group-col {
-  display: contents; /* flatten children into the grid */
-}
-
-.score-group-col-header {
-  display: none; /* hidden on desktop */
-}
-
-/* Mobile: 2 columns by group */
-@media (max-width: 767px) {
-  .score-filters-grid {
-    grid-template-columns: 1fr 1fr;
-    gap: 12px 20px;
-  }
-
-  .score-group-col {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .score-group-col-header {
-    display: block;
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--text-secondary);
-    opacity: 0.7;
-    padding-bottom: 4px;
-    border-bottom: 1px solid var(--border-color);
-  }
-}
-
-.score-slider-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 
 .score-slider-header {

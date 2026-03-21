@@ -6,10 +6,8 @@
       :is-toolbar-collapsed="isToolbarCollapsed"
       :included-tag-suggestions-formatted="includedTagSuggestionsFormatted"
       :excluded-tag-suggestions-formatted="excludedTagSuggestionsFormatted"
-      :show-more-filters="showMoreFilters"
       @search-included-tags="onSearchInputIncluded"
       @search-excluded-tags="onSearchInputExcluded"
-      @update:show-more-filters="(v) => (showMoreFilters = v)"
       @search="performSearch"
       @clear="clearSearch"
     />
@@ -341,8 +339,7 @@ const withInsights = computed(
   () => searchStore.currentSearchState.withInsights || false,
 );
 
-// Filters visibility state
-const showMoreFilters = ref(false);
+// Filters visibility state removed - now local to SearchPanelDesktopLayout
 
 function togglePhotoSelection(id) {
   localTogglePhotoSelection(id);
@@ -683,9 +680,24 @@ watch(withInsights, (newValue) => {
   }
 });
 
+// Debounced re-search when visual filters change (only if a search was already performed)
+let filterDebounceTimer = null;
+watch(
+  () => [searchStore.selectedVisualAspects, searchStore.selectedArtisticScores],
+  () => {
+    if (!searchStore.hasSearched) return;
+    if (filterDebounceTimer) clearTimeout(filterDebounceTimer);
+    filterDebounceTimer = setTimeout(() => {
+      performSearch();
+    }, 500);
+  },
+  { deep: true },
+);
+
 onUnmounted(() => {
   // Scroll listener ya no es necesario
   stopReferencesPolling();
+  if (filterDebounceTimer) clearTimeout(filterDebounceTimer);
 });
 
 // Carousel de ejemplos dinámico usando composable

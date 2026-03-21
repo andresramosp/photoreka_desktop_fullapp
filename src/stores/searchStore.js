@@ -157,8 +157,8 @@ export const useSearchStore = defineStore("search", () => {
   // Visual aspects filter state
   const selectedVisualAspects = ref([]);
 
-  // Artistic scores filter state
-  const selectedArtisticScores = ref([]);
+  // Artistic scores filter state: { [criterionKey]: { value: number, operator: '>=' | '<=' } }
+  const selectedArtisticScores = ref({});
 
   // Helper function to create empty mode state with query fields
   const createModeState = () => ({
@@ -327,7 +327,7 @@ export const useSearchStore = defineStore("search", () => {
   }
 
   function clearArtisticScores() {
-    selectedArtisticScores.value = [];
+    selectedArtisticScores.value = {};
   }
 
   function clearCurrentSearch() {
@@ -361,7 +361,7 @@ export const useSearchStore = defineStore("search", () => {
     selectedVisualAspects.value = [];
 
     // Limpiar artistic scores
-    selectedArtisticScores.value = [];
+    selectedArtisticScores.value = {};
 
     // Limpiar resultados y estado de paginación solo del modo actual
     modeState.iterationsRecord = {};
@@ -415,7 +415,7 @@ export const useSearchStore = defineStore("search", () => {
     selectedVisualAspects.value = [];
 
     // Limpiar artistic scores
-    selectedArtisticScores.value = [];
+    selectedArtisticScores.value = {};
   }
 
   function setSearching(value) {

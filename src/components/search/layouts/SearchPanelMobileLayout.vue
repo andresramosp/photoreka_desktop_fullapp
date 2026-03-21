@@ -265,63 +265,14 @@
           </div>
 
           <div class="filter-section">
-            <div class="filter-section-label">Visual Aspects</div>
-            <n-tree-select
-              v-model:value="selectedVisualAspects"
-              v-model:show="visualAspectsDropdownShow"
-              multiple
-              clearable
-              placeholder="Any aspect"
-              :options="treeSelectOptions"
-              :max-tag-count="2"
-              class="mobile-filter-select"
+            <VisualFiltersPanel
+              :visual-aspects="localVisualFilters"
+              :score-filters="selectedArtisticScores"
               :disabled="isSearching"
-              check-strategy="child"
-              :show-path="false"
-              expand-on-click
-              :filterable="false"
-              @update:value="
-                () => {
-                  visualAspectsDropdownShow.value = false;
-                }
-              "
-            >
-              <template #empty>
-                <div style="padding: 8px; color: #888; font-size: 12px">
-                  No visual aspects found
-                </div>
-              </template>
-            </n-tree-select>
-          </div>
-
-          <div class="filter-section">
-            <div class="filter-section-label">Visual Scores</div>
-            <n-tree-select
-              v-model:value="selectedArtisticScores"
-              v-model:show="artisticScoresDropdownShow"
-              multiple
-              clearable
-              placeholder="Any score"
-              :options="artisticScoresOptions"
-              :max-tag-count="2"
-              class="mobile-filter-select"
-              :disabled="isSearching"
-              check-strategy="child"
-              :show-path="false"
-              expand-on-click
-              :filterable="false"
-              @update:value="
-                () => {
-                  artisticScoresDropdownShow.value = false;
-                }
-              "
-            >
-              <template #empty>
-                <div style="padding: 8px; color: #888; font-size: 12px">
-                  No artistic scores found
-                </div>
-              </template>
-            </n-tree-select>
+              :show-section-labels="false"
+              @update:visual-aspects="handleVisualFiltersChange"
+              @update:score-filters="handleScoreFiltersChange"
+            />
           </div>
         </div>
 
@@ -362,7 +313,6 @@ import {
   NDrawer,
   NDrawerContent,
   NDivider,
-  NTreeSelect,
 } from "naive-ui";
 import {
   SearchOutline,
@@ -375,11 +325,9 @@ import {
   RefreshOutline,
   CheckmarkOutline,
 } from "@vicons/ionicons5";
-import {
-  useSearchStore,
-  createArtisticScoresTreeOptions,
-} from "@/stores/searchStore";
+import { useSearchStore, visualAspectsOptions } from "@/stores/searchStore";
 import { useCollectionsStore } from "@/stores/collections";
+import VisualFiltersPanel from "@/components/photos-grid/VisualFiltersPanel.vue";
 
 defineOptions({ name: "SearchPanelMobileLayout" });
 
@@ -442,6 +390,22 @@ const selectedArtisticScores = computed({
   set: (value) => searchStore.setSelectedArtisticScores(value),
 });
 
+// Local visual filters state (keyed by group)
+const localVisualFilters = ref({});
+visualAspectsOptions.forEach((group) => {
+  localVisualFilters.value[group.key] = [];
+});
+
+function handleVisualFiltersChange(newFilters) {
+  localVisualFilters.value = newFilters;
+  const flatFilters = Object.values(newFilters).flat();
+  searchStore.setSelectedVisualAspects(flatFilters);
+}
+
+function handleScoreFiltersChange(newScoreFilters) {
+  searchStore.setSelectedArtisticScores(newScoreFilters);
+}
+
 // Filter options from stores
 const collectionsOptions = computed(() => {
   return collectionsStore.allCollections.map((collection) => ({
@@ -453,23 +417,6 @@ const collectionsOptions = computed(() => {
 });
 
 const collectionsLoading = computed(() => collectionsStore.isLoading);
-
-const treeSelectOptions = computed(() => {
-  return searchStore.visualAspectsOptions.map((group) => ({
-    label: group.label,
-    key: group.key,
-    disabled: false,
-    checkable: false,
-    children: group.children.map((child) => ({
-      label: child.label,
-      key: child.value,
-      disabled: false,
-      checkable: true,
-    })),
-  }));
-});
-
-const artisticScoresOptions = computed(() => createArtisticScoresTreeOptions());
 
 // Events - only actions and tag search go to parent
 const emit = defineEmits([
@@ -488,8 +435,6 @@ const showFiltersPanel = ref(false);
 const includedTagsDropdownShow = ref(false);
 const excludedTagsDropdownShow = ref(false);
 const collectionsDropdownShow = ref(false);
-const visualAspectsDropdownShow = ref(false);
-const artisticScoresDropdownShow = ref(false);
 
 // Methods to update store directly
 function updateSearchType(type) {
@@ -514,7 +459,7 @@ const totalActiveFilters = computed(() => {
   // Count active filters
   count += selectedCollections.value.length;
   count += selectedVisualAspects.value.length;
-  count += selectedArtisticScores.value.length;
+  count += Object.keys(searchStore.selectedArtisticScores).length;
 
   // Count excluded tags for tags mode
   if (activeSearchType.value === "tags" && excludedTags.value.length > 0) {
@@ -531,7 +476,7 @@ const hasAnyFiltersOrSettings = computed(() => {
     withInsights.value ||
     selectedCollections.value.length > 0 ||
     selectedVisualAspects.value.length > 0 ||
-    selectedArtisticScores.value.length > 0 ||
+    Object.keys(searchStore.selectedArtisticScores).length > 0 ||
     excludedTags.value.length > 0
   );
 });
@@ -555,7 +500,11 @@ function handleReset() {
   searchStore.setWithInsights(false);
   selectedCollections.value = [];
   selectedVisualAspects.value = [];
-  selectedArtisticScores.value = [];
+  searchStore.setSelectedArtisticScores({});
+  // Reset local visual filters
+  visualAspectsOptions.forEach((group) => {
+    localVisualFilters.value[group.key] = [];
+  });
   excludedTags.value = [];
   emit("reset");
 }

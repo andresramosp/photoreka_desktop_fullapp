@@ -237,34 +237,41 @@
         </div>
       </div>
 
-      <!-- More Filters Toggle -->
+      <!-- More Filters Accordion -->
       <div class="search-filters-section">
-        <div
-          class="more-filters-toggle"
-          @click="emit('update:showMoreFilters', !showMoreFilters)"
-        >
-          <span class="more-filters-label">More filters</span>
-          <div class="more-filters-indicators">
-            <n-badge
-              v-if="hasActiveFilters"
-              :value="activeFiltersCount"
-              type="info"
-              :offset="[8, -4]"
-              style="margin-right: 0"
-              size="small"
-            />
+        <div class="filter-controls-section-header" @click="toggleFilters">
+          <div class="filter-controls-header-left">
             <n-icon
-              size="12"
-              class="toggle-icon"
-              :class="{ rotated: showMoreFilters }"
+              size="16"
+              class="filter-controls-section-icon"
+              :color="`var(--primary-color)`"
             >
-              <ChevronDownOutline />
+              <OptionsOutline />
             </n-icon>
+            <span class="filter-controls-section-label">More filters</span>
+            <span
+              v-if="hasActiveFilters && !isFiltersExpanded"
+              class="filter-controls-active-badge"
+            >
+              {{ activeFiltersCount }}
+            </span>
           </div>
+          <n-icon
+            size="14"
+            class="filter-controls-toggle-icon"
+            :class="{ rotated: isFiltersExpanded }"
+          >
+            <svg viewBox="0 0 24 24">
+              <path
+                fill="currentColor"
+                d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+              />
+            </svg>
+          </n-icon>
         </div>
 
-        <!-- Collapsible Filters Container -->
-        <div v-if="showMoreFilters" class="filters-container">
+        <!-- Collapsible Filters Content -->
+        <div v-if="isFiltersExpanded" class="filter-controls-tab-container">
           <div class="filters-content">
             <!-- Collections Filter -->
             <!-- <div class="filter-compact-group">
@@ -320,87 +327,15 @@
               </div>
             </div> -->
 
-            <!-- Visual Aspects Filter -->
-            <div class="filter-section-header">
-              <span class="filter-section-title">Filter by visual aspects</span>
-            </div>
-            <div class="visual-aspects-filters-container">
-              <div
-                v-for="aspectGroup in visualAspectsOptions"
-                :key="aspectGroup.key"
-                class="visual-aspect-item"
-              >
-                <n-select
-                  v-model:value="selectedFilters[aspectGroup.key]"
-                  multiple
-                  :placeholder="`${
-                    aspectGroup.label.charAt(0).toUpperCase() +
-                    aspectGroup.label.slice(1)
-                  }`"
-                  :options="aspectGroup.children"
-                  :max-tag-count="1"
-                  clearable
-                  filterable
-                  class="visual-aspect-select"
-                  size="small"
-                  :disabled="isSearching"
-                  @update:show="handleSelectShowChange"
-                />
-              </div>
-            </div>
-
-            <!-- Artistic Scores Filter -->
-            <div class="filter-section-header">
-              <span class="filter-section-title"
-                >Filter by artistic scores</span
-              >
-              <n-tooltip trigger="hover" placement="top">
-                <template #trigger>
-                  <n-icon
-                    size="13"
-                    color="var(--text-secondary)"
-                    style="cursor: help"
-                  >
-                    <InformationCircle />
-                  </n-icon>
-                </template>
-                Will include photos above 7 in the selected scores
-              </n-tooltip>
-            </div>
-            <div class="artistic-scores-filters-container">
-              <div class="filter-controls-criteria-row">
-                <template
-                  v-for="[groupKey, group] in Object.entries(artisticScores)"
-                  :key="groupKey"
-                >
-                  <n-button
-                    v-for="criterion in group.criteria"
-                    :key="criterion.value"
-                    secondary
-                    :type="
-                      (selectedArtisticScores || []).includes(criterion.value)
-                        ? groupKey === 'fundamentals'
-                          ? 'primary'
-                          : 'warning'
-                        : 'default'
-                    "
-                    size="small"
-                    @click="
-                      !isSearching && toggleArtisticScore(criterion.value)
-                    "
-                    class="filter-controls-criterion-button"
-                    :disabled="isSearching"
-                  >
-                    <template #icon>
-                      <n-icon>
-                        <component :is="criterionIcons[criterion.value]" />
-                      </n-icon>
-                    </template>
-                    {{ criterion.label }}
-                  </n-button>
-                </template>
-              </div>
-            </div>
+            <!-- Visual Filters Panel -->
+            <VisualFiltersPanel
+              :visual-aspects="selectedFilters"
+              :score-filters="selectedArtisticScores"
+              :disabled="isSearching"
+              :show-section-labels="false"
+              @update:visual-aspects="handleVisualFiltersChange"
+              @update:score-filters="handleScoreFiltersChange"
+            />
           </div>
         </div>
       </div>
@@ -546,16 +481,9 @@
 
 <script setup>
 import { computed, ref, watch } from "vue";
-import {
-  NTooltip,
-  NSelect,
-  NInput,
-  NButton,
-  NIcon,
-  NTag,
-  NBadge,
-} from "naive-ui";
+import { NTooltip, NSelect, NInput, NButton, NIcon, NTag } from "naive-ui";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
+import VisualFiltersPanel from "@/components/photos-grid/VisualFiltersPanel.vue";
 import {
   DocumentOutline,
   SparklesOutline,
@@ -566,6 +494,7 @@ import {
   CloseOutline,
   InformationCircle,
   ChevronDownOutline as ChevronDown,
+  OptionsOutline,
 } from "@vicons/ionicons5";
 import { TagOutlined } from "@vicons/antd";
 import { useSearchStore, visualAspectsOptions } from "@/stores/searchStore";
@@ -611,10 +540,13 @@ const props = defineProps({
   // Tag suggestions from composable
   includedTagSuggestionsFormatted: { type: Array, default: () => [] },
   excludedTagSuggestionsFormatted: { type: Array, default: () => [] },
-
-  // Filters
-  showMoreFilters: { type: Boolean, default: false },
 });
+
+// Local filter accordion state
+const isFiltersExpanded = ref(false);
+function toggleFilters() {
+  isFiltersExpanded.value = !isFiltersExpanded.value;
+}
 
 // Computed from stores
 const activeSearchType = computed(() => searchStore.activeSearchType);
@@ -680,6 +612,17 @@ const selectedArtisticScores = computed({
   set: (value) => searchStore.setSelectedArtisticScores(value),
 });
 
+// Handler for VisualFiltersPanel changes
+function handleVisualFiltersChange(newFilters) {
+  selectedFilters.value = newFilters;
+  const flatFilters = Object.values(newFilters).flat();
+  searchStore.setSelectedVisualAspects(flatFilters);
+}
+
+function handleScoreFiltersChange(newScoreFilters) {
+  searchStore.setSelectedArtisticScores(newScoreFilters);
+}
+
 // Filter options from stores
 const collectionsOptions = computed(() => {
   return collectionsStore.allCollections.map((collection) => ({
@@ -697,7 +640,7 @@ const hasActiveFilters = computed(() => {
   return (
     selectedCollections.value.length > 0 ||
     searchStore.selectedVisualAspects.length > 0 ||
-    searchStore.selectedArtisticScores.length > 0
+    Object.keys(searchStore.selectedArtisticScores).length > 0
   );
 });
 
@@ -705,7 +648,7 @@ const activeFiltersCount = computed(() => {
   return (
     selectedCollections.value.length +
     searchStore.selectedVisualAspects.length +
-    searchStore.selectedArtisticScores.length
+    Object.keys(searchStore.selectedArtisticScores).length
   );
 });
 
@@ -719,17 +662,18 @@ const activeFiltersBadges = computed(() => {
   });
 
   // Add artistic scores
-  searchStore.selectedArtisticScores.forEach((score) => {
-    // Find the label for this score
-    let scoreLabel = score;
-    Object.values(artisticScores).forEach((group) => {
-      const criterion = group.criteria.find((c) => c.value === score);
-      if (criterion) {
-        scoreLabel = criterion.label;
-      }
-    });
-    badges.push(scoreLabel);
-  });
+  Object.entries(searchStore.selectedArtisticScores).forEach(
+    ([key, filter]) => {
+      let scoreLabel = key;
+      Object.values(artisticScores).forEach((group) => {
+        const criterion = group.criteria.find((c) => c.value === key);
+        if (criterion) {
+          scoreLabel = `${criterion.label} ${filter.operator} ${filter.value}`;
+        }
+      });
+      badges.push(scoreLabel);
+    },
+  );
 
   return badges;
 });
@@ -739,9 +683,6 @@ const emit = defineEmits([
   // Tag search (for suggestions from composable)
   "searchIncludedTags",
   "searchExcludedTags",
-
-  // Filters
-  "update:showMoreFilters",
 
   // Actions
   "search",
@@ -809,21 +750,6 @@ function handleSelectShowChange(show) {
   // Si se abre un select, mantener el hover
   if (show && props.isToolbarCollapsed) {
     isHovering.value = true;
-  }
-}
-
-// Toggle artistic score
-function toggleArtisticScore(scoreValue) {
-  const current = selectedArtisticScores.value || [];
-  const index = current.indexOf(scoreValue);
-  if (index === -1) {
-    // Add score
-    searchStore.setSelectedArtisticScores([...current, scoreValue]);
-  } else {
-    // Remove score
-    const newScores = [...current];
-    newScores.splice(index, 1);
-    searchStore.setSelectedArtisticScores(newScores);
   }
 }
 </script>
@@ -965,7 +891,7 @@ function toggleArtisticScore(scoreValue) {
   display: flex;
   align-items: flex-start;
   gap: 24px;
-  margin-bottom: 10px;
+  /* margin-bottom: 10px; */
   padding-bottom: 20px;
   border-bottom: 1px solid var(--border-color);
   overflow: visible;
@@ -1038,78 +964,17 @@ function toggleArtisticScore(scoreValue) {
 
 /* Filters Section */
 .search-filters-section {
-  margin-top: 10px;
-  /* margin-bottom: 12px; */
-}
-
-.more-filters-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  padding: 4px 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.more-filters-toggle:hover {
-  color: var(--primary-color);
-}
-
-.more-filters-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-}
-
-.more-filters-toggle:hover {
-  background-color: var(--bg-hover);
-  border-color: var(--border-color-hover);
-}
-
-.more-filters-label {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.more-filters-indicators {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.toggle-icon {
-  transition: transform 0.2s ease;
-}
-
-.toggle-icon.rotated {
-  transform: rotate(180deg);
-}
-
-/* Filters Container */
-.filters-container {
-  animation: slideDown 0.3s ease-out;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  margin-top: 4px;
+  margin-bottom: 10px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .filters-content {
   display: flex;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
+  flex-direction: column;
+  padding: 4px 0 0;
+  width: 100%;
 }
 
 .filter-compact-group {
