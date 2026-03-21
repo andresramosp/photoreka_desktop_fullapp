@@ -31,7 +31,10 @@
     </div>
 
     <!-- Visual Scores sub-section -->
-    <div class="score-filters-section">
+    <div
+      class="score-filters-section"
+      :class="{ 'with-section-labels': showSectionLabels }"
+    >
       <div class="score-filters-header">
         <div style="display: flex; align-items: center; gap: 6px">
           <div
@@ -236,8 +239,11 @@ function clearScores() {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding-top: 8px;
   border-top: 1px solid var(--border-color);
+}
+
+.score-filters-section.with-section-labels {
+  padding-top: 8px;
 }
 
 .score-filters-header {

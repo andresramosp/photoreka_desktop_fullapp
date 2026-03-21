@@ -2,9 +2,14 @@
   <div class="sos-wrapper">
     <div class="sos-header">
       <span class="sos-label">{{ label }}</span>
-      <span v-if="currentValue > 1" class="sos-value">
-        {{ localOperator }} {{ currentValue }}
-      </span>
+      <button
+        v-if="currentValue > 1"
+        class="sos-clear-btn"
+        @click.stop="onSliderChange(1)"
+        title="Clear"
+      >
+        ✕
+      </button>
     </div>
     <div class="sos-operator-selector">
       <button
@@ -109,6 +114,27 @@ const onSliderChange = (val) => {
   font-size: 11px;
   font-weight: 500;
   color: var(--text-secondary);
+}
+
+.sos-clear-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+  font-size: 9px;
+  line-height: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+
+.sos-clear-btn:hover {
+  opacity: 1;
+  color: var(--error-color, #e88080);
 }
 
 .sos-operator-selector {

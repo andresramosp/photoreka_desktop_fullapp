@@ -519,7 +519,7 @@ const hasOpenSelect = ref(false);
 const hoverDebounceTimer = ref(null);
 const leaveDebounceTimer = ref(null);
 const HOVER_DEBOUNCE_MS = 250; // Debounce de 250ms para entrada
-const LEAVE_DEBOUNCE_MS = 750; // Debounce de 750ms para salida
+const LEAVE_DEBOUNCE_MS = 1500; // Debounce de 750ms para salida
 
 // Visual Aspects Filters
 const selectedFilters = ref({});
@@ -547,6 +547,18 @@ const isFiltersExpanded = ref(false);
 function toggleFilters() {
   isFiltersExpanded.value = !isFiltersExpanded.value;
 }
+
+// Collapse filters panel when the toolbar is visually hidden
+// (either when isToolbarCollapsed becomes true, or when the hover ends while collapsed)
+watch(
+  () => props.isToolbarCollapsed,
+  (collapsed) => {
+    if (collapsed) isFiltersExpanded.value = false;
+  },
+);
+watch(isHovering, (hovering) => {
+  if (!hovering && props.isToolbarCollapsed) isFiltersExpanded.value = false;
+});
 
 // Computed from stores
 const activeSearchType = computed(() => searchStore.activeSearchType);
