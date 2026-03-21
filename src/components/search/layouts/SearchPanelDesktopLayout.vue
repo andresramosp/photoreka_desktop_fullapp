@@ -363,7 +363,7 @@
                 type="primary"
                 :loading="isSearching"
                 :disabled="!hasSearchQuery"
-                @click="emit('search')"
+                @click="handleSearch"
                 class="search-button"
               >
                 <template #icon>
@@ -449,7 +449,7 @@
                 type="primary"
                 :loading="isSearching"
                 :disabled="!hasSearchQuery"
-                @click="emit('search')"
+                @click="handleSearch"
                 class="search-button"
               >
                 <template #icon>
@@ -700,6 +700,11 @@ function updateSearchMode(mode) {
 
 function updateWithInsights(value) {
   searchStore.setWithInsights(value);
+}
+
+function handleSearch() {
+  isFiltersExpanded.value = false;
+  emit("search");
 }
 
 // Handle hover for expanding toolbar when collapsed
