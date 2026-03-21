@@ -557,7 +557,8 @@ watch(
   },
 );
 watch(isHovering, (hovering) => {
-  if (!hovering && props.isToolbarCollapsed) isFiltersExpanded.value = false;
+  if (!hovering && props.isToolbarCollapsed && !hasSearchQuery.value)
+    isFiltersExpanded.value = false;
 });
 
 // Computed from stores
@@ -746,6 +747,9 @@ function handleMouseLeave() {
     clearTimeout(hoverDebounceTimer.value);
     hoverDebounceTimer.value = null;
   }
+
+  // No colapsar si hay algo escrito o un select abierto
+  if (hasSearchQuery.value) return;
 
   // No colapsar si hay un select abierto
   if (!hasOpenSelect.value) {
