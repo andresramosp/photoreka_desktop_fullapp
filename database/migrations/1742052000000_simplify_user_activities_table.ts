@@ -14,10 +14,10 @@ export default class extends BaseSchema {
       table.dropColumn('updated_at')
     })
 
-    // Drop old unused index on level
-    this.schema.alterTable(this.tableName, (table) => {
-      table.dropIndex(['level', 'created_at'])
-    })
+    // Drop old unused index on level (if it exists)
+    await this.schema.raw(
+      'DROP INDEX IF EXISTS user_activities_level_created_at_index'
+    )
   }
 
   async down() {

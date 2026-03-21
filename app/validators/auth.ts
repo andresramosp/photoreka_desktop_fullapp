@@ -40,6 +40,12 @@ export const changePasswordValidator = vine.compile(
 export const updateProfileValidator = vine.compile(
   vine.object({
     name: vine.string().minLength(2).maxLength(50).optional(),
+    username: vine
+      .string()
+      .minLength(3)
+      .maxLength(50)
+      .regex(/^[a-z0-9][a-z0-9._-]*[a-z0-9]$/)
+      .optional(),
     email: vine.string().email().normalizeEmail().optional(),
     preferredSource: vine.enum(['web', 'lightroom']).optional(),
     profiles: vine.string().optional(),
