@@ -503,7 +503,7 @@ import { useCollectionsStore } from "@/stores/collections";
 // Maneja Enter en el input semántico para disparar búsqueda (sin Shift)
 function handleSemanticInputEnter(e) {
   if (!e.shiftKey && hasSearchQuery.value && !isSearching.value) {
-    emit("search");
+    handleSearch();
   }
 }
 
@@ -516,10 +516,6 @@ const collectionsStore = useCollectionsStore();
 // Local state for hover
 const isHovering = ref(false);
 const hasOpenSelect = ref(false);
-const hoverDebounceTimer = ref(null);
-const leaveDebounceTimer = ref(null);
-const HOVER_DEBOUNCE_MS = 250; // Debounce de 250ms para entrada
-const LEAVE_DEBOUNCE_MS = 1500; // Debounce de 750ms para salida
 
 // Visual Aspects Filters
 const selectedFilters = ref({});
@@ -536,6 +532,7 @@ const { artisticScores, criterionIcons } = useArtisticScores();
 const props = defineProps({
   // UI state
   isToolbarCollapsed: { type: Boolean, default: false },
+  forceCollapseKey: { type: Number, default: 0 },
 
   // Tag suggestions from composable
   includedTagSuggestionsFormatted: { type: Array, default: () => [] },
@@ -548,18 +545,14 @@ function toggleFilters() {
   isFiltersExpanded.value = !isFiltersExpanded.value;
 }
 
-// Collapse filters panel when the toolbar is visually hidden
-// (either when isToolbarCollapsed becomes true, or when the hover ends while collapsed)
+// Collapse panel when forceCollapseKey changes (e.g. scroll down in results)
 watch(
-  () => props.isToolbarCollapsed,
-  (collapsed) => {
-    if (collapsed) isFiltersExpanded.value = false;
+  () => props.forceCollapseKey,
+  () => {
+    isHovering.value = false;
+    isFiltersExpanded.value = false;
   },
 );
-watch(isHovering, (hovering) => {
-  if (!hovering && props.isToolbarCollapsed && !hasSearchQuery.value)
-    isFiltersExpanded.value = false;
-});
 
 // Computed from stores
 const activeSearchType = computed(() => searchStore.activeSearchType);
@@ -717,61 +710,24 @@ function updateWithInsights(value) {
 
 function handleSearch() {
   isFiltersExpanded.value = false;
+  isHovering.value = false;
   emit("search");
 }
 
-// Handle hover for expanding toolbar when collapsed
+// Hover: abrir panel colapsado al pasar el ratón. No se cierra al salir.
 function handleMouseEnter() {
-  // Cancelar timer de salida si existe
-  if (leaveDebounceTimer.value) {
-    clearTimeout(leaveDebounceTimer.value);
-    leaveDebounceTimer.value = null;
-  }
-
   if (props.isToolbarCollapsed) {
-    // Clear existing timer if any
-    if (hoverDebounceTimer.value) {
-      clearTimeout(hoverDebounceTimer.value);
-    }
-    // Set new debounced timer
-    hoverDebounceTimer.value = setTimeout(() => {
-      isHovering.value = true;
-      hoverDebounceTimer.value = null;
-    }, HOVER_DEBOUNCE_MS);
+    isHovering.value = true;
   }
 }
 
 function handleMouseLeave() {
-  // Clear debounce timer de entrada
-  if (hoverDebounceTimer.value) {
-    clearTimeout(hoverDebounceTimer.value);
-    hoverDebounceTimer.value = null;
-  }
-
-  // No colapsar si hay algo escrito o un select abierto
-  if (hasSearchQuery.value) return;
-
-  // No colapsar si hay un select abierto
-  if (!hasOpenSelect.value) {
-    // Cancelar timer anterior si existe
-    if (leaveDebounceTimer.value) {
-      clearTimeout(leaveDebounceTimer.value);
-    }
-    // Establecer nuevo timer para cerrar después de 500ms
-    leaveDebounceTimer.value = setTimeout(() => {
-      isHovering.value = false;
-      leaveDebounceTimer.value = null;
-    }, LEAVE_DEBOUNCE_MS);
-  }
+  // No colapsar al salir
 }
 
 // Rastrear cuando un select se abre o cierra
 function handleSelectShowChange(show) {
   hasOpenSelect.value = show;
-  // Si se abre un select, mantener el hover
-  if (show && props.isToolbarCollapsed) {
-    isHovering.value = true;
-  }
 }
 </script>
 

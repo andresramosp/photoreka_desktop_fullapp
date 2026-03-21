@@ -4,6 +4,7 @@
     <SearchPanelDesktopLayout
       v-if="!isMobile"
       :is-toolbar-collapsed="isToolbarCollapsed"
+      :force-collapse-key="forceCollapseKey"
       :included-tag-suggestions-formatted="includedTagSuggestionsFormatted"
       :excluded-tag-suggestions-formatted="excludedTagSuggestionsFormatted"
       @search-included-tags="onSearchInputIncluded"
@@ -95,6 +96,7 @@
           @add-to-collection="handleCuratorAddToCollection"
           @take-to-tool="handleCuratorTakeToTool"
           @curator-mode-changed="handleCuratorModeChanged"
+          @scroll-down="handleResultsScrollDown"
         />
       </div>
     </div>
@@ -215,6 +217,7 @@ const {
 
 // Estado del toolbar colapsable (ya no usado con scroll interno)
 const isToolbarCollapsed = ref(false);
+const forceCollapseKey = ref(0);
 
 // Estado del modal de colecciones
 const showCollectionModal = ref(false);
@@ -313,6 +316,13 @@ const excludedTagSuggestionsFormatted = computed(() => {
 function handleCuratorModeChanged(isCuratorModeActive) {
   if (isCuratorModeActive) {
     isToolbarCollapsed.value = true;
+  }
+}
+
+// Handler para colapsar toolbar al hacer scroll down en resultados
+function handleResultsScrollDown() {
+  if (isToolbarCollapsed.value) {
+    forceCollapseKey.value++;
   }
 }
 

@@ -120,7 +120,12 @@
     </div>
 
     <!-- Normal Grid View -->
-    <div v-if="!curatorMode" ref="normalViewRef" class="normal-view">
+    <div
+      v-if="!curatorMode"
+      ref="normalViewRef"
+      class="normal-view"
+      @scroll="onNormalViewScroll"
+    >
       <div
         class="photo-grid photo-grid-base"
         :class="`grid-cols-${gridColumns}`"
@@ -436,6 +441,7 @@ const emit = defineEmits([
   "curator-mode-changed",
   "select-all",
   "deselect-all",
+  "scroll-down",
 ]);
 
 // Local state
@@ -448,6 +454,16 @@ const localShowOnlyHighMatches = ref(props.showOnlyHighMatches);
 // Refs for scroll containers
 const normalViewRef = ref(null);
 const leftPanelContentRef = ref(null);
+
+// Track scroll direction to emit scroll-down
+let lastScrollTop = 0;
+function onNormalViewScroll(e) {
+  const st = e.target.scrollTop;
+  if (st > lastScrollTop && st > 50) {
+    emit("scroll-down");
+  }
+  lastScrollTop = st;
+}
 
 // Computed: column options based on mobile
 const columnOptions = computed(() => (props.isMobile ? [1, 2] : [3, 4, 5, 6]));
