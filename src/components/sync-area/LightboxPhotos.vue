@@ -748,18 +748,21 @@ const handleSelectionChange = (selectionData) => {
 };
 
 // Duplicates filter state
-const isDuplicateFilterActive = ref(false);
+const isDuplicateFilterActive = ref("all");
+const filteredUniqueIds = ref([]);
 
-const handleDuplicatesFilterChange = (isActive) => {
-  isDuplicateFilterActive.value = isActive;
-  emit("duplicates-filter-change", isActive);
+const handleDuplicatesFilterChange = ({ filter, filteredIds }) => {
+  isDuplicateFilterActive.value = filter;
+  filteredUniqueIds.value = filteredIds;
+  emit("duplicates-filter-change", filter);
 };
 
 // Use local selection state for the analyze dialog
 const selectedCount = computed(() => {
-  return localSelectedCount.value > 0
-    ? localSelectedCount.value
-    : filteredPhotos.value.length;
+  if (localSelectedCount.value > 0) return localSelectedCount.value;
+  if (isDuplicateFilterActive.value === "non-duplicates")
+    return filteredUniqueIds.value.length;
+  return filteredPhotos.value.length;
 });
 
 const triggerFileInput = () => {
@@ -950,9 +953,17 @@ const openAnalyzeDialog = () => {
 
 const confirmAnalyze = () => {
   showAnalyzeDialog.value = false;
+  let selectedIds = localSelectedCount.value > 0 ? localSelectedIds.value : [];
+  // When unique filter is active and no manual selection, analyze only unique photos
+  if (
+    selectedIds.length === 0 &&
+    isDuplicateFilterActive.value === "non-duplicates"
+  ) {
+    selectedIds = filteredUniqueIds.value;
+  }
   emit("on-analyze", {
     fastMode: fastMode.value,
-    selectedIds: localSelectedCount.value > 0 ? localSelectedIds.value : [],
+    selectedIds,
   });
 };
 

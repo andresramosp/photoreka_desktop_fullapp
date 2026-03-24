@@ -97,7 +97,7 @@ const emailConfirmationMessageId = ref(null);
 const activeTab = ref("upload");
 const lightboxRef = ref(null);
 const lightboxSelectedCount = ref(0);
-const isDuplicateFilterActive = ref(false);
+const isDuplicateFilterActive = ref("all");
 
 // Handle selection changes from LightboxPhotos
 const handleLightboxSelectionChange = (selectionData) => {
@@ -105,16 +105,16 @@ const handleLightboxSelectionChange = (selectionData) => {
 };
 
 // Handle duplicates filter changes from LightboxPhotos
-const handleDuplicatesFilterChange = (isActive) => {
-  isDuplicateFilterActive.value = isActive;
+const handleDuplicatesFilterChange = (filter) => {
+  isDuplicateFilterActive.value = filter;
 };
 
-// Computed for floating button - solo mostrar en tab upload y cuando no hay filtro de duplicados activo
+// Computed for floating button - ocultar solo cuando el filtro de duplicados está activo (no en unique)
 const shouldShowProcessButton = computed(() => {
   return (
     activeTab.value === "upload" &&
     photosStore.lightboxPhotos?.length > 0 &&
-    !isDuplicateFilterActive.value
+    isDuplicateFilterActive.value !== "duplicates"
   );
 });
 

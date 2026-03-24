@@ -833,8 +833,12 @@ watch(
 
 // Emit event when duplicates filter changes
 watch([filterDuplicates, duplicatesReviewed], ([newFilter, newReviewed]) => {
-  const isDuplicateFilterActive = newFilter !== "all" && newReviewed;
-  emit("duplicates-filter-change", isDuplicateFilterActive);
+  const activeFilter = newFilter !== "all" && newReviewed ? newFilter : "all";
+  const filteredIds =
+    activeFilter === "non-duplicates"
+      ? filteredAndSortedPhotos.value.map((p) => p.id)
+      : [];
+  emit("duplicates-filter-change", { filter: activeFilter, filteredIds });
 });
 
 // Grid functions
