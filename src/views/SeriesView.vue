@@ -946,17 +946,17 @@ const handleSendToChat = async () => {
 };
 
 const handleToolSelected = async (toolId, canvasId = null) => {
-  // Para el atlas, ordenar los IDs según el orden de la serie
+  // Ordenar los IDs según el orden de la serie para todas las herramientas
   let photoIds = localSelectedPhotoIds.value;
 
-  if (toolId === "3d-atlas" && viewingSeries.value?.photos) {
+  if (viewingSeries.value?.photos) {
     // Filtrar las fotos de la serie manteniendo solo las seleccionadas, en el orden correcto
     const selectedSet = new Set(photoIds);
     photoIds = viewingSeries.value.photos
       .filter((photo) => selectedSet.has(photo.id))
       .map((photo) => photo.id);
 
-    console.log("🎬 Atlas: IDs ordenados según serie:", photoIds);
+    console.log("🎬 IDs ordenados según serie:", photoIds);
   }
 
   await takeToTool(toolId, photoIds, localClearAllSelections, canvasId);

@@ -11,7 +11,7 @@ export function useFramedPhotoDownload() {
   const createFramedPhotoCanvas = async (
     imageBlob,
     frameConfig,
-    realMargins = null
+    realMargins = null,
   ) => {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -47,7 +47,7 @@ export function useFramedPhotoDownload() {
           canvas.height = canvasHeight;
 
           console.log(
-            `Creating framed canvas: ${canvasWidth}x${canvasHeight} (mobile: ${isMobile}, baseWidth: ${baseWidth})`
+            `Creating framed canvas: ${canvasWidth}x${canvasHeight} (mobile: ${isMobile}, baseWidth: ${baseWidth})`,
           );
 
           // Fill frame background
@@ -153,7 +153,7 @@ export function useFramedPhotoDownload() {
   // NEW: Recreate the exact FrameVisualizer composition manually
   const captureFramedPhotoFromDOM = async (
     frameVisualizerRef,
-    scaleFactor = 3
+    scaleFactor = 3,
   ) => {
     if (!frameVisualizerRef) {
       throw new Error("FrameVisualizer reference not provided");
@@ -241,7 +241,7 @@ export function useFramedPhotoDownload() {
     photo,
     frameConfig,
     isPlayground = false,
-    frameVisualizerRef = null
+    frameVisualizerRef = null,
   ) => {
     if (!photo || !frameConfig) return;
 
@@ -259,19 +259,19 @@ export function useFramedPhotoDownload() {
           const scaleFactor = isMobile ? 8 : 3; // Higher scaling for mobile
           canvas = await captureFramedPhotoFromDOM(
             frameVisualizerRef,
-            scaleFactor
+            scaleFactor,
           );
           console.log(
             "DOM capture successful:",
             canvas.width,
             "x",
             canvas.height,
-            `(mobile: ${isMobile}, scale: ${scaleFactor})`
+            `(mobile: ${isMobile}, scale: ${scaleFactor})`,
           );
         } catch (domError) {
           console.warn(
             "DOM capture failed, falling back to original method:",
-            domError
+            domError,
           );
           // Fall back to original method if DOM capture fails
           frameVisualizerRef = null;
@@ -292,7 +292,7 @@ export function useFramedPhotoDownload() {
           const response = await api.post(
             apiUrl,
             { ids: [photo.id] },
-            { responseType: "blob" }
+            { responseType: "blob" },
           );
           originalImageBlob = response.data;
         }
@@ -302,7 +302,7 @@ export function useFramedPhotoDownload() {
         canvas = await createFramedPhotoCanvas(
           originalImageBlob,
           frameConfig,
-          realMargins
+          realMargins,
         );
       }
 
@@ -345,7 +345,7 @@ export function useFramedPhotoDownload() {
     photos,
     frameConfig,
     isPlayground = false,
-    frameVisualizerRef = null
+    frameVisualizerRef = null,
   ) => {
     if (!photos || photos.length === 0 || !frameConfig) return;
 
@@ -368,7 +368,9 @@ export function useFramedPhotoDownload() {
         const batch = photos.slice(i, i + batchSize);
         const batchPromises = [];
 
-        for (const photo of batch) {
+        for (let batchIdx = 0; batchIdx < batch.length; batchIdx++) {
+          const photo = batch[batchIdx];
+          const globalIndex = i + batchIdx;
           const promise = (async () => {
             try {
               let canvas;
@@ -376,7 +378,7 @@ export function useFramedPhotoDownload() {
               // For ZIP downloads, always use createFramedPhotoCanvas to process each individual photo
               // DOM capture only works for the currently visible photo in the preview
               console.log(
-                `Processing photo for ZIP: ${photo.name || photo.id}`
+                `Processing photo for ZIP: ${photo.name || photo.id}`,
               );
 
               let originalImageBlob;
@@ -390,7 +392,7 @@ export function useFramedPhotoDownload() {
                 const response = await api.post(
                   apiUrl,
                   { ids: [photo.id] },
-                  { responseType: "blob" }
+                  { responseType: "blob" },
                 );
                 originalImageBlob = response.data;
               }
@@ -400,7 +402,7 @@ export function useFramedPhotoDownload() {
               canvas = await createFramedPhotoCanvas(
                 originalImageBlob,
                 frameConfig,
-                realMargins // Pass the real margins
+                realMargins, // Pass the real margins
               );
 
               // Convert to blob
@@ -420,9 +422,11 @@ export function useFramedPhotoDownload() {
               // Reemplaza caracteres inválidos para Windows
               const safeFrameRatio = String(frameRatio).replace(
                 /[:*?"<>|]/g,
-                "-"
+                "-",
               );
-              const filename = `${nameWithoutExt}_framed_${safeFrameRatio}.jpg`;
+              // Add numeric prefix to preserve order in the zip
+              const orderPrefix = String(globalIndex + 1).padStart(2, "0");
+              const filename = `${orderPrefix}_${nameWithoutExt}_framed_${safeFrameRatio}.jpg`;
 
               zip.file(filename, framedBlob);
             } catch (error) {
