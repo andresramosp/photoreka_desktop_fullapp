@@ -6,7 +6,7 @@ import vine from '@vinejs/vine'
 export const createAuthValidator = vine.compile(
   vine.object({
     name: vine.string().minLength(2).maxLength(50),
-    email: vine.string().email().normalizeEmail(),
+    email: vine.string().email().toLowerCase(),
     password: vine.string().minLength(8).maxLength(100),
     inviteCode: vine.string().minLength(6).maxLength(20).optional(),
     usageTier: vine.enum(['BASIC', 'PRO', 'PREMIUM']).optional(),
@@ -19,7 +19,7 @@ export const createAuthValidator = vine.compile(
  */
 export const createLoginValidator = vine.compile(
   vine.object({
-    email: vine.string().email().normalizeEmail(),
+    email: vine.string().email().toLowerCase(),
     password: vine.string().minLength(1),
   })
 )
@@ -40,7 +40,7 @@ export const changePasswordValidator = vine.compile(
 export const updateProfileValidator = vine.compile(
   vine.object({
     name: vine.string().minLength(2).maxLength(50).optional(),
-    email: vine.string().email().normalizeEmail().optional(),
+    email: vine.string().email().toLowerCase().optional(),
     preferredSource: vine.enum(['web', 'lightroom']).optional(),
     profiles: vine.string().optional(),
   })
@@ -60,7 +60,7 @@ export const confirmEmailValidator = vine.compile(
  */
 export const forgotPasswordValidator = vine.compile(
   vine.object({
-    email: vine.string().email().normalizeEmail(),
+    email: vine.string().email().toLowerCase(),
   })
 )
 
@@ -79,6 +79,6 @@ export const resetPasswordValidator = vine.compile(
  */
 export const resendConfirmationValidator = vine.compile(
   vine.object({
-    email: vine.string().email().normalizeEmail(),
+    email: vine.string().email().toLowerCase(),
   })
 )

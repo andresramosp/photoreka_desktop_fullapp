@@ -125,7 +125,7 @@ export default class InvitesController {
       // Validate request payload
       const sendInviteValidator = vine.compile(
         vine.object({
-          email: vine.string().email().normalizeEmail(),
+          email: vine.string().email().toLowerCase(),
           maxUses: vine.number().min(1).optional(),
         })
       )
@@ -213,7 +213,7 @@ export default class InvitesController {
       // Validate request payload
       const sendGrantValidator = vine.compile(
         vine.object({
-          email: vine.string().email().normalizeEmail(),
+          email: vine.string().email().toLowerCase(),
           maxUses: vine.number().min(1).optional(),
           tier: vine.enum(Object.values(UsageTier)).optional(),
         })
