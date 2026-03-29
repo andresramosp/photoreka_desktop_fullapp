@@ -5,9 +5,9 @@
         <div class="wbm-modal">
           <!-- Header -->
           <div class="wbm-header">
-            <div class="wbm-logo-row">
+            <!-- <div class="wbm-logo-row">
               <AppLogo layout="horizontal" size="tiny" />
-            </div>
+            </div> -->
             <h2 class="wbm-title">Welcome to Photoreka!</h2>
             <p class="wbm-subtitle">
               Photoreka is designed to work with
@@ -468,14 +468,14 @@ const goUpload = () => {
   font-family: inherit;
 }
 
-.wbm-btn-primary:hover {
+/* .wbm-btn-primary:hover {
   background: var(--accent-color-hover, #1d4ed8);
   transform: translateY(-1px);
-}
+} */
 
-.wbm-btn-primary:active {
+/* .wbm-btn-primary:active {
   transform: translateY(0);
-}
+} */
 
 /* Footer */
 .wbm-footer {
