@@ -22,6 +22,9 @@ import { VisualDetectionTask } from '#models/analyzer/visualDetectionTask'
 import { GlobalEmbeddingsTagsTask } from '#models/analyzer/globalEmbeddingsTagsTask'
 import UsageService from '#services/usage_service'
 import UserCostService from '#services/user_cost_service'
+import User from '#models/user'
+import MailService from '#services/mail_service'
+import { analysisCompleteTemplate } from '../utils/email_templates.js'
 
 const logger = Logger.getInstance('AnalyzerProcess')
 logger.setLevel(LogLevel.DEBUG)
@@ -31,6 +34,7 @@ export default class AnalyzerProcessRunner {
   private modelsService: ModelsService
   private photoImageService: PhotoImageService
   private photoManager: PhotoManager
+  private originalMode: AnalyzerMode = 'adding'
 
   constructor() {
     this.process = new AnalyzerProcess()
@@ -83,6 +87,8 @@ export default class AnalyzerProcessRunner {
         Number(finalUserId)
       )
     }
+
+    this.originalMode = mode
 
     await this.changeStage(
       `Proceso Iniciado | Paquete: ${packageId} | Modo ${mode}`,
@@ -181,7 +187,7 @@ export default class AnalyzerProcessRunner {
 
     // No lanzar autoRetry para admin_retry (el admin decide manualmente)
     if (this.process.mode !== 'admin_retry') {
-      this.handleAutoRetry()
+      await this.handleAutoRetry()
     }
 
     return { hasFailed, processId: this.process.id }
@@ -391,6 +397,8 @@ export default class AnalyzerProcessRunner {
 
   // NUEVO: Función privada para manejar el autoRetry
   private async handleAutoRetry() {
+    const shouldNotify = this.originalMode === 'adding' && !this.process.isPreprocess
+
     if (this.process.autoRetry) {
       // Verificar si hay fotos pendientes en alguna tarea
       const hayFallidas = this.hasFailedPhotos()
@@ -410,9 +418,64 @@ export default class AnalyzerProcessRunner {
         )
         this.process.currentStage = 'finished'
         await this.process.save()
+        if (shouldNotify) this.sendAnalysisCompleteEmail().catch(() => {})
       } else {
         logger.info('autoRetry activo, pero no hay fotos fallidas. No se lanza retry_process.')
+        if (shouldNotify) this.sendAnalysisCompleteEmail().catch(() => {})
       }
+    } else {
+      if (shouldNotify) this.sendAnalysisCompleteEmail().catch(() => {})
+    }
+  }
+
+  /**
+   * Sends a completion notification email to the user with a summary of the analysis
+   */
+  private async sendAnalysisCompleteEmail() {
+    try {
+      const userId = this.process.userId
+      if (!userId) return
+
+      const user = await User.find(userId)
+      if (!user || !user.email) return
+
+      // Count processed and failed photos from the process sheet
+      const totalProcessPhotos = await this.getTotalProcessPhotos()
+      let failedPhotos = 0
+      const sheet = this.process.processSheet || {}
+      for (const task of Object.values(sheet) as any[]) {
+        if (Array.isArray(task.pendingPhotoIds)) {
+          failedPhotos = Math.max(failedPhotos, task.pendingPhotoIds.length)
+        }
+      }
+      const processedPhotos = totalProcessPhotos - failedPhotos
+
+      // Total photos in user's archive
+      const totalResult = await Photo.query().where('user_id', userId).count('* as total')
+      const totalUserPhotos = Number(totalResult[0]?.$extras?.total || 0)
+
+      const frontendUrl = process.env.FRONTEND_URL || 'https://app.photoreka.com'
+      const processUrl = `${frontendUrl}/sync-area#processing`
+
+      const html = analysisCompleteTemplate(
+        user.name || 'there',
+        processedPhotos,
+        failedPhotos,
+        totalUserPhotos,
+        processUrl
+      )
+
+      const mailService = new MailService()
+      await mailService.sendEmail({
+        from: 'Photoreka <hello@photoreka.com>',
+        to: user.email,
+        subject: `Your photo analysis is complete${failedPhotos > 0 ? ' (with some issues)' : ''}`,
+        body: html,
+      })
+
+      logger.info(`Email de análisis completado enviado a ${user.email} (userId: ${userId})`)
+    } catch (error) {
+      logger.error('Error enviando email de análisis completado:', error)
     }
   }
 }

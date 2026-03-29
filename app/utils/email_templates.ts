@@ -449,3 +449,229 @@ export function grantUserTemplate(
 
   return baseLayout(content, 'Your Photoreka early access')
 }
+
+/**
+ * Tier definition for analysis completion email
+ */
+interface PhotoTier {
+  range: string
+  minPhotos: number
+  profile: string
+  color: string
+  features: { label: string; icon: string; status: 'ok' | 'maybe' | 'no' }[]
+}
+
+const TIERS: PhotoTier[] = [
+  {
+    range: '< 50',
+    minPhotos: 0,
+    profile: 'Casual single-photo use',
+    color: 'rgba(239, 68, 68, 0.25)',
+    features: [
+      { label: 'Semantic Search', icon: '🔍', status: 'maybe' },
+      { label: 'ChatLab AI', icon: '🤖', status: 'maybe' },
+      { label: 'Series & Collections', icon: '📁', status: 'no' },
+      { label: '2D/3D Atlas', icon: '🗺️', status: 'no' },
+      { label: 'Patterns & Report', icon: '📊', status: 'no' },
+    ],
+  },
+  {
+    range: '50 – 500',
+    minPhotos: 50,
+    profile: 'Catalog subset exploration',
+    color: 'rgba(245, 158, 11, 0.25)',
+    features: [
+      { label: 'Semantic Search', icon: '🔍', status: 'ok' },
+      { label: 'ChatLab AI', icon: '🤖', status: 'ok' },
+      { label: 'Series & Collections', icon: '📁', status: 'maybe' },
+      { label: '2D/3D Atlas', icon: '🗺️', status: 'maybe' },
+      { label: 'Patterns & Report', icon: '📊', status: 'maybe' },
+    ],
+  },
+  {
+    range: '500 – 2,000',
+    minPhotos: 500,
+    profile: 'Meaningful collection work',
+    color: 'rgba(6, 182, 212, 0.25)',
+    features: [
+      { label: 'Semantic Search', icon: '🔍', status: 'ok' },
+      { label: 'ChatLab AI', icon: '🤖', status: 'ok' },
+      { label: 'Series & Collections', icon: '📁', status: 'ok' },
+      { label: '2D/3D Atlas', icon: '🗺️', status: 'maybe' },
+      { label: 'Patterns & Report', icon: '📊', status: 'maybe' },
+    ],
+  },
+  {
+    range: '2,000+',
+    minPhotos: 2000,
+    profile: 'Deep archive analysis',
+    color: 'rgba(34, 197, 94, 0.25)',
+    features: [
+      { label: 'Semantic Search', icon: '🔍', status: 'ok' },
+      { label: 'ChatLab AI', icon: '🤖', status: 'ok' },
+      { label: 'Series & Collections', icon: '📁', status: 'ok' },
+      { label: '2D/3D Atlas', icon: '🗺️', status: 'ok' },
+      { label: 'Patterns & Report', icon: '📊', status: 'ok' },
+    ],
+  },
+]
+
+function getTier(totalPhotos: number): PhotoTier {
+  for (let i = TIERS.length - 1; i >= 0; i--) {
+    if (totalPhotos >= TIERS[i].minPhotos) return TIERS[i]
+  }
+  return TIERS[0]
+}
+
+function getNextTier(totalPhotos: number): PhotoTier | null {
+  for (const tier of TIERS) {
+    if (totalPhotos < tier.minPhotos) return tier
+  }
+  return null
+}
+
+function featureStatusColor(status: 'ok' | 'maybe' | 'no'): string {
+  if (status === 'ok') return '#22c55e'
+  if (status === 'maybe') return '#f59e0b'
+  return '#ef4444'
+}
+
+function featureStatusBg(status: 'ok' | 'maybe' | 'no'): string {
+  if (status === 'ok') return 'rgba(34, 197, 94, 0.15)'
+  if (status === 'maybe') return 'rgba(245, 158, 11, 0.15)'
+  return 'rgba(239, 68, 68, 0.15)'
+}
+
+function featureStatusSymbol(status: 'ok' | 'maybe' | 'no'): string {
+  if (status === 'ok') return '✓'
+  if (status === 'maybe') return '?'
+  return '✗'
+}
+
+/**
+ * Analysis completed notification email
+ */
+export function analysisCompleteTemplate(
+  userName: string,
+  processedPhotos: number,
+  failedPhotos: number,
+  totalUserPhotos: number,
+  processUrl: string
+): string {
+  const tier = getTier(totalUserPhotos)
+  const nextTier = getNextTier(totalUserPhotos)
+  const allSucceeded = failedPhotos === 0
+
+  const featuresHtml = tier.features
+    .map(
+      (f) => `
+      <tr>
+        <td style="padding: 8px 12px; font-size: 14px; color: ${MUTED_TEXT_COLOR}; border-bottom: 1px solid rgba(148, 163, 184, 0.1);">
+          ${f.icon} ${f.label}
+        </td>
+        <td style="padding: 8px 12px; text-align: center; border-bottom: 1px solid rgba(148, 163, 184, 0.1);">
+          <span style="display: inline-block; width: 24px; height: 24px; line-height: 24px; border-radius: 50%; 
+                       font-size: 13px; font-weight: 700; text-align: center;
+                       background: ${featureStatusBg(f.status)}; color: ${featureStatusColor(f.status)};">
+            ${featureStatusSymbol(f.status)}
+          </span>
+        </td>
+      </tr>`
+    )
+    .join('')
+
+  const summaryItems = [
+    `<strong style="color: ${TEXT_COLOR};">${processedPhotos}</strong> photo${processedPhotos !== 1 ? 's' : ''} processed`,
+    ...(failedPhotos > 0
+      ? [
+          `<strong style="color: #ef4444;">${failedPhotos}</strong> photo${failedPhotos !== 1 ? 's' : ''} failed`,
+        ]
+      : []),
+    `<strong style="color: ${TEXT_COLOR};">${totalUserPhotos.toLocaleString()}</strong> total in your archive`,
+  ]
+
+  const nextTierSection = nextTier
+    ? `
+    <div style="background-color: rgba(99, 102, 241, 0.08); border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid rgba(99, 102, 241, 0.15);">
+      <p style="margin: 0 0 8px; font-size: 14px; color: ${TEXT_COLOR}; font-weight: 600; text-align: center;">
+        🚀 Unlock more with your next milestone
+      </p>
+      <p style="margin: 0; font-size: 13px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+        Upload more photos to reach the <strong style="color: ${TEXT_COLOR};">${nextTier.range}</strong> tier
+        (<em>${nextTier.profile}</em>) and get full access to more tools.
+        The more photos you import, the more powerful every feature becomes.
+      </p>
+    </div>`
+    : `
+    <div style="background-color: rgba(34, 197, 94, 0.08); border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid rgba(34, 197, 94, 0.15);">
+      <p style="margin: 0; font-size: 14px; color: #22c55e; font-weight: 600; text-align: center;">
+        🎉 You've reached the top tier — all tools are fully unlocked!
+      </p>
+    </div>`
+
+  const content = `
+    <h1 style="margin: 0 0 20px; font-size: 28px; font-weight: 700; color: ${TEXT_COLOR}; text-align: center;">
+      Analysis Complete ${allSucceeded ? '✅' : '⚠️'}
+    </h1>
+    <p style="margin: 0 0 10px; font-size: 16px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+      Hi ${userName},
+    </p>
+    <p style="margin: 0 0 24px; font-size: 16px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+      Your photo analysis has finished. Here's a quick summary:
+    </p>
+
+    <!-- Summary -->
+    <div style="background-color: rgba(99, 102, 241, 0.05); border-radius: 8px; padding: 16px 20px; margin: 0 0 24px;">
+      <p style="margin: 0; font-size: 14px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.8;">
+        ${summaryItems.join(' &nbsp;·&nbsp; ')}
+      </p>
+    </div>
+
+    <!-- Current tier badge -->
+    <p style="margin: 0 0 6px; font-size: 12px; color: ${MUTED_TEXT_COLOR}; text-align: center; text-transform: uppercase; letter-spacing: 0.5px;">
+      Your current tier
+    </p>
+    <p style="margin: 0 0 20px; text-align: center;">
+      <span style="display: inline-block; padding: 6px 18px; border-radius: 8px; font-size: 14px; font-weight: 600;
+                   background: ${tier.color}; color: ${TEXT_COLOR};">
+        ${tier.range} photos — ${tier.profile}
+      </span>
+    </p>
+
+    <!-- Features table -->
+    <table role="presentation" style="width: 100%; max-width: 400px; margin: 0 auto 20px; border-collapse: collapse;">
+      <thead>
+        <tr>
+          <th style="padding: 8px 12px; text-align: left; font-size: 11px; color: ${MUTED_TEXT_COLOR}; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid rgba(148, 163, 184, 0.2);">
+            Feature
+          </th>
+          <th style="padding: 8px 12px; text-align: center; font-size: 11px; color: ${MUTED_TEXT_COLOR}; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid rgba(148, 163, 184, 0.2);">
+            Status
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        ${featuresHtml}
+      </tbody>
+    </table>
+
+    <!-- Legend -->
+    <p style="margin: 0 0 20px; font-size: 11px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+      <span style="color: #22c55e;">✓</span> Works great &nbsp;&nbsp;
+      <span style="color: #f59e0b;">?</span> Limited value &nbsp;&nbsp;
+      <span style="color: #ef4444;">✗</span> Not useful yet
+    </p>
+
+    ${nextTierSection}
+
+    ${emailButton('View Your Processes', processUrl)}
+
+    <hr style="border: none; border-top: 1px solid rgba(148, 163, 184, 0.2); margin: 30px 0;" />
+
+    <p style="margin: 0; font-size: 12px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+      This is an automated notification from Photoreka. Your photos are ready to explore.
+    </p>
+  `
+
+  return baseLayout(content, 'Analysis Complete - Photoreka')
+}
