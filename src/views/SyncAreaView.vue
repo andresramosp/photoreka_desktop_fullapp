@@ -4,7 +4,7 @@
     <div class="hub-header">
       <div class="header-content">
         <h1 class="page-title">Sync Area</h1>
-        <p class="page-subtitle">Synchronize and process your photos here.</p>
+        <p class="page-subtitle">Import and process your photos here.</p>
       </div>
     </div>
 

@@ -90,7 +90,7 @@
             {{
               overallProgress >= 100 && isPreprocessing
                 ? "Preprocessing Photos"
-                : "Synchronizing Photos"
+                : "Importing Photos"
             }}
           </h3>
           <n-spin
