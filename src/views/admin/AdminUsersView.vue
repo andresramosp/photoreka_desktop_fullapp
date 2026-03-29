@@ -55,6 +55,19 @@
       <n-tag :bordered="false" size="small" type="info">
         {{ filteredCount }} user{{ filteredCount !== 1 ? "s" : "" }}
       </n-tag>
+
+      <n-button
+        size="small"
+        quaternary
+        :disabled="users.length === 0"
+        title="Copy all emails to clipboard"
+        @click="copyEmails"
+      >
+        <template #icon
+          ><n-icon size="15"><CopyIcon /></n-icon
+        ></template>
+        Copy emails
+      </n-button>
     </div>
 
     <!-- Users Table -->
@@ -449,6 +462,7 @@ import {
   BanOutline as BanIcon,
   CheckmarkCircleOutline as ActivateIcon,
   RefreshOutline as RefreshIcon,
+  CopyOutline as CopyIcon,
 } from "@vicons/ionicons5";
 import { api } from "../../utils/axios";
 
@@ -741,6 +755,18 @@ const providerOptions = [
 ];
 
 const filteredCount = computed(() => users.value.length);
+
+async function copyEmails() {
+  const emails = users.value.map((u) => u.email).join(", ");
+  try {
+    await navigator.clipboard.writeText(emails);
+    message.success(
+      `${users.value.length} email${users.value.length !== 1 ? "s" : ""} copied to clipboard`,
+    );
+  } catch {
+    message.error("Failed to copy to clipboard");
+  }
+}
 
 const usageChanged = computed(() => {
   if (!selectedUser.value?.usage) return false;
