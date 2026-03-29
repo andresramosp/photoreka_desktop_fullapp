@@ -153,6 +153,12 @@
 
           <!-- Mobile Welcome Banner -->
           <MobileWelcomeBanner />
+
+          <!-- Welcome Batch Modal (no processed photos yet) -->
+          <WelcomeBatchModal
+            :show="showWelcomeBatchModal"
+            @close="welcomeBatchDismissed = true"
+          />
         </template>
       </n-message-provider>
     </n-notification-provider>
@@ -173,6 +179,7 @@ import ConfettiEffect from "./components/ConfettiEffect.vue";
 import AppInitLoader from "./components/AppInitLoader.vue";
 import { useThemeInit } from "@/composables/useTheme.js";
 import MobileWelcomeBanner from "./components/MobileWelcomeBanner.vue";
+import WelcomeBatchModal from "./components/WelcomeBatchModal.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -281,6 +288,19 @@ const getKeepAliveComponents = () => {
 const mobileMenuOpen = ref(false);
 const isMobile = ref(false);
 const showConfetti = ref(false);
+
+// Welcome Batch Modal — shown when user has 0 processed photos
+const welcomeBatchDismissed = ref(
+  localStorage.getItem("welcome-batch-modal-dismissed") === "true",
+);
+const showWelcomeBatchModal = computed(() => {
+  return (
+    isAppReady.value &&
+    userStore.isAuthenticated &&
+    photosStore.processedPhotos.length === 0 &&
+    !welcomeBatchDismissed.value
+  );
+});
 
 // Welcome modal simple con delay para evitar parpadeos
 
