@@ -247,6 +247,17 @@
           <n-tag v-else type="success" size="large" round> Connected </n-tag>
         </div>
 
+        <div class="import-card" @click="importFromDropbox">
+          <div class="import-card-icon">
+            <img :src="dropboxIconUrl" alt="Dropbox" class="dropbox-logo" />
+          </div>
+          <h4 class="import-card-title">Dropbox</h4>
+          <p class="import-card-description">
+            Import photos directly from your Dropbox
+          </p>
+          <n-tag type="info" size="large" round>Select files</n-tag>
+        </div>
+
         <div
           class="import-card lightroom-card"
           @click="showLightroomModal = true"
@@ -361,6 +372,13 @@
                     />
                   </svg>
                 </n-icon>
+                <n-icon v-else-if="button.icon === 'dropbox'">
+                  <img
+                    :src="dropboxIconUrl"
+                    alt="Dropbox"
+                    style="width: 1em; height: 1em"
+                  />
+                </n-icon>
               </template>
               {{ button.label }}
             </n-button>
@@ -424,6 +442,13 @@
                       />
                     </svg>
                   </n-icon>
+                  <n-icon v-else-if="button.icon === 'dropbox'">
+                    <img
+                      :src="dropboxIconUrl"
+                      alt="Dropbox"
+                      style="width: 1em; height: 1em"
+                    />
+                  </n-icon>
                 </template>
                 <span class="button-label">{{
                   isUploadDisabled &&
@@ -474,11 +499,13 @@ import { useUserStore } from "@/stores/userStore.ts";
 import { usePhotoUpload } from "@/composables/usePhotoUpload.js";
 import { useWarmUp } from "@/composables/useWarmUp.js";
 import { useGooglePhotos } from "@/composables/useGooglePhotos.js";
+import { useDropbox } from "@/composables/useDropbox.js";
 import { FolderOpen, CloudUploadOutline } from "@vicons/ionicons5";
 import { BookInformation20Regular } from "@vicons/fluent";
 import pLimit from "p-limit";
 import pica from "pica";
 import googlePhotosIconUrl from "@/assets/logos/google_photos.png";
+import dropboxIconUrl from "@/assets/logos/dropbox.svg";
 
 import PhotosGrid from "../PhotosGrid.vue";
 import DuplicatePhotosDialog from "../DuplicatePhotosDialog.vue";
@@ -507,6 +534,8 @@ const { warmedUp, ensureWarmUp } = useWarmUp();
 
 // Google Photos composable
 const googlePhotos = useGooglePhotos();
+// Dropbox composable
+const dropbox = useDropbox();
 const picaInstance = pica();
 const limit = pLimit(10);
 
@@ -664,15 +693,23 @@ const uploadButtons = computed(() => {
       type: "default",
       action: () => handleSourceSelection("google", importFromGooglePhotos),
     },
+    dropbox: {
+      key: "dropbox",
+      label: "Dropbox",
+      compactLabel: "Dropbox",
+      icon: "dropbox",
+      type: "default",
+      action: () => handleSourceSelection("dropbox", importFromDropbox),
+    },
   };
 
   // Order buttons based on preferredSource
   if (preferredSource === "lightroom") {
-    return [buttons.lightroom, buttons.local, buttons.google];
+    return [buttons.lightroom, buttons.local, buttons.google, buttons.dropbox];
   }
 
   // Default order for "web"
-  return [buttons.local, buttons.google, buttons.lightroom];
+  return [buttons.local, buttons.google, buttons.lightroom, buttons.dropbox];
 });
 
 // Watcher para activar warm-up cuando el progreso llega al 75%
@@ -902,6 +939,51 @@ async function importFromGooglePhotos() {
   }
 }
 
+async function importFromDropbox() {
+  try {
+    const validation = validateUploadLimits(100);
+    if (!validation.isValid) {
+      message.error(validation.message);
+      return;
+    }
+
+    const downloadResults = await dropbox.importPhotos(5);
+
+    if (!downloadResults || downloadResults.length === 0) {
+      return;
+    }
+
+    const successfulDownloads = downloadResults.filter((r) => r.success);
+
+    if (successfulDownloads.length === 0) {
+      message.warning("No photos were successfully downloaded from Dropbox");
+      return;
+    }
+
+    const finalValidation = validateUploadLimits(successfulDownloads.length);
+    if (!finalValidation.isValid) {
+      message.error(finalValidation.message);
+      return;
+    }
+
+    ensureWarmUp("image");
+
+    await handleUploadFlow(
+      successfulDownloads.map((result) => ({
+        dropboxBlob: result.blob,
+        dropboxFile: result.file,
+      })),
+      "dropbox",
+    );
+
+    message.success(
+      `Successfully imported ${successfulDownloads.length} photos from Dropbox`,
+    );
+  } catch (error) {
+    console.error("❌ Error importing from Dropbox:", error);
+  }
+}
+
 // Handler to check if source warning should be shown
 const handleSourceSelection = (source, callback) => {
   const preferredSource = userStore.user?.preferredSource || "web";
@@ -930,6 +1012,8 @@ const confirmSourceWarning = () => {
     showLightroomModal.value = true;
   } else if (source === "google") {
     importFromGooglePhotos();
+  } else if (source === "dropbox") {
+    importFromDropbox();
   }
 
   pendingSourceAction.value = null;
@@ -1319,9 +1403,9 @@ defineExpose({
 
 .import-cards-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 24px;
-  max-width: 900px;
+  max-width: 1100px;
   margin: 0 auto 32px;
 }
 
@@ -1377,6 +1461,12 @@ defineExpose({
 
 .import-card-icon .lightroom-logo {
   height: 60px;
+  width: auto;
+  object-fit: contain;
+}
+
+.import-card-icon .dropbox-logo {
+  height: 48px;
   width: auto;
   object-fit: contain;
 }

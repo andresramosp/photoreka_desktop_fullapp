@@ -225,22 +225,36 @@
             </div>
 
             <!-- Dropbox -->
-            <div class="connection-item coming-soon">
+            <div class="connection-item">
               <div class="connection-info">
-                <div class="connection-icon-wrapper dropbox">
-                  <n-icon size="24" color="#fff">
-                    <CloudUploadOutline />
-                  </n-icon>
-                </div>
+                <img
+                  :src="dropboxIconUrl"
+                  alt="Dropbox"
+                  class="connection-icon"
+                />
                 <div class="connection-details">
                   <span class="connection-name">Dropbox</span>
                   <span class="connection-description"
-                    >Sync photos from your Dropbox</span
+                    >Import photos from your Dropbox</span
                   >
                 </div>
               </div>
               <div class="connection-actions">
-                <n-tag type="info" size="small" round> Coming soon </n-tag>
+                <n-tag v-if="isDropboxReady" type="success" size="small" round>
+                  Ready
+                </n-tag>
+                <n-tag v-else type="warning" size="small" round>
+                  Not connected
+                </n-tag>
+                <n-button
+                  v-if="!isDropboxReady"
+                  type="primary"
+                  size="small"
+                  @click="connectDropbox"
+                  :loading="dropbox.isLoading.value"
+                >
+                  Connect
+                </n-button>
               </div>
             </div>
           </div>
@@ -485,7 +499,6 @@ import {
   LinkOutline,
   CloudOutline,
   AddOutline,
-  CloudUploadOutline,
   LogoInstagram,
   MailOutline,
   SendOutline,
@@ -494,15 +507,18 @@ import {
 import { InProgress } from "@vicons/carbon";
 import { InfoCircleFilled } from "@vicons/antd";
 import googlePhotosIconUrl from "@/assets/logos/google_photos.png";
+import dropboxIconUrl from "@/assets/logos/dropbox.svg";
 import { useUserStore } from "@/stores/userStore";
 import { useTheme } from "@/composables/useTheme.js";
 import { useGooglePhotos } from "@/composables/useGooglePhotos.js";
+import { useDropbox } from "@/composables/useDropbox.js";
 import { api } from "@/utils/axios";
 
 // Stores and composables
 const userStore = useUserStore();
 const { isDarkMode, setTheme } = useTheme();
 const googlePhotos = useGooglePhotos();
+const dropbox = useDropbox();
 const message = useMessage();
 
 // Refresh usage on component mount
@@ -599,6 +615,19 @@ const connectGooglePhotos = async () => {
 const disconnectGooglePhotos = () => {
   googlePhotos.signOut();
   message.info("Google Photos disconnected");
+};
+
+// Dropbox connection
+const isDropboxReady = computed(() => dropbox.isInitialized.value);
+
+const connectDropbox = async () => {
+  try {
+    await dropbox.initialize();
+    message.success("Dropbox connected successfully!");
+  } catch (error: any) {
+    message.error(error?.message || "Failed to connect Dropbox");
+    console.error("Error connecting Dropbox:", error);
+  }
 };
 
 // Analysis usage (real data from userStore)

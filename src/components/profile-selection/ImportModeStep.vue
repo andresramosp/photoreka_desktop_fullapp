@@ -70,6 +70,7 @@
               <ul class="explanation-list">
                 <li>✓ Import from your computer (drag & drop or browse)</li>
                 <li>✓ Connect Google Photos and sync automatically</li>
+                <li>✓ Import directly from Dropbox</li>
                 <li>✓ Works from any device with a browser</li>
                 <li>
                   ✓ Lightroom plugin available as optional secondary source
@@ -392,7 +393,9 @@ const handleNext = () => {
 /* Fade transition */
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
 }
 
 .fade-enter-from,

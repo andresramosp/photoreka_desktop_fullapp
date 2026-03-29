@@ -4,7 +4,8 @@
     <div
       v-if="
         isUploading ||
-        (googlePhotos.isDownloading && googlePhotos.totalToDownload > 0)
+        (googlePhotos.isDownloading && googlePhotos.totalToDownload > 0) ||
+        (dropbox.isDownloading.value && dropbox.totalToDownload.value > 0)
       "
       class="upload-progress-section"
     >
@@ -13,11 +14,19 @@
           {{
             googlePhotos.isDownloading
               ? "Downloading from Google Photos"
-              : "Uploading Photos"
+              : dropbox.isDownloading.value
+                ? "Downloading from Dropbox"
+                : "Uploading Photos"
           }}
         </h3>
         <span class="progress-count" v-if="googlePhotos.isDownloading">
           {{ googlePhotos.downloadedCount }}/{{ googlePhotos.totalToDownload }}
+          photos downloaded
+        </span>
+        <span class="progress-count" v-else-if="dropbox.isDownloading.value">
+          {{ dropbox.downloadedCount.value }}/{{
+            dropbox.totalToDownload.value
+          }}
           photos downloaded
         </span>
         <span class="progress-count" v-else>
@@ -91,6 +100,24 @@
               </template>
               Google Photos
             </n-button>
+
+            <n-button
+              type="default"
+              size="large"
+              class="upload-btn"
+              @click="importFromDropbox"
+            >
+              <template #icon>
+                <n-icon>
+                  <img
+                    :src="dropboxIconUrl"
+                    alt="Dropbox"
+                    style="width: 1em; height: 1em"
+                  />
+                </n-icon>
+              </template>
+              Dropbox
+            </n-button>
           </div>
           <div class="file-formats">
             <span class="format-text"
@@ -141,6 +168,24 @@
           </template>
           Google Photos
         </n-button>
+
+        <n-button
+          type="default"
+          size="medium"
+          class="compact-upload-btn"
+          @click="importFromDropbox"
+        >
+          <template #icon>
+            <n-icon>
+              <img
+                :src="dropboxIconUrl"
+                alt="Dropbox"
+                style="width: 1em; height: 1em"
+              />
+            </n-icon>
+          </template>
+          Dropbox
+        </n-button>
       </div>
     </div>
 
@@ -187,7 +232,9 @@ import PhotoCardHub from "../photoCards/PhotoCardHub.vue";
 import { NButton, NProgress, NIcon } from "naive-ui";
 import { api_analyzer, api } from "@/utils/axios";
 import { useGooglePhotos } from "@/composables/useGooglePhotos.js";
+import { useDropbox } from "@/composables/useDropbox.js";
 import googlePhotosIconUrl from "@/assets/logos/google_photos.png";
+import dropboxIconUrl from "@/assets/logos/dropbox.svg";
 
 const props = defineProps({
   selectedIds: {
@@ -200,6 +247,7 @@ const emit = defineEmits(["update:selectedIds", "photos-added"]);
 
 const photosStore = usePhotosStore();
 const googlePhotos = useGooglePhotos();
+const dropbox = useDropbox();
 
 const isUploading = ref(false);
 const gridColumns = ref(6);
@@ -230,6 +278,10 @@ const overallProgress = computed(() => {
   // Si estamos descargando de Google Photos, usar ese progreso
   if (googlePhotos.isDownloading.value) {
     return googlePhotos.downloadProgress.value;
+  }
+  // Si estamos descargando de Dropbox, usar ese progreso
+  if (dropbox.isDownloading.value) {
+    return dropbox.downloadProgress.value;
   }
   // Si estamos subiendo archivos locales
   if (totalFiles.value === 0) return 0;
@@ -448,6 +500,104 @@ async function processAndUploadGooglePhoto(result) {
   const { uploadUrl, thumbnailUploadUrl, photo: uploadedPhoto } = response.data;
 
   // Upload to R2
+  await Promise.all([
+    fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": resizedBlob.type },
+      body: resizedBlob,
+    }),
+    fetch(thumbnailUploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": thumbnailBlob.type },
+      body: thumbnailBlob,
+    }),
+  ]);
+
+  uploadedPhoto.status = "preprocessing";
+  uploadedPhoto.isDuplicate = false;
+  photosStore.photos.unshift(uploadedPhoto);
+  uploadedCount.value++;
+
+  return uploadedPhoto;
+}
+
+/**
+ * Importa fotos desde Dropbox Chooser
+ */
+async function importFromDropbox() {
+  try {
+    const downloadResults = await dropbox.importPhotos(5);
+
+    if (!downloadResults || downloadResults.length === 0) {
+      return;
+    }
+
+    const successfulDownloads = downloadResults.filter((r) => r.success);
+
+    if (successfulDownloads.length === 0) {
+      console.warn("No photos were successfully downloaded from Dropbox");
+      return;
+    }
+
+    isUploading.value = true;
+    totalFiles.value = successfulDownloads.length;
+    uploadedCount.value = 0;
+
+    const photosToUpload = [];
+
+    await Promise.all(
+      successfulDownloads.map((result) =>
+        limit(() =>
+          processAndUploadDropboxPhoto(result).then((photo) => {
+            if (photo) photosToUpload.push(photo);
+          }),
+        ),
+      ),
+    );
+
+    const photoIds = photosToUpload.map((p) => p.id);
+    photoIds.forEach((id) => {
+      photosStore.updatePhoto(id, { preprocessing: true });
+    });
+
+    await api_analyzer.post(`/api/analyzer`, {
+      packageId: "preprocess",
+      mode: "adding",
+    });
+
+    await photosStore.getOrFetch(true);
+
+    photoIds.forEach((id) => {
+      photosStore.updatePhoto(id, { preprocessing: false, preprocessed: true });
+    });
+
+    emit("photos-added", photosToUpload);
+  } catch (error) {
+    console.error("❌ Error importing from Dropbox:", error);
+  } finally {
+    isUploading.value = false;
+  }
+}
+
+/**
+ * Procesa y sube una foto de Dropbox (blob ya descargado)
+ */
+async function processAndUploadDropboxPhoto(result) {
+  const { file, blob } = result;
+  const filename = file?.name || `dropbox-photo-${Date.now()}.jpg`;
+
+  const [resizedBlob, thumbnailBlob] = await Promise.all([
+    resizeImageFromBlob(blob, 1500),
+    resizeImageFromBlob(blob, 800),
+  ]);
+
+  const response = await api.post("/api/catalog/uploadPhoto", {
+    fileType: resizedBlob.type,
+    originalName: filename,
+    source: "dropbox",
+  });
+  const { uploadUrl, thumbnailUploadUrl, photo: uploadedPhoto } = response.data;
+
   await Promise.all([
     fetch(uploadUrl, {
       method: "PUT",

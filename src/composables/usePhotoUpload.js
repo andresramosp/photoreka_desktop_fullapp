@@ -48,6 +48,10 @@ export function usePhotoUpload() {
         photoData?.filename ||
         photoData?.name ||
         `google-photo-${Date.now()}.jpg`;
+    } else if (srcType === "dropbox") {
+      // Para Dropbox, source es { dropboxBlob, dropboxFile }
+      file = source.dropboxBlob;
+      fileName = source.dropboxFile?.name || `dropbox-photo-${Date.now()}.jpg`;
     } else {
       // Para archivos locales, source es un File object
       file = source;
@@ -76,7 +80,12 @@ export function usePhotoUpload() {
     const payload = {
       fileType: resizedBlob.type,
       originalName: fileName,
-      source: srcType === "google" ? { type: "google" } : { type: "local" },
+      source:
+        srcType === "google"
+          ? { type: "google" }
+          : srcType === "dropbox"
+            ? { type: "dropbox" }
+            : { type: "local" },
       exifData: exifData, // Incluir datos EXIF básicos
     };
 
