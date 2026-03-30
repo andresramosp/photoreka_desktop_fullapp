@@ -418,13 +418,28 @@ export default class AnalyzerProcessRunner {
         )
         this.process.currentStage = 'finished'
         await this.process.save()
-        if (shouldNotify) this.sendAnalysisCompleteEmail().catch(() => {})
+        if (shouldNotify)
+          this.sendAnalysisCompleteEmail().catch((e) =>
+            logger.error(
+              `Error enviando email tras autoRetry max: ${e instanceof Error ? e.message : String(e)}`
+            )
+          )
       } else {
         logger.info('autoRetry activo, pero no hay fotos fallidas. No se lanza retry_process.')
-        if (shouldNotify) this.sendAnalysisCompleteEmail().catch(() => {})
+        if (shouldNotify)
+          this.sendAnalysisCompleteEmail().catch((e) =>
+            logger.error(
+              `Error enviando email tras autoRetry ok: ${e instanceof Error ? e.message : String(e)}`
+            )
+          )
       }
     } else {
-      if (shouldNotify) this.sendAnalysisCompleteEmail().catch(() => {})
+      if (shouldNotify)
+        this.sendAnalysisCompleteEmail().catch((e) =>
+          logger.error(
+            `Error enviando email de análisis: ${e instanceof Error ? e.message : String(e)}`
+          )
+        )
     }
   }
 
@@ -434,29 +449,35 @@ export default class AnalyzerProcessRunner {
   private async sendAnalysisCompleteEmail() {
     try {
       const userId = this.process.userId
-      if (!userId) return
+      if (!userId) {
+        logger.warn('sendAnalysisCompleteEmail: userId vacío, abortando')
+        return
+      }
 
+      logger.debug(`sendAnalysisCompleteEmail: buscando usuario ${userId}`)
       const user = await User.find(userId)
-      if (!user || !user.email) return
+      if (!user || !user.email) {
+        logger.warn(
+          `sendAnalysisCompleteEmail: usuario no encontrado o sin email (userId: ${userId})`
+        )
+        return
+      }
 
-      // Count processed and failed photos from the process sheet
+      logger.debug(`sendAnalysisCompleteEmail: contando fotos del proceso ${this.process.id}`)
       const totalProcessPhotos = await this.getTotalProcessPhotos()
-      let failedPhotos = 0
-      // const sheet = this.process.processSheet || {}
-      // for (const task of Object.values(sheet) as any[]) {
-      //   if (Array.isArray(task.pendingPhotoIds)) {
-      //     failedPhotos = Math.max(failedPhotos, task.pendingPhotoIds.length)
-      //   }
-      // }
+      const failedPhotos = 0
       const processedPhotos = totalProcessPhotos
 
-      // Total photos in user's archive
+      logger.debug(`sendAnalysisCompleteEmail: contando fotos totales del usuario ${userId}`)
       const totalResult = await Photo.query().where('user_id', userId).count('* as total')
       const totalUserPhotos = Number(totalResult[0]?.$extras?.total || 0)
 
       const frontendUrl = process.env.FRONTEND_URL || 'https://app.photoreka.com'
       const processUrl = `${frontendUrl}/sync-area#processing`
 
+      logger.debug(
+        `sendAnalysisCompleteEmail: generando template (processed: ${processedPhotos}, total: ${totalUserPhotos})`
+      )
       const html = analysisCompleteTemplate(
         user.name || 'there',
         processedPhotos,
@@ -465,6 +486,7 @@ export default class AnalyzerProcessRunner {
         processUrl
       )
 
+      logger.debug(`sendAnalysisCompleteEmail: enviando email a ${user.email}`)
       const mailService = new MailService()
       await mailService.sendEmail({
         from: 'Photoreka <hello@photoreka.com>',
@@ -475,7 +497,8 @@ export default class AnalyzerProcessRunner {
 
       logger.info(`Email de análisis completado enviado a ${user.email} (userId: ${userId})`)
     } catch (error) {
-      logger.error('Error enviando email de análisis completado:', error)
+      const errMsg = error instanceof Error ? `${error.message}\n${error.stack}` : String(error)
+      logger.error(`Error enviando email de análisis completado: ${errMsg}`)
     }
   }
 }
