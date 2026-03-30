@@ -442,13 +442,13 @@ export default class AnalyzerProcessRunner {
       // Count processed and failed photos from the process sheet
       const totalProcessPhotos = await this.getTotalProcessPhotos()
       let failedPhotos = 0
-      const sheet = this.process.processSheet || {}
-      for (const task of Object.values(sheet) as any[]) {
-        if (Array.isArray(task.pendingPhotoIds)) {
-          failedPhotos = Math.max(failedPhotos, task.pendingPhotoIds.length)
-        }
-      }
-      const processedPhotos = totalProcessPhotos - failedPhotos
+      // const sheet = this.process.processSheet || {}
+      // for (const task of Object.values(sheet) as any[]) {
+      //   if (Array.isArray(task.pendingPhotoIds)) {
+      //     failedPhotos = Math.max(failedPhotos, task.pendingPhotoIds.length)
+      //   }
+      // }
+      const processedPhotos = totalProcessPhotos
 
       // Total photos in user's archive
       const totalResult = await Photo.query().where('user_id', userId).count('* as total')
