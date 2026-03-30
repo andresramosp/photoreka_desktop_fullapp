@@ -23,7 +23,6 @@ import GridMaker from "../views/GridMakerView.vue";
 import ChatView from "../views/ChatView.vue";
 // import LandingView from "../views/LandingView.vue";
 import LandingViewPremium from "../views/LandingViewPremium.vue";
-import TermsView from "../views/TermsView.vue";
 import MaintenanceView from "../views/MaintenanceView.vue";
 import ThreeDView from "../views/3DView.vue";
 import TwoDView from "../views/2DView.vue";
@@ -75,20 +74,6 @@ const router = createRouter({
         layout: false, // Use standalone layout
       },
     },
-    {
-      path: "/terms",
-      name: "terms",
-      component: TermsView,
-      meta: {
-        requiresGuest: false, // Accessible to both guests and authenticated users
-        layout: false, // Use standalone layout like landing page
-        title: "Terms of Service - Photoreka",
-        description:
-          "Read Photoreka's terms of service and user agreement for our AI photo enhancement platform.",
-        keywords: "terms of service, privacy policy, user agreement, Photoreka",
-      },
-    },
-
     {
       path: "/auth",
       name: "auth",

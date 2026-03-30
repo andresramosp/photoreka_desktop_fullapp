@@ -218,7 +218,20 @@
 
                 <!-- Link if exists -->
                 <div v-if="selectedSubtopic.link" class="article-link">
+                  <a
+                    v-if="selectedSubtopic.link.url"
+                    :href="selectedSubtopic.link.url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="link-button"
+                  >
+                    {{ selectedSubtopic.link.text }}
+                    <n-icon size="16">
+                      <OpenOutline />
+                    </n-icon>
+                  </a>
                   <router-link
+                    v-else
                     :to="selectedSubtopic.link.route"
                     class="link-button"
                   >

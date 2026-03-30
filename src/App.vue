@@ -33,7 +33,6 @@
             route.name === '3d-catalog' ||
             route.name === 'shared-atlas' ||
             route.name === 'shared-series' ||
-            route.name === 'terms' ||
             route.name === 'maintenance' ||
             route.name === 'reset-password' ||
             route.name === 'confirm-email' ||

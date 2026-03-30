@@ -518,7 +518,11 @@
                   <p v-else-if="!faq.hasLink">{{ faq.answer }}</p>
                   <p v-else>
                     {{ faq.answer.split("Terms and Image Policy")[0] }}
-                    <a @click="goToTerms" class="faq-link"
+                    <a
+                      href="https://www.photoreka.com/terms"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="faq-link"
                       >Terms and Image Policy</a
                     >
                     {{
@@ -540,7 +544,13 @@
             <p class="footer-copyright">
               © 2024 Photoreka. All rights reserved.
             </p>
-            <a @click="goToTerms" class="footer-link">Terms & Image Policy</a>
+            <a
+              href="https://www.photoreka.com/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="footer-link"
+              >Terms & Image Policy</a
+            >
           </div>
         </footer>
 
@@ -810,12 +820,6 @@ const goToAuth = (mode = "login") => {
   } else {
     router.push({ name: "auth", query: { mode } });
   }
-};
-
-const goToTerms = () => {
-  trackUserAction("navigate_to_terms", "landing_page_premium");
-  const termsUrl = router.resolve({ name: "terms" }).href;
-  window.open(termsUrl, "_blank");
 };
 
 const goToPlayground = () => {

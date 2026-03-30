@@ -63,12 +63,20 @@
         <n-checkbox v-model:checked="acceptTerms" class="terms-checkbox">
           <span class="terms-text">
             I agree to the
-            <n-button @click="goToTerms" text type="primary" class="terms-link"
-              >terms and conditions</n-button
+            <a
+              href="https://www.photoreka.com/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="terms-link"
+              >terms and conditions</a
             >
             and
-            <n-button @click="goToTerms" text type="primary" class="terms-link"
-              >privacy policy</n-button
+            <a
+              href="https://www.photoreka.com/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="terms-link"
+              >privacy policy</a
             >
           </span>
         </n-checkbox>
@@ -247,11 +255,6 @@ const handleSubmit = async () => {
     // Validation failed, errors will be shown in form
   }
 };
-
-const goToTerms = () => {
-  const termsUrl = router.resolve({ name: "terms" }).href;
-  window.open(termsUrl, "_blank");
-};
 </script>
 
 <style scoped>
@@ -320,6 +323,13 @@ const goToTerms = () => {
   height: auto;
   display: inline;
   vertical-align: baseline;
+  color: var(--primary-color, #2563eb);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.terms-link:hover {
+  text-decoration: underline;
 }
 
 .submit-button {

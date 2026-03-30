@@ -249,7 +249,7 @@
           "image": null,
           "link": {
             "text": "Read Full Terms",
-            "route": "/terms"
+            "url": "https://www.photoreka.com/terms"
           }
         },
         {
@@ -259,7 +259,7 @@
           "image": null,
           "link": {
             "text": "Read Privacy Policy",
-            "route": "/privacy"
+            "url": "https://www.photoreka.com/privacy"
           }
         }
       ]
