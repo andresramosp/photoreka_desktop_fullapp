@@ -202,7 +202,8 @@ export default class AnalyzerProcessRunner {
         await this.executeStage(stage, level)
       } catch (error) {
         const stageDescription = `stage ${stage.type} (${stage.tasks?.length || 0} items)`
-        logger.error(`Error en ${stageDescription}:`, error)
+        const errMsg = error instanceof Error ? `${error.message}\n${error.stack}` : String(error)
+        logger.error(`Error en ${stageDescription}: ${errMsg}`)
       }
     }
   }
@@ -222,11 +223,17 @@ export default class AnalyzerProcessRunner {
     if (stage.type === 'parallel') {
       // Ejecutar todas las tasks/stages en paralelo
       const parallelPromises = stage.tasks.map(async (item: any) => {
-        if (this.isTaskDefinition(item)) {
-          const task = this.createTask(item)
-          await this.executeSingleTask(task, level + 1, true)
-        } else {
-          await this.executeStage(item, level + 1)
+        const itemDesc = this.getItemDescription(item)
+        try {
+          if (this.isTaskDefinition(item)) {
+            const task = this.createTask(item)
+            await this.executeSingleTask(task, level + 1, true)
+          } else {
+            await this.executeStage(item, level + 1)
+          }
+        } catch (error) {
+          const errMsg = error instanceof Error ? `${error.message}\n${error.stack}` : String(error)
+          logger.error(`Error en ${itemDesc} (parallel): ${errMsg}`)
         }
       })
 
@@ -234,11 +241,17 @@ export default class AnalyzerProcessRunner {
     } else if (stage.type === 'sequential') {
       // Ejecutar las tasks/stages secuencialmente
       for (const item of stage.tasks) {
-        if (this.isTaskDefinition(item)) {
-          const task = this.createTask(item)
-          await this.executeSingleTask(task, level + 1)
-        } else {
-          await this.executeStage(item, level + 1)
+        const itemDesc = this.getItemDescription(item)
+        try {
+          if (this.isTaskDefinition(item)) {
+            const task = this.createTask(item)
+            await this.executeSingleTask(task, level + 1)
+          } else {
+            await this.executeStage(item, level + 1)
+          }
+        } catch (error) {
+          const errMsg = error instanceof Error ? `${error.message}\n${error.stack}` : String(error)
+          logger.error(`Error en ${itemDesc} (sequential): ${errMsg}`)
         }
       }
     }
@@ -272,8 +285,14 @@ export default class AnalyzerProcessRunner {
       logger.info(
         `${indent}-> Ejecutando ${taskName} en ${executionType} | Fotos: ${pendingPhotos.length}`
       )
-      await task.process(pendingPhotos, this.process)
-      logger.info(`${indent}-> Completado ${taskName}`)
+      try {
+        await task.process(pendingPhotos, this.process)
+        logger.info(`${indent}-> Completado ${taskName}`)
+      } catch (error) {
+        const errMsg = error instanceof Error ? `${error.message}\n${error.stack}` : String(error)
+        logger.error(`${indent}-> ERROR en tarea ${taskName}: ${errMsg}`)
+        throw error // re-throw para que executeStage lo capture también
+      }
 
       if (!isParallel) {
         await this.changeStage(`${indent}*** Tarea ${executionType} completada *** | ${taskName}`)
