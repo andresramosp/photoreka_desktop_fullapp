@@ -1851,66 +1851,62 @@ function zoomTick(direction = 1) {
   applyZoom(stage, newScale, updateStageOffset, pointer);
 }
 
+// Track in-progress image loads by photo ID to avoid duplicate requests
+const _pendingImageLoads = new Map();
+
 watch(
   () => photos.value.map((p) => p.src),
   () => {
     photos.value.forEach((photo) => {
-      if (!photo.image || photo.image.src !== photo.src) {
-        // Clear previous image if src changed
-        if (photo.image && photo.image.src !== photo.src) {
-          photo.image.onload = null;
-          photo.image.onerror = null;
-          photo.image = null;
-          photo.imageBroken = false;
-        }
-
-        const img = new Image();
-
-        // Handle image load errors to prevent broken state
-        img.onerror = () => {
-          console.warn(`Failed to load image: ${photo.src}`);
-          // Set a flag to indicate this image is broken
-          photo.imageBroken = true;
-          // Clear the image reference to prevent drawing attempts
-          photo.image = null;
-          // Force a re-render
-          const stage = stageRef.value?.getStage();
-          if (stage) {
-            stage.batchDraw();
-          }
-        };
-
-        img.onload = () => {
-          // Reset broken flag when image loads successfully
-          photo.imageBroken = false;
-          // Ensure the photo object still references this image
-          if (photo.image === img) {
-            // Force a re-render by updating the stage
-            const stage = stageRef.value?.getStage();
-            if (stage) {
-              stage.batchDraw();
-            }
-          }
-        };
-
-        img.src = photo.src;
-        photo.image = img;
-      } else if (photo.image && !photo.imageBroken) {
-        // Check if existing image is still valid by testing if it's complete and not broken
-        // This handles cases where the image was deleted from the server after being loaded
+      // Already loaded and valid — nothing to do
+      if (photo.image && photo.image.src === photo.src && !photo.imageBroken) {
+        // Check if existing image became invalid (deleted from server after initial load)
         if (photo.image.complete && photo.image.naturalWidth === 0) {
           console.warn(`Image became invalid: ${photo.src}`);
           photo.imageBroken = true;
           photo.image.onload = null;
           photo.image.onerror = null;
           photo.image = null;
-          // Force a re-render
+          _pendingImageLoads.delete(photo.id);
           const stage = stageRef.value?.getStage();
-          if (stage) {
-            stage.batchDraw();
-          }
+          if (stage) stage.batchDraw();
         }
+        return;
       }
+
+      // Already loading this exact src — skip
+      if (_pendingImageLoads.get(photo.id) === photo.src) return;
+
+      // Clear previous image if src changed
+      if (photo.image) {
+        photo.image.onload = null;
+        photo.image.onerror = null;
+        photo.image = null;
+        photo.imageBroken = false;
+      }
+
+      _pendingImageLoads.set(photo.id, photo.src);
+      const img = new Image();
+
+      img.onerror = () => {
+        _pendingImageLoads.delete(photo.id);
+        console.warn(`Failed to load image: ${photo.src}`);
+        photo.imageBroken = true;
+        // Do NOT assign photo.image — keep it null so Konva never draws a broken element
+        const stage = stageRef.value?.getStage();
+        if (stage) stage.batchDraw();
+      };
+
+      img.onload = () => {
+        _pendingImageLoads.delete(photo.id);
+        photo.imageBroken = false;
+        // Only assign after successful load — prevents Konva from drawing a broken/pending image
+        photo.image = img;
+        const stage = stageRef.value?.getStage();
+        if (stage) stage.batchDraw();
+      };
+
+      img.src = photo.src;
     });
   },
   { immediate: true },

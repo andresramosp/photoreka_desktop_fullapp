@@ -5,6 +5,115 @@ const HORIZONTAL_PHOTO_WIDTH = 150 * 1.5;
 const HORIZONTAL_PHOTO_HEIGHT = 100 * 1.5;
 const VERTICAL_PHOTO_WIDTH = 100 * 1.5;
 const VERTICAL_PHOTO_HEIGHT = 150 * 1.5;
+const MIN_GAP = 35; // Same gap as auto-align snap
+
+/**
+ * Check if a rectangle at (x,y) with size (w,h) overlaps any photo (with padding).
+ */
+function hasOverlap(photos, x, y, w, h, padding) {
+  for (const p of photos) {
+    if (
+      x - padding < p.config.x + p.config.width &&
+      x + w + padding > p.config.x &&
+      y - padding < p.config.y + p.config.height &&
+      y + h + padding > p.config.y
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Find a position on the canvas where a block of given size
+ * doesn't overlap with any existing photo.
+ */
+function findClearArea(existingPhotos, width, height, gap) {
+  if (existingPhotos.length === 0) {
+    return { x: gap, y: gap };
+  }
+
+  // Bounding box of all existing photos
+  let bMinX = Infinity,
+    bMinY = Infinity,
+    bMaxX = -Infinity,
+    bMaxY = -Infinity;
+  for (const p of existingPhotos) {
+    bMinX = Math.min(bMinX, p.config.x);
+    bMinY = Math.min(bMinY, p.config.y);
+    bMaxX = Math.max(bMaxX, p.config.x + p.config.width);
+    bMaxY = Math.max(bMaxY, p.config.y + p.config.height);
+  }
+
+  // Preferred positions: right of content, then below
+  const candidates = [
+    { x: bMaxX + gap, y: bMinY },
+    { x: bMinX, y: bMaxY + gap },
+  ];
+  for (const pos of candidates) {
+    if (!hasOverlap(existingPhotos, pos.x, pos.y, width, height, gap)) {
+      return pos;
+    }
+  }
+
+  // Systematic scan: rightward then downward
+  const step = Math.min(width, height, 100);
+  const range = Math.max(bMaxX - bMinX, bMaxY - bMinY, width, height) * 2;
+
+  for (let x = bMaxX + gap; x <= bMaxX + range; x += step) {
+    for (let y = bMinY - height; y <= bMaxY + height; y += step) {
+      if (!hasOverlap(existingPhotos, x, y, width, height, gap)) {
+        return { x, y };
+      }
+    }
+  }
+
+  for (let y = bMaxY + gap; y <= bMaxY + range; y += step) {
+    for (let x = bMinX - width; x <= bMaxX + width; x += step) {
+      if (!hasOverlap(existingPhotos, x, y, width, height, gap)) {
+        return { x, y };
+      }
+    }
+  }
+
+  // Absolute fallback
+  return { x: bMaxX + gap, y: bMaxY + gap };
+}
+
+/**
+ * Arrange photos in a compact grid and place them in a clear area.
+ */
+function arrangeInGrid(newPhotos, existingPhotos) {
+  if (newPhotos.length === 0) return;
+
+  const gap = MIN_GAP;
+  const count = newPhotos.length;
+
+  // Uniform cell size based on max dimensions of new photos
+  const cellW = Math.max(...newPhotos.map((p) => p.config.width));
+  const cellH = Math.max(...newPhotos.map((p) => p.config.height));
+
+  // As-square-as-possible grid
+  const cols = Math.ceil(Math.sqrt(count));
+  const rows = Math.ceil(count / cols);
+
+  const gridW = cols * cellW + (cols - 1) * gap;
+  const gridH = rows * cellH + (rows - 1) * gap;
+
+  const origin = findClearArea(existingPhotos, gridW, gridH, gap);
+
+  for (let i = 0; i < newPhotos.length; i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const photo = newPhotos[i];
+
+    // Center photo within its cell
+    photo.config.x =
+      origin.x + col * (cellW + gap) + (cellW - photo.config.width) / 2;
+    photo.config.y =
+      origin.y + row * (cellH + gap) + (cellH - photo.config.height) / 2;
+  }
+}
 
 // Devuelve una promesa con las dimensiones de la imagen
 function getImageDimensions(url) {
@@ -114,9 +223,12 @@ export const useCanvasStore = defineStore("canvas", {
 
     async addPhotos(photoObjects, fromPhoto = false, autoFit = false) {
       const addedPhotoIds = [];
+      const createdPhotos = [];
+      const photosToArrange = [];
       for (let index = 0; index < photoObjects.length; index++) {
         const photo = photoObjects[index];
         if (!this.photos.some((p) => p.id == photo.id)) {
+          const hasCustomPosition = photo.config?.x != null;
           const createdPhoto = await createPhoto(
             photo,
             undefined,
@@ -124,10 +236,24 @@ export const useCanvasStore = defineStore("canvas", {
             this.currentZIndex,
             index,
           );
-          this.photos.push(createdPhoto);
+          createdPhotos.push(createdPhoto);
           addedPhotoIds.push(createdPhoto.id);
+          if (!hasCustomPosition) {
+            photosToArrange.push(createdPhoto);
+          }
         }
       }
+
+      // Arrange newly added photos in a compact grid at a clear area
+      // BEFORE pushing to the reactive store, so they never render at diagonal positions
+      // (skip when expanding from a photo — those use animation-driven positions)
+      if (photosToArrange.length > 0 && !fromPhoto) {
+        arrangeInGrid(photosToArrange, this.photos);
+      }
+
+      // Push all at once to avoid intermediate renders
+      this.photos.push(...createdPhotos);
+
       this.updateBasicMode();
 
       // Apply glow effect to newly added photos
