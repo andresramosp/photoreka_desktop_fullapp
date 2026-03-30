@@ -675,3 +675,137 @@ export function analysisCompleteTemplate(
 
   return baseLayout(content, 'Analysis Complete - Photoreka')
 }
+
+/**
+ * Portfolio review build complete notification email
+ */
+export function portfolioReviewBuildTemplate(
+  userName: string,
+  params: {
+    isRebuild: boolean
+    photosAdded: number
+    photosRemoved: number
+    totalPhotos: number
+    patternsByType: Record<string, { title: string; strength: string }[]>
+    totalCostInEur: number
+    portfolioUrl: string
+  }
+): string {
+  const { isRebuild, photosAdded, photosRemoved, totalPhotos, patternsByType, portfolioUrl } =
+    params
+
+  const totalPatterns = Object.values(patternsByType).reduce((sum, arr) => sum + arr.length, 0)
+
+  // Changes summary
+  const changeItems: string[] = []
+  if (photosAdded > 0) {
+    changeItems.push(
+      `<strong style="color: #22c55e;">+${photosAdded}</strong> photo${photosAdded !== 1 ? 's' : ''} added`
+    )
+  }
+  if (photosRemoved > 0) {
+    changeItems.push(
+      `<strong style="color: #ef4444;">−${photosRemoved}</strong> photo${photosRemoved !== 1 ? 's' : ''} removed`
+    )
+  }
+  changeItems.push(
+    `<strong style="color: ${TEXT_COLOR};">${totalPhotos.toLocaleString()}</strong> total in archive`
+  )
+
+  // Patterns table by review type
+  const reviewTypeLabels: Record<string, { label: string; icon: string }> = {
+    general: { label: 'Visual Patterns', icon: '🎨' },
+    story: { label: 'Narrative Themes', icon: '📖' },
+    context: { label: 'Contextual Patterns', icon: '🌍' },
+  }
+
+  function strengthBadge(strength: string): string {
+    const colors: Record<string, { bg: string; text: string }> = {
+      strong: { bg: 'rgba(34, 197, 94, 0.15)', text: '#22c55e' },
+      moderate: { bg: 'rgba(245, 158, 11, 0.15)', text: '#f59e0b' },
+      weak: { bg: 'rgba(148, 163, 184, 0.15)', text: '#94a3b8' },
+    }
+    const c = colors[strength] || colors.weak
+    return `<span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: ${c.bg}; color: ${c.text};">${strength}</span>`
+  }
+
+  let patternsHtml = ''
+  for (const [type, patterns] of Object.entries(patternsByType)) {
+    const meta = reviewTypeLabels[type] || { label: type, icon: '📋' }
+    if (patterns.length === 0) continue
+
+    const rows = patterns
+      .map(
+        (p) => `
+      <tr>
+        <td style="padding: 6px 12px; font-size: 13px; color: ${MUTED_TEXT_COLOR}; border-bottom: 1px solid rgba(148, 163, 184, 0.1);">
+          ${p.title}
+        </td>
+        <td style="padding: 6px 12px; text-align: center; border-bottom: 1px solid rgba(148, 163, 184, 0.1);">
+          ${strengthBadge(p.strength)}
+        </td>
+      </tr>`
+      )
+      .join('')
+
+    patternsHtml += `
+    <div style="margin: 16px 0 0;">
+      <p style="margin: 0 0 8px; font-size: 14px; color: ${TEXT_COLOR}; font-weight: 600;">
+        ${meta.icon} ${meta.label} <span style="font-weight: 400; color: ${MUTED_TEXT_COLOR};">(${patterns.length})</span>
+      </p>
+      <table role="presentation" style="width: 100%; border-collapse: collapse;">
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+    </div>`
+  }
+
+  const content = `
+    <h1 style="margin: 0 0 20px; font-size: 28px; font-weight: 700; color: ${TEXT_COLOR}; text-align: center;">
+      Portfolio Review ${isRebuild ? 'Updated' : 'Ready'} 📊
+    </h1>
+    <p style="margin: 0 0 10px; font-size: 16px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+      Hi ${userName},
+    </p>
+    <p style="margin: 0 0 24px; font-size: 16px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+      ${isRebuild ? 'Your usage patterns have been updated with new changes in your archive.' : "Your portfolio review is ready. Here's what we found across your archive."}
+    </p>
+
+    <!-- Changes summary -->
+    <div style="background-color: rgba(99, 102, 241, 0.05); border-radius: 8px; padding: 16px 20px; margin: 0 0 24px;">
+      <p style="margin: 0; font-size: 14px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.8;">
+        ${changeItems.join(' &nbsp;·&nbsp; ')}
+      </p>
+    </div>
+
+    <!-- Patterns overview -->
+    <div style="background-color: rgba(99, 102, 241, 0.08); border-radius: 8px; padding: 20px; margin: 0 0 20px; border: 1px solid rgba(99, 102, 241, 0.15);">
+      <p style="margin: 0 0 4px; font-size: 22px; font-weight: 700; color: ${TEXT_COLOR}; text-align: center;">
+        ${totalPatterns}
+      </p>
+      <p style="margin: 0; font-size: 13px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+        pattern${totalPatterns !== 1 ? 's' : ''} identified across your portfolio
+      </p>
+    </div>
+
+    ${patternsHtml}
+
+    <!-- Legend -->
+    <p style="margin: 16px 0 24px; font-size: 11px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+      <span style="color: #22c55e;">strong</span> &nbsp;&nbsp;
+      <span style="color: #f59e0b;">moderate</span> &nbsp;&nbsp;
+      <span style="color: #94a3b8;">weak</span>
+    </p>
+
+    ${emailButton('View Portfolio Review', portfolioUrl)}
+
+    <hr style="border: none; border-top: 1px solid rgba(148, 163, 184, 0.2); margin: 30px 0;" />
+
+    <p style="margin: 0; font-size: 12px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+      This is an automated notification from Photoreka.
+    </p>
+  `
+
+  return baseLayout(content, 'Portfolio Review - Photoreka')
+}

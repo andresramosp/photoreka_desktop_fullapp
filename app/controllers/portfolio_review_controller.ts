@@ -6,6 +6,8 @@ import User from '#models/user'
 import Photo from '#models/photo'
 import AnalyzerProcess from '#models/analyzer/analyzerProcess'
 import UserCostService from '#services/user_cost_service'
+import MailService from '#services/mail_service'
+import { portfolioReviewBuildTemplate } from '../utils/email_templates.js'
 
 const REVIEW_TYPES: ReviewType[] = ['general', 'story', 'context']
 const BUILD_THRESHOLD_PHOTOS = 200
@@ -82,6 +84,19 @@ export default class PortfolioReviewController {
         filteredCatalogPatterns[key] = catalogPatterns[key]?.patterns
       }
       const userModel = await User.findOrFail(user.id)
+
+      // Calcular fotos añadidas/borradas respecto al build anterior
+      const previousMetadata = existingCatalogPatterns.metadata || {}
+      const previousPhotoIdsSet = new Set<number>(previousMetadata.photoIds || [])
+      const currentPhotoIdsSet = new Set<number>(processedPhotoIds)
+      const photosAdded = processedPhotoIds.filter(
+        (id: number) => !previousPhotoIdsSet.has(id)
+      ).length
+      const photosRemoved = (previousMetadata.photoIds || []).filter(
+        (id: number) => !currentPhotoIdsSet.has(id)
+      ).length
+      const isRebuild = previousPhotoIdsSet.size > 0
+
       userModel.catalogPatterns = {
         metadata: {
           buildDate: new Date().toISOString(),
@@ -93,6 +108,41 @@ export default class PortfolioReviewController {
         ...filteredCatalogPatterns,
       }
       await userModel.save()
+
+      // Enviar email de notificación al usuario
+      try {
+        const patternsByType: Record<string, { title: string; strength: string }[]> = {}
+        for (const [type, patterns] of Object.entries(filteredCatalogPatterns)) {
+          if (Array.isArray(patterns)) {
+            patternsByType[type] = patterns.map((p: any) => ({
+              title: p.title || 'Untitled pattern',
+              strength: p.strength || 'moderate',
+            }))
+          }
+        }
+
+        const html = portfolioReviewBuildTemplate(userModel.name || 'there', {
+          isRebuild,
+          photosAdded,
+          photosRemoved,
+          totalPhotos: processedPhotoIds.length,
+          patternsByType,
+          totalCostInEur,
+          portfolioUrl: 'https://app.photoreka.com/report',
+        })
+
+        const mailService = new MailService()
+        await mailService.sendEmail({
+          from: 'Photoreka <hello@photoreka.com>',
+          to: userModel.email,
+          subject: isRebuild
+            ? 'Your report and usage patterns have been updated'
+            : 'Your usage patterns are ready',
+          body: html,
+        })
+      } catch (emailError) {
+        console.error('Error enviando email de portfolio review:', emailError)
+      }
 
       return response.ok({
         message: 'Patterns construidos y almacenados exitosamente',
