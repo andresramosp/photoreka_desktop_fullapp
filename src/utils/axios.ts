@@ -38,8 +38,8 @@ const handleApiError = (error: AxiosError) => {
   if (error.response) {
     const { status, data } = error.response;
 
-    // No mostrar mensaje para errores 404
-    if (status === 404) {
+    // No mostrar mensaje para errores 404 ni 500+ (errores internos del servidor)
+    if (status === 404 || status >= 500) {
       return Promise.reject(error);
     }
 
@@ -58,7 +58,7 @@ const handleApiError = (error: AxiosError) => {
       }
     }
 
-    // Para cualquier otro error, mostrar mensaje genérico
+    // Para errores del cliente (4xx), mostrar mensaje
     const errorData = data as any;
     const errorMessage =
       errorData?.message || "An error occurred. Please try again.";
