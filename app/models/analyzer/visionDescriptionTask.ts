@@ -34,9 +34,9 @@ export class VisionDescriptionTask extends AnalyzerTask {
 
     logger.debug(`VisionDescriptionTask usando perfil: ${analyzerProcess.userProfile || 'general'}`)
 
-    const threshold =
-      analyzerProcess.mode === 'retry_process' ? this.imagesPerRequest * 2 : this.imagesPerRequest
-    // const threshold = 500
+    // const threshold =
+    // analyzerProcess.mode === 'retry_process' ? this.imagesPerRequest * 2 : this.imagesPerRequest
+    const threshold = 100
     if (this.batchAPI && pendingPhotos.length > threshold) {
       await this.processWithBatchAPI(pendingPhotos)
     } else {
