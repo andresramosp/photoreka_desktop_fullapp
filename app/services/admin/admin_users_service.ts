@@ -1,6 +1,20 @@
 import User from '#models/user'
 import Photo from '#models/photo'
 import db from '@adonisjs/lucid/services/db'
+import { DateTime } from 'luxon'
+import { DeleteObjectsCommand, S3Client } from '@aws-sdk/client-s3'
+import logger from '@adonisjs/core/services/logger'
+
+const s3 = new S3Client({
+  region: 'auto',
+  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY!,
+    secretAccessKey: process.env.R2_SECRET_KEY!,
+  },
+  requestChecksumCalculation: 'WHEN_REQUIRED',
+  responseChecksumValidation: 'WHEN_REQUIRED',
+})
 
 export interface AdminUserListItem {
   id: number
@@ -147,7 +161,8 @@ export default class AdminUsersService {
   }
 
   /**
-   * Delete a user and their associated data
+   * Soft-delete a user and their photos.
+   * The photo deletion scheduler will handle R2 cleanup and hard-deletes later.
    */
   static async deleteUser(userId: number): Promise<void> {
     const user = await User.findOrFail(userId)
@@ -156,12 +171,44 @@ export default class AdminUsersService {
       throw new Error('Cannot delete admin users')
     }
 
-    // Soft-delete photos
-    const deletedAt = new Date()
-    db.from('photos').where('user_id', userId).update({ deleted_at: deletedAt })
+    const now = new Date()
 
-    // Delete the user
-    await user.delete()
+    // Fetch photo file names for R2 cleanup
+    const photos = await db
+      .from('photos')
+      .where('user_id', userId)
+      .whereNull('deleted_at')
+      .select('name', 'thumbnail_name')
+
+    // Delete files from R2
+    const objectsToDelete: { Key: string }[] = []
+    for (const p of photos) {
+      if (p.name) objectsToDelete.push({ Key: p.name })
+      if (p.thumbnail_name) objectsToDelete.push({ Key: p.thumbnail_name })
+    }
+    if (objectsToDelete.length > 0) {
+      try {
+        s3.send(
+          new DeleteObjectsCommand({
+            Bucket: process.env.R2_BUCKET,
+            Delete: { Objects: objectsToDelete, Quiet: true },
+          })
+        )
+      } catch (err) {
+        logger.warn('[AdminDeleteUser] Failed to delete R2 objects: %o', err)
+      }
+    }
+
+    await db
+      .from('photos')
+      .where('user_id', userId)
+      .whereNull('deleted_at')
+      .update({ deleted_at: now })
+
+    // Soft-delete the user
+    user.deletedAt = DateTime.fromJSDate(now)
+    user.isActive = false
+    await user.save()
   }
 
   /**

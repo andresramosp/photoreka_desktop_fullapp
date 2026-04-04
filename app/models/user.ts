@@ -1,5 +1,6 @@
 import { DateTime } from 'luxon'
-import { BaseModel, column, computed } from '@adonisjs/lucid/orm'
+import { BaseModel, beforeFetch, beforeFind, column, computed } from '@adonisjs/lucid/orm'
+import type { ModelQueryBuilderContract } from '@adonisjs/lucid/types/model'
 import { withAuthFinder } from '@adonisjs/auth/mixins/lucid'
 import { compose } from '@adonisjs/core/helpers'
 import hash from '@adonisjs/core/services/hash'
@@ -91,6 +92,19 @@ export default class User extends compose(BaseModel, AuthFinder) {
 
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime
+
+  @column.dateTime()
+  declare deletedAt: DateTime | null
+
+  @beforeFind()
+  public static ignoreDeleted(query: ModelQueryBuilderContract<typeof User>) {
+    query.whereNull('deleted_at')
+  }
+
+  @beforeFetch()
+  public static ignoreBatchDeleted(query: ModelQueryBuilderContract<typeof User>) {
+    query.whereNull('deleted_at')
+  }
 
   /**
    * Check if the user's email is confirmed
