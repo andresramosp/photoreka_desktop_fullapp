@@ -77,17 +77,25 @@ export class ChunkTask extends AnalyzerTask {
           const description = photo.descriptions!![category]
           if (!description) continue
 
-          let descriptionChunks
-          const splitMethod = this.descriptionsChunksMethod[category]
-            ? this.descriptionsChunksMethod[category]
-            : { type: 'split_by_size', maxLength: 300 }
+          let descriptionChunks: string[]
 
-          if (splitMethod.type === 'split_by_pipes') {
-            descriptionChunks = description.split('|').filter((ch: string) => ch.length > 0)
-          } else if (splitMethod.type === 'split_by_size') {
-            descriptionChunks = this.splitIntoChunks(description, splitMethod.maxLength)
+          // Si el LLM devolvió un array en vez de string, usar los items directamente como chunks
+          if (Array.isArray(description)) {
+            descriptionChunks = description.filter(
+              (item: any) => typeof item === 'string' && item.trim().length > 0
+            )
           } else {
-            throw new Error(`Método de división no soportado: ${splitMethod.type}`)
+            const splitMethod = this.descriptionsChunksMethod[category]
+              ? this.descriptionsChunksMethod[category]
+              : { type: 'split_by_size', maxLength: 300 }
+
+            if (splitMethod.type === 'split_by_pipes') {
+              descriptionChunks = description.split('|').filter((ch: string) => ch.length > 0)
+            } else if (splitMethod.type === 'split_by_size') {
+              descriptionChunks = this.splitIntoChunks(description, splitMethod.maxLength)
+            } else {
+              throw new Error(`Método de división no soportado: ${splitMethod.type}`)
+            }
           }
 
           // Crear los chunks sin embeddings y añadirlos al array existente
