@@ -954,10 +954,13 @@ export default class LangchainAgentService {
     const rawOutput = structured.text ?? ''
     const cleaned = rawOutput.replace(/\[(?:Shown photos|INTERNAL_CONTEXT)[^\]]*\]\s*/gi, '').trim()
 
-    // Build photoGroups first so their IDs feed the filename→token replacement
+    // Build photoGroups first so their IDs feed the filename→token replacement.
+    // Filter out IDs that exceed PostgreSQL integer range — the LLM may hallucinate
+    // numeric filenames (e.g. "18385876675018230") as photo_ids in structured output.
+    const MAX_PG_INT = 2_147_483_647
     const photoGroups: PhotoGroup[] = (structured.photo_groups ?? []).map((g) => ({
       label: g.label,
-      photoIds: g.photo_ids ?? [],
+      photoIds: (g.photo_ids ?? []).filter((id) => Number.isFinite(id) && id <= MAX_PG_INT),
     }))
     await this.enrichPhotoGroupsWithDescriptions(photoGroups)
     const allPhotoIds = photoGroups.flatMap((g) => g.photoIds)
@@ -1015,8 +1018,13 @@ export default class LangchainAgentService {
     userId: number,
     knownPhotoIds: number[]
   ): Promise<string> {
-    // Collect any additional numeric IDs that may have leaked into the text
-    const numericIds = [...text.matchAll(/\b(\d{3,})\b/g)].map((m) => Number(m[1]))
+    // Collect any additional numeric IDs that may have leaked into the text.
+    // Filter to PostgreSQL integer range (max 2^31-1) to avoid "out of range" DB errors
+    // from timestamps or other large numbers the LLM may include.
+    const MAX_PG_INT = 2_147_483_647
+    const numericIds = [...text.matchAll(/\b(\d{3,})\b/g)]
+      .map((m) => Number(m[1]))
+      .filter((n) => Number.isFinite(n) && n <= MAX_PG_INT)
     const candidateIds = [...new Set([...knownPhotoIds, ...numericIds])]
     if (candidateIds.length === 0) return text
 
