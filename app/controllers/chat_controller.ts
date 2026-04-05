@@ -147,7 +147,16 @@ export default class ChatController {
 
       // Record chat cost to user history (analytics)
       if (result.cost?.total?.costEur) {
-        UserCostService.record(user.id, 'chat', result.cost.total.costEur).catch(() => {})
+        UserCostService.record(user.id, 'chat', result.cost.total.costEur, 1, {
+          referenceId: isEphemeral ? undefined : String(resolvedConversationId),
+          metadata: result.cost?.total
+            ? {
+                inputTokens: result.cost.total.inputTokens,
+                cachedTokens: result.cost.total.cachedTokens,
+                outputTokens: result.cost.total.outputTokens,
+              }
+            : undefined,
+        }).catch(() => {})
       }
 
       // Charge credits based on real cost

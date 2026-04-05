@@ -143,26 +143,37 @@ export default class AdminDashboardService {
     }
     const globalScore = totalChecks > 0 ? Math.round((totalPassed / totalChecks) * 100) : 100
 
-    // Costs from user costHistory
-    const users = await User.query().select('id', 'name', 'email', 'costHistory')
-    let totalCostEur = 0
-    let totalCalls = 0
-    const categoryCalls: Record<string, number> = {}
+    // Costs — use cost_logs for accurate temporal data, fallback to user.costHistory for total
+    const costTotalRow = await db.rawQuery(`
+      SELECT
+        COALESCE(SUM(cost_in_eur), 0)::float AS total_cost,
+        COALESCE(SUM(calls), 0)::int AS total_calls
+      FROM cost_logs
+    `)
+    const logTotalCost = costTotalRow.rows[0]?.total_cost ?? 0
+    const logTotalCalls = costTotalRow.rows[0]?.total_calls ?? 0
 
+    // Legacy total from users (for pre-migration data)
+    const users = await User.query().select('id', 'name', 'email', 'costHistory')
+    let legacyTotalCost = 0
+    let legacyTotalCalls = 0
     for (const u of users) {
       const history = u.costHistory as {
         totalCostInEur?: number
         byCategory?: Record<string, { costInEur: number; calls: number }>
       } | null
       if (!history) continue
-      totalCostEur += history.totalCostInEur ?? 0
+      legacyTotalCost += history.totalCostInEur ?? 0
       const byCategory = history.byCategory ?? {}
       for (const [, val] of Object.entries(byCategory)) {
-        totalCalls += val.calls
+        legacyTotalCalls += val.calls
       }
     }
 
-    // Monthly trend (last 6 months) from processes
+    const totalCostEur = Math.max(logTotalCost, legacyTotalCost)
+    const totalCalls = Math.max(logTotalCalls, legacyTotalCalls)
+
+    // Monthly trend (last 6 months) from cost_logs (all categories)
     const monthlyMap: Record<string, number> = {}
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
@@ -174,19 +185,23 @@ export default class AdminDashboardService {
     const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
     const lastMonthKey = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`
 
-    const allProcesses = await AnalyzerProcess.query()
-      .where('isPreprocess', false)
-      .whereNotNull('user_id')
-      .whereNotNull('cost_report')
-      .select('costReport', 'createdAt')
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
+    const monthlyRows = await db.rawQuery(
+      `
+      SELECT
+        to_char(created_at, 'YYYY-MM') AS month,
+        COALESCE(SUM(cost_in_eur), 0)::float AS cost_eur
+      FROM cost_logs
+      WHERE created_at >= ?
+      GROUP BY month
+      ORDER BY month
+    `,
+      [sixMonthsAgo.toISOString()]
+    )
 
-    for (const p of allProcesses) {
-      const report = p.costReport as { totalCostInEur?: number } | null
-      if (!report) continue
-      const created = new Date(p.createdAt.toString())
-      const mk = `${created.getFullYear()}-${String(created.getMonth() + 1).padStart(2, '0')}`
-      if (mk in monthlyMap) {
-        monthlyMap[mk] += report.totalCostInEur ?? 0
+    for (const row of monthlyRows.rows) {
+      if (row.month in monthlyMap) {
+        monthlyMap[row.month] = row.cost_eur
       }
     }
 

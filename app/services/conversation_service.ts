@@ -102,7 +102,11 @@ export default class ConversationService {
     )
 
     if (cost?.totalCostInEur) {
-      UserCostService.record(userId, 'chat', cost.totalCostInEur).catch(() => {})
+      UserCostService.record(userId, 'chat', cost.totalCostInEur, 1, {
+        model: 'gemini-2.5-flash-lite',
+        task: 'title_generation',
+        referenceId: String(conversationId),
+      }).catch(() => {})
     }
 
     const title = typeof result === 'string' ? result.trim().slice(0, 255) : null

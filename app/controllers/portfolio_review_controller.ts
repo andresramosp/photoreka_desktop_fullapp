@@ -63,9 +63,9 @@ export default class PortfolioReviewController {
           // Acumular costo y registrar inmediatamente (así queda guardado aunque el build falle en steps posteriores)
           if (result?.cost?.totalCostInEur) {
             totalCostInEur += result.cost.totalCostInEur
-            UserCostService.record(user.id, 'portfolio_review', result.cost.totalCostInEur).catch(
-              () => {}
-            )
+            UserCostService.record(user.id, 'portfolio_review', result.cost.totalCostInEur, 1, {
+              task: reviewType,
+            }).catch(() => {})
           }
 
           return result
@@ -349,9 +349,9 @@ export default class PortfolioReviewController {
       const result = await portfolioReviewManager.getPatterns(userId, reviewType)
 
       if (result?.cost?.totalCostInEur) {
-        UserCostService.record(user.id, 'portfolio_review', result.cost.totalCostInEur).catch(
-          () => {}
-        )
+        UserCostService.record(user.id, 'portfolio_review', result.cost.totalCostInEur, 1, {
+          task: reviewType,
+        }).catch(() => {})
       }
 
       return response.ok(result)
@@ -379,7 +379,9 @@ export default class PortfolioReviewController {
         UserCostService.record(
           parseInt(userId),
           'portfolio_review',
-          result.cost.totalCostInEur
+          result.cost.totalCostInEur,
+          1,
+          { task: reviewTypeParam }
         ).catch(() => {})
       }
 

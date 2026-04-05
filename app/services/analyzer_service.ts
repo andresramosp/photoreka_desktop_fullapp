@@ -175,9 +175,11 @@ export default class AnalyzerProcessRunner {
     // Registrar coste en el historial del usuario
     // (incluido admin_retry: el coste es real, solo no se descuenta del crédito del usuario)
     if (this.process.userId) {
-      UserCostService.recordFromTracker(this.process.userId, this.process.costTracker).catch(
-        () => {}
-      )
+      UserCostService.recordFromTracker(
+        this.process.userId,
+        this.process.costTracker,
+        this.process.id
+      ).catch(() => {})
     }
 
     // Limpiar cache de health solo si se precargó

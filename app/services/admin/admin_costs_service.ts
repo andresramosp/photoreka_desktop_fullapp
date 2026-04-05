@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import User from '#models/user'
-import AnalyzerProcess from '#models/analyzer/analyzerProcess'
+import CostLog from '#models/cost_log'
 import db from '@adonisjs/lucid/services/db'
 import type { CostCategory } from '../../utils/cost_tracker.js'
 
@@ -13,8 +13,7 @@ export interface CostsTotals {
   lastMonthCostEur: number
   monthOverMonthPct: number | null
   totalCalls: number
-  avgCostPerProcess: number
-  totalProcesses: number
+  avgCostPerCall: number
   totalUsers: number
 }
 
@@ -22,7 +21,7 @@ export interface MonthlyDataPoint {
   month: string // 'YYYY-MM'
   costEur: number
   calls: number
-  processes: number
+  byCategory: Record<string, number>
 }
 
 export interface CategoryBreakdown {
@@ -44,18 +43,26 @@ export interface TaskBreakdown {
   calls: number
 }
 
+export interface DailyDataPoint {
+  date: string // 'YYYY-MM-DD'
+  costEur: number
+  calls: number
+  byCategory: Record<string, number>
+}
+
 export interface TopUserCost {
   id: number
   name: string
   email: string
   totalCostEur: number
-  processesCount: number
+  thisMonthCostEur: number
   byCategory: Record<string, { costInEur: number; calls: number }>
 }
 
 export interface CostsOverview {
   totals: CostsTotals
   monthly: MonthlyDataPoint[]
+  daily: DailyDataPoint[]
   byCategory: CategoryBreakdown[]
   byModel: ModelBreakdown[]
   byTask: TaskBreakdown[]
@@ -71,185 +78,270 @@ export default class AdminCostsService {
 
   /**
    * Build the full costs overview dashboard payload.
+   * All temporal data now comes from cost_logs table.
+   * Falls back to user.costHistory for users who have legacy data without logs.
    */
   static async getOverview(): Promise<CostsOverview> {
-    // ── 1. Aggregate user-level costs (for totals + categories + top users) ──
-    const users = await User.query().select('id', 'name', 'email', 'costHistory')
-
-    let globalTotalCost = 0
-    let globalTotalCalls = 0
-    const categoryAgg: Record<string, { costEur: number; calls: number }> = {}
-    const topUsersRaw: TopUserCost[] = []
-
-    for (const u of users) {
-      const history = u.costHistory as {
-        totalCostInEur?: number
-        byCategory?: Record<string, { costInEur: number; calls: number }>
-      } | null
-
-      if (!history) continue
-
-      const userCost = history.totalCostInEur ?? 0
-      globalTotalCost += userCost
-
-      const byCategory = history.byCategory ?? {}
-      let userCalls = 0
-
-      for (const [cat, val] of Object.entries(byCategory)) {
-        if (!categoryAgg[cat]) categoryAgg[cat] = { costEur: 0, calls: 0 }
-        categoryAgg[cat].costEur += val.costInEur
-        categoryAgg[cat].calls += val.calls
-        globalTotalCalls += val.calls
-        userCalls += val.calls
-      }
-
-      if (userCost > 0) {
-        topUsersRaw.push({
-          id: u.id,
-          name: u.name,
-          email: u.email,
-          totalCostEur: this.round(userCost),
-          processesCount: 0, // filled below
-          byCategory,
-        })
-      }
-    }
-
-    // ── 2. Process-level data (for monthly chart, by-model, by-task, per-user process count) ──
-    const processes = await AnalyzerProcess.query()
-      .where('isPreprocess', false)
-      .whereNotNull('user_id')
-      .whereNotNull('cost_report')
-      .select('id', 'userId', 'costReport', 'createdAt')
-
-    // Monthly aggregation (last 12 months)
     const now = new Date()
-    const monthlyMap: Record<string, { costEur: number; calls: number; processes: number }> = {}
-
-    // Pre-fill last 12 months with zeros
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-      monthlyMap[key] = { costEur: 0, calls: 0, processes: 0 }
-    }
-
-    const modelAgg: Record<string, { costEur: number; calls: number }> = {}
-    const taskAgg: Record<string, { costEur: number; calls: number }> = {}
-    const userProcessCount = new Map<number, number>()
-
     const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
     const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
     const lastMonthKey = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`
 
-    for (const p of processes) {
-      const report = p.costReport as {
-        totalCostInEur?: number
-        totalCalls?: number
-        byModel?: Record<string, { costInEur: number; calls: number }>
-        byTask?: Record<string, { costInEur: number; calls: number }>
-      } | null
+    // ── 1. Monthly aggregation from cost_logs (last 12 months) ──
+    const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1)
 
-      if (!report) continue
+    const monthlyRows = await db.rawQuery(
+      `
+      SELECT
+        to_char(created_at, 'YYYY-MM') AS month,
+        category,
+        COALESCE(SUM(cost_in_eur), 0)::float AS cost_eur,
+        COALESCE(SUM(calls), 0)::int AS calls
+      FROM cost_logs
+      WHERE created_at >= ?
+      GROUP BY month, category
+      ORDER BY month
+    `,
+      [twelveMonthsAgo.toISOString()]
+    )
 
-      // Monthly
-      const createdAt = p.createdAt?.toJSDate?.() ?? new Date(p.createdAt as any)
-      const monthKey = `${createdAt.getFullYear()}-${String(createdAt.getMonth() + 1).padStart(2, '0')}`
-      if (monthlyMap[monthKey]) {
-        monthlyMap[monthKey].costEur += report.totalCostInEur ?? 0
-        monthlyMap[monthKey].calls += report.totalCalls ?? 0
-        monthlyMap[monthKey].processes++
-      }
+    // Pre-fill last 12 months
+    const monthlyMap: Record<
+      string,
+      { costEur: number; calls: number; byCategory: Record<string, number> }
+    > = {}
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      monthlyMap[key] = { costEur: 0, calls: 0, byCategory: {} }
+    }
 
-      // By model
-      if (report.byModel) {
-        for (const [model, val] of Object.entries(report.byModel)) {
-          if (!modelAgg[model]) modelAgg[model] = { costEur: 0, calls: 0 }
-          modelAgg[model].costEur += val.costInEur
-          modelAgg[model].calls += val.calls
-        }
-      }
-
-      // By task
-      if (report.byTask) {
-        for (const [task, val] of Object.entries(report.byTask)) {
-          if (!taskAgg[task]) taskAgg[task] = { costEur: 0, calls: 0 }
-          taskAgg[task].costEur += val.costInEur
-          taskAgg[task].calls += val.calls
-        }
-      }
-
-      // Per-user process count
-      if (p.userId) {
-        userProcessCount.set(p.userId, (userProcessCount.get(p.userId) || 0) + 1)
+    for (const row of monthlyRows.rows) {
+      if (monthlyMap[row.month]) {
+        monthlyMap[row.month].costEur += row.cost_eur
+        monthlyMap[row.month].calls += row.calls
+        monthlyMap[row.month].byCategory[row.category] =
+          (monthlyMap[row.month].byCategory[row.category] || 0) + row.cost_eur
       }
     }
 
-    // ── 3. Assemble totals ──
+    // ── 2. Daily aggregation (last 30 days) ──
+    const thirtyDaysAgo = new Date(now)
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+    const dailyRows = await db.rawQuery(
+      `
+      SELECT
+        to_char(created_at, 'YYYY-MM-DD') AS date,
+        category,
+        COALESCE(SUM(cost_in_eur), 0)::float AS cost_eur,
+        COALESCE(SUM(calls), 0)::int AS calls
+      FROM cost_logs
+      WHERE created_at >= ?
+      GROUP BY date, category
+      ORDER BY date
+    `,
+      [thirtyDaysAgo.toISOString()]
+    )
+
+    // Pre-fill last 30 days
+    const dailyMap: Record<
+      string,
+      { costEur: number; calls: number; byCategory: Record<string, number> }
+    > = {}
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now)
+      d.setDate(d.getDate() - i)
+      const key = d.toISOString().slice(0, 10)
+      dailyMap[key] = { costEur: 0, calls: 0, byCategory: {} }
+    }
+
+    for (const row of dailyRows.rows) {
+      if (dailyMap[row.date]) {
+        dailyMap[row.date].costEur += row.cost_eur
+        dailyMap[row.date].calls += row.calls
+        dailyMap[row.date].byCategory[row.category] =
+          (dailyMap[row.date].byCategory[row.category] || 0) + row.cost_eur
+      }
+    }
+
+    // ── 3. Global totals from cost_logs ──
+    const totalsRow = await db.rawQuery(`
+      SELECT
+        COALESCE(SUM(cost_in_eur), 0)::float AS total_cost,
+        COALESCE(SUM(calls), 0)::int AS total_calls,
+        COUNT(DISTINCT user_id)::int AS total_users
+      FROM cost_logs
+    `)
+
+    const logTotalCost = totalsRow.rows[0]?.total_cost ?? 0
+    const logTotalCalls = totalsRow.rows[0]?.total_calls ?? 0
+    const logTotalUsers = totalsRow.rows[0]?.total_users ?? 0
+
+    // Also get legacy accumulated totals from users who may have pre-migration data
+    const legacyTotalsRow = await db.rawQuery(`
+      SELECT COALESCE(SUM((cost_history->>'totalCostInEur')::float), 0)::float AS legacy_total
+      FROM users
+      WHERE cost_history IS NOT NULL
+    `)
+    const legacyTotal = legacyTotalsRow.rows[0]?.legacy_total ?? 0
+
+    // Use the higher of the two as total (cost_logs will catch up over time)
+    const globalTotalCost = Math.max(logTotalCost, legacyTotal)
+
+    // This month / last month from cost_logs (accurate temporal data)
     const thisMonthCost = monthlyMap[thisMonthKey]?.costEur ?? 0
     const lastMonthCost = monthlyMap[lastMonthKey]?.costEur ?? 0
     const monthOverMonthPct =
       lastMonthCost > 0 ? this.round(((thisMonthCost - lastMonthCost) / lastMonthCost) * 100) : null
 
-    const totalProcesses = processes.length
-    const avgCostPerProcess = totalProcesses > 0 ? this.round(globalTotalCost / totalProcesses) : 0
+    // ── 4. Category breakdown from cost_logs ──
+    const categoryRows = await db.rawQuery(`
+      SELECT
+        category,
+        COALESCE(SUM(cost_in_eur), 0)::float AS cost_eur,
+        COALESCE(SUM(calls), 0)::int AS calls
+      FROM cost_logs
+      GROUP BY category
+      ORDER BY cost_eur DESC
+    `)
 
-    const usersWithCost = topUsersRaw.length
+    const categoryTotal = categoryRows.rows.reduce((s: number, r: any) => s + r.cost_eur, 0)
+    const byCategory: CategoryBreakdown[] = categoryRows.rows.map((r: any) => ({
+      category: r.category,
+      costEur: this.round(r.cost_eur),
+      calls: r.calls,
+      pct: categoryTotal > 0 ? this.round((r.cost_eur / categoryTotal) * 100) : 0,
+    }))
 
+    // ── 5. Model breakdown from cost_logs ──
+    const modelRows = await db.rawQuery(`
+      SELECT
+        COALESCE(model, 'unknown') AS model,
+        COALESCE(SUM(cost_in_eur), 0)::float AS cost_eur,
+        COALESCE(SUM(calls), 0)::int AS calls
+      FROM cost_logs
+      WHERE model IS NOT NULL
+      GROUP BY model
+      ORDER BY cost_eur DESC
+    `)
+
+    const byModel: ModelBreakdown[] = modelRows.rows.map((r: any) => ({
+      model: r.model,
+      costEur: this.round(r.cost_eur),
+      calls: r.calls,
+    }))
+
+    // ── 6. Task breakdown from cost_logs ──
+    const taskRows = await db.rawQuery(`
+      SELECT
+        COALESCE(task, 'unknown') AS task,
+        COALESCE(SUM(cost_in_eur), 0)::float AS cost_eur,
+        COALESCE(SUM(calls), 0)::int AS calls
+      FROM cost_logs
+      WHERE task IS NOT NULL
+      GROUP BY task
+      ORDER BY cost_eur DESC
+    `)
+
+    const byTask: TaskBreakdown[] = taskRows.rows.map((r: any) => ({
+      task: r.task,
+      costEur: this.round(r.cost_eur),
+      calls: r.calls,
+    }))
+
+    // ── 7. Top users (from cost_logs, enriched with user info) ──
+    const topUserRows = await db.rawQuery(`
+      SELECT
+        cl.user_id,
+        u.name,
+        u.email,
+        COALESCE(SUM(cl.cost_in_eur), 0)::float AS total_cost_eur,
+        json_object_agg(
+          cl.category,
+          json_build_object('costInEur', cl.cat_cost, 'calls', cl.cat_calls)
+        ) AS by_category
+      FROM (
+        SELECT
+          user_id,
+          category,
+          SUM(cost_in_eur)::float AS cat_cost,
+          SUM(calls)::int AS cat_calls
+        FROM cost_logs
+        GROUP BY user_id, category
+      ) cl
+      JOIN users u ON u.id = cl.user_id
+      GROUP BY cl.user_id, u.name, u.email
+      ORDER BY total_cost_eur DESC
+      LIMIT 15
+    `)
+
+    // Get this month's cost per top user
+    const topUserIds = topUserRows.rows.map((r: any) => r.user_id)
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+
+    let thisMonthByUser: Record<number, number> = {}
+    if (topUserIds.length > 0) {
+      const thisMonthUserRows = await db.rawQuery(
+        `
+        SELECT
+          user_id,
+          COALESCE(SUM(cost_in_eur), 0)::float AS cost_eur
+        FROM cost_logs
+        WHERE user_id = ANY(?)
+          AND created_at >= ?
+        GROUP BY user_id
+      `,
+        [topUserIds, thisMonthStart.toISOString()]
+      )
+
+      for (const r of thisMonthUserRows.rows) {
+        thisMonthByUser[r.user_id] = r.cost_eur
+      }
+    }
+
+    const topUsers: TopUserCost[] = topUserRows.rows.map((r: any) => ({
+      id: r.user_id,
+      name: r.name,
+      email: r.email,
+      totalCostEur: this.round(r.total_cost_eur),
+      thisMonthCostEur: this.round(thisMonthByUser[r.user_id] ?? 0),
+      byCategory: r.by_category ?? {},
+    }))
+
+    // ── 8. Assemble ──
     const totals: CostsTotals = {
       totalCostEur: this.round(globalTotalCost),
       thisMonthCostEur: this.round(thisMonthCost),
       lastMonthCostEur: this.round(lastMonthCost),
       monthOverMonthPct,
-      totalCalls: globalTotalCalls,
-      avgCostPerProcess,
-      totalProcesses,
-      totalUsers: usersWithCost,
+      totalCalls: logTotalCalls,
+      avgCostPerCall: logTotalCalls > 0 ? this.round(globalTotalCost / logTotalCalls) : 0,
+      totalUsers: logTotalUsers,
     }
 
-    // ── 4. Monthly array (sorted chronologically) ──
     const monthly: MonthlyDataPoint[] = Object.entries(monthlyMap)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([month, data]) => ({
         month,
         costEur: this.round(data.costEur),
         calls: data.calls,
-        processes: data.processes,
+        byCategory: Object.fromEntries(
+          Object.entries(data.byCategory).map(([k, v]) => [k, this.round(v)])
+        ),
       }))
 
-    // ── 5. Category breakdown with percentages ──
-    const byCategory: CategoryBreakdown[] = Object.entries(categoryAgg)
-      .map(([category, data]) => ({
-        category,
+    const daily: DailyDataPoint[] = Object.entries(dailyMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, data]) => ({
+        date,
         costEur: this.round(data.costEur),
         calls: data.calls,
-        pct: globalTotalCost > 0 ? this.round((data.costEur / globalTotalCost) * 100) : 0,
+        byCategory: Object.fromEntries(
+          Object.entries(data.byCategory).map(([k, v]) => [k, this.round(v)])
+        ),
       }))
-      .sort((a, b) => b.costEur - a.costEur)
 
-    // ── 6. Model breakdown ──
-    const byModel: ModelBreakdown[] = Object.entries(modelAgg)
-      .map(([model, data]) => ({
-        model,
-        costEur: this.round(data.costEur),
-        calls: data.calls,
-      }))
-      .sort((a, b) => b.costEur - a.costEur)
-
-    // ── 7. Task breakdown ──
-    const byTask: TaskBreakdown[] = Object.entries(taskAgg)
-      .map(([task, data]) => ({
-        task,
-        costEur: this.round(data.costEur),
-        calls: data.calls,
-      }))
-      .sort((a, b) => b.costEur - a.costEur)
-
-    // ── 8. Top users (top 15, with process counts) ──
-    for (const tu of topUsersRaw) {
-      tu.processesCount = userProcessCount.get(tu.id) || 0
-    }
-    const topUsers = topUsersRaw.sort((a, b) => b.totalCostEur - a.totalCostEur).slice(0, 15)
-
-    return { totals, monthly, byCategory, byModel, byTask, topUsers }
+    return { totals, monthly, daily, byCategory, byModel, byTask, topUsers }
   }
 }
