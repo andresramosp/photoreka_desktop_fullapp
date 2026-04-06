@@ -14,8 +14,6 @@ import { isMobileDevice } from "@/utils/utils";
 // Section icons (menu-only, not tied to any tool)
 import {
   LibraryOutline as LibraryIcon,
-  CompassOutline as ExploreIcon,
-  CreateOutline as CreateIcon,
   ConstructOutline as SystemIcon,
   MapOutline as MapIcon,
 } from "@vicons/ionicons5";
@@ -84,14 +82,64 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     icon: renderIcon(toolIcon("sync-area")),
   }));
 
+  // Workspace (root-level)
+  const workspaceOption = computed<MenuOption>(() => ({
+    label: "Workspace",
+    key: "workspace",
+    icon: renderIcon(toolIcon("workspace")),
+  }));
+
   // Library Section
   const librarySection = computed<MenuOption>(() => {
     const children: MenuOption[] = [
       {
         label: () =>
-          h("span", { class: "second-level-menu-item" }, "Workspace"),
-        key: "workspace",
-        icon: renderIcon(toolIcon("workspace")),
+          h(
+            "span",
+            {
+              class: "second-level-menu-item",
+              style: {
+                display: "flex",
+                alignItems: "center",
+                width: "100%",
+              },
+            },
+            [
+              h(
+                "span",
+                {
+                  onClick: (e: MouseEvent) => {
+                    if (!isToolDisabledOnMobile("series")) {
+                      e.stopPropagation();
+                      router.push("/series");
+                      if (isMobile.value && closeMobileMenu) {
+                        closeMobileMenu();
+                      }
+                    }
+                  },
+                  style: {
+                    cursor: isToolDisabledOnMobile("series")
+                      ? "default"
+                      : "pointer",
+                    display: "inline-block",
+                  },
+                },
+                "Series",
+              ),
+              isToolDisabledOnMobile("series") ? renderLaptopSuffix()() : null,
+            ],
+          ),
+        key: "series-group",
+        icon: renderIcon(toolIcon("series")),
+        disabled: isToolDisabledOnMobile("series") || isBlocked.value,
+        children:
+          isToolDisabledOnMobile("series") || isBlocked.value
+            ? undefined
+            : series.value.map((ser) => ({
+                label: () =>
+                  h("span", { class: "collection-menu-item" }, ser.label),
+                key: ser.key,
+              })),
       },
       {
         label: () =>
@@ -135,158 +183,89 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     };
   });
 
-  // Explore Section
-  const exploreSection = computed<MenuOption>(() => {
-    const children: MenuOption[] = [
-      {
-        label: () => h("span", { class: "second-level-menu-item" }, "Search"),
-        key: "search",
-        disabled: isBlocked.value,
-        icon: renderIcon(toolIcon("search")),
-      },
+  // Search (root-level)
+  const searchOption = computed<MenuOption>(() => ({
+    label: "Search",
+    key: "search",
+    disabled: isBlocked.value,
+    icon: renderIcon(toolIcon("search")),
+  }));
 
+  // Report (root-level)
+  const reportOption = computed<MenuOption>(() => ({
+    label: "Report",
+    key: "report",
+    disabled: isBlocked.value,
+    icon: renderIcon(toolIcon("report")),
+  }));
+
+  // Atlas (root-level, with 2D/3D children)
+  const atlasOption = computed<MenuOption>(() => ({
+    label: "Atlas",
+    key: "atlas-group",
+    disabled: isBlocked.value,
+    icon: renderIcon(MapIcon),
+    children: [
       {
-        label: () => h("span", { class: "second-level-menu-item" }, "Report"),
-        key: "report",
-        disabled: isBlocked.value,
-        icon: renderIcon(toolIcon("report")),
+        label: () => h("span", { class: "collection-menu-item" }, "2D Atlas"),
+        key: "2d-view",
+        icon: renderIcon(toolIcon("2d-view")),
       },
       {
-        label: () => h("span", { class: "second-level-menu-item" }, "Atlas"),
-        key: "atlas-group",
-        disabled: isBlocked.value,
-        icon: renderIcon(MapIcon),
-        children: [
-          {
-            label: () =>
-              h("span", { class: "collection-menu-item" }, "2D Atlas"),
-            key: "2d-view",
-            icon: renderIcon(toolIcon("2d-view")),
+        label: () =>
+          h(
+            "span",
+            {
+              class: "collection-menu-item",
+              style: {
+                display: "flex",
+                alignItems: "center",
+                width: "100%",
+              },
+            },
+            [
+              h("span", "3D Atlas"),
+              isToolDisabledOnMobile("3d-atlas")
+                ? renderLaptopSuffix()()
+                : null,
+            ],
+          ),
+        key: "atlas",
+        icon: renderIcon(toolIcon("3d-atlas")),
+        disabled: isToolDisabledOnMobile("3d-atlas") || isBlocked.value,
+      },
+    ],
+  }));
+
+  // Canvas (root-level)
+  const canvasOption = computed<MenuOption>(() => ({
+    label: () =>
+      h(
+        "span",
+        {
+          style: {
+            display: "flex",
+            alignItems: "center",
+            width: "100%",
           },
-          {
-            label: () =>
-              h(
-                "span",
-                {
-                  class: "collection-menu-item",
-                  style: {
-                    display: "flex",
-                    alignItems: "center",
-                    width: "100%",
-                  },
-                },
-                [
-                  h("span", "3D Atlas"),
-                  isToolDisabledOnMobile("3d-atlas")
-                    ? renderLaptopSuffix()()
-                    : null,
-                ],
-              ),
-            key: "atlas",
-            icon: renderIcon(toolIcon("3d-atlas")),
-            disabled: isToolDisabledOnMobile("3d-atlas") || isBlocked.value,
-          },
+        },
+        [
+          h("span", "Canvas"),
+          isToolDisabledOnMobile("canvas") ? renderLaptopSuffix()() : null,
         ],
-      },
-    ];
+      ),
+    key: "canvas",
+    disabled: isToolDisabledOnMobile("canvas") || isBlocked.value,
+    icon: renderIcon(toolIcon("canvas")),
+  }));
 
-    return {
-      label: "Explore",
-      key: "explore-section",
-      icon: renderIcon(ExploreIcon),
-      children,
-    };
-  });
-
-  // Create Section
-  const createSection = computed<MenuOption>(() => {
-    const children: MenuOption[] = [
-      {
-        label: () =>
-          h(
-            "span",
-            {
-              class: "second-level-menu-item",
-              style: {
-                display: "flex",
-                alignItems: "center",
-                width: "100%",
-              },
-            },
-            [
-              h(
-                "span",
-                {
-                  onClick: (e: MouseEvent) => {
-                    if (!isToolDisabledOnMobile("series")) {
-                      e.stopPropagation();
-                      router.push("/series");
-                      // Close mobile menu after navigation
-                      if (isMobile.value && closeMobileMenu) {
-                        closeMobileMenu();
-                      }
-                    }
-                  },
-                  style: {
-                    cursor: isToolDisabledOnMobile("series")
-                      ? "default"
-                      : "pointer",
-                    display: "inline-block",
-                  },
-                },
-                "Series",
-              ),
-              isToolDisabledOnMobile("series") ? renderLaptopSuffix()() : null,
-            ],
-          ),
-        key: "series-group",
-        icon: renderIcon(toolIcon("series")),
-        disabled: isToolDisabledOnMobile("series") || isBlocked.value,
-        children:
-          isToolDisabledOnMobile("series") || isBlocked.value
-            ? undefined
-            : series.value.map((ser) => ({
-                label: () =>
-                  h("span", { class: "collection-menu-item" }, ser.label),
-                key: ser.key,
-              })),
-      },
-      {
-        label: () =>
-          h(
-            "span",
-            {
-              class: "second-level-menu-item",
-              style: {
-                display: "flex",
-                alignItems: "center",
-                width: "100%",
-              },
-            },
-            [
-              h("span", "Canvas"),
-              isToolDisabledOnMobile("canvas") ? renderLaptopSuffix()() : null,
-            ],
-          ),
-        key: "canvas",
-        disabled: isToolDisabledOnMobile("canvas") || isBlocked.value,
-        icon: renderIcon(toolIcon("canvas")),
-      },
-      {
-        label: () => h("span", { class: "second-level-menu-item" }, "Framer"),
-        key: "framer",
-        disabled: isBlocked.value,
-        icon: renderIcon(toolIcon("framer")),
-      },
-    ];
-
-    return {
-      label: "Create",
-      key: "create-section",
-      icon: renderIcon(CreateIcon),
-      children,
-    };
-  });
+  // Framer (root-level)
+  const framerOption = computed<MenuOption>(() => ({
+    label: "Framer",
+    key: "framer",
+    disabled: isBlocked.value,
+    icon: renderIcon(toolIcon("framer")),
+  }));
 
   // System Section
   const systemSection = computed<MenuOption>(() => ({
@@ -323,14 +302,25 @@ export function useMainMenu(closeMobileMenu?: () => void) {
         type: "divider",
         key: "sync-divider",
       } as MenuOption,
+      workspaceOption.value,
+
       librarySection.value,
-      exploreSection.value,
-      createSection.value,
       {
         type: "divider",
-        key: "create-divider",
+        key: "group1-divider",
       } as MenuOption,
+      searchOption.value,
+      atlasOption.value,
+      ,
+      canvasOption.value,
+
       chatOption.value,
+      reportOption.value,
+      {
+        type: "divider",
+        key: "tools-divider",
+      } as MenuOption,
+      framerOption.value,
       {
         type: "divider",
         key: "chat-divider",
