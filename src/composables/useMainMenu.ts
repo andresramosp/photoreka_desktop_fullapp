@@ -96,6 +96,38 @@ export function useMainMenu(closeMobileMenu?: () => void) {
         label: () =>
           h(
             "span",
+            { class: "second-level-menu-item" },
+            h(
+              "span",
+              {
+                onClick: (e: MouseEvent) => {
+                  e.stopPropagation();
+                  router.push("/collections");
+                  // Close mobile menu after navigation
+                  if (isMobile.value && closeMobileMenu) {
+                    closeMobileMenu();
+                  }
+                },
+                style: {
+                  cursor: "pointer",
+                  display: "inline-block",
+                },
+              },
+              "Collections",
+            ),
+          ),
+        key: "collections-group",
+        icon: renderIcon(toolIcon("collections")),
+        disabled: isBlocked.value,
+        children: collections.value.map((col) => ({
+          label: () => h("span", { class: "collection-menu-item" }, col.label),
+          key: col.key,
+        })),
+      },
+      {
+        label: () =>
+          h(
+            "span",
             {
               class: "second-level-menu-item",
               style: {
@@ -140,38 +172,6 @@ export function useMainMenu(closeMobileMenu?: () => void) {
                   h("span", { class: "collection-menu-item" }, ser.label),
                 key: ser.key,
               })),
-      },
-      {
-        label: () =>
-          h(
-            "span",
-            { class: "second-level-menu-item" },
-            h(
-              "span",
-              {
-                onClick: (e: MouseEvent) => {
-                  e.stopPropagation();
-                  router.push("/collections");
-                  // Close mobile menu after navigation
-                  if (isMobile.value && closeMobileMenu) {
-                    closeMobileMenu();
-                  }
-                },
-                style: {
-                  cursor: "pointer",
-                  display: "inline-block",
-                },
-              },
-              "Collections",
-            ),
-          ),
-        key: "collections-group",
-        icon: renderIcon(toolIcon("collections")),
-        disabled: isBlocked.value,
-        children: collections.value.map((col) => ({
-          label: () => h("span", { class: "collection-menu-item" }, col.label),
-          key: col.key,
-        })),
       },
     ];
 
