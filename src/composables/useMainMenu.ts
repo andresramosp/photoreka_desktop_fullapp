@@ -330,7 +330,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
   });
 
   // Default expanded keys (Library section expanded by default)
-  const defaultExpandedKeys = ref<string[]>(["library-section"]);
+  const defaultExpandedKeys = ref<string[]>([]);
 
   // Determine if top-level collapsible sections are mutually exclusive (accordion mode)
   const exclusiveMenuMode = ref(true);
