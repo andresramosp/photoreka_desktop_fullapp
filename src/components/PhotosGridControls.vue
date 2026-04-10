@@ -236,7 +236,7 @@
       </div>
 
       <!-- Collapsible More Filters -->
-      <div v-if="isDateRangeExpanded" class="filter-controls-tab-container">
+      <div v-show="isDateRangeExpanded" class="filter-controls-tab-container">
         <div class="more-filters-content">
           <!-- Tags Filter Row -->
           <div class="tags-filter-row">
