@@ -14,7 +14,6 @@ import { isMobileDevice } from "@/utils/utils";
 // Section icons (menu-only, not tied to any tool)
 import {
   LibraryOutline as LibraryIcon,
-  ConstructOutline as SystemIcon,
   MapOutline as MapIcon,
 } from "@vicons/ionicons5";
 
@@ -267,23 +266,18 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     icon: renderIcon(toolIcon("framer")),
   }));
 
-  // System Section
-  const systemSection = computed<MenuOption>(() => ({
-    label: "System",
-    key: "system-section",
-    icon: renderIcon(SystemIcon),
-    children: [
-      {
-        label: () => h("span", { class: "second-level-menu-item" }, "Settings"),
-        key: "settings",
-        icon: renderIcon(toolIcon("settings")),
-      },
-      {
-        label: () => h("span", { class: "second-level-menu-item" }, "Help"),
-        key: "help",
-        icon: renderIcon(toolIcon("help")),
-      },
-    ],
+  // Settings (root-level)
+  const settingsOption = computed<MenuOption>(() => ({
+    label: "Settings",
+    key: "settings",
+    icon: renderIcon(toolIcon("settings")),
+  }));
+
+  // Help (root-level)
+  const helpOption = computed<MenuOption>(() => ({
+    label: "Help",
+    key: "help",
+    icon: renderIcon(toolIcon("help")),
   }));
 
   // Chat option (global, like Sync Area)
@@ -325,7 +319,8 @@ export function useMainMenu(closeMobileMenu?: () => void) {
         type: "divider",
         key: "chat-divider",
       } as MenuOption,
-      systemSection.value,
+      settingsOption.value,
+      helpOption.value,
     ];
   });
 
