@@ -320,7 +320,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
         key: "chat-divider",
       } as MenuOption,
       settingsOption.value,
-      helpOption.value,
+      // helpOption.value,
     ];
   });
 
