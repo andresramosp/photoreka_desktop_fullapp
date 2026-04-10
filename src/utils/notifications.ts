@@ -1,6 +1,16 @@
-import { createDiscreteApi } from "naive-ui";
+import { createDiscreteApi, darkTheme as naiveUIDarkTheme } from "naive-ui";
+import { computed } from "vue";
+import { getNaiveThemeOverrides } from "@/config/theme.js";
 
-// Crear una API discreta para usar fuera de componentes Vue
-const { message } = createDiscreteApi(["message"]);
+const configProviderProps = computed(() => ({
+  theme: naiveUIDarkTheme,
+  themeOverrides: getNaiveThemeOverrides(true),
+}));
 
-export { message };
+// Crear una API discreta con el tema de la app
+const { message, notification } = createDiscreteApi(
+  ["message", "notification"],
+  { configProviderProps },
+);
+
+export { message, notification };

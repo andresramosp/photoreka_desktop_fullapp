@@ -1,5 +1,7 @@
 import axios, { type AxiosInstance, type AxiosError } from "axios";
-import { message } from "./notifications";
+import { h } from "vue";
+import { message, notification } from "./notifications";
+import router from "@/router";
 
 // Crear una instancia de axios
 const api: AxiosInstance = axios.create({
@@ -41,6 +43,37 @@ const handleApiError = (error: AxiosError) => {
     // No mostrar mensaje para errores 404 ni 500+ (errores internos del servidor)
     if (status === 404 || status >= 500) {
       return Promise.reject(error);
+    }
+
+    // Detectar créditos insuficientes (402)
+    if (status === 402 && data && typeof data === "object") {
+      const errorData = data as any;
+      if (errorData.code === "INSUFFICIENT_CREDITS") {
+        // No mostrar notificación para endpoints de chat (ChatView lo maneja internamente)
+        const requestUrl = error.config?.url || "";
+        if (!requestUrl.includes("/api/chat")) {
+          notification.warning({
+            title: "Insufficient Credits",
+            content: errorData.message || "No credits remaining.",
+            action: () =>
+              h(
+                "a",
+                {
+                  style:
+                    "color: var(--primary-color); cursor: pointer; font-size: 14px;",
+                  onClick: (e: Event) => {
+                    e.preventDefault();
+                    notification.destroyAll();
+                    router.push("/settings");
+                  },
+                },
+                "Go to Settings →",
+              ),
+            duration: 8000,
+          });
+        }
+        return Promise.reject(error);
+      }
     }
 
     // Detectar cuenta demo con acceso de solo lectura (403)
