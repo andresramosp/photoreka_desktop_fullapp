@@ -4,6 +4,10 @@ import ws from '#services/ws'
 import SearchTextService from '#services/search_text_service'
 import SearchPhotoService from '#services/search_photo_service'
 import UserCostService from '#services/user_cost_service'
+import CreditService from '#services/credit_service'
+
+/** Pessimistic fixed credit cost for RunPod GPU in precise mode */
+const PRECISE_GPU_CREDITS = 5
 
 export default class SearchController {
   /**
@@ -32,6 +36,14 @@ export default class SearchController {
       })
 
       UserCostService.recordFromTracker(user.id, searchService.costTracker).catch(() => {})
+
+      const summary = searchService.costTracker.getSummary()
+      if (summary.totalCostInEur > 0) {
+        CreditService.charge(user.id, summary.totalCostInEur).catch(() => {})
+      }
+      if (!query.options.cursor && query.options.searchMode === 'precise') {
+        CreditService.chargeFixed(user.id, PRECISE_GPU_CREDITS).catch(() => {})
+      }
 
       return response.ok(result)
     } catch (error) {
@@ -62,6 +74,14 @@ export default class SearchController {
       }
 
       UserCostService.recordFromTracker(user.id, searchService.costTracker).catch(() => {})
+
+      const summary = searchService.costTracker.getSummary()
+      if (summary.totalCostInEur > 0) {
+        CreditService.charge(user.id, summary.totalCostInEur).catch(() => {})
+      }
+      if (query.options.searchMode === 'precise') {
+        CreditService.chargeFixed(user.id, PRECISE_GPU_CREDITS).catch(() => {})
+      }
 
       return response.ok({ message: 'Search process initiated' })
     } catch (error) {
@@ -96,6 +116,11 @@ export default class SearchController {
 
       UserCostService.recordFromTracker(user.id, searchService.costTracker).catch(() => {})
 
+      const summary = searchService.costTracker.getSummary()
+      if (summary.totalCostInEur > 0) {
+        CreditService.charge(user.id, summary.totalCostInEur).catch(() => {})
+      }
+
       return response.ok(result)
     } catch (error) {
       console.error('Error fetching photos:', error)
@@ -119,6 +144,11 @@ export default class SearchController {
       )
 
       UserCostService.recordFromTracker(user.id, searchService.costTracker).catch(() => {})
+
+      const summary = searchService.costTracker.getSummary()
+      if (summary.totalCostInEur > 0) {
+        CreditService.charge(user.id, summary.totalCostInEur).catch(() => {})
+      }
 
       return response.ok(result)
     } catch (error) {

@@ -128,7 +128,7 @@ export default class PhotoManager {
     userId: string,
     collections?: string[],
     visualAspects?: string[],
-    artisticScores?: string[],
+    artisticScores?: Record<string, { value: number; operator: string }>,
     source?: string
   ): Promise<number[]> {
     let query = Photo.query().where('user_id', userId)
@@ -144,7 +144,9 @@ export default class PhotoManager {
     const noVisualAspects =
       !visualAspects || !Array.isArray(visualAspects) || visualAspects.length === 0
     const noArtisticScores =
-      !artisticScores || !Array.isArray(artisticScores) || artisticScores.length === 0
+      !artisticScores ||
+      typeof artisticScores !== 'object' ||
+      Object.keys(artisticScores).length === 0
     const noSource = !source
     if (noVisualAspects && noArtisticScores && noSource) {
       return photos.map((p) => p.id)
@@ -171,10 +173,24 @@ export default class PhotoManager {
           const scores = p.descriptions?.artistic_scores
           if (!scores || typeof scores !== 'object') artisticOk = false
           else {
-            // Debe cumplir que todos los scores seleccionados tengan al menos 7
-            artisticOk = artisticScores.every((scoreKey) => {
+            artisticOk = Object.entries(artisticScores).every(([scoreKey, filter]) => {
               const value = scores[scoreKey]
-              return typeof value === 'number' && value >= 7
+              if (typeof value !== 'number') return false
+              const op = filter.operator || '>='
+              switch (op) {
+                case '<=':
+                  return value <= filter.value
+                case '<':
+                  return value < filter.value
+                case '>':
+                  return value > filter.value
+                case '>=':
+                  return value >= filter.value
+                case '=':
+                  return value === filter.value
+                default:
+                  return value >= filter.value
+              }
             })
           }
         }

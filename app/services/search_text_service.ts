@@ -48,7 +48,7 @@ export type SearchOptions = {
   minResults?: number
   collections?: string[]
   visualAspects?: string[]
-  artisticScores?: string[]
+  artisticScores?: Record<string, { value: number; operator: string }>
   cursor?: string
   source?: string
   withInsights?: boolean
@@ -107,7 +107,7 @@ export default class SearchTextService {
       userId?.toString(),
       collections && collections.length > 0 ? collections : undefined,
       visualAspects && visualAspects.length > 0 ? visualAspects : undefined,
-      artisticScores && artisticScores.length > 0 ? artisticScores : undefined
+      artisticScores && Object.keys(artisticScores).length > 0 ? artisticScores : undefined
     )
 
     const { structuredResult, useImage, expansionCost } = await this.queryService.structureQuery(
@@ -253,7 +253,7 @@ export default class SearchTextService {
       userId?.toString(),
       collections && collections.length > 0 ? collections : undefined,
       visualAspects && visualAspects.length > 0 ? visualAspects : undefined,
-      artisticScores && artisticScores.length > 0 ? artisticScores : undefined,
+      artisticScores && Object.keys(artisticScores).length > 0 ? artisticScores : undefined,
       source || undefined
     )
     const photoIds =
@@ -359,7 +359,7 @@ export default class SearchTextService {
       userId?.toString(),
       collections && collections.length > 0 ? collections : undefined,
       visualAspects && visualAspects.length > 0 ? visualAspects : undefined,
-      artisticScores && artisticScores.length > 0 ? artisticScores : undefined
+      artisticScores && Object.keys(artisticScores).length > 0 ? artisticScores : undefined
     )
 
     let embeddingScoredPhotos = await this.scoringService.getScoredPhotosByTags(

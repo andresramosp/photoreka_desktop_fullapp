@@ -154,14 +154,25 @@ export function createTrackedModelsService(
 /**
  * Extracts cost from GPT Batch API result lines (each has response.body.usage).
  */
+function resolvePricesModel(model: string): keyof typeof PRICES | null {
+  if (model in PRICES) return model as keyof typeof PRICES
+  // Batch API returns versioned names like "gpt-5.1-2025-11-13"; match against PRICES keys by prefix
+  const candidates = Object.keys(PRICES)
+    .filter((key) => model.startsWith(key))
+    .sort((a, b) => b.length - a.length) // longest prefix wins
+  return (candidates[0] as keyof typeof PRICES) || null
+}
+
 function recordGPTBatchCost(results: any[], tracker: CostTracker, modelHint?: string) {
   for (const res of results) {
     const usage = res?.response?.body?.usage
     if (!usage) continue
 
-    const model = res?.response?.body?.model || modelHint || 'unknown'
-    const prices = PRICES[model as keyof typeof PRICES]
-    if (!prices) continue
+    const rawModel = res?.response?.body?.model || modelHint || 'unknown'
+    const resolvedKey = resolvePricesModel(rawModel)
+    if (!resolvedKey) continue
+    const model = rawModel
+    const prices = PRICES[resolvedKey]
 
     const promptTokens = usage.prompt_tokens || 0
     const completionTokens = usage.completion_tokens || 0
