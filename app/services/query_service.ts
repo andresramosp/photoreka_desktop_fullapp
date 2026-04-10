@@ -110,10 +110,17 @@ export default class QueryService {
     const modelOnePromise = this.modelsService.getGeminiResponse(
       MESSAGE_QUERY_NO_PREFIX_AND_TRANSLATION,
       JSON.stringify({ query }),
-      'gemini-2.5-flash-lite'
+      'gemini-2.5-flash-lite',
+      { temperature: 0.1 },
+      true,
+      true // throwOnError: retries will exhaust, then throw to caller
     )
 
     const { result: modelOneResult, cost: modelOneCost } = await modelOnePromise
+    // Fallback: si no_prefix vino vacío/undefined, usar la query original
+    if (!modelOneResult.no_prefix) {
+      modelOneResult.no_prefix = query
+    }
 
     // Para broad, solo devolver no_prefix y traducción
     if (searchMode === 'broad') {
@@ -139,16 +146,23 @@ export default class QueryService {
     const metadataPromise = this.modelsService.getGeminiResponse(
       MESSAGE_QUERY_METADATA,
       JSON.stringify({ query }),
-      'gemini-2.5-flash-lite'
+      'gemini-2.5-flash-lite',
+      { temperature: 0.1 },
+      true,
+      true
     )
 
-    const { result: metadataResult } = await metadataPromise
+    const metadataResponse = await metadataPromise
+    const metadataResult = metadataResponse?.result
 
     // Segunda llamada, depende de modelOneResult
     const { result: modelResult, cost: modelTwoCost } = await this.modelsService.getGeminiResponse(
       queryStuctureMessage,
       JSON.stringify({ query: modelOneResult.no_prefix }),
-      'gemini-2.5-flash-lite'
+      'gemini-2.5-flash-lite',
+      { temperature: 0.1 },
+      true,
+      true
     )
 
     // const { result: modelResult, cost: modelTwoCost } = await this.modelsService.getGPTResponse(

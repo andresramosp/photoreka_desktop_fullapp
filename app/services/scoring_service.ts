@@ -572,7 +572,11 @@ export default class ScoringService {
     config: EffectiveConfig
   ): Promise<{ id: number; descScore: number; matchingChunks: any[] }[]> {
     // Solo procesar si hay más de 1 segmento y fullQuery está habilitado
-    if (query.positiveSegments.length <= 1 || config.descFullQueryThreshold === null) {
+    if (
+      query.positiveSegments.length <= 1 ||
+      config.descFullQueryThreshold === null ||
+      !query.fullQuery
+    ) {
       return []
     }
 
@@ -732,6 +736,12 @@ export default class ScoringService {
     areas: string[] = []
   ): Promise<{ id: number; descScore: number; matchingChunks: any[] }[]> {
     const embedding = EmbeddingStoreService.getEmbedding(segment.name)
+    if (!embedding || embedding.length === 0) {
+      console.warn(
+        `[getScoredPhotoDescBySegment] No embedding found for segment: '${segment.name}', skipping`
+      )
+      return []
+    }
 
     const matchingChunks = await this.vectorService.findSimilarChunkToEmbedding(
       embedding,
