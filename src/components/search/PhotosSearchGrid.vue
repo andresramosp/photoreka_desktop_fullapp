@@ -4,7 +4,7 @@
     <div class="grid-controls grid-controls-base">
       <div class="controls-left">
         <div class="results-info results-info-base">
-          <span class="results-count results-count-base">
+          <!-- <span class="results-count results-count-base">
             {{ displayedPhotosCount }} photos found
             <span v-if="localShowOnlyHighMatches" class="filter-applied">
               ({{ displayedPhotosCount }} of {{ totalPhotosCount }} high-quality
@@ -14,7 +14,7 @@
               ({{ displayedPhotosCount }} of {{ totalPhotosCount }} with
               {{ localMinStarRating }}+ stars)
             </span>
-          </span>
+          </span> -->
         </div>
       </div>
 

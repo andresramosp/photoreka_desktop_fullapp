@@ -92,7 +92,6 @@
       <div class="search-selector-section">
         <!-- Search Type -->
         <div class="selector-group">
-          <div class="selector-label">Search Type:</div>
           <div class="type-pills">
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
@@ -140,7 +139,6 @@
 
         <!-- Search Mode -->
         <div class="selector-group">
-          <div class="selector-label">Search Mode:</div>
           <div class="mode-pills">
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
@@ -209,7 +207,6 @@
 
         <!-- Insights Toggle -->
         <div class="selector-group">
-          <div class="selector-label">Insights:</div>
           <div class="mode-pills">
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
@@ -226,7 +223,7 @@
                         <SparklesOutline />
                       </n-icon>
                     </template>
-                    {{ withInsights ? "Enabled" : "Disabled" }}
+                    Insights
                   </n-button>
                   <div class="premium-indicator-pill"></div>
                 </div>
@@ -714,15 +711,23 @@ function handleSearch() {
   emit("search");
 }
 
-// Hover: abrir panel colapsado al pasar el ratón. No se cierra al salir.
+// Hover: abrir panel colapsado al pasar el ratón con debounce. No se cierra al salir.
+let hoverDebounceTimer = null;
+
 function handleMouseEnter() {
-  if (props.isToolbarCollapsed) {
-    isHovering.value = true;
+  if (props.isToolbarCollapsed && !isSearching.value) {
+    hoverDebounceTimer = setTimeout(() => {
+      isHovering.value = true;
+    }, 300);
   }
 }
 
 function handleMouseLeave() {
-  // No colapsar al salir
+  // Cancelar el debounce si el ratón sale antes de que se active
+  if (hoverDebounceTimer) {
+    clearTimeout(hoverDebounceTimer);
+    hoverDebounceTimer = null;
+  }
 }
 
 // Rastrear cuando un select se abre o cierra
@@ -839,6 +844,10 @@ function handleSelectShowChange(show) {
   top: 0;
   z-index: 10;
   transform: translateY(0);
+  transition: none;
+}
+
+.search-toolbar-wrapper.is-hovering .search-toolbar {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -867,7 +876,7 @@ function handleSelectShowChange(show) {
 .search-selector-section {
   display: flex;
   align-items: flex-start;
-  gap: 24px;
+  gap: 48px;
   /* margin-bottom: 10px; */
   padding-bottom: 20px;
   border-bottom: 1px solid var(--border-color);
