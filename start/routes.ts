@@ -114,6 +114,7 @@ router
     router.get('/api/analyzer-process', [AnalyzerProcessController, 'getAll'])
     router.get('/api/analyzer-process/:id', [AnalyzerProcessController, 'getById'])
 
+    router.post('/api/search/semantic/sync', [SearchController, 'searchSemanticSync'])
     router.post('/api/search/tags/sync', [SearchController, 'searchByTagsSync'])
     router.post('/api/search/tags/direct', [SearchController, 'searchByTagsDirect'])
     router.post('/api/search/byPhotos', [SearchController, 'searchByPhotos'])
@@ -259,7 +260,6 @@ router
 
     // Semantic search endpoints - AI-powered search
     router.post('/api/search/semantic/stream', [SearchController, 'searchSemanticStream'])
-    router.post('/api/search/semantic/sync', [SearchController, 'searchSemanticSync'])
     router.get('/api/catalog/photoInsight/:id?', [CatalogController, 'photoInsight'])
     router.post('/api/catalog/photoInsightSpecific/:id?', [
       CatalogController,

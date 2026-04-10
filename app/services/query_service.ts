@@ -100,7 +100,9 @@ export default class QueryService {
     }
   }
 
-  @MeasureExecutionTime
+  @withCache({
+    provider: 'redis',
+  })
   public async structureQueryLLM(query, searchMode: SearchMode) {
     let expansionCost = 0
 

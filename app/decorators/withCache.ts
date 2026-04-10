@@ -11,7 +11,7 @@ interface CacheOptions {
 
 export function withCache(options: CacheOptions = {}) {
   const provider = options.provider || 'nodecache'
-  const ttl = options.ttl || 60
+  const ttl = options.ttl ?? 0 // 0 = no expiry
 
   return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
     const originalMethod = descriptor.value
@@ -62,9 +62,13 @@ export function withCache(options: CacheOptions = {}) {
 
       if (!isEmpty) {
         if (provider === 'nodecache') {
-          nodeCache.set(cacheKey, result, ttl)
+          nodeCache.set(cacheKey, result, ttl) // ttl=0 means no expiry in node-cache
         } else {
-          await redis.set(redisCacheKey, JSON.stringify(result), 'EX', ttl)
+          if (ttl > 0) {
+            await redis.set(redisCacheKey, JSON.stringify(result), 'EX', ttl)
+          } else {
+            await redis.set(redisCacheKey, JSON.stringify(result))
+          }
         }
       }
       return result

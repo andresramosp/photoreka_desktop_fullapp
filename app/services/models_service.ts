@@ -25,6 +25,14 @@ import { createRequire } from 'module'
 
 const cache = new NodeCache() // Simple in-memory cache
 
+function hasNonEmptyResult(result: any): boolean {
+  const r = result?.result
+  if (r == null || r === '') return false
+  if (Array.isArray(r)) return r.length > 0
+  if (typeof r === 'object') return Object.keys(r).length > 0
+  return true
+}
+
 export type ModelName =
   | 'gpt-4o'
   | 'gpt-4.1'
@@ -367,7 +375,8 @@ export default class ModelsService {
         },
       }
 
-      if (useCache) cache.set(cacheKey, { ...result, cost: '0 [cached]' }, cacheDuration)
+      if (useCache && hasNonEmptyResult(result))
+        cache.set(cacheKey, { ...result, cost: '0 [cached]' }, cacheDuration)
 
       return result
     } catch (error) {
@@ -863,7 +872,8 @@ export default class ModelsService {
       }
 
       // Cache the result
-      if (useCache) cache.set(cacheKey, { ...result, cost: '0 [cached]' }, cacheDuration)
+      if (useCache && hasNonEmptyResult(result))
+        cache.set(cacheKey, { ...result, cost: '0 [cached]' }, cacheDuration)
 
       return result
     } catch (error) {
@@ -871,7 +881,6 @@ export default class ModelsService {
     }
   }
 
-  @MeasureExecutionTime
   public async getGeminiResponse(
     systemPrompt: string,
     userMessages: any[],
@@ -907,30 +916,57 @@ export default class ModelsService {
         maxOutputTokens: 2500,
       }
 
-      // Generate content using the client
-      const result = await ai.models.generateContent({
-        model,
-        contents,
-        generationConfig,
-        safetySettings: [
-          {
-            category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-            threshold: HarmBlockThreshold.BLOCK_NONE,
-          },
-          {
-            category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-            threshold: HarmBlockThreshold.BLOCK_NONE,
-          },
-          {
-            category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-            threshold: HarmBlockThreshold.BLOCK_NONE,
-          },
-          {
-            category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-            threshold: HarmBlockThreshold.BLOCK_NONE,
-          },
-        ],
-      })
+      // Generate content using the client (with retries for transient errors)
+      const maxRetries = 4
+      let result: GenerateContentResponse | undefined
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          result = await ai.models.generateContent({
+            model,
+            contents,
+            generationConfig,
+            safetySettings: [
+              {
+                category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+                threshold: HarmBlockThreshold.BLOCK_NONE,
+              },
+              {
+                category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                threshold: HarmBlockThreshold.BLOCK_NONE,
+              },
+              {
+                category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                threshold: HarmBlockThreshold.BLOCK_NONE,
+              },
+              {
+                category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                threshold: HarmBlockThreshold.BLOCK_NONE,
+              },
+            ],
+          })
+          break // success, exit retry loop
+        } catch (retryError: any) {
+          const status = retryError?.status ?? retryError?.code ?? retryError?.httpErrorCode
+          const isRetryable =
+            [429, 500, 503].includes(Number(status)) ||
+            /UNAVAILABLE|RESOURCE_EXHAUSTED|INTERNAL|overloaded|high demand/i.test(
+              retryError?.message || ''
+            )
+
+          if (!isRetryable || attempt === maxRetries) {
+            throw retryError
+          }
+
+          const baseDelay = Math.min(1000 * Math.pow(2, attempt), 16000)
+          const jitter = Math.random() * baseDelay * 0.5
+          const delay = baseDelay + jitter
+          console.warn(
+            `[Gemini] Retryable error (attempt ${attempt + 1}/${maxRetries}), retrying in ${Math.round(delay)}ms:`,
+            retryError?.message || retryError
+          )
+          await new Promise((resolve) => setTimeout(resolve, delay))
+        }
+      }
 
       // Extract usage metadata
       const usageMetadata = result.usageMetadata || {}
@@ -964,7 +1000,8 @@ export default class ModelsService {
       }
 
       // Cache the result
-      if (useCache) cache.set(cacheKey, { ...finalResult, cost: '0 [cached]' }, cacheDuration)
+      if (useCache && hasNonEmptyResult(finalResult))
+        cache.set(cacheKey, { ...finalResult, cost: '0 [cached]' }, cacheDuration)
 
       return finalResult
     } catch (error) {
@@ -1084,7 +1121,8 @@ export default class ModelsService {
       }
 
       // Cache the result
-      if (useCache) cache.set(cacheKey, { ...result, cost: '0 [cached]' }, cacheDuration)
+      if (useCache && hasNonEmptyResult(result))
+        cache.set(cacheKey, { ...result, cost: '0 [cached]' }, cacheDuration)
 
       return result
     } catch (error) {
