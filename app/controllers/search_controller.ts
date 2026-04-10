@@ -17,6 +17,14 @@ export default class SearchController {
   public async searchSemanticSync({ request, response, auth }: HttpContext) {
     const user = auth.use('api').user!
     try {
+      const hasCredits = await CreditService.canAfford(user.id)
+      if (!hasCredits) {
+        return response.status(402).json({
+          message: 'No credits remaining. Please purchase more credits to continue.',
+          code: 'INSUFFICIENT_CREDITS',
+        })
+      }
+
       const searchService = new SearchTextService()
       const query = request.body()
 
@@ -55,6 +63,14 @@ export default class SearchController {
   public async searchSemanticStream({ request, response, auth }: HttpContext) {
     const user = auth.use('api').user!
     try {
+      const hasCredits = await CreditService.canAfford(user.id)
+      if (!hasCredits) {
+        return response.status(402).json({
+          message: 'No credits remaining. Please purchase more credits to continue.',
+          code: 'INSUFFICIENT_CREDITS',
+        })
+      }
+
       const searchService = new SearchTextService()
       const query = request.body()
 
@@ -94,6 +110,15 @@ export default class SearchController {
   public async searchByTagsSync({ response, request, auth }: HttpContext) {
     try {
       const user = auth.use('api').user!
+
+      const hasCredits = await CreditService.canAfford(user.id)
+      if (!hasCredits) {
+        return response.status(402).json({
+          message: 'No credits remaining. Please purchase more credits to continue.',
+          code: 'INSUFFICIENT_CREDITS',
+        })
+      }
+
       const searchService = new SearchTextService()
 
       const query = request.body()
@@ -131,6 +156,15 @@ export default class SearchController {
   public async searchByTagsDirect({ response, request, auth }: HttpContext) {
     try {
       const user = auth.use('api').user!
+
+      const hasCredits = await CreditService.canAfford(user.id)
+      if (!hasCredits) {
+        return response.status(402).json({
+          message: 'No credits remaining. Please purchase more credits to continue.',
+          code: 'INSUFFICIENT_CREDITS',
+        })
+      }
+
       const searchService = new SearchTextService()
 
       const { included = [], excluded = [], mode = 'AND', semantic = false } = request.body()
