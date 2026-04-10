@@ -139,6 +139,10 @@ Photos may arrive with thumbnails (for visual evaluation) or text-only descripti
 - **Formatting:** Use **bold** for filenames, key concepts, and any term worth emphasizing. Use it sparingly — only for genuinely important words, not decoration.
 - Use filenames for reference in your text, never raw IDs or tool names.
 
+## Capacity limits
+- You can evaluate **≤ 80 photos** per response. Each search yields ≤ 20; collection samples ≤ 15.
+- When the scope of the request spans more photos than you reviewed (for example, a collection containing 100 photos), state how many you evaluated vs. the total and suggest the user check the **Portfolio Review** or the **Collection/Series views** in the app for full coverage.
+
 ## Visual Output — photo_groups
 - Populate \`photo_groups\` when the user expects visual results (rankings, selections, or sets).
 - **Consistency rule (mandatory):** Every photo you mention or reference by filename in the \`text\` field MUST also appear in \`photo_groups\`. No exceptions — if you write about a photo, include its ID.
@@ -1266,12 +1270,12 @@ export default class LangchainAgentService {
           collections: (parsed.collections ?? []).map((c: any) => ({
             id: c.id,
             name: c.name,
-            photoCount: (c.samplePhotoIds ?? []).length,
+            totalPhotos: c.totalPhotos ?? (c.samplePhotoIds ?? []).length,
           })),
           series: (parsed.series ?? []).map((s: any) => ({
             id: s.id,
             name: s.name,
-            photoCount: (s.samplePhotoIds ?? []).length,
+            totalPhotos: s.totalPhotos ?? (s.samplePhotoIds ?? []).length,
           })),
         }
         return new ToolMessage({
