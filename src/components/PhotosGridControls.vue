@@ -42,6 +42,7 @@
         <VisualFiltersPanel
           :visual-aspects="selectedFilters"
           :score-filters="artisticScoreFilters"
+          :show-section-labels="false"
           @update:visual-aspects="handleVisualAspectsPanelChange"
           @update:score-filters="handleScoreFiltersPanelChange"
         />
