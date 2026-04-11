@@ -732,9 +732,13 @@ const handleCancel = () => {
 }
 
 .collection-description {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--text-primary);
   margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 380px;
 }
 
 .collection-count {
