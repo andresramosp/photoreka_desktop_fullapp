@@ -294,9 +294,11 @@ watch(
 // Detect container size for responsive marks
 const checkScreenSize = () => {
   if (containerRef.value) {
-    // Show fewer marks in very narrow containers (< 250px)
     const width = containerRef.value.offsetWidth;
-    isSmallScreen.value = width < 250;
+    // Ignore zero/tiny widths (container hidden or mid-animation)
+    if (width > 50) {
+      isSmallScreen.value = width < 250;
+    }
   }
 };
 
