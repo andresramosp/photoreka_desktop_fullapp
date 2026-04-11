@@ -118,7 +118,108 @@
             justify-content="space-evenly"
             animated
           >
-            <n-tab-pane name="tags" display-directive="show:lazy">
+            <n-tab-pane name="scores" display-directive="show:lazy">
+              <template #tab>
+                <div class="mobile-tab">
+                  <n-icon size="16">
+                    <ScoresIcon />
+                  </n-icon>
+                  <span>Score</span>
+                </div>
+              </template>
+
+              <div class="mobile-tab-content">
+                <div
+                  v-if="selectedPhoto?.descriptions?.artistic_scores"
+                  class="mobile-scores"
+                >
+                  <!-- Overall Rating Compact -->
+                  <div class="mobile-overall-rating">
+                    <div class="mobile-rating-main">
+                      <span class="mobile-rating-value">
+                        {{ overallRating.average }}/{{ scoreScale.max }}
+                      </span>
+                      <span
+                        class="mobile-rating-label"
+                        :class="
+                          'rating-' +
+                          overallRating.rating
+                            .toLowerCase()
+                            .replace(' ', '-')
+                            .replace('/', '')
+                        "
+                      >
+                        {{ overallRating.rating }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <!-- Genre Pills (Horizontal scroll) -->
+                  <div class="mobile-genre-scroll">
+                    <div
+                      class="mobile-genre-pill"
+                      :class="{ active: selectedGenre === 'street' }"
+                      @click="emit('apply-genre-preset', 'street')"
+                    >
+                      <n-icon size="14"><WalkOutline /></n-icon>
+                      Street
+                    </div>
+                    <div
+                      class="mobile-genre-pill"
+                      :class="{ active: selectedGenre === 'documentary' }"
+                      @click="emit('apply-genre-preset', 'documentary')"
+                    >
+                      <n-icon size="14"><BookOpen16Regular /></n-icon>
+                      Documentary
+                    </div>
+                    <div
+                      class="mobile-genre-pill"
+                      :class="{ active: selectedGenre === 'abstract' }"
+                      @click="emit('apply-genre-preset', 'abstract')"
+                    >
+                      <n-icon size="14"><PaletteOutlined /></n-icon>
+                      Artistic
+                    </div>
+                  </div>
+
+                  <!-- Scores List (Compact) -->
+                  <div class="mobile-scores-list">
+                    <div
+                      v-for="scoreData in orderedArtisticScores"
+                      :key="scoreData.criterion"
+                      class="mobile-score-row"
+                    >
+                      <span class="mobile-score-label">{{
+                        scoreData.label
+                      }}</span>
+                      <div class="mobile-score-bar-wrap">
+                        <div class="mobile-score-bar">
+                          <div
+                            class="mobile-score-fill"
+                            :style="{
+                              width: (scoreData.score / 9) * 100 + '%',
+                              background: getScoreBgColor(scoreData.score),
+                            }"
+                          ></div>
+                        </div>
+                        <span class="mobile-score-value">{{
+                          scoreData.score
+                        }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="mobile-empty-state">
+                  <n-icon size="32" color="var(--text-tertiary)">
+                    <ScoresIcon />
+                  </n-icon>
+                  <p>No scores available</p>
+                </div>
+              </div>
+            </n-tab-pane>
+
+            <n-tab-pane name="tags" display-directive="show:lazy"
+              >>
               <template #tab>
                 <div class="mobile-tab">
                   <n-icon size="16">
@@ -374,106 +475,6 @@
                       </template>
                     </div>
                   </div>
-                </div>
-              </div>
-            </n-tab-pane>
-
-            <n-tab-pane name="scores" display-directive="show:lazy">
-              <template #tab>
-                <div class="mobile-tab">
-                  <n-icon size="16">
-                    <ScoresIcon />
-                  </n-icon>
-                  <span>Score</span>
-                </div>
-              </template>
-
-              <div class="mobile-tab-content">
-                <div
-                  v-if="selectedPhoto?.descriptions?.artistic_scores"
-                  class="mobile-scores"
-                >
-                  <!-- Overall Rating Compact -->
-                  <div class="mobile-overall-rating">
-                    <div class="mobile-rating-main">
-                      <span class="mobile-rating-value">
-                        {{ overallRating.average }}/{{ scoreScale.max }}
-                      </span>
-                      <span
-                        class="mobile-rating-label"
-                        :class="
-                          'rating-' +
-                          overallRating.rating
-                            .toLowerCase()
-                            .replace(' ', '-')
-                            .replace('/', '')
-                        "
-                      >
-                        {{ overallRating.rating }}
-                      </span>
-                    </div>
-                  </div>
-
-                  <!-- Genre Pills (Horizontal scroll) -->
-                  <div class="mobile-genre-scroll">
-                    <div
-                      class="mobile-genre-pill"
-                      :class="{ active: selectedGenre === 'street' }"
-                      @click="emit('apply-genre-preset', 'street')"
-                    >
-                      <n-icon size="14"><WalkOutline /></n-icon>
-                      Street
-                    </div>
-                    <div
-                      class="mobile-genre-pill"
-                      :class="{ active: selectedGenre === 'documentary' }"
-                      @click="emit('apply-genre-preset', 'documentary')"
-                    >
-                      <n-icon size="14"><BookOpen16Regular /></n-icon>
-                      Documentary
-                    </div>
-                    <div
-                      class="mobile-genre-pill"
-                      :class="{ active: selectedGenre === 'abstract' }"
-                      @click="emit('apply-genre-preset', 'abstract')"
-                    >
-                      <n-icon size="14"><PaletteOutlined /></n-icon>
-                      Artistic
-                    </div>
-                  </div>
-
-                  <!-- Scores List (Compact) -->
-                  <div class="mobile-scores-list">
-                    <div
-                      v-for="scoreData in orderedArtisticScores"
-                      :key="scoreData.criterion"
-                      class="mobile-score-row"
-                    >
-                      <span class="mobile-score-label">{{
-                        scoreData.label
-                      }}</span>
-                      <div class="mobile-score-bar-wrap">
-                        <div class="mobile-score-bar">
-                          <div
-                            class="mobile-score-fill"
-                            :style="{
-                              width: (scoreData.score / 9) * 100 + '%',
-                              background: getScoreBgColor(scoreData.score),
-                            }"
-                          ></div>
-                        </div>
-                        <span class="mobile-score-value">{{
-                          scoreData.score
-                        }}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div v-else class="mobile-empty-state">
-                  <n-icon size="32" color="var(--text-tertiary)">
-                    <ScoresIcon />
-                  </n-icon>
-                  <p>No scores available</p>
                 </div>
               </div>
             </n-tab-pane>
@@ -754,7 +755,7 @@ const emit = defineEmits([
   "submit-custom-question",
 ]);
 
-const activeTab = ref("tags");
+const activeTab = ref("scores");
 
 const visibleModel = computed({
   get: () => props.visible,

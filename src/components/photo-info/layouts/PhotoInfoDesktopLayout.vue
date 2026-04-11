@@ -93,7 +93,210 @@
 
       <!-- Info Sections with Lateral Tabs -->
       <div class="info-sections">
-        <n-tabs type="line" placement="left" size="large" animated>
+        <n-tabs
+          type="line"
+          placement="left"
+          size="large"
+          animated
+          default-value="scores"
+        >
+          <n-tab-pane name="scores" display-directive="show:lazy">
+            <template #tab>
+              <div class="tab-content">
+                <n-icon size="18">
+                  <ScoresIcon />
+                </n-icon>
+                <span>Scores</span>
+              </div>
+            </template>
+            <div class="tab-panel-content">
+              <div class="descriptions-section">
+                <div v-if="selectedPhoto?.descriptions" class="ai-descriptions">
+                  <div
+                    class="description-item"
+                    v-if="selectedPhoto.descriptions.artistic_scores"
+                  >
+                    <!-- Overall Rating -->
+                    <div class="overall-rating-container">
+                      <div class="overall-rating">
+                        <span class="overall-label">Overall Rating:</span>
+                        <div class="overall-score">
+                          <span class="overall-value"
+                            >{{ overallRating.average }}/{{
+                              scoreScale.max
+                            }}</span
+                          >
+                          <span
+                            class="overall-rating-text"
+                            :class="
+                              'rating-' +
+                              overallRating.rating
+                                .toLowerCase()
+                                .replace(' ', '-')
+                                .replace('/', '')
+                            "
+                          >
+                            {{ overallRating.rating }}
+                          </span>
+                        </div>
+                      </div>
+
+                      <!-- Genre Presets -->
+                      <div class="genre-presets-container">
+                        <!-- <div class="genre-header">
+                          <h6 class="genre-title">Photography Genre Presets</h6>
+                        </div> -->
+                        <div class="genre-pills">
+                          <n-tooltip
+                            trigger="hover"
+                            placement="bottom"
+                            :show-arrow="true"
+                            delay="1200"
+                          >
+                            <template #trigger>
+                              <div
+                                class="genre-pill"
+                                :class="{ active: selectedGenre === 'street' }"
+                                @click="emit('apply-genre-preset', 'street')"
+                              >
+                                <n-icon size="14" class="genre-icon">
+                                  <WalkOutline />
+                                </n-icon>
+                                Street
+                              </div>
+                            </template>
+                            <div v-html="formatGenreTooltip('street')"></div>
+                          </n-tooltip>
+
+                          <n-tooltip
+                            trigger="hover"
+                            placement="bottom"
+                            :show-arrow="true"
+                            delay="1200"
+                          >
+                            <template #trigger>
+                              <div
+                                class="genre-pill"
+                                :class="{
+                                  active: selectedGenre === 'documentary',
+                                }"
+                                @click="
+                                  emit('apply-genre-preset', 'documentary')
+                                "
+                              >
+                                <n-icon size="14" class="genre-icon">
+                                  <BookOpen16Regular />
+                                </n-icon>
+                                Documentary
+                              </div>
+                            </template>
+                            <div
+                              v-html="formatGenreTooltip('documentary')"
+                            ></div>
+                          </n-tooltip>
+
+                          <n-tooltip
+                            trigger="hover"
+                            placement="bottom"
+                            :show-arrow="true"
+                            delay="1200"
+                          >
+                            <template #trigger>
+                              <div
+                                class="genre-pill"
+                                :class="{
+                                  active: selectedGenre === 'abstract',
+                                }"
+                                @click="emit('apply-genre-preset', 'abstract')"
+                              >
+                                <n-icon size="14" class="genre-icon">
+                                  <PaletteOutlined />
+                                </n-icon>
+                                Artistic
+                              </div>
+                            </template>
+                            <div v-html="formatGenreTooltip('abstract')"></div>
+                          </n-tooltip>
+                        </div>
+                      </div>
+
+                      <!-- Weights Configuration -->
+                      <div
+                        class="weights-configuration-container"
+                        v-if="showCustomWeights"
+                      >
+                        <div class="weights-header">
+                          <h6 class="weights-title">
+                            Score Weights Configuration
+                          </h6>
+                        </div>
+                        <CustomArtisticWeights
+                          :modelValue="artisticScoreWeights"
+                          @update:modelValue="
+                            emit('update:artistic-score-weights', $event)
+                          "
+                          :format-criterion-name="formatCriterionName"
+                        />
+                      </div>
+
+                      <div class="artistic-scores-grid">
+                        <div
+                          v-for="scoreData in orderedArtisticScores"
+                          :key="scoreData.criterion"
+                          class="score-item"
+                          :class="{ 'bonus-item': scoreData.group === 'bonus' }"
+                          :style="{
+                            '--weight-scale':
+                              artisticScoreWeights[scoreData.criterion],
+                            '--weight-opacity':
+                              artisticScoreWeights[scoreData.criterion],
+                          }"
+                        >
+                          <span
+                            class="score-label"
+                            :data-weight="`×${artisticScoreWeights[
+                              scoreData.criterion
+                            ].toFixed(1)}`"
+                            :title="`Score: ${scoreData.score}/${
+                              scoreScale.max
+                            } | Weight: ${artisticScoreWeights[
+                              scoreData.criterion
+                            ].toFixed(1)} | Impact: ${(
+                              scoreData.score *
+                              artisticScoreWeights[scoreData.criterion]
+                            ).toFixed(1)}`"
+                          >
+                            {{ scoreData.label }}
+                          </span>
+                          <div class="score-bar-container">
+                            <div class="score-bar">
+                              <div
+                                class="score-fill"
+                                :style="{
+                                  width: (scoreData.score / 9) * 100 + '%',
+                                  opacity: 0.8,
+                                  background: getScoreBgColor(scoreData.score),
+                                }"
+                              ></div>
+                            </div>
+                            <span class="score-value">
+                              <span class="score-number">{{
+                                scoreData.score
+                              }}</span>
+                              <span class="max-score"
+                                >/{{ scoreScale.max }}</span
+                              >
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </n-tab-pane>
+
           <n-tab-pane name="tags" display-directive="show:lazy">
             <template #tab>
               <div class="tab-content">
@@ -572,203 +775,6 @@
                     <span v-if="wordCount > 50" class="error-text">
                       Please reduce to 50 words or less
                     </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </n-tab-pane>
-
-          <n-tab-pane name="scores" display-directive="show:lazy">
-            <template #tab>
-              <div class="tab-content">
-                <n-icon size="18">
-                  <ScoresIcon />
-                </n-icon>
-                <span>Scores</span>
-              </div>
-            </template>
-            <div class="tab-panel-content">
-              <div class="descriptions-section">
-                <div v-if="selectedPhoto?.descriptions" class="ai-descriptions">
-                  <div
-                    class="description-item"
-                    v-if="selectedPhoto.descriptions.artistic_scores"
-                  >
-                    <!-- Overall Rating -->
-                    <div class="overall-rating-container">
-                      <div class="overall-rating">
-                        <span class="overall-label">Overall Rating:</span>
-                        <div class="overall-score">
-                          <span class="overall-value"
-                            >{{ overallRating.average }}/{{
-                              scoreScale.max
-                            }}</span
-                          >
-                          <span
-                            class="overall-rating-text"
-                            :class="
-                              'rating-' +
-                              overallRating.rating
-                                .toLowerCase()
-                                .replace(' ', '-')
-                                .replace('/', '')
-                            "
-                          >
-                            {{ overallRating.rating }}
-                          </span>
-                        </div>
-                      </div>
-
-                      <!-- Genre Presets -->
-                      <div class="genre-presets-container">
-                        <div class="genre-header">
-                          <h6 class="genre-title">Photography Genre Presets</h6>
-                        </div>
-                        <div class="genre-pills">
-                          <n-tooltip
-                            trigger="hover"
-                            placement="bottom"
-                            :show-arrow="true"
-                            delay="1200"
-                          >
-                            <template #trigger>
-                              <div
-                                class="genre-pill"
-                                :class="{ active: selectedGenre === 'street' }"
-                                @click="emit('apply-genre-preset', 'street')"
-                              >
-                                <n-icon size="16" class="genre-icon">
-                                  <WalkOutline />
-                                </n-icon>
-                                Street
-                              </div>
-                            </template>
-                            <div v-html="formatGenreTooltip('street')"></div>
-                          </n-tooltip>
-
-                          <n-tooltip
-                            trigger="hover"
-                            placement="bottom"
-                            :show-arrow="true"
-                            delay="1200"
-                          >
-                            <template #trigger>
-                              <div
-                                class="genre-pill"
-                                :class="{
-                                  active: selectedGenre === 'documentary',
-                                }"
-                                @click="
-                                  emit('apply-genre-preset', 'documentary')
-                                "
-                              >
-                                <n-icon size="16" class="genre-icon">
-                                  <BookOpen16Regular />
-                                </n-icon>
-                                Documentary
-                              </div>
-                            </template>
-                            <div
-                              v-html="formatGenreTooltip('documentary')"
-                            ></div>
-                          </n-tooltip>
-
-                          <n-tooltip
-                            trigger="hover"
-                            placement="bottom"
-                            :show-arrow="true"
-                            delay="1200"
-                          >
-                            <template #trigger>
-                              <div
-                                class="genre-pill"
-                                :class="{
-                                  active: selectedGenre === 'abstract',
-                                }"
-                                @click="emit('apply-genre-preset', 'abstract')"
-                              >
-                                <n-icon size="16" class="genre-icon">
-                                  <PaletteOutlined />
-                                </n-icon>
-                                Artistic
-                              </div>
-                            </template>
-                            <div v-html="formatGenreTooltip('abstract')"></div>
-                          </n-tooltip>
-                        </div>
-                      </div>
-
-                      <!-- Weights Configuration -->
-                      <div
-                        class="weights-configuration-container"
-                        v-if="showCustomWeights"
-                      >
-                        <div class="weights-header">
-                          <h6 class="weights-title">
-                            Score Weights Configuration
-                          </h6>
-                        </div>
-                        <CustomArtisticWeights
-                          :modelValue="artisticScoreWeights"
-                          @update:modelValue="
-                            emit('update:artistic-score-weights', $event)
-                          "
-                          :format-criterion-name="formatCriterionName"
-                        />
-                      </div>
-
-                      <div class="artistic-scores-grid">
-                        <div
-                          v-for="scoreData in orderedArtisticScores"
-                          :key="scoreData.criterion"
-                          class="score-item"
-                          :class="{ 'bonus-item': scoreData.group === 'bonus' }"
-                          :style="{
-                            '--weight-scale':
-                              artisticScoreWeights[scoreData.criterion],
-                            '--weight-opacity':
-                              artisticScoreWeights[scoreData.criterion],
-                          }"
-                        >
-                          <span
-                            class="score-label"
-                            :data-weight="`×${artisticScoreWeights[
-                              scoreData.criterion
-                            ].toFixed(1)}`"
-                            :title="`Score: ${scoreData.score}/${
-                              scoreScale.max
-                            } | Weight: ${artisticScoreWeights[
-                              scoreData.criterion
-                            ].toFixed(1)} | Impact: ${(
-                              scoreData.score *
-                              artisticScoreWeights[scoreData.criterion]
-                            ).toFixed(1)}`"
-                          >
-                            {{ scoreData.label }}
-                          </span>
-                          <div class="score-bar-container">
-                            <div class="score-bar">
-                              <div
-                                class="score-fill"
-                                :style="{
-                                  width: (scoreData.score / 9) * 100 + '%',
-                                  opacity: 0.8,
-                                  background: getScoreBgColor(scoreData.score),
-                                }"
-                              ></div>
-                            </div>
-                            <span class="score-value">
-                              <span class="score-number">{{
-                                scoreData.score
-                              }}</span>
-                              <span class="max-score"
-                                >/{{ scoreScale.max }}</span
-                              >
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -1506,8 +1512,8 @@ const navigateTo = (routeName, id) => {
 
 /* Genre presets */
 .genre-presets-container {
-  margin-bottom: var(--spacing-md);
-  margin-top: var(--spacing-md);
+  margin-bottom: var(--spacing-xs);
+  margin-top: var(--spacing-sm);
 }
 
 .genre-header {
@@ -1516,8 +1522,8 @@ const navigateTo = (routeName, id) => {
 }
 
 .genre-title {
-  margin: 0 0 var(--spacing-xs) 0;
-  font-size: var(--font-size-sm);
+  margin: 0;
+  font-size: 11px;
   font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -1526,24 +1532,24 @@ const navigateTo = (routeName, id) => {
 
 .genre-pills {
   display: flex;
-  gap: 8px;
+  gap: 18px;
   justify-content: center;
   flex-wrap: wrap;
-  padding: 12px 0;
+  padding: 10px 0 12px;
 }
 
 .genre-pill {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border-radius: 20px;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 16px;
   border: 1px solid var(--border-color);
   background-color: var(--bg-secondary);
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
   flex-shrink: 0;
