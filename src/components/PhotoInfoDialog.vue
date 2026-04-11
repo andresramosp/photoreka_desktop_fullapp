@@ -21,6 +21,7 @@
     :customQuestionsRemaining="customQuestionsRemaining"
     :insightTypesAvailable="insightTypesAvailable"
     :canUseInsights="canUseInsights"
+    :photoLibrary="photoLibrary"
     :photoCredit="photoCredit"
     :formatDate="formatDate"
     :formatExposureTime="formatExposureTime"
@@ -65,6 +66,7 @@
     :customQuestionsRemaining="customQuestionsRemaining"
     :insightTypesAvailable="insightTypesAvailable"
     :canUseInsights="canUseInsights"
+    :photoLibrary="photoLibrary"
     :photoCredit="photoCredit"
     :formatDate="formatDate"
     :formatExposureTime="formatExposureTime"
@@ -190,6 +192,8 @@ import PhotoInfoMobileLayout from "./photo-info/layouts/PhotoInfoMobileLayout.vu
 // Composables
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { useUserStore } from "@/stores/userStore.ts";
+import { useCollectionsStore } from "@/stores/collections.js";
+import { useSeriesStore } from "@/stores/series.js";
 
 // Icons from @vicons
 import {
@@ -223,6 +227,8 @@ import { PaletteOutlined } from "@vicons/material";
 // Mobile detection
 const { isMobile } = useIsMobile();
 const userStore = useUserStore();
+const collectionsStore = useCollectionsStore();
+const seriesStore = useSeriesStore();
 
 const props = defineProps({
   modelValue: {
@@ -308,6 +314,22 @@ const hasNextPhoto = computed(() => {
 const photoCounter = computed(() => {
   if (!props.allPhotos?.length || props.currentPhotoIndex < 0) return "";
   return `${props.currentPhotoIndex + 1} / ${props.allPhotos.length}`;
+});
+
+// Computed: collections and series that contain this photo
+const photoLibrary = computed(() => {
+  const photoId = props.selectedPhoto?.id;
+  if (!photoId) return { collections: [], series: [] };
+
+  const collections = collectionsStore.allCollections
+    .filter((c) => c.photos?.some((p) => String(p.id) === String(photoId)))
+    .map((c) => ({ id: c.id, name: c.name || c.title }));
+
+  const series = seriesStore.allSeries
+    .filter((s) => s.photos?.some((p) => String(p.id) === String(photoId)))
+    .map((s) => ({ id: s.id, name: s.name || s.title }));
+
+  return { collections, series };
 });
 
 // Generic photo credit info for any user

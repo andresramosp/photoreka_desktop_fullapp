@@ -524,6 +524,77 @@
               </div>
             </n-tab-pane>
 
+            <!-- Library Tab -->
+            <n-tab-pane name="library" display-directive="show:lazy">
+              <template #tab>
+                <div class="mobile-tab">
+                  <n-icon size="16">
+                    <LibraryIcon />
+                  </n-icon>
+                  <span>Library</span>
+                </div>
+              </template>
+
+              <div class="mobile-tab-content">
+                <div
+                  v-if="photoLibrary.collections.length > 0"
+                  class="mobile-tags-groups"
+                >
+                  <!-- Collections -->
+                  <div
+                    v-if="photoLibrary.collections.length > 0"
+                    class="mobile-tag-group"
+                  >
+                    <h6 class="mobile-group-title">Collections</h6>
+                    <div class="mobile-tags-row">
+                      <n-tag
+                        v-for="collection in photoLibrary.collections"
+                        :key="'col-' + collection.id"
+                        size="small"
+                        type="info"
+                        :bordered="false"
+                        class="library-tag"
+                        @click="navigateTo('collection-detail', collection.id)"
+                      >
+                        {{ collection.name }}
+                      </n-tag>
+                    </div>
+                  </div>
+
+                  <!-- Series (hidden on mobile) -->
+                  <!--
+                  <div
+                    v-if="photoLibrary.series.length > 0"
+                    class="mobile-tag-group"
+                  >
+                    <h6 class="mobile-group-title">Series</h6>
+                    <div class="mobile-tags-row">
+                      <n-tag
+                        v-for="s in photoLibrary.series"
+                        :key="'ser-' + s.id"
+                        size="small"
+                        type="info"
+                        :bordered="false"
+                        class="library-tag"
+                        @click="navigateTo('series-detail', s.id)"
+                      >
+                        {{ s.name }}
+                      </n-tag>
+                    </div>
+                  </div>
+                  -->
+                </div>
+                <div v-else class="mobile-empty-state">
+                  <n-icon size="32" color="var(--text-tertiary)">
+                    <LibraryIcon />
+                  </n-icon>
+                  <p>Not in any collection or series yet</p>
+                </div>
+              </div>
+            </n-tab-pane>
+
+            <!-- Insights tab (hidden) -->
+            <!--
             <n-tab-pane name="insights" display-directive="show:lazy">
               <template #tab>
                 <div class="mobile-tab">
@@ -536,120 +607,39 @@
 
               <div class="mobile-tab-content">
                 <div class="mobile-insights">
-                  <!-- Insights List -->
-                  <div
-                    v-if="allPhotoInsights.length > 0"
-                    class="mobile-insights-list"
-                  >
-                    <div
-                      v-for="(insight, index) in allPhotoInsights"
-                      :key="index"
-                      class="mobile-insight-item"
-                    >
+                  <div v-if="allPhotoInsights.length > 0" class="mobile-insights-list">
+                    <div v-for="(insight, index) in allPhotoInsights" :key="index" class="mobile-insight-item">
                       <h6 class="mobile-insight-label">{{ insight.label }}</h6>
-                      <div
-                        class="mobile-insight-text"
-                        v-html="insight.text"
-                      ></div>
+                      <div class="mobile-insight-text" v-html="insight.text"></div>
                     </div>
                   </div>
-
-                  <!-- Loading -->
-                  <div
-                    v-if="isGeneratingInsight"
-                    class="mobile-insight-loading"
-                  >
+                  <div v-if="isGeneratingInsight" class="mobile-insight-loading">
                     <n-spin size="small" />
                     <span>{{ pendingInsightLabel || "Analyzing..." }}</span>
                   </div>
-
-                  <!-- Empty state -->
-                  <div
-                    v-if="allPhotoInsights.length === 0 && !isGeneratingInsight"
-                    class="mobile-empty-state"
-                  >
-                    <n-icon size="32" color="var(--primary-color)">
-                      <SparklesIcon />
-                    </n-icon>
+                  <div v-if="allPhotoInsights.length === 0 && !isGeneratingInsight" class="mobile-empty-state">
+                    <n-icon size="32" color="var(--primary-color)"><SparklesIcon /></n-icon>
                     <p>Tap a button to get AI insights</p>
                   </div>
-
-                  <!-- Control Buttons -->
                   <div class="mobile-insights-controls">
                     <div class="mobile-insight-buttons">
-                      <n-button
-                        size="small"
-                        type="primary"
-                        :disabled="
-                          isGeneratingInsight ||
-                          !insightTypesAvailable.cultural ||
-                          !canUseInsights
-                        "
-                        @click="emit('get-insight', 'cultural')"
-                      >
-                        <template #icon>
-                          <n-icon size="14"><GlobeOutline /></n-icon>
-                        </template>
+                      <n-button size="small" type="primary" :disabled="isGeneratingInsight || !insightTypesAvailable.cultural || !canUseInsights" @click="emit('get-insight', 'cultural')">
+                        <template #icon><n-icon size="14"><GlobeOutline /></n-icon></template>
                         Cultural
                       </n-button>
-                      <n-button
-                        size="small"
-                        type="primary"
-                        :disabled="
-                          isGeneratingInsight ||
-                          !insightTypesAvailable.technical ||
-                          !canUseInsights
-                        "
-                        @click="emit('get-insight', 'technical')"
-                      >
-                        <template #icon>
-                          <n-icon size="14"><SettingsOutline /></n-icon>
-                        </template>
+                      <n-button size="small" type="primary" :disabled="isGeneratingInsight || !insightTypesAvailable.technical || !canUseInsights" @click="emit('get-insight', 'technical')">
+                        <template #icon><n-icon size="14"><SettingsOutline /></n-icon></template>
                         Technical
                       </n-button>
-                      <n-button
-                        size="small"
-                        type="primary"
-                        :disabled="
-                          isGeneratingInsight ||
-                          !insightTypesAvailable.artistic ||
-                          !canUseInsights
-                        "
-                        @click="emit('get-insight', 'artistic')"
-                      >
-                        <template #icon>
-                          <n-icon size="14"><BrushOutline /></n-icon>
-                        </template>
+                      <n-button size="small" type="primary" :disabled="isGeneratingInsight || !insightTypesAvailable.artistic || !canUseInsights" @click="emit('get-insight', 'artistic')">
+                        <template #icon><n-icon size="14"><BrushOutline /></n-icon></template>
                         Artistic
                       </n-button>
                     </div>
                     <div class="mobile-custom-question">
-                      <n-input
-                        :value="customInsightQuestion"
-                        @update:value="
-                          emit('update:custom-insight-question', $event)
-                        "
-                        placeholder="Ask a question..."
-                        size="small"
-                        :disabled="
-                          isGeneratingInsight ||
-                          customQuestionsRemaining <= 0 ||
-                          !canUseInsights
-                        "
-                        @keydown.enter="emit('submit-custom-question')"
-                      >
+                      <n-input :value="customInsightQuestion" @update:value="emit('update:custom-insight-question', $event)" placeholder="Ask a question..." size="small" :disabled="isGeneratingInsight || customQuestionsRemaining <= 0 || !canUseInsights" @keydown.enter="emit('submit-custom-question')">
                         <template #suffix>
-                          <n-button
-                            text
-                            size="tiny"
-                            :disabled="
-                              !customInsightQuestion.trim() ||
-                              isGeneratingInsight ||
-                              customQuestionsRemaining <= 0 ||
-                              !canUseInsights
-                            "
-                            @click="emit('submit-custom-question')"
-                          >
+                          <n-button text size="tiny" :disabled="!customInsightQuestion.trim() || isGeneratingInsight || customQuestionsRemaining <= 0 || !canUseInsights" @click="emit('submit-custom-question')">
                             <n-icon size="16"><SendOutline /></n-icon>
                           </n-button>
                         </template>
@@ -659,6 +649,7 @@
                 </div>
               </div>
             </n-tab-pane>
+            -->
           </n-tabs>
         </div>
       </div>
@@ -668,6 +659,7 @@
 
 <script setup>
 import { ref, computed } from "vue";
+import { useRouter } from "vue-router";
 import {
   NDrawer,
   NDrawerContent,
@@ -695,6 +687,7 @@ import {
   BrushOutline,
   SendOutline,
   LogoInstagram,
+  LibraryOutline as LibraryIcon,
 } from "@vicons/ionicons5";
 import { FullscreenOutlined, PaletteOutlined } from "@vicons/material";
 import {
@@ -703,6 +696,8 @@ import {
 } from "@vicons/fluent";
 
 defineOptions({ name: "PhotoInfoMobileLayout" });
+
+const router = useRouter();
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -730,6 +725,10 @@ const props = defineProps({
     default: () => ({ cultural: true, technical: true, artistic: true }),
   },
   canUseInsights: { type: Boolean, default: true },
+  photoLibrary: {
+    type: Object,
+    default: () => ({ collections: [], series: [] }),
+  },
   photoCredit: { type: Object, default: null },
   formatDate: { type: Function, default: (d) => d },
   formatExposureTime: { type: Function, default: (e) => e },
@@ -761,6 +760,11 @@ const visibleModel = computed({
   get: () => props.visible,
   set: (value) => emit("update:visible", value),
 });
+
+const navigateTo = (routeName, id) => {
+  emit("update:visible", false);
+  router.push({ name: routeName, params: { id } });
+};
 </script>
 
 <style scoped>
@@ -1313,5 +1317,16 @@ const visibleModel = computed({
   box-sizing: border-box;
   padding: 8px !important;
   height: 100%;
+}
+
+/* Library tab styles */
+.library-tag {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.library-tag:active {
+  transform: scale(0.95);
+  opacity: 0.8;
 }
 </style>

@@ -775,6 +775,85 @@
             </div>
           </n-tab-pane>
 
+          <!-- Library Tab -->
+          <n-tab-pane name="library" display-directive="show:lazy">
+            <template #tab>
+              <div class="tab-content">
+                <n-icon size="18">
+                  <LibraryIcon />
+                </n-icon>
+                <span>Library</span>
+              </div>
+            </template>
+            <div class="tab-panel-content">
+              <div class="tags-section">
+                <div
+                  v-if="
+                    photoLibrary.collections.length > 0 ||
+                    photoLibrary.series.length > 0
+                  "
+                  class="grouped-tags"
+                >
+                  <!-- Collections -->
+                  <div
+                    v-if="photoLibrary.collections.length > 0"
+                    class="tag-group-item"
+                  >
+                    <h5 class="tag-group-label">Collections</h5>
+                    <div class="tag-group-content">
+                      <div class="tags-list">
+                        <n-tag
+                          v-for="collection in photoLibrary.collections"
+                          :key="'col-' + collection.id"
+                          type="info"
+                          :bordered="false"
+                          class="photo-tag library-tag"
+                          @click="
+                            navigateTo('collection-detail', collection.id)
+                          "
+                        >
+                          {{ collection.name }}
+                        </n-tag>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Series -->
+                  <div
+                    v-if="photoLibrary.series.length > 0"
+                    class="tag-group-item"
+                  >
+                    <h5 class="tag-group-label">Series</h5>
+                    <div class="tag-group-content">
+                      <div class="tags-list">
+                        <n-tag
+                          v-for="s in photoLibrary.series"
+                          :key="'ser-' + s.id"
+                          type="info"
+                          :bordered="false"
+                          class="photo-tag library-tag"
+                          @click="navigateTo('series-detail', s.id)"
+                        >
+                          {{ s.name }}
+                        </n-tag>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="library-empty-state">
+                  <n-icon size="48" color="var(--text-tertiary)">
+                    <LibraryIcon />
+                  </n-icon>
+                  <p class="empty-text">
+                    This photo is not in any collection or series yet.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </n-tab-pane>
+
+          <!-- Insights tab (hidden) -->
+          <!--
           <n-tab-pane name="insights" display-directive="show:lazy">
             <template #tab>
               <div class="tab-content">
@@ -786,9 +865,7 @@
             </template>
             <div class="tab-panel-content">
               <div class="insights-panel">
-                <!-- Insights Display Area -->
                 <div class="insights-display-area">
-                  <!-- Empty state placeholder -->
                   <div
                     v-if="allPhotoInsights.length === 0 && !isGeneratingInsight"
                     class="insights-placeholder"
@@ -801,8 +878,6 @@
                       Choose a preset topic or ask your own question.
                     </p>
                   </div>
-
-                  <!-- Accumulated insights -->
                   <div v-if="allPhotoInsights.length > 0" class="insights-list">
                     <div
                       v-for="(insight, index) in allPhotoInsights"
@@ -815,8 +890,6 @@
                       </div>
                     </div>
                   </div>
-
-                  <!-- Loading state -->
                   <div v-if="isGeneratingInsight" class="insight-loading">
                     <div class="description-item insight-item loading">
                       <h5 class="description-label">
@@ -829,95 +902,26 @@
                     </div>
                   </div>
                 </div>
-
-                <!-- Control Panel -->
                 <div class="insights-control-panel">
                   <div class="preset-buttons">
-                    <n-button
-                      type="primary"
-                      size="small"
-                      @click="emit('get-insight', 'cultural')"
-                      :disabled="
-                        isGeneratingInsight ||
-                        !insightTypesAvailable.cultural ||
-                        !canUseInsights
-                      "
-                      class="preset-btn"
-                    >
-                      <template #icon>
-                        <n-icon size="16">
-                          <GlobeOutline />
-                        </n-icon>
-                      </template>
+                    <n-button type="primary" size="small" @click="emit('get-insight', 'cultural')" :disabled="isGeneratingInsight || !insightTypesAvailable.cultural || !canUseInsights" class="preset-btn">
+                      <template #icon><n-icon size="16"><GlobeOutline /></n-icon></template>
                       Cultural
                     </n-button>
-                    <n-button
-                      type="primary"
-                      size="small"
-                      @click="emit('get-insight', 'technical')"
-                      :disabled="
-                        isGeneratingInsight ||
-                        !insightTypesAvailable.technical ||
-                        !canUseInsights
-                      "
-                      class="preset-btn"
-                    >
-                      <template #icon>
-                        <n-icon size="16">
-                          <SettingsOutline />
-                        </n-icon>
-                      </template>
+                    <n-button type="primary" size="small" @click="emit('get-insight', 'technical')" :disabled="isGeneratingInsight || !insightTypesAvailable.technical || !canUseInsights" class="preset-btn">
+                      <template #icon><n-icon size="16"><SettingsOutline /></n-icon></template>
                       Technical
                     </n-button>
-                    <n-button
-                      type="primary"
-                      size="small"
-                      @click="emit('get-insight', 'artistic')"
-                      :disabled="
-                        isGeneratingInsight ||
-                        !insightTypesAvailable.artistic ||
-                        !canUseInsights
-                      "
-                      class="preset-btn"
-                    >
-                      <template #icon>
-                        <n-icon size="16">
-                          <BrushOutline />
-                        </n-icon>
-                      </template>
+                    <n-button type="primary" size="small" @click="emit('get-insight', 'artistic')" :disabled="isGeneratingInsight || !insightTypesAvailable.artistic || !canUseInsights" class="preset-btn">
+                      <template #icon><n-icon size="16"><BrushOutline /></n-icon></template>
                       Artistic
                     </n-button>
                   </div>
                   <div class="custom-question-input">
-                    <n-input
-                      :value="customInsightQuestion"
-                      @update:value="
-                        emit('update:custom-insight-question', $event)
-                      "
-                      placeholder="Ask anything about this photo..."
-                      :disabled="
-                        isGeneratingInsight ||
-                        customQuestionsRemaining <= 0 ||
-                        !canUseInsights
-                      "
-                      @keydown.enter="emit('submit-custom-question')"
-                      size="small"
-                    >
+                    <n-input :value="customInsightQuestion" @update:value="emit('update:custom-insight-question', $event)" placeholder="Ask anything about this photo..." :disabled="isGeneratingInsight || customQuestionsRemaining <= 0 || !canUseInsights" @keydown.enter="emit('submit-custom-question')" size="small">
                       <template #suffix>
-                        <n-button
-                          text
-                          :disabled="
-                            !customInsightQuestion.trim() ||
-                            isGeneratingInsight ||
-                            customQuestionsRemaining <= 0 ||
-                            !canUseInsights
-                          "
-                          @click="emit('submit-custom-question')"
-                          class="send-btn"
-                        >
-                          <n-icon size="18">
-                            <SendOutline />
-                          </n-icon>
+                        <n-button text :disabled="!customInsightQuestion.trim() || isGeneratingInsight || customQuestionsRemaining <= 0 || !canUseInsights" @click="emit('submit-custom-question')" class="send-btn">
+                          <n-icon size="18"><SendOutline /></n-icon>
                         </n-button>
                       </template>
                     </n-input>
@@ -926,6 +930,7 @@
               </div>
             </div>
           </n-tab-pane>
+          -->
         </n-tabs>
       </div>
     </div>
@@ -934,6 +939,7 @@
 
 <script setup>
 import { computed } from "vue";
+import { useRouter } from "vue-router";
 import {
   NModal,
   NIcon,
@@ -961,6 +967,7 @@ import {
   BrushOutline,
   SendOutline,
   LogoInstagram,
+  LibraryOutline as LibraryIcon,
 } from "@vicons/ionicons5";
 import { FullscreenOutlined } from "@vicons/material";
 import { Trophy20Regular as ScoresIcon } from "@vicons/fluent";
@@ -968,6 +975,8 @@ import { BookOpen16Regular } from "@vicons/fluent";
 import { PaletteOutlined } from "@vicons/material";
 
 defineOptions({ name: "PhotoInfoDesktopLayout" });
+
+const router = useRouter();
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -995,6 +1004,10 @@ const props = defineProps({
     default: () => ({ cultural: true, technical: true, artistic: true }),
   },
   canUseInsights: { type: Boolean, default: true },
+  photoLibrary: {
+    type: Object,
+    default: () => ({ collections: [], series: [] }),
+  },
   photoCredit: { type: Object, default: null },
   formatDate: { type: Function, default: (d) => d },
   formatExposureTime: { type: Function, default: (e) => e },
@@ -1024,6 +1037,11 @@ const visibleModel = computed({
   get: () => props.visible,
   set: (value) => emit("update:visible", value),
 });
+
+const navigateTo = (routeName, id) => {
+  emit("update:visible", false);
+  router.push({ name: routeName, params: { id } });
+};
 </script>
 
 <style scoped>
@@ -1820,5 +1838,33 @@ const visibleModel = computed({
 
 .send-btn:disabled {
   opacity: 0.4;
+}
+
+/* Library tab styles */
+.library-tag {
+  cursor: pointer;
+  /* transition: all 0.2s ease; */
+}
+
+/* .library-tag:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  opacity: 0.85;
+} */
+
+.library-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-xl) var(--spacing-md);
+  text-align: center;
+}
+
+.library-empty-state .empty-text {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  margin: 0;
 }
 </style>
