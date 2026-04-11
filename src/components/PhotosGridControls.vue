@@ -36,7 +36,7 @@
       </div>
       <!-- Filters Collapsible Content -->
       <div
-        v-if="isFiltersExpanded"
+        v-show="isFiltersExpanded"
         class="filter-controls-tab-container filters-expanded-content"
       >
         <VisualFiltersPanel
@@ -46,6 +46,16 @@
           @update:visual-aspects="handleVisualAspectsPanelChange"
           @update:score-filters="handleScoreFiltersPanelChange"
         />
+        <!-- Date Range Filter -->
+        <div class="date-range-wrapper">
+          <TimeRangeFilter
+            :photos="photos"
+            @time-range-change="handleTimeRangeChange"
+            :histogram-height="'30px'"
+            :show-title="false"
+            marksCount="5"
+          />
+        </div>
       </div>
     </div>
 
@@ -413,14 +423,6 @@
                 class="compact-select"
               />
             </div>
-          </div>
-
-          <!-- Date Range Filter -->
-          <div class="date-range-wrapper">
-            <TimeRangeFilter
-              :photos="photos"
-              @time-range-change="handleTimeRangeChange"
-            />
           </div>
         </div>
       </div>

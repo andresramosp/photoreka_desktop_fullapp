@@ -147,6 +147,7 @@
           :show-title="false"
           :current-time-range="timeRangeFilter"
           @time-range-change="handleTimeRangeChange"
+          :histogram-height="'40px'"
         />
       </div>
     </div>

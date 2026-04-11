@@ -255,6 +255,7 @@
                   :photos="processedPhotos"
                   :show-title="false"
                   @time-range-change="handleTimeRangeChange"
+                  :histogram-height="'40px'"
                 />
               </div>
             </div>

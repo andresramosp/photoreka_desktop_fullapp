@@ -8,7 +8,11 @@
     </div>
 
     <!-- Histogram visualization -->
-    <div class="histogram-container" ref="histogramRef">
+    <div
+      class="histogram-container"
+      ref="histogramRef"
+      :style="{ height: histogramHeight }"
+    >
       <div
         v-for="(bar, index) in histogramBars"
         :key="index"
@@ -51,9 +55,17 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  histogramHeight: {
+    type: String,
+    default: "60px",
+  },
   currentTimeRange: {
     type: [Array, Object],
     default: null,
+  },
+  marksCount: {
+    type: Number,
+    default: 3,
   },
 });
 
@@ -166,27 +178,19 @@ const marks = computed(() => {
   if (minTimestamp.value === maxTimestamp.value) return {};
 
   const range = maxTimestamp.value - minTimestamp.value;
-  const marksToShow = isSmallScreen.value ? 3 : 5;
+  const marksToShow = isSmallScreen.value
+    ? Math.min(props.marksCount, 3)
+    : props.marksCount;
   const marksObject = {};
 
   // Always include start and end
   marksObject[minTimestamp.value] = formatDateCompact(minTimestamp.value);
 
-  if (marksToShow > 2) {
-    // For 3 marks: add middle
-    if (marksToShow === 3) {
-      const mid = minTimestamp.value + range * 0.5;
-      marksObject[mid] = formatDateCompact(mid);
-    }
-    // For 5 marks: add quarter points and middle
-    else if (marksToShow === 5) {
-      const quarter1 = minTimestamp.value + range * 0.25;
-      const mid = minTimestamp.value + range * 0.5;
-      const quarter3 = minTimestamp.value + range * 0.75;
-      marksObject[quarter1] = formatDateCompact(quarter1);
-      marksObject[mid] = formatDateCompact(mid);
-      marksObject[quarter3] = formatDateCompact(quarter3);
-    }
+  // Add evenly spaced intermediate marks
+  const intermediateCount = marksToShow - 2;
+  for (let i = 1; i <= intermediateCount; i++) {
+    const t = minTimestamp.value + range * (i / (intermediateCount + 1));
+    marksObject[t] = formatDateCompact(t);
   }
 
   marksObject[maxTimestamp.value] = formatDateCompact(maxTimestamp.value);
@@ -333,7 +337,7 @@ onBeforeUnmount(() => {
 
 .histogram-container {
   position: relative;
-  height: 60px;
+  height: 30px;
   width: 100%;
   background: rgba(255, 255, 255, 0.02);
   border-radius: 4px;
