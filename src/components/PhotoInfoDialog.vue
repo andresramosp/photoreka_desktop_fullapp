@@ -29,6 +29,10 @@
     :formatCriterionName="formatCriterionName"
     :formatGenreTooltip="formatGenreTooltip"
     :getScoreBgColor="getScoreBgColor"
+    :showDelete="showDelete"
+    :showAddToCollection="showAddToCollection"
+    :showMoveToTool="showMoveToTool"
+    :showSendToChat="true"
     @update:visible="visible = $event"
     @copy-name="copyNameToClipboard"
     @image-error="handleImageError"
@@ -42,6 +46,10 @@
     @get-insight="getSpecificInsight"
     @update:custom-insight-question="customInsightQuestion = $event"
     @submit-custom-question="submitCustomQuestion"
+    @delete-photo="handleDeletePhoto"
+    @add-to-collection="handleAddToCollection"
+    @move-to-tool="handleMoveToTool"
+    @send-to-chat="handleSendToChat"
   />
 
   <!-- Mobile Layout -->
@@ -74,6 +82,10 @@
     :formatCriterionName="formatCriterionName"
     :formatGenreTooltip="formatGenreTooltip"
     :getScoreBgColor="getScoreBgColor"
+    :showDelete="showDelete"
+    :showAddToCollection="showAddToCollection"
+    :showMoveToTool="showMoveToTool"
+    :showSendToChat="true"
     @update:visible="visible = $event"
     @copy-name="copyNameToClipboard"
     @image-error="handleImageError"
@@ -87,7 +99,56 @@
     @get-insight="getSpecificInsight"
     @update:custom-insight-question="customInsightQuestion = $event"
     @submit-custom-question="submitCustomQuestion"
+    @delete-photo="handleDeletePhoto"
+    @add-to-collection="handleAddToCollection"
+    @move-to-tool="handleMoveToTool"
+    @send-to-chat="handleSendToChat"
   />
+
+  <!-- Collection Modal -->
+  <CollectionModal
+    :show="showCollectionModal"
+    :photo-count="1"
+    :photo-ids="selectedPhoto ? [selectedPhoto.id] : []"
+    @add-to-collection="handleCollectionAdded"
+    @add-to-series="handleCollectionAdded"
+    @cancel="showCollectionModal = false"
+  />
+
+  <!-- Photo Tool Selector Modal -->
+  <PhotoToolSelector
+    :show="showToolSelector"
+    :photo-count="1"
+    :is-processing="isProcessingTool"
+    @tool-selected="handleToolSelected"
+    @close="closeToolSelector"
+  />
+
+  <!-- Delete Confirmation Modal -->
+  <n-modal
+    v-model:show="showDeleteConfirm"
+    preset="dialog"
+    title="Confirm Deletion"
+  >
+    <template #header>
+      <div style="font-size: 18px; font-weight: 600">Confirm Deletion</div>
+    </template>
+    <div style="padding: 16px 0">
+      <p style="font-size: 16px">
+        Are you sure you want to delete this photo? This action cannot be
+        undone.
+      </p>
+    </div>
+    <template #action>
+      <n-button @click="showDeleteConfirm = false">Cancel</n-button>
+      <n-button
+        type="error"
+        :loading="isDeletingPhoto"
+        @click="confirmDeletePhoto"
+        >Delete</n-button
+      >
+    </template>
+  </n-modal>
 
   <!-- Fullscreen Photo Modal -->
   <n-modal
@@ -183,6 +244,8 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { NModal, NIcon, NButton, useMessage } from "naive-ui";
+import CollectionModal from "./CollectionModal.vue";
+import PhotoToolSelector from "./PhotoToolSelector.vue";
 import CustomArtisticWeights from "./CustomArtisticWeights.vue";
 
 // Layout Components
@@ -194,6 +257,8 @@ import { useIsMobile } from "@/composables/useIsMobile.js";
 import { useUserStore } from "@/stores/userStore.ts";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useSeriesStore } from "@/stores/series.js";
+import { usePhotosStore } from "@/stores/photos.js";
+import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 
 // Icons from @vicons
 import {
@@ -229,6 +294,15 @@ const { isMobile } = useIsMobile();
 const userStore = useUserStore();
 const collectionsStore = useCollectionsStore();
 const seriesStore = useSeriesStore();
+const photosStore = usePhotosStore();
+const {
+  takeToTool,
+  takeToChat,
+  showToolSelector,
+  isProcessing: isProcessingTool,
+  openToolSelector,
+  closeToolSelector,
+} = usePhotoToolSelection();
 
 const props = defineProps({
   modelValue: {
@@ -246,6 +320,18 @@ const props = defineProps({
   currentPhotoIndex: {
     type: Number,
     default: -1,
+  },
+  showDelete: {
+    type: Boolean,
+    default: true,
+  },
+  showAddToCollection: {
+    type: Boolean,
+    default: true,
+  },
+  showMoveToTool: {
+    type: Boolean,
+    default: true,
   },
 });
 
@@ -294,6 +380,9 @@ const wordCount = ref(0);
 
 const showCustomWeights = ref(false);
 const showFullscreenPhoto = ref(false);
+const showCollectionModal = ref(false);
+const showDeleteConfirm = ref(false);
+const isDeletingPhoto = ref(false);
 
 // Navigation state and logic
 const isTransitioning = ref(false);
@@ -1051,6 +1140,53 @@ const saveNotes = async () => {
   } finally {
     isSavingNotes.value = false;
   }
+};
+
+// ─── Action Bar Handlers ───────────────────────────────────────────
+
+const handleDeletePhoto = () => {
+  showDeleteConfirm.value = true;
+};
+
+const confirmDeletePhoto = async () => {
+  if (!props.selectedPhoto?.id) return;
+  isDeletingPhoto.value = true;
+  try {
+    await photosStore.deletePhotos([props.selectedPhoto.id]);
+    showDeleteConfirm.value = false;
+    visible.value = false;
+    message.success("Photo deleted");
+  } catch (error) {
+    console.error("Delete photo failed:", error);
+    message.error("Failed to delete photo");
+  } finally {
+    isDeletingPhoto.value = false;
+  }
+};
+
+const handleAddToCollection = () => {
+  showCollectionModal.value = true;
+};
+
+const handleCollectionAdded = () => {
+  showCollectionModal.value = false;
+};
+
+const handleMoveToTool = () => {
+  openToolSelector();
+};
+
+const handleToolSelected = async (toolId, canvasId = null) => {
+  if (!props.selectedPhoto?.id) return;
+  visible.value = false;
+  await takeToTool(toolId, [props.selectedPhoto.id], () => {}, canvasId);
+  closeToolSelector();
+};
+
+const handleSendToChat = async () => {
+  if (!props.selectedPhoto?.id) return;
+  visible.value = false;
+  await takeToChat([props.selectedPhoto.id], () => {});
 };
 
 // Handle ResizeObserver errors gracefully

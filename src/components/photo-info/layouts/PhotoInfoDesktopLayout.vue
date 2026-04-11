@@ -25,6 +25,21 @@
             </n-icon>
           </template>
         </n-button>
+        <div style="flex: 1" />
+        <FloatingActionBar
+          :embedded="true"
+          :selected-count="1"
+          style="margin-right: -8px"
+          :show-delete="showDelete"
+          :show-add-to-collection="showAddToCollection"
+          :show-move-to-tool="showMoveToTool"
+          :show-send-to-chat="showSendToChat"
+          @delete="emit('delete-photo')"
+          @download="emit('download')"
+          @add-to-collection="emit('add-to-collection')"
+          @move-to-tool="emit('move-to-tool')"
+          @send-to-chat="emit('send-to-chat')"
+        />
       </div>
     </template>
 
@@ -61,7 +76,7 @@
 
           <!-- Bottom right: Download + Fullscreen -->
           <div class="bottom-right-actions">
-            <n-button
+            <!-- <n-button
               size="small"
               @click="emit('download')"
               title="Download photo"
@@ -73,7 +88,7 @@
                   <DownloadIcon />
                 </n-icon>
               </template>
-            </n-button>
+            </n-button> -->
             <n-button
               size="small"
               quaternary
@@ -958,6 +973,7 @@ import {
   NTabPane,
 } from "naive-ui";
 import CustomArtisticWeights from "../../CustomArtisticWeights.vue";
+import FloatingActionBar from "../../FloatingActionBar.vue";
 
 // Icons
 import {
@@ -1015,6 +1031,10 @@ const props = defineProps({
     default: () => ({ collections: [], series: [] }),
   },
   photoCredit: { type: Object, default: null },
+  showDelete: { type: Boolean, default: true },
+  showAddToCollection: { type: Boolean, default: true },
+  showMoveToTool: { type: Boolean, default: true },
+  showSendToChat: { type: Boolean, default: false },
   formatDate: { type: Function, default: (d) => d },
   formatExposureTime: { type: Function, default: (e) => e },
   formatCategoryName: { type: Function, default: (c) => c },
@@ -1037,6 +1057,10 @@ const emit = defineEmits([
   "get-insight",
   "update:custom-insight-question",
   "submit-custom-question",
+  "delete-photo",
+  "add-to-collection",
+  "move-to-tool",
+  "send-to-chat",
 ]);
 
 const visibleModel = computed({

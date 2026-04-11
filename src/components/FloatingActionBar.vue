@@ -1,58 +1,43 @@
 <template>
-  <Transition name="floating-bar">
-    <div v-if="selectedCount > 0" class="floating-action-bar">
+  <Transition :name="embedded ? '' : 'floating-bar'">
+    <div
+      v-if="embedded || selectedCount > 0"
+      :class="[
+        'floating-action-bar',
+        { 'floating-action-bar--embedded': embedded },
+      ]"
+    >
       <div class="floating-action-content">
-        <div class="selected-count">
-          <span>{{ selectedCount }} selected</span>
-        </div>
+        <template v-if="!embedded">
+          <div class="selected-count">
+            <span>{{ selectedCount }} selected</span>
+          </div>
+        </template>
 
         <div class="floating-action-buttons">
-          <!-- Clear Selection Button -->
-          <n-button
-            text
-            size="small"
-            @click="handleClearSelection"
-            class="clear-selection-btn"
-            title="Clear selection"
-          >
-            <template #icon>
-              <n-icon size="18">
-                <svg viewBox="0 0 24 24">
-                  <path
-                    fill="currentColor"
-                    d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41z"
-                  />
-                </svg>
-              </n-icon>
-            </template>
-          </n-button>
+          <template v-if="!embedded">
+            <!-- Clear Selection Button -->
+            <n-button
+              text
+              size="small"
+              @click="handleClearSelection"
+              class="clear-selection-btn"
+              title="Clear selection"
+            >
+              <template #icon>
+                <n-icon size="18">
+                  <svg viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41z"
+                    />
+                  </svg>
+                </n-icon>
+              </template>
+            </n-button>
 
-          <div class="action-separator"></div>
-
-          <!-- Delete Button -->
-          <n-tooltip v-if="showDelete" placement="top" trigger="hover">
-            <template #trigger>
-              <n-button
-                type="error"
-                size="medium"
-                @click="$emit('delete')"
-                :disabled="selectedCount === 0"
-                :loading="isDeleting"
-              >
-                <template #icon v-if="!isDeleting">
-                  <n-icon>
-                    <svg viewBox="0 0 24 24">
-                      <path
-                        fill="currentColor"
-                        d="M9 3v1H4v2h1v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6h1V4h-5V3H9M7 6h10v13H7V6Z"
-                      />
-                    </svg>
-                  </n-icon>
-                </template>
-              </n-button>
-            </template>
-            <span>Delete selected photos</span>
-          </n-tooltip>
+            <div class="action-separator"></div>
+          </template>
 
           <!-- Download Button -->
           <n-tooltip placement="top" trigger="hover">
@@ -149,6 +134,31 @@
             </template>
             <span>Attach selected photos to your message</span>
           </n-tooltip>
+
+          <!-- Delete Button -->
+          <n-tooltip v-if="showDelete" placement="top" trigger="hover">
+            <template #trigger>
+              <n-button
+                type="error"
+                size="medium"
+                @click="$emit('delete')"
+                :disabled="selectedCount === 0"
+                :loading="isDeleting"
+              >
+                <template #icon v-if="!isDeleting">
+                  <n-icon>
+                    <svg viewBox="0 0 24 24">
+                      <path
+                        fill="currentColor"
+                        d="M9 3v1H4v2h1v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6h1V4h-5V3H9M7 6h10v13H7V6Z"
+                      />
+                    </svg>
+                  </n-icon>
+                </template>
+              </n-button>
+            </template>
+            <span>Delete selected photos</span>
+          </n-tooltip>
         </div>
       </div>
     </div>
@@ -199,6 +209,10 @@ defineProps({
     default: false,
   },
   isDownloading: {
+    type: Boolean,
+    default: false,
+  },
+  embedded: {
     type: Boolean,
     default: false,
   },
@@ -365,5 +379,27 @@ const handleClearSelection = () => {
     height: 20px;
     margin: 0 2px;
   }
+}
+
+/* Embedded mode styles */
+.floating-action-bar--embedded {
+  position: static;
+  transform: none;
+  background: transparent;
+  backdrop-filter: none;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+  width: auto;
+}
+
+.floating-action-bar--embedded .floating-action-content {
+  gap: 4px;
+}
+
+.floating-action-bar--embedded .floating-action-buttons {
+  gap: 8px;
+  transform: scale(0.85);
+  transform-origin: center center;
 }
 </style>
