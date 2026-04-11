@@ -287,7 +287,7 @@ const MODEL_PHASE1: ModelName = 'gemini-3-flash-preview'
  * Photo intent, no artistic → cheap model (handles photos but no deep evaluation).
  * Photo intent + artistic   → expensive model (full curatorial / aesthetic reasoning).
  */
-const MODEL_PHASE2_EXPENSIVE: ModelName = 'gpt-5.1'
+const MODEL_PHASE2_EXPENSIVE: ModelName = 'gemini-3-flash-preview' //'gpt-5.1'
 const MODEL_PHASE2_CHEAP: ModelName = 'gemini-3-flash-preview'
 const MODEL_PHASE2_LITE: ModelName = 'gemini-3.1-flash-lite-preview'
 
