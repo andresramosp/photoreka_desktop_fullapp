@@ -53,7 +53,7 @@
             @time-range-change="handleTimeRangeChange"
             :histogram-height="'30px'"
             :show-title="false"
-            marksCount="5"
+            :marksCount="5"
           />
         </div>
       </div>
