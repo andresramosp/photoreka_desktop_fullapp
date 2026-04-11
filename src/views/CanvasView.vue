@@ -244,6 +244,7 @@
       @loading="isLoadingRelatedPhotos = $event"
       @photos-selected="onPhotosSelected"
       @search-type-changed="onSearchTypeChanged"
+      @photo-info="handleToolbarPhotoInfo"
     />
 
     <PhotosDialog
@@ -1556,6 +1557,12 @@ const handleSendToChat = async () => {
 const openPhotoInfo = (photo, event) => {
   event.cancelBubble = true;
   selectedDialogPhoto.value = photo;
+  showPhotoInfoDialog.value = true;
+};
+
+const handleToolbarPhotoInfo = async (photo) => {
+  const fullPhoto = await photosStore.fetchPhoto(photo.id);
+  selectedDialogPhoto.value = fullPhoto;
   showPhotoInfoDialog.value = true;
 };
 

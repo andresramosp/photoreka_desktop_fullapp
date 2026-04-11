@@ -41,8 +41,7 @@
                 v-for="photo in relatedPhotos"
                 :key="photo.id"
                 :photo="photo"
-                :selected="selectedPhotos.includes(photo.id)"
-                @select="togglePhotoSelection"
+                :selected="false"
                 :showLowRelevanceIcon="photo.labelScore == 'poor'"
                 @info="onPhotoInfo"
                 draggable="true"
@@ -51,7 +50,7 @@
                 @touchmove="(e: any) => onTouchMove(e, photo)"
                 @touchend="(e: any) => onTouchEnd(e, photo)"
                 style="cursor: grab"
-                :show-info-button="false"
+                :show-info-button="true"
               />
             </template>
           </div>
@@ -94,6 +93,7 @@ interface Emits {
   (e: "photos-selected", photoIds: string[]): void;
   (e: "search-type-changed", searchType: string): void;
   (e: "loading", isLoading: boolean): void;
+  (e: "photo-info", photo: Photo): void;
 }
 
 const props = defineProps<Props>();
@@ -161,7 +161,7 @@ const togglePhotoSelection = (photoId: string) => {
 };
 
 const onPhotoInfo = (photo: Photo) => {
-  console.log("Photo info requested:", photo);
+  emit("photo-info", photo);
 };
 
 const closeToolbar = () => {
@@ -1015,11 +1015,6 @@ function simulateDropEvent(x: number, y: number) {
 /* Touch drag improvements */
 .related-photos-grid .photo-card {
   /* Removemos touch-action: none para permitir scroll horizontal nativo */
-  transition: transform 0.2s ease;
-}
-
-.related-photos-grid .photo-card:active {
-  transform: scale(0.95);
 }
 
 /* Upward slide animation for toolbar appearance */
