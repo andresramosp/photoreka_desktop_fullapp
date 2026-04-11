@@ -12,6 +12,34 @@
     <!-- PixiJS Canvas Container -->
     <div v-else ref="pixiContainer" class="pixi-container"></div>
 
+    <!-- Tag Beacons Display (long-distance zone indicators) -->
+    <div
+      v-if="
+        tagBeaconsSystem &&
+        tagBeaconsSystem.config.value.enabled &&
+        !isTransitioning &&
+        tagBeaconsSystem.visibleBeacons.value.length > 0
+      "
+      class="tag-beacons-wrapper"
+    >
+      <div
+        v-for="beacon in tagBeaconsSystem.visibleBeacons.value"
+        :key="beacon.key"
+        class="tag-beacon"
+        @click.stop="flyToBeacon(beacon)"
+        :style="{
+          left: beacon.screen.x + 'px',
+          top: beacon.screen.y + 'px',
+          opacity: beacon.opacity,
+          transform: `translate(-50%, -50%) scale(${beacon.scale})`,
+          '--beacon-color': beacon.color,
+        }"
+      >
+        <span class="tag-beacon-label">{{ beacon.name }}</span>
+        <span class="tag-beacon-count">&times;{{ beacon.count }}</span>
+      </div>
+    </div>
+
     <!-- Config Panel Component (Desktop) -->
     <Photos2DConfigPanel
       v-if="!isMobile"
@@ -33,6 +61,27 @@
       :searchResults="searchResults"
       :processedPhotos="processedPhotos"
       :isPlayground="isPlayground"
+      :hasTagBeacons="true"
+      :tagBeaconsEnabled="tagBeaconsSystem.config.value.enabled"
+      :tagBeaconsCellSize="tagBeaconsSystem.config.value.cellSize"
+      :tagBeaconsMaxBeacons="tagBeaconsSystem.config.value.maxBeacons"
+      :tagBeaconsTopTags="tagBeaconsSystem.config.value.topTagsPerCell"
+      :tagBeaconsMergeRadius="tagBeaconsSystem.config.value.mergeSameTagRadius"
+      @update:tagBeaconsEnabled="
+        (v) => (tagBeaconsSystem.config.value.enabled = v)
+      "
+      @update:tagBeaconsCellSize="
+        (v) => (tagBeaconsSystem.config.value.cellSize = v)
+      "
+      @update:tagBeaconsMaxBeacons="
+        (v) => (tagBeaconsSystem.config.value.maxBeacons = v)
+      "
+      @update:tagBeaconsTopTags="
+        (v) => (tagBeaconsSystem.config.value.topTagsPerCell = v)
+      "
+      @update:tagBeaconsMergeRadius="
+        (v) => (tagBeaconsSystem.config.value.mergeSameTagRadius = v)
+      "
       @chunk-change="onChunkChange"
       @visual-aspects-change="onVisualAspectsChange"
       @artistic-scores-change="onArtisticScoresChange"
@@ -246,6 +295,7 @@ import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { use2DTextureManager } from "@/composables/2d-viewer/use2DTextureManager.js";
 import { use2DLod } from "@/composables/2d-viewer/use2DLod.js";
+import { useTagBeacons2D } from "@/composables/2d-viewer/useTagBeacons2D.js";
 import { useTheme } from "@/composables/useTheme.js";
 import { isMobileDevice } from "@/utils/utils.js";
 import { api } from "@/utils/axios";
@@ -719,6 +769,20 @@ const filteredPhotos = computed(() => {
 
   return filtered;
 });
+
+// Cluster type for beacons (updated after layout transitions complete)
+const beaconsClusterType = ref("general");
+
+// Tag Beacons overlay (zone-level dominant tag indicators)
+const tagBeaconsSystem = useTagBeacons2D(
+  filteredPhotos,
+  pixiContainer,
+  scale,
+  offsetX,
+  offsetY,
+  SCALE_FACTOR,
+  beaconsClusterType,
+);
 
 // Selected photos with full data
 const selectedPhotos = computed(() => {
@@ -1785,6 +1849,56 @@ const flyToPhoto = (photoId) => {
 };
 
 /**
+ * Fly the camera to a beacon's world position.
+ */
+const flyToBeacon = (beacon) => {
+  if (!pixiContainer.value || !photoContainer.value) return;
+
+  const [wx, wy] = beacon.worldPosition || [0, 0];
+  const canvasX = wx * SCALE_FACTOR;
+  const canvasY = wy * SCALE_FACTOR;
+
+  const containerWidth = pixiContainer.value.clientWidth;
+  const containerHeight = pixiContainer.value.clientHeight;
+
+  // Zoom level that frames the cell area nicely
+  const TARGET_ZOOM = Math.max(MIN_SCALE, Math.min(MAX_SCALE, 2));
+
+  const targetOffsetX = containerWidth / 2 - canvasX * TARGET_ZOOM;
+  const targetOffsetY = containerHeight / 2 - canvasY * TARGET_ZOOM;
+
+  const startOffsetX = offsetX.value;
+  const startOffsetY = offsetY.value;
+  const startScale = scale.value;
+
+  const dx = targetOffsetX - startOffsetX;
+  const dy = targetOffsetY - startOffsetY;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  const scaleDiff = Math.abs(TARGET_ZOOM - startScale);
+  const duration = Math.max(
+    600,
+    Math.min(1500, distance * 0.4 + scaleDiff * 150),
+  );
+
+  flightState.value = {
+    startTime: performance.now(),
+    duration,
+    startOffsetX,
+    startOffsetY,
+    targetOffsetX,
+    targetOffsetY,
+    startScale,
+    targetScale: TARGET_ZOOM,
+  };
+
+  isFlying.value = true;
+
+  if (!animationFrameId.value) {
+    animationFrameId.value = requestAnimationFrame(flightAnimationLoop);
+  }
+};
+
+/**
  * Animation loop for smooth camera flight
  */
 const flightAnimationLoop = () => {
@@ -1914,6 +2028,9 @@ const onChunkChange = async (newChunk) => {
 
     // Reposition sprites with smooth animation
     repositionSprites(photos2D.value);
+
+    // Update beacons cluster type after layout settles
+    beaconsClusterType.value = newChunk;
   } else {
     console.log("🧹 First load: loading all photos and textures");
 
@@ -1925,6 +2042,9 @@ const onChunkChange = async (newChunk) => {
     resetView();
 
     await loadPhotosToPixi();
+
+    // Update beacons cluster type
+    beaconsClusterType.value = newChunk;
   }
 };
 
@@ -2270,6 +2390,9 @@ onMounted(async () => {
   if (isMobile.value) {
     showConfigPanel.value = false;
   }
+
+  // Start tag beacons update loop
+  tagBeaconsSystem.startUpdateLoop();
 });
 
 onUnmounted(() => {
@@ -2285,6 +2408,7 @@ onUnmounted(() => {
     clearTimeout(filterSnapReflowTimer);
     filterSnapReflowTimer = null;
   }
+  tagBeaconsSystem.reset();
   cleanupPatternTags();
   cleanup();
 });
@@ -2823,6 +2947,62 @@ watch(isTransitioning, (v) => {
 @media (max-width: 768px) {
   .pixi-container {
     padding-top: 60px; /* Space for mobile config buttons bar */
+  }
+}
+
+/* ============================================ */
+/* Tag Beacons Display                          */
+/* ============================================ */
+
+.tag-beacons-wrapper {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1400;
+}
+
+.tag-beacon {
+  position: absolute;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: white;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+  user-select: none;
+  will-change: transform, opacity;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.tag-beacon::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--beacon-color);
+  border-radius: 12px;
+  opacity: 0.55;
+  z-index: -1;
+}
+
+.tag-beacon-label {
+  font-weight: 600;
+}
+
+.tag-beacon-count {
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+@media (max-width: 767px) {
+  .tag-beacon {
+    font-size: 9px;
+    padding: 3px 8px;
   }
 }
 </style>

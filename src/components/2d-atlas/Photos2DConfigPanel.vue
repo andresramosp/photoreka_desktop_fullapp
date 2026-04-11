@@ -196,6 +196,143 @@
         </div>
       </div>
 
+      <!-- Tag Beacons Section -->
+      <div class="control-section">
+        <div class="section-toggle" @click="toggleTagBeacons">
+          <div style="display: flex; align-items: center; gap: 6px">
+            <n-icon size="16" color="var(--text-on-primary)">
+              <TagsOutlined />
+            </n-icon>
+            <span class="section-toggle-label">Tag Beacons</span>
+          </div>
+          <n-icon
+            size="12"
+            class="toggle-icon"
+            :class="{ rotated: showTagBeacons }"
+          >
+            <svg viewBox="0 0 24 24">
+              <path
+                fill="currentColor"
+                d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+              />
+            </svg>
+          </n-icon>
+        </div>
+
+        <div v-if="showTagBeacons && hasTagBeacons" class="options-container">
+          <div
+            class="control-item"
+            style="
+              margin-top: 12px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            "
+          >
+            <label class="control-label" style="margin: 0"
+              >Enable Beacons</label
+            >
+            <n-switch
+              :value="tagBeaconsEnabled"
+              @update:value="handleTagBeaconsToggle"
+              size="small"
+              @click.stop
+            />
+          </div>
+
+          <div class="control-item-full" style="margin-top: 12px">
+            <label
+              class="control-label"
+              style="margin-bottom: 8px; display: block"
+            >
+              Zone Cell Size
+            </label>
+            <div class="slider-container">
+              <n-slider
+                :value="tagBeaconsCellSize"
+                @update:value="handleTagBeaconsCellSizeChange"
+                :min="40"
+                :max="240"
+                :step="10"
+                :marks="{ 40: '40', 120: '120', 240: '240' }"
+                class="radial-slider"
+                @click.stop
+              />
+            </div>
+          </div>
+
+          <div class="control-item-full" style="margin-top: 12px">
+            <label
+              class="control-label"
+              style="margin-bottom: 8px; display: block"
+            >
+              Max Beacons
+            </label>
+            <div class="slider-container">
+              <n-slider
+                :value="tagBeaconsMaxBeacons"
+                @update:value="handleTagBeaconsMaxBeaconsChange"
+                :min="0"
+                :max="50"
+                :step="1"
+                :marks="{
+                  0: '0',
+                  10: '10',
+                  20: '20',
+                  30: '30',
+                  40: '40',
+                  50: '50',
+                }"
+                class="radial-slider"
+                @click.stop
+              />
+            </div>
+          </div>
+
+          <div class="control-item-full" style="margin-top: 12px">
+            <label
+              class="control-label"
+              style="margin-bottom: 8px; display: block"
+            >
+              Top Tags per Zone
+            </label>
+            <div class="slider-container">
+              <n-slider
+                :value="tagBeaconsTopTags"
+                @update:value="handleTagBeaconsTopTagsChange"
+                :min="1"
+                :max="5"
+                :step="1"
+                :marks="{ 1: '1', 2: '2', 3: '3', 4: '4', 5: '5' }"
+                class="radial-slider"
+                @click.stop
+              />
+            </div>
+          </div>
+
+          <div class="control-item-full" style="margin-top: 12px">
+            <label
+              class="control-label"
+              style="margin-bottom: 8px; display: block"
+            >
+              Merge Same Tag Radius
+            </label>
+            <div class="slider-container">
+              <n-slider
+                :value="tagBeaconsMergeRadius"
+                @update:value="handleTagBeaconsMergeRadiusChange"
+                :min="0"
+                :max="300"
+                :step="10"
+                :marks="{ 0: '0', 50: '50', 150: '150', 300: '300' }"
+                class="radial-slider"
+                @click.stop
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Navigation Controls Section -->
       <div class="control-section">
         <div class="section-toggle" @click="toggleNavigationControls">
@@ -263,7 +400,7 @@
 
 <script setup>
 import { ref, computed, watch } from "vue";
-import { NTooltip, NIcon } from "naive-ui";
+import { NTooltip, NIcon, NSwitch, NSlider } from "naive-ui";
 import {
   CloseOutlined,
   SettingOutlined,
@@ -271,6 +408,7 @@ import {
   EyeOutlined,
   InfoCircleOutlined,
   TagOutlined,
+  TagsOutlined,
   CompassOutlined,
 } from "@vicons/antd";
 import { AppsOutline } from "@vicons/ionicons5";
@@ -361,6 +499,31 @@ const props = defineProps({
     type: [String, Number],
     default: null,
   },
+  // Tag beacons
+  hasTagBeacons: {
+    type: Boolean,
+    default: false,
+  },
+  tagBeaconsEnabled: {
+    type: Boolean,
+    default: false,
+  },
+  tagBeaconsCellSize: {
+    type: Number,
+    default: 40,
+  },
+  tagBeaconsMaxBeacons: {
+    type: Number,
+    default: 50,
+  },
+  tagBeaconsTopTags: {
+    type: Number,
+    default: 1,
+  },
+  tagBeaconsMergeRadius: {
+    type: Number,
+    default: 70,
+  },
   // Navigation
   isPlayground: {
     type: Boolean,
@@ -391,6 +554,11 @@ const emit = defineEmits([
   "unhighlight-pattern",
   "select-pattern",
   "tag-search",
+  "update:tagBeaconsEnabled",
+  "update:tagBeaconsCellSize",
+  "update:tagBeaconsMaxBeacons",
+  "update:tagBeaconsTopTags",
+  "update:tagBeaconsMergeRadius",
 ]);
 
 // Internal state
@@ -403,6 +571,7 @@ const isExpanded = computed({
 const expandedSection = ref(null);
 const clusteringSectionRef = ref(null);
 const showNavigationControls = ref(false);
+const showTagBeacons = ref(false);
 
 // Local state for artistic score filters (for counting active filters)
 const localArtisticScoreFilters = ref({ ...props.artisticScoreFilters });
@@ -458,6 +627,14 @@ const toggleFiltersSection = () => {
     expandedSection.value === "filters" ? null : "filters";
 };
 
+const toggleTagBeacons = () => {
+  showTagBeacons.value = !showTagBeacons.value;
+  if (showTagBeacons.value) {
+    expandedSection.value = null;
+    showNavigationControls.value = false;
+  }
+};
+
 const toggleNavigationControls = () => {
   showNavigationControls.value = !showNavigationControls.value;
 };
@@ -485,6 +662,26 @@ const handlePatternClick = (pattern) => {
 
 const handleTagSearch = (tags) => {
   emit("tag-search", tags);
+};
+
+const handleTagBeaconsToggle = (value) => {
+  emit("update:tagBeaconsEnabled", value);
+};
+
+const handleTagBeaconsCellSizeChange = (value) => {
+  emit("update:tagBeaconsCellSize", value);
+};
+
+const handleTagBeaconsMaxBeaconsChange = (value) => {
+  emit("update:tagBeaconsMaxBeacons", value);
+};
+
+const handleTagBeaconsTopTagsChange = (value) => {
+  emit("update:tagBeaconsTopTags", value);
+};
+
+const handleTagBeaconsMergeRadiusChange = (value) => {
+  emit("update:tagBeaconsMergeRadius", value);
 };
 </script>
 
