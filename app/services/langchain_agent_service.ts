@@ -283,7 +283,7 @@ const MODEL_PHASE1: ModelName = 'gemini-3-flash-preview'
 
 /**
  * Phase 2 model selection — driven by `has_photo_intent` + `needs_artistic_evaluation`.
- * No photo intent           → lite model (cheapest, text-only answer).
+ * No photo intent           → lite  model (cheapest, text-only answer).
  * Photo intent, no artistic → cheap model (handles photos but no deep evaluation).
  * Photo intent + artistic   → expensive model (full curatorial / aesthetic reasoning).
  */
