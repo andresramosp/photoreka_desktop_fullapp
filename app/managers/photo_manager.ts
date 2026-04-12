@@ -5,7 +5,7 @@ import ModelsService from '#services/models_service'
 import NLPService from '#services/nlp_service'
 import { Logger } from '@adonisjs/core/logger'
 
-import { invalidateCache, withCache } from '../decorators/withCache.js'
+import { invalidateCache, invalidateCacheByPattern, withCache } from '../decorators/withCache.js'
 import TagPhotoManager from './tag_photo_manager.js'
 import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
 import { DeleteObjectsCommand, S3Client } from '@aws-sdk/client-s3'
@@ -123,6 +123,21 @@ export default class PhotoManager {
   @withCache({
     provider: 'redis',
     ttl: 60 * 30,
+    key: (
+      userId: string,
+      collections?: string[],
+      visualAspects?: string[],
+      artisticScores?: any,
+      source?: string
+    ) => {
+      const filters = JSON.stringify({
+        c: collections,
+        v: visualAspects,
+        a: artisticScores,
+        s: source,
+      })
+      return `getPhotosIdsForSearch:${userId}:${filters}`
+    },
   })
   public async getPhotosIdsForSearch(
     userId: string,
@@ -539,8 +554,8 @@ export default class PhotoManager {
       console.warn('⚠️ Fallo al eliminar archivos en R2:', err)
     }
 
-    await invalidateCache(`getPhotos_${userId}`)
-    await invalidateCache(`getPhotosIdsForSearch${userId}`)
+    await invalidateCache(`getPhotosByUser_${userId}`)
+    await invalidateCacheByPattern(`getPhotosIdsForSearch:${userId}:*`)
 
     return { message: 'Photos marked for deletion', ids, deletedAt }
   }
