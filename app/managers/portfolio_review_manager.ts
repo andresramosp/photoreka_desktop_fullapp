@@ -87,7 +87,8 @@ export interface ClusterPattern {
   description: string
   photoCount: number
   percentage: number
-  strength: 'strong' | 'moderate' | 'weak'
+  strength: 'strong' | 'moderate' | 'emergent'
+  isNew?: boolean
   clusterPhotos: number[]
   samplePhotos: Array<{
     id: number
@@ -118,10 +119,10 @@ export default class PortfolioReviewManager {
   // UTILITY METHODS
   // ========================================
 
-  private calculatePatternStrength(percentage: number): 'strong' | 'moderate' | 'weak' {
+  private calculatePatternStrength(percentage: number): 'strong' | 'moderate' | 'emergent' {
     if (percentage >= 20) return 'strong'
     if (percentage >= 5) return 'moderate'
-    return 'weak'
+    return 'emergent'
   }
 
   private shouldReclusterCluster(cluster: any): boolean {
@@ -390,6 +391,7 @@ export default class PortfolioReviewManager {
       photoCount: clusterSize,
       percentage: cluster.percentage,
       strength: this.calculatePatternStrength(cluster.percentage),
+      isNew: true,
       clusterPhotos: allClusterPhotoIds,
       samplePhotos: representativePhotos
         .slice(0, 4)

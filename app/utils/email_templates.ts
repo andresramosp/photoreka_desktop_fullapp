@@ -686,7 +686,7 @@ export function portfolioReviewBuildTemplate(
     photosAdded: number
     photosRemoved: number
     totalPhotos: number
-    patternsByType: Record<string, { title: string; strength: string }[]>
+    patternsByType: Record<string, { title: string; strength: string; isNew?: boolean }[]>
     totalCostInEur: number
     portfolioUrl: string
   }
@@ -723,9 +723,9 @@ export function portfolioReviewBuildTemplate(
     const colors: Record<string, { bg: string; text: string }> = {
       strong: { bg: 'rgba(34, 197, 94, 0.15)', text: '#22c55e' },
       moderate: { bg: 'rgba(245, 158, 11, 0.15)', text: '#f59e0b' },
-      weak: { bg: 'rgba(148, 163, 184, 0.15)', text: '#94a3b8' },
+      emergent: { bg: 'rgba(148, 163, 184, 0.15)', text: '#94a3b8' },
     }
-    const c = colors[strength] || colors.weak
+    const c = colors[strength] || colors.emergent
     return `<span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: ${c.bg}; color: ${c.text};">${strength}</span>`
   }
 
@@ -743,6 +743,9 @@ export function portfolioReviewBuildTemplate(
         </td>
         <td style="padding: 6px 12px; text-align: center; border-bottom: 1px solid rgba(148, 163, 184, 0.1);">
           ${strengthBadge(p.strength)}
+        </td>
+        <td style="padding: 6px 12px; text-align: center; border-bottom: 1px solid rgba(148, 163, 184, 0.1);">
+          ${p.isNew ? '<span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: rgba(99, 102, 241, 0.15); color: #818cf8;">new</span>' : ''}
         </td>
       </tr>`
       )
@@ -795,7 +798,7 @@ export function portfolioReviewBuildTemplate(
     <p style="margin: 16px 0 24px; font-size: 11px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
       <span style="color: #22c55e;">strong</span> &nbsp;&nbsp;
       <span style="color: #f59e0b;">moderate</span> &nbsp;&nbsp;
-      <span style="color: #94a3b8;">weak</span>
+      <span style="color: #94a3b8;">emergent</span>
     </p>
 
     ${emailButton('View Portfolio Review', portfolioUrl)}
