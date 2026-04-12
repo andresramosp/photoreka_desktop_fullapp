@@ -33,6 +33,8 @@
     :showAddToCollection="showAddToCollection"
     :showMoveToTool="showMoveToTool"
     :showSendToChat="true"
+    :allPhotos="allPhotos"
+    :currentPhotoIndex="currentPhotoIndex"
     @update:visible="visible = $event"
     @copy-name="copyNameToClipboard"
     @image-error="handleImageError"
@@ -51,6 +53,7 @@
     @move-to-tool="handleMoveToTool"
     @send-to-chat="handleSendToChat"
     @navigate-to-photo="handleNavigateToPhoto"
+    @photo-navigate="handlePhotoNavigate"
   />
 
   <!-- Mobile Layout -->
@@ -475,6 +478,11 @@ const goToNextPhoto = () => {
   setTimeout(() => {
     isTransitioning.value = false;
   }, 400);
+};
+
+// Handler for dialog-level navigation (from arrow buttons in desktop layout)
+const handlePhotoNavigate = (index) => {
+  emit("photo-navigate", index);
 };
 
 // Keyboard navigation

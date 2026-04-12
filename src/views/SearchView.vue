@@ -105,7 +105,10 @@
     <PhotoInfoDialog
       v-model="showPhotoInfoDialog"
       :selected-photo="selectedDialogPhoto"
+      :all-photos="photosWithComputedStars"
+      :current-photo-index="currentPhotoIndex"
       @change-photo="selectedDialogPhoto = $event"
+      @photo-navigate="handlePhotoNavigate"
     />
     <!-- Collection Selection Modal -->
     <CollectionModal
@@ -186,6 +189,13 @@ const searchStore = useSearchStore();
 const collectionsStore = useCollectionsStore();
 const showPhotoInfoDialog = ref(false);
 const selectedDialogPhoto = ref();
+
+const currentPhotoIndex = computed(() => {
+  if (!selectedDialogPhoto.value) return -1;
+  return photosWithComputedStars.value.findIndex(
+    (p) => String(p.id) === String(selectedDialogPhoto.value.id),
+  );
+});
 
 // Mobile detection
 const { isMobile } = useIsMobile();
@@ -374,6 +384,16 @@ const showPhotoInfo = async (photo) => {
     matchingChunks: photo.matchingChunks,
   };
   showPhotoInfoDialog.value = true;
+};
+
+const handlePhotoNavigate = async (index) => {
+  const photo = photosWithComputedStars.value[index];
+  if (!photo) return;
+  const fullPhoto = await photoStore.fetchPhoto(photo.id);
+  selectedDialogPhoto.value = {
+    ...fullPhoto,
+    matchingChunks: photo.matchingChunks,
+  };
 };
 
 function handleAddToCollection() {

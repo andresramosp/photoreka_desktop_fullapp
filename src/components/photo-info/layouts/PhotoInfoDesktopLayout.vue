@@ -46,6 +46,23 @@
     <div class="dialog-content">
       <!-- Centered Photo Display with Overlay Info -->
       <div class="photo-display-centered">
+        <!-- Navigation Arrow Left -->
+        <n-button
+          v-if="canNavigate && hasPreviousPhoto"
+          class="dialog-nav-arrow dialog-nav-arrow-left"
+          size="small"
+          circle
+          quaternary
+          @click="emit('photo-navigate', currentPhotoIndex - 1)"
+          title="Previous photo (←)"
+        >
+          <template #icon>
+            <n-icon size="18">
+              <ChevronBack />
+            </n-icon>
+          </template>
+        </n-button>
+
         <img
           :src="
             selectedPhoto?.originalUrl ||
@@ -56,6 +73,23 @@
           class="centered-photo"
           @error="emit('image-error', $event)"
         />
+
+        <!-- Navigation Arrow Right -->
+        <n-button
+          v-if="canNavigate && hasNextPhoto"
+          class="dialog-nav-arrow dialog-nav-arrow-right"
+          size="small"
+          circle
+          quaternary
+          @click="emit('photo-navigate', currentPhotoIndex + 1)"
+          title="Next photo (→)"
+        >
+          <template #icon>
+            <n-icon size="18">
+              <ChevronForward />
+            </n-icon>
+          </template>
+        </n-button>
 
         <!-- Photo Overlay with Actions Only -->
         <div class="photo-overlay">
@@ -1010,6 +1044,8 @@ import {
   LogoInstagram,
   LibraryOutline as LibraryIcon,
   GitCompareOutline as SimilarIcon,
+  ChevronBackOutline as ChevronBack,
+  ChevronForwardOutline as ChevronForward,
 } from "@vicons/ionicons5";
 import { FullscreenOutlined } from "@vicons/material";
 import { Trophy20Regular as ScoresIcon } from "@vicons/fluent";
@@ -1055,6 +1091,8 @@ const props = defineProps({
   showAddToCollection: { type: Boolean, default: true },
   showMoveToTool: { type: Boolean, default: true },
   showSendToChat: { type: Boolean, default: false },
+  allPhotos: { type: Array, default: () => [] },
+  currentPhotoIndex: { type: Number, default: -1 },
   formatDate: { type: Function, default: (d) => d },
   formatExposureTime: { type: Function, default: (e) => e },
   formatCategoryName: { type: Function, default: (c) => c },
@@ -1082,7 +1120,24 @@ const emit = defineEmits([
   "move-to-tool",
   "send-to-chat",
   "navigate-to-photo",
+  "photo-navigate",
 ]);
+
+// Navigation computed
+const hasPreviousPhoto = computed(() => {
+  return props.allPhotos?.length > 0 && props.currentPhotoIndex > 0;
+});
+
+const hasNextPhoto = computed(() => {
+  return (
+    props.allPhotos?.length > 0 &&
+    props.currentPhotoIndex < props.allPhotos.length - 1
+  );
+});
+
+const canNavigate = computed(() => {
+  return props.allPhotos?.length > 1;
+});
 
 const visibleModel = computed({
   get: () => props.visible,
@@ -1263,6 +1318,48 @@ watch(
   position: relative;
   margin-bottom: var(--spacing-lg);
   flex-shrink: 0;
+}
+
+/* Dialog-level navigation arrows */
+.dialog-nav-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  background: rgba(0, 0, 0, 0.35) !important;
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  color: white !important;
+  width: 32px;
+  height: 32px;
+  opacity: 0;
+  transition:
+    opacity 0.25s ease,
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.photo-display-centered:hover .dialog-nav-arrow {
+  opacity: 0.7;
+}
+
+.dialog-nav-arrow:hover {
+  opacity: 1 !important;
+  background: rgba(0, 0, 0, 0.55) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  transform: translateY(-50%) scale(1.1);
+}
+
+.dialog-nav-arrow:active {
+  transform: translateY(-50%) scale(0.95);
+}
+
+.dialog-nav-arrow-left {
+  left: 8px;
+}
+
+.dialog-nav-arrow-right {
+  right: 8px;
 }
 
 .centered-photo {
