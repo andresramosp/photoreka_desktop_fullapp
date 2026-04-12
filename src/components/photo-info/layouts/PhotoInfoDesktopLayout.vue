@@ -113,7 +113,7 @@
           placement="left"
           size="large"
           animated
-          default-value="scores"
+          v-model:value="activeTab"
         >
           <n-tab-pane name="scores" display-directive="show:lazy">
             <template #tab>
@@ -873,6 +873,24 @@
             </div>
           </n-tab-pane>
 
+          <!-- Similar Photos Tab -->
+          <n-tab-pane name="similar" display-directive="show:lazy">
+            <template #tab>
+              <div class="tab-content">
+                <n-icon size="18">
+                  <SimilarIcon />
+                </n-icon>
+                <span>Similar</span>
+              </div>
+            </template>
+            <div class="tab-panel-content">
+              <SimilarPhotosSection
+                :selected-photo="selectedPhoto"
+                @navigate-to-photo="(photo) => emit('navigate-to-photo', photo)"
+              />
+            </div>
+          </n-tab-pane>
+
           <!-- Insights tab (hidden) -->
           <!--
           <n-tab-pane name="insights" display-directive="show:lazy">
@@ -959,7 +977,7 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
   NModal,
@@ -974,6 +992,7 @@ import {
 } from "naive-ui";
 import CustomArtisticWeights from "../../CustomArtisticWeights.vue";
 import FloatingActionBar from "../../FloatingActionBar.vue";
+import SimilarPhotosSection from "../SimilarPhotosSection.vue";
 
 // Icons
 import {
@@ -990,6 +1009,7 @@ import {
   SendOutline,
   LogoInstagram,
   LibraryOutline as LibraryIcon,
+  GitCompareOutline as SimilarIcon,
 } from "@vicons/ionicons5";
 import { FullscreenOutlined } from "@vicons/material";
 import { Trophy20Regular as ScoresIcon } from "@vicons/fluent";
@@ -1061,6 +1081,7 @@ const emit = defineEmits([
   "add-to-collection",
   "move-to-tool",
   "send-to-chat",
+  "navigate-to-photo",
 ]);
 
 const visibleModel = computed({
@@ -1072,6 +1093,15 @@ const navigateTo = (routeName, id) => {
   emit("update:visible", false);
   router.push({ name: routeName, params: { id } });
 };
+
+const activeTab = ref("scores");
+
+watch(
+  () => props.selectedPhoto,
+  () => {
+    activeTab.value = "scores";
+  },
+);
 </script>
 
 <style scoped>
@@ -1332,8 +1362,8 @@ const navigateTo = (routeName, id) => {
 
 .info-sections :deep(.n-tabs-tab) {
   justify-content: flex-start !important;
-  padding: var(--spacing-md) var(--spacing-sm) !important;
-  min-height: 48px !important;
+  padding: 8px var(--spacing-sm) !important;
+  min-height: 36px !important;
 }
 
 .info-sections :deep(.n-tabs-content) {
@@ -1462,6 +1492,8 @@ const navigateTo = (routeName, id) => {
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-md);
+  padding-left: 22px;
+  padding-right: 22px;
 }
 
 .overall-label {

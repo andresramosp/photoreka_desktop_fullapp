@@ -50,6 +50,7 @@
     @add-to-collection="handleAddToCollection"
     @move-to-tool="handleMoveToTool"
     @send-to-chat="handleSendToChat"
+    @navigate-to-photo="handleNavigateToPhoto"
   />
 
   <!-- Mobile Layout -->
@@ -103,6 +104,7 @@
     @add-to-collection="handleAddToCollection"
     @move-to-tool="handleMoveToTool"
     @send-to-chat="handleSendToChat"
+    @navigate-to-photo="handleNavigateToPhoto"
   />
 
   <!-- Collection Modal -->
@@ -335,7 +337,11 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["update:modelValue", "photo-navigate"]);
+const emit = defineEmits([
+  "update:modelValue",
+  "photo-navigate",
+  "change-photo",
+]);
 
 const message = useMessage();
 const { downloadPhoto } = usePhotoDownload();
@@ -1187,6 +1193,20 @@ const handleSendToChat = async () => {
   if (!props.selectedPhoto?.id) return;
   visible.value = false;
   await takeToChat([props.selectedPhoto.id], () => {});
+};
+
+const handleNavigateToPhoto = async (photo) => {
+  const fullPhoto = await photosStore.fetchPhoto(photo.id);
+  if (fullPhoto) {
+    emit("change-photo", fullPhoto);
+    // Scroll dialog content to top after photo change
+    nextTick(() => {
+      const scrollable =
+        document.querySelector(".dialog-content") ||
+        document.querySelector(".n-drawer-body-content-wrapper");
+      if (scrollable) scrollable.scrollTop = 0;
+    });
+  }
 };
 
 // Handle ResizeObserver errors gracefully

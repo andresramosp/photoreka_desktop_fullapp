@@ -308,7 +308,11 @@
     </Transition>
 
     <!-- PhotoInfoDialog for showing photo details -->
-    <PhotoInfoDialog v-model="showPhotoDialog" :selectedPhoto="selectedPhoto" />
+    <PhotoInfoDialog
+      v-model="showPhotoDialog"
+      :selectedPhoto="selectedPhoto"
+      @change-photo="selectedPhoto = $event"
+    />
   </div>
 </template>
 

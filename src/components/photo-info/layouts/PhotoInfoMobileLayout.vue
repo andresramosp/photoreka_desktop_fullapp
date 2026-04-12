@@ -607,6 +607,26 @@
               </div>
             </n-tab-pane>
 
+            <!-- Similar Photos Tab -->
+            <n-tab-pane name="similar" display-directive="show:lazy">
+              <template #tab>
+                <div class="mobile-tab">
+                  <n-icon size="16">
+                    <SimilarIcon />
+                  </n-icon>
+                  <span>Similar</span>
+                </div>
+              </template>
+              <div class="mobile-tab-content">
+                <SimilarPhotosSection
+                  :selected-photo="selectedPhoto"
+                  @navigate-to-photo="
+                    (photo) => emit('navigate-to-photo', photo)
+                  "
+                />
+              </div>
+            </n-tab-pane>
+
             <!-- Insights tab (hidden) -->
             <!--
             <n-tab-pane name="insights" display-directive="show:lazy">
@@ -672,7 +692,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
   NDrawer,
@@ -702,6 +722,7 @@ import {
   SendOutline,
   LogoInstagram,
   LibraryOutline as LibraryIcon,
+  GitCompareOutline as SimilarIcon,
 } from "@vicons/ionicons5";
 import { FullscreenOutlined, PaletteOutlined } from "@vicons/material";
 import {
@@ -709,6 +730,7 @@ import {
   BookOpen16Regular,
 } from "@vicons/fluent";
 import FloatingActionBar from "../../FloatingActionBar.vue";
+import SimilarPhotosSection from "../SimilarPhotosSection.vue";
 
 defineOptions({ name: "PhotoInfoMobileLayout" });
 
@@ -775,9 +797,17 @@ const emit = defineEmits([
   "add-to-collection",
   "move-to-tool",
   "send-to-chat",
+  "navigate-to-photo",
 ]);
 
 const activeTab = ref("scores");
+
+watch(
+  () => props.selectedPhoto,
+  () => {
+    activeTab.value = "scores";
+  },
+);
 
 const visibleModel = computed({
   get: () => props.visible,

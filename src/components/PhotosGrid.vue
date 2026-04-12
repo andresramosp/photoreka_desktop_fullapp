@@ -389,6 +389,7 @@
       :all-photos="displayedPhotos"
       :current-photo-index="currentPhotoIndex"
       @photo-navigate="handlePhotoNavigate"
+      @change-photo="selectedDialogPhoto = $event"
     />
 
     <!-- Collection Modal -->

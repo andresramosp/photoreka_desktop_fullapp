@@ -139,6 +139,7 @@
   <PhotoInfoDialog
     v-model="showPhotoInfoDialog"
     :selected-photo="selectedPhotoForInfo"
+    @change-photo="selectedPhotoForInfo = $event"
   />
 </template>
 

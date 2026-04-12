@@ -99,6 +99,7 @@
     :selected-photo="infoPhoto"
     :all-photos="[]"
     :current-photo-index="-1"
+    @change-photo="infoPhoto = $event"
   />
 </template>
 
