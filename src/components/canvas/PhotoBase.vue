@@ -230,6 +230,7 @@ watch(
 watch(
   () => [props.baseImages, props.toolbarState.expansion.type],
   async ([photos, type]) => {
+    cropRegion.value = null;
     resetAllTags();
     const isInteractive = ["tags", "composition"].includes(type);
     const skip = isInteractive && !props.toolbarState.expansion.onCanvas;
