@@ -279,6 +279,7 @@ export const useCanvasStore = defineStore("canvas", {
       onCanvas,
       autoFit = false,
       filterContext = null,
+      cropRegion = null,
     ) {
       let basePhoto = basePhotos[0]; // de momento solo un anchor
       try {
@@ -319,6 +320,8 @@ export const useCanvasStore = defineStore("canvas", {
           boxesIds: selectedBoxes,
           // Collection filter
           collectionId: filterContext?.collectionId || null,
+          // Optional crop region (percentage-based: {x, y, w, h} each 0-1)
+          cropRegion: cropRegion || null,
         });
         const backendPhotos = Array.isArray(response.data)
           ? response.data

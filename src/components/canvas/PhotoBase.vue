@@ -41,6 +41,8 @@
         :alt="primaryBaseImage.title"
         class="photo-base-image"
       />
+      <!-- Crop selector for chromatic single-photo mode -->
+      <ImageCropSelector v-if="showCropSelector" v-model="cropRegion" />
       <!-- Badge contador para múltiples fotos (no mostrar en modo tags) -->
       <div
         v-if="hasMultiplePhotos && toolbarState.expansion.type !== 'tags'"
@@ -60,13 +62,15 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { NSelect, NCheckbox } from "naive-ui";
 import { nextTick, onMounted, ref, watch, computed } from "vue";
 import { useCanvasStore, expansionTypeOptions } from "@/stores/canvas.js";
 import { useTagDisplay } from "@/composables/canvas/useTagsDisplay";
 import { debounce } from "lodash";
 import SelectableTagChip from "../wrappers/SelectableTagChip.vue";
+import ImageCropSelector from "./ImageCropSelector.vue";
+import type { CropRegion } from "./ImageCropSelector.vue";
 
 const props = defineProps({
   baseImages: { type: Array, required: true, default: () => [] },
@@ -117,6 +121,18 @@ const {
 
 const tagsOverlay = ref(null);
 const pageSize = 100;
+const cropRegion = ref<CropRegion | null>(null);
+
+// Show crop selector for chromatic and general (embedding) criteria with a single source photo
+const showCropSelector = computed(() => {
+  const type = props.toolbarState.expansion.type;
+  const supportsCrop =
+    type === "chromatic" ||
+    type === "chromatic_dominant" ||
+    type === "embedding";
+  const isSinglePhoto = props.baseImages && props.baseImages.length === 1;
+  return supportsCrop && isSinglePhoto;
+});
 
 const loadPhotosFromToolbar = async () => {
   if (!props.baseImages || props.baseImages.length === 0) return;
@@ -133,6 +149,7 @@ const loadPhotosFromToolbar = async () => {
     false, // onCanvas
     false, // autoFit
     props.filterContext, // filterContext
+    cropRegion.value, // cropRegion
   );
 
   await nextTick();
@@ -165,6 +182,7 @@ const loadPhotosFromSelections = debounce(async () => {
     false, // onCanvas
     false, // autoFit
     props.filterContext, // filterContext
+    null, // cropRegion - not used for tag selections
   );
 
   await nextTick();
@@ -245,8 +263,17 @@ watch(
     if (newCriteria === "tags" || newCriteria === "composition") {
       emit("photos-generated", []);
     }
+    // Clear crop region when switching criteria
+    cropRegion.value = null;
   },
 );
+
+// Re-trigger search when crop region changes
+watch(cropRegion, () => {
+  if (showCropSelector.value) {
+    loadPhotosFromToolbar();
+  }
+});
 
 function resetAllTags() {
   filteredTags.value.forEach((tagPhoto) => {
