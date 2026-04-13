@@ -224,6 +224,15 @@
                   @click="handleDeleteBrokenPhoto"
                   :sizeFactor="1.0"
                 />
+
+                <!-- Botón de info (esquina superior izquierda) -->
+                <PhotoInfoButton
+                  v-if="!photo.imageBroken && photo.hovered && !photo.inTrash"
+                  :photo="photo"
+                  :fill="accentColor"
+                  :sizeFactor="1.3"
+                  @click="handleInfoButtonClick"
+                />
               </template>
             </v-group>
           </v-group>
@@ -797,6 +806,7 @@ import PhotosDialog from "@/components/PhotosDialog.vue";
 import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
 import ExpandPhotoButtons from "@/components/canvas/PhotoControls/ExpandPhotoButtons.vue";
 import PhotoCenterButton from "@/components/canvas/PhotoControls/PhotoCenterButton.vue";
+import PhotoInfoButton from "@/components/canvas/PhotoControls/PhotoInfoButton.vue";
 import TagPillsCanvas from "@/components/canvas/TagPills/TagPillsCanvas.vue";
 import RelatedPhotosToolbar from "@/components/canvas/RelatedPhotosToolbar.vue";
 import PlaygroundUpgradeModal from "@/components/PlaygroundUpgradeModal.vue";
@@ -1559,6 +1569,15 @@ const openPhotoInfo = (photo, event) => {
   event.cancelBubble = true;
   selectedDialogPhoto.value = photo;
   showPhotoInfoDialog.value = true;
+};
+
+const handleInfoButtonClick = async ({ photo, event }) => {
+  if (event) event.cancelBubble = true;
+  const fullPhoto = await photosStore.fetchPhoto(photo.id);
+  if (fullPhoto) {
+    selectedDialogPhoto.value = fullPhoto;
+    showPhotoInfoDialog.value = true;
+  }
 };
 
 const handleToolbarPhotoInfo = async (photo) => {
