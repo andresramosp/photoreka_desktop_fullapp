@@ -25,21 +25,6 @@
             </n-icon>
           </template>
         </n-button>
-        <div style="flex: 1" />
-        <FloatingActionBar
-          :embedded="true"
-          :selected-count="1"
-          style="margin-right: -8px"
-          :show-delete="showDelete"
-          :show-add-to-collection="showAddToCollection"
-          :show-move-to-tool="showMoveToTool"
-          :show-send-to-chat="showSendToChat"
-          @delete="emit('delete-photo')"
-          @download="emit('download')"
-          @add-to-collection="emit('add-to-collection')"
-          @move-to-tool="emit('move-to-tool')"
-          @send-to-chat="emit('send-to-chat')"
-        />
       </div>
     </template>
 
@@ -90,6 +75,23 @@
             </n-icon>
           </template>
         </n-button>
+
+        <!-- Floating Action Bar centered on hover -->
+        <div class="photo-action-bar-overlay">
+          <FloatingActionBar
+            :embedded="true"
+            :selected-count="1"
+            :show-delete="showDelete"
+            :show-add-to-collection="showAddToCollection"
+            :show-move-to-tool="showMoveToTool"
+            :show-send-to-chat="showSendToChat"
+            @delete="emit('delete-photo')"
+            @download="emit('download')"
+            @add-to-collection="emit('add-to-collection')"
+            @move-to-tool="emit('move-to-tool')"
+            @send-to-chat="emit('send-to-chat')"
+          />
+        </div>
 
         <!-- Photo Overlay with Actions Only -->
         <div class="photo-overlay">
@@ -1372,6 +1374,29 @@ watch(
   background-color: transparent;
 }
 
+/* Floating action bar overlay - centered on hover */
+.photo-action-bar-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: var(--radius-md);
+}
+
+.photo-display-centered:hover .photo-action-bar-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 /* Photo overlay */
 .photo-overlay {
   position: absolute;
@@ -1380,7 +1405,7 @@ watch(
   right: 0;
   bottom: 0;
   pointer-events: none;
-  z-index: 2;
+  z-index: 5;
 }
 
 .photo-overlay > * {
