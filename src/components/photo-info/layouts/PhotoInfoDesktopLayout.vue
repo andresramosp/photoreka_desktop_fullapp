@@ -30,7 +30,7 @@
 
     <div class="dialog-content">
       <!-- Centered Photo Display with Overlay Info -->
-      <div class="photo-display-centered">
+      <div class="photo-display-centered" @mousemove="showActionBar = true">
         <!-- Navigation Arrow Left -->
         <n-button
           v-if="canNavigate && hasPreviousPhoto"
@@ -38,7 +38,10 @@
           size="small"
           circle
           quaternary
-          @click="emit('photo-navigate', currentPhotoIndex - 1)"
+          @click="
+            showActionBar = false;
+            emit('photo-navigate', currentPhotoIndex - 1);
+          "
           title="Previous photo (←)"
         >
           <template #icon>
@@ -66,7 +69,10 @@
           size="small"
           circle
           quaternary
-          @click="emit('photo-navigate', currentPhotoIndex + 1)"
+          @click="
+            showActionBar = false;
+            emit('photo-navigate', currentPhotoIndex + 1);
+          "
           title="Next photo (→)"
         >
           <template #icon>
@@ -77,7 +83,10 @@
         </n-button>
 
         <!-- Floating Action Bar centered on hover -->
-        <div class="photo-action-bar-overlay">
+        <div
+          class="photo-action-bar-overlay"
+          :class="{ 'action-bar-hidden': !showActionBar }"
+        >
           <FloatingActionBar
             :embedded="true"
             :selected-count="1"
@@ -1151,6 +1160,7 @@ const navigateTo = (routeName, id) => {
   router.push({ name: routeName, params: { id } });
 };
 
+const showActionBar = ref(true);
 const activeTab = ref("scores");
 
 watch(
@@ -1327,7 +1337,7 @@ watch(
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  z-index: 3;
+  z-index: 6;
   background: rgba(0, 0, 0, 0.35) !important;
   backdrop-filter: blur(4px);
   border: 1px solid rgba(255, 255, 255, 0.15) !important;
@@ -1392,7 +1402,8 @@ watch(
   border-radius: var(--radius-md);
 }
 
-.photo-display-centered:hover .photo-action-bar-overlay {
+.photo-display-centered:hover
+  .photo-action-bar-overlay:not(.action-bar-hidden) {
   opacity: 1;
   pointer-events: auto;
 }
