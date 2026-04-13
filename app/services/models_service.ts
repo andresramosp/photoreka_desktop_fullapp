@@ -497,6 +497,26 @@ export default class ModelsService {
     return { embeddings: allEmbeddings }
   }
 
+  async getEmbeddingsImagesCPU(images: { id: number; base64: any }[]) {
+    const batchSize = 16
+    let allEmbeddings: any[] = []
+
+    for (let i = 0; i < images.length; i += batchSize) {
+      const batch = images.slice(i, i + batchSize)
+      try {
+        const { data } = await axios.post(process.env.PYTHON_API_CPU + '/clip-image-embeddings', {
+          images: batch,
+        })
+        const embeddings = data.embeddings || []
+        allEmbeddings = allEmbeddings.concat(embeddings)
+      } catch (error) {
+        console.error('Error en getEmbeddingsImagesCPU:', error.message)
+      }
+    }
+
+    return { embeddings: allEmbeddings }
+  }
+
   async getEmbeddingsCPU(tags) {
     try {
       const { data } = await axios.post(process.env.PYTHON_API_CPU + '/embeddings', { tags })
