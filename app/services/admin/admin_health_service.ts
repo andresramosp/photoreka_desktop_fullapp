@@ -384,7 +384,7 @@ export default class AdminHealthService {
         }
 
         const payload = validImages.map(({ photo, base64 }) => ({ id: photo.id, base64 }))
-        const { embeddings } = await modelsService.getEmbeddingsImages(payload)
+        const { embeddings } = await modelsService.getEmbeddingsImagesCPU(payload)
 
         for (const item of embeddings) {
           const img = validImages.find((vi) => vi.photo.id === Number(item.id))

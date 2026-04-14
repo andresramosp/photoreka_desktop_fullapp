@@ -21,6 +21,7 @@ import {
   MediaResolution,
 } from '@google/genai'
 import { withCache } from '../decorators/withCache.js'
+import withCPUWarmUp from '../decorators/withCPUWarmUp.js'
 import { createRequire } from 'module'
 
 const cache = new NodeCache() // Simple in-memory cache
@@ -188,6 +189,7 @@ export type EndpointType =
   | 'logic_gpu'
   | 'logic_gpu_lb'
   | 'image'
+  | 'railway_cpu'
 
 export const USD_TO_EUR = 0.92
 
@@ -225,6 +227,33 @@ export default class ModelsService {
       console.log('[RunPod] Endpoint warmed.')
     } catch (error) {
       console.warn('[RunPod] Ping failed (non-critical):', error.message)
+    }
+  }
+
+  public async ensureCPUApiWarm() {
+    const key = 'railway_cpu'
+    const now = Date.now()
+    const last = ModelsService.lastPingTimestamps[key] || 0
+    const secondsSinceLastPing = (now - last) / 1000
+
+    if (secondsSinceLastPing < this.pingCooldownSeconds) {
+      return
+    }
+
+    try {
+      console.log('[Railway] Pinging CPU API to wake up serverless instance...')
+      // 1x1 pixel JPEG mínimo para evitar 400
+      const minimalImage =
+        '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AKwA//9k='
+      await axios.post(
+        process.env.PYTHON_API_CPU + '/clip-image-embeddings',
+        { images: [{ id: 0, base64: minimalImage }] },
+        { timeout: 30000 }
+      )
+      ModelsService.lastPingTimestamps[key] = Date.now()
+      console.log('[Railway] CPU API is warm.')
+    } catch (error) {
+      console.warn('[Railway] Ping failed (non-critical):', error.message)
     }
   }
 
@@ -497,6 +526,7 @@ export default class ModelsService {
     return { embeddings: allEmbeddings }
   }
 
+  @withCPUWarmUp
   async getEmbeddingsImagesCPU(images: { id: number; base64: any }[]) {
     const batchSize = 16
     let allEmbeddings: any[] = []

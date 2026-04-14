@@ -5,6 +5,14 @@ import UsageService from '#services/usage_service'
 /** 1 credit = €0.001 */
 const EUR_PER_CREDIT = 0.001
 
+// ─── Fixed credit costs ─────────────────────────────────
+
+/** Pessimistic fixed credit cost for RunPod GPU in precise mode */
+export const PRECISE_GPU_CREDITS = 5
+
+/** Fixed credit cost for on-the-fly CLIP embedding from a cropped region */
+export const CLIP_CROP_CREDITS = 5
+
 // ─── Service ─────────────────────────────────────────────
 
 export default class CreditService {
@@ -52,5 +60,18 @@ export default class CreditService {
   static async chargeFixed(userId: number, credits: number): Promise<void> {
     if (credits <= 0) return
     await UsageService.incrementCreditsUsed(userId, credits)
+  }
+
+  /**
+   * Atomically check affordability and charge a fixed number of credits.
+   * Returns `true` if the user could afford it and was charged,
+   * `false` if they lacked sufficient credits (nothing is charged).
+   */
+  static async tryChargeFixed(userId: number, credits: number): Promise<boolean> {
+    if (credits <= 0) return true
+    const remaining = await this.getRemaining(userId)
+    if (remaining < credits) return false
+    await UsageService.incrementCreditsUsed(userId, credits)
+    return true
   }
 }

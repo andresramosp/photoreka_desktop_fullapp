@@ -4,10 +4,7 @@ import ws from '#services/ws'
 import SearchTextService from '#services/search_text_service'
 import SearchPhotoService from '#services/search_photo_service'
 import UserCostService from '#services/user_cost_service'
-import CreditService from '#services/credit_service'
-
-/** Pessimistic fixed credit cost for RunPod GPU in precise mode */
-const PRECISE_GPU_CREDITS = 5
+import CreditService, { PRECISE_GPU_CREDITS, CLIP_CROP_CREDITS } from '#services/credit_service'
 
 export default class SearchController {
   /**
@@ -27,6 +24,17 @@ export default class SearchController {
 
       const searchService = new SearchTextService()
       const query = request.body()
+
+      // Charge GPU credits upfront for precise mode (non-cursor requests)
+      if (!query.options.cursor && query.options.searchMode === 'precise') {
+        const charged = await CreditService.tryChargeFixed(user.id, PRECISE_GPU_CREDITS)
+        if (!charged) {
+          return response.status(402).json({
+            message: 'No credits remaining. Please purchase more credits to continue.',
+            code: 'INSUFFICIENT_CREDITS',
+          })
+        }
+      }
 
       const result = await searchService.searchSemanticSync(query.description, user.id, {
         searchMode: query.options.searchMode,
@@ -48,9 +56,6 @@ export default class SearchController {
       const summary = searchService.costTracker.getSummary()
       if (summary.totalCostInEur > 0) {
         CreditService.charge(user.id, summary.totalCostInEur).catch(() => {})
-      }
-      if (!query.options.cursor && query.options.searchMode === 'precise') {
-        CreditService.chargeFixed(user.id, PRECISE_GPU_CREDITS).catch(() => {})
       }
 
       return response.ok(result)
@@ -74,6 +79,17 @@ export default class SearchController {
       const searchService = new SearchTextService()
       const query = request.body()
 
+      // Charge GPU credits upfront for precise mode
+      if (query.options.searchMode === 'precise') {
+        const charged = await CreditService.tryChargeFixed(user.id, PRECISE_GPU_CREDITS)
+        if (!charged) {
+          return response.status(402).json({
+            message: 'No credits remaining. Please purchase more credits to continue.',
+            code: 'INSUFFICIENT_CREDITS',
+          })
+        }
+      }
+
       const stream = searchService.searchSemanticStream(query.description, user.id, {
         searchMode: query.options.searchMode,
         pageSize: query.options.pageSize,
@@ -94,9 +110,6 @@ export default class SearchController {
       const summary = searchService.costTracker.getSummary()
       if (summary.totalCostInEur > 0) {
         CreditService.charge(user.id, summary.totalCostInEur).catch(() => {})
-      }
-      if (query.options.searchMode === 'precise') {
-        CreditService.chargeFixed(user.id, PRECISE_GPU_CREDITS).catch(() => {})
       }
 
       return response.ok({ message: 'Search process initiated' })
@@ -197,6 +210,17 @@ export default class SearchController {
       const searchService = new SearchPhotoService()
 
       const query: any = request.body()
+
+      // CLIP crop embedding requires a GPU call — charge upfront
+      if (query.criteria === 'embedding' && query.cropRegion) {
+        const charged = await CreditService.tryChargeFixed(user.id, CLIP_CROP_CREDITS)
+        if (!charged) {
+          return response.status(402).json({
+            message: 'No credits remaining. Please purchase more credits to continue.',
+            code: 'INSUFFICIENT_CREDITS',
+          })
+        }
+      }
 
       const result = await searchService.searchByPhotos(query, user.id)
 

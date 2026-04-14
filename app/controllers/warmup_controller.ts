@@ -7,8 +7,10 @@ export default class WarmupController {
     try {
       const modelService = new ModelsService()
 
-      if (process.env.API_MODELS == 'REMOTE') {
-        await Promise.all([modelService.ensureRunPodWarm(params.endpointType)])
+      if (params.endpointType === 'railway_cpu') {
+        await modelService.ensureCPUApiWarm()
+      } else if (process.env.API_MODELS == 'REMOTE') {
+        await modelService.ensureRunPodWarm(params.endpointType)
       }
 
       return response.ok({ result: true })
