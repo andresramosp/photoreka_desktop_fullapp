@@ -348,7 +348,6 @@ router.isReady().then(() => {
 });
 
 onMounted(() => {
-  ensureWarmUp("railway_cpu");
   checkIsMobile();
   window.addEventListener("resize", checkIsMobile);
   // La carga inicial ya se maneja en el watcher de isAuthenticated
@@ -378,6 +377,7 @@ watch(
       collectionsStore.getOrFetch(true);
       seriesStore.getOrFetch(true);
       userStore.processPatterns();
+      ensureWarmUp("railway_cpu");
     } else {
       // Usuario se desautenticó - resetear stores
       if (wasAuth !== undefined) {
