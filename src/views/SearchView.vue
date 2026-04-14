@@ -696,7 +696,7 @@ async function handleBeAdaptiveClick() {
 
 // Manejo de respuestas en tiempo real
 onMounted(() => {
-  ensureWarmUp("logic_gpu");
+  ensureWarmUp("railway_cpu");
 
   // Fetch collections when component mounts
   collectionsStore.getOrFetch();

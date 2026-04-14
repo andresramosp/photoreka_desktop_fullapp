@@ -529,9 +529,6 @@ const photosStore = usePhotosStore();
 const userStore = useUserStore();
 const message = useMessage();
 
-// Warm up composable
-const { warmedUp, ensureWarmUp } = useWarmUp();
-
 // Google Photos composable
 const googlePhotos = useGooglePhotos();
 // Dropbox composable
@@ -715,7 +712,6 @@ const uploadButtons = computed(() => {
 // Watcher para activar warm-up cuando el progreso llega al 75%
 watch(overallProgress, (newProgress) => {
   if (newProgress >= 75 && !warmUpTriggeredAt75.value && isUploading.value) {
-    ensureWarmUp("image");
     warmUpTriggeredAt75.value = true;
   }
 
@@ -854,9 +850,6 @@ const handleDrop = async (event) => {
     return;
   }
 
-  // Trigger warm up when photos are dropped
-  ensureWarmUp("image");
-
   try {
     await handleUploadFlow(files, "local");
   } catch (error) {
@@ -875,9 +868,6 @@ async function uploadLocalFiles(event) {
     event.target.value = ""; // Clear the input
     return;
   }
-
-  // Trigger warm up when files are selected
-  //ensureWarmUp("image");
 
   try {
     await handleUploadFlow(selectedLocalFiles, "local");
@@ -918,9 +908,6 @@ async function importFromGooglePhotos() {
       message.error(finalValidation.message);
       return;
     }
-
-    // Trigger warm up
-    ensureWarmUp("image");
 
     // Process and upload photos using handleUploadFlow
     await handleUploadFlow(
@@ -965,8 +952,6 @@ async function importFromDropbox() {
       message.error(finalValidation.message);
       return;
     }
-
-    ensureWarmUp("image");
 
     await handleUploadFlow(
       successfulDownloads.map((result) => ({

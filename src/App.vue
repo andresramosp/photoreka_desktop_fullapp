@@ -179,6 +179,9 @@ import AppInitLoader from "./components/AppInitLoader.vue";
 import { useThemeInit } from "@/composables/useTheme.js";
 import MobileWelcomeBanner from "./components/MobileWelcomeBanner.vue";
 import WelcomeBatchModal from "./components/WelcomeBatchModal.vue";
+import { useWarmUp } from "@/composables/useWarmUp";
+
+const { ensureWarmUp } = useWarmUp();
 
 const route = useRoute();
 const router = useRouter();
@@ -345,6 +348,7 @@ router.isReady().then(() => {
 });
 
 onMounted(() => {
+  ensureWarmUp("railway_cpu");
   checkIsMobile();
   window.addEventListener("resize", checkIsMobile);
   // La carga inicial ya se maneja en el watcher de isAuthenticated
