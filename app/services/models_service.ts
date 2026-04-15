@@ -208,6 +208,7 @@ export default class ModelsService {
   }
 
   static lastPingTimestamps: Record<string, number> = {}
+  static pendingWarmups: Record<string, Promise<void>> = {}
 
   public async ensureRunPodWarm(endpointType: EndpointType) {
     const now = Date.now()
@@ -240,21 +241,47 @@ export default class ModelsService {
       return
     }
 
-    try {
-      console.log('[Railway] Pinging CPU API to wake up serverless instance...')
-      // 1x1 pixel JPEG mínimo para evitar 400
-      const minimalImage =
-        '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AKwA//9k='
-      await axios.post(
-        process.env.PYTHON_API_CPU + '/clip-image-embeddings',
-        { images: [{ id: 0, base64: minimalImage }] },
-        { timeout: 30000 }
-      )
-      ModelsService.lastPingTimestamps[key] = Date.now()
-      console.log('[Railway] CPU API is warm.')
-    } catch (error) {
-      console.warn('[Railway] Ping failed (non-critical):', error.message)
+    // Si ya hay un warmup en curso, reutilizar la misma promise (evita pings duplicados concurrentes)
+    if (ModelsService.pendingWarmups[key]) {
+      return ModelsService.pendingWarmups[key]
     }
+
+    const warmupPromise = (async () => {
+      const maxRetries = 3
+
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          console.log(
+            `[Railway] Pinging CPU API to wake up serverless instance (attempt ${attempt + 1}/${maxRetries})...`
+          )
+          await axios.post(
+            process.env.PYTHON_API_CPU + '/clip-text-embeddings',
+            { tags: ['ping'] },
+            { timeout: 50000 }
+          )
+          ModelsService.lastPingTimestamps[key] = Date.now()
+          console.log('[Railway] CPU API is warm.')
+          return
+        } catch (error) {
+          const isLastAttempt = attempt === maxRetries - 1
+          if (isLastAttempt) {
+            console.error(`[Railway] Ping failed after ${maxRetries} attempts:`, error.message)
+          } else {
+            const delay = 2000 * Math.pow(2, attempt) // 2s, 4s
+            console.warn(
+              `[Railway] Ping failed (attempt ${attempt + 1}/${maxRetries}), retrying in ${delay}ms:`,
+              error.message
+            )
+            await new Promise((resolve) => setTimeout(resolve, delay))
+          }
+        }
+      }
+    })().finally(() => {
+      delete ModelsService.pendingWarmups[key]
+    })
+
+    ModelsService.pendingWarmups[key] = warmupPromise
+    return warmupPromise
   }
 
   buildRequestConfig(operation, payload, endpointType: EndpointType) {
@@ -547,6 +574,7 @@ export default class ModelsService {
     return { embeddings: allEmbeddings }
   }
 
+  @withCPUWarmUp
   async getEmbeddingsCPU(tags) {
     try {
       const { data } = await axios.post(process.env.PYTHON_API_CPU + '/embeddings', { tags })
@@ -576,6 +604,7 @@ export default class ModelsService {
     }
   }
 
+  @withCPUWarmUp
   async getCLIPEmbeddingsCPU(tags) {
     try {
       const { data } = await axios.post(process.env.PYTHON_API_CPU + '/clip-text-embeddings', {
@@ -588,6 +617,7 @@ export default class ModelsService {
     }
   }
 
+  @withCPUWarmUp
   async getReducedEmbeddings(payload) {
     try {
       const { data } = await axios.post(
@@ -601,6 +631,7 @@ export default class ModelsService {
     }
   }
 
+  @withCPUWarmUp
   async getClusters(payload) {
     try {
       const { data } = await axios.post(
@@ -614,6 +645,7 @@ export default class ModelsService {
     }
   }
 
+  @withCPUWarmUp
   async getHistogramColor(images) {
     try {
       const { data } = await axios.post(process.env.PYTHON_API_CPU + '/color-histograms', {
