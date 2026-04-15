@@ -66,7 +66,10 @@
           </template>
         </n-button>
       </div>
-      <div class="logo-container">
+      <div
+        class="logo-container"
+        :class="{ 'logo-container--collapsed': collapsed }"
+      >
         <div class="logo clickable-logo" @click="goToDashboard">
           <div v-if="collapsed" class="logo-icon">
             <AppLogo layout="icon" :height="42" />
@@ -292,14 +295,19 @@ onUnmounted(() => {
 }
 
 .logo-container {
-  padding: 0 16px;
+  padding: 0 18px 0 28px;
   border-bottom: 1px solid var(--border-color);
   transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   height: 64px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   box-sizing: border-box;
+}
+
+.logo-container--collapsed {
+  justify-content: center;
+  padding: 0;
 }
 
 .logo {
