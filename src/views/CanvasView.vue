@@ -825,14 +825,11 @@ import { useTheme } from "@/composables/useTheme.js";
 import AppLogo from "@/components/AppLogo.vue";
 import { ExpandAltOutlined } from "@vicons/antd";
 import ColorPickerPills from "@/components/ColorPickerPills.vue";
-import { useWarmUp } from "@/composables/useWarmUp";
 
 // Define component name for KeepAlive
 defineOptions({
   name: "CanvasView",
 });
-
-const { ensureWarmUp } = useWarmUp();
 
 const canvasStore = useCanvasStore();
 const photosStore = usePhotosStore();
@@ -1993,7 +1990,6 @@ watch(
 );
 
 onMounted(async () => {
-  ensureWarmUp("railway_cpu");
   window.addEventListener("resize", handleResize);
   document.addEventListener("click", handleClickOutside);
   document.addEventListener("keydown", handleKeyDown);

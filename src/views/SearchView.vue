@@ -296,10 +296,7 @@ const currentRefIndex = ref(0);
 let refPollingInterval = null;
 let refCyclingInterval = null;
 
-// Warm up composable
-import { useWarmUp } from "@/composables/useWarmUp";
 import SearchPlaceHolder from "@/components/SearchPlaceHolder.vue";
-const { warmedUp, ensureWarmUp } = useWarmUp();
 
 const scrollContainer = ref(null);
 
@@ -696,8 +693,6 @@ async function handleBeAdaptiveClick() {
 
 // Manejo de respuestas en tiempo real
 onMounted(() => {
-  ensureWarmUp("railway_cpu");
-
   // Fetch collections when component mounts
   collectionsStore.getOrFetch();
 
