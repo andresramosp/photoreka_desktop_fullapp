@@ -1682,7 +1682,7 @@ const zoomOut = () => {
   scheduleHiResUpdate();
 };
 
-const resetView = () => {
+const resetView = (animate = true) => {
   if (!pixiContainer.value || photos2D.value.length === 0) return;
 
   const bounds = getBounds.value;
@@ -1697,14 +1697,46 @@ const resetView = () => {
 
   const scaleX = containerWidth / (boundsWidth + 100);
   const scaleY = containerHeight / (boundsHeight + 100);
-  scale.value = Math.min(scaleX, scaleY, 1);
+  const targetScale = Math.min(scaleX, scaleY, 1);
 
-  offsetX.value = containerWidth / 2 - centerX * scale.value;
-  offsetY.value = containerHeight / 2 - centerY * scale.value;
+  const targetOffsetX = containerWidth / 2 - centerX * targetScale;
+  const targetOffsetY = containerHeight / 2 - centerY * targetScale;
 
-  updateContainerTransform();
-  scheduleLodUpdate();
-  scheduleHiResUpdate();
+  if (!animate) {
+    scale.value = targetScale;
+    offsetX.value = targetOffsetX;
+    offsetY.value = targetOffsetY;
+    updateContainerTransform();
+    scheduleLodUpdate();
+    scheduleHiResUpdate();
+    return;
+  }
+
+  // Animated transition using the flight system
+  const dx = targetOffsetX - offsetX.value;
+  const dy = targetOffsetY - offsetY.value;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  const scaleDiff = Math.abs(targetScale - scale.value);
+  const duration = Math.max(
+    600,
+    Math.min(1500, distance * 0.3 + scaleDiff * 200),
+  );
+
+  flightState.value = {
+    startTime: performance.now(),
+    duration,
+    startOffsetX: offsetX.value,
+    startOffsetY: offsetY.value,
+    targetOffsetX,
+    targetOffsetY,
+    startScale: scale.value,
+    targetScale,
+  };
+  isFlying.value = true;
+
+  if (!animationFrameId.value) {
+    animationFrameId.value = requestAnimationFrame(flightAnimationLoop);
+  }
 };
 
 // ============================================================================
@@ -2039,7 +2071,7 @@ const onChunkChange = async (newChunk) => {
 
     // Frame the view as soon as we have positions (don't wait for textures)
     await nextTick();
-    resetView();
+    resetView(false);
 
     await loadPhotosToPixi();
 
@@ -2227,7 +2259,7 @@ const retryLoad = async () => {
 
   // Frame immediately after positions are known
   await nextTick();
-  resetView();
+  resetView(false);
 
   await loadPhotosToPixi();
 };
@@ -2359,7 +2391,7 @@ onMounted(async () => {
 
   // Frame the view as soon as we have positions (don't wait for textures)
   await nextTick();
-  resetView();
+  resetView(false);
 
   await loadPhotosToPixi();
 
