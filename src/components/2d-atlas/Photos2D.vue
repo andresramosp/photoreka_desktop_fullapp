@@ -1687,7 +1687,29 @@ const zoomOut = () => {
 const resetView = (animate = true) => {
   if (!pixiContainer.value || photos2D.value.length === 0) return;
 
-  const bounds = getBounds.value;
+  // Use filtered photos bounds so fit-to-view frames only visible photos
+  const target =
+    filteredPhotos.value.length > 0 ? filteredPhotos.value : photos2D.value;
+  let minX = Infinity,
+    maxX = -Infinity,
+    minY = Infinity,
+    maxY = -Infinity;
+  target.forEach((photo) => {
+    const [x, y] = photo.position || [0, 0];
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  });
+  const paddingX = (maxX - minX) * 0.1 || 10;
+  const paddingY = (maxY - minY) * 0.1 || 10;
+  const bounds = {
+    minX: minX - paddingX,
+    maxX: maxX + paddingX,
+    minY: minY - paddingY,
+    maxY: maxY + paddingY,
+  };
+
   const centerX = ((bounds.minX + bounds.maxX) / 2) * SCALE_FACTOR;
   const centerY = ((bounds.minY + bounds.maxY) / 2) * SCALE_FACTOR;
 
