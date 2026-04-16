@@ -84,11 +84,14 @@ import { api, api_analyzer } from "@/utils/axios";
 import { useMessage, useNotification } from "naive-ui";
 import { CloudUploadOutline } from "@vicons/ionicons5";
 import { InProgress } from "@vicons/carbon";
+import { h } from "vue";
+import { useRouter } from "vue-router";
 
 const photosStore = usePhotosStore();
 const userStore = useUserStore();
 const notification = useNotification();
 const message = useMessage();
+const router = useRouter();
 
 // Control para el mensaje de confirmación de email
 const emailConfirmationMessageId = ref(null);
@@ -190,24 +193,48 @@ async function analyze(ev) {
   if (toProcess.length === 0) return;
 
   try {
-    setActiveTab("processing");
-    message.success(
-      `The analysis of your photos has begun! You can close this window in the meantime.`,
-      { duration: 5000 },
-    );
     await api_analyzer.post(`/api/analyzer`, {
       packageId: "process",
       mode: "adding",
       fastMode: ev.fastMode,
       photoIds: toProcess,
     });
+
+    setActiveTab("processing");
+    message.success(
+      `The analysis of your photos has begun! You can close this window in the meantime.`,
+      { duration: 5000 },
+    );
     photosStore.clearAllSelections();
     photosStore.getOrFetch(true);
 
     // Update usage after starting analysis
     await userStore.fetchUsage();
   } catch (error) {
-    console.error("❌ Error iniciando análisis:", error);
+    if (error?.response?.status === 403) {
+      notification.warning({
+        title: "Insufficient Credits",
+        content:
+          "You have reached your photo analysis limit. Please upgrade your plan to analyze more photos.",
+        action: () =>
+          h(
+            "a",
+            {
+              style:
+                "color: var(--primary-color); cursor: pointer; font-size: 14px;",
+              onClick: (e) => {
+                e.preventDefault();
+                notification.destroyAll();
+                router.push("/settings");
+              },
+            },
+            "Go to Settings →",
+          ),
+        duration: 8000,
+      });
+    } else {
+      console.error("❌ Error iniciando análisis:", error);
+    }
   }
 }
 
