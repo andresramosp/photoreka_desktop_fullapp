@@ -239,6 +239,14 @@
               </button>
             </div>
           </div>
+
+          <p class="welcome-hint">
+            ChatLab is a complementary tool. For best results, use it alongside
+            Photoreka's other tools.
+            <button class="welcome-hint-link" @click="showChatLabInfo = true">
+              Read more
+            </button>
+          </p>
         </div>
       </div>
 
@@ -530,6 +538,115 @@
       @close="closeToolSelector"
     />
 
+    <!-- ChatLab Info Dialog -->
+    <transition name="backdrop-fade">
+      <div
+        v-if="showChatLabInfo"
+        class="chatlab-info-backdrop"
+        @click="showChatLabInfo = false"
+      />
+    </transition>
+    <transition name="chatlab-info-pop">
+      <div v-if="showChatLabInfo" class="chatlab-info-dialog">
+        <div class="chatlab-info-header">
+          <div class="chatlab-info-title-row">
+            <n-icon :size="20" class="chatlab-info-icon"
+              ><InformationCircleIcon
+            /></n-icon>
+            <span class="chatlab-info-title">About ChatLab</span>
+          </div>
+          <n-button quaternary size="small" @click="showChatLabInfo = false">
+            <template #icon>
+              <n-icon :size="14"><CloseIcon /></n-icon>
+            </template>
+          </n-button>
+        </div>
+        <div class="chatlab-info-body">
+          <p>
+            ChatLab is an advisory companion that helps you reflect on your
+            work, discover hidden gems, and plan your next creative move. It is
+            <strong>not</strong> an action engine — think of it as a thoughtful
+            critic sitting beside you, offering perspective while you stay in
+            control.
+          </p>
+
+          <h4 class="chatlab-info-h4">
+            <n-icon :size="14" class="chatlab-h4-icon chatlab-h4-icon--can"
+              ><CheckmarkCircleIcon
+            /></n-icon>
+            What ChatLab can do
+          </h4>
+          <ul>
+            <li>
+              Suggest photos that match a mood, theme, or narrative you
+              describe.
+            </li>
+            <li>
+              Propose sequences and series orders with storytelling rationale.
+            </li>
+            <li>
+              Analyze your portfolio for patterns, strengths, and blind spots.
+            </li>
+            <li>
+              Give you personalized feedback and suggestions based on your work.
+            </li>
+          </ul>
+
+          <h4 class="chatlab-info-h4">
+            <n-icon :size="14" class="chatlab-h4-icon chatlab-h4-icon--cannot"
+              ><CloseCircleIcon
+            /></n-icon>
+            What ChatLab cannot do
+          </h4>
+          <ul>
+            <li>Create, edit, or delete collections, series, or canvases.</li>
+            <li>Delete, move, or modify your photos in any way.</li>
+            <li>Perform any write operation on your library.</li>
+          </ul>
+
+          <h4 class="chatlab-info-h4">
+            <n-icon
+              :size="14"
+              class="chatlab-h4-icon chatlab-h4-icon--aesthetic"
+              ><PaletteIcon
+            /></n-icon>
+            Aesthetic subjectivity
+          </h4>
+          <p>
+            AI curation carries an inherent margin of interpretation. If a
+            suggestion doesn't match your vision, try the
+            <strong>visual score filters and rankings</strong> in Search, Atlas,
+            or Workspace for a data-driven first pass, then apply your own eye
+            for the final pick. ChatLab is a second opinion, not the last word —
+            the best curation always comes from the photographer.
+          </p>
+
+          <h4 class="chatlab-info-h4">
+            <n-icon :size="14" class="chatlab-h4-icon chatlab-h4-icon--scope"
+              ><EyeIcon
+            /></n-icon>
+            Visibility scope
+          </h4>
+          <p>
+            For each prompt, ChatLab first performs a recall pass across your
+            <strong>entire library</strong>, then narrows down to roughly
+            <strong>20 photos visually</strong> and up to
+            <strong>50 via metadata</strong>, supplemented by aggregate
+            statistics about your catalog. This means results are informed by
+            the full breadth of your work, but the final selection window is
+            intentionally focused — use tools like <strong>Search</strong>,
+            <strong>Atlas</strong>, or <strong>Workspace</strong> to explore
+            beyond that window.
+          </p>
+
+          <p class="chatlab-info-closing">
+            Use ChatLab to spark ideas, then bring those ideas to life with the
+            rest of Photoreka's toolkit.
+          </p>
+        </div>
+      </div>
+    </transition>
+
     <!-- Floating Action Bar -->
     <FloatingActionBar
       :selected-count="selectedPhotoIds.length"
@@ -590,6 +707,10 @@ import {
   BookmarksOutline,
   ChevronForwardOutline as ChevronForwardIcon,
   ArrowBackOutline as ArrowBackIcon,
+  InformationCircleOutline as InformationCircleIcon,
+  CheckmarkCircleOutline as CheckmarkCircleIcon,
+  CloseCircleOutline as CloseCircleIcon,
+  EyeOutline as EyeIcon,
 } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
 import { PlusCircleFilled, RobotOutlined } from "@vicons/antd";
@@ -723,6 +844,7 @@ const showPhotoInfoDialog = ref(false);
 const selectedDialogPhoto = ref<any>(null);
 const showSidebar = ref(false);
 const pendingDeleteId = ref<number | null>(null);
+const showChatLabInfo = ref(false);
 
 const suggestions: Suggestion[] = [
   {
@@ -1737,6 +1859,166 @@ const formatRelativeDate = (dateStr: string) => {
   color: var(--text-tertiary);
   margin: 0 0 var(--spacing-2xl) 0;
   line-height: var(--line-height-relaxed);
+}
+
+.welcome-hint {
+  margin: var(--spacing-xl) auto 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  opacity: 0.55;
+  line-height: var(--line-height-relaxed);
+  text-align: center;
+}
+
+.welcome-hint-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent-color);
+  cursor: pointer;
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  opacity: 0.85;
+  transition: opacity 0.15s;
+}
+
+.welcome-hint-link:hover {
+  opacity: 1;
+}
+
+/* ── ChatLab Info Dialog ── */
+.chatlab-info-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 200;
+}
+
+.chatlab-info-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 201;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  width: 520px;
+  max-width: 92vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chatlab-info-pop-enter-active {
+  transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.chatlab-info-pop-leave-active {
+  transition: all 0.15s ease;
+}
+.chatlab-info-pop-enter-from {
+  opacity: 0;
+  transform: translate(-50%, -48%) scale(0.95);
+}
+.chatlab-info-pop-leave-to {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.97);
+}
+
+.chatlab-info-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.chatlab-info-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.chatlab-info-icon {
+  color: var(--accent-color);
+  opacity: 0.8;
+}
+
+.chatlab-info-title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.chatlab-info-body {
+  padding: var(--spacing-lg) var(--spacing-xl);
+  overflow-y: auto;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: var(--line-height-relaxed);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.chatlab-info-body p {
+  margin: 0 0 var(--spacing-md) 0;
+}
+
+.chatlab-info-body h4,
+.chatlab-info-h4 {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: var(--spacing-lg) 0 var(--spacing-sm) 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chatlab-info-body h4:first-child,
+.chatlab-info-h4:first-child {
+  margin-top: 0;
+}
+
+.chatlab-h4-icon {
+  flex-shrink: 0;
+}
+.chatlab-h4-icon--can {
+  color: var(--success-color, #52c41a);
+}
+.chatlab-h4-icon--cannot {
+  color: var(--error-color);
+}
+.chatlab-h4-icon--scope {
+  color: var(--accent-color);
+}
+.chatlab-h4-icon--aesthetic {
+  color: var(--accent-color);
+  opacity: 0.8;
+}
+
+.chatlab-info-body ul {
+  margin: 0 0 var(--spacing-md) 0;
+  padding-left: var(--spacing-lg);
+}
+
+.chatlab-info-body li {
+  margin-bottom: var(--spacing-xs);
+  position: relative;
+}
+
+.chatlab-info-body li::marker {
+  color: var(--accent-color);
+}
+
+.chatlab-info-closing {
+  font-style: italic;
+  opacity: 0.75;
+  margin-top: var(--spacing-md);
 }
 
 /* ── Suggestion Cards Grid ── */
