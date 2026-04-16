@@ -789,7 +789,7 @@ const initialLoadingPhase = ref(true);
 const selectedChunk = ref(null);
 
 // Navigation control mode: 'orbit' (default) or 'fps'
-const controlMode = ref("orbit");
+const controlMode = ref("fps");
 // First Person Controls (keyboard/mouse)
 const fpControls = ref(null);
 // Orbit Controls (default - click & drag to rotate)
