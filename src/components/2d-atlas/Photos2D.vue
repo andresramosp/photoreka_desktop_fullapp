@@ -514,7 +514,7 @@ const lastPinchWorld = ref({ x: 0, y: 0 }); // world (photoContainer space)
 
 // Keyboard navigation state
 const keysPressed = ref(new Set());
-const keyboardPanSpeed = 8; // pixels per frame
+const keyboardPanSpeed = 5; // pixels per frame
 let keyboardAnimationId = null;
 
 // UI state
