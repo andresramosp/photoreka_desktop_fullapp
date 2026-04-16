@@ -90,6 +90,7 @@
       @highlight-pattern="handleHighlightPattern"
       @unhighlight-pattern="handleUnhighlightPattern"
       @select-pattern="handleSelectPattern"
+      @fly-to-pattern="flyToPattern"
       @tag-search="handleTagSearch"
     />
 
@@ -114,6 +115,7 @@
       @artistic-scores-change="onArtisticScoresChange"
       @time-range-change="onTimeRangeChange"
       @select-pattern="handleSelectPattern"
+      @fly-to-pattern="flyToPattern"
       @tag-search="handleTagSearch"
     />
 
@@ -1739,6 +1741,113 @@ const resetView = (animate = true) => {
   }
 };
 
+// Fly camera to frame all photos of a given pattern
+const flyToPattern = (pattern) => {
+  if (!pixiContainer.value || !pattern) return;
+
+  const photoIds = pattern.clusterPhotos || [];
+  if (photoIds.length === 0) return;
+
+  const idSet = new Set(photoIds.map(String));
+
+  // Collect positions of pattern photos
+  const positions = [];
+  for (const photo of photos2D.value) {
+    if (!idSet.has(String(photo.id))) continue;
+    const [px, py] = photo.position || [0, 0];
+    positions.push([px, py]);
+  }
+
+  if (positions.length === 0) return;
+
+  // Exclude outliers using IQR on distance from median center
+  let used = positions;
+  if (positions.length >= 6) {
+    // Median center
+    const xs = positions.map((p) => p[0]).sort((a, b) => a - b);
+    const ys = positions.map((p) => p[1]).sort((a, b) => a - b);
+    const medianX = xs[Math.floor(xs.length / 2)];
+    const medianY = ys[Math.floor(ys.length / 2)];
+
+    // Distances from median center
+    const dists = positions.map((p) =>
+      Math.sqrt((p[0] - medianX) ** 2 + (p[1] - medianY) ** 2),
+    );
+    const sorted = [...dists].sort((a, b) => a - b);
+    const q1 = sorted[Math.floor(sorted.length * 0.25)];
+    const q3 = sorted[Math.floor(sorted.length * 0.75)];
+    const iqr = q3 - q1;
+    const cutoff = q3 + 1.5 * iqr;
+
+    const filtered = positions.filter((_, i) => dists[i] <= cutoff);
+    // Only use filtered set if we keep at least 60% of photos
+    if (filtered.length >= positions.length * 0.6) {
+      used = filtered;
+    }
+  }
+
+  // Compute bounding box of kept photos
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  for (const [px, py] of used) {
+    if (px < minX) minX = px;
+    if (px > maxX) maxX = px;
+    if (py < minY) minY = py;
+    if (py > maxY) maxY = py;
+  }
+
+  // Add padding (10% of bounds or at least 1 unit)
+  const padX = Math.max((maxX - minX) * 0.1, 1);
+  const padY = Math.max((maxY - minY) * 0.1, 1);
+  minX -= padX;
+  maxX += padX;
+  minY -= padY;
+  maxY += padY;
+
+  const centerX = ((minX + maxX) / 2) * SCALE_FACTOR;
+  const centerY = ((minY + maxY) / 2) * SCALE_FACTOR;
+  const boundsWidth = (maxX - minX) * SCALE_FACTOR;
+  const boundsHeight = (maxY - minY) * SCALE_FACTOR;
+
+  const containerWidth = pixiContainer.value.clientWidth;
+  const containerHeight = pixiContainer.value.clientHeight;
+
+  const scaleX = containerWidth / (boundsWidth + 100);
+  const scaleY = containerHeight / (boundsHeight + 100);
+  const targetScale = Math.min(scaleX, scaleY, MAX_SCALE);
+
+  const targetOffsetX = containerWidth / 2 - centerX * targetScale;
+  const targetOffsetY = containerHeight / 2 - centerY * targetScale;
+
+  // Animated transition using the flight system
+  const dx = targetOffsetX - offsetX.value;
+  const dy = targetOffsetY - offsetY.value;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  const scaleDiff = Math.abs(targetScale - scale.value);
+  const duration = Math.max(
+    600,
+    Math.min(1500, distance * 0.3 + scaleDiff * 200),
+  );
+
+  flightState.value = {
+    startTime: performance.now(),
+    duration,
+    startOffsetX: offsetX.value,
+    startOffsetY: offsetY.value,
+    targetOffsetX,
+    targetOffsetY,
+    startScale: scale.value,
+    targetScale,
+  };
+  isFlying.value = true;
+
+  if (!animationFrameId.value) {
+    animationFrameId.value = requestAnimationFrame(flightAnimationLoop);
+  }
+};
+
 // ============================================================================
 // Photo Flight Navigation (similar to 3D Atlas)
 // ============================================================================
@@ -2649,7 +2758,7 @@ watch(isTransitioning, (v) => {
   pointer-events: none;
   z-index: 1000;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  max-width: 200px;
+  max-width: 300px;
   animation: tooltipFadeIn 0.2s ease-out;
 }
 
@@ -2666,7 +2775,7 @@ watch(isTransitioning, (v) => {
 
 .tooltip-image {
   width: 100%;
-  max-height: 150px;
+  max-height: 188px;
   object-fit: cover;
   border-radius: 4px;
 }

@@ -54,6 +54,18 @@
                   {{ pattern.description }}
                 </div>
               </n-tooltip>
+              <n-tooltip trigger="hover" placement="top">
+                <template #trigger>
+                  <n-icon
+                    size="14"
+                    class="pattern-fit-icon"
+                    @click.stop="emit('fly-to-pattern', pattern)"
+                  >
+                    <CompressOutlined />
+                  </n-icon>
+                </template>
+                Fit to pattern
+              </n-tooltip>
             </div>
           </div>
         </div>
@@ -96,7 +108,7 @@
 <script setup>
 import { computed, h } from "vue";
 import { NIcon, NTooltip, NSelect } from "naive-ui";
-import { InfoCircleFilled } from "@vicons/antd";
+import { InfoCircleFilled, CompressOutlined } from "@vicons/antd";
 import {
   Star,
   EllipseOutline,
@@ -122,7 +134,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["select-pattern"]);
+const emit = defineEmits(["select-pattern", "fly-to-pattern"]);
 
 // Sort patterns by strength first, then by number of photos
 const sortedPatternsForCurrentChunk = computed(() => {
@@ -380,6 +392,17 @@ const getStrengthIcon = (strength) => {
 
 .pattern-info-icon:hover {
   color: var(--text-primary);
+}
+
+.pattern-fit-icon {
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.2s;
+  flex-shrink: 0;
+}
+
+.pattern-fit-icon:hover {
+  color: var(--primary-color, #3b82f6);
 }
 
 .pattern-tooltip-content {

@@ -165,6 +165,7 @@
             :selectedPatternId="selectedPatternId"
             displayMode="select"
             @select-pattern="handlePatternClick"
+            @fly-to-pattern="(p) => emit('fly-to-pattern', p)"
           />
           <!-- <button class="close-modal-btn" @click="activeModal = null">
             <n-icon size="18">
@@ -315,6 +316,7 @@ const emit = defineEmits([
   "artistic-scores-change",
   "time-range-change",
   "select-pattern",
+  "fly-to-pattern",
   "tag-search",
 ]);
 

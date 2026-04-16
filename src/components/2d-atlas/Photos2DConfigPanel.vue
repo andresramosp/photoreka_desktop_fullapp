@@ -90,6 +90,7 @@
             :selectedPatternId="selectedPatternId"
             displayMode="list"
             @select-pattern="handlePatternClick"
+            @fly-to-pattern="(p) => emit('fly-to-pattern', p)"
           />
         </div>
       </div>
@@ -553,6 +554,7 @@ const emit = defineEmits([
   "highlight-pattern",
   "unhighlight-pattern",
   "select-pattern",
+  "fly-to-pattern",
   "tag-search",
   "update:tagBeaconsEnabled",
   "update:tagBeaconsCellSize",
