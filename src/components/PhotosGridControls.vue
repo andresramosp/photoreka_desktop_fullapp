@@ -56,199 +56,28 @@
             :marksCount="5"
           />
         </div>
-      </div>
-    </div>
 
-    <!-- Sorting Section -->
-    <div class="sorting-section">
-      <div
-        class="filter-controls-section-header sorting-header"
-        @click="toggleSorting"
-      >
-        <div class="filter-controls-header-left">
-          <n-icon
-            size="16"
-            class="filter-controls-section-icon"
-            :color="`var(--warning-color)`"
-          >
-            <Trophy20Regular />
-          </n-icon>
-          <span class="filter-controls-section-label"
-            >Rank by visual scores</span
-          >
+        <!-- More Filters Toggle -->
+        <div class="more-filters-toggle-wrapper">
           <n-button
-            v-if="hasActiveSorting"
             text
             size="small"
-            @click="toggleSortOrder"
-            class="sort-order-btn"
-            :title="
-              sortOrder === 'desc'
-                ? 'Best First (click for Worst First)'
-                : 'Worst First (click for Best First)'
-            "
+            class="more-filters-toggle-btn"
+            @click.stop="isDateRangeExpanded = !isDateRangeExpanded"
           >
-            <n-icon size="16">
-              <svg viewBox="0 0 24 24" style="width: 16px; height: 16px">
-                <path
-                  v-if="sortOrder === 'desc'"
-                  d="M19,17H22L18,21L14,17H17V3H19V17M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
-                  fill="currentColor"
-                />
-                <path
-                  v-else
-                  d="M19,7H22L18,3L14,7H17V21H19V7M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
-                  fill="currentColor"
-                />
-              </svg>
-            </n-icon>
-          </n-button>
-          <n-button
-            v-if="hasActiveSorting"
-            quaternary
-            size="small"
-            @click="clearSorting"
-            class="clear-action-btn"
-          >
-            Clear
-          </n-button>
-          <span
-            v-if="hasActiveSorting && !isSortingExpanded"
-            class="filter-controls-active-badge"
-          >
-            Active
-          </span>
-        </div>
-        <n-icon
-          size="14"
-          class="filter-controls-toggle-icon"
-          :class="{ rotated: isSortingExpanded }"
-        >
-          <svg viewBox="0 0 24 24">
-            <path
-              fill="currentColor"
-              d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
-            />
-          </svg>
-        </n-icon>
-      </div>
-      <div
-        v-if="isSortingExpanded"
-        class="sorting-wrapper filter-controls-tab-container"
-      >
-        <!-- Sorting Type Selection -->
-        <div class="sorting-type-row">
-          <n-radio-group
-            v-model:value="sortingType"
-            size="small"
-            @update:value="handleSortingTypeChange"
-            class="inline-radios"
-          >
-            <n-radio value="criteria" class="sorting-radio">Criteria</n-radio>
-            <n-radio value="genre" class="sorting-radio">Genre</n-radio>
-          </n-radio-group>
-        </div>
-        <!-- Criteria Selection -->
-        <div
-          v-if="sortingType === 'criteria'"
-          class="filter-controls-criteria-row"
-        >
-          <template
-            v-for="[groupKey, group] in Object.entries(artisticScores)"
-            :key="groupKey"
-          >
-            <n-button
-              v-for="criterion in group.criteria"
-              :key="criterion.value"
-              secondary
-              :type="
-                selectedCriteria.includes(criterion.value)
-                  ? groupKey === 'fundamentals'
-                    ? 'primary'
-                    : 'warning'
-                  : 'default'
-              "
-              size="small"
-              @click="toggleCriterion(criterion.value)"
-              class="filter-controls-criterion-button"
-            >
-              <template #icon>
-                <n-icon>
-                  <component :is="criterionIcons[criterion.value]" />
-                </n-icon>
-              </template>
-              {{ criterion.label }}
-            </n-button>
-          </template>
-        </div>
-
-        <!-- Genre Buttons -->
-        <div v-if="sortingType === 'genre'" class="genre-row">
-          <n-tooltip
-            v-for="genre in genres"
-            :key="genre.value"
-            trigger="hover"
-            placement="bottom"
-            :show-arrow="true"
-            delay="1200"
-          >
-            <template #trigger>
-              <n-button
-                :type="selectedGenre === genre.value ? 'primary' : 'default'"
-                size="small"
-                secondary
-                @click="handleGenreSelect(genre.value)"
-                class="genre-button"
-                :class="{ 'custom-button': genre.value === 'custom' }"
-              >
-                <template #icon>
-                  <n-icon>
-                    <component :is="genre.icon" />
-                  </n-icon>
-                </template>
-                {{ genre.label }}
-              </n-button>
+            <template #icon>
+              <n-icon size="14">
+                <Settings20Regular />
+              </n-icon>
             </template>
-            <div
-              v-if="genre.value !== 'custom'"
-              v-html="formatGenreTooltip(genre.value)"
-            ></div>
-            <div v-else>Customize your own scoring weights</div>
-          </n-tooltip>
+            {{
+              isDateRangeExpanded ? "Hide extra filters" : "See more filters"
+            }}
+          </n-button>
         </div>
-      </div>
-    </div>
 
-    <!-- More Filters Section -->
-    <div class="date-range-section">
-      <div class="filter-controls-section-header" @click="toggleDateRange">
-        <div class="filter-controls-header-left">
-          <n-icon
-            size="16"
-            class="filter-controls-section-icon"
-            :color="`var(--text-on-primary)`"
-          >
-            <Settings20Regular />
-          </n-icon>
-          <span class="filter-controls-section-label">More filters</span>
-        </div>
-        <n-icon
-          size="14"
-          class="filter-controls-toggle-icon"
-          :class="{ rotated: isDateRangeExpanded }"
-        >
-          <svg viewBox="0 0 24 24">
-            <path
-              fill="currentColor"
-              d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
-            />
-          </svg>
-        </n-icon>
-      </div>
-
-      <!-- Collapsible More Filters -->
-      <div v-show="isDateRangeExpanded" class="filter-controls-tab-container">
-        <div class="more-filters-content">
+        <!-- More Filters Sub-section -->
+        <div v-show="isDateRangeExpanded" class="more-filters-content">
           <!-- Tags Filter Row -->
           <div class="tags-filter-row">
             <div class="filter-wrapper">
@@ -424,6 +253,166 @@
               />
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sorting Section -->
+    <div class="sorting-section">
+      <div
+        class="filter-controls-section-header sorting-header"
+        @click="toggleSorting"
+      >
+        <div class="filter-controls-header-left">
+          <n-icon
+            size="16"
+            class="filter-controls-section-icon"
+            :color="`var(--warning-color)`"
+          >
+            <Trophy20Regular />
+          </n-icon>
+          <span class="filter-controls-section-label"
+            >Rank by visual scores</span
+          >
+          <n-button
+            v-if="hasActiveSorting"
+            text
+            size="small"
+            @click="toggleSortOrder"
+            class="sort-order-btn"
+            :title="
+              sortOrder === 'desc'
+                ? 'Best First (click for Worst First)'
+                : 'Worst First (click for Best First)'
+            "
+          >
+            <n-icon size="16">
+              <svg viewBox="0 0 24 24" style="width: 16px; height: 16px">
+                <path
+                  v-if="sortOrder === 'desc'"
+                  d="M19,17H22L18,21L14,17H17V3H19V17M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
+                  fill="currentColor"
+                />
+                <path
+                  v-else
+                  d="M19,7H22L18,3L14,7H17V21H19V7M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
+                  fill="currentColor"
+                />
+              </svg>
+            </n-icon>
+          </n-button>
+          <n-button
+            v-if="hasActiveSorting"
+            quaternary
+            size="small"
+            @click="clearSorting"
+            class="clear-action-btn"
+          >
+            Clear
+          </n-button>
+          <span
+            v-if="hasActiveSorting && !isSortingExpanded"
+            class="filter-controls-active-badge"
+          >
+            Active
+          </span>
+        </div>
+        <n-icon
+          size="14"
+          class="filter-controls-toggle-icon"
+          :class="{ rotated: isSortingExpanded }"
+        >
+          <svg viewBox="0 0 24 24">
+            <path
+              fill="currentColor"
+              d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+            />
+          </svg>
+        </n-icon>
+      </div>
+      <div
+        v-if="isSortingExpanded"
+        class="sorting-wrapper filter-controls-tab-container"
+      >
+        <!-- Sorting Type Selection -->
+        <div class="sorting-type-row">
+          <n-radio-group
+            v-model:value="sortingType"
+            size="small"
+            @update:value="handleSortingTypeChange"
+            class="inline-radios"
+          >
+            <n-radio value="criteria" class="sorting-radio">Criteria</n-radio>
+            <n-radio value="genre" class="sorting-radio">Genre</n-radio>
+          </n-radio-group>
+        </div>
+        <!-- Criteria Selection -->
+        <div
+          v-if="sortingType === 'criteria'"
+          class="filter-controls-criteria-row"
+        >
+          <template
+            v-for="[groupKey, group] in Object.entries(artisticScores)"
+            :key="groupKey"
+          >
+            <n-button
+              v-for="criterion in group.criteria"
+              :key="criterion.value"
+              secondary
+              :type="
+                selectedCriteria.includes(criterion.value)
+                  ? groupKey === 'fundamentals'
+                    ? 'primary'
+                    : 'warning'
+                  : 'default'
+              "
+              size="small"
+              @click="toggleCriterion(criterion.value)"
+              class="filter-controls-criterion-button"
+            >
+              <template #icon>
+                <n-icon>
+                  <component :is="criterionIcons[criterion.value]" />
+                </n-icon>
+              </template>
+              {{ criterion.label }}
+            </n-button>
+          </template>
+        </div>
+
+        <!-- Genre Buttons -->
+        <div v-if="sortingType === 'genre'" class="genre-row">
+          <n-tooltip
+            v-for="genre in genres"
+            :key="genre.value"
+            trigger="hover"
+            placement="bottom"
+            :show-arrow="true"
+            delay="1200"
+          >
+            <template #trigger>
+              <n-button
+                :type="selectedGenre === genre.value ? 'primary' : 'default'"
+                size="small"
+                secondary
+                @click="handleGenreSelect(genre.value)"
+                class="genre-button"
+                :class="{ 'custom-button': genre.value === 'custom' }"
+              >
+                <template #icon>
+                  <n-icon>
+                    <component :is="genre.icon" />
+                  </n-icon>
+                </template>
+                {{ genre.label }}
+              </n-button>
+            </template>
+            <div
+              v-if="genre.value !== 'custom'"
+              v-html="formatGenreTooltip(genre.value)"
+            ></div>
+            <div v-else>Customize your own scoring weights</div>
+          </n-tooltip>
         </div>
       </div>
     </div>
@@ -838,9 +827,12 @@ const toggleFilters = () => {
   // Close other sections when opening this one
   if (!isFiltersExpanded.value) {
     isSortingExpanded.value = false;
-    isDateRangeExpanded.value = false;
   }
   isFiltersExpanded.value = !isFiltersExpanded.value;
+  // Collapse more filters when closing the parent
+  if (!isFiltersExpanded.value) {
+    isDateRangeExpanded.value = false;
+  }
 };
 
 const toggleSorting = () => {
@@ -850,15 +842,6 @@ const toggleSorting = () => {
     isDateRangeExpanded.value = false;
   }
   isSortingExpanded.value = !isSortingExpanded.value;
-};
-
-const toggleDateRange = () => {
-  // Close other sections when opening this one
-  if (!isDateRangeExpanded.value) {
-    isFiltersExpanded.value = false;
-    isSortingExpanded.value = false;
-  }
-  isDateRangeExpanded.value = !isDateRangeExpanded.value;
 };
 
 const handleFilterChange = () => {
@@ -1130,14 +1113,6 @@ watch(
   border: 1px dashed var(--border-color);
 }
 
-/* More Filters Section */
-.date-range-section {
-  background-color: var(--bg-container);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  overflow: hidden;
-}
-
 .filters-tab-container {
   animation: slideDown 0.3s ease-out;
 }
@@ -1153,14 +1128,29 @@ watch(
   }
 }
 
+.more-filters-toggle-wrapper {
+  display: flex;
+  justify-content: flex-start;
+  padding-top: 12px;
+}
+
+.more-filters-toggle-btn {
+  font-size: 12px;
+  color: var(--secondary-color) !important;
+  opacity: 0.85;
+  transition: opacity 0.2s;
+}
+
+.more-filters-toggle-btn:hover {
+  opacity: 1;
+}
+
 .more-filters-content {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 12px;
-  background-color: var(--bg-container);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
 }
 
 .tags-filter-row {
@@ -1325,7 +1315,7 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 8px 12px 12px;
+  padding: 8px 12px 8px;
 }
 
 .score-slider-header {
