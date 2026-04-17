@@ -64,6 +64,18 @@
         <span class="remaining-text"
           >{{ analyzedPhotosRemaining }} analyses remaining</span
         >
+        <n-button
+          quaternary
+          size="tiny"
+          @click="router.push('/settings')"
+          title="Settings"
+        >
+          <template #icon>
+            <n-icon size="14" color="var(--text-secondary)">
+              <SettingsOutline />
+            </n-icon>
+          </template>
+        </n-button>
       </div>
     </div>
 
@@ -102,7 +114,8 @@ import { useUserStore } from "@/stores/userStore";
 import { NButton, NIcon } from "naive-ui";
 import { DriveFolderUploadFilled } from "@vicons/material";
 import { InProgress } from "@vicons/carbon";
-import { AddOutline } from "@vicons/ionicons5";
+import { AddOutline, SettingsOutline } from "@vicons/ionicons5";
+import { useRouter } from "vue-router";
 
 const props = defineProps({
   settingsMode: {
@@ -111,6 +124,7 @@ const props = defineProps({
   },
 });
 
+const router = useRouter();
 const userStore = useUserStore();
 
 // Default values if usage is not available
