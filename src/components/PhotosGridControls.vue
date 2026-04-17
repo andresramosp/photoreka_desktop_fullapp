@@ -458,8 +458,12 @@
 <script setup>
 import { computed, ref, reactive, watch, h, onMounted } from "vue";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
-import { useArtisticScores } from "@/composables/useArtisticScores.js";
+import {
+  useArtisticScores,
+  getDefaultGenreFromProfile,
+} from "@/composables/useArtisticScores.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
+import { useUserStore } from "@/stores/userStore";
 import { useSearchTags } from "@/composables/useSearchTags.js";
 import CustomArtisticWeights from "./CustomArtisticWeights.vue";
 import TimeRangeFilter from "./TimeRangeFilter.vue";
@@ -509,6 +513,7 @@ const emit = defineEmits([
 
 // Genre definitions for rendering
 const genres = [
+  { value: "general", label: "General", icon: Camera20Regular },
   { value: "street", label: "Street", icon: WalkOutline },
   { value: "documentary", label: "Documentary", icon: BookOpen16Regular },
   { value: "abstract", label: "Artistic", icon: PaletteOutlined },
@@ -528,6 +533,9 @@ const props = defineProps({
 
 // Mobile detection
 const { isMobile } = useIsMobile();
+
+// User store for profile-based defaults
+const userStore = useUserStore();
 
 // Message instance
 const message = useMessage();
@@ -610,7 +618,7 @@ const isDateRangeExpanded = ref(false);
 // Quality Sorting
 const sortingType = ref("criteria"); // 'criteria' or 'genre'
 const selectedCriteria = ref([]); // Start empty (no sorting initially)
-const selectedGenre = ref("street");
+const selectedGenre = ref(getDefaultGenreFromProfile(userStore.user?.profiles));
 const sortOrder = ref("desc"); // 'asc', 'desc'
 const isSortingExpanded = ref(false); // Will be set based on mobile on mount
 
@@ -717,6 +725,7 @@ const renderCriterionTag = ({ option, handleClose }) => {
 
 // Genre options for the select (no longer needed but keeping for compatibility)
 const genreOptions = [
+  { value: "general", label: "General" },
   { value: "street", label: "Street" },
   { value: "documentary", label: "Documentary" },
   { value: "abstract", label: "Abstract" },

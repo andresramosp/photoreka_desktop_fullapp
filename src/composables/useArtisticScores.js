@@ -174,6 +174,16 @@ const artisticScores = {
 
 // Configuración de pesos por género - solo se aplicarán a criterios activos en artisticScores
 const genreWeightConfigs = {
+  general: {
+    aesthetic_quality: 1,
+    composition: 0.9,
+    storytelling: 0.5,
+    strangeness: 0.25,
+    message: 0,
+    humor: 0,
+    visual_games: 0,
+    candidness: 0,
+  },
   street: {
     aesthetic_quality: 0.6,
     composition: 0.6,
@@ -229,12 +239,35 @@ const genrePresets = Object.fromEntries(
   ]),
 );
 
+/**
+ * Map a UserProfile string to the corresponding genre preset key.
+ * Compound profiles always resolve to the street preset.
+ * @param {string|undefined|null} profile - The user profile from userStore
+ * @returns {string} - The genre preset key
+ */
+export function getDefaultGenreFromProfile(profile) {
+  const profileToGenre = {
+    general: "general",
+    "street-photography": "street",
+    documentary: "documentary",
+    artistic: "abstract",
+  };
+
+  if (!profile) return "general";
+
+  // Street always wins for compound profiles.
+  if (profile.includes("|")) return "street";
+
+  const primary = profile.split("|")[0];
+  return profileToGenre[primary] || "general";
+}
+
 export function useArtisticScores() {
   // Reactive weights for custom configuration - default to weight 1 for all criteria
   const artisticScoreWeights = ref(
     Object.fromEntries(getAllCriteriaKeys().map((key) => [key, 1])),
   );
-  const selectedGenre = ref("street");
+  const selectedGenre = ref("general");
 
   /**
    * Apply a genre preset to the weights
@@ -346,19 +379,19 @@ export function useArtisticScores() {
     return orderedScores;
   };
 
-  // Initialize with street preset by default
-  applyGenrePreset("street");
+  // Initialize with general preset by default
+  applyGenrePreset("general");
 
   /**
    * Calculate artistic score for a photo based on genre weights
    * @param {Object} artistic_scores - The artistic scores object from photo
-   * @param {string} genre - The genre preset to use ('street', 'documentary', 'abstract', 'custom')
+   * @param {string} genre - The genre preset to use ('general', 'street', 'documentary', 'abstract', 'custom')
    * @param {Object} customWeights - Custom weights object (used when genre is 'custom')
    * @returns {Object} - { average, rating, total, count }
    */
   const calculateArtisticScore = (
     artistic_scores,
-    genre = "street",
+    genre = "general",
     customWeights = null,
   ) => {
     if (!artistic_scores || typeof artistic_scores !== "object") {
@@ -369,7 +402,7 @@ export function useArtisticScores() {
     const weights =
       genre === "custom" && customWeights
         ? customWeights
-        : genrePresets[genre] || genrePresets.street;
+        : genrePresets[genre] || genrePresets.general;
     const weightedScores = [];
     let totalWeight = 0;
 

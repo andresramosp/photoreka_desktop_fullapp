@@ -289,7 +289,10 @@ import { Trophy20Regular as ScoresIcon } from "@vicons/fluent";
 
 import { api } from "@/utils/axios.js";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
-import { useArtisticScores } from "@/composables/useArtisticScores.js";
+import {
+  useArtisticScores,
+  getDefaultGenreFromProfile,
+} from "@/composables/useArtisticScores.js";
 import { tagCategoryNameMap } from "@/stores/photos.js";
 import { BookOpen16Regular } from "@vicons/fluent";
 import { PaletteOutlined } from "@vicons/material";
@@ -565,6 +568,10 @@ watch(
   () => props.selectedPhoto,
   (newPhoto) => {
     if (newPhoto) {
+      // Apply user-profile-based genre preset
+      const profileGenre = getDefaultGenreFromProfile(userStore.user?.profiles);
+      applyGenrePresetWithUI(profileGenre);
+
       // Initialize tags from photo data
       photoTags.value = newPhoto.tags ? [...newPhoto.tags] : [];
 

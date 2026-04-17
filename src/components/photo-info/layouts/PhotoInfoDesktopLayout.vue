@@ -216,6 +216,27 @@
                             <template #trigger>
                               <div
                                 class="genre-pill"
+                                :class="{ active: selectedGenre === 'general' }"
+                                @click="emit('apply-genre-preset', 'general')"
+                              >
+                                <n-icon size="14" class="genre-icon">
+                                  <CameraOutline />
+                                </n-icon>
+                                General
+                              </div>
+                            </template>
+                            <div v-html="formatGenreTooltip('general')"></div>
+                          </n-tooltip>
+
+                          <n-tooltip
+                            trigger="hover"
+                            placement="bottom"
+                            :show-arrow="true"
+                            delay="1200"
+                          >
+                            <template #trigger>
+                              <div
+                                class="genre-pill"
                                 :class="{ active: selectedGenre === 'street' }"
                                 @click="emit('apply-genre-preset', 'street')"
                               >
@@ -1041,6 +1062,7 @@ import SimilarPhotosSection from "../SimilarPhotosSection.vue";
 
 // Icons
 import {
+  CameraOutline,
   CopyOutline as CopyIcon,
   DownloadOutline as DownloadIcon,
   InformationCircleOutline as InfoIcon,
@@ -1079,7 +1101,7 @@ const props = defineProps({
     default: () => ({ average: 0, rating: "N/A" }),
   },
   scoreScale: { type: Object, default: () => ({ max: 9 }) },
-  selectedGenre: { type: String, default: "street" },
+  selectedGenre: { type: String, default: "general" },
   showCustomWeights: { type: Boolean, default: false },
   artisticScoreWeights: { type: Object, default: () => ({}) },
   orderedArtisticScores: { type: Array, default: () => [] },

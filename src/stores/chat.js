@@ -5,6 +5,15 @@ import { api } from "@/utils/axios";
 
 export const useChatStore = defineStore("chat", {
   state: () => ({
+    /** @type {{ id: string, name: string, description: string, modelPhase1: string, modelPhase2Cheap: string, modelPhase2Expensive: string, modelPhase2Lite: string }[]} */
+    chatModes: [],
+
+    /** Selected chat intelligence mode ID */
+    selectedModeId: null,
+
+    /** Server-provided default chat intelligence mode ID */
+    defaultModeId: null,
+
     /** @type {{ id: number, title: string|null, createdAt: string, updatedAt: string }[]} */
     conversations: [],
 
@@ -17,6 +26,7 @@ export const useChatStore = defineStore("chat", {
     /** Loading states */
     isLoadingConversations: false,
     isLoadingMessages: false,
+    isLoadingModes: false,
 
     /** Total conversations count (from server pagination) */
     totalConversations: 0,
@@ -31,9 +41,44 @@ export const useChatStore = defineStore("chat", {
         (c) => c.id === state.activeConversationId,
       );
     },
+
+    activeMode: (state) => {
+      if (!state.selectedModeId) return state.chatModes[0] || null;
+      return (
+        state.chatModes.find((mode) => mode.id === state.selectedModeId) ||
+        state.chatModes[0] ||
+        null
+      );
+    },
   },
 
   actions: {
+    async fetchModes() {
+      this.isLoadingModes = true;
+      try {
+        const { data } = await api.get("/api/chat/modes");
+        this.chatModes = data.modes || [];
+        this.defaultModeId =
+          data.defaultModeId || this.chatModes[0]?.id || null;
+
+        // Always pick the 'default' mode if it exists, otherwise fall back to server default
+        const defaultMode = this.chatModes.find(
+          (mode) => mode.id === "default",
+        );
+        this.selectedModeId = defaultMode?.id || this.defaultModeId;
+      } catch (error) {
+        console.error("[ChatStore] Failed to fetch chat modes:", error);
+      } finally {
+        this.isLoadingModes = false;
+      }
+    },
+
+    setSelectedMode(modeId) {
+      const exists = this.chatModes.some((mode) => mode.id === modeId);
+      if (!exists) return;
+      this.selectedModeId = modeId;
+    },
+
     /**
      * Fetch the list of conversations for the sidebar.
      */
@@ -103,6 +148,7 @@ export const useChatStore = defineStore("chat", {
 
       const payload = {
         message: text,
+        ...(this.selectedModeId && { modeId: this.selectedModeId }),
         ...(this.activeConversationId && {
           conversationId: this.activeConversationId,
         }),

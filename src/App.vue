@@ -377,7 +377,6 @@ watch(
       collectionsStore.getOrFetch(true);
       seriesStore.getOrFetch(true);
       userStore.processPatterns();
-      ensureWarmUp("railway_cpu");
     } else {
       // Usuario se desautenticó - resetear stores
       if (wasAuth !== undefined) {
@@ -391,6 +390,15 @@ watch(
     }
   },
   { immediate: true }, // Ejecutar inmediatamente para capturar estado inicial
+);
+
+watch(
+  [() => route.fullPath, () => userStore.isAuthenticated, routerReady],
+  ([, isAuth, isRouterReady]) => {
+    if (!isRouterReady || !isAuth) return;
+    void ensureWarmUp("railway_cpu");
+  },
+  { immediate: true },
 );
 
 // Safety: si un usuario acaba en "/" (por cualquier flujo), redirigir al destino correcto

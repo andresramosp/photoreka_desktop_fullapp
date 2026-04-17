@@ -171,6 +171,14 @@
                   <div class="mobile-genre-scroll">
                     <div
                       class="mobile-genre-pill"
+                      :class="{ active: selectedGenre === 'general' }"
+                      @click="emit('apply-genre-preset', 'general')"
+                    >
+                      <n-icon size="14"><CameraOutline /></n-icon>
+                      General
+                    </div>
+                    <div
+                      class="mobile-genre-pill"
                       :class="{ active: selectedGenre === 'street' }"
                       @click="emit('apply-genre-preset', 'street')"
                     >
@@ -708,6 +716,7 @@ import {
 
 // Icons
 import {
+  CameraOutline,
   CopyOutline as CopyIcon,
   CloseOutline as CloseIcon,
   DownloadOutline as DownloadIcon,
@@ -748,7 +757,7 @@ const props = defineProps({
     default: () => ({ average: 0, rating: "N/A" }),
   },
   scoreScale: { type: Object, default: () => ({ max: 9 }) },
-  selectedGenre: { type: String, default: "street" },
+  selectedGenre: { type: String, default: "general" },
   showCustomWeights: { type: Boolean, default: false },
   artisticScoreWeights: { type: Object, default: () => ({}) },
   orderedArtisticScores: { type: Array, default: () => [] },

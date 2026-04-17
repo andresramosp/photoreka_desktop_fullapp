@@ -553,7 +553,10 @@ import { useCollectionsStore } from "@/stores/collections.js";
 import { useUserStore } from "@/stores/userStore";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection.js";
-import { useArtisticScores } from "@/composables/useArtisticScores.js";
+import {
+  useArtisticScores,
+  getDefaultGenreFromProfile,
+} from "@/composables/useArtisticScores.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { CheckmarkSquare24Filled, SelectAllOn24Regular } from "@vicons/fluent";
@@ -693,7 +696,7 @@ const tagFilterResults = ref(null); // Array of photo IDs from tag search
 const artisticScoreFilters = ref({}); // Minimum score thresholds per criterion
 const sortingType = ref("none"); // 'none', 'criteria' or 'genre'
 const selectedCriteria = ref([]);
-const selectedGenre = ref("street");
+const selectedGenre = ref(getDefaultGenreFromProfile(userStore.user?.profiles));
 const customWeights = ref({});
 const sortOrder = ref("desc"); // 'asc', 'desc'
 
