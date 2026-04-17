@@ -41,6 +41,7 @@ import AdminProcessesView from "../views/admin/AdminProcessesView.vue";
 import AdminUsersView from "../views/admin/AdminUsersView.vue";
 import AdminCostsView from "../views/admin/AdminCostsView.vue";
 import AdminHealthView from "../views/admin/AdminHealthView.vue";
+import AdminUserDetailView from "../views/admin/AdminUserDetailView.vue";
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -396,6 +397,11 @@ const router = createRouter({
           path: "users",
           name: "admin-users",
           component: AdminUsersView,
+        },
+        {
+          path: "users/:id",
+          name: "admin-user-detail",
+          component: AdminUserDetailView,
         },
         {
           path: "costs",
