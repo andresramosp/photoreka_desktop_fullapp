@@ -109,6 +109,11 @@ User: "How has my photography style evolved?" / "What subjects do I photograph m
 - Style/quality question → \`catalog_sample(scan_mode="technical")\` + \`overall_catalog_view\` in parallel.
 - Subject/theme question → \`catalog_sample(scan_mode="semantic")\` + \`overall_catalog_view\` in parallel.
 
+### Pattern G — User frustration / dissatisfaction with results
+User shows frustration, repeats requests with different wording, or explicitly says results don't match (e.g. "these aren't good enough", "not what I'm looking for", "I give up").
+**Think:** The chat has limits — other app tools may serve the user better. Fetch feature info so the evaluation phase can suggest the right tool.
+\`app_knowledge({ section: "usage_and_help" })\` → then \`done\`.
+
 ## Core rules
 1. **Sequential** when one tool's output feeds another's input. **Parallel** when independent — including multiple \`search_advanced\` calls with unrelated criteria.
 2. **\`done\`** must always be called to signal completion.`
@@ -138,6 +143,16 @@ Photos may arrive with thumbnails (for visual evaluation) or text-only descripti
 - **Honesty:** Be honest, constructive, and insightful — even if that means tough feedback. Do not flatter the user gratuitously.
 - **Formatting:** Use **bold** for filenames, key concepts, and any term worth emphasizing. Use it sparingly — only for genuinely important words, not decoration.
 - Use filenames for reference in your text, never raw IDs or tool names.
+
+## Frustration & redirection
+If the user is dissatisfied or frustrated:
+- **Acknowledge** honestly: chat is an auxiliary tool with limits (sample size, AI subjectivity).
+- **Redirect** to a better-suited feature using \`app_knowledge\` data. Examples:
+    - Rankings/Portfolios → **Workspace / Search** or **Report & Statistics**.
+    - Fine-tuning → **Collections** or **Series**.
+    - Catalog analysis → **Portfolio Review**.
+    - Visual exploration → **3D Atlas** or **Canvas**.
+- **Tone:** Empathetic, practical. Offer 1 concrete suggestion. Chat is a starting point.
 
 ## Capacity limits
 - You can evaluate **only the photos actually provided** to you — not the full contents of a collection or series. Each search yields ≤ 20; collection/series samples ≤ 15.
@@ -242,6 +257,14 @@ export type AgentChatResult = {
 type ModelName = string
 type ModelProvider = 'openai' | 'gemini' | 'deepseek' | 'xai' | 'qwen'
 
+type ChatIntelligenceMode = {
+  id: string
+  modelPhase1: string
+  modelPhase2Cheap: string
+  modelPhase2Expensive: string
+  modelPhase2Lite: string
+}
+
 type PhotoIdGroup = {
   tool: string
   ids: number[]
@@ -250,6 +273,7 @@ type PhotoIdGroup = {
 
 type ChatSession = {
   userId: number
+  modeId: string
   message: string
   history: ChatMessage[]
   modelName: ModelName
@@ -277,19 +301,6 @@ const PHASE2_MAX_THUMBNAILS = 20 // how many of those can carry a thumbnail imag
 
 /** Tools whose Phase 2 photo results are eligible for thumbnail images. */
 const IMAGE_ELIGIBLE_TOOLS = new Set(['search_advanced', 'get_photo_info'])
-
-/** Phase 1 model — fixed, no classification needed. */
-const MODEL_PHASE1: ModelName = 'gemini-3-flash-preview'
-
-/**
- * Phase 2 model selection — driven by `has_photo_intent` + `needs_artistic_evaluation`.
- * No photo intent           → lite  model (cheapest, text-only answer).
- * Photo intent, no artistic → cheap model (handles photos but no deep evaluation).
- * Photo intent + artistic   → expensive model (full curatorial / aesthetic reasoning).
- */
-const MODEL_PHASE2_EXPENSIVE: ModelName = 'gemini-3-flash-preview' //'gpt-5.1'
-const MODEL_PHASE2_CHEAP: ModelName = 'gemini-3-flash-preview'
-const MODEL_PHASE2_LITE: ModelName = 'gemini-3.1-flash-lite-preview'
 
 // ══════════════════════════════════════════════════════════════
 // SERVICE
@@ -319,6 +330,7 @@ export default class LangchainAgentService {
     conversationId: number,
     message: string,
     contextPhotoIds: number[] = [],
+    selectedMode: ChatIntelligenceMode,
     forceCheapModel = false
   ): Promise<AgentChatResult> {
     const session = await this.initChatSession(
@@ -326,6 +338,7 @@ export default class LangchainAgentService {
       conversationId,
       message,
       contextPhotoIds,
+      selectedMode,
       forceCheapModel
     )
     await this.prefetchAttachedPhotos(session, contextPhotoIds)
@@ -343,6 +356,7 @@ export default class LangchainAgentService {
     conversationId: number,
     message: string,
     contextPhotoIds: number[],
+    selectedMode: ChatIntelligenceMode,
     forceCheapModel: boolean
   ): Promise<ChatSession> {
     const convService = new ConversationService()
@@ -351,19 +365,20 @@ export default class LangchainAgentService {
       this.queryService.classifyQuery(message),
     ])
     const { has_photo_intent, needs_artistic_evaluation } = classification
-    const modelName = MODEL_PHASE1
+    const modelName = selectedMode.modelPhase1 as ModelName
     let modelNamePhase2: ModelName
     if (forceCheapModel) {
-      modelNamePhase2 = MODEL_PHASE2_LITE
+      modelNamePhase2 = selectedMode.modelPhase2Lite as ModelName
     } else if (!has_photo_intent) {
-      modelNamePhase2 = MODEL_PHASE2_LITE
+      modelNamePhase2 = selectedMode.modelPhase2Lite as ModelName
     } else if (needs_artistic_evaluation) {
-      modelNamePhase2 = MODEL_PHASE2_EXPENSIVE
+      modelNamePhase2 = selectedMode.modelPhase2Expensive as ModelName
     } else {
-      modelNamePhase2 = MODEL_PHASE2_CHEAP
+      modelNamePhase2 = selectedMode.modelPhase2Cheap as ModelName
     }
     console.log(
-      `[Agent] 🔍 Query classification: photo=${has_photo_intent} artistic=${needs_artistic_evaluation}` +
+      `[Agent] 🧠 Mode: ${selectedMode.id} | ` +
+        `Query classification: photo=${has_photo_intent} artistic=${needs_artistic_evaluation}` +
         (forceCheapModel ? ' (overridden → lite)' : '') +
         ` → Phase1=${modelName} | Phase2=${modelNamePhase2}`
     )
@@ -413,6 +428,7 @@ export default class LangchainAgentService {
 
     return {
       userId,
+      modeId: selectedMode.id,
       message,
       history,
       modelName,
@@ -706,7 +722,8 @@ export default class LangchainAgentService {
           try {
             result = await t.invoke(tc.args)
           } catch (err) {
-            result = JSON.stringify({ error: `Tool execution failed: ${err.message}` })
+            const errorMessage = err instanceof Error ? err.message : String(err)
+            result = JSON.stringify({ error: `Tool execution failed: ${errorMessage}` })
           }
         } else {
           result = JSON.stringify({ error: `Unknown tool: ${tc.name}` })
@@ -1188,7 +1205,7 @@ export default class LangchainAgentService {
     return new ChatOpenAI({
       apiKey: process.env.OPENAI_KEY,
       model,
-      reasoning: { effort: effortOverride ?? 'medium' },
+      // reasoning: { effort: effortOverride ?? 'medium' },
     })
   }
 

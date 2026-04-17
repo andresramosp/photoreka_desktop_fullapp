@@ -333,6 +333,7 @@ router
 router
   .group(() => {
     router.get('/api/chat/reset', [ChatController, 'reset'])
+    router.get('/api/chat/modes', [ChatController, 'listModes'])
 
     // Conversation management endpoints
     router.get('/api/conversations', [ChatController, 'listConversations'])

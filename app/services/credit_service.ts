@@ -5,6 +5,9 @@ import UsageService from '#services/usage_service'
 /** 1 credit = €0.001 */
 const EUR_PER_CREDIT = 0.001
 
+/** Default margin applied on top of the raw EUR cost for variable-cost LLM usage. */
+export const DEFAULT_COST_MARGIN_PERCENT = 30
+
 // ─── Fixed credit costs ─────────────────────────────────
 
 /** Pessimistic fixed credit cost for RunPod GPU in precise mode */
@@ -16,6 +19,30 @@ export const CLIP_CROP_CREDITS = 5
 // ─── Service ─────────────────────────────────────────────
 
 export default class CreditService {
+  /**
+   * Margin percent applied to variable EUR costs before converting them to credits.
+   * Override with CREDIT_MARGIN_PERCENT if needed.
+   */
+  static getCostMarginPercent(): number {
+    const configuredPercent = Number(process.env.CREDIT_MARGIN_PERCENT)
+
+    if (!Number.isFinite(configuredPercent) || configuredPercent < 0) {
+      return DEFAULT_COST_MARGIN_PERCENT
+    }
+
+    return configuredPercent
+  }
+
+  /**
+   * Apply the configured pricing margin to a raw EUR cost.
+   */
+  static applyMargin(costEur: number): number {
+    if (costEur <= 0) return 0
+
+    const multiplier = 1 + this.getCostMarginPercent() / 100
+    return costEur * multiplier
+  }
+
   /**
    * Convert a EUR cost to credits (rounded up, minimum 1).
    */
@@ -47,7 +74,7 @@ export default class CreditService {
    * Returns the number of credits charged.
    */
   static async charge(userId: number, costEur: number): Promise<number> {
-    const credits = this.eurToCredits(costEur)
+    const credits = this.eurToCredits(this.applyMargin(costEur))
     if (credits <= 0) return 0
     await UsageService.incrementCreditsUsed(userId, credits)
     return credits

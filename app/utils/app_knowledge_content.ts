@@ -239,6 +239,8 @@ Photos only appear in tools like Search, Collections, Atlas, etc. when they are 
 
 **Features:**
 - Adjustable grid view
+- Search filters by visual aspects and date range
+- Ranking and filters by artistic scores (aesythic, composition, storytelling, humor, etc.)
 - Photo info panel access (click photo)
 - Multi-selection for batch actions
 - Available on desktop and mobile

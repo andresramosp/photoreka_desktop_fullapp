@@ -39,6 +39,12 @@ export type ModelName =
   | 'gpt-4.1'
   | 'gpt-5'
   | 'gpt-5.1'
+  | 'gpt-5.2'
+  | 'gpt-5.3-chat-latest'
+  | 'gpt-5.4'
+  | 'gpt-5.4-mini'
+  | 'gpt-5.4-nano'
+  | 'gpt-5.4-pro'
   | 'gpt-5-mini'
   | 'gpt-5-nano'
   | 'gpt-5-chat-latest'
@@ -82,6 +88,36 @@ export const PRICES = {
     input_cache_miss: 1.25 / 1_000_000,
     input_cache_hit: 0.125 / 1_000_000,
     output: 10 / 1_000_000,
+  },
+  'gpt-5.2': {
+    input_cache_miss: 1.75 / 1_000_000,
+    input_cache_hit: 0.175 / 1_000_000,
+    output: 14 / 1_000_000,
+  },
+  'gpt-5.3-chat-latest': {
+    input_cache_miss: 1.75 / 1_000_000,
+    input_cache_hit: 0.175 / 1_000_000,
+    output: 14 / 1_000_000,
+  },
+  'gpt-5.4': {
+    input_cache_miss: 2.5 / 1_000_000,
+    input_cache_hit: 0.25 / 1_000_000,
+    output: 15 / 1_000_000,
+  },
+  'gpt-5.4-mini': {
+    input_cache_miss: 0.75 / 1_000_000,
+    input_cache_hit: 0.075 / 1_000_000,
+    output: 4.5 / 1_000_000,
+  },
+  'gpt-5.4-nano': {
+    input_cache_miss: 0.2 / 1_000_000,
+    input_cache_hit: 0.02 / 1_000_000,
+    output: 1.25 / 1_000_000,
+  },
+  'gpt-5.4-pro': {
+    input_cache_miss: 30 / 1_000_000,
+    input_cache_hit: 0,
+    output: 180 / 1_000_000,
   },
   'gpt-5-mini': {
     input_cache_miss: 0.25 / 1_000_000,
@@ -861,8 +897,10 @@ export default class ModelsService {
   ): Promise<any> {
     let cacheDuration = 60 * 5
     try {
-      // Si el modelo es gpt-5, gpt-5-mini o gpt-5-nano (pero NO gpt-5-chat-latest), no pasar temperature y usar max_completion_tokens
-      const isGpt5NonChat = ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-5.1'].includes(model)
+      // Si el modelo es un GPT-5 base/non-chat, no pasar temperature y usar max_completion_tokens
+      const isGpt5NonChat = ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-5.1', 'gpt-5.2'].includes(
+        model
+      )
 
       let payload: any = {
         model,
