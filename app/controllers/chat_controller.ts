@@ -177,6 +177,7 @@ export default class ChatController {
       if (result.cost?.total?.costEur) {
         UserCostService.record(user.id, 'chat', result.cost.total.costEur, 1, {
           referenceId: isEphemeral ? undefined : String(resolvedConversationId),
+          task: 'chat_message',
           metadata: result.cost?.total
             ? {
                 inputTokens: result.cost.total.inputTokens,
