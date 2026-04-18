@@ -335,6 +335,18 @@
 
       <!-- Normal flat view -->
       <template v-else>
+        <!-- Suggest Photos Button -->
+        <div
+          v-if="props.showSuggestButton && displayedPhotos.length > 0"
+          class="suggest-photos-card"
+          @click="emit('suggest-photos')"
+          title="Suggest similar photos to add"
+        >
+          <n-icon size="48" color="var(--primary-color)">
+            <AddOutline />
+          </n-icon>
+          <span class="suggest-label">Suggest Photos</span>
+        </div>
         <PhotoCardHub
           v-for="photo in displayedPhotos"
           :key="photo.id"
@@ -350,18 +362,6 @@
           :artistic-score="getPhotoArtisticScore(photo)"
           :matched-tags="photo.matchedTags"
         />
-        <!-- Suggest Photos Button -->
-        <div
-          v-if="props.showSuggestButton && displayedPhotos.length > 0"
-          class="suggest-photos-card"
-          @click="emit('suggest-photos')"
-          title="Suggest similar photos to add"
-        >
-          <n-icon size="48" color="var(--primary-color)">
-            <AddOutline />
-          </n-icon>
-          <span class="suggest-label">Suggest Photos</span>
-        </div>
       </template>
     </div>
 
