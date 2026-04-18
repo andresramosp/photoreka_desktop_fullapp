@@ -27,7 +27,8 @@ export abstract class AnalyzerTask {
     this.analyzerProcess = analyzerProcess
     this.modelsService = createTrackedModelsService(
       new ModelsService(),
-      analyzerProcess.costTracker
+      analyzerProcess.costTracker,
+      this
     )
   }
 
