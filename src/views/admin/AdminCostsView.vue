@@ -48,14 +48,12 @@
           }}</span>
         </div>
         <div class="kpi-card">
-          <span class="kpi-label">Avg / Process</span>
-          <span class="kpi-value"
-            >€{{ fmt(data.totals.avgCostPerProcess) }}</span
-          >
+          <span class="kpi-label">Avg / Call</span>
+          <span class="kpi-value">€{{ fmt(data.totals.avgCostPerCall) }}</span>
         </div>
         <div class="kpi-card">
-          <span class="kpi-label">Processes</span>
-          <span class="kpi-value">{{ data.totals.totalProcesses }}</span>
+          <span class="kpi-label">Users</span>
+          <span class="kpi-value">{{ data.totals.totalUsers }}</span>
         </div>
       </div>
 
@@ -74,8 +72,7 @@
               <div class="bar-tooltip" v-if="hoveredMonth === m">
                 <strong>{{ formatMonthLabel(m.month) }}</strong
                 ><br />
-                €{{ fmt(m.costEur) }} · {{ m.calls }} calls ·
-                {{ m.processes }} proc.
+                €{{ fmt(m.costEur) }} · {{ m.calls }} calls
               </div>
               <div
                 class="bar-fill"
@@ -151,7 +148,7 @@
 
       <!-- ═══ Task Breakdown ═══ -->
       <div class="card">
-        <h3 class="card-title">Cost by Analysis Task</h3>
+        <h3 class="card-title">Cost by Task</h3>
         <div v-if="data.byTask.length === 0" class="no-data">No data yet</div>
         <div v-else class="task-table">
           <div class="task-header">
@@ -179,7 +176,7 @@
           <div class="task-header">
             <span>User</span>
             <span>Total Cost</span>
-            <span>Processes</span>
+            <span>This Month</span>
             <span>Top Category</span>
           </div>
           <div v-for="u in data.topUsers" :key="u.id" class="task-row">
@@ -190,7 +187,7 @@
               }}</span>
             </span>
             <span class="cost-value">€{{ fmt(u.totalCostEur) }}</span>
-            <span>{{ u.processesCount }}</span>
+            <span>€{{ fmt(u.thisMonthCostEur) }}</span>
             <span>{{ topCategory(u.byCategory) }}</span>
           </div>
         </div>
@@ -211,15 +208,14 @@ interface CostsData {
     lastMonthCostEur: number;
     monthOverMonthPct: number | null;
     totalCalls: number;
-    avgCostPerProcess: number;
-    totalProcesses: number;
+    avgCostPerCall: number;
     totalUsers: number;
   };
   monthly: {
     month: string;
     costEur: number;
     calls: number;
-    processes: number;
+    byCategory: Record<string, number>;
   }[];
   byCategory: {
     category: string;
@@ -234,7 +230,7 @@ interface CostsData {
     name: string;
     email: string;
     totalCostEur: number;
-    processesCount: number;
+    thisMonthCostEur: number;
     byCategory: Record<string, { costInEur: number; calls: number }>;
   }[];
 }
