@@ -34,6 +34,16 @@ export default class SearchController {
             code: 'INSUFFICIENT_CREDITS',
           })
         }
+        UserCostService.record(
+          user.id,
+          'search',
+          CreditService.creditsToEstimatedEur(PRECISE_GPU_CREDITS),
+          1,
+          {
+            task: 'gpu_precise_search',
+            metadata: { fixedCharge: true, credits: PRECISE_GPU_CREDITS },
+          }
+        ).catch(() => {})
       }
 
       const result = await searchService.searchSemanticSync(query.description, user.id, {
@@ -89,6 +99,16 @@ export default class SearchController {
             code: 'INSUFFICIENT_CREDITS',
           })
         }
+        UserCostService.record(
+          user.id,
+          'search',
+          CreditService.creditsToEstimatedEur(PRECISE_GPU_CREDITS),
+          1,
+          {
+            task: 'gpu_precise_search',
+            metadata: { fixedCharge: true, credits: PRECISE_GPU_CREDITS },
+          }
+        ).catch(() => {})
       }
 
       const stream = searchService.searchSemanticStream(query.description, user.id, {
@@ -221,6 +241,16 @@ export default class SearchController {
             code: 'INSUFFICIENT_CREDITS',
           })
         }
+        UserCostService.record(
+          user.id,
+          'search',
+          CreditService.creditsToEstimatedEur(CLIP_CROP_CREDITS),
+          1,
+          {
+            task: 'clip_crop_embedding',
+            metadata: { fixedCharge: true, credits: CLIP_CROP_CREDITS },
+          }
+        ).catch(() => {})
       }
 
       const result = await searchService.searchByPhotos(query, user.id)

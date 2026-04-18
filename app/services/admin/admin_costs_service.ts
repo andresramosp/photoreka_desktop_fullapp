@@ -256,7 +256,7 @@ export default class AdminCostsService {
         cl.user_id,
         u.name,
         u.email,
-        COALESCE(SUM(cl.cost_in_eur), 0)::float AS total_cost_eur,
+        COALESCE(SUM(cl.cat_cost), 0)::float AS total_cost_eur,
         json_object_agg(
           cl.category,
           json_build_object('costInEur', cl.cat_cost, 'calls', cl.cat_calls)

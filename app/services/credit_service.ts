@@ -81,6 +81,14 @@ export default class CreditService {
   }
 
   /**
+   * Convert a credit amount back to its estimated EUR cost (without margin).
+   * Useful for recording fixed charges in cost_logs at their approximate real cost.
+   */
+  static creditsToEstimatedEur(credits: number): number {
+    return credits * EUR_PER_CREDIT
+  }
+
+  /**
    * Charge a fixed number of credits for a preset-cost operation
    * (e.g. search precise = N credits).
    */
