@@ -49,6 +49,7 @@ export default class SearchController {
         cursor: query.options.cursor,
         source: query.options.source || null,
         searchId: query.options.searchId || null,
+        lightweight: query.options.lightweight || false,
       })
 
       UserCostService.recordFromTracker(user.id, searchService.costTracker).catch(() => {})

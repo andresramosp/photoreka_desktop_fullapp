@@ -55,6 +55,8 @@ export type SearchOptions = {
   searchId?: string
   /** When provided, restricts the search pool to only these photo IDs (after collection/aspect filters). */
   candidateIds?: number[]
+  /** When true, returns only scoring data (id, labelScore, totalScore) without fetching full photo models. */
+  lightweight?: boolean
 }
 
 export type SearchTagsOptions = SearchOptions & {
@@ -243,6 +245,7 @@ export default class SearchTextService {
       withInsights = false,
       searchId, // 👈 nuevo
       candidateIds,
+      lightweight = false,
     } = options
 
     if (searchMode === 'curation') {
@@ -278,11 +281,30 @@ export default class SearchTextService {
       userId?.toString()
     )
 
-    let { paginatedPhotos, hasMore } = await this.getPaginatedPhotosByCursor(
-      embeddingScoredPhotos,
-      pageSize,
-      cursor
-    )
+    let paginatedPhotos
+    let hasMore
+
+    if (lightweight) {
+      // Lightweight mode: return only scoring data without DB fetch
+      const pageSlice = embeddingScoredPhotos.slice(0, pageSize)
+      hasMore = pageSize < embeddingScoredPhotos.length
+      paginatedPhotos = pageSlice.map((scoredPhoto) => ({
+        photo: {
+          id: scoredPhoto.id,
+          labelScore: scoredPhoto.labelScore,
+          totalScore: scoredPhoto.totalScore,
+          imageScore: scoredPhoto.imageScore,
+          tagScore: scoredPhoto.tagScore,
+          descScore: scoredPhoto.descScore,
+        },
+      }))
+    } else {
+      ;({ paginatedPhotos, hasMore } = await this.getPaginatedPhotosByCursor(
+        embeddingScoredPhotos,
+        pageSize,
+        cursor
+      ))
+    }
 
     let modelCosts = []
 
