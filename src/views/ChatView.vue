@@ -642,10 +642,27 @@
             What ChatLab cannot do
           </h4>
           <ul>
-            <li>Create, edit, or delete collections, series, or canvases.</li>
+            <li>Create, edit, or delete collections, series or canvases.</li>
             <li>Delete, move, or modify your photos in any way.</li>
             <li>Perform any write operation on your library.</li>
           </ul>
+
+          <h4 class="chatlab-info-h4">
+            <n-icon :size="14" class="chatlab-h4-icon chatlab-h4-icon--scope"
+              ><EyeIcon
+            /></n-icon>
+            Visibility scope
+          </h4>
+          <p>
+            Each prompt returns a focused selection of up to
+            <strong>20 photos</strong>. While suggestions are informed by your
+            overall library, the output is intentionally limited to keep results
+            concise and usable — use
+            <RouterLink to="/search">Search</RouterLink>,
+            <RouterLink to="/2d-view">Atlas</RouterLink>, or
+            <RouterLink to="/workspace">Workspace</RouterLink>
+            to explore further.
+          </p>
 
           <h4 class="chatlab-info-h4">
             <n-icon
@@ -658,33 +675,13 @@
           <p>
             AI curation carries an inherent margin of interpretation. If a
             suggestion doesn't match your vision, try the
-            <strong>visual score filters and rankings</strong> in Search, Atlas,
-            or Workspace for a data-driven first pass, then apply your own eye
-            for the final pick. ChatLab is a second opinion, not the last word —
-            the best curation always comes from the photographer.
-          </p>
-
-          <h4 class="chatlab-info-h4">
-            <n-icon :size="14" class="chatlab-h4-icon chatlab-h4-icon--scope"
-              ><EyeIcon
-            /></n-icon>
-            Visibility scope
-          </h4>
-          <p>
-            For each prompt, ChatLab first performs a recall pass across your
-            <strong>entire library</strong>, then narrows down to roughly
-            <strong>20 photos visually</strong> and up to
-            <strong>50 via metadata</strong>, supplemented by aggregate
-            statistics about your catalog. This means results are informed by
-            the full breadth of your work, but the final selection window is
-            intentionally focused — use tools like <strong>Search</strong>,
-            <strong>Atlas</strong>, or <strong>Workspace</strong> to explore
-            beyond that window.
-          </p>
-
-          <p class="chatlab-info-closing">
-            Use ChatLab to spark ideas, then bring those ideas to life with the
-            rest of Photoreka's toolkit.
+            <strong>visual score filters and rankings</strong> in
+            <RouterLink to="/search">Search</RouterLink>,
+            <RouterLink to="/2d-view">Atlas</RouterLink>, or
+            <RouterLink to="/workspace">Workspace</RouterLink> for a data-driven
+            first pass, then apply your own eye for the final pick. ChatLab is a
+            second opinion, not the last word — the best curation emerges from
+            the <strong>simbiosis between you and the system</strong>.
           </p>
         </div>
       </div>
@@ -2065,6 +2062,14 @@ const formatRelativeDate = (dateStr: string) => {
 
 .chatlab-info-body li::marker {
   color: var(--accent-color);
+}
+
+.chatlab-info-body a,
+.chatlab-info-body a:visited,
+.chatlab-info-body a:link {
+  color: var(--accent-color);
+  text-decoration: none !important;
+  text-underline-offset: 2px;
 }
 
 .chatlab-info-closing {

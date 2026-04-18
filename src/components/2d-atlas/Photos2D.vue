@@ -92,6 +92,7 @@
       @select-pattern="handleSelectPattern"
       @fly-to-pattern="flyToPattern"
       @tag-search="handleTagSearch"
+      @text-search="handleTextSearch"
     />
 
     <!-- Config Panel Component (Mobile) -->
@@ -117,6 +118,7 @@
       @select-pattern="handleSelectPattern"
       @fly-to-pattern="flyToPattern"
       @tag-search="handleTagSearch"
+      @text-search="handleTextSearch"
     />
 
     <!-- Hovered Photo Info -->
@@ -125,6 +127,41 @@
       class="photo-tooltip"
       :style="{ left: tooltipPosition.x + 'px', top: tooltipPosition.y + 'px' }"
     >
+      <!-- Search score badge (top-right corner of tooltip) -->
+      <div
+        v-if="textSearchScoreMap && textSearchScoreMap.has(hoveredPhoto.id)"
+        class="tooltip-score-badge"
+      >
+        <svg
+          v-for="star in [3, 2, 1]"
+          :key="star"
+          viewBox="0 0 24 24"
+          class="tooltip-star"
+          :class="{
+            filled: star <= getHoveredPhotoStars(),
+            empty: star > getHoveredPhotoStars(),
+          }"
+          width="14"
+          height="14"
+        >
+          <path
+            fill="currentColor"
+            d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22L12 18.77L5.82 22L7 14.14L2 9.27l6.91-1.01L12 2z"
+          />
+        </svg>
+        <svg
+          v-if="getHoveredPhotoStars() === 0"
+          viewBox="0 0 24 24"
+          class="tooltip-star-question"
+          width="14"
+          height="14"
+        >
+          <path
+            fill="currentColor"
+            d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"
+          />
+        </svg>
+      </div>
       <img
         v-if="hoveredPhoto.thumbnailUrl"
         :src="hoveredPhoto.thumbnailUrl"
@@ -301,6 +338,7 @@ import { useTagBeacons2D } from "@/composables/2d-viewer/useTagBeacons2D.js";
 import { useTheme } from "@/composables/useTheme.js";
 import { isMobileDevice } from "@/utils/utils.js";
 import { api } from "@/utils/axios";
+import { usePhotoScored } from "@/composables/usePhotoScored.js";
 
 // Props
 const props = defineProps({
@@ -318,6 +356,7 @@ const props = defineProps({
 const message = useMessage();
 const router = useRouter();
 const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
+const { computePhotoStars } = usePhotoScored();
 const {
   isProcessing: isProcessingTool,
   showToolSelector,
@@ -540,6 +579,9 @@ const timeRangeFilter = ref(null);
 const searchResults = ref(null);
 const tagFilterResults = ref(null); // Tag search results: Map<photoId, { matchedIncluded, matchedExcluded }>
 
+// Text search state: Map<photoId, { labelScore, totalScore, stars }>
+const textSearchScoreMap = ref(null);
+const TEXT_SEARCH_MAX_RESULTS = 2000;
 // Build a Map for fast photo lookup by id (for filtering, selection, etc.)
 const photoById = computed(() => {
   const map = new Map();
@@ -1636,14 +1678,45 @@ const loadPhotosToPixi = async () => {
   scheduleHiResUpdate();
 };
 
+// Opacity mapping for text search stars
+const TEXT_SEARCH_OPACITY = {
+  3: 1.0, // excellent → full opacity
+  2: 0.7, // good → slightly less
+  1: 0.4, // fair → less
+  0: 0.12, // poor / question mark → almost invisible
+  none: 0.03, // not in results → nearly invisible
+};
+
 // Update sprite visibility based on filters
 const updateSpriteVisibility = () => {
   if (!photoSprites.value.size) return;
 
   const filteredIds = new Set(filteredPhotos.value.map((p) => p.id));
+  const scoreMap = textSearchScoreMap.value;
 
   photoSprites.value.forEach((sprite, photoId) => {
-    sprite.visible = filteredIds.has(photoId);
+    const isFiltered = filteredIds.has(photoId);
+
+    if (!isFiltered) {
+      sprite.visible = false;
+      sprite.alpha = 1;
+      return;
+    }
+
+    sprite.visible = true;
+
+    // If text search is active, apply opacity based on score
+    if (scoreMap) {
+      const scoreData = scoreMap.get(photoId);
+      if (scoreData) {
+        sprite.alpha =
+          TEXT_SEARCH_OPACITY[scoreData.stars] ?? TEXT_SEARCH_OPACITY[0];
+      } else {
+        sprite.alpha = TEXT_SEARCH_OPACITY.none;
+      }
+    } else {
+      sprite.alpha = 1;
+    }
   });
 
   scheduleLodUpdate();
@@ -2258,6 +2331,68 @@ const handleTagSearch = async (tags) => {
   }
 };
 
+// Text semantic search handler
+const handleTextSearch = async ({ query, searchMode = "broad", onDone }) => {
+  // Clear search if query is empty
+  if (!query || !query.trim()) {
+    textSearchScoreMap.value = null;
+    updateSpriteVisibility();
+    onDone?.();
+    return;
+  }
+
+  try {
+    const { data: response } = await api.post("/api/search/semantic/sync", {
+      description: query.trim(),
+      options: {
+        iteration: 1,
+        pageSize: TEXT_SEARCH_MAX_RESULTS,
+        searchMode,
+        collections: [],
+        visualAspects: [],
+        artisticScores: {},
+        withInsights: false,
+        lightweight: true,
+      },
+    });
+
+    if (response?.data?.results) {
+      const scoreMap = new Map();
+      // Flatten all iterations
+      Object.values(response.data.results).forEach((items) => {
+        items.forEach((item) => {
+          const photo = item.photo;
+          const stars = computePhotoStars(photo);
+          scoreMap.set(photo.id, {
+            labelScore: photo.labelScore,
+            totalScore: photo.totalScore,
+            stars,
+          });
+        });
+      });
+      textSearchScoreMap.value = scoreMap;
+    } else {
+      textSearchScoreMap.value = new Map();
+    }
+
+    updateSpriteVisibility();
+  } catch (error) {
+    console.error("Error in text search:", error);
+    message.error("Failed to perform text search");
+    textSearchScoreMap.value = null;
+    updateSpriteVisibility();
+  } finally {
+    onDone?.();
+  }
+};
+
+// Helper for tooltip stars display
+const getHoveredPhotoStars = () => {
+  if (!hoveredPhoto.value || !textSearchScoreMap.value) return 0;
+  const scoreData = textSearchScoreMap.value.get(hoveredPhoto.value.id);
+  return scoreData?.stars ?? 0;
+};
+
 // Collection modal handlers
 const handleAddToCollection = () => {
   if (selectedPhotoIds.value.length === 0) return;
@@ -2603,6 +2738,34 @@ watch(
   { deep: true },
 );
 
+// Watch hoveredPhoto to set full alpha on hover when text search is active
+let previousHoveredId = null;
+watch(hoveredPhoto, (newPhoto, oldPhoto) => {
+  if (!textSearchScoreMap.value) return;
+
+  // Restore alpha on previously hovered sprite
+  if (previousHoveredId !== null) {
+    const oldSprite = photoSprites.value.get(previousHoveredId);
+    if (oldSprite) {
+      const scoreData = textSearchScoreMap.value.get(previousHoveredId);
+      oldSprite.alpha = scoreData
+        ? (TEXT_SEARCH_OPACITY[scoreData.stars] ?? TEXT_SEARCH_OPACITY[0])
+        : TEXT_SEARCH_OPACITY.none;
+    }
+  }
+
+  // Set full alpha on currently hovered sprite
+  if (newPhoto) {
+    const sprite = photoSprites.value.get(newPhoto.id);
+    if (sprite) {
+      sprite.alpha = 1;
+    }
+    previousHoveredId = newPhoto.id;
+  } else {
+    previousHoveredId = null;
+  }
+});
+
 // Toggle overlap-free layout without reloading from backend
 watch(gridRelaxationEnabled, () => {
   if (!photos2D.value.length) return;
@@ -2782,6 +2945,35 @@ watch(isTransitioning, (v) => {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
   max-width: 300px;
   animation: tooltipFadeIn 0.2s ease-out;
+}
+
+.tooltip-score-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 1px;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  border-radius: 4px;
+  padding: 3px 5px;
+  z-index: 2;
+}
+
+.tooltip-star {
+  color: #555;
+}
+
+.tooltip-star.filled {
+  color: #fbbf24;
+}
+
+.tooltip-star.empty {
+  color: #555;
+}
+
+.tooltip-star-question {
+  color: #888;
 }
 
 @keyframes tooltipFadeIn {

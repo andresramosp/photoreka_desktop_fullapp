@@ -216,6 +216,7 @@
             @artistic-scores-change="handleArtisticScoresChange"
             @time-range-change="handleTimeRangeChange"
             @tag-search="handleTagSearch"
+            @text-search="(payload) => emit('text-search', payload)"
           />
         </div>
       </div>
@@ -318,6 +319,7 @@ const emit = defineEmits([
   "select-pattern",
   "fly-to-pattern",
   "tag-search",
+  "text-search",
 ]);
 
 // Internal state

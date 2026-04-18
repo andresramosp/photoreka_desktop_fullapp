@@ -1,5 +1,54 @@
 <template>
   <div class="section-content">
+    <!-- Semantic Text Search -->
+    <div class="filter-item">
+      <div class="filter-header-row">
+        <label class="filter-label">Semantic Search</label>
+        <div class="tags-mode-switch-wrapper">
+          <span
+            class="tag-mode-label"
+            :class="{ active: searchMode === 'broad' }"
+            >Broad</span
+          >
+          <n-switch
+            v-model:value="isPreciseMode"
+            size="small"
+            class="tags-mode-switch"
+          />
+          <span
+            class="tag-mode-label"
+            :class="{ active: searchMode === 'precise' }"
+            >Precise</span
+          >
+        </div>
+      </div>
+      <div class="text-search-row">
+        <n-input
+          v-model:value="textSearchQuery"
+          placeholder="Describe what you're looking for..."
+          size="small"
+          clearable
+          :disabled="isTextSearching || showDiscreteLoader"
+          @keyup.enter="handleTextSearch"
+          @clear="handleClearTextSearch"
+          @click.stop
+          @keydown.stop
+          @keyup.stop
+        />
+        <n-button
+          size="small"
+          type="primary"
+          :loading="isTextSearching"
+          :disabled="!textSearchQuery?.trim() || showDiscreteLoader"
+          @click="handleTextSearch"
+        >
+          <template #icon>
+            <n-icon><SearchOutlined /></n-icon>
+          </template>
+        </n-button>
+      </div>
+    </div>
+
     <!-- Visual Aspects Filter -->
     <div class="filter-item">
       <label class="filter-label">Visual Aspects</label>
@@ -66,9 +115,9 @@
             </n-icon>
           </button>
           <n-icon
-            size="12"
+            size="14"
             class="toggle-icon"
-            color="var(--text-on-primary)"
+            color="#aaa"
             :class="{ rotated: showArtisticScores }"
           >
             <svg viewBox="0 0 24 24">
@@ -125,9 +174,9 @@
             </n-icon>
           </button>
           <n-icon
-            size="12"
+            size="14"
             class="toggle-icon"
-            color="var(--text-on-primary)"
+            color="#aaa"
             :class="{ rotated: showTimeRange }"
           >
             <svg viewBox="0 0 24 24">
@@ -209,8 +258,16 @@
 
 <script setup>
 import { ref, computed, watch } from "vue";
-import { NTreeSelect, NTooltip, NIcon, NSelect, NSwitch } from "naive-ui";
-import { InfoCircleFilled, CloseOutlined } from "@vicons/antd";
+import {
+  NTreeSelect,
+  NTooltip,
+  NIcon,
+  NSelect,
+  NSwitch,
+  NInput,
+  NButton,
+} from "naive-ui";
+import { InfoCircleFilled, CloseOutlined, SearchOutlined } from "@vicons/antd";
 import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
 import ScoreOperatorSlider from "@/components/controls/ScoreOperatorSlider.vue";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
@@ -249,12 +306,39 @@ const emit = defineEmits([
   "artistic-scores-change",
   "time-range-change",
   "tag-search",
+  "text-search",
 ]);
 
 // Internal state
 const showArtisticScores = ref(false);
 const showTimeRange = ref(false);
 const visualAspectsDropdownShow = ref(false);
+
+// Text search state
+const textSearchQuery = ref("");
+const isTextSearching = ref(false);
+const isPreciseMode = ref(false);
+const searchMode = computed(() => (isPreciseMode.value ? "precise" : "broad"));
+
+const handleTextSearch = () => {
+  const query = (textSearchQuery.value || "").trim();
+  if (!query) return;
+  isTextSearching.value = true;
+  emit("text-search", {
+    query,
+    searchMode: searchMode.value,
+    onDone: () => (isTextSearching.value = false),
+  });
+};
+
+const handleClearTextSearch = () => {
+  textSearchQuery.value = "";
+  emit("text-search", {
+    query: "",
+    searchMode: searchMode.value,
+    onDone: () => {},
+  });
+};
 const includedTagsDropdownShow = ref(false);
 
 // Mobile detection
@@ -428,6 +512,16 @@ const clearTags = () => {
   margin-bottom: 5px;
 }
 
+.text-search-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.text-search-row .n-input {
+  flex: 1;
+}
+
 .filter-item {
   display: flex;
   flex-direction: column;
@@ -438,7 +532,6 @@ const clearTags = () => {
   color: #aaa;
   font-size: 11px;
   font-weight: 500;
-  text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
@@ -461,7 +554,6 @@ const clearTags = () => {
 .tag-mode-label {
   font-size: 10px;
   font-weight: 500;
-  text-transform: uppercase;
   letter-spacing: 0.5px;
   color: #666;
   transition: color 0.2s;
@@ -501,7 +593,6 @@ const clearTags = () => {
   color: #aaa;
   font-size: 11px;
   font-weight: 500;
-  text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
@@ -546,7 +637,6 @@ const clearTags = () => {
   color: #888;
   font-size: 10px;
   font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.5px;
   padding-bottom: 4px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);

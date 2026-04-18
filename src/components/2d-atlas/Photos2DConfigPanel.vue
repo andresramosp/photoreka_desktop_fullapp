@@ -193,6 +193,7 @@
             @artistic-scores-change="handleArtisticScoresChange"
             @time-range-change="handleTimeRangeChange"
             @tag-search="handleTagSearch"
+            @text-search="(payload) => emit('text-search', payload)"
           />
         </div>
       </div>
@@ -556,6 +557,7 @@ const emit = defineEmits([
   "select-pattern",
   "fly-to-pattern",
   "tag-search",
+  "text-search",
   "update:tagBeaconsEnabled",
   "update:tagBeaconsCellSize",
   "update:tagBeaconsMaxBeacons",
@@ -721,7 +723,7 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
   position: absolute;
   top: 16px;
   right: 16px;
-  width: 280px;
+  width: 300px;
   max-height: calc(100vh - 32px);
   background: var(--bg-card);
   border-radius: 12px;
