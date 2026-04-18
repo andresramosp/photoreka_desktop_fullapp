@@ -24,9 +24,11 @@ import type {
 } from './langchain_agent_service.js'
 import { makeDebugCallback, makeUsageCallback } from '../utils/agent_utils.js'
 
-// ── Model ──────────────────────────────────────────────────────────────────────
-// Lightweight model — no tool orchestration needed, just an informative response.
-const MODEL = 'gemini-3.1-flash-lite-preview'
+type ChatIntelligenceMode = {
+  id: string
+  modelPhase2Lite: string
+}
+
 const MAX_TOKENS = 1200
 const MAX_ATTEMPTS = 2
 
@@ -70,10 +72,12 @@ export default class LangchainAgentKnowledgeService {
   public async chat(
     userId: number,
     conversationId: number,
-    message: string
+    message: string,
+    selectedMode: ChatIntelligenceMode
   ): Promise<AgentChatResult> {
+    const modelName = selectedMode.modelPhase2Lite
     console.log(
-      `\n[KnowledgeAgent] ▶ No-photos path | userId=${userId} | message="${message.slice(0, 80)}${message.length > 80 ? '…' : ''}"`
+      `\n[KnowledgeAgent] ▶ No-photos path | userId=${userId} | mode=${selectedMode.id} | message="${message.slice(0, 80)}${message.length > 80 ? '…' : ''}"`
     )
 
     const [userContext, history] = await Promise.all([
@@ -85,7 +89,7 @@ export default class LangchainAgentKnowledgeService {
 
     const messages = this.buildMessages(userContext, history, message)
 
-    const model = this.createModel().withStructuredOutput(KNOWLEDGE_SCHEMA)
+    const model = this.createModel(modelName).withStructuredOutput(KNOWLEDGE_SCHEMA)
     const usageCollector: { usage?: any } = {}
 
     let text = ''
@@ -110,7 +114,7 @@ export default class LangchainAgentKnowledgeService {
     }
     if (!text) throw lastError
 
-    const cost = this.computeCost(usageCollector.usage)
+    const cost = this.computeCost(usageCollector.usage, modelName)
     console.log(
       `[KnowledgeAgent] ✅ Done. Cost: €${cost.total.costEur.toFixed(6)} | in=${cost.total.inputTokens} out=${cost.total.outputTokens}`
     )
@@ -212,10 +216,10 @@ export default class LangchainAgentKnowledgeService {
 
   // ── Model & cost ─────────────────────────────────────────────────────────────
 
-  private createModel() {
+  private createModel(modelName: string) {
     return new ChatGoogleGenerativeAI({
       apiKey: process.env.GEMINI_API_KEY,
-      model: MODEL,
+      model: modelName,
       maxOutputTokens: MAX_TOKENS,
       safetySettings: [
         {
@@ -238,7 +242,7 @@ export default class LangchainAgentKnowledgeService {
     })
   }
 
-  private computeCost(usageMeta: any): AgentCostBreakdown {
+  private computeCost(usageMeta: any, modelName: string): AgentCostBreakdown {
     const inputTokens = usageMeta?.input_tokens ?? 0
     const outputTokens = usageMeta?.output_tokens ?? 0
     const cachedTokens = usageMeta?.input_token_details?.cache_read ?? 0
@@ -249,7 +253,7 @@ export default class LangchainAgentKnowledgeService {
         string,
         { input_cache_miss: number; input_cache_hit: number; output: number }
       >
-    )[MODEL]
+    )[modelName]
     let costEur = 0
     if (prices) {
       const cacheMiss = inputTokens - cachedTokens

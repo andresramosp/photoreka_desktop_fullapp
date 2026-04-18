@@ -820,12 +820,14 @@ export default class AgentToolsService {
               id: c.id,
               name: c.name,
               description: c.description,
+              totalPhotos: c.photos.length,
               samplePhotoIds: c.photos.slice(0, 15).map((p) => p.id),
             })),
             series: series.map((s) => ({
               id: s.id,
               name: s.name,
               description: s.description,
+              totalPhotos: s.photos.length,
               samplePhotoIds: s.photos.slice(0, 15).map((p) => p.id),
             })),
           })

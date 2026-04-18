@@ -50,7 +50,7 @@ export class VisualEmbeddingTask extends AnalyzerTask {
 
       // Convertir al formato esperado por el servicio de embeddings
       const payload = validImages.map(({ photo, base64 }) => ({ id: photo.id, base64 }))
-      const { embeddings } = await this.modelsService.getEmbeddingsImages(payload)
+      const { embeddings } = await this.modelsService.getEmbeddingsImagesCPU(payload)
 
       // Store PhotoImage and embedding for later save
       embeddings.forEach((item: EmbeddingResponse) => {

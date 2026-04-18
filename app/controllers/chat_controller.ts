@@ -5,6 +5,12 @@ import ConversationService from '#services/conversation_service'
 import Photo from '#models/photo'
 import UserCostService from '#services/user_cost_service'
 import CreditService from '#services/credit_service'
+import {
+  findChatIntelligenceMode,
+  getDefaultChatIntelligenceModeId,
+  listChatIntelligenceModes,
+  resolveChatIntelligenceMode,
+} from '../services/chat_intelligence_mode_service.js'
 
 export default class ChatController {
   private conversationService = new ConversationService()
@@ -20,6 +26,7 @@ export default class ChatController {
    *   conversationId?: number      — existing conversation ID (null = create new)
    *   contextPhotoIds?: number[]   — up to 10 photo IDs to attach as visual context
    *   ephemeral?: boolean          — if true, no conversation or history is created (one-time calls)
+   *   modeId?: string              — selected chat intelligence mode
    * }
    *
    * Response:
@@ -34,11 +41,26 @@ export default class ChatController {
     try {
       const user = auth.use('api').user!
 
-      const { message, conversationId, contextPhotoIds, ephemeral, forceCheapModel } = request.only(
-        ['message', 'conversationId', 'contextPhotoIds', 'ephemeral', 'forceCheapModel']
-      )
+      const { message, conversationId, contextPhotoIds, ephemeral, modeId, forceCheapModel } =
+        request.only([
+          'message',
+          'conversationId',
+          'contextPhotoIds',
+          'ephemeral',
+          'modeId',
+          'forceCheapModel',
+        ])
 
       const isEphemeral = ephemeral === true
+
+      if (modeId !== undefined && findChatIntelligenceMode(modeId) === null) {
+        return response.badRequest({
+          message: 'The "modeId" field is invalid.',
+          availableModeIds: listChatIntelligenceModes().map((mode: { id: string }) => mode.id),
+        })
+      }
+
+      const selectedMode = resolveChatIntelligenceMode(modeId)
 
       if (!message || typeof message !== 'string' || message.trim().length === 0) {
         return response.badRequest({
@@ -110,7 +132,12 @@ export default class ChatController {
       if (analyzedCount === 0) {
         console.log(`[ChatController] 📭 No analyzed photos — routing to knowledge agent`)
         const knowledgeService = new LangchainAgentKnowledgeService()
-        result = await knowledgeService.chat(user.id, resolvedConversationId, message.trim())
+        result = await knowledgeService.chat(
+          user.id,
+          resolvedConversationId,
+          message.trim(),
+          selectedMode
+        )
       } else {
         const agentService = new LangchainAgentService()
         result = await agentService.chat(
@@ -118,6 +145,7 @@ export default class ChatController {
           resolvedConversationId,
           message.trim(),
           validatedPhotoIds,
+          selectedMode,
           forceCheapModel === true
         )
       }
@@ -174,7 +202,7 @@ export default class ChatController {
         ...result,
         photoGroups: photoGroupsForFrontend,
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error('[ChatController] ❌ Error:', error)
       console.error('[ChatController] Stack:', error?.stack)
       return response.internalServerError({
@@ -183,6 +211,18 @@ export default class ChatController {
         stack: process.env.NODE_ENV !== 'production' ? error?.stack : undefined,
       })
     }
+  }
+
+  /**
+   * List available chat intelligence modes
+   *
+   * GET /api/chat/modes
+   */
+  public async listModes({ response }: HttpContext) {
+    return response.ok({
+      defaultModeId: getDefaultChatIntelligenceModeId(),
+      modes: listChatIntelligenceModes(),
+    })
   }
 
   /**
@@ -199,7 +239,7 @@ export default class ChatController {
       const result = await this.conversationService.listByUser(user.id, page, limit)
 
       return response.ok(result)
-    } catch (error) {
+    } catch (error: any) {
       console.error('[ChatController] ❌ Error listing conversations:', error)
       return response.internalServerError({
         message: 'An error occurred while listing conversations.',
@@ -229,7 +269,7 @@ export default class ChatController {
       }
 
       return response.ok(conversation)
-    } catch (error) {
+    } catch (error: any) {
       console.error('[ChatController] ❌ Error getting conversation:', error)
       return response.internalServerError({
         message: 'An error occurred while loading the conversation.',
@@ -266,7 +306,7 @@ export default class ChatController {
       }
 
       return response.ok({ message: 'Conversation renamed.' })
-    } catch (error) {
+    } catch (error: any) {
       console.error('[ChatController] ❌ Error renaming conversation:', error)
       return response.internalServerError({
         message: 'An error occurred while renaming the conversation.',
@@ -296,7 +336,7 @@ export default class ChatController {
       }
 
       return response.ok({ message: 'Conversation deleted.' })
-    } catch (error) {
+    } catch (error: any) {
       console.error('[ChatController] ❌ Error deleting conversation:', error)
       return response.internalServerError({
         message: 'An error occurred while deleting the conversation.',
@@ -317,7 +357,7 @@ export default class ChatController {
       return response.ok({
         message: 'Chat history cleared successfully.',
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error('[ChatController] ❌ Error resetting chat:', error)
       return response.internalServerError({
         message: 'An error occurred while resetting chat history.',

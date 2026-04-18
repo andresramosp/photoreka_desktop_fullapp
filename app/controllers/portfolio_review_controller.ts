@@ -111,12 +111,16 @@ export default class PortfolioReviewController {
 
       // Enviar email de notificación al usuario
       try {
-        const patternsByType: Record<string, { title: string; strength: string }[]> = {}
+        const patternsByType: Record<
+          string,
+          { title: string; strength: string; isNew?: boolean }[]
+        > = {}
         for (const [type, patterns] of Object.entries(filteredCatalogPatterns)) {
           if (Array.isArray(patterns)) {
             patternsByType[type] = patterns.map((p: any) => ({
               title: p.title || 'Untitled pattern',
               strength: p.strength || 'moderate',
+              isNew: p.isNew || false,
             }))
           }
         }

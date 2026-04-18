@@ -48,13 +48,15 @@ export type SearchOptions = {
   minResults?: number
   collections?: string[]
   visualAspects?: string[]
-  artisticScores?: string[]
+  artisticScores?: Record<string, { value: number; operator: string }>
   cursor?: string
   source?: string
   withInsights?: boolean
   searchId?: string
   /** When provided, restricts the search pool to only these photo IDs (after collection/aspect filters). */
   candidateIds?: number[]
+  /** When true, returns only scoring data (id, labelScore, totalScore) without fetching full photo models. */
+  lightweight?: boolean
 }
 
 export type SearchTagsOptions = SearchOptions & {
@@ -107,7 +109,7 @@ export default class SearchTextService {
       userId?.toString(),
       collections && collections.length > 0 ? collections : undefined,
       visualAspects && visualAspects.length > 0 ? visualAspects : undefined,
-      artisticScores && artisticScores.length > 0 ? artisticScores : undefined
+      artisticScores && Object.keys(artisticScores).length > 0 ? artisticScores : undefined
     )
 
     const { structuredResult, useImage, expansionCost } = await this.queryService.structureQuery(
@@ -243,6 +245,7 @@ export default class SearchTextService {
       withInsights = false,
       searchId, // 👈 nuevo
       candidateIds,
+      lightweight = false,
     } = options
 
     if (searchMode === 'curation') {
@@ -253,7 +256,7 @@ export default class SearchTextService {
       userId?.toString(),
       collections && collections.length > 0 ? collections : undefined,
       visualAspects && visualAspects.length > 0 ? visualAspects : undefined,
-      artisticScores && artisticScores.length > 0 ? artisticScores : undefined,
+      artisticScores && Object.keys(artisticScores).length > 0 ? artisticScores : undefined,
       source || undefined
     )
     const photoIds =
@@ -278,11 +281,30 @@ export default class SearchTextService {
       userId?.toString()
     )
 
-    let { paginatedPhotos, hasMore } = await this.getPaginatedPhotosByCursor(
-      embeddingScoredPhotos,
-      pageSize,
-      cursor
-    )
+    let paginatedPhotos
+    let hasMore
+
+    if (lightweight) {
+      // Lightweight mode: return only scoring data without DB fetch
+      const pageSlice = embeddingScoredPhotos.slice(0, pageSize)
+      hasMore = pageSize < embeddingScoredPhotos.length
+      paginatedPhotos = pageSlice.map((scoredPhoto) => ({
+        photo: {
+          id: scoredPhoto.id,
+          labelScore: scoredPhoto.labelScore,
+          totalScore: scoredPhoto.totalScore,
+          imageScore: scoredPhoto.imageScore,
+          tagScore: scoredPhoto.tagScore,
+          descScore: scoredPhoto.descScore,
+        },
+      }))
+    } else {
+      ;({ paginatedPhotos, hasMore } = await this.getPaginatedPhotosByCursor(
+        embeddingScoredPhotos,
+        pageSize,
+        cursor
+      ))
+    }
 
     let modelCosts = []
 
@@ -359,7 +381,7 @@ export default class SearchTextService {
       userId?.toString(),
       collections && collections.length > 0 ? collections : undefined,
       visualAspects && visualAspects.length > 0 ? visualAspects : undefined,
-      artisticScores && artisticScores.length > 0 ? artisticScores : undefined
+      artisticScores && Object.keys(artisticScores).length > 0 ? artisticScores : undefined
     )
 
     let embeddingScoredPhotos = await this.scoringService.getScoredPhotosByTags(

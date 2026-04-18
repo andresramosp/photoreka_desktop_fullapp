@@ -9,6 +9,8 @@ import VisualFeaturesService from './visual_features_service.js'
 import ScoringService, { MatchThresholds, SearchComposition } from './scoring_service.js'
 import VectorService from './vector_service.js'
 import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
+import PhotoImageService from './photo_image_service.js'
+import sharp from 'sharp'
 
 export type SearchByPhotoOptions = {
   anchorIds: number[]
@@ -30,6 +32,8 @@ export type SearchByPhotoOptions = {
   collectionId?: number
   /** When provided, restricts the candidate pool to only these photo IDs (applied after collectionId filter). */
   candidatePoolIds?: number[]
+  /** Optional crop region as percentages (0-1). When set, only the selected area of the anchor is used for scoring. */
+  cropRegion?: { x: number; y: number; w: number; h: number } | null
 }
 
 export default class SearchPhotoService {
@@ -269,14 +273,22 @@ export default class SearchPhotoService {
     candidateIds: number[],
     anchors: Photo[]
   ) {
-    const anchorEmbeddings = anchors
-      .filter((p) => p.embedding)
-      .map((p) => VectorService.getParsedEmbedding(p.embedding))
-    if (!anchorEmbeddings.length) return []
+    let combinedEmbedding: number[]
 
-    const combinedEmbedding = anchorEmbeddings
-      .reduce((acc, e, i) => (i === 0 ? e.slice() : acc.map((v, idx) => v + e[idx])), [])
-      .map((v) => v / anchorEmbeddings.length)
+    // If a crop region is provided (single anchor only), compute CLIP embedding from the cropped area
+    if (query.cropRegion && anchors.length === 1) {
+      combinedEmbedding = await this.computeCroppedEmbedding(anchors[0], query.cropRegion)
+      if (!combinedEmbedding.length) return []
+    } else {
+      const anchorEmbeddings = anchors
+        .filter((p) => p.embedding)
+        .map((p) => VectorService.getParsedEmbedding(p.embedding))
+      if (!anchorEmbeddings.length) return []
+
+      combinedEmbedding = anchorEmbeddings
+        .reduce((acc, e, i) => (i === 0 ? e.slice() : acc.map((v, idx) => v + e[idx])), [])
+        .map((v) => v / anchorEmbeddings.length)
+    }
 
     const similar = await this.vectorService.findSimilarPhotoToEmbedding(
       combinedEmbedding,
@@ -297,23 +309,29 @@ export default class SearchPhotoService {
     anchors: Photo[],
     useDominants: boolean = true
   ) {
-    const anchorEmbeddings = anchors
-      .filter((p) => (useDominants ? p.colorHistogramDominant : p.colorHistogram))
-      .map((p) =>
-        useDominants
-          ? VectorService.getParsedEmbedding(p.colorHistogramDominant)
-          : VectorService.getParsedEmbedding(p.colorHistogram)
-      )
+    let combinedEmbedding: number[]
 
-    if (!anchorEmbeddings.length) return []
+    // If a crop region is provided (single anchor only), compute histogram from the cropped area
+    if (query.cropRegion && anchors.length === 1) {
+      combinedEmbedding = await this.computeCroppedColorHistogram(anchors[0], query.cropRegion)
+      if (!combinedEmbedding.length) return []
+    } else {
+      const anchorEmbeddings = anchors
+        .filter((p) => (useDominants ? p.colorHistogramDominant : p.colorHistogram))
+        .map((p) =>
+          useDominants
+            ? VectorService.getParsedEmbedding(p.colorHistogramDominant)
+            : VectorService.getParsedEmbedding(p.colorHistogram)
+        )
 
-    const combinedEmbedding = anchorEmbeddings
-      .reduce((acc, e, i) => (i === 0 ? e.slice() : acc.map((v, idx) => v + e[idx])), [])
-      .map((v) => v / anchorEmbeddings.length)
+      if (!anchorEmbeddings.length) return []
 
-    let similar
+      combinedEmbedding = anchorEmbeddings
+        .reduce((acc, e, i) => (i === 0 ? e.slice() : acc.map((v, idx) => v + e[idx])), [])
+        .map((v) => v / anchorEmbeddings.length)
+    }
 
-    similar = await this.vectorService.findSimilarPhotoToColorPalette(
+    const similar = await this.vectorService.findSimilarPhotoToColorPalette(
       combinedEmbedding,
       query.opposite ? 1 : 0.1,
       200,
@@ -324,6 +342,84 @@ export default class SearchPhotoService {
     )
 
     return similar.map((s) => ({ id: s.id, score: s.proximity }))
+  }
+
+  /**
+   * Downloads the anchor photo, crops it to the given region, and computes
+   * a color histogram via the Python API. Returns the 64-dim embedding.
+   */
+  private async computeCroppedColorHistogram(
+    anchor: Photo,
+    region: { x: number; y: number; w: number; h: number }
+  ): Promise<number[]> {
+    try {
+      const photoImageService = PhotoImageService.getInstance()
+      const buffer = await photoImageService.getImageBufferFromR2(anchor.name)
+
+      const metadata = await sharp(buffer).metadata()
+      const imgWidth = metadata.width || 1
+      const imgHeight = metadata.height || 1
+
+      const left = Math.round(region.x * imgWidth)
+      const top = Math.round(region.y * imgHeight)
+      const width = Math.max(1, Math.round(region.w * imgWidth))
+      const height = Math.max(1, Math.round(region.h * imgHeight))
+
+      const croppedBuffer = await sharp(buffer).extract({ left, top, width, height }).toBuffer()
+
+      const croppedBase64 = croppedBuffer.toString('base64')
+
+      const modelsService = new ModelsService()
+      const { embeddings } = await modelsService.getHistogramColor([
+        { id: anchor.id.toString(), base64: croppedBase64 },
+      ])
+
+      if (!embeddings || !embeddings.length) return []
+
+      // Use full histogram (not dominant) for crop regions — more accurate for partial areas
+      return embeddings[0].embedding_full || embeddings[0].embedding_dominant || []
+    } catch (error) {
+      console.error('Error computing cropped color histogram:', error)
+      return []
+    }
+  }
+
+  /**
+   * Downloads the anchor photo, crops it to the given region, and computes
+   * a volatile CLIP embedding via the GPU API. Returns the embedding vector.
+   */
+  private async computeCroppedEmbedding(
+    anchor: Photo,
+    region: { x: number; y: number; w: number; h: number }
+  ): Promise<number[]> {
+    try {
+      const photoImageService = PhotoImageService.getInstance()
+      const buffer = await photoImageService.getImageBufferFromR2(anchor.name)
+
+      const metadata = await sharp(buffer).metadata()
+      const imgWidth = metadata.width || 1
+      const imgHeight = metadata.height || 1
+
+      const left = Math.round(region.x * imgWidth)
+      const top = Math.round(region.y * imgHeight)
+      const width = Math.max(1, Math.round(region.w * imgWidth))
+      const height = Math.max(1, Math.round(region.h * imgHeight))
+
+      const croppedBuffer = await sharp(buffer).extract({ left, top, width, height }).toBuffer()
+      const croppedBase64 = croppedBuffer.toString('base64')
+
+      const modelsService = new ModelsService()
+      const { embeddings } = await modelsService.getEmbeddingsImagesCPU([
+        { id: anchor.id, base64: croppedBase64 },
+      ])
+
+      if (!embeddings || !embeddings.length) return []
+
+      return embeddings[0].embedding || []
+    } catch (error) {
+      console.error('Error computing cropped CLIP embedding:', error)
+      return []
+    }
   }
 
   private async scoreTags(query: SearchByPhotoOptions, candidateIds: number[], anchors: Photo[]) {

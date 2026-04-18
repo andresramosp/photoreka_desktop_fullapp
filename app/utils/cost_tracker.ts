@@ -30,7 +30,7 @@ export interface CostSummary {
 
 export class CostTracker {
   private entries: CostEntry[] = []
-  private currentTask: string = 'unknown'
+  public currentTask: string = 'unknown'
 
   constructor(private category: CostCategory) {}
 
@@ -38,11 +38,17 @@ export class CostTracker {
     this.currentTask = taskName
   }
 
-  record(cost: any, model: string, method: string, type: 'direct' | 'batch' = 'direct') {
+  record(
+    cost: any,
+    model: string,
+    method: string,
+    type: 'direct' | 'batch' = 'direct',
+    taskOverride?: string
+  ) {
     if (!cost || typeof cost.totalCostInEur !== 'number') return
 
     this.entries.push({
-      task: this.currentTask,
+      task: taskOverride ?? this.currentTask,
       model,
       method,
       type,
@@ -113,7 +119,8 @@ const TRACKED_METHODS: Record<
 
 export function createTrackedModelsService(
   service: ModelsService,
-  tracker: CostTracker
+  tracker: CostTracker,
+  taskNameRef?: { name: string }
 ): ModelsService {
   return new Proxy(service, {
     get(target, prop, receiver) {
@@ -126,10 +133,11 @@ export function createTrackedModelsService(
       const tracked = TRACKED_METHODS[methodName]
       if (tracked) {
         return async function (...args: any[]) {
+          const taskName = taskNameRef?.name || tracker.currentTask
           const result = await value.apply(target, args)
           if (result?.cost) {
             const model = args[tracked.modelArgIndex] || 'unknown'
-            tracker.record(result.cost, model, methodName, tracked.type)
+            tracker.record(result.cost, model, methodName, tracked.type, taskName)
           }
           return result
         }
@@ -138,9 +146,10 @@ export function createTrackedModelsService(
       // Auto-track batch results
       if (methodName === 'getBatchResults') {
         return async function (...args: any[]) {
+          const taskName = taskNameRef?.name || tracker.currentTask
           const results = await value.apply(target, args)
           // Extract and record aggregated cost from batch response usage data
-          recordGPTBatchCost(results, tracker, args[1])
+          recordGPTBatchCost(results, tracker, args[1], taskName)
           return results
         }
       }
@@ -154,14 +163,30 @@ export function createTrackedModelsService(
 /**
  * Extracts cost from GPT Batch API result lines (each has response.body.usage).
  */
-function recordGPTBatchCost(results: any[], tracker: CostTracker, modelHint?: string) {
+function resolvePricesModel(model: string): keyof typeof PRICES | null {
+  if (model in PRICES) return model as keyof typeof PRICES
+  // Batch API returns versioned names like "gpt-5.1-2025-11-13"; match against PRICES keys by prefix
+  const candidates = Object.keys(PRICES)
+    .filter((key) => model.startsWith(key))
+    .sort((a, b) => b.length - a.length) // longest prefix wins
+  return (candidates[0] as keyof typeof PRICES) || null
+}
+
+function recordGPTBatchCost(
+  results: any[],
+  tracker: CostTracker,
+  modelHint?: string,
+  taskOverride?: string
+) {
   for (const res of results) {
     const usage = res?.response?.body?.usage
     if (!usage) continue
 
-    const model = res?.response?.body?.model || modelHint || 'unknown'
-    const prices = PRICES[model as keyof typeof PRICES]
-    if (!prices) continue
+    const rawModel = res?.response?.body?.model || modelHint || 'unknown'
+    const resolvedKey = resolvePricesModel(rawModel)
+    if (!resolvedKey) continue
+    const model = rawModel
+    const prices = PRICES[resolvedKey]
 
     const promptTokens = usage.prompt_tokens || 0
     const completionTokens = usage.completion_tokens || 0
@@ -183,7 +208,8 @@ function recordGPTBatchCost(results: any[], tracker: CostTracker, modelHint?: st
       },
       model,
       'getBatchResults',
-      'batch'
+      'batch',
+      taskOverride
     )
   }
 }

@@ -70,13 +70,13 @@ export default class AnalyzerController {
         const usage = await UsageService.getUsage(targetUserId)
         if (!usage || !usage.analyzedPhotosRemaining) {
           return response.forbidden({
-            message: 'Has alcanzado el límite de fotos analizadas para tu plan',
+            message: 'You have reached your analysis limit.',
           })
         }
 
         if (photos.length > usage.analyzedPhotosRemaining) {
           return response.forbidden({
-            message: `No tienes suficiente capacidad para analizar ${photos.length} fotos. Te quedan ${usage.analyzedPhotosRemaining} análisis disponibles`,
+            message: 'You have reached your analysis limit.',
           })
         }
       }

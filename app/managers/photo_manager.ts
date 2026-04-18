@@ -5,7 +5,7 @@ import ModelsService from '#services/models_service'
 import NLPService from '#services/nlp_service'
 import { Logger } from '@adonisjs/core/logger'
 
-import { invalidateCache, withCache } from '../decorators/withCache.js'
+import { invalidateCache, invalidateCacheByPattern, withCache } from '../decorators/withCache.js'
 import TagPhotoManager from './tag_photo_manager.js'
 import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
 import { DeleteObjectsCommand, S3Client } from '@aws-sdk/client-s3'
@@ -123,12 +123,27 @@ export default class PhotoManager {
   @withCache({
     provider: 'redis',
     ttl: 60 * 30,
+    key: (
+      userId: string,
+      collections?: string[],
+      visualAspects?: string[],
+      artisticScores?: any,
+      source?: string
+    ) => {
+      const filters = JSON.stringify({
+        c: collections,
+        v: visualAspects,
+        a: artisticScores,
+        s: source,
+      })
+      return `getPhotosIdsForSearch:${userId}:${filters}`
+    },
   })
   public async getPhotosIdsForSearch(
     userId: string,
     collections?: string[],
     visualAspects?: string[],
-    artisticScores?: string[],
+    artisticScores?: Record<string, { value: number; operator: string }>,
     source?: string
   ): Promise<number[]> {
     let query = Photo.query().where('user_id', userId)
@@ -144,7 +159,9 @@ export default class PhotoManager {
     const noVisualAspects =
       !visualAspects || !Array.isArray(visualAspects) || visualAspects.length === 0
     const noArtisticScores =
-      !artisticScores || !Array.isArray(artisticScores) || artisticScores.length === 0
+      !artisticScores ||
+      typeof artisticScores !== 'object' ||
+      Object.keys(artisticScores).length === 0
     const noSource = !source
     if (noVisualAspects && noArtisticScores && noSource) {
       return photos.map((p) => p.id)
@@ -171,10 +188,24 @@ export default class PhotoManager {
           const scores = p.descriptions?.artistic_scores
           if (!scores || typeof scores !== 'object') artisticOk = false
           else {
-            // Debe cumplir que todos los scores seleccionados tengan al menos 7
-            artisticOk = artisticScores.every((scoreKey) => {
+            artisticOk = Object.entries(artisticScores).every(([scoreKey, filter]) => {
               const value = scores[scoreKey]
-              return typeof value === 'number' && value >= 7
+              if (typeof value !== 'number') return false
+              const op = filter.operator || '>='
+              switch (op) {
+                case '<=':
+                  return value <= filter.value
+                case '<':
+                  return value < filter.value
+                case '>':
+                  return value > filter.value
+                case '>=':
+                  return value >= filter.value
+                case '=':
+                  return value === filter.value
+                default:
+                  return value >= filter.value
+              }
             })
           }
         }
@@ -523,8 +554,8 @@ export default class PhotoManager {
       console.warn('⚠️ Fallo al eliminar archivos en R2:', err)
     }
 
-    await invalidateCache(`getPhotos_${userId}`)
-    await invalidateCache(`getPhotosIdsForSearch${userId}`)
+    await invalidateCache(`getPhotosByUser_${userId}`)
+    await invalidateCacheByPattern(`getPhotosIdsForSearch:${userId}:*`)
 
     return { message: 'Photos marked for deletion', ids, deletedAt }
   }

@@ -6,7 +6,7 @@ import Photo from '#models/photo'
 import { Exception } from '@adonisjs/core/exceptions'
 import Logger, { LogLevel } from '../utils/logger.js'
 import PhotoImageService from './photo_image_service.js'
-import { invalidateCache } from '../decorators/withCache.js'
+import { invalidateCache, invalidateCacheByPattern } from '../decorators/withCache.js'
 import chalk from 'chalk' // ← NUEVO
 import PhotoManager from '../managers/photo_manager.js'
 import HealthPhotoService from './health_photo_service.js'
@@ -57,8 +57,8 @@ export default class AnalyzerProcessRunner {
   ) {
     const finalUserId = userId
 
-    await invalidateCache(`getPhotos_${finalUserId}`)
-    await invalidateCache(`getPhotosIdsForSearch${finalUserId}`)
+    await invalidateCache(`getPhotosByUser_${finalUserId}`)
+    await invalidateCacheByPattern(`getPhotosIdsForSearch:${finalUserId}:*`)
 
     if (
       (mode === 'retry_process' || mode === 'remake_process' || mode === 'admin_retry') &&
@@ -165,8 +165,10 @@ export default class AnalyzerProcessRunner {
 
     // Usar el userId del proceso para invalidar cache
     const processUserId = this.process.userId?.toString()
-    await invalidateCache(`getPhotos_${processUserId}`)
-    await invalidateCache(`getPhotosIdsForSearch${processUserId}`)
+    await invalidateCache(`getPhotosByUser_${processUserId}`)
+    await invalidateCacheByPattern(`getPhotosIdsForSearch:${processUserId}:*`)
+    await invalidateCacheByPattern(`getPhotosFor3DView_${processUserId}_*`)
+    await invalidateCache(`getTagsByUser_${processUserId}`)
 
     // Persistir cost report
     this.process.costReport = this.process.costTracker.getSummary()

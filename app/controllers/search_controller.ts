@@ -4,6 +4,7 @@ import ws from '#services/ws'
 import SearchTextService from '#services/search_text_service'
 import SearchPhotoService from '#services/search_photo_service'
 import UserCostService from '#services/user_cost_service'
+import CreditService, { PRECISE_GPU_CREDITS, CLIP_CROP_CREDITS } from '#services/credit_service'
 
 export default class SearchController {
   /**
@@ -13,8 +14,27 @@ export default class SearchController {
   public async searchSemanticSync({ request, response, auth }: HttpContext) {
     const user = auth.use('api').user!
     try {
+      const hasCredits = await CreditService.canAfford(user.id)
+      if (!hasCredits) {
+        return response.status(402).json({
+          message: 'No credits remaining. Please purchase more credits to continue.',
+          code: 'INSUFFICIENT_CREDITS',
+        })
+      }
+
       const searchService = new SearchTextService()
       const query = request.body()
+
+      // Charge GPU credits upfront for precise mode (non-cursor requests)
+      if (!query.options.cursor && query.options.searchMode === 'precise') {
+        const charged = await CreditService.tryChargeFixed(user.id, PRECISE_GPU_CREDITS)
+        if (!charged) {
+          return response.status(402).json({
+            message: 'No credits remaining. Please purchase more credits to continue.',
+            code: 'INSUFFICIENT_CREDITS',
+          })
+        }
+      }
 
       const result = await searchService.searchSemanticSync(query.description, user.id, {
         searchMode: query.options.searchMode,
@@ -29,9 +49,15 @@ export default class SearchController {
         cursor: query.options.cursor,
         source: query.options.source || null,
         searchId: query.options.searchId || null,
+        lightweight: query.options.lightweight || false,
       })
 
       UserCostService.recordFromTracker(user.id, searchService.costTracker).catch(() => {})
+
+      const summary = searchService.costTracker.getSummary()
+      if (summary.totalCostInEur > 0) {
+        CreditService.charge(user.id, summary.totalCostInEur).catch(() => {})
+      }
 
       return response.ok(result)
     } catch (error) {
@@ -43,8 +69,27 @@ export default class SearchController {
   public async searchSemanticStream({ request, response, auth }: HttpContext) {
     const user = auth.use('api').user!
     try {
+      const hasCredits = await CreditService.canAfford(user.id)
+      if (!hasCredits) {
+        return response.status(402).json({
+          message: 'No credits remaining. Please purchase more credits to continue.',
+          code: 'INSUFFICIENT_CREDITS',
+        })
+      }
+
       const searchService = new SearchTextService()
       const query = request.body()
+
+      // Charge GPU credits upfront for precise mode
+      if (query.options.searchMode === 'precise') {
+        const charged = await CreditService.tryChargeFixed(user.id, PRECISE_GPU_CREDITS)
+        if (!charged) {
+          return response.status(402).json({
+            message: 'No credits remaining. Please purchase more credits to continue.',
+            code: 'INSUFFICIENT_CREDITS',
+          })
+        }
+      }
 
       const stream = searchService.searchSemanticStream(query.description, user.id, {
         searchMode: query.options.searchMode,
@@ -63,6 +108,11 @@ export default class SearchController {
 
       UserCostService.recordFromTracker(user.id, searchService.costTracker).catch(() => {})
 
+      const summary = searchService.costTracker.getSummary()
+      if (summary.totalCostInEur > 0) {
+        CreditService.charge(user.id, summary.totalCostInEur).catch(() => {})
+      }
+
       return response.ok({ message: 'Search process initiated' })
     } catch (error) {
       console.error('Error fetching photos:', error)
@@ -74,6 +124,15 @@ export default class SearchController {
   public async searchByTagsSync({ response, request, auth }: HttpContext) {
     try {
       const user = auth.use('api').user!
+
+      const hasCredits = await CreditService.canAfford(user.id)
+      if (!hasCredits) {
+        return response.status(402).json({
+          message: 'No credits remaining. Please purchase more credits to continue.',
+          code: 'INSUFFICIENT_CREDITS',
+        })
+      }
+
       const searchService = new SearchTextService()
 
       const query = request.body()
@@ -96,6 +155,11 @@ export default class SearchController {
 
       UserCostService.recordFromTracker(user.id, searchService.costTracker).catch(() => {})
 
+      const summary = searchService.costTracker.getSummary()
+      if (summary.totalCostInEur > 0) {
+        CreditService.charge(user.id, summary.totalCostInEur).catch(() => {})
+      }
+
       return response.ok(result)
     } catch (error) {
       console.error('Error fetching photos:', error)
@@ -106,6 +170,15 @@ export default class SearchController {
   public async searchByTagsDirect({ response, request, auth }: HttpContext) {
     try {
       const user = auth.use('api').user!
+
+      const hasCredits = await CreditService.canAfford(user.id)
+      if (!hasCredits) {
+        return response.status(402).json({
+          message: 'No credits remaining. Please purchase more credits to continue.',
+          code: 'INSUFFICIENT_CREDITS',
+        })
+      }
+
       const searchService = new SearchTextService()
 
       const { included = [], excluded = [], mode = 'AND', semantic = false } = request.body()
@@ -120,6 +193,11 @@ export default class SearchController {
 
       UserCostService.recordFromTracker(user.id, searchService.costTracker).catch(() => {})
 
+      const summary = searchService.costTracker.getSummary()
+      if (summary.totalCostInEur > 0) {
+        CreditService.charge(user.id, summary.totalCostInEur).catch(() => {})
+      }
+
       return response.ok(result)
     } catch (error) {
       console.error('Error fetching photos:', error)
@@ -133,6 +211,17 @@ export default class SearchController {
       const searchService = new SearchPhotoService()
 
       const query: any = request.body()
+
+      // CLIP crop embedding requires a GPU call — charge upfront
+      if (query.criteria === 'embedding' && query.cropRegion) {
+        const charged = await CreditService.tryChargeFixed(user.id, CLIP_CROP_CREDITS)
+        if (!charged) {
+          return response.status(402).json({
+            message: 'No credits remaining. Please purchase more credits to continue.',
+            code: 'INSUFFICIENT_CREDITS',
+          })
+        }
+      }
 
       const result = await searchService.searchByPhotos(query, user.id)
 

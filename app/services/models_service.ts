@@ -21,15 +21,30 @@ import {
   MediaResolution,
 } from '@google/genai'
 import { withCache } from '../decorators/withCache.js'
+import withCPUWarmUp from '../decorators/withCPUWarmUp.js'
 import { createRequire } from 'module'
 
 const cache = new NodeCache() // Simple in-memory cache
+
+function hasNonEmptyResult(result: any): boolean {
+  const r = result?.result
+  if (r == null || r === '') return false
+  if (Array.isArray(r)) return r.length > 0
+  if (typeof r === 'object') return Object.keys(r).length > 0
+  return true
+}
 
 export type ModelName =
   | 'gpt-4o'
   | 'gpt-4.1'
   | 'gpt-5'
   | 'gpt-5.1'
+  | 'gpt-5.2'
+  | 'gpt-5.3-chat-latest'
+  | 'gpt-5.4'
+  | 'gpt-5.4-mini'
+  | 'gpt-5.4-nano'
+  | 'gpt-5.4-pro'
   | 'gpt-5-mini'
   | 'gpt-5-nano'
   | 'gpt-5-chat-latest'
@@ -73,6 +88,36 @@ export const PRICES = {
     input_cache_miss: 1.25 / 1_000_000,
     input_cache_hit: 0.125 / 1_000_000,
     output: 10 / 1_000_000,
+  },
+  'gpt-5.2': {
+    input_cache_miss: 1.75 / 1_000_000,
+    input_cache_hit: 0.175 / 1_000_000,
+    output: 14 / 1_000_000,
+  },
+  'gpt-5.3-chat-latest': {
+    input_cache_miss: 1.75 / 1_000_000,
+    input_cache_hit: 0.175 / 1_000_000,
+    output: 14 / 1_000_000,
+  },
+  'gpt-5.4': {
+    input_cache_miss: 2.5 / 1_000_000,
+    input_cache_hit: 0.25 / 1_000_000,
+    output: 15 / 1_000_000,
+  },
+  'gpt-5.4-mini': {
+    input_cache_miss: 0.75 / 1_000_000,
+    input_cache_hit: 0.075 / 1_000_000,
+    output: 4.5 / 1_000_000,
+  },
+  'gpt-5.4-nano': {
+    input_cache_miss: 0.2 / 1_000_000,
+    input_cache_hit: 0.02 / 1_000_000,
+    output: 1.25 / 1_000_000,
+  },
+  'gpt-5.4-pro': {
+    input_cache_miss: 30 / 1_000_000,
+    input_cache_hit: 0,
+    output: 180 / 1_000_000,
   },
   'gpt-5-mini': {
     input_cache_miss: 0.25 / 1_000_000,
@@ -180,6 +225,7 @@ export type EndpointType =
   | 'logic_gpu'
   | 'logic_gpu_lb'
   | 'image'
+  | 'railway_cpu'
 
 export const USD_TO_EUR = 0.92
 
@@ -198,6 +244,7 @@ export default class ModelsService {
   }
 
   static lastPingTimestamps: Record<string, number> = {}
+  static pendingWarmups: Record<string, Promise<void>> = {}
 
   public async ensureRunPodWarm(endpointType: EndpointType) {
     const now = Date.now()
@@ -218,6 +265,59 @@ export default class ModelsService {
     } catch (error) {
       console.warn('[RunPod] Ping failed (non-critical):', error.message)
     }
+  }
+
+  public async ensureCPUApiWarm() {
+    const key = 'railway_cpu'
+    const now = Date.now()
+    const last = ModelsService.lastPingTimestamps[key] || 0
+    const secondsSinceLastPing = (now - last) / 1000
+
+    if (secondsSinceLastPing < this.pingCooldownSeconds) {
+      return
+    }
+
+    // Si ya hay un warmup en curso, reutilizar la misma promise (evita pings duplicados concurrentes)
+    if (ModelsService.pendingWarmups[key]) {
+      return ModelsService.pendingWarmups[key]
+    }
+
+    const warmupPromise = (async () => {
+      const maxRetries = 3
+
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          console.log(
+            `[Railway] Pinging CPU API to wake up serverless instance (attempt ${attempt + 1}/${maxRetries})...`
+          )
+          await axios.post(
+            process.env.PYTHON_API_CPU + '/clip-text-embeddings',
+            { tags: ['ping'] },
+            { timeout: 50000 }
+          )
+          ModelsService.lastPingTimestamps[key] = Date.now()
+          console.log('[Railway] CPU API is warm.')
+          return
+        } catch (error) {
+          const isLastAttempt = attempt === maxRetries - 1
+          if (isLastAttempt) {
+            console.error(`[Railway] Ping failed after ${maxRetries} attempts:`, error.message)
+          } else {
+            const delay = 2000 * Math.pow(2, attempt) // 2s, 4s
+            console.warn(
+              `[Railway] Ping failed (attempt ${attempt + 1}/${maxRetries}), retrying in ${delay}ms:`,
+              error.message
+            )
+            await new Promise((resolve) => setTimeout(resolve, delay))
+          }
+        }
+      }
+    })().finally(() => {
+      delete ModelsService.pendingWarmups[key]
+    })
+
+    ModelsService.pendingWarmups[key] = warmupPromise
+    return warmupPromise
   }
 
   buildRequestConfig(operation, payload, endpointType: EndpointType) {
@@ -367,7 +467,8 @@ export default class ModelsService {
         },
       }
 
-      if (useCache) cache.set(cacheKey, { ...result, cost: '0 [cached]' }, cacheDuration)
+      if (useCache && hasNonEmptyResult(result))
+        cache.set(cacheKey, { ...result, cost: '0 [cached]' }, cacheDuration)
 
       return result
     } catch (error) {
@@ -488,6 +589,28 @@ export default class ModelsService {
     return { embeddings: allEmbeddings }
   }
 
+  @withCPUWarmUp
+  async getEmbeddingsImagesCPU(images: { id: number; base64: any }[]) {
+    const batchSize = 16
+    let allEmbeddings: any[] = []
+
+    for (let i = 0; i < images.length; i += batchSize) {
+      const batch = images.slice(i, i + batchSize)
+      try {
+        const { data } = await axios.post(process.env.PYTHON_API_CPU + '/clip-image-embeddings', {
+          images: batch,
+        })
+        const embeddings = data.embeddings || []
+        allEmbeddings = allEmbeddings.concat(embeddings)
+      } catch (error) {
+        console.error('Error en getEmbeddingsImagesCPU:', error.message)
+      }
+    }
+
+    return { embeddings: allEmbeddings }
+  }
+
+  @withCPUWarmUp
   async getEmbeddingsCPU(tags) {
     try {
       const { data } = await axios.post(process.env.PYTHON_API_CPU + '/embeddings', { tags })
@@ -517,6 +640,7 @@ export default class ModelsService {
     }
   }
 
+  @withCPUWarmUp
   async getCLIPEmbeddingsCPU(tags) {
     try {
       const { data } = await axios.post(process.env.PYTHON_API_CPU + '/clip-text-embeddings', {
@@ -529,6 +653,7 @@ export default class ModelsService {
     }
   }
 
+  @withCPUWarmUp
   async getReducedEmbeddings(payload) {
     try {
       const { data } = await axios.post(
@@ -542,6 +667,7 @@ export default class ModelsService {
     }
   }
 
+  @withCPUWarmUp
   async getClusters(payload) {
     try {
       const { data } = await axios.post(
@@ -555,6 +681,7 @@ export default class ModelsService {
     }
   }
 
+  @withCPUWarmUp
   async getHistogramColor(images) {
     try {
       const { data } = await axios.post(process.env.PYTHON_API_CPU + '/color-histograms', {
@@ -770,8 +897,10 @@ export default class ModelsService {
   ): Promise<any> {
     let cacheDuration = 60 * 5
     try {
-      // Si el modelo es gpt-5, gpt-5-mini o gpt-5-nano (pero NO gpt-5-chat-latest), no pasar temperature y usar max_completion_tokens
-      const isGpt5NonChat = ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-5.1'].includes(model)
+      // Si el modelo es un GPT-5 base/non-chat, no pasar temperature y usar max_completion_tokens
+      const isGpt5NonChat = ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-5.1', 'gpt-5.2'].includes(
+        model
+      )
 
       let payload: any = {
         model,
@@ -863,7 +992,8 @@ export default class ModelsService {
       }
 
       // Cache the result
-      if (useCache) cache.set(cacheKey, { ...result, cost: '0 [cached]' }, cacheDuration)
+      if (useCache && hasNonEmptyResult(result))
+        cache.set(cacheKey, { ...result, cost: '0 [cached]' }, cacheDuration)
 
       return result
     } catch (error) {
@@ -871,7 +1001,6 @@ export default class ModelsService {
     }
   }
 
-  @MeasureExecutionTime
   public async getGeminiResponse(
     systemPrompt: string,
     userMessages: any[],
@@ -907,30 +1036,57 @@ export default class ModelsService {
         maxOutputTokens: 2500,
       }
 
-      // Generate content using the client
-      const result = await ai.models.generateContent({
-        model,
-        contents,
-        generationConfig,
-        safetySettings: [
-          {
-            category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-            threshold: HarmBlockThreshold.BLOCK_NONE,
-          },
-          {
-            category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-            threshold: HarmBlockThreshold.BLOCK_NONE,
-          },
-          {
-            category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-            threshold: HarmBlockThreshold.BLOCK_NONE,
-          },
-          {
-            category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-            threshold: HarmBlockThreshold.BLOCK_NONE,
-          },
-        ],
-      })
+      // Generate content using the client (with retries for transient errors)
+      const maxRetries = 4
+      let result: GenerateContentResponse | undefined
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          result = await ai.models.generateContent({
+            model,
+            contents,
+            generationConfig,
+            safetySettings: [
+              {
+                category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+                threshold: HarmBlockThreshold.BLOCK_NONE,
+              },
+              {
+                category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                threshold: HarmBlockThreshold.BLOCK_NONE,
+              },
+              {
+                category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                threshold: HarmBlockThreshold.BLOCK_NONE,
+              },
+              {
+                category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                threshold: HarmBlockThreshold.BLOCK_NONE,
+              },
+            ],
+          })
+          break // success, exit retry loop
+        } catch (retryError: any) {
+          const status = retryError?.status ?? retryError?.code ?? retryError?.httpErrorCode
+          const isRetryable =
+            [429, 500, 503].includes(Number(status)) ||
+            /UNAVAILABLE|RESOURCE_EXHAUSTED|INTERNAL|overloaded|high demand/i.test(
+              retryError?.message || ''
+            )
+
+          if (!isRetryable || attempt === maxRetries) {
+            throw retryError
+          }
+
+          const baseDelay = Math.min(1000 * Math.pow(2, attempt), 16000)
+          const jitter = Math.random() * baseDelay * 0.5
+          const delay = baseDelay + jitter
+          console.warn(
+            `[Gemini] Retryable error (attempt ${attempt + 1}/${maxRetries}), retrying in ${Math.round(delay)}ms:`,
+            retryError?.message || retryError
+          )
+          await new Promise((resolve) => setTimeout(resolve, delay))
+        }
+      }
 
       // Extract usage metadata
       const usageMetadata = result.usageMetadata || {}
@@ -964,7 +1120,8 @@ export default class ModelsService {
       }
 
       // Cache the result
-      if (useCache) cache.set(cacheKey, { ...finalResult, cost: '0 [cached]' }, cacheDuration)
+      if (useCache && hasNonEmptyResult(finalResult))
+        cache.set(cacheKey, { ...finalResult, cost: '0 [cached]' }, cacheDuration)
 
       return finalResult
     } catch (error) {
@@ -1084,7 +1241,8 @@ export default class ModelsService {
       }
 
       // Cache the result
-      if (useCache) cache.set(cacheKey, { ...result, cost: '0 [cached]' }, cacheDuration)
+      if (useCache && hasNonEmptyResult(result))
+        cache.set(cacheKey, { ...result, cost: '0 [cached]' }, cacheDuration)
 
       return result
     } catch (error) {
