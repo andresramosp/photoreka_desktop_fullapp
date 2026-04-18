@@ -306,7 +306,7 @@
                       @select="
                         (photoId) => toggleMessagePhotoSelection(index, photoId)
                       "
-                      @info="showPhotoInfo"
+                      @info="(p) => showPhotoInfo(p, message.attachedPhotos)"
                     />
                   </div>
                 </div>
@@ -347,7 +347,13 @@
                     @select="
                       (photoId) => toggleMessagePhotoSelection(index, photoId)
                     "
-                    @info="showPhotoInfo"
+                    @info="
+                      (p) =>
+                        showPhotoInfo(
+                          p,
+                          getPhotosForMessage(message.photoLists[0].photoIds),
+                        )
+                    "
                   />
                 </div>
               </div>
@@ -381,7 +387,10 @@
                       @select="
                         (photoId) => toggleMessagePhotoSelection(index, photoId)
                       "
-                      @info="showPhotoInfo"
+                      @info="
+                        (p) =>
+                          showPhotoInfo(p, getPhotosForMessage(list.photoIds))
+                      "
                     />
                   </div>
                 </div>
@@ -442,7 +451,7 @@
               :showDelete="false"
               :showDuplicate="false"
               :isUploading="photo.isUploading"
-              @info="showPhotoInfo"
+              @info="(p) => showPhotoInfo(p, contextPhotos)"
             />
             <button
               class="remove-photo-btn"
@@ -558,6 +567,9 @@
     <PhotoInfoDialog
       v-model="showPhotoInfoDialog"
       :selected-photo="selectedDialogPhoto"
+      :all-photos="dialogNavigablePhotos"
+      :current-photo-index="currentPhotoIndex"
+      @photo-navigate="handlePhotoNavigate"
       @change-photo="selectedDialogPhoto = $event"
     />
 
@@ -884,6 +896,15 @@ const messagesRef = ref<HTMLElement | null>(null);
 const isMobile = ref(window.innerWidth < 768);
 const showPhotoInfoDialog = ref(false);
 const selectedDialogPhoto = ref<any>(null);
+const dialogNavigablePhotos = ref<ContextPhoto[]>([]);
+
+const currentPhotoIndex = computed(() => {
+  if (!selectedDialogPhoto.value || dialogNavigablePhotos.value.length === 0)
+    return -1;
+  return dialogNavigablePhotos.value.findIndex(
+    (p) => String(p.id) === String(selectedDialogPhoto.value.id),
+  );
+});
 const showSidebar = ref(false);
 const pendingDeleteId = ref<number | null>(null);
 const showChatLabInfo = ref(false);
@@ -1201,7 +1222,17 @@ const handleMarkdownClick = (e: MouseEvent) => {
   if (!photoId) return;
   const photo = photosStore.photos.find((p: any) => String(p.id) === photoId);
   if (photo) {
-    showPhotoInfo({ id: photoId } as any);
+    // Find the message that contains this photo to build navigable list
+    const numericId = parseInt(photoId, 10);
+    const parentMsg = chatStore.messages.find((m: any) =>
+      m.photoLists?.some((pl: PhotoList) => pl.photoIds.includes(numericId)),
+    );
+    const navigable = parentMsg?.photoLists
+      ? getPhotosForMessage(
+          parentMsg.photoLists.flatMap((pl: PhotoList) => pl.photoIds),
+        )
+      : [];
+    showPhotoInfo({ id: photoId } as any, navigable);
   }
 };
 
@@ -1491,14 +1522,31 @@ const handleAttachToChat = () => {
   }
 };
 
-const showPhotoInfo = async (photo: ContextPhoto) => {
+const showPhotoInfo = async (
+  photo: ContextPhoto | { id: string | number },
+  navigablePhotos: ContextPhoto[] = [],
+) => {
   try {
     const fullPhoto = await photosStore.fetchPhoto(photo.id);
     if (fullPhoto) {
+      dialogNavigablePhotos.value = navigablePhotos;
       selectedDialogPhoto.value = fullPhoto;
       showPhotoInfoDialog.value = true;
     } else {
       message.error("Photo not found");
+    }
+  } catch {
+    message.error("Could not load photo info");
+  }
+};
+
+const handlePhotoNavigate = async (newIndex: number) => {
+  if (newIndex < 0 || newIndex >= dialogNavigablePhotos.value.length) return;
+  const photo = dialogNavigablePhotos.value[newIndex];
+  try {
+    const fullPhoto = await photosStore.fetchPhoto(photo.id);
+    if (fullPhoto) {
+      selectedDialogPhoto.value = fullPhoto;
     }
   } catch {
     message.error("Could not load photo info");
