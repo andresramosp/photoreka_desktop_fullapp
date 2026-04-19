@@ -73,6 +73,13 @@ const ThreeDViewController = () => import('#controllers/3dview_controller')
 const PortfolioReviewController = () => import('#controllers/portfolio_review_controller')
 const ChatController = () => import('#controllers/chat_controller')
 const CanvasController = () => import('#controllers/canvas_controller')
+const PaymentController = () => import('#controllers/payment_controller')
+
+// Stripe webhook (no auth — verified by signature)
+router.post('/api/payments/webhook', [PaymentController, 'webhook'])
+
+// Payment packages (public — needed before auth for landing page)
+router.get('/api/payments/packages', [PaymentController, 'packages'])
 
 // Landing page endpoints (no auth required)
 router.post('/api/landing/waiting-list', [LandingController, 'waitingList'])
@@ -158,6 +165,11 @@ router
     // Portfolio Review endpoints
     // router.get('/api/portfolio-review/:reviewType', [PortfolioReviewController, 'getPatterns'])
     router.get('/api/portfolio-review/should-build', [PortfolioReviewController, 'shouldBuild'])
+
+    // Payment endpoints
+    router.post('/api/payments/checkout', [PaymentController, 'checkout'])
+    router.get('/api/payments/history', [PaymentController, 'history'])
+    router.get('/api/payments/verify', [PaymentController, 'verify'])
 
     // Usage endpoints
     router.get('/api/usage', [UsageController, 'show'])

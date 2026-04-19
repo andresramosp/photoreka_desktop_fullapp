@@ -98,6 +98,7 @@
     "reflect-metadata": "^0.2.2",
     "sharp": "^0.33.5",
     "socket.io": "^4.8.1",
+    "stripe": "^22.0.2",
     "zod": "^3.25.76"
   },
   "hotHook": {
