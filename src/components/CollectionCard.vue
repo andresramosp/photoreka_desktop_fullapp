@@ -157,13 +157,12 @@ const formatDate = (date: Date | string) => {
   height: 80px;
   border-radius: 8px;
   overflow: hidden;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: 2px solid var(--border-color);
   background-color: var(--bg-container);
 }
 
 .sequence-photo:hover {
-  transform: scale(1.05);
   border-color: var(--primary-color);
 }
 

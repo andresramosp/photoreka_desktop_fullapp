@@ -416,7 +416,7 @@ onMounted(() => {
   ) !important;
   border: 1px solid var(--border-color) !important;
   flex: 1;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   min-height: 120px;
   overflow: hidden;
 }
@@ -440,8 +440,6 @@ onMounted(() => {
 
 .stat-card:hover {
   border-color: var(--primary-50);
-  box-shadow: 0 8px 24px var(--primary-15);
-  transform: translateY(-2px);
 }
 
 .stat-content {
@@ -504,7 +502,7 @@ onMounted(() => {
   border: 1px solid var(--border-color);
   border-radius: 16px;
   cursor: pointer;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
   min-height: 190px;
   flex: 1;
@@ -529,8 +527,6 @@ onMounted(() => {
 
 .action-card:hover {
   border-color: var(--primary-50);
-  box-shadow: 0 12px 32px var(--primary-15);
-  transform: translateY(-4px);
 }
 
 .action-card.disabled {
@@ -541,8 +537,6 @@ onMounted(() => {
 
 .action-card.disabled:hover {
   border-color: var(--border-color);
-  box-shadow: none;
-  transform: none;
 }
 
 /* Canvas Card Styles */

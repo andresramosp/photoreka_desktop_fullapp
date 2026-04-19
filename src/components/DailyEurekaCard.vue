@@ -295,7 +295,6 @@ const showPhotoInfo = async () => {
 .did-you-know.hovering {
   transform: none !important;
   box-shadow: none !important;
-  border: none !important;
 }
 
 .did-you-know.has-photo {

@@ -68,7 +68,7 @@ const handleClick = () => {
   border-radius: 16px;
   padding: 24px;
   cursor: pointer;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
   min-height: 190px;
   flex: 1;
@@ -97,8 +97,6 @@ const handleClick = () => {
 
 .dashboard-action-card:hover {
   border-color: var(--primary-50);
-  box-shadow: 0 12px 32px var(--primary-15);
-  transform: translateY(-4px);
 }
 
 .dashboard-action-card.disabled {
@@ -109,8 +107,6 @@ const handleClick = () => {
 
 .dashboard-action-card.disabled:hover {
   border-color: var(--border-color);
-  box-shadow: none;
-  transform: none;
 }
 
 /* Patrón decorativo de fondo - ahora está en global.scss */
@@ -130,12 +126,6 @@ const handleClick = () => {
   padding: 12px;
   background: var(--primary-08);
   border-radius: 12px;
-  transition: all 0.3s ease;
-}
-
-.dashboard-action-card:hover .card-icon-small {
-  background: var(--primary-15);
-  transform: translateY(-2px);
 }
 
 .card-title {
@@ -167,18 +157,6 @@ const handleClick = () => {
   .dashboard-action-card {
     padding: 16px;
     min-height: 190px;
-  }
-}
-
-/* Large devices - enhanced hover effects */
-@media (min-width: 1024px) {
-  .dashboard-action-card:hover {
-    box-shadow: 0 8px 24px var(--primary-30);
-  }
-
-  .dashboard-action-card.disabled:hover {
-    transform: none;
-    box-shadow: none;
   }
 }
 </style>
