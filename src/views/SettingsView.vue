@@ -117,6 +117,30 @@
           <div class="section-content">
             <div class="setting-item">
               <div class="setting-info">
+                <label class="setting-label">Profile</label>
+                <p class="setting-description">Your photography profile</p>
+              </div>
+              <div class="setting-control">
+                <n-tag type="info" size="medium">
+                  {{ userProfileLabel }}
+                </n-tag>
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <label class="setting-label">Preferred Source</label>
+                <p class="setting-description">Where your photos come from</p>
+              </div>
+              <div class="setting-control">
+                <n-tag type="info" size="medium">
+                  {{ preferredSourceLabel }}
+                </n-tag>
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
                 <label class="setting-label">Language</label>
                 <p class="setting-description">
                   Choose your preferred language
@@ -266,19 +290,28 @@
             <n-icon size="24" color="var(--primary-color)">
               <CloudOutline />
             </n-icon>
-            <h2 class="section-title">Plans & Storage</h2>
+            <h2 class="section-title">Photo Analysis & Credits</h2>
           </div>
           <div class="section-content">
             <!-- Current Plan -->
-            <div class="current-plan-card">
+            <!-- <div class="current-plan-card">
               <div class="plan-info">
                 <span class="plan-name">Free Plan</span>
                 <n-tag type="info" size="small">Current Plan</n-tag>
               </div>
-              <n-button type="primary" ghost size="small">
+              <n-button
+                type="primary"
+                ghost
+                size="small"
+                @click="
+                  message.info(
+                    'Plans coming soon! Use the buttons below to add photos or credits.',
+                  )
+                "
+              >
                 View Plans
               </n-button>
-            </div>
+            </div> -->
 
             <!-- Analysis Usage -->
             <div class="storage-usage-container">
@@ -321,9 +354,13 @@
                   >{{ analyzedPhotosRemaining }} analyses remaining</span
                 >
                 <n-button
-                  type="primary"
+                  type="info"
                   size="small"
-                  @click="showPlansModal = true"
+                  @click="
+                    ENABLE_REAL_PURCHASE
+                      ? (showPhotosModal = true)
+                      : (showPlansModal = true)
+                  "
                 >
                   <template #icon>
                     <n-icon>
@@ -376,17 +413,20 @@
                   >{{ creditsAvailable - creditsUsed }} credits remaining</span
                 >
                 <n-button
-                  type="warning"
+                  type="info"
                   size="small"
-                  ghost
-                  @click="showPlansModal = true"
+                  @click="
+                    ENABLE_REAL_PURCHASE
+                      ? (showCreditsModal = true)
+                      : (showPlansModal = true)
+                  "
                 >
                   <template #icon>
                     <n-icon>
                       <AddOutline />
                     </n-icon>
                   </template>
-                  Get more credits
+                  Top credits
                 </n-button>
               </div>
             </div>
@@ -403,7 +443,13 @@
     </div>
   </div>
 
-  <!-- Plans & Credits Modal -->
+  <!-- Photo Packages Modal -->
+  <PhotoPackagesModal v-model:show="showPhotosModal" />
+
+  <!-- Credit Purchase Modal -->
+  <CreditPurchaseModal v-model:show="showCreditsModal" />
+
+  <!-- Plans & Credits Coming Soon Modal -->
   <n-modal
     v-model:show="showPlansModal"
     :style="{ width: '480px', maxWidth: '92vw' }"
@@ -513,6 +559,14 @@ import { useTheme } from "@/composables/useTheme.js";
 import { useGooglePhotos } from "@/composables/useGooglePhotos.js";
 import { useDropbox } from "@/composables/useDropbox.js";
 import { api } from "@/utils/axios";
+import PhotoPackagesModal from "@/components/PhotoPackagesModal.vue";
+import CreditPurchaseModal from "@/components/CreditPurchaseModal.vue";
+
+// ============================================================
+// Toggle: set to true to enable real purchase modals,
+//         set to false to show "coming soon" placeholder modal.
+// ============================================================
+const ENABLE_REAL_PURCHASE = false;
 
 // Stores and composables
 const userStore = useUserStore();
@@ -534,6 +588,30 @@ const isDemoUser = computed(() => {
 // User data (real)
 const userName = computed(() => userStore.user?.name || "User");
 const userEmail = computed(() => userStore.user?.email || "");
+
+// Profile & preferred source labels
+const singleProfileLabel: Record<string, string> = {
+  general: "General",
+  "street-photography": "Street Photography",
+  documentary: "Documentary",
+  artistic: "Artistic",
+};
+
+const userProfileLabel = computed(() => {
+  const profiles = userStore.user?.profiles;
+  if (!profiles) return "General";
+  return profiles
+    .split("|")
+    .map((p) => singleProfileLabel[p.trim()] || p.trim())
+    .join(" & ");
+});
+
+const preferredSourceLabel = computed(() => {
+  const source = userStore.user?.preferredSource;
+  if (source === "ligthroom") return "Lightroom";
+  if (source === "web") return "Web";
+  return source || "Web";
+});
 
 // Invite friends
 const inviteEmail = ref("");
@@ -658,7 +736,9 @@ const creditsPercentage = computed(() => {
   return Math.min((creditsUsed.value / creditsAvailable.value) * 100, 100);
 });
 
-// Plans modal
+// Purchase modals
+const showPhotosModal = ref(false);
+const showCreditsModal = ref(false);
 const showPlansModal = ref(false);
 
 // Actions
@@ -959,6 +1039,82 @@ const saveSettings = () => {
   color: var(--text-secondary);
 }
 
+/* Plans Modal Styles */
+.plans-modal-card {
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-surface);
+}
+
+.plans-modal-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) 0;
+}
+
+.plans-modal-icon-wrapper {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(
+    135deg,
+    rgba(59, 130, 246, 0.12),
+    rgba(99, 102, 241, 0.12)
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plans-modal-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.plans-modal-body {
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.plans-modal-highlight {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-container);
+  text-align: left;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  width: 100%;
+}
+
+.plans-modal-highlight--bonus {
+  background-color: rgba(250, 204, 21, 0.08);
+}
+
+.plans-modal-link {
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: var(--font-weight-medium);
+}
+
+.plans-modal-link:hover {
+  text-decoration: underline;
+}
+
+.plans-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+}
+
 /* Actions */
 .settings-actions {
   display: flex;
@@ -1127,81 +1283,5 @@ const saveSettings = () => {
   .settings-grid {
     grid-template-columns: 1fr;
   }
-}
-
-/* Plans Modal */
-.plans-modal-card {
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
-}
-
-.plans-modal-content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-  padding: var(--spacing-sm) 0;
-}
-
-.plans-modal-icon-wrapper {
-  width: 52px;
-  height: 52px;
-  border-radius: var(--radius-lg);
-  background-color: var(--bg-elevated);
-  border: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.plans-modal-title {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.plans-modal-body {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  margin: 0;
-  line-height: 1.6;
-}
-
-.plans-modal-highlight {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-radius: var(--radius-md);
-  background-color: var(--bg-elevated);
-  border: 1px solid var(--border-color);
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-.plans-modal-highlight .n-icon {
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.plans-modal-highlight--bonus {
-  border-color: rgba(var(--warning-color-rgb, 234, 179, 8), 0.25);
-  background-color: rgba(var(--warning-color-rgb, 234, 179, 8), 0.05);
-}
-
-.plans-modal-link {
-  color: var(--primary-color);
-  text-decoration: none;
-}
-
-.plans-modal-link:hover {
-  text-decoration: underline;
-}
-
-.plans-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--spacing-sm);
 }
 </style>
