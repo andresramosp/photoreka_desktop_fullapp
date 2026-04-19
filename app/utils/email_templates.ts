@@ -812,3 +812,62 @@ export function portfolioReviewBuildTemplate(
 
   return baseLayout(content, 'Portfolio Review - Photoreka')
 }
+
+/**
+ * Portfolio build complete notification email
+ */
+export function portfolioBuildCompleteTemplate(
+  userName: string,
+  params: {
+    photoCount: number
+    targetSize: number
+    recallSize: number
+    costEur: number
+    portfolioUrl: string
+    hasSequencing: boolean
+  }
+): string {
+  const { photoCount, targetSize, recallSize, portfolioUrl, hasSequencing } = params
+
+  const content = `
+    <h1 style="margin: 0 0 20px; font-size: 28px; font-weight: 700; color: ${TEXT_COLOR}; text-align: center;">
+      Your Portfolio is Ready 📸
+    </h1>
+    <p style="margin: 0 0 10px; font-size: 16px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+      Hi ${userName},
+    </p>
+    <p style="margin: 0 0 24px; font-size: 16px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+      We've reviewed <strong style="color: ${TEXT_COLOR};">${recallSize}</strong> candidate photos from your catalog and curated a selection of <strong style="color: ${TEXT_COLOR};">${photoCount}</strong> for your portfolio.
+    </p>
+
+    <!-- Stats -->
+    <div style="display: flex; justify-content: center; gap: 16px; margin: 0 0 24px;">
+      <div style="background-color: rgba(99, 102, 241, 0.08); border-radius: 8px; padding: 16px 24px; text-align: center; border: 1px solid rgba(99, 102, 241, 0.15); display: inline-block; margin: 0 8px;">
+        <p style="margin: 0 0 4px; font-size: 24px; font-weight: 700; color: ${TEXT_COLOR};">${photoCount}</p>
+        <p style="margin: 0; font-size: 12px; color: ${MUTED_TEXT_COLOR};">photos selected</p>
+      </div>
+      <div style="background-color: rgba(99, 102, 241, 0.08); border-radius: 8px; padding: 16px 24px; text-align: center; border: 1px solid rgba(99, 102, 241, 0.15); display: inline-block; margin: 0 8px;">
+        <p style="margin: 0 0 4px; font-size: 24px; font-weight: 700; color: ${TEXT_COLOR};">${recallSize}</p>
+        <p style="margin: 0; font-size: 12px; color: ${MUTED_TEXT_COLOR};">candidates reviewed</p>
+      </div>
+    </div>
+
+    ${
+      hasSequencing
+        ? `<p style="margin: 0 0 24px; font-size: 14px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+            ✨ Your portfolio includes a <strong style="color: ${TEXT_COLOR};">suggested viewing sequence</strong> for optimal flow.
+          </p>`
+        : ''
+    }
+
+    ${emailButton('View Your Portfolio', portfolioUrl)}
+
+    <hr style="border: none; border-top: 1px solid rgba(148, 163, 184, 0.2); margin: 30px 0;" />
+
+    <p style="margin: 0; font-size: 12px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+      This is an automated notification from Photoreka.
+    </p>
+  `
+
+  return baseLayout(content, 'Portfolio Ready - Photoreka')
+}
