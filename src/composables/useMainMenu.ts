@@ -172,6 +172,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
                 key: ser.key,
               })),
       },
+      portfolioBuilderOption.value,
     ];
 
     return {
@@ -280,6 +281,14 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     icon: renderIcon(toolIcon("help")),
   }));
 
+  // Portfolio Builder (root-level)
+  const portfolioBuilderOption = computed<MenuOption>(() => ({
+    label: "Portfolios",
+    key: "portfolios",
+    disabled: isBlocked.value,
+    icon: renderIcon(toolIcon("portfolios")),
+  }));
+
   // Chat option (global, like Sync Area)
   const chatOption = computed<MenuOption>(() => ({
     label: "ChatLab",
@@ -310,6 +319,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
 
       chatOption.value,
       reportOption.value,
+
       {
         type: "divider",
         key: "tools-divider",

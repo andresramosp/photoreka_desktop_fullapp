@@ -2,10 +2,10 @@
   <div class="clickable-weight-slider">
     <div
       class="slider-track"
-      @mousedown="handleMouseDown"
-      @click="handleClick"
+      @mousedown="!readonly && handleMouseDown($event)"
+      @click="!readonly && handleClick($event)"
       ref="trackRef"
-      :class="{ dragging: isDragging }"
+      :class="{ dragging: isDragging, readonly: readonly }"
     >
       <div
         class="slider-fill"
@@ -59,6 +59,10 @@ const props = defineProps({
   color: {
     type: String,
     default: "var(--text-on-primary)",
+  },
+  readonly: {
+    type: Boolean,
+    default: false,
   },
   fillColor: {
     type: String,
@@ -178,6 +182,16 @@ onUnmounted(() => {
   cursor: grabbing;
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
+}
+
+.slider-track.readonly {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.slider-track.readonly:hover {
+  border-color: #2c2c32;
+  transform: none;
 }
 
 .slider-fill {
