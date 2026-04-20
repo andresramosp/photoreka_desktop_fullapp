@@ -18,7 +18,8 @@ export type CoherenceMode = 'free' | 'visual' | 'chromatic' | 'narrative' | 'het
 export type PortfolioBuildConfig = {
   targetSize: number
   weights: Record<string, number>
-  freetext?: string
+  themePreferences?: string
+  sequencingPreferences?: string
   coherenceMode: CoherenceMode
   sequencing: boolean
   filters?: {

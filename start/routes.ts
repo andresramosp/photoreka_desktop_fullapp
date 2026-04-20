@@ -173,6 +173,7 @@ router
     router.get('/api/portfolio-build/list', [PortfolioBuildController, 'list'])
     router.get('/api/portfolio-build/:id', [PortfolioBuildController, 'getStatus'])
     router.post('/api/portfolio-build/:id/abort', [PortfolioBuildController, 'abort'])
+    router.patch('/api/portfolio-build/:id/layout', [PortfolioBuildController, 'updateLayout'])
 
     // Payment endpoints
     router.post('/api/payments/checkout', [PaymentController, 'checkout'])

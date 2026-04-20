@@ -61,6 +61,7 @@ export type ModelName =
   | 'gemini-2.5-flash'
   | 'gemini-2.5-flash-lite'
   | 'gemini-3-flash-preview'
+  | 'gemini-3.1-flash-lite-preview'
   | 'gemini-3-pro-preview'
   | 'grok-4-fast-reasoning'
   | 'grok-4-fast-non-reasoning'

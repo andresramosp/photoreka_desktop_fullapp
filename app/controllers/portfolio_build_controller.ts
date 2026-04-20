@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import PortfolioBuildService from '#services/portfolio_build_service'
+import CreditService from '#services/credit_service'
 import type { PortfolioBuildConfig } from '#models/portfolio_build'
 
 const VALID_COHERENCE_MODES = ['free', 'visual', 'chromatic', 'narrative', 'heterogeneous']
@@ -8,11 +9,17 @@ const VALID_SCORE_FIELDS = [
   'composition',
   'storytelling',
   'originality',
+  'strangeness',
   'message',
   'humor',
   'visual_games',
   'candidness',
 ]
+
+/** Maps aliased score field names to the canonical name used downstream. */
+const SCORE_FIELD_ALIASES: Record<string, string> = {
+  strangeness: 'originality',
+}
 
 export default class PortfolioBuildController {
   /**
@@ -27,6 +34,14 @@ export default class PortfolioBuildController {
       const body = request.body()
       const config = this.parseAndValidateConfig(body)
 
+      const hasCredits = await CreditService.canAfford(user.id)
+      if (!hasCredits) {
+        return response.status(402).json({
+          message: 'No credits remaining. Please purchase more credits to continue.',
+          code: 'INSUFFICIENT_CREDITS',
+        })
+      }
+
       const service = new PortfolioBuildService()
 
       // Check eligibility
@@ -38,7 +53,19 @@ export default class PortfolioBuildController {
         })
       }
 
-      const build = await service.startBuild(user.id, config)
+      const wait = Boolean(body.wait ?? false)
+      const build = await service.startBuild(user.id, config, wait)
+
+      if (wait) {
+        return response.ok({
+          success: true,
+          buildId: build.id,
+          status: build.status,
+          result: build.result,
+          costEur: build.costEur,
+          error: build.error ?? undefined,
+        })
+      }
 
       return response.accepted({
         success: true,
@@ -106,9 +133,13 @@ export default class PortfolioBuildController {
           id: b.id,
           status: b.status,
           progress: b.progress,
+          config: b.config,
           targetSize: b.config.targetSize,
+          coherenceMode: b.config.coherenceMode,
           resultCount: b.result?.photoIds?.length ?? null,
-          costEur: b.costEur,
+          photoItems: b.result?.photoItems ?? null,
+          costEur: Number(b.costEur),
+          error: b.error ?? null,
           createdAt: b.createdAt.toISO(),
           completedAt: b.completedAt?.toISO(),
         })),
@@ -143,6 +174,65 @@ export default class PortfolioBuildController {
   }
 
   /**
+   * PATCH /api/portfolio-build/:id/layout
+   * Update the photo order (and optionally remove photos) for a completed build.
+   */
+  public async updateLayout({ params, request, response, auth }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as any
+
+      const service = new PortfolioBuildService()
+      const build = await service.getStatus(Number(params.id), user.id)
+
+      if (!build) {
+        return response.notFound({ error: 'Build not found.' })
+      }
+
+      if (build.status !== 'completed') {
+        return response.badRequest({ error: 'Can only update layout of completed builds.' })
+      }
+
+      const body = request.body()
+      const photoIds = body.photoIds
+
+      if (!Array.isArray(photoIds) || photoIds.length === 0) {
+        return response.badRequest({ error: 'photoIds must be a non-empty array.' })
+      }
+
+      // Validate that all provided IDs are a subset of the original result
+      const originalIds = new Set(build.result?.photoIds ?? [])
+      const invalidIds = photoIds.filter((id: any) => !originalIds.has(Number(id)))
+      if (invalidIds.length > 0) {
+        return response.badRequest({
+          error: `photoIds contains IDs not in the original build: ${invalidIds.join(', ')}`,
+        })
+      }
+
+      // Build new photoItems in the requested order
+      const originalItemsMap = new Map(
+        (build.result?.photoItems ?? []).map((item: any) => [item.id, item])
+      )
+      const newPhotoIds = photoIds.map(Number)
+      const newPhotoItems = newPhotoIds
+        .map((id: number) => originalItemsMap.get(id))
+        .filter(Boolean)
+
+      build.result = {
+        ...build.result!,
+        photoIds: newPhotoIds,
+        photoItems: newPhotoItems,
+      }
+      await build.save()
+
+      return response.ok({ success: true, photoIds: newPhotoIds })
+    } catch (error: any) {
+      console.error('[PortfolioBuildController] updateLayout error:', error)
+      return response.internalServerError({ error: error.message })
+    }
+  }
+
+  /**
    * GET /api/portfolio-build/eligibility
    * Check if the user is eligible to start a build.
    */
@@ -150,6 +240,14 @@ export default class PortfolioBuildController {
     try {
       await auth.use('api').check()
       const user = auth.use('api').user! as any
+
+      const hasCredits = await CreditService.canAfford(user.id)
+      if (!hasCredits) {
+        return response.status(402).json({
+          message: 'No credits remaining. Please purchase more credits to continue.',
+          code: 'INSUFFICIENT_CREDITS',
+        })
+      }
 
       const service = new PortfolioBuildService()
       const result = await service.validateBuildEligibility(user.id)
@@ -169,17 +267,22 @@ export default class PortfolioBuildController {
       throw new Error('targetSize must be between 10 and 60.')
     }
 
-    const weights = body.weights
-    if (!weights || typeof weights !== 'object') {
+    const rawWeights = body.weights
+    if (!rawWeights || typeof rawWeights !== 'object') {
       throw new Error('weights is required and must be an object.')
     }
-    for (const [field, value] of Object.entries(weights)) {
-      if (!VALID_SCORE_FIELDS.includes(field)) {
+
+    // Normalize aliased field names (e.g. strangeness → originality)
+    const weights: Record<string, number> = {}
+    for (const [field, value] of Object.entries(rawWeights)) {
+      const canonical = SCORE_FIELD_ALIASES[field] ?? field
+      if (!VALID_SCORE_FIELDS.includes(canonical)) {
         throw new Error(`Invalid weight field: ${field}`)
       }
       if (typeof value !== 'number' || value < 0 || value > 10) {
         throw new Error(`Weight for ${field} must be a number between 0 and 10.`)
       }
+      weights[canonical] = value
     }
 
     const coherenceMode = body.coherenceMode ?? 'free'
@@ -196,8 +299,20 @@ export default class PortfolioBuildController {
       sequencing,
     }
 
-    if (body.freetext && typeof body.freetext === 'string' && body.freetext.trim().length > 0) {
-      config.freetext = body.freetext.trim().slice(0, 2000)
+    if (
+      body.themePreferences &&
+      typeof body.themePreferences === 'string' &&
+      body.themePreferences.trim().length > 0
+    ) {
+      config.themePreferences = body.themePreferences.trim().slice(0, 2000)
+    }
+
+    if (
+      body.sequencingPreferences &&
+      typeof body.sequencingPreferences === 'string' &&
+      body.sequencingPreferences.trim().length > 0
+    ) {
+      config.sequencingPreferences = body.sequencingPreferences.trim().slice(0, 2000)
     }
 
     if (body.filters && typeof body.filters === 'object') {
@@ -205,7 +320,11 @@ export default class PortfolioBuildController {
       if (body.filters.visualAspects) config.filters.visualAspects = body.filters.visualAspects
       if (body.filters.dateFrom) config.filters.dateFrom = body.filters.dateFrom
       if (body.filters.dateTo) config.filters.dateTo = body.filters.dateTo
-      if (body.filters.collectionIds) config.filters.collectionIds = body.filters.collectionIds
+      if (Array.isArray(body.filters.collectionIds) && body.filters.collectionIds.length > 0) {
+        config.filters.collectionIds = body.filters.collectionIds
+          .filter((id: any) => Number.isFinite(Number(id)))
+          .map(Number)
+      }
     }
 
     return config
