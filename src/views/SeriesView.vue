@@ -411,7 +411,7 @@
     <!-- Floating Action Bar (only show in series detail view) -->
     <FloatingActionBar
       v-if="showSeriesView && !isPublicView"
-      :selected-count="localSelectedPhotoIds.length"
+      :selected-ids="localSelectedPhotoIds"
       :show-delete="false"
       :show-add-to-collection="false"
       :show-move-to-tool="true"

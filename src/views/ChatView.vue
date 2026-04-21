@@ -701,7 +701,7 @@
 
     <!-- Floating Action Bar -->
     <FloatingActionBar
-      :selected-count="selectedPhotoIds.length"
+      :selected-ids="selectedPhotoIds"
       :show-delete="false"
       :show-add-to-collection="true"
       :show-move-to-tool="true"

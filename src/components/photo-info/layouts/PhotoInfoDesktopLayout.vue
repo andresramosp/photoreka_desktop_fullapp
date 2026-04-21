@@ -89,7 +89,7 @@
         >
           <FloatingActionBar
             :embedded="true"
-            :selected-count="1"
+            :selected-ids="selectedPhoto?.id ? [selectedPhoto.id] : []"
             :show-delete="showDelete"
             :show-add-to-collection="showAddToCollection"
             :show-move-to-tool="showMoveToTool"

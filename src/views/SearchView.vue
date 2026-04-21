@@ -130,7 +130,7 @@
 
     <!-- Floating Action Bar -->
     <FloatingActionBar
-      :selected-count="localSelectedPhotoIds.length"
+      :selected-ids="localSelectedPhotoIds"
       :show-delete="false"
       :show-add-to-collection="true"
       :show-move-to-tool="true"

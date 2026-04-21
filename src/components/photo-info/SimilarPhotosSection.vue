@@ -11,7 +11,7 @@
       />
       <FloatingActionBar
         embedded
-        :selected-count="selectedIds.length"
+        :selected-ids="selectedIds"
         :show-delete="false"
         :show-add-to-collection="true"
         :show-move-to-tool="true"

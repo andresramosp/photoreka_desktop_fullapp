@@ -39,8 +39,8 @@
             <div class="action-separator"></div>
           </template>
 
-          <!-- Download Button -->
-          <n-tooltip placement="top" trigger="hover">
+          <!-- Group 1: Download + Copy Names -->
+          <n-tooltip placement="bottom" trigger="hover">
             <template #trigger>
               <n-button
                 type="info"
@@ -59,30 +59,40 @@
             <span>Download selected photos</span>
           </n-tooltip>
 
-          <!-- Add to Collection Button -->
-          <n-tooltip v-if="showAddToCollection" placement="top" trigger="hover">
+          <n-tooltip v-if="showCopyNames" placement="bottom" trigger="hover">
             <template #trigger>
               <n-button
                 type="info"
                 size="medium"
-                @click="$emit('add-to-collection')"
+                @click="handleCopyNames"
                 :disabled="selectedCount === 0"
               >
                 <template #icon>
                   <n-icon>
-                    <AlbumsOutline />
+                    <CopyOutline />
                   </n-icon>
                 </template>
               </n-button>
             </template>
-            <span>Add selected photos to a collection</span>
+            <span>Copy photo names to clipboard</span>
           </n-tooltip>
 
-          <!-- Move to Tool Button -->
-          <n-tooltip v-if="showMoveToTool" placement="top" trigger="hover">
+          <!-- Divider: only shown when group 2 has at least one button -->
+          <div
+            v-if="
+              showMoveToTool ||
+              showAddToCollection ||
+              showSendToChat ||
+              showAttachToChat
+            "
+            class="action-separator"
+          ></div>
+
+          <!-- Group 2: Take to Tool / Collection / Chat -->
+          <n-tooltip v-if="showMoveToTool" placement="bottom" trigger="hover">
             <template #trigger>
               <n-button
-                type="info"
+                type="primary"
                 size="medium"
                 @click="$emit('move-to-tool')"
                 :disabled="selectedCount === 0"
@@ -97,11 +107,32 @@
             <span>Take selected photos to a tool</span>
           </n-tooltip>
 
-          <!-- Send to Chat Button (from any external view) -->
-          <n-tooltip v-if="showSendToChat" placement="top" trigger="hover">
+          <n-tooltip
+            v-if="showAddToCollection"
+            placement="bottom"
+            trigger="hover"
+          >
             <template #trigger>
               <n-button
-                type="info"
+                type="primary"
+                size="medium"
+                @click="$emit('add-to-collection')"
+                :disabled="selectedCount === 0"
+              >
+                <template #icon>
+                  <n-icon>
+                    <AlbumsOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </template>
+            <span>Add selected photos to a collection</span>
+          </n-tooltip>
+
+          <n-tooltip v-if="showSendToChat" placement="bottom" trigger="hover">
+            <template #trigger>
+              <n-button
+                type="primary"
                 size="medium"
                 @click="$emit('send-to-chat')"
                 :disabled="selectedCount === 0"
@@ -116,8 +147,7 @@
             <span>Send selected photos to ChatLab</span>
           </n-tooltip>
 
-          <!-- Attach to Chat Button (inside ChatView only) -->
-          <n-tooltip v-if="showAttachToChat" placement="top" trigger="hover">
+          <n-tooltip v-if="showAttachToChat" placement="bottom" trigger="hover">
             <template #trigger>
               <n-button
                 type="primary"
@@ -135,8 +165,11 @@
             <span>Attach selected photos to your message</span>
           </n-tooltip>
 
-          <!-- Delete Button -->
-          <n-tooltip v-if="showDelete" placement="top" trigger="hover">
+          <!-- Divider before delete -->
+          <div v-if="showDelete" class="action-separator"></div>
+
+          <!-- Group 3: Delete -->
+          <n-tooltip v-if="showDelete" placement="bottom" trigger="hover">
             <template #trigger>
               <n-button
                 type="error"
@@ -166,23 +199,29 @@
 </template>
 
 <script setup>
-import { NButton, NIcon, NTooltip } from "naive-ui";
+import { NButton, NIcon, NTooltip, useMessage } from "naive-ui";
 import {
   AlbumsOutline,
   CloudDownloadOutline,
   AttachOutline,
+  CopyOutline,
 } from "@vicons/ionicons5";
 import { RobotOutlined } from "@vicons/antd";
 import { MagicWand } from "@vicons/carbon";
+import { computed } from "vue";
+import { usePhotosStore } from "@/stores/photos";
 import { useMobilePhotoSelection } from "@/composables/useMobilePhotoSelection";
 
 // Get mobile selection composable to reset mode
 const { exitSelectionMode } = useMobilePhotoSelection();
 
-defineProps({
-  selectedCount: {
-    type: Number,
-    required: true,
+const photosStore = usePhotosStore();
+const message = useMessage();
+
+const props = defineProps({
+  selectedIds: {
+    type: Array,
+    default: () => [],
   },
   showDelete: {
     type: Boolean,
@@ -212,6 +251,10 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  showCopyNames: {
+    type: Boolean,
+    default: true,
+  },
   embedded: {
     type: Boolean,
     default: false,
@@ -227,6 +270,21 @@ const emit = defineEmits([
   "send-to-chat",
   "attach-to-chat",
 ]);
+
+const selectedCount = computed(() => props.selectedIds.length);
+
+const handleCopyNames = () => {
+  const idSet = new Set(props.selectedIds.map(String));
+  const names = (photosStore.photos || [])
+    .filter((p) => idSet.has(String(p.id)))
+    .map((p) => (p.originalFileName || p.name || "").replace(/\.[^/.]+$/, ""))
+    .join(", ");
+  navigator.clipboard.writeText(names);
+  const count = idSet.size;
+  message.success(
+    `${count} filename${count !== 1 ? "s" : ""} copied to clipboard`,
+  );
+};
 
 // Handler for clear selection that also exits mobile selection mode
 const handleClearSelection = () => {
