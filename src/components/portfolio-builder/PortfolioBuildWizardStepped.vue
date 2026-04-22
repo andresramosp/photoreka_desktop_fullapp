@@ -9,7 +9,7 @@
     :mask-closable="!isBuilding"
     :close-on-esc="!isBuilding"
     class="build-wizard-modal"
-    style="width: 640px"
+    style="width: 700px"
     @close="handleClose"
   >
     <template #header>
@@ -68,7 +68,7 @@
           :disabled="idx > currentStep"
           @click="idx < currentStep && (currentStep = idx)"
         >
-          <n-icon :component="step.icon" :size="15" class="tab-icon" />
+          <n-icon :component="step.icon" :size="20" class="tab-icon" />
           <span class="tab-label">{{ step.shortLabel }}</span>
         </button>
       </div>
@@ -222,98 +222,77 @@
                 </button>
               </div>
 
-              <!-- Describe mode -->
-              <template v-if="form.weightMode === 'describe'">
-                <n-input
-                  v-model:value="form.stylePreferences"
-                  type="textarea"
-                  placeholder="e.g. 'strong storytelling and humor' or 'cinematic, high-contrast, geometric compositions'…"
-                  :autosize="{ minRows: 2, maxRows: 4 }"
-                  :maxlength="1000"
-                  clearable
-                />
-                <div class="style-preview-trigger">
-                  <n-button
-                    size="tiny"
-                    :loading="isPreviewing"
-                    :disabled="!form.stylePreferences.trim()"
-                    @click="runStylePreview(form.stylePreferences)"
-                    secondary
-                    type="info"
-                  >
-                    <template #icon
-                      ><n-icon><FlashOutline /></n-icon
-                    ></template>
-                    Preview weights
-                  </n-button>
-                </div>
-                <div class="style-preview-header">
-                  <span class="filter-label">Preview</span>
-                  <span class="style-preview-hint">
-                    <template v-if="isPreviewing">Analyzing…</template>
-                    <template
-                      v-else-if="
-                        stylePreviewResult &&
-                        stylePreviewResult.emphasize?.length
-                      "
+              <!-- Mode content (soft fade on switch) -->
+              <Transition name="weight-mode" mode="out-in">
+                <!-- Describe mode -->
+                <div
+                  v-if="form.weightMode === 'describe'"
+                  key="describe"
+                  class="weight-mode-content"
+                >
+                  <n-input
+                    v-model:value="form.stylePreferences"
+                    type="textarea"
+                    placeholder="e.g. 'strong storytelling and humor' or 'cinematic, high-contrast, geometric compositions'…"
+                    :autosize="{ minRows: 2, maxRows: 4 }"
+                    :maxlength="1000"
+                    clearable
+                  />
+                  <div class="style-preview-trigger">
+                    <n-button
+                      size="tiny"
+                      :loading="isPreviewing"
+                      :disabled="!form.stylePreferences.trim()"
+                      @click="runStylePreview(form.stylePreferences)"
+                      secondary
+                      type="info"
                     >
-                      Emphasized:
-                      <span
-                        v-for="(c, i) in stylePreviewResult.emphasize"
-                        :key="c"
-                        class="style-preview-chip"
-                      >
-                        {{ formatCriterionName(c) }}
-                        <span v-if="i < stylePreviewResult.emphasize.length - 1"
-                          >,
-                        </span>
-                      </span>
-                    </template>
-                    <template v-else-if="form.stylePreferences.trim()">
-                      Using balanced baseline
-                    </template>
-                    <template v-else>
-                      Balanced baseline — describe a style to bias it
-                    </template>
-                  </span>
+                      <template #icon
+                        ><n-icon><FlashOutline /></n-icon
+                      ></template>
+                      Preview weights
+                    </n-button>
+                  </div>
+                  <CustomArtisticWeights
+                    :model-value="previewWeights"
+                    @update:model-value="() => {}"
+                    :format-criterion-name="formatCriterionName"
+                    compact
+                    readonly
+                  />
                 </div>
-                <CustomArtisticWeights
-                  :model-value="previewWeights"
-                  @update:model-value="() => {}"
-                  :format-criterion-name="formatCriterionName"
-                  compact
-                  readonly
-                />
-              </template>
 
-              <!-- Advanced mode -->
-              <template v-else>
-                <div class="preset-row">
-                  <n-button
-                    v-for="preset in genrePresetOptions"
-                    :key="preset.value"
-                    :type="
-                      selectedGenre === preset.value ? 'primary' : 'default'
-                    "
-                    :ghost="selectedGenre !== preset.value"
-                    size="small"
-                    @click="applyPreset(preset.value)"
-                    class="preset-button"
-                  >
-                    <template #icon>
-                      <n-icon><component :is="preset.icon" /></n-icon>
-                    </template>
-                    {{ preset.label }}
-                  </n-button>
+                <!-- Advanced mode -->
+                <div v-else key="manual" class="weight-mode-content">
+                  <div class="preset-section">
+                    <div class="preset-row">
+                      <n-button
+                        v-for="preset in genrePresetOptions"
+                        :key="preset.value"
+                        :type="
+                          selectedGenre === preset.value ? 'primary' : 'default'
+                        "
+                        :ghost="selectedGenre !== preset.value"
+                        size="small"
+                        @click="applyPreset(preset.value)"
+                        class="preset-button"
+                      >
+                        <template #icon>
+                          <n-icon><component :is="preset.icon" /></n-icon>
+                        </template>
+                        {{ preset.label }}
+                      </n-button>
+                    </div>
+                  </div>
+                  <CustomArtisticWeights
+                    :model-value="form.weights"
+                    @update:model-value="onAdvancedWeightsChange"
+                    :format-criterion-name="formatCriterionName"
+                    compact
+                    :readonly="selectedGenre !== 'custom'"
+                  />
                 </div>
-                <CustomArtisticWeights
-                  :model-value="form.weights"
-                  @update:model-value="onAdvancedWeightsChange"
-                  :format-criterion-name="formatCriterionName"
-                  compact
-                  :readonly="selectedGenre !== 'custom'"
-                />
-              </template>
+              </Transition>
             </div>
           </div>
 
@@ -1117,7 +1096,7 @@ watch(
 }
 
 .tab-label {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1;
 }
 
@@ -1196,7 +1175,7 @@ watch(
 .slide-body {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 15px;
 }
 
 /* ── Slide transitions ──────────────────────────────────── */
@@ -1258,38 +1237,54 @@ watch(
 }
 
 /* ── Presets ─────────────────────────────────────────────── */
+.preset-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.preset-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
 .preset-row {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
   justify-content: center;
-  margin-bottom: 4px;
 }
 
 .preset-button {
-  border-radius: 8px;
+  border-radius: 6px !important;
+  font-size: 12px !important;
 }
 
 /* ── Weight mode toggle ─────────────────────────────────── */
 .weight-mode-toggle {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   padding: 3px;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--border-color) 40%, transparent);
+  background: color-mix(in srgb, var(--border-color) 50%, transparent);
   border: 1px solid var(--border-color);
-  align-self: center;
+  width: 100%;
 }
 
 .weight-mode-option {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 6px 16px;
+  padding: 7px 16px;
+  flex: 1;
   background: transparent;
   border: none;
   border-radius: 7px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
@@ -1304,7 +1299,25 @@ watch(
   background: var(--bg-card);
   color: var(--primary-color);
   font-weight: 600;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+/* ── Weight mode content wrapper ───────────────────────── */
+.weight-mode-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.weight-mode-enter-active {
+  transition: opacity 0.18s ease;
+}
+.weight-mode-leave-active {
+  transition: opacity 0.12s ease;
+}
+.weight-mode-enter-from,
+.weight-mode-leave-to {
+  opacity: 0;
 }
 
 /* ── Style preview header ───────────────────────────────── */
