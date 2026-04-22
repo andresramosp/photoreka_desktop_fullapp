@@ -397,7 +397,7 @@ export default class PortfolioBuildService {
       }
 
       // Notify user
-      // await this.notifyCompletion(build)
+      await this.notifyCompletion(build)
 
       console.log(
         `[PortfolioBuild] ✅ Build ${build.id} completed | ` +
