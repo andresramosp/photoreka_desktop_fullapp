@@ -176,6 +176,31 @@ export default class PortfolioBuildController {
   }
 
   /**
+   * DELETE /api/portfolio-build/:id
+   * Permanently delete a portfolio build record.
+   */
+  public async delete({ params, response, auth }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as any
+
+      const service = new PortfolioBuildService()
+      const build = await service.getStatus(Number(params.id), user.id)
+
+      if (!build) {
+        return response.notFound({ error: 'Build not found.' })
+      }
+
+      await build.delete()
+
+      return response.ok({ success: true })
+    } catch (error: any) {
+      console.error('[PortfolioBuildController] delete error:', error)
+      return response.internalServerError({ error: error.message })
+    }
+  }
+
+  /**
    * PATCH /api/portfolio-build/:id/layout
    * Update the photo order (and optionally remove photos) for a completed build.
    */

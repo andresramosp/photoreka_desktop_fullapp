@@ -46,6 +46,12 @@ export type PortfolioBuildResult = {
    * refinement). Surfaced to the user as additional suggestions.
    */
   builderPool?: { id: number; thumbnailUrl: string; originalUrl?: string }[]
+  /**
+   * Live progress counters, updated throughout the pipeline so the UI can
+   * show meaningful step-level detail (e.g. "3/6 batches evaluated").
+   */
+  evaluationProgress?: { completed: number; total: number }
+  refinementProgress?: { trimmed: number; toTrim: number; startCount: number }
 }
 
 export default class PortfolioBuild extends BaseModel {

@@ -1,6 +1,7 @@
 import { DateTime } from 'luxon'
 import sharp from 'sharp'
 import pLimit from 'p-limit'
+import axios from 'axios'
 import { writeFile, mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import PortfolioBuild from '#models/portfolio_build'
@@ -27,7 +28,6 @@ import type { SearchMode } from './search_text_service.js'
 // CONFIGURATION
 // ══════════════════════════════════════════════════════════════
 
-/** Recall pool = targetSize × multiplier (before RECALL_MAX cap). */
 const RECALL_MULTIPLIER = 7
 /** Hard cap on the recall pool regardless of catalog size. */
 const RECALL_MAX = 800
@@ -37,6 +37,8 @@ const BATCH_SIZE = 6
 const BATCH_ORDER: 'desc' | 'asc' = 'desc'
 /** Max concurrent LLM evaluation batches. */
 const EVAL_CONCURRENCY = 3
+/** Evaluate batches sequentially and stop once the evaluation target is reached. */
+const EARLY_STOP = true
 /** LLM model for the heavy evaluation batches (must support vision). */
 const EVALUATION_MODEL = 'gemini-3-flash-preview'
 /** LLM model for the refinement pass (must support vision). */
@@ -61,9 +63,9 @@ const MIN_ANALYZED_RATIO = 0.8
 /** Grid thumbnail cell size in pixels. */
 const GRID_CELL_SIZE = 280
 /** Save debug artifacts (e.g. grid image) to disk. */
-const DEBUG_SAVE_GRID = false
+const DEBUG_SAVE_GRID = true
 /** Save a grid image per evaluation batch for debugging. */
-const DEBUG_SAVE_BATCH_GRID = false
+const DEBUG_SAVE_BATCH_GRID = true
 /** Over-generate buffer: fraction of targetSize to over-select for refinement trimming. */
 const OVER_GENERATE_RATIO = 0.35
 /** Minimum over-generate buffer (absolute). */
@@ -247,6 +249,17 @@ export default class PortfolioBuildService {
         throw new Error('No eligible photos found after recall. Ensure your catalog is analyzed.')
       }
 
+      // Publish recall size so the UI can show "pool of N candidates".
+      build.result = {
+        ...(build.result ?? {}),
+        photoIds: build.result?.photoIds ?? [],
+        recallSize: candidates.length,
+        batchesEvaluated: 0,
+        totalCandidatesEvaluated: 0,
+      }
+      await build.save()
+      this.emitProgress(build)
+
       // ── Step 3: Compute coherence scores ──
       console.log(
         `[PortfolioBuild] 🎨 [Step 3/7] Coherence scoring — mode: ${config.coherenceMode}`
@@ -291,7 +304,7 @@ export default class PortfolioBuildService {
         )
         await this.updateStatus(build, 'refining', 85)
         tracker.setCurrentTask('refinement')
-        const refinement = await this.refinementPass(selected, config, trackedModels, build.id)
+        const refinement = await this.refinementPass(selected, config, trackedModels, build)
         selected = refinement.remaining
         refinementNotes = refinement.notes
       }
@@ -384,7 +397,7 @@ export default class PortfolioBuildService {
       }
 
       // Notify user
-      await this.notifyCompletion(build)
+      // await this.notifyCompletion(build)
 
       console.log(
         `[PortfolioBuild] ✅ Build ${build.id} completed | ` +
@@ -925,90 +938,133 @@ Only include fields that are clearly indicated by the user's text. If nothing is
       batches.push(sorted.slice(i, i + BATCH_SIZE))
     }
 
-    const limit = pLimit(EVAL_CONCURRENCY)
     let completedBatches = 0
+    let evaluatedCandidates = 0
     let aborted = false
 
-    console.log(
-      `[PortfolioBuild] 🔄 Starting evaluation: ${batches.length} batches of ≤${BATCH_SIZE} photos | concurrency: ${EVAL_CONCURRENCY} | eval target: ${evaluationTarget} (final: ${config.targetSize})`
-    )
+    const applySimilarityGate = (selectedCandidates: ScoredCandidate[]): ScoredCandidate[] => {
+      const gated: ScoredCandidate[] = []
 
-    // Run all batches in parallel with limited concurrency
-    const batchResults = await Promise.all(
-      batches.map((batch, batchIdx) =>
-        limit(async () => {
-          // Check if build was aborted
-          if (aborted) return { batch, decisions: [] as BatchDecision[] }
-          const freshBuild = await PortfolioBuild.find(build.id)
-          if (!freshBuild || freshBuild.status === 'failed') {
-            aborted = true
-            console.log(`[PortfolioBuild] 🛑 Build ${build.id} aborted — stopping evaluation`)
-            return { batch, decisions: [] as BatchDecision[] }
-          }
+      for (const candidate of [...selectedCandidates].sort(
+        (a, b) => b.compositeScore - a.compositeScore
+      )) {
+        if (this.checkSimilarityGate(candidate, gated)) {
+          gated.push(candidate)
+        }
+      }
 
-          tracker.setCurrentTask(`evaluation_batch_${batchIdx}`)
+      return gated
+    }
 
-          // Debug: save batch grid image
-          if (DEBUG_SAVE_BATCH_GRID) {
-            try {
-              const gridBuffer = await this.generateGridImage(batch)
-              if (gridBuffer) {
-                const gridDir = path.join(process.cwd(), 'tmp', 'debug')
-                await mkdir(gridDir, { recursive: true })
-                const gridPath = path.join(
-                  gridDir,
-                  `portfolio_batch_${build.id}_${batchIdx}_${Date.now()}.jpg`
-                )
-                await writeFile(gridPath, gridBuffer)
-                console.log(
-                  `[PortfolioBuild] 🖼️ Batch ${batchIdx + 1} grid saved: ${gridPath} (${Math.round(gridBuffer.length / 1024)}KB)`
-                )
-              }
-            } catch (err) {
-              console.warn(
-                `[PortfolioBuild] ⚠️ Batch ${batchIdx + 1} grid generation failed:`,
-                (err as Error).message
-              )
-            }
-          }
+    const processBatch = async (batch: ScoredCandidate[], batchIdx: number) => {
+      // Check if build was aborted
+      if (aborted) return { batch, decisions: [] as BatchDecision[] }
+      const freshBuild = await PortfolioBuild.find(build.id)
+      if (!freshBuild || freshBuild.status === 'failed') {
+        aborted = true
+        console.log(`[PortfolioBuild] 🛑 Build ${build.id} aborted — stopping evaluation`)
+        return { batch, decisions: [] as BatchDecision[] }
+      }
 
-          let decisions: BatchDecision[] = []
-          try {
-            decisions = await this.evaluateSingleBatch(
-              batch,
-              config,
-              trackedModels,
-              evaluationTarget
+      tracker.setCurrentTask(`evaluation_batch_${batchIdx}`)
+
+      // Debug: save batch grid image
+      if (DEBUG_SAVE_BATCH_GRID) {
+        try {
+          const gridBuffer = await this.generateGridImage(batch)
+          if (gridBuffer) {
+            const gridDir = path.join(process.cwd(), 'tmp', 'debug')
+            await mkdir(gridDir, { recursive: true })
+            const gridPath = path.join(
+              gridDir,
+              `portfolio_batch_${build.id}_${batchIdx}_${Date.now()}.jpg`
             )
-          } catch (err: any) {
-            console.warn(
-              `[PortfolioBuild] ⚠️ Batch ${batchIdx + 1}/${batches.length} failed after retries, skipping: ${err.message}`
+            await writeFile(gridPath, gridBuffer)
+            console.log(
+              `[PortfolioBuild] 🖼️ Batch ${batchIdx + 1} grid saved: ${gridPath} (${Math.round(gridBuffer.length / 1024)}KB)`
             )
           }
-
-          completedBatches++
-          const evalProgress = 10 + Math.round((completedBatches / batches.length) * 75)
-          build.progress = evalProgress
-          await build.save()
-          this.emitProgress(build)
-
-          console.log(
-            `[PortfolioBuild]   📦 Batch ${batchIdx + 1}/${batches.length}: ` +
-              `+${decisions.filter((d) => d.select).length} selected | ` +
-              `completed: ${completedBatches}/${batches.length}`
+        } catch (err) {
+          console.warn(
+            `[PortfolioBuild] ⚠️ Batch ${batchIdx + 1} grid generation failed:`,
+            (err as Error).message
           )
+        }
+      }
 
-          return { batch, decisions }
-        })
+      let decisions: BatchDecision[] = []
+      try {
+        decisions = await this.evaluateSingleBatch(batch, config, trackedModels, evaluationTarget)
+      } catch (err: any) {
+        console.warn(
+          `[PortfolioBuild] ⚠️ Batch ${batchIdx + 1}/${batches.length} failed after retries, skipping: ${err.message}`
+        )
+      }
+
+      const completedCount = ++completedBatches
+      evaluatedCandidates += batch.length
+      const evalProgress = 10 + Math.round((completedCount / batches.length) * 75)
+      build.progress = evalProgress
+      build.result = {
+        ...(build.result ?? {}),
+        photoIds: build.result?.photoIds ?? [],
+        recallSize: build.result?.recallSize ?? candidates.length,
+        batchesEvaluated: completedCount,
+        totalCandidatesEvaluated: evaluatedCandidates,
+        evaluationProgress: { completed: completedCount, total: batches.length },
+      }
+      await build.save()
+      this.emitProgress(build)
+
+      console.log(
+        `[PortfolioBuild]   📦 Batch ${batchIdx + 1}/${batches.length}: ` +
+          `+${decisions.filter((d) => d.select).length} selected | ` +
+          `completed: ${completedCount}/${batches.length}`
       )
+
+      return { batch, decisions }
+    }
+
+    console.log(
+      `[PortfolioBuild] 🔄 Starting evaluation: ${batches.length} batches of ≤${BATCH_SIZE} photos | ` +
+        `${EARLY_STOP ? 'mode: early-stop sequential' : `concurrency: ${EVAL_CONCURRENCY}`} | ` +
+        `eval target: ${evaluationTarget} (final: ${config.targetSize})`
     )
 
-    // Collect all LLM-selected photos
+    const batchResults: Array<{ batch: ScoredCandidate[]; decisions: BatchDecision[] }> = []
     const allSelected: ScoredCandidate[] = []
-    for (const { batch, decisions } of batchResults) {
-      for (const decision of decisions) {
-        if (decision.select) {
-          const photo = batch.find((p) => p.id === decision.id)
+
+    if (EARLY_STOP) {
+      for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+        const batchResult = await processBatch(batches[batchIdx], batchIdx)
+        batchResults.push(batchResult)
+
+        for (const decision of batchResult.decisions) {
+          if (!decision.select) continue
+          const photo = batchResult.batch.find((candidate) => candidate.id === decision.id)
+          if (photo) allSelected.push(photo)
+        }
+
+        const gatedCount = applySimilarityGate(allSelected).length
+        if (gatedCount >= evaluationTarget) {
+          console.log(
+            `[PortfolioBuild] 🛑 Early stop reached after batch ${batchIdx + 1}/${batches.length}: ` +
+              `${gatedCount} gated selections for target ${evaluationTarget}`
+          )
+          break
+        }
+      }
+    } else {
+      const limit = pLimit(EVAL_CONCURRENCY)
+      const concurrentResults = await Promise.all(
+        batches.map((batch, batchIdx) => limit(async () => processBatch(batch, batchIdx)))
+      )
+      batchResults.push(...concurrentResults)
+
+      for (const { batch, decisions } of batchResults) {
+        for (const decision of decisions) {
+          if (!decision.select) continue
+          const photo = batch.find((candidate) => candidate.id === decision.id)
           if (photo) allSelected.push(photo)
         }
       }
@@ -1029,6 +1085,7 @@ Only include fields that are clearly indicated by the user's text. If nothing is
 
     // Checkpoint: save post-gate results
     build.result = {
+      ...(build.result ?? {}),
       photoIds: gated.map((p) => p.id),
       photoItems: gated.map((p) => ({
         id: p.id,
@@ -1037,7 +1094,8 @@ Only include fields that are clearly indicated by the user's text. If nothing is
       })),
       recallSize: candidates.length,
       batchesEvaluated: completedBatches,
-      totalCandidatesEvaluated: completedBatches * BATCH_SIZE,
+      totalCandidatesEvaluated: evaluatedCandidates,
+      evaluationProgress: { completed: completedBatches, total: batches.length },
     }
     await build.save()
     this.emitProgress(build)
@@ -1078,19 +1136,12 @@ ${coherenceInstruction ? `\n## Coherence directive\n${coherenceInstruction}` : '
 
 Return JSON: { "decisions": [ { "id": <number>, "analysis": "<one sentence assessing this photo's merit>", "select": <boolean> } ] }`
 
-    const userContent: any[] = [
-      { type: 'text', text: `Evaluate these ${batch.length} candidate photos:` },
-    ]
-
-    for (const photo of batch) {
-      userContent.push({ type: 'text', text: this.buildPhotoMetadataLine(photo) })
-      try {
-        const url = photo.thumbnailUrl
-        if (url) {
-          userContent.push({ type: 'image_url', image_url: { url, detail: 'low' } })
-        }
-      } catch {}
-    }
+    const { userContent, unavailableImageIds } = await this.buildVisionUserContent(
+      'evaluation',
+      `Evaluate these ${batch.length} candidate photos:`,
+      batch,
+      EVALUATION_MODEL
+    )
 
     const result = await this.callLLMWithRetry(trackedModels, {
       systemPrompt,
@@ -1100,7 +1151,7 @@ Return JSON: { "decisions": [ { "id": <number>, "analysis": "<one sentence asses
     })
 
     const decisions: BatchDecision[] = result.result?.decisions ?? []
-    return decisions
+    return this.normalizeBatchDecisions(batch, decisions, unavailableImageIds, 'evaluation')
   }
 
   private getCoherencePromptModifier(mode: CoherenceMode): string {
@@ -1124,12 +1175,36 @@ Return JSON: { "decisions": [ { "id": <number>, "analysis": "<one sentence asses
     selected: ScoredCandidate[],
     config: PortfolioBuildConfig,
     trackedModels: ModelsService,
-    buildId: number
+    build: PortfolioBuild
   ): Promise<{ notes?: string; remaining: ScoredCandidate[] }> {
+    const buildId = build.id
     const targetSize = config.targetSize
     let remaining = [...selected]
     const allNotes: string[] = []
     let round = 0
+    const startCount = selected.length
+    const initialToTrim = Math.max(0, startCount - targetSize)
+
+    const publishRefinementProgress = async () => {
+      const trimmed = Math.max(0, startCount - remaining.length)
+      build.result = {
+        ...(build.result ?? {}),
+        photoIds: build.result?.photoIds ?? [],
+        recallSize: build.result?.recallSize ?? 0,
+        batchesEvaluated: build.result?.batchesEvaluated ?? 0,
+        totalCandidatesEvaluated: build.result?.totalCandidatesEvaluated ?? 0,
+        refinementProgress: {
+          trimmed,
+          toTrim: initialToTrim,
+          startCount,
+        },
+      }
+      await build.save()
+      this.emitProgress(build)
+    }
+
+    // Initial progress publish (0 trimmed yet).
+    await publishRefinementProgress()
 
     // Build a global context summary from config (no per-photo metadata — just portfolio-level info)
     const globalContext = this.buildRefinementGlobalContext(config, selected.length)
@@ -1236,6 +1311,7 @@ Return JSON: { "decisions": [ { "id": <number>, "analysis": "<one sentence asses
         // Force-trim the weakest by composite score
         remaining.sort((a, b) => b.compositeScore - a.compositeScore)
         remaining = remaining.slice(0, targetSize)
+        await publishRefinementProgress()
         break
       }
 
@@ -1246,6 +1322,7 @@ Return JSON: { "decisions": [ { "id": <number>, "analysis": "<one sentence asses
         `[PortfolioBuild] ✂️ Round ${round} result: ${before} → ${remaining.length} ` +
           `(removed ${roundFlaggedIds.length})`
       )
+      await publishRefinementProgress()
     }
 
     // Safety trim if still above target after all rounds
@@ -1255,6 +1332,7 @@ Return JSON: { "decisions": [ { "id": <number>, "analysis": "<one sentence asses
       )
       remaining.sort((a, b) => b.compositeScore - a.compositeScore)
       remaining = remaining.slice(0, targetSize)
+      await publishRefinementProgress()
     }
 
     console.log(
@@ -1338,22 +1416,12 @@ Return JSON:
   "flagged_ids": [<0 to ${maxCuts} photo ids to remove, or empty array>]
 }`
 
-    const userContent: any[] = [
-      {
-        type: 'text',
-        text: `Review batch of ${batch.length} photos (${currentTotal} total in portfolio, target: ${targetSize}):`,
-      },
-    ]
-
-    for (const photo of batch) {
-      userContent.push({ type: 'text', text: this.buildPhotoMetadataLine(photo) })
-      try {
-        const url = photo.thumbnailUrl
-        if (url) {
-          userContent.push({ type: 'image_url', image_url: { url, detail: 'low' } })
-        }
-      } catch {}
-    }
+    const { userContent } = await this.buildVisionUserContent(
+      'refinement',
+      `Review batch of ${batch.length} photos (${currentTotal} total in portfolio, target: ${targetSize}):`,
+      batch,
+      REFINEMENT_MODEL
+    )
 
     const result = await this.callLLMWithRetry(trackedModels, {
       systemPrompt,
@@ -1410,19 +1478,12 @@ Return JSON:
   "ordered_ids": [<all photo ids in your proposed order>]
 }`
 
-    const userContent: any[] = [
-      { type: 'text', text: `Sequence these ${selected.length} portfolio photos:` },
-    ]
-
-    for (const photo of selected) {
-      userContent.push({ type: 'text', text: this.buildPhotoMetadataLine(photo) })
-      try {
-        const url = photo.thumbnailUrl
-        if (url) {
-          userContent.push({ type: 'image_url', image_url: { url, detail: 'low' } })
-        }
-      } catch {}
-    }
+    const { userContent } = await this.buildVisionUserContent(
+      'sequencing',
+      `Sequence these ${selected.length} portfolio photos:`,
+      selected,
+      REFINEMENT_MODEL
+    )
 
     const result = await this.callLLMWithRetry(trackedModels, {
       systemPrompt,
@@ -1701,9 +1762,10 @@ Return JSON:
         limit(async () => {
           try {
             if (!photo.thumbnailUrl) return null
-            const res = await fetch(photo.thumbnailUrl)
-            if (!res.ok) return null
-            const buffer = Buffer.from(await res.arrayBuffer())
+            const res = await axios.get(photo.thumbnailUrl, {
+              responseType: 'arraybuffer',
+            })
+            const buffer = Buffer.from(res.data)
             return sharp(buffer)
               .resize(cellSize, cellSize, {
                 fit: 'contain',
@@ -1856,6 +1918,11 @@ Return JSON:
         continue
       }
 
+      if (part?.inlineData?.mimeType && part?.inlineData?.data) {
+        parts.push(part)
+        continue
+      }
+
       if (part?.type === 'text') {
         parts.push(part.text)
         continue
@@ -1929,8 +1996,174 @@ Return JSON:
    * Build a consistent metadata line for a photo when sending to the LLM.
    * Centralizes the format used across evaluation, refinement, and sequencing phases.
    */
+  private async buildVisionUserContent(
+    phase: 'evaluation' | 'refinement' | 'sequencing',
+    introText: string,
+    photos: ScoredCandidate[],
+    model: ModelName,
+    provider?: LLMProvider
+  ): Promise<{ userContent: any[]; unavailableImageIds: number[] }> {
+    const userContent: any[] = [{ type: 'text', text: introText }]
+    const unavailableImageIds: number[] = []
+
+    for (const photo of photos) {
+      userContent.push({ type: 'text', text: this.buildPhotoMetadataLine(photo) })
+
+      const imagePart = await this.buildVisionImagePart(photo.thumbnailUrl, model, provider)
+      if (imagePart) {
+        userContent.push(imagePart)
+      } else {
+        unavailableImageIds.push(photo.id)
+      }
+    }
+
+    if (unavailableImageIds.length > 0) {
+      console.warn(
+        `[PortfolioBuild] ⚠️ ${phase} prompt omitted ${unavailableImageIds.length}/${photos.length} image(s): ${unavailableImageIds.join(', ')}`
+      )
+    }
+
+    return { userContent, unavailableImageIds }
+  }
+
+  private normalizeBatchDecisions(
+    batch: ScoredCandidate[],
+    decisions: BatchDecision[],
+    unavailableImageIds: number[],
+    phase: 'evaluation'
+  ): BatchDecision[] {
+    const batchIdSet = new Set(batch.map((photo) => photo.id))
+    const unavailableIdSet = new Set(unavailableImageIds)
+    const normalized: BatchDecision[] = []
+    const seenIds = new Set<number>()
+    const invalidIds: number[] = []
+    const duplicateIds: number[] = []
+
+    for (const decision of decisions) {
+      if (typeof decision?.id !== 'number' || !batchIdSet.has(decision.id)) {
+        if (typeof decision?.id === 'number') invalidIds.push(decision.id)
+        continue
+      }
+
+      if (seenIds.has(decision.id)) {
+        duplicateIds.push(decision.id)
+        continue
+      }
+
+      seenIds.add(decision.id)
+      const forcedReject = unavailableIdSet.has(decision.id)
+      normalized.push({
+        id: decision.id,
+        analysis:
+          typeof decision.analysis === 'string'
+            ? decision.analysis
+            : forcedReject
+              ? 'Image unavailable during vision evaluation.'
+              : '',
+        select: forcedReject ? false : Boolean(decision.select),
+      })
+    }
+
+    const missingIds = batch.map((photo) => photo.id).filter((photoId) => !seenIds.has(photoId))
+
+    for (const missingId of missingIds) {
+      normalized.push({
+        id: missingId,
+        analysis: unavailableIdSet.has(missingId)
+          ? 'Auto-rejected because the image was unavailable to the LLM.'
+          : 'No decision returned by the LLM.',
+        select: false,
+      })
+    }
+
+    if (invalidIds.length > 0 || duplicateIds.length > 0 || missingIds.length > 0) {
+      console.warn(
+        `[PortfolioBuild] ⚠️ ${phase} decision normalization | invalid_ids:${invalidIds.join(',') || 'none'} | duplicate_ids:${duplicateIds.join(',') || 'none'} | missing_ids:${missingIds.join(',') || 'none'}`
+      )
+    }
+
+    if (unavailableImageIds.length > 0) {
+      console.warn(
+        `[PortfolioBuild] ⚠️ ${phase} auto-rejected ${unavailableImageIds.length} text-only candidate(s): ${unavailableImageIds.join(', ')}`
+      )
+    }
+
+    return normalized
+  }
+
+  private async buildVisionImagePart(
+    imageUrl: string | undefined,
+    model: ModelName,
+    provider?: LLMProvider
+  ): Promise<any | null> {
+    if (!imageUrl) return null
+
+    if (!this.isGeminiModel(model, provider)) {
+      return { type: 'image_url', image_url: { url: imageUrl, detail: 'low' } }
+    }
+
+    return this.tryBuildGeminiInlineImagePart(imageUrl)
+  }
+
+  private isGeminiModel(model: ModelName, provider?: LLMProvider): boolean {
+    return provider === 'gemini' || String(model).includes('gemini')
+  }
+
+  private async tryBuildGeminiInlineImagePart(imageUrl: string): Promise<any | null> {
+    if (imageUrl.startsWith('data:')) {
+      const match = imageUrl.match(/^data:(image\/[^;]+);base64,(.+)$/)
+      if (!match) return null
+
+      return { inlineData: { mimeType: match[1], data: match[2] } }
+    }
+
+    if (!imageUrl.startsWith('http')) return null
+
+    const filename = this.extractFilenameFromImageUrl(imageUrl)
+    if (!filename) return null
+
+    try {
+      const buffer = await PhotoImageService.getInstance().getImageBufferFromR2(filename)
+      return {
+        inlineData: {
+          mimeType: this.inferImageMimeType(filename),
+          data: buffer.toString('base64'),
+        },
+      }
+    } catch {
+      return null
+    }
+  }
+
+  private extractFilenameFromImageUrl(imageUrl: string): string | null {
+    try {
+      const parsed = new URL(imageUrl)
+      const filename = parsed.pathname.split('/').filter(Boolean).pop()
+      return filename ? decodeURIComponent(filename) : null
+    } catch {
+      const filename = imageUrl.split('/').filter(Boolean).pop()
+      return filename ? decodeURIComponent(filename) : null
+    }
+  }
+
+  private inferImageMimeType(filename: string): string {
+    const ext = path.extname(filename).toLowerCase()
+
+    switch (ext) {
+      case '.jpg':
+      case '.jpeg':
+        return 'image/jpeg'
+      case '.webp':
+        return 'image/webp'
+      case '.gif':
+        return 'image/gif'
+      case '.png':
+      default:
+        return 'image/png'
+    }
+  }
+
   private buildPhotoMetadataLine(photo: ScoredCandidate): string {
-    const scores = photo.descriptions.artistic_scores
     const va = photo.descriptions.visual_aspects
 
     const parts = [`id:${photo.id}`, photo.originalFileName]
