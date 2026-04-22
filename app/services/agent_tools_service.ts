@@ -13,6 +13,7 @@ import User from '#models/user'
 import Photo from '#models/photo'
 import Collection from '#models/collection'
 import Series from '#models/series'
+import PortfolioBuild from '#models/portfolio_build'
 
 // ─────────────────────────────────────────────────────────────
 // Tool schemas
@@ -96,6 +97,8 @@ export const AppKnowledgeSchema = z.object({
 export const OverallCatalogViewSchema = z.object({})
 
 export const FetchCollectionsSchema = z.object({})
+
+export const FetchPortfoliosSchema = z.object({})
 
 export const SearchAdvancedSchema = z.object({
   operation: z
@@ -426,6 +429,9 @@ export const TOOL_DESCRIPTIONS = {
 
   fetch_collections:
     "[BASIC_TOOLS] Get all the user's collections and series, each with their name, description, and sample photo IDs. Use this when the user asks about their collections, series, albums, or organized groups of photos — for example 'what collections do I have?', 'show me my series', 'which albums exist?'. Returns two separate arrays: 'collections' (manually curated groups) and 'series' (ordered sequences/stories). **Important:** this tool only returns metadata and a small sample of IDs per collection — it does NOT provide full photo descriptions or visual thumbnails. Once you identify the collection(s) the user cares about, call `get_photo_info` with those photo IDs to retrieve full descriptions and visuals for evaluation. Exception: if the user only wants a high-level overview of their collections (names, counts, structure), you do NOT need to call `get_photo_info`.",
+
+  fetch_portfolios:
+    "[BASIC_TOOLS] Get all the user's portfolio builds (AI-generated curated portfolios produced by the Portfolio Builder tool). Returns only COMPLETED builds, most recent first, each with its id, name, creation date, target size, coherence mode (free/visual/chromatic/narrative/heterogeneous), whether sequencing was enabled, the user's theme and sequencing preferences, the final ordered photo IDs of the portfolio, and a sample of the builder pool (approved-but-not-selected alternatives). Use this whenever the user asks about their portfolios, generated portfolios, portfolio builds, curated selections, or references an earlier build — for example 'show me my last portfolio', 'what portfolios have I built?', 'open the street portfolio I made'. **Important:** this tool only returns metadata and photo IDs — it does NOT provide full photo descriptions or visual thumbnails. Once you identify the portfolio(s) the user cares about, call `get_photo_info` on a subset of the relevant photo IDs to retrieve descriptions and visuals for evaluation. Exception: if the user only wants a high-level overview of their portfolios (names, counts, config), no `get_photo_info` call is needed.",
 
   search_advanced:
     '[PHOTO_SEARCH] **The primary search tool.** Combine multiple search strategies in a single call and merge their results with intersect (AND) or union (OR). You can specify any combination of: (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) filter — metadata/score/visual-aspect filtering, (4) similar_to — similarity to reference photos. **ALL parameters MUST ALWAYS BE SPECIFIED IN ENGLISH ONLY** — style descriptions, keywords, and filter values must be in English. All specified sub-searches run in parallel; their full ID sets are combined via the chosen operation; only the final result is sampled and returned with photo ID, filename, and genre. Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) with intersect. "moody portraits or landscapes" → style_query("dark moody") + filter(genre=[portrait,landscape]) with union.',
@@ -842,6 +848,53 @@ export default class AgentToolsService {
       }
     )
 
+    // ── Tool: fetch_portfolios ─────────────────────────────
+    const fetchPortfolios = tool(
+      async (): Promise<string> => {
+        try {
+          const builds = await PortfolioBuild.query()
+            .where('user_id', userId)
+            .where('status', 'completed')
+            .orderBy('created_at', 'desc')
+            .limit(20)
+
+          return JSON.stringify({
+            portfolios: builds.map((b) => {
+              const cfg = b.config || ({} as any)
+              const result = b.result || ({} as any)
+              const photoIds: number[] = Array.isArray(result.photoIds) ? result.photoIds : []
+              const builderPoolIds: number[] = Array.isArray(result.builderPool)
+                ? result.builderPool
+                    .map((p: any) => Number(p?.id))
+                    .filter((n: number) => Number.isFinite(n))
+                : []
+              return {
+                id: b.id,
+                name: cfg.name ?? null,
+                createdAt: b.createdAt?.toISO?.() ?? null,
+                targetSize: cfg.targetSize ?? null,
+                coherenceMode: cfg.coherenceMode ?? null,
+                sequencing: Boolean(cfg.sequencing),
+                themePreferences: cfg.themePreferences ?? null,
+                sequencingPreferences: cfg.sequencingPreferences ?? null,
+                totalPhotos: photoIds.length,
+                photoIds,
+                builderPoolSample: builderPoolIds.slice(0, 15),
+                builderPoolTotal: builderPoolIds.length,
+              }
+            }),
+          })
+        } catch (error: any) {
+          return JSON.stringify({ error: `Failed to fetch portfolios: ${error.message}` })
+        }
+      },
+      {
+        name: 'fetch_portfolios',
+        description: TOOL_DESCRIPTIONS.fetch_portfolios,
+        schema: FetchPortfoliosSchema,
+      }
+    )
+
     // ── Tool: catalog_sample ────────────────────────────────
     const catalogSample = tool(
       async ({
@@ -1036,6 +1089,7 @@ export default class AgentToolsService {
       appKnowledge,
       searchAdvanced,
       fetchCollections,
+      fetchPortfolios,
       overallCatalogView,
       catalogSample,
       webSearch,

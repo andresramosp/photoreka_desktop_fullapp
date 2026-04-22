@@ -42,7 +42,7 @@ const EARLY_STOP = true
 /** LLM model for the heavy evaluation batches (must support vision). */
 const EVALUATION_MODEL = 'gemini-3-flash-preview'
 /** LLM model for the refinement pass (must support vision). */
-const REFINEMENT_MODEL = 'gemini-3-flash-preview' //'gpt-5.1'
+const REFINEMENT_MODEL = 'gpt-5.1' //'gpt-5.1'
 /** Cheap model used to parse freetext into structured filters. */
 const PARSE_MODEL = 'gemini-3.1-flash-lite-preview'
 /** Photos per batch in the iterative refinement pass. */
@@ -94,6 +94,84 @@ const TAG_SEARCH_MODE: SearchMode = 'broad'
 const COMPUTATIONAL_SEQUENCE_RECENT_WINDOW = 3
 /** Hard cap for consecutive vertical photos in computational sequencing. */
 const COMPUTATIONAL_SEQUENCE_MAX_VERTICAL_RUN = 2
+
+// ── Style-preferences parsing (free-text → artistic weights) ─
+/**
+ * Default portfolio weight vector. This is the canonical starting point:
+ * - Displayed in the wizard before the user types any style preference.
+ * - Used as the baseline when the LLM applies emphasis/deemphasis boosts.
+ *
+ * Intentionally differs from the "general" genre preset: a portfolio should
+ * already have above-average emphasis on quality, composition and originality;
+ * the other criteria start low but can be boosted via style description.
+ *
+ * Scale: 0..1 (the frontend renders sliders in this range; weights are
+ * multiplied ×10 before submission to the build pipeline).
+ *
+ * ⚠️  This is the single source of truth. The frontend fetches this via
+ *     GET /api/portfolio-build/default-weights and must NOT hard-code it.
+ */
+const STYLE_BASELINE_WEIGHTS: Record<string, number> = {
+  aesthetic_quality: 1, // portfolios demand visual excellence
+  composition: 0.5, // strong framing is non-negotiable
+  storytelling: 0.5, // narrative value matters more than in a casual gallery
+  strangeness: 0.25, // originality is a differentiator (aliased from 'originality')
+  message: 0, // low baseline; user can emphasize
+  humor: 0, // low baseline; user can emphasize
+  visual_games: 0, // low baseline; user can emphasize
+  candidness: 0, // some candid presence valued by default
+}
+/** Value assigned to criteria the LLM flags as "emphasized". */
+const STYLE_EMPHASIZE_VALUE = 1.0
+/** Value assigned to criteria the LLM flags as "deemphasized". */
+const STYLE_DEEMPHASIZE_VALUE = 0.1
+/** Max number of criteria the LLM is allowed to emphasize. */
+const STYLE_MAX_EMPHASIZE = 4
+/** Max number of criteria the LLM is allowed to deemphasize. */
+const STYLE_MAX_DEEMPHASIZE = 2
+
+/**
+ * Canonical artistic criteria exposed to the style-preferences parser.
+ * Keys match the internal score fields used by the compositeScore pipeline.
+ */
+const STYLE_CRITERIA_DESCRIPTIONS: Array<{ key: string; label: string; desc: string }> = [
+  {
+    key: 'aesthetic_quality',
+    label: 'Aesthetic quality',
+    desc: 'overall visual beauty, pleasing look, polished finish',
+  },
+  {
+    key: 'composition',
+    label: 'Composition',
+    desc: 'framing, balance, geometry, use of lines and shapes',
+  },
+  {
+    key: 'storytelling',
+    label: 'Storytelling',
+    desc: 'narrative content, sense of moment or sequence, documentary value',
+  },
+  {
+    key: 'originality',
+    label: 'Originality',
+    desc: 'unusual, unexpected, strange, surprising or surreal elements',
+  },
+  {
+    key: 'message',
+    label: 'Message',
+    desc: 'social, political or conceptual meaning; clear intent',
+  },
+  { key: 'humor', label: 'Humor', desc: 'funny, ironic, playful, witty imagery' },
+  {
+    key: 'visual_games',
+    label: 'Visual games',
+    desc: 'optical illusions, juxtapositions, reflections, layering, wordplay with image',
+  },
+  {
+    key: 'candidness',
+    label: 'Candidness',
+    desc: 'spontaneity, genuine/unposed moments, raw human presence',
+  },
+]
 
 // ── Score field mapping (mirrors agent_tools_service) ────────
 const SCORE_FIELD_MAP: Record<string, string> = { originality: 'strangeness' }
@@ -192,6 +270,15 @@ export default class PortfolioBuildService {
   }
 
   /**
+   * Returns the canonical default weight vector (0..1 scale) that the wizard
+   * should display before the user has entered any style preference.
+   * This is the same baseline used internally when applying LLM emphasis boosts.
+   */
+  public static getDefaultWeights(): Record<string, number> {
+    return { ...STYLE_BASELINE_WEIGHTS }
+  }
+
+  /**
    * List builds for a user (most recent first).
    */
   public async listBuilds(userId: number): Promise<PortfolioBuild[]> {
@@ -213,6 +300,124 @@ export default class PortfolioBuildService {
     build.completedAt = DateTime.now()
     await build.save()
     return true
+  }
+
+  /**
+   * Parse a free-text style description into a weight vector by asking the
+   * LLM for a sparse emphasize/deemphasize set and composing it with the
+   * baseline preset.
+   *
+   * Returns weights in 0..1 range (same scale the frontend sliders expose).
+   * Cost is small (PARSE_MODEL is our cheapest model). Safe to call from a
+   * preview endpoint — it does not touch the build queue.
+   */
+  public async previewStyleWeights(stylePreferences: string): Promise<{
+    emphasize: string[]
+    deemphasize: string[]
+    weights: Record<string, number>
+  }> {
+    const tracker = new CostTracker('portfolio_build')
+    const parsed = await this.parseStylePreferences(stylePreferences, tracker)
+    const weights = this.computeStyleWeightsFromEmphasis(parsed.emphasize, parsed.deemphasize)
+    return { emphasize: parsed.emphasize, deemphasize: parsed.deemphasize, weights }
+  }
+
+  /**
+   * LLM-backed parser for the style free-text. Produces a tightly constrained
+   * JSON response describing which criteria to emphasize / deemphasize.
+   */
+  private async parseStylePreferences(
+    stylePreferences: string,
+    tracker: CostTracker
+  ): Promise<{ emphasize: string[]; deemphasize: string[] }> {
+    const criteriaList = STYLE_CRITERIA_DESCRIPTIONS.map(
+      (c) => `- "${c.key}" (${c.label}): ${c.desc}`
+    ).join('\n')
+
+    const allowedKeys = STYLE_CRITERIA_DESCRIPTIONS.map((c) => c.key)
+
+    const systemPrompt = `You map a user's free-text description of desired artistic style into a SPARSE set of artistic criteria to emphasize or deemphasize when ranking photos for a portfolio.
+
+Available criteria:
+${criteriaList}
+
+Rules:
+- Return JSON: { "emphasize": string[], "deemphasize": string[] }
+- "emphasize": between 1 and ${STYLE_MAX_EMPHASIZE} criteria that best match what the user wants. Keep it tight — a portfolio needs marked, well-defined emphasis, not a vague boost on everything. Pick the 1–3 criteria that are most clearly implied; only use 4 if the user explicitly lists that many distinct qualities.
+- "deemphasize": 0 to ${STYLE_MAX_DEEMPHASIZE} criteria, ONLY if the user explicitly says they do NOT want that quality (e.g. "not overly polished" → deemphasize aesthetic_quality). Otherwise return [].
+- Use ONLY keys from the list above. No other strings.
+- If the user's description is empty, vague, or purely thematic (e.g. mentions places or subjects only, no style cues), return { "emphasize": [], "deemphasize": [] } — the baseline will be used unchanged.
+- Never emphasize and deemphasize the same key.
+- Always in English keys regardless of the user's language.`
+
+    const trackedModels = createTrackedModelsService(this.modelsService, tracker)
+    let result: any
+    try {
+      const resp = await this.callLLMWithRetry(trackedModels, {
+        systemPrompt,
+        userContent: stylePreferences,
+        model: PARSE_MODEL,
+        temperature: 0.2,
+      })
+      result = resp.result ?? {}
+    } catch (err: any) {
+      console.warn(
+        `[PortfolioBuild] ⚠️ style preferences parse failed, falling back to baseline: ${err.message}`
+      )
+      return { emphasize: [], deemphasize: [] }
+    }
+
+    const sanitizeList = (arr: any, max: number): string[] => {
+      if (!Array.isArray(arr)) return []
+      const out: string[] = []
+      for (const k of arr) {
+        if (typeof k !== 'string') continue
+        if (!allowedKeys.includes(k)) continue
+        if (out.includes(k)) continue
+        out.push(k)
+        if (out.length >= max) break
+      }
+      return out
+    }
+
+    const emphasize = sanitizeList(result.emphasize, STYLE_MAX_EMPHASIZE)
+    let deemphasize = sanitizeList(result.deemphasize, STYLE_MAX_DEEMPHASIZE)
+    // Guard against overlap.
+    deemphasize = deemphasize.filter((k) => !emphasize.includes(k))
+
+    console.log(
+      `[PortfolioBuild] 🎚️ Parsed stylePreferences → emphasize=[${emphasize.join(', ')}] deemphasize=[${deemphasize.join(', ')}]`
+    )
+    return { emphasize, deemphasize }
+  }
+
+  /**
+   * Compose a weight vector from the baseline preset plus emphasize /
+   * deemphasize overrides. Emphasized criteria are pinned to the max value,
+   * deemphasized criteria are suppressed but never zero (to avoid
+   * omission-destructive behavior for the untouched majority).
+   */
+  private computeStyleWeightsFromEmphasis(
+    emphasize: string[],
+    deemphasize: string[]
+  ): Record<string, number> {
+    // Map the LLM-facing keys (e.g. 'originality') to the internal score
+    // field names used throughout the pipeline (e.g. 'strangeness').
+    const toInternal = (k: string) => internalScoreField(k)
+    const emphasizeInternal = new Set(emphasize.map(toInternal))
+    const deemphasizeInternal = new Set(deemphasize.map(toInternal))
+
+    const weights: Record<string, number> = {}
+    for (const [k, baseline] of Object.entries(STYLE_BASELINE_WEIGHTS)) {
+      if (emphasizeInternal.has(k)) {
+        weights[k] = STYLE_EMPHASIZE_VALUE
+      } else if (deemphasizeInternal.has(k)) {
+        weights[k] = STYLE_DEEMPHASIZE_VALUE
+      } else {
+        weights[k] = baseline
+      }
+    }
+    return weights
   }
 
   // ── Main pipeline ──────────────────────────────────────────
@@ -328,7 +533,7 @@ export default class PortfolioBuildService {
         `[PortfolioBuild] 🖼️ [Step 7/7] Generating final portfolio grid image (${selected.length} photos)`
       )
       let gridImagePath: string | undefined
-      if (selected.length > 0) {
+      if (DEBUG_SAVE_GRID && selected.length > 0) {
         try {
           // Order selected photos by finalIds for the grid
           const orderedSelected = finalIds
@@ -1118,9 +1323,13 @@ Only include fields that are clearly indicated by the user's text. If nothing is
     evaluationTarget: number
   ): Promise<BatchDecision[]> {
     const coherenceInstruction = this.getCoherencePromptModifier(config.coherenceMode)
-    const userNotes = config.themePreferences
+    const themeNote = config.themePreferences
       ? `\n## Theme preferences\n"${config.themePreferences}"`
       : ''
+    const styleNote = config.stylePreferences
+      ? `\n## Style preferences\n"${config.stylePreferences}"`
+      : ''
+    const userNotes = themeNote + styleNote
 
     const systemPrompt = `You are a portfolio curator. Look at each photo and decide: SELECT or REJECT.
 
@@ -1360,6 +1569,9 @@ Return JSON: { "decisions": [ { "id": <number>, "analysis": "<one sentence asses
     ]
     if (config.themePreferences) {
       parts.push(`Theme preferences: "${config.themePreferences}"`)
+    }
+    if (config.stylePreferences) {
+      parts.push(`Style preferences: "${config.stylePreferences}"`)
     }
     if (config.filters?.visualAspects) {
       const vaEntries = Object.entries(config.filters.visualAspects)
@@ -2207,7 +2419,7 @@ Return JSON:
       if (!user?.email) return
 
       const mailService = new MailService()
-      const portfolioUrl = `${process.env.APP_URL ?? 'https://app.photoreka.com'}/portfolio-build/${build.id}`
+      const portfolioUrl = `${process.env.APP_URL ?? 'https://app.photoreka.com'}/portfolio/${build.id}`
 
       await mailService.sendEmail({
         from: 'Photoreka <hello@photoreka.com>',

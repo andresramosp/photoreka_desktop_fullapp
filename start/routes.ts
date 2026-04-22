@@ -169,6 +169,14 @@ router
 
     // Portfolio Builder endpoints
     router.post('/api/portfolio-build/start', [PortfolioBuildController, 'start'])
+    router.post('/api/portfolio-build/preview-style-weights', [
+      PortfolioBuildController,
+      'previewStyleWeights',
+    ])
+    router.get('/api/portfolio-build/default-weights', [
+      PortfolioBuildController,
+      'getDefaultWeights',
+    ])
     router.get('/api/portfolio-build/eligibility', [PortfolioBuildController, 'eligibility'])
     router.get('/api/portfolio-build/list', [PortfolioBuildController, 'list'])
     router.get('/api/portfolio-build/:id', [PortfolioBuildController, 'getStatus'])

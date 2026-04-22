@@ -378,6 +378,49 @@ Collections are unordered thematic groups. Ideal for projects, clients, events, 
 
 ---
 
+## PORTFOLIO BUILDER
+
+**Purpose:** AI-powered automatic curation of a cohesive portfolio from the user's catalog. The builder selects, refines, and (optionally) sequences a fixed-size set of photos that matches the user's stated criteria.
+
+### How it works
+The pipeline runs asynchronously in the background (users can leave the page and come back). It goes through 7 internal stages: **parsing → recall → coherence scoring → evaluation → refinement → sequencing → completion**.
+
+1. **Recall** — builds a large candidate pool from the catalog (up to ~7× the target size, capped) using the user's filters, weights, and theme preferences.
+2. **Coherence scoring** — scores how well each candidate fits the chosen coherence mode.
+3. **Evaluation** — an LLM evaluates batches of candidates against the brief.
+4. **Refinement** — trims down to the target size with similarity-gate and quality checks.
+5. **Sequencing (optional)** — orders the final photos for narrative/visual flow.
+
+### Configuration inputs
+- **Target size:** between 10 and 40 photos.
+- **Weights:** per-criterion weights (0–10) across the 8 artistic score fields — aesthetic_quality, composition, storytelling, originality, message, humor, visual_games, candidness. Used to bias which photos are considered strongest.
+- **Coherence mode:** controls how photos relate to each other as a set.
+    - free — no coherence constraint, pure quality-driven selection.
+    - visual — photos share overall visual style (composition, framing, treatment).
+    - chromatic — photos share a consistent color palette and tonal register.
+    - narrative — photos share a common story, theme, or subject thread.
+    - heterogeneous — deliberately diverse portfolio, maximising variety.
+- **Theme preferences (optional, free text):** natural-language hints about theme, mood, or constraints to bias recall.
+- **Style preferences (optional, free text):** natural-language hints about visual style, treatment, or aesthetic to bias recall.
+- **Filters (optional):** visual-aspect filters, date range, and/or restrict the pool to specific collections.
+
+### Output
+Each completed build stores:
+- An **ordered list of photo IDs** that form the final portfolio.
+- A **builder pool** — photos the LLM approved but that didn't make the final cut (surfaced as alternative suggestions the user can swap in).
+- Notes on the refinement and sequencing passes.
+
+### Constraints & behavior
+- Only one build can be in progress at a time per user.
+- Requires a sufficiently analyzed catalog (enough eligible photos after filters); otherwise the build is rejected at eligibility check.
+- Builds consume credits (AI evaluation + sequencing).
+- The user can **abort** an in-progress build, **delete** a completed one, and **manually edit the layout** (reorder or remove photos) of a completed build after the fact.
+- Builds are the appropriate destination when the user wants a "final selection", "curated set", "show reel", or a ready-to-present body of work — not for exploratory searching.
+
+> **Tip:** If a user is dissatisfied with ChatLab's ranking or curation for a large selection task, the Portfolio Builder is the right tool to redirect them to: it evaluates the full catalog in batches with LLM judgment, not just a sampled subset.
+
+---
+
 ## 7. CANVAS (/canvas)
 
 **Purpose:** Infinite freeform visual board for composition, sequencing, and collage. Desktop only.

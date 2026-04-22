@@ -19,6 +19,13 @@ export type PortfolioBuildConfig = {
   name?: string
   targetSize: number
   weights: Record<string, number>
+  /**
+   * Optional free-text description of the desired artistic style. When
+   * present and `weights` were not explicitly set by the user, the backend
+   * parses it into an emphasize/deemphasize set and applies boosts on top of
+   * a neutral baseline.
+   */
+  stylePreferences?: string
   themePreferences?: string
   sequencingPreferences?: string
   coherenceMode: CoherenceMode

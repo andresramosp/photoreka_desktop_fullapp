@@ -148,15 +148,14 @@ Photos may arrive with thumbnails (for visual evaluation) or text-only descripti
 If the user is dissatisfied or frustrated:
 - **Acknowledge** honestly: chat is an auxiliary tool with limits (sample size, AI subjectivity).
 - **Redirect** to a better-suited feature using \`app_knowledge\` data. Examples:
-    - Rankings/Portfolios → **Workspace / Search** or **Report & Statistics**.
-    - Fine-tuning → **Collections** or **Series**.
-    - Catalog analysis → **Portfolio Review**.
+    - Rankings/Portfolios → **Workspace / Search with Artistic Filters or Portfolios**.
+    - Catalog analysis → **Report & Analytics**.
     - Visual exploration → **3D Atlas** or **Canvas**.
 - **Tone:** Empathetic, practical. Offer 1 concrete suggestion. Chat is a starting point.
 
 ## Capacity limits
 - You can evaluate **only the photos actually provided** to you — not the full contents of a collection or series. Each search yields ≤ 20; collection/series samples ≤ 15.
-- When a collection/series has more photos than you received, mention clearly that scope limitation and suggest **Portfolio Review** or the **Collection/Series views** in the app for full coverage.
+- When a collection/series/portfolio has more photos than you received, mention clearly that scope limitation and suggest the **Collection/Series/Porfolios views** in the app for full coverage.
 
 ## Visual Output — photo_groups
 - Populate \`photo_groups\` when the user expects visual results (rankings, selections, or sets).
@@ -1302,6 +1301,26 @@ export default class LangchainAgentService {
         })
       }
 
+      if (msg.name === 'fetch_portfolios') {
+        const slim = {
+          _compressed: true,
+          portfolios: (parsed.portfolios ?? []).map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            createdAt: p.createdAt,
+            targetSize: p.targetSize,
+            coherenceMode: p.coherenceMode,
+            sequencing: p.sequencing,
+            totalPhotos: p.totalPhotos ?? (p.photoIds ?? []).length,
+          })),
+        }
+        return new ToolMessage({
+          content: JSON.stringify(slim),
+          tool_call_id: msg.tool_call_id,
+          name: msg.name,
+        })
+      }
+
       if (msg.name === 'web_search') {
         const slim = {
           _compressed: true,
@@ -1354,7 +1373,12 @@ export default class LangchainAgentService {
   ): any[] {
     // Build a queue of full outputs per restorable tool so we can replace
     // the compressed ToolMessages inline instead of duplicating data.
-    const RESTORABLE_TOOLS = new Set(['overall_catalog_view', 'app_knowledge', 'fetch_collections'])
+    const RESTORABLE_TOOLS = new Set([
+      'overall_catalog_view',
+      'app_knowledge',
+      'fetch_collections',
+      'fetch_portfolios',
+    ])
     const restoreQueues = new Map<string, string[]>()
     for (const step of intermediateSteps) {
       if (!RESTORABLE_TOOLS.has(step.tool)) continue
@@ -1446,9 +1470,10 @@ export default class LangchainAgentService {
         continue
       }
 
-      // fetch_collections intentionally excluded: it only provides collection metadata.
-      // The agent must call get_photo_info explicitly for any photos it wants to evaluate.
-      if (step.tool === 'fetch_collections') continue
+      // fetch_collections and fetch_portfolios intentionally excluded: they only
+      // provide metadata. The agent must call get_photo_info explicitly for any
+      // photos it wants to evaluate.
+      if (step.tool === 'fetch_collections' || step.tool === 'fetch_portfolios') continue
     }
     return groups
   }

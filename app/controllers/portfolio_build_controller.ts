@@ -45,6 +45,23 @@ export default class PortfolioBuildController {
 
       const service = new PortfolioBuildService()
 
+      // If the client only sent a free-text style description (no explicit
+      // weights), resolve it now so the build starts with a concrete weight
+      // vector. Cheap PARSE_MODEL call; same path as the preview endpoint.
+      if (!config.weights && config.stylePreferences) {
+        const parsed = await service.previewStyleWeights(config.stylePreferences)
+        // Scale from the 0..1 preview range to the 0..10 pipeline range.
+        config.weights = Object.fromEntries(
+          Object.entries(parsed.weights).map(([k, v]) => [k, v * 10])
+        )
+      }
+
+      if (!config.weights) {
+        return response.badRequest({
+          error: 'Either "weights" or "stylePreferences" must be provided.',
+        })
+      }
+
       // Check eligibility (using the actual target size we're about to build)
       const eligibility = await service.validateBuildEligibility(user.id, config.targetSize)
       if (!eligibility.eligible) {
@@ -318,7 +335,52 @@ export default class PortfolioBuildController {
     }
   }
 
+  /**
+   * GET /api/portfolio-build/default-weights
+   * Returns the canonical default weight vector (0..1 slider scale) that the
+   * wizard should display as its initial state. This is the single source of
+   * truth — the frontend must NOT hard-code these values.
+   */
+  public async getDefaultWeights({ response, auth }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const weights = PortfolioBuildService.getDefaultWeights()
+      return response.ok({ weights })
+    } catch (error: any) {
+      console.error('[PortfolioBuildController] getDefaultWeights error:', error)
+      return response.internalServerError({ error: error.message })
+    }
+  }
+
   // ── Validation ─────────────────────────────────────────────
+
+  /**
+   * POST /api/portfolio-build/preview-style-weights
+   * Parse a free-text style description into an emphasize/deemphasize set
+   * plus the resulting weight vector (in the 0..1 slider range). Used by the
+   * wizard to give the user a live preview before they commit to a build.
+   */
+  public async previewStyleWeights({ request, response, auth }: HttpContext) {
+    try {
+      await auth.use('api').check()
+
+      const body = request.body()
+      const raw = body.stylePreferences
+      if (typeof raw !== 'string' || raw.trim().length === 0) {
+        return response.badRequest({
+          error: 'stylePreferences must be a non-empty string.',
+        })
+      }
+      const stylePreferences = raw.trim().slice(0, 1000)
+
+      const service = new PortfolioBuildService()
+      const result = await service.previewStyleWeights(stylePreferences)
+      return response.ok(result)
+    } catch (error: any) {
+      console.error('[PortfolioBuildController] previewStyleWeights error:', error)
+      return response.internalServerError({ error: error.message })
+    }
+  }
 
   private parseAndValidateConfig(body: any): PortfolioBuildConfig {
     const name =
@@ -329,22 +391,32 @@ export default class PortfolioBuildController {
       throw new Error('targetSize must be between 10 and 60.')
     }
 
+    const hasStylePreferences =
+      typeof body.stylePreferences === 'string' && body.stylePreferences.trim().length > 0
+
     const rawWeights = body.weights
-    if (!rawWeights || typeof rawWeights !== 'object') {
-      throw new Error('weights is required and must be an object.')
+    if (rawWeights !== undefined && rawWeights !== null) {
+      if (typeof rawWeights !== 'object') {
+        throw new Error('weights must be an object.')
+      }
+    } else if (!hasStylePreferences) {
+      throw new Error('Either "weights" or "stylePreferences" must be provided.')
     }
 
     // Normalize aliased field names (e.g. strangeness → originality)
-    const weights: Record<string, number> = {}
-    for (const [field, value] of Object.entries(rawWeights)) {
-      const canonical = SCORE_FIELD_ALIASES[field] ?? field
-      if (!VALID_SCORE_FIELDS.includes(canonical)) {
-        throw new Error(`Invalid weight field: ${field}`)
+    let weights: Record<string, number> | undefined
+    if (rawWeights && typeof rawWeights === 'object') {
+      weights = {}
+      for (const [field, value] of Object.entries(rawWeights)) {
+        const canonical = SCORE_FIELD_ALIASES[field] ?? field
+        if (!VALID_SCORE_FIELDS.includes(canonical)) {
+          throw new Error(`Invalid weight field: ${field}`)
+        }
+        if (typeof value !== 'number' || value < 0 || value > 10) {
+          throw new Error(`Weight for ${field} must be a number between 0 and 10.`)
+        }
+        weights[canonical] = value
       }
-      if (typeof value !== 'number' || value < 0 || value > 10) {
-        throw new Error(`Weight for ${field} must be a number between 0 and 10.`)
-      }
-      weights[canonical] = value
     }
 
     const coherenceMode = body.coherenceMode ?? 'free'
@@ -357,9 +429,15 @@ export default class PortfolioBuildController {
     const config: PortfolioBuildConfig = {
       ...(name ? { name } : {}),
       targetSize,
-      weights,
+      // `weights` may be undefined here; the caller resolves it from
+      // stylePreferences before actually starting the build.
+      weights: weights as Record<string, number>,
       coherenceMode,
       sequencing,
+    }
+
+    if (hasStylePreferences) {
+      config.stylePreferences = body.stylePreferences.trim().slice(0, 1000)
     }
 
     if (
