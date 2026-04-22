@@ -1007,7 +1007,7 @@ const resetForm = () => {
   form.weights = portfolioStore.defaultWeights
     ? { ...portfolioStore.defaultWeights }
     : getFallbackWeights();
-  form.coherenceMode = "free";
+  form.coherenceMode = "visual";
   form.themePreferences = "";
   form.sequencing = false;
   form.sequencingPreferences = "";
