@@ -74,6 +74,7 @@ const PortfolioReviewController = () => import('#controllers/portfolio_review_co
 const ChatController = () => import('#controllers/chat_controller')
 const CanvasController = () => import('#controllers/canvas_controller')
 const PaymentController = () => import('#controllers/payment_controller')
+const PortfolioBuildController = () => import('#controllers/portfolio_build_controller')
 
 // Stripe webhook (no auth — verified by signature)
 router.post('/api/payments/webhook', [PaymentController, 'webhook'])
@@ -165,6 +166,15 @@ router
     // Portfolio Review endpoints
     // router.get('/api/portfolio-review/:reviewType', [PortfolioReviewController, 'getPatterns'])
     router.get('/api/portfolio-review/should-build', [PortfolioReviewController, 'shouldBuild'])
+
+    // Portfolio Builder endpoints
+    router.post('/api/portfolio-build/start', [PortfolioBuildController, 'start'])
+    router.get('/api/portfolio-build/eligibility', [PortfolioBuildController, 'eligibility'])
+    router.get('/api/portfolio-build/list', [PortfolioBuildController, 'list'])
+    router.get('/api/portfolio-build/:id', [PortfolioBuildController, 'getStatus'])
+    router.post('/api/portfolio-build/:id/abort', [PortfolioBuildController, 'abort'])
+    router.delete('/api/portfolio-build/:id', [PortfolioBuildController, 'delete'])
+    router.patch('/api/portfolio-build/:id/layout', [PortfolioBuildController, 'updateLayout'])
 
     // Payment endpoints
     router.post('/api/payments/checkout', [PaymentController, 'checkout'])

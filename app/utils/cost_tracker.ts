@@ -2,7 +2,13 @@ import ModelsService, { PRICES, USD_TO_EUR } from '#services/models_service'
 
 // ─── Types ───────────────────────────────────────────────
 
-export type CostCategory = 'photo_analysis' | 'chat' | 'portfolio_review' | 'search' | 'other'
+export type CostCategory =
+  | 'photo_analysis'
+  | 'chat'
+  | 'portfolio_review'
+  | 'search'
+  | 'portfolio_build'
+  | 'other'
 
 export interface CostEntry {
   task: string
