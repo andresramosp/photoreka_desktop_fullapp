@@ -17,6 +17,11 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
+  build: {
+    rollupOptions: {
+      maxParallelFileOps: 20,
+    },
+  },
   server: {
     port: 5173,
     host: "localhost",
