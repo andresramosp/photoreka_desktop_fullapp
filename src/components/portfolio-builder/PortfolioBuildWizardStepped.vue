@@ -586,7 +586,7 @@ const form = reactive({
   weights: portfolioStore.defaultWeights
     ? { ...portfolioStore.defaultWeights }
     : getFallbackWeights(),
-  coherenceMode: "free",
+  coherenceMode: "visual", // 'free' | 'visual' | 'chromatic' | 'narrative' | 'heterogeneous'
   themePreferences: "",
   sequencing: false,
   sequencingPreferences: "",
@@ -748,15 +748,11 @@ const runStylePreview = async (text) => {
 // ── Coherence modes ────────────────────────────────────────
 const coherenceModes = [
   {
-    value: "free",
-    label: "Free",
-    description: "No coherence constraint — pure quality selection.",
-  },
-  {
     value: "visual",
     label: "Visual",
     description: "Favor photos with similar visual style and aesthetics.",
   },
+
   {
     value: "chromatic",
     label: "Chromatic",
@@ -771,6 +767,11 @@ const coherenceModes = [
     value: "heterogeneous",
     label: "Heterogeneous",
     description: "Maximize variety and diversity.",
+  },
+  {
+    value: "free",
+    label: "Free",
+    description: "No coherence constraint — pure quality selection.",
   },
 ];
 
