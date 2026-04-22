@@ -2419,7 +2419,7 @@ Return JSON:
       if (!user?.email) return
 
       const mailService = new MailService()
-      const portfolioUrl = `${process.env.APP_URL ?? 'https://app.photoreka.com'}/portfolio/${build.id}`
+      const portfolioUrl = `${process.env.APP_URL ?? 'https://app.photoreka.com'}/portfolios/${build.id}`
 
       await mailService.sendEmail({
         from: 'Photoreka <hello@photoreka.com>',
