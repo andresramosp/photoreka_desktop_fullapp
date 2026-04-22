@@ -63,9 +63,9 @@ const MIN_ANALYZED_RATIO = 0.8
 /** Grid thumbnail cell size in pixels. */
 const GRID_CELL_SIZE = 280
 /** Save debug artifacts (e.g. grid image) to disk. */
-const DEBUG_SAVE_GRID = true
+const DEBUG_SAVE_GRID = false
 /** Save a grid image per evaluation batch for debugging. */
-const DEBUG_SAVE_BATCH_GRID = true
+const DEBUG_SAVE_BATCH_GRID = false
 /** Over-generate buffer: fraction of targetSize to over-select for refinement trimming. */
 const OVER_GENERATE_RATIO = 0.35
 /** Minimum over-generate buffer (absolute). */
