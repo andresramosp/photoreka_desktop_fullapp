@@ -33,8 +33,8 @@
         </div>
         <h3 class="building-title">Building your portfolio…</h3>
         <p class="building-subtitle">
-          Our engine is evaluating and curating your best photos. This can take
-          a few minutes.
+          Our engine is evaluating and curating your best photos. <br />
+          You can close this dialog. We well notify you when it's done!
         </p>
         <div class="building-steps">
           <div
@@ -1304,7 +1304,7 @@ watch(
   font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.5;
-  max-width: 360px;
+  max-width: 400px;
 }
 
 .building-steps {
