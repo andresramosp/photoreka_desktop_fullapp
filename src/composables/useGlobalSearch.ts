@@ -3,6 +3,7 @@ import { ref, computed, watch } from "vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useSeriesStore } from "@/stores/series.js";
+import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds.js";
 import { useUserStore } from "@/stores/userStore.js";
 import { api } from "@/utils/axios.js";
 import helpData from "@/assets/helpData.json";
@@ -66,19 +67,29 @@ export interface SearchResultCanvas {
   updatedAt?: string;
 }
 
+export interface SearchResultPortfolio {
+  type: "portfolio";
+  id: number | string;
+  name: string;
+  photoCount: number;
+  coverUrl?: string;
+}
+
 export type SearchResult =
   | SearchResultPhoto
   | SearchResultCollection
   | SearchResultSeries
   | SearchResultTool
   | SearchResultHelp
-  | SearchResultCanvas;
+  | SearchResultCanvas
+  | SearchResultPortfolio;
 
 export interface GroupedResults {
   tools: SearchResultTool[];
   help: SearchResultHelp[];
   collections: SearchResultCollection[];
   series: SearchResultSeries[];
+  portfolios: SearchResultPortfolio[];
   photos: SearchResultPhoto[];
   canvases: SearchResultCanvas[];
 }
@@ -287,6 +298,7 @@ export function useGlobalSearch() {
   const photosStore = usePhotosStore();
   const collectionsStore = useCollectionsStore();
   const seriesStore = useSeriesStore();
+  const portfolioBuildsStore = usePortfolioBuildsStore();
   const userStore = useUserStore();
 
   const searchQuery = ref("");
@@ -403,6 +415,27 @@ export function useGlobalSearch() {
       }));
   };
 
+  // Search portfolios
+  const searchPortfolios = (query: string): SearchResultPortfolio[] => {
+    if (!query || query.length < 2) return [];
+
+    const builds = portfolioBuildsStore.allBuilds || [];
+
+    return builds
+      .filter((build: any) => {
+        const name = build.config?.name || `Portfolio #${build.id}`;
+        return matchesQuery(name, query);
+      })
+      .slice(0, maxResultsPerCategory.value)
+      .map((build: any) => ({
+        type: "portfolio" as const,
+        id: build.id,
+        name: build.config?.name || `Portfolio #${build.id}`,
+        photoCount: build.resultCount ?? (build.photoItems || []).length,
+        coverUrl: build.photoItems?.[0]?.thumbnailUrl,
+      }));
+  };
+
   // Search photos by name and tags
   const searchPhotos = (query: string): SearchResultPhoto[] => {
     if (!query || query.length < 2) return [];
@@ -483,6 +516,7 @@ export function useGlobalSearch() {
         help: [],
         collections: [],
         series: [],
+        portfolios: [],
         photos: [],
         canvases: [],
       };
@@ -493,6 +527,7 @@ export function useGlobalSearch() {
       help: searchHelp(query),
       collections: searchCollections(query),
       series: searchSeries(query),
+      portfolios: searchPortfolios(query),
       photos: searchPhotos(query),
       canvases: searchCanvases(query),
     };
@@ -506,6 +541,7 @@ export function useGlobalSearch() {
       results.help.length +
       results.collections.length +
       results.series.length +
+      results.portfolios.length +
       results.photos.length +
       results.canvases.length
     );
@@ -522,6 +558,7 @@ export function useGlobalSearch() {
       ...results.canvases,
       ...results.collections,
       ...results.series,
+      ...results.portfolios,
       ...results.photos,
       ...results.help,
     ];
@@ -571,6 +608,7 @@ export function useGlobalSearch() {
         photosStore.getOrFetch(false),
         collectionsStore.getOrFetch(false),
         seriesStore.getOrFetch(false),
+        portfolioBuildsStore.getOrFetch(false),
         loadCanvases(),
       ]);
     } catch (error) {

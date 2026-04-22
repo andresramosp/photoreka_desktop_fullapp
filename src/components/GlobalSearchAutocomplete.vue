@@ -213,6 +213,45 @@
             </div>
           </div>
 
+          <!-- Portfolios Section -->
+          <div
+            v-if="searchResults.portfolios.length > 0"
+            class="results-section"
+          >
+            <div class="section-header">
+              <n-icon size="14">
+                <PortfolioIcon />
+              </n-icon>
+              <span>Portfolios</span>
+            </div>
+            <div class="section-items">
+              <div
+                v-for="portfolio in searchResults.portfolios"
+                :key="`portfolio-${portfolio.id}`"
+                class="result-item portfolio-item"
+                :class="{ active: isActiveItem('portfolio', portfolio.id) }"
+                @click="handleSelectPortfolio(portfolio)"
+                @touchend.prevent="handleSelectPortfolio(portfolio)"
+                @mouseenter="setActiveItem('portfolio', portfolio.id)"
+              >
+                <div class="item-icon portfolio-icon">
+                  <n-icon size="18">
+                    <PortfolioIcon />
+                  </n-icon>
+                </div>
+                <div class="item-content">
+                  <div class="item-name">{{ portfolio.name }}</div>
+                  <div class="item-description">
+                    {{ portfolio.photoCount }} photos
+                  </div>
+                </div>
+                <n-icon size="14" class="item-arrow">
+                  <ChevronForward />
+                </n-icon>
+              </div>
+            </div>
+          </div>
+
           <!-- Photos Section -->
           <div v-if="searchResults.photos.length > 0" class="results-section">
             <div class="section-header">
@@ -334,6 +373,7 @@ import {
   CloudUploadOutline,
   SettingsOutline,
   HelpCircleOutline,
+  BriefcaseOutline as PortfolioIcon,
 } from "@vicons/ionicons5";
 import { Workspace as WorkspaceIcon } from "@vicons/carbon";
 import {
@@ -537,6 +577,9 @@ const handleSelectItem = (item: SearchResult) => {
     case "canvas":
       handleSelectCanvas(item);
       break;
+    case "portfolio":
+      handleSelectPortfolio(item);
+      break;
   }
 };
 
@@ -571,6 +614,12 @@ const handleSelectCanvas = (canvas: any) => {
     canvasStore.pendingCanvasId = canvas.id;
   }
   router.push({ name: "canvas" });
+};
+
+const handleSelectPortfolio = (portfolio: any) => {
+  showDropdown.value = false;
+  clearSearch();
+  router.push({ name: "portfolio-detail", params: { id: portfolio.id } });
 };
 
 const handleSelectPhoto = async (photo: SearchResultPhoto) => {
@@ -848,6 +897,11 @@ onUnmounted(() => {
 .canvas-icon {
   background: var(--primary-color-opacity-10);
   color: var(--primary-color);
+}
+
+.portfolio-icon {
+  background: var(--warning-color-opacity-10);
+  color: var(--warning-color);
 }
 
 /* Item content */
