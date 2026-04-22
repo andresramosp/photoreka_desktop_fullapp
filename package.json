@@ -40,7 +40,8 @@
     "vue-leaflet": "^0.1.0",
     "vue-router": "^4.5.0",
     "vue-virtual-scroller": "^2.0.0-beta.8",
-    "vuedraggable": "^4.1.0"
+    "vuedraggable": "^4.1.0",
+    "vueuc": "^0.4.65"
   },
   "devDependencies": {
     "@tsconfig/node22": "^22.0.1",
