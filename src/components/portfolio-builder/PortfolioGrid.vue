@@ -22,6 +22,7 @@
           :photo="element"
           :style="getCellStyle(element)"
           @remove="(photo) => $emit('remove', photo)"
+          @info="(photo) => $emit('info', photo)"
         />
       </template>
     </draggable>
@@ -45,11 +46,11 @@ const DEFAULT_RATIO = 1.5; // 3:2 fallback while loading
 
 const props = defineProps({
   photos: { type: Array, required: true },
-  columns: { type: Number, default: 5 },
+  columns: { type: Number, default: 4 },
   gap: { type: Number, default: 3 },
 });
 
-const emit = defineEmits(["update:photos", "remove"]);
+const emit = defineEmits(["update:photos", "remove", "info"]);
 
 // ── Container width measurement ────────────────────────────
 const wrapperRef = ref(null);
@@ -155,11 +156,17 @@ function getCellStyle(photo) {
 function onDragEnd() {
   emit("update:photos", [...props.photos]);
 }
+
+defineExpose({
+  containerWidth,
+  aspectRatios,
+  wrapperRef,
+});
 </script>
 
 <style scoped>
 .portfolio-grid-wrapper {
-  background: var(--bg-container);
+  /* background: var(--bg-container); */
   border-radius: 8px;
   padding: 3px;
   min-height: 200px;

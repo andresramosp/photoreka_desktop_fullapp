@@ -68,19 +68,11 @@
     <!-- Content with cards (when builds exist) -->
     <div v-else-if="!isLoading" class="card-grid">
       <!-- Create card -->
-      <div class="card create-card" @click="openWizard">
-        <div class="create-preview">
-          <div class="create-icon">
-            <n-icon :size="36" color="var(--primary-color)">
-              <AddOutline />
-            </n-icon>
-          </div>
-        </div>
-        <div class="card-info">
-          <h3 class="card-title">New Build</h3>
-          <p class="card-meta">Create a new AI-curated portfolio</p>
-        </div>
-      </div>
+      <CreateCard
+        title="New Build"
+        subtitle="Create a new AI-curated portfolio"
+        @click="openWizard"
+      />
 
       <!-- Existing build cards -->
       <CollectionCard
@@ -113,6 +105,7 @@ import {
 } from "@vicons/ionicons5";
 import { TOOL_ICONS, getToolById } from "@/config/toolsConfig";
 import CollectionCard from "@/components/CollectionCard.vue";
+import CreateCard from "@/components/photos-grid/CreateCard.vue";
 import PortfolioBuildWizard from "@/components/portfolio-builder/PortfolioBuildWizardStepped.vue";
 import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds";
 
@@ -138,7 +131,7 @@ const buildItems = computed(() =>
     );
     return {
       id: build.id,
-      name: `Portfolio #${build.id}`,
+      name: build.config?.name || `Portfolio #${build.id}`,
       photos: [...previews, ...filler],
       updatedAt: build.createdAt,
     };
@@ -150,18 +143,6 @@ onMounted(() => {
 });
 
 const openWizard = async () => {
-  // Quick eligibility check before opening
-  try {
-    const elig = await store.checkEligibility();
-    if (!elig.eligible) {
-      message.warning(
-        elig.reason || "You are not eligible to build a portfolio yet.",
-      );
-      return;
-    }
-  } catch {
-    // If eligibility check fails, still allow opening (the backend will enforce)
-  }
   showWizard.value = true;
 };
 

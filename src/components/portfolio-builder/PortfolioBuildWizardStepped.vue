@@ -69,8 +69,61 @@
       <!-- Slide container -->
       <div class="slide-container">
         <Transition :name="slideDirection" mode="out-in">
-          <!-- Step 1: Portfolio Size -->
-          <div v-if="currentStep === 0" key="size" class="slide">
+          <!-- Step 1: Name & Theme -->
+          <div v-if="currentStep === 0" key="name" class="slide">
+            <div class="slide-header">
+              <h3 class="slide-title">Name & Theme</h3>
+              <p class="slide-desc">
+                Give your portfolio a name and optionally describe its theme.
+              </p>
+            </div>
+            <div class="slide-body">
+              <div class="filter-field">
+                <label class="filter-label"
+                  >Portfolio name
+                  <span style="color: var(--error-color)">*</span></label
+                >
+                <n-input
+                  v-model:value="form.name"
+                  placeholder="e.g. 'Urban Stories 2025' or 'Night Light Series'…"
+                  :maxlength="200"
+                  show-count
+                />
+              </div>
+              <div class="filter-field">
+                <label class="filter-label"
+                  >Theme & direction
+                  <span style="color: var(--text-tertiary); font-weight: 400"
+                    >(optional)</span
+                  ></label
+                >
+                <n-input
+                  v-model:value="form.themePreferences"
+                  type="textarea"
+                  placeholder="e.g. 'European cities at night, moody urban vibes' or 'nature macro photography, vibrant colors'…"
+                  :autosize="{ minRows: 3, maxRows: 5 }"
+                  :maxlength="2000"
+                  show-count
+                />
+              </div>
+              <Transition name="hint-fade">
+                <div
+                  v-if="form.themePreferences.trim().length > 0"
+                  class="theme-hint"
+                >
+                  <n-icon :size="14"><InformationCircleOutline /></n-icon>
+                  <span>
+                    This preference acts as a soft bias, not a strict filter.
+                    For stricter thematic restrictions, consider filtering by
+                    collections in the Filters step.
+                  </span>
+                </div>
+              </Transition>
+            </div>
+          </div>
+
+          <!-- Step 2: Portfolio Size -->
+          <div v-else-if="currentStep === 1" key="size" class="slide">
             <div class="slide-header">
               <h3 class="slide-title">Portfolio Size</h3>
               <p class="slide-desc">
@@ -100,11 +153,38 @@
                   <span class="size-label">photos</span>
                 </div>
               </div>
+
+              <Transition name="hint-fade">
+                <div
+                  v-if="
+                    sizeEligibility &&
+                    sizeEligibility.eligible === false &&
+                    !isCheckingEligibility
+                  "
+                  class="size-error"
+                >
+                  <n-icon :size="16"><InformationCircleOutline /></n-icon>
+                  <div class="size-error-text">
+                    <strong>Not enough analyzed photos</strong>
+                    <span>{{ sizeEligibility.reason }}</span>
+                    <span
+                      v-if="
+                        sizeEligibility.stats &&
+                        typeof sizeEligibility.requiredPool === 'number'
+                      "
+                      class="size-error-hint"
+                    >
+                      Try reducing the portfolio size, or analyze more photos
+                      from your catalog.
+                    </span>
+                  </div>
+                </div>
+              </Transition>
             </div>
           </div>
 
-          <!-- Step 2: Artistic Weights -->
-          <div v-else-if="currentStep === 1" key="weights" class="slide">
+          <!-- Step 3: Artistic Weights -->
+          <div v-else-if="currentStep === 2" key="weights" class="slide">
             <div class="slide-header">
               <h3 class="slide-title">Artistic Weights</h3>
               <p class="slide-desc">
@@ -133,37 +213,6 @@
                 compact
                 :readonly="selectedGenre !== 'custom'"
               />
-            </div>
-          </div>
-
-          <!-- Step 3: Theme & Direction -->
-          <div v-else-if="currentStep === 2" key="theme" class="slide">
-            <div class="slide-header">
-              <h3 class="slide-title">Theme & Direction</h3>
-              <p class="slide-desc">
-                Tell the AI what you want the portfolio to communicate.
-              </p>
-            </div>
-            <div class="slide-body">
-              <n-input
-                v-model:value="form.themePreferences"
-                type="textarea"
-                placeholder="e.g. 'European cities at night, moody urban vibes' or 'nature macro photography, vibrant colors'…"
-                :autosize="{ minRows: 3, maxRows: 5 }"
-                :maxlength="2000"
-                show-count
-              />
-              <div
-                v-if="form.themePreferences.trim().length > 0"
-                class="theme-hint"
-              >
-                <n-icon :size="14"><InformationCircleOutline /></n-icon>
-                <span>
-                  This preference acts as a soft bias, not a strict filter. For
-                  stricter thematic restrictions, consider filtering by
-                  collections in the next step.
-                </span>
-              </div>
             </div>
           </div>
 
@@ -323,6 +372,7 @@
             v-if="currentStep < wizardSteps.length - 1"
             type="primary"
             @click="goNext"
+            :disabled="!canAdvance"
           >
             Next
             <template #icon>
@@ -377,6 +427,7 @@ import {
   ColorPaletteOutline,
   ReorderThreeOutline,
   InformationCircleOutline,
+  CreateOutline,
 } from "@vicons/ionicons5";
 import { TOOL_ICONS, getToolById } from "@/config/toolsConfig";
 import CustomArtisticWeights from "@/components/CustomArtisticWeights.vue";
@@ -404,9 +455,9 @@ const currentStep = ref(0);
 const slideDirection = ref("slide-left");
 
 const wizardSteps = [
+  { shortLabel: "Name", icon: CreateOutline },
   { shortLabel: "Size", icon: ResizeOutline },
   { shortLabel: "Weights", icon: BarChartOutline },
-  { shortLabel: "Theme", icon: ColorPaletteOutline },
   { shortLabel: "Filters", icon: FunnelOutline },
   { shortLabel: "Coherence", icon: LinkOutline },
   // { shortLabel: "Sequence", icon: ReorderThreeOutline },
@@ -438,6 +489,7 @@ const getDefaultWeights = () => {
 };
 
 const form = reactive({
+  name: "",
   targetSize: 20,
   weights: getDefaultWeights(),
   coherenceMode: "free",
@@ -567,8 +619,55 @@ const estimatedCredits = computed(() => {
 
 // ── Validation ─────────────────────────────────────────────
 const canSubmit = computed(() => {
+  if (form.name.trim().length === 0) return false;
   if (form.targetSize < 10 || form.targetSize > 60) return false;
+  if (sizeEligibility.value && sizeEligibility.value.eligible === false)
+    return false;
   return Object.values(form.weights).some((w) => w > 0);
+});
+
+// ── Dynamic size eligibility ───────────────────────────────
+// The backend enforces that the user has enough *analyzed* photos to feed the
+// recall/evaluation pool for the chosen targetSize. We re-check every time the
+// slider settles so the user sees live feedback.
+const sizeEligibility = ref(null);
+const isCheckingEligibility = ref(false);
+let eligibilityDebounce = null;
+let eligibilityReqId = 0;
+
+const runEligibilityCheck = async (size) => {
+  const reqId = ++eligibilityReqId;
+  isCheckingEligibility.value = true;
+  try {
+    const result = await portfolioStore.checkEligibility(size);
+    if (reqId !== eligibilityReqId) return; // stale
+    sizeEligibility.value = result;
+  } catch (e) {
+    if (reqId !== eligibilityReqId) return;
+    // On error, don't block the user — backend will enforce on submit.
+    sizeEligibility.value = null;
+  } finally {
+    if (reqId === eligibilityReqId) isCheckingEligibility.value = false;
+  }
+};
+
+watch(
+  () => form.targetSize,
+  (size) => {
+    if (eligibilityDebounce) clearTimeout(eligibilityDebounce);
+    eligibilityDebounce = setTimeout(() => runEligibilityCheck(size), 250);
+  },
+  { immediate: true },
+);
+
+// Block moving past the Size step if the user is not eligible for the chosen size.
+const canAdvance = computed(() => {
+  if (currentStep.value === 1) {
+    if (isCheckingEligibility.value) return false;
+    if (sizeEligibility.value && sizeEligibility.value.eligible === false)
+      return false;
+  }
+  return true;
 });
 
 // ── Submit ─────────────────────────────────────────────────
@@ -576,6 +675,7 @@ const handleSubmit = async () => {
   if (!canSubmit.value) return;
 
   const config = {
+    name: form.name.trim(),
     targetSize: form.targetSize,
     weights: Object.fromEntries(
       Object.entries(form.weights).map(([k, v]) => [k, v * 10]),
@@ -669,10 +769,12 @@ const handleClose = () => {
 
 onUnmounted(() => {
   stopPolling();
+  if (eligibilityDebounce) clearTimeout(eligibilityDebounce);
 });
 
 const resetForm = () => {
   stopPolling();
+  form.name = "";
   form.targetSize = 20;
   form.weights = getDefaultWeights();
   form.coherenceMode = "free";
@@ -1001,6 +1103,73 @@ watch(
   flex-shrink: 0;
   margin-top: 1px;
   color: var(--info-color);
+}
+
+/* ── Size eligibility error ─────────────────────────────── */
+.size-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--error-color) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--error-color) 25%, transparent);
+  color: var(--text-primary);
+}
+
+.size-error .n-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--error-color);
+}
+
+.size-error-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.size-error-text strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--error-color);
+}
+
+.size-error-hint {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.hint-fade-enter-active {
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease,
+    max-height 0.3s ease;
+}
+.hint-fade-leave-active {
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease,
+    max-height 0.2s ease;
+}
+.hint-fade-enter-from {
+  opacity: 0;
+  transform: translateY(-6px);
+  max-height: 0;
+}
+.hint-fade-enter-to,
+.hint-fade-leave-from {
+  opacity: 1;
+  transform: translateY(0);
+  max-height: 100px;
+}
+.hint-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+  max-height: 0;
 }
 
 /* ── Footer ─────────────────────────────────────────────── */

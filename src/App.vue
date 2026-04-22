@@ -174,6 +174,7 @@ import FloatingRequestAccessButton from "./components/FloatingRequestAccessButto
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useSeriesStore } from "@/stores/series.js";
+import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds";
 import ConfettiEffect from "./components/ConfettiEffect.vue";
 import AppInitLoader from "./components/AppInitLoader.vue";
 import { useThemeInit } from "@/composables/useTheme.js";
@@ -240,6 +241,7 @@ const showDashboardHeader = computed(() => {
 const photosStore = usePhotosStore();
 const collectionsStore = useCollectionsStore();
 const seriesStore = useSeriesStore();
+const portfolioBuildsStore = usePortfolioBuildsStore();
 const userStore = useUserStore();
 
 // Punto único de decisión de destino post-autenticación
@@ -363,6 +365,7 @@ watch(
       photosStore.resetStore();
       collectionsStore.resetStore();
       seriesStore.resetStore();
+      portfolioBuildsStore.resetStore();
 
       // Esperar a cargar el catálogo y decidir a dónde ir
       photosStore.getOrFetch(true).then(() => {
@@ -377,6 +380,7 @@ watch(
       });
       collectionsStore.getOrFetch(true);
       seriesStore.getOrFetch(true);
+      portfolioBuildsStore.getOrFetch(true);
       userStore.processPatterns();
     } else {
       // Usuario se desautenticó - resetear stores
@@ -385,6 +389,7 @@ watch(
         photosStore.resetStore();
         collectionsStore.resetStore();
         seriesStore.resetStore();
+        portfolioBuildsStore.resetStore();
       }
       // Si no está autenticado, marcar photosStore como inicializado para no bloquear la app
       photosStore.isInitialized = true;

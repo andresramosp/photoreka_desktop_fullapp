@@ -44,9 +44,15 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
       }
     },
 
-    async checkEligibility() {
+    async checkEligibility(targetSize) {
       try {
-        const response = await api.get("/api/portfolio-build/eligibility");
+        const params =
+          typeof targetSize === "number" && Number.isFinite(targetSize)
+            ? { targetSize }
+            : undefined;
+        const response = await api.get("/api/portfolio-build/eligibility", {
+          params,
+        });
         return response.data;
       } catch (error) {
         if (error.response?.status === 402) {

@@ -31,11 +31,29 @@
               </template>
               Save Layout
             </n-button>
+
+            <n-dropdown
+              trigger="click"
+              :options="exportOptions"
+              @select="handleExportSelect"
+            >
+              <n-button
+                :disabled="!photos.length || isExporting"
+                :loading="isExporting"
+              >
+                <template #icon>
+                  <n-icon><DownloadOutline /></n-icon>
+                </template>
+                {{ isExporting ? exportStatus : "Export" }}
+              </n-button>
+            </n-dropdown>
           </div>
         </div>
 
         <div v-if="build">
-          <h1 class="detail-title">Portfolio #{{ build.id }}</h1>
+          <h1 class="detail-title">
+            {{ build.config?.name || `Portfolio #${build.id}` }}
+          </h1>
           <p class="detail-meta">
             {{ photos.length }} photos · {{ coherenceLabel }} ·
             {{ formatDate(build.createdAt) }}
@@ -80,26 +98,57 @@
         :removed-count="removedPhotos.length"
         @undo-last="undoLastRemoval"
         @restore-all="restoreAll"
+        @add-photos="showAddPhotosDialog = true"
       />
 
       <PortfolioGrid
         v-model:photos="photos"
         :columns="columns"
         :gap="gap"
+        ref="gridRef"
         @remove="handleRemovePhoto"
+        @info="handlePhotoInfo"
       />
     </template>
+
+    <PortfolioAddPhotosDialog
+      v-if="build"
+      v-model="showAddPhotosDialog"
+      :build="build"
+      :current-photo-ids="currentPhotoIds"
+      @add-photos="handleAddPhotos"
+    />
+
+    <PhotoInfoDialog
+      v-model="showPhotoInfoDialog"
+      :selected-photo="selectedDialogPhoto"
+      @change-photo="selectedDialogPhoto = $event"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { NIcon, NSpin, NButton, useMessage } from "naive-ui";
-import { SaveOutline, HourglassOutline } from "@vicons/ionicons5";
+import { NIcon, NSpin, NButton, NDropdown, useMessage } from "naive-ui";
+import {
+  SaveOutline,
+  HourglassOutline,
+  DownloadOutline,
+  DocumentTextOutline,
+  ImageOutline,
+} from "@vicons/ionicons5";
+import { h } from "vue";
 import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds";
+import { usePhotosStore } from "@/stores/photos";
 import PortfolioGrid from "@/components/portfolio-builder/PortfolioGrid.vue";
 import PortfolioGridToolbar from "@/components/portfolio-builder/PortfolioGridToolbar.vue";
+import PortfolioAddPhotosDialog from "@/components/portfolio-builder/PortfolioAddPhotosDialog.vue";
+import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
+import {
+  exportPortfolioToPdf,
+  exportPortfolioToJpeg,
+} from "@/utils/portfolioPdfExport";
 
 defineOptions({ name: "PortfolioDetailView" });
 
@@ -107,6 +156,7 @@ const route = useRoute();
 const router = useRouter();
 const message = useMessage();
 const store = usePortfolioBuildsStore();
+const photosStore = usePhotosStore();
 
 const build = ref(null);
 const photos = ref([]);
@@ -115,8 +165,27 @@ const originalPhotoIds = ref([]);
 const isLoading = ref(true);
 const isSaving = ref(false);
 const error = ref(null);
-const columns = ref(5);
-const gap = ref(3);
+const columns = ref(2);
+const gap = ref(30);
+const showAddPhotosDialog = ref(false);
+const gridRef = ref(null);
+const isExporting = ref(false);
+const exportStatus = ref("Exporting…");
+const showPhotoInfoDialog = ref(false);
+const selectedDialogPhoto = ref(null);
+
+const exportOptions = [
+  {
+    label: "Export as PDF",
+    key: "pdf",
+    icon: () => h(NIcon, null, { default: () => h(DocumentTextOutline) }),
+  },
+  {
+    label: "Export as JPEG",
+    key: "jpeg",
+    icon: () => h(NIcon, null, { default: () => h(ImageOutline) }),
+  },
+];
 
 const COHERENCE_LABELS = {
   free: "Free Selection",
@@ -141,9 +210,34 @@ const hasChanges = computed(() => {
   return currentIds.some((id, i) => id !== originalPhotoIds.value[i]);
 });
 
-onMounted(async () => {
+const currentPhotoIds = computed(() => photos.value.map((p) => p.id));
+
+function handleAddPhotos(newPhotos) {
+  if (!Array.isArray(newPhotos) || newPhotos.length === 0) return;
+  const existing = new Set(photos.value.map((p) => p.id));
+  const toAdd = newPhotos.filter((p) => p && p.id && !existing.has(p.id));
+  if (toAdd.length === 0) return;
+  photos.value.push(
+    ...toAdd.map((p) => ({ id: p.id, thumbnailUrl: p.thumbnailUrl })),
+  );
+  message.success(
+    `Added ${toAdd.length} ${toAdd.length === 1 ? "photo" : "photos"}`,
+  );
+}
+
+async function loadBuild(buildIdParam) {
+  isLoading.value = true;
+  error.value = null;
+  build.value = null;
+  photos.value = [];
+  removedPhotos.value = [];
+  originalPhotoIds.value = [];
+  showAddPhotosDialog.value = false;
+  showPhotoInfoDialog.value = false;
+  selectedDialogPhoto.value = null;
+
   try {
-    const buildId = Number(route.params.id);
+    const buildId = Number(buildIdParam);
     if (!buildId) {
       error.value = "Invalid build ID.";
       return;
@@ -163,7 +257,9 @@ onMounted(async () => {
   } finally {
     isLoading.value = false;
   }
-});
+}
+
+watch(() => route.params.id, loadBuild, { immediate: true });
 
 function autoSelectColumns(count) {
   if (count <= 9) columns.value = 3;
@@ -177,6 +273,16 @@ function handleRemovePhoto(photo) {
   if (idx === -1) return;
   removedPhotos.value.push({ photo, index: idx });
   photos.value.splice(idx, 1);
+}
+
+async function handlePhotoInfo(photo) {
+  try {
+    const fullPhoto = await photosStore.fetchPhoto(photo.id);
+    selectedDialogPhoto.value = fullPhoto;
+    showPhotoInfoDialog.value = true;
+  } catch (err) {
+    console.error("[PortfolioDetailView] fetchPhoto error:", err);
+  }
 }
 
 function undoLastRemoval() {
@@ -216,6 +322,65 @@ function goBack() {
   router.push({ name: "portfolios" });
 }
 
+function handleExportSelect(key) {
+  if (key === "pdf") exportAsPdf();
+  else if (key === "jpeg") exportAsJpeg();
+}
+
+async function exportAsJpeg() {
+  if (!photos.value.length || isExporting.value) return;
+  isExporting.value = true;
+  exportStatus.value = "Rendering…";
+  try {
+    const gridEl = gridRef.value?.wrapperRef;
+    if (!gridEl) throw new Error("Grid element not available");
+    const rawName =
+      build.value?.config?.name || `portfolio-${build.value?.id || "export"}`;
+    const safeName = rawName.replace(/[^\w.-]+/g, "_");
+    await exportPortfolioToJpeg({
+      gridElement: gridEl,
+      filename: `${safeName}.jpg`,
+    });
+    message.success("JPEG exported");
+  } catch (err) {
+    console.error("[PortfolioDetailView] jpeg export error:", err);
+    message.error("Failed to export JPEG");
+  } finally {
+    isExporting.value = false;
+    exportStatus.value = "Exporting…";
+  }
+}
+
+async function exportAsPdf() {
+  if (!photos.value.length || isExporting.value) return;
+  isExporting.value = true;
+  exportStatus.value = "Preparing…";
+  try {
+    const containerWidthPx = gridRef.value?.containerWidth || 0;
+    const rawName =
+      build.value?.config?.name || `portfolio-${build.value?.id || "export"}`;
+    const safeName = rawName.replace(/[^\w.-]+/g, "_");
+    await exportPortfolioToPdf({
+      photos: photos.value,
+      columns: columns.value,
+      gap: gap.value,
+      containerWidthPx,
+      orientation: "auto",
+      filename: `${safeName}.pdf`,
+      onProgress: ({ loaded, total }) => {
+        exportStatus.value = `Loading ${loaded}/${total}`;
+      },
+    });
+    message.success("PDF exported");
+  } catch (err) {
+    console.error("[PortfolioDetailView] export error:", err);
+    message.error("Failed to export PDF");
+  } finally {
+    isExporting.value = false;
+    exportStatus.value = "Exporting…";
+  }
+}
+
 function formatDate(isoStr) {
   if (!isoStr) return "";
   const d = new Date(isoStr);
@@ -232,6 +397,12 @@ function formatDate(isoStr) {
   padding: var(--spacing-2xl);
   margin: 0 auto;
   background-color: var(--bg-body);
+}
+
+.header-actions-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .loading-state,

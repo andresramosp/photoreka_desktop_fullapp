@@ -210,23 +210,12 @@
 
       <div v-else class="card-grid">
         <!-- Create New Collection Card (only show when there are existing collections) -->
-        <div
+        <CreateCard
           v-if="collections.length > 0"
-          class="card create-card"
+          title="Create New Collection"
+          subtitle="Start organizing your photos"
           @click="showCreateDialog"
-        >
-          <div class="create-preview">
-            <div class="create-icon">
-              <n-icon size="48" color="var(--primary-color)">
-                <AddOutline />
-              </n-icon>
-            </div>
-          </div>
-          <div class="card-info">
-            <h3 class="card-title">Create New Collection</h3>
-            <p class="card-meta">Start organizing your photos</p>
-          </div>
-        </div>
+        />
 
         <!-- Existing Collections -->
         <CollectionCard
@@ -389,6 +378,7 @@ import {
 import PhotosDialog from "@/components/PhotosDialog.vue";
 import PhotosGrid from "@/components/PhotosGrid.vue";
 import CollectionCard from "@/components/CollectionCard.vue";
+import CreateCard from "@/components/photos-grid/CreateCard.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { api } from "@/utils/axios";

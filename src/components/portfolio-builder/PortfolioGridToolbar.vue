@@ -1,28 +1,12 @@
 <template>
   <div class="grid-toolbar">
     <div class="toolbar-left">
-      <span class="toolbar-label">Grid</span>
-      <n-select
-        :value="columns"
-        :options="columnOptions"
-        size="small"
-        style="width: 110px"
-        @update:value="$emit('update:columns', $event)"
-      />
-
-      <span class="toolbar-separator" />
-
-      <span class="toolbar-label">Gap</span>
-      <n-slider
-        :value="gap"
-        :min="0"
-        :max="40"
-        :step="1"
-        :tooltip="true"
-        :format-tooltip="(v) => `${v}px`"
-        style="width: 90px"
-        @update:value="$emit('update:gap', $event)"
-      />
+      <n-button size="small" type="primary" ghost @click="$emit('add-photos')">
+        <template #icon>
+          <n-icon><AddOutline /></n-icon>
+        </template>
+        More Photos
+      </n-button>
     </div>
 
     <div class="toolbar-right">
@@ -36,15 +20,43 @@
         <n-button size="small" quaternary @click="$emit('restore-all')">
           Restore all ({{ removedCount }})
         </n-button>
+        <span class="toolbar-separator" />
       </template>
+
+      <span class="toolbar-label">Grid</span>
+      <n-button-group>
+        <n-button
+          v-for="opt in columnOptions"
+          :key="opt"
+          :type="columns === opt ? 'primary' : 'default'"
+          size="small"
+          @click="$emit('update:columns', opt)"
+        >
+          {{ opt }}
+        </n-button>
+      </n-button-group>
+
+      <span class="toolbar-separator" />
+
+      <span class="toolbar-label">Gap</span>
+      <n-slider
+        :value="gap"
+        :min="0"
+        :max="60"
+        :step="1"
+        :tooltip="true"
+        :format-tooltip="(v) => `${v}px`"
+        style="width: 90px"
+        @update:value="$emit('update:gap', $event)"
+      />
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed } from "vue";
-import { NSelect, NSlider, NButton, NIcon } from "naive-ui";
-import { ArrowUndoOutline } from "@vicons/ionicons5";
+import { NButtonGroup, NSlider, NButton, NIcon } from "naive-ui";
+import { ArrowUndoOutline, AddOutline } from "@vicons/ionicons5";
 
 const props = defineProps({
   columns: { type: Number, required: true },
@@ -53,16 +65,18 @@ const props = defineProps({
   removedCount: { type: Number, default: 0 },
 });
 
-defineEmits(["update:columns", "update:gap", "undo-last", "restore-all"]);
+defineEmits([
+  "update:columns",
+  "update:gap",
+  "undo-last",
+  "restore-all",
+  "add-photos",
+]);
 
 const columnOptions = computed(() => {
   const opts = [];
-  for (let c = 3; c <= 7; c++) {
-    const rows = Math.ceil(props.photoCount / c);
-    opts.push({
-      label: `${c} columns · ${rows} rows`,
-      value: c,
-    });
+  for (let c = 2; c <= 6; c++) {
+    opts.push(c);
   }
   return opts;
 });
@@ -72,10 +86,10 @@ const columnOptions = computed(() => {
 .grid-toolbar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   padding: 12px 0;
   margin-bottom: 8px;
-  border-bottom: 1px solid var(--border-color);
+  /* border-bottom: 1px solid var(--border-color); */
 }
 
 .toolbar-left {

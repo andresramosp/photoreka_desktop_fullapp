@@ -1,7 +1,7 @@
 <template>
   <div class="grid-cell" :class="{ 'is-loaded': loaded }">
     <img
-      :src="photo.thumbnailUrl"
+      :src="photo.originalUrl || photo.thumbnailUrl"
       :alt="`Photo ${photo.id}`"
       class="cell-image"
       draggable="false"
@@ -9,13 +9,26 @@
     />
 
     <div class="cell-overlay">
-      <button
-        class="cell-action-btn remove-btn"
+      <n-button
+        size="small"
+        class="action-button info-button"
+        title="Photo details"
+        @click.stop="$emit('info', photo)"
+      >
+        <template #icon>
+          <n-icon><InformationCircleOutline /></n-icon>
+        </template>
+      </n-button>
+      <n-button
+        size="small"
+        class="action-button remove-button"
         title="Remove from portfolio"
         @click.stop="$emit('remove', photo)"
       >
-        <n-icon :size="16"><TrashOutline /></n-icon>
-      </button>
+        <template #icon>
+          <n-icon><TrashOutline /></n-icon>
+        </template>
+      </n-button>
     </div>
 
     <div v-if="!loaded" class="cell-placeholder">
@@ -26,14 +39,14 @@
 
 <script setup>
 import { ref } from "vue";
-import { NIcon, NSpin } from "naive-ui";
-import { TrashOutline } from "@vicons/ionicons5";
+import { NButton, NIcon, NSpin } from "naive-ui";
+import { TrashOutline, InformationCircleOutline } from "@vicons/ionicons5";
 
 defineProps({
   photo: { type: Object, required: true },
 });
 
-defineEmits(["remove"]);
+defineEmits(["remove", "info"]);
 
 const loaded = ref(false);
 </script>
@@ -71,7 +84,7 @@ const loaded = ref(false);
   background: rgba(0, 0, 0, 0);
   display: flex;
   align-items: flex-start;
-  justify-content: flex-end;
+  justify-content: space-between;
   padding: 6px;
   opacity: 0;
   transition:
@@ -88,24 +101,42 @@ const loaded = ref(false);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px !important;
+  backdrop-filter: blur(8px);
+  border: none !important;
+  opacity: 0.9;
   cursor: pointer;
-  transition:
-    background 0.15s ease,
-    transform 0.15s ease;
+  transition: opacity 0.2s ease !important;
 }
 
-.remove-btn {
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
+.action-button {
+  border-radius: 8px !important;
+  backdrop-filter: blur(8px);
+  border: none !important;
+  width: 32px;
+  height: 32px;
+  opacity: 0.9;
+  transition: opacity 0.2s ease !important;
 }
 
-.remove-btn:hover {
-  background: color-mix(in srgb, var(--error-color) 85%, transparent);
-  transform: scale(1.1);
+.action-button:hover {
+  opacity: 1 !important;
+}
+
+.info-button {
+  background-color: var(--info-color) !important;
+  color: white !important;
+}
+
+.remove-button {
+  background-color: rgba(0, 0, 0, 0.6) !important;
+  color: white !important;
+}
+
+.remove-button:hover {
+  background-color: var(--error-color) !important;
 }
 
 .cell-placeholder {

@@ -268,23 +268,12 @@
 
       <div v-else class="card-grid">
         <!-- Create New Series Card (only show when there are existing series) -->
-        <div
+        <CreateCard
           v-if="allSeries.length > 0"
-          class="card create-card"
+          title="Create New Series"
+          subtitle="Start your photo sequence"
           @click="showCreateDialog"
-        >
-          <div class="create-preview">
-            <div class="create-icon">
-              <n-icon size="48" color="var(--primary-color)">
-                <AddOutline />
-              </n-icon>
-            </div>
-          </div>
-          <div class="card-info">
-            <h3 class="card-title">Create New Series</h3>
-            <p class="card-meta">Start your photo sequence</p>
-          </div>
-        </div>
+        />
 
         <!-- Existing Series -->
         <CollectionCard
@@ -472,6 +461,7 @@ import {
 } from "@vicons/ionicons5";
 import PhotosDialog from "@/components/PhotosDialog.vue";
 import CollectionCard from "@/components/CollectionCard.vue";
+import CreateCard from "@/components/photos-grid/CreateCard.vue";
 import FloatingActionBar from "@/components/FloatingActionBar.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
