@@ -31,6 +31,7 @@ export default class ReadOnlyMiddleware {
     '/api/chat',
     '/api/chat/reset',
     '/api/catalog/photosByIds',
+    '/api/portfolio-build', // Allows start, abort, and layout updates for demo portfolios
   ]
 
   /**
