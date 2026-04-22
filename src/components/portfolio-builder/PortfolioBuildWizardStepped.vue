@@ -195,31 +195,125 @@
             <div class="slide-header">
               <h3 class="slide-title">Artistic Weights</h3>
               <p class="slide-desc">
-                Prioritize what matters most. Pick a preset or customize
-                manually.
+                Tell us what matters most — in words, or tweak the weights
+                yourself.
               </p>
             </div>
             <div class="slide-body">
-              <div class="preset-row">
-                <n-button
-                  v-for="preset in genrePresetOptions"
-                  :key="preset.value"
-                  :type="selectedGenre === preset.value ? 'primary' : 'default'"
-                  :ghost="selectedGenre !== preset.value"
-                  size="small"
-                  @click="applyPreset(preset.value)"
-                  class="preset-button"
+              <!-- Mode toggle: Manual / Describe -->
+              <div class="weight-mode-toggle">
+                <button
+                  type="button"
+                  class="weight-mode-option"
+                  :class="{ active: form.weightMode === 'advanced' }"
+                  @click="setWeightMode('advanced')"
                 >
-                  {{ preset.label }}
-                </n-button>
+                  <n-icon :size="14"><BarChartOutline /></n-icon>
+                  <span>Manual</span>
+                </button>
+                <button
+                  type="button"
+                  class="weight-mode-option"
+                  :class="{ active: form.weightMode === 'describe' }"
+                  @click="setWeightMode('describe')"
+                >
+                  <n-icon :size="14"><CreateOutline /></n-icon>
+                  <span>Describe</span>
+                </button>
               </div>
-              <CustomArtisticWeights
-                :model-value="form.weights"
-                @update:model-value="form.weights = $event"
-                :format-criterion-name="formatCriterionName"
-                compact
-                :readonly="selectedGenre !== 'custom'"
-              />
+
+              <!-- Describe mode -->
+              <template v-if="form.weightMode === 'describe'">
+                <n-input
+                  v-model:value="form.stylePreferences"
+                  type="textarea"
+                  placeholder="e.g. 'strong storytelling and humor' or 'cinematic, high-contrast, geometric compositions'…"
+                  :autosize="{ minRows: 2, maxRows: 4 }"
+                  :maxlength="1000"
+                  clearable
+                />
+                <div class="style-preview-trigger">
+                  <n-button
+                    size="tiny"
+                    :loading="isPreviewing"
+                    :disabled="!form.stylePreferences.trim()"
+                    @click="runStylePreview(form.stylePreferences)"
+                    secondary
+                    type="info"
+                  >
+                    <template #icon
+                      ><n-icon><FlashOutline /></n-icon
+                    ></template>
+                    Preview weights
+                  </n-button>
+                </div>
+                <div class="style-preview-header">
+                  <span class="filter-label">Preview</span>
+                  <span class="style-preview-hint">
+                    <template v-if="isPreviewing">Analyzing…</template>
+                    <template
+                      v-else-if="
+                        stylePreviewResult &&
+                        stylePreviewResult.emphasize?.length
+                      "
+                    >
+                      Emphasized:
+                      <span
+                        v-for="(c, i) in stylePreviewResult.emphasize"
+                        :key="c"
+                        class="style-preview-chip"
+                      >
+                        {{ formatCriterionName(c) }}
+                        <span v-if="i < stylePreviewResult.emphasize.length - 1"
+                          >,
+                        </span>
+                      </span>
+                    </template>
+                    <template v-else-if="form.stylePreferences.trim()">
+                      Using balanced baseline
+                    </template>
+                    <template v-else>
+                      Balanced baseline — describe a style to bias it
+                    </template>
+                  </span>
+                </div>
+                <CustomArtisticWeights
+                  :model-value="previewWeights"
+                  @update:model-value="() => {}"
+                  :format-criterion-name="formatCriterionName"
+                  compact
+                  readonly
+                />
+              </template>
+
+              <!-- Advanced mode -->
+              <template v-else>
+                <div class="preset-row">
+                  <n-button
+                    v-for="preset in genrePresetOptions"
+                    :key="preset.value"
+                    :type="
+                      selectedGenre === preset.value ? 'primary' : 'default'
+                    "
+                    :ghost="selectedGenre !== preset.value"
+                    size="small"
+                    @click="applyPreset(preset.value)"
+                    class="preset-button"
+                  >
+                    <template #icon>
+                      <n-icon><component :is="preset.icon" /></n-icon>
+                    </template>
+                    {{ preset.label }}
+                  </n-button>
+                </div>
+                <CustomArtisticWeights
+                  :model-value="form.weights"
+                  @update:model-value="onAdvancedWeightsChange"
+                  :format-criterion-name="formatCriterionName"
+                  compact
+                  :readonly="selectedGenre !== 'custom'"
+                />
+              </template>
             </div>
           </div>
 
@@ -434,7 +528,14 @@ import {
   ReorderThreeOutline,
   InformationCircleOutline,
   CreateOutline,
+  WalkOutline,
 } from "@vicons/ionicons5";
+import {
+  BookOpen16Regular,
+  Camera20Regular,
+  Settings20Regular,
+} from "@vicons/fluent";
+import { PaletteOutlined } from "@vicons/material";
 import { TOOL_ICONS, getToolById } from "@/config/toolsConfig";
 import CustomArtisticWeights from "@/components/CustomArtisticWeights.vue";
 import { useArtisticScores } from "@/composables/useArtisticScores";
@@ -484,11 +585,15 @@ const goBack = () => {
 };
 
 // ── Form state ──────────────────────────────────────────────
-const getDefaultWeights = () => {
+// Emergency fallback: used only if the backend fetch hasn't completed yet
+// (e.g. network failure or the user somehow reaches step 3 in < 1 RTT).
+// The canonical defaults live in the backend — see
+// GET /api/portfolio-build/default-weights.
+const getFallbackWeights = () => {
   const w = {};
   Object.values(artisticScores).forEach((group) => {
     group.criteria.forEach((c) => {
-      w[c.value] = genrePresets.general[c.value] ?? 1;
+      w[c.value] = 0.5;
     });
   });
   return w;
@@ -497,7 +602,11 @@ const getDefaultWeights = () => {
 const form = reactive({
   name: "",
   targetSize: 20,
-  weights: getDefaultWeights(),
+  weightMode: "advanced", // 'describe' | 'advanced'
+  stylePreferences: "",
+  weights: portfolioStore.defaultWeights
+    ? { ...portfolioStore.defaultWeights }
+    : getFallbackWeights(),
   coherenceMode: "free",
   themePreferences: "",
   sequencing: false,
@@ -579,11 +688,11 @@ const buildSteps = computed(() => {
 
 // ── Presets ─────────────────────────────────────────────────
 const genrePresetOptions = [
-  { value: "general", label: "General" },
-  { value: "street", label: "Street" },
-  { value: "documentary", label: "Documentary" },
-  { value: "abstract", label: "Abstract" },
-  { value: "custom", label: "Custom" },
+  { value: "general", label: "General", icon: Camera20Regular },
+  { value: "street", label: "Street", icon: WalkOutline },
+  { value: "documentary", label: "Documentary", icon: BookOpen16Regular },
+  { value: "abstract", label: "Artistic", icon: PaletteOutlined },
+  { value: "custom", label: "Custom", icon: Settings20Regular },
 ];
 
 const applyPreset = (genre) => {
@@ -593,6 +702,67 @@ const applyPreset = (genre) => {
     if (preset) {
       form.weights = { ...preset };
     }
+  }
+};
+
+// ── Weight mode switching ──────────────────────────────────
+const setWeightMode = (mode) => {
+  if (form.weightMode === mode) return;
+  form.weightMode = mode;
+  if (mode === "advanced" && selectedGenre.value === null) {
+    applyPreset("general");
+  }
+};
+
+const onAdvancedWeightsChange = (next) => {
+  form.weights = next;
+  // Manual edits always count as 'custom'.
+  if (selectedGenre.value !== "custom") {
+    selectedGenre.value = "custom";
+  }
+};
+
+// ── Style preview (Describe mode) ──────────────────────────
+// Live preview of the weight vector the backend will produce from the user's
+// free-text style description. Debounced and request-id guarded so stale
+// responses can't overwrite a newer one.
+const stylePreviewResult = ref(null); // { emphasize, deemphasize, weights } | null
+const isPreviewing = ref(false);
+let previewReqId = 0;
+
+const previewWeights = computed(() => {
+  if (stylePreviewResult.value?.weights) {
+    return stylePreviewResult.value.weights;
+  }
+  return portfolioStore.defaultWeights
+    ? { ...portfolioStore.defaultWeights }
+    : getFallbackWeights();
+});
+
+watch(
+  () => form.stylePreferences,
+  (val) => {
+    if (!val.trim()) {
+      stylePreviewResult.value = null;
+    }
+  },
+);
+
+const runStylePreview = async (text) => {
+  const reqId = ++previewReqId;
+  const trimmed = (text || "").trim();
+  if (!trimmed) {
+    stylePreviewResult.value = null;
+    isPreviewing.value = false;
+    return;
+  }
+  isPreviewing.value = true;
+  try {
+    const result = await portfolioStore.previewStyleWeights(trimmed);
+    if (reqId !== previewReqId) return;
+    stylePreviewResult.value = result;
+  } finally {
+    if (reqId === previewReqId) isPreviewing.value = false;
   }
 };
 
@@ -661,7 +831,13 @@ const canSubmit = computed(() => {
   if (form.targetSize < 10 || form.targetSize > 60) return false;
   if (sizeEligibility.value && sizeEligibility.value.eligible === false)
     return false;
-  return Object.values(form.weights).some((w) => w > 0);
+  // In Advanced mode we need at least one non-zero weight. In Describe mode
+  // the backend always falls back to a neutral baseline, so any state is
+  // acceptable (empty text is allowed — it just means "no style bias").
+  if (form.weightMode === "advanced") {
+    return Object.values(form.weights).some((w) => w > 0);
+  }
+  return true;
 });
 
 // ── Dynamic size eligibility ───────────────────────────────
@@ -673,11 +849,11 @@ const isCheckingEligibility = ref(false);
 let eligibilityDebounce = null;
 let eligibilityReqId = 0;
 
-const runEligibilityCheck = async (size) => {
+const runEligibilityCheck = async (size, collectionIds) => {
   const reqId = ++eligibilityReqId;
   isCheckingEligibility.value = true;
   try {
-    const result = await portfolioStore.checkEligibility(size);
+    const result = await portfolioStore.checkEligibility(size, collectionIds);
     if (reqId !== eligibilityReqId) return; // stale
     sizeEligibility.value = result;
   } catch (e) {
@@ -690,10 +866,13 @@ const runEligibilityCheck = async (size) => {
 };
 
 watch(
-  () => form.targetSize,
-  (size) => {
+  [() => form.targetSize, selectedCollections],
+  ([size, collections]) => {
     if (eligibilityDebounce) clearTimeout(eligibilityDebounce);
-    eligibilityDebounce = setTimeout(() => runEligibilityCheck(size), 250);
+    eligibilityDebounce = setTimeout(
+      () => runEligibilityCheck(size, collections),
+      250,
+    );
   },
   { immediate: true },
 );
@@ -712,15 +891,37 @@ const canAdvance = computed(() => {
 const handleSubmit = async () => {
   if (!canSubmit.value) return;
 
+  // In Describe mode we send the free-text style description and let the
+  // backend parse it into emphasized criteria on top of a neutral baseline.
+  // In Advanced mode we send the user's explicit weight vector as before.
   const config = {
     name: form.name.trim(),
     targetSize: form.targetSize,
-    weights: Object.fromEntries(
-      Object.entries(form.weights).map(([k, v]) => [k, v * 10]),
-    ),
     coherenceMode: form.coherenceMode,
     sequencing: form.sequencing,
   };
+
+  if (form.weightMode === "advanced") {
+    config.weights = Object.fromEntries(
+      Object.entries(form.weights).map(([k, v]) => [k, v * 10]),
+    );
+  } else {
+    // If a cached preview already resolved to concrete weights, send them too
+    // so the backend can skip the parse LLM call. Backend is free to ignore.
+    if (stylePreviewResult.value?.weights) {
+      config.weights = Object.fromEntries(
+        Object.entries(stylePreviewResult.value.weights).map(([k, v]) => [
+          k,
+          v * 10,
+        ]),
+      );
+    }
+  }
+
+  // Always forward a non-empty style description regardless of weight mode —
+  // the backend passes it to the evaluation and refinement LLMs as context.
+  const style = form.stylePreferences.trim();
+  if (style) config.stylePreferences = style;
 
   if (form.themePreferences.trim()) {
     config.themePreferences = form.themePreferences.trim();
@@ -821,17 +1022,23 @@ const resetForm = () => {
   stopPolling();
   form.name = "";
   form.targetSize = 20;
-  form.weights = getDefaultWeights();
+  form.weightMode = "advanced";
+  form.stylePreferences = "";
+  form.weights = portfolioStore.defaultWeights
+    ? { ...portfolioStore.defaultWeights }
+    : getFallbackWeights();
   form.coherenceMode = "free";
   form.themePreferences = "";
   form.sequencing = false;
   form.sequencingPreferences = "";
-  selectedGenre.value = "general";
+  applyPreset("general");
   selectedVisualAspects.value = [];
   selectedCollections.value = [];
   dateFrom.value = null;
   dateTo.value = null;
   currentStep.value = 0;
+  stylePreviewResult.value = null;
+  isPreviewing.value = false;
   buildProgressDetail.value = {
     recallSize: null,
     evaluationProgress: null,
@@ -841,8 +1048,13 @@ const resetForm = () => {
 
 watch(
   () => props.show,
-  (val) => {
-    if (val) resetForm();
+  async (val) => {
+    if (!val) return;
+    // Fetch backend defaults before resetting the form so the weight sliders
+    // start from the portfolio-specific baseline rather than a local guess.
+    // The request is cheap and cached after the first call.
+    await portfolioStore.fetchDefaultWeights();
+    resetForm();
   },
 );
 </script>
@@ -984,7 +1196,7 @@ watch(
 .slide-body {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
 /* ── Slide transitions ──────────────────────────────────── */
@@ -1056,6 +1268,72 @@ watch(
 
 .preset-button {
   border-radius: 8px;
+}
+
+/* ── Weight mode toggle ─────────────────────────────────── */
+.weight-mode-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--border-color) 40%, transparent);
+  border: 1px solid var(--border-color);
+  align-self: center;
+}
+
+.weight-mode-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.weight-mode-option:hover:not(.active) {
+  color: var(--text-primary);
+}
+
+.weight-mode-option.active {
+  background: var(--bg-card);
+  color: var(--primary-color);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* ── Style preview header ───────────────────────────────── */
+.style-preview-trigger {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -6px;
+}
+
+.style-preview-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.style-preview-hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-style: italic;
+  text-align: right;
+  line-height: 1.4;
+}
+
+.style-preview-chip {
+  color: var(--primary-color);
+  font-weight: 600;
+  font-style: normal;
 }
 
 /* ── Filters ─────────────────────────────────────────────── */

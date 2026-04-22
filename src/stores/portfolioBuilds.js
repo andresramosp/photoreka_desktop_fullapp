@@ -6,6 +6,7 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
     builds: null, // null = not loaded, [] = loaded but empty
     isLoading: false,
     isCreating: false,
+    defaultWeights: null, // null = not yet fetched; cached after first call
   }),
 
   getters: {
@@ -20,6 +21,7 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
       this.builds = null;
       this.isLoading = false;
       this.isCreating = false;
+      // Keep defaultWeights cached — they never change between sessions.
     },
 
     async getOrFetch(force = false) {
@@ -44,14 +46,17 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
       }
     },
 
-    async checkEligibility(targetSize) {
+    async checkEligibility(targetSize, collectionIds) {
       try {
-        const params =
-          typeof targetSize === "number" && Number.isFinite(targetSize)
-            ? { targetSize }
-            : undefined;
+        const params = {};
+        if (typeof targetSize === "number" && Number.isFinite(targetSize)) {
+          params.targetSize = targetSize;
+        }
+        if (Array.isArray(collectionIds) && collectionIds.length > 0) {
+          params.collectionIds = collectionIds.join(",");
+        }
         const response = await api.get("/api/portfolio-build/eligibility", {
-          params,
+          params: Object.keys(params).length ? params : undefined,
         });
         return response.data;
       } catch (error) {
@@ -88,6 +93,58 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
       } catch (error) {
         console.error("[PortfolioBuildsStore] getBuildStatus error:", error);
         throw error;
+      }
+    },
+
+    /**
+     * Fetch the canonical default weight vector (0..1) from the backend.
+     * Cached in store state after the first successful call — subsequent calls
+     * are synchronous no-ops.
+     *
+     * Returns `Record<string, number>` or `null` on network error.
+     */
+    async fetchDefaultWeights() {
+      if (this.defaultWeights) return this.defaultWeights;
+      try {
+        const response = await api.get("/api/portfolio-build/default-weights");
+        this.defaultWeights = response.data.weights;
+        return this.defaultWeights;
+      } catch (error) {
+        console.error(
+          "[PortfolioBuildsStore] fetchDefaultWeights error:",
+          error,
+        );
+        return null;
+      }
+    },
+
+    /**
+     * Parse a freeform style description into a sparse set of emphasized /
+     * de-emphasized artistic criteria. The backend applies the emphasis on
+     * top of a neutral baseline so that the resulting weights are well-defined
+     * and never zero out criteria by omission.
+     *
+     * Returns `{ emphasize: string[], deemphasize: string[], weights: Record<string, number> }`
+     * or `null` if the endpoint is unavailable / the text is empty.
+     */
+    async previewStyleWeights(stylePreferences) {
+      const text = (stylePreferences || "").trim();
+      if (!text) return null;
+      try {
+        const response = await api.post(
+          "/api/portfolio-build/preview-style-weights",
+          { stylePreferences: text },
+        );
+        return response.data;
+      } catch (error) {
+        // Endpoint may not exist yet — fail silently so the UI can keep
+        // working with the neutral baseline.
+        if (error.response?.status === 404) return null;
+        console.error(
+          "[PortfolioBuildsStore] previewStyleWeights error:",
+          error,
+        );
+        return null;
       }
     },
 

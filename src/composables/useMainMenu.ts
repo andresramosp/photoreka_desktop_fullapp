@@ -306,35 +306,50 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     label: () =>
       h(
         "span",
-        { class: "second-level-menu-item" },
-        h(
-          "span",
-          {
-            onClick: (e: MouseEvent) => {
-              e.stopPropagation();
-              router.push("/portfolios");
-              if (isMobile.value && closeMobileMenu) {
-                closeMobileMenu();
-              }
-            },
-            style: {
-              cursor: "pointer",
-              display: "inline-block",
-            },
+        {
+          class: "second-level-menu-item",
+          style: {
+            display: "flex",
+            alignItems: "center",
+            width: "100%",
           },
-          "Portfolios",
-        ),
+        },
+        [
+          h(
+            "span",
+            {
+              onClick: (e: MouseEvent) => {
+                if (!isToolDisabledOnMobile("portfolios")) {
+                  e.stopPropagation();
+                  router.push("/portfolios");
+                  if (isMobile.value && closeMobileMenu) {
+                    closeMobileMenu();
+                  }
+                }
+              },
+              style: {
+                cursor: isToolDisabledOnMobile("portfolios")
+                  ? "default"
+                  : "pointer",
+                display: "inline-block",
+              },
+            },
+            "Portfolios",
+          ),
+          isToolDisabledOnMobile("portfolios") ? renderLaptopSuffix()() : null,
+        ],
       ),
     key: "portfolios-group",
-    disabled: isBlocked.value,
+    disabled: isToolDisabledOnMobile("portfolios") || isBlocked.value,
     icon: renderIcon(toolIcon("portfolios")),
-    children: isBlocked.value
-      ? undefined
-      : portfolios.value.map((portfolio) => ({
-          label: () =>
-            h("span", { class: "collection-menu-item" }, portfolio.label),
-          key: portfolio.key,
-        })),
+    children:
+      isToolDisabledOnMobile("portfolios") || isBlocked.value
+        ? undefined
+        : portfolios.value.map((portfolio) => ({
+            label: () =>
+              h("span", { class: "collection-menu-item" }, portfolio.label),
+            key: portfolio.key,
+          })),
   }));
 
   // Chat option (global, like Sync Area)

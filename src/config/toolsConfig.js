@@ -152,7 +152,7 @@ export const TOOLS_CONFIG = [
     description: "AI-curated portfolio builds",
     icon: "BriefcaseOutline",
     route: "/portfolios",
-    availableOn: TOOL_AVAILABILITY.BOTH,
+    availableOn: TOOL_AVAILABILITY.DESKTOP_ONLY,
     menuSection: "create",
     showInPhotoSelector: false,
   },
