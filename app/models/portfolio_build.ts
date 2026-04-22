@@ -16,6 +16,7 @@ export type PortfolioBuildStatus =
 export type CoherenceMode = 'free' | 'visual' | 'chromatic' | 'narrative' | 'heterogeneous'
 
 export type PortfolioBuildConfig = {
+  name?: string
   targetSize: number
   weights: Record<string, number>
   themePreferences?: string
@@ -32,13 +33,19 @@ export type PortfolioBuildConfig = {
 
 export type PortfolioBuildResult = {
   photoIds: number[]
-  photoItems?: { id: number; thumbnailUrl: string }[]
+  photoItems?: { id: number; thumbnailUrl: string; originalUrl?: string }[]
   recallSize: number
   batchesEvaluated: number
   totalCandidatesEvaluated: number
   refinementNotes?: string
   sequencingNotes?: string
   gridImagePath?: string
+  /**
+   * Pool of photos the LLM approved during evaluation but that didn't make
+   * the final cut (trimmed by similarity gate, over-generation buffer, or
+   * refinement). Surfaced to the user as additional suggestions.
+   */
+  builderPool?: { id: number; thumbnailUrl: string; originalUrl?: string }[]
 }
 
 export default class PortfolioBuild extends BaseModel {

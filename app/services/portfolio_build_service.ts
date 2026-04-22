@@ -46,7 +46,7 @@ const PARSE_MODEL = 'gemini-3.1-flash-lite-preview'
 /** Photos per batch in the iterative refinement pass. */
 const REFINEMENT_BATCH_SIZE = 10
 /** Max fraction of photos the LLM may flag per batch (~15%). */
-const REFINEMENT_CUT_RATIO = 0.15
+const REFINEMENT_CUT_RATIO = 0.2
 /** Max refinement rounds before force-trimming by composite score. */
 const REFINEMENT_MAX_ROUNDS = 8
 /** Whether the sequencing option is available at all. */
@@ -54,16 +54,16 @@ const ENABLE_SEQUENCING = true
 /** Internal sequencing strategy. Switch to 'llm' to restore model-based ordering. */
 const SEQUENCING_MODE: SequencingMode = 'computational'
 /** Allowed target-size range. */
+const MIN_PORTFOLIO_TARGET_SIZE = 10
 const MAX_TARGET_SIZE = 60
-const MIN_TARGET_SIZE = 10
 /** Minimum ratio of analyzed photos (with artistic_scores) required to start a build. */
 const MIN_ANALYZED_RATIO = 0.8
 /** Grid thumbnail cell size in pixels. */
 const GRID_CELL_SIZE = 280
 /** Save debug artifacts (e.g. grid image) to disk. */
-const DEBUG_SAVE_GRID = true
+const DEBUG_SAVE_GRID = false
 /** Save a grid image per evaluation batch for debugging. */
-const DEBUG_SAVE_BATCH_GRID = true
+const DEBUG_SAVE_BATCH_GRID = false
 /** Over-generate buffer: fraction of targetSize to over-select for refinement trimming. */
 const OVER_GENERATE_RATIO = 0.35
 /** Minimum over-generate buffer (absolute). */
@@ -272,7 +272,7 @@ export default class PortfolioBuildService {
         Math.ceil(config.targetSize * OVER_GENERATE_RATIO)
       )
       const evaluationTarget = config.targetSize + overBuffer
-      let selected = await this.evaluateBatches(
+      const evalOutcome = await this.evaluateBatches(
         build,
         candidates,
         config,
@@ -280,6 +280,8 @@ export default class PortfolioBuildService {
         tracker,
         evaluationTarget
       )
+      let selected = evalOutcome.gated
+      const llmApproved = evalOutcome.allSelected
 
       // ── Step 5: Refinement (iterative trim to target) ──
       let refinementNotes: string | undefined
@@ -341,11 +343,27 @@ export default class PortfolioBuildService {
       build.progress = 100
       build.completedAt = DateTime.now()
       build.costEur = costSummary.totalCostInEur
+      // Builder pool: photos the LLM approved but that didn't make the final
+      // cut (trimmed by similarity gate, over-generation buffer, or refinement).
+      // Rejected photos (LLM said select=false) are intentionally excluded.
+      const finalIdSet = new Set(finalIds)
+      const builderPool = llmApproved
+        .filter((p) => !finalIdSet.has(p.id))
+        .map((p) => ({
+          id: p.id,
+          thumbnailUrl: p.thumbnailUrl,
+          originalUrl: (p as any).originalUrl as string | undefined,
+        }))
+
       build.result = {
         photoIds: finalIds,
         photoItems: finalIds.map((id) => {
           const photo = selected.find((p) => p.id === id)
-          return { id, thumbnailUrl: photo?.thumbnailUrl ?? '' }
+          return {
+            id,
+            thumbnailUrl: photo?.thumbnailUrl ?? '',
+            originalUrl: (photo as any)?.originalUrl as string | undefined,
+          }
         }),
         recallSize: candidates.length,
         batchesEvaluated: Math.ceil(candidates.length / BATCH_SIZE),
@@ -353,6 +371,7 @@ export default class PortfolioBuildService {
         refinementNotes,
         sequencingNotes,
         gridImagePath,
+        builderPool,
       }
       await build.save()
       this.emitProgress(build)
@@ -896,7 +915,7 @@ Only include fields that are clearly indicated by the user's text. If nothing is
     trackedModels: ModelsService,
     tracker: CostTracker,
     evaluationTarget: number
-  ): Promise<ScoredCandidate[]> {
+  ): Promise<{ gated: ScoredCandidate[]; allSelected: ScoredCandidate[] }> {
     // Sort batches according to configured order
     const sorted = [...candidates]
     if (BATCH_ORDER === 'asc') sorted.reverse()
@@ -1011,7 +1030,11 @@ Only include fields that are clearly indicated by the user's text. If nothing is
     // Checkpoint: save post-gate results
     build.result = {
       photoIds: gated.map((p) => p.id),
-      photoItems: gated.map((p) => ({ id: p.id, thumbnailUrl: p.thumbnailUrl })),
+      photoItems: gated.map((p) => ({
+        id: p.id,
+        thumbnailUrl: p.thumbnailUrl,
+        originalUrl: (p as any).originalUrl as string | undefined,
+      })),
       recallSize: candidates.length,
       batchesEvaluated: completedBatches,
       totalCandidatesEvaluated: completedBatches * BATCH_SIZE,
@@ -1024,7 +1047,10 @@ Only include fields that are clearly indicated by the user's text. If nothing is
     )
 
     // Trim to evaluation target if we overshot
-    return gated.slice(0, evaluationTarget)
+    return {
+      gated: gated.slice(0, evaluationTarget),
+      allSelected,
+    }
   }
 
   private async evaluateSingleBatch(
@@ -1661,7 +1687,6 @@ Return JSON:
   // ── Grid image generation ──────────────────────────────────
 
   private async generateGridImage(photos: ScoredCandidate[]): Promise<Buffer | null> {
-    const photoImageService = PhotoImageService.getInstance()
     const maxPhotos = Math.min(photos.length, 64) // cap grid at 8×8
     const photosToGrid = photos.slice(0, maxPhotos)
 
@@ -1675,10 +1700,10 @@ Return JSON:
       photosToGrid.map((photo) =>
         limit(async () => {
           try {
-            const buffer = await photoImageService.getImageBufferFromR2(
-              photo.thumbnailUrl?.split('/').pop() ?? ''
-            )
-            if (!buffer) return null
+            if (!photo.thumbnailUrl) return null
+            const res = await fetch(photo.thumbnailUrl)
+            if (!res.ok) return null
+            const buffer = Buffer.from(await res.arrayBuffer())
             return sharp(buffer)
               .resize(cellSize, cellSize, {
                 fit: 'contain',
@@ -1971,9 +1996,41 @@ Return JSON:
 
   // ── Validation ─────────────────────────────────────────────
 
+  /**
+   * Compute the minimum number of analyzed photos required to build a portfolio
+   * of the given size.
+   *
+   * We must guarantee both:
+   * - a sufficiently broad recall pool (`targetSize × RECALL_MULTIPLIER`, capped)
+   * - the over-generated evaluation target used before refinement
+   *
+   * In practice recall usually dominates, but we keep both constraints explicit
+   * so eligibility mirrors the actual pipeline requirements.
+   */
+  public static requiredPoolForTargetSize(targetSize: number): number {
+    const normalizedTargetSize = Math.max(
+      MIN_PORTFOLIO_TARGET_SIZE,
+      Math.min(MAX_TARGET_SIZE, Math.ceil(targetSize))
+    )
+    const recallTarget = Math.min(normalizedTargetSize * RECALL_MULTIPLIER, RECALL_MAX)
+    const overBuffer = Math.max(
+      OVER_GENERATE_MIN,
+      Math.ceil(normalizedTargetSize * OVER_GENERATE_RATIO)
+    )
+    const evaluationTarget = normalizedTargetSize + overBuffer
+
+    return Math.max(recallTarget, evaluationTarget)
+  }
+
   public async validateBuildEligibility(
-    userId: number
-  ): Promise<{ eligible: boolean; reason?: string; stats?: { total: number; analyzed: number } }> {
+    userId: number,
+    targetSize?: number
+  ): Promise<{
+    eligible: boolean
+    reason?: string
+    requiredPool?: number
+    stats?: { total: number; analyzed: number }
+  }> {
     const [totalResult, analyzedResult] = await Promise.all([
       Photo.query()
         .where('user_id', userId)
@@ -1989,10 +2046,20 @@ Return JSON:
 
     const stats = { total: totalResult, analyzed: analyzedResult }
 
-    if (analyzedResult < MIN_TARGET_SIZE) {
+    // Dynamic requirement based on the target size (falls back to the minimum
+    // supported portfolio size when no size is provided).
+    const requiredPool =
+      typeof targetSize === 'number' && Number.isFinite(targetSize) && targetSize > 0
+        ? PortfolioBuildService.requiredPoolForTargetSize(targetSize)
+        : PortfolioBuildService.requiredPoolForTargetSize(MIN_PORTFOLIO_TARGET_SIZE)
+
+    if (analyzedResult < requiredPool) {
+      const sizeSuffix =
+        typeof targetSize === 'number' ? ` to build a portfolio of ${targetSize} photos` : ''
       return {
         eligible: false,
-        reason: `You need at least ${MIN_TARGET_SIZE} analyzed photos. Currently: ${analyzedResult}.`,
+        reason: `You need at least ${requiredPool} analyzed photos${sizeSuffix} so the builder can form a sufficiently broad recall pool. Currently: ${analyzedResult}.`,
+        requiredPool,
         stats,
       }
     }
@@ -2002,10 +2069,11 @@ Return JSON:
       return {
         eligible: false,
         reason: `At least ${Math.round(MIN_ANALYZED_RATIO * 100)}% of your catalog must be analyzed. Currently: ${Math.round(ratio * 100)}% (${analyzedResult}/${totalResult}).`,
+        requiredPool,
         stats,
       }
     }
 
-    return { eligible: true, stats }
+    return { eligible: true, requiredPool, stats }
   }
 }

@@ -1,6 +1,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import PortfolioBuildService from '#services/portfolio_build_service'
 import CreditService from '#services/credit_service'
+import Photo from '#models/photo'
 import type { PortfolioBuildConfig } from '#models/portfolio_build'
 
 const VALID_COHERENCE_MODES = ['free', 'visual', 'chromatic', 'narrative', 'heterogeneous']
@@ -44,12 +45,13 @@ export default class PortfolioBuildController {
 
       const service = new PortfolioBuildService()
 
-      // Check eligibility
-      const eligibility = await service.validateBuildEligibility(user.id)
+      // Check eligibility (using the actual target size we're about to build)
+      const eligibility = await service.validateBuildEligibility(user.id, config.targetSize)
       if (!eligibility.eligible) {
         return response.badRequest({
           error: eligibility.reason,
           stats: eligibility.stats,
+          requiredPool: eligibility.requiredPool,
         })
       }
 
@@ -200,20 +202,40 @@ export default class PortfolioBuildController {
         return response.badRequest({ error: 'photoIds must be a non-empty array.' })
       }
 
-      // Validate that all provided IDs are a subset of the original result
-      const originalIds = new Set(build.result?.photoIds ?? [])
-      const invalidIds = photoIds.filter((id: any) => !originalIds.has(Number(id)))
-      if (invalidIds.length > 0) {
+      const newPhotoIds = photoIds.map((id: any) => Number(id)).filter((id) => !Number.isNaN(id))
+      if (newPhotoIds.length === 0) {
         return response.badRequest({
-          error: `photoIds contains IDs not in the original build: ${invalidIds.join(', ')}`,
+          error: 'photoIds must contain at least one valid numeric id.',
         })
       }
 
-      // Build new photoItems in the requested order
+      // Build a thumbnail map from the existing build result
       const originalItemsMap = new Map(
-        (build.result?.photoItems ?? []).map((item: any) => [item.id, item])
+        (build.result?.photoItems ?? []).map((item: any) => [Number(item.id), item])
       )
-      const newPhotoIds = photoIds.map(Number)
+
+      // Any IDs not present in the original result must be verified to belong to
+      // the user's catalog (defense against IDOR) and their thumbnails resolved.
+      const unknownIds = newPhotoIds.filter((id) => !originalItemsMap.has(id))
+      if (unknownIds.length > 0) {
+        const photos = await Photo.query()
+          .whereIn('id', unknownIds)
+          .where('user_id', user.id)
+          .select(['id', 'thumbnail_name'])
+
+        if (photos.length !== unknownIds.length) {
+          const foundIds = new Set(photos.map((p) => p.id))
+          const invalidIds = unknownIds.filter((id) => !foundIds.has(id))
+          return response.badRequest({
+            error: `photoIds contains IDs that don't belong to the current user: ${invalidIds.join(', ')}`,
+          })
+        }
+
+        for (const photo of photos) {
+          originalItemsMap.set(photo.id, { id: photo.id, thumbnailUrl: photo.thumbnailUrl })
+        }
+      }
+
       const newPhotoItems = newPhotoIds
         .map((id: number) => originalItemsMap.get(id))
         .filter(Boolean)
@@ -234,9 +256,11 @@ export default class PortfolioBuildController {
 
   /**
    * GET /api/portfolio-build/eligibility
-   * Check if the user is eligible to start a build.
+   * Check if the user is eligible to start a build. Accepts an optional
+   * `targetSize` query parameter to evaluate eligibility for a specific size
+   * (matches the dynamic pool requirement computed in the service).
    */
-  public async eligibility({ response, auth }: HttpContext) {
+  public async eligibility({ request, response, auth }: HttpContext) {
     try {
       await auth.use('api').check()
       const user = auth.use('api').user! as any
@@ -249,8 +273,18 @@ export default class PortfolioBuildController {
         })
       }
 
+      const rawTargetSize = request.qs().targetSize
+      let targetSize: number | undefined
+      if (rawTargetSize !== undefined && rawTargetSize !== null && rawTargetSize !== '') {
+        const parsed = Number(rawTargetSize)
+        if (!Number.isFinite(parsed) || parsed < 10 || parsed > 60) {
+          return response.badRequest({ error: 'targetSize must be a number between 10 and 60.' })
+        }
+        targetSize = parsed
+      }
+
       const service = new PortfolioBuildService()
-      const result = await service.validateBuildEligibility(user.id)
+      const result = await service.validateBuildEligibility(user.id, targetSize)
 
       return response.ok(result)
     } catch (error: any) {
@@ -262,6 +296,9 @@ export default class PortfolioBuildController {
   // ── Validation ─────────────────────────────────────────────
 
   private parseAndValidateConfig(body: any): PortfolioBuildConfig {
+    const name =
+      body.name && typeof body.name === 'string' ? body.name.trim().slice(0, 200) : undefined
+
     const targetSize = Number(body.targetSize)
     if (!Number.isFinite(targetSize) || targetSize < 10 || targetSize > 60) {
       throw new Error('targetSize must be between 10 and 60.')
@@ -293,6 +330,7 @@ export default class PortfolioBuildController {
     const sequencing = Boolean(body.sequencing ?? false)
 
     const config: PortfolioBuildConfig = {
+      ...(name ? { name } : {}),
       targetSize,
       weights,
       coherenceMode,
