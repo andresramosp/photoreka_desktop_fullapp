@@ -103,5 +103,18 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
         throw error;
       }
     },
+
+    async deleteBuild(buildId) {
+      try {
+        const response = await api.delete(`/api/portfolio-build/${buildId}`);
+        if (Array.isArray(this.builds)) {
+          this.builds = this.builds.filter((b) => b.id !== buildId);
+        }
+        return response.data;
+      } catch (error) {
+        console.error("[PortfolioBuildsStore] deleteBuild error:", error);
+        throw error;
+      }
+    },
   },
 });

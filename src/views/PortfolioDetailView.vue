@@ -47,6 +47,25 @@
                 {{ isExporting ? exportStatus : "Export" }}
               </n-button>
             </n-dropdown>
+
+            <n-button
+              type="error"
+              ghost
+              @click="showDeleteConfirmation"
+              class="detail-delete-button"
+            >
+              <template #icon>
+                <n-icon>
+                  <svg viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
+                    />
+                  </svg>
+                </n-icon>
+              </template>
+              Delete Portfolio
+            </n-button>
           </div>
         </div>
 
@@ -124,13 +143,47 @@
       :selected-photo="selectedDialogPhoto"
       @change-photo="selectedDialogPhoto = $event"
     />
+
+    <!-- Delete Portfolio Confirmation Dialog -->
+    <n-modal
+      v-model:show="deleteConfirmationVisible"
+      preset="dialog"
+      title="Delete Portfolio"
+      positive-text="Delete Portfolio"
+      negative-text="Cancel"
+      type="error"
+      :loading="isDeleting"
+      @positive-click="deletePortfolio"
+      @negative-click="deleteConfirmationVisible = false"
+    >
+      <div class="delete-confirmation">
+        <p>
+          Are you sure you want to delete the portfolio
+          <strong
+            >"{{ build?.config?.name || `Portfolio #${build?.id}` }}"</strong
+          >?
+        </p>
+        <p class="delete-warning">
+          <n-icon size="16" color="#f5a623" style="margin-right: 8px">
+            <svg viewBox="0 0 24 24">
+              <path
+                fill="currentColor"
+                d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"
+              />
+            </svg>
+          </n-icon>
+          Don't worry - your photos will not be deleted, only the portfolio will
+          be removed.
+        </p>
+      </div>
+    </n-modal>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { NIcon, NSpin, NButton, NDropdown, useMessage } from "naive-ui";
+import { NIcon, NSpin, NButton, NDropdown, NModal, useMessage } from "naive-ui";
 import {
   SaveOutline,
   HourglassOutline,
@@ -149,6 +202,7 @@ import {
   exportPortfolioToPdf,
   exportPortfolioToJpeg,
 } from "@/utils/portfolioPdfExport";
+import { usePhotoDownload } from "@/composables/usePhotoDownload";
 
 defineOptions({ name: "PortfolioDetailView" });
 
@@ -157,6 +211,8 @@ const router = useRouter();
 const message = useMessage();
 const store = usePortfolioBuildsStore();
 const photosStore = usePhotosStore();
+const { downloadPhotosZip, isDownloading: isDownloadingZip } =
+  usePhotoDownload();
 
 const build = ref(null);
 const photos = ref([]);
@@ -173,6 +229,8 @@ const isExporting = ref(false);
 const exportStatus = ref("Exporting…");
 const showPhotoInfoDialog = ref(false);
 const selectedDialogPhoto = ref(null);
+const deleteConfirmationVisible = ref(false);
+const isDeleting = ref(false);
 
 const exportOptions = [
   {
@@ -184,6 +242,11 @@ const exportOptions = [
     label: "Export as JPEG",
     key: "jpeg",
     icon: () => h(NIcon, null, { default: () => h(ImageOutline) }),
+  },
+  {
+    label: "Download as ZIP",
+    key: "zip",
+    icon: () => h(NIcon, null, { default: () => h(DownloadOutline) }),
   },
 ];
 
@@ -322,9 +385,34 @@ function goBack() {
   router.push({ name: "portfolios" });
 }
 
+function showDeleteConfirmation() {
+  deleteConfirmationVisible.value = true;
+}
+
+async function deletePortfolio() {
+  if (!build.value) return;
+  isDeleting.value = true;
+  try {
+    await store.deleteBuild(build.value.id);
+    message.success(
+      `Portfolio "${
+        build.value.config?.name || `Portfolio #${build.value.id}`
+      }" deleted successfully`,
+    );
+    deleteConfirmationVisible.value = false;
+    router.push({ name: "portfolios" });
+  } catch (err) {
+    console.error("[PortfolioDetailView] delete error:", err);
+    message.error("Failed to delete portfolio");
+  } finally {
+    isDeleting.value = false;
+  }
+}
+
 function handleExportSelect(key) {
   if (key === "pdf") exportAsPdf();
   else if (key === "jpeg") exportAsJpeg();
+  else if (key === "zip") downloadPhotosZip(photos.value);
 }
 
 async function exportAsJpeg() {

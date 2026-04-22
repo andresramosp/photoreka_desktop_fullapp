@@ -23,11 +23,18 @@
     <!-- Building overlay -->
     <div v-if="isBuilding" class="building-overlay">
       <div class="building-content">
-        <n-spin :size="48" />
+        <div class="build-grid-spinner" aria-label="Building portfolio">
+          <span
+            v-for="i in 9"
+            :key="i"
+            class="build-grid-cell"
+            :style="{ '--cell-index': i - 1 }"
+          />
+        </div>
         <h3 class="building-title">Building your portfolio…</h3>
         <p class="building-subtitle">
-          Our AI is evaluating and curating your best photos. This can take a
-          few minutes.
+          Our engine is evaluating and curating your best photos. This can take
+          a few minutes.
         </p>
         <div class="building-steps">
           <div
@@ -411,7 +418,6 @@ import {
   NTreeSelect,
   NSelect,
   NDatePicker,
-  NSpin,
   useMessage,
 } from "naive-ui";
 import {
@@ -507,6 +513,11 @@ const dateTo = ref(null);
 // ── Building state ─────────────────────────────────────────
 const isBuilding = ref(false);
 const currentBuildStep = ref("");
+const buildProgressDetail = ref({
+  recallSize: null,
+  evaluationProgress: null,
+  refinementProgress: null,
+});
 let pollTimer = null;
 
 const stopPolling = () => {
@@ -517,11 +528,38 @@ const stopPolling = () => {
 };
 
 const buildSteps = computed(() => {
+  const detail = buildProgressDetail.value;
+
+  const recallLabel = (() => {
+    if (detail.recallSize != null) {
+      return `Selecting candidate pool — ${detail.recallSize} candidates`;
+    }
+    return "Selecting candidate pool";
+  })();
+
+  const evaluatingLabel = (() => {
+    const ep = detail.evaluationProgress;
+    if (ep && typeof ep.total === "number" && ep.total > 0) {
+      return `Evaluating batches - ${ep.total} batches`;
+
+      // return `Evaluating batches — ${ep.completed}/${ep.total}`;
+    }
+    return "Evaluating batches";
+  })();
+
+  const refiningLabel = (() => {
+    const rp = detail.refinementProgress;
+    if (rp && typeof rp.toTrim === "number" && rp.toTrim > 0) {
+      return `Refinement pass — trimmed ${rp.trimmed}/${rp.toTrim}`;
+    }
+    return "Refinement pass";
+  })();
+
   const steps = [
     { key: "parsing", label: "Parsing preferences", done: false },
-    { key: "recall", label: "Selecting candidate pool", done: false },
-    { key: "evaluating", label: "AI evaluation", done: false },
-    { key: "refining", label: "Refinement pass", done: false },
+    { key: "recall", label: recallLabel, done: false },
+    { key: "evaluating", label: evaluatingLabel, done: false },
+    { key: "refining", label: refiningLabel, done: false },
   ];
   if (form.sequencing) {
     steps.push({ key: "sequencing", label: "Sequencing photos", done: false });
@@ -729,6 +767,13 @@ const handleSubmit = async () => {
         if (status.status) {
           currentBuildStep.value = status.status;
         }
+        if (status.result) {
+          buildProgressDetail.value = {
+            recallSize: status.result.recallSize ?? null,
+            evaluationProgress: status.result.evaluationProgress ?? null,
+            refinementProgress: status.result.refinementProgress ?? null,
+          };
+        }
         if (status.status === "completed") {
           stopPolling();
           await portfolioStore.fetchBuilds();
@@ -787,6 +832,11 @@ const resetForm = () => {
   dateFrom.value = null;
   dateTo.value = null;
   currentStep.value = 0;
+  buildProgressDetail.value = {
+    recallSize: null,
+    evaluationProgress: null,
+    refinementProgress: null,
+  };
 };
 
 watch(
@@ -1281,6 +1331,40 @@ watch(
 
 .build-step.done {
   color: var(--primary-color);
+}
+
+/* ── Custom pulsating grid spinner ─────────────────────── */
+.build-grid-spinner {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 4px;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 4px;
+}
+
+.build-grid-cell {
+  background: var(--primary-color);
+  border-radius: 2px;
+  opacity: 0.18;
+  transform: scale(0.85);
+  animation: build-grid-pulse 1.4s ease-in-out infinite;
+  animation-delay: calc(var(--cell-index) * 0.1s);
+  will-change: opacity, transform;
+}
+
+@keyframes build-grid-pulse {
+  0%,
+  70%,
+  100% {
+    opacity: 0.18;
+    transform: scale(0.85);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* ── Scrollbar ──────────────────────────────────────────── */
