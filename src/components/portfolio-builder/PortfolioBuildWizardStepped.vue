@@ -13,12 +13,12 @@
     @close="handleClose"
   >
     <template #header>
-      <div class="dialog-header-centered">
-        <!-- <n-icon :size="18" color="#2563eb"
+      <!-- <div class="dialog-header-centered">
+        <n-icon :size="18" color="#2563eb"
           ><component :is="PortfolioIcon"
-        /></n-icon> -->
+        /></n-icon>
         <span>New Portfolio Build</span>
-      </div>
+      </div> -->
     </template>
     <!-- Building overlay -->
     <div v-if="isBuilding" class="building-overlay">
