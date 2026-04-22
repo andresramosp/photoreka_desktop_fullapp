@@ -540,7 +540,7 @@ const buildSteps = computed(() => {
   const evaluatingLabel = (() => {
     const ep = detail.evaluationProgress;
     if (ep && typeof ep.total === "number" && ep.total > 0) {
-      return `Evaluating batches - ${ep.total} batches`;
+      return `Evaluating photos - ${ep.total} batches`;
 
       // return `Evaluating batches — ${ep.completed}/${ep.total}`;
     }
