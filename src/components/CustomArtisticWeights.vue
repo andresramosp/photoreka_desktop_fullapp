@@ -1,5 +1,5 @@
 <template>
-  <div class="custom-weights-content">
+  <div class="custom-weights-content" :class="{ compact }">
     <div class="weights-container">
       <div
         v-for="group in groupedCriteria"
@@ -27,6 +27,7 @@
               :step="0.1"
               :label="criterion.label"
               :value-display="modelValue[criterion.value]?.toFixed(1) || '0.0'"
+              :readonly="readonly"
             />
           </div>
         </div>
@@ -48,6 +49,14 @@ const props = defineProps({
   formatCriterionName: {
     type: Function,
     required: true,
+  },
+  compact: {
+    type: Boolean,
+    default: false,
+  },
+  readonly: {
+    type: Boolean,
+    default: false,
   },
 });
 
@@ -154,6 +163,31 @@ const updateWeight = (criterion, value) => {
 
 .weights-container::-webkit-scrollbar-thumb:hover {
   background: #3c3c42;
+}
+
+/* Compact mode: 2-column grid, no inner scroll */
+.compact .weights-container {
+  max-height: none;
+  overflow-y: visible;
+  padding-right: 0;
+}
+
+.compact .weights-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.compact .weights-grid .weight-item :deep(.clickable-weight-slider) {
+  margin-bottom: 0;
+}
+
+.compact .weights-grid .weight-item :deep(.slider-track) {
+  height: 38px;
+}
+
+.compact .weights-grid .weight-item :deep(.slider-label) {
+  font-size: 12px;
 }
 
 /* Responsive */

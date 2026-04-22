@@ -21,6 +21,8 @@ import ProfileSelectionView from "../views/ProfileSelectionView.vue";
 import StoragePlanSelectionView from "../views/StoragePlanSelectionView.vue";
 import GridMaker from "../views/GridMakerView.vue";
 import ChatView from "../views/ChatView.vue";
+import PortfolioBuilderView from "../views/PortfolioBuilderView.vue";
+import PortfolioDetailView from "../views/PortfolioDetailView.vue";
 // import LandingView from "../views/LandingView.vue";
 import LandingViewPremium from "../views/LandingViewPremium.vue";
 import MaintenanceView from "../views/MaintenanceView.vue";
@@ -344,6 +346,22 @@ const router = createRouter({
       path: "/chat-lab",
       name: "chat-lab",
       component: ChatView,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
+      path: "/portfolios",
+      name: "portfolios",
+      component: PortfolioBuilderView,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
+      path: "/portfolios/:id",
+      name: "portfolio-detail",
+      component: PortfolioDetailView,
       meta: {
         requiresAuth: true,
       },

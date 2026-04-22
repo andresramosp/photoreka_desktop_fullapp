@@ -173,6 +173,11 @@ const activeKey = computed(() => {
     return `series-${route.params.id}`;
   }
 
+  // Handle portfolio detail routes
+  if (routeName === "portfolio-detail" && route.params.id) {
+    return `portfolio-${route.params.id}`;
+  }
+
   // Handle collections list view - mark the group as active
   if (routeName === "collections") {
     return "collections-group";
@@ -181,6 +186,11 @@ const activeKey = computed(() => {
   // Handle series list view - mark the group as active
   if (routeName === "series") {
     return "series-group";
+  }
+
+  // Handle portfolios list view - mark the group as active
+  if (routeName === "portfolios") {
+    return "portfolios-group";
   }
 
   return routeName;
@@ -195,16 +205,23 @@ const handleMenuSelect = (key: string) => {
 
   if (key === "sync-area") {
     router.push({ name: "sync-area", hash: "#upload" });
-  } else if (key.startsWith("collection-") || key.startsWith("series-")) {
+  } else if (
+    key.startsWith("collection-") ||
+    key.startsWith("series-") ||
+    key.startsWith("portfolio-")
+  ) {
     // Navegación usando /id en vez de query string
     if (key.startsWith("collection-")) {
       // Extraer el id después de "collection-"
       const id = key.replace("collection-", "");
       router.push(`/collections/${id}`);
-    } else {
+    } else if (key.startsWith("series-")) {
       // Extraer el id después de "series-"
       const id = key.replace("series-", "");
       router.push(`/series/${id}`);
+    } else {
+      const id = key.replace("portfolio-", "");
+      router.push(`/portfolios/${id}`);
     }
   } else {
     router.push({ name: key });

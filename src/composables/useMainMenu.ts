@@ -4,6 +4,7 @@ import type { MenuOption } from "naive-ui";
 import { usePhotosStore } from "@/stores/photos";
 import { useCollectionsStore } from "@/stores/collections";
 import { useSeriesStore } from "@/stores/series";
+import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds";
 import { useUserStore } from "@/stores/userStore";
 import { useRouter } from "vue-router";
 
@@ -23,11 +24,17 @@ const toolIcon = (toolId: string) => {
   return tool ? TOOL_ICONS[tool.icon] : TOOL_ICONS.Workspace;
 };
 
+type MenuLeafItem = {
+  key: string;
+  label: string;
+};
+
 export function useMainMenu(closeMobileMenu?: () => void) {
   const router = useRouter();
   const photosStore = usePhotosStore();
   const collectionsStore = useCollectionsStore();
   const seriesStore = useSeriesStore();
+  const portfolioBuildsStore = usePortfolioBuildsStore();
   const userStore = useUserStore();
   const isMobile = ref(window.innerWidth < 768);
 
@@ -37,18 +44,31 @@ export function useMainMenu(closeMobileMenu?: () => void) {
   });
 
   // Get real collections and series from stores
-  const collections = computed(() =>
-    collectionsStore.allCollections.map((col) => ({
-      key: `collection-${col.id}`,
-      label: col.title || col.name || `Collection ${col.id}`,
-    })),
+  const collections = computed<MenuLeafItem[]>(() =>
+    collectionsStore.allCollections.map(
+      (col: { id: string | number; title?: string; name?: string }) => ({
+        key: `collection-${col.id}`,
+        label: col.title || col.name || `Collection ${col.id}`,
+      }),
+    ),
   );
 
-  const series = computed(() =>
-    seriesStore.allSeries.map((ser) => ({
-      key: `series-${ser.id}`,
-      label: ser.title || ser.name || `Series ${ser.id}`,
-    })),
+  const series = computed<MenuLeafItem[]>(() =>
+    seriesStore.allSeries.map(
+      (ser: { id: string | number; title?: string; name?: string }) => ({
+        key: `series-${ser.id}`,
+        label: ser.title || ser.name || `Series ${ser.id}`,
+      }),
+    ),
+  );
+
+  const portfolios = computed<MenuLeafItem[]>(() =>
+    portfolioBuildsStore.allBuilds.map(
+      (build: { id: string | number; config?: { name?: string } }) => ({
+        key: `portfolio-${build.id}`,
+        label: build.config?.name || `Portfolio #${build.id}`,
+      }),
+    ),
   );
 
   const appAccessMode = computed(() => photosStore.appAccessMode);
@@ -172,6 +192,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
                 key: ser.key,
               })),
       },
+      portfolioBuilderOption.value,
     ];
 
     return {
@@ -280,6 +301,42 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     icon: renderIcon(toolIcon("help")),
   }));
 
+  // Portfolio Builder
+  const portfolioBuilderOption = computed<MenuOption>(() => ({
+    label: () =>
+      h(
+        "span",
+        { class: "second-level-menu-item" },
+        h(
+          "span",
+          {
+            onClick: (e: MouseEvent) => {
+              e.stopPropagation();
+              router.push("/portfolios");
+              if (isMobile.value && closeMobileMenu) {
+                closeMobileMenu();
+              }
+            },
+            style: {
+              cursor: "pointer",
+              display: "inline-block",
+            },
+          },
+          "Portfolios",
+        ),
+      ),
+    key: "portfolios-group",
+    disabled: isBlocked.value,
+    icon: renderIcon(toolIcon("portfolios")),
+    children: isBlocked.value
+      ? undefined
+      : portfolios.value.map((portfolio) => ({
+          label: () =>
+            h("span", { class: "collection-menu-item" }, portfolio.label),
+          key: portfolio.key,
+        })),
+  }));
+
   // Chat option (global, like Sync Area)
   const chatOption = computed<MenuOption>(() => ({
     label: "ChatLab",
@@ -305,11 +362,11 @@ export function useMainMenu(closeMobileMenu?: () => void) {
       } as MenuOption,
       searchOption.value,
       atlasOption.value,
-      ,
       canvasOption.value,
 
       chatOption.value,
       reportOption.value,
+
       {
         type: "divider",
         key: "tools-divider",
