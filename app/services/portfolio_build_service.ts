@@ -279,6 +279,62 @@ export default class PortfolioBuildService {
   }
 
   /**
+   * Estimate the raw EUR cost (before margin) for a portfolio build config.
+   *
+   * Calibrated against observed builds:
+   *   - 20-photo portfolio with visual coherence ≈ €0.10 observed raw cost.
+   *   - A 20% safety buffer is applied (€0.006/photo instead of €0.005) to
+   *     account for worst-case refinement rounds and prompt length variability.
+   *
+   * Does NOT include the CreditService margin — call `estimateCredits()` to
+   * get the final credit amount charged to the user (which includes that margin).
+   */
+  private static estimateRawEur(
+    config: Pick<
+      PortfolioBuildConfig,
+      'targetSize' | 'coherenceMode' | 'sequencing' | 'stylePreferences'
+    >
+  ): number {
+    const N = config.targetSize
+
+    // Base: €0.006/photo covers evaluation (Gemini Flash) + refinement (GPT).
+    // Anchored at observed ~€0.005/photo, +20% buffer for worst-case rounds.
+    let eur = 0.006 * N
+
+    // Non-free coherence modes embed a directive in every LLM prompt,
+    // slightly lengthening inputs and increasing the chance of extra
+    // refinement rounds (+10%).
+    if (config.coherenceMode && config.coherenceMode !== 'free') {
+      eur *= 1.1
+    }
+
+    // LLM sequencing pass (currently computational, but hook for 'llm' mode).
+    if (config.sequencing && SEQUENCING_MODE === 'llm') {
+      eur *= 1.15
+    }
+
+    // Style/theme freetext parse is negligible but non-zero.
+    if (config.stylePreferences) eur += 0.001
+
+    // Safety floor for very small portfolios.
+    return Math.max(eur, 0.05)
+  }
+
+  /**
+   * Estimate the credit cost for a portfolio build, already including the
+   * CreditService margin. This is the single source of truth shown in the
+   * wizard — the frontend fetches it via GET /api/portfolio-build/estimate-credits.
+   */
+  public static estimateCredits(
+    config: Pick<
+      PortfolioBuildConfig,
+      'targetSize' | 'coherenceMode' | 'sequencing' | 'stylePreferences'
+    >
+  ): number {
+    return CreditService.eurToCredits(CreditService.applyMargin(this.estimateRawEur(config)))
+  }
+
+  /**
    * Create a manually-curated (empty) portfolio. No AI pipeline runs — the
    * user will add/remove photos through the detail view.
    */
@@ -636,6 +692,7 @@ Rules:
       // Record cost & charge credits
       UserCostService.recordFromTracker(build.userId, tracker, String(build.id)).catch(() => {})
 
+      // Charge the actual LLM cost with the standard 30% commercial margin.
       if (costSummary.totalCostInEur > 0) {
         CreditService.charge(build.userId, costSummary.totalCostInEur).catch(() => {})
       }

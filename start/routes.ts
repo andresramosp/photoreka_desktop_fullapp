@@ -174,6 +174,10 @@ router
       PortfolioBuildController,
       'previewStyleWeights',
     ])
+    router.get('/api/portfolio-build/estimate-credits', [
+      PortfolioBuildController,
+      'estimateCredits',
+    ])
     router.get('/api/portfolio-build/default-weights', [
       PortfolioBuildController,
       'getDefaultWeights',

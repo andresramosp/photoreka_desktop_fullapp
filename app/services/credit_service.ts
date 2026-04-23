@@ -89,8 +89,15 @@ export default class CreditService {
   }
 
   /**
-   * Charge a fixed number of credits for a preset-cost operation
-   * (e.g. search precise = N credits).
+   * Charge a fixed number of credits for a preset-cost operation.
+   *
+   * ⚠️  The caller is responsible for ensuring that `credits` already includes
+   * the commercial margin. Use one of:
+   *   - A constant whose value was set with margin baked in (e.g. PRECISE_GPU_CREDITS).
+   *   - `eurToCredits(applyMargin(rawCost))` to compute it explicitly.
+   *   - `PortfolioBuildService.estimateCredits(config)` for portfolio builds.
+   *
+   * Do NOT call this with `eurToCredits(rawCost)` — that charges at cost with no margin.
    */
   static async chargeFixed(userId: number, credits: number): Promise<void> {
     if (credits <= 0) return

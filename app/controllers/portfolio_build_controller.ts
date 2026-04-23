@@ -373,6 +373,52 @@ export default class PortfolioBuildController {
   }
 
   /**
+   * GET /api/portfolio-build/estimate-credits
+   * Estimate the credit cost for a build config. Used by the wizard to show a
+   * live, backend-authoritative cost estimate as the user adjusts settings.
+   *
+   * Query params: targetSize, coherenceMode, sequencing, stylePreferences
+   */
+  public async estimateCredits({ request, response, auth }: HttpContext) {
+    try {
+      await auth.use('api').check()
+
+      const qs = request.qs()
+
+      const rawTargetSize = Number(qs.targetSize)
+      if (!Number.isFinite(rawTargetSize) || rawTargetSize < 10 || rawTargetSize > 60) {
+        return response.badRequest({ error: 'targetSize must be a number between 10 and 60.' })
+      }
+
+      const coherenceMode = qs.coherenceMode ?? 'free'
+      const VALID_COHERENCE_MODES = ['free', 'visual', 'chromatic', 'narrative', 'heterogeneous']
+      if (!VALID_COHERENCE_MODES.includes(coherenceMode)) {
+        return response.badRequest({ error: `Invalid coherenceMode: ${coherenceMode}` })
+      }
+
+      const sequencing = qs.sequencing === 'true' || qs.sequencing === '1'
+      const stylePreferences =
+        typeof qs.stylePreferences === 'string' && qs.stylePreferences.trim().length > 0
+          ? qs.stylePreferences.trim()
+          : undefined
+
+      const config = {
+        targetSize: rawTargetSize,
+        coherenceMode: coherenceMode as any,
+        sequencing,
+        stylePreferences,
+        weights: {},
+      }
+
+      const credits = PortfolioBuildService.estimateCredits(config)
+      return response.ok({ credits })
+    } catch (error: any) {
+      console.error('[PortfolioBuildController] estimateCredits error:', error)
+      return response.internalServerError({ error: error.message })
+    }
+  }
+
+  /**
    * GET /api/portfolio-build/default-weights
    * Returns the canonical default weight vector (0..1 slider scale) that the
    * wizard should display as its initial state. This is the single source of
