@@ -61,7 +61,7 @@
             <template #icon>
               <n-icon><SparklesOutline /></n-icon>
             </template>
-            Create with AI
+            Build a new portfolio
           </n-button>
           <n-button size="large" @click="openManualDialog">
             <template #icon>
@@ -75,24 +75,27 @@
 
     <!-- Content with cards (when builds exist) -->
     <div v-else-if="!isLoading" class="card-grid">
-      <!-- Dual-action create card -->
+      <!-- Create card -->
+      <CreateCard
+        v-if="!ENABLE_CREATE_OPTIONS"
+        title="New Portfolio"
+        subtitle="Start compiling your best photos"
+        @click="openWizard"
+      />
+
+      <!-- Dual-action create card (ENABLE_CREATE_OPTIONS = true) -->
       <div
+        v-else
         class="portfolio-create-card"
         :class="{ 'is-open': showCreateOptions }"
-        @click="
-          ENABLE_CREATE_OPTIONS
-            ? showCreateOptions && (showCreateOptions = false)
-            : undefined
-        "
+        @click="showCreateOptions && (showCreateOptions = false)"
       >
         <Transition name="create-fade" mode="out-in">
           <div
-            v-if="!ENABLE_CREATE_OPTIONS || !showCreateOptions"
+            v-if="!showCreateOptions"
             key="closed"
             class="portfolio-create-default"
-            @click.stop="
-              ENABLE_CREATE_OPTIONS ? (showCreateOptions = true) : openWizard()
-            "
+            @click.stop="showCreateOptions = true"
           >
             <div class="portfolio-create-icon">
               <n-icon :size="32" color="var(--primary-color)">
@@ -101,11 +104,7 @@
             </div>
             <h3 class="portfolio-create-title">New Portfolio</h3>
             <p class="portfolio-create-subtitle">
-              {{
-                ENABLE_CREATE_OPTIONS
-                  ? "Choose how you want to build it"
-                  : "Create with AI"
-              }}
+              Choose how you want to build it
             </p>
           </div>
           <div v-else key="open" class="portfolio-create-options">
@@ -207,6 +206,7 @@ import {
 } from "@vicons/ionicons5";
 import { TOOL_ICONS, getToolById } from "@/config/toolsConfig";
 import CollectionCard from "@/components/CollectionCard.vue";
+import CreateCard from "@/components/photos-grid/CreateCard.vue";
 import PortfolioBuildWizard from "@/components/portfolio-builder/PortfolioBuildWizardStepped.vue";
 import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds";
 

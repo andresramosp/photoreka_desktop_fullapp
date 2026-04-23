@@ -168,6 +168,40 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
       }
     },
 
+    /**
+     * Fetch the backend-authoritative credit estimate for the given build
+     * configuration. Returns the number of credits, or `null` on error
+     * (callers should fall back to a local approximation).
+     */
+    async fetchEstimateCredits({
+      targetSize,
+      coherenceMode,
+      sequencing,
+      stylePreferences,
+    }) {
+      try {
+        const params = {
+          targetSize,
+          coherenceMode,
+          sequencing: sequencing ? "true" : "false",
+        };
+        if (stylePreferences && stylePreferences.trim().length > 0) {
+          params.stylePreferences = stylePreferences.trim();
+        }
+        const response = await api.get(
+          "/api/portfolio-build/estimate-credits",
+          { params },
+        );
+        return response.data.credits ?? null;
+      } catch (error) {
+        console.error(
+          "[PortfolioBuildsStore] fetchEstimateCredits error:",
+          error,
+        );
+        return null;
+      }
+    },
+
     async saveLayout(buildId, photoIds) {
       try {
         const response = await api.patch(

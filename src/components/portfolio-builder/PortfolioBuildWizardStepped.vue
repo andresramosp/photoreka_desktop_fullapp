@@ -421,7 +421,7 @@
             <span class="credit-estimate-text">Estimated cost:</span>
           </div>
           <span class="credit-estimate-value"
-            >{{ estimatedCredits }} credits</span
+            >{{ displayedCredits }} credits</span
           >
         </div>
         <div class="footer-actions">
@@ -796,14 +796,53 @@ const collectionOptions = computed(() => {
 });
 
 // ── Credit estimation ──────────────────────────────────────
-const estimatedCredits = computed(() => {
-  const basePerPhoto = 2;
-  const sequencingMultiplier = form.sequencing ? 1.4 : 1;
-  const coherenceExtra = form.coherenceMode !== "free" ? 5 : 0;
-  return Math.ceil(
-    form.targetSize * basePerPhoto * sequencingMultiplier + coherenceExtra,
+// Fetched from the backend so the formula is a single source of truth.
+// Falls back to a local approximation while the request is in-flight or on error.
+const estimatedCredits = ref(null); // null = loading/unknown
+let creditEstimateDebounce = null;
+let creditEstimateReqId = 0;
+
+const localFallbackCredits = computed(() => {
+  // Simple local approximation used only as a placeholder while fetching.
+  const base = Math.ceil(
+    (0.006 *
+      form.targetSize *
+      (form.coherenceMode !== "free" ? 1.1 : 1) *
+      1.3) /
+      0.001,
   );
+  return Math.max(base, 65);
 });
+
+const fetchCreditEstimate = () => {
+  if (creditEstimateDebounce) clearTimeout(creditEstimateDebounce);
+  creditEstimateDebounce = setTimeout(async () => {
+    const reqId = ++creditEstimateReqId;
+    const result = await portfolioStore.fetchEstimateCredits({
+      targetSize: form.targetSize,
+      coherenceMode: form.coherenceMode,
+      sequencing: form.sequencing,
+      stylePreferences: form.stylePreferences,
+    });
+    if (reqId !== creditEstimateReqId) return;
+    estimatedCredits.value = result ?? localFallbackCredits.value;
+  }, 400);
+};
+
+watch(
+  [
+    () => form.targetSize,
+    () => form.coherenceMode,
+    () => form.sequencing,
+    () => form.stylePreferences,
+  ],
+  fetchCreditEstimate,
+  { immediate: true },
+);
+
+const displayedCredits = computed(
+  () => estimatedCredits.value ?? localFallbackCredits.value,
+);
 
 // ── Validation ─────────────────────────────────────────────
 const canSubmit = computed(() => {
@@ -996,6 +1035,7 @@ const handleClose = () => {
 onUnmounted(() => {
   stopPolling();
   if (eligibilityDebounce) clearTimeout(eligibilityDebounce);
+  if (creditEstimateDebounce) clearTimeout(creditEstimateDebounce);
 });
 
 const resetForm = () => {
@@ -1019,6 +1059,7 @@ const resetForm = () => {
   currentStep.value = 0;
   stylePreviewResult.value = null;
   isPreviewing.value = false;
+  estimatedCredits.value = null;
   buildProgressDetail.value = {
     recallSize: null,
     evaluationProgress: null,
