@@ -1,5 +1,8 @@
 <template>
-  <div class="series-photo-strip" :class="`size-${photoSize}`">
+  <div
+    class="series-photo-strip"
+    :class="[`size-${photoSize}`, `view-${viewMode}`]"
+  >
     <!-- Size Controls -->
     <div class="strip-controls">
       <div class="strip-controls-left">
@@ -12,6 +15,31 @@
             @click="setPhotoSize(size.value)"
           >
             {{ size.label }}
+          </n-button>
+        </n-button-group>
+
+        <!-- View Mode Toggle -->
+        <span class="size-label view-label">View:</span>
+        <n-button-group size="small">
+          <n-button
+            :type="viewMode === 'grid' ? 'primary' : 'default'"
+            @click="setViewMode('grid')"
+            title="Grid view"
+          >
+            <template #icon>
+              <n-icon><GridOutline /></n-icon>
+            </template>
+            Grid
+          </n-button>
+          <n-button
+            :type="viewMode === 'strip' ? 'primary' : 'default'"
+            @click="setViewMode('strip')"
+            title="Strip view"
+          >
+            <template #icon>
+              <n-icon><ReorderFourOutline /></n-icon>
+            </template>
+            Strip
           </n-button>
         </n-button-group>
 
@@ -41,7 +69,29 @@
       </n-empty>
     </div>
 
-    <!-- Photo Strip -->
+    <!-- GRID VIEW: dedicated component. CSS Grid with fixed-width columns
+         guarantees a stable multi-row layout with exactly one "+" per gap
+         and a placeholder that never disturbs the surrounding rows. -->
+    <SeriesPhotoGrid
+      v-else-if="viewMode === 'grid'"
+      :photos="photos"
+      :series-id="seriesId"
+      :selected-photo-ids="selectedPhotoIds"
+      :suggested-photos-info="suggestedPhotosInfo"
+      :refreshing-photo-id="refreshingPhotoId"
+      :photo-size="currentSize"
+      @add-photos-at="(i) => $emit('add-photos-at', i)"
+      @suggest-photo-at="(p) => $emit('suggest-photo-at', p)"
+      @refresh-suggestion="(id) => $emit('refresh-suggestion', id)"
+      @remove-photo="(id) => $emit('remove-photo', id)"
+      @reorder="(o) => $emit('reorder', o)"
+      @move-photo="(id, i) => $emit('move-photo', id, i)"
+      @photos-updated="(list) => $emit('photos-updated', list)"
+      @select-photo="(id) => $emit('select-photo', id)"
+      @show-info="(id) => $emit('show-info', id)"
+    />
+
+    <!-- STRIP VIEW: horizontal single-row strip with inline gap buttons. -->
     <div
       v-else
       ref="scrollContainer"
@@ -129,6 +179,7 @@
               :is-selected="selectedPhotoIds.includes(photo.id)"
               :show-name="false"
               :size="currentSize"
+              :order-number="index + 1"
               :class="{ inserting: insertingPhotoIds.has(photo.id) }"
               :is-suggested="!!suggestedPhotosInfo[photo.id]"
               :suggestion-criteria="suggestedPhotosInfo[photo.id]?.criteria"
@@ -141,7 +192,7 @@
               @mouseleave="hoveredPhotoIndex = null"
             />
 
-            <!-- Placeholder after this photo if it matches -->
+            <!-- Trailing gap AFTER this photo (position = index + 1). -->
             <template v-if="activePlaceholderIndex === index + 1">
               <div class="insertion-gap placeholder-gap"></div>
               <PlaceholderPhotoCard
@@ -190,10 +241,17 @@
 <script setup>
 import { ref, computed, watch } from "vue";
 import { NButton, NButtonGroup, NIcon, NEmpty, NSelect } from "naive-ui";
-import { AddOutline, AddCircleOutline, CloseOutline } from "@vicons/ionicons5";
+import {
+  AddOutline,
+  AddCircleOutline,
+  CloseOutline,
+  GridOutline,
+  ReorderFourOutline,
+} from "@vicons/ionicons5";
 import draggable from "vuedraggable";
 import PhotoSequenceCard from "@/components/PhotoSequenceCard.vue";
 import PlaceholderPhotoCard from "@/components/PlaceholderPhotoCard.vue";
+import SeriesPhotoGrid from "@/components/SeriesPhotoGrid.vue";
 
 const props = defineProps({
   photos: {
@@ -239,6 +297,12 @@ const sizeOptions = [
 ];
 
 const photoSize = ref("medium");
+
+// View mode: 'strip' (horizontal scroll, one row) or 'grid' (multi-row, wraps)
+const viewMode = ref("grid");
+const setViewMode = (mode) => {
+  viewMode.value = mode;
+};
 
 // Select all state
 const allSelected = ref(false);
@@ -387,9 +451,9 @@ watch(
 
 // Size configurations
 const sizeConfig = {
-  small: { width: 200, maxNameLength: 12 },
-  medium: { width: 350, maxNameLength: 20 },
-  large: { width: 450, maxNameLength: 30 },
+  small: { width: 185, maxNameLength: 12 },
+  medium: { width: 340, maxNameLength: 20 },
+  large: { width: 470, maxNameLength: 30 },
 };
 
 const currentSize = computed(() => sizeConfig[photoSize.value].width);
@@ -460,6 +524,8 @@ const onDragEnd = () => {
 
 const handleHorizontalScroll = (event) => {
   if (!scrollContainer.value) return;
+  // In grid mode, allow native vertical scroll behavior.
+  if (viewMode.value === "grid") return;
 
   event.preventDefault();
   scrollContainer.value.scrollLeft += event.deltaY;
@@ -513,6 +579,8 @@ const handlePlaceholderSuggest = (criteria) => {
 
 // Method to scroll to a specific photo by index
 const scrollToPhoto = (photoIndex) => {
+  // In grid mode the layout is vertical; no horizontal scrolling needed.
+  if (viewMode.value === "grid") return;
   if (!scrollContainer.value || photoIndex === null || photoIndex === undefined)
     return;
 
@@ -565,6 +633,7 @@ const handleSelectAllToggle = () => {
   align-items: center;
   gap: 12px;
   margin-bottom: 20px;
+  /* margin-left: 40px; */
 }
 
 .strip-controls-left {

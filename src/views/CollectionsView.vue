@@ -191,15 +191,6 @@
     <!-- Collections Grid View (default view) -->
     <div v-else>
       <!-- Header Section -->
-      <div class="collections-header">
-        <div class="header-content">
-          <h1 class="page-title">Collections</h1>
-          <p class="page-subtitle">
-            Manage and categorize your photographs into collections for
-            efficient organization and professional presentation.
-          </p>
-        </div>
-      </div>
 
       <!-- Collections Grid -->
       <div v-if="isLoading" class="loading-state">

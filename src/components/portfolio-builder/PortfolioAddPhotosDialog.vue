@@ -22,7 +22,7 @@
         size="small"
         class="add-photos-tabs"
       >
-        <n-tab-pane name="builder">
+        <n-tab-pane name="builder" v-if="hasBuilderPool">
           <template #tab>
             <div class="tab-label">
               <n-icon size="14"><BuilderIcon /></n-icon>
@@ -417,6 +417,10 @@ const builderPoolPhotos = computed(() => {
   return pool.filter((p) => p && p.id && !currentSet.has(p.id));
 });
 
+const hasBuilderPool = computed(
+  () => (props.build?.result?.builderPool ?? []).length > 0,
+);
+
 // ── Catalog tab ──
 const searchQuery = ref("");
 const isSearching = ref(false);
@@ -555,7 +559,13 @@ watch(
     if (!isOpen) return;
     clearSelection();
     clearSearch();
-    activeTab.value = "builder";
+    if (hasBuilderPool.value) {
+      activeTab.value = "builder";
+    } else if (props.currentPhotoIds.length > 0) {
+      activeTab.value = "similar";
+    } else {
+      activeTab.value = "catalog";
+    }
 
     // Preload catalog in background
     photosStore

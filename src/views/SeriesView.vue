@@ -62,11 +62,51 @@
             </n-button>
             <div style="display: flex; gap: 12px">
               <n-button
+                v-if="!isPublicView"
+                :disabled="!canUndo || isSaving"
+                @click="undoLastChange"
+                title="Undo last removal"
+              >
+                <template #icon>
+                  <n-icon>
+                    <ArrowUndoOutline />
+                  </n-icon>
+                </template>
+                Undo
+              </n-button>
+              <n-button
+                v-if="!isPublicView"
+                :disabled="!hasChanges || isSaving"
+                @click="discardChanges"
+              >
+                <template #icon>
+                  <n-icon>
+                    <CloseOutline />
+                  </n-icon>
+                </template>
+                Discard
+              </n-button>
+              <n-button
+                v-if="!isPublicView"
+                :type="hasChanges ? 'primary' : 'default'"
+                ghost
+                :disabled="!hasChanges || isSaving"
+                :loading="isSaving"
+                @click="saveChanges"
+              >
+                <template #icon>
+                  <n-icon>
+                    <SaveOutline />
+                  </n-icon>
+                </template>
+                Save
+              </n-button>
+              <n-button
                 type="primary"
                 @click="openFullscreenViewer"
                 class="play-series-button"
                 :disabled="
-                  !(viewingSeries.photos && viewingSeries.photos.length > 0)
+                  !(editablePhotos && editablePhotos.length > 0) || isSaving
                 "
               >
                 <template #icon>
@@ -227,7 +267,7 @@
       <!-- Series Photos Strip -->
       <div class="series-photos">
         <SeriesPhotoStrip
-          :photos="viewingSeries.photos || []"
+          :photos="editablePhotos"
           :series-id="route.params.id"
           :selected-photo-ids="localSelectedPhotoIds"
           :suggested-photos-info="suggestedPhotosInfo"
@@ -249,15 +289,6 @@
     <!-- Series Grid View (default view) -->
     <div v-else>
       <!-- Header Section -->
-      <div class="series-list-header">
-        <div class="header-content">
-          <h1 class="page-title">Series</h1>
-          <p class="page-subtitle">
-            Create sequential photo stories. Arrange your photos in a specific
-            order to tell your visual narrative.
-          </p>
-        </div>
-      </div>
 
       <!-- Series Grid -->
       <div v-if="isLoading" class="loading-state">
@@ -392,7 +423,7 @@
     <!-- Series Fullscreen Viewer -->
     <SeriesFullscreenViewer
       v-model="fullscreenViewerVisible"
-      :photos="viewingSeries?.photos || []"
+      :photos="isPublicView ? viewingSeries?.photos || [] : editablePhotos"
       :start-index="0"
       :is-public-view="isPublicView"
     />
@@ -458,6 +489,8 @@ import {
   CreateOutline,
   CheckmarkOutline,
   CloseOutline,
+  SaveOutline,
+  ArrowUndoOutline,
 } from "@vicons/ionicons5";
 import PhotosDialog from "@/components/PhotosDialog.vue";
 import CollectionCard from "@/components/CollectionCard.vue";
@@ -545,6 +578,33 @@ const recentlySuggestedPhotos = ref(new Map());
 // Track photo being refreshed to show loading state
 const refreshingPhotoId = ref(null);
 
+// ---- Local editable state (deferred save pattern) ----
+// The user edits this locally; nothing is persisted until "Save" is pressed.
+const editablePhotos = ref([]); // full photo objects, ordered
+const originalPhotos = ref([]); // snapshot from server for discard
+const originalPhotoIds = ref([]); // id order snapshot for change detection
+const removedPhotosHistory = ref([]); // stack of { photo, index } for Undo
+const currentEditingSeriesId = ref(null); // track which series is currently loaded editable
+const isSaving = ref(false);
+
+const hasChanges = computed(() => {
+  const currentIds = editablePhotos.value.map((p) => p.id);
+  if (currentIds.length !== originalPhotoIds.value.length) return true;
+  return currentIds.some((id, i) => id !== originalPhotoIds.value[i]);
+});
+
+const canUndo = computed(() => removedPhotosHistory.value.length > 0);
+
+// Initialize / reset local state from the loaded series
+const initEditableState = (series) => {
+  const photos = Array.isArray(series?.photos) ? series.photos : [];
+  editablePhotos.value = [...photos];
+  originalPhotos.value = [...photos];
+  originalPhotoIds.value = photos.map((p) => p.id);
+  removedPhotosHistory.value = [];
+  currentEditingSeriesId.value = series?.id ?? null;
+};
+
 // Form data
 const formData = ref({
   title: "",
@@ -588,6 +648,17 @@ const suggestedPhotosInfo = computed(() => {
 const refreshSeries = async () => {
   await seriesStore.getOrFetch(true); // Force refresh
   updateViewingSeries();
+};
+
+// Helper: find a full photo object for a given id, preferring photosStore
+const resolvePhotoById = (id) => {
+  const fromStore = (photosStore.allPhotos || []).find((p) => p.id === id);
+  if (fromStore) return { ...fromStore };
+  const fromEditable = editablePhotos.value.find((p) => p.id === id);
+  if (fromEditable) return { ...fromEditable };
+  const fromOriginal = originalPhotos.value.find((p) => p.id === id);
+  if (fromOriginal) return { ...fromOriginal };
+  return null;
 };
 
 const showCreateDialog = () => {
@@ -634,6 +705,8 @@ const handleAddPhotosAt = (insertIndex) => {
   photosDialogVisible.value = true;
 };
 
+// Suggest a photo: only fetches a suggestion from the search API (read-only)
+// and inserts it into the LOCAL editable list. Not persisted until Save.
 const handleSuggestPhotoAt = async (payload) => {
   if (!viewingSeries.value) return;
 
@@ -642,15 +715,13 @@ const handleSuggestPhotoAt = async (payload) => {
   const criteria = typeof payload === "object" ? payload?.criteria : "story";
   const safeCriteria = criteria || "story";
 
-  // Allow explicit leftId/rightId to be passed (for refresh scenarios)
   const explicitLeftId =
     typeof payload === "object" ? payload?.leftId : undefined;
   const explicitRightId =
     typeof payload === "object" ? payload?.rightId : undefined;
 
-  const photos = viewingSeries.value.photos || [];
+  const photos = editablePhotos.value;
 
-  // Use explicit IDs if provided, otherwise calculate from position
   const left =
     explicitLeftId !== undefined
       ? { id: explicitLeftId }
@@ -671,14 +742,11 @@ const handleSuggestPhotoAt = async (payload) => {
     return;
   }
 
-  // Build context key for this gap
   const contextKey = `${left?.id || "start"}-${right?.id || "end"}`;
-
-  // Get discarded photos for this specific gap context
   const discardedForThisGap =
     discardedPhotosByContext.value.get(contextKey) || new Set();
 
-  // Combine current photos in series with discarded photos for this gap
+  // Exclude: photos already in the (editable) series and any discarded for this gap
   const currentPhotosIds = [
     ...photos.map((p) => p.id),
     ...Array.from(discardedForThisGap),
@@ -713,57 +781,73 @@ const handleSuggestPhotoAt = async (payload) => {
       timestamp: Date.now(),
     });
 
-    await seriesStore.insertPhotosAt(
-      viewingSeries.value.id,
-      [suggested.id],
-      insertIndex,
+    // Insert LOCALLY only
+    const newPhoto = resolvePhotoById(suggested.id) || { ...suggested };
+    const safeIndex = Math.min(
+      Math.max(Number(insertIndex) || 0, 0),
+      editablePhotos.value.length,
     );
-    // message.success("Suggestion added to the series");
-    await refreshSeries();
+    const next = [...editablePhotos.value];
+    next.splice(safeIndex, 0, newPhoto);
+    editablePhotos.value = next;
   } catch (error) {
     console.error("Error getting suggestion:", error);
   }
 };
 
 const openFullscreenViewer = () => {
-  if (viewingSeries.value?.photos?.length > 0) {
+  if (editablePhotos.value?.length > 0) {
     fullscreenViewerVisible.value = true;
   }
 };
 
+// Photos picked in the dialog: add to LOCAL state only.
 const onPhotosSelected = async (photoIds) => {
   if (!photoIds || photoIds.length === 0) {
     message.warning("Please select at least one photo");
     return;
   }
 
-  // Only used to add photos to existing series
-  if (showSeriesView.value && viewingSeries.value) {
-    try {
-      if (pendingInsertIndex.value !== null) {
-        await seriesStore.insertPhotosAt(
-          viewingSeries.value.id,
-          photoIds,
-          pendingInsertIndex.value,
-        );
-      } else {
-        await seriesStore.addPhotosToSeries(viewingSeries.value.id, photoIds);
-      }
+  if (!(showSeriesView.value && viewingSeries.value)) return;
 
-      message.success(
-        `Added ${photoIds.length} photo${
-          photoIds.length > 1 ? "s" : ""
-        } to the series.`,
-      );
-      photosDialogVisible.value = false;
-      pendingInsertIndex.value = null;
-      await refreshSeries();
-    } catch (error) {
-      console.error("Error adding photos to series:", error);
-    }
+  // Filter out photos already in the editable list
+  const existingIds = new Set(editablePhotos.value.map((p) => p.id));
+  const uniqueIds = photoIds.filter((id) => !existingIds.has(id));
+
+  if (uniqueIds.length === 0) {
+    message.warning("All selected photos are already in the series");
+    photosDialogVisible.value = false;
+    pendingInsertIndex.value = null;
+    return;
   }
+
+  const resolved = uniqueIds.map((id) => resolvePhotoById(id)).filter(Boolean);
+
+  if (resolved.length === 0) {
+    message.error("Could not load selected photos");
+    return;
+  }
+
+  const next = [...editablePhotos.value];
+  if (pendingInsertIndex.value !== null) {
+    const safeIndex = Math.min(
+      Math.max(Number(pendingInsertIndex.value) || 0, 0),
+      next.length,
+    );
+    next.splice(safeIndex, 0, ...resolved);
+  } else {
+    next.push(...resolved);
+  }
+  editablePhotos.value = next;
+
+  message.success(
+    `Added ${resolved.length} photo${resolved.length > 1 ? "s" : ""}. Remember to save.`,
+  );
+  photosDialogVisible.value = false;
+  pendingInsertIndex.value = null;
 };
 
+// Refresh a suggestion: remove locally and ask for a new one (no backend mutation).
 const handleRefreshSuggestion = async (photoId) => {
   if (!viewingSeries.value) return;
 
@@ -773,7 +857,6 @@ const handleRefreshSuggestion = async (photoId) => {
     return;
   }
 
-  // Mark current photo as discarded
   const contextKey = `${suggestionInfo.leftId || "start"}-${
     suggestionInfo.rightId || "end"
   }`;
@@ -781,21 +864,20 @@ const handleRefreshSuggestion = async (photoId) => {
   if (!discardedPhotosByContext.value.has(contextKey)) {
     discardedPhotosByContext.value.set(contextKey, new Set());
   }
-
-  const discardedSet = discardedPhotosByContext.value.get(contextKey);
-  discardedSet.add(photoId);
-
-  // Remove from tracking
+  discardedPhotosByContext.value.get(contextKey).add(photoId);
   recentlySuggestedPhotos.value.delete(photoId);
 
-  // Set refreshing state to show loading placeholder
   refreshingPhotoId.value = photoId;
 
   try {
-    // Remove the photo (without refreshing UI yet)
-    await seriesStore.removePhotosFromSeries(viewingSeries.value.id, [photoId]);
+    // Remove locally (no history push — it was a transient suggestion)
+    const idx = editablePhotos.value.findIndex((p) => p.id === photoId);
+    if (idx !== -1) {
+      const next = [...editablePhotos.value];
+      next.splice(idx, 1);
+      editablePhotos.value = next;
+    }
 
-    // Request a new suggestion with the same criteria and context
     await handleSuggestPhotoAt({
       insertIndex: suggestionInfo.insertIndex,
       criteria: suggestionInfo.criteria,
@@ -804,79 +886,51 @@ const handleRefreshSuggestion = async (photoId) => {
     });
   } catch (error) {
     console.error("Error refreshing suggestion:", error);
-    // On error, refresh to restore correct state
-    await refreshSeries();
   } finally {
-    // Clear refreshing state
     refreshingPhotoId.value = null;
   }
 };
 
-const handleRemovePhoto = async (photoId) => {
+// Remove a photo: local only, pushed to undo history.
+const handleRemovePhoto = (photoId) => {
   if (!viewingSeries.value) return;
 
-  // Check if this photo was recently suggested
   const suggestionInfo = recentlySuggestedPhotos.value.get(photoId);
-
-  // If it was suggested in the last 5 minutes, mark it as discarded for that gap
   if (suggestionInfo && Date.now() - suggestionInfo.timestamp < 5 * 60 * 1000) {
     const contextKey = `${suggestionInfo.leftId || "start"}-${
       suggestionInfo.rightId || "end"
     }`;
-
-    // Get or create the discarded set for this context
     if (!discardedPhotosByContext.value.has(contextKey)) {
       discardedPhotosByContext.value.set(contextKey, new Set());
     }
-
-    const discardedSet = discardedPhotosByContext.value.get(contextKey);
-    discardedSet.add(photoId);
-
-    console.log(
-      `Photo ${photoId} marked as discarded for gap context: ${contextKey}`,
-    );
-
-    // Remove from recently suggested
+    discardedPhotosByContext.value.get(contextKey).add(photoId);
     recentlySuggestedPhotos.value.delete(photoId);
   }
 
-  try {
-    await seriesStore.removePhotosFromSeries(viewingSeries.value.id, [photoId]);
-    message.success("Photo removed from series");
-    await refreshSeries();
-  } catch (error) {
-    console.error("Error removing photo:", error);
-  }
+  const idx = editablePhotos.value.findIndex((p) => p.id === photoId);
+  if (idx === -1) return;
+  const [removed] = editablePhotos.value.splice(idx, 1);
+  removedPhotosHistory.value.push({ photo: removed, index: idx });
+  // trigger reactivity
+  editablePhotos.value = [...editablePhotos.value];
 };
 
-const handleReorder = async (newOrder) => {
-  if (!viewingSeries.value) return;
-
-  try {
-    await seriesStore.updatePhotoOrder(viewingSeries.value.id, newOrder);
-    // Don't refresh here to avoid flickering - the local state is already updated
-  } catch (error) {
-    console.error("Error reordering photos:", error);
-    await refreshSeries(); // Refresh to restore correct order on error
-  }
+// Reorder (drag & drop): strip already provides the new ordered array via
+// @photos-updated. @reorder fires too — we just ignore the backend payload here.
+const handleReorder = () => {
+  // No-op: deferred until save. Local order is tracked via @photos-updated.
 };
 
-const handleMovePhoto = async (photoId, newPosition) => {
-  if (!viewingSeries.value) return;
-
-  try {
-    await seriesStore.movePhoto(viewingSeries.value.id, photoId, newPosition);
-    // Don't refresh here to avoid flickering - the local state is already updated
-  } catch (error) {
-    console.error("Error moving photo:", error);
-    await refreshSeries(); // Refresh to restore correct order on error
-  }
+// Move left/right: strip also emits @photos-updated with the final array,
+// so this handler stays a no-op to avoid double-applying the change.
+const handleMovePhoto = () => {
+  // No-op: handled by @photos-updated.
 };
 
 const handlePhotosUpdated = (updatedPhotos) => {
-  // Update viewingSeries.photos with the new order
-  if (viewingSeries.value) {
-    viewingSeries.value.photos = updatedPhotos;
+  // Strip sends the full ordered photo array after drag/move operations
+  if (Array.isArray(updatedPhotos)) {
+    editablePhotos.value = [...updatedPhotos];
   }
 };
 
@@ -891,8 +945,8 @@ const handleDownloadMultiple = async () => {
   }
 
   try {
-    // Get full photo objects from selected IDs
-    const selectedPhotos = viewingSeries.value.photos.filter((photo) =>
+    // Get full photo objects from selected IDs (from editable list)
+    const selectedPhotos = editablePhotos.value.filter((photo) =>
       localSelectedPhotoIds.value.includes(photo.id),
     );
 
@@ -904,23 +958,94 @@ const handleDownloadMultiple = async () => {
   }
 };
 
-const handleRemoveSelectedFromSeries = async () => {
+// Remove multiple selected: local only.
+const handleRemoveSelectedFromSeries = () => {
   if (!viewingSeries.value || localSelectedPhotoIds.value.length === 0) {
     return;
   }
 
+  const selectedSet = new Set(localSelectedPhotoIds.value);
+  // Capture removed items with their original indices (in descending order
+  // so pushing and later undoing via pop preserves positions correctly).
+  const toRemove = [];
+  editablePhotos.value.forEach((p, i) => {
+    if (selectedSet.has(p.id)) toRemove.push({ photo: p, index: i });
+  });
+
+  if (toRemove.length === 0) return;
+
+  editablePhotos.value = editablePhotos.value.filter(
+    (p) => !selectedSet.has(p.id),
+  );
+  // Push in original-index ascending order so undo pops latest first
+  for (const entry of toRemove) removedPhotosHistory.value.push(entry);
+
+  message.info(
+    `Removed ${toRemove.length} photo${toRemove.length > 1 ? "s" : ""} (not saved yet)`,
+  );
+  localClearAllSelections();
+};
+
+// Undo last removal
+const undoLastChange = () => {
+  const last = removedPhotosHistory.value.pop();
+  if (!last) return;
+  const next = [...editablePhotos.value];
+  const insertAt = Math.min(last.index, next.length);
+  next.splice(insertAt, 0, last.photo);
+  editablePhotos.value = next;
+};
+
+// Discard all local changes
+const discardChanges = () => {
+  editablePhotos.value = [...originalPhotos.value];
+  removedPhotosHistory.value = [];
+  recentlySuggestedPhotos.value.clear();
+  discardedPhotosByContext.value.clear();
+};
+
+// Persist local changes to the backend
+const saveChanges = async () => {
+  if (!viewingSeries.value || !hasChanges.value) return;
+
+  const seriesId = viewingSeries.value.id;
+  const currentIds = editablePhotos.value.map((p) => p.id);
+  const originalIds = originalPhotoIds.value;
+
+  const originalSet = new Set(originalIds);
+  const currentSet = new Set(currentIds);
+  const toRemove = originalIds.filter((id) => !currentSet.has(id));
+  const toAdd = currentIds.filter((id) => !originalSet.has(id));
+
+  isSaving.value = true;
   try {
-    await seriesStore.removePhotosFromSeries(
-      viewingSeries.value.id,
-      localSelectedPhotoIds.value,
+    if (toRemove.length > 0) {
+      await seriesStore.removePhotosFromSeries(seriesId, toRemove);
+    }
+    if (toAdd.length > 0) {
+      await seriesStore.addPhotosToSeries(seriesId, toAdd);
+    }
+    // Always push the final order so the server matches the local arrangement
+    await seriesStore.updatePhotoOrder(
+      seriesId,
+      currentIds.map((photoId, order) => ({ photoId, order })),
     );
-    message.success(
-      `Removed ${localSelectedPhotoIds.value.length} photo(s) from series`,
-    );
-    localClearAllSelections();
-    await refreshSeries();
+
+    message.success("Series saved");
+
+    // Re-sync snapshots from the updated store
+    await seriesStore.getOrFetch(true);
+    const fresh = seriesStore.getSeriesWithFullPhotos(seriesId, photosStore);
+    if (fresh) {
+      viewingSeries.value = fresh;
+      seriesStore.setCurrentSeries(fresh);
+      initEditableState(fresh);
+    }
   } catch (error) {
-    console.error("Error removing photos:", error);
+    console.error("Error saving series:", error);
+    message.error("Failed to save series");
+  } finally {
+    isSaving.value = false;
   }
 };
 
@@ -940,10 +1065,10 @@ const handleToolSelected = async (toolId, canvasId = null) => {
   // Ordenar los IDs según el orden de la serie para todas las herramientas
   let photoIds = localSelectedPhotoIds.value;
 
-  if (viewingSeries.value?.photos) {
+  if (editablePhotos.value?.length) {
     // Filtrar las fotos de la serie manteniendo solo las seleccionadas, en el orden correcto
     const selectedSet = new Set(photoIds);
-    photoIds = viewingSeries.value.photos
+    photoIds = editablePhotos.value
       .filter((photo) => selectedSet.has(photo.id))
       .map((photo) => photo.id);
 
@@ -959,6 +1084,12 @@ const openSeries = (series) => {
 };
 
 const backToSeries = () => {
+  if (hasChanges.value) {
+    const confirmLeave = window.confirm(
+      "You have unsaved changes. Leave without saving?",
+    );
+    if (!confirmLeave) return;
+  }
   // Clear suggestion tracking when leaving series detail
   recentlySuggestedPhotos.value.clear();
   discardedPhotosByContext.value.clear();
@@ -1111,7 +1242,7 @@ const updateViewingSeries = () => {
   if (id && allSeries.value.length > 0) {
     const series = seriesStore.getSeriesWithFullPhotos(id, photosStore);
     if (series) {
-      // If switching to a different series, clear tracking
+      // If switching to a different series, clear tracking & reset editable state
       if (viewingSeries.value?.id !== series.id) {
         recentlySuggestedPhotos.value.clear();
         discardedPhotosByContext.value.clear();
@@ -1119,12 +1250,25 @@ const updateViewingSeries = () => {
       viewingSeries.value = series;
       showSeriesView.value = true;
       seriesStore.setCurrentSeries(series);
+
+      // Initialize editable state only when loading a different series,
+      // so we don't clobber in-progress edits on unrelated store refreshes.
+      if (String(currentEditingSeriesId.value) !== String(series.id)) {
+        initEditableState(series);
+      }
       return;
     }
   }
   viewingSeries.value = null;
   showSeriesView.value = false;
   seriesStore.clearCurrentSeries();
+  if (currentEditingSeriesId.value !== null) {
+    editablePhotos.value = [];
+    originalPhotos.value = [];
+    originalPhotoIds.value = [];
+    removedPhotosHistory.value = [];
+    currentEditingSeriesId.value = null;
+  }
 };
 
 // Load public series by name for anonymous users

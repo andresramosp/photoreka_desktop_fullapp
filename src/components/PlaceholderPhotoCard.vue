@@ -1,8 +1,12 @@
 <template>
-  <div class="placeholder-photo-card" :style="cardStyle">
+  <div
+    class="placeholder-photo-card"
+    :class="{ compact: isCompact }"
+    :style="cardStyle"
+  >
     <!-- Remove/Close Button Overlay (always visible) -->
     <div class="placeholder-overlay">
-      <n-button size="small" @click.stop="handleClose">
+      <n-button :size="isCompact ? 'tiny' : 'small'" @click.stop="handleClose">
         <template #icon>
           <n-icon><TrashOutline /></n-icon>
         </template>
@@ -16,37 +20,44 @@
 
     <!-- Menu State -->
     <div v-else class="menu-content">
-      <n-button class="menu-option" @click.stop="handleAdd">
-        <template #icon>
-          <n-icon color="primary"><AddOutline /></n-icon>
-        </template>
-        Add photo
-      </n-button>
-
-      <n-button
-        class="menu-option"
-        :class="{ expanded: showSuggestSubmenu }"
-        @click.stop="toggleSuggestSubmenu"
-      >
-        <template #icon>
-          <n-icon color="orange"><SparklesOutline /></n-icon>
-        </template>
-        Get suggestion
-        <template #icon-right>
-          <n-icon :class="{ rotated: showSuggestSubmenu }">▶</n-icon>
-        </template>
-      </n-button>
-
-      <div v-if="showSuggestSubmenu" class="submenu">
-        <n-button
-          v-for="option in suggestionCriteriaOptions"
-          :key="option.value"
-          class="submenu-option"
-          size="small"
-          @click.stop="handleSuggest(option.value)"
-        >
-          {{ option.label }}
+      <!-- Main view -->
+      <template v-if="!showSuggestSubmenu">
+        <n-button class="menu-option" @click.stop="handleAdd">
+          <template #icon>
+            <n-icon color="primary"><AddOutline /></n-icon>
+          </template>
+          Add photo
         </n-button>
+
+        <n-button class="menu-option" @click.stop="toggleSuggestSubmenu">
+          <template #icon>
+            <n-icon color="orange"><SparklesOutline /></n-icon>
+          </template>
+          Get suggestion
+        </n-button>
+      </template>
+
+      <!-- Suggestion submenu view -->
+      <div v-else class="submenu-view">
+        <div class="submenu-header">
+          <n-button size="tiny" circle text @click.stop="toggleSuggestSubmenu">
+            <template #icon>
+              <n-icon><ArrowBackOutline /></n-icon>
+            </template>
+          </n-button>
+          <span v-if="!isCompact" class="submenu-title">Suggestion type</span>
+        </div>
+        <div class="submenu-list">
+          <n-button
+            v-for="option in suggestionCriteriaOptions"
+            :key="option.value"
+            class="submenu-option"
+            :size="isCompact ? 'tiny' : 'small'"
+            @click.stop="handleSuggest(option.value)"
+          >
+            {{ option.label }}
+          </n-button>
+        </div>
       </div>
     </div>
   </div>
@@ -55,7 +66,12 @@
 <script setup>
 import { ref, computed } from "vue";
 import { NButton, NIcon, NSpin } from "naive-ui";
-import { AddOutline, TrashOutline, SparklesOutline } from "@vicons/ionicons5";
+import {
+  AddOutline,
+  TrashOutline,
+  SparklesOutline,
+  ArrowBackOutline,
+} from "@vicons/ionicons5";
 
 const props = defineProps({
   size: {
@@ -81,6 +97,8 @@ const cardStyle = computed(() => ({
   height: `${props.size}px`,
   minWidth: `${props.size}px`,
 }));
+
+const isCompact = computed(() => props.size < 220);
 
 const toggleSuggestSubmenu = () => {
   showSuggestSubmenu.value = !showSuggestSubmenu.value;
@@ -135,6 +153,63 @@ const handleSuggest = (criteria) => {
   padding: 24px;
   width: 100%;
   max-width: 280px;
+  /* allow submenu-view to expand to card height */
+  align-self: stretch;
+}
+
+.compact .menu-content {
+  gap: 4px;
+  padding: 10px 8px;
+}
+
+/* Submenu full view */
+.submenu-view {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.submenu-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #2c2c32;
+}
+
+.submenu-title {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.submenu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.compact .submenu-view {
+  padding: 4px 4px 4px 2px;
+  gap: 2px;
+}
+
+.compact .submenu-header {
+  padding-bottom: 2px;
+  gap: 2px;
+}
+
+.compact .submenu-list {
+  gap: 2px;
 }
 
 /* Remove Button Overlay (like photos) */
@@ -145,6 +220,11 @@ const handleSuggest = (criteria) => {
   display: flex;
   gap: 4px;
   z-index: 10;
+}
+
+.compact .placeholder-overlay {
+  top: 4px;
+  right: 4px;
 }
 
 .menu-option {
@@ -159,51 +239,15 @@ const handleSuggest = (criteria) => {
   border: 1px solid #2c2c32;
 }
 
-.menu-option.expanded {
-  background: rgba(37, 99, 235, 0.15);
-  border-color: rgba(37, 99, 235, 0.3);
-}
-
-.menu-option :deep(.n-button__icon--right) {
-  margin-left: auto;
-  margin-right: 0;
-  font-size: 10px;
-}
-
-.menu-option :deep(.n-button__icon--right .rotated) {
-  transform: rotate(90deg);
-}
-
-.submenu {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid #2c2c32;
-  border-radius: 8px;
-  /* animation: submenuSlideIn 0.2s ease; */
-}
-
-@keyframes submenuSlideIn {
-  from {
-    opacity: 0;
-    max-height: 0;
-    /* transform: translateY(-10px); */
-  }
-  to {
-    opacity: 1;
-    max-height: 300px;
-    /* transform: translateY(0); */
-  }
+.compact .menu-option {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 6px;
 }
 
 .submenu-option {
   width: 100%;
   justify-content: center;
-  padding: 10px 16px;
-  font-size: 14px;
   border-radius: 6px;
   background: #1f1f23;
 }

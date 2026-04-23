@@ -323,6 +323,8 @@ const truncatedName = computed(() => {
   background-color: var(--bg-container);
   border: 2px solid transparent;
   transition: all 0.3s ease;
+  container-type: inline-size;
+  container-name: sequence-card;
 }
 
 /* Grid mode: aspect ratio 1:1 */
@@ -413,19 +415,45 @@ const truncatedName = computed(() => {
   pointer-events: none;
 }
 
-/* Order Badge (Series) */
+/* Order Badge (Series) — top-right sequence number, same style as photo-filename-topright */
 .order-badge {
   position: absolute;
-  top: -8px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--primary-color, #2563eb);
-  color: white;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 2px 10px;
-  border-radius: 10px;
-  z-index: 10;
+  top: -2px;
+  right: 2px;
+  color: var(--text-secondary);
+  font-size: 26px;
+  font-weight: 500;
+  border-radius: 0 12px 0 8px;
+  opacity: 0.65;
+  z-index: 2;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+  transition: opacity 0.2s ease;
+  white-space: nowrap;
+  letter-spacing: 0.025em;
+  user-select: none;
+}
+
+.photo-sequence-card:hover .order-badge {
+  opacity: 0;
+}
+
+@container sequence-card (max-width: 300px) {
+  .order-badge {
+    font-size: 18px;
+  }
+}
+
+@container sequence-card (max-width: 200px) {
+  .order-badge {
+    font-size: 14px;
+  }
+}
+
+@container sequence-card (max-width: 150px) {
+  .order-badge {
+    font-size: 13px;
+  }
 }
 
 /* Remove Button Overlay */

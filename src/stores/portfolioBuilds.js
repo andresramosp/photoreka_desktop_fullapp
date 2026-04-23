@@ -86,6 +86,26 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
       }
     },
 
+    /**
+     * Create a manually-curated (empty) portfolio. No AI build runs; the
+     * user will add photos through the detail view.
+     */
+    async createManual({ name, description }) {
+      this.isCreating = true;
+      try {
+        const response = await api.post("/api/portfolio-build/manual", {
+          name,
+          description,
+        });
+        return response.data;
+      } catch (error) {
+        console.error("[PortfolioBuildsStore] createManual error:", error);
+        throw error;
+      } finally {
+        this.isCreating = false;
+      }
+    },
+
     async getBuildStatus(buildId) {
       try {
         const response = await api.get(`/api/portfolio-build/${buildId}`);

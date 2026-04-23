@@ -130,6 +130,30 @@
       />
     </template>
 
+    <!-- Empty portfolio state (manual portfolios or after removing all photos) -->
+    <div
+      v-else-if="build && build.status === 'completed' && photos.length === 0"
+      class="empty-portfolio-state"
+    >
+      <n-icon :size="64" color="var(--text-tertiary)">
+        <ImagesOutline />
+      </n-icon>
+      <h3>This portfolio is empty</h3>
+      <p>
+        {{
+          isManualBuild
+            ? "Start adding photos to build your portfolio manually."
+            : "All photos have been removed. Add some back to continue."
+        }}
+      </p>
+      <n-button type="primary" @click="showAddPhotosDialog = true">
+        <template #icon>
+          <n-icon><AddOutline /></n-icon>
+        </template>
+        Add Photos
+      </n-button>
+    </div>
+
     <PortfolioAddPhotosDialog
       v-if="build"
       v-model="showAddPhotosDialog"
@@ -190,6 +214,8 @@ import {
   DownloadOutline,
   DocumentTextOutline,
   ImageOutline,
+  ImagesOutline,
+  AddOutline,
 } from "@vicons/ionicons5";
 import { h } from "vue";
 import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds";
@@ -267,13 +293,14 @@ const coherenceLabel = computed(() => {
 });
 
 const hasChanges = computed(() => {
-  if (!originalPhotoIds.value.length) return false;
   const currentIds = photos.value.map((p) => p.id);
   if (currentIds.length !== originalPhotoIds.value.length) return true;
   return currentIds.some((id, i) => id !== originalPhotoIds.value[i]);
 });
 
 const currentPhotoIds = computed(() => photos.value.map((p) => p.id));
+
+const isManualBuild = computed(() => Boolean(build.value?.config?.isManual));
 
 function handleAddPhotos(newPhotos) {
   if (!Array.isArray(newPhotos) || newPhotos.length === 0) return;
@@ -313,6 +340,10 @@ async function loadBuild(buildIdParam) {
       photos.value = data.result.photoItems.map((p) => ({ ...p }));
       originalPhotoIds.value = photos.value.map((p) => p.id);
       autoSelectColumns(photos.value.length);
+    } else if (data.status === "completed") {
+      // Empty (e.g. manual portfolio with no photos yet)
+      photos.value = [];
+      originalPhotoIds.value = [];
     }
   } catch (err) {
     console.error("[PortfolioDetailView] load error:", err);
@@ -504,6 +535,27 @@ function formatDate(isoStr) {
   gap: 16px;
   color: var(--text-secondary);
   text-align: center;
+}
+
+.empty-portfolio-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  gap: 16px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.empty-portfolio-state h3 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.empty-portfolio-state p {
+  margin: 0;
+  max-width: 420px;
 }
 
 .pending-state h3 {
