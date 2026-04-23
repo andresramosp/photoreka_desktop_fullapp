@@ -17,6 +17,16 @@ export type CoherenceMode = 'free' | 'visual' | 'chromatic' | 'narrative' | 'het
 
 export type PortfolioBuildConfig = {
   name?: string
+  /**
+   * Optional free-text description. Only used by manually-created portfolios
+   * (no AI build); the AI pipeline ignores this field.
+   */
+  description?: string
+  /**
+   * If true, this is a manually-curated portfolio: no AI build pipeline runs,
+   * photos are added/removed by the user through the detail view.
+   */
+  isManual?: boolean
   targetSize: number
   weights: Record<string, number>
   /**

@@ -155,6 +155,7 @@ export default class PortfolioBuildController {
           config: b.config,
           targetSize: b.config.targetSize,
           coherenceMode: b.config.coherenceMode,
+          isManual: Boolean(b.config.isManual),
           resultCount: b.result?.photoIds?.length ?? null,
           photoItems: b.result?.photoItems ?? null,
           costEur: Number(b.costEur),
@@ -331,6 +332,42 @@ export default class PortfolioBuildController {
       return response.ok(result)
     } catch (error: any) {
       console.error('[PortfolioBuildController] eligibility error:', error)
+      return response.internalServerError({ error: error.message })
+    }
+  }
+
+  /**
+   * POST /api/portfolio-build/manual
+   * Create a manually-curated (empty) portfolio. No AI pipeline runs.
+   * The user will add/remove photos through the detail view.
+   */
+  public async createManual({ request, response, auth }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as any
+
+      const body = request.body()
+      const rawName = typeof body.name === 'string' ? body.name.trim() : ''
+      if (rawName.length === 0) {
+        return response.badRequest({ error: 'name is required.' })
+      }
+      const name = rawName.slice(0, 200)
+
+      let description: string | undefined
+      if (typeof body.description === 'string' && body.description.trim().length > 0) {
+        description = body.description.trim().slice(0, 2000)
+      }
+
+      const service = new PortfolioBuildService()
+      const build = await service.createManual(user.id, name, description)
+
+      return response.ok({
+        success: true,
+        buildId: build.id,
+        status: build.status,
+      })
+    } catch (error: any) {
+      console.error('[PortfolioBuildController] createManual error:', error)
       return response.internalServerError({ error: error.message })
     }
   }

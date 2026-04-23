@@ -169,6 +169,7 @@ router
 
     // Portfolio Builder endpoints
     router.post('/api/portfolio-build/start', [PortfolioBuildController, 'start'])
+    router.post('/api/portfolio-build/manual', [PortfolioBuildController, 'createManual'])
     router.post('/api/portfolio-build/preview-style-weights', [
       PortfolioBuildController,
       'previewStyleWeights',

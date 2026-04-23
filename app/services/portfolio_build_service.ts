@@ -46,9 +46,9 @@ const REFINEMENT_MODEL = 'gpt-5.1' //'gpt-5.1'
 /** Cheap model used to parse freetext into structured filters. */
 const PARSE_MODEL = 'gemini-3.1-flash-lite-preview'
 /** Photos per batch in the iterative refinement pass. */
-const REFINEMENT_BATCH_SIZE = 10
+const REFINEMENT_BATCH_SIZE = 15
 /** Max fraction of photos the LLM may flag per batch (~15%). */
-const REFINEMENT_CUT_RATIO = 0.2
+const REFINEMENT_CUT_RATIO = 0.25
 /** Max refinement rounds before force-trimming by composite score. */
 const REFINEMENT_MAX_ROUNDS = 8
 /** Whether the sequencing option is available at all. */
@@ -276,6 +276,45 @@ export default class PortfolioBuildService {
    */
   public static getDefaultWeights(): Record<string, number> {
     return { ...STYLE_BASELINE_WEIGHTS }
+  }
+
+  /**
+   * Create a manually-curated (empty) portfolio. No AI pipeline runs — the
+   * user will add/remove photos through the detail view.
+   */
+  public async createManual(
+    userId: number,
+    name: string,
+    description?: string
+  ): Promise<PortfolioBuild> {
+    const config: PortfolioBuildConfig = {
+      name,
+      ...(description ? { description } : {}),
+      isManual: true,
+      targetSize: 0,
+      weights: {},
+      coherenceMode: 'free',
+      sequencing: false,
+    }
+
+    const now = DateTime.now()
+    const build = await PortfolioBuild.create({
+      userId,
+      status: 'completed',
+      config,
+      progress: 100,
+      costEur: 0,
+      result: {
+        photoIds: [],
+        photoItems: [],
+        recallSize: 0,
+        batchesEvaluated: 0,
+        totalCandidatesEvaluated: 0,
+      },
+      startedAt: now,
+      completedAt: now,
+    })
+    return build
   }
 
   /**
@@ -1161,6 +1200,18 @@ Only include fields that are clearly indicated by the user's text. If nothing is
       return gated
     }
 
+    const appendSelectedDecisions = (
+      batch: ScoredCandidate[],
+      decisions: BatchDecision[],
+      selectedCandidates: ScoredCandidate[]
+    ) => {
+      for (const decision of decisions) {
+        if (!decision.select) continue
+        const photo = batch.find((candidate) => candidate.id === decision.id)
+        if (photo) selectedCandidates.push(photo)
+      }
+    }
+
     const processBatch = async (batch: ScoredCandidate[], batchIdx: number) => {
       // Check if build was aborted
       if (aborted) return { batch, decisions: [] as BatchDecision[] }
@@ -1238,25 +1289,56 @@ Only include fields that are clearly indicated by the user's text. If nothing is
 
     const batchResults: Array<{ batch: ScoredCandidate[]; decisions: BatchDecision[] }> = []
     const allSelected: ScoredCandidate[] = []
+    let nextBatchIdx = 0
 
     if (EARLY_STOP) {
-      for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
-        const batchResult = await processBatch(batches[batchIdx], batchIdx)
+      for (; nextBatchIdx < batches.length; nextBatchIdx++) {
+        const batchResult = await processBatch(batches[nextBatchIdx], nextBatchIdx)
         batchResults.push(batchResult)
 
-        for (const decision of batchResult.decisions) {
-          if (!decision.select) continue
-          const photo = batchResult.batch.find((candidate) => candidate.id === decision.id)
-          if (photo) allSelected.push(photo)
-        }
+        appendSelectedDecisions(batchResult.batch, batchResult.decisions, allSelected)
 
         const gatedCount = applySimilarityGate(allSelected).length
         if (gatedCount >= evaluationTarget) {
           console.log(
-            `[PortfolioBuild] 🛑 Early stop reached after batch ${batchIdx + 1}/${batches.length}: ` +
+            `[PortfolioBuild] 🛑 Early stop reached after batch ${nextBatchIdx + 1}/${batches.length}: ` +
               `${gatedCount} gated selections for target ${evaluationTarget}`
           )
+          nextBatchIdx++
           break
+        }
+      }
+
+      let gatedAfterEarlyStop = applySimilarityGate(allSelected)
+      if (
+        !aborted &&
+        gatedAfterEarlyStop.length < evaluationTarget &&
+        nextBatchIdx < batches.length
+      ) {
+        console.log(
+          `[PortfolioBuild] 🔁 Post-gate top-up: ${gatedAfterEarlyStop.length}/${evaluationTarget} gated after early stop, evaluating remaining batches`
+        )
+
+        for (; nextBatchIdx < batches.length; nextBatchIdx++) {
+          const batchResult = await processBatch(batches[nextBatchIdx], nextBatchIdx)
+          batchResults.push(batchResult)
+          appendSelectedDecisions(batchResult.batch, batchResult.decisions, allSelected)
+
+          gatedAfterEarlyStop = applySimilarityGate(allSelected)
+          if (gatedAfterEarlyStop.length >= evaluationTarget) {
+            console.log(
+              `[PortfolioBuild] ✅ Top-up reached evaluation target after batch ${nextBatchIdx + 1}/${batches.length}: ` +
+                `${gatedAfterEarlyStop.length} gated selections`
+            )
+            nextBatchIdx++
+            break
+          }
+        }
+
+        if (gatedAfterEarlyStop.length < evaluationTarget) {
+          console.log(
+            `[PortfolioBuild] ℹ️ Top-up exhausted remaining batches: ${gatedAfterEarlyStop.length}/${evaluationTarget} gated selections`
+          )
         }
       }
     } else {
@@ -1267,11 +1349,7 @@ Only include fields that are clearly indicated by the user's text. If nothing is
       batchResults.push(...concurrentResults)
 
       for (const { batch, decisions } of batchResults) {
-        for (const decision of decisions) {
-          if (!decision.select) continue
-          const photo = batch.find((candidate) => candidate.id === decision.id)
-          if (photo) allSelected.push(photo)
-        }
+        appendSelectedDecisions(batch, decisions, allSelected)
       }
     }
 
@@ -1605,7 +1683,7 @@ Return JSON: { "decisions": [ { "id": <number>, "analysis": "<one sentence asses
   ): Promise<{ notes?: string; flaggedIds: number[] }> {
     const coherenceInstruction = this.getCoherencePromptModifier(config.coherenceMode)
 
-    const systemPrompt = `You are a portfolio curator performing an iterative refinement of a photography portfolio.
+    const systemPrompt = `You are a portfolio curator performing an iterative refinement of a photography portfolio already short-listed.
 
 ## Portfolio context
 ${globalContext}
