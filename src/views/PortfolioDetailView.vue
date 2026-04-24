@@ -308,7 +308,11 @@ function handleAddPhotos(newPhotos) {
   const toAdd = newPhotos.filter((p) => p && p.id && !existing.has(p.id));
   if (toAdd.length === 0) return;
   photos.value.push(
-    ...toAdd.map((p) => ({ id: p.id, thumbnailUrl: p.thumbnailUrl })),
+    ...toAdd.map((p) => ({
+      id: p.id,
+      thumbnailUrl: p.thumbnailUrl,
+      originalUrl: p.originalUrl,
+    })),
   );
   message.success(
     `Added ${toAdd.length} ${toAdd.length === 1 ? "photo" : "photos"}`,
