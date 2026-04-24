@@ -255,9 +255,10 @@ export function getDefaultGenreFromProfile(profile) {
 
   if (!profile) return "general";
 
-  // Street always wins for compound profiles.
-  if (profile.includes("|")) return "street";
+  // Street always wins if it's present anywhere in compound profiles
+  if (profile.includes("street-photography")) return "street";
 
+  // Otherwise use the first profile
   const primary = profile.split("|")[0];
   return profileToGenre[primary] || "general";
 }
