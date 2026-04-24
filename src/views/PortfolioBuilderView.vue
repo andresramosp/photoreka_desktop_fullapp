@@ -63,12 +63,12 @@
             </template>
             Build a new portfolio
           </n-button>
-          <n-button size="large" @click="openManualDialog">
+          <!-- <n-button size="large" @click="openManualDialog">
             <template #icon>
               <n-icon><CreateOutline /></n-icon>
             </template>
             Create Manually
-          </n-button>
+          </n-button> -->
         </div>
       </div>
     </div>
