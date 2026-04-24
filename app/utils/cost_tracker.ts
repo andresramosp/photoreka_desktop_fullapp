@@ -101,6 +101,57 @@ export class CostTracker {
   getTotal(): number {
     return this.entries.reduce((sum, e) => sum + e.costInEur, 0)
   }
+
+  /**
+   * Vacía las entries acumuladas. Útil tras persistir/enviar el resumen de un
+   * intento, para que el siguiente intento registre solo su delta.
+   */
+  reset(): void {
+    this.entries = []
+  }
+}
+
+/**
+ * Combina dos CostSummary en uno nuevo. Se usa para acumular el coste real de
+ * un proceso a lo largo de varios intentos (retries) sin sobreescribir el
+ * resumen anterior.
+ *
+ * Asume misma `category`; si difieren, prevalece la de `a` (base).
+ */
+export function mergeCostSummaries(
+  a: CostSummary | null | undefined,
+  b: CostSummary | null | undefined
+): CostSummary | null {
+  if (!a && !b) return null
+  if (!a) return { ...b!, entries: [...b!.entries] }
+  if (!b) return { ...a, entries: [...a.entries] }
+
+  const round = (n: number) => Math.round(n * 1_000_000) / 1_000_000
+  const mergedEntries: CostEntry[] = [...a.entries, ...b.entries]
+
+  const byTask: Record<string, { costInEur: number; calls: number }> = {}
+  const byModel: Record<string, { costInEur: number; calls: number }> = {}
+
+  for (const e of mergedEntries) {
+    if (!byTask[e.task]) byTask[e.task] = { costInEur: 0, calls: 0 }
+    byTask[e.task].costInEur += e.costInEur
+    byTask[e.task].calls++
+
+    if (!byModel[e.model]) byModel[e.model] = { costInEur: 0, calls: 0 }
+    byModel[e.model].costInEur += e.costInEur
+    byModel[e.model].calls++
+  }
+  for (const v of Object.values(byTask)) v.costInEur = round(v.costInEur)
+  for (const v of Object.values(byModel)) v.costInEur = round(v.costInEur)
+
+  return {
+    category: a.category,
+    totalCostInEur: round(a.totalCostInEur + b.totalCostInEur),
+    totalCalls: a.totalCalls + b.totalCalls,
+    entries: mergedEntries,
+    byTask,
+    byModel,
+  }
 }
 
 // ─── Proxy-based transparent tracking ────────────────────

@@ -25,6 +25,7 @@ import UserCostService from '#services/user_cost_service'
 import User from '#models/user'
 import MailService from '#services/mail_service'
 import { analysisCompleteTemplate } from '../utils/email_templates.js'
+import { mergeCostSummaries } from '../utils/cost_tracker.js'
 
 const logger = Logger.getInstance('AnalyzerProcess')
 logger.setLevel(LogLevel.DEBUG)
@@ -171,18 +172,27 @@ export default class AnalyzerProcessRunner {
     await invalidateCache(`getTagsByUser_${processUserId}`)
 
     // Persistir cost report
-    this.process.costReport = this.process.costTracker.getSummary()
+    // El tracker contiene solo las entries del intento actual (se reseteó al
+    // final del intento anterior, si lo hubo). Acumulamos sobre costReport
+    // para que refleje TODO el trabajo real del proceso a través de retries.
+    const attemptSummary = this.process.costTracker.getSummary()
+    const cumulativeReport = mergeCostSummaries(this.process.costReport, attemptSummary)
+    this.process.costReport = cumulativeReport
     await this.process.save()
 
     // Registrar coste en el historial del usuario
     // (incluido admin_retry: el coste es real, solo no se descuenta del crédito del usuario)
-    if (this.process.userId) {
-      UserCostService.recordFromTracker(
-        this.process.userId,
-        this.process.costTracker,
-        this.process.id
-      ).catch(() => {})
+    // Enviamos solo el delta del intento actual (attemptSummary) para no
+    // triplicar el coste en el histórico del usuario / cost_logs en cada retry.
+    if (this.process.userId && attemptSummary.totalCostInEur > 0) {
+      UserCostService.recordSummary(this.process.userId, attemptSummary, this.process.id).catch(
+        () => {}
+      )
     }
+
+    // Reset del tracker para que el siguiente intento (auto-retry) registre
+    // solo su propio delta en vez de volver a acumular desde cero.
+    this.process.costTracker.reset()
 
     // Limpiar cache de health solo si se precargó
     if (this.process.mode === 'retry_process' || this.process.mode === 'admin_retry') {

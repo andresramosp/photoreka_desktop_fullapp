@@ -1,6 +1,6 @@
 import User from '#models/user'
 import CostLog from '#models/cost_log'
-import type { CostCategory, CostTracker } from '../utils/cost_tracker.js'
+import type { CostCategory, CostSummary, CostTracker } from '../utils/cost_tracker.js'
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -78,8 +78,20 @@ export default class UserCostService {
     tracker: CostTracker,
     referenceId?: string
   ): Promise<void> {
-    const summary = tracker.getSummary()
-    if (summary.totalCostInEur <= 0) return
+    return this.recordSummary(userId, tracker.getSummary(), referenceId)
+  }
+
+  /**
+   * Record cost directly from a CostSummary (already aggregated).
+   * Útil cuando la capa superior calcula el "delta" real de un intento y no
+   * quiere que se vuelva a acumular el tracker entre retries.
+   */
+  static async recordSummary(
+    userId: number,
+    summary: CostSummary,
+    referenceId?: string
+  ): Promise<void> {
+    if (!userId || summary.totalCostInEur <= 0) return
 
     // Update accumulated user history (single aggregated call)
     const user = await User.find(userId)
