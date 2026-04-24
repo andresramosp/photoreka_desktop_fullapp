@@ -241,7 +241,8 @@ const genrePresets = Object.fromEntries(
 
 /**
  * Map a UserProfile string to the corresponding genre preset key.
- * Compound profiles always resolve to the street preset.
+ * Only uses specific genre when profile is a single, non-compound value.
+ * Returns "general" for compound profiles or unrecognized values.
  * @param {string|undefined|null} profile - The user profile from userStore
  * @returns {string} - The genre preset key
  */
@@ -255,12 +256,11 @@ export function getDefaultGenreFromProfile(profile) {
 
   if (!profile) return "general";
 
-  // Street always wins if it's present anywhere in compound profiles
-  if (profile.includes("street-photography")) return "street";
+  // If it's a compound profile (contains |), always return general
+  if (profile.includes("|")) return "general";
 
-  // Otherwise use the first profile
-  const primary = profile.split("|")[0];
-  return profileToGenre[primary] || "general";
+  // Only map single, non-compound profiles
+  return profileToGenre[profile] || "general";
 }
 
 export function useArtisticScores() {
