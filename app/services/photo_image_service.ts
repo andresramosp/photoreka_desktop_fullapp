@@ -1,23 +1,7 @@
 import sharp from 'sharp'
 import Logger, { LogLevel } from '../utils/logger.js'
 import Photo from '#models/photo'
-
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
-
-const s3 = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY!,
-    secretAccessKey: process.env.R2_SECRET_KEY!,
-  },
-  requestChecksumCalculation: 'WHEN_REQUIRED',
-  responseChecksumValidation: 'WHEN_REQUIRED',
-  requestHandler: {
-    requestTimeout: 30_000,
-    httpsAgent: { maxSockets: 25 },
-  } as any,
-})
+import axios from 'axios'
 
 const logger = Logger.getInstance('PhotoImageService')
 logger.setLevel(LogLevel.DEBUG)
@@ -34,23 +18,33 @@ export default class PhotoImageService {
     return PhotoImageService.instance
   }
 
+  private getWorkerImageUrl(filename: string): string {
+    return `https://${process.env.IMAGES_WORKER}/${filename}`
+  }
+
+  private async downloadImageBuffer(filename: string): Promise<Buffer> {
+    const imageUrl = this.getWorkerImageUrl(filename)
+
+    try {
+      const response = await axios.get(imageUrl, {
+        responseType: 'arraybuffer',
+        timeout: 30_000,
+      })
+
+      return Buffer.from(response.data)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      logger.debug(`Error descargando imagen ${filename} desde worker: ${errorMessage}`)
+      throw new Error(`No se encontró el archivo ${filename} en worker de imágenes`)
+    }
+  }
+
   // @withCache({ provider: 'redis', ttl: 60 * 5 })
   public async getImageBase64FromR2(
     filename: string,
     withGuideLines: boolean = false
   ): Promise<String> {
-    const command = new GetObjectCommand({
-      Bucket: process.env.R2_BUCKET!,
-      Key: filename,
-    })
-
-    const s3Response = await s3.send(command)
-
-    if (!s3Response.Body) {
-      throw new Error(`No se encontró el archivo ${filename} en R2`)
-    }
-
-    const buffer = Buffer.from(await s3Response.Body.transformToByteArray())
+    const buffer = await this.downloadImageBuffer(filename)
 
     // Si no se necesitan líneas guía, devolver el buffer original
     if (!withGuideLines) {
@@ -81,20 +75,7 @@ export default class PhotoImageService {
   }
 
   public async getImageBufferFromR2(filename: string): Promise<Buffer> {
-    const command = new GetObjectCommand({
-      Bucket: process.env.R2_BUCKET!,
-      Key: filename,
-    })
-
-    const s3Response = await s3.send(command, {
-      abortSignal: AbortSignal.timeout(30_000),
-    })
-
-    if (!s3Response.Body) {
-      throw new Error(`No se encontró el archivo ${filename} en R2`)
-    }
-
-    return Buffer.from(await s3Response.Body.transformToByteArray())
+    return this.downloadImageBuffer(filename)
   }
 
   // public async getPhotoImages(
@@ -221,7 +202,8 @@ export default class PhotoImageService {
           base64: base64 as string,
         })
       } catch (error) {
-        logger.debug(`No se pudo obtener la imagen ${photo.name} desde R2:`, error)
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        logger.debug(`No se pudo obtener la imagen ${photo.name} desde worker: ${errorMessage}`)
       }
     }
 
@@ -242,7 +224,10 @@ export default class PhotoImageService {
           base64: base64 as string,
         })
       } catch (error) {
-        logger.debug(`No se pudo obtener la imagen ${photo.thumbnailName} desde R2:`, error)
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        logger.debug(
+          `No se pudo obtener la imagen ${photo.thumbnailName} desde worker: ${errorMessage}`
+        )
       }
     }
 

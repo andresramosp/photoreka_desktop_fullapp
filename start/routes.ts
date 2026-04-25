@@ -218,69 +218,105 @@ router
         return response.badRequest('No photos found for given ids')
       }
 
+      const sharp = (await import('sharp')).default
+
+      const toJpgName = (name: string, fallback = 'photo.jpg') => {
+        const base = (name || fallback).replace(/\.[^.]+$/, '')
+        return `${base}.jpg`
+      }
+
       // Si es solo una foto
       if (photos.length === 1) {
         const photo = photos[0]
+
         try {
-          const imgResponse = await axios.get(photo.originalUrl, { responseType: 'stream' })
-          const filename = photo.originalFileName || 'photo.jpg'
+          const imgResponse = await axios.get(photo.originalUrl, {
+            responseType: 'arraybuffer',
+          })
+
+          const jpegBuffer = await sharp(imgResponse.data)
+            .jpeg({
+              quality: 90,
+              mozjpeg: true,
+              chromaSubsampling: '4:4:4',
+            })
+            .toBuffer()
+
+          const filename = toJpgName(photo.originalFileName)
 
           // CORS headers
           response.header('Access-Control-Allow-Origin', '*')
           response.header('Access-Control-Expose-Headers', 'Content-Disposition')
 
           response.header('Content-Disposition', `attachment; filename="${filename}"`)
-          response.header(
-            'Content-Type',
-            imgResponse.headers['content-type'] || 'application/octet-stream'
-          )
-          return response.stream(imgResponse.data)
+          response.header('Content-Type', 'image/jpeg')
+          response.header('Content-Length', jpegBuffer.length)
+
+          return response.send(jpegBuffer)
         } catch (err) {
-          response.status(500).send('Error downloading image')
+          console.error(err)
+          return response.status(500).send('Error downloading image')
         }
-        return
       }
 
       // Si son varias fotos
-      // CORS headers
       response.header('Access-Control-Allow-Origin', '*')
       response.header('Access-Control-Expose-Headers', 'Content-Disposition')
 
       response.header('Content-Disposition', 'attachment; filename="photos.zip"')
       response.header('Content-Type', 'application/zip')
 
-      const archive = archiver('zip', { zlib: { level: 9 } })
-      archive.on('error', () => {
+      const archive = archiver('zip', {
+        zlib: { level: 9 },
+      })
+
+      archive.on('error', (err) => {
+        console.error(err)
         response.status(500).send('Error creating zip')
       })
 
-      // Stream the zip archive through AdonisJS response to preserve headers
+      // Stream zip al cliente
       response.stream(archive)
 
-      // Limitar concurrencia de descargas a 3 usando p-limit
+      // Limitar concurrencia
       const limit = pLimit(3)
+
       await Promise.all(
         photos.map((photo, idx) =>
           limit(async () => {
             try {
-              console.log(
-                `[ZIP] Descargando foto ${idx + 1}/${photos.length}: ${photo.originalUrl}`
-              )
-              const imgResponse = await axios.get(photo.originalUrl, { responseType: 'stream' })
-              const filename = photo.originalFileName || `photo_${idx + 1}.jpg`
-              archive.append(imgResponse.data, { name: filename })
+              console.log(`[ZIP] Procesando foto ${idx + 1}/${photos.length}: ${photo.originalUrl}`)
+
+              const imgResponse = await axios.get(photo.originalUrl, {
+                responseType: 'arraybuffer',
+              })
+
+              const jpegBuffer = await sharp(imgResponse.data)
+                .jpeg({
+                  quality: 90,
+                  mozjpeg: true,
+                  chromaSubsampling: '4:4:4',
+                })
+                .toBuffer()
+
+              const filename = toJpgName(photo.originalFileName, `photo_${idx + 1}.jpg`)
+
+              archive.append(jpegBuffer, { name: filename })
             } catch (err) {
-              console.error(`[ZIP] Error descargando o agregando foto:`, err)
-              // Si una imagen falla, la ignoramos
+              console.error(`[ZIP] Error convirtiendo/agregando foto:`, err)
+              // Si una falla, se ignora
             }
           })
         )
       )
+
       console.log('[ZIP] Todas las fotos agregadas, finalizando zip...')
-      archive.finalize()
+      await archive.finalize()
+
       response.response.on('close', () => {
         console.log('[ZIP] Zip finalizado y enviado')
       })
+
       return
     })
   })

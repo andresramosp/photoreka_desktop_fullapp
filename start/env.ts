@@ -19,6 +19,9 @@ const schema = {
   GOOGLE_CLIENT_SECRET: Env.schema.string(),
   GOOGLE_OAUTH_REDIRECT_URI: Env.schema.string(),
   FRONTEND_URL: Env.schema.string(),
+  IMAGES_WORKER: Env.schema.string.optional(),
+  R2_UPLOAD_WORKER_URL: Env.schema.string.optional(),
+  R2_UPLOAD_WORKER_SECRET: Env.schema.string.optional(),
   REGISTRATION_MODE: Env.schema.enum.optional(['open', 'waiting_list'] as const),
 }
 

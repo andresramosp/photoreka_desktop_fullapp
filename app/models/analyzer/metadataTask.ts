@@ -1,29 +1,15 @@
 import { AnalyzerTask } from './analyzerTask.js'
 import Logger, { LogLevel } from '../../utils/logger.js'
 import Photo from '#models/photo'
+import PhotoImageService from '#services/photo_image_service'
 import PhotoManager from '../../managers/photo_manager.js'
-import { S3Client, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
 import sharp from 'sharp'
-import axios from 'axios'
 import { computeDHash } from '../../utils/dhash.js'
 
 const logger = Logger.getInstance('AnalyzerProcess', 'MetadataTask')
 logger.setLevel(LogLevel.DEBUG)
 
-const s3 = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  requestHandler: {
-    requestTimeout: 30_000,
-    httpsAgent: { maxSockets: 25 },
-  } as any,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY!,
-    secretAccessKey: process.env.R2_SECRET_KEY!,
-  },
-  requestChecksumCalculation: 'WHEN_REQUIRED',
-  responseChecksumValidation: 'WHEN_REQUIRED',
-})
+const photoImageService = PhotoImageService.getInstance()
 
 interface PhotoMetadata {
   orientation: string[]
@@ -225,33 +211,8 @@ export class MetadataTask extends AnalyzerTask {
 
   private async extractPhotoMetadata(photo: Photo): Promise<PhotoMetadata> {
     try {
-      // Obtener información básica del archivo desde S3
-      const headCommand = new HeadObjectCommand({
-        Bucket: process.env.R2_BUCKET!,
-        Key: photo.name,
-      })
-
-      const s3Head = await s3.send(headCommand)
-      const fileSize = s3Head.ContentLength || 0
-
-      // Obtener el buffer de la imagen para analizar metadatos
-      const command = new GetObjectCommand({
-        Bucket: process.env.R2_BUCKET!,
-        Key: photo.name,
-      })
-
-      const s3Response = await s3.send(command)
-
-      if (!s3Response.Body) {
-        throw new Error(`No se encontró el archivo ${photo.name} en R2`)
-      }
-
-      // Convertir stream a buffer de forma eficiente
-      const chunks: Buffer[] = []
-      for await (const chunk of s3Response.Body as any) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-      }
-      const buffer = Buffer.concat(chunks)
+      const buffer = await photoImageService.getImageBufferFromR2(photo.name)
+      const fileSize = buffer.length
 
       // Usar sharp para obtener metadatos de la imagen
       const sharpMetadata = await sharp(buffer).metadata()
@@ -291,15 +252,11 @@ export class MetadataTask extends AnalyzerTask {
         orientation = 'square'
       }
 
-      // Limpiar buffer para liberar memoria
-      chunks.length = 0
-
       // Generar dHash a partir del thumbnail público (solo si no existe ya)
       let dhash: string | undefined = photo.dhash ?? undefined
       if (!dhash) {
         try {
-          const thumbRes = await axios.get(photo.thumbnailUrl, { responseType: 'arraybuffer' })
-          const thumbBuffer = Buffer.from(thumbRes.data)
+          const thumbBuffer = await photoImageService.getImageBufferFromR2(photo.thumbnailName)
           dhash = await computeDHash(thumbBuffer)
         } catch (err) {
           logger.error(`Error generando dHash para foto ${photo.id}: ${errorMessage(err)}`)

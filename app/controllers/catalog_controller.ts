@@ -39,11 +39,14 @@ const s3 = new S3Client({
   responseChecksumValidation: 'WHEN_REQUIRED',
 })
 
+const UPLOAD_URL_TTL_SECONDS = 60 * 15
+
 export default class CatalogController {
   /**
-   * Genera URLs firmadas para subir a R2
+   * Genera URLs firmadas S3 para subir a R2.
+   * Se mantiene como fallback mientras se despliega el Worker de subida.
    */
-  private async generateSignedUrls(key: string, thumbnailKey: string, contentType: string) {
+  private async generateS3SignedUrls(key: string, thumbnailKey: string, contentType: string) {
     const originalCommand = new PutObjectCommand({
       Bucket: process.env.R2_BUCKET,
       Key: key,
@@ -62,13 +65,69 @@ export default class CatalogController {
     ])
   }
 
+  private getUploadWorkerBaseUrl(): string | null {
+    const rawBaseUrl = process.env.R2_UPLOAD_WORKER_URL || process.env.IMAGES_WORKER
+    if (!rawBaseUrl || !process.env.R2_UPLOAD_WORKER_SECRET) {
+      return null
+    }
+
+    const trimmedBaseUrl = rawBaseUrl.trim().replace(/\/+$/, '')
+    if (trimmedBaseUrl.startsWith('http://') || trimmedBaseUrl.startsWith('https://')) {
+      return trimmedBaseUrl
+    }
+
+    return `https://${trimmedBaseUrl}`
+  }
+
+  private buildUploadWorkerSignature(key: string, contentType: string, expiresAt: number): string {
+    const secret = process.env.R2_UPLOAD_WORKER_SECRET
+    if (!secret) {
+      throw new Error('R2 upload worker secret is not configured')
+    }
+
+    return crypto
+      .createHmac('sha256', secret)
+      .update(`${key}\n${contentType}\n${expiresAt}`)
+      .digest('hex')
+  }
+
+  private buildUploadWorkerUrl(key: string, contentType: string): string | null {
+    const uploadWorkerBaseUrl = this.getUploadWorkerBaseUrl()
+    if (!uploadWorkerBaseUrl) {
+      return null
+    }
+
+    const expiresAt = Math.floor(Date.now() / 1000) + UPLOAD_URL_TTL_SECONDS
+    const uploadUrl = new URL(`/upload/${encodeURIComponent(key)}`, `${uploadWorkerBaseUrl}/`)
+
+    uploadUrl.searchParams.set('contentType', contentType)
+    uploadUrl.searchParams.set('expires', String(expiresAt))
+    uploadUrl.searchParams.set(
+      'signature',
+      this.buildUploadWorkerSignature(key, contentType, expiresAt)
+    )
+
+    return uploadUrl.toString()
+  }
+
+  private async generateUploadUrls(key: string, thumbnailKey: string, contentType: string) {
+    const uploadUrl = this.buildUploadWorkerUrl(key, contentType)
+    const thumbnailUploadUrl = this.buildUploadWorkerUrl(thumbnailKey, contentType)
+
+    if (uploadUrl && thumbnailUploadUrl) {
+      return [uploadUrl, thumbnailUploadUrl] as const
+    }
+
+    return this.generateS3SignedUrls(key, thumbnailKey, contentType)
+  }
+
   /**
    * Genera claves únicas para las fotos
    */
   private generatePhotoKeys(fileType?: string) {
     const id = crypto.randomUUID()
-    const extension = fileType?.includes('jpeg')
-      ? '.jpg'
+    const extension = fileType?.includes('webp')
+      ? '.webp'
       : fileType?.includes('png')
         ? '.png'
         : '.jpg'
@@ -123,8 +182,13 @@ export default class CatalogController {
         return response.badRequest({ message: 'Faltan datos' })
       }
 
+      const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+      if (!ALLOWED_MIME_TYPES.includes(fileType)) {
+        return response.badRequest({ message: 'Tipo de archivo no permitido' })
+      }
+
       const { key, thumbnailKey } = this.generatePhotoKeys(fileType)
-      const [uploadUrl, thumbnailUploadUrl] = await this.generateSignedUrls(
+      const [uploadUrl, thumbnailUploadUrl] = await this.generateUploadUrls(
         key,
         thumbnailKey,
         fileType
@@ -151,7 +215,7 @@ export default class CatalogController {
         photo,
       })
     } catch (error) {
-      console.error('Error generando URLs firmadas:', error)
+      console.error('Error preparando URLs de subida:', error)
       return response.internalServerError({ message: 'Error generando URLs' })
     }
   }
