@@ -112,6 +112,7 @@ import { ref, computed } from "vue";
 import { NModal, NButton, NIcon } from "naive-ui";
 import { ImagesOutline } from "@vicons/ionicons5";
 import pica from "pica";
+import { UPLOAD_MIME, UPLOAD_QUALITY_INITIAL } from "@/config/uploadConfig.js";
 
 const props = defineProps({
   modelValue: {
@@ -154,7 +155,7 @@ const handleFileSelect = (event) => {
 const handleDrop = (event) => {
   isDragOver.value = false;
   const files = Array.from(event.dataTransfer.files).filter((file) =>
-    file.type.startsWith("image/")
+    file.type.startsWith("image/"),
   );
   processFiles(files);
 };
@@ -210,7 +211,11 @@ async function resizeImage(file, targetWidth) {
   canvas.height = img.height * scale;
 
   await picaInstance.resize(img, canvas);
-  const blob = await picaInstance.toBlob(canvas, "image/jpeg", 0.9);
+  const blob = await picaInstance.toBlob(
+    canvas,
+    UPLOAD_MIME,
+    UPLOAD_QUALITY_INITIAL,
+  );
   return blob;
 }
 
