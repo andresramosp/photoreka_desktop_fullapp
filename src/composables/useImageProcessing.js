@@ -7,6 +7,11 @@
 //
 import { ref } from "vue";
 import pica from "pica";
+import {
+  UPLOAD_MIME,
+  UPLOAD_QUALITY_INITIAL,
+  UPLOAD_QUALITY_DECREMENT,
+} from "@/config/uploadConfig.js";
 
 export function useImageProcessing() {
   const picaInstance = pica();
@@ -19,7 +24,7 @@ export function useImageProcessing() {
       // Detectar errores específicos de protección de fingerprinting o canvas
       console.warn(
         "⚠️ Pica failed due to browser restrictions, using step-down fallback:",
-        error.message
+        error.message,
       );
       return await resizeWithStepDown(file, targetWidth, maxSizeBytes);
       // Re-lanzar otros errores
@@ -39,19 +44,23 @@ export function useImageProcessing() {
 
     // Si maxSizeBytes es null, usar calidad fija como antes
     if (!maxSizeBytes) {
-      const blob = await picaInstance.toBlob(canvas, "image/jpeg", 0.9);
+      const blob = await picaInstance.toBlob(
+        canvas,
+        UPLOAD_MIME,
+        UPLOAD_QUALITY_INITIAL,
+      );
       return blob;
     }
 
     // Compresión iterativa para no superar el tamaño máximo
-    let quality = 0.9;
+    let quality = UPLOAD_QUALITY_INITIAL;
     let blob;
     let attempts = 0;
     const maxAttempts = 10;
-    const qualityDecrement = 0.1;
+    const qualityDecrement = UPLOAD_QUALITY_DECREMENT;
 
     do {
-      blob = await picaInstance.toBlob(canvas, "image/jpeg", quality);
+      blob = await picaInstance.toBlob(canvas, UPLOAD_MIME, quality);
 
       if (blob.size <= maxSizeBytes || attempts >= maxAttempts) {
         break;
@@ -89,7 +98,7 @@ export function useImageProcessing() {
       const stepWidth = Math.max(targetWidth, Math.floor(currentWidth * 0.5));
       const stepHeight = Math.max(
         targetHeight,
-        Math.floor(currentHeight * 0.5)
+        Math.floor(currentHeight * 0.5),
       );
 
       const stepCanvas = document.createElement("canvas");
@@ -127,20 +136,20 @@ export function useImageProcessing() {
     // Manejar compresión con control de tamaño
     if (!maxSizeBytes) {
       return new Promise((resolve) => {
-        finalCanvas.toBlob(resolve, "image/jpeg", 0.9);
+        finalCanvas.toBlob(resolve, UPLOAD_MIME, UPLOAD_QUALITY_INITIAL);
       });
     }
 
     // Compresión iterativa para controlar el tamaño
-    let quality = 0.9;
+    let quality = UPLOAD_QUALITY_INITIAL;
     let blob;
     let attempts = 0;
     const maxAttempts = 10;
-    const qualityDecrement = 0.1;
+    const qualityDecrement = UPLOAD_QUALITY_DECREMENT;
 
     do {
       blob = await new Promise((resolve) => {
-        finalCanvas.toBlob(resolve, "image/jpeg", quality);
+        finalCanvas.toBlob(resolve, UPLOAD_MIME, quality);
       });
 
       if (blob.size <= maxSizeBytes || attempts >= maxAttempts) {
@@ -182,7 +191,7 @@ export function useImageProcessing() {
       } catch (error) {
         console.error("❌ Error creating object URL:", error);
         reject(
-          new Error(`Failed to create object URL for image: ${file.name}`)
+          new Error(`Failed to create object URL for image: ${file.name}`),
         );
       }
     });
@@ -194,12 +203,12 @@ export function useImageProcessing() {
     blob,
     fileName,
     type,
-    maxRetries = 3
+    maxRetries = 3,
   ) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         console.log(
-          `🔄 Uploading ${type} for ${fileName} (attempt ${attempt}/${maxRetries})`
+          `🔄 Uploading ${type} for ${fileName} (attempt ${attempt}/${maxRetries})`,
         );
 
         const response = await fetch(url, {
@@ -226,7 +235,7 @@ export function useImageProcessing() {
       } catch (error) {
         console.error(
           `❌ Upload attempt ${attempt} failed for ${type} of ${fileName}:`,
-          error
+          error,
         );
 
         // Log específico para problemas de compatibilidad
@@ -239,7 +248,7 @@ export function useImageProcessing() {
 
         if (attempt === maxRetries) {
           throw new Error(
-            `Failed to upload ${type} for ${fileName} after ${maxRetries} attempts: ${error.message}`
+            `Failed to upload ${type} for ${fileName} after ${maxRetries} attempts: ${error.message}`,
           );
         }
 

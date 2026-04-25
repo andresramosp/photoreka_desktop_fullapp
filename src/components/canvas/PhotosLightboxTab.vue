@@ -228,6 +228,7 @@ import { computed, ref } from "vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import pLimit from "p-limit";
 import pica from "pica";
+import { UPLOAD_MIME, UPLOAD_QUALITY_INITIAL } from "@/config/uploadConfig.js";
 import PhotoCardHub from "../photoCards/PhotoCardHub.vue";
 import { NButton, NProgress, NIcon } from "naive-ui";
 import { api_analyzer, api } from "@/utils/axios";
@@ -385,7 +386,11 @@ async function resizeImage(file, targetWidth) {
   canvas.height = img.height * scale;
 
   await picaInstance.resize(img, canvas);
-  const blob = await picaInstance.toBlob(canvas, "image/jpeg", 0.9);
+  const blob = await picaInstance.toBlob(
+    canvas,
+    UPLOAD_MIME,
+    UPLOAD_QUALITY_INITIAL,
+  );
   return blob;
 }
 
@@ -630,7 +635,11 @@ async function resizeImageFromBlob(blob, targetWidth) {
   canvas.height = img.height * scale;
 
   await picaInstance.resize(img, canvas);
-  const resizedBlob = await picaInstance.toBlob(canvas, "image/jpeg", 0.9);
+  const resizedBlob = await picaInstance.toBlob(
+    canvas,
+    UPLOAD_MIME,
+    UPLOAD_QUALITY_INITIAL,
+  );
   return resizedBlob;
 }
 
