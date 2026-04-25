@@ -37,6 +37,115 @@ interface PhotoMetadata {
   dhash?: string
 }
 
+const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error))
+
+export const detectImagePalette = async (buffer: Buffer): Promise<string[]> => {
+  try {
+    const metadata = await sharp(buffer).metadata()
+
+    if (metadata.channels && metadata.channels <= 1) {
+      return ['black and white']
+    }
+
+    // Trabajamos en raw RGB, tamaño moderado
+    const { data } = await sharp(buffer)
+      .resize(128, 128, { fit: 'inside' })
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true })
+
+    let validPixels = 0 // píxeles no demasiado oscuros ni demasiado claros
+    let colorfulPixels = 0 // píxeles con saturación claramente no nula
+    const hueBuckets = new Array(36).fill(0) // histograma de hue en bins de 10°
+    let colorfulHueCount = 0
+
+    const SAT_COLOR = 0.15 // saturación mínima para considerar un píxel "con color"
+    const V_MIN = 0.12 // descartar sombras profundas
+    const V_MAX = 0.97 // descartar altas luces quemadas
+
+    for (let i = 0; i < data.length; i += 3) {
+      const r = data[i] / 255
+      const g = data[i + 1] / 255
+      const b = data[i + 2] / 255
+
+      const max = Math.max(r, g, b)
+      const min = Math.min(r, g, b)
+      const v = max
+      const s = max === 0 ? 0 : (max - min) / max
+
+      if (v < V_MIN || v > V_MAX) continue
+      validPixels++
+
+      if (s < SAT_COLOR) continue
+      colorfulPixels++
+
+      // Calcular hue (0-360)
+      const d = max - min
+      let h = 0
+      if (d !== 0) {
+        if (max === r) h = ((g - b) / d) % 6
+        else if (max === g) h = (b - r) / d + 2
+        else h = (r - g) / d + 4
+        h *= 60
+        if (h < 0) h += 360
+      }
+      hueBuckets[Math.floor(h / 10) % 36]++
+      colorfulHueCount++
+    }
+
+    if (validPixels === 0) return ['color'] // imagen rarísima, fallback seguro
+
+    const colorfulRatio = colorfulPixels / validPixels
+
+    // Umbrales ajustados por observación empírica
+    const BW_MAX_RATIO = 0.03 // <3% de píxeles con color → B&W
+    const COLOR_MIN_RATIO = 0.1 // >10% → hay color real
+    // Monochrome real = un solo color dominante cubriendo casi toda la imagen.
+    // Por eso exigimos:
+    //  - que la gran mayoría de los píxeles válidos tengan color (no solo "algo de color")
+    //  - que ese color esté extremadamente concentrado en un único hue
+    //  - que el hue dominante por sí mismo cubra una fracción muy alta de la imagen entera
+    const MONOCHROME_MIN_COLORFUL_RATIO = 0.7 // ≥70% de la imagen debe tener color saturado
+    const MONOCHROME_HUE_CONCENTRATION = 0.95 // ≥95% de los píxeles con color en una ventana de 20°
+    const MONOCHROME_DOMINANT_OVER_VALID = 0.6 // el hue dominante debe abarcar ≥60% de la imagen útil
+
+    if (colorfulRatio < BW_MAX_RATIO) {
+      return ['black and white']
+    }
+
+    // Detectar monochrome: ¿los píxeles con color están concentrados en un único hue
+    // y ese hue domina la imagen completa?
+    if (colorfulHueCount > 0) {
+      // Ventana circular estrecha de 2 bins (20°) para exigir un solo color dominante
+      let bestWindow = 0
+      for (let start = 0; start < 36; start++) {
+        let sum = 0
+        for (let k = 0; k < 2; k++) sum += hueBuckets[(start + k) % 36]
+        if (sum > bestWindow) bestWindow = sum
+      }
+      const hueConcentration = bestWindow / colorfulHueCount
+      const dominantOverValid = bestWindow / validPixels
+
+      if (
+        colorfulRatio >= MONOCHROME_MIN_COLORFUL_RATIO &&
+        hueConcentration >= MONOCHROME_HUE_CONCENTRATION &&
+        dominantOverValid >= MONOCHROME_DOMINANT_OVER_VALID
+      ) {
+        return ['color', 'monochrome']
+      }
+    }
+
+    if (colorfulRatio >= COLOR_MIN_RATIO) return ['color']
+
+    // Zona intermedia (3%–10% píxeles con color, no concentrados): lo más honesto es 'color'
+    // porque el B&W real cae muy por debajo del 3% en JPEGs normales.
+    return ['color']
+  } catch (error) {
+    logger.error(`Error detectando palette de imagen: ${errorMessage(error)}`)
+    return ['color']
+  }
+}
+
 export class MetadataTask extends AnalyzerTask {
   declare data: Record<number, PhotoMetadata>
 
@@ -89,8 +198,7 @@ export class MetadataTask extends AnalyzerTask {
               return { photo, success: true }
             } catch (error) {
               logger.error(
-                `Error procesando metadatos para foto ${photo.id} (${photo.name}):`,
-                error
+                `Error procesando metadatos para foto ${photo.id} (${photo.name}): ${errorMessage(error)}`
               )
               return { photo, success: false, error }
             }
@@ -109,7 +217,7 @@ export class MetadataTask extends AnalyzerTask {
 
         logger.debug(`Lote procesado: ${successfulPhotos.length}/${batch.length} fotos exitosas`)
       } catch (error) {
-        logger.error(`Error procesando lote de ${batch.length} fotos:`, error)
+        logger.error(`Error procesando lote de ${batch.length} fotos: ${errorMessage(error)}`)
         // Continuar con el siguiente lote en caso de error
       }
     }
@@ -168,7 +276,7 @@ export class MetadataTask extends AnalyzerTask {
       }
 
       // Detectar si es color o blanco y negro
-      const paletteType = await this.detectImagePalette(buffer)
+      const paletteTypes = await detectImagePalette(buffer)
 
       // Determinar orientación basada en dimensiones
       const width = sharpMetadata.width || 0
@@ -194,14 +302,14 @@ export class MetadataTask extends AnalyzerTask {
           const thumbBuffer = Buffer.from(thumbRes.data)
           dhash = await computeDHash(thumbBuffer)
         } catch (err) {
-          logger.error(`Error generando dHash para foto ${photo.id}:`, err)
+          logger.error(`Error generando dHash para foto ${photo.id}: ${errorMessage(err)}`)
         }
       }
 
       return {
         orientation: [orientation],
         temperature: [temperature],
-        palette: [paletteType],
+        palette: paletteTypes,
         width,
         height,
         fileSize,
@@ -210,107 +318,13 @@ export class MetadataTask extends AnalyzerTask {
         dhash,
       }
     } catch (error) {
-      logger.error(`Error extrayendo metadatos para ${photo.name}:`, error)
+      logger.error(`Error extrayendo metadatos para ${photo.name}: ${errorMessage(error)}`)
       // Retornar datos mínimos en caso de error
       return {
         orientation: ['unknown'],
         temperature: ['neutral'],
         palette: ['color'], // Asumir color por defecto en caso de error
       }
-    }
-  }
-
-  private async detectImagePalette(buffer: Buffer): Promise<string> {
-    try {
-      // Obtener información básica de la imagen
-      const metadata = await sharp(buffer).metadata()
-
-      // Si la imagen tiene solo 1 canal, es definitivamente B&W
-      if (metadata.channels && metadata.channels <= 1) {
-        return 'black and white'
-      }
-
-      // Para imágenes RGB, usar el método TomB (análisis píxel por píxel)
-      if (metadata.channels && metadata.channels >= 3) {
-        // Redimensionar imagen para optimizar procesamiento (manteniendo aspect ratio)
-        const resized = await sharp(buffer)
-          .resize(100, 100, { fit: 'inside' })
-          .raw()
-          .toBuffer({ resolveWithObject: true })
-        const { data, info } = resized
-
-        let totalDiff = 0
-        const pixels = info.width * info.height
-
-        // Para cada píxel, calcular diferencias absolutas entre canales R-G, R-B, G-B
-        for (let i = 0; i < data.length; i += 3) {
-          const r = data[i]
-          const g = data[i + 1]
-          const b = data[i + 2]
-
-          const rg = Math.abs(r - g)
-          const rb = Math.abs(r - b)
-          const gb = Math.abs(g - b)
-
-          totalDiff += rg + rb + gb
-        }
-
-        // Normalizar por número de píxeles y rango máximo (255 * 3)
-        const colorFactor = totalDiff / (pixels * 255 * 3)
-
-        // Umbrales ajustables para determinismo
-        const COLOR_THRESHOLD_HIGH = 0.08 // 8% - claramente color
-        const COLOR_THRESHOLD_LOW = 0.02 // 2% - claramente B&W
-
-        if (colorFactor >= COLOR_THRESHOLD_HIGH) {
-          return 'color'
-        } else if (colorFactor <= COLOR_THRESHOLD_LOW) {
-          return 'black and white'
-        } else {
-          // Zona gris: aplicar segundo criterio basado en saturación
-          return await this.detectColorBySaturation(buffer)
-        }
-      }
-
-      // Fallback
-      return 'color'
-    } catch (error) {
-      logger.error('Error detectando palette de imagen:', error)
-      return 'color' // Asumir color por defecto en caso de error
-    }
-  }
-
-  private async detectColorBySaturation(buffer: Buffer): Promise<string> {
-    try {
-      // Convertir a HSV para analizar saturación
-      const { data, info } = await sharp(buffer)
-        .resize(50, 50, { fit: 'inside' })
-        .raw()
-        .toBuffer({ resolveWithObject: true })
-
-      let totalSaturation = 0
-      const pixels = info.width * info.height
-
-      // Convertir RGB a HSV y analizar saturación
-      for (let i = 0; i < data.length; i += 3) {
-        const r = data[i] / 255
-        const g = data[i + 1] / 255
-        const b = data[i + 2] / 255
-
-        const max = Math.max(r, g, b)
-        const min = Math.min(r, g, b)
-        const saturation = max === 0 ? 0 : (max - min) / max
-
-        totalSaturation += saturation
-      }
-
-      const avgSaturation = totalSaturation / pixels
-      const SATURATION_THRESHOLD = 0.05 // 5% de saturación promedio
-
-      return avgSaturation > SATURATION_THRESHOLD ? 'color' : 'black and white'
-    } catch (error) {
-      logger.error('Error analizando saturación:', error)
-      return 'color'
     }
   }
 
@@ -323,7 +337,7 @@ export class MetadataTask extends AnalyzerTask {
         size: exifBuffer.length,
       }
     } catch (error) {
-      logger.error('Error parseando datos EXIF:', error)
+      logger.error(`Error parseando datos EXIF: ${errorMessage(error)}`)
       return null
     }
   }
@@ -377,7 +391,7 @@ export class MetadataTask extends AnalyzerTask {
 
       logger.debug(`Guardados metadatos para ${photoIds.length} fotos`)
     } catch (err) {
-      logger.error(`Error guardando metadatos:`, err)
+      logger.error(`Error guardando metadatos: ${errorMessage(err)}`)
     }
   }
 }

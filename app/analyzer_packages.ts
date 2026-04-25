@@ -2,6 +2,7 @@ import AnalyzerProcess from '#models/analyzer/analyzerProcess'
 import { AnalyzerTask } from '#models/analyzer/analyzerTask'
 import { ChunkTask } from '#models/analyzer/chunkTask'
 import { MetadataTask } from '#models/analyzer/metadataTask'
+import { PaletteMetadataTask } from '#models/analyzer/paletteMetadataTask'
 import { TagTask } from '#models/analyzer/tagTask'
 import { VisionDescriptionTask } from '#models/analyzer/visionDescriptionTask'
 import { VisualColorEmbeddingTask } from '#models/analyzer/visualColorEmbeddingTask'
@@ -239,41 +240,19 @@ export const packages = [
     ],
   },
 
-  // ...existing code...
   {
-    id: 'remake_visuals',
+    id: 'overwrite_metadata_palette',
     isPreprocess: false,
     stages: [
       {
         type: 'parallel',
         tasks: [
           {
-            name: 'vision_visual_aspects',
-            type: 'VisionDescriptionTask',
-            model: 'Gemini',
-            modelName: 'gemini-2.5-flash-lite',
-            needsImage: true,
-            sequential: false,
-            prompts: [MESSAGE_ANALYZER_VISUAL_ASPECTS],
-            resolution: 'low',
-            imagesPerRequest: 8,
-            promptDependentField: null,
-            checks: ['descriptions.visual_aspects.genre'],
-            visualAspects: true,
-          },
-          {
-            name: 'vision_artistic',
-            type: 'VisionDescriptionTask',
-            model: 'GPT',
-            modelName: 'gpt-5.1', //'gpt-5-chat-latest',
-            needsImage: true,
-            sequential: false,
-            prompts: [MESSAGE_ANALYZER_CONTEXT_ARTISTIC_SCORES],
-            resolution: 'high',
-            imagesPerRequest: 6,
-            batchAPI: true,
-            promptDependentField: null,
-            checks: ['descriptions.artistic_scores'],
+            name: 'metadata_palette_overwrite',
+            type: 'PaletteMetadataTask',
+            needsImage: false,
+            onlyIfNeeded: false,
+            checks: ['descriptions.visual_aspects.palette'],
           },
         ],
       },
@@ -368,6 +347,9 @@ export const getTaskList = (
         break
       case 'MetadataTask':
         task = new MetadataTask(process)
+        break
+      case 'PaletteMetadataTask':
+        task = new PaletteMetadataTask(process)
         break
       case 'VisualEmbeddingTask':
         task = new VisualEmbeddingTask(process)

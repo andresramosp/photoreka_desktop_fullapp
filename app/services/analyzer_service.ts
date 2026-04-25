@@ -16,6 +16,7 @@ import { VisionDescriptionTask } from '#models/analyzer/visionDescriptionTask'
 import { TagTask } from '#models/analyzer/tagTask'
 import { ChunkTask } from '#models/analyzer/chunkTask'
 import { MetadataTask } from '#models/analyzer/metadataTask'
+import { PaletteMetadataTask } from '#models/analyzer/paletteMetadataTask'
 import { VisualEmbeddingTask } from '#models/analyzer/visualEmbeddingTask'
 import { VisualColorEmbeddingTask } from '#models/analyzer/visualColorEmbeddingTask'
 import { VisualDetectionTask } from '#models/analyzer/visualDetectionTask'
@@ -147,6 +148,7 @@ export default class AnalyzerProcessRunner {
     // Incrementar contador acumulativo de fotos analizadas (solo para procesos no-preprocess y modos nuevos)
     if (!this.process.isPreprocess && this.process.userId) {
       const shouldCount = ![
+        'overwrite_metadata',
         'remake_all',
         'remake_task',
         'remake_process',
@@ -342,6 +344,9 @@ export default class AnalyzerProcessRunner {
         break
       case 'MetadataTask':
         task = new MetadataTask(this.process)
+        break
+      case 'PaletteMetadataTask':
+        task = new PaletteMetadataTask(this.process)
         break
       case 'VisualEmbeddingTask':
         task = new VisualEmbeddingTask(this.process)

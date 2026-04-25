@@ -14,6 +14,7 @@ logger.setLevel(LogLevel.DEBUG)
 
 export type AnalyzerMode =
   | 'adding'
+  | 'overwrite_metadata'
   | 'remake_all'
   | 'remake_task'
   | 'remake_process'

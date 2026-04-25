@@ -146,8 +146,8 @@ export default class Photo extends BaseModel {
       return 'uploaded'
     }
 
-    // admin_retry es una reparación transparente: no afecta al usuario
-    if (this.analyzerProcess.mode === 'admin_retry') {
+    // Reparaciones/overwrites de mantenimiento: no afectan al estado visible del usuario
+    if (['admin_retry', 'overwrite_metadata'].includes(this.analyzerProcess.mode)) {
       return 'processed'
     }
 
