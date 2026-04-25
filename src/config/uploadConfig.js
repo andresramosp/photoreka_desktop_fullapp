@@ -11,6 +11,13 @@
 
 const RAW_FORMAT = import.meta.env.VITE_UPLOAD_FORMAT || "jpeg";
 
+export const UPLOAD_MAX_WIDTH = 1500;
+export const UPLOAD_THUMB_MAX_WIDTH = 800;
+export const UPLOAD_MAX_SIZE_BYTES = 512000;
+export const UPLOAD_THUMB_MAX_SIZE_BYTES = Math.floor(
+  UPLOAD_MAX_SIZE_BYTES * (UPLOAD_THUMB_MAX_WIDTH / UPLOAD_MAX_WIDTH),
+);
+
 // Normalise to the two supported values; fall back to jpeg if misconfigured.
 export const UPLOAD_FORMAT = RAW_FORMAT === "webp" ? "webp" : "jpeg";
 

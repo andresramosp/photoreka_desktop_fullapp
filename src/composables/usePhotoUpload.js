@@ -10,6 +10,12 @@ import {
   extractBasicExifData,
   getCompactExifSummary,
 } from "@/utils/exifUtils.js";
+import {
+  UPLOAD_MAX_SIZE_BYTES,
+  UPLOAD_MAX_WIDTH,
+  UPLOAD_THUMB_MAX_SIZE_BYTES,
+  UPLOAD_THUMB_MAX_WIDTH,
+} from "@/config/uploadConfig.js";
 
 export function usePhotoUpload() {
   const photosStore = usePhotosStore();
@@ -71,8 +77,8 @@ export function usePhotoUpload() {
 
     // A partir de aquí, flujo idéntico para ambos tipos
     const [resizedBlob, thumbnailBlob] = await Promise.all([
-      resizeImage(file, 1500, 512000),
-      resizeImage(file, 800),
+      resizeImage(file, UPLOAD_MAX_WIDTH, UPLOAD_MAX_SIZE_BYTES),
+      resizeImage(file, UPLOAD_THUMB_MAX_WIDTH, UPLOAD_THUMB_MAX_SIZE_BYTES),
     ]);
 
     // Llamar al endpoint unificado
