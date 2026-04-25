@@ -152,7 +152,7 @@ export const SearchAdvancedSchema = z.object({
         })
         .optional()
         .describe(
-          'Filter by categorical visual aspect values. Valid keys: genre, framing, focus, lighting, lighting_scheme, depth_of_field, perspective, stylistic, orientation, temperature, palette. Accepted values per key — genre: abstract|documentary|street|landscape|portrait; framing: close-up|medium shot|wide shot; focus: blurry|nitid; lighting: natural|artificial|backlit|frontlit|side lit; lighting_scheme: low key|high key|balanced; depth_of_field: shallow|deep|medium; perspective: normal|high angle|low angle; stylistic: long exposure|motion blur|silhouettes|bokeh|grain; orientation: horizontal|vertical|square; temperature: warm|cold|neutral; palette: color|black and white.'
+          'Filter by categorical visual aspect values. Valid keys: genre, framing, focus, lighting, lighting_scheme, depth_of_field, perspective, stylistic, orientation, temperature, palette. Accepted values per key — genre: abstract|documentary|street|landscape|portrait; framing: close-up|medium shot|wide shot; focus: blurry|nitid; lighting: natural|artificial|backlit|frontlit|side lit; lighting_scheme: low key|high key|balanced; depth_of_field: shallow|deep|medium; perspective: normal|high angle|low angle; stylistic: long exposure|motion blur|silhouettes|bokeh|grain; orientation: horizontal|vertical|square; temperature: warm|cold|neutral; palette: color|black and white|monochrome.'
         ),
       filenameLike: z
         .string()
