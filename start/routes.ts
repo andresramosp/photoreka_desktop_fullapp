@@ -220,6 +220,15 @@ router
 
       const sharp = (await import('sharp')).default
 
+      const downloadImageBuffer = async (url: string) => {
+        const imgResponse = await axios.get(url, {
+          responseType: 'arraybuffer',
+          timeout: 30_000,
+        })
+
+        return Buffer.from(imgResponse.data)
+      }
+
       const toJpgName = (name: string, fallback = 'photo.jpg') => {
         const base = (name || fallback).replace(/\.[^.]+$/, '')
         return `${base}.jpg`
@@ -230,11 +239,9 @@ router
         const photo = photos[0]
 
         try {
-          const imgResponse = await axios.get(photo.originalUrl, {
-            responseType: 'arraybuffer',
-          })
+          const imageBuffer = await downloadImageBuffer(photo.originalUrl)
 
-          const jpegBuffer = await sharp(imgResponse.data)
+          const jpegBuffer = await sharp(imageBuffer)
             .jpeg({
               quality: 90,
               mozjpeg: true,
@@ -287,11 +294,9 @@ router
             try {
               console.log(`[ZIP] Procesando foto ${idx + 1}/${photos.length}: ${photo.originalUrl}`)
 
-              const imgResponse = await axios.get(photo.originalUrl, {
-                responseType: 'arraybuffer',
-              })
+              const imageBuffer = await downloadImageBuffer(photo.originalUrl)
 
-              const jpegBuffer = await sharp(imgResponse.data)
+              const jpegBuffer = await sharp(imageBuffer)
                 .jpeg({
                   quality: 90,
                   mozjpeg: true,
