@@ -3,52 +3,10 @@
 // (generateArtisticScoresEmbedding) desde modelos.
 // Se hace import dinámico dentro de loadModel().
 import { withCache } from '../decorators/withCache.js'
+import { ARTISTIC_SCORE_KEYS, VISUAL_ASPECT_KEYS, VISUAL_ASPECTS_MAP } from '#config/photo_schema'
 
 class EmbeddingService {
   private extractor: any | null = null
-
-  // Orden canónico de dimensiones para artistic_scores
-  private artisticScoresOrder = [
-    'humor',
-    'message',
-    'candidness',
-    'composition',
-    'strangeness',
-    'storytelling',
-    'visual_games',
-    'aesthetic_quality',
-  ] as const
-
-  // Diccionario de valores posibles para cada campo de visual_aspects
-  // Cada valor se codifica como su índice en el array (one-hot style)
-  private visualAspectsSchema = {
-    focus: ['blurry', 'nitid'],
-    lighting_scheme: ['low key', 'high key', 'balanced'],
-    stylistic: ['long exposure', 'motion blur', 'silhouettes', 'bokeh', 'grain'],
-    lighting: ['natural', 'artificial', 'backlit', 'frontlit', 'side lit'],
-    depth_of_field: ['shallow', 'deep', 'medium'],
-    framing: ['close-up', 'medium shot', 'wide shot'],
-    genre: ['abstract', 'documentary', 'street', 'landscape', 'portrait'],
-    perspective: ['normal', 'high angle', 'low angle'],
-    palette: ['color', 'black and white', 'monochrome'],
-    temperature: ['warm', 'cool', 'neutral'],
-    orientation: ['horizontal', 'vertical', 'square'],
-  } as const
-
-  // Orden de campos para el embedding
-  private visualAspectsFieldsOrder = [
-    'focus',
-    'lighting_scheme',
-    'stylistic',
-    'lighting',
-    'depth_of_field',
-    'framing',
-    'genre',
-    'perspective',
-    'palette',
-    'temperature',
-    'orientation',
-  ] as const
 
   /**
    * Genera vector normalizado (div /10) a partir de objeto artistic_scores.
@@ -58,7 +16,7 @@ class EmbeddingService {
     scores: Record<string, any> | null | undefined
   ): number[] | null {
     if (!scores) return null
-    const vec = this.artisticScoresOrder.map((k) => {
+    const vec = ARTISTIC_SCORE_KEYS.map((k) => {
       const raw = scores[k as string]
       if (raw == null || isNaN(raw)) return 0
       const v = Number(raw)
@@ -82,8 +40,8 @@ class EmbeddingService {
 
     const vec: number[] = []
 
-    for (const field of this.visualAspectsFieldsOrder) {
-      const possibleValues = this.visualAspectsSchema[field] as readonly string[]
+    for (const field of VISUAL_ASPECT_KEYS) {
+      const possibleValues = VISUAL_ASPECTS_MAP[field].values as readonly string[]
       const actualValues = aspects[field]
 
       // Normalizar valores por frecuencia para crear gradientes suaves

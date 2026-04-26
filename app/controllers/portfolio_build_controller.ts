@@ -3,24 +3,16 @@ import PortfolioBuildService from '#services/portfolio_build_service'
 import CreditService from '#services/credit_service'
 import Photo from '#models/photo'
 import type { PortfolioBuildConfig } from '#models/portfolio_build'
+import { ARTISTIC_SCORE_EXTERNAL_KEYS, SCORE_INTERNAL_TO_EXTERNAL } from '#config/photo_schema'
 
 const VALID_COHERENCE_MODES = ['free', 'visual', 'chromatic', 'narrative', 'heterogeneous']
-const VALID_SCORE_FIELDS = [
-  'aesthetic_quality',
-  'composition',
-  'storytelling',
-  'originality',
-  'strangeness',
-  'message',
-  'humor',
-  'visual_games',
-  'candidness',
-]
+const VALID_SCORE_FIELDS = ARTISTIC_SCORE_EXTERNAL_KEYS
 
-/** Maps aliased score field names to the canonical name used downstream. */
-const SCORE_FIELD_ALIASES: Record<string, string> = {
-  strangeness: 'originality',
-}
+/**
+ * Maps legacy internal key names to the canonical external key used downstream.
+ * E.g. a client sending 'strangeness' is normalised to 'originality'.
+ */
+const SCORE_FIELD_ALIASES: Record<string, string> = SCORE_INTERNAL_TO_EXTERNAL
 
 export default class PortfolioBuildController {
   /**

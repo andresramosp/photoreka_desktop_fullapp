@@ -14,6 +14,11 @@ import Photo from '#models/photo'
 import Collection from '#models/collection'
 import Series from '#models/series'
 import PortfolioBuild from '#models/portfolio_build'
+import {
+  VISUAL_ASPECTS_SCHEMA,
+  ARTISTIC_SCORE_EXTERNAL_KEYS,
+  toInternalScoreKey,
+} from '#config/photo_schema'
 
 // ─────────────────────────────────────────────────────────────
 // Tool schemas
@@ -35,22 +40,10 @@ export const AddPhotosToResultSchema = z.object({
     ),
 })
 
-export const ScoreField = z.enum([
-  'aesthetic_quality',
-  'composition',
-  'storytelling',
-  'originality',
-  'message',
-  'humor',
-  'visual_games',
-  'candidness',
-])
+export const ScoreField = z.enum(ARTISTIC_SCORE_EXTERNAL_KEYS as [string, ...string[]])
 
-/** Maps model-facing score field names to the internal storage keys in `artistic_scores`. */
-const SCORE_FIELD_MAP: Record<string, string> = {
-  originality: 'strangeness',
-}
-const toInternalField = (field: string): string => SCORE_FIELD_MAP[field] ?? field
+/** Translates a model-facing score field name to the internal DB key (delegates to schema). */
+const toInternalField = (field: string): string => toInternalScoreKey(field)
 
 export const FindPhotosFromPhotoSchema = z.object({
   anchor_photo_ids: z
@@ -100,6 +93,31 @@ export const FetchCollectionsSchema = z.object({})
 
 export const FetchPortfoliosSchema = z.object({})
 
+/**
+ * Builds a Zod object schema for the visualAspects filter from the central
+ * photo schema. Each aspect key maps to an optional array of accepted values.
+ */
+function buildVisualAspectsZodSchema() {
+  return z
+    .object(
+      Object.fromEntries(
+        VISUAL_ASPECTS_SCHEMA.map((aspect) => [
+          aspect.key,
+          z
+            .array(z.enum(aspect.values as [string, ...string[]]))
+            .optional()
+            .describe(`Filter by ${aspect.label}. Accepted values: ${aspect.values.join(', ')}.`),
+        ])
+      )
+    )
+    .optional()
+    .describe(
+      'Filter by visual aspects. Each key maps to an array of accepted values. ' +
+        'Multiple keys are ANDed; multiple values within a key are ORed. ' +
+        'Do NOT place artistic score names here — use scoreFilters instead.'
+    )
+}
+
 export const SearchAdvancedSchema = z.object({
   operation: z
     .enum(['intersect', 'union'])
@@ -136,24 +154,7 @@ export const SearchAdvancedSchema = z.object({
         .describe('Filter by numeric artistic scores. Multiple entries are ANDed.'),
       sortByScore: ScoreField.optional().describe('Sort results by this artistic score.'),
       sortOrder: z.enum(['asc', 'desc']).optional().default('desc').describe('Sort direction.'),
-      visualAspects: z
-        .object({
-          genre: z.array(z.string()).optional(),
-          framing: z.array(z.string()).optional(),
-          focus: z.array(z.string()).optional(),
-          lighting: z.array(z.string()).optional(),
-          lighting_scheme: z.array(z.string()).optional(),
-          depth_of_field: z.array(z.string()).optional(),
-          perspective: z.array(z.string()).optional(),
-          stylistic: z.array(z.string()).optional(),
-          orientation: z.array(z.string()).optional(),
-          temperature: z.array(z.string()).optional(),
-          palette: z.array(z.string()).optional(),
-        })
-        .optional()
-        .describe(
-          'Filter by categorical visual aspect values. Valid keys: genre, framing, focus, lighting, lighting_scheme, depth_of_field, perspective, stylistic, orientation, temperature, palette. Accepted values per key — genre: abstract|documentary|street|landscape|portrait; framing: close-up|medium shot|wide shot; focus: blurry|nitid; lighting: natural|artificial|backlit|frontlit|side lit; lighting_scheme: low key|high key|balanced; depth_of_field: shallow|deep|medium; perspective: normal|high angle|low angle; stylistic: long exposure|motion blur|silhouettes|bokeh|grain; orientation: horizontal|vertical|square; temperature: warm|cold|neutral; palette: color|black and white|monochrome.'
-        ),
+      visualAspects: buildVisualAspectsZodSchema(),
       filenameLike: z
         .string()
         .optional()
@@ -205,16 +206,7 @@ export const CatalogSampleSchema = z.object({
     .default(10)
     .describe('Number of photos to sample from each time bucket (default 10).'),
   sort_within: z
-    .enum([
-      'aesthetic_quality',
-      'composition',
-      'storytelling',
-      'originality',
-      'message',
-      'humor',
-      'visual_games',
-      'candidness',
-    ])
+    .enum(ARTISTIC_SCORE_EXTERNAL_KEYS as [string, ...string[]])
     .optional()
     .describe(
       'If set, pick the top-scoring photos per bucket on this artistic dimension instead of random sampling. ' +

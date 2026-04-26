@@ -1,79 +1,13 @@
 import Photo from '#models/photo'
+import {
+  VISUAL_ASPECTS_SCHEMA,
+  ARTISTIC_SCORES_SCHEMA,
+  ARTISTIC_SCORE_CRITERIA,
+} from '#config/photo_schema'
 
-// ─────────────────────────────────────────────────────────────
-// Configuration
-// ─────────────────────────────────────────────────────────────
-
-export const VISUAL_ASPECTS_CONFIG = [
-  {
-    key: 'genre',
-    label: 'Genre',
-    values: ['abstract', 'documentary', 'street', 'landscape', 'portrait'],
-  },
-  {
-    key: 'framing',
-    label: 'Framing',
-    values: ['close-up', 'medium shot', 'wide shot'],
-  },
-  {
-    key: 'focus',
-    label: 'Focus',
-    values: ['blurry', 'nitid'],
-  },
-  {
-    key: 'lighting',
-    label: 'Lighting',
-    values: ['natural', 'artificial', 'backlit', 'frontlit', 'side lit'],
-  },
-  {
-    key: 'lighting_scheme',
-    label: 'Lighting Scheme',
-    values: ['low key', 'high key', 'balanced'],
-  },
-  {
-    key: 'depth_of_field',
-    label: 'Depth of Field',
-    values: ['shallow', 'deep', 'medium'],
-  },
-  {
-    key: 'perspective',
-    label: 'Perspective',
-    values: ['normal', 'high angle', 'low angle'],
-  },
-  {
-    key: 'stylistic',
-    label: 'Stylistic',
-    values: ['long exposure', 'motion blur', 'silhouettes', 'bokeh', 'grain'],
-  },
-  {
-    key: 'orientation',
-    label: 'Orientation',
-    values: ['horizontal', 'vertical', 'square'],
-  },
-  {
-    key: 'temperature',
-    label: 'Temperature',
-    values: ['warm', 'cold', 'neutral'],
-  },
-  {
-    key: 'palette',
-    label: 'Palette',
-    values: ['color', 'black and white'],
-  },
-]
-
-export const ARTISTIC_SCORES_CONFIG = {
-  fundamentals: {
-    label: 'Fundamentals',
-    description: 'Core evaluation criteria',
-    criteria: ['aesthetic_quality', 'composition', 'storytelling', 'candidness'],
-  },
-  bonus: {
-    label: 'Bonus',
-    description: 'Additional evaluation aspects',
-    criteria: ['strangeness', 'message', 'humor', 'visual_games'],
-  },
-}
+// Re-export for any consumers that import these directly from stats_service
+export { VISUAL_ASPECTS_SCHEMA as VISUAL_ASPECTS_CONFIG }
+export { ARTISTIC_SCORES_SCHEMA as ARTISTIC_SCORES_CONFIG }
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -179,7 +113,7 @@ export default class StatsService {
   async getVisualAspectsStats(userId: number): Promise<VisualAspectStat[]> {
     const photos = await Photo.query().where('user_id', userId).select('id', 'descriptions')
 
-    const stats: VisualAspectStat[] = VISUAL_ASPECTS_CONFIG.map((aspect) => {
+    const stats: VisualAspectStat[] = VISUAL_ASPECTS_SCHEMA.map((aspect) => {
       const valueCounts: Record<string, number> = {}
       for (const v of aspect.values) valueCounts[v] = 0
 
@@ -230,10 +164,11 @@ export default class StatsService {
     const computeStat = (criterion: string): ArtisticScoreStat => {
       const scores = photos
         .map((p) => {
-          const s = p.descriptions?.artistic_scores as Record<string, number> | undefined
-          return s?.[criterion]
+          const s = p.descriptions?.artistic_scores as Record<string, any> | undefined
+          const raw = s?.[criterion]
+          return raw !== undefined && raw !== null ? Number(raw) : undefined
         })
-        .filter((v): v is number => v !== undefined && v !== null)
+        .filter((v): v is number => v !== undefined && !isNaN(v) && v > 0)
 
       const count = scores.length
       const sum = scores.reduce((a, b) => a + b, 0)
@@ -259,8 +194,12 @@ export default class StatsService {
 
     return {
       totalPhotos,
-      fundamentals: ARTISTIC_SCORES_CONFIG.fundamentals.criteria.map(computeStat),
-      bonus: ARTISTIC_SCORES_CONFIG.bonus.criteria.map(computeStat),
+      fundamentals: ARTISTIC_SCORES_SCHEMA.find((g) => g.key === 'fundamentals')!.criteria.map(
+        (c) => computeStat(c.key)
+      ),
+      bonus: ARTISTIC_SCORES_SCHEMA.find((g) => g.key === 'bonus')!.criteria.map((c) =>
+        computeStat(c.key)
+      ),
     }
   }
 

@@ -1,6 +1,22 @@
 import Photo from '#models/photo'
+import { VISUAL_ASPECTS_SCHEMA } from '#config/photo_schema'
 
-export const MESSAGE_ANALYZER_VISUAL_ASPECTS = (photosBatch: Photo[]) => `
+// Build the numbered aspect list and the output example from the schema,
+// so the prompt stays in sync automatically when aspects change.
+function buildAspectList(): string {
+  const llmAspects = VISUAL_ASPECTS_SCHEMA.filter((a) => a.source === 'llm')
+  return llmAspects
+    .map((a, i) => `${i + 1}. '${a.key}': ${a.values.map((v) => `'${v}'`).join(', ')}`)
+    .join('\n')
+}
+
+function buildOutputExample(): string {
+  const llmAspects = VISUAL_ASPECTS_SCHEMA.filter((a) => a.source === 'llm')
+  const exampleObj = Object.fromEntries(llmAspects.map((a) => [a.key, [a.values[0]]]))
+  return JSON.stringify([exampleObj], null, 2)
+}
+
+export const MESSAGE_ANALYZER_VISUAL_ASPECTS = (_photosBatch: Photo[]) => `
 You are a bot in charge of analyzing photographs and returning structured information for each photo, focusing on technical-stylistic aspects. 
 
 *Guidelines*
@@ -12,29 +28,11 @@ You are a bot in charge of analyzing photographs and returning structured inform
 
 The aspects and possible values include:
 
-1. 'focus': 'blurry', 'nitid'.
-2. 'lighting_scheme': 'low key', 'high key', 'balanced'
-3. 'stylistic': 'long exposure', 'motion blur', 'silhouettes', 'bokeh', 'grain'
-4. 'lighting': 'natural', 'artificial', 'backlit', 'frontlit', 'side lit'
-5. 'depth of field': 'shallow', 'deep', 'medium'
-6. 'framing': 'close-up', 'medium shot', 'wide shot'.
-7. 'genre': 'abstract', 'documentary', 'street', 'landscape', 'portrait'
-8. 'perspective': 'normal', 'high angle', 'low angle', 
+${buildAspectList()}
 
 **Output Example for 1 image:**
 \`\`\`json
-[
-  {
-  "focus": ["nitid"],
-  "stylistic": ["motion blur", "grain"],
-  "lighting_scheme": ["low key"],
-  "lighting": ["natural", "side lit"],
-  "depth_of_field": ["deep"],
-  "framing": ["close-up"],
-  "genre": ["documentary", "street"],
-  "perspective": ["normal"]
-  }
-]
+${buildOutputExample()}
 \`\`\`
 
 Always return a JSON array, each item containing the technical-stylistic aspects for one image, in the same order as the input images.

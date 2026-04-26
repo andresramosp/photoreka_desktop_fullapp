@@ -1,4 +1,4 @@
-import { DateTime } from 'luxon'
+﻿import { DateTime } from 'luxon'
 import sharp from 'sharp'
 import pLimit from 'p-limit'
 import axios from 'axios'
@@ -23,6 +23,7 @@ import CpuWorkerPool from './cpu_worker_pool.js'
 import { DHASH_DUPLICATE_THRESHOLD } from '../utils/dhash.js'
 import ScoringService from './scoring_service.js'
 import type { SearchMode } from './search_text_service.js'
+import { STYLE_CRITERIA_DESCRIPTIONS, toInternalScoreKey } from '#config/photo_schema'
 
 // ══════════════════════════════════════════════════════════════
 // CONFIGURATION
@@ -130,53 +131,16 @@ const STYLE_MAX_EMPHASIZE = 4
 /** Max number of criteria the LLM is allowed to deemphasize. */
 const STYLE_MAX_DEEMPHASIZE = 2
 
-/**
- * Canonical artistic criteria exposed to the style-preferences parser.
- * Keys match the internal score fields used by the compositeScore pipeline.
- */
-const STYLE_CRITERIA_DESCRIPTIONS: Array<{ key: string; label: string; desc: string }> = [
-  {
-    key: 'aesthetic_quality',
-    label: 'Aesthetic quality',
-    desc: 'overall visual beauty, pleasing look, polished finish',
-  },
-  {
-    key: 'composition',
-    label: 'Composition',
-    desc: 'framing, balance, geometry, use of lines and shapes',
-  },
-  {
-    key: 'storytelling',
-    label: 'Storytelling',
-    desc: 'narrative content, sense of moment or sequence, documentary value',
-  },
-  {
-    key: 'originality',
-    label: 'Originality',
-    desc: 'unusual, unexpected, strange, surprising or surreal elements',
-  },
-  {
-    key: 'message',
-    label: 'Message',
-    desc: 'social, political or conceptual meaning; clear intent',
-  },
-  { key: 'humor', label: 'Humor', desc: 'funny, ironic, playful, witty imagery' },
-  {
-    key: 'visual_games',
-    label: 'Visual games',
-    desc: 'optical illusions, juxtapositions, reflections, layering, wordplay with image',
-  },
-  {
-    key: 'candidness',
-    label: 'Candidness',
-    desc: 'spontaneity, genuine/unposed moments, raw human presence',
-  },
-]
+// STYLE_CRITERIA_DESCRIPTIONS is imported from '#config/photo_schema' (single source of truth).
 
 // ── Score field mapping (mirrors agent_tools_service) ────────
-const SCORE_FIELD_MAP: Record<string, string> = { originality: 'strangeness' }
+/**
+ * Maps external score field names (e.g. 'originality') to the internal
+ * storage keys used throughout the pipeline (e.g. 'strangeness').
+ * Imported from the central photo schema.
+ */
 function internalScoreField(field: string): string {
-  return SCORE_FIELD_MAP[field] ?? field
+  return toInternalScoreKey(field)
 }
 
 // ══════════════════════════════════════════════════════════════
