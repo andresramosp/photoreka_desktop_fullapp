@@ -273,17 +273,38 @@ router
       response.header('Content-Disposition', 'attachment; filename="photos.zip"')
       response.header('Content-Type', 'application/zip')
 
+      const rawResponse = response.response
       const archive = archiver('zip', {
         zlib: { level: 9 },
       })
 
-      archive.on('error', (err) => {
-        console.error(err)
-        response.status(500).send('Error creating zip')
+      let clientDisconnected = false
+      const zipSent = new Promise<void>((resolve, reject) => {
+        rawResponse.once('finish', resolve)
+        rawResponse.once('close', () => {
+          if (!rawResponse.writableFinished) {
+            clientDisconnected = true
+            archive.abort()
+          }
+
+          resolve()
+        })
+        rawResponse.once('error', reject)
       })
 
-      // Stream zip al cliente
-      response.stream(archive)
+      archive.on('error', (err) => {
+        console.error(err)
+
+        if (!rawResponse.headersSent) {
+          response.status(500).send('Error creating zip')
+          return
+        }
+
+        rawResponse.destroy(err)
+      })
+
+      response.relayHeaders()
+      archive.pipe(rawResponse)
 
       // Limitar concurrencia
       const limit = pLimit(3)
@@ -291,6 +312,10 @@ router
       await Promise.all(
         photos.map((photo, idx) =>
           limit(async () => {
+            if (clientDisconnected) {
+              return
+            }
+
             try {
               console.log(`[ZIP] Procesando foto ${idx + 1}/${photos.length}: ${photo.originalUrl}`)
 
@@ -315,12 +340,15 @@ router
         )
       )
 
+      if (clientDisconnected) {
+        return
+      }
+
       console.log('[ZIP] Todas las fotos agregadas, finalizando zip...')
       await archive.finalize()
 
-      response.response.on('close', () => {
-        console.log('[ZIP] Zip finalizado y enviado')
-      })
+      await zipSent
+      console.log('[ZIP] Zip finalizado y enviado')
 
       return
     })
