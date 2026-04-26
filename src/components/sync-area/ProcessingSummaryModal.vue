@@ -158,6 +158,7 @@ import PhotoCardHub from "../photoCards/PhotoCardHub.vue";
 import ConfettiEffect from "../ConfettiEffect.vue";
 import PhotoInfoDialog from "../PhotoInfoDialog.vue";
 import { useArtisticScores } from "@/composables/useArtisticScores";
+import { ARTISTIC_SCORES_SCHEMA } from "@/config/photo_schema";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { usePhotosStore } from "@/stores/photos";
 
@@ -318,6 +319,12 @@ function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+// --- Derive fundamental criterion keys from the central schema ---
+const FUNDAMENTAL_CRITERIA_KEYS =
+  ARTISTIC_SCORES_SCHEMA.find((g) => g.key === "fundamentals")?.criteria.map(
+    (c) => c.key,
+  ) ?? [];
+
 // --- Calculate maximum individual score for a photo (highest fundamental) ---
 function calculateMaxScore(photo) {
   const scores = photo.descriptions?.artistic_scores;
@@ -325,10 +332,8 @@ function calculateMaxScore(photo) {
 
   // Return the highest individual fundamental score
   return Math.max(
-    scores.aesthetic_quality || 0,
-    scores.composition || 0,
-    scores.storytelling || 0,
-    scores.strangeness || 0,
+    0,
+    ...FUNDAMENTAL_CRITERIA_KEYS.map((key) => scores[key] || 0),
   );
 }
 
@@ -388,6 +393,9 @@ function breaksRecord(photo) {
 }
 
 // --- Fundamental artistic scores highlight labels ---
+// Keys must match the fundamentals criteria in `ARTISTIC_SCORES_SCHEMA`.
+// Labels here are UI highlight strings — distinct from the criterion's
+// canonical label (e.g. "Great Aesthetic" vs "Aesthetic Quality").
 const fundamentalLabels = {
   aesthetic_quality: "Great Aesthetic",
   composition: "Strong Composition",

@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { ref, reactive, computed } from "vue";
 import { useArtisticScores } from "@/composables/useArtisticScores";
+import { buildVisualAspectsOptions } from "@/config/photo_schema";
 
 // ===== CONFIGURACIÓN DE ESTADO =====
 // Cambiar a true para usar un estado compartido único (grid y queries compartidos)
@@ -8,124 +9,14 @@ import { useArtisticScores } from "@/composables/useArtisticScores";
 const USE_SHARED_STATE = true;
 // ===================================
 
-// Export visualAspectsOptions for reuse in other components
-
-export const visualAspectsOptions = [
-  {
-    type: "group",
-    label: "Palette",
-    key: "palette",
-    children: [
-      { label: "Color", value: "color" },
-      { label: "Monochrome", value: "monochrome" },
-      { label: "Black and white", value: "black and white" },
-    ],
-  },
-  {
-    type: "group",
-    label: "Orientation",
-    key: "orientation",
-    children: [
-      { label: "Horizontal", value: "horizontal" },
-      { label: "Vertical", value: "vertical" },
-    ],
-  },
-  {
-    type: "group",
-    label: "Temperature",
-    key: "temperature",
-    children: [
-      { label: "Cold", value: "cold" },
-      { label: "Warm", value: "warm" },
-      { label: "Neutral", value: "neutral" },
-    ],
-  },
-  // {
-  //   type: "group",
-  //   label: "Focus",
-  //   key: "focus",
-  //   children: [
-  //     { label: "Blurry", value: "blurry" },
-  //     { label: "Nitid", value: "nitid" },
-  //   ],
-  // },
-  // {
-  //   type: "group",
-  //   label: "Lighting Scheme",
-  //   key: "lighting_scheme",
-  //   children: [
-  //     { label: "Low key", value: "low key" },
-  //     { label: "High key", value: "high key" },
-  //     { label: "Balanced", value: "balanced" },
-  //   ],
-  // },
-  {
-    type: "group",
-    label: "Stylistic",
-    key: "stylistic",
-    children: [
-      { label: "Long exposure", value: "long exposure" },
-      { label: "Motion blur", value: "motion blur" },
-      { label: "Silhouettes", value: "silhouettes" },
-      { label: "Bokeh", value: "bokeh" },
-      { label: "Grain", value: "grain" },
-    ],
-  },
-  {
-    type: "group",
-    label: "Lighting",
-    key: "lighting",
-    children: [
-      { label: "Natural", value: "natural" },
-      { label: "Artificial", value: "artificial" },
-      { label: "Backlit", value: "backlit" },
-      { label: "Frontlit", value: "frontlit" },
-      { label: "Side lit", value: "side lit" },
-    ],
-  },
-  {
-    type: "group",
-    label: "Depth of Field",
-    key: "depth_of_field",
-    children: [
-      { label: "Shallow", value: "shallow" },
-      { label: "Deep", value: "deep" },
-      { label: "Medium", value: "medium" },
-    ],
-  },
-  {
-    type: "group",
-    label: "Framing",
-    key: "framing",
-    children: [
-      { label: "Close-up", value: "close-up" },
-      { label: "Medium shot", value: "medium shot" },
-      { label: "Wide shot", value: "wide shot" },
-    ],
-  },
-  {
-    type: "group",
-    label: "Genre",
-    key: "genre",
-    children: [
-      { label: "Abstract", value: "abstract" },
-      { label: "Documentary", value: "documentary" },
-      { label: "Street", value: "street" },
-      { label: "Landscape", value: "landscape" },
-      { label: "Portrait", value: "portrait" },
-    ],
-  },
-  {
-    type: "group",
-    label: "Perspective",
-    key: "perspective",
-    children: [
-      { label: "Normal", value: "normal" },
-      { label: "High angle", value: "high angle" },
-      { label: "Low angle", value: "low angle" },
-    ],
-  },
-];
+// Visual aspects options for the UI tree-select.
+// Derived from the central photo schema (#config/photo_schema → @/config/photo_schema).
+// `focus` and `lighting_scheme` are intentionally hidden from the search UI
+// (mirrors the previous hardcoded behavior).
+export const visualAspectsOptions = buildVisualAspectsOptions([
+  "focus",
+  "lighting_scheme",
+]);
 
 // Function to transform artistic scores to tree-select format
 export function createArtisticScoresTreeOptions() {

@@ -10,8 +10,14 @@ import {
   Eye20Regular,
 } from "@vicons/fluent";
 import { PersonRound } from "@vicons/material";
+import {
+  ARTISTIC_SCORES_SCHEMA,
+  ARTISTIC_SCORE_KEYS,
+  getGenreWeights,
+  getGenreFromProfile,
+} from "@/config/photo_schema";
 
-// Icon mapping for criteria
+// Icon mapping for criteria (UI-only — not part of the schema)
 const criterionIcons = {
   aesthetic_quality: Sparkle20Regular,
   composition: Grid20Regular,
@@ -116,151 +122,42 @@ const consistencyScale = {
 };
 
 // All available artistic score criteria organized by groups
-// Esta es la fuente de verdad - solo los criterios aquí definidos estarán disponibles
-const artisticScores = {
-  fundamentals: {
-    label: "Fundamentals",
-    color: "#3b82f6",
-    criteria: [
-      {
-        value: "aesthetic_quality",
-        label: "Aesthetic Quality",
-        icon: criterionIcons.aesthetic_quality,
-      },
-      {
-        value: "composition",
-        label: "Composition",
-        icon: criterionIcons.composition,
-      },
-      {
-        value: "storytelling",
-        label: "Storytelling",
-        icon: criterionIcons.storytelling,
-      },
-      {
-        value: "strangeness",
-        label: "Originality",
-        icon: criterionIcons.strangeness,
-      },
-    ],
-  },
-  bonus: {
-    label: "Bonus",
-    color: "#f59e0b",
-    criteria: [
-      {
-        value: "message",
-        label: "Message",
-        icon: criterionIcons.message,
-      },
-      {
-        value: "humor",
-        label: "Humor",
-        icon: criterionIcons.humor,
-      },
-      {
-        value: "visual_games",
-        label: "Visual Games",
-        icon: criterionIcons.visual_games,
-      },
-      {
-        value: "candidness",
-        label: "Candidness",
-        icon: criterionIcons.candidness,
-      },
-    ],
-  },
-};
-
-// Configuración de pesos por género - solo se aplicarán a criterios activos en artisticScores
-const genreWeightConfigs = {
-  general: {
-    aesthetic_quality: 1,
-    composition: 0.9,
-    storytelling: 0.5,
-    strangeness: 0.25,
-    message: 0,
-    humor: 0,
-    visual_games: 0,
-    candidness: 0,
-  },
-  street: {
-    aesthetic_quality: 0.6,
-    composition: 0.6,
-    storytelling: 0.9,
-    strangeness: 0.9,
-    message: 0.5,
-    humor: 0.8,
-    visual_games: 0.8,
-    candidness: 1,
-  },
-  documentary: {
-    aesthetic_quality: 0.4,
-    composition: 0.5,
-    storytelling: 0.8,
-    strangeness: 0.5,
-    message: 1,
-    humor: 0,
-    visual_games: 0,
-    candidness: 0.4,
-  },
-  abstract: {
-    aesthetic_quality: 1,
-    composition: 0.9,
-    storytelling: 0.1,
-    strangeness: 0.6,
-    message: 0.7,
-    humor: 0.4,
-    visual_games: 0.7,
-    candidness: 0.1,
-  },
-};
-
-// Helper function to get all criteria keys from artisticScores
-const getAllCriteriaKeys = () => {
-  const keys = [];
-  Object.values(artisticScores).forEach((group) => {
-    keys.push(...group.criteria.map((criterion) => criterion.value));
-  });
-  return keys;
-};
-
-// Generar presets dinámicamente basándose solo en criterios activos
-const genrePresets = Object.fromEntries(
-  Object.entries(genreWeightConfigs).map(([genre, config]) => [
-    genre,
-    // Solo incluir criterios que existen en artisticScores
-    Object.fromEntries(
-      getAllCriteriaKeys().map((criterion) => [
-        criterion,
-        config[criterion] !== undefined ? config[criterion] : 1, // Default weight is 1 if not specified, but preserve 0 values
-      ]),
-    ),
+// Derived from the central photo schema (single source of truth).
+// Icons are injected from criterionIcons (UI-only concern).
+const artisticScores = Object.fromEntries(
+  ARTISTIC_SCORES_SCHEMA.map((group) => [
+    group.key,
+    {
+      label: group.label,
+      color: group.color,
+      criteria: group.criteria.map((criterion) => ({
+        value: criterion.key,
+        label: criterion.label,
+        icon: criterionIcons[criterion.key] || null,
+      })),
+    },
   ]),
+);
+
+// Genre preset keys supported by the schema.
+const GENRE_PRESET_KEYS = ["general", "street", "documentary", "abstract"];
+
+// Helper function to get all criteria keys (delegated to schema).
+const getAllCriteriaKeys = () => [...ARTISTIC_SCORE_KEYS];
+
+// Genre presets generated from the schema's per-criterion weights.
+const genrePresets = Object.fromEntries(
+  GENRE_PRESET_KEYS.map((genre) => [genre, getGenreWeights(genre)]),
 );
 
 /**
  * Map a UserProfile string to the corresponding genre preset key.
- * Only uses specific genre when profile is a single, non-compound value.
- * Returns "general" for compound profiles or unrecognized values.
+ * Delegates to the central schema's `getGenreFromProfile`.
  * @param {string|undefined|null} profile - The user profile from userStore
  * @returns {string} - The genre preset key
  */
 export function getDefaultGenreFromProfile(profile) {
-  const profileToGenre = {
-    general: "general",
-    "street-photography": "street",
-    documentary: "documentary",
-    artistic: "abstract",
-  };
-
-  if (!profile) return "general";
-
-  // If it's a compound profile (contains |), always return general
-  if (profile.includes("|")) return "general";
-
-  // Only map single, non-compound profiles
-  return profileToGenre[profile] || "general";
+  return getGenreFromProfile(profile);
 }
 
 export function useArtisticScores() {
@@ -584,8 +481,11 @@ export function useArtisticScores() {
       // Collect all values for this criterion (excluding 0/N/A)
       photos.forEach((photo) => {
         const artistic_scores = photo.descriptions?.artistic_scores;
-        if (artistic_scores && artistic_scores[criterion] > 0) {
-          values.push(artistic_scores[criterion]);
+        if (artistic_scores) {
+          const val = Number(artistic_scores[criterion]);
+          if (!isNaN(val) && val > 0) {
+            values.push(val);
+          }
         }
       });
 
