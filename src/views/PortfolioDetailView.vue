@@ -38,13 +38,19 @@
               @select="handleExportSelect"
             >
               <n-button
-                :disabled="!photos.length || isExporting"
-                :loading="isExporting"
+                :disabled="!photos.length || isExporting || isDownloadingZip"
+                :loading="isExporting || isDownloadingZip"
               >
                 <template #icon>
                   <n-icon><DownloadOutline /></n-icon>
                 </template>
-                {{ isExporting ? exportStatus : "Export" }}
+                {{
+                  isExporting
+                    ? exportStatus
+                    : isDownloadingZip
+                      ? "Preparing ZIP…"
+                      : "Export"
+                }}
               </n-button>
             </n-dropdown>
 
@@ -444,10 +450,10 @@ async function deletePortfolio() {
   }
 }
 
-function handleExportSelect(key) {
+async function handleExportSelect(key) {
   if (key === "pdf") exportAsPdf();
   else if (key === "jpeg") exportAsJpeg();
-  else if (key === "zip") downloadPhotosZip(photos.value);
+  else if (key === "zip") await downloadPhotosZip(photos.value);
 }
 
 async function exportAsJpeg() {
