@@ -7,6 +7,12 @@
         </template>
         More Photos
       </n-button>
+      <n-button size="small" ghost @click="$emit('build-variant')">
+        <template #icon>
+          <n-icon><GitBranchOutline /></n-icon>
+        </template>
+        Build Variant
+      </n-button>
     </div>
 
     <div class="toolbar-right">
@@ -56,7 +62,11 @@
 <script setup>
 import { computed } from "vue";
 import { NButtonGroup, NSlider, NButton, NIcon } from "naive-ui";
-import { ArrowUndoOutline, AddOutline } from "@vicons/ionicons5";
+import {
+  ArrowUndoOutline,
+  AddOutline,
+  GitBranchOutline,
+} from "@vicons/ionicons5";
 
 const props = defineProps({
   columns: { type: Number, required: true },
@@ -71,6 +81,7 @@ defineEmits([
   "undo-last",
   "restore-all",
   "add-photos",
+  "build-variant",
 ]);
 
 const columnOptions = computed(() => {

@@ -124,6 +124,7 @@
         @undo-last="undoLastRemoval"
         @restore-all="restoreAll"
         @add-photos="showAddPhotosDialog = true"
+        @build-variant="openVariantWizard"
       />
 
       <PortfolioGrid
@@ -166,6 +167,13 @@
       :build="build"
       :current-photo-ids="currentPhotoIds"
       @add-photos="handleAddPhotos"
+    />
+
+    <!-- Variant wizard -->
+    <PortfolioBuildWizard
+      v-model:show="showVariantWizard"
+      :prefill-config="variantPrefillConfig"
+      @build-complete="onVariantBuildComplete"
     />
 
     <PhotoInfoDialog
@@ -229,6 +237,7 @@ import { usePhotosStore } from "@/stores/photos";
 import PortfolioGrid from "@/components/portfolio-builder/PortfolioGrid.vue";
 import PortfolioGridToolbar from "@/components/portfolio-builder/PortfolioGridToolbar.vue";
 import PortfolioAddPhotosDialog from "@/components/portfolio-builder/PortfolioAddPhotosDialog.vue";
+import PortfolioBuildWizard from "@/components/portfolio-builder/PortfolioBuildWizardStepped.vue";
 import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
 import {
   exportPortfolioToPdf,
@@ -263,6 +272,8 @@ const showPhotoInfoDialog = ref(false);
 const selectedDialogPhoto = ref(null);
 const deleteConfirmationVisible = ref(false);
 const isDeleting = ref(false);
+const showVariantWizard = ref(false);
+const variantPrefillConfig = ref(null);
 
 const exportOptions = [
   {
@@ -428,6 +439,35 @@ function goBack() {
 
 function showDeleteConfirmation() {
   deleteConfirmationVisible.value = true;
+}
+
+function openVariantWizard() {
+  if (!build.value) return;
+  const baseName = build.value.config?.name || `Portfolio #${build.value.id}`;
+
+  // Compute the next variant number: find max N among existing "<baseName> Variant N" portfolios.
+  const variantPattern = new RegExp(
+    `^${baseName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} Variant (\\d+)$`,
+    "i",
+  );
+  let maxN = 0;
+  for (const b of store.allBuilds) {
+    const existingName = b.config?.name || "";
+    const match = existingName.match(variantPattern);
+    if (match) maxN = Math.max(maxN, parseInt(match[1], 10));
+  }
+  const variantName = `${baseName} Variant ${maxN + 1}`;
+
+  variantPrefillConfig.value = {
+    ...(build.value.config || {}),
+    name: variantName,
+  };
+  showVariantWizard.value = true;
+}
+
+function onVariantBuildComplete() {
+  store.fetchBuilds();
+  router.push({ name: "portfolios" });
 }
 
 async function deletePortfolio() {

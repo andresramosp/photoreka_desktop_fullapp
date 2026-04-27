@@ -526,6 +526,8 @@ import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds";
 
 const props = defineProps({
   show: { type: Boolean, default: false },
+  /** Pre-fill the wizard from an existing build config (used for variants). */
+  prefillConfig: { type: Object, default: null },
 });
 const emit = defineEmits(["update:show", "build-complete"]);
 
@@ -1084,6 +1086,57 @@ const resetForm = () => {
   };
 };
 
+const fillFromConfig = (config) => {
+  resetForm();
+  if (!config) return;
+
+  if (config.name) form.name = config.name;
+  if (typeof config.targetSize === "number")
+    form.targetSize = config.targetSize;
+  if (config.coherenceMode) form.coherenceMode = config.coherenceMode;
+  if (config.themePreferences) form.themePreferences = config.themePreferences;
+  if (typeof config.sequencing === "boolean")
+    form.sequencing = config.sequencing;
+  if (config.sequencingPreferences)
+    form.sequencingPreferences = config.sequencingPreferences;
+
+  // Weights are stored ×10 — normalise back to 0-1 for the sliders.
+  if (config.stylePreferences) {
+    form.weightMode = "describe";
+    form.stylePreferences = config.stylePreferences;
+  } else if (config.weights && Object.keys(config.weights).length > 0) {
+    form.weightMode = "advanced";
+    form.weights = Object.fromEntries(
+      Object.entries(config.weights).map(([k, v]) => [k, v / 10]),
+    );
+    selectedGenre.value = "custom";
+  }
+
+  // Filters
+  const filters = config.filters || {};
+  if (
+    Array.isArray(filters.collectionIds) &&
+    filters.collectionIds.length > 0
+  ) {
+    selectedCollections.value = [...filters.collectionIds];
+  }
+  if (filters.dateFrom) {
+    dateFrom.value = new Date(filters.dateFrom).getTime();
+  }
+  if (filters.dateTo) {
+    dateTo.value = new Date(filters.dateTo).getTime();
+  }
+  if (filters.visualAspects && typeof filters.visualAspects === "object") {
+    const aspects = [];
+    for (const [group, values] of Object.entries(filters.visualAspects)) {
+      for (const value of values) {
+        aspects.push(`${group}:${value}`);
+      }
+    }
+    selectedVisualAspects.value = aspects;
+  }
+};
+
 watch(
   () => props.show,
   async (val) => {
@@ -1092,7 +1145,11 @@ watch(
     // start from the portfolio-specific baseline rather than a local guess.
     // The request is cheap and cached after the first call.
     await portfolioStore.fetchDefaultWeights();
-    resetForm();
+    if (props.prefillConfig) {
+      fillFromConfig(props.prefillConfig);
+    } else {
+      resetForm();
+    }
   },
 );
 </script>
