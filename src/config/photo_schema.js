@@ -52,6 +52,33 @@ export const VISUAL_ASPECTS_SCHEMA = [
     source: "llm",
     values: ["close-up", "medium shot", "wide shot"],
   },
+
+  {
+    key: "perspective",
+    label: "Perspective",
+    source: "llm",
+    values: ["normal", "high angle", "low angle"],
+  },
+  // ── Metadata-sourced ─────────────────────────────────────
+
+  {
+    key: "temperature",
+    label: "Temperature",
+    source: "metadata",
+    values: ["warm", "cold", "neutral"],
+  },
+  {
+    key: "palette",
+    label: "Palette",
+    source: "metadata",
+    values: ["color", "black and white", "monochrome"],
+  },
+  {
+    key: "orientation",
+    label: "Orientation",
+    source: "metadata",
+    values: ["horizontal", "vertical", "square"],
+  },
   {
     key: "genre",
     label: "Genre",
@@ -80,31 +107,6 @@ export const VISUAL_ASPECTS_SCHEMA = [
         "food",
       ],
     },
-  },
-  {
-    key: "perspective",
-    label: "Perspective",
-    source: "llm",
-    values: ["normal", "high angle", "low angle"],
-  },
-  // ── Metadata-sourced ─────────────────────────────────────
-  {
-    key: "orientation",
-    label: "Orientation",
-    source: "metadata",
-    values: ["horizontal", "vertical", "square"],
-  },
-  {
-    key: "temperature",
-    label: "Temperature",
-    source: "metadata",
-    values: ["warm", "cold", "neutral"],
-  },
-  {
-    key: "palette",
-    label: "Palette",
-    source: "metadata",
-    values: ["color", "black and white", "monochrome"],
   },
 ];
 

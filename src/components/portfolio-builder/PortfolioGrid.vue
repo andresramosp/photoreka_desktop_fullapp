@@ -21,6 +21,8 @@
         <PortfolioGridCell
           :photo="element"
           :style="getCellStyle(element)"
+          :selected="selectedIdsSet.has(element.id)"
+          @select="(photo) => $emit('select', photo)"
           @remove="(photo) => $emit('remove', photo)"
           @info="(photo) => $emit('info', photo)"
         />
@@ -48,9 +50,12 @@ const props = defineProps({
   photos: { type: Array, required: true },
   columns: { type: Number, default: 4 },
   gap: { type: Number, default: 3 },
+  selectedIds: { type: Array, default: () => [] },
 });
 
-const emit = defineEmits(["update:photos", "remove", "info"]);
+const emit = defineEmits(["update:photos", "remove", "info", "select"]);
+
+const selectedIdsSet = computed(() => new Set(props.selectedIds));
 
 // ── Container width measurement ────────────────────────────
 const wrapperRef = ref(null);

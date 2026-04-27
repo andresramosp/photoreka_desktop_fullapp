@@ -121,17 +121,23 @@
         v-model:gap="gap"
         :photo-count="photos.length"
         :removed-count="removedPhotos.length"
+        :photos="photos"
+        :selected-ids="selectedPhotoIds"
         @undo-last="undoLastRemoval"
         @restore-all="restoreAll"
         @add-photos="showAddPhotosDialog = true"
         @build-variant="openVariantWizard"
+        @select-all="handleSelectAll"
+        @deselect-all="clearAllSelections"
       />
 
       <PortfolioGrid
         v-model:photos="photos"
         :columns="columns"
         :gap="gap"
+        :selected-ids="selectedPhotoIds"
         ref="gridRef"
+        @select="(photo) => togglePhotoSelection(photo.id)"
         @remove="handleRemovePhoto"
         @info="handlePhotoInfo"
       />
@@ -174,6 +180,38 @@
       v-model:show="showVariantWizard"
       :prefill-config="variantPrefillConfig"
       @build-complete="onVariantBuildComplete"
+    />
+
+    <!-- Collection modal -->
+    <CollectionModal
+      :show="showCollectionModal"
+      :photo-count="selectedPhotoIds.length"
+      :photo-ids="selectedPhotoIds"
+      @add-to-collection="onCollectionAdded"
+      @add-to-series="onCollectionAdded"
+      @cancel="showCollectionModal = false"
+    />
+
+    <!-- Tool selector -->
+    <PhotoToolSelector
+      :show="showToolSelector"
+      :photo-count="selectedPhotoIds.length"
+      :is-processing="isProcessingTool"
+      @tool-selected="handleToolSelected"
+      @close="closeToolSelector"
+    />
+
+    <!-- Floating action bar -->
+    <FloatingActionBar
+      :selected-ids="selectedPhotoIds"
+      :show-delete="false"
+      :show-add-to-collection="true"
+      :show-move-to-tool="true"
+      :is-downloading="isDownloadingZip"
+      @clear-selection="clearAllSelections"
+      @download="handleSelectionDownload"
+      @add-to-collection="showCollectionModal = true"
+      @move-to-tool="openToolSelector"
     />
 
     <PhotoInfoDialog
@@ -239,11 +277,16 @@ import PortfolioGridToolbar from "@/components/portfolio-builder/PortfolioGridTo
 import PortfolioAddPhotosDialog from "@/components/portfolio-builder/PortfolioAddPhotosDialog.vue";
 import PortfolioBuildWizard from "@/components/portfolio-builder/PortfolioBuildWizardStepped.vue";
 import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
+import FloatingActionBar from "@/components/FloatingActionBar.vue";
+import CollectionModal from "@/components/CollectionModal.vue";
+import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import {
   exportPortfolioToPdf,
   exportPortfolioToJpeg,
 } from "@/utils/portfolioPdfExport";
 import { usePhotoDownload } from "@/composables/usePhotoDownload";
+import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection";
+import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection";
 
 defineOptions({ name: "PortfolioDetailView" });
 
@@ -252,8 +295,29 @@ const router = useRouter();
 const message = useMessage();
 const store = usePortfolioBuildsStore();
 const photosStore = usePhotosStore();
-const { downloadPhotosZip, isDownloading: isDownloadingZip } =
-  usePhotoDownload();
+const {
+  downloadPhotosZip,
+  isDownloading: isDownloadingZip,
+  downloadPhoto,
+} = usePhotoDownload();
+
+const {
+  selectedPhotoIds,
+  togglePhotoSelection,
+  clearAllSelections,
+  selectAllPhotos,
+  deselectAllPhotos,
+} = useLocalPhotoSelection();
+
+const {
+  isProcessing: isProcessingTool,
+  showToolSelector,
+  takeToTool,
+  openToolSelector,
+  closeToolSelector,
+} = usePhotoToolSelection();
+
+const showCollectionModal = ref(false);
 
 const build = ref(null);
 const photos = ref([]);
@@ -468,6 +532,32 @@ function openVariantWizard() {
 function onVariantBuildComplete() {
   store.fetchBuilds();
   router.push({ name: "portfolios" });
+}
+
+function onCollectionAdded() {
+  showCollectionModal.value = false;
+  clearAllSelections();
+}
+
+async function handleToolSelected(toolId, canvasId = null) {
+  const ids = [...selectedPhotoIds.value];
+  await takeToTool(toolId, ids, clearAllSelections, canvasId);
+  closeToolSelector();
+}
+
+async function handleSelectionDownload() {
+  const photosToDownload = selectedPhotoIds.value
+    .map((id) => photos.value.find((p) => p.id === id))
+    .filter(Boolean);
+  if (photosToDownload.length === 1) {
+    await downloadPhoto(photosToDownload[0]);
+  } else {
+    await downloadPhotosZip(photosToDownload);
+  }
+}
+
+function handleSelectAll() {
+  selectAllPhotos(photos.value.map((p) => p.id));
 }
 
 async function deletePortfolio() {

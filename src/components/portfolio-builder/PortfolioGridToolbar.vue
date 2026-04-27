@@ -44,6 +44,22 @@
 
       <span class="toolbar-separator" />
 
+      <n-button
+        size="small"
+        :type="allSelected ? 'primary' : 'default'"
+        @click="handleSelectAllToggle"
+        class="select-all-btn"
+      >
+        <template #icon>
+          <n-icon>
+            <SelectAllOn24Regular />
+          </n-icon>
+        </template>
+        <span>{{ allSelected ? "Deselect All" : "Select All" }}</span>
+      </n-button>
+
+      <span class="toolbar-separator" />
+
       <span class="toolbar-label">Gap</span>
       <n-slider
         :value="gap"
@@ -67,21 +83,26 @@ import {
   AddOutline,
   GitBranchOutline,
 } from "@vicons/ionicons5";
+import { SelectAllOn24Regular } from "@vicons/fluent";
 
 const props = defineProps({
   columns: { type: Number, required: true },
   gap: { type: Number, default: 3 },
   photoCount: { type: Number, required: true },
   removedCount: { type: Number, default: 0 },
+  photos: { type: Array, default: () => [] },
+  selectedIds: { type: Array, default: () => [] },
 });
 
-defineEmits([
+const emit = defineEmits([
   "update:columns",
   "update:gap",
   "undo-last",
   "restore-all",
   "add-photos",
   "build-variant",
+  "select-all",
+  "deselect-all",
 ]);
 
 const columnOptions = computed(() => {
@@ -91,6 +112,25 @@ const columnOptions = computed(() => {
   }
   return opts;
 });
+
+const selectedIdsSet = computed(() => new Set(props.selectedIds));
+
+const allSelected = computed(() => {
+  return (
+    props.photos.length > 0 &&
+    props.photos.every((photo) => selectedIdsSet.value.has(photo.id))
+  );
+});
+
+const handleSelectAllToggle = () => {
+  if (allSelected.value) {
+    // Deselect all
+    emit("deselect-all");
+  } else {
+    // Select all
+    emit("select-all");
+  }
+};
 </script>
 
 <style scoped>
@@ -120,6 +160,14 @@ const columnOptions = computed(() => {
   height: 18px;
   background: var(--border-color);
   margin: 0 4px;
+}
+
+.select-all-btn {
+  white-space: nowrap;
+}
+
+.select-all-btn span {
+  font-size: 13px;
 }
 
 .toolbar-right {

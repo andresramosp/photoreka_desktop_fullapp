@@ -1,5 +1,11 @@
 <template>
-  <div class="grid-cell" :class="{ 'is-loaded': loaded }">
+  <div
+    class="grid-cell"
+    :class="{ 'is-loaded': loaded, 'is-selected': selected }"
+    @mousedown="onMousedown"
+    @mousemove="onMousemove"
+    @click="onClick"
+  >
     <img
       :src="photo.originalUrl || photo.thumbnailUrl"
       :alt="`Photo ${photo.id}`"
@@ -31,6 +37,11 @@
       </n-button>
     </div>
 
+    <div class="cell-drag-hint" aria-hidden="true">
+      <span></span><span></span> <span></span><span></span> <span></span
+      ><span></span>
+    </div>
+
     <div v-if="!loaded" class="cell-placeholder">
       <n-spin :size="16" />
     </div>
@@ -42,13 +53,39 @@ import { ref } from "vue";
 import { NButton, NIcon, NSpin } from "naive-ui";
 import { TrashOutline, InformationCircleOutline } from "@vicons/ionicons5";
 
-defineProps({
+const props = defineProps({
   photo: { type: Object, required: true },
+  selected: { type: Boolean, default: false },
 });
 
-defineEmits(["remove", "info"]);
+const emit = defineEmits(["remove", "info", "select"]);
 
 const loaded = ref(false);
+
+// Distinguish click from drag: suppress selection toggle when the user dragged
+let dragStartX = 0;
+let dragStartY = 0;
+let hasMoved = false;
+
+function onMousedown(e) {
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  hasMoved = false;
+}
+
+function onMousemove(e) {
+  if (!hasMoved) {
+    const dx = e.clientX - dragStartX;
+    const dy = e.clientY - dragStartY;
+    if (dx * dx + dy * dy > 25) hasMoved = true; // > 5px
+  }
+}
+
+function onClick() {
+  if (!hasMoved) {
+    emit("select", props.photo);
+  }
+}
 </script>
 
 <style scoped>
@@ -139,6 +176,36 @@ const loaded = ref(false);
   background-color: var(--error-color) !important;
 }
 
+/* ── Drag hint (grip dots, center) ── */
+.cell-drag-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.7);
+  display: grid;
+  grid-template-columns: repeat(2, 6px);
+  gap: 5px;
+  opacity: 0;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.grid-cell:hover .cell-drag-hint {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.cell-drag-hint span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
 .cell-placeholder {
   position: absolute;
   inset: 0;
@@ -146,5 +213,60 @@ const loaded = ref(false);
   align-items: center;
   justify-content: center;
   background: var(--bg-container);
+}
+
+/* ── Selection indicator (top-left checkbox) ── */
+.cell-select-indicator {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  cursor: pointer;
+  transition:
+    opacity 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease;
+  z-index: 10;
+}
+
+.grid-cell:hover .cell-select-indicator,
+.grid-cell.is-selected .cell-select-indicator {
+  opacity: 1;
+}
+
+.grid-cell.is-selected .cell-select-indicator {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.check-icon {
+  width: 14px;
+  height: 14px;
+  color: white;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.grid-cell.is-selected .check-icon {
+  opacity: 1;
+}
+
+/* ── Selection border ── */
+.grid-cell.is-selected::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 3px solid var(--accent-color);
+  pointer-events: none;
+  z-index: 5;
 }
 </style>
