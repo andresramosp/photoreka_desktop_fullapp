@@ -9,8 +9,8 @@
 
     <!-- General Purpose Block -->
     <div class="style-block">
-      <h3 class="section-title">General Purpose</h3>
-      <p class="section-subtitle">Recommended for most users</p>
+      <!-- <h3 class="section-title">Most Popular</h3>
+      <p class="section-subtitle">Recommended for most users</p> -->
       <div class="general-grid general-grid-dual">
         <div
           class="category-card general-card"
