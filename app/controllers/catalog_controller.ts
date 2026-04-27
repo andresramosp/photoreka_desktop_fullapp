@@ -127,15 +127,15 @@ export default class CatalogController {
   /**
    * Genera claves únicas para las fotos
    */
-  private generatePhotoKeys(fileType?: string) {
+  private generatePhotoKeys(userId: string, fileType?: string) {
     const id = crypto.randomUUID()
     const extension = fileType?.includes('webp')
       ? '.webp'
       : fileType?.includes('png')
         ? '.png'
         : '.jpg'
-    const key = `${id}${extension}`
-    const thumbnailKey = `${id}-thumb${extension}`
+    const key = `main/${userId}/${id}${extension}`
+    const thumbnailKey = `thumbs/${userId}/${id}${extension}`
     return { key, thumbnailKey, extension }
   }
 
@@ -190,7 +190,7 @@ export default class CatalogController {
         return response.badRequest({ message: 'Tipo de archivo no permitido' })
       }
 
-      const { key, thumbnailKey } = this.generatePhotoKeys(fileType)
+      const { key, thumbnailKey } = this.generatePhotoKeys(userId, fileType)
       const [uploadUrl, thumbnailUploadUrl] = await this.generateUploadUrls(
         key,
         thumbnailKey,
