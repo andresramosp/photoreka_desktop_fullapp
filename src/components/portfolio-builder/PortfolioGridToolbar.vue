@@ -29,6 +29,25 @@
         <span class="toolbar-separator" />
       </template>
 
+      <n-checkbox
+        :checked="fillAvailableSpace"
+        @update:checked="$emit('update:fill-available-space', $event)"
+      >
+        Fill space
+      </n-checkbox>
+      <span class="toolbar-label">Gap</span>
+      <n-slider
+        :value="gap"
+        :min="0"
+        :max="60"
+        :step="1"
+        :tooltip="true"
+        :format-tooltip="(v) => `${v}px`"
+        style="width: 90px"
+        @update:value="$emit('update:gap', $event)"
+      />
+      <span class="toolbar-separator" />
+
       <span class="toolbar-label">Grid</span>
       <n-button-group>
         <n-button
@@ -41,8 +60,6 @@
           {{ opt }}
         </n-button>
       </n-button-group>
-
-      <span class="toolbar-separator" />
 
       <n-button
         size="small"
@@ -57,27 +74,6 @@
         </template>
         <span>{{ allSelected ? "Deselect All" : "Select All" }}</span>
       </n-button>
-
-      <span class="toolbar-separator" />
-
-      <span class="toolbar-label">Gap</span>
-      <n-slider
-        :value="gap"
-        :min="0"
-        :max="60"
-        :step="1"
-        :tooltip="true"
-        :format-tooltip="(v) => `${v}px`"
-        style="width: 90px"
-        @update:value="$emit('update:gap', $event)"
-      />
-
-      <n-checkbox
-        :checked="fillAvailableSpace"
-        @update:checked="$emit('update:fill-available-space', $event)"
-      >
-        Fill space
-      </n-checkbox>
     </div>
   </div>
 </template>
