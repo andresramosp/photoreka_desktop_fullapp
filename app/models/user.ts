@@ -13,6 +13,7 @@ export type UserProvider = 'email' | 'google'
 export type UserRole = 'user' | 'admin'
 export type UserProfile =
   | 'general'
+  | 'commercial'
   | 'street-photography'
   | 'documentary'
   | 'artistic'

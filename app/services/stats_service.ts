@@ -1,13 +1,8 @@
 import Photo from '#models/photo'
-import {
-  VISUAL_ASPECTS_SCHEMA,
-  ARTISTIC_SCORES_SCHEMA,
-  ARTISTIC_SCORE_CRITERIA,
-} from '#config/photo_schema'
+import { VISUAL_ASPECTS_SCHEMA, getArtisticSchema, type PromptVariant } from '#config/photo_schema'
 
 // Re-export for any consumers that import these directly from stats_service
 export { VISUAL_ASPECTS_SCHEMA as VISUAL_ASPECTS_CONFIG }
-export { ARTISTIC_SCORES_SCHEMA as ARTISTIC_SCORES_CONFIG }
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -156,7 +151,10 @@ export default class StatsService {
 
   // ── Artistic Scores ───────────────────────────────────────
 
-  async getArtisticScoresStats(userId: number): Promise<ArtisticScoresStats> {
+  async getArtisticScoresStats(
+    userId: number,
+    variant: PromptVariant
+  ): Promise<ArtisticScoresStats> {
     const photos = await Photo.query().where('user_id', userId).select('id', 'descriptions')
 
     const totalPhotos = photos.length
@@ -192,14 +190,13 @@ export default class StatsService {
       }
     }
 
+    const schema = getArtisticSchema(variant)
     return {
       totalPhotos,
-      fundamentals: ARTISTIC_SCORES_SCHEMA.find((g) => g.key === 'fundamentals')!.criteria.map(
-        (c) => computeStat(c.key)
-      ),
-      bonus: ARTISTIC_SCORES_SCHEMA.find((g) => g.key === 'bonus')!.criteria.map((c) =>
-        computeStat(c.key)
-      ),
+      fundamentals: schema
+        .find((g) => g.key === 'fundamentals')!
+        .criteria.map((c) => computeStat(c.key)),
+      bonus: schema.find((g) => g.key === 'bonus')!.criteria.map((c) => computeStat(c.key)),
     }
   }
 

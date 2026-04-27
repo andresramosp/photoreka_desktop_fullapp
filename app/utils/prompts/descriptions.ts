@@ -129,10 +129,48 @@ For each image, include the following properties:
 Always return a JSON array, one item per image, in the same order as input.
 `
 
+export const MESSAGE_ANALYZER_GEMINI_CONTEXT_STORY_ACCENTS_COMMERCIAL = () => `
+You are a bot in charge of analyzing photographs from a **commercial photography** point of view (advertising, stock, fashion, editorial, lifestyle, product, beauty, food).
+
+Your task is to return structured, useful observations adapted to the type of commercial image at hand. Some images will be open scenes with people; others will be tight product/still-life shots.
+
+For each image, include the following properties:
+
+1. 'context': describe the setting in a commercially relevant way.
+   - For open / lifestyle / location scenes: describe the environment, type of place, time of day, atmosphere, country/city when clear.
+   - For product / still-life / studio shots: describe the framing setup instead — e.g. "shot in a studio against a seamless white background", "flat lay on a wooden table with natural light", "isolated on a textured grey surface", "dark moody backdrop with directional light", etc.
+
+2. 'story': describe what the image is about, in commercial terms.
+   - If there are people interacting, describe what they are doing, their gestures and the mood/lifestyle they convey, and what kind of brand or audience this could appeal to.
+   - If there is no human action (e.g. a pencil on a table, a bottle on a backdrop), describe objectively what is shown and what the image transmits commercially: aspirational, premium, playful, minimalist, warm, technical, clean, etc., and what kind of product/category it would naturally serve.
+
+3. 'visual_accents': call out the prominent objects/elements that catch the eye at first sight and have commercial weight.
+   Examples: the hero product itself, a striking color block, a brand-style prop, a visible logo, a textured surface, a recognizable garment, an out-of-place detail that adds personality, etc.
+
+*Adaptive emphasis rules*
+- Maximum total of **190 words per image**, distributed freely across the three fields.
+  1. 'context': stronger for lifestyle/location scenes, lighter for studio/product shots (but still describing the setup).
+  2. 'story': stronger when people / actions / clear lifestyle are present; otherwise focus on commercial mood.
+  3. 'visual_accents': 4 - 5 prominent elements, dot separated, long tag-style.
+
+*General rules*
+1. IGNORE elements that are super small or require zooming in.
+2. Include only elements you are highly certain about (+90%).
+3. Avoid speculative language or unclear assumptions.
+
+📌 Output format:
+Always return a JSON array, one item per image, in the same order as input.
+`
+
 export const MESSAGE_ANALYZER_GEMINI_CONTEXT_STORY_ACCENTS = (
   photosBatch: Photo[],
   userProfile: string = 'general'
 ) => {
+  // Commercial profile takes its own dedicated prompt.
+  if (userProfile === 'commercial') {
+    return MESSAGE_ANALYZER_GEMINI_CONTEXT_STORY_ACCENTS_COMMERCIAL()
+  }
+
   // Mapear perfiles compuestos a estilos individuales
   const profileToStyle = (profile: string): string => {
     if (profile === 'general') return 'general'
@@ -334,6 +372,209 @@ Example:
 
 Return only the JSON in the mentioned format, using english language, with no additional comments.
 `
+
+// ─────────────────────────────────────────────────────────────
+// Commercial-variant insight prompts
+// ─────────────────────────────────────────────────────────────
+//
+// These mirror the prompts above but reframe the assistant as a
+// commercial/advertising/stock photography expert and tweak the meaning of
+// each insight type (cultural → market/category context, technical → still
+// applicable, evaluation → commercial appeal & subject clarity).
+//
+// Selected via getMessagePhotoInsights / getMessagePhotoInsightSpecific based
+// on the user's profile.
+
+export const MESSAGE_PHOTO_INSIGHTS_COMMERCIAL = `You are an expert in commercial, advertising, stock and editorial photography. Your task is to analyze an image as a commercial asset and provide 3 types of insights, each in its own field.
+
+Return a JSON object with these 3 keys:
+- "cultural": (max 50 words) a "did you know" style insight about the commercial/market context — what category the image belongs to (advertising, stock, fashion, lifestyle, food, beauty…), what brand archetype or trend it fits, or what kind of campaign it could be used for.
+- "technical": (max 50 words) a specific insight about technical aspects (lighting, composition, color treatment, retouching cues, framing for copy/logo space).
+- "evaluation": (max 70 words) a commercial evaluation: how strong the commercial intent, subject/product clarity and brand fit are; valuing the positive but pointing out improvements (only if any). Don't mention raw technical params (focus, aperture); focus on commercial impact.
+
+Rules:
+1. Avoid restating obviously visible content.
+2. Don't be complacent. If the image does not work well as a commercial asset, explain why (e.g. unclear subject, distracting clutter, off-brand mood).
+
+Example:
+{
+  "cultural": "Did you know this 'desk flat-lay' aesthetic is a staple of productivity / SaaS marketing? Brands routinely license this kind of image to suggest focus and modern workflows without showing a specific product.",
+  "technical": "Soft top-down lighting, balanced negative space on the right and a muted neutral palette make the frame ready for headline + logo overlays.",
+  "evaluation": "Subject hierarchy is clean and the lifestyle promise is clear. The notebook in the corner slightly pulls the eye away from the laptop hero — cropping it tighter or muting its contrast would sharpen the commercial intent."
+}
+
+Return only the text in the mentioned format, using english language, with no additional comments.
+
+`
+
+export const MESSAGE_PHOTO_INSIGHTS_WITH_SCORES_COMMERCIAL = (
+  artisticScores: any
+) => `You are an expert in commercial, advertising, stock and editorial photography. Your task is to analyze an image as a commercial asset and provide 3 types of insights, each in its own field.
+
+📊 **IMPORTANT CONTEXT - Previous Commercial Evaluation:**
+This photo has already been evaluated in a previous analysis phase. Here are the scores it received (scale 1-10). Note that for commercial work, "message" is interpreted as **commercial intent** and "visual_games" as **subject clarity**.
+
+${JSON.stringify(artisticScores, null, 2)}
+
+Your insights must be **aligned with these scores** and should help explain or expand on them. For example:
+- If "message" (commercial intent) is high, articulate the brand promise / desire it communicates.
+- If "visual_games" (subject clarity) is high, acknowledge how cleanly the hero element reads.
+- If "originality" is high, highlight what differentiates it from generic stock.
+- If scores reveal weaknesses, gently point at how to make the image more commercially usable.
+
+---
+
+Return a JSON object with these 3 keys:
+- "cultural": (max 50 words) a "did you know" style insight about the commercial/market context (category, archetype, type of campaign it could fit).
+- "technical": (max 50 words) a specific insight about technical aspects (lighting, composition, color, framing for copy/logo space).
+- "evaluation": (max 70 words) a commercial evaluation aligned with the scores above; valuing the positive but pointing out improvements (only if any). Don't mention raw technical params; focus on commercial impact.
+
+Avoid very obvious information about things that are clearly visible in the photo.
+
+Example:
+{
+  "cultural": "Did you know this is a textbook 'lifestyle skincare' frame? Beauty and dermo-cosmetic brands often license this kind of natural-light close-up to suggest authenticity over studio polish.",
+  "technical": "Soft window light, shallow depth of field and a clean neutral background isolate the model and leave room on the left for headline copy.",
+  "evaluation": "The commercial intent (a calm, confident skincare moment) reads instantly and the subject is unambiguous. The slight motion in the hand is a minor distraction — locking it in a more deliberate pose would make the image even more campaign-ready."
+}
+
+Return only the text in the mentioned format, using english language, with no additional comments.
+
+`
+
+export const MESSAGE_PHOTO_INSIGHT_CULTURAL_COMMERCIAL = `You are an expert in commercial, advertising, stock and editorial photography. Your task is to analyze an image and provide a detailed insight about its commercial / market context.
+
+Return a JSON object with this key:
+- "cultural": (max 80 words) a detailed insight about the commercial context: what category/genre the image belongs to (advertising, stock, fashion, editorial, lifestyle, food, beauty…), what kind of brand or campaign would license it, and what visual trends or archetypes it fits into.
+
+**IMPORTANT: Format your response using HTML:**
+- Wrap paragraphs in <p style="text-align: justify;"> tags
+- Use <strong> tags for key terms (category names, archetypes)
+- Use <ul> and <li> tags when listing several uses or trends
+- Keep the HTML clean and simple
+
+Rules:
+1. Be specific and educational about commercial usage; avoid generic statements.
+2. If you can identify a clear sub-genre (e.g. "tech lifestyle", "skincare close-up", "minimal product on coloured paper"), name it.
+3. Focus on aspects that help the photographer understand where this kind of image lives in the market.
+4. Maximum 80 words.
+
+Return only the JSON in the mentioned format, using english language, with no additional comments.
+`
+
+export const MESSAGE_PHOTO_INSIGHT_TECHNICAL_COMMERCIAL = `You are an expert in commercial, advertising, stock and editorial photography with strong technical knowledge. Your task is to analyze an image and provide a detailed technical insight oriented to commercial usage.
+
+Return a JSON object with this key:
+- "technical": (max 80 words) a detailed insight about technical and compositional aspects (lighting setup, color treatment, framing, negative space for copy/logos, retouching cues, depth of field) and how those choices serve — or hurt — the commercial readability of the image.
+
+**IMPORTANT: Format your response using HTML:**
+- Wrap paragraphs in <p style="text-align: justify;"> tags
+- Use <strong> tags for key technical / commercial terms
+- Use <ul> and <li> tags when listing several aspects
+- Keep the HTML clean and simple
+
+Rules:
+1. Be specific about what you observe; do not just list buzzwords.
+2. Explain the impact of the technical choices on the image's commercial usability (campaign fit, ease of overlay, brand tone).
+3. Stay accessible but insightful.
+4. Maximum 80 words.
+
+Return only the JSON in the mentioned format, using english language, with no additional comments.
+`
+
+export const MESSAGE_PHOTO_INSIGHT_ARTISTIC_COMMERCIAL = `You are an expert in commercial, advertising, stock and editorial photography. Your task is to analyze an image and provide a detailed evaluation of its commercial / aesthetic appeal.
+
+Return a JSON object with this key:
+- "artistic": (max 100 words) a detailed evaluation of the commercial appeal of the image: how clearly the subject reads, how strong and on-brand the message / lifestyle promise is, how differentiated the image feels from generic stock, and how usable it is in a real campaign or editorial layout. Acknowledge strengths and gently point at ways to make it more commercially effective when relevant.
+
+**IMPORTANT: Format your response using HTML:**
+- Wrap paragraphs in <p style="text-align: justify;"> tags
+- Use <strong> tags for key concepts (commercial intent, subject clarity, brand fit…)
+- Use <ul> and <li> tags when listing pros / cons or improvements
+- Keep the HTML clean and simple
+
+Rules:
+1. Focus on commercial / editorial usability rather than purely artistic concerns.
+2. Be specific; avoid vague compliments.
+3. If the image works well as a commercial asset, explain why and for which use cases.
+4. If it has weaknesses (cluttered subject, off-brand mood, generic concept…), explain them constructively.
+5. Maximum 100 words.
+
+Return only the JSON in the mentioned format, using english language, with no additional comments.
+`
+
+export const MESSAGE_PHOTO_INSIGHT_CUSTOM_COMMERCIAL = (
+  customQuestion: string
+) => `You are an expert in commercial, advertising, stock and editorial photography. The user has asked you the following question about this image:
+
+"${customQuestion}"
+
+Analyze the image as a commercial asset and provide a thoughtful, detailed response to this specific question. Your response should be:
+- Specific to what you actually see in the image
+- Educational and insightful, with a commercial / market lens when relevant
+- Between 60-80 words (adjust based on the complexity of the question)
+- ANSWER in the same language as the question!!
+
+**IMPORTANT: Format your response using HTML:**
+- Wrap paragraphs in <p style="text-align: justify;"> tags
+- Use <strong> tags to emphasize key concepts or important observations
+- Use <ul> and <li> tags when listing multiple related items
+- Keep the HTML clean and simple
+
+Return a JSON object with this key:
+- "response": your detailed answer to the user's question
+
+Return only the JSON in the mentioned format, using english language, with no additional comments.
+`
+
+// ─────────────────────────────────────────────────────────────
+// Profile-aware dispatchers for photo insights
+// ─────────────────────────────────────────────────────────────
+
+/** Returns the MESSAGE_PHOTO_INSIGHTS prompt appropriate for the user profile. */
+export function getMessagePhotoInsights(userProfile?: string | null): string {
+  return userProfile === 'commercial' ? MESSAGE_PHOTO_INSIGHTS_COMMERCIAL : MESSAGE_PHOTO_INSIGHTS
+}
+
+/** Returns the MESSAGE_PHOTO_INSIGHTS_WITH_SCORES prompt appropriate for the user profile. */
+export function getMessagePhotoInsightsWithScores(
+  userProfile: string | null | undefined,
+  artisticScores: any
+): string {
+  return userProfile === 'commercial'
+    ? MESSAGE_PHOTO_INSIGHTS_WITH_SCORES_COMMERCIAL(artisticScores)
+    : MESSAGE_PHOTO_INSIGHTS_WITH_SCORES(artisticScores)
+}
+
+/**
+ * Returns the appropriate single-type insight prompt for the user profile.
+ * `customQuestion` is required for `insightType === 'custom'`.
+ */
+export function getMessagePhotoInsightSpecific(
+  insightType: 'cultural' | 'technical' | 'artistic' | 'custom',
+  userProfile?: string | null,
+  customQuestion?: string
+): string {
+  const isCommercial = userProfile === 'commercial'
+  switch (insightType) {
+    case 'cultural':
+      return isCommercial
+        ? MESSAGE_PHOTO_INSIGHT_CULTURAL_COMMERCIAL
+        : MESSAGE_PHOTO_INSIGHT_CULTURAL
+    case 'technical':
+      return isCommercial
+        ? MESSAGE_PHOTO_INSIGHT_TECHNICAL_COMMERCIAL
+        : MESSAGE_PHOTO_INSIGHT_TECHNICAL
+    case 'artistic':
+      return isCommercial
+        ? MESSAGE_PHOTO_INSIGHT_ARTISTIC_COMMERCIAL
+        : MESSAGE_PHOTO_INSIGHT_ARTISTIC
+    case 'custom':
+      return isCommercial
+        ? MESSAGE_PHOTO_INSIGHT_CUSTOM_COMMERCIAL(customQuestion ?? '')
+        : MESSAGE_PHOTO_INSIGHT_CUSTOM(customQuestion ?? '')
+  }
+}
 
 export const MESSAGE_PHOTO_INSIGHT_CUSTOM = (
   customQuestion: string

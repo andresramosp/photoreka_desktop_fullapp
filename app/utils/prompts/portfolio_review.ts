@@ -68,24 +68,26 @@ MERGE RULES (CRITICAL):
 
 ${modeDescription}
 
+Adapt your analysis to the nature of the portfolio — these photos may be documentary/street, commercial/advertising, portrait, lifestyle, or another genre. The concept of "narrative pattern" is broad: it can mean a shared human story, a consistent brand promise, a repeated lifestyle scenario, or a product-use situation.
+
 Your task is to identify and describe NARRATIVE patterns, themes, or storytelling approaches shared by a group of photos.
 
 NARRATIVE PATTERN CHARACTERISTICS:
-- Story elements: What story or stories do these photos tell together?
-- Emotional arc: Is there an emotional progression or consistent mood?
-- Subjects and protagonists: Who or what are the main characters?
-- Narrative devices: Use of sequence, contrast, symbolism, etc.
-- Thematic coherence: What overarching theme connects these photos?
+- Story or message: What story, situation, or visual message do these photos tell together?
+- Tone or emotional register: Is there a consistent mood, emotional arc, or brand tone?
+- Subjects and protagonists: Who or what are the main characters or hero elements?
+- Narrative devices: Use of sequence, contrast, symbolism, lifestyle promise, implied use, etc.
+- Thematic coherence: What overarching theme or intent connects these photos?
 
 TITLE RULES (2-4 words):
-- Should capture the narrative essence (e.g., "Urban Storytelling", "Isolated Subjects", "Journey Through Time")
+- Should capture the narrative or thematic essence (e.g., "Urban Storytelling", "Isolated Subjects", "Journey Through Time", "Aspirational Lifestyle", "Product Discovery", "Quiet Domestic Moments")
 - Be evocative but grounded in visible content
 - Avoid overly generic titles
 
 DESCRIPTION RULES:
-- 2-3 sentences explaining the narrative pattern
-- Focus on storytelling elements, not technical aspects
-- Be specific about themes observed
+- 2-3 sentences explaining the narrative or thematic pattern
+- Focus on storytelling, message, or lifestyle elements — not technical aspects
+- Be specific about the themes or intent observed
 ${mergeRules}
 Return ONLY valid JSON (no markdown, no commentary) in this exact format:
 ${outputFormat}`,
@@ -243,23 +245,26 @@ MERGE RULES (CRITICAL):
 
 ${modeDescription}
 
+Adapt your analysis to the nature of the portfolio — these photos may be documentary/street, commercial/advertising, portrait, lifestyle, or another genre. "Context" means whatever situational frame is most meaningful for these images: a geographic or cultural setting, a production/shooting environment, a type of venue or scenario, or a situational occasion.
+
 Your task is to identify and describe CONTEXTUAL similarities, situations, or settings shared by a group of photos.
 
-CONTEXTUAL PATTERN CHARACTERISTICS (focus especially on region and geography):
-- Cultural-geographic context: Region, country, city, or geographic area reflected in the photos (urban, rural, coastal, mountainous, etc.)
-- Settings: Types of places or environments
-- Activities or events, traditions, rituals
-- Time context (day, season, era)
-- Environmental factors (weather, lighting, atmosphere)
+CONTEXTUAL PATTERN CHARACTERISTICS:
+- Geographic or cultural setting: Region, country, city, or geographic area when visible or clearly implied (urban, rural, coastal, etc.)
+- Shooting or production environment: studio setup, outdoor location, specific type of venue, product placement surface, indoor/outdoor, day/night
+- Situational context: Activities, events, occasions, rituals, everyday scenarios, product-use situations, lifestyle settings
+- Time context: day, season, era, time of day
+- Environmental factors: weather, lighting conditions, atmosphere
 
 TITLE RULES (2-4 words):
-- Should capture the contextual or geographic essence (e.g., "Urban Nightlife", "Coastal Life")
-- Be descriptive of the setting, situation, or regional aspect
+- Should capture the dominant contextual or situational essence (e.g., "Urban Nightlife", "Coastal Life", "Studio Product Shots", "Outdoor Lifestyle", "Kitchen Settings", "Market Scenes")
+- Be descriptive of the setting or situation
 - Avoid overly generic titles
 
 DESCRIPTION RULES:
-- 2-3 sentences explaining the contextual and especially geographic or regional similarities
-- Focus on settings, environments, and regional or geographic elements
+- 2-3 sentences explaining the shared contextual or situational similarities
+- Focus on settings, environments, production context, and situational elements
+- Prioritize geographic/cultural context for documentary-style photos; production/shooting context for commercial-style photos
 - Be specific about the observed contexts
 ${mergeRules}
 Return ONLY valid JSON (no markdown, no commentary) in this exact format:
@@ -269,7 +274,7 @@ ${photosText}
 
 Note: Each photo entry includes its ID. Use these IDs when selecting representative photos.
 
-Analyze the contextual patterns shared by these photos, with special attention to region and geography.`,
+Analyze the contextual patterns shared by these photos.`,
   }
 }
 

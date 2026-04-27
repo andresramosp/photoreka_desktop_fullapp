@@ -3,16 +3,14 @@ import PortfolioBuildService from '#services/portfolio_build_service'
 import CreditService from '#services/credit_service'
 import Photo from '#models/photo'
 import type { PortfolioBuildConfig } from '#models/portfolio_build'
-import { ARTISTIC_SCORE_EXTERNAL_KEYS, SCORE_INTERNAL_TO_EXTERNAL } from '#config/photo_schema'
+import {
+  getArtisticExternalKeys,
+  getPromptVariant,
+  getScoreInternalToExternal,
+  type PromptVariant,
+} from '#config/photo_schema'
 
 const VALID_COHERENCE_MODES = ['free', 'visual', 'chromatic', 'narrative', 'heterogeneous']
-const VALID_SCORE_FIELDS = ARTISTIC_SCORE_EXTERNAL_KEYS
-
-/**
- * Maps legacy internal key names to the canonical external key used downstream.
- * E.g. a client sending 'strangeness' is normalised to 'originality'.
- */
-const SCORE_FIELD_ALIASES: Record<string, string> = SCORE_INTERNAL_TO_EXTERNAL
 
 export default class PortfolioBuildController {
   /**
@@ -25,7 +23,7 @@ export default class PortfolioBuildController {
       const user = auth.use('api').user! as any
 
       const body = request.body()
-      const config = this.parseAndValidateConfig(body)
+      const config = this.parseAndValidateConfig(body, user.profiles)
 
       const hasCredits = await CreditService.canAfford(user.id)
       if (!hasCredits) {
@@ -41,7 +39,7 @@ export default class PortfolioBuildController {
       // weights), resolve it now so the build starts with a concrete weight
       // vector. Cheap PARSE_MODEL call; same path as the preview endpoint.
       if (!config.weights && config.stylePreferences) {
-        const parsed = await service.previewStyleWeights(config.stylePreferences)
+        const parsed = await service.previewStyleWeights(config.stylePreferences, user.profiles)
         // Scale from the 0..1 preview range to the 0..10 pipeline range.
         config.weights = Object.fromEntries(
           Object.entries(parsed.weights).map(([k, v]) => [k, v * 10])
@@ -419,7 +417,8 @@ export default class PortfolioBuildController {
   public async getDefaultWeights({ response, auth }: HttpContext) {
     try {
       await auth.use('api').check()
-      const weights = PortfolioBuildService.getDefaultWeights()
+      const user = auth.use('api').user! as any
+      const weights = PortfolioBuildService.getDefaultWeights(user.profiles)
       return response.ok({ weights })
     } catch (error: any) {
       console.error('[PortfolioBuildController] getDefaultWeights error:', error)
@@ -438,6 +437,7 @@ export default class PortfolioBuildController {
   public async previewStyleWeights({ request, response, auth }: HttpContext) {
     try {
       await auth.use('api').check()
+      const user = auth.use('api').user as any
 
       const body = request.body()
       const raw = body.stylePreferences
@@ -449,7 +449,7 @@ export default class PortfolioBuildController {
       const stylePreferences = raw.trim().slice(0, 1000)
 
       const service = new PortfolioBuildService()
-      const result = await service.previewStyleWeights(stylePreferences)
+      const result = await service.previewStyleWeights(stylePreferences, user?.profiles)
       return response.ok(result)
     } catch (error: any) {
       console.error('[PortfolioBuildController] previewStyleWeights error:', error)
@@ -457,7 +457,11 @@ export default class PortfolioBuildController {
     }
   }
 
-  private parseAndValidateConfig(body: any): PortfolioBuildConfig {
+  private parseAndValidateConfig(body: any, userProfile: string | null): PortfolioBuildConfig {
+    const variant: PromptVariant = getPromptVariant(userProfile)
+    const validScoreFields = getArtisticExternalKeys(variant)
+    const scoreFieldAliases = getScoreInternalToExternal(variant)
+
     const name =
       body.name && typeof body.name === 'string' ? body.name.trim().slice(0, 200) : undefined
 
@@ -483,8 +487,8 @@ export default class PortfolioBuildController {
     if (rawWeights && typeof rawWeights === 'object') {
       weights = {}
       for (const [field, value] of Object.entries(rawWeights)) {
-        const canonical = SCORE_FIELD_ALIASES[field] ?? field
-        if (!VALID_SCORE_FIELDS.includes(canonical)) {
+        const canonical = scoreFieldAliases[field] ?? field
+        if (!validScoreFields.includes(canonical)) {
           throw new Error(`Invalid weight field: ${field}`)
         }
         if (typeof value !== 'number' || value < 0 || value > 10) {

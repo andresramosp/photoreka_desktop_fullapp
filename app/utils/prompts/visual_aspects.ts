@@ -1,22 +1,37 @@
 import Photo from '#models/photo'
-import { VISUAL_ASPECTS_SCHEMA } from '#config/photo_schema'
+import {
+  VISUAL_ASPECTS_SCHEMA,
+  getAspectValuesForVariant,
+  getPromptVariant,
+  type PromptVariant,
+} from '#config/photo_schema'
 
 // Build the numbered aspect list and the output example from the schema,
 // so the prompt stays in sync automatically when aspects change.
-function buildAspectList(): string {
+function buildAspectList(variant: PromptVariant): string {
   const llmAspects = VISUAL_ASPECTS_SCHEMA.filter((a) => a.source === 'llm')
   return llmAspects
-    .map((a, i) => `${i + 1}. '${a.key}': ${a.values.map((v) => `'${v}'`).join(', ')}`)
+    .map((a, i) => {
+      const values = getAspectValuesForVariant(a, variant)
+      return `${i + 1}. '${a.key}': ${values.map((v) => `'${v}'`).join(', ')}`
+    })
     .join('\n')
 }
 
-function buildOutputExample(): string {
+function buildOutputExample(variant: PromptVariant): string {
   const llmAspects = VISUAL_ASPECTS_SCHEMA.filter((a) => a.source === 'llm')
-  const exampleObj = Object.fromEntries(llmAspects.map((a) => [a.key, [a.values[0]]]))
+  const exampleObj = Object.fromEntries(
+    llmAspects.map((a) => [a.key, [getAspectValuesForVariant(a, variant)[0]]])
+  )
   return JSON.stringify([exampleObj], null, 2)
 }
 
-export const MESSAGE_ANALYZER_VISUAL_ASPECTS = (_photosBatch: Photo[]) => `
+export const MESSAGE_ANALYZER_VISUAL_ASPECTS = (
+  _photosBatch: Photo[],
+  userProfile: string = 'general'
+) => {
+  const variant = getPromptVariant(userProfile)
+  return `
 You are a bot in charge of analyzing photographs and returning structured information for each photo, focusing on technical-stylistic aspects. 
 
 *Guidelines*
@@ -28,12 +43,13 @@ You are a bot in charge of analyzing photographs and returning structured inform
 
 The aspects and possible values include:
 
-${buildAspectList()}
+${buildAspectList(variant)}
 
 **Output Example for 1 image:**
 \`\`\`json
-${buildOutputExample()}
+${buildOutputExample(variant)}
 \`\`\`
 
 Always return a JSON array, each item containing the technical-stylistic aspects for one image, in the same order as the input images.
 `
+}

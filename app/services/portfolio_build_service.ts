@@ -23,7 +23,12 @@ import CpuWorkerPool from './cpu_worker_pool.js'
 import { DHASH_DUPLICATE_THRESHOLD } from '../utils/dhash.js'
 import ScoringService from './scoring_service.js'
 import type { SearchMode } from './search_text_service.js'
-import { STYLE_CRITERIA_DESCRIPTIONS, toInternalScoreKey } from '#config/photo_schema'
+import {
+  toInternalScoreKey,
+  getStyleCriteriaDescriptionsForVariant,
+  getPromptVariant,
+  type PromptVariant,
+} from '#config/photo_schema'
 
 // ══════════════════════════════════════════════════════════════
 // CONFIGURATION
@@ -73,6 +78,8 @@ const OVER_GENERATE_RATIO = 0.35
 const OVER_GENERATE_MIN = 3
 /** Cosine similarity threshold — reject candidates too similar to already-selected photos. */
 const SIMILARITY_GATE_THRESHOLD = 0.75
+/** Commercial work often contains valid near-variants; allow more similarity before rejecting. */
+const COMMERCIAL_SIMILARITY_GATE_THRESHOLD = 0.8
 /** Max retries for LLM calls before giving up. */
 const LLM_MAX_RETRIES = 3
 /** Base delay in ms between retries (exponential backoff). */
@@ -122,6 +129,28 @@ const STYLE_BASELINE_WEIGHTS: Record<string, number> = {
   visual_games: 0, // low baseline; user can emphasize
   candidness: 0, // some candid presence valued by default
 }
+
+/**
+ * Commercial baseline weights — different criteria set than style portfolios.
+ * Uses commercial-specific keys (`commercial_intent`, `subject_clarity`)
+ * instead of `message` / `visual_games`.
+ */
+const COMMERCIAL_BASELINE_WEIGHTS: Record<string, number> = {
+  aesthetic_quality: 1, // commercial work demands polish
+  composition: 0.7, // tightly designed framing matters
+  storytelling: 0.3, // lifestyle narrative useful but optional
+  strangeness: 0.2, // some differentiation; not the priority (aliased from 'originality')
+  commercial_intent: 1, // core commercial criterion
+  humor: 0, // low baseline; user can emphasize
+  subject_clarity: 0.7, // hero subject readability is non-negotiable
+  candidness: 0, // low baseline; user can emphasize
+}
+
+function getBaselineWeights(variant: PromptVariant): Record<string, number> {
+  return variant === 'commercial'
+    ? { ...COMMERCIAL_BASELINE_WEIGHTS }
+    : { ...STYLE_BASELINE_WEIGHTS }
+}
 /** Value assigned to criteria the LLM flags as "emphasized". */
 const STYLE_EMPHASIZE_VALUE = 1.0
 /** Value assigned to criteria the LLM flags as "deemphasized". */
@@ -131,16 +160,17 @@ const STYLE_MAX_EMPHASIZE = 4
 /** Max number of criteria the LLM is allowed to deemphasize. */
 const STYLE_MAX_DEEMPHASIZE = 2
 
-// STYLE_CRITERIA_DESCRIPTIONS is imported from '#config/photo_schema' (single source of truth).
+// STYLE_CRITERIA_DESCRIPTIONS is provided per-variant by
+// `getStyleCriteriaDescriptionsForVariant` from '#config/photo_schema'.
 
 // ── Score field mapping (mirrors agent_tools_service) ────────
 /**
  * Maps external score field names (e.g. 'originality') to the internal
- * storage keys used throughout the pipeline (e.g. 'strangeness').
- * Imported from the central photo schema.
+ * storage keys used throughout the pipeline (e.g. 'strangeness'), scoped to
+ * the user's variant. Imported from the central photo schema.
  */
-function internalScoreField(field: string): string {
-  return toInternalScoreKey(field)
+function internalScoreField(field: string, variant: PromptVariant): string {
+  return toInternalScoreKey(field, variant)
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -235,11 +265,14 @@ export default class PortfolioBuildService {
 
   /**
    * Returns the canonical default weight vector (0..1 scale) that the wizard
-   * should display before the user has entered any style preference.
-   * This is the same baseline used internally when applying LLM emphasis boosts.
+   * should display before the user has entered any style preference. The
+   * baseline is variant-aware: style/general portfolios use a different
+   * criteria set than commercial portfolios.
+   * Same baseline used internally when applying LLM emphasis boosts.
    */
-  public static getDefaultWeights(): Record<string, number> {
-    return { ...STYLE_BASELINE_WEIGHTS }
+  public static getDefaultWeights(userProfile?: string | null): Record<string, number> {
+    const variant = getPromptVariant(userProfile)
+    return getBaselineWeights(variant)
   }
 
   /**
@@ -370,14 +403,22 @@ export default class PortfolioBuildService {
    * Cost is small (PARSE_MODEL is our cheapest model). Safe to call from a
    * preview endpoint — it does not touch the build queue.
    */
-  public async previewStyleWeights(stylePreferences: string): Promise<{
+  public async previewStyleWeights(
+    stylePreferences: string,
+    userProfile?: string | null
+  ): Promise<{
     emphasize: string[]
     deemphasize: string[]
     weights: Record<string, number>
   }> {
     const tracker = new CostTracker('portfolio_build')
-    const parsed = await this.parseStylePreferences(stylePreferences, tracker)
-    const weights = this.computeStyleWeightsFromEmphasis(parsed.emphasize, parsed.deemphasize)
+    const parsed = await this.parseStylePreferences(stylePreferences, tracker, userProfile)
+    const variant = getPromptVariant(userProfile)
+    const weights = this.computeStyleWeightsFromEmphasis(
+      parsed.emphasize,
+      parsed.deemphasize,
+      variant
+    )
     return { emphasize: parsed.emphasize, deemphasize: parsed.deemphasize, weights }
   }
 
@@ -387,13 +428,16 @@ export default class PortfolioBuildService {
    */
   private async parseStylePreferences(
     stylePreferences: string,
-    tracker: CostTracker
+    tracker: CostTracker,
+    userProfile?: string | null
   ): Promise<{ emphasize: string[]; deemphasize: string[] }> {
-    const criteriaList = STYLE_CRITERIA_DESCRIPTIONS.map(
-      (c) => `- "${c.key}" (${c.label}): ${c.desc}`
-    ).join('\n')
+    const variant = getPromptVariant(userProfile)
+    const criteriaDescriptions = getStyleCriteriaDescriptionsForVariant(variant)
+    const criteriaList = criteriaDescriptions
+      .map((c) => `- "${c.key}" (${c.label}): ${c.desc}`)
+      .join('\n')
 
-    const allowedKeys = STYLE_CRITERIA_DESCRIPTIONS.map((c) => c.key)
+    const allowedKeys = criteriaDescriptions.map((c) => c.key)
 
     const systemPrompt = `You map a user's free-text description of desired artistic style into a SPARSE set of artistic criteria to emphasize or deemphasize when ranking photos for a portfolio.
 
@@ -458,22 +502,24 @@ Rules:
    */
   private computeStyleWeightsFromEmphasis(
     emphasize: string[],
-    deemphasize: string[]
+    deemphasize: string[],
+    variant: PromptVariant
   ): Record<string, number> {
     // Map the LLM-facing keys (e.g. 'originality') to the internal score
     // field names used throughout the pipeline (e.g. 'strangeness').
-    const toInternal = (k: string) => internalScoreField(k)
+    const toInternal = (k: string) => internalScoreField(k, variant)
     const emphasizeInternal = new Set(emphasize.map(toInternal))
     const deemphasizeInternal = new Set(deemphasize.map(toInternal))
 
+    const baseline = getBaselineWeights(variant)
     const weights: Record<string, number> = {}
-    for (const [k, baseline] of Object.entries(STYLE_BASELINE_WEIGHTS)) {
+    for (const [k, value] of Object.entries(baseline)) {
       if (emphasizeInternal.has(k)) {
         weights[k] = STYLE_EMPHASIZE_VALUE
       } else if (deemphasizeInternal.has(k)) {
         weights[k] = STYLE_DEEMPHASIZE_VALUE
       } else {
-        weights[k] = baseline
+        weights[k] = value
       }
     }
     return weights
@@ -485,6 +531,9 @@ Rules:
     const build = await PortfolioBuild.findOrFail(buildId)
     const config = build.config
     const tracker = new CostTracker('portfolio_build')
+    const buildUser = await User.find(build.userId)
+    const userProfile = buildUser?.profiles ?? null
+    const variant: PromptVariant = getPromptVariant(userProfile)
 
     try {
       build.startedAt = DateTime.now()
@@ -508,7 +557,7 @@ Rules:
         `[PortfolioBuild] 📂 [Step 2/7] Recall — building candidate pool (target: ${config.targetSize}, multiplier: ×${RECALL_MULTIPLIER}, cap: ${RECALL_MAX})`
       )
       await this.updateStatus(build, 'recall', 5)
-      const candidates = await this.recall(build.userId, config, parsedFilters)
+      const candidates = await this.recall(build.userId, config, parsedFilters, variant)
       if (candidates.length === 0) {
         throw new Error('No eligible photos found after recall. Ensure your catalog is analyzed.')
       }
@@ -533,8 +582,9 @@ Rules:
       }
 
       // ── Step 3b: Load embeddings for similarity gate ──
+      const similarityGateThreshold = this.getSimilarityGateThreshold(variant)
       console.log(
-        `[PortfolioBuild] 🧲 [Step 3b/7] Loading embeddings for similarity gate (${candidates.length} candidates, threshold: ${SIMILARITY_GATE_THRESHOLD})`
+        `[PortfolioBuild] 🧲 [Step 3b/7] Loading embeddings for similarity gate (${candidates.length} candidates, threshold: ${similarityGateThreshold})`
       )
       await this.loadCandidateEmbeddings(candidates, build.userId)
 
@@ -555,7 +605,8 @@ Rules:
         config,
         trackedModels,
         tracker,
-        evaluationTarget
+        evaluationTarget,
+        variant
       )
       let selected = evalOutcome.gated
       const llmApproved = evalOutcome.allSelected
@@ -723,7 +774,8 @@ Only include fields that are clearly indicated by the user's text. If nothing is
   private async recall(
     userId: number,
     config: PortfolioBuildConfig,
-    parsedFilters: Record<string, any> | null
+    parsedFilters: Record<string, any> | null,
+    variant: PromptVariant
   ): Promise<ScoredCandidate[]> {
     const allPhotos = await this.photoManager.getPhotosPreview(String(userId))
 
@@ -743,7 +795,7 @@ Only include fields that are clearly indicated by the user's text. If nothing is
     pool = await this.deduplicateByHash(pool, userId)
 
     // Rank by weighted composite score
-    const scored = this.rankByCompositeScore(pool, config.weights)
+    const scored = this.rankByCompositeScore(pool, config.weights, variant)
 
     // Apply CLIP semantic boost for preferred content
     // if (parsedFilters?.preferred) {
@@ -884,7 +936,8 @@ Only include fields that are clearly indicated by the user's text. If nothing is
 
   private rankByCompositeScore(
     pool: PhotoPreview[],
-    weights: Record<string, number>
+    weights: Record<string, number>,
+    variant: PromptVariant
   ): ScoredCandidate[] {
     const weightEntries = Object.entries(weights).filter(([_, w]) => w > 0)
     const totalWeight = weightEntries.reduce((sum, [_, w]) => sum + w, 0)
@@ -900,7 +953,7 @@ Only include fields that are clearly indicated by the user's text. If nothing is
       let weightedSum = 0
       let usedWeight = 0
       for (const [field, weight] of weightEntries) {
-        const internal = internalScoreField(field)
+        const internal = internalScoreField(field, variant)
         const val = scores[internal]
         if (typeof val === 'number') {
           weightedSum += val * weight
@@ -1192,11 +1245,13 @@ Only include fields that are clearly indicated by the user's text. If nothing is
     config: PortfolioBuildConfig,
     trackedModels: ModelsService,
     tracker: CostTracker,
-    evaluationTarget: number
+    evaluationTarget: number,
+    variant: PromptVariant
   ): Promise<{ gated: ScoredCandidate[]; allSelected: ScoredCandidate[] }> {
     // Sort batches according to configured order
     const sorted = [...candidates]
     if (BATCH_ORDER === 'asc') sorted.reverse()
+    const similarityGateThreshold = this.getSimilarityGateThreshold(variant)
 
     const batches: ScoredCandidate[][] = []
     for (let i = 0; i < sorted.length; i += BATCH_SIZE) {
@@ -1213,7 +1268,7 @@ Only include fields that are clearly indicated by the user's text. If nothing is
       for (const candidate of [...selectedCandidates].sort(
         (a, b) => b.compositeScore - a.compositeScore
       )) {
-        if (this.checkSimilarityGate(candidate, gated)) {
+        if (this.checkSimilarityGate(candidate, gated, similarityGateThreshold)) {
           gated.push(candidate)
         }
       }
@@ -1271,7 +1326,13 @@ Only include fields that are clearly indicated by the user's text. If nothing is
 
       let decisions: BatchDecision[] = []
       try {
-        decisions = await this.evaluateSingleBatch(batch, config, trackedModels, evaluationTarget)
+        decisions = await this.evaluateSingleBatch(
+          batch,
+          config,
+          trackedModels,
+          evaluationTarget,
+          variant
+        )
       } catch (err: any) {
         console.warn(
           `[PortfolioBuild] ⚠️ Batch ${batchIdx + 1}/${batches.length} failed after retries, skipping: ${err.message}`
@@ -1310,6 +1371,7 @@ Only include fields that are clearly indicated by the user's text. If nothing is
 
     const batchResults: Array<{ batch: ScoredCandidate[]; decisions: BatchDecision[] }> = []
     const allSelected: ScoredCandidate[] = []
+    let gated: ScoredCandidate[] = []
     let nextBatchIdx = 0
 
     if (EARLY_STOP) {
@@ -1319,48 +1381,28 @@ Only include fields that are clearly indicated by the user's text. If nothing is
 
         appendSelectedDecisions(batchResult.batch, batchResult.decisions, allSelected)
 
-        const gatedCount = applySimilarityGate(allSelected).length
+        const rawSelectedCount = allSelected.length
+        gated = applySimilarityGate(allSelected)
+        const gatedCount = gated.length
+        console.log(
+          `[PortfolioBuild]   📊 Running totals after batch ${nextBatchIdx + 1}/${batches.length}: ` +
+            `${rawSelectedCount} raw selected, ${gatedCount} after similarity gate (target: ${evaluationTarget})`
+        )
+
         if (gatedCount >= evaluationTarget) {
           console.log(
             `[PortfolioBuild] 🛑 Early stop reached after batch ${nextBatchIdx + 1}/${batches.length}: ` +
-              `${gatedCount} gated selections for target ${evaluationTarget}`
+              `${rawSelectedCount} raw selections, ${gatedCount} after similarity gate (target: ${evaluationTarget})`
           )
           nextBatchIdx++
           break
         }
       }
 
-      let gatedAfterEarlyStop = applySimilarityGate(allSelected)
-      if (
-        !aborted &&
-        gatedAfterEarlyStop.length < evaluationTarget &&
-        nextBatchIdx < batches.length
-      ) {
+      if (!aborted && gated.length < evaluationTarget) {
         console.log(
-          `[PortfolioBuild] 🔁 Post-gate top-up: ${gatedAfterEarlyStop.length}/${evaluationTarget} gated after early stop, evaluating remaining batches`
+          `[PortfolioBuild] ℹ️ Evaluation exhausted available batches: ${gated.length}/${evaluationTarget} gated selections`
         )
-
-        for (; nextBatchIdx < batches.length; nextBatchIdx++) {
-          const batchResult = await processBatch(batches[nextBatchIdx], nextBatchIdx)
-          batchResults.push(batchResult)
-          appendSelectedDecisions(batchResult.batch, batchResult.decisions, allSelected)
-
-          gatedAfterEarlyStop = applySimilarityGate(allSelected)
-          if (gatedAfterEarlyStop.length >= evaluationTarget) {
-            console.log(
-              `[PortfolioBuild] ✅ Top-up reached evaluation target after batch ${nextBatchIdx + 1}/${batches.length}: ` +
-                `${gatedAfterEarlyStop.length} gated selections`
-            )
-            nextBatchIdx++
-            break
-          }
-        }
-
-        if (gatedAfterEarlyStop.length < evaluationTarget) {
-          console.log(
-            `[PortfolioBuild] ℹ️ Top-up exhausted remaining batches: ${gatedAfterEarlyStop.length}/${evaluationTarget} gated selections`
-          )
-        }
       }
     } else {
       const limit = pLimit(EVAL_CONCURRENCY)
@@ -1372,17 +1414,15 @@ Only include fields that are clearly indicated by the user's text. If nothing is
       for (const { batch, decisions } of batchResults) {
         appendSelectedDecisions(batch, decisions, allSelected)
       }
+
+      gated = applySimilarityGate(allSelected)
     }
 
-    // Apply similarity gate post-hoc: keep highest composite score, reject too-similar
-    allSelected.sort((a, b) => b.compositeScore - a.compositeScore)
-    const gated: ScoredCandidate[] = []
-    for (const candidate of allSelected) {
-      if (this.checkSimilarityGate(candidate, gated)) {
-        gated.push(candidate)
-      } else {
+    const gatedIdSet = new Set(gated.map((candidate) => candidate.id))
+    for (const candidate of [...allSelected].sort((a, b) => b.compositeScore - a.compositeScore)) {
+      if (!gatedIdSet.has(candidate.id)) {
         console.log(
-          `[PortfolioBuild] 🚫 Similarity gate rejected id:${candidate.id} (too similar to existing selection)`
+          `[PortfolioBuild] 🚫 Similarity gate rejected id:${candidate.id} (sim > ${similarityGateThreshold.toFixed(2)})`
         )
       }
     }
@@ -1419,7 +1459,8 @@ Only include fields that are clearly indicated by the user's text. If nothing is
     batch: ScoredCandidate[],
     config: PortfolioBuildConfig,
     trackedModels: ModelsService,
-    evaluationTarget: number
+    evaluationTarget: number,
+    variant: PromptVariant
   ): Promise<BatchDecision[]> {
     const coherenceInstruction = this.getCoherencePromptModifier(config.coherenceMode)
     const themeNote = config.themePreferences
@@ -1430,7 +1471,15 @@ Only include fields that are clearly indicated by the user's text. If nothing is
       : ''
     const userNotes = themeNote + styleNote
 
+    const profileContext =
+      variant === 'commercial'
+        ? 'You are curating a COMMERCIAL portfolio (advertising / stock / fashion / editorial / lifestyle / product / food). Judge each photo as a commercial asset: visual polish, clarity of subject, marketability, brand-friendliness.'
+        : 'You are curating a portfolio of street, documentary or artistic photography. Judge each photo on visual craft, narrative strength and authorial voice.'
+
     const systemPrompt = `You are a portfolio curator. Look at each photo and decide: SELECT or REJECT.
+
+## Context
+${profileContext}
 
 ## Goal
 Pick photos worthy of a ${evaluationTarget}-photo professional portfolio.
@@ -2280,12 +2329,22 @@ Return JSON:
 
   // ── Helpers ────────────────────────────────────────────────
 
-  private checkSimilarityGate(candidate: ScoredCandidate, selected: ScoredCandidate[]): boolean {
+  private getSimilarityGateThreshold(variant: PromptVariant): number {
+    return variant === 'commercial'
+      ? COMMERCIAL_SIMILARITY_GATE_THRESHOLD
+      : SIMILARITY_GATE_THRESHOLD
+  }
+
+  private checkSimilarityGate(
+    candidate: ScoredCandidate,
+    selected: ScoredCandidate[],
+    threshold: number
+  ): boolean {
     if (!candidate._embedding || selected.length === 0) return true
     for (const sel of selected) {
       if (!sel._embedding) continue
       const sim = this.cosineSimilarity(candidate._embedding, sel._embedding)
-      if (sim > SIMILARITY_GATE_THRESHOLD) return false
+      if (sim > threshold) return false
     }
     return true
   }

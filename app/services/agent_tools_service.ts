@@ -16,8 +16,12 @@ import Series from '#models/series'
 import PortfolioBuild from '#models/portfolio_build'
 import {
   VISUAL_ASPECTS_SCHEMA,
-  ARTISTIC_SCORE_EXTERNAL_KEYS,
-  toInternalScoreKey,
+  ALL_ARTISTIC_SCORE_EXTERNAL_KEYS,
+  resolveInternalScoreKeyAnyVariant,
+  getPromptVariant,
+  getArtisticExternalKeys,
+  getAspectValuesForVariant,
+  type PromptVariant,
 } from '#config/photo_schema'
 
 // ─────────────────────────────────────────────────────────────
@@ -40,10 +44,14 @@ export const AddPhotosToResultSchema = z.object({
     ),
 })
 
-export const ScoreField = z.enum(ARTISTIC_SCORE_EXTERNAL_KEYS as [string, ...string[]])
+export const ScoreField = z.enum(ALL_ARTISTIC_SCORE_EXTERNAL_KEYS as [string, ...string[]])
 
-/** Translates a model-facing score field name to the internal DB key (delegates to schema). */
-const toInternalField = (field: string): string => toInternalScoreKey(field)
+/**
+ * Translates a model-facing score field name to the internal DB key. The
+ * agent tool API accepts external keys from any user profile, so resolution
+ * is variant-agnostic (delegated to the central schema).
+ */
+const toInternalField = (field: string): string => resolveInternalScoreKeyAnyVariant(field)
 
 export const FindPhotosFromPhotoSchema = z.object({
   anchor_photo_ids: z
@@ -95,19 +103,23 @@ export const FetchPortfoliosSchema = z.object({})
 
 /**
  * Builds a Zod object schema for the visualAspects filter from the central
- * photo schema. Each aspect key maps to an optional array of accepted values.
+ * photo schema. Each aspect key maps to an optional array of accepted values
+ * scoped to the given prompt variant (e.g. genre values differ per variant).
  */
-function buildVisualAspectsZodSchema() {
+function buildVisualAspectsZodSchema(variant: PromptVariant) {
   return z
     .object(
       Object.fromEntries(
-        VISUAL_ASPECTS_SCHEMA.map((aspect) => [
-          aspect.key,
-          z
-            .array(z.enum(aspect.values as [string, ...string[]]))
-            .optional()
-            .describe(`Filter by ${aspect.label}. Accepted values: ${aspect.values.join(', ')}.`),
-        ])
+        VISUAL_ASPECTS_SCHEMA.map((aspect) => {
+          const values = getAspectValuesForVariant(aspect, variant)
+          return [
+            aspect.key,
+            z
+              .array(z.enum(values as [string, ...string[]]))
+              .optional()
+              .describe(`Filter by ${aspect.label}. Accepted values: ${values.join(', ')}.`),
+          ]
+        })
       )
     )
     .optional()
@@ -118,126 +130,135 @@ function buildVisualAspectsZodSchema() {
     )
 }
 
-export const SearchAdvancedSchema = z.object({
-  operation: z
-    .enum(['intersect', 'union'])
-    .describe(
-      'How to combine results from the sub-searches declared below.\n' +
-        '- intersect: return only photos that appear in ALL sub-search results (AND logic). Use when the user wants photos matching every criterion simultaneously (e.g. "black and white portraits of dogs").\n' +
-        '- union: return photos that appear in ANY sub-search result (OR logic). Use when the user wants photos matching at least one criterion (e.g. "photos of cats or dogs").'
-    ),
-  style_query: z
-    .string()
-    .optional()
-    .describe(
-      'Natural language description of the visual style to find. Focus on style, composition, mood, color palette, atmosphere. **MUST ALWAYS BE IN ENGLISH ONLY.** Triggers an embedding-based semantic style search.'
-    ),
-  content_tags: z
-    .array(z.string())
-    .min(1)
-    .max(3)
-    .optional()
-    .describe(
-      'Between 1 and 3 keywords describing concrete subjects, narrative elements, or specific content (e.g. ["dog", "running"]). **EACH KEYWORD MUST ALWAYS BE IN ENGLISH ONLY.** Triggers a tag-based content search.'
-    ),
-  filter: z
-    .object({
-      scoreFilters: z
-        .array(
-          z.object({
-            field: ScoreField.describe('Artistic score field to filter on'),
-            min: z.number().optional().describe('Minimum score (inclusive), 0–10'),
-            max: z.number().optional().describe('Maximum score (inclusive), 0–10'),
-          })
-        )
-        .optional()
-        .describe('Filter by numeric artistic scores. Multiple entries are ANDed.'),
-      sortByScore: ScoreField.optional().describe('Sort results by this artistic score.'),
-      sortOrder: z.enum(['asc', 'desc']).optional().default('desc').describe('Sort direction.'),
-      visualAspects: buildVisualAspectsZodSchema(),
-      filenameLike: z
-        .string()
-        .optional()
-        .describe('Substring match on filename (case-insensitive)'),
-      dateFrom: z.string().optional().describe('Photos taken on or after this date (ISO 8601)'),
-      dateTo: z.string().optional().describe('Photos taken on or before this date (ISO 8601)'),
-    })
-    .optional()
-    .describe(
-      'Structured metadata/attribute filter. Triggers filter_photos logic. Do NOT place artistic score names in visualAspects — those belong in scoreFilters.'
-    ),
-  similar_to: z
-    .object({
-      anchor_photo_ids: z
-        .array(z.number())
-        .min(1)
-        .describe('Photo IDs to use as similarity anchor.'),
-      criteria: z
-        .enum(['embedding', 'story', 'context', 'chromatic'])
-        .describe(
-          'Similarity dimension: embedding (visual), story (narrative), context (environment), chromatic (color palette).'
-        ),
-      opposite: z
-        .boolean()
-        .optional()
-        .default(false)
-        .describe('If true, find most dissimilar photos.'),
-    })
-    .optional()
-    .describe('Find photos similar to reference photos. Triggers similarity search.'),
-})
+function buildSearchAdvancedSchema(variant: PromptVariant) {
+  const scoreKeys = getArtisticExternalKeys(variant)
+  const scoreField = z.enum(scoreKeys as [string, ...string[]])
+  return z.object({
+    operation: z
+      .enum(['intersect', 'union'])
+      .describe(
+        'How to combine results from the sub-searches declared below.\n' +
+          '- intersect: return only photos that appear in ALL sub-search results (AND logic). Use when the user wants photos matching every criterion simultaneously (e.g. "black and white portraits of dogs").\n' +
+          '- union: return photos that appear in ANY sub-search result (OR logic). Use when the user wants photos matching at least one criterion (e.g. "photos of cats or dogs").'
+      ),
+    style_query: z
+      .string()
+      .optional()
+      .describe(
+        'Natural language description of the visual style to find. Focus on style, composition, mood, color palette, atmosphere. **MUST ALWAYS BE IN ENGLISH ONLY.** Triggers an embedding-based semantic style search.'
+      ),
+    content_tags: z
+      .array(z.string())
+      .min(1)
+      .max(3)
+      .optional()
+      .describe(
+        'Between 1 and 3 keywords describing concrete subjects, narrative elements, or specific content (e.g. ["dog", "running"]). **EACH KEYWORD MUST ALWAYS BE IN ENGLISH ONLY.** Triggers a tag-based content search.'
+      ),
+    filter: z
+      .object({
+        scoreFilters: z
+          .array(
+            z.object({
+              field: scoreField.describe('Artistic score field to filter on'),
+              min: z.number().optional().describe('Minimum score (inclusive), 0–10'),
+              max: z.number().optional().describe('Maximum score (inclusive), 0–10'),
+            })
+          )
+          .optional()
+          .describe('Filter by numeric artistic scores. Multiple entries are ANDed.'),
+        sortByScore: scoreField.optional().describe('Sort results by this artistic score.'),
+        sortOrder: z.enum(['asc', 'desc']).optional().default('desc').describe('Sort direction.'),
+        visualAspects: buildVisualAspectsZodSchema(variant),
+        filenameLike: z
+          .string()
+          .optional()
+          .describe('Substring match on filename (case-insensitive)'),
+        dateFrom: z.string().optional().describe('Photos taken on or after this date (ISO 8601)'),
+        dateTo: z.string().optional().describe('Photos taken on or before this date (ISO 8601)'),
+      })
+      .optional()
+      .describe(
+        'Structured metadata/attribute filter. Triggers filter_photos logic. Do NOT place artistic score names in visualAspects — those belong in scoreFilters.'
+      ),
+    similar_to: z
+      .object({
+        anchor_photo_ids: z
+          .array(z.number())
+          .min(1)
+          .describe('Photo IDs to use as similarity anchor.'),
+        criteria: z
+          .enum(['embedding', 'story', 'context', 'chromatic'])
+          .describe(
+            'Similarity dimension: embedding (visual), story (narrative), context (environment), chromatic (color palette).'
+          ),
+        opposite: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe('If true, find most dissimilar photos.'),
+      })
+      .optional()
+      .describe('Find photos similar to reference photos. Triggers similarity search.'),
+  })
+}
 
-export const CatalogSampleSchema = z.object({
-  buckets: z
-    .number()
-    .min(2)
-    .max(10)
-    .optional()
-    .default(5)
-    .describe(
-      'Number of equal time periods to divide the catalog timeline into (default 5). ' +
-        'E.g. 5 buckets over a 5-year catalog = 1 bucket per year.'
-    ),
-  per_bucket: z
-    .number()
-    .min(1)
-    .max(10)
-    .optional()
-    .default(10)
-    .describe('Number of photos to sample from each time bucket (default 10).'),
-  sort_within: z
-    .enum(ARTISTIC_SCORE_EXTERNAL_KEYS as [string, ...string[]])
-    .optional()
-    .describe(
-      'If set, pick the top-scoring photos per bucket on this artistic dimension instead of random sampling. ' +
-        'E.g. sort_within="aesthetic_quality" returns the best-rated photos per period.'
-    ),
-  date_from: z
-    .string()
-    .optional()
-    .describe('Restrict sampling to photos taken on or after this date (ISO 8601).'),
-  date_to: z
-    .string()
-    .optional()
-    .describe('Restrict sampling to photos taken on or before this date (ISO 8601).'),
-  genre: z
-    .array(z.string())
-    .optional()
-    .describe(
-      'Filter photos by genre before sampling. **Accepted values MUST ALWAYS BE IN ENGLISH ONLY:** abstract, documentary, street, landscape, portrait. ' +
-        'E.g. ["street"] to sample only street photography evolution.'
-    ),
-  scan_mode: z
-    .enum(['technical', 'semantic'])
-    .optional()
-    .default('technical')
-    .describe(
-      'Controls the detail format used when photos are shown for evaluation. ' +
-        '`technical`: includes visual aspects (composition, lighting, palette, etc.) for structural analysis. ' +
-        '`semantic`: includes content tags grouped by subject category (people, places, objects, etc.) for theme/subject analysis. ' +
-        'Choose based on the type of evolution you want to analyze (default: technical).'
-    ),
-})
+function buildCatalogSampleSchema(variant: PromptVariant) {
+  const scoreKeys = getArtisticExternalKeys(variant)
+  const genreAspect = VISUAL_ASPECTS_SCHEMA.find((a) => a.key === 'genre')!
+  const genreValues = getAspectValuesForVariant(genreAspect, variant)
+  return z.object({
+    buckets: z
+      .number()
+      .min(2)
+      .max(10)
+      .optional()
+      .default(5)
+      .describe(
+        'Number of equal time periods to divide the catalog timeline into (default 5). ' +
+          'E.g. 5 buckets over a 5-year catalog = 1 bucket per year.'
+      ),
+    per_bucket: z
+      .number()
+      .min(1)
+      .max(10)
+      .optional()
+      .default(10)
+      .describe('Number of photos to sample from each time bucket (default 10).'),
+    sort_within: z
+      .enum(scoreKeys as [string, ...string[]])
+      .optional()
+      .describe(
+        'If set, pick the top-scoring photos per bucket on this artistic dimension instead of random sampling. ' +
+          'E.g. sort_within="aesthetic_quality" returns the best-rated photos per period.'
+      ),
+    date_from: z
+      .string()
+      .optional()
+      .describe('Restrict sampling to photos taken on or after this date (ISO 8601).'),
+    date_to: z
+      .string()
+      .optional()
+      .describe('Restrict sampling to photos taken on or before this date (ISO 8601).'),
+    genre: z
+      .array(z.string())
+      .optional()
+      .describe(
+        `Filter photos by genre before sampling. **Accepted values MUST ALWAYS BE IN ENGLISH ONLY:** ${genreValues.join(', ')}. ` +
+          `E.g. ["${genreValues[0]}"] to sample only ${genreValues[0]} photography evolution.`
+      ),
+    scan_mode: z
+      .enum(['technical', 'semantic'])
+      .optional()
+      .default('technical')
+      .describe(
+        'Controls the detail format used when photos are shown for evaluation. ' +
+          '`technical`: includes visual aspects (composition, lighting, palette, etc.) for structural analysis. ' +
+          '`semantic`: includes content tags grouped by subject category (people, places, objects, etc.) for theme/subject analysis. ' +
+          'Choose based on the type of evolution you want to analyze (default: technical).'
+      ),
+  })
+}
 
 export const WebSearchSchema = z.object({
   query: z
@@ -458,6 +479,7 @@ export default class AgentToolsService {
    */
   createTools(
     userId: number,
+    variant: PromptVariant,
     foundPhotoIds: number[],
     provider: 'openai' | 'gemini' | 'deepseek' | 'xai' | 'qwen' = 'openai'
   ) {
@@ -742,7 +764,7 @@ export default class AgentToolsService {
       {
         name: 'search_advanced',
         description: TOOL_DESCRIPTIONS.search_advanced,
-        schema: SearchAdvancedSchema,
+        schema: buildSearchAdvancedSchema(variant),
       }
     )
 
@@ -751,15 +773,15 @@ export default class AgentToolsService {
       async (): Promise<string> => {
         try {
           const statsService = new StatsService()
+          const user = await User.find(userId)
+          const variant = getPromptVariant(user?.profiles ?? null)
 
           const [catalogPatterns, visualAspectsStats, artisticScoresStats] = await Promise.all([
-            User.find(userId).then((user) =>
-              user
-                ? formatCatalogPatternsForAgent(user.catalogPatterns, 'all')
-                : JSON.stringify({ error: 'User not found' })
-            ),
+            user
+              ? Promise.resolve(formatCatalogPatternsForAgent(user.catalogPatterns, 'all'))
+              : Promise.resolve(JSON.stringify({ error: 'User not found' })),
             statsService.getVisualAspectsStats(userId),
-            statsService.getArtisticScoresStats(userId),
+            statsService.getArtisticScoresStats(userId, variant),
           ])
 
           const report = {
@@ -1024,7 +1046,7 @@ export default class AgentToolsService {
       {
         name: 'catalog_sample',
         description: TOOL_DESCRIPTIONS.catalog_sample,
-        schema: CatalogSampleSchema,
+        schema: buildCatalogSampleSchema(variant),
       }
     )
 

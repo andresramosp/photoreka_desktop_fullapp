@@ -16,6 +16,7 @@ import Photo from '#models/photo'
 import PhotoImageService from './photo_image_service.js'
 import ConversationService from './conversation_service.js'
 import QueryService from './query_service.js'
+import { getPromptVariant } from '#config/photo_schema'
 import {
   _debug,
   compactPreview,
@@ -392,7 +393,12 @@ export default class LangchainAgentService {
           : ' (same for Phase 2)')
     )
 
-    const tools = this.toolsService.createTools(userId, foundPhotoIds, provider)
+    const tools = this.toolsService.createTools(
+      userId,
+      getPromptVariant((await User.find(userId))?.profiles ?? null),
+      foundPhotoIds,
+      provider
+    )
     const doneTool = this.createDoneTool()
     const allTools = [...tools, doneTool]
     // 'any' = Gemini, 'required' = OpenAI/xAI (forces tool call, prevents phantom text), 'auto' = DeepSeek

@@ -3,7 +3,13 @@
 // (generateArtisticScoresEmbedding) desde modelos.
 // Se hace import dinámico dentro de loadModel().
 import { withCache } from '../decorators/withCache.js'
-import { ARTISTIC_SCORE_KEYS, VISUAL_ASPECT_KEYS, VISUAL_ASPECTS_MAP } from '#config/photo_schema'
+import {
+  detectVariantFromScores,
+  getArtisticInternalKeys,
+  VISUAL_ASPECT_KEYS,
+  VISUAL_ASPECTS_MAP,
+  type PromptVariant,
+} from '#config/photo_schema'
 
 class EmbeddingService {
   private extractor: any | null = null
@@ -11,17 +17,24 @@ class EmbeddingService {
   /**
    * Genera vector normalizado (div /10) a partir de objeto artistic_scores.
    * Si falta alguna clave se rellena con 0.
+   *
+   * El layout del vector depende de la PromptVariant (style/general comparten
+   * layout; commercial tiene su propio set de claves). Si no se pasa variant
+   * explícitamente se detecta a partir del propio objeto de scores.
    */
   public generateArtisticScoresEmbedding(
-    scores: Record<string, any> | null | undefined
+    scores: Record<string, any> | null | undefined,
+    variant?: PromptVariant
   ): number[] | null {
     if (!scores) return null
-    const vec = ARTISTIC_SCORE_KEYS.map((k) => {
-      const raw = scores[k as string]
+    const v: PromptVariant = variant ?? detectVariantFromScores(scores)
+    const keys = getArtisticInternalKeys(v)
+    const vec = keys.map((k) => {
+      const raw = scores[k]
       if (raw == null || isNaN(raw)) return 0
-      const v = Number(raw)
+      const val = Number(raw)
       // Asumimos escala 0-10 -> normalizamos a 0-1
-      const normalized = Math.max(0, Math.min(10, v)) / 10
+      const normalized = Math.max(0, Math.min(10, val)) / 10
       return Number(normalized.toFixed(6))
     })
     return vec

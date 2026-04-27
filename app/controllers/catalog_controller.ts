@@ -20,6 +20,9 @@ import {
   MESSAGE_PHOTO_INSIGHT_TECHNICAL,
   MESSAGE_PHOTO_INSIGHT_ARTISTIC,
   MESSAGE_PHOTO_INSIGHT_CUSTOM,
+  getMessagePhotoInsights,
+  getMessagePhotoInsightsWithScores,
+  getMessagePhotoInsightSpecific,
 } from '../utils/prompts/descriptions.js'
 import PhotoImageService from '#services/photo_image_service'
 import DescriptionChunk from '#models/descriptionChunk'
@@ -471,9 +474,12 @@ export default class CatalogController {
       let systemPrompt: string
 
       if (withScores && photo.descriptions?.artistic_scores) {
-        systemPrompt = MESSAGE_PHOTO_INSIGHTS_WITH_SCORES(photo.descriptions.artistic_scores)
+        systemPrompt = getMessagePhotoInsightsWithScores(
+          user?.profiles,
+          photo.descriptions.artistic_scores
+        )
       } else {
-        systemPrompt = MESSAGE_PHOTO_INSIGHTS
+        systemPrompt = getMessagePhotoInsights(user?.profiles)
       }
 
       let insights = []
@@ -595,16 +601,12 @@ export default class CatalogController {
 
       switch (insightType) {
         case 'cultural':
-          systemPrompt = MESSAGE_PHOTO_INSIGHT_CULTURAL
-          break
         case 'technical':
-          systemPrompt = MESSAGE_PHOTO_INSIGHT_TECHNICAL
-          break
         case 'artistic':
-          systemPrompt = MESSAGE_PHOTO_INSIGHT_ARTISTIC
+          systemPrompt = getMessagePhotoInsightSpecific(insightType, user?.profiles)
           break
         case 'custom':
-          systemPrompt = MESSAGE_PHOTO_INSIGHT_CUSTOM(customQuestion!)
+          systemPrompt = getMessagePhotoInsightSpecific('custom', user?.profiles, customQuestion!)
           break
       }
 

@@ -7,6 +7,7 @@ import AnalyzerProcess from './analyzerProcess.js'
 import pLimit from 'p-limit'
 import { MediaResolution } from '@google/genai'
 import PhotoImageService from '../../services/photo_image_service.js'
+import { ModelName } from '#services/models_service'
 
 const logger = Logger.getInstance('AnalyzerProcess', 'VisionDescriptionTask')
 logger.setLevel(LogLevel.DEBUG)
@@ -19,6 +20,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
   declare resolution: 'low' | 'high' | 'medium'
   declare sequential: boolean
   declare imagesPerRequest: number
+  declare retryModel?: ModelName
   declare promptDependentField: DescriptionType
   declare promptsNames: DescriptionType[]
   declare data: Record<number, Record<string, string>>
@@ -26,6 +28,25 @@ export class VisionDescriptionTask extends AnalyzerTask {
   declare analyzerProcess: AnalyzerProcess
   declare visualAspects: boolean
   failedRequests: Photo[] = []
+
+  private formatError(error: unknown): string {
+    return error instanceof Error ? error.message : String(error)
+  }
+
+  private ensureNonEmptyResult(response: any, modelName: ModelName): any {
+    const result = response?.result
+    const isEmptyObject =
+      result &&
+      typeof result === 'object' &&
+      !Array.isArray(result) &&
+      Object.keys(result).length === 0
+
+    if (isEmptyObject) {
+      throw new Error(`Parsed empty JSON object from ${modelName} (likely truncated)`)
+    }
+
+    return response
+  }
 
   async process(pendingPhotos: Photo[], analyzerProcess: AnalyzerProcess): Promise<void> {
     this.analyzerProcess = analyzerProcess
@@ -61,6 +82,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
 
     const processBatch = async (batch: Photo[]) => {
       let response: any
+      let lastError: unknown = null
       const userProfile = this.analyzerProcess.userProfile || 'general'
       const injectedPrompts: any = this.prompts.map((p) =>
         typeof p === 'function' ? p(batch, userProfile) : p
@@ -69,20 +91,38 @@ export class VisionDescriptionTask extends AnalyzerTask {
         `Llamando a ${this.model} para ${batch.length} imágenes con perfil ${userProfile}...`
       )
 
-      try {
-        if (this.model === 'GPT' || this.model === 'Qwen' || this.model === 'Gemini') {
-          response = await this.executeModelTask(injectedPrompts, batch)
-        } else {
-          throw new Error(`Modelo no soportado: ${this.model}`)
+      const maxAttempts = this.retryModel ? 2 : 1
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const currentModelName = attempt > 1 && this.retryModel ? this.retryModel : this.modelName
+
+        try {
+          response = await this.executeModelTask(injectedPrompts, batch, currentModelName)
+          break
+        } catch (err) {
+          lastError = err
+          logger.error(
+            `Error en ${currentModelName} para ${batch.length} imágenes (intento ${attempt}/${maxAttempts}): ${this.formatError(err)}`
+          )
+
+          if (attempt < maxAttempts) {
+            logger.warn(
+              `Reintentando ${this.name} con modelo alternativo ${this.retryModel} tras fallo de ${this.modelName}`
+            )
+          }
         }
-      } catch (err) {
-        logger.error(`Error en ${this.model} para ${batch.length} imágenes:`, err)
+      }
+
+      if (!response) {
+        logger.error(
+          `No se pudo completar ${this.name} para ${batch.length} imágenes con ${this.modelName}${this.retryModel ? ` ni con ${this.retryModel}` : ''}: ${this.formatError(lastError)}`
+        )
         return
       }
 
       // Manejar el caso donde response puede tener menos resultados debido a errores
       if (response && response.result && response.result.length > 0) {
-        if (this.model === 'Gemini' && response.validPhotos) {
+        if (response.validPhotos) {
           // Para Gemini, usamos las fotos válidas identificadas
           response.result.forEach((res: any, photoIndex: number) => {
             const { ...results } = res
@@ -175,7 +215,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
         delete this.data[photoId]
       }
     } catch (err) {
-      logger.error(`Error guardando datos de VisionTask:`, err)
+      logger.error(`Error guardando datos de VisionTask: ${this.formatError(err)}`)
     }
   }
 
@@ -241,7 +281,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
         try {
           status = await this.modelsService.getBatchStatus(batchId)
         } catch (error) {
-          logger.error(`Error al obtener status del batch ${batchId}:`, error)
+          logger.error(`Error al obtener status del batch ${batchId}: ${this.formatError(error)}`)
         }
       }
       if (status === 'completed') {
@@ -283,7 +323,9 @@ export class VisionDescriptionTask extends AnalyzerTask {
           this.data[photoId] = { ...this.data[photoId], ...photoResult }
         })
       } catch (err) {
-        logger.error(`Error procesando resultado del batch para fotos ${res.custom_id}:`, err)
+        logger.error(
+          `Error procesando resultado del batch para fotos ${res.custom_id}: ${this.formatError(err)}`
+        )
       }
     })
 
@@ -294,11 +336,30 @@ export class VisionDescriptionTask extends AnalyzerTask {
     logger.debug(`Datos salvados del batch para ${batchPhotos.length} imágenes`)
   }
 
-  private async executeModelTask(prompts: string[], batch: Photo[]): Promise<any> {
+  private getModelTypeForModel(modelName: ModelName) {
+    if (modelName.startsWith('gemini')) return 'Gemini'
+    if (modelName.startsWith('qwen')) return 'Qwen'
+    if (
+      modelName.startsWith('gpt') ||
+      modelName.startsWith('deepseek') ||
+      modelName.startsWith('grok')
+    ) {
+      return 'GPT'
+    }
+
+    return this.model
+  }
+
+  private async executeModelTask(
+    prompts: string[],
+    batch: Photo[],
+    modelName: ModelName
+  ): Promise<any> {
     const prompt = prompts[0]
+    const modelType = this.getModelTypeForModel(modelName)
 
     try {
-      if (this.model === 'GPT') {
+      if (modelType === 'GPT') {
         const images = batch.map((photo) => ({
           type: 'image_url',
           image_url: {
@@ -306,15 +367,19 @@ export class VisionDescriptionTask extends AnalyzerTask {
             detail: this.resolution,
           },
         }))
-        return await this.modelsService.getGPTResponse(
+        const response = await this.modelsService.getGPTResponse(
           prompt,
           images,
-          this.modelName,
+          modelName,
           null,
           0,
           false
         )
-      } else if (this.model === 'Qwen') {
+        if (!response) {
+          throw new Error(`Respuesta vacía de ${modelName}`)
+        }
+        return this.ensureNonEmptyResult(response, modelName)
+      } else if (modelType === 'Qwen') {
         const images = batch.map((photo) => ({
           type: 'image_url',
           image_url: {
@@ -322,15 +387,19 @@ export class VisionDescriptionTask extends AnalyzerTask {
             detail: this.resolution,
           },
         }))
-        return await this.modelsService.getQwenResponse(
+        const response = await this.modelsService.getQwenResponse(
           prompt,
           images,
-          'qwen-vl-max',
+          modelName,
           null,
           0,
           false
         )
-      } else if (this.model === 'Gemini') {
+        if (!response) {
+          throw new Error(`Respuesta vacía de ${modelName}`)
+        }
+        return this.ensureNonEmptyResult(response, modelName)
+      } else if (modelType === 'Gemini') {
         const photoImageService = PhotoImageService.getInstance()
 
         // Obtener imágenes válidas, automáticamente filtra las que no están en R2
@@ -366,7 +435,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
         const result = await this.modelsService.getGeminiResponse(
           prompt,
           images,
-          this.modelName,
+          modelName,
           {
             temperature: 0.1,
             mediaResolution:
@@ -386,14 +455,17 @@ export class VisionDescriptionTask extends AnalyzerTask {
           result.validPhotos = validPhotos // Agregar info de qué fotos son válidas
         }
 
-        return result
+        if (!result) {
+          throw new Error(`Respuesta vacía de ${modelName}`)
+        }
+
+        return this.ensureNonEmptyResult(result, modelName)
       } else {
-        throw new Error(`Modelo no soportado: ${this.model}`)
+        throw new Error(`Modelo no soportado: ${modelName}`)
       }
     } catch (error) {
-      logger.error(`Error en executeModelTask para modelo ${this.model}:`, error)
-      // En lugar de lanzar el error, retornamos un resultado vacío para continuar
-      return { result: [] }
+      logger.error(`Error en executeModelTask para modelo ${modelName}: ${this.formatError(error)}`)
+      throw error
     }
   }
 

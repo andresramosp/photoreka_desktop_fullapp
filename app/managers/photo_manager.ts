@@ -417,44 +417,47 @@ export default class PhotoManager {
    * Para valores primitivos (strings), los reemplaza completamente.
    */
   public async updatePhotoDescriptions(id: string, newDescriptions: PhotoDescriptions) {
-    const photo = await Photo.find(id)
-    if (!photo) {
-      throw new Error('Photo not found')
-    }
+    return await db.transaction(async (trx) => {
+      const photo = await Photo.query({ client: trx }).where('id', id).forUpdate().first()
+      if (!photo) {
+        throw new Error('Photo not found')
+      }
 
-    // Merge profundo para preservar claves existentes dentro de cada tipo de descripción
-    const existingDescriptions = photo.descriptions || {}
-    const mergedDescriptions: any = { ...existingDescriptions }
+      // Merge profundo para preservar claves existentes dentro de cada tipo de descripción
+      const existingDescriptions = photo.descriptions || {}
+      const mergedDescriptions: any = { ...existingDescriptions }
 
-    for (const [key, value] of Object.entries(newDescriptions)) {
-      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-        // Para objetos (como visual_aspects), hacer merge profundo
-        const existingValue = existingDescriptions[key as DescriptionType]
-        if (
-          typeof existingValue === 'object' &&
-          existingValue !== null &&
-          !Array.isArray(existingValue)
-        ) {
-          mergedDescriptions[key] = {
-            ...existingValue,
-            ...value,
+      for (const [key, value] of Object.entries(newDescriptions)) {
+        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          // Para objetos (como visual_aspects), hacer merge profundo
+          const existingValue = existingDescriptions[key as DescriptionType]
+          if (
+            typeof existingValue === 'object' &&
+            existingValue !== null &&
+            !Array.isArray(existingValue)
+          ) {
+            mergedDescriptions[key] = {
+              ...existingValue,
+              ...value,
+            }
+          } else {
+            mergedDescriptions[key] = value
           }
         } else {
+          // Para strings y otros tipos primitivos, reemplazar directamente
           mergedDescriptions[key] = value
         }
-      } else {
-        // Para strings y otros tipos primitivos, reemplazar directamente
-        mergedDescriptions[key] = value
       }
-    }
 
-    photo.descriptions = mergedDescriptions
-    try {
-      await photo.save()
-    } catch (err) {
-      console.error(`[AnalyzerProcess] Error updating descriptions for photo ${id}`, err)
-    }
-    return photo
+      photo.descriptions = mergedDescriptions
+      try {
+        await photo.useTransaction(trx).save()
+      } catch (err) {
+        console.error(`[AnalyzerProcess] Error updating descriptions for photo ${id}`, err)
+        throw err
+      }
+      return photo
+    })
   }
 
   public async updatePhotoDetections(
