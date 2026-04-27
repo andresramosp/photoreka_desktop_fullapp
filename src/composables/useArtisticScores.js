@@ -11,22 +11,30 @@ import {
 } from "@vicons/fluent";
 import { PersonRound } from "@vicons/material";
 import {
-  ARTISTIC_SCORES_SCHEMA,
-  ARTISTIC_SCORE_KEYS,
+  getArtisticSchema,
+  getArtisticCriteria,
+  getArtisticInternalKeys,
   getGenreWeights,
+  getGenrePresetKeys,
   getGenreFromProfile,
+  getProfileVariant,
 } from "@/config/photo_schema";
 
-// Icon mapping for criteria (UI-only — not part of the schema)
+// Icon mapping for criteria (UI-only — not part of the schema).
+// Includes both style/general keys and commercial-only keys.
 const criterionIcons = {
   aesthetic_quality: Sparkle20Regular,
   composition: Grid20Regular,
   storytelling: DocumentBulletList20Regular,
   strangeness: StarEmphasis20Regular,
+  // style/general bonus
   message: Comment20Regular,
   humor: Emoji20Regular,
   visual_games: Eye20Regular,
   candidness: PersonRound,
+  // commercial-only
+  commercial_intent: Comment20Regular,
+  subject_clarity: Eye20Regular,
 };
 
 // Score scale configuration
@@ -121,34 +129,26 @@ const consistencyScale = {
   ],
 };
 
-// All available artistic score criteria organized by groups
-// Derived from the central photo schema (single source of truth).
+// All available artistic score criteria organized by groups.
+// Variant-scoped: returns the structure for the requested variant
+// (general/style share the same set; commercial has a distinct set).
 // Icons are injected from criterionIcons (UI-only concern).
-const artisticScores = Object.fromEntries(
-  ARTISTIC_SCORES_SCHEMA.map((group) => [
-    group.key,
-    {
-      label: group.label,
-      color: group.color,
-      criteria: group.criteria.map((criterion) => ({
-        value: criterion.key,
-        label: criterion.label,
-        icon: criterionIcons[criterion.key] || null,
-      })),
-    },
-  ]),
-);
-
-// Genre preset keys supported by the schema.
-const GENRE_PRESET_KEYS = ["general", "street", "documentary", "abstract"];
-
-// Helper function to get all criteria keys (delegated to schema).
-const getAllCriteriaKeys = () => [...ARTISTIC_SCORE_KEYS];
-
-// Genre presets generated from the schema's per-criterion weights.
-const genrePresets = Object.fromEntries(
-  GENRE_PRESET_KEYS.map((genre) => [genre, getGenreWeights(genre)]),
-);
+function buildArtisticScoresForVariant(variant) {
+  return Object.fromEntries(
+    getArtisticSchema(variant).map((group) => [
+      group.key,
+      {
+        label: group.label,
+        color: group.color,
+        criteria: group.criteria.map((criterion) => ({
+          value: criterion.key,
+          label: criterion.label,
+          icon: criterionIcons[criterion.key] || null,
+        })),
+      },
+    ]),
+  );
+}
 
 /**
  * Map a UserProfile string to the corresponding genre preset key.
@@ -160,22 +160,57 @@ export function getDefaultGenreFromProfile(profile) {
   return getGenreFromProfile(profile);
 }
 
-export function useArtisticScores() {
+export function useArtisticScores(options = {}) {
+  // Optional user profile (string or ref/computed). When provided, criterion
+  // labels are resolved with per-profile overrides (e.g. visual_games →
+  // "Subject Clarity" for commercial users).
+  const profileOption = options.profile ?? null;
+  const resolveProfile = () => {
+    if (!profileOption) return null;
+    if (typeof profileOption === "function") return profileOption();
+    if (
+      profileOption &&
+      typeof profileOption === "object" &&
+      "value" in profileOption
+    ) {
+      return profileOption.value;
+    }
+    return profileOption;
+  };
+
+  // Resolve the user's profile / variant ONCE at composable creation.
+  // The profile is stable per session (logout remounts components),
+  // so a snapshot avoids forcing all consumers to deal with reactive
+  // refs for what was previously a plain value API.
+  const initialProfile = resolveProfile();
+  const variant = getProfileVariant(initialProfile);
+
+  // Variant-scoped lookups built once.
+  const artisticScores = buildArtisticScoresForVariant(variant);
+  const variantCriteria = getArtisticCriteria(variant);
+  const variantGenres = getGenrePresetKeys(variant);
+  const genrePresets = Object.fromEntries(
+    variantGenres.map((g) => [g, getGenreWeights(g, variant)]),
+  );
+  const getAllCriteriaKeys = () => getArtisticInternalKeys(variant);
+  const defaultGenre = variantGenres[0];
+
   // Reactive weights for custom configuration - default to weight 1 for all criteria
   const artisticScoreWeights = ref(
     Object.fromEntries(getAllCriteriaKeys().map((key) => [key, 1])),
   );
-  const selectedGenre = ref("general");
+  const selectedGenre = ref(defaultGenre);
 
   /**
-   * Apply a genre preset to the weights
+   * Apply a genre preset to the weights. If `genre` is not a valid preset
+   * for the current variant, the variant's default preset is used instead.
    * @param {string} genre - The genre preset to apply
    */
   const applyGenrePreset = (genre) => {
-    selectedGenre.value = genre;
-    const preset = genrePresets[genre];
+    const resolved = variantGenres.includes(genre) ? genre : defaultGenre;
+    selectedGenre.value = resolved;
+    const preset = genrePresets[resolved];
     if (preset) {
-      // Solo aplicar pesos para criterios que existen en artisticScores
       getAllCriteriaKeys().forEach((criterion) => {
         artisticScoreWeights.value[criterion] =
           preset[criterion] !== undefined ? preset[criterion] : 1;
@@ -192,6 +227,9 @@ export function useArtisticScores() {
     );
     selectedGenre.value = "custom";
   };
+
+  // Initialize with the variant's default preset by default.
+  applyGenrePreset(defaultGenre);
 
   /**
    * Get all artistic scores with default values for missing criteria
@@ -254,7 +292,7 @@ export function useArtisticScores() {
             criterion: criterionObj.value,
             score: completeScores[criterionObj.value],
             group: "fundamentals",
-            label: criterionObj.label,
+            label: formatCriterionName(criterionObj.value),
           });
         }
       });
@@ -268,7 +306,7 @@ export function useArtisticScores() {
             criterion: criterionObj.value,
             score: completeScores[criterionObj.value],
             group: "bonus",
-            label: criterionObj.label,
+            label: formatCriterionName(criterionObj.value),
           });
         }
       });
@@ -277,30 +315,28 @@ export function useArtisticScores() {
     return orderedScores;
   };
 
-  // Initialize with general preset by default
-  applyGenrePreset("general");
-
   /**
    * Calculate artistic score for a photo based on genre weights
    * @param {Object} artistic_scores - The artistic scores object from photo
-   * @param {string} genre - The genre preset to use ('general', 'street', 'documentary', 'abstract', 'custom')
+   * @param {string} genre - The genre preset to use (variant-dependent) or 'custom'
    * @param {Object} customWeights - Custom weights object (used when genre is 'custom')
    * @returns {Object} - { average, rating, total, count }
    */
   const calculateArtisticScore = (
     artistic_scores,
-    genre = "general",
+    genre = defaultGenre,
     customWeights = null,
   ) => {
     if (!artistic_scores || typeof artistic_scores !== "object") {
       return { average: 0, rating: "N/A", total: 0, count: 0 };
     }
 
-    // Use custom weights if genre is 'custom' and customWeights are provided
+    // Use custom weights if genre is 'custom' and customWeights are provided.
+    // Otherwise look up the genre's preset; fall back to the variant default.
     const weights =
       genre === "custom" && customWeights
         ? customWeights
-        : genrePresets[genre] || genrePresets.general;
+        : genrePresets[genre] || genrePresets[defaultGenre];
     const weightedScores = [];
     let totalWeight = 0;
 
@@ -386,28 +422,20 @@ export function useArtisticScores() {
   };
 
   /**
-   * Format criterion name using the label from artisticScores
-   * @param {string} criterion - The criterion name in snake_case
+   * Format criterion name using the label from the variant's criteria.
+   * @param {string} criterion - The criterion key in snake_case
    * @returns {string} - The formatted criterion name
    */
   const formatCriterionName = (criterion) => {
-    // Find the criterion in artisticScores groups and return its label
-    for (const group of Object.values(artisticScores)) {
-      const criterionObj = group.criteria.find((c) => c.value === criterion);
-      if (criterionObj) {
-        return criterionObj.label;
-      }
-    }
+    const def = variantCriteria.find((c) => c.key === criterion);
+    if (def) return def.label;
 
-    // Fallback to original formatting if not found
-    const formatted = criterion
+    // Fallback to title-case of the snake_case key when the criterion
+    // belongs to a different variant than the user's current one.
+    return criterion
       .split("_")
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(" ");
-
-    return formatted
-      .replace("Methaphoric", "Metaphoric")
-      .replace("Documentary", "Documentary");
   };
 
   /**
@@ -433,7 +461,7 @@ export function useArtisticScores() {
         const weight = preset[criterion.value];
         const percentage = Math.round(weight * 100);
         tooltip += `<div style="margin-left: 8px; font-size: 11px; color: #ffffffcc;">`;
-        tooltip += `${criterion.label}: <span style="font-weight: 500; color: ${
+        tooltip += `${formatCriterionName(criterion.value)}: <span style="font-weight: 500; color: ${
           percentage === 0
             ? "#ef4444"
             : percentage >= 80

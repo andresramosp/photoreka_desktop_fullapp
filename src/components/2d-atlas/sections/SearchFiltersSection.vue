@@ -144,7 +144,7 @@
             class="score-slider-item"
           >
             <ScoreOperatorSlider
-              :label="criterion.label"
+              :label="formatCriterionName(criterion.value)"
               :model-value="localArtisticScoreFilters[criterion.value] ?? null"
               @update:model-value="
                 (v) => handleArtisticScoreChange(criterion.value, v)
@@ -270,7 +270,8 @@ import {
 import { InfoCircleFilled, CloseOutlined, SearchOutlined } from "@vicons/antd";
 import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
 import ScoreOperatorSlider from "@/components/controls/ScoreOperatorSlider.vue";
-import { visualAspectsOptions } from "@/stores/searchStore.js";
+import { useSearchStore } from "@/stores/searchStore.js";
+import { useUserStore } from "@/stores/userStore";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { api } from "@/utils/axios";
@@ -387,11 +388,14 @@ watch(
   },
 );
 
-const { artisticScores } = useArtisticScores();
+const { artisticScores, formatCriterionName } = useArtisticScores({
+  profile: () => useUserStore().user?.profiles,
+});
 const artisticScoresGroups = artisticScores;
 
+const _searchStore = useSearchStore();
 const treeSelectOptions = computed(() => {
-  return visualAspectsOptions.map((group) => ({
+  return _searchStore.visualAspectsOptionsForProfile.map((group) => ({
     label: group.label,
     key: group.key,
     disabled: false,

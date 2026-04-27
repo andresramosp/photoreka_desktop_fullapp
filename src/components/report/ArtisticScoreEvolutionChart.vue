@@ -204,6 +204,7 @@
 import { computed, ref } from "vue";
 import { NSelect, NIcon } from "naive-ui";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
+import { useUserStore } from "@/stores/userStore";
 import { TrendingUp as TrendingUpIcon } from "@vicons/ionicons5";
 import theme from "@/config/theme.js";
 
@@ -217,7 +218,7 @@ const props = defineProps({
 });
 
 const { formatCriterionName, getScoreBgColor, artisticScores } =
-  useArtisticScores();
+  useArtisticScores({ profile: () => useUserStore().user?.profiles });
 
 const selectedCriteria = ref([]);
 

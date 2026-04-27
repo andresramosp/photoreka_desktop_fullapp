@@ -158,7 +158,8 @@ import PhotoCardHub from "../photoCards/PhotoCardHub.vue";
 import ConfettiEffect from "../ConfettiEffect.vue";
 import PhotoInfoDialog from "../PhotoInfoDialog.vue";
 import { useArtisticScores } from "@/composables/useArtisticScores";
-import { ARTISTIC_SCORES_SCHEMA } from "@/config/photo_schema";
+import { useUserStore } from "@/stores/userStore";
+import { getArtisticSchema, getProfileVariant } from "@/config/photo_schema";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { usePhotosStore } from "@/stores/photos";
 
@@ -176,7 +177,9 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["close"]);
-const { artisticScores, getCriterionIcon } = useArtisticScores();
+const { artisticScores, getCriterionIcon } = useArtisticScores({
+  profile: () => useUserStore().user?.profiles,
+});
 const router = useRouter();
 const photosStore = usePhotosStore();
 
@@ -319,11 +322,11 @@ function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-// --- Derive fundamental criterion keys from the central schema ---
+// --- Derive fundamental criterion keys from the user's variant schema ---
 const FUNDAMENTAL_CRITERIA_KEYS =
-  ARTISTIC_SCORES_SCHEMA.find((g) => g.key === "fundamentals")?.criteria.map(
-    (c) => c.key,
-  ) ?? [];
+  getArtisticSchema(getProfileVariant(useUserStore().user?.profiles))
+    .find((g) => g.key === "fundamentals")
+    ?.criteria.map((c) => c.key) ?? [];
 
 // --- Calculate maximum individual score for a photo (highest fundamental) ---
 function calculateMaxScore(photo) {
@@ -393,15 +396,23 @@ function breaksRecord(photo) {
 }
 
 // --- Fundamental artistic scores highlight labels ---
-// Keys must match the fundamentals criteria in `ARTISTIC_SCORES_SCHEMA`.
-// Labels here are UI highlight strings — distinct from the criterion's
-// canonical label (e.g. "Great Aesthetic" vs "Aesthetic Quality").
-const fundamentalLabels = {
+// Variant-aware: derived from the active profile's `fundamentals` criteria.
+// The map intentionally uses presentation-specific highlight strings (not
+// the criterion's canonical UI label).
+const FUNDAMENTAL_HIGHLIGHTS = {
   aesthetic_quality: "Great Aesthetic",
   composition: "Strong Composition",
   storytelling: "Compelling Story",
   strangeness: "Strikingly Original",
+  commercial_intent: "Commercially Strong",
 };
+const fundamentalLabels = computed(() => {
+  const out = {};
+  for (const c of artisticScores.fundamentals.criteria) {
+    out[c.value] = FUNDAMENTAL_HIGHLIGHTS[c.value] ?? c.label;
+  }
+  return out;
+});
 
 const fundamentalIcons = computed(() => {
   const icons = {};
@@ -413,7 +424,7 @@ const fundamentalIcons = computed(() => {
 
 // Select up to 5 photos with best fundamental scores, each highlighting a different criterion when possible
 const topPhotos = computed(() => {
-  const fundamentalKeys = Object.keys(fundamentalLabels);
+  const fundamentalKeys = Object.keys(fundamentalLabels.value);
   const candidates = [];
 
   // For each photo, collect ALL its fundamental scores (sorted by value)
@@ -500,7 +511,7 @@ const topPhotos = computed(() => {
       photo: candidate.photo,
       criterion: selectedScore.key,
       score: selectedScore.score,
-      label: fundamentalLabels[selectedScore.key],
+      label: fundamentalLabels.value[selectedScore.key],
       icon: fundamentalIcons.value[selectedScore.key],
       isRecord: candidate.isRecord,
       maxScore: candidate.maxScore,

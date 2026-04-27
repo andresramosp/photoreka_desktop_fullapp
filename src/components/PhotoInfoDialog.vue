@@ -29,6 +29,7 @@
     :formatCriterionName="formatCriterionName"
     :formatGenreTooltip="formatGenreTooltip"
     :getScoreBgColor="getScoreBgColor"
+    :availableGenrePresets="availableGenrePresets"
     :showDelete="showDelete"
     :showAddToCollection="showAddToCollection"
     :showMoveToTool="showMoveToTool"
@@ -86,6 +87,7 @@
     :formatCriterionName="formatCriterionName"
     :formatGenreTooltip="formatGenreTooltip"
     :getScoreBgColor="getScoreBgColor"
+    :availableGenrePresets="availableGenrePresets"
     :showDelete="showDelete"
     :showAddToCollection="showAddToCollection"
     :showMoveToTool="showMoveToTool"
@@ -276,6 +278,8 @@ import {
   RefreshOutline as RefreshIcon,
   CreateOutline as EditIcon,
   WalkOutline,
+  CameraOutline,
+  BriefcaseOutline,
   CloseOutline as CloseIcon,
   ChevronBackOutline as ChevronBack,
   ChevronForwardOutline as ChevronForward,
@@ -293,6 +297,7 @@ import {
   useArtisticScores,
   getDefaultGenreFromProfile,
 } from "@/composables/useArtisticScores.js";
+import { getGenrePresetKeys, getProfileVariant } from "@/config/photo_schema";
 import { tagCategoryNameMap } from "@/stores/photos.js";
 import { BookOpen16Regular } from "@vicons/fluent";
 import { PaletteOutlined } from "@vicons/material";
@@ -362,7 +367,25 @@ const {
   applyGenrePreset,
   getActiveArtisticScores,
   getOrderedArtisticScores,
-} = useArtisticScores();
+} = useArtisticScores({ profile: () => userStore.user?.profiles });
+
+// Genre presets shown in the scores section derive from the user's
+// profile-variant via the central schema's `getGenrePresetKeys`.
+const GENRE_PRESET_META = {
+  general: { label: "General", icon: CameraOutline },
+  street: { label: "Street", icon: WalkOutline },
+  documentary: { label: "Documentary", icon: BookOpen16Regular },
+  abstract: { label: "Artistic", icon: PaletteOutlined },
+  commercial: { label: "Commercial", icon: BriefcaseOutline },
+};
+const availableGenrePresets = computed(() => {
+  const variant = getProfileVariant(userStore.user?.profiles);
+  return getGenrePresetKeys(variant).map((key) => ({
+    key,
+    label: GENRE_PRESET_META[key]?.label ?? key,
+    icon: GENRE_PRESET_META[key]?.icon ?? CameraOutline,
+  }));
+});
 
 // Simple session limits (resets on app restart)
 const MAX_QUESTIONS = 3; // Max custom questions per photo

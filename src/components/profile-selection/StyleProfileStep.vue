@@ -11,7 +11,7 @@
     <div class="style-block">
       <h3 class="section-title">General Purpose</h3>
       <p class="section-subtitle">Recommended for most users</p>
-      <div class="general-grid">
+      <div class="general-grid general-grid-dual">
         <div
           class="category-card general-card"
           :class="{ selected: selectedProfiles.includes('general') }"
@@ -30,6 +30,25 @@
           </p>
           <div class="mode-badge recommended">Recommended</div>
         </div>
+
+        <div
+          class="category-card general-card commercial-card"
+          :class="{ selected: selectedProfiles.includes('commercial') }"
+          @click="toggleCommercial()"
+        >
+          <div class="category-icon">
+            <n-icon size="32">
+              <BriefcaseOutline />
+            </n-icon>
+          </div>
+          <h4 class="category-title">Commercial Photography</h4>
+          <p class="category-description">
+            Optimized for advertising, stock, fashion, editorial, product, and
+            lifestyle work. The engine prioritizes visual polish, subject
+            clarity, and commercial intent.
+          </p>
+          <div class="mode-badge commercial">Commercial</div>
+        </div>
       </div>
     </div>
 
@@ -45,9 +64,10 @@
           :class="{
             selected: selectedProfiles.includes('street-photography'),
             disabled:
-              selectedProfiles.length >= 2 &&
-              !selectedProfiles.includes('street-photography') &&
-              !selectedProfiles.includes('general'),
+              selectedProfiles.includes('commercial') ||
+              (selectedProfiles.length >= 2 &&
+                !selectedProfiles.includes('street-photography') &&
+                !selectedProfiles.includes('general')),
             expanded: expandedProfile === 'street-photography',
           }"
           @click="toggleProfile('street-photography')"
@@ -68,9 +88,10 @@
           :class="{
             selected: selectedProfiles.includes('documentary'),
             disabled:
-              selectedProfiles.length >= 2 &&
-              !selectedProfiles.includes('documentary') &&
-              !selectedProfiles.includes('general'),
+              selectedProfiles.includes('commercial') ||
+              (selectedProfiles.length >= 2 &&
+                !selectedProfiles.includes('documentary') &&
+                !selectedProfiles.includes('general')),
             expanded: expandedProfile === 'documentary',
           }"
           @click="toggleProfile('documentary')"
@@ -91,9 +112,10 @@
           :class="{
             selected: selectedProfiles.includes('artistic'),
             disabled:
-              selectedProfiles.length >= 2 &&
-              !selectedProfiles.includes('artistic') &&
-              !selectedProfiles.includes('general'),
+              selectedProfiles.includes('commercial') ||
+              (selectedProfiles.length >= 2 &&
+                !selectedProfiles.includes('artistic') &&
+                !selectedProfiles.includes('general')),
             expanded: expandedProfile === 'artistic',
           }"
           @click="toggleProfile('artistic')"
@@ -141,7 +163,13 @@
         </div>
       </transition>
 
-      <p class="selection-hint" v-if="!selectedProfiles.includes('general')">
+      <p
+        class="selection-hint"
+        v-if="
+          !selectedProfiles.includes('general') &&
+          !selectedProfiles.includes('commercial')
+        "
+      >
         Choose up to 2 styles that best represent your work
       </p>
     </div>
@@ -178,6 +206,7 @@ import {
   CheckmarkCircleOutline,
   ArrowBackOutline,
   WalkOutline,
+  BriefcaseOutline,
 } from "@vicons/ionicons5";
 import { BookOpen16Regular } from "@vicons/fluent";
 import { PaletteOutlined } from "@vicons/material";
@@ -293,9 +322,19 @@ const toggleGeneral = () => {
   }
 };
 
+const toggleCommercial = () => {
+  // Commercial is mutually exclusive with general and any advanced profile
+  if (props.selectedProfiles.includes("commercial")) {
+    emit("update:selectedProfiles", []);
+  } else {
+    emit("update:selectedProfiles", ["commercial"]);
+    expandedProfile.value = null;
+  }
+};
+
 const toggleProfile = (profile: string) => {
   const currentProfiles = [...props.selectedProfiles].filter(
-    (p) => p !== "general"
+    (p) => p !== "general" && p !== "commercial",
   );
   const index = currentProfiles.indexOf(profile);
 
@@ -316,17 +355,19 @@ const toggleProfile = (profile: string) => {
 watch(
   () => props.selectedProfiles,
   (newProfiles) => {
-    // If general is selected, clear expanded profile
-    if (newProfiles.includes("general")) {
+    // If general or commercial is selected, clear expanded profile
+    if (newProfiles.includes("general") || newProfiles.includes("commercial")) {
       expandedProfile.value = null;
     } else {
       // If a professional profile is selected and there's no expanded profile, expand the first one
-      const professionalProfiles = newProfiles.filter((p) => p !== "general");
+      const professionalProfiles = newProfiles.filter(
+        (p) => p !== "general" && p !== "commercial",
+      );
       if (professionalProfiles.length > 0 && !expandedProfile.value) {
         expandedProfile.value = professionalProfiles[0];
       }
     }
-  }
+  },
 );
 
 const handleBack = () => {
@@ -409,6 +450,13 @@ const handleComplete = () => {
   margin: 0 auto;
 }
 
+.general-grid-dual {
+  max-width: 760px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
 .general-card {
   background-color: #2c2c32;
   border: 2px solid #3c3c42;
@@ -454,6 +502,21 @@ const handleComplete = () => {
 .mode-badge.recommended {
   background-color: rgba(34, 197, 94, 0.2);
   color: #22c55e;
+}
+
+.mode-badge.commercial {
+  background-color: rgba(168, 85, 247, 0.2);
+  color: #a855f7;
+}
+
+.commercial-card.selected {
+  border-color: #a855f7;
+  background-color: rgba(168, 85, 247, 0.1);
+  box-shadow: 0 4px 16px rgba(168, 85, 247, 0.3);
+}
+
+.commercial-card.selected .category-icon {
+  color: #a855f7;
 }
 
 /* Professional Categories Grid */

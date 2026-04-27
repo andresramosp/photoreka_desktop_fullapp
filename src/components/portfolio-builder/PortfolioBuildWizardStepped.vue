@@ -518,7 +518,9 @@ import { PaletteOutlined } from "@vicons/material";
 import { TOOL_ICONS, getToolById } from "@/config/toolsConfig";
 import CustomArtisticWeights from "@/components/CustomArtisticWeights.vue";
 import { useArtisticScores } from "@/composables/useArtisticScores";
-import { visualAspectsOptions } from "@/stores/searchStore";
+import { useUserStore } from "@/stores/userStore";
+import { getVisualAspectsOptions } from "@/stores/searchStore";
+import { getGenrePresetKeys, getProfileVariant } from "@/config/photo_schema";
 import { useCollectionsStore } from "@/stores/collections";
 import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds";
 
@@ -533,8 +535,9 @@ const message = useMessage();
 const collectionsStore = useCollectionsStore();
 const portfolioStore = usePortfolioBuildsStore();
 
-const { genrePresets, formatCriterionName, artisticScores } =
-  useArtisticScores();
+const { genrePresets, formatCriterionName, artisticScores } = useArtisticScores(
+  { profile: () => useUserStore().user?.profiles },
+);
 
 // ── Wizard navigation ───────────────────────────────────────
 const currentStep = ref(0);
@@ -666,13 +669,26 @@ const buildSteps = computed(() => {
 });
 
 // ── Presets ─────────────────────────────────────────────────
-const genrePresetOptions = [
-  { value: "general", label: "General", icon: Camera20Regular },
-  { value: "street", label: "Street", icon: WalkOutline },
-  { value: "documentary", label: "Documentary", icon: BookOpen16Regular },
-  { value: "abstract", label: "Artistic", icon: PaletteOutlined },
-  { value: "custom", label: "Custom", icon: Settings20Regular },
-];
+// Variant-specific genre presets. Commercial users only see the
+// `commercial` preset; style/general users see the artistic genres.
+const GENRE_PRESET_META = {
+  general: { label: "General", icon: Camera20Regular },
+  street: { label: "Street", icon: WalkOutline },
+  documentary: { label: "Documentary", icon: BookOpen16Regular },
+  abstract: { label: "Artistic", icon: PaletteOutlined },
+  commercial: { label: "Commercial", icon: Camera20Regular },
+};
+const genrePresetOptions = computed(() => {
+  const variant = getProfileVariant(useUserStore().user?.profiles);
+  const keys = getGenrePresetKeys(variant);
+  const built = keys.map((key) => ({
+    value: key,
+    label: GENRE_PRESET_META[key]?.label ?? key,
+    icon: GENRE_PRESET_META[key]?.icon ?? Camera20Regular,
+  }));
+  built.push({ value: "custom", label: "Custom", icon: Settings20Regular });
+  return built;
+});
 
 const applyPreset = (genre) => {
   selectedGenre.value = genre;
@@ -777,7 +793,8 @@ const coherenceModes = [
 
 // ── Visual aspects tree-select options ──────────────────────
 const treeSelectOptions = computed(() => {
-  return visualAspectsOptions.map((group) => ({
+  const opts = getVisualAspectsOptions(useUserStore().user?.profiles);
+  return opts.map((group) => ({
     label: group.label,
     key: group.key,
     children: group.children.map((child) => ({

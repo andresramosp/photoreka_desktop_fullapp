@@ -229,6 +229,7 @@
 <script setup>
 import { computed } from "vue";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
+import { useUserStore } from "@/stores/userStore";
 import { StarOutline as StarIcon } from "@vicons/ionicons5";
 import ArtisticScoreEvolutionChart from "./ArtisticScoreEvolutionChart.vue";
 
@@ -250,7 +251,7 @@ const {
   getCriterionIcon,
   artisticScores,
   consistencyScale,
-} = useArtisticScores();
+} = useArtisticScores({ profile: () => useUserStore().user?.profiles });
 
 // Helper function to calculate consistency bar width based on level
 const getConsistencyWidth = (stdDev) => {

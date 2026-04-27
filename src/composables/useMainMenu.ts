@@ -199,6 +199,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
       label: "Library",
       key: "library-section",
       icon: renderIcon(LibraryIcon),
+      disabled: isBlocked.value,
       children,
     };
   });

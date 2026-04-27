@@ -375,7 +375,7 @@
                   <component :is="criterionIcons[criterion.value]" />
                 </n-icon>
               </template>
-              {{ criterion.label }}
+              {{ formatCriterionName(criterion.value) }}
             </n-button>
           </template>
         </div>
@@ -457,13 +457,14 @@
 
 <script setup>
 import { computed, ref, reactive, watch, h, onMounted } from "vue";
-import { visualAspectsOptions } from "@/stores/searchStore.js";
+import { useSearchStore } from "@/stores/searchStore.js";
 import {
   useArtisticScores,
   getDefaultGenreFromProfile,
 } from "@/composables/useArtisticScores.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { useUserStore } from "@/stores/userStore";
+import { getGenrePresetKeys, getProfileVariant } from "@/config/photo_schema";
 import { useSearchTags } from "@/composables/useSearchTags.js";
 import CustomArtisticWeights from "./CustomArtisticWeights.vue";
 import TimeRangeFilter from "./TimeRangeFilter.vue";
@@ -491,7 +492,7 @@ import {
   Trophy20Regular,
 } from "@vicons/fluent";
 import { PaletteOutlined } from "@vicons/material";
-import { Walk, WalkOutline } from "@vicons/ionicons5";
+import { Walk, WalkOutline, BriefcaseOutline } from "@vicons/ionicons5";
 
 const emit = defineEmits([
   "filters-change",
@@ -511,14 +512,17 @@ const emit = defineEmits([
   "artistic-scores-change",
 ]);
 
-// Genre definitions for rendering
-const genres = [
-  { value: "general", label: "General", icon: Camera20Regular },
-  { value: "street", label: "Street", icon: WalkOutline },
-  { value: "documentary", label: "Documentary", icon: BookOpen16Regular },
-  { value: "abstract", label: "Artistic", icon: PaletteOutlined },
-  { value: "custom", label: "Custom", icon: Settings20Regular },
-];
+// Genre definitions for rendering. The set of available genre presets
+// derives from the user's profile via `getGenrePresetKeys` from the central
+// schema (commercial users → ['commercial']; style/general users → the
+// classic four artistic presets). 'custom' is always appended.
+const GENRE_PRESET_META = {
+  general: { label: "General", icon: Camera20Regular },
+  street: { label: "Street", icon: WalkOutline },
+  documentary: { label: "Documentary", icon: BookOpen16Regular },
+  abstract: { label: "Artistic", icon: PaletteOutlined },
+  commercial: { label: "Commercial", icon: BriefcaseOutline },
+};
 
 const props = defineProps({
   basicSortActive: {
@@ -536,6 +540,18 @@ const { isMobile } = useIsMobile();
 
 // User store for profile-based defaults
 const userStore = useUserStore();
+const searchStore = useSearchStore();
+
+const genres = computed(() => {
+  const variant = getProfileVariant(userStore.user?.profiles);
+  const built = getGenrePresetKeys(variant).map((key) => ({
+    value: key,
+    label: GENRE_PRESET_META[key]?.label ?? key,
+    icon: GENRE_PRESET_META[key]?.icon ?? Camera20Regular,
+  }));
+  built.push({ value: "custom", label: "Custom", icon: Settings20Regular });
+  return built;
+});
 
 // Message instance
 const message = useMessage();
@@ -629,7 +645,7 @@ const {
   formatCriterionName,
   formatGenreTooltip,
   criterionIcons,
-} = useArtisticScores();
+} = useArtisticScores({ profile: () => userStore.user?.profiles });
 
 // Create grouped criteria options for n-select
 const availableCriteria = Object.entries(artisticScores).map(
@@ -639,7 +655,7 @@ const availableCriteria = Object.entries(artisticScores).map(
     key: groupKey,
     children: group.criteria.map((criterion) => ({
       value: criterion.value,
-      label: criterion.label,
+      label: formatCriterionName(criterion.value),
       group: groupKey, // Add group information for styling
     })),
   }),
@@ -732,7 +748,7 @@ const genreOptions = [
 ];
 
 // Initialize selectedFilters with empty arrays for each category
-visualAspectsOptions.forEach((group) => {
+searchStore.visualAspectsOptionsForProfile.forEach((group) => {
   selectedFilters.value[group.key] = [];
 });
 
@@ -1323,7 +1339,6 @@ watch(
 .filters-expanded-content {
   display: flex;
   flex-direction: column;
-  gap: 10px;
   padding: 8px 12px 8px;
 }
 

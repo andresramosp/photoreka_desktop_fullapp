@@ -15,6 +15,7 @@ interface Usage {
 
 export type UserProfile =
   | "general"
+  | "commercial"
   | "street-photography"
   | "documentary"
   | "artistic"

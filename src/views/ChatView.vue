@@ -993,9 +993,9 @@ const suggestions: Suggestion[] = [
         autoSend: true,
       },
       {
-        title: "Gender Presence in Street Work",
+        title: "Gender Representation",
         prompt:
-          "Analyze my street photography archive and determine whether men or women appear more frequently as primary subjects. Break down the distribution and explain if this reflects a stylistic bias, contextual coincidence, or recurring thematic inclination.",
+          "Analyze my photo library and determine whether men or women appear more frequently as primary subjects across all genres. Break down the distribution and explain if this reflects a stylistic bias, contextual coincidence, or recurring thematic inclination.",
         needsPhotos: false,
         autoSend: true,
       },

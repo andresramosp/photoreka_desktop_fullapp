@@ -730,7 +730,7 @@ const sortByQuality = computed(() => {
 
 // Get dynamic criteria from useArtisticScores
 const { artisticScores, formatCriterionName, calculateArtisticScore } =
-  useArtisticScores();
+  useArtisticScores({ profile: () => userStore.user?.profiles });
 const availableCriteria = [];
 Object.values(artisticScores).forEach((group) => {
   group.criteria.forEach((criterion) => {

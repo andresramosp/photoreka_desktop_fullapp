@@ -494,7 +494,8 @@ import {
   OptionsOutline,
 } from "@vicons/ionicons5";
 import { TagOutlined } from "@vicons/antd";
-import { useSearchStore, visualAspectsOptions } from "@/stores/searchStore";
+import { useSearchStore } from "@/stores/searchStore";
+import { useUserStore } from "@/stores/userStore";
 import { useCollectionsStore } from "@/stores/collections";
 
 // Maneja Enter en el input semántico para disparar búsqueda (sin Shift)
@@ -518,12 +519,16 @@ const hasOpenSelect = ref(false);
 const selectedFilters = ref({});
 
 // Initialize selectedFilters with empty arrays for each category
-visualAspectsOptions.forEach((group) => {
+const userStore = useUserStore();
+searchStore.visualAspectsOptionsForProfile.forEach((group) => {
   selectedFilters.value[group.key] = [];
 });
 
 // Artistic Scores from composable
-const { artisticScores, criterionIcons } = useArtisticScores();
+const { artisticScores, criterionIcons, formatCriterionName } =
+  useArtisticScores({
+    profile: () => userStore.user?.profiles,
+  });
 
 // Props - only UI state and suggestions come from parent
 const props = defineProps({
@@ -671,7 +676,7 @@ const activeFiltersBadges = computed(() => {
       Object.values(artisticScores).forEach((group) => {
         const criterion = group.criteria.find((c) => c.value === key);
         if (criterion) {
-          scoreLabel = `${criterion.label} ${filter.operator} ${filter.value}`;
+          scoreLabel = `${formatCriterionName(criterion.value)} ${filter.operator} ${filter.value}`;
         }
       });
       badges.push(scoreLabel);

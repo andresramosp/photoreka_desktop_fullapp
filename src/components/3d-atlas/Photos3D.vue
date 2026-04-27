@@ -266,6 +266,7 @@ import { useTagBeacons } from "@/composables/3d-viewer/useTagBeacons.js";
 import { use3DPhotoEffects } from "@/composables/3d-viewer/use3DPhotoEffects.js";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
+import { useUserStore } from "@/stores/userStore";
 import { useHasTouch } from "@/composables/useHasTouch.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
@@ -742,7 +743,9 @@ const flyToBeacon = (beacon) => {
 const selectedVisualAspects = ref([]);
 
 // Filtro de artistic scores - Nuevo sistema con sliders
-const { artisticScores } = useArtisticScores();
+const { artisticScores } = useArtisticScores({
+  profile: () => useUserStore().user?.profiles,
+});
 const artisticScoresGroups = artisticScores;
 const artisticScoreFilters = ref({});
 

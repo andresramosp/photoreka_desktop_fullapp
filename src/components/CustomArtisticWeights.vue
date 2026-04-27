@@ -40,6 +40,7 @@
 import { computed } from "vue";
 import ClickableWeightSlider from "./wrappers/ClickableWeightSlider.vue";
 import { useArtisticScores } from "@/composables/useArtisticScores";
+import { useUserStore } from "@/stores/userStore";
 
 const props = defineProps({
   modelValue: {
@@ -63,7 +64,9 @@ const props = defineProps({
 const emit = defineEmits(["update:modelValue"]);
 
 // Get artisticScores from composable
-const { artisticScores } = useArtisticScores();
+const { artisticScores } = useArtisticScores({
+  profile: () => useUserStore().user?.profiles,
+});
 
 // Group criteria by their categories
 const groupedCriteria = computed(() => {

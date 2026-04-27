@@ -170,36 +170,14 @@
                   <!-- Genre Pills (Horizontal scroll) -->
                   <div class="mobile-genre-scroll">
                     <div
+                      v-for="preset in availableGenrePresets"
+                      :key="preset.key"
                       class="mobile-genre-pill"
-                      :class="{ active: selectedGenre === 'general' }"
-                      @click="emit('apply-genre-preset', 'general')"
+                      :class="{ active: selectedGenre === preset.key }"
+                      @click="emit('apply-genre-preset', preset.key)"
                     >
-                      <n-icon size="14"><CameraOutline /></n-icon>
-                      General
-                    </div>
-                    <div
-                      class="mobile-genre-pill"
-                      :class="{ active: selectedGenre === 'street' }"
-                      @click="emit('apply-genre-preset', 'street')"
-                    >
-                      <n-icon size="14"><WalkOutline /></n-icon>
-                      Street
-                    </div>
-                    <div
-                      class="mobile-genre-pill"
-                      :class="{ active: selectedGenre === 'documentary' }"
-                      @click="emit('apply-genre-preset', 'documentary')"
-                    >
-                      <n-icon size="14"><BookOpen16Regular /></n-icon>
-                      Documentary
-                    </div>
-                    <div
-                      class="mobile-genre-pill"
-                      :class="{ active: selectedGenre === 'abstract' }"
-                      @click="emit('apply-genre-preset', 'abstract')"
-                    >
-                      <n-icon size="14"><PaletteOutlined /></n-icon>
-                      Artistic
+                      <n-icon size="14"><component :is="preset.icon" /></n-icon>
+                      {{ preset.label }}
                     </div>
                   </div>
 
@@ -786,6 +764,15 @@ const props = defineProps({
   formatCriterionName: { type: Function, default: (c) => c },
   formatGenreTooltip: { type: Function, default: () => "" },
   getScoreBgColor: { type: Function, default: () => "#ccc" },
+  availableGenrePresets: {
+    type: Array,
+    default: () => [
+      { key: "general", label: "General", icon: null },
+      { key: "street", label: "Street", icon: null },
+      { key: "documentary", label: "Documentary", icon: null },
+      { key: "abstract", label: "Artistic", icon: null },
+    ],
+  },
 });
 
 const emit = defineEmits([

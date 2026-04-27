@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import { ref, reactive, computed } from "vue";
 import { useArtisticScores } from "@/composables/useArtisticScores";
 import { buildVisualAspectsOptions } from "@/config/photo_schema";
+import { useUserStore } from "@/stores/userStore";
 
 // ===== CONFIGURACIÓN DE ESTADO =====
 // Cambiar a true para usar un estado compartido único (grid y queries compartidos)
@@ -13,14 +14,34 @@ const USE_SHARED_STATE = true;
 // Derived from the central photo schema (#config/photo_schema → @/config/photo_schema).
 // `focus` and `lighting_scheme` are intentionally hidden from the search UI
 // (mirrors the previous hardcoded behavior).
+//
+// NOTE: this static export contains the FULL union of values across all
+// profiles. It is kept for backwards-compatibility with consumers that may
+// process photos created by users on different profiles. Profile-aware
+// consumers should prefer `getVisualAspectsOptions(profile)` below, which
+// filters the genre list to the user's current profile.
 export const visualAspectsOptions = buildVisualAspectsOptions([
   "focus",
   "lighting_scheme",
 ]);
 
-// Function to transform artistic scores to tree-select format
-export function createArtisticScoresTreeOptions() {
-  const { artisticScores } = useArtisticScores();
+/**
+ * Profile-aware variant of `visualAspectsOptions`. Returns the same tree-select
+ * structure but with each aspect's value list narrowed to the user's profile
+ * (e.g. commercial users only see commercial genre values).
+ *
+ * @param {string|null|undefined} profile - The user's profile string.
+ * @returns {Array} tree-select options.
+ */
+export function getVisualAspectsOptions(profile) {
+  return buildVisualAspectsOptions(["focus", "lighting_scheme"], profile);
+}
+
+// Function to transform artistic scores to tree-select format.
+// Profile-aware: callers should pass the user's profile so commercial users
+// see only commercial-variant criteria and vice-versa.
+export function createArtisticScoresTreeOptions(profile) {
+  const { artisticScores } = useArtisticScores({ profile });
 
   return Object.entries(artisticScores).map(([groupKey, group]) => ({
     label: group.label,
@@ -37,6 +58,8 @@ export function createArtisticScoresTreeOptions() {
 }
 
 export const useSearchStore = defineStore("search", () => {
+  const userStore = useUserStore();
+
   // Estado global del search
   const activeSearchType = ref("semantic");
   const searchMode = ref("broad");
@@ -51,6 +74,13 @@ export const useSearchStore = defineStore("search", () => {
 
   // Artistic scores filter state: { [criterionKey]: { value: number, operator: '>=' | '<=' } }
   const selectedArtisticScores = ref({});
+
+  // Profile-aware visual aspects tree-select options. Reactive to the
+  // user's current profile so commercial users see commercial genre
+  // values and vice-versa.
+  const visualAspectsOptionsForProfile = computed(() =>
+    getVisualAspectsOptions(userStore.user?.profiles),
+  );
 
   // Helper function to create empty mode state with query fields
   const createModeState = () => ({
@@ -379,6 +409,7 @@ export const useSearchStore = defineStore("search", () => {
     selectedVisualAspects,
     selectedArtisticScores,
     visualAspectsOptions,
+    visualAspectsOptionsForProfile,
 
     // Computed
     currentSearchState,

@@ -272,7 +272,7 @@ const getStrengthIcon = (strength) => {
   const icons = {
     strong: StarIcon,
     moderate: EllipseIcon,
-    weak: TrendingUpIcon,
+    emergent: TrendingUpIcon,
   };
   return icons[strength] || null;
 };

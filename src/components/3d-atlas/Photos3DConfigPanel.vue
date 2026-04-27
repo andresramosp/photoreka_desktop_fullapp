@@ -824,7 +824,8 @@ import {
 import { AppsOutline } from "@vicons/ionicons5";
 import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
 import ScoreOperatorSlider from "@/components/controls/ScoreOperatorSlider.vue";
-import { visualAspectsOptions } from "@/stores/searchStore.js";
+import { useSearchStore } from "@/stores/searchStore.js";
+import { useUserStore } from "@/stores/userStore";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import EmbeddingInfoModal3D from "./EmbeddingInfoModal3D.vue";
 
@@ -1005,11 +1006,14 @@ const showEmbeddingInfoModal3D = ref(false);
 const localArtisticScoreFilters = ref({ ...props.artisticScoreFilters });
 
 // Computed
-const { artisticScores } = useArtisticScores();
+const { artisticScores } = useArtisticScores({
+  profile: () => useUserStore().user?.profiles,
+});
 const artisticScoresGroups = artisticScores;
 
+const _searchStore = useSearchStore();
 const treeSelectOptions = computed(() => {
-  return visualAspectsOptions.map((group) => ({
+  return _searchStore.visualAspectsOptionsForProfile.map((group) => ({
     label: group.label,
     key: group.key,
     disabled: false,

@@ -67,7 +67,7 @@
             class="score-slider-item"
           >
             <ScoreOperatorSlider
-              :label="criterion.label"
+              :label="formatCriterionName(criterion.value)"
               :model-value="localScoreFilters[criterion.value] ?? null"
               :disabled="disabled"
               @update:model-value="(v) => onScoreChange(criterion.value, v)"
@@ -83,7 +83,8 @@
 import { ref, reactive, computed, watch } from "vue";
 import { NSelect, NButton, NIcon, NTooltip } from "naive-ui";
 import { Info16Regular } from "@vicons/fluent";
-import { visualAspectsOptions } from "@/stores/searchStore.js";
+import { useSearchStore } from "@/stores/searchStore.js";
+import { useUserStore } from "@/stores/userStore";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import ScoreOperatorSlider from "@/components/controls/ScoreOperatorSlider.vue";
 
@@ -100,7 +101,15 @@ const props = defineProps({
 
 const emit = defineEmits(["update:visualAspects", "update:scoreFilters"]);
 
-const { artisticScores } = useArtisticScores();
+const userStore = useUserStore();
+const searchStore = useSearchStore();
+const visualAspectsOptions = computed(
+  () => searchStore.visualAspectsOptionsForProfile,
+);
+
+const { artisticScores, formatCriterionName } = useArtisticScores({
+  profile: () => userStore.user?.profiles,
+});
 
 // Local state for visual aspects (keyed by group)
 const localVisualFilters = ref({});
@@ -112,7 +121,7 @@ const localScoreFilters = ref({});
 // Initialize local state from props
 function initVisualFilters() {
   const filters = {};
-  visualAspectsOptions.forEach((group) => {
+  visualAspectsOptions.value.forEach((group) => {
     filters[group.key] = props.visualAspects[group.key]
       ? [...props.visualAspects[group.key]]
       : [];

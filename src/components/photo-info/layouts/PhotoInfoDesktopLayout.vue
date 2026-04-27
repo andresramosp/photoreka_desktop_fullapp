@@ -203,53 +203,10 @@
 
                       <!-- Genre Presets -->
                       <div class="genre-presets-container">
-                        <!-- <div class="genre-header">
-                          <h6 class="genre-title">Photography Genre Presets</h6>
-                        </div> -->
                         <div class="genre-pills">
                           <n-tooltip
-                            trigger="hover"
-                            placement="bottom"
-                            :show-arrow="true"
-                            delay="1200"
-                          >
-                            <template #trigger>
-                              <div
-                                class="genre-pill"
-                                :class="{ active: selectedGenre === 'general' }"
-                                @click="emit('apply-genre-preset', 'general')"
-                              >
-                                <n-icon size="14" class="genre-icon">
-                                  <CameraOutline />
-                                </n-icon>
-                                General
-                              </div>
-                            </template>
-                            <div v-html="formatGenreTooltip('general')"></div>
-                          </n-tooltip>
-
-                          <n-tooltip
-                            trigger="hover"
-                            placement="bottom"
-                            :show-arrow="true"
-                            delay="1200"
-                          >
-                            <template #trigger>
-                              <div
-                                class="genre-pill"
-                                :class="{ active: selectedGenre === 'street' }"
-                                @click="emit('apply-genre-preset', 'street')"
-                              >
-                                <n-icon size="14" class="genre-icon">
-                                  <WalkOutline />
-                                </n-icon>
-                                Street
-                              </div>
-                            </template>
-                            <div v-html="formatGenreTooltip('street')"></div>
-                          </n-tooltip>
-
-                          <n-tooltip
+                            v-for="preset in availableGenrePresets"
+                            :key="preset.key"
                             trigger="hover"
                             placement="bottom"
                             :show-arrow="true"
@@ -259,44 +216,17 @@
                               <div
                                 class="genre-pill"
                                 :class="{
-                                  active: selectedGenre === 'documentary',
+                                  active: selectedGenre === preset.key,
                                 }"
-                                @click="
-                                  emit('apply-genre-preset', 'documentary')
-                                "
+                                @click="emit('apply-genre-preset', preset.key)"
                               >
                                 <n-icon size="14" class="genre-icon">
-                                  <BookOpen16Regular />
+                                  <component :is="preset.icon" />
                                 </n-icon>
-                                Documentary
+                                {{ preset.label }}
                               </div>
                             </template>
-                            <div
-                              v-html="formatGenreTooltip('documentary')"
-                            ></div>
-                          </n-tooltip>
-
-                          <n-tooltip
-                            trigger="hover"
-                            placement="bottom"
-                            :show-arrow="true"
-                            delay="1200"
-                          >
-                            <template #trigger>
-                              <div
-                                class="genre-pill"
-                                :class="{
-                                  active: selectedGenre === 'abstract',
-                                }"
-                                @click="emit('apply-genre-preset', 'abstract')"
-                              >
-                                <n-icon size="14" class="genre-icon">
-                                  <PaletteOutlined />
-                                </n-icon>
-                                Artistic
-                              </div>
-                            </template>
-                            <div v-html="formatGenreTooltip('abstract')"></div>
+                            <div v-html="formatGenreTooltip(preset.key)"></div>
                           </n-tooltip>
                         </div>
                       </div>
@@ -1132,6 +1062,15 @@ const props = defineProps({
   formatCriterionName: { type: Function, default: (c) => c },
   formatGenreTooltip: { type: Function, default: () => "" },
   getScoreBgColor: { type: Function, default: () => "#ccc" },
+  availableGenrePresets: {
+    type: Array,
+    default: () => [
+      { key: "general", label: "General", icon: null },
+      { key: "street", label: "Street", icon: null },
+      { key: "documentary", label: "Documentary", icon: null },
+      { key: "abstract", label: "Artistic", icon: null },
+    ],
+  },
 });
 
 const emit = defineEmits([

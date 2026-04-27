@@ -592,6 +592,7 @@ const userEmail = computed(() => userStore.user?.email || "");
 // Profile & preferred source labels
 const singleProfileLabel: Record<string, string> = {
   general: "General",
+  commercial: "Commercial",
   "street-photography": "Street Photography",
   documentary: "Documentary",
   artistic: "Artistic",

@@ -77,10 +77,16 @@
 
 <script setup>
 import { computed } from "vue";
-import { visualAspectsOptions } from "@/stores/searchStore.js";
+import { getVisualAspectsOptions } from "@/stores/searchStore.js";
+import { useUserStore } from "@/stores/userStore.ts";
 import { EyeOutline as EyeIcon } from "@vicons/ionicons5";
 import theme from "@/config/theme.js";
 const { colors } = theme;
+
+const userStore = useUserStore();
+const visualAspectsOptions = computed(() =>
+  getVisualAspectsOptions(userStore.user?.profiles),
+);
 
 const props = defineProps({
   photos: {
@@ -94,7 +100,7 @@ const visualAspectsData = computed(() => {
     return [];
   }
 
-  const data = visualAspectsOptions.map((aspect) => {
+  const data = visualAspectsOptions.value.map((aspect) => {
     const valueCounts = {};
     let totalPhotosWithAspect = 0;
 
