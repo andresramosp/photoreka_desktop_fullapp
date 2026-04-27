@@ -126,26 +126,32 @@
             <div class="example-photos" v-if="pattern.examples?.length">
               <h4 class="examples-title">Example Photos</h4>
               <div class="photos-grid">
-                <PhotoCardHub
-                  v-for="photo in pattern.examples"
-                  :key="photo.id"
-                  :photo="{
-                    id: photo.id,
-                    url: photo.url,
-                    thumbnailUrl: photo.url,
-                    name: 'Example Photo',
-                    status: 'processed',
-                    isCheckingDuplicates: false,
-                  }"
-                  :selected="false"
-                  :show-footer="false"
-                  :show-delete="false"
-                  :show-name="false"
-                  :is-uploading="false"
-                  :show-duplicate="false"
-                  @info="showPhotoInfo"
-                  @select="() => {}"
-                />
+                <template v-for="photo in pattern.examples" :key="photo.id">
+                  <img
+                    :src="photo.url"
+                    style="display: none"
+                    aria-hidden="true"
+                    @error="markPhotoBroken(photo.id)"
+                  />
+                  <PhotoCardHub
+                    :photo="{
+                      id: photo.id,
+                      url: photo.url,
+                      thumbnailUrl: photo.url,
+                      name: 'Example Photo',
+                      status: 'processed',
+                      isCheckingDuplicates: false,
+                    }"
+                    :selected="false"
+                    :show-footer="false"
+                    :show-delete="false"
+                    :show-name="false"
+                    :is-uploading="false"
+                    :show-duplicate="false"
+                    @info="showPhotoInfo"
+                    @select="() => {}"
+                  />
+                </template>
               </div>
             </div>
 
@@ -284,7 +290,13 @@ const message = useMessage();
 const notification = useNotification();
 const router = useRouter();
 
-const patternSections = ref([]);
+const rawPatternSections = ref([]);
+const brokenPhotoIds = ref(new Set());
+
+const markPhotoBroken = (photoId) => {
+  brokenPhotoIds.value = new Set([...brokenPhotoIds.value, photoId]);
+};
+
 const showPhotoInfoDialog = ref(false);
 const selectedDialogPhoto = ref(null);
 
@@ -357,42 +369,12 @@ const loadPatternsData = () => {
 
   if (!patterns) {
     console.warn("No catalog patterns found in user profile");
-    patternSections.value = [];
+    rawPatternSections.value = [];
     return;
   }
 
   console.log("Loading patterns data:", patterns);
 
-  // Build a lookup map of live photos so we can substitute deleted sample photos
-  const livePhotosById = new Map(photosStore.photos.map((p) => [p.id, p]));
-
-  const resolveExamples = (pattern) => {
-    const samplePhotos = pattern.samplePhotos || [];
-    const clusterPhotos = pattern.clusterPhotos || [];
-
-    // Keep only sample photos that still exist
-    const examples = samplePhotos
-      .filter((photo) => livePhotosById.has(photo.id))
-      .map((photo) => ({ id: photo.id, url: photo.thumbnailUrl }));
-
-    // Fill missing slots from clusterPhotos using live photo data
-    if (examples.length < 4 && clusterPhotos.length > 0) {
-      const usedIds = new Set(samplePhotos.map((p) => p.id));
-      for (const clusterId of clusterPhotos) {
-        if (examples.length >= 4) break;
-        if (usedIds.has(clusterId)) continue;
-        const livePhoto = livePhotosById.get(clusterId);
-        if (livePhoto) {
-          examples.push({ id: livePhoto.id, url: livePhoto.thumbnailUrl });
-          usedIds.add(clusterId);
-        }
-      }
-    }
-
-    return examples.slice(0, 4);
-  };
-
-  // Dynamically process all pattern categories
   const sections = [];
 
   Object.keys(patterns).forEach((key) => {
@@ -418,8 +400,8 @@ const loadPatternsData = () => {
           description: pattern.description,
           photoCount: pattern.photoCount,
           strength: pattern.strength,
+          samplePhotos: pattern.samplePhotos || [],
           clusterPhotos: pattern.clusterPhotos || [],
-          examples: resolveExamples(pattern),
         })),
       });
 
@@ -427,9 +409,45 @@ const loadPatternsData = () => {
     }
   });
 
-  patternSections.value = sections;
+  rawPatternSections.value = sections;
   console.log("Total sections loaded:", sections.length);
 };
+
+// Reactively resolves example photos, filtering both store-deleted and R2-broken photos.
+// Automatically refills from clusterPhotos when slots are freed.
+const patternSections = computed(() => {
+  const livePhotosById = new Map(photosStore.photos.map((p) => [p.id, p]));
+  const broken = brokenPhotoIds.value;
+
+  return rawPatternSections.value.map((section) => ({
+    ...section,
+    patterns: section.patterns.map((pattern) => {
+      const samplePhotos = pattern.samplePhotos;
+      const clusterPhotos = pattern.clusterPhotos;
+
+      const examples = samplePhotos
+        .filter(
+          (photo) => livePhotosById.has(photo.id) && !broken.has(photo.id),
+        )
+        .map((photo) => ({ id: photo.id, url: photo.thumbnailUrl }));
+
+      if (examples.length < 4 && clusterPhotos.length > 0) {
+        const usedIds = new Set(samplePhotos.map((p) => p.id));
+        for (const clusterId of clusterPhotos) {
+          if (examples.length >= 4) break;
+          if (usedIds.has(clusterId) || broken.has(clusterId)) continue;
+          const livePhoto = livePhotosById.get(clusterId);
+          if (livePhoto) {
+            examples.push({ id: livePhoto.id, url: livePhoto.thumbnailUrl });
+            usedIds.add(clusterId);
+          }
+        }
+      }
+
+      return { ...pattern, examples: examples.slice(0, 4) };
+    }),
+  }));
+});
 
 // Pie chart function for mini pie
 const generateMiniPieSlice = (percentage) => {
