@@ -127,6 +127,11 @@ Users must choose how they prefer to manage photo imports. This decision affects
 - Optimized for creative expression and fine art
 - Biased toward: Creative vision and conceptual execution / Technical mastery / Color theory, light, and visual poetry / Unique perspectives and experimental approaches
 
+**Commercial Photography**
+- Optimized for advertising, product, fashion, lifestyle, and editorial work
+- Biased toward: Professional visual polish and brand-appropriate aesthetics / Clear, unambiguous subject presentation / Commercial storytelling (lifestyle aspirations, brand values, use-case context) / Originality that stands out from generic stock imagery
+- **Note:** This profile uses a completely different set of scoring criteria than all other profiles (see Artistic Scores section below). It also uses a dedicated set of genre values: advertising, product, fashion, portrait, lifestyle, food.
+
 #### Dual Profiles (Combination Mode)
 
 **Artistic + Documentary**
@@ -144,11 +149,17 @@ Users must choose how they prefer to manage photo imports. This decision affects
 ### How Profile Affects the App
 
 **Artistic Scores Weighting**
-The selected profile influences how AI assigns and weights artistic scores (1-10 scale) across your catalog. It creates a "slight preference" in evaluation -- emphasizing qualities relevant to your chosen style. The 8 scoring criteria are organized in two groups:
+The selected profile influences how AI assigns and weights artistic scores (1-10 scale) across your catalog. It creates a "slight preference" in evaluation -- emphasizing qualities relevant to your chosen style.
+
+For **all non-commercial profiles** (General, Street, Documentary, Artistic, and all dual combinations), the 8 scoring criteria are organized in two groups:
 - **Fundamentals:** Aesthetic Quality, Composition, Storytelling, Originality
 - **Bonus:** Message/Depth, Humor, Visual Games, Candidness
 
-Each profile maps to a genre preset that adjusts the weight of each criterion in the global rating calculation.
+For **Commercial Photography**, the criteria set is purpose-built for commercial work and differs from all other profiles:
+- **Fundamentals:** Aesthetic Quality, Composition, Storytelling, Commercial Intent
+- **Bonus:** Originality, Humor, Subject Clarity, Candidness
+
+Each profile maps to a genre preset that adjusts the weight of each criterion in the global rating calculation. Commercial users have a single "commercial" preset with fixed weights optimized for advertising, product, fashion, and lifestyle photography.
 
 **Search & Recommendations**
 Semantic search and assistant recommendations are subtly influenced by your profile, surfacing photos that align with your declared photographic sensibility.
@@ -549,13 +560,19 @@ Organized in 4 categories:
 - **Artistic** (artistic_scores): artistic quality tags
 
 #### Artistic Scores
-8 criteria scored 1-10 with named levels (Disastrous -> Masterpiece):
+8 criteria scored 1-10 with named levels (Disastrous -> Masterpiece).
+
+For **non-commercial profiles**:
 - **Fundamentals:** Aesthetic Quality, Composition, Storytelling, Originality
 - **Bonus:** Message/Depth, Humor, Visual Games, Candidness
 
+For **Commercial Photography** (different criteria set):
+- **Fundamentals:** Aesthetic Quality, Composition, Storytelling, Commercial Intent
+- **Bonus:** Originality, Humor, Subject Clarity, Candidness
+
 **Global Rating** = weighted average of all criteria. Weights are determined by the user's genre preset but can be customized manually with individual sliders per criterion.
 
-**Genre Presets:** predefined weight configurations for different photography styles (General, Street, Documentary, Artistic). Selecting a preset automatically adjusts all weight sliders.
+**Genre Presets:** predefined weight configurations for different photography styles. Non-commercial profiles can choose from: General, Street, Documentary, Artistic. Commercial Photography has a single dedicated preset ("commercial") with weights optimized for advertising, product, fashion, and lifestyle work. Selecting a preset automatically adjusts all weight sliders.
 
 #### Notes
 Free-text notes per photo with word count indicator. Auto-saves.
@@ -744,7 +761,7 @@ Collections are unordered thematic groups. Series are ordered narrative sequence
 Yes, Series and 3D Atlas have public shareable URLs.
 
 **How do Artistic Scores work?**
-AI-generated 1-10 scores across 8 criteria (Aesthetic Quality, Composition, Storytelling, Originality, Message, Humor, Visual Games, Candidness). The Global Rating is a weighted average based on your genre preset, which you can customize with manual sliders.
+AI-generated 1-10 scores across 8 criteria. For non-commercial profiles the criteria are: Aesthetic Quality, Composition, Storytelling, Originality, Message, Humor, Visual Games, Candidness. For the Commercial Photography profile the criteria are: Aesthetic Quality, Composition, Storytelling, Commercial Intent, Originality, Humor, Subject Clarity, Candidness. The Global Rating is a weighted average based on your genre preset, which you can customize with manual sliders.
 
 **Does Canvas auto-save?**
 No. You must save manually. Unsaved changes are tracked with a warning indicator.
@@ -784,7 +801,7 @@ Embedding -- Vector representation of a photo used for semantic similarity
 Tag -- AI-generated label assigned during analysis, organized by category
 Artistic Score -- 1-10 AI rating across 8 criteria
 Global Rating -- Weighted average of all artistic scores
-Genre Preset -- Predefined weight configuration for a photography style (General, Street, Documentary, Artistic)
+Genre Preset -- Predefined weight configuration for a photography style. Non-commercial profiles: General, Street, Documentary, Artistic. Commercial Photography: a single "commercial" preset
 Expansion -- Canvas feature that finds and adds similar photos automatically
 Take to Tool -- Send selected photos from any view to Canvas, Framer, or Atlas
 Daily Eureka -- Dashboard card showing a daily rediscovered photo with AI insights
