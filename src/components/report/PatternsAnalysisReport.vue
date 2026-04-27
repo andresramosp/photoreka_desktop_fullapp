@@ -363,6 +363,35 @@ const loadPatternsData = () => {
 
   console.log("Loading patterns data:", patterns);
 
+  // Build a lookup map of live photos so we can substitute deleted sample photos
+  const livePhotosById = new Map(photosStore.photos.map((p) => [p.id, p]));
+
+  const resolveExamples = (pattern) => {
+    const samplePhotos = pattern.samplePhotos || [];
+    const clusterPhotos = pattern.clusterPhotos || [];
+
+    // Keep only sample photos that still exist
+    const examples = samplePhotos
+      .filter((photo) => livePhotosById.has(photo.id))
+      .map((photo) => ({ id: photo.id, url: photo.thumbnailUrl }));
+
+    // Fill missing slots from clusterPhotos using live photo data
+    if (examples.length < 4 && clusterPhotos.length > 0) {
+      const usedIds = new Set(samplePhotos.map((p) => p.id));
+      for (const clusterId of clusterPhotos) {
+        if (examples.length >= 4) break;
+        if (usedIds.has(clusterId)) continue;
+        const livePhoto = livePhotosById.get(clusterId);
+        if (livePhoto) {
+          examples.push({ id: livePhoto.id, url: livePhoto.thumbnailUrl });
+          usedIds.add(clusterId);
+        }
+      }
+    }
+
+    return examples.slice(0, 4);
+  };
+
   // Dynamically process all pattern categories
   const sections = [];
 
@@ -390,12 +419,7 @@ const loadPatternsData = () => {
           photoCount: pattern.photoCount,
           strength: pattern.strength,
           clusterPhotos: pattern.clusterPhotos || [],
-          examples: (pattern.samplePhotos || [])
-            .map((photo) => ({
-              id: photo.id,
-              url: photo.thumbnailUrl,
-            }))
-            .slice(0, 4), // Limit to 4 example photos
+          examples: resolveExamples(pattern),
         })),
       });
 

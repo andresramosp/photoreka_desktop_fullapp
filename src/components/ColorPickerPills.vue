@@ -4,7 +4,7 @@
       v-for="option in filteredOptions"
       :key="option.id"
       :class="['color-pill', { active: currentColorId === option.id }]"
-      :style="{ backgroundColor: option.color }"
+      :style="getOptionStyle(option)"
       :title="option.label"
       :disabled="disabled"
       @click.stop="handleColorChange(option.id)"
@@ -15,12 +15,22 @@
 <script setup>
 import { computed, watch } from "vue";
 import { useTheme } from "@/composables/useTheme.js";
+import woodenTextureUrl from "@/assets/canvas/wooden-texture.jpg";
 
 // All available color options - source of truth
 const BACKGROUND_COLOR_OPTIONS = [
   { id: "default", color: "#000000", label: "Dark" },
   { id: "white", color: "#f5f5f5", label: "Light" },
   { id: "gray", color: "#e0e0e0", label: "Gray" },
+  // {
+  //   id: "wood",
+  //   label: "Wood",
+  //   swatchStyle: {
+  //     backgroundImage: `url(${woodenTextureUrl})`,
+  //     backgroundSize: "cover",
+  //     backgroundPosition: "center",
+  //   },
+  // },
 ];
 
 const props = defineProps({
@@ -50,6 +60,16 @@ const currentColorId = computed(() => {
     ? props.modelValue
     : props.modelValue.id;
 });
+
+const getOptionStyle = (option) => {
+  if (option.swatchStyle) {
+    return option.swatchStyle;
+  }
+
+  return {
+    backgroundColor: option.color,
+  };
+};
 
 // Watch for theme changes and set default color if none selected
 watch(isDarkMode, (newIsDarkMode) => {

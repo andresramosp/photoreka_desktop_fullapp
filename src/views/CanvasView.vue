@@ -6,12 +6,20 @@
       'show-dots': toolbarState.showDots,
       [`bg-${canvasBackgroundId}`]: true,
     }"
+    :style="canvasBackgroundStyle"
   >
     <div
+      class="canvas-stage-wrapper"
       ref="canvasContainer"
       @dragover.prevent
       @drop="handlePhotoDropAndRemove"
     >
+      <div
+        v-if="isWoodBackground"
+        class="canvas-wood-surface"
+        :style="canvasWoodSurfaceStyle"
+      ></div>
+
       <!-- Konva Canvas -->
       <v-stage
         ref="stageRef"
@@ -825,6 +833,7 @@ import { useTheme } from "@/composables/useTheme.js";
 import AppLogo from "@/components/AppLogo.vue";
 import { ExpandAltOutlined } from "@vicons/antd";
 import ColorPickerPills from "@/components/ColorPickerPills.vue";
+import woodenTextureUrl from "@/assets/canvas/wooden-texture.jpg";
 
 // Define component name for KeepAlive
 defineOptions({
@@ -951,7 +960,45 @@ watch(
 const canvasBackgroundId = computed(() => {
   const bg = toolbarState.value.canvasBackground;
   if (!bg) return "default";
-  return typeof bg === "object" ? bg.id : bg;
+  const backgroundId = typeof bg === "object" ? bg.id : bg;
+
+  // Keep compatibility with previously stored values.
+  if (backgroundId === "lightGray") return "gray";
+
+  return backgroundId;
+});
+
+const isWoodBackground = computed(() => canvasBackgroundId.value === "wood");
+
+const canvasBackgroundStyle = computed(() => {
+  if (!isWoodBackground.value) {
+    return undefined;
+  }
+
+  return {
+    backgroundColor: "#7a5230",
+  };
+});
+const canvasWoodSurfaceStyle = computed(() => {
+  const zoom = toolbarState.value.zoomLevel || 1;
+  const woodWorldPaddingX = Math.max(stageConfig.width, 1600) * 8;
+  const woodWorldPaddingY = Math.max(stageConfig.height, 900) * 8;
+  const woodWorldWidth = stageConfig.width + woodWorldPaddingX * 2;
+  const woodWorldHeight = stageConfig.height + woodWorldPaddingY * 2;
+  const woodTextureWorldWidth = Math.max(stageConfig.width * 3, 2200);
+
+  return {
+    left: `${stageOffset.x - woodWorldPaddingX * zoom}px`,
+    top: `${stageOffset.y - woodWorldPaddingY * zoom}px`,
+    width: `${woodWorldWidth * zoom}px`,
+    height: `${woodWorldHeight * zoom}px`,
+    backgroundImage: [
+      "radial-gradient(circle at 50% 20%, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 38%)",
+      "linear-gradient(180deg, rgba(42, 24, 11, 0.08), rgba(22, 12, 6, 0.22))",
+      `url(${woodenTextureUrl})`,
+    ].join(", "),
+    backgroundSize: `auto, auto, ${woodTextureWorldWidth * zoom}px auto`,
+  };
 });
 
 // State
@@ -959,8 +1006,6 @@ const basicModeDismissed = ref(false);
 const expansionMode = ref(isPlayground.value ? "canvas" : "catalog");
 const interactionMode = ref("pan");
 const showRelatedPhotos = ref(false);
-const showPhotosDialog = ref(false);
-const showTrashDialog = ref(false);
 const showPhotoInfoDialog = ref(false);
 const selectedPhotosForToolbar = ref([]);
 const selectedDialogPhoto = ref(null);
@@ -2215,6 +2260,24 @@ onUnmounted(() => {
   height: 100vh; /* Full screen in playground mode */
 }
 
+.canvas-stage-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.canvas-wood-surface {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  background-position:
+    center,
+    center,
+    0 0;
+  background-repeat: no-repeat, no-repeat, repeat;
+  will-change: left, top, width, height, background-size;
+}
+
 .canvas-controls {
   position: absolute;
   z-index: 10;
@@ -2614,6 +2677,7 @@ onUnmounted(() => {
   background-color: #ffffff !important;
 }
 
+.canvas-container.bg-gray,
 .canvas-container.bg-lightGray {
   background-color: #d3d3d3 !important;
 }
@@ -2638,6 +2702,15 @@ onUnmounted(() => {
 }
 
 .canvas-container.show-dots.bg-lightGray {
+  background-image: radial-gradient(
+    circle,
+    rgba(0, 0, 0, 0.15) 1.2px,
+    transparent 1.2px
+  );
+  background-size: 45px 45px;
+}
+
+.canvas-container.show-dots.bg-gray {
   background-image: radial-gradient(
     circle,
     rgba(0, 0, 0, 0.15) 1.2px,
