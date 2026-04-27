@@ -1,7 +1,9 @@
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
-
-const DEFAULT_RATIO = 1.5;
+import {
+  buildPortfolioRows,
+  PORTFOLIO_DEFAULT_RATIO,
+} from "./portfolioGridLayout";
 
 /**
  * Load an image and return its dataURL + aspect ratio.
@@ -21,7 +23,8 @@ function loadImage(url) {
         const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
         resolve({
           dataUrl,
-          ratio: img.naturalWidth / img.naturalHeight || DEFAULT_RATIO,
+          ratio:
+            img.naturalWidth / img.naturalHeight || PORTFOLIO_DEFAULT_RATIO,
         });
       } catch (err) {
         reject(err);
@@ -54,6 +57,7 @@ function resolveOrientation(orientation, columns) {
  * @param {number} opts.columns          Columns per row
  * @param {number} opts.gap              Gap in px (as used on web)
  * @param {number} opts.containerWidthPx Width in px of the grid container on web (used to scale gap)
+ * @param {boolean} [opts.fillAvailableSpace=true]
  * @param {'auto'|'portrait'|'landscape'} [opts.orientation='auto']
  * @param {string} [opts.filename='portfolio.pdf']
  * @param {string} [opts.pageFormat='a4']
@@ -65,6 +69,7 @@ export async function exportPortfolioToPdf({
   columns,
   gap,
   containerWidthPx,
+  fillAvailableSpace = true,
   orientation = "auto",
   filename = "portfolio.pdf",
   pageFormat = "a4",
@@ -106,25 +111,20 @@ export async function exportPortfolioToPdf({
       loaded.push({ id: p.id, dataUrl, ratio });
     } catch (err) {
       console.warn("[portfolioPdfExport] failed to load image", p.id, err);
-      loaded.push({ id: p.id, dataUrl: null, ratio: DEFAULT_RATIO });
+      loaded.push({ id: p.id, dataUrl: null, ratio: PORTFOLIO_DEFAULT_RATIO });
     }
     onProgress?.({ loaded: i + 1, total: photos.length });
   }
 
-  // Build rows using the same justified-row algorithm as the web grid.
-  const rows = [];
-  for (let i = 0; i < loaded.length; i += columns) {
-    const rowPhotos = loaded.slice(i, i + columns);
-    const ratios = rowPhotos.map((p) => p.ratio || DEFAULT_RATIO);
-    const sumRatios = ratios.reduce((a, b) => a + b, 0);
-    const rowAvailableWidth = availableWidth - gapMm * (rowPhotos.length - 1);
-    const rowHeight = rowAvailableWidth / sumRatios;
-    rows.push({
-      photos: rowPhotos,
-      ratios,
-      rowHeight,
-    });
-  }
+  const rows = buildPortfolioRows({
+    photos: loaded,
+    columns,
+    gap: gapMm,
+    containerWidth: availableWidth,
+    fillAvailableSpace,
+    defaultRatio: PORTFOLIO_DEFAULT_RATIO,
+    getAspectRatio: (photo) => photo.ratio,
+  });
 
   // Paginate: lay rows top-to-bottom, inserting page breaks when they overflow.
   let cursorY = marginMm;

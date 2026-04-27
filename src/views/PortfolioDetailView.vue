@@ -119,6 +119,7 @@
       <PortfolioGridToolbar
         v-model:columns="columns"
         v-model:gap="gap"
+        v-model:fill-available-space="fillAvailableSpace"
         :photo-count="photos.length"
         :removed-count="removedPhotos.length"
         :photos="photos"
@@ -135,6 +136,7 @@
         v-model:photos="photos"
         :columns="columns"
         :gap="gap"
+        :fill-available-space="fillAvailableSpace"
         :selected-ids="selectedPhotoIds"
         ref="gridRef"
         @select="(photo) => togglePhotoSelection(photo.id)"
@@ -328,6 +330,7 @@ const isSaving = ref(false);
 const error = ref(null);
 const columns = ref(2);
 const gap = ref(30);
+const fillAvailableSpace = ref(true);
 const showAddPhotosDialog = ref(false);
 const gridRef = ref(null);
 const isExporting = ref(false);
@@ -624,6 +627,7 @@ async function exportAsPdf() {
       columns: columns.value,
       gap: gap.value,
       containerWidthPx,
+      fillAvailableSpace: fillAvailableSpace.value,
       orientation: "auto",
       filename: `${safeName}.pdf`,
       onProgress: ({ loaded, total }) => {

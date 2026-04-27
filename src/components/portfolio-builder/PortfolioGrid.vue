@@ -43,13 +43,16 @@ import {
 import { NSpin } from "naive-ui";
 import draggable from "vuedraggable";
 import PortfolioGridCell from "./PortfolioGridCell.vue";
-
-const DEFAULT_RATIO = 1.5; // 3:2 fallback while loading
+import {
+  buildPortfolioRows,
+  PORTFOLIO_DEFAULT_RATIO,
+} from "@/utils/portfolioGridLayout";
 
 const props = defineProps({
   photos: { type: Array, required: true },
   columns: { type: Number, default: 4 },
   gap: { type: Number, default: 3 },
+  fillAvailableSpace: { type: Boolean, default: true },
   selectedIds: { type: Array, default: () => [] },
 });
 
@@ -106,7 +109,7 @@ function measurePhoto(photo) {
       resolve();
     };
     img.onerror = () => {
-      aspectRatios.value.set(photo.id, DEFAULT_RATIO);
+      aspectRatios.value.set(photo.id, PORTFOLIO_DEFAULT_RATIO);
       resolve();
     };
     img.src = photo.thumbnailUrl;
@@ -125,21 +128,21 @@ const layoutMap = computed(() => {
   const cw = containerWidth.value;
   if (!cw || !props.photos.length) return map;
 
-  const cols = props.columns;
+  const rows = buildPortfolioRows({
+    photos: props.photos,
+    columns: props.columns,
+    gap: props.gap,
+    containerWidth: cw,
+    fillAvailableSpace: props.fillAvailableSpace,
+    defaultRatio: PORTFOLIO_DEFAULT_RATIO,
+    getAspectRatio: (photo) => aspectRatios.value.get(photo.id),
+  });
 
-  for (let i = 0; i < props.photos.length; i += cols) {
-    const rowPhotos = props.photos.slice(i, i + cols);
-    const ratios = rowPhotos.map(
-      (p) => aspectRatios.value.get(p.id) ?? DEFAULT_RATIO,
-    );
-    const sumRatios = ratios.reduce((a, b) => a + b, 0);
-    const availableWidth = cw - props.gap * (rowPhotos.length - 1);
-    const rowHeight = availableWidth / sumRatios;
-
-    rowPhotos.forEach((p, j) => {
-      map.set(p.id, {
-        width: Math.floor(ratios[j] * rowHeight),
-        height: Math.floor(rowHeight),
+  for (const row of rows) {
+    row.photos.forEach((photo, index) => {
+      map.set(photo.id, {
+        width: Math.floor(row.widths[index]),
+        height: Math.floor(row.rowHeight),
       });
     });
   }

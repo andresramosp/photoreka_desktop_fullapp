@@ -71,13 +71,20 @@
         style="width: 90px"
         @update:value="$emit('update:gap', $event)"
       />
+
+      <n-checkbox
+        :checked="fillAvailableSpace"
+        @update:checked="$emit('update:fill-available-space', $event)"
+      >
+        Fill space
+      </n-checkbox>
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed } from "vue";
-import { NButtonGroup, NSlider, NButton, NIcon } from "naive-ui";
+import { NButtonGroup, NSlider, NButton, NCheckbox, NIcon } from "naive-ui";
 import {
   ArrowUndoOutline,
   AddOutline,
@@ -88,6 +95,7 @@ import { SelectAllOn24Regular } from "@vicons/fluent";
 const props = defineProps({
   columns: { type: Number, required: true },
   gap: { type: Number, default: 3 },
+  fillAvailableSpace: { type: Boolean, default: true },
   photoCount: { type: Number, required: true },
   removedCount: { type: Number, default: 0 },
   photos: { type: Array, default: () => [] },
@@ -97,6 +105,7 @@ const props = defineProps({
 const emit = defineEmits([
   "update:columns",
   "update:gap",
+  "update:fill-available-space",
   "undo-last",
   "restore-all",
   "add-photos",
@@ -174,5 +183,6 @@ const handleSelectAllToggle = () => {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 </style>
