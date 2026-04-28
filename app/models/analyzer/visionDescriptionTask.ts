@@ -57,7 +57,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
 
     // const threshold =
     // analyzerProcess.mode === 'retry_process' ? this.imagesPerRequest * 2 : this.imagesPerRequest
-    const threshold = 100
+    const threshold = 50
     if (this.batchAPI && pendingPhotos.length > threshold) {
       await this.processWithBatchAPI(pendingPhotos)
     } else {

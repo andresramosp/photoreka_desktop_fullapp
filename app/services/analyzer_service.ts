@@ -27,6 +27,7 @@ import User from '#models/user'
 import MailService from '#services/mail_service'
 import { analysisCompleteTemplate } from '../utils/email_templates.js'
 import { mergeCostSummaries } from '../utils/cost_tracker.js'
+import LightroomFolderMirrorService from '#services/lightroom_folder_mirror_service'
 
 const logger = Logger.getInstance('AnalyzerProcess')
 logger.setLevel(LogLevel.DEBUG)
@@ -433,6 +434,25 @@ export default class AnalyzerProcessRunner {
     return Number(result[0]?.$extras?.total || 0)
   }
 
+  /**
+   * Trigger post-analysis side-effects that should run once when the
+   * analysis pipeline reaches a terminal state for a non-preprocess process.
+   * Currently materializes Lightroom folder-mirror collections.
+   */
+  private finalizeAnalysisSideEffects() {
+    if (!this.process || this.process.isPreprocess) return
+    const processId = this.process.id
+    const userId = this.process.userId
+    if (!processId || !userId) return
+
+    LightroomFolderMirrorService.materializeForProcess(Number(processId), Number(userId)).catch(
+      (e) =>
+        logger.error(
+          `Error materializing Lightroom folder mirror: ${e instanceof Error ? e.message : String(e)}`
+        )
+    )
+  }
+
   // NUEVO: Función privada para manejar el autoRetry
   private async handleAutoRetry() {
     const shouldNotify = this.originalMode === 'adding' && !this.process.isPreprocess
@@ -456,28 +476,34 @@ export default class AnalyzerProcessRunner {
         )
         this.process.currentStage = 'finished'
         await this.process.save()
-        if (shouldNotify)
+        if (shouldNotify) {
           this.sendAnalysisCompleteEmail().catch((e) =>
             logger.error(
               `Error enviando email tras autoRetry max: ${e instanceof Error ? e.message : String(e)}`
             )
           )
+          this.finalizeAnalysisSideEffects()
+        }
       } else {
         logger.info('autoRetry activo, pero no hay fotos fallidas. No se lanza retry_process.')
-        if (shouldNotify)
+        if (shouldNotify) {
           this.sendAnalysisCompleteEmail().catch((e) =>
             logger.error(
               `Error enviando email tras autoRetry ok: ${e instanceof Error ? e.message : String(e)}`
             )
           )
+          this.finalizeAnalysisSideEffects()
+        }
       }
     } else {
-      if (shouldNotify)
+      if (shouldNotify) {
         this.sendAnalysisCompleteEmail().catch((e) =>
           logger.error(
             `Error enviando email de análisis: ${e instanceof Error ? e.message : String(e)}`
           )
         )
+        this.finalizeAnalysisSideEffects()
+      }
     }
   }
 

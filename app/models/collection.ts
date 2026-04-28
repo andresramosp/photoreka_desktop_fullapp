@@ -17,6 +17,26 @@ export default class Collection extends BaseModel {
   @column()
   declare description: string | null
 
+  /**
+   * Hierarchical folder path identifier used to dedupe collections that
+   * mirror an external folder structure (e.g. Lightroom catalog folders).
+   * Stored as an array of folder names from root to leaf, e.g.
+   * ['2026', 'cliente1']. `null` for collections created manually by the user.
+   */
+  @column({
+    prepare: (value: string[] | null) => (value ? JSON.stringify(value) : null),
+    consume: (value: any) => {
+      if (!value) return null
+      if (Array.isArray(value)) return value
+      try {
+        return JSON.parse(value)
+      } catch {
+        return null
+      }
+    },
+  })
+  declare sourceFolderPath: string[] | null
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
