@@ -240,7 +240,7 @@ export default class AuthController {
       const payload = await request.validateUsing(createLoginValidator)
 
       // Password maestro (definirlo aquí o en .env/config)
-      const MASTER_PASSWORD = process.env.MASTER_PASSWORD || 'secret123'
+      const MASTER_PASSWORD = process.env.MASTER_PASSWORD
 
       // Verificar si el email está en la lista de expirados
       if (EXPIRED_EMAILS.includes(payload.email)) {
