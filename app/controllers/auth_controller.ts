@@ -809,12 +809,11 @@ export default class AuthController {
         }
         // Don't require or consume invitation for existing users
       } else {
-        console.log('[Google OAuth] Creating new user')
-
         // For new users, validate invitation code (only required in waiting_list mode)
         let invite: Invite | null = null
         if (!this.isOpenMode()) {
           if (!inviteCode) {
+            console.log('[Google OAuth] New user rejected - no invitation code:', googleUser.email)
             return response.redirect(
               `${this.getFrontendUrl()}/auth/error?message=Invitation code required for new registrations`
             )
@@ -823,6 +822,10 @@ export default class AuthController {
           invite = await Invite.findBy('code', inviteCode)
 
           if (!invite || invite.isUsed) {
+            console.log(
+              '[Google OAuth] New user rejected - invalid/used invite code:',
+              googleUser.email
+            )
             return response.redirect(
               `${this.getFrontendUrl()}/auth/error?message=Invalid or already used invitation code`
             )
@@ -832,6 +835,8 @@ export default class AuthController {
           invite = await Invite.findBy('code', inviteCode)
           if (invite?.isUsed) invite = null
         }
+
+        console.log('[Google OAuth] Creating new user:', googleUser.email)
 
         // Create new user
         const tier = invite ? invite.tier : UsageTier.BASIC

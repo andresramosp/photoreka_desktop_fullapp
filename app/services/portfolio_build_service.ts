@@ -2303,7 +2303,7 @@ Return JSON:
         // HTTP(S) URL → download from R2 and convert to base64
         if (url.startsWith('http')) {
           try {
-            const filename = url.split('/').pop() ?? ''
+            const filename = this.extractFilenameFromImageUrl(url) ?? ''
             const buffer = await photoImageService.getImageBufferFromR2(filename)
             if (buffer) {
               parts.push({
@@ -2508,8 +2508,8 @@ Return JSON:
   private extractFilenameFromImageUrl(imageUrl: string): string | null {
     try {
       const parsed = new URL(imageUrl)
-      const filename = parsed.pathname.split('/').filter(Boolean).pop()
-      return filename ? decodeURIComponent(filename) : null
+      const pathname = parsed.pathname.replace(/^\//, '')
+      return pathname ? decodeURIComponent(pathname) : null
     } catch {
       const filename = imageUrl.split('/').filter(Boolean).pop()
       return filename ? decodeURIComponent(filename) : null
