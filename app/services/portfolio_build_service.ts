@@ -76,7 +76,7 @@ const DEBUG_SAVE_BATCH_GRID = false
 const OVER_GENERATE_RATIO = 0.35
 /** Minimum over-generate buffer (absolute). */
 const OVER_GENERATE_MIN = 3
-/** Cosine similarity threshold — reject candidates too similar to already-selected photos. */
+/** Cosine similarity threshold — rejects candidates too similar to already-selected photos. */
 const SIMILARITY_GATE_THRESHOLD = 0.75
 /** Commercial work often contains valid near-variants; allow more similarity before rejecting. */
 const COMMERCIAL_SIMILARITY_GATE_THRESHOLD = 0.8
