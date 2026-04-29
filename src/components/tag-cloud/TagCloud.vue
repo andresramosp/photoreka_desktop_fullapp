@@ -1366,6 +1366,7 @@ defineExpose({
   backdrop-filter: blur(10px);
   flex-direction: column;
   border: 1px solid var(--border-color);
+  z-index: 1;
 }
 
 .zoom-btn {
