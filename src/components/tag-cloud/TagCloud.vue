@@ -53,7 +53,7 @@
       @reset-view="resetView"
     />
 
-    <!-- Hover tooltip -->
+    <!-- Hover tooltip: full (visible label) -->
     <div
       v-if="hoveredTag"
       class="tag-tooltip"
@@ -64,6 +64,15 @@
         <span class="tt-group">{{ hoveredTag.group }}</span>
         <span class="tt-count">{{ hoveredTag.photoCount }} photos</span>
       </div>
+    </div>
+
+    <!-- Hover tooltip: compact (dot without visible label) -->
+    <div
+      v-else-if="dotTooltipTag"
+      class="tag-tooltip tooltip-compact"
+      :style="{ left: dotTooltipPos.x + 'px', top: dotTooltipPos.y + 'px' }"
+    >
+      {{ dotTooltipTag.name }}
     </div>
 
     <!-- Zoom Controls -->
@@ -118,8 +127,10 @@ const loadingMessage = ref("Loading tag cloud…");
 const error = ref(null);
 const tags = ref([]); // raw tags from backend, sorted by photoCount desc
 const metadata = ref(null);
-const hoveredTag = ref(null);
+const hoveredTag = ref(null); // visible-label hover → full tooltip + forces label placement
 const tooltipPos = ref({ x: 0, y: 0 });
+const dotTooltipTag = ref(null); // dot hover (no visible label) → compact tooltip, does NOT trigger label relayout
+const dotTooltipPos = ref({ x: 0, y: 0 });
 const isMobile = ref(isMobileDevice());
 const selectionRect = ref(null); // { x, y, w, h } in canvas-relative px
 
@@ -921,7 +932,7 @@ const onPointerUp = (e) => {
 };
 
 const onCanvasPointerMove = (e) => {
-  if (isPanning) return;
+  if (isPanning || isSelecting) return;
   if (!app) return;
   const rect = app.canvas.getBoundingClientRect();
   const sx = e.clientX - rect.left;
@@ -929,22 +940,32 @@ const onCanvasPointerMove = (e) => {
   const labelIndex = findVisibleLabelAtScreen(sx, sy);
   setHoveredLabelIndex(labelIndex);
 
-  if (TAG_INTERACTION_MODE === "dot-tooltip") {
-    const idx = labelIndex >= 0 ? labelIndex : findTagAtScreen(sx, sy);
-    if (idx >= 0) {
-      hoveredTag.value = tags.value[idx];
-      tooltipPos.value = { x: sx + 14, y: sy + 14 };
-    } else {
-      hoveredTag.value = null;
-    }
+  if (labelIndex >= 0) {
+    // Hovering a visible label → full tooltip + forces label placement via watch
+    hoveredTag.value = tags.value[labelIndex];
+    tooltipPos.value = { x: sx + 14, y: sy + 14 };
+    dotTooltipTag.value = null;
     return;
   }
 
+  // Clear full tooltip immediately so label layout isn't disturbed
   hoveredTag.value = null;
+
+  // Hovering a dot whose label isn't visible at this zoom → compact tooltip only
+  // (dotTooltipTag is NOT watched, so label layout is untouched)
+  const dotIdx = findTagAtScreen(sx, sy);
+  if (dotIdx >= 0) {
+    dotTooltipTag.value = tags.value[dotIdx];
+    dotTooltipPos.value = { x: sx + 5, y: sy + 5 };
+    return;
+  }
+
+  dotTooltipTag.value = null;
 };
 
 const onCanvasPointerLeave = () => {
   hoveredTag.value = null;
+  dotTooltipTag.value = null;
   setHoveredLabelIndex(-1);
 };
 
@@ -1145,6 +1166,14 @@ onBeforeUnmount(() => {
 
 .tt-group {
   text-transform: capitalize;
+}
+
+.tooltip-compact {
+  padding: 3px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 4px;
+  pointer-events: none;
 }
 
 /* Zoom controls */
