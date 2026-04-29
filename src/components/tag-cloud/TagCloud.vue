@@ -139,6 +139,8 @@ const CAMERA_EPSILON = 0.001;
 const LABEL_FADE_IN = 0.5;
 const LABEL_FADE_OUT = 0.3;
 const LABEL_HIDE_THRESHOLD = 0.03;
+const TAG_INTERACTION_MODE = "label-highlight"; // "dot-tooltip" | "label-highlight"
+const LABEL_HIGHLIGHT_TINT = 0x06b6d4;
 
 // Group color palette
 const GROUP_COLORS = {
@@ -154,6 +156,8 @@ const GROUP_COLORS = {
   misc: 0x9ca3af,
 };
 const DEFAULT_COLOR = 0x9ca3af;
+
+let hoveredLabelIndex = -1;
 
 // ---------------------------------------------------------------------------
 // Data loading
@@ -176,6 +180,8 @@ const loadTags = async () => {
     incoming.sort((a, b) => (b.photoCount || 0) - (a.photoCount || 0));
     tags.value = incoming;
     metadata.value = data?.metadata || null;
+    hoveredTag.value = null;
+    setHoveredLabelIndex(-1);
     await nextTick();
     if (app) {
       clearLabels();
@@ -233,6 +239,7 @@ const initPixi = async () => {
   app.stage.addChild(labelsContainer);
 
   bindInteractions();
+  updateCanvasCursor();
   app.ticker.add(onTick);
 };
 
@@ -249,6 +256,7 @@ const destroyPixi = () => {
     dotsGraphics = null;
     labelsContainer = null;
     labelsByIndex = new Map();
+    hoveredLabelIndex = -1;
   }
 };
 
@@ -466,6 +474,7 @@ const getOrCreateLabel = (index) => {
   label.alpha = 0;
   label.visible = false;
   label.targetAlpha = 0;
+  label.tint = 0xffffff;
   labelsContainer.addChild(label);
   labelsByIndex.set(index, label);
   return label;
@@ -474,7 +483,41 @@ const getOrCreateLabel = (index) => {
 const hideAllLabels = () => {
   for (const label of labelsByIndex.values()) {
     label.targetAlpha = 0;
+    label.hitRect = null;
   }
+};
+
+const syncLabelInteractionStates = () => {
+  for (const [index, label] of labelsByIndex.entries()) {
+    const isHighlighted =
+      TAG_INTERACTION_MODE === "label-highlight" &&
+      index === hoveredLabelIndex &&
+      label.visible &&
+      (label.targetAlpha ?? 0) > 0;
+
+    label.tint = isHighlighted ? LABEL_HIGHLIGHT_TINT : 0xffffff;
+    label.scale.set(isHighlighted ? 1.04 : 1);
+  }
+};
+
+const setHoveredLabelIndex = (index) => {
+  if (hoveredLabelIndex === index) return;
+  hoveredLabelIndex = index;
+  syncLabelInteractionStates();
+  updateCanvasCursor();
+};
+
+const updateCanvasCursor = () => {
+  if (!app?.canvas) return;
+  if (isPanning) {
+    app.canvas.style.cursor = "grabbing";
+    return;
+  }
+  if (hoveredLabelIndex >= 0) {
+    app.canvas.style.cursor = "pointer";
+    return;
+  }
+  app.canvas.style.cursor = "grab";
 };
 
 const updateLabelAlphas = () => {
@@ -596,6 +639,7 @@ const placeLabelAtIndex = (index, grid, cellKey, cellSize, force = false) => {
   label.x = sx;
   label.y = rect.y1 + estH / 2;
   label.targetAlpha = 1;
+  label.hitRect = rect;
   label.visible = true;
   return true;
 };
@@ -649,6 +693,8 @@ const updateLabels = () => {
       placed++;
     }
   }
+
+  syncLabelInteractionStates();
 };
 
 // ---------------------------------------------------------------------------
@@ -679,6 +725,25 @@ const findTagAtScreen = (sx, sy) => {
   return best;
 };
 
+const findVisibleLabelAtScreen = (sx, sy) => {
+  for (const [index, label] of labelsByIndex.entries()) {
+    if (
+      !label.visible ||
+      label.alpha <= LABEL_HIDE_THRESHOLD ||
+      !label.hitRect
+    ) {
+      continue;
+    }
+
+    const { x1, y1, x2, y2 } = label.hitRect;
+    if (sx >= x1 - 4 && sx <= x2 + 4 && sy >= y1 - 4 && sy <= y2 + 4) {
+      return index;
+    }
+  }
+
+  return -1;
+};
+
 // ---------------------------------------------------------------------------
 // Interactions
 // ---------------------------------------------------------------------------
@@ -691,6 +756,7 @@ const bindInteractions = () => {
   canvas.addEventListener("pointerdown", onPointerDown);
   canvas.addEventListener("pointermove", onCanvasPointerMove);
   canvas.addEventListener("pointerleave", onCanvasPointerLeave);
+  canvas.addEventListener("click", onCanvasClick);
   window.addEventListener("pointermove", onPointerMove);
   window.addEventListener("pointerup", onPointerUp);
   window.addEventListener("resize", onResize);
@@ -703,6 +769,7 @@ const unbindInteractions = () => {
   canvas.removeEventListener("pointerdown", onPointerDown);
   canvas.removeEventListener("pointermove", onCanvasPointerMove);
   canvas.removeEventListener("pointerleave", onCanvasPointerLeave);
+  canvas.removeEventListener("click", onCanvasClick);
   window.removeEventListener("pointermove", onPointerMove);
   window.removeEventListener("pointerup", onPointerUp);
   window.removeEventListener("resize", onResize);
@@ -730,6 +797,16 @@ const onWheel = (e) => {
 };
 
 const onPointerDown = (e) => {
+  if (!app) return;
+  const rect = app.canvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left;
+  const sy = e.clientY - rect.top;
+  if (findVisibleLabelAtScreen(sx, sy) >= 0) {
+    isPanning = false;
+    updateCanvasCursor();
+    return;
+  }
+
   isPanning = true;
   panStart = {
     x: e.clientX,
@@ -745,10 +822,12 @@ const onPointerMove = (e) => {
   camera.y = panStart.camY + (e.clientY - panStart.y);
   syncTargetCamera();
   applyCamera();
+  updateCanvasCursor();
 };
 
 const onPointerUp = () => {
   isPanning = false;
+  updateCanvasCursor();
 };
 
 const onCanvasPointerMove = (e) => {
@@ -757,17 +836,37 @@ const onCanvasPointerMove = (e) => {
   const rect = app.canvas.getBoundingClientRect();
   const sx = e.clientX - rect.left;
   const sy = e.clientY - rect.top;
-  const idx = findTagAtScreen(sx, sy);
-  if (idx >= 0) {
-    hoveredTag.value = tags.value[idx];
-    tooltipPos.value = { x: sx + 14, y: sy + 14 };
-  } else {
-    hoveredTag.value = null;
+  const labelIndex = findVisibleLabelAtScreen(sx, sy);
+  setHoveredLabelIndex(labelIndex);
+
+  if (TAG_INTERACTION_MODE === "dot-tooltip") {
+    const idx = labelIndex >= 0 ? labelIndex : findTagAtScreen(sx, sy);
+    if (idx >= 0) {
+      hoveredTag.value = tags.value[idx];
+      tooltipPos.value = { x: sx + 14, y: sy + 14 };
+    } else {
+      hoveredTag.value = null;
+    }
+    return;
   }
+
+  hoveredTag.value = null;
 };
 
 const onCanvasPointerLeave = () => {
   hoveredTag.value = null;
+  setHoveredLabelIndex(-1);
+};
+
+const onCanvasClick = (e) => {
+  if (!app) return;
+  const rect = app.canvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left;
+  const sy = e.clientY - rect.top;
+  const labelIndex = findVisibleLabelAtScreen(sx, sy);
+  if (labelIndex >= 0) {
+    console.log("[TagCloud] label click", tags.value[labelIndex]);
+  }
 };
 
 let resizeRaf = null;
