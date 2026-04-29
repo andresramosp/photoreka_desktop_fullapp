@@ -501,6 +501,7 @@
     <FloatingActionBar
       :selected-ids="selectedPhotoIds"
       :show-delete="true"
+      :show-delete-options="!!collectionId"
       :show-add-to-collection="displayAddToCollection"
       :show-move-to-tool="displayMoveToTool"
       :show-send-to-chat="displaySendToChat"
@@ -508,6 +509,7 @@
       :is-downloading="isDownloading"
       @clear-selection="clearAllSelections"
       @delete="handleDeleteMultiple"
+      @remove-from-collection="handleRemoveFromCollection"
       @download="handleDownloadMultiple"
       @add-to-collection="handleAddToCollection"
       @move-to-tool="openToolSelector"
@@ -1674,19 +1676,17 @@ const handlePhotoNavigate = async (newIndex) => {
 
 // Batch actions
 const handleDeleteMultiple = async () => {
-  // Solo mostrar modal de confirmación si NO es una colección
-  if (!props.collectionId) {
-    showDeleteConfirmDialog.value = true;
-    return;
-  }
+  // Always show confirmation dialog for permanent deletion
+  showDeleteConfirmDialog.value = true;
+};
 
-  // Para colecciones, eliminar directamente (comportamiento actual)
+const handleRemoveFromCollection = async () => {
+  if (!props.collectionId) return;
   try {
     await collectionsStore.removePhotosFromCollection(
       props.collectionId,
       selectedPhotoIds.value,
     );
-    // Recargar la ruta actual para refrescar la colección (sin reload completo)
     emit("refreshCollection");
   } catch (e) {}
   clearAllSelections();

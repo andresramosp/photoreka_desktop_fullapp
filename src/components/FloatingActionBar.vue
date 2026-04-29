@@ -169,12 +169,19 @@
           <div v-if="showDelete" class="action-separator"></div>
 
           <!-- Group 3: Delete -->
-          <n-tooltip v-if="showDelete" placement="bottom" trigger="hover">
-            <template #trigger>
+          <template v-if="showDelete">
+            <!-- Dropdown mode (in collection context) -->
+            <n-dropdown
+              v-if="showDeleteOptions"
+              trigger="click"
+              placement="bottom"
+              :options="deleteDropdownOptions"
+              :disabled="selectedCount === 0"
+              @select="handleDeleteDropdownSelect"
+            >
               <n-button
                 type="error"
                 size="medium"
-                @click="$emit('delete')"
                 :disabled="selectedCount === 0"
                 :loading="isDeleting"
               >
@@ -189,9 +196,33 @@
                   </n-icon>
                 </template>
               </n-button>
-            </template>
-            <span>Delete selected photos</span>
-          </n-tooltip>
+            </n-dropdown>
+
+            <!-- Simple mode (workspace context) -->
+            <n-tooltip v-else placement="bottom" trigger="hover">
+              <template #trigger>
+                <n-button
+                  type="error"
+                  size="medium"
+                  @click="$emit('delete')"
+                  :disabled="selectedCount === 0"
+                  :loading="isDeleting"
+                >
+                  <template #icon v-if="!isDeleting">
+                    <n-icon>
+                      <svg viewBox="0 0 24 24">
+                        <path
+                          fill="currentColor"
+                          d="M9 3v1H4v2h1v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6h1V4h-5V3H9M7 6h10v13H7V6Z"
+                        />
+                      </svg>
+                    </n-icon>
+                  </template>
+                </n-button>
+              </template>
+              <span>Delete selected photos</span>
+            </n-tooltip>
+          </template>
         </div>
       </div>
     </div>
@@ -199,7 +230,7 @@
 </template>
 
 <script setup>
-import { NButton, NIcon, NTooltip, useMessage } from "naive-ui";
+import { NButton, NIcon, NTooltip, NDropdown, useMessage } from "naive-ui";
 import {
   AlbumsOutline,
   CloudDownloadOutline,
@@ -255,6 +286,10 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  showDeleteOptions: {
+    type: Boolean,
+    default: false,
+  },
   embedded: {
     type: Boolean,
     default: false,
@@ -264,12 +299,22 @@ const props = defineProps({
 const emit = defineEmits([
   "clear-selection",
   "delete",
+  "remove-from-collection",
   "download",
   "add-to-collection",
   "move-to-tool",
   "send-to-chat",
   "attach-to-chat",
 ]);
+
+const deleteDropdownOptions = [
+  { label: "Remove from collection", key: "remove-from-collection" },
+  { label: "Delete photo", key: "delete", props: { style: "color: #e5534b" } },
+];
+
+const handleDeleteDropdownSelect = (key) => {
+  emit(key);
+};
 
 const selectedCount = computed(() => props.selectedIds.length);
 
