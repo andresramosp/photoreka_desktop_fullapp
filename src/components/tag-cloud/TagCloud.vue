@@ -173,6 +173,8 @@ const CAMERA_EPSILON = 0.001;
 const LABEL_FADE_IN = 0.5;
 const LABEL_FADE_OUT = 0.3;
 const LABEL_HIDE_THRESHOLD = 0.03;
+const HOVER_SCALE_LERP = 0.15; // speed of scale animation on hover
+const HOVER_TINT_LERP = 0.12; // speed of tint animation on hover
 const TAG_INTERACTION_MODE = "label-highlight"; // "dot-tooltip" | "label-highlight"
 const LABEL_HIGHLIGHT_TINT = 0x06b6d4;
 
@@ -577,7 +579,7 @@ const getOrCreateLabel = (index) => {
       // fontFamily: "Inter, system-ui, sans-serif",
       fontSize: 13,
       fill: 0xffffff,
-      stroke: { color: 0x000000, width: 3, alpha: 0.7 },
+      stroke: { color: 0x000000, width: 1, alpha: 0.7 },
       align: "center",
     },
   });
@@ -587,6 +589,8 @@ const getOrCreateLabel = (index) => {
   label.visible = false;
   label.targetAlpha = 0;
   label.tint = 0xffffff;
+  label.targetScale = 1;
+  label.targetTint = 0xffffff;
   labelsContainer.addChild(label);
   labelsByIndex.set(index, label);
   return label;
@@ -611,8 +615,10 @@ const syncLabelInteractionStates = () => {
       tags.value[index] != null &&
       selectedTagIds.has(tags.value[index].id);
 
-    label.tint = isHovered || isSelected ? LABEL_HIGHLIGHT_TINT : 0xffffff;
-    label.scale.set(isHovered ? 1.04 : 1);
+    // Set target values for smooth animation
+    label.targetTint =
+      isHovered || isSelected ? LABEL_HIGHLIGHT_TINT : 0xffffff;
+    label.targetScale = isHovered ? 1.04 : 1;
   }
 };
 
@@ -636,6 +642,23 @@ const updateCanvasCursor = () => {
   app.canvas.style.cursor = "grab";
 };
 
+// Interpolate a tint value from current to target
+const lerpTint = (current, target, factor) => {
+  const cr = (current >> 16) & 0xff;
+  const cg = (current >> 8) & 0xff;
+  const cb = current & 0xff;
+
+  const tr = (target >> 16) & 0xff;
+  const tg = (target >> 8) & 0xff;
+  const tb = target & 0xff;
+
+  const nr = Math.round(cr + (tr - cr) * factor);
+  const ng = Math.round(cg + (tg - cg) * factor);
+  const nb = Math.round(cb + (tb - cb) * factor);
+
+  return (nr << 16) | (ng << 8) | nb;
+};
+
 const updateLabelAlphas = () => {
   for (const label of labelsByIndex.values()) {
     const targetAlpha = label.targetAlpha ?? 0;
@@ -652,6 +675,23 @@ const updateLabelAlphas = () => {
     if (targetAlpha === 0 && label.alpha <= LABEL_HIDE_THRESHOLD) {
       label.alpha = 0;
       label.visible = false;
+    }
+
+    // Smooth scale animation
+    const currentScale = label.scale.x;
+    const targetScale = label.targetScale ?? 1;
+    const scaleDelta = targetScale - currentScale;
+    if (Math.abs(scaleDelta) > 0.001) {
+      const nextScale = currentScale + scaleDelta * HOVER_SCALE_LERP;
+      label.scale.set(nextScale);
+    } else if (currentScale !== targetScale) {
+      label.scale.set(targetScale);
+    }
+
+    // Smooth tint animation
+    const targetTint = label.targetTint ?? 0xffffff;
+    if (label.tint !== targetTint) {
+      label.tint = lerpTint(label.tint, targetTint, HOVER_TINT_LERP);
     }
   }
 };
