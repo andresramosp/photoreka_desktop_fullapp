@@ -60,10 +60,21 @@
       class="tag-tooltip"
       :style="{ left: tooltipPos.x + 'px', top: tooltipPos.y + 'px' }"
     >
-      <div class="tt-name">{{ hoveredTag.name }}</div>
       <div class="tt-meta">
-        <span class="tt-group">{{ hoveredTag.group }}</span>
-        <span class="tt-count">{{ hoveredTag.photoCount }} photos</span>
+        <div class="tt-group-row">
+          <n-icon size="14">
+            <TagsOutlined />
+          </n-icon>
+          <span class="tt-group">{{
+            normalizeGroupName(hoveredTag.group)
+          }}</span>
+        </div>
+        <div class="tt-count-row">
+          <n-icon size="14">
+            <PictureOutlined />
+          </n-icon>
+          <span class="tt-count">{{ hoveredTag.photoCount }} photos</span>
+        </div>
       </div>
     </div>
 
@@ -110,6 +121,8 @@ import {
   ZoomInOutlined,
   ZoomOutOutlined,
   FullscreenOutlined,
+  TagsOutlined,
+  PictureOutlined,
 } from "@vicons/antd";
 import * as PIXI from "pixi.js";
 import { api } from "@/utils/axios";
@@ -207,6 +220,13 @@ let selectedTagIds = new Set(); // IDs of tags from the last emitted search
 // Data loading
 // ---------------------------------------------------------------------------
 let filterDebounceTimer = null;
+
+const normalizeGroupName = (groupName) => {
+  if (!groupName) return "";
+  return groupName
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+};
 
 const loadTags = async () => {
   loading.value = true;
@@ -1307,8 +1327,16 @@ defineExpose({
 
 .tt-meta {
   display: flex;
-  gap: 10px;
-  color: var(--text-secondary, #9ca3af);
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-primay, #9ca3af);
+}
+
+.tt-group-row,
+.tt-count-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .tt-group {
