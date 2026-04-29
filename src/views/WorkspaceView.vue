@@ -130,7 +130,7 @@ const navigateToSyncArea = () => {
   font-size: var(--font-size-4xl);
   font-weight: var(--font-weight-bold);
   color: var(--text-primary);
-  margin: 0 0 var(--spacing-sm) 0;
+  margin: 0 0 var(--spacing-xs) 0;
   line-height: var(--line-height-tight);
 }
 
