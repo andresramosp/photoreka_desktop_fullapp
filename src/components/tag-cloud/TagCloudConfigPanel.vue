@@ -67,17 +67,17 @@
               }}</span>
             </div>
             <n-slider
-              :value="localLimit"
+              :value="getSliderIndex(localLimit)"
               @update:value="onLimitChange"
-              :min="1000"
-              :max="30000"
-              :step="1000"
+              :min="0"
+              :max="4"
+              :step="1"
               :marks="{
-                1000: '1k',
-                5000: '5k',
-                10000: '10k',
-                20000: '20k',
-                30000: '30k',
+                0: '1k',
+                1: '5k',
+                2: '10k',
+                3: '20k',
+                4: '30k',
               }"
               class="tag-slider"
               @click.stop
@@ -103,12 +103,12 @@
               <span class="slider-value">{{ localMinPhotoCount }}</span>
             </div>
             <n-slider
-              :value="localMinPhotoCount"
+              :value="getMinPhotoCountSliderIndex(localMinPhotoCount)"
               @update:value="onMinPhotoCountChange"
-              :min="1"
-              :max="50"
+              :min="0"
+              :max="3"
               :step="1"
-              :marks="{ 1: '1', 10: '10', 25: '25', 50: '50+' }"
+              :marks="{ 0: '1', 1: '10', 2: '25', 3: '50+' }"
               class="tag-slider"
               @click.stop
             />
@@ -225,6 +225,9 @@ const toggleDisplay = () => {
     expandedSection.value === "display" ? null : "display";
 };
 
+const LIMIT_VALUES = [1000, 5000, 10000, 20000, 30000];
+const MIN_PHOTO_COUNT_VALUES = [1, 10, 25, 50];
+
 const localMinPhotoCount = ref(props.minPhotoCount);
 const localLimit = ref(props.limit);
 
@@ -241,12 +244,20 @@ watch(
   },
 );
 
-const onMinPhotoCountChange = (val) => {
-  localMinPhotoCount.value = val;
+const getSliderIndex = (value) => {
+  return LIMIT_VALUES.indexOf(value);
 };
 
-const onLimitChange = (val) => {
-  localLimit.value = val;
+const getMinPhotoCountSliderIndex = (value) => {
+  return MIN_PHOTO_COUNT_VALUES.indexOf(value);
+};
+
+const onMinPhotoCountChange = (index) => {
+  localMinPhotoCount.value = MIN_PHOTO_COUNT_VALUES[index];
+};
+
+const onLimitChange = (index) => {
+  localLimit.value = LIMIT_VALUES[index];
 };
 
 const emitMinPhotoCount = () => {

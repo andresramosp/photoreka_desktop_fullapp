@@ -31,7 +31,7 @@
 
     <!-- Config Panel -->
     <TagCloudConfigPanel
-      v-if="!loading && tags.length > 0"
+      v-if="tags.length > 0"
       v-model:minPhotoCount="minPhotoCount"
       v-model:limit="limit"
       v-model:showDots="showDots"
@@ -622,9 +622,9 @@ const placeLabelAtIndex = (index, grid, cellKey, cellSize, force = false) => {
   const estH = fs * 1.15;
   const rect = {
     x1: sx - estW / 2,
-    y1: sy + dotRadii[index] * scale + 2,
+    y1: sy - estH / 2,
     x2: sx - estW / 2 + estW,
-    y2: sy + dotRadii[index] * scale + 2 + estH,
+    y2: sy + estH / 2,
   };
 
   if (!force && rectCollides(grid, cellKey, rect, cellSize)) {
@@ -637,7 +637,7 @@ const placeLabelAtIndex = (index, grid, cellKey, cellSize, force = false) => {
   if (label.text !== t.name) label.text = t.name;
   if (label.style.fontSize !== fs) label.style.fontSize = fs;
   label.x = sx;
-  label.y = rect.y1 + estH / 2;
+  label.y = sy;
   label.targetAlpha = 1;
   label.hitRect = rect;
   label.visible = true;
