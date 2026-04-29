@@ -70,6 +70,7 @@ const CollectionsController = () => import('#controllers/collections_controller'
 const SeriesController = () => import('#controllers/series_controller')
 const UsageController = () => import('#controllers/usage_controller')
 const ThreeDViewController = () => import('#controllers/3dview_controller')
+const TagCloudController = () => import('#controllers/tagcloud_controller')
 const PortfolioReviewController = () => import('#controllers/portfolio_review_controller')
 const ChatController = () => import('#controllers/chat_controller')
 const CanvasController = () => import('#controllers/canvas_controller')
@@ -162,6 +163,9 @@ router
     // 3D Visualization endpoints
     router.post('/api/3d/photos', [ThreeDViewController, 'get3DPhotos'])
     router.get('/api/3d/categories', [ThreeDViewController, 'getAvailableCategories'])
+
+    // Tag Cloud (2D semantic visualization of user's tags)
+    router.post('/api/tagcloud/2d', [TagCloudController, 'get2DTags'])
 
     // Portfolio Review endpoints
     // router.get('/api/portfolio-review/:reviewType', [PortfolioReviewController, 'getPatterns'])
