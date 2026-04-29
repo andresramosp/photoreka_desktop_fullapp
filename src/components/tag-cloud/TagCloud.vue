@@ -27,7 +27,19 @@
     </div>
 
     <!-- PixiJS Canvas -->
-    <div ref="pixiContainer" class="pixi-container"></div>
+    <div ref="pixiContainer" class="pixi-container">
+      <!-- Rectangle selection overlay (Ctrl/Cmd + drag) -->
+      <div
+        v-if="selectionRect"
+        class="selection-rect"
+        :style="{
+          left: selectionRect.x + 'px',
+          top: selectionRect.y + 'px',
+          width: selectionRect.w + 'px',
+          height: selectionRect.h + 'px',
+        }"
+      ></div>
+    </div>
 
     <!-- Config Panel -->
     <TagCloudConfigPanel
@@ -94,6 +106,8 @@ import { api } from "@/utils/axios";
 import { isMobileDevice } from "@/utils/utils.js";
 import TagCloudConfigPanel from "./TagCloudConfigPanel.vue";
 
+const emit = defineEmits(["tags-selected"]);
+
 // ---------------------------------------------------------------------------
 // Reactive state
 // ---------------------------------------------------------------------------
@@ -107,6 +121,7 @@ const metadata = ref(null);
 const hoveredTag = ref(null);
 const tooltipPos = ref({ x: 0, y: 0 });
 const isMobile = ref(isMobileDevice());
+const selectionRect = ref(null); // { x, y, w, h } in canvas-relative px
 
 // Filters
 const minPhotoCount = ref(1);
@@ -750,6 +765,35 @@ const findVisibleLabelAtScreen = (sx, sy) => {
 let isPanning = false;
 let panStart = { x: 0, y: 0, camX: 0, camY: 0 };
 
+// Rectangle selection state (Ctrl/Cmd + drag)
+let isSelecting = false;
+let selectStart = { x: 0, y: 0 }; // canvas-relative coords
+const SELECTION_DRAG_THRESHOLD = 3;
+
+const getCanvasPoint = (clientX, clientY) => {
+  const rect = app.canvas.getBoundingClientRect();
+  return { x: clientX - rect.left, y: clientY - rect.top };
+};
+
+const getTagsInScreenRect = (rx1, ry1, rx2, ry2) => {
+  const out = [];
+  for (const [index, label] of labelsByIndex.entries()) {
+    if (
+      !label.visible ||
+      label.alpha <= LABEL_HIDE_THRESHOLD ||
+      !label.hitRect
+    ) {
+      continue;
+    }
+    const r = label.hitRect;
+    // AABB intersection
+    if (r.x1 <= rx2 && r.x2 >= rx1 && r.y1 <= ry2 && r.y2 >= ry1) {
+      out.push(tags.value[index]);
+    }
+  }
+  return out;
+};
+
 const bindInteractions = () => {
   const canvas = app.canvas;
   canvas.addEventListener("wheel", onWheel, { passive: false });
@@ -801,6 +845,20 @@ const onPointerDown = (e) => {
   const rect = app.canvas.getBoundingClientRect();
   const sx = e.clientX - rect.left;
   const sy = e.clientY - rect.top;
+
+  // Ctrl/Cmd + drag → start rectangle selection
+  if (e.ctrlKey || e.metaKey) {
+    isSelecting = true;
+    isPanning = false;
+    selectStart = { x: sx, y: sy };
+    selectionRect.value = { x: sx, y: sy, w: 0, h: 0 };
+    try {
+      app.canvas.setPointerCapture?.(e.pointerId);
+    } catch (_) {}
+    e.preventDefault();
+    return;
+  }
+
   if (findVisibleLabelAtScreen(sx, sy) >= 0) {
     isPanning = false;
     updateCanvasCursor();
@@ -817,6 +875,15 @@ const onPointerDown = (e) => {
 };
 
 const onPointerMove = (e) => {
+  if (isSelecting) {
+    const { x, y } = getCanvasPoint(e.clientX, e.clientY);
+    const x1 = Math.min(selectStart.x, x);
+    const y1 = Math.min(selectStart.y, y);
+    const x2 = Math.max(selectStart.x, x);
+    const y2 = Math.max(selectStart.y, y);
+    selectionRect.value = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+    return;
+  }
   if (!isPanning) return;
   camera.x = panStart.camX + (e.clientX - panStart.x);
   camera.y = panStart.camY + (e.clientY - panStart.y);
@@ -825,7 +892,30 @@ const onPointerMove = (e) => {
   updateCanvasCursor();
 };
 
-const onPointerUp = () => {
+const onPointerUp = (e) => {
+  if (isSelecting) {
+    isSelecting = false;
+    const r = selectionRect.value;
+    selectionRect.value = null;
+    if (
+      r &&
+      (r.w > SELECTION_DRAG_THRESHOLD || r.h > SELECTION_DRAG_THRESHOLD)
+    ) {
+      const found = getTagsInScreenRect(r.x, r.y, r.x + r.w, r.y + r.h);
+      if (found.length > 0) {
+        emit("tags-selected", found);
+      }
+    } else if (r && e) {
+      // Treat as a click on a single visible label
+      const { x, y } = getCanvasPoint(e.clientX, e.clientY);
+      const idx = findVisibleLabelAtScreen(x, y);
+      if (idx >= 0) {
+        emit("tags-selected", [tags.value[idx]]);
+      }
+    }
+    updateCanvasCursor();
+    return;
+  }
   isPanning = false;
   updateCanvasCursor();
 };
@@ -860,12 +950,14 @@ const onCanvasPointerLeave = () => {
 
 const onCanvasClick = (e) => {
   if (!app) return;
+  // Ignore the click that follows a Ctrl/Cmd-drag selection
+  if (e.ctrlKey || e.metaKey) return;
   const rect = app.canvas.getBoundingClientRect();
   const sx = e.clientX - rect.left;
   const sy = e.clientY - rect.top;
   const labelIndex = findVisibleLabelAtScreen(sx, sy);
   if (labelIndex >= 0) {
-    console.log("[TagCloud] label click", tags.value[labelIndex]);
+    emit("tags-selected", [tags.value[labelIndex]]);
   }
 };
 
@@ -912,6 +1004,15 @@ onBeforeUnmount(() => {
 }
 .pixi-container:active {
   cursor: grabbing;
+}
+
+.selection-rect {
+  position: absolute;
+  pointer-events: none;
+  border: 1px solid #06b6d4;
+  background: rgba(6, 182, 212, 0.12);
+  border-radius: 2px;
+  z-index: 4;
 }
 
 .state-screen {

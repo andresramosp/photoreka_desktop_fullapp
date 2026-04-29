@@ -1,0 +1,407 @@
+<template>
+  <div
+    class="tag-search-toolbar"
+    :class="{ 'toolbar-visible': isVisible }"
+    v-show="isVisible"
+  >
+    <div class="toolbar-content">
+      <div class="toolbar-header">
+        <div class="header-left">
+          <div class="selected-tags-row">
+            <span
+              v-for="tag in selectedTags"
+              :key="tag.id"
+              class="selected-tag-chip"
+              :title="tag.name"
+            >
+              {{ tag.name }}
+            </span>
+          </div>
+          <span class="section-title">
+            Photos matching
+            <span class="match-count" v-if="!isLoading && photos.length > 0">
+              · {{ photos.length }}
+            </span>
+          </span>
+        </div>
+        <button
+          class="toolbar-close"
+          @click="closeToolbar"
+          title="Close"
+          aria-label="Close"
+        >
+          <n-icon size="16">
+            <CloseOutlined />
+          </n-icon>
+        </button>
+      </div>
+
+      <div
+        class="related-photos-scroll scrollbar-minimal"
+        @wheel="handleHorizontalScroll"
+        ref="scrollContainer"
+      >
+        <div class="related-photos-grid">
+          <template v-if="isLoading">
+            <div
+              v-for="n in 10"
+              :key="`skeleton-${n}`"
+              class="related-photo-skeleton"
+            >
+              <n-skeleton height="100%" />
+            </div>
+          </template>
+          <template v-else-if="photos.length === 0">
+            <div class="empty-state">No photos match these tags.</div>
+          </template>
+          <template v-else>
+            <PhotoCard
+              v-for="photo in photos"
+              :key="photo.id"
+              :photo="photo"
+              :selected="false"
+              :show-tags="true"
+              :show-info-button="true"
+              @info="onPhotoInfo"
+            />
+          </template>
+        </div>
+        <div class="scroll-safe-zone"></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, watch, nextTick } from "vue";
+import { NIcon, NSkeleton } from "naive-ui";
+import { CloseOutlined } from "@vicons/antd";
+import PhotoCard from "../photoCards/PhotoCard.vue";
+import { api } from "@/utils/axios";
+import { usePhotosStore } from "@/stores/photos.js";
+
+const props = defineProps({
+  selectedTags: {
+    type: Array,
+    default: () => [],
+  },
+});
+
+const emit = defineEmits(["close", "photo-info"]);
+
+const photos = ref([]);
+const isLoading = ref(false);
+const scrollContainer = ref(null);
+const photosStore = usePhotosStore();
+let activeRequestId = 0;
+
+const isVisible = computed(
+  () =>
+    props.selectedTags.length > 0 &&
+    (isLoading.value || photos.value.length >= 0),
+);
+
+const closeToolbar = () => {
+  photos.value = [];
+  emit("close");
+};
+
+const onPhotoInfo = (photo) => {
+  emit("photo-info", photo);
+};
+
+const handleHorizontalScroll = (e) => {
+  if (!scrollContainer.value) return;
+  e.preventDefault();
+  scrollContainer.value.scrollLeft += e.deltaY;
+};
+
+const runSearch = async () => {
+  const tagNames = props.selectedTags.map((t) => t.name);
+  if (tagNames.length === 0) {
+    photos.value = [];
+    return;
+  }
+
+  const requestId = ++activeRequestId;
+  isLoading.value = true;
+  photos.value = [];
+
+  try {
+    const { data: matches } = await api.post("/api/search/tags/direct", {
+      included: tagNames,
+      excluded: [],
+      mode: "OR",
+      semantic: false,
+    });
+
+    if (requestId !== activeRequestId) return;
+
+    const list = Array.isArray(matches) ? matches.slice() : [];
+    // Sort: most matched tags first; ties broken by photoId desc
+    list.sort((a, b) => {
+      const da = (a.matchedIncluded || []).length;
+      const db = (b.matchedIncluded || []).length;
+      if (db !== da) return db - da;
+      return (b.photoId || 0) - (a.photoId || 0);
+    });
+
+    if (list.length === 0) {
+      photos.value = [];
+      return;
+    }
+
+    const photoMap = new Map();
+    (photosStore.allPhotos || []).forEach((p) => photoMap.set(p.id, p));
+
+    const missing = list.filter((m) => !photoMap.has(m.photoId));
+    if (missing.length > 0) {
+      const { data: fetched } = await api.post("/api/catalog/photosByIds", {
+        photosIds: missing.map((m) => m.photoId),
+      });
+      if (requestId !== activeRequestId) return;
+      (fetched || []).forEach((p) => photoMap.set(p.id, p));
+    }
+
+    const merged = list
+      .map((m) => {
+        const p = photoMap.get(m.photoId);
+        if (!p) return null;
+        return {
+          ...p,
+          url: p.originalUrl || p.url,
+          thumbnailUrl: p.thumbnailUrl || p.originalUrl,
+          title: p.originalFileName || p.title || "",
+          matchingTags: (m.matchedIncluded || []).map((name) => ({
+            name,
+            proximity: 1,
+          })),
+        };
+      })
+      .filter(Boolean);
+
+    photos.value = merged;
+
+    nextTick(() => {
+      if (scrollContainer.value) scrollContainer.value.scrollLeft = 0;
+    });
+  } catch (err) {
+    if (requestId !== activeRequestId) return;
+    console.error("[TagSearchToolbar] search failed", err);
+    photos.value = [];
+  } finally {
+    if (requestId === activeRequestId) {
+      isLoading.value = false;
+    }
+  }
+};
+
+watch(
+  () => props.selectedTags,
+  (next) => {
+    if (!next || next.length === 0) {
+      photos.value = [];
+      activeRequestId++;
+      isLoading.value = false;
+      return;
+    }
+    runSearch();
+  },
+  { immediate: true, deep: true },
+);
+</script>
+
+<style scoped>
+.tag-search-toolbar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 240px;
+  background: linear-gradient(
+    180deg,
+    rgba(13, 13, 18, 0.85) 0%,
+    rgba(13, 13, 18, 0.95) 60%,
+    rgba(13, 13, 18, 1) 100%
+  );
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
+  z-index: 10;
+  transform: translateY(100%);
+  transition: none;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.tag-search-toolbar.toolbar-visible {
+  transform: translateY(0);
+  animation: slideUpFromBottom 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)
+    forwards;
+}
+
+.toolbar-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 14px 18px 6px 18px;
+  gap: 10px;
+}
+
+.toolbar-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.header-left {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  justify-content: space-between;
+}
+
+.section-title {
+  color: #e5e5e5;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.match-count {
+  color: #9ca3af;
+  font-weight: 400;
+}
+
+.selected-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 44px;
+  overflow: hidden;
+}
+
+.selected-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  background: rgba(6, 182, 212, 0.15);
+  color: #67e8f9;
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbar-close {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #9ca3af;
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.toolbar-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #e5e5e5;
+}
+
+.related-photos-scroll {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.05);
+}
+
+.related-photos-scroll::-webkit-scrollbar {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.related-photos-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+}
+
+.related-photos-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.related-photos-grid {
+  display: flex;
+  gap: 12px;
+  height: 160px;
+  padding-right: 18px;
+}
+
+.related-photos-grid .photo-card {
+  flex-shrink: 0;
+  width: 160px;
+  height: 160px;
+}
+
+.related-photo-skeleton {
+  flex-shrink: 0;
+  width: 160px;
+  height: 160px;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 160px;
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+.scroll-safe-zone {
+  height: 8px;
+  min-height: 8px;
+  background: transparent;
+  pointer-events: none;
+}
+
+@keyframes slideUpFromBottom {
+  0% {
+    transform: translateY(100%);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .tag-search-toolbar {
+    height: 210px;
+  }
+  .related-photos-grid {
+    height: 130px;
+  }
+  .related-photos-grid .photo-card {
+    width: 130px;
+    height: 130px;
+  }
+  .related-photo-skeleton {
+    width: 130px;
+    height: 130px;
+  }
+}
+</style>

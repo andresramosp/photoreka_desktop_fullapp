@@ -1,11 +1,24 @@
 <template>
   <div class="tag-cloud-view">
-    <TagCloud class="tag-cloud-component" />
+    <TagCloud class="tag-cloud-component" @tags-selected="onTagsSelected" />
+    <TagSearchToolbar
+      :selected-tags="selectedTags"
+      @close="selectedTags = []"
+    />
   </div>
 </template>
 
 <script setup>
+import { ref } from "vue";
 import TagCloud from "@/components/tag-cloud/TagCloud.vue";
+import TagSearchToolbar from "@/components/tag-cloud/TagSearchToolbar.vue";
+
+const selectedTags = ref([]);
+
+const onTagsSelected = (tags) => {
+  // Replace selection on each interaction (single click or rect drag)
+  selectedTags.value = Array.isArray(tags) ? tags : [];
+};
 </script>
 
 <style scoped>
