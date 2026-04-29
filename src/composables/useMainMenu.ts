@@ -232,6 +232,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
         key: "2d-view",
         icon: renderIcon(toolIcon("2d-view")),
       },
+
       {
         label: () =>
           h(
@@ -254,6 +255,11 @@ export function useMainMenu(closeMobileMenu?: () => void) {
         key: "atlas",
         icon: renderIcon(toolIcon("3d-atlas")),
         disabled: isToolDisabledOnMobile("3d-atlas") || isBlocked.value,
+      },
+      {
+        label: () => h("span", { class: "collection-menu-item" }, "Tag Cloud"),
+        key: "tagcloud",
+        icon: renderIcon(toolIcon("tagcloud")),
       },
     ],
   }));

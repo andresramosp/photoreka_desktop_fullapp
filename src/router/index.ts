@@ -268,6 +268,15 @@ const router = createRouter({
     },
 
     {
+      path: "/tagcloud",
+      name: "tagcloud",
+      component: () => import("../views/TagCloudView.vue"),
+      meta: {
+        requiresAuth: true,
+      },
+    },
+
+    {
       path: "/3d-catalog/:userId",
       name: "3d-catalog",
       component: ThreeDView,

@@ -4,7 +4,7 @@
  * Single source of truth for icons, platform availability, and tool metadata
  */
 
-import { Workspace } from "@vicons/carbon";
+import { Workspace, WordCloud } from "@vicons/carbon";
 import {
   LayersOutline,
   CloudUploadOutline,
@@ -48,6 +48,7 @@ export const TOOL_ICONS = {
   HelpCircleOutline,
   Image,
   DesktopOutline,
+  WordCloud,
   RobotOutlined,
 };
 
@@ -103,6 +104,7 @@ export const TOOLS_CONFIG = [
     showInPhotoSelector: true,
     singlePhotoOnly: true,
   },
+
   {
     id: "3d-atlas",
     name: "3D Atlas",
@@ -113,6 +115,16 @@ export const TOOLS_CONFIG = [
     menuSection: "explore",
     showInPhotoSelector: true,
     singlePhotoOnly: false,
+  },
+  {
+    id: "tagcloud",
+    name: "Tag Cloud",
+    description: "Browse your tags clustered by semantic proximity",
+    icon: "WordCloud",
+    route: "/tagcloud",
+    availableOn: TOOL_AVAILABILITY.BOTH,
+    menuSection: "explore",
+    showInPhotoSelector: false,
   },
   {
     id: "series",
