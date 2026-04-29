@@ -165,11 +165,94 @@
                 @click.stop
               />
             </div>
+
+            <!-- Balloon expansion slider -->
+            <div class="control-item-full">
+              <div class="slider-header">
+                <div class="control-item-label">
+                  <span>Balloon expansion</span>
+                  <n-tooltip trigger="hover" placement="top">
+                    <template #trigger>
+                      <n-icon
+                        size="12"
+                        color="var(--text-secondary)"
+                        class="info-icon"
+                      >
+                        <InfoCircleFilled />
+                      </n-icon>
+                    </template>
+                    Inflates the layout around its center
+                  </n-tooltip>
+                </div>
+                <span class="slider-value">
+                  {{ Math.round(balloonExpansion * 100) }}%
+                </span>
+              </div>
+              <n-slider
+                :value="balloonExpansion"
+                @update:value="(v) => emit('update:balloonExpansion', v)"
+                :min="0"
+                :max="0.5"
+                :step="0.02"
+                @click.stop
+                class="tag-slider"
+              />
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Reset View -->
+      <!-- Navigation Controls Section -->
+      <div class="control-section">
+        <div class="section-toggle" @click="toggleNavigationControls">
+          <div style="display: flex; align-items: center; gap: 6px">
+            <n-icon size="16" color="var(--text-on-primary)">
+              <CompassOutlined />
+            </n-icon>
+            <span class="section-toggle-label">Navigation Controls</span>
+          </div>
+          <n-icon
+            size="12"
+            class="toggle-icon"
+            :class="{ rotated: showNavigationControls }"
+          >
+            <svg viewBox="0 0 24 24">
+              <path
+                fill="currentColor"
+                d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+              />
+            </svg>
+          </n-icon>
+        </div>
+
+        <div v-if="showNavigationControls" class="controls-info">
+          <div class="control-tip">
+            <div class="control-icon-group">
+              <div class="keyboard-keys-group">
+                <div class="keyboard-key">Wheel</div>
+              </div>
+              <span class="control-text">Mouse wheel to zoom in/out</span>
+            </div>
+          </div>
+          <div class="control-tip">
+            <div class="control-icon-group">
+              <div class="keyboard-keys-group">
+                <div class="keyboard-key">Click</div>
+              </div>
+              <span class="control-text">Click on a tag to search photos</span>
+            </div>
+          </div>
+          <div class="control-tip">
+            <div class="control-icon-group">
+              <div class="keyboard-keys-group">
+                <div class="keyboard-key">Ctrl</div>
+                <div class="keyboard-key">Select</div>
+              </div>
+              <span class="control-text">To choose multiple tags</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -183,6 +266,7 @@ import {
   InfoCircleFilled,
   FilterOutlined,
   EyeOutlined,
+  CompassOutlined,
 } from "@vicons/antd";
 
 const props = defineProps({
@@ -206,22 +290,32 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  balloonExpansion: {
+    type: Number,
+    default: 0.2,
+  },
 });
 
 const emit = defineEmits([
   "update:minPhotoCount",
   "update:limit",
   "update:showDots",
+  "update:balloonExpansion",
   "reset-view",
   "filters-changed",
 ]);
 
 const isExpanded = ref(true);
 const expandedSection = ref(null);
+const showNavigationControls = ref(false);
 
 const toggleDisplay = () => {
   expandedSection.value =
     expandedSection.value === "display" ? null : "display";
+};
+
+const toggleNavigationControls = () => {
+  showNavigationControls.value = !showNavigationControls.value;
 };
 
 const LIMIT_VALUES = [1000, 5000, 10000, 20000];
@@ -276,15 +370,15 @@ const emitLimit = () => {
   top: 16px;
   right: 16px;
   z-index: 5;
-  width: 36px;
-  height: 36px;
+  width: 48px;
+  height: 48px;
   display: flex;
   align-items: center;
+  border-radius: 50%;
   justify-content: center;
   background: var(--bg-card, rgba(20, 20, 28, 0.78));
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
   cursor: pointer;
   transition: background 0.2s;
   touch-action: manipulation;
@@ -303,7 +397,7 @@ const emitLimit = () => {
   position: absolute;
   top: 16px;
   right: 16px;
-  width: 240px;
+  width: 300px;
   max-height: calc(100vh - 32px);
   background: var(--bg-card, rgba(20, 20, 28, 0.78));
   border-radius: 12px;
@@ -492,5 +586,79 @@ const emitLimit = () => {
 
 .control-panel::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+.controls-info {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 4px;
+  padding: 12px;
+  margin-top: 12px;
+  animation: slideDown 0.3s ease-out;
+}
+
+.control-tip {
+  margin: 8px 0;
+  color: var(--text-secondary, #a0aec0);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.control-tip:last-child {
+  margin-bottom: 0;
+}
+
+.control-icon-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.control-text {
+  color: var(--text-secondary, #a0aec0);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.keyboard-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 13px;
+  height: 13px;
+  padding: 2px 5px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.12),
+    rgba(255, 255, 255, 0.04)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 3px;
+  color: var(--text-primary, #ffffff);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.15),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
+  text-shadow: 0 0.5px 0.5px rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
+}
+
+.keyboard-keys-group {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>

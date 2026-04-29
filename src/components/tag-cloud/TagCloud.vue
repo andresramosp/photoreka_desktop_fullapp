@@ -47,6 +47,7 @@
       v-model:minPhotoCount="minPhotoCount"
       v-model:limit="limit"
       v-model:showDots="showDots"
+      v-model:balloonExpansion="balloonExpansion"
       :tagCount="tags.length"
       :totalCandidates="metadata?.totalCandidates ?? null"
       @filters-changed="onFiltersChanged"
@@ -138,6 +139,7 @@ const selectionRect = ref(null); // { x, y, w, h } in canvas-relative px
 const minPhotoCount = ref(1);
 const limit = ref(10000);
 const showDots = ref(true);
+const balloonExpansion = ref(0.2);
 
 // ---------------------------------------------------------------------------
 // PIXI handles & layout state
@@ -149,9 +151,15 @@ let labelsContainer = null; // screen-space labels
 let labelsByIndex = new Map(); // persistent labels keyed by tag index
 
 // Parallel typed arrays (indexed like `tags.value`)
-let positions = null; // Float32Array [x0,y0,...]
+let positions = null; // Float32Array [x0,y0,...] — current (expanded) positions used for rendering
+let rawPositions = null; // Float32Array [x0,y0,...] — positions before expansion
 let dotRadii = null; // Float32Array
 let dotColors = null; // Uint32Array
+
+// Expansion animation
+let currentExpansionStrength = 0.2;
+const EXPANSION_LERP = 0.1;
+const EXPANSION_EPSILON = 0.0005;
 
 // Camera
 const camera = { x: 0, y: 0, scale: 1 };
@@ -167,6 +175,13 @@ const LABEL_FADE_OUT = 0.3;
 const LABEL_HIDE_THRESHOLD = 0.03;
 const TAG_INTERACTION_MODE = "label-highlight"; // "dot-tooltip" | "label-highlight"
 const LABEL_HIGHLIGHT_TINT = 0x06b6d4;
+
+// Balloon expansion: scales all positions around the centroid (which is origin after centering)
+const computeCosmicScale = (strength) => {
+  const t = Math.max(0, Math.min(1, strength));
+  const eased = t * t; // quadratic ease
+  return 1 + eased * 30; // up to ~31x
+};
 
 // Group color palette
 const GROUP_COLORS = {
@@ -285,6 +300,8 @@ const destroyPixi = () => {
     labelsContainer = null;
     labelsByIndex = new Map();
     hoveredLabelIndex = -1;
+    rawPositions = null;
+    currentExpansionStrength = 0;
   }
 };
 
@@ -338,14 +355,15 @@ const buildScene = () => {
   const cx = (minX + maxX) / 2;
   const cy = (minY + maxY) / 2;
 
+  rawPositions = new Float32Array(N * 2);
   positions = new Float32Array(N * 2);
   dotRadii = new Float32Array(N);
   dotColors = new Uint32Array(N);
 
   for (let i = 0; i < N; i++) {
     const t = tags.value[i];
-    positions[i * 2] = (t.coordinates[0] - cx) * worldScale;
-    positions[i * 2 + 1] = (t.coordinates[1] - cy) * worldScale;
+    rawPositions[i * 2] = (t.coordinates[0] - cx) * worldScale;
+    rawPositions[i * 2 + 1] = (t.coordinates[1] - cy) * worldScale;
 
     const norm = (t.photoCount - minCount) / countSpan;
     const sized = Math.sqrt(norm); // compress dynamic range
@@ -353,8 +371,31 @@ const buildScene = () => {
     dotColors[i] = GROUP_COLORS[t.group] || DEFAULT_COLOR;
   }
 
-  // Group circles by color and draw all of them in a single Graphics
-  // (fewer style switches => fewer batches).
+  // Snap currentExpansionStrength to match balloonExpansion so new loads don't animate in
+  currentExpansionStrength = balloonExpansion.value;
+  applyExpansionToPositions();
+  redrawDots();
+
+  baseScale = 1;
+  dotsGraphics.visible = showDots.value;
+};
+
+// Re-compute `positions` from `rawPositions` at the current expansion strength
+const applyExpansionToPositions = () => {
+  if (!rawPositions || !positions) return;
+  const s = computeCosmicScale(currentExpansionStrength);
+  const N = tags.value.length;
+  for (let i = 0; i < N; i++) {
+    positions[i * 2] = rawPositions[i * 2] * s;
+    positions[i * 2 + 1] = rawPositions[i * 2 + 1] * s;
+  }
+};
+
+// Redraw all dots in dotsGraphics at the current `positions`
+const redrawDots = () => {
+  if (!dotsGraphics || !positions || !dotColors) return;
+  dotsGraphics.clear();
+  const N = tags.value.length;
   const indicesByColor = new Map();
   for (let i = 0; i < N; i++) {
     const c = dotColors[i];
@@ -371,9 +412,6 @@ const buildScene = () => {
     }
     dotsGraphics.fill({ color, alpha: 0.85 });
   }
-
-  baseScale = 1;
-  dotsGraphics.visible = showDots.value;
 };
 
 // ---------------------------------------------------------------------------
@@ -395,9 +433,40 @@ const syncTargetCamera = () => {
 
 const resetView = () => {
   if (!app) return;
-  camera.scale = baseScale;
-  camera.x = app.renderer.width / 2;
-  camera.y = app.renderer.height / 2;
+  const w = app.renderer.width;
+  const h = app.renderer.height;
+  const padding = 80;
+
+  // If positions are available, fit the camera to the actual (expanded) bounding box
+  if (positions && tags.value.length > 0) {
+    const N = tags.value.length;
+    let minX = Infinity,
+      maxX = -Infinity,
+      minY = Infinity,
+      maxY = -Infinity;
+    for (let i = 0; i < N; i++) {
+      const x = positions[i * 2];
+      const y = positions[i * 2 + 1];
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    const spanX = Math.max(1, maxX - minX);
+    const spanY = Math.max(1, maxY - minY);
+    const fitScale = Math.min(
+      (w - padding * 2) / spanX,
+      (h - padding * 2) / spanY,
+    );
+    camera.scale = fitScale;
+    camera.x = w / 2 - ((minX + maxX) / 2) * fitScale;
+    camera.y = h / 2 - ((minY + maxY) / 2) * fitScale;
+  } else {
+    camera.scale = baseScale;
+    camera.x = w / 2;
+    camera.y = h / 2;
+  }
+
   syncTargetCamera();
   applyCamera();
 };
@@ -463,6 +532,21 @@ const onTick = () => {
 
   if (cameraChanged) {
     applyCamera();
+  }
+
+  // Expansion animation
+  const expansionDelta = balloonExpansion.value - currentExpansionStrength;
+  if (Math.abs(expansionDelta) > EXPANSION_EPSILON) {
+    currentExpansionStrength += expansionDelta * EXPANSION_LERP * delta;
+    if (
+      Math.abs(balloonExpansion.value - currentExpansionStrength) <=
+      EXPANSION_EPSILON
+    ) {
+      currentExpansionStrength = balloonExpansion.value;
+    }
+    applyExpansionToPositions();
+    redrawDots();
+    scheduleLabelUpdate();
   }
 
   updateLabelAlphas();
