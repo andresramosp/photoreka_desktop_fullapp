@@ -110,7 +110,7 @@ const isMobile = ref(isMobileDevice());
 
 // Filters
 const minPhotoCount = ref(1);
-const limit = ref(8000);
+const limit = ref(10000);
 const showDots = ref(true);
 
 // ---------------------------------------------------------------------------

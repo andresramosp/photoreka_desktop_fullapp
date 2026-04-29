@@ -70,14 +70,13 @@
               :value="getSliderIndex(localLimit)"
               @update:value="onLimitChange"
               :min="0"
-              :max="4"
+              :max="3"
               :step="1"
               :marks="{
                 0: '1k',
                 1: '5k',
                 2: '10k',
                 3: '20k',
-                4: '30k',
               }"
               class="tag-slider"
               @click.stop
@@ -108,7 +107,7 @@
               :min="0"
               :max="3"
               :step="1"
-              :marks="{ 0: '1', 1: '10', 2: '25', 3: '50+' }"
+              :marks="{ 0: '1', 1: '5', 2: '10', 3: '20' }"
               class="tag-slider"
               @click.stop
             />
@@ -201,7 +200,7 @@ const props = defineProps({
   },
   limit: {
     type: Number,
-    default: 8000,
+    default: 10000,
   },
   showDots: {
     type: Boolean,
@@ -225,8 +224,8 @@ const toggleDisplay = () => {
     expandedSection.value === "display" ? null : "display";
 };
 
-const LIMIT_VALUES = [1000, 5000, 10000, 20000, 30000];
-const MIN_PHOTO_COUNT_VALUES = [1, 10, 25, 50];
+const LIMIT_VALUES = [1000, 5000, 10000, 20000];
+const MIN_PHOTO_COUNT_VALUES = [1, 5, 10, 50];
 
 const localMinPhotoCount = ref(props.minPhotoCount);
 const localLimit = ref(props.limit);
