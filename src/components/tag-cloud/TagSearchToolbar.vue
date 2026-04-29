@@ -25,9 +25,8 @@
             >
           </div>
           <span class="section-title">
-            Photos matching
             <span class="match-count" v-if="!isLoading && totalMatchCount > 0">
-              · {{ totalMatchCount }}
+              {{ totalMatchCount }} Photos
               <template
                 v-if="
                   maxDisplayedPhotos !== null && photos.length < totalMatchCount
@@ -158,7 +157,7 @@ const emit = defineEmits(["close"]);
 
 const photos = ref([]);
 const totalMatchCount = ref(0);
-const maxDisplayedPhotos = ref(500); // null = no limit
+const maxDisplayedPhotos = ref(100); // null = no limit
 const isLoading = ref(false);
 const scrollContainer = ref(null);
 const photosStore = usePhotosStore();
@@ -324,12 +323,16 @@ const runSearch = async () => {
   totalMatchCount.value = 0;
 
   try {
-    const { data: matches } = await api.post("/api/search/tags/direct", {
-      included: tagNames,
-      excluded: [],
-      mode: "OR",
-      semantic: false,
-    });
+    const { data: matches, headers } = await api.post(
+      "/api/search/tags/direct",
+      {
+        included: tagNames,
+        excluded: [],
+        mode: "OR",
+        semantic: false,
+        limit: maxDisplayedPhotos.value,
+      },
+    );
 
     if (requestId !== activeRequestId) return;
 
@@ -342,22 +345,20 @@ const runSearch = async () => {
       return (b.photoId || 0) - (a.photoId || 0);
     });
 
-    totalMatchCount.value = list.length;
+    const totalFromHeader = Number.parseInt(headers["x-total-count"], 10);
+    totalMatchCount.value = Number.isFinite(totalFromHeader)
+      ? totalFromHeader
+      : list.length;
 
     if (list.length === 0) {
       photos.value = [];
       return;
     }
 
-    const limited =
-      maxDisplayedPhotos.value !== null
-        ? list.slice(0, maxDisplayedPhotos.value)
-        : list;
-
     const photoMap = new Map();
     (photosStore.allPhotos || []).forEach((p) => photoMap.set(p.id, p));
 
-    const missing = limited.filter((m) => !photoMap.has(m.photoId));
+    const missing = list.filter((m) => !photoMap.has(m.photoId));
     if (missing.length > 0) {
       const { data: fetched } = await api.post("/api/catalog/photosByIds", {
         photosIds: missing.map((m) => m.photoId),
@@ -366,7 +367,7 @@ const runSearch = async () => {
       (fetched || []).forEach((p) => photoMap.set(p.id, p));
     }
 
-    const merged = limited
+    const merged = list
       .map((m) => {
         const p = photoMap.get(m.photoId);
         if (!p) return null;
