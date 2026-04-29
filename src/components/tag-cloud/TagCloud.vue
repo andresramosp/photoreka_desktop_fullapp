@@ -184,6 +184,7 @@ const GROUP_COLORS = {
 const DEFAULT_COLOR = 0x9ca3af;
 
 let hoveredLabelIndex = -1;
+let selectedTagIds = new Set(); // IDs of tags from the last emitted search
 
 // ---------------------------------------------------------------------------
 // Data loading
@@ -208,6 +209,7 @@ const loadTags = async () => {
     metadata.value = data?.metadata || null;
     hoveredTag.value = null;
     setHoveredLabelIndex(-1);
+    selectedTagIds = new Set();
     await nextTick();
     if (app) {
       clearLabels();
@@ -515,14 +517,18 @@ const hideAllLabels = () => {
 
 const syncLabelInteractionStates = () => {
   for (const [index, label] of labelsByIndex.entries()) {
-    const isHighlighted =
+    const isHovered =
       TAG_INTERACTION_MODE === "label-highlight" &&
       index === hoveredLabelIndex &&
       label.visible &&
       (label.targetAlpha ?? 0) > 0;
+    const isSelected =
+      selectedTagIds.size > 0 &&
+      tags.value[index] != null &&
+      selectedTagIds.has(tags.value[index].id);
 
-    label.tint = isHighlighted ? LABEL_HIGHLIGHT_TINT : 0xffffff;
-    label.scale.set(isHighlighted ? 1.04 : 1);
+    label.tint = isHovered || isSelected ? LABEL_HIGHLIGHT_TINT : 0xffffff;
+    label.scale.set(isHovered ? 1.04 : 1);
   }
 };
 
@@ -903,6 +909,17 @@ const onPointerMove = (e) => {
   updateCanvasCursor();
 };
 
+const emitTagsSelected = (selectedTags) => {
+  selectedTagIds = new Set(selectedTags.map((t) => t.id));
+  syncLabelInteractionStates();
+  emit("tags-selected", selectedTags);
+};
+
+const clearSelection = () => {
+  selectedTagIds.clear();
+  syncLabelInteractionStates();
+};
+
 const onPointerUp = (e) => {
   if (isSelecting) {
     isSelecting = false;
@@ -914,14 +931,14 @@ const onPointerUp = (e) => {
     ) {
       const found = getTagsInScreenRect(r.x, r.y, r.x + r.w, r.y + r.h);
       if (found.length > 0) {
-        emit("tags-selected", found);
+        emitTagsSelected(found);
       }
     } else if (r && e) {
       // Treat as a click on a single visible label
       const { x, y } = getCanvasPoint(e.clientX, e.clientY);
       const idx = findVisibleLabelAtScreen(x, y);
       if (idx >= 0) {
-        emit("tags-selected", [tags.value[idx]]);
+        emitTagsSelected([tags.value[idx]]);
       }
     }
     updateCanvasCursor();
@@ -976,9 +993,11 @@ const onCanvasClick = (e) => {
   const rect = app.canvas.getBoundingClientRect();
   const sx = e.clientX - rect.left;
   const sy = e.clientY - rect.top;
+  // Visible label takes priority; fall back to dot hit-test
   const labelIndex = findVisibleLabelAtScreen(sx, sy);
-  if (labelIndex >= 0) {
-    emit("tags-selected", [tags.value[labelIndex]]);
+  const index = labelIndex >= 0 ? labelIndex : findTagAtScreen(sx, sy);
+  if (index >= 0) {
+    emitTagsSelected([tags.value[index]]);
   }
 };
 
@@ -1005,6 +1024,10 @@ onBeforeUnmount(() => {
   if (labelUpdateRaf) cancelAnimationFrame(labelUpdateRaf);
   unbindInteractions();
   destroyPixi();
+});
+
+defineExpose({
+  clearSelection,
 });
 </script>
 
