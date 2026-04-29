@@ -149,7 +149,7 @@ const isMobile = ref(isMobileDevice());
 const selectionRect = ref(null); // { x, y, w, h } in canvas-relative px
 
 // Filters
-const minPhotoCount = ref(1);
+const minPhotoCount = ref(5);
 const limit = ref(10000);
 const showDots = ref(true);
 const balloonExpansion = ref(0.2);
