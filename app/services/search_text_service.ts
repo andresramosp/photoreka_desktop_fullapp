@@ -786,7 +786,8 @@ export default class SearchTextService {
     excludedTags: string[],
     userId: string | number,
     mode: 'AND' | 'OR' = 'AND',
-    semantic: boolean = false
+    semantic: boolean = false,
+    limit?: number | null
   ) {
     const db = await import('@adonisjs/lucid/services/db').then((mod) => mod.default)
 
@@ -1037,6 +1038,9 @@ export default class SearchTextService {
       }
     }
 
-    return results
+    return {
+      results: typeof limit === 'number' ? results.slice(0, limit) : results,
+      totalCount: results.length,
+    }
   }
 }

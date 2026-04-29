@@ -201,14 +201,18 @@ export default class SearchController {
 
       const searchService = new SearchTextService()
 
-      const { included = [], excluded = [], mode = 'AND', semantic = false } = request.body()
+      const { included = [], excluded = [], mode = 'AND', semantic = false, limit } =
+        request.body()
+      const parsedLimit = Number(limit)
+      const normalizedLimit = Number.isInteger(parsedLimit) && parsedLimit > 0 ? parsedLimit : null
 
-      const result = await searchService.searchByTagsDirect(
+      const { results, totalCount } = await searchService.searchByTagsDirect(
         included,
         excluded,
         user.id,
         mode,
-        semantic
+        semantic,
+        normalizedLimit
       )
 
       UserCostService.recordFromTracker(user.id, searchService.costTracker).catch(() => {})
@@ -218,7 +222,10 @@ export default class SearchController {
         CreditService.charge(user.id, summary.totalCostInEur).catch(() => {})
       }
 
-      return response.ok(result)
+      response.header('X-Total-Count', totalCount.toString())
+      response.header('Access-Control-Expose-Headers', 'X-Total-Count')
+
+      return response.ok(results)
     } catch (error) {
       console.error('Error fetching photos:', error)
       return response.internalServerError({ message: 'Error fetching photos' })
