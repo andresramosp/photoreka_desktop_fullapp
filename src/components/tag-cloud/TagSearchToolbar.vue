@@ -7,20 +7,34 @@
     <div class="toolbar-content">
       <div class="toolbar-header">
         <div class="header-left">
-          <div class="selected-tags-row">
+          <div class="selected-tags-row" ref="tagsRowRef">
             <span
-              v-for="tag in selectedTags"
+              v-for="(tag, index) in selectedTags"
               :key="tag.id"
               class="selected-tag-chip"
               :title="tag.name"
+              v-show="index < visibleTagCount"
             >
               {{ tag.name }}
             </span>
+            <span
+              v-if="selectedTags.length - visibleTagCount > 0"
+              class="selected-tag-chip overflow-count-chip"
+              :title="`${selectedTags.length - visibleTagCount} more tags`"
+              >+{{ selectedTags.length - visibleTagCount }}</span
+            >
           </div>
           <span class="section-title">
             Photos matching
-            <span class="match-count" v-if="!isLoading && photos.length > 0">
-              · {{ photos.length }}
+            <span class="match-count" v-if="!isLoading && totalMatchCount > 0">
+              · {{ totalMatchCount }}
+              <template
+                v-if="
+                  maxDisplayedPhotos !== null && photos.length < totalMatchCount
+                "
+              >
+                <span class="showing-count">(showing {{ photos.length }})</span>
+              </template>
             </span>
           </span>
         </div>
@@ -119,7 +133,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { NIcon, NSkeleton } from "naive-ui";
 import { CloseOutlined } from "@vicons/antd";
 import PhotoCard from "../photoCards/PhotoCard.vue";
@@ -143,10 +157,60 @@ const props = defineProps({
 const emit = defineEmits(["close"]);
 
 const photos = ref([]);
+const totalMatchCount = ref(0);
+const maxDisplayedPhotos = ref(500); // null = no limit
 const isLoading = ref(false);
 const scrollContainer = ref(null);
 const photosStore = usePhotosStore();
 let activeRequestId = 0;
+
+// Tag overflow measurement
+const tagsRowRef = ref(null);
+const visibleTagCount = ref(Infinity);
+
+const measureVisibleTags = () => {
+  visibleTagCount.value = Infinity;
+  nextTick(() => {
+    const container = tagsRowRef.value;
+    if (!container || !props.selectedTags.length) {
+      visibleTagCount.value = props.selectedTags.length;
+      return;
+    }
+    const chips = [
+      ...container.querySelectorAll(
+        ".selected-tag-chip:not(.overflow-count-chip)",
+      ),
+    ];
+    if (!chips.length) return;
+    const cw = container.clientWidth;
+    const gap = 6;
+    const overflowW = 44; // reserved px for "+N" chip
+    const widths = chips.map((el) => el.getBoundingClientRect().width);
+    const total = widths.reduce((s, w, i) => s + w + (i ? gap : 0), 0);
+    if (total <= cw) {
+      visibleTagCount.value = chips.length;
+      return;
+    }
+    let acc = 0;
+    let count = 0;
+    for (let i = 0; i < widths.length; i++) {
+      const w = widths[i] + (i ? gap : 0);
+      if (acc + w + gap + overflowW <= cw) {
+        acc += w;
+        count++;
+      } else break;
+    }
+    visibleTagCount.value = Math.max(1, count);
+  });
+};
+
+let resizeObserver = null;
+onMounted(() => {
+  resizeObserver = new ResizeObserver(measureVisibleTags);
+  if (tagsRowRef.value) resizeObserver.observe(tagsRowRef.value);
+  measureVisibleTags();
+});
+onUnmounted(() => resizeObserver?.disconnect());
 
 // Photo info dialog
 const showPhotoInfoDialog = ref(false);
@@ -257,6 +321,7 @@ const runSearch = async () => {
   const requestId = ++activeRequestId;
   isLoading.value = true;
   photos.value = [];
+  totalMatchCount.value = 0;
 
   try {
     const { data: matches } = await api.post("/api/search/tags/direct", {
@@ -277,15 +342,22 @@ const runSearch = async () => {
       return (b.photoId || 0) - (a.photoId || 0);
     });
 
+    totalMatchCount.value = list.length;
+
     if (list.length === 0) {
       photos.value = [];
       return;
     }
 
+    const limited =
+      maxDisplayedPhotos.value !== null
+        ? list.slice(0, maxDisplayedPhotos.value)
+        : list;
+
     const photoMap = new Map();
     (photosStore.allPhotos || []).forEach((p) => photoMap.set(p.id, p));
 
-    const missing = list.filter((m) => !photoMap.has(m.photoId));
+    const missing = limited.filter((m) => !photoMap.has(m.photoId));
     if (missing.length > 0) {
       const { data: fetched } = await api.post("/api/catalog/photosByIds", {
         photosIds: missing.map((m) => m.photoId),
@@ -294,7 +366,7 @@ const runSearch = async () => {
       (fetched || []).forEach((p) => photoMap.set(p.id, p));
     }
 
-    const merged = list
+    const merged = limited
       .map((m) => {
         const p = photoMap.get(m.photoId);
         if (!p) return null;
@@ -330,6 +402,7 @@ const runSearch = async () => {
 watch(
   () => props.selectedTags,
   (next) => {
+    measureVisibleTags();
     if (!next || next.length === 0) {
       photos.value = [];
       activeRequestId++;
@@ -404,12 +477,18 @@ watch(
   font-weight: 400;
 }
 
+.showing-count {
+  color: #6b7280;
+  font-size: 11px;
+}
+
 .selected-tags-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
-  max-height: 44px;
   overflow: hidden;
+  align-items: center;
+  min-width: 0;
 }
 
 .selected-tag-chip {
@@ -426,6 +505,16 @@ watch(
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.overflow-count-chip {
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.06);
+  color: #9ca3af;
+  border-color: rgba(255, 255, 255, 0.15);
+  max-width: none;
+  cursor: default;
 }
 
 .toolbar-close {

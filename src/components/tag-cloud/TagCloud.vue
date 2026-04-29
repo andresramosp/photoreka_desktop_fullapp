@@ -47,6 +47,8 @@
       v-model:minPhotoCount="minPhotoCount"
       v-model:limit="limit"
       v-model:showDots="showDots"
+      v-model:dynamicSearch="dynamicSearch"
+      v-model:maxSearchTags="maxSearchTags"
       v-model:balloonExpansion="balloonExpansion"
       :tagCount="tags.length"
       :totalCandidates="metadata?.totalCandidates ?? null"
@@ -152,6 +154,8 @@ const selectionRect = ref(null); // { x, y, w, h } in canvas-relative px
 const minPhotoCount = ref(5);
 const limit = ref(10000);
 const showDots = ref(true);
+const dynamicSearch = ref(false);
+const maxSearchTags = ref(20);
 const balloonExpansion = ref(0.2);
 
 // ---------------------------------------------------------------------------
@@ -215,6 +219,10 @@ const DEFAULT_COLOR = 0x9ca3af;
 
 let hoveredLabelIndex = -1;
 let selectedTagIds = new Set(); // IDs of tags from the last emitted search
+let dynamicSearchTimer = null;
+let lastDynamicSearchSignature = null;
+
+const DYNAMIC_SEARCH_DEBOUNCE_MS = 350;
 
 // ---------------------------------------------------------------------------
 // Data loading
@@ -269,6 +277,29 @@ const onFiltersChanged = () => {
 
 watch(showDots, (val) => {
   if (dotsGraphics) dotsGraphics.visible = val;
+});
+
+watch(dynamicSearch, (enabled) => {
+  selectedTagIds.clear();
+  syncLabelInteractionStates();
+
+  if (!enabled) {
+    if (dynamicSearchTimer) {
+      clearTimeout(dynamicSearchTimer);
+      dynamicSearchTimer = null;
+    }
+    lastDynamicSearchSignature = null;
+    emit("tags-selected", []);
+    return;
+  }
+
+  scheduleDynamicSearchEmit(true);
+});
+
+watch(maxSearchTags, () => {
+  if (!dynamicSearch.value) return;
+  lastDynamicSearchSignature = null;
+  scheduleDynamicSearchEmit(true);
 });
 
 watch(hoveredTag, () => {
@@ -444,7 +475,7 @@ const applyCamera = () => {
   world.x = camera.x;
   world.y = camera.y;
   world.scale.set(camera.scale, camera.scale);
-  scheduleLabelUpdate();
+  scheduleLabelUpdate(true);
 };
 
 const syncTargetCamera = () => {
@@ -568,7 +599,7 @@ const onTick = () => {
     }
     applyExpansionToPositions();
     redrawDots();
-    scheduleLabelUpdate();
+    scheduleLabelUpdate(true);
   }
 
   updateLabelAlphas();
@@ -580,12 +611,17 @@ const onTick = () => {
 const BASE_MAX_VISIBLE_LABELS = 250;
 const MAX_MAX_VISIBLE_LABELS = 1400;
 let labelUpdateRaf = null;
+let pendingDynamicSearchRefresh = false;
 
-const scheduleLabelUpdate = () => {
+const scheduleLabelUpdate = (refreshDynamicSearch = false) => {
+  pendingDynamicSearchRefresh =
+    pendingDynamicSearchRefresh || refreshDynamicSearch;
   if (labelUpdateRaf) return;
   labelUpdateRaf = requestAnimationFrame(() => {
+    const shouldRefreshDynamicSearch = pendingDynamicSearchRefresh;
     labelUpdateRaf = null;
-    updateLabels();
+    pendingDynamicSearchRefresh = false;
+    updateLabels(shouldRefreshDynamicSearch);
   });
 };
 
@@ -774,6 +810,79 @@ const rectCollides = (grid, cellKey, rect, cellSize) => {
   return false;
 };
 
+const getViewportVisibleTags = () => {
+  if (!app) return [];
+
+  const viewportRect = {
+    x1: 0,
+    y1: 0,
+    x2: app.renderer.width,
+    y2: app.renderer.height,
+  };
+  const visibleTags = [];
+
+  for (const [index, label] of labelsByIndex.entries()) {
+    if (
+      !label.visible ||
+      (label.targetAlpha ?? 0) <= 0 ||
+      !label.hitRect ||
+      !tags.value[index]
+    ) {
+      continue;
+    }
+
+    const rect = label.hitRect;
+    const intersectsViewport =
+      rect.x1 < viewportRect.x2 &&
+      rect.x2 > viewportRect.x1 &&
+      rect.y1 < viewportRect.y2 &&
+      rect.y2 > viewportRect.y1;
+
+    if (!intersectsViewport) continue;
+
+    visibleTags.push(tags.value[index]);
+  }
+
+  visibleTags.sort((left, right) => {
+    const photoCountDiff = (right.photoCount || 0) - (left.photoCount || 0);
+    if (photoCountDiff !== 0) return photoCountDiff;
+    return String(left.name || "").localeCompare(String(right.name || ""));
+  });
+
+  return visibleTags.slice(0, Math.max(1, maxSearchTags.value || 1));
+};
+
+const emitDynamicSearchSelection = () => {
+  dynamicSearchTimer = null;
+  if (!dynamicSearch.value) return;
+
+  const visibleTags = getViewportVisibleTags();
+  const signature = visibleTags.map((tag) => tag.id).join(",");
+  if (signature === lastDynamicSearchSignature) return;
+
+  lastDynamicSearchSignature = signature;
+  emit("tags-selected", visibleTags);
+};
+
+const scheduleDynamicSearchEmit = (immediate = false) => {
+  if (!dynamicSearch.value) return;
+
+  if (dynamicSearchTimer) {
+    clearTimeout(dynamicSearchTimer);
+    dynamicSearchTimer = null;
+  }
+
+  if (immediate) {
+    emitDynamicSearchSelection();
+    return;
+  }
+
+  dynamicSearchTimer = setTimeout(
+    emitDynamicSearchSelection,
+    DYNAMIC_SEARCH_DEBOUNCE_MS,
+  );
+};
+
 const placeLabelAtIndex = (index, grid, cellKey, cellSize, force = false) => {
   if (index < 0 || index >= tags.value.length) return false;
 
@@ -820,9 +929,14 @@ const placeLabelAtIndex = (index, grid, cellKey, cellSize, force = false) => {
   return true;
 };
 
-const updateLabels = () => {
+const updateLabels = (refreshDynamicSearch = false) => {
   hideAllLabels();
-  if (!app || !positions || tags.value.length === 0) return;
+  if (!app || !positions || tags.value.length === 0) {
+    if (refreshDynamicSearch) {
+      scheduleDynamicSearchEmit();
+    }
+    return;
+  }
 
   const w = app.renderer.width;
   const h = app.renderer.height;
@@ -871,6 +985,9 @@ const updateLabels = () => {
   }
 
   syncLabelInteractionStates();
+  if (refreshDynamicSearch) {
+    scheduleDynamicSearchEmit();
+  }
 };
 
 // ---------------------------------------------------------------------------
@@ -1054,6 +1171,7 @@ const onPointerMove = (e) => {
 };
 
 const emitTagsSelected = (selectedTags) => {
+  if (dynamicSearch.value) return;
   selectedTagIds = new Set(selectedTags.map((t) => t.id));
   syncLabelInteractionStates();
   emit("tags-selected", selectedTags);
@@ -1166,6 +1284,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (filterDebounceTimer) clearTimeout(filterDebounceTimer);
   if (labelUpdateRaf) cancelAnimationFrame(labelUpdateRaf);
+  if (dynamicSearchTimer) clearTimeout(dynamicSearchTimer);
   unbindInteractions();
   destroyPixi();
 });

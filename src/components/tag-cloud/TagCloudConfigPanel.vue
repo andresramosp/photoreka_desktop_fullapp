@@ -112,6 +112,65 @@
               @click.stop
             />
           </div>
+          <div class="control-item-row">
+            <div class="control-item-label">
+              <span>Dynamic search</span>
+              <n-tooltip trigger="hover" placement="top">
+                <template #trigger>
+                  <n-icon
+                    size="12"
+                    color="var(--text-secondary)"
+                    class="info-icon"
+                  >
+                    <InfoCircleFilled />
+                  </n-icon>
+                </template>
+                Search photos using all tag labels currently visible in the
+                viewport
+              </n-tooltip>
+            </div>
+            <n-switch
+              :value="dynamicSearch"
+              @update:value="(v) => emit('update:dynamicSearch', v)"
+              size="small"
+              @click.stop
+            />
+          </div>
+          <div
+            v-if="false"
+            class="control-item-full"
+            @pointerup="emitMaxSearchTags"
+          >
+            <div class="slider-header">
+              <div class="control-item-label">
+                <span>Max search tags</span>
+                <n-tooltip trigger="hover" placement="top">
+                  <template #trigger>
+                    <n-icon
+                      size="12"
+                      color="var(--text-secondary)"
+                      class="info-icon"
+                    >
+                      <InfoCircleFilled />
+                    </n-icon>
+                  </template>
+                  Limit how many visible tags are used for dynamic search. When
+                  there are more, the most prominent tags are kept first.
+                </n-tooltip>
+              </div>
+              <span class="slider-value">{{ localMaxSearchTags }}</span>
+            </div>
+            <n-slider
+              :value="getMaxSearchTagsSliderIndex(localMaxSearchTags)"
+              @update:value="onMaxSearchTagsChange"
+              :min="0"
+              :max="4"
+              :step="1"
+              :marks="{ 0: '5', 1: '10', 2: '20', 3: '35', 4: '50' }"
+              class="tag-slider"
+              @click.stop
+            />
+          </div>
         </div>
       </div>
 
@@ -290,6 +349,14 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  dynamicSearch: {
+    type: Boolean,
+    default: false,
+  },
+  maxSearchTags: {
+    type: Number,
+    default: 10,
+  },
   balloonExpansion: {
     type: Number,
     default: 0.2,
@@ -300,6 +367,8 @@ const emit = defineEmits([
   "update:minPhotoCount",
   "update:limit",
   "update:showDots",
+  "update:dynamicSearch",
+  "update:maxSearchTags",
   "update:balloonExpansion",
   "reset-view",
   "filters-changed",
@@ -320,9 +389,11 @@ const toggleNavigationControls = () => {
 
 const LIMIT_VALUES = [1000, 5000, 10000, 20000];
 const MIN_PHOTO_COUNT_VALUES = [1, 5, 10, 50];
+const MAX_SEARCH_TAG_VALUES = [5, 10, 20, 35, 50];
 
 const localMinPhotoCount = ref(props.minPhotoCount);
 const localLimit = ref(props.limit);
+const localMaxSearchTags = ref(props.maxSearchTags);
 
 watch(
   () => props.minPhotoCount,
@@ -336,6 +407,12 @@ watch(
     localLimit.value = v;
   },
 );
+watch(
+  () => props.maxSearchTags,
+  (v) => {
+    localMaxSearchTags.value = v;
+  },
+);
 
 const getSliderIndex = (value) => {
   return LIMIT_VALUES.indexOf(value);
@@ -343,6 +420,10 @@ const getSliderIndex = (value) => {
 
 const getMinPhotoCountSliderIndex = (value) => {
   return MIN_PHOTO_COUNT_VALUES.indexOf(value);
+};
+
+const getMaxSearchTagsSliderIndex = (value) => {
+  return MAX_SEARCH_TAG_VALUES.indexOf(value);
 };
 
 const onMinPhotoCountChange = (index) => {
@@ -353,6 +434,10 @@ const onLimitChange = (index) => {
   localLimit.value = LIMIT_VALUES[index];
 };
 
+const onMaxSearchTagsChange = (index) => {
+  localMaxSearchTags.value = MAX_SEARCH_TAG_VALUES[index];
+};
+
 const emitMinPhotoCount = () => {
   emit("update:minPhotoCount", localMinPhotoCount.value);
   emit("filters-changed");
@@ -361,6 +446,10 @@ const emitMinPhotoCount = () => {
 const emitLimit = () => {
   emit("update:limit", localLimit.value);
   emit("filters-changed");
+};
+
+const emitMaxSearchTags = () => {
+  emit("update:maxSearchTags", localMaxSearchTags.value);
 };
 </script>
 

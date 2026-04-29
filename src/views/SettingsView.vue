@@ -566,7 +566,7 @@ import CreditPurchaseModal from "@/components/CreditPurchaseModal.vue";
 // Toggle: set to true to enable real purchase modals,
 //         set to false to show "coming soon" placeholder modal.
 // ============================================================
-const ENABLE_REAL_PURCHASE = false;
+const ENABLE_REAL_PURCHASE = true;
 
 // Stores and composables
 const userStore = useUserStore();
