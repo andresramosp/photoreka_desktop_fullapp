@@ -122,7 +122,7 @@ export const TOOLS_CONFIG = [
     description: "Browse your tags clustered by semantic proximity",
     icon: "WordCloud",
     route: "/tagcloud",
-    availableOn: TOOL_AVAILABILITY.BOTH,
+    availableOn: TOOL_AVAILABILITY.DESKTOP_ONLY,
     menuSection: "explore",
     showInPhotoSelector: false,
   },
