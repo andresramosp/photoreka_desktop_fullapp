@@ -59,17 +59,63 @@
               v-for="photo in photos"
               :key="photo.id"
               :photo="photo"
-              :selected="false"
+              :selected="!!selectedPhotosRecord[photo.id]"
               :show-tags="true"
               :show-info-button="true"
               @info="onPhotoInfo"
+              @select="togglePhotoSelection"
             />
           </template>
         </div>
         <div class="scroll-safe-zone"></div>
       </div>
     </div>
+
+    <!-- Photo Info Dialog -->
+    <PhotoInfoDialog
+      v-model="showPhotoInfoDialog"
+      :selected-photo="selectedDialogPhoto"
+      :all-photos="photos"
+      :current-photo-index="currentPhotoIndex"
+      :show-delete="false"
+      @photo-navigate="handlePhotoNavigate"
+      @change-photo="selectedDialogPhoto = $event"
+    />
+
+    <!-- Collection Modal -->
+    <CollectionModal
+      :show="showCollectionModal"
+      :photo-count="selectedPhotoIds.length"
+      :photo-ids="selectedPhotoIds"
+      @add-to-collection="handleCollectionAdded"
+      @add-to-series="handleCollectionAdded"
+      @cancel="showCollectionModal = false"
+    />
+
+    <!-- Photo Tool Selector -->
+    <PhotoToolSelector
+      :show="showToolSelector"
+      :photo-count="selectedPhotoIds.length"
+      :is-processing="isProcessingTool"
+      @tool-selected="handleToolSelected"
+      @close="closeToolSelector"
+    />
   </div>
+
+  <!-- Floating Action Bar (fixed, outside toolbar positioning context) -->
+  <FloatingActionBar
+    :selected-ids="selectedPhotoIds"
+    :show-delete="false"
+    :show-add-to-collection="true"
+    :show-move-to-tool="true"
+    :show-send-to-chat="true"
+    :is-downloading="isDownloading"
+    @clear-selection="clearAllSelections"
+    @download="handleDownloadMultiple"
+    @add-to-collection="handleAddToCollection"
+    @move-to-tool="openToolSelector"
+    @send-to-chat="handleSendToChat"
+  />
 </template>
 
 <script setup>
@@ -77,8 +123,15 @@ import { ref, computed, watch, nextTick } from "vue";
 import { NIcon, NSkeleton } from "naive-ui";
 import { CloseOutlined } from "@vicons/antd";
 import PhotoCard from "../photoCards/PhotoCard.vue";
+import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
+import FloatingActionBar from "@/components/FloatingActionBar.vue";
+import CollectionModal from "@/components/CollectionModal.vue";
+import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import { api } from "@/utils/axios";
 import { usePhotosStore } from "@/stores/photos.js";
+import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
+import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection.js";
+import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 
 const props = defineProps({
   selectedTags: {
@@ -87,13 +140,41 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["close", "photo-info"]);
+const emit = defineEmits(["close"]);
 
 const photos = ref([]);
 const isLoading = ref(false);
 const scrollContainer = ref(null);
 const photosStore = usePhotosStore();
 let activeRequestId = 0;
+
+// Photo info dialog
+const showPhotoInfoDialog = ref(false);
+const selectedDialogPhoto = ref(null);
+
+// Selection
+const {
+  selectedPhotosRecord,
+  selectedPhotoIds,
+  togglePhotoSelection,
+  clearAllSelections,
+} = useLocalPhotoSelection();
+
+// Download
+const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
+
+// Tool selection
+const {
+  isProcessing: isProcessingTool,
+  showToolSelector,
+  takeToTool,
+  takeToChat,
+  openToolSelector,
+  closeToolSelector,
+} = usePhotoToolSelection();
+
+// Collection modal
+const showCollectionModal = ref(false);
 
 const isVisible = computed(
   () =>
@@ -106,8 +187,58 @@ const closeToolbar = () => {
   emit("close");
 };
 
-const onPhotoInfo = (photo) => {
-  emit("photo-info", photo);
+const currentPhotoIndex = computed(() => {
+  if (!selectedDialogPhoto.value) return -1;
+  return photos.value.findIndex((p) => p.id === selectedDialogPhoto.value.id);
+});
+
+const onPhotoInfo = async (photo) => {
+  const fullPhoto = await photosStore.fetchPhoto(photo.id);
+  selectedDialogPhoto.value = fullPhoto;
+  showPhotoInfoDialog.value = true;
+};
+
+const handlePhotoNavigate = async (newIndex) => {
+  if (newIndex < 0 || newIndex >= photos.value.length) return;
+  const photo = photos.value[newIndex];
+  const fullPhoto = await photosStore.fetchPhoto(photo.id);
+  selectedDialogPhoto.value = fullPhoto;
+};
+
+const handleDownloadMultiple = async () => {
+  const photosToDownload = selectedPhotoIds.value
+    .map((id) => photos.value.find((p) => p.id == id))
+    .filter(Boolean);
+  if (photosToDownload.length === 1) {
+    await downloadPhoto(photosToDownload[0]);
+  } else {
+    await downloadPhotosZip(photosToDownload);
+  }
+};
+
+const handleAddToCollection = () => {
+  if (selectedPhotoIds.value.length > 0) {
+    showCollectionModal.value = true;
+  }
+};
+
+const handleCollectionAdded = () => {
+  clearAllSelections();
+  showCollectionModal.value = false;
+};
+
+const handleToolSelected = async (toolId, canvasId = null) => {
+  await takeToTool(
+    toolId,
+    selectedPhotoIds.value,
+    clearAllSelections,
+    canvasId,
+  );
+  closeToolSelector();
+};
+
+const handleSendToChat = async () => {
+  await takeToChat(selectedPhotoIds.value, clearAllSelections);
 };
 
 const handleHorizontalScroll = (e) => {

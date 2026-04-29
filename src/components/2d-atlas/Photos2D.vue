@@ -636,6 +636,11 @@ const SCALE_FACTOR = 50;
 // Avoid 0 to prevent division-by-zero and unstable transforms.
 const MIN_SCALE = 0.05;
 const MAX_SCALE = 12;
+const ZOOM_SENSITIVITY = 0.0035;
+const CAMERA_LERP = 0.18;
+const CAMERA_EPSILON = 0.001;
+const targetCamera = { x: 0, y: 0, scale: 1 };
+let lastAnimationTick = 0;
 
 const clampScale = (value) => {
   const v = Number(value);
@@ -666,15 +671,81 @@ const screenToWorld = (screenX, screenY, scl = scale.value) => {
   };
 };
 
-const applyZoomAboutScreenPoint = (screenX, screenY, newScaleRaw) => {
-  const oldScale = Number(scale.value) || 1;
+const syncTargetCamera = () => {
+  targetCamera.x = offsetX.value;
+  targetCamera.y = offsetY.value;
+  targetCamera.scale = scale.value;
+};
+
+const applyZoomAboutScreenPoint = (
+  screenX,
+  screenY,
+  newScaleRaw,
+  cameraState = null,
+) => {
+  const currentX = cameraState ? cameraState.x : offsetX.value;
+  const currentY = cameraState ? cameraState.y : offsetY.value;
+  const oldScale = Number(cameraState ? cameraState.scale : scale.value) || 1;
   const newScale = clampScale(newScaleRaw);
-  if (newScale === oldScale) return;
+  if (newScale === oldScale) return false;
 
   const scaleChange = newScale / oldScale;
-  scale.value = newScale;
-  offsetX.value = screenX - (screenX - offsetX.value) * scaleChange;
-  offsetY.value = screenY - (screenY - offsetY.value) * scaleChange;
+  const nextX = screenX - (screenX - currentX) * scaleChange;
+  const nextY = screenY - (screenY - currentY) * scaleChange;
+
+  if (cameraState) {
+    cameraState.x = nextX;
+    cameraState.y = nextY;
+    cameraState.scale = newScale;
+  } else {
+    scale.value = newScale;
+    offsetX.value = nextX;
+    offsetY.value = nextY;
+  }
+
+  return true;
+};
+
+const hasPendingCameraAnimation = () => {
+  return (
+    Math.abs(targetCamera.x - offsetX.value) > CAMERA_EPSILON ||
+    Math.abs(targetCamera.y - offsetY.value) > CAMERA_EPSILON ||
+    Math.abs(targetCamera.scale - scale.value) > CAMERA_EPSILON
+  );
+};
+
+const updateCameraTowardsTarget = (deltaFrames = 1) => {
+  const lerpFactor = 1 - Math.pow(1 - CAMERA_LERP, Math.max(1, deltaFrames));
+  const dx = targetCamera.x - offsetX.value;
+  const dy = targetCamera.y - offsetY.value;
+  const ds = targetCamera.scale - scale.value;
+
+  if (
+    Math.abs(dx) <= CAMERA_EPSILON &&
+    Math.abs(dy) <= CAMERA_EPSILON &&
+    Math.abs(ds) <= CAMERA_EPSILON
+  ) {
+    offsetX.value = targetCamera.x;
+    offsetY.value = targetCamera.y;
+    scale.value = targetCamera.scale;
+    return false;
+  }
+
+  offsetX.value += dx * lerpFactor;
+  offsetY.value += dy * lerpFactor;
+  scale.value += ds * lerpFactor;
+
+  if (Math.abs(targetCamera.x - offsetX.value) <= CAMERA_EPSILON) {
+    offsetX.value = targetCamera.x;
+  }
+  if (Math.abs(targetCamera.y - offsetY.value) <= CAMERA_EPSILON) {
+    offsetY.value = targetCamera.y;
+  }
+  if (Math.abs(targetCamera.scale - scale.value) <= CAMERA_EPSILON) {
+    scale.value = targetCamera.scale;
+  }
+
+  return true;
 };
 
 // Canvas interaction cleanup (listeners must be removed manually)
@@ -890,6 +961,7 @@ const initPixi = async () => {
   offsetX.value = pixiContainer.value.clientWidth / 2;
   offsetY.value = pixiContainer.value.clientHeight / 2;
   scale.value = 1;
+  syncTargetCamera();
   updateContainerTransform();
 
   // If patterns are enabled, place the tag once Pixi is ready.
@@ -1036,6 +1108,7 @@ const updateKeyboardPan = () => {
     offsetX.value += dx;
     offsetY.value += dy;
     updateContainerTransform();
+    syncTargetCamera();
   }
 
   // Continue loop
@@ -1081,15 +1154,13 @@ const handleWheel = (e) => {
   const mouseX = e.clientX - rect.left;
   const mouseY = e.clientY - rect.top;
 
-  const oldScale = scale.value;
-  const scaleBy = 1.1;
-  const direction = e.deltaY > 0 ? -1 : 1;
-  const newScale = direction > 0 ? oldScale * scaleBy : oldScale / scaleBy;
+  const factor = Math.exp(-e.deltaY * ZOOM_SENSITIVITY);
+  const newScale = clampScale(targetCamera.scale * factor);
+  if (!applyZoomAboutScreenPoint(mouseX, mouseY, newScale, targetCamera)) {
+    return;
+  }
 
-  // Zoom towards mouse position
-  applyZoomAboutScreenPoint(mouseX, mouseY, newScale);
-
-  updateContainerTransform();
+  startAnimationLoop();
   // LOD update only after wheel interaction settles (debounced)
   scheduleLodUpdate();
   scheduleHiResUpdate();
@@ -1117,6 +1188,7 @@ const handleMouseMove = (e) => {
 
   lastPointerPosition.value = { x: e.clientX, y: e.clientY };
   updateContainerTransform();
+  syncTargetCamera();
   // Do NOT schedule LOD during drag — wait until mouseUp
 };
 
@@ -1204,6 +1276,7 @@ const handleTouchMove = (e) => {
     lastPinchWorld.value = screenToWorld(mid.x, mid.y, newScale);
 
     updateContainerTransform();
+    syncTargetCamera();
     // Do NOT schedule LOD during pinch — wait until touchEnd
   } else if (isDragging.value && touches.length === 1) {
     const dx = touches[0].clientX - lastPointerPosition.value.x;
@@ -1217,6 +1290,7 @@ const handleTouchMove = (e) => {
       y: touches[0].clientY,
     };
     updateContainerTransform();
+    syncTargetCamera();
     // Do NOT schedule LOD during drag — wait until touchEnd
   }
 };
@@ -1729,14 +1803,18 @@ const zoomIn = () => {
   const centerX = pixiContainer.value?.clientWidth / 2 || 0;
   const centerY = pixiContainer.value?.clientHeight / 2 || 0;
 
-  const oldScale = scale.value;
-  scale.value = Math.min(MAX_SCALE, scale.value * 1.1);
+  if (
+    !applyZoomAboutScreenPoint(
+      centerX,
+      centerY,
+      targetCamera.scale * 1.1,
+      targetCamera,
+    )
+  ) {
+    return;
+  }
 
-  const scaleChange = scale.value / oldScale;
-  offsetX.value = centerX - (centerX - offsetX.value) * scaleChange;
-  offsetY.value = centerY - (centerY - offsetY.value) * scaleChange;
-
-  updateContainerTransform();
+  startAnimationLoop();
   scheduleLodUpdate();
   scheduleHiResUpdate();
 };
@@ -1745,14 +1823,18 @@ const zoomOut = () => {
   const centerX = pixiContainer.value?.clientWidth / 2 || 0;
   const centerY = pixiContainer.value?.clientHeight / 2 || 0;
 
-  const oldScale = scale.value;
-  scale.value = Math.max(MIN_SCALE, scale.value / 1.1);
+  if (
+    !applyZoomAboutScreenPoint(
+      centerX,
+      centerY,
+      targetCamera.scale / 1.1,
+      targetCamera,
+    )
+  ) {
+    return;
+  }
 
-  const scaleChange = scale.value / oldScale;
-  offsetX.value = centerX - (centerX - offsetX.value) * scaleChange;
-  offsetY.value = centerY - (centerY - offsetY.value) * scaleChange;
-
-  updateContainerTransform();
+  startAnimationLoop();
   scheduleLodUpdate();
   scheduleHiResUpdate();
 };
@@ -1803,6 +1885,7 @@ const resetView = (animate = true) => {
     scale.value = targetScale;
     offsetX.value = targetOffsetX;
     offsetY.value = targetOffsetY;
+    syncTargetCamera();
     updateContainerTransform();
     scheduleLodUpdate();
     scheduleHiResUpdate();
@@ -2140,8 +2223,9 @@ const flyToBeacon = (beacon) => {
 const flightAnimationLoop = () => {
   if (!isFlying.value || !flightState.value) {
     // Stop animation when flight is complete
-    if (!isTransitioning.value) {
+    if (!isTransitioning.value && !hasPendingCameraAnimation()) {
       animationFrameId.value = null;
+      lastAnimationTick = 0;
     } else {
       // Keep running if there are other animations
       animationFrameId.value = requestAnimationFrame(animationLoop);
@@ -2177,6 +2261,7 @@ const flightAnimationLoop = () => {
     // Flight complete
     isFlying.value = false;
     flightState.value = null;
+    syncTargetCamera();
     console.log("✅ Flight complete");
 
     // Update LOD after flight completes
@@ -2184,36 +2269,55 @@ const flightAnimationLoop = () => {
     scheduleHiResUpdate();
 
     // Continue animation loop if there are transitions, otherwise stop
-    if (isTransitioning.value) {
+    if (isTransitioning.value || hasPendingCameraAnimation()) {
       animationFrameId.value = requestAnimationFrame(animationLoop);
     } else {
       animationFrameId.value = null;
+      lastAnimationTick = 0;
     }
   } else {
     // Continue flight
-    animationFrameId.value = requestAnimationFrame(flightAnimationLoop);
+    animationFrameId.value = requestAnimationFrame(animationLoop);
   }
 };
 
 // Update the regular animation loop to handle both transitions and flights
-const animationLoop = () => {
+const animationLoop = (currentTime) => {
+  const previousTick = lastAnimationTick || currentTime;
+  const deltaFrames = Math.max(1, (currentTime - previousTick) / (1000 / 60));
+  lastAnimationTick = currentTime;
+
   // Handle flight animation
   if (isFlying.value) {
     flightAnimationLoop();
     return; // Flight loop will handle continuation
   }
 
+  let shouldContinue = false;
+
   // Handle sprite transitions
   if (isTransitioning.value) {
-    updateTransitionPositions(performance.now());
+    updateTransitionPositions(currentTime);
+    shouldContinue = true;
+  }
+
+  if (hasPendingCameraAnimation()) {
+    updateCameraTowardsTarget(deltaFrames);
+    updateContainerTransform();
+    shouldContinue = true;
+  }
+
+  if (shouldContinue) {
     animationFrameId.value = requestAnimationFrame(animationLoop);
   } else {
     animationFrameId.value = null; // self-stop
+    lastAnimationTick = 0;
   }
 };
 
 const startAnimationLoop = () => {
   if (!animationFrameId.value) {
+    lastAnimationTick = 0;
     animationFrameId.value = requestAnimationFrame(animationLoop);
   }
 };
@@ -2223,6 +2327,7 @@ const stopAnimationLoop = () => {
     cancelAnimationFrame(animationFrameId.value);
     animationFrameId.value = null;
   }
+  lastAnimationTick = 0;
 };
 
 // Selection handlers
