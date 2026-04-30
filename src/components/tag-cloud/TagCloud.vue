@@ -657,11 +657,13 @@ const getOrCreateLabel = (index) => {
   label = new PIXI.Text({
     text: "",
     style: {
-      // fontFamily: "Inter, system-ui, sans-serif",
-      fontSize: 13,
-      fill: 0xffffff,
-      stroke: { color: 0x000000, width: 1, alpha: 0.7 },
+      fontFamily: "Work Sans, system-ui, sans-serif",
+      fontSize: 12,
+      fill: "whitesmoke",
+      stroke: { color: "black", width: 1, alpha: 1 },
       align: "center",
+      fontStretch: "condensed",
+      letterSpacing: -0.5,
     },
   });
   label.anchor.set(0.5, 0.5);
