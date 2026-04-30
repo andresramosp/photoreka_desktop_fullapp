@@ -296,6 +296,36 @@
           <div class="control-tip">
             <div class="control-icon-group">
               <div class="keyboard-keys-group">
+                <div class="keyboard-key">Drag</div>
+              </div>
+              <span class="control-text">Click &amp; drag to pan the view</span>
+            </div>
+          </div>
+          <div class="control-tip">
+            <div class="control-icon-group">
+              <div class="keyboard-keys-group">
+                <div class="keyboard-key">W</div>
+                <div class="keyboard-key">A</div>
+                <div class="keyboard-key">S</div>
+                <div class="keyboard-key">D</div>
+              </div>
+              <span class="control-text">Pan the view</span>
+            </div>
+          </div>
+          <div class="control-tip">
+            <div class="control-icon-group">
+              <div class="keyboard-keys-group">
+                <div class="keyboard-key">↑</div>
+                <div class="keyboard-key">↓</div>
+                <div class="keyboard-key">←</div>
+                <div class="keyboard-key">→</div>
+              </div>
+              <span class="control-text">Pan with arrow keys</span>
+            </div>
+          </div>
+          <div class="control-tip">
+            <div class="control-icon-group">
+              <div class="keyboard-keys-group">
                 <div class="keyboard-key">Click</div>
               </div>
               <span class="control-text">Click on a tag to search photos</span>
@@ -308,6 +338,16 @@
                 <div class="keyboard-key">Select</div>
               </div>
               <span class="control-text">To choose multiple tags</span>
+            </div>
+          </div>
+          <div class="control-tip">
+            <div class="control-icon-group">
+              <div class="keyboard-keys-group">
+                <div class="keyboard-key">Pinch</div>
+              </div>
+              <span class="control-text"
+                >Two-finger pinch to zoom (tablet)</span
+              >
             </div>
           </div>
         </div>

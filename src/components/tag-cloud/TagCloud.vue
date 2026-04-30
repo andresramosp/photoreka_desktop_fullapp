@@ -1068,6 +1068,21 @@ const findVisibleLabelAtScreen = (sx, sy) => {
 let isPanning = false;
 let panStart = { x: 0, y: 0, camX: 0, camY: 0 };
 
+// Touch state
+let isTouching = false;
+let touchPanStart = { x: 0, y: 0, camX: 0, camY: 0 };
+let isPinching = false;
+let lastPinchDistance = 0;
+let lastPinchWorldX = 0;
+let lastPinchWorldY = 0;
+let touchStartTime = 0;
+let hadRecentPinch = false;
+
+// Keyboard navigation state
+const keysPressed = new Set();
+const KEYBOARD_PAN_SPEED = 8;
+let keyboardAnimationId = null;
+
 // Rectangle selection state (Ctrl/Cmd + drag)
 let isSelecting = false;
 let selectStart = { x: 0, y: 0 }; // canvas-relative coords
@@ -1104,9 +1119,15 @@ const bindInteractions = () => {
   canvas.addEventListener("pointermove", onCanvasPointerMove);
   canvas.addEventListener("pointerleave", onCanvasPointerLeave);
   canvas.addEventListener("click", onCanvasClick);
+  canvas.addEventListener("touchstart", onTouchStart, { passive: false });
+  canvas.addEventListener("touchmove", onTouchMove, { passive: false });
+  canvas.addEventListener("touchend", onTouchEnd);
+  canvas.addEventListener("touchcancel", onTouchEnd);
   window.addEventListener("pointermove", onPointerMove);
   window.addEventListener("pointerup", onPointerUp);
   window.addEventListener("resize", onResize);
+  window.addEventListener("keydown", handleKeyDown);
+  window.addEventListener("keyup", handleKeyUp);
 };
 
 const unbindInteractions = () => {
@@ -1117,9 +1138,15 @@ const unbindInteractions = () => {
   canvas.removeEventListener("pointermove", onCanvasPointerMove);
   canvas.removeEventListener("pointerleave", onCanvasPointerLeave);
   canvas.removeEventListener("click", onCanvasClick);
+  canvas.removeEventListener("touchstart", onTouchStart);
+  canvas.removeEventListener("touchmove", onTouchMove);
+  canvas.removeEventListener("touchend", onTouchEnd);
+  canvas.removeEventListener("touchcancel", onTouchEnd);
   window.removeEventListener("pointermove", onPointerMove);
   window.removeEventListener("pointerup", onPointerUp);
   window.removeEventListener("resize", onResize);
+  window.removeEventListener("keydown", handleKeyDown);
+  window.removeEventListener("keyup", handleKeyUp);
 };
 
 const onWheel = (e) => {
@@ -1288,6 +1315,224 @@ const onCanvasClick = (e) => {
   }
 };
 
+// ---------------------------------------------------------------------------
+// Touch handlers
+// ---------------------------------------------------------------------------
+const onTouchStart = (e) => {
+  e.preventDefault();
+  const touches = e.touches;
+
+  if (touches.length === 1) {
+    isPanning = false;
+    isPinching = false;
+    isTouching = true;
+    touchStartTime = performance.now();
+    touchPanStart = {
+      x: touches[0].clientX,
+      y: touches[0].clientY,
+      camX: camera.x,
+      camY: camera.y,
+    };
+  } else if (touches.length === 2) {
+    isTouching = false;
+    isPanning = false;
+    isPinching = true;
+    hadRecentPinch = true;
+    const dx = touches[1].clientX - touches[0].clientX;
+    const dy = touches[1].clientY - touches[0].clientY;
+    lastPinchDistance = Math.sqrt(dx * dx + dy * dy);
+
+    if (app) {
+      const rect = app.canvas.getBoundingClientRect();
+      const midX = (touches[0].clientX + touches[1].clientX) / 2 - rect.left;
+      const midY = (touches[0].clientY + touches[1].clientY) / 2 - rect.top;
+      lastPinchWorldX = (midX - camera.x) / camera.scale;
+      lastPinchWorldY = (midY - camera.y) / camera.scale;
+    }
+  }
+};
+
+const onTouchMove = (e) => {
+  e.preventDefault();
+  const touches = e.touches;
+
+  if (isPinching && touches.length === 2) {
+    const dx = touches[1].clientX - touches[0].clientX;
+    const dy = touches[1].clientY - touches[0].clientY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (!app) return;
+    const rect = app.canvas.getBoundingClientRect();
+    const midX = (touches[0].clientX + touches[1].clientX) / 2 - rect.left;
+    const midY = (touches[0].clientY + touches[1].clientY) / 2 - rect.top;
+
+    const prevDistance = lastPinchDistance || distance || 1;
+    const pinchRatio = distance > 0 ? distance / prevDistance : 1;
+    const newScale = Math.max(
+      minScale,
+      Math.min(maxScale, camera.scale * pinchRatio),
+    );
+
+    // Keep the anchored world point under the pinch midpoint
+    camera.x = midX - lastPinchWorldX * newScale;
+    camera.y = midY - lastPinchWorldY * newScale;
+    camera.scale = newScale;
+
+    lastPinchDistance = distance;
+    // Recompute anchor from updated transform
+    lastPinchWorldX = (midX - camera.x) / camera.scale;
+    lastPinchWorldY = (midY - camera.y) / camera.scale;
+
+    syncTargetCamera();
+    applyCamera();
+  } else if (isTouching && touches.length === 1) {
+    const dx = touches[0].clientX - touchPanStart.x;
+    const dy = touches[0].clientY - touchPanStart.y;
+    camera.x = touchPanStart.camX + dx;
+    camera.y = touchPanStart.camY + dy;
+    syncTargetCamera();
+    applyCamera();
+  }
+};
+
+const onTouchEnd = (e) => {
+  const wasPinching = isPinching;
+
+  // Detect tap (short touch with minimal movement, no recent pinch)
+  if (
+    !wasPinching &&
+    !hadRecentPinch &&
+    isTouching &&
+    e.changedTouches.length > 0
+  ) {
+    const touch = e.changedTouches[0];
+    const duration = performance.now() - touchStartTime;
+    const dx = Math.abs(touch.clientX - touchPanStart.x);
+    const dy = Math.abs(touch.clientY - touchPanStart.y);
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (duration < 300 && dx < 15 && dy < 15 && dist < 20 && app) {
+      const rect = app.canvas.getBoundingClientRect();
+      const sx = touch.clientX - rect.left;
+      const sy = touch.clientY - rect.top;
+      const labelIndex = findVisibleLabelAtScreen(sx, sy);
+      const index = labelIndex >= 0 ? labelIndex : findTagAtScreen(sx, sy);
+      if (index >= 0) {
+        emitTagsSelected([tags.value[index]]);
+      }
+    }
+  }
+
+  // If one finger remains after pinching, transition to pan
+  if (e.touches && e.touches.length === 1) {
+    isPinching = false;
+    isTouching = true;
+    touchStartTime = performance.now();
+    const t = e.touches[0];
+    touchPanStart = {
+      x: t.clientX,
+      y: t.clientY,
+      camX: camera.x,
+      camY: camera.y,
+    };
+  } else {
+    isTouching = false;
+    isPinching = false;
+    if (hadRecentPinch) {
+      setTimeout(() => {
+        hadRecentPinch = false;
+      }, 300);
+    }
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Keyboard navigation (WASD + arrows)
+// ---------------------------------------------------------------------------
+const handleKeyDown = (e) => {
+  const target = e.target;
+  const tagName = target?.tagName?.toLowerCase();
+  const isEditable = target?.isContentEditable;
+
+  if (
+    tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select" ||
+    isEditable ||
+    target?.closest?.(".n-select") ||
+    target?.closest?.(".n-input")
+  )
+    return;
+
+  const key = e.key.toLowerCase();
+  if (
+    [
+      "w",
+      "a",
+      "s",
+      "d",
+      "arrowup",
+      "arrowdown",
+      "arrowleft",
+      "arrowright",
+    ].includes(key)
+  ) {
+    e.preventDefault();
+    keysPressed.add(key);
+    if (!keyboardAnimationId) {
+      keyboardAnimationId = requestAnimationFrame(updateKeyboardPan);
+    }
+  }
+};
+
+const handleKeyUp = (e) => {
+  const target = e.target;
+  const tagName = target?.tagName?.toLowerCase();
+  const isEditable = target?.isContentEditable;
+
+  if (
+    tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select" ||
+    isEditable ||
+    target?.closest?.(".n-select") ||
+    target?.closest?.(".n-input")
+  )
+    return;
+
+  keysPressed.delete(e.key.toLowerCase());
+
+  if (keysPressed.size === 0 && keyboardAnimationId) {
+    cancelAnimationFrame(keyboardAnimationId);
+    keyboardAnimationId = null;
+  }
+};
+
+const updateKeyboardPan = () => {
+  if (keysPressed.size === 0) {
+    keyboardAnimationId = null;
+    return;
+  }
+
+  let dx = 0;
+  let dy = 0;
+  if (keysPressed.has("w") || keysPressed.has("arrowup"))
+    dy += KEYBOARD_PAN_SPEED;
+  if (keysPressed.has("s") || keysPressed.has("arrowdown"))
+    dy -= KEYBOARD_PAN_SPEED;
+  if (keysPressed.has("a") || keysPressed.has("arrowleft"))
+    dx += KEYBOARD_PAN_SPEED;
+  if (keysPressed.has("d") || keysPressed.has("arrowright"))
+    dx -= KEYBOARD_PAN_SPEED;
+
+  if (dx !== 0 || dy !== 0) {
+    targetCamera.x += dx;
+    targetCamera.y += dy;
+  }
+
+  keyboardAnimationId = requestAnimationFrame(updateKeyboardPan);
+};
+
 let resizeRaf = null;
 const onResize = () => {
   if (resizeRaf) cancelAnimationFrame(resizeRaf);
@@ -1310,6 +1555,7 @@ onBeforeUnmount(() => {
   if (filterDebounceTimer) clearTimeout(filterDebounceTimer);
   if (labelUpdateRaf) cancelAnimationFrame(labelUpdateRaf);
   if (dynamicSearchTimer) clearTimeout(dynamicSearchTimer);
+  if (keyboardAnimationId) cancelAnimationFrame(keyboardAnimationId);
   unbindInteractions();
   destroyPixi();
 });
