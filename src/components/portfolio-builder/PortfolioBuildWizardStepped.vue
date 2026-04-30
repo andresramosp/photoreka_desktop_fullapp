@@ -1381,7 +1381,7 @@ watch(
 
 /* ── Weight mode toggle ─────────────────────────────────── */
 .weight-mode-toggle {
-  display: flex;
+  display: none;
   gap: 2px;
   padding: 3px;
   border-radius: 10px;
