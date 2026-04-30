@@ -3,6 +3,7 @@ import { BaseModel, column, manyToMany, belongsTo } from '@adonisjs/lucid/orm'
 import type { ManyToMany, BelongsTo } from '@adonisjs/lucid/types/relations'
 import User from './user.js'
 import Photo from './photo.js'
+import CollectionSet from './collection_set.js'
 
 export default class Collection extends BaseModel {
   @column({ isPrimary: true })
@@ -10,6 +11,9 @@ export default class Collection extends BaseModel {
 
   @column()
   declare userId: number
+
+  @column()
+  declare setId: number | null
 
   @column()
   declare name: string
@@ -45,6 +49,9 @@ export default class Collection extends BaseModel {
 
   @belongsTo(() => User)
   declare user: BelongsTo<typeof User>
+
+  @belongsTo(() => CollectionSet, { foreignKey: 'setId' })
+  declare set: BelongsTo<typeof CollectionSet>
 
   @manyToMany(() => Photo, {
     pivotTable: 'collection_photos',

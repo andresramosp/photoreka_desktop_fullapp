@@ -67,6 +67,7 @@ const TagsController = () => import('#controllers/tags_controller')
 const EmbeddingController = () => import('#controllers/embeddings_controller')
 const LandingController = () => import('#controllers/landing_controller')
 const CollectionsController = () => import('#controllers/collections_controller')
+const CollectionSetsController = () => import('#controllers/collection_sets_controller')
 const SeriesController = () => import('#controllers/series_controller')
 const UsageController = () => import('#controllers/usage_controller')
 const ThreeDViewController = () => import('#controllers/3dview_controller')
@@ -140,6 +141,14 @@ router
     router.delete('/api/collections/:id', [CollectionsController, 'destroy'])
     router.post('/api/collections/:id/photos', [CollectionsController, 'addPhotos'])
     router.delete('/api/collections/:id/photos', [CollectionsController, 'removePhotos'])
+    router.patch('/api/collections/move', [CollectionSetsController, 'moveCollection'])
+
+    // Collection Sets endpoints
+    router.get('/api/collection-sets', [CollectionSetsController, 'index'])
+    router.get('/api/collection-sets/:id', [CollectionSetsController, 'show'])
+    router.post('/api/collection-sets', [CollectionSetsController, 'store'])
+    router.put('/api/collection-sets/:id', [CollectionSetsController, 'update'])
+    router.delete('/api/collection-sets/:id', [CollectionSetsController, 'destroy'])
 
     // Canvas endpoints
     router.get('/api/canvas', [CanvasController, 'index'])

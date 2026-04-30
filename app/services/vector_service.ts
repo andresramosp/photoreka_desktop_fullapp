@@ -259,6 +259,38 @@ export default class VectorService {
     return result.rows
   }
 
+  /**
+   * Finds similar tags by querying only the `tags` table without any joins.
+   * Uses ORDER BY <=> so the ivfflat index can be applied, then filters by
+   * threshold in-process. Avoids the DISTINCT + multi-join scan that exhausts
+   * PostgreSQL shared memory on constrained environments (e.g. Railway).
+   */
+  public async findSimilarTagDirect(
+    embedding: number[],
+    threshold: number = 0.89,
+    limit: number = 5
+  ): Promise<{ tag_id: number; name: string; group: string; proximity: number }[]> {
+    if (!embedding || embedding.length === 0) {
+      throw new Error('Embedding no proporcionado o vacío')
+    }
+
+    const result = await db.rawQuery(
+      `
+      SELECT
+        id AS tag_id,
+        name,
+        "group",
+        1 - (embedding <=> :embedding) AS proximity
+      FROM tags
+      ORDER BY embedding <=> :embedding
+      LIMIT :limit
+      `,
+      { embedding: `[${embedding.join(',')}]`, limit }
+    )
+
+    return (result.rows as any[]).filter((r) => r.proximity >= threshold)
+  }
+
   public async findSimilarPhotoToEmbedding(
     embedding: number[],
     threshold: Threshold = 0.3,

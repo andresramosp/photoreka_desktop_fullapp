@@ -23,6 +23,7 @@ export default class CollectionsController {
         id: collection.id,
         name: collection.name,
         description: collection.description,
+        setId: collection.setId,
         createdAt: collection.createdAt,
         updatedAt: collection.updatedAt,
         photosCount: collection.photos.length,
@@ -66,6 +67,7 @@ export default class CollectionsController {
         id: collection.id,
         name: collection.name,
         description: collection.description,
+        setId: collection.setId,
         createdAt: collection.createdAt,
         updatedAt: collection.updatedAt,
         photos: collection.photos.map((photo) => ({
@@ -92,7 +94,12 @@ export default class CollectionsController {
     try {
       await auth.use('api').check()
       const user = auth.use('api').user! as any
-      const { name, description, photoIds } = request.only(['name', 'description', 'photoIds'])
+      const { name, description, photoIds, setId } = request.only([
+        'name',
+        'description',
+        'photoIds',
+        'setId',
+      ])
 
       if (!name || name.trim().length === 0) {
         return response.badRequest('Collection name is required')
@@ -103,6 +110,7 @@ export default class CollectionsController {
         userId: user.id,
         name: name.trim(),
         description: description?.trim() || null,
+        setId: setId || null,
       })
 
       // Si se proporcionaron fotos iniciales, añadirlas a la colección
@@ -123,6 +131,7 @@ export default class CollectionsController {
         id: collection.id,
         name: collection.name,
         description: collection.description,
+        setId: collection.setId,
         createdAt: collection.createdAt,
         updatedAt: collection.updatedAt,
         photos: collection.photos.map((photo) => ({

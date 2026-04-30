@@ -4,14 +4,16 @@ export default class extends BaseSchema {
   protected tableName = 'photos'
 
   async up() {
-    this.schema.raw(`
-      ALTER TABLE ${this.tableName}
-      ADD COLUMN embedding VECTOR(512)
-    `)
+    this.defer(async (db) => {
+      await db.rawQuery(`
+        ALTER TABLE ${this.tableName}
+        ADD COLUMN embedding VECTOR(512)
+      `)
 
-    this.schema.raw(`
-      CREATE INDEX photos_embedding_idx ON ${this.tableName} USING ivfflat (embedding) WITH (lists = 100);
-    `)
+      await db.rawQuery(`
+        CREATE INDEX photos_embedding_idx ON ${this.tableName} USING ivfflat (embedding) WITH (lists = 100)
+      `)
+    })
   }
 
   async down() {

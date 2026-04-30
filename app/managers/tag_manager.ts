@@ -81,11 +81,12 @@ export default class TagManager {
       return existingTag
     }
 
-    // 2. Buscar tags similares
+    // 2. Buscar tags similares (consulta directa a la tabla tags sin joins para
+    //    evitar el agotamiento de shared memory en Railway)
     let similarTagsResult: any[] = []
     try {
       logger.debug(`Buscando tags similares para: ${tag.name}`)
-      similarTagsResult = (await vectorService.findSimilarTagToEmbedding(embedding, 0.89, 5)) || []
+      similarTagsResult = (await vectorService.findSimilarTagDirect(embedding, 0.89, 5)) || []
       // logger.debug(`Resultados de búsqueda similar:`, similarTagsResult)
     } catch (error) {
       logger.error(`Error al buscar tags similares:`, error)
@@ -99,7 +100,7 @@ export default class TagManager {
         // Si no tiene tag_id, continuamos con la creación de nuevo tag
       } else {
         similarTag.id = similarTag.tag_id
-        logger.debug(`Usando tag similar: ${similarTag.name} (ID: ${similarTag.id})`)
+        logger.info(`Usando tag similar: ${similarTag.name} (ID: ${similarTag.id})`)
         return similarTag
       }
     }
