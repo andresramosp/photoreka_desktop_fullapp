@@ -43,15 +43,17 @@
 
     <!-- Config Panel -->
     <TagCloudConfigPanel
-      v-if="tags.length > 0"
+      v-if="allTags.length > 0"
       v-model:minPhotoCount="minPhotoCount"
       v-model:limit="limit"
       v-model:showDots="showDots"
       v-model:dynamicSearch="dynamicSearch"
       v-model:maxSearchTags="maxSearchTags"
       v-model:balloonExpansion="balloonExpansion"
+      v-model:selectedGroups="selectedGroups"
       :tagCount="tags.length"
       :totalCandidates="metadata?.totalCandidates ?? null"
+      :availableGroups="availableGroups"
       @filters-changed="onFiltersChanged"
       @reset-view="resetView"
     />
@@ -117,7 +119,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick, watch } from "vue";
+import {
+  ref,
+  computed,
+  onMounted,
+  onBeforeUnmount,
+  nextTick,
+  watch,
+} from "vue";
 import { NIcon } from "naive-ui";
 import {
   ZoomInOutlined,
@@ -148,7 +157,8 @@ const pixiContainer = ref(null);
 const loading = ref(true);
 const loadingMessage = ref("Loading tag cloud…");
 const error = ref(null);
-const tags = ref([]); // raw tags from backend, sorted by photoCount desc
+const allTags = ref([]); // all raw tags from backend, sorted by photoCount desc
+const tags = ref([]); // tags currently rendered (filtered by selectedGroups)
 const metadata = ref(null);
 const hoveredTag = ref(null); // visible-label hover → full tooltip + forces label placement
 const tooltipPos = ref({ x: 0, y: 0 });
@@ -164,6 +174,7 @@ const showDots = ref(true);
 const dynamicSearch = ref(false);
 const maxSearchTags = ref(20);
 const balloonExpansion = ref(0.2);
+const selectedGroups = ref([]); // empty = all groups
 
 // ---------------------------------------------------------------------------
 // PIXI handles & layout state
@@ -236,6 +247,20 @@ const DYNAMIC_SEARCH_DEBOUNCE_MS = 350;
 // ---------------------------------------------------------------------------
 let filterDebounceTimer = null;
 
+// Canonical group keys: map known singular→plural variants to a single key
+const GROUP_KEY_ALIASES = {
+  object: "objects",
+  animal: "animals",
+  person: "person", // already singular by convention
+  symbol: "symbols",
+};
+
+const canonicalGroupKey = (key) => {
+  if (!key) return key;
+  const lower = key.trim().toLowerCase();
+  return GROUP_KEY_ALIASES[lower] ?? lower;
+};
+
 const normalizeGroupName = (groupName) => {
   if (!groupName) return "";
   return groupName
@@ -248,11 +273,15 @@ const isUsingDefaultParams = () =>
   limit.value === DEFAULT_LIMIT;
 
 const applyTagData = async (data) => {
-  const incoming = (data?.tags || []).filter(
-    (t) => Array.isArray(t.coordinates) && t.coordinates.length >= 2,
-  );
+  const incoming = (data?.tags || [])
+    .filter((t) => Array.isArray(t.coordinates) && t.coordinates.length >= 2)
+    .map((t) => ({ ...t, group: canonicalGroupKey(t.group) }));
   incoming.sort((a, b) => (b.photoCount || 0) - (a.photoCount || 0));
-  tags.value = incoming;
+  allTags.value = incoming;
+  tags.value =
+    selectedGroups.value.length === 0
+      ? incoming
+      : incoming.filter((t) => selectedGroups.value.includes(t.group));
   metadata.value = data?.metadata || null;
   hoveredTag.value = null;
   setHoveredLabelIndex(-1);
@@ -264,6 +293,37 @@ const applyTagData = async (data) => {
     resetView();
   }
 };
+
+const applyGroupFilter = () => {
+  tags.value =
+    selectedGroups.value.length === 0
+      ? allTags.value
+      : allTags.value.filter((t) => selectedGroups.value.includes(t.group));
+  hoveredTag.value = null;
+  setHoveredLabelIndex(-1);
+  selectedTagIds = new Set();
+  if (app) {
+    clearLabels();
+    buildScene();
+    resetView();
+  }
+};
+
+const availableGroups = computed(() => {
+  const counts = new Map();
+  for (const t of allTags.value) {
+    if (t.group) counts.set(t.group, (counts.get(t.group) || 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .filter(([, count]) => count > 1)
+    .map(([key, count]) => ({
+      key,
+      label: normalizeGroupName(key),
+      color: GROUP_COLORS[key] || DEFAULT_COLOR,
+      count,
+    }))
+    .sort((a, b) => b.count - a.count);
+});
 
 const loadTags = async () => {
   loading.value = true;
@@ -330,6 +390,14 @@ watch(maxSearchTags, () => {
 watch(hoveredTag, () => {
   scheduleLabelUpdate();
 });
+
+watch(
+  selectedGroups,
+  () => {
+    applyGroupFilter();
+  },
+  { deep: true },
+);
 
 // ---------------------------------------------------------------------------
 // PIXI init

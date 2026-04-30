@@ -112,6 +112,78 @@
               @click.stop
             />
           </div>
+          <!-- Group filter -->
+          <div v-if="availableGroups.length > 0" class="control-item-full">
+            <div
+              class="section-toggle group-filter-toggle"
+              @click.stop="groupFilterExpanded = !groupFilterExpanded"
+            >
+              <div class="control-item-label">
+                <span>Filter by group</span>
+                <n-tooltip trigger="hover" placement="top">
+                  <template #trigger>
+                    <n-icon
+                      size="12"
+                      color="var(--text-secondary)"
+                      class="info-icon"
+                      @click.stop
+                    >
+                      <InfoCircleFilled />
+                    </n-icon>
+                  </template>
+                  Show only tags from the selected groups. Leave all unselected
+                  to show every group.
+                </n-tooltip>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px">
+                <span
+                  v-if="localSelectedGroups.length > 0"
+                  class="group-filter-clear-inline"
+                  @click.stop="clearGroupFilter"
+                  >Clear</span
+                >
+                <span
+                  v-if="localSelectedGroups.length > 0 && !groupFilterExpanded"
+                  class="active-indicator"
+                  >{{ localSelectedGroups.length }}</span
+                >
+                <n-icon
+                  size="12"
+                  class="toggle-icon"
+                  :class="{ rotated: groupFilterExpanded }"
+                >
+                  <svg viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+                    />
+                  </svg>
+                </n-icon>
+              </div>
+            </div>
+            <div
+              class="expandable-content"
+              :class="{ expanded: groupFilterExpanded }"
+            >
+              <div class="group-filter-list">
+                <div
+                  v-for="group in availableGroups"
+                  :key="group.key"
+                  class="group-filter-option"
+                  :class="{ active: localSelectedGroups.includes(group.key) }"
+                  @click.stop="toggleGroup(group.key)"
+                >
+                  <span
+                    class="group-color-dot"
+                    :style="{ background: hexToCSS(group.color) }"
+                  ></span>
+                  <span class="group-option-label">{{ group.label }}</span>
+                  <span class="group-option-count">{{ group.count }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="control-item-row">
             <div class="control-item-label">
               <span>Dynamic search</span>
@@ -401,6 +473,14 @@ const props = defineProps({
     type: Number,
     default: 0.2,
   },
+  selectedGroups: {
+    type: Array,
+    default: () => [],
+  },
+  availableGroups: {
+    type: Array, // [{ key, label, color (number), count }]
+    default: () => [],
+  },
 });
 
 const emit = defineEmits([
@@ -410,6 +490,7 @@ const emit = defineEmits([
   "update:dynamicSearch",
   "update:maxSearchTags",
   "update:balloonExpansion",
+  "update:selectedGroups",
   "reset-view",
   "filters-changed",
 ]);
@@ -417,6 +498,7 @@ const emit = defineEmits([
 const isExpanded = ref(true);
 const expandedSection = ref(null);
 const showNavigationControls = ref(false);
+const groupFilterExpanded = ref(false);
 
 const toggleDisplay = () => {
   expandedSection.value =
@@ -490,6 +572,36 @@ const emitLimit = () => {
 
 const emitMaxSearchTags = () => {
   emit("update:maxSearchTags", localMaxSearchTags.value);
+};
+
+// ---------------------------------------------------------------------------
+// Group filter
+// ---------------------------------------------------------------------------
+const localSelectedGroups = ref([...props.selectedGroups]);
+
+watch(
+  () => props.selectedGroups,
+  (v) => {
+    localSelectedGroups.value = [...v];
+  },
+  { deep: true },
+);
+
+const hexToCSS = (hex) => "#" + hex.toString(16).padStart(6, "0");
+
+const toggleGroup = (key) => {
+  const idx = localSelectedGroups.value.indexOf(key);
+  if (idx >= 0) {
+    localSelectedGroups.value.splice(idx, 1);
+  } else {
+    localSelectedGroups.value.push(key);
+  }
+  emit("update:selectedGroups", [...localSelectedGroups.value]);
+};
+
+const clearGroupFilter = () => {
+  localSelectedGroups.value = [];
+  emit("update:selectedGroups", []);
 };
 </script>
 
@@ -778,6 +890,97 @@ const emitMaxSearchTags = () => {
   display: flex;
   gap: 3px;
   flex-shrink: 0;
+}
+
+/* Group filter */
+.group-filter-toggle {
+  margin-bottom: 0;
+  padding: 4px 0;
+}
+
+.group-filter-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 190px;
+  overflow-y: auto;
+  padding-right: 2px;
+  padding-top: 2px;
+}
+
+.group-filter-list::-webkit-scrollbar {
+  width: 4px;
+}
+.group-filter-list::-webkit-scrollbar-thumb {
+  background: var(--border-color, rgba(255, 255, 255, 0.18));
+  border-radius: 2px;
+}
+
+.group-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 7px;
+  border-radius: 5px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+  font-size: 12px;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.group-filter-option:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+}
+
+.group-filter-option.active {
+  background: rgba(var(--primary-color-rgb, 59, 130, 246), 0.12);
+  border-color: rgba(var(--primary-color-rgb, 59, 130, 246), 0.3);
+  color: var(--text-primary);
+}
+
+.group-color-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.group-option-label {
+  flex: 1;
+}
+
+.group-option-count {
+  font-size: 10px;
+  color: var(--text-secondary);
+  min-width: 22px;
+  text-align: right;
+}
+
+.group-filter-clear-inline {
+  font-size: 11px;
+  color: var(--primary-color, #3b82f6);
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity 0.15s;
+}
+
+.group-filter-clear-inline:hover {
+  opacity: 1;
+}
+
+.active-indicator {
+  background: var(--primary-color, #3b82f6);
+  color: var(--text-on-primary, #fff);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 16px;
+  text-align: center;
 }
 
 @keyframes slideDown {
