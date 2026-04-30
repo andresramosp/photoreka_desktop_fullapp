@@ -901,45 +901,52 @@ const clearGroupFilter = () => {
 .group-filter-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  max-height: 190px;
+  gap: 6px;
+  max-height: 300px;
   overflow-y: auto;
-  padding-right: 2px;
+  padding-right: 4px;
   padding-top: 2px;
 }
 
 .group-filter-list::-webkit-scrollbar {
   width: 4px;
 }
+
+.group-filter-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 .group-filter-list::-webkit-scrollbar-thumb {
-  background: var(--border-color, rgba(255, 255, 255, 0.18));
+  background: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
 }
 
 .group-filter-option {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 7px;
-  border-radius: 5px;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
   cursor: pointer;
-  border: 1px solid transparent;
-  transition:
-    background 0.15s,
-    border-color 0.15s;
-  font-size: 12px;
-  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s;
   user-select: none;
 }
 
 .group-filter-option:hover {
-  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 .group-filter-option.active {
-  background: rgba(var(--primary-color-rgb, 59, 130, 246), 0.12);
-  border-color: rgba(var(--primary-color-rgb, 59, 130, 246), 0.3);
-  color: var(--text-primary);
+  background: color-mix(in srgb, var(--primary-color) 15%, transparent);
+  border-color: color-mix(in srgb, var(--primary-color) 40%, transparent);
+}
+
+.group-filter-option.active:hover {
+  background: color-mix(in srgb, var(--primary-color) 20%, transparent);
+  border-color: color-mix(in srgb, var(--primary-color) 50%, transparent);
 }
 
 .group-color-dot {
@@ -951,13 +958,20 @@ const clearGroupFilter = () => {
 
 .group-option-label {
   flex: 1;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .group-option-count {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-secondary);
   min-width: 22px;
   text-align: right;
+  flex-shrink: 0;
 }
 
 .group-filter-clear-inline {
