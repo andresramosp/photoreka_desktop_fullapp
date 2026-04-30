@@ -130,6 +130,13 @@ import * as PIXI from "pixi.js";
 import { api } from "@/utils/axios";
 import { isMobileDevice } from "@/utils/utils.js";
 import TagCloudConfigPanel from "./TagCloudConfigPanel.vue";
+import {
+  useTagCloudStore,
+  DEFAULT_MIN_PHOTO_COUNT,
+  DEFAULT_LIMIT,
+} from "@/stores/tagCloudStore.js";
+
+const tagCloudStore = useTagCloudStore();
 
 const emit = defineEmits(["tags-selected"]);
 
@@ -151,7 +158,7 @@ const isMobile = ref(isMobileDevice());
 const selectionRect = ref(null); // { x, y, w, h } in canvas-relative px
 
 // Filters
-const minPhotoCount = ref(5);
+const minPhotoCount = ref(1);
 const limit = ref(10000);
 const showDots = ref(true);
 const dynamicSearch = ref(false);
@@ -236,31 +243,49 @@ const normalizeGroupName = (groupName) => {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 };
 
+const isUsingDefaultParams = () =>
+  minPhotoCount.value === DEFAULT_MIN_PHOTO_COUNT &&
+  limit.value === DEFAULT_LIMIT;
+
+const applyTagData = async (data) => {
+  const incoming = (data?.tags || []).filter(
+    (t) => Array.isArray(t.coordinates) && t.coordinates.length >= 2,
+  );
+  incoming.sort((a, b) => (b.photoCount || 0) - (a.photoCount || 0));
+  tags.value = incoming;
+  metadata.value = data?.metadata || null;
+  hoveredTag.value = null;
+  setHoveredLabelIndex(-1);
+  selectedTagIds = new Set();
+  await nextTick();
+  if (app) {
+    clearLabels();
+    buildScene();
+    resetView();
+  }
+};
+
 const loadTags = async () => {
   loading.value = true;
   loadingMessage.value = "Generating tag cloud…";
   error.value = null;
   try {
+    // If using default params, reuse the store's prefetched data (or await its in-flight request)
+    if (isUsingDefaultParams()) {
+      const cached = await tagCloudStore.awaitData();
+      if (cached) {
+        await applyTagData(cached);
+        return;
+      }
+    }
+
+    // Custom params or store had no data — fall back to a direct call
     const { data } = await api.post("/api/tagcloud/2d", {
       outputDims: 2,
-      minPhotoCount: Math.max(1, minPhotoCount.value || 1),
-      limit: Math.max(100, limit.value || 8000),
+      minPhotoCount: Math.max(1, minPhotoCount.value),
+      limit: Math.max(100, limit.value),
     });
-    const incoming = (data?.tags || []).filter(
-      (t) => Array.isArray(t.coordinates) && t.coordinates.length >= 2,
-    );
-    incoming.sort((a, b) => (b.photoCount || 0) - (a.photoCount || 0));
-    tags.value = incoming;
-    metadata.value = data?.metadata || null;
-    hoveredTag.value = null;
-    setHoveredLabelIndex(-1);
-    selectedTagIds = new Set();
-    await nextTick();
-    if (app) {
-      clearLabels();
-      buildScene();
-      resetView();
-    }
+    await applyTagData(data);
   } catch (err) {
     console.error("[TagCloud] Failed to load tags:", err);
     error.value =

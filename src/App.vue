@@ -175,6 +175,7 @@ import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useSeriesStore } from "@/stores/series.js";
 import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds";
+import { useTagCloudStore } from "@/stores/tagCloudStore.js";
 import ConfettiEffect from "./components/ConfettiEffect.vue";
 import AppInitLoader from "./components/AppInitLoader.vue";
 import { useThemeInit } from "@/composables/useTheme.js";
@@ -242,6 +243,7 @@ const photosStore = usePhotosStore();
 const collectionsStore = useCollectionsStore();
 const seriesStore = useSeriesStore();
 const portfolioBuildsStore = usePortfolioBuildsStore();
+const tagCloudStore = useTagCloudStore();
 const userStore = useUserStore();
 
 // Punto único de decisión de destino post-autenticación
@@ -381,6 +383,7 @@ watch(
       collectionsStore.getOrFetch(true);
       seriesStore.getOrFetch(true);
       portfolioBuildsStore.getOrFetch(true);
+      tagCloudStore.prefetch();
       userStore.processPatterns();
     } else {
       // Usuario se desautenticó - resetear stores
@@ -390,6 +393,7 @@ watch(
         collectionsStore.resetStore();
         seriesStore.resetStore();
         portfolioBuildsStore.resetStore();
+        tagCloudStore.resetStore();
       }
       // Si no está autenticado, marcar photosStore como inicializado para no bloquear la app
       photosStore.isInitialized = true;
