@@ -313,6 +313,7 @@
           :item="series"
           type="series"
           @click="openSeries(series)"
+          :selectable="false"
         />
 
         <!-- Empty State (when no series exist) -->

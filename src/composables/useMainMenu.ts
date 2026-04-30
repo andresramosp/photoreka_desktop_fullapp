@@ -16,6 +16,7 @@ import { isMobileDevice } from "@/utils/utils";
 import {
   LibraryOutline as LibraryIcon,
   MapOutline as MapIcon,
+  FolderOutline as FolderIcon,
 } from "@vicons/ionicons5";
 
 // Shorthand: resolve a tool's icon component from its config
@@ -44,6 +45,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
   });
 
   // Get real collections and series from stores
+  // (kept for series; collections are now rendered as a full tree)
   const collections = computed<MenuLeafItem[]>(() =>
     collectionsStore.allCollections.map(
       (col: { id: string | number; title?: string; name?: string }) => ({
@@ -52,6 +54,63 @@ export function useMainMenu(closeMobileMenu?: () => void) {
       }),
     ),
   );
+
+  /**
+   * Build menu children for a set node recursively.
+   * child sets come first, then collections inside the set.
+   */
+  const buildSetChildren = (setId: string | number): MenuOption[] => {
+    const childSets: MenuOption[] = collectionsStore
+      .childSetsOf(setId)
+      .map((s: { id: string | number; name?: string }) => ({
+        label: () =>
+          h("span", { class: "collection-menu-item" }, s.name || `Set ${s.id}`),
+        key: `set-${s.id}`,
+        icon: renderIcon(FolderIcon),
+        children: buildSetChildren(s.id),
+      }));
+
+    const cols: MenuOption[] = collectionsStore
+      .collectionsInSet(setId)
+      .map((col: { id: string | number; title?: string; name?: string }) => ({
+        label: () =>
+          h(
+            "span",
+            { class: "collection-menu-item" },
+            col.title || col.name || `Collection ${col.id}`,
+          ),
+        key: `collection-${col.id}`,
+      }));
+
+    return [...childSets, ...cols];
+  };
+
+  /** Root-level sets + root-level collections as the children of the Collections group */
+  const collectionsTreeChildren = computed<MenuOption[]>(() => {
+    const rootSetNodes: MenuOption[] = collectionsStore.rootSets.map(
+      (s: { id: string | number; name?: string }) => ({
+        label: () =>
+          h("span", { class: "collection-menu-item" }, s.name || `Set ${s.id}`),
+        key: `set-${s.id}`,
+        icon: renderIcon(FolderIcon),
+        children: buildSetChildren(s.id),
+      }),
+    );
+
+    const rootColNodes: MenuOption[] = collectionsStore.rootCollections.map(
+      (col: { id: string | number; title?: string; name?: string }) => ({
+        label: () =>
+          h(
+            "span",
+            { class: "collection-menu-item" },
+            col.title || col.name || `Collection ${col.id}`,
+          ),
+        key: `collection-${col.id}`,
+      }),
+    );
+
+    return [...rootSetNodes, ...rootColNodes];
+  });
 
   const series = computed<MenuLeafItem[]>(() =>
     seriesStore.allSeries.map(
@@ -138,10 +197,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
         key: "collections-group",
         icon: renderIcon(toolIcon("collections")),
         disabled: isBlocked.value,
-        children: collections.value.map((col) => ({
-          label: () => h("span", { class: "collection-menu-item" }, col.label),
-          key: col.key,
-        })),
+        children: collectionsTreeChildren.value,
       },
       {
         label: () =>

@@ -189,6 +189,14 @@ const router = createRouter({
       },
     },
     {
+      path: "/collections/set/:setId",
+      name: "collection-set",
+      component: CollectionsView,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
       path: "/collections/:id",
       name: "collection-detail",
       component: CollectionsView,

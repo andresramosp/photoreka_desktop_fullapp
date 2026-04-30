@@ -1,5 +1,32 @@
 <template>
-  <div class="action-card" @click="handleClick">
+  <div
+    class="action-card"
+    :class="{
+      'is-dragging': isDragging,
+      'is-selected': isSelected,
+      'is-selection-mode': isSelectionMode,
+    }"
+    draggable="true"
+    @click="handleClick"
+    @dragstart="onDragStart"
+    @dragend="onDragEnd"
+  >
+    <!-- Selection circle (Google Photos style) -->
+    <button
+      v-if="selectable"
+      class="selection-circle"
+      :class="{ 'is-checked': isSelected }"
+      @click.stop="handleCircleClick"
+      :aria-label="isSelected ? 'Deselect collection' : 'Select collection'"
+      tabindex="0"
+    >
+      <svg v-if="isSelected" viewBox="0 0 24 24" class="check-icon">
+        <path
+          fill="currentColor"
+          d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"
+        />
+      </svg>
+    </button>
     <div class="card-preview">
       <!-- Series Preview: Sequential photos with numbers -->
       <div
@@ -94,18 +121,55 @@ interface Props {
   item: Item;
   type: "series" | "collection";
   showUpdateDate?: boolean;
+  isSelected?: boolean;
+  isSelectionMode?: boolean;
+  selectedIds?: string[];
+  selectable?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   showUpdateDate: true,
+  isSelected: false,
+  isSelectionMode: false,
+  selectedIds: () => [],
+  selectable: true,
 });
 
 const emit = defineEmits<{
-  click: [item: Item];
+  click: [item: Item, event: MouseEvent];
+  "select-toggle": [item: Item];
 }>();
 
-const handleClick = () => {
-  emit("click", props.item);
+const handleClick = (nativeEvent: MouseEvent) => {
+  emit("click", props.item, nativeEvent);
+};
+
+const handleCircleClick = () => {
+  emit("select-toggle", props.item);
+};
+
+import { ref } from "vue";
+const isDragging = ref(false);
+
+const onDragStart = (e: DragEvent) => {
+  isDragging.value = true;
+  e.dataTransfer!.effectAllowed = "move";
+  if (props.isSelected && props.selectedIds.length > 1) {
+    // Encode all selected IDs for multi-drag
+    e.dataTransfer!.setData(
+      "application/x-collection-ids",
+      JSON.stringify(props.selectedIds),
+    );
+  } else {
+    e.dataTransfer!.setData(
+      "application/x-collection-id",
+      String(props.item.id),
+    );
+  }
+};
+
+const onDragEnd = () => {
+  isDragging.value = false;
 };
 
 // Format date helper
@@ -132,6 +196,72 @@ const formatDate = (date: Date | string) => {
 </script>
 
 <style scoped>
+.action-card {
+  position: relative;
+  transition: opacity 0.15s;
+}
+
+/* Selection circle */
+.selection-circle {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  opacity: 0;
+  transition:
+    opacity 0.18s,
+    background 0.18s,
+    border-color 0.18s;
+  backdrop-filter: blur(4px);
+}
+
+/* Show circle on hover, in selection mode, or when selected */
+.action-card:hover .selection-circle,
+.action-card.is-selection-mode .selection-circle,
+.action-card.is-selected .selection-circle {
+  opacity: 1;
+}
+
+.selection-circle.is-checked {
+  background: var(--primary-color, #6366f1);
+  border-color: var(--primary-color, #6366f1);
+}
+
+.check-icon {
+  width: 16px;
+  height: 16px;
+  color: #fff;
+}
+
+.action-card.is-dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+
+.action-card.is-selected {
+  outline: 2px solid var(--primary-color, #6366f1);
+  outline-offset: -2px;
+  background: color-mix(
+    in srgb,
+    var(--primary-color, #6366f1) 8%,
+    var(--bg-card, #fff)
+  );
+}
+
+.action-card[draggable="true"] {
+  cursor: grab;
+}
+
 .card-preview {
   position: relative;
   height: 120px;

@@ -138,6 +138,7 @@
         type="collection"
         :show-update-date="false"
         @click="handleBuildClick"
+        :selectable="false"
       />
     </div>
 

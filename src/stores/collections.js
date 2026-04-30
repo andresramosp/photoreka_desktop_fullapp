@@ -1,4 +1,4 @@
-// stores/collections.js
+﻿// stores/collections.js
 
 import { defineStore } from "pinia";
 import { api } from "@/utils/axios";
@@ -7,6 +7,7 @@ export const useCollectionsStore = defineStore("collections", {
   state: () => ({
     // Data
     collections: null, // null indicates not loaded yet, [] means loaded but empty
+    collectionSets: null, // null indicates not loaded yet
     currentCollection: null,
 
     // Loading states
@@ -37,11 +38,45 @@ export const useCollectionsStore = defineStore("collections", {
     allCollections: (state) =>
       Array.isArray(state.collections) ? state.collections : [],
 
+    allCollectionSets: (state) =>
+      Array.isArray(state.collectionSets) ? state.collectionSets : [],
+
+    // Root-level collections (not inside any set)
+    rootCollections: (state) => {
+      if (!Array.isArray(state.collections)) return [];
+      return state.collections.filter((c) => !c.setId);
+    },
+
+    // Root-level sets (no parent)
+    rootSets: (state) => {
+      if (!Array.isArray(state.collectionSets)) return [];
+      return state.collectionSets.filter((s) => !s.parentSetId);
+    },
+
     // Collection by ID
     getCollectionById: (state) => (id) => {
       if (!Array.isArray(state.collections)) return null;
       return state.collections.find(
-        (collection) => String(collection.id) === String(id)
+        (collection) => String(collection.id) === String(id),
+      );
+    },
+
+    getSetById: (state) => (id) => {
+      if (!Array.isArray(state.collectionSets)) return null;
+      return state.collectionSets.find((s) => String(s.id) === String(id));
+    },
+
+    // Collections in a specific set
+    collectionsInSet: (state) => (setId) => {
+      if (!Array.isArray(state.collections)) return [];
+      return state.collections.filter((c) => String(c.setId) === String(setId));
+    },
+
+    // Child sets of a specific set
+    childSetsOf: (state) => (setId) => {
+      if (!Array.isArray(state.collectionSets)) return [];
+      return state.collectionSets.filter(
+        (s) => String(s.parentSetId) === String(setId),
       );
     },
 
@@ -52,7 +87,7 @@ export const useCollectionsStore = defineStore("collections", {
     collectionsWithPhotos: (state) => {
       if (!Array.isArray(state.collections)) return [];
       return state.collections.filter(
-        (collection) => collection.photos && collection.photos.length > 0
+        (collection) => collection.photos && collection.photos.length > 0,
       );
     },
 
@@ -64,12 +99,14 @@ export const useCollectionsStore = defineStore("collections", {
 
     // Check if data has been loaded
     hasBeenLoaded: (state) => state.collections !== null,
+    setsHaveBeenLoaded: (state) => state.collectionSets !== null,
   },
 
   actions: {
     // Resetear el store completamente (para cambios de usuario)
     resetStore() {
       this.collections = null;
+      this.collectionSets = null;
       this.currentCollection = null;
       this.isLoading = false;
       this.isCreating = false;
@@ -88,6 +125,13 @@ export const useCollectionsStore = defineStore("collections", {
       return await this.fetchCollections();
     },
 
+    async getOrFetchSets(force = false) {
+      if (this.setsHaveBeenLoaded && !force) {
+        return this.allCollectionSets;
+      }
+      return await this.fetchCollectionSets();
+    },
+
     // Fetch collections from API
     async fetchCollections() {
       this.isLoading = true;
@@ -98,7 +142,7 @@ export const useCollectionsStore = defineStore("collections", {
           photos: this.assignPhotoGradients(collection.photos || []),
           photoCount: (collection.photos || []).length,
           updatedAt: new Date(
-            collection.updatedAt || collection.created_at || new Date()
+            collection.updatedAt || collection.created_at || new Date(),
           ),
         }));
         return this.collections;
@@ -110,6 +154,21 @@ export const useCollectionsStore = defineStore("collections", {
       }
     },
 
+    // Fetch collection sets from API
+    async fetchCollectionSets() {
+      try {
+        const response = await api.get("/api/collection-sets");
+        this.collectionSets = response.data.map((set) => ({
+          ...set,
+          updatedAt: new Date(set.updatedAt || set.created_at || new Date()),
+        }));
+        return this.collectionSets;
+      } catch (error) {
+        console.error("Error loading collection sets:", error);
+        throw error;
+      }
+    },
+
     // Create new collection
     async createCollection(data) {
       this.isCreating = true;
@@ -118,6 +177,7 @@ export const useCollectionsStore = defineStore("collections", {
           name: data.title || data.name,
           description: data.description,
           photoIds: data.photoIds || [],
+          setId: data.setId || null,
         };
 
         const response = await api.post("/api/collections", payload);
@@ -145,6 +205,129 @@ export const useCollectionsStore = defineStore("collections", {
       }
     },
 
+    // Create a new collection set
+    async createCollectionSet(data) {
+      try {
+        const payload = {
+          name: data.name,
+          description: data.description || null,
+          parentSetId: data.parentSetId || null,
+        };
+        const response = await api.post("/api/collection-sets", payload);
+        const newSet = {
+          ...response.data,
+          updatedAt: new Date(response.data.updatedAt || new Date()),
+        };
+        if (Array.isArray(this.collectionSets)) {
+          this.collectionSets.push(newSet);
+        } else {
+          this.collectionSets = [newSet];
+        }
+        return newSet;
+      } catch (error) {
+        console.error("Error creating collection set:", error);
+        throw error;
+      }
+    },
+
+    // Update a collection set
+    async updateCollectionSet(id, data) {
+      try {
+        const payload = {
+          name: data.name,
+          description: data.description ?? null,
+          parentSetId: data.parentSetId ?? undefined,
+        };
+        await api.put(`/api/collection-sets/${id}`, payload);
+        if (Array.isArray(this.collectionSets)) {
+          const idx = this.collectionSets.findIndex(
+            (s) => String(s.id) === String(id),
+          );
+          if (idx !== -1) {
+            this.collectionSets[idx] = {
+              ...this.collectionSets[idx],
+              ...payload,
+              updatedAt: new Date(),
+            };
+          }
+        }
+        return true;
+      } catch (error) {
+        console.error("Error updating collection set:", error);
+        throw error;
+      }
+    },
+
+    // Delete a collection set
+    async deleteCollectionSet(id) {
+      try {
+        await api.delete(`/api/collection-sets/${id}`);
+        if (Array.isArray(this.collectionSets)) {
+          this.collectionSets = this.collectionSets.filter(
+            (s) => String(s.id) !== String(id),
+          );
+          // Promote child sets to root in local state
+          this.collectionSets.forEach((s) => {
+            if (String(s.parentSetId) === String(id)) {
+              s.parentSetId = null;
+            }
+          });
+        }
+        // Move orphaned collections to root in local state
+        if (Array.isArray(this.collections)) {
+          this.collections.forEach((c) => {
+            if (String(c.setId) === String(id)) {
+              c.setId = null;
+            }
+          });
+        }
+        return true;
+      } catch (error) {
+        console.error("Error deleting collection set:", error);
+        throw error;
+      }
+    },
+
+    // Move a collection to a different set (or root)
+    async moveCollectionToSet(collectionId, targetSetId) {
+      try {
+        await api.patch("/api/collections/move", {
+          collectionId,
+          targetSetId: targetSetId || null,
+        });
+        if (Array.isArray(this.collections)) {
+          const col = this.collections.find(
+            (c) => String(c.id) === String(collectionId),
+          );
+          if (col) {
+            const oldSetId = col.setId;
+            col.setId = targetSetId || null;
+            // Update collectionsCount on the sets involved
+            if (Array.isArray(this.collectionSets)) {
+              if (oldSetId) {
+                const oldSet = this.collectionSets.find(
+                  (s) => String(s.id) === String(oldSetId),
+                );
+                if (oldSet && oldSet.collectionsCount > 0)
+                  oldSet.collectionsCount -= 1;
+              }
+              if (targetSetId) {
+                const newSet = this.collectionSets.find(
+                  (s) => String(s.id) === String(targetSetId),
+                );
+                if (newSet)
+                  newSet.collectionsCount = (newSet.collectionsCount ?? 0) + 1;
+              }
+            }
+          }
+        }
+        return true;
+      } catch (error) {
+        console.error("Error moving collection:", error);
+        throw error;
+      }
+    },
+
     // Delete collection
     async deleteCollection(id) {
       this.isDeleting = true;
@@ -154,7 +337,7 @@ export const useCollectionsStore = defineStore("collections", {
         // Remove from store
         if (Array.isArray(this.collections)) {
           this.collections = this.collections.filter(
-            (collection) => String(collection.id) !== String(id)
+            (collection) => String(collection.id) !== String(id),
           );
         }
 
@@ -188,7 +371,7 @@ export const useCollectionsStore = defineStore("collections", {
         // Update in collections array
         if (Array.isArray(this.collections)) {
           const index = this.collections.findIndex(
-            (collection) => String(collection.id) === String(id)
+            (collection) => String(collection.id) === String(id),
           );
           if (index !== -1) {
             this.collections[index] = {
@@ -273,7 +456,7 @@ export const useCollectionsStore = defineStore("collections", {
         // Update in collections array
         if (Array.isArray(this.collections)) {
           const index = this.collections.findIndex(
-            (collection) => String(collection.id) === String(collectionId)
+            (collection) => String(collection.id) === String(collectionId),
           );
           if (index !== -1) {
             this.collections[index] = updatedCollection;
@@ -322,7 +505,7 @@ export const useCollectionsStore = defineStore("collections", {
 
       // Get full photos from photosStore
       const fullPhotos = photosStore.allPhotos.filter((p) =>
-        photoIds.includes(p.id)
+        photoIds.includes(p.id),
       );
 
       return {
@@ -331,11 +514,24 @@ export const useCollectionsStore = defineStore("collections", {
       };
     },
 
+    // Build breadcrumb trail for a set
+    getBreadcrumbFor(setId) {
+      const trail = [];
+      let current = this.getSetById(setId);
+      while (current) {
+        trail.unshift(current);
+        current = current.parentSetId
+          ? this.getSetById(current.parentSetId)
+          : null;
+      }
+      return trail;
+    },
+
     // Utility method for date formatting (can be moved to utils later)
     formatDate(date) {
       return new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(
         Math.ceil((date - new Date()) / (1000 * 60 * 60 * 24)),
-        "day"
+        "day",
       );
     },
   },
