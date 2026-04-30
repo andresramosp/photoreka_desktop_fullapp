@@ -23,12 +23,12 @@ export class VisualColorEmbeddingTask extends AnalyzerTask {
       this.data = {}
     }
     const photoImageService = PhotoImageService.getInstance()
-    for (let i = 0; i < pendingPhotos.length; i += 64) {
+    for (let i = 0; i < pendingPhotos.length; i += 32) {
       await this.sleep(250)
-      const batch = pendingPhotos.slice(i, i + 64)
+      const batch = pendingPhotos.slice(i, i + 32)
 
-      // Obtener las imágenes válidas, automáticamente filtra las que no están en R2
-      const validImages = await photoImageService.getValidPhotosWithImages(batch, false)
+      // Usar thumbnails reduce mucho el payload y conserva bien el histograma de color.
+      const validImages = await photoImageService.getValidPhotosWithImagesThumb(batch, false)
 
       // Marcar las fotos fallidas como completadas
       const failedPhotos = batch.filter(

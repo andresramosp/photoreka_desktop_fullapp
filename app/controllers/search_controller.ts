@@ -201,8 +201,7 @@ export default class SearchController {
 
       const searchService = new SearchTextService()
 
-      const { included = [], excluded = [], mode = 'AND', semantic = false, limit } =
-        request.body()
+      const { included = [], excluded = [], mode = 'AND', semantic = false, limit } = request.body()
       const parsedLimit = Number(limit)
       const normalizedLimit = Number.isInteger(parsedLimit) && parsedLimit > 0 ? parsedLimit : null
 

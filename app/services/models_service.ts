@@ -691,7 +691,17 @@ export default class ModelsService {
 
       return data
     } catch (error) {
-      console.error('Error en getEmbeddings:', error.message, JSON.stringify(images))
+      const imageCount = Array.isArray(images) ? images.length : 0
+      const photoIds = Array.isArray(images) ? images.map((image) => image?.id).slice(0, 10) : []
+      const totalBase64Chars = Array.isArray(images)
+        ? images.reduce((sum, image) => sum + (image?.base64?.length || 0), 0)
+        : 0
+
+      console.error('Error en getEmbeddings:', error.message, {
+        imageCount,
+        photoIds,
+        totalBase64Chars,
+      })
       return { embeddings: [] }
     }
   }
