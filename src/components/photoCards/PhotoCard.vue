@@ -312,7 +312,7 @@ interface Props {
 }
 
 interface Emits {
-  (e: "select", photoId: string): void;
+  (e: "select", photoId: string, event?: MouseEvent): void;
   (e: "info", photo: Photo): void;
   (e: "move-to-selection", photoId: string): void; // For curation mode
   (e: "move-to-curation", photoId: string): void; // For selection mode
@@ -485,7 +485,7 @@ const handleTouchCancel = () => {
 
 const handleClick = (event: MouseEvent) => {
   if (props.mode === "curation") return;
-  baseHandleClick(event, props.photo.id, (id) => emit("select", id));
+  baseHandleClick(event, props.photo.id, (id, evt) => emit("select", id, evt));
 };
 
 const toggleSelection = () => {

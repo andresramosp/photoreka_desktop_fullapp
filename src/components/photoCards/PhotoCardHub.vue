@@ -3,6 +3,7 @@
     class="photo-card-info"
     :class="{
       selected: isSelected,
+      focused: props.focused,
       duplicate: photo.isDuplicate,
       'with-footer': showFooter,
       'show-hover': showHoverOverlay,
@@ -357,6 +358,7 @@ interface PhotoInfo {
 interface Props {
   photo: PhotoInfo;
   selected?: boolean;
+  focused?: boolean;
   showFooter: boolean;
   showDelete: boolean;
   showName: boolean;
@@ -367,7 +369,7 @@ interface Props {
 }
 
 interface Emits {
-  (e: "select", photoId: string): void;
+  (e: "select", photoId: string, event?: MouseEvent): void;
   (e: "info", photo: PhotoInfo): void;
   (e: "delete", photoId: string): void;
   (e: "show-duplicates", duplicates: string[]): void;
@@ -376,6 +378,7 @@ interface Emits {
 
 const props = withDefaults(defineProps<Props>(), {
   selected: false,
+  focused: false,
   matchedTags: () => [],
 });
 
@@ -434,7 +437,7 @@ const handleTouchCancel = () => {
 };
 
 const handleClick = (event: MouseEvent) => {
-  baseHandleClick(event, props.photo.id, (id) => emit("select", id));
+  baseHandleClick(event, props.photo.id, (id, evt) => emit("select", id, evt));
 };
 
 const handleMouseEnter = () => {
@@ -543,6 +546,11 @@ onUnmounted(() => {
 
 .photo-card-info.selected {
   border: solid 2px var(--accent-color);
+}
+
+.photo-card-info.focused:not(.selected) {
+  border: 2px dashed var(--accent-color);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 30%, transparent);
 }
 
 .photo-container {

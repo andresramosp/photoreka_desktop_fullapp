@@ -25,10 +25,11 @@ export function useMobilePhotoSelection() {
    */
   const togglePhotoSelection = (
     photoId: string,
-    onSelect: (id: string) => void,
+    onSelect: (id: string, event?: MouseEvent) => void,
+    event?: MouseEvent,
   ) => {
     // Call the original selection handler
-    onSelect(photoId);
+    onSelect(photoId, event);
 
     // Update internal tracking
     if (selectedPhotosSet.value.has(photoId)) {
@@ -123,11 +124,11 @@ export function useMobilePhotoSelection() {
   const handleClick = (
     event: MouseEvent,
     photoId: string,
-    onSelect: (id: string) => void,
+    onSelect: (id: string, event?: MouseEvent) => void,
   ) => {
     // On desktop, always allow regular click-to-select
     if (!isMobile.value) {
-      togglePhotoSelection(photoId, onSelect);
+      togglePhotoSelection(photoId, onSelect, event);
     }
     // On mobile, prevent default click to avoid interference with touch events
     else {

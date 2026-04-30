@@ -318,10 +318,21 @@
           <PhotoCardHub
             v-for="photo in chunk.photos"
             :key="photo.id"
+            :data-photo-id="photo.id"
             :photo="photo"
             :selected="selectedPhotosRecord[photo.id]"
+            :focused="
+              focusedByKeyboard && String(photo.id) === String(focusedPhotoId)
+            "
             @info="showPhotoInfo"
-            @select="togglePhotoSelection"
+            @select="
+              (id, evt) =>
+                handlePhotoSelect(
+                  id,
+                  evt,
+                  displayedPhotos.map((p) => p.id),
+                )
+            "
             @swap-photo="handleSwapPhoto"
             :show-delete="true"
             :show-name="true"
@@ -350,10 +361,21 @@
         <PhotoCardHub
           v-for="photo in displayedPhotos"
           :key="photo.id"
+          :data-photo-id="photo.id"
           :photo="photo"
           :selected="selectedPhotosRecord[photo.id]"
+          :focused="
+            focusedByKeyboard && String(photo.id) === String(focusedPhotoId)
+          "
           @info="showPhotoInfo"
-          @select="togglePhotoSelection"
+          @select="
+            (id, evt) =>
+              handlePhotoSelect(
+                id,
+                evt,
+                displayedPhotos.map((p) => p.id),
+              )
+          "
           @swap-photo="handleSwapPhoto"
           :show-delete="true"
           :show-name="true"
@@ -554,7 +576,7 @@ import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useUserStore } from "@/stores/userStore";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
-import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection.js";
+import { usePhotoRangeSelection } from "@/composables/usePhotoRangeSelection.js";
 import {
   useArtisticScores,
   getDefaultGenreFromProfile,
@@ -622,7 +644,13 @@ const {
   selectAllPhotos,
   deselectAllPhotos,
   clearAllSelections,
-} = useLocalPhotoSelection();
+  handlePhotoSelect,
+  resetRangeState,
+  focusedPhotoId,
+  focusedByKeyboard,
+  attachKeyboardListeners,
+  detachKeyboardListeners,
+} = usePhotoRangeSelection();
 
 const {
   isProcessing: isProcessingTool,
@@ -1607,15 +1635,24 @@ watch(
   { deep: true },
 );
 
-// Watch for props.photos changes to reset pagination
+// Watch for props.photos changes to reset pagination and range anchor
 watch(
   () => props.photos.length,
   (newLength, oldLength) => {
     resetPagination();
+    resetRangeState();
   },
 );
 
 // Lifecycle hooks for scroll listener
+watch(focusedPhotoId, (id) => {
+  if (!focusedByKeyboard.value || !id) return;
+  nextTick(() => {
+    const el = document.querySelector(`[data-photo-id="${id}"]`);
+    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  });
+});
+
 onMounted(() => {
   nextTick(() => {
     const container = document.querySelector(".view-container");
@@ -1631,6 +1668,12 @@ onMounted(() => {
 
   // Add resize listener for responsive column options
   window.addEventListener("resize", handleResize);
+
+  // Attach keyboard navigation listeners
+  attachKeyboardListeners(
+    () => displayedPhotos.value.map((p) => p.id),
+    () => gridColumns.value,
+  );
 });
 
 // Handle window resize for responsive columns
@@ -1648,6 +1691,9 @@ onUnmounted(() => {
 
   // Remove resize listener
   window.removeEventListener("resize", handleResize);
+
+  // Detach keyboard navigation listeners
+  detachKeyboardListeners();
 });
 
 // Computed for current photo index in displayed photos
