@@ -173,6 +173,7 @@ export default class AnalyzerProcessRunner {
     await invalidateCacheByPattern(`getPhotosIdsForSearch:${processUserId}:*`)
     await invalidateCacheByPattern(`getPhotosFor3DView_${processUserId}_*`)
     await invalidateCache(`getTagsByUser_${processUserId}`)
+    await invalidateCacheByPattern(`getTagCloud:${processUserId}:*`)
 
     // Persistir cost report
     // El tracker contiene solo las entries del intento actual (se reseteó al

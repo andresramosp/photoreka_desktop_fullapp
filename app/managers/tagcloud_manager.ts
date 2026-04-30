@@ -23,7 +23,6 @@ export default class TagCloudManager {
    * de proximidad semántica.
    */
   @withCache({
-    ttl: 60 * 60,
     provider: 'redis',
     key: (userId, outputDims, minPhotoCount, limit) =>
       `getTagCloud:${userId}:${outputDims}:${minPhotoCount}:${limit}`,

@@ -574,6 +574,7 @@ export default class PhotoManager {
 
     await invalidateCache(`getPhotosByUser_${userId}`)
     await invalidateCacheByPattern(`getPhotosIdsForSearch:${userId}:*`)
+    await invalidateCacheByPattern(`getTagCloud:${userId}:*`)
 
     return { message: 'Photos marked for deletion', ids, deletedAt }
   }
