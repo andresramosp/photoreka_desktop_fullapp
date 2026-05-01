@@ -38,3 +38,18 @@ export const UPLOAD_QUALITY_INITIAL = UPLOAD_FORMAT === "webp" ? 0.82 : 0.9;
  * than JPEG in the 0.7-0.9 range, so large decrements overshoot easily.
  */
 export const UPLOAD_QUALITY_DECREMENT = UPLOAD_FORMAT === "webp" ? 0.07 : 0.1;
+
+// ---------------------------------------------------------------------------
+// Safe Search – pre-upload content moderation (Google Vision API)
+// ---------------------------------------------------------------------------
+
+/** Fraction of the photo batch to sample for the safe search check (0–1). */
+export const SAFE_SEARCH_SAMPLE_RATIO = 0.75;
+/** Minimum number of photos always sampled, regardless of ratio. */
+export const SAFE_SEARCH_MIN_SAMPLES = 1;
+/** Maximum number of photos sampled per upload batch. */
+export const SAFE_SEARCH_MAX_SAMPLES = 15;
+/** Images are downscaled to this width (px) before the check – keeps payloads small. */
+export const SAFE_SEARCH_MAX_WIDTH = 500;
+/** Maximum byte size per image sent to the check endpoint (~150 KB). */
+export const SAFE_SEARCH_MAX_SIZE_BYTES = 150_000;

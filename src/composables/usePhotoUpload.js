@@ -15,6 +15,11 @@ import {
   UPLOAD_MAX_WIDTH,
   UPLOAD_THUMB_MAX_SIZE_BYTES,
   UPLOAD_THUMB_MAX_WIDTH,
+  SAFE_SEARCH_SAMPLE_RATIO,
+  SAFE_SEARCH_MIN_SAMPLES,
+  SAFE_SEARCH_MAX_SAMPLES,
+  SAFE_SEARCH_MAX_WIDTH,
+  SAFE_SEARCH_MAX_SIZE_BYTES,
 } from "@/config/uploadConfig.js";
 
 export function usePhotoUpload() {
@@ -29,6 +34,7 @@ export function usePhotoUpload() {
   const uploadedCount = ref(0);
   const totalFiles = ref(0);
   const pendingPhotos = ref([]); // Array temporal para fotos subidas pero no mostradas
+  const showSafeSearchViolationModal = ref(false);
 
   const overallProgress = computed(() => {
     if (totalFiles.value === 0) return 0;
@@ -198,6 +204,54 @@ export function usePhotoUpload() {
     return { isValid: true };
   }
 
+  // Comprueba una muestra de las fotos contra Google Safe Search antes de subirlas.
+  // Devuelve true si el lote puede continuar, false si se detecta contenido inapropiado.
+  async function runSafeSearchCheck(sources, srcType = "local") {
+    const count = sources.length;
+    const sampleCount = Math.min(
+      SAFE_SEARCH_MAX_SAMPLES,
+      Math.max(
+        SAFE_SEARCH_MIN_SAMPLES,
+        Math.ceil(count * SAFE_SEARCH_SAMPLE_RATIO),
+      ),
+    );
+
+    // Random sample
+    const shuffled = [...sources].sort(() => Math.random() - 0.5);
+    const sample = shuffled.slice(0, sampleCount);
+
+    // Extract raw file blobs regardless of source type
+    const files = sample.map((source) => {
+      if (srcType === "google") return source.googlePhotoBlob;
+      if (srcType === "dropbox") return source.dropboxBlob;
+      return source;
+    });
+
+    // Resize to small dimensions for a lightweight payload
+    const base64Images = await Promise.all(
+      files.map(async (file) => {
+        const resized = await resizeImage(
+          file,
+          SAFE_SEARCH_MAX_WIDTH,
+          SAFE_SEARCH_MAX_SIZE_BYTES,
+        );
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            // Strip "data:image/...;base64," prefix – send raw base64 only
+            resolve(reader.result.split(",")[1]);
+          };
+          reader.readAsDataURL(resized);
+        });
+      }),
+    );
+
+    const result = await api.post("/api/moderation/safe-search", {
+      images: base64Images,
+    });
+    return result.data;
+  }
+
   // Función principal para manejar el upload con progreso y errores
   async function handleUploadFlow(sources, srcType = "local") {
     if (sources.length === 0) return;
@@ -210,6 +264,23 @@ export function usePhotoUpload() {
     }
 
     isUploading.value = true;
+
+    // Safe Search pre-check (lightweight, before the real upload)
+    try {
+      const safeSearchResult = await runSafeSearchCheck(sources, srcType);
+      if (!safeSearchResult.passed) {
+        showSafeSearchViolationModal.value = true;
+        isUploading.value = false;
+        return;
+      }
+    } catch (err) {
+      // Fail open: if the check is unavailable, continue with the upload
+      console.warn(
+        "⚠️ Safe search check unavailable, proceeding with upload:",
+        err,
+      );
+    }
+
     totalFiles.value = sources.length;
     uploadedCount.value = 0;
 
@@ -267,6 +338,7 @@ export function usePhotoUpload() {
     uploadedCount,
     totalFiles,
     overallProgress,
+    showSafeSearchViolationModal,
 
     // Funciones
     handleUploadFlow,

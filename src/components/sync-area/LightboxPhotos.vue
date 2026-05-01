@@ -7,6 +7,8 @@
 
     <LightroomModal v-model="showLightroomModal" />
 
+    <SafeSearchViolationModal v-model:show="showSafeSearchViolationModal" />
+
     <!-- Source Warning Modal -->
     <n-modal
       v-model:show="showSourceWarningModal"
@@ -510,6 +512,7 @@ import dropboxIconUrl from "@/assets/logos/dropbox.svg";
 import PhotosGrid from "../PhotosGrid.vue";
 import DuplicatePhotosDialog from "../DuplicatePhotosDialog.vue";
 import LightroomModal from "../LightroomModal.vue";
+import SafeSearchViolationModal from "../SafeSearchViolationModal.vue";
 
 import { NModal, NCheckbox, NTooltip } from "naive-ui";
 
@@ -544,6 +547,7 @@ const {
   overallProgress,
   handleUploadFlow,
   validateUploadLimits,
+  showSafeSearchViolationModal,
 } = usePhotoUpload();
 
 // Variables locales del componente
