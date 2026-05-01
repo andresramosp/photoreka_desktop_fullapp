@@ -23,6 +23,7 @@ const schema = {
   R2_UPLOAD_WORKER_URL: Env.schema.string.optional(),
   R2_UPLOAD_WORKER_SECRET: Env.schema.string.optional(),
   REGISTRATION_MODE: Env.schema.enum.optional(['open', 'waiting_list'] as const),
+  GOOGLE_VISION_API_KEY: Env.schema.string.optional(),
 }
 
 // Fallback env.get() compatible wrapper

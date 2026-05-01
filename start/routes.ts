@@ -77,6 +77,7 @@ const ChatController = () => import('#controllers/chat_controller')
 const CanvasController = () => import('#controllers/canvas_controller')
 const PaymentController = () => import('#controllers/payment_controller')
 const PortfolioBuildController = () => import('#controllers/portfolio_build_controller')
+const SafeSearchController = () => import('#controllers/safe_search_controller')
 
 // Stripe webhook (no auth — verified by signature)
 router.post('/api/payments/webhook', [PaymentController, 'webhook'])
@@ -113,6 +114,9 @@ router
     router.post('/api/catalog/photosByIds', [CatalogController, 'getPhotosByIds'])
 
     router.post('/api/catalog/uploadPhoto', [CatalogController, 'uploadPhoto'])
+
+    // Content moderation
+    router.post('/api/moderation/safe-search', [SafeSearchController, 'check'])
 
     router.post('/api/catalog/checkDuplicates', [CatalogController, 'checkDuplicates'])
     router.post('/api/catalog/checkExactDuplicates', [CatalogController, 'checkExactDuplicates'])
