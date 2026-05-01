@@ -139,8 +139,8 @@ const isVisible = computed({
 
 const downloadPlugin = () => {
   const link = document.createElement("a");
-  link.href = "/Photoreka.lrplugin-1.0.0.zip";
-  link.download = "Photoreka.lrplugin-1.0.0.zip";
+  link.href = "/Photoreka.lrplugin.zip";
+  link.download = "Photoreka.lrplugin.zip";
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
