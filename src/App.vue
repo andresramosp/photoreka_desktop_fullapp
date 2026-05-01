@@ -381,6 +381,7 @@ watch(
         }
       });
       collectionsStore.getOrFetch(true);
+      collectionsStore.getOrFetchSets(true);
       seriesStore.getOrFetch(true);
       portfolioBuildsStore.getOrFetch(true);
       tagCloudStore.prefetch();
