@@ -22,6 +22,9 @@
           :photo="element"
           :style="getCellStyle(element)"
           :selected="selectedIdsSet.has(element.id)"
+          :cell-width="getCellLayoutMeta(element).width"
+          :cell-height="getCellLayoutMeta(element).height"
+          :row-photo-count="getCellLayoutMeta(element).rowPhotoCount"
           @select="(photo) => $emit('select', photo)"
           @remove="(photo) => $emit('remove', photo)"
           @info="(photo) => $emit('info', photo)"
@@ -143,6 +146,7 @@ const layoutMap = computed(() => {
       map.set(photo.id, {
         width: Math.floor(row.widths[index]),
         height: Math.floor(row.rowHeight),
+        rowPhotoCount: row.photos.length,
       });
     });
   }
@@ -159,6 +163,16 @@ function getCellStyle(photo) {
     flexShrink: 0,
     flexGrow: 0,
   };
+}
+
+function getCellLayoutMeta(photo) {
+  return (
+    layoutMap.value.get(photo.id) ?? {
+      width: 0,
+      height: 0,
+      rowPhotoCount: 0,
+    }
+  );
 }
 
 function onDragEnd() {

@@ -66,11 +66,7 @@
         <!-- Photo Display -->
         <div class="mobile-photo-container">
           <img
-            :src="
-              selectedPhoto?.originalUrl ||
-              selectedPhoto?.url ||
-              selectedPhoto?.thumbnailUrl
-            "
+            :src="selectedPhoto?.thumbnailUrl"
             :alt="selectedPhoto?.filename || selectedPhoto?.name || 'Photo'"
             class="mobile-photo"
             @error="emit('image-error', $event)"

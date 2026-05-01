@@ -7,11 +7,12 @@
     @click="onClick"
   >
     <img
-      :src="photo.originalUrl || photo.thumbnailUrl"
+      :src="imageSrc"
       :alt="`Photo ${photo.id}`"
       class="cell-image"
       draggable="false"
-      @load="loaded = true"
+      @load="onImageLoad"
+      @error="onImageError"
     />
 
     <div class="cell-overlay">
@@ -49,23 +50,58 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { NButton, NIcon, NSpin } from "naive-ui";
 import { TrashOutline, InformationCircleOutline } from "@vicons/ionicons5";
+
+const ORIGINAL_IMAGE_MIN_RENDERED_WIDTH = 420;
 
 const props = defineProps({
   photo: { type: Object, required: true },
   selected: { type: Boolean, default: false },
+  cellWidth: { type: Number, default: 0 },
+  cellHeight: { type: Number, default: 0 },
+  rowPhotoCount: { type: Number, default: 0 },
 });
 
 const emit = defineEmits(["remove", "info", "select"]);
 
 const loaded = ref(false);
+const forceThumbnail = ref(false);
+
+const shouldUseOriginal = computed(() => {
+  if (!props.photo?.originalUrl) return false;
+  if (props.rowPhotoCount === 1) return true;
+  return props.cellWidth >= ORIGINAL_IMAGE_MIN_RENDERED_WIDTH;
+});
+
+const imageSrc = computed(() => {
+  if (!forceThumbnail.value && shouldUseOriginal.value) {
+    return props.photo.originalUrl;
+  }
+  return props.photo.thumbnailUrl || props.photo.originalUrl || "";
+});
+
+watch(imageSrc, () => {
+  loaded.value = false;
+});
 
 // Distinguish click from drag: suppress selection toggle when the user dragged
 let dragStartX = 0;
 let dragStartY = 0;
 let hasMoved = false;
+
+function onImageLoad() {
+  loaded.value = true;
+}
+
+function onImageError() {
+  if (!forceThumbnail.value && imageSrc.value === props.photo.originalUrl) {
+    forceThumbnail.value = true;
+    return;
+  }
+  loaded.value = true;
+}
 
 function onMousedown(e) {
   dragStartX = e.clientX;

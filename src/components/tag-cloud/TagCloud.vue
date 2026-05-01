@@ -205,8 +205,7 @@ let baseScale = 1;
 const ZOOM_SENSITIVITY = 0.0035;
 const CAMERA_LERP = 0.18;
 const CAMERA_EPSILON = 0.001;
-const LABEL_FADE_IN = 0.5;
-const LABEL_FADE_OUT = 0.3;
+const LABEL_FADE_IN = 1;
 const LABEL_HIDE_THRESHOLD = 0.03;
 const HOVER_SCALE_LERP = 0.15; // speed of scale animation on hover
 const HOVER_TINT_LERP = 0.12; // speed of tint animation on hover
@@ -813,19 +812,18 @@ const lerpTint = (current, target, factor) => {
 const updateLabelAlphas = () => {
   for (const label of labelsByIndex.values()) {
     const targetAlpha = label.targetAlpha ?? 0;
-    if (targetAlpha > 0 && !label.visible) {
-      label.visible = true;
-    }
-
-    const fadeSpeed =
-      targetAlpha > label.alpha ? LABEL_FADE_IN : LABEL_FADE_OUT;
-    const nextAlpha = label.alpha + (targetAlpha - label.alpha) * fadeSpeed;
-    label.alpha =
-      Math.abs(targetAlpha - nextAlpha) < 0.01 ? targetAlpha : nextAlpha;
-
-    if (targetAlpha === 0 && label.alpha <= LABEL_HIDE_THRESHOLD) {
+    if (targetAlpha === 0) {
       label.alpha = 0;
       label.visible = false;
+    } else {
+      if (!label.visible) {
+        label.visible = true;
+      }
+
+      const nextAlpha =
+        label.alpha + (targetAlpha - label.alpha) * LABEL_FADE_IN;
+      label.alpha =
+        Math.abs(targetAlpha - nextAlpha) < 0.01 ? targetAlpha : nextAlpha;
     }
 
     // Smooth scale animation

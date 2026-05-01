@@ -52,11 +52,7 @@
         </n-button>
 
         <img
-          :src="
-            selectedPhoto?.originalUrl ||
-            selectedPhoto?.url ||
-            selectedPhoto?.thumbnailUrl
-          "
+          :src="selectedPhoto?.thumbnailUrl"
           :alt="selectedPhoto?.filename || selectedPhoto?.name || 'Photo'"
           class="centered-photo"
           @error="emit('image-error', $event)"

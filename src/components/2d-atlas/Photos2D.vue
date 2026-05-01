@@ -221,7 +221,7 @@
           class="selected-photo-item"
         >
           <img
-            :src="photo.thumbnailUrl || photo.originalUrl"
+            :src="photo.thumbnailUrl"
             :alt="photo.id"
             class="selected-photo-thumb"
           />
