@@ -1290,6 +1290,23 @@ const onPointerMove = (e) => {
   updateCanvasCursor();
 };
 
+const getSelectedTags = () =>
+  tags.value.filter((candidate) => selectedTagIds.has(candidate.id));
+
+const mergeTagSelection = (incomingTags) => {
+  const merged = new Map();
+
+  for (const tag of getSelectedTags()) {
+    merged.set(tag.id, tag);
+  }
+
+  for (const tag of incomingTags) {
+    merged.set(tag.id, tag);
+  }
+
+  return tags.value.filter((candidate) => merged.has(candidate.id));
+};
+
 const emitTagsSelected = (selectedTags) => {
   if (dynamicSearch.value) return;
   selectedTagIds = new Set(selectedTags.map((t) => t.id));
@@ -1305,10 +1322,7 @@ const toggleTagSelection = (tag) => {
         (candidate) =>
           selectedTagIds.has(candidate.id) && candidate.id !== tag.id,
       )
-    : [
-        ...tags.value.filter((candidate) => selectedTagIds.has(candidate.id)),
-        tag,
-      ];
+    : [...getSelectedTags(), tag];
 
   emitTagsSelected(nextSelection);
 };
@@ -1329,7 +1343,7 @@ const onPointerUp = (e) => {
     ) {
       const found = getTagsInScreenRect(r.x, r.y, r.x + r.w, r.y + r.h);
       if (found.length > 0) {
-        emitTagsSelected(found);
+        emitTagsSelected(mergeTagSelection(found));
       }
     } else if (r && e) {
       // Treat as a click on a single tag while preserving ctrl/cmd toggle behavior.

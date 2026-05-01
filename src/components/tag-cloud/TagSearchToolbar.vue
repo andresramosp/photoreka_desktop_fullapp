@@ -18,7 +18,10 @@
               {{ tag.name }}
             </span>
             <span
-              v-if="selectedTags.length - visibleTagCount > 0"
+              v-if="
+                selectedTags.length >= TAG_OVERFLOW_THRESHOLD &&
+                selectedTags.length - visibleTagCount > 0
+              "
               class="selected-tag-chip overflow-count-chip"
               :title="`${selectedTags.length - visibleTagCount} more tags`"
               >+{{ selectedTags.length - visibleTagCount }}</span
@@ -164,6 +167,7 @@ const photosStore = usePhotosStore();
 let activeRequestId = 0;
 
 // Tag overflow measurement
+const TAG_OVERFLOW_THRESHOLD = 10;
 const tagsRowRef = ref(null);
 const visibleTagCount = ref(Infinity);
 
@@ -172,6 +176,10 @@ const measureVisibleTags = () => {
   nextTick(() => {
     const container = tagsRowRef.value;
     if (!container || !props.selectedTags.length) {
+      visibleTagCount.value = props.selectedTags.length;
+      return;
+    }
+    if (props.selectedTags.length < TAG_OVERFLOW_THRESHOLD) {
       visibleTagCount.value = props.selectedTags.length;
       return;
     }
