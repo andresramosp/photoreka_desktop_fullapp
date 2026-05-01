@@ -1297,6 +1297,22 @@ const emitTagsSelected = (selectedTags) => {
   emit("tags-selected", selectedTags);
 };
 
+const toggleTagSelection = (tag) => {
+  if (!tag || dynamicSearch.value) return;
+
+  const nextSelection = selectedTagIds.has(tag.id)
+    ? tags.value.filter(
+        (candidate) =>
+          selectedTagIds.has(candidate.id) && candidate.id !== tag.id,
+      )
+    : [
+        ...tags.value.filter((candidate) => selectedTagIds.has(candidate.id)),
+        tag,
+      ];
+
+  emitTagsSelected(nextSelection);
+};
+
 const clearSelection = () => {
   selectedTagIds.clear();
   syncLabelInteractionStates();
@@ -1316,11 +1332,12 @@ const onPointerUp = (e) => {
         emitTagsSelected(found);
       }
     } else if (r && e) {
-      // Treat as a click on a single visible label
+      // Treat as a click on a single tag while preserving ctrl/cmd toggle behavior.
       const { x, y } = getCanvasPoint(e.clientX, e.clientY);
       const idx = findVisibleLabelAtScreen(x, y);
-      if (idx >= 0) {
-        emitTagsSelected([tags.value[idx]]);
+      const tagIndex = idx >= 0 ? idx : findTagAtScreen(x, y);
+      if (tagIndex >= 0) {
+        toggleTagSelection(tags.value[tagIndex]);
       }
     }
     updateCanvasCursor();
