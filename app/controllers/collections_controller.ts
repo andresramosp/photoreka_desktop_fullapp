@@ -105,6 +105,16 @@ export default class CollectionsController {
         return response.badRequest('Collection name is required')
       }
 
+      // Verificar que no existe ya una colección con el mismo nombre para este usuario
+      const existing = await Collection.query()
+        .where('userId', user.id)
+        .where('name', name.trim())
+        .first()
+
+      if (existing) {
+        return response.conflict('A collection with this name already exists')
+      }
+
       // Crear la colección
       const collection = await Collection.create({
         userId: user.id,
@@ -170,6 +180,17 @@ export default class CollectionsController {
 
       if (!name || name.trim().length === 0) {
         return response.badRequest('Collection name is required')
+      }
+
+      // Verificar que no existe otra colección con el mismo nombre para este usuario
+      const existing = await Collection.query()
+        .where('userId', user.id)
+        .where('name', name.trim())
+        .whereNot('id', collectionId)
+        .first()
+
+      if (existing) {
+        return response.conflict('A collection with this name already exists')
       }
 
       collection.name = name.trim()
