@@ -61,11 +61,12 @@ export default class ThreeDManager {
     provider: 'redis',
     key: (userId, chunkName, fakeLimit, outputDims) =>
       `get3DPhotos:${userId}:${chunkName}:${fakeLimit}:${outputDims}`,
+    ttl: 1_209_600, // 2 weeks — fallback expiry if manual invalidation is skipped
   })
   public async get3DPhotos(
     userId: string,
     chunkName: string,
-    fakeLimit: number = 5000,
+    fakeLimit: number = 10000,
     outputDims: number = 3
   ) {
     let photosWithCategory

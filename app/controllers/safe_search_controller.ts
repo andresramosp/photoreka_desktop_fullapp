@@ -33,7 +33,7 @@ const MODERATION_RULES = {
   },
   spoof: {
     threshold: new Set(['VERY_LIKELY']),
-    batchThreshold: 0.3, // ← configurable (ej: 30% del lote)
+    batchThreshold: 0.75, // ← configurable (ej: 30% del lote)
   },
 } as const
 

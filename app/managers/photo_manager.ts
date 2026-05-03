@@ -69,6 +69,10 @@ export default class PhotoManager {
     return await query
   }
 
+  @withCache({
+    provider: 'redis',
+    key: (userId) => `getPhotosPreview_${userId}`,
+  })
   public async getPhotosPreview(userId: string) {
     const photos = await Photo.query()
       .where('user_id', userId)
@@ -571,7 +575,7 @@ export default class PhotoManager {
     }
 
     if (userId) {
-      await CacheInvalidationService.onPhotosDeleted(userId)
+      await CacheInvalidationService.onPhotosDeleted(userId, ids.length)
     }
 
     return { message: 'Photos marked for deletion', ids, deletedAt }

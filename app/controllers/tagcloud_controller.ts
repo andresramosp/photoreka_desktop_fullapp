@@ -13,7 +13,7 @@ export default class TagCloudController {
       const user = auth.use('api').user! as any
       const userId = user.id.toString()
 
-      const { outputDims = 2, minPhotoCount = 1, limit = 8000 } = request.body() || {}
+      const { outputDims = 2, minPhotoCount = 1, limit = 10000 } = request.body() || {}
 
       const manager = new TagCloudManager()
       const result = await manager.getTagCloud(userId, outputDims, minPhotoCount, limit)

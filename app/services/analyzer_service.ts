@@ -168,7 +168,8 @@ export default class AnalyzerProcessRunner {
 
     // Usar el userId del proceso para invalidar cache
     const processUserId = this.process.userId?.toString()
-    await CacheInvalidationService.onAnalysisCompleted(processUserId)
+    const totalForCache = await this.getTotalProcessPhotos()
+    await CacheInvalidationService.onAnalysisCompleted(processUserId, totalForCache)
 
     // Persistir cost report
     // El tracker contiene solo las entries del intento actual (se reseteó al
