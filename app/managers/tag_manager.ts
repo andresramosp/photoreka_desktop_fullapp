@@ -32,7 +32,6 @@ export default class TagManager {
   @withCache({
     key: (userId) => `getTagsByUser_${userId}`,
     provider: 'redis',
-    ttl: 60 * 5,
   })
   public async getTagsByUser(userId: string): Promise<Tag[]> {
     // Busca los tags asociados a las fotos del usuario, sin duplicados

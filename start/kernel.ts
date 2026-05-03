@@ -67,5 +67,3 @@ try {
 } finally {
   await db.manager.closeAll()
 }
-
-invalidateCache()

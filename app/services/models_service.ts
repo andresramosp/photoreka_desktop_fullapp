@@ -2,7 +2,8 @@
 
 import env from '#start/env'
 import axios from 'axios'
-import NodeCache from 'node-cache'
+import crypto from 'node:crypto'
+import redis from '@adonisjs/redis/services/main'
 import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
 import withWarmUp from '../decorators/withWarmUp.js'
 import { robustJsonParse } from '../utils/jsonUtils.js'
@@ -20,11 +21,29 @@ import {
   HarmCategory,
   MediaResolution,
 } from '@google/genai'
-import { withCache } from '../decorators/withCache.js'
 import withCPUWarmUp from '../decorators/withCPUWarmUp.js'
 import { createRequire } from 'module'
 
-const cache = new NodeCache() // Simple in-memory cache
+/** Returns true if content contains image blocks (OpenAI image_url, Gemini inlineData/fileData). */
+function containsImages(content: any): boolean {
+  if (!content) return false
+  if (typeof content === 'string') return false
+  const items = Array.isArray(content) ? content : [content]
+  return items.some((item) => {
+    if (!item || typeof item !== 'object') return false
+    if (item.type === 'image_url' || item.type === 'image') return true
+    if (item.inlineData || item.inline_data) return true
+    if (item.fileData || item.file_data) return true
+    // Nested content arrays (e.g. Qwen multimodal messages)
+    if (Array.isArray(item.content)) return containsImages(item.content)
+    return false
+  })
+}
+
+/** SHA-256 hash of the serialized parts, used as a compact Redis key. */
+function llmCacheKey(parts: object): string {
+  return 'llm:' + crypto.createHash('sha256').update(JSON.stringify(parts)).digest('hex')
+}
 
 function hasNonEmptyResult(result: any): boolean {
   const r = result?.result
@@ -371,7 +390,6 @@ export default class ModelsService {
     temperature: number = 0.1,
     useCache: boolean = true
   ): Promise<any> {
-    const cacheDuration = 60 * 5
     try {
       // Construcción del payload compatible con Qwen multimodal
       let messages: any[] = []
@@ -406,13 +424,16 @@ export default class ModelsService {
       }
       if (responseFormat) payload.response_format = responseFormat
 
-      const cacheKey = JSON.stringify({ systemContent, userContent, model, responseFormat })
+      const shouldCache = useCache && !containsImages(userContent)
+      const cacheKey = shouldCache ? llmCacheKey({ systemContent, userContent, model, responseFormat }) : null
 
       // Check cache
-      const cachedResponse = cache.get(cacheKey)
-      if (useCache && cachedResponse) {
-        console.log('Cache hit for getQwenResponse')
-        return cachedResponse
+      if (shouldCache) {
+        const cached = await redis.get(cacheKey!)
+        if (cached) {
+          console.log('Cache hit for getQwenResponse')
+          return JSON.parse(cached)
+        }
       }
 
       const { data } = await axios.post(
@@ -468,8 +489,8 @@ export default class ModelsService {
         },
       }
 
-      if (useCache && hasNonEmptyResult(result))
-        cache.set(cacheKey, { ...result, cost: '0 [cached]' }, cacheDuration)
+      if (shouldCache && hasNonEmptyResult(result))
+        await redis.set(cacheKey!, JSON.stringify({ ...result, cost: '0 [cached]' }))
 
       return result
     } catch (error) {
@@ -906,7 +927,6 @@ export default class ModelsService {
     temperature: number = 1,
     useCache: boolean = true
   ): Promise<any> {
-    let cacheDuration = 60 * 5
     try {
       // Si el modelo es un GPT-5 base/non-chat, no pasar temperature y usar max_completion_tokens
       const isGpt5NonChat = ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-5.1', 'gpt-5.2'].includes(
@@ -949,13 +969,16 @@ export default class ModelsService {
         payload.response_format = responseFormat
       }
 
-      const cacheKey = JSON.stringify({ systemContent, userContent, model })
+      const shouldCache = useCache && !containsImages(userContent)
+      const cacheKey = shouldCache ? llmCacheKey({ systemContent, userContent, model }) : null
 
       // Check cache
-      const cachedResponse = cache.get(cacheKey)
-      if (useCache && cachedResponse) {
-        console.log('Cache hit for getGPTResponse')
-        return cachedResponse
+      if (shouldCache) {
+        const cached = await redis.get(cacheKey!)
+        if (cached) {
+          console.log('Cache hit for getGPTResponse')
+          return JSON.parse(cached)
+        }
       }
 
       const { data } = await axios.post(`${env.get('OPENAI_BASEURL')}/chat/completions`, payload, {
@@ -1003,8 +1026,8 @@ export default class ModelsService {
       }
 
       // Cache the result
-      if (useCache && hasNonEmptyResult(result))
-        cache.set(cacheKey, { ...result, cost: '0 [cached]' }, cacheDuration)
+      if (shouldCache && hasNonEmptyResult(result))
+        await redis.set(cacheKey!, JSON.stringify({ ...result, cost: '0 [cached]' }))
 
       return result
     } catch (error) {
@@ -1020,18 +1043,20 @@ export default class ModelsService {
     useCache: boolean = true,
     throwOnError: boolean = false
   ): Promise<any> {
-    let cacheDuration = 60 * 5
     let finalResult, parsedResult, rawResult
     try {
       const contents = createUserContent([systemPrompt, ...userMessages])
 
-      const cacheKey = JSON.stringify({ contents, model })
+      const shouldCache = useCache && !containsImages(userMessages)
+      const cacheKey = shouldCache ? llmCacheKey({ systemPrompt, userMessages, model }) : null
 
       // Check cache
-      const cachedResponse = cache.get(cacheKey)
-      if (useCache && cachedResponse) {
-        console.log('Cache hit for getGeminiResponse')
-        return cachedResponse
+      if (shouldCache) {
+        const cached = await redis.get(cacheKey!)
+        if (cached) {
+          console.log('Cache hit for getGeminiResponse')
+          return JSON.parse(cached)
+        }
       }
 
       const ai = new GoogleGenAI({
@@ -1131,8 +1156,8 @@ export default class ModelsService {
       }
 
       // Cache the result
-      if (useCache && hasNonEmptyResult(finalResult))
-        cache.set(cacheKey, { ...finalResult, cost: '0 [cached]' }, cacheDuration)
+      if (shouldCache && hasNonEmptyResult(finalResult))
+        await redis.set(cacheKey!, JSON.stringify({ ...finalResult, cost: '0 [cached]' }))
 
       return finalResult
     } catch (error) {
@@ -1151,7 +1176,6 @@ export default class ModelsService {
     temperature: number = 0.1,
     useCache: boolean = true
   ): Promise<any> {
-    let cacheDuration = 60 * 30
     try {
       let payload: any = {
         model,
@@ -1176,17 +1200,20 @@ export default class ModelsService {
             ],
       }
 
-      const cacheKey = JSON.stringify({ systemContent, userContent, model })
+      const shouldCache = useCache && !containsImages(userContent)
+      const cacheKey = shouldCache ? llmCacheKey({ systemContent, userContent, model }) : null
 
       if (responseFormat) {
         payload.response_format = responseFormat
       }
 
       // Check cache
-      const cachedResponse = cache.get(cacheKey)
-      if (useCache && cachedResponse) {
-        console.log('Cache hit for getGPTResponse')
-        return cachedResponse
+      if (shouldCache) {
+        const cached = await redis.get(cacheKey!)
+        if (cached) {
+          console.log('Cache hit for getDSResponse')
+          return JSON.parse(cached)
+        }
       }
 
       const { data } = await axios.post(
@@ -1252,8 +1279,8 @@ export default class ModelsService {
       }
 
       // Cache the result
-      if (useCache && hasNonEmptyResult(result))
-        cache.set(cacheKey, { ...result, cost: '0 [cached]' }, cacheDuration)
+      if (shouldCache && hasNonEmptyResult(result))
+        await redis.set(cacheKey!, JSON.stringify({ ...result, cost: '0 [cached]' }))
 
       return result
     } catch (error) {

@@ -103,7 +103,6 @@ class EmbeddingService {
 
   @withCache({
     provider: 'redis',
-    ttl: 60 * 60,
   })
   public async generateEmbeddings(sentences: string[]): Promise<number[][]> {
     await this.loadModel()

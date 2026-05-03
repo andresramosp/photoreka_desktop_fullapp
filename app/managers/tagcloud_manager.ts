@@ -26,6 +26,7 @@ export default class TagCloudManager {
     provider: 'redis',
     key: (userId, outputDims, minPhotoCount, limit) =>
       `getTagCloud:${userId}:${outputDims}:${minPhotoCount}:${limit}`,
+    ttl: 1_209_600, // 2 weeks — fallback expiry if manual invalidation is skipped
   })
   public async getTagCloud(
     userId: string,

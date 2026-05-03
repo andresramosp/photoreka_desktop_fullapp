@@ -5,7 +5,8 @@ import ModelsService from '#services/models_service'
 import NLPService from '#services/nlp_service'
 import { Logger } from '@adonisjs/core/logger'
 
-import { invalidateCache, invalidateCacheByPattern, withCache } from '../decorators/withCache.js'
+import { withCache } from '../decorators/withCache.js'
+import { CacheInvalidationService } from '../services/cache_invalidation_service.js'
 import TagPhotoManager from './tag_photo_manager.js'
 import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
 import { DeleteObjectsCommand, S3Client } from '@aws-sdk/client-s3'
@@ -54,7 +55,6 @@ export default class PhotoManager {
 
   @withCache({
     provider: 'redis',
-    ttl: 60 * 30,
     key: (userId) => `getPhotosByUser_${userId}`,
   })
   public async getPhotosByUser(userId: string) {
@@ -69,6 +69,10 @@ export default class PhotoManager {
     return await query
   }
 
+  @withCache({
+    provider: 'redis',
+    key: (userId) => `getPhotosPreview_${userId}`,
+  })
   public async getPhotosPreview(userId: string) {
     const photos = await Photo.query()
       .where('user_id', userId)
@@ -93,7 +97,6 @@ export default class PhotoManager {
 
   @withCache({
     provider: 'redis',
-    ttl: 60 * 30,
     key: (userId, embeddingType) => `getPhotosFor3DView_${userId}_${embeddingType}`,
   })
   public async getPhotosFor3DView(
@@ -123,7 +126,6 @@ export default class PhotoManager {
 
   @withCache({
     provider: 'redis',
-    ttl: 60 * 30,
     key: (
       userId: string,
       collections?: string[],
@@ -572,9 +574,9 @@ export default class PhotoManager {
       console.warn('⚠️ Fallo al eliminar archivos en R2:', err)
     }
 
-    await invalidateCache(`getPhotosByUser_${userId}`)
-    await invalidateCacheByPattern(`getPhotosIdsForSearch:${userId}:*`)
-    await invalidateCacheByPattern(`getTagCloud:${userId}:*`)
+    if (userId) {
+      await CacheInvalidationService.onPhotosDeleted(userId, ids.length)
+    }
 
     return { message: 'Photos marked for deletion', ids, deletedAt }
   }

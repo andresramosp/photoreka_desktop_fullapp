@@ -47,8 +47,10 @@ export function withCache(options: CacheOptions = {}) {
       } else {
         const cached = await redis.get(redisCacheKey)
         if (cached) {
+          console.log(`[withCache] Redis cache HIT for key: ${redisCacheKey}`)
           return JSON.parse(cached)
         }
+        console.log(`[withCache] Redis cache MISS for key: ${redisCacheKey}`)
       }
 
       const result = await originalMethod.apply(this, args)

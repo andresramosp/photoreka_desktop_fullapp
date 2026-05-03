@@ -407,7 +407,6 @@ export default class PortfolioReviewManager {
   // ========================================
 
   @withCache({
-    ttl: 60 * 60,
     provider: 'redis',
     key: (userId, reviewType) => `portfolioEmbeddings:${reviewType}:${userId}`,
   })

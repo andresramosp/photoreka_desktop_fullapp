@@ -279,7 +279,8 @@ export default class ScoringService {
 
   @withCache({
     provider: 'redis',
-    ttl: 60 * 5,
+    key: (photoIds: number[], structuredQuery: any, searchMode: SearchMode, userId: string) =>
+      `getScoredPhotosByTagsAndDesc:${userId}:${searchMode}:${JSON.stringify(structuredQuery)}:${JSON.stringify([...photoIds].sort())}`,
   })
   public async getScoredPhotosByTagsAndDesc(
     photoIds: number[],
@@ -306,7 +307,7 @@ export default class ScoringService {
         this.processFullQuery(photoIds, query, config),
         this.processNotes(photoIds, query, config),
         this.processNuances(photoIds, query, config, userId),
-        this.processImageSimilarity(photoIds, query.fullQuery, config),
+        this.processImageSimilarity(photoIds, query.fullQuery, config, userId),
       ])
 
     // 6. Merge todos los resultados
@@ -373,7 +374,14 @@ export default class ScoringService {
 
   @withCache({
     provider: 'redis',
-    ttl: 60 * 5,
+    key: (
+      photoIds: number[],
+      included: string[],
+      excluded: string[],
+      searchMode: SearchMode,
+      userId: string
+    ) =>
+      `getScoredPhotosByTags:${userId}:${searchMode}:${JSON.stringify([...included].sort())}:${JSON.stringify([...excluded].sort())}:${JSON.stringify([...photoIds].sort())}`,
   })
   public async getScoredPhotosByTags(
     photoIds: number[],
@@ -648,13 +656,14 @@ export default class ScoringService {
   private async processImageSimilarity(
     photoIds: number[],
     fullQuery: string,
-    config: EffectiveConfig
+    config: EffectiveConfig,
+    userId: string
   ): Promise<{ id: number; imageScore: number }[]> {
     if (config.imageThreshold === null || !fullQuery) {
       return []
     }
 
-    return this.getScoredPhotoImageByFullQuery(photoIds, fullQuery, config.imageThreshold)
+    return this.getScoredPhotoImageByFullQuery(photoIds, fullQuery, config.imageThreshold, userId)
   }
 
   private finalizeScores(
@@ -799,12 +808,19 @@ export default class ScoringService {
 
   @withCache({
     provider: 'redis',
-    ttl: 60 * 5,
+    key: (
+      photoIds: number[],
+      fullQuery: string,
+      embeddingsProximityThreshold: number,
+      userId: string
+    ) =>
+      `getScoredPhotoImageByFullQuery:${userId}:${fullQuery}:${embeddingsProximityThreshold}:${JSON.stringify([...photoIds].sort())}`,
   })
   private async getScoredPhotoImageByFullQuery(
     photoIds: number[],
     fullQuery: string,
-    embeddingsProximityThreshold: number = 0.25
+    embeddingsProximityThreshold: number = 0.25,
+    userId: string = ''
   ): Promise<{ id: number; imageScore: number }[]> {
     const embedding = EmbeddingStoreService.getEmbedding(fullQuery, EmbeddingType.CLIP)
 

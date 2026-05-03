@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import ThreeDManager from '../managers/3d_manager.js'
-import { invalidateCache } from '../decorators/withCache.js'
 
 export default class ThreeDViewController {
   /**
@@ -16,22 +15,7 @@ export default class ThreeDViewController {
       const { chunkName, outputDims = 3 } = request.body()
 
       const threeDManager = new ThreeDManager()
-      const result = await threeDManager.get3DPhotos(userId, chunkName, 5000, outputDims)
-
-      // Si no hay fotos, invalidar el caché para que pueda reintentar
-      if (result.photos && result.photos.length === 0) {
-        const fakeLimit = 5000 // valor por defecto del método
-        const cacheKey = `get3DPhotos:${userId}:${chunkName}:${fakeLimit}:${outputDims}`
-
-        console.log(`[3DViewController] Intentando invalidar caché para clave: ${cacheKey}`)
-
-        // Invalidar en ambos providers por si acaso
-        await invalidateCache(cacheKey, 'redis')
-
-        console.log(
-          `[3DViewController] Caché invalidado en redis y nodecache para clave: ${cacheKey}`
-        )
-      }
+      const result = await threeDManager.get3DPhotos(userId, chunkName, 10000, outputDims)
 
       return response.ok(result)
     } catch (error) {
