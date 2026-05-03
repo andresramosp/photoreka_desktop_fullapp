@@ -62,7 +62,7 @@ export class GlobalEmbeddingsTagsTask extends AnalyzerTask {
       const batchTags = this.tagsToProcess.slice(i, i + batchEmbeddingsSize)
 
       logger.debug(
-        `Obteniendo embeddings para lote de tags ${Math.floor(i / batchEmbeddingsSize) + 1}/${Math.ceil(tagNames.length / batchEmbeddingsSize)} (${batch.length} tags)`
+        `Obteniendo embeddings para batch de tags ${Math.floor(i / batchEmbeddingsSize) + 1}/${Math.ceil(tagNames.length / batchEmbeddingsSize)} (${batch.length} tags)`
       )
 
       try {
