@@ -84,7 +84,6 @@ export default class QueryService {
   // TODO: userid!!
   @withCache({
     provider: 'redis',
-    ttl: 60 * 10,
   })
   public async structureQueryNLP(query) {
     let expansionCost = 0

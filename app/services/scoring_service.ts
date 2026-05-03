@@ -279,7 +279,7 @@ export default class ScoringService {
 
   @withCache({
     provider: 'redis',
-    ttl: 60 * 5,
+    ttl: 60 * 30,
   })
   public async getScoredPhotosByTagsAndDesc(
     photoIds: number[],
@@ -373,7 +373,7 @@ export default class ScoringService {
 
   @withCache({
     provider: 'redis',
-    ttl: 60 * 5,
+    ttl: 60 * 30,
   })
   public async getScoredPhotosByTags(
     photoIds: number[],
@@ -799,7 +799,7 @@ export default class ScoringService {
 
   @withCache({
     provider: 'redis',
-    ttl: 60 * 5,
+    ttl: 60 * 30,
   })
   private async getScoredPhotoImageByFullQuery(
     photoIds: number[],

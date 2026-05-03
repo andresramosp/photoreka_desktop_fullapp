@@ -1,5 +1,5 @@
 import ModelsService from './models_service.js'
-import NLPService from './nlp_service.js'
+import redis from '@adonisjs/redis/services/main'
 
 export enum EmbeddingType {
   Text = 'text',
@@ -15,11 +15,11 @@ export class EmbeddingStoreService {
     type: EmbeddingType = EmbeddingType.Text
   ): void {
     const targetMap = type === EmbeddingType.CLIP ? this.embeddingsMapCLIP : this.embeddingsMap
+    const redisPrefix = type === EmbeddingType.CLIP ? 'clip' : 'text'
     for (const { key, value } of pairs) {
       targetMap[key] = value
-      // console.log(
-      //   `[EmbeddingStoreService] Embedding ${type} almacenado para clave '${key}' (dimensión: ${value.length})`
-      // )
+      // Persist to Redis so embeddings survive server restarts (fire-and-forget)
+      redis.set(`embedding:${redisPrefix}:${key}`, JSON.stringify(value)).catch(() => {})
     }
   }
 
@@ -79,30 +79,33 @@ export class EmbeddingStoreService {
   ): Promise<void> {
     if (newTerms.length === 0) return
 
-    // console.log(
-    //   `[EmbeddingStoreService] Calculando embeddings Text para ${newTerms.length} nuevos términos...`
-    // )
+    // Check Redis L2 before hitting the CPU API
+    const redisValues = await redis.mget(...newTerms.map((t) => `embedding:text:${t}`))
+    const termsToCompute: string[] = []
+    for (let i = 0; i < newTerms.length; i++) {
+      if (redisValues[i]) {
+        this.embeddingsMap[newTerms[i]] = JSON.parse(redisValues[i]!)
+      } else {
+        termsToCompute.push(newTerms[i])
+      }
+    }
 
-    const { embeddings } = await modelsService.getEmbeddingsCPU(newTerms)
+    if (termsToCompute.length === 0) return
 
-    if (!embeddings || embeddings.length !== newTerms.length) {
+    const { embeddings } = await modelsService.getEmbeddingsCPU(termsToCompute)
+
+    if (!embeddings || embeddings.length !== termsToCompute.length) {
       throw new Error(
-        `[EmbeddingStoreService] Error: Mismatch entre entrada (${newTerms.length}) y embeddings devueltos (${embeddings?.length})`
+        `[EmbeddingStoreService] Error: Mismatch entre entrada (${termsToCompute.length}) y embeddings devueltos (${embeddings?.length})`
       )
     }
 
-    const pairs = newTerms.map((key, index) => ({
+    const pairs = termsToCompute.map((key, index) => ({
       key,
       value: embeddings[index],
     }))
 
     this.addEmbeddings(pairs, EmbeddingType.Text)
-
-    // console.log(
-    //   `[EmbeddingStoreService] Embeddings Text calculados y almacenados para claves: [${newTerms.join(
-    //     ', '
-    //   )}]`
-    // )
   }
 
   private static async calculateCLIPEmbeddings(
@@ -111,30 +114,33 @@ export class EmbeddingStoreService {
   ): Promise<void> {
     if (newTermsCLIP.length === 0) return
 
-    // console.log(
-    //   `[EmbeddingStoreService] Calculando embeddings CLIP para ${newTermsCLIP.length} nuevos términos...`
-    // )
+    // Check Redis L2 before hitting the CPU API
+    const redisValues = await redis.mget(...newTermsCLIP.map((t) => `embedding:clip:${t}`))
+    const termsToCompute: string[] = []
+    for (let i = 0; i < newTermsCLIP.length; i++) {
+      if (redisValues[i]) {
+        this.embeddingsMapCLIP[newTermsCLIP[i]] = JSON.parse(redisValues[i]!)
+      } else {
+        termsToCompute.push(newTermsCLIP[i])
+      }
+    }
 
-    const { embeddings: embeddingsCLIP } = await modelsService.getCLIPEmbeddingsCPU(newTermsCLIP)
+    if (termsToCompute.length === 0) return
 
-    if (!embeddingsCLIP || embeddingsCLIP.length !== newTermsCLIP.length) {
+    const { embeddings: embeddingsCLIP } = await modelsService.getCLIPEmbeddingsCPU(termsToCompute)
+
+    if (!embeddingsCLIP || embeddingsCLIP.length !== termsToCompute.length) {
       throw new Error(
-        `[EmbeddingStoreService] Error: Mismatch entre entrada CLIP (${newTermsCLIP.length}) y embeddings devueltos (${embeddingsCLIP?.length})`
+        `[EmbeddingStoreService] Error: Mismatch entre entrada CLIP (${termsToCompute.length}) y embeddings devueltos (${embeddingsCLIP?.length})`
       )
     }
 
-    const pairsCLIP = newTermsCLIP.map((key, index) => ({
+    const pairsCLIP = termsToCompute.map((key, index) => ({
       key,
       value: embeddingsCLIP[index],
     }))
 
     this.addEmbeddings(pairsCLIP, EmbeddingType.CLIP)
-
-    // console.log(
-    //   `[EmbeddingStoreService] Embeddings CLIP calculados y almacenados para claves: [${newTermsCLIP.join(
-    //     ', '
-    //   )}]`
-    // )
   }
 
   public static async calculateEmbeddings(

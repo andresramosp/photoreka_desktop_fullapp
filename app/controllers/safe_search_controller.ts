@@ -6,12 +6,6 @@ import { USD_TO_EUR } from '#services/models_service'
 /** Google Vision Safe Search Detection price: $1.50 per 1,000 images. */
 const SAFE_SEARCH_COST_USD_PER_IMAGE = 0.0015
 
-/** Likelihoods that trigger a violation. */
-const VIOLATION_THRESHOLD = new Set(['VERY_LIKELY'])
-
-/** Vision API fields we enforce. */
-const CHECKED_FIELDS = ['adult', 'violence'] as const
-
 /** Vision API accepts at most 16 images per annotate request. */
 const MAX_IMAGES_PER_REQUEST = 16
 
@@ -21,21 +15,37 @@ const MAX_IMAGES_PER_REQUEST = 16
  */
 const MAX_BASE64_LENGTH = 200_000
 
+/**
+ * Declarative moderation rules.
+ *
+ * - threshold: which likelihood values are considered violations
+ * - perImage: if true → any single image triggers violation
+ * - batchThreshold: % of images required to trigger violation (0–1)
+ */
+const MODERATION_RULES = {
+  adult: {
+    threshold: new Set(['VERY_LIKELY']),
+    perImage: true,
+  },
+  violence: {
+    threshold: new Set(['VERY_LIKELY']),
+    perImage: true,
+  },
+  spoof: {
+    threshold: new Set(['VERY_LIKELY']),
+    batchThreshold: 0.3, // ← configurable (ej: 30% del lote)
+  },
+} as const
+
+type ModerationField = keyof typeof MODERATION_RULES
+
 export default class SafeSearchController {
-  /**
-   * Checks a batch of base64-encoded images against Google Vision Safe Search.
-   * Fails open (passes) when the API key is not configured or the API is unavailable.
-   *
-   * POST /api/moderation/safe-search
-   * Body: { images: string[] }  — pure base64, no data-URL prefix
-   */
   public async check({ request, response, auth }: HttpContext) {
     try {
       const user = await auth.use('api').authenticate()
 
       const apiKey = process.env.GOOGLE_VISION_API_KEY
       if (!apiKey) {
-        // Feature disabled – skip check and allow upload to proceed
         return response.ok({ passed: true, skipped: true })
       }
 
@@ -45,7 +55,6 @@ export default class SafeSearchController {
         return response.badRequest({ message: 'No images provided' })
       }
 
-      // Sanitise: cap count and reject oversized entries
       const imagesToCheck = (images as unknown[])
         .slice(0, MAX_IMAGES_PER_REQUEST)
         .filter((img): img is string => typeof img === 'string' && img.length <= MAX_BASE64_LENGTH)
@@ -67,7 +76,7 @@ export default class SafeSearchController {
 
       const results = visionResponse.data.responses as Record<string, any>[]
 
-      // Estimate and record cost (fire-and-forget)
+      // Cost tracking (optional)
       // const costInEur = imagesToCheck.length * SAFE_SEARCH_COST_USD_PER_IMAGE * USD_TO_EUR
       // UserCostService.record(user.id, 'other', costInEur, imagesToCheck.length, {
       //   model: 'google-vision-safe-search',
@@ -76,14 +85,29 @@ export default class SafeSearchController {
 
       const violations: { imageIndex: number; reasons: string[] }[] = []
 
+      // Contadores por campo (para batch rules)
+      const batchCounters: Record<ModerationField, number> = {
+        adult: 0,
+        violence: 0,
+        spoof: 0,
+      }
+
       results.forEach((result, index) => {
         const annotation = result.safeSearchAnnotation
         if (!annotation) return
 
         const reasons: string[] = []
-        for (const field of CHECKED_FIELDS) {
-          if (VIOLATION_THRESHOLD.has(annotation[field])) {
-            reasons.push(field)
+
+        for (const field of Object.keys(MODERATION_RULES) as ModerationField[]) {
+          const rule = MODERATION_RULES[field]
+          const value = annotation[field]
+
+          if (rule.threshold.has(value)) {
+            batchCounters[field]++
+
+            if (rule.perImage) {
+              reasons.push(field)
+            }
           }
         }
 
@@ -92,13 +116,34 @@ export default class SafeSearchController {
         }
       })
 
+      // Evaluación batch (ej: spoof)
+      const batchViolations: string[] = []
+
+      for (const field of Object.keys(MODERATION_RULES) as ModerationField[]) {
+        const rule = MODERATION_RULES[field]
+
+        if (rule.batchThreshold !== undefined) {
+          const ratio = batchCounters[field] / imagesToCheck.length
+
+          if (ratio >= rule.batchThreshold) {
+            batchViolations.push(field)
+          }
+        }
+      }
+
+      const passed = violations.length === 0 && batchViolations.length === 0
+
       return response.ok({
-        passed: violations.length === 0,
+        passed,
         violations,
+        batchViolations,
+        stats: {
+          total: imagesToCheck.length,
+          counts: batchCounters,
+        },
       })
     } catch (error) {
       console.error('Safe search check failed:', error)
-      // Fail open: if Vision API is unreachable, allow the upload to proceed
       return response.ok({ passed: true, skipped: true })
     }
   }

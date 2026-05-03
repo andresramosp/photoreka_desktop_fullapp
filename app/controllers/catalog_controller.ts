@@ -6,7 +6,7 @@ import Photo, { PhotoDescriptions } from '#models/photo'
 import User from '#models/user'
 import PhotoManager from '../managers/photo_manager.js'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { invalidateCache, invalidateCacheByPattern } from '../decorators/withCache.js'
+import { CacheInvalidationService } from '../services/cache_invalidation_service.js'
 import VectorService from '#services/vector_service'
 import ModelsService from '#services/models_service'
 import UserCostService from '#services/user_cost_service'
@@ -143,8 +143,7 @@ export default class CatalogController {
    * Invalida cache del usuario
    */
   private async invalidateUserCache(userId: string) {
-    await invalidateCache(`getPhotosByUser_${userId}`)
-    await invalidateCacheByPattern(`getPhotosIdsForSearch:${userId}:*`)
+    await CacheInvalidationService.onPhotoListChanged(userId)
   }
 
   /**

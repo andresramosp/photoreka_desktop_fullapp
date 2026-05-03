@@ -58,7 +58,6 @@ export default class ThreeDManager {
    */
 
   @withCache({
-    ttl: 60 * 60,
     provider: 'redis',
     key: (userId, chunkName, fakeLimit, outputDims) =>
       `get3DPhotos:${userId}:${chunkName}:${fakeLimit}:${outputDims}`,
