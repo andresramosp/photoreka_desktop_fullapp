@@ -180,30 +180,49 @@
       </div>
     </div>
 
-    <!-- First Import State - Onboarding continuation -->
+    <!-- Import State - unified for first-time and returning users -->
     <div
-      v-if="
-        !isMaintenanceMode && isFirstImportState && lightboxPhotos.length === 0
-      "
+      v-if="!isMaintenanceMode && lightboxPhotos.length === 0"
       class="first-import-section"
     >
       <div class="first-import-header">
-        <h1 class="first-import-title">
-          Your Lightbox is ready to get started
-        </h1>
-
-        <!-- <h2 class="first-import-title">Now let's import your first photos</h2> -->
-        <p class="first-import-subtitle">
-          Import your first batch of photos to start exploring Photoreka's
-          features
-        </p>
+        <template v-if="isFirstImportState">
+          <h1 class="first-import-title">
+            Your Lightbox is ready to get started
+          </h1>
+          <p class="first-import-subtitle">
+            Import your first batch of photos to start exploring Photoreka's
+            features
+          </p>
+        </template>
+        <template v-else>
+          <h1
+            v-if="isUploadDisabled && photosRemaining <= 0"
+            class="first-import-title"
+          >
+            Upload limit reached
+          </h1>
+          <h1 v-else class="first-import-title">
+            Continue expanding your catalog
+          </h1>
+          <p class="first-import-subtitle">
+            {{
+              isUploadDisabled
+                ? uploadDisabledMessage
+                : "Add more photos using one of the following options"
+            }}
+          </p>
+        </template>
       </div>
 
       <!-- Web-first workflow cards -->
       <div v-if="preferredSource === 'web'" class="import-cards-grid">
         <div
           class="import-card"
-          :class="{ 'drag-over': isDragOver && !isUploadDisabled }"
+          :class="{
+            'drag-over': isDragOver && !isUploadDisabled,
+            'import-card--disabled': isUploadDisabled,
+          }"
           @click="triggerFileInput"
           @dragover.prevent="!isUploadDisabled && handleDragOver"
           @dragenter.prevent="!isUploadDisabled && handleDragEnter"
@@ -222,7 +241,11 @@
           <n-tag type="primary" size="large" round>Recommended</n-tag>
         </div>
 
-        <div class="import-card" @click="importFromGooglePhotos">
+        <div
+          class="import-card"
+          :class="{ 'import-card--disabled': isUploadDisabled }"
+          @click="importFromGooglePhotos"
+        >
           <div class="import-card-icon">
             <img
               :src="googlePhotosIconUrl"
@@ -249,7 +272,11 @@
           <n-tag v-else type="success" size="large" round> Connected </n-tag>
         </div>
 
-        <div class="import-card" @click="importFromDropbox">
+        <div
+          class="import-card"
+          :class="{ 'import-card--disabled': isUploadDisabled }"
+          @click="importFromDropbox"
+        >
           <div class="import-card-icon">
             <img :src="dropboxIconUrl" alt="Dropbox" class="dropbox-logo" />
           </div>
@@ -279,8 +306,8 @@
         </div>
       </div>
 
-      <!-- Lightroom-first workflow card -->
-      <div v-else class="import-cards-grid single">
+      <!-- Lightroom-first, first time: show only the lightroom card -->
+      <div v-else-if="isFirstImportState" class="import-cards-grid single">
         <div
           class="import-card lightroom-card"
           @click="showLightroomModal = true"
@@ -300,96 +327,98 @@
         </div>
       </div>
 
-      <!-- <div class="first-import-footer">
-        <span class="format-text"
-          >Supports JPG, PNG and major image formats</span
+      <!-- Lightroom-first, returning user: show all cards (lightroom first) with source warning for others -->
+      <div v-else class="import-cards-grid">
+        <div
+          class="import-card lightroom-card"
+          @click="
+            handleSourceSelection('lightroom', () => {
+              showLightroomModal = true;
+            })
+          "
         >
-      </div> -->
-    </div>
+          <div class="import-card-icon">
+            <img
+              src="/src/assets/logos/lightroom_logo.png"
+              alt="Adobe Lightroom"
+              class="lightroom-logo"
+            />
+          </div>
+          <h4 class="import-card-title">Official Plugin</h4>
+          <p class="import-card-description">
+            Export from LrC and work in the web version
+          </p>
+          <n-tag type="success" size="large" round> See instructions</n-tag>
+        </div>
 
-    <!-- Empty State Section -->
-    <div
-      v-if="
-        !isMaintenanceMode && !isFirstImportState && lightboxPhotos.length === 0
-      "
-      class="empty-state-section"
-    >
-      <div class="empty-state-container">
-        <div class="empty-state-content">
-          <div class="empty-state-icon">
-            <n-icon size="48" :color="'var(--primary-color)'">
-              <CloudUploadOutline />
+        <div
+          class="import-card"
+          :class="{
+            'drag-over': isDragOver && !isUploadDisabled,
+            'import-card--disabled': isUploadDisabled,
+          }"
+          @click="handleSourceSelection('local', triggerFileInput)"
+          @dragover.prevent="!isUploadDisabled && handleDragOver"
+          @dragenter.prevent="!isUploadDisabled && handleDragEnter"
+          @dragleave.prevent="!isUploadDisabled && handleDragLeave"
+          @drop.prevent="handleDrop"
+        >
+          <div class="import-card-icon">
+            <n-icon size="48" color="var(--primary-color)">
+              <FolderOpen />
             </n-icon>
           </div>
-          <h3 class="empty-state-title">
-            {{
-              isUploadDisabled && photosRemaining <= 0
-                ? "Upload limit reached"
-                : "Your Lightbox is empty"
-            }}
-          </h3>
-          <p class="empty-state-subtitle upload-subtitle">
-            {{
-              isUploadDisabled
-                ? uploadDisabledMessage
-                : "Import your photos using one of the options below."
-            }}
+          <h4 class="import-card-title">Local Files</h4>
+          <p class="import-card-description">
+            Drag & drop or browse your computer
           </p>
+          <n-tag type="primary" size="large" round>Select files</n-tag>
+        </div>
 
-          <div v-if="!isUploadDisabled" class="upload-buttons">
-            <n-button
-              v-for="button in uploadButtons"
-              :key="button.key"
-              secondary
-              :type="button.type"
-              size="large"
-              @click="button.action"
-            >
-              <template #icon>
-                <n-icon
-                  v-if="button.icon === 'FolderOpen'"
-                  color="var(--primary-color)"
-                >
-                  <FolderOpen />
-                </n-icon>
-                <n-icon v-else-if="button.icon === 'lightroom'">
-                  <img
-                    src="/src/assets/logos/lightroom_logo.png"
-                    alt="Lr"
-                    style="width: 1.1em; height: 1.1em"
-                  />
-                </n-icon>
-                <n-icon v-else-if="button.icon === 'google'">
-                  <img
-                    :src="googlePhotosIconUrl"
-                    alt="Google Photos"
-                    style="width: 1em; height: 1em"
-                  />
-                </n-icon>
-                <n-icon v-else-if="button.icon === 'google-locked'">
-                  <svg viewBox="0 0 24 24" width="1em" height="1em">
-                    <path
-                      fill="currentColor"
-                      d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h2c0-1.66 1.34-3 3-3s3 1.34 3 3v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"
-                    />
-                  </svg>
-                </n-icon>
-                <n-icon v-else-if="button.icon === 'dropbox'">
-                  <img
-                    :src="dropboxIconUrl"
-                    alt="Dropbox"
-                    style="width: 1em; height: 1em"
-                  />
-                </n-icon>
-              </template>
-              {{ button.label }}
-            </n-button>
+        <div
+          class="import-card"
+          :class="{ 'import-card--disabled': isUploadDisabled }"
+          @click="handleSourceSelection('google', importFromGooglePhotos)"
+        >
+          <div class="import-card-icon">
+            <img
+              :src="googlePhotosIconUrl"
+              alt="Google Photos"
+              class="google-photos-logo"
+            />
           </div>
-          <div class="file-formats">
-            <span class="format-text"
-              >Supports JPG, PNG, WebP up to 5MB per file</span
-            >
+          <h4 class="import-card-title">Google Photos</h4>
+          <div class="import-card-description">
+            {{
+              googlePhotos.isAuthorized.value
+                ? "Import from your Google Photos library"
+                : "Connect and sync your photos from Google Photos"
+            }}
           </div>
+          <n-tag
+            v-if="!googlePhotos.isAuthorized.value"
+            type="warning"
+            size="large"
+            round
+          >
+            Disconnected
+          </n-tag>
+          <n-tag v-else type="success" size="large" round> Connected </n-tag>
+        </div>
+
+        <div
+          class="import-card"
+          :class="{ 'import-card--disabled': isUploadDisabled }"
+          @click="handleSourceSelection('dropbox', importFromDropbox)"
+        >
+          <div class="import-card-icon">
+            <img :src="dropboxIconUrl" alt="Dropbox" class="dropbox-logo" />
+          </div>
+          <h4 class="import-card-title">Dropbox</h4>
+          <p class="import-card-description">
+            Import photos directly from your Dropbox
+          </p>
+          <n-tag type="info" size="large" round>Select files</n-tag>
         </div>
       </div>
     </div>
@@ -1377,7 +1406,7 @@ defineExpose({
 
 .first-import-title {
   margin: 0 0 8px 0;
-  font-size: 32px;
+  font-size: 30px;
   font-weight: 700;
   color: var(--text-secondary);
   letter-spacing: -0.025em;
@@ -1421,6 +1450,12 @@ defineExpose({
   border-color: #4c4c52;
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.import-card--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .import-card:hover:not(.drag-over) {
