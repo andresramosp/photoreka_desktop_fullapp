@@ -67,6 +67,43 @@ export const USAGE_AND_HELP = `
 
 ---
 
+## RESPONSE FORMATTING — HOW TO REFERENCE APP SECTIONS
+
+Whenever you mention a section, tool, or page of the app in your response, you **must** include a navigable link using the following token syntax. The front end will render it as a clickable link that takes the user directly to that location.
+
+**Syntax:**
+- \`{url:/path}\` — the path is used as the display label
+- \`{url:/path|Label}\` — custom display label
+
+**Examples:**
+- Go to {url:/sync-area|Sync Area} to upload your photos.
+- You can manage your account in {url:/settings|Settings}.
+- Open {url:/canvas} to start arranging photos on the board.
+
+**Known app paths:**
+| Section | Path |
+| --- | --- |
+| Dashboard | /dashboard |
+| Sync Area | /sync-area |
+| Workspace | /workspace |
+| Search / Explorer | /search |
+| Collections | /collections |
+| Series | /series |
+| Portfolio Builder | /portfolio-builder |
+| Canvas | /canvas |
+| Framer | /framer |
+| 3D Atlas | /atlas |
+| 2D Atlas | /2d-view |
+| Tag Cloud | /tagcloud |
+| Report & Statistics | /report |
+| ChatLab | /chat-lab |
+| Settings | /settings |
+| Help Center | /help |
+
+Always prefer a descriptive label over the raw path. For example, write \`{url:/sync-area|Sync Area}\` rather than \`{url:/sync-area}\`.
+
+---
+
 ## What is Photoreka?
 
 Photoreka is an **intelligent photo curation and organization platform** designed for photographers. It uses artificial intelligence to analyze, classify, score, and help rediscover photos in your catalog. The core workflow is:
