@@ -18,6 +18,20 @@
         <!-- Daily Eureka Card -->
         <DailyEurekaCard />
 
+        <!-- Promo cards from toolsConfig (tools with promo: true) -->
+        <DashboardActionCard
+          v-for="tool in promoTools"
+          :key="tool.id"
+          :icon="getIconComponent(tool.icon)"
+          :title="tool.name"
+          :description="tool.description"
+          additional-classes="explorer"
+          icon-color="var(--primary-color)"
+          badge="New Feature!"
+          :disabled="appAccessMode === 'blocked'"
+          @click="goToTool(tool.id)"
+        />
+
         <!-- <div
           class="action-card workspace-card"
           :class="{ disabled: appAccessMode === 'blocked' }"
@@ -46,7 +60,7 @@
         </div> -->
 
         <DashboardActionCard
-          v-if="!isMobileLimitedMode"
+          v-if="!isMobileLimitedMode && promoTools.length <= 2"
           :icon="Workspace"
           title="Canvas"
           additional-classes="explorer"
@@ -68,6 +82,7 @@
         </DashboardActionCard>
 
         <DashboardActionCard
+          v-if="promoTools.length <= 1"
           :icon="LayersOutline"
           title="Your Workspace"
           :disabled="appAccessMode === 'blocked'"
@@ -83,8 +98,9 @@
 
         <!-- Report and Statistics Card - Hidden on mobile, as it requires too much screen space for now. Will be redesigned in the future to be more mobile-friendly, but for now we want to avoid showing a card that leads to an empty page on mobile. -->
         <DashboardActionCard
+          v-if="promoTools.length === 0 && !isMobileLimitedMode"
           :icon="AnalyticsOutline"
-          title="Report & Statistics"
+          title="Report &amp; Statistics"
           description="Understand your body of work"
           :disabled="appAccessMode === 'blocked'"
           @click="goToTool('report')"
@@ -186,6 +202,7 @@ import CollectionCard from "@/components/CollectionCard.vue";
 import DailyEurekaCard from "@/components/DailyEurekaCard.vue";
 import DashboardActionCard from "@/components/DashboardActionCard.vue";
 import { isMobileDevice } from "@/utils/utils.js";
+import { getPromoTools, getIconComponent } from "@/config/toolsConfig.js";
 
 // Import @vicons icons from ionicons5 for reliability
 import {
@@ -201,9 +218,11 @@ import {
   LayersOutline,
   AnalyticsOutline,
 } from "@vicons/ionicons5";
+
 import { LayersOutlined } from "@vicons/material";
 import { Workspace } from "@vicons/carbon";
 
+// Promo tools derived from centralized config (desktop-only)
 const router = useRouter();
 const photosStore = usePhotosStore();
 const collectionsStore = useCollectionsStore();
@@ -213,6 +232,11 @@ const message = useMessage();
 
 // Check if in mobile limited mode
 const isMobileLimitedMode = computed(() => isMobileDevice());
+
+// Promo tools derived from centralized config (desktop-only)
+const promoTools = computed(() =>
+  isMobileLimitedMode.value ? [] : getPromoTools("desktop"),
+);
 
 // Computed collections and series combined from store
 const collections = computed(() => {

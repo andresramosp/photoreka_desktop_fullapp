@@ -125,6 +125,7 @@ export const TOOLS_CONFIG = [
     availableOn: TOOL_AVAILABILITY.DESKTOP_ONLY,
     menuSection: "explore",
     showInPhotoSelector: false,
+    promo: true,
   },
   {
     id: "series",
@@ -160,13 +161,14 @@ export const TOOLS_CONFIG = [
   },
   {
     id: "portfolios",
-    name: "Portfolios",
-    description: "AI-curated portfolio builds",
+    name: "Create a Portfolio",
+    description: "Showcase your best work in a beautiful portfolio",
     icon: "BriefcaseOutline",
     route: "/portfolios",
     availableOn: TOOL_AVAILABILITY.DESKTOP_ONLY,
     menuSection: "create",
     showInPhotoSelector: false,
+    promo: true,
   },
   {
     id: "chat",
@@ -279,4 +281,18 @@ export function getIconComponent(iconKey) {
 export function isDesktopOnly(toolId) {
   const tool = getToolById(toolId);
   return tool?.availableOn === TOOL_AVAILABILITY.DESKTOP_ONLY;
+}
+
+/**
+ * Get tools currently marked for promotion in the dashboard.
+ * Set `promo: true` on any tool entry to surface it as a promo card.
+ * @param {string} platform - 'mobile' or 'desktop'
+ * @returns {Array} Tools with promo: true available on the given platform
+ */
+export function getPromoTools(platform) {
+  return TOOLS_CONFIG.filter((tool) => {
+    if (!tool.promo) return false;
+    if (tool.availableOn === TOOL_AVAILABILITY.BOTH) return true;
+    return tool.availableOn === platform;
+  });
 }

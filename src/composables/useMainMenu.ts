@@ -313,9 +313,27 @@ export function useMainMenu(closeMobileMenu?: () => void) {
         disabled: isToolDisabledOnMobile("3d-atlas") || isBlocked.value,
       },
       {
-        label: () => h("span", { class: "collection-menu-item" }, "Tag Cloud"),
+        label: () =>
+          h(
+            "span",
+            {
+              class: "collection-menu-item",
+              style: {
+                display: "flex",
+                alignItems: "center",
+                width: "100%",
+              },
+            },
+            [
+              h("span", "Tag Cloud"),
+              isToolDisabledOnMobile("tagcloud")
+                ? renderLaptopSuffix()()
+                : null,
+            ],
+          ),
         key: "tagcloud",
         icon: renderIcon(toolIcon("tagcloud")),
+        disabled: isToolDisabledOnMobile("tagcloud") || isBlocked.value,
       },
     ],
   }));

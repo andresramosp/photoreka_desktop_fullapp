@@ -7,6 +7,18 @@
     <!-- Patrón decorativo de fondo -->
     <!-- <div class="card-background-pattern"></div> -->
 
+    <!-- Promo badge -->
+    <div v-if="badge" class="card-badge">
+      <n-tag
+        size="small"
+        round
+        :bordered="false"
+        :color="{ color: 'var(--accent-color)', textColor: 'black' }"
+      >
+        {{ badge }}
+      </n-tag>
+    </div>
+
     <!-- Contenido principal -->
     <div class="card-content">
       <div class="card-icon-small">
@@ -35,6 +47,7 @@ interface Props {
   additionalClasses?: string;
   iconSize?: number;
   iconColor?: string;
+  badge?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -43,6 +56,7 @@ const props = withDefaults(defineProps<Props>(), {
   additionalClasses: "",
   iconSize: 45,
   iconColor: "var(--text-primary)",
+  badge: "",
 });
 
 const emit = defineEmits<{
@@ -107,6 +121,14 @@ const handleClick = () => {
 
 .dashboard-action-card.disabled:hover {
   border-color: var(--border-color);
+}
+
+/* Promo badge */
+.card-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
 }
 
 /* Patrón decorativo de fondo - ahora está en global.scss */
