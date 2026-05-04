@@ -158,6 +158,9 @@
             :show="showWelcomeBatchModal"
             @close="welcomeBatchDismissed = true"
           />
+
+          <!-- Assistant Chat Widget (route-driven visibility) -->
+          <!-- <AssistantChatWidget /> -->
         </template>
       </n-message-provider>
     </n-notification-provider>
@@ -181,12 +184,23 @@ import AppInitLoader from "./components/AppInitLoader.vue";
 import { useThemeInit } from "@/composables/useTheme.js";
 import MobileWelcomeBanner from "./components/MobileWelcomeBanner.vue";
 import WelcomeBatchModal from "./components/WelcomeBatchModal.vue";
+import AssistantChatWidget from "./components/AssistantChatWidget.vue";
+import { useAssistantChatStore } from "@/stores/assistantChat.js";
 import { useWarmUp } from "@/composables/useWarmUp";
 
 const { ensureWarmUp } = useWarmUp();
 
 const route = useRoute();
 const router = useRouter();
+
+const assistantChatStore = useAssistantChatStore();
+
+// Keep the assistant widget in sync with the active route
+watch(
+  () => route.name,
+  (name) => assistantChatStore.setActiveRoute(name),
+  { immediate: true },
+);
 
 // Check if current route is an admin route
 const isAdminRoute = computed(() => {

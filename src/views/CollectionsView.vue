@@ -1121,7 +1121,7 @@ const suggestPhotosForCollection = async () => {
       criteria: "embedding",
       opposite: false,
       inverted: false,
-      resultLength: 200,
+      resultLength: 54,
     });
     const backendPhotos = Array.isArray(response.data)
       ? response.data
