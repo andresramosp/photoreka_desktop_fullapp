@@ -9,6 +9,7 @@ import VisualFeaturesService from './visual_features_service.js'
 import ScoringService, { MatchThresholds, SearchComposition } from './scoring_service.js'
 import VectorService from './vector_service.js'
 import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
+import { withCache } from '../decorators/withCache.js'
 import PhotoImageService from './photo_image_service.js'
 import sharp from 'sharp'
 
@@ -43,6 +44,32 @@ export default class SearchPhotoService {
   private vectorService = new VectorService()
 
   public async searchByPhotos(
+    query: SearchByPhotoOptions,
+    userId: number
+  ): Promise<(Photo & { score: number; labelScore: string })[]> {
+    // cropRegion searches are pixel-precise and virtually never repeat — skip cache
+    if (query.cropRegion) {
+      return this.executeSearch(query, userId)
+    }
+    return this.searchByPhotosCached(query, userId)
+  }
+
+  @withCache({
+    provider: 'redis',
+    key: (query: SearchByPhotoOptions, userId: number) => {
+      const { cropRegion: _, ...rest } = query
+      const stable = JSON.stringify(rest, (_, v) => (Array.isArray(v) ? [...v].sort() : v))
+      return `searchByPhotos:${userId}:${stable}`
+    },
+  })
+  private async searchByPhotosCached(
+    query: SearchByPhotoOptions,
+    userId: number
+  ): Promise<(Photo & { score: number; labelScore: string })[]> {
+    return this.executeSearch(query, userId)
+  }
+
+  private async executeSearch(
     query: SearchByPhotoOptions,
     userId: number
   ): Promise<(Photo & { score: number; labelScore: string })[]> {

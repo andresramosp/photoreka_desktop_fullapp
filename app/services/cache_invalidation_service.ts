@@ -50,6 +50,7 @@ export class CacheInvalidationService {
     await invalidateCacheByPattern(`getScoredPhotosByTagsAndDesc:${userId}:*`)
     await invalidateCacheByPattern(`getScoredPhotosByTags:${userId}:*`)
     await invalidateCacheByPattern(`getScoredPhotoImageByFullQuery:${userId}:*`)
+    await invalidateCacheByPattern(`searchByPhotos:${userId}:*`)
     console.log(
       `[CacheInvalidation] onPhotosDeleted: Invalidated caches for user ${userId} (photoCount=${photoCount}, expensive=${photoCount >= EXPENSIVE_CACHE_DELETE_THRESHOLD})`
     )
@@ -75,6 +76,7 @@ export class CacheInvalidationService {
     await invalidateCacheByPattern(`getScoredPhotosByTagsAndDesc:${userId}:*`)
     await invalidateCacheByPattern(`getScoredPhotosByTags:${userId}:*`)
     await invalidateCacheByPattern(`getScoredPhotoImageByFullQuery:${userId}:*`)
+    await invalidateCacheByPattern(`searchByPhotos:${userId}:*`)
     console.log(
       `[CacheInvalidation] onAnalysisCompleted: Invalidated all caches for user ${userId} (photoCount=${photoCount}, expensive=${photoCount >= EXPENSIVE_CACHE_ANALYSIS_THRESHOLD})`
     )
