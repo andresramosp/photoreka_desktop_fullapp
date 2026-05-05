@@ -27,6 +27,7 @@ export default class ChatController {
    *   contextPhotoIds?: number[]   — up to 10 photo IDs to attach as visual context
    *   ephemeral?: boolean          — if true, no conversation or history is created (one-time calls)
    *   modeId?: string              — selected chat intelligence mode
+   *   isKnowledgeAssistant?: boolean — if true, forces use of knowledge-only agent (no photo search/analysis)
    * }
    *
    * Response:
@@ -41,15 +42,25 @@ export default class ChatController {
     try {
       const user = auth.use('api').user!
 
-      const { message, conversationId, contextPhotoIds, ephemeral, modeId, forceCheapModel } =
-        request.only([
-          'message',
-          'conversationId',
-          'contextPhotoIds',
-          'ephemeral',
-          'modeId',
-          'forceCheapModel',
-        ])
+      const {
+        message,
+        conversationId,
+        contextPhotoIds,
+        ephemeral,
+        modeId,
+        forceCheapModel,
+        isKnowledgeAssistant,
+        uiContext,
+      } = request.only([
+        'message',
+        'conversationId',
+        'contextPhotoIds',
+        'ephemeral',
+        'modeId',
+        'forceCheapModel',
+        'isKnowledgeAssistant',
+        'uiContext',
+      ])
 
       const isEphemeral = ephemeral === true
 
@@ -119,7 +130,7 @@ export default class ChatController {
         })
       }
 
-      // Route to knowledge-only agent when the user has no analyzed photos.
+      // Route to knowledge-only agent when forced via parameter or when user has no analyzed photos.
       // This prevents Phase 1 tool orchestration from hallucinating on empty results.
       const analyzedCount = await Photo.query()
         .where('user_id', user.id)
@@ -129,18 +140,21 @@ export default class ChatController {
         .then((r) => Number(r[0].$extras.total ?? 0))
 
       let result
-      if (analyzedCount === 0) {
-        console.log(`[ChatController] 📭 No analyzed photos — routing to knowledge agent`)
-        const knowledgeService = new LangchainAgentKnowledgeService()
-        result = await knowledgeService.chat(
+      if (isKnowledgeAssistant === true || analyzedCount === 0) {
+        console.log(
+          isKnowledgeAssistant === true
+            ? `[ChatController] 🧠 Forcing knowledge agent (isKnowledgeAssistant=true)`
+            : `[ChatController] 📭 No analyzed photos — routing to knowledge agent`
+        )
+        result = await new LangchainAgentKnowledgeService().chat(
           user.id,
           resolvedConversationId,
           message.trim(),
-          selectedMode
+          selectedMode,
+          typeof uiContext === 'string' ? uiContext : undefined
         )
       } else {
-        const agentService = new LangchainAgentService()
-        result = await agentService.chat(
+        result = await new LangchainAgentService().chat(
           user.id,
           resolvedConversationId,
           message.trim(),

@@ -89,7 +89,7 @@ Whenever you mention a section, tool, or page of the app in your response, you *
 | Search / Explorer | /search |
 | Collections | /collections |
 | Series | /series |
-| Portfolio Builder | /portfolio-builder |
+| Portfolios | /portfolios |
 | Canvas | /canvas |
 | Framer | /framer |
 | 3D Atlas | /atlas |
@@ -273,6 +273,12 @@ The AI analysis pipeline extracts:
 - Shows photos currently being analyzed ("processing" state)
 - Displays real-time analysis progress via WebSocket
 - Allows navigating back to Lightbox
+- **You do not need to stay on the page or keep the browser open** -- analysis continues in the background on the server. You will be notified when the batch finishes, even if you closed the tab or disconnected from the internet.
+
+### Analysis Duration
+- **Small batches (fewer than ~50 photos):** typically a few minutes.
+- **Large batches (hundreds or thousands of photos):** between 1 and 4 hours under normal load; up to ~8 hours during peak demand.
+- Individual photos become available in the catalog as soon as they reach the "processed" state, so you can start using tools before the entire batch is done.
 
 ### Import Sources
 Photos can be imported from multiple sources, all going through the same pipeline:
@@ -790,6 +796,9 @@ Settings
 
 **Why don't I see my photos?**
 They must be processed. Go to Sync Area -> Lightbox tab -> click "Analyze Photos".
+
+**How long does photo analysis take?**
+For small batches (fewer than ~50 photos) it typically takes a few minutes. For larger batches (hundreds or thousands of photos) expect 1–4 hours under normal conditions, and up to ~8 hours during peak demand. You do not need to stay on the page -- analysis runs on the server and you will be notified when it finishes. Photos become available in the catalog one by one as they are processed, so you can start using Search, Canvas, and other tools before the full batch is done.
 
 **Collection vs Series?**
 Collections are unordered thematic groups. Series are ordered narrative sequences with drag-and-drop reordering.

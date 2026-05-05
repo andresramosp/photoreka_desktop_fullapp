@@ -40,21 +40,60 @@ Help photographers explore and analyze their library with insight and wit.
 ## Behavior
 - **Language:** Always match the user's language.
 - **Scope:** Strictly photography and Photoreka features. Polite refusal for outside topics.
-- **Grounding:** NEVER fabricate photo filenames, descriptions, scores, or content.`
+- **Grounding:** NEVER fabricate photo filenames, descriptions, scores, or content.
 
-const KNOWLEDGE_ROLE_ADDENDUM = `
+## Response Format
+- **Paragraphs:** Split the text into short, distinct paragraphs (2–4 sentences each). Never a single continuous block. Each paragraph = one idea.
+- **Conciseness:** Max 200 words. No fluff, no repetition.
+- **Structure:** Opening context → key insight → closing suggestion (if applicable).
+- **Formatting:** Use **bold** for feature names, key concepts, and important terms. Use sparingly — only for genuinely important words, not decoration.`
 
-## Your current role: ASSISTANT — NO ANALYZED PHOTOS
-The user currently has no analyzed photos available. This means:
-- You CANNOT search, display, score, or reference ANY photos from their catalog.
-- Tools like search, catalog view, and photo info have no data to operate on.
+function buildRoleAddendum(photoCount: number, analyzedCount: number): string {
+  if (analyzedCount > 0) {
+    return `
+
+## Your current role: KNOWLEDGE ASSISTANT (catalog active)
+You are a **knowledge-only** help assistant for Photoreka. You are NOT the full photo assistant.
+The user has ${analyzedCount} analyzed photo(s) (out of ${photoCount} total) in their catalog.
+- You do NOT have access to their photos, scores, descriptions, or any catalog data.
+- Always return an empty photo_groups array.
+- The full photo assistant — which can search, display, rank, and analyze photos — is available at {url:/chat-lab}.
+
+Your job:
+1. Answer questions about Photoreka's features and how to use them, using the app knowledge provided below.
+2. For ANY photo-related request (searching, displaying, scoring, browsing, finding duplicates, etc.) redirect the user to the full photo assistant: {url:/chat-lab}
+3. NEVER fabricate photo filenames, scores, descriptions, or any catalog content.
+4. Be clear about what you can and cannot do: you answer "how does this feature work?" questions, not "show me my photos" requests.`
+  }
+
+  if (photoCount === 0) {
+    return `
+
+## Your current role: KNOWLEDGE ASSISTANT — EMPTY CATALOG
+The user has not uploaded any photos yet.
+- You CANNOT search, display, score, or reference ANY photos.
 - Always return an empty photo_groups array.
 
 Your job:
-1. Clearly and kindly explain the situation (no analyzed photos yet).
-2. Guide the user to the Sync Area to upload and/or analyze their photos.
-3. Answer any questions about Photoreka's features using the app knowledge provided below.
+1. Answer any questions about Photoreka's features using the app knowledge provided below.
+2. Guide the user to upload photos first via the Sync Area.
+3. Once they have analyzed photos, the full photo assistant is available at {url:/chat-lab}
 4. NEVER invent photo content, filenames, or pretend the catalog has data.`
+  }
+
+  return `
+
+## Your current role: KNOWLEDGE ASSISTANT — NO ANALYZED PHOTOS
+The user has ${photoCount} photo(s) uploaded but none have been analyzed yet.
+- You CANNOT search, display, score, or reference ANY photos from their catalog.
+- Always return an empty photo_groups array.
+
+Your job:
+1. Answer any questions about Photoreka's features using the app knowledge provided below.
+2. Guide the user to analyze their photos via the Analyze button in the Sync Area.
+3. Once analyzed, the full photo assistant is available at {url:/chat-lab}
+4. NEVER invent photo content, filenames, or pretend the catalog has data.`
+}
 
 const KNOWLEDGE_SCHEMA = {
   type: 'object',
@@ -73,21 +112,27 @@ export default class LangchainAgentKnowledgeService {
     userId: number,
     conversationId: number,
     message: string,
-    selectedMode: ChatIntelligenceMode
+    selectedMode: ChatIntelligenceMode,
+    uiContext?: string
   ): Promise<AgentChatResult> {
     const modelName = selectedMode.modelPhase2Lite
     console.log(
       `\n[KnowledgeAgent] ▶ No-photos path | userId=${userId} | mode=${selectedMode.id} | message="${message.slice(0, 80)}${message.length > 80 ? '…' : ''}"`
     )
 
-    const [userContext, history] = await Promise.all([
+    const [{ context: userContext, photoCount, analyzedCount }, history] = await Promise.all([
       this.buildUserContext(userId),
       conversationId > 0
         ? this.conversationService.getLLMContext(conversationId)
         : Promise.resolve<ChatMessage[]>([]),
     ])
 
-    const messages = this.buildMessages(userContext, history, message)
+    const roleAddendum =
+      buildRoleAddendum(photoCount, analyzedCount) +
+      (uiContext
+        ? `\n\n## Current Screen Context\n${uiContext}\nUse this context to give accurate, screen-specific answers (e.g. "what does this screen do?").`
+        : '')
+    const messages = this.buildMessages(userContext, roleAddendum, history, message)
 
     const model = this.createModel(modelName).withStructuredOutput(KNOWLEDGE_SCHEMA)
     const usageCollector: { usage?: any } = {}
@@ -131,13 +176,18 @@ export default class LangchainAgentKnowledgeService {
 
   // ── Message building ─────────────────────────────────────────────────────────
 
-  private buildMessages(userContext: string, history: ChatMessage[], message: string): any[] {
+  private buildMessages(
+    userContext: string,
+    roleAddendum: string,
+    history: ChatMessage[],
+    message: string
+  ): any[] {
     const knowledgeText = Object.entries(APP_KNOWLEDGE_SECTIONS)
       .map(([key, value]) => `### ${key}\n${value}`)
       .join('\n\n---\n\n')
 
     const systemContent = [
-      SYSTEM_PROMPT_BASE + KNOWLEDGE_ROLE_ADDENDUM,
+      SYSTEM_PROMPT_BASE + roleAddendum,
       userContext,
       `## App Knowledge\n${knowledgeText}`,
     ]
@@ -176,7 +226,9 @@ export default class LangchainAgentKnowledgeService {
 
   // ── User context ─────────────────────────────────────────────────────────────
 
-  private async buildUserContext(userId: number): Promise<string> {
+  private async buildUserContext(
+    userId: number
+  ): Promise<{ context: string; photoCount: number; analyzedCount: number }> {
     const [user, photoCount, analyzedCount] = await Promise.all([
       User.find(userId),
       Photo.query()
@@ -190,7 +242,7 @@ export default class LangchainAgentKnowledgeService {
         .count('* as total')
         .then((r) => Number(r[0].$extras.total ?? 0)),
     ])
-    if (!user) return ''
+    if (!user) return { context: '', photoCount, analyzedCount }
 
     const lines: string[] = ['## Current user context']
     lines.push(`- Current date: ${new Date().toISOString().slice(0, 10)}`)
@@ -205,13 +257,17 @@ export default class LangchainAgentKnowledgeService {
       lines.push(
         `- ⚠️ CRITICAL: This catalog is EMPTY (0 photos). The user has not uploaded any photos yet. There is NOTHING to search, display, analyze, or reference. Do NOT fabricate any photo filenames, descriptions, or content. Inform the user that they need to upload photos first. Return empty photo_groups.`
       )
-    } else {
+    } else if (analyzedCount === 0) {
       lines.push(
         `- ⚠️ CRITICAL: The user has ${photoCount} photo(s) uploaded but NONE have been analyzed yet. The photos exist in the Sync Area but are NOT searchable, scoreable, or describable — no descriptions, no scores, no visual data is available. Do NOT fabricate any photo filenames, descriptions, or content. Inform the user that their photos need to be analyzed first (via the Analyze button in the Sync Area). Return empty photo_groups.`
       )
+    } else {
+      lines.push(
+        `- NOTE: You are a knowledge-only assistant. You do NOT have access to the user's catalog data. For any photo-related actions, redirect the user to the full photo assistant at {url:/chat-lab}. Return empty photo_groups.`
+      )
     }
 
-    return lines.join('\n')
+    return { context: lines.join('\n'), photoCount, analyzedCount }
   }
 
   // ── Model & cost ─────────────────────────────────────────────────────────────
