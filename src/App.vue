@@ -37,7 +37,8 @@
             route.name === 'reset-password' ||
             route.name === 'confirm-email' ||
             route.name === 'auth-callback' ||
-            route.name === 'auth-error'
+            route.name === 'auth-error' ||
+            route.name === 'lr-auth'
           "
         />
 

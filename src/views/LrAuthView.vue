@@ -52,59 +52,62 @@
               <template #icon><GoogleIcon /></template>
               Sign in with Google
             </n-button>
-            <n-divider>or</n-divider>
-            <n-button
-              size="large"
-              class="email-login-btn"
-              @click="showLoginForm = true"
-            >
-              Sign in with email
-            </n-button>
+
+            <!-- Collapsible email login -->
+            <div class="email-section">
+              <n-button
+                text
+                size="small"
+                class="email-toggle-btn"
+                @click="showLoginForm = !showLoginForm"
+              >
+                {{
+                  showLoginForm
+                    ? "▲ Hide email login"
+                    : "▾ Sign in with email instead"
+                }}
+              </n-button>
+
+              <Transition name="slide-down">
+                <n-form
+                  v-if="showLoginForm"
+                  :model="form"
+                  :rules="rules"
+                  ref="formRef"
+                  class="email-form"
+                  @submit.prevent="handleEmailLogin"
+                >
+                  <n-form-item path="email" :show-label="false">
+                    <n-input
+                      v-model:value="form.email"
+                      type="email"
+                      placeholder="Email"
+                      size="large"
+                    />
+                  </n-form-item>
+                  <n-form-item path="password" :show-label="false">
+                    <n-input
+                      v-model:value="form.password"
+                      type="password"
+                      placeholder="Password"
+                      size="large"
+                      show-password-on="click"
+                    />
+                  </n-form-item>
+                  <n-button
+                    type="primary"
+                    size="large"
+                    block
+                    :loading="completing"
+                    attr-type="submit"
+                  >
+                    Sign in & connect
+                  </n-button>
+                </n-form>
+              </Transition>
+            </div>
           </template>
         </div>
-
-        <!-- Inline email login form -->
-        <n-modal
-          v-model:show="showLoginForm"
-          preset="card"
-          :style="{ width: '380px' }"
-          title="Sign in with email"
-          :bordered="false"
-        >
-          <n-form
-            :model="form"
-            :rules="rules"
-            ref="formRef"
-            @submit.prevent="handleEmailLogin"
-          >
-            <n-form-item path="email" label="Email">
-              <n-input
-                v-model:value="form.email"
-                type="email"
-                placeholder="you@example.com"
-                size="large"
-              />
-            </n-form-item>
-            <n-form-item path="password" label="Password">
-              <n-input
-                v-model:value="form.password"
-                type="password"
-                placeholder="Password"
-                size="large"
-                show-password-on="click"
-              />
-            </n-form-item>
-            <n-button
-              type="primary"
-              size="large"
-              block
-              :loading="completing"
-              attr-type="submit"
-            >
-              Sign in & connect
-            </n-button>
-          </n-form>
-        </n-modal>
       </template>
 
       <!-- Success -->
@@ -308,7 +311,41 @@ function handleSwitchAccount() {
   width: 100%;
 }
 
-.email-login-btn {
+.email-section {
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.email-toggle-btn {
+  color: var(--text-secondary) !important;
+  font-size: 13px;
+}
+
+.email-form {
+  width: 100%;
+  margin-top: 4px;
+}
+
+/* Slide-down transition for the email form */
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.25s ease;
+  overflow: hidden;
+}
+
+.slide-down-enter-from,
+.slide-down-leave-to {
+  opacity: 0;
+  max-height: 0;
+}
+
+.slide-down-enter-to,
+.slide-down-leave-from {
+  opacity: 1;
+  max-height: 300px;
 }
 </style>
