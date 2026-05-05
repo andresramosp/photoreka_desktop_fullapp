@@ -101,6 +101,12 @@ const PILLS_BY_SECTION = {
       autoSend: true,
     },
     {
+      label: "What's the different between sets and collections?",
+      prompt:
+        "What is the difference between sets and collections in Photoreka?",
+      autoSend: true,
+    },
+    {
       label: "What's the difference between collections and series?",
       prompt:
         "What is the difference between Collections and Series in Photoreka, and when should I use each?",
