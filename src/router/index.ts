@@ -33,6 +33,7 @@ import ResetPasswordView from "../views/ResetPasswordView.vue";
 import ConfirmEmailView from "../views/ConfirmEmailView.vue";
 import AuthCallback from "../views/AuthCallback.vue";
 import AuthError from "../views/AuthError.vue";
+import LrAuthView from "../views/LrAuthView.vue";
 
 // Admin views
 // NOTE: AdminLoginView kept as layout reference for a potential standalone admin domain
@@ -123,6 +124,16 @@ const router = createRouter({
       meta: {
         requiresGuest: false, // Accessible to show errors
         layout: false, // Use standalone layout
+      },
+    },
+
+    {
+      path: "/lr-auth",
+      name: "lr-auth",
+      component: LrAuthView,
+      meta: {
+        requiresGuest: false,
+        layout: false,
       },
     },
 

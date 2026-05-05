@@ -46,6 +46,14 @@ onMounted(async () => {
     displayMessage.value = "Success! Redirecting...";
     loadingColor.value = "#10b981";
     message.success("Welcome to Photoreka!");
+
+    // If this OAuth was triggered from the Lightroom plugin, go back to lr-auth
+    const lrSession = sessionStorage.getItem("lr_pending_session");
+    if (lrSession) {
+      sessionStorage.removeItem("lr_pending_session");
+      router.replace(`/lr-auth?session=${lrSession}`);
+      return;
+    }
     // No navegar aquí — el watcher de isAuthenticated en App.vue
     // se encarga de redirigir al destino correcto para todos los flujos
   } else {
