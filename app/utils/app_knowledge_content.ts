@@ -414,6 +414,29 @@ Collections are unordered thematic groups. Ideal for projects, clients, events, 
 
 > **Tip:** You can create collections directly from ChatLab recommendations -- the assistant's "Add to Collection" button lets you send curated results to a new or existing collection.
 
+### Collection Sets (Folders for Collections)
+
+Collection Sets are **folders that group collections** into a hierarchical structure. They add an organizational layer on top of collections, making it easier to manage large libraries.
+
+**Key concepts:**
+- A Set can contain **collections** and/or **child sets** (nested folders)
+- Sets are self-referential: a set can have a parent set, enabling multi-level nesting
+- Sets do **not** directly contain photos -- only collections contain photos
+- A collection can belong to exactly one set, or be at the root level (no set)
+
+**Operations:**
+- **Create a set**: provide a name, optional description, and optionally assign it a parent set
+- **Rename / update**: change name, description, or re-parent (move to a different parent set)
+- **Move a collection**: reassign a collection to a different set or to the root level
+- **Delete a set**: the set is removed, its child sets are promoted to the deleted set's parent (or root), and its collections are moved to the parent set (or root). No collections or photos are lost
+
+**Behavior on delete (cascade promotion):**
+When a set is deleted, nothing is lost:
+1. Child sets -> promoted to the deleted set's parent (or root if no parent)
+2. Collections inside -> moved to the deleted set's parent (or root if no parent)
+
+> **Tip:** Use sets to mirror project folder structures -- for example, a "2026" set containing "Client A" and "Client B" child sets, each with their own collections. Deleting a parent set is safe: its contents are automatically promoted rather than deleted.
+
 ---
 
 ## 6. SERIES (/series)
@@ -803,6 +826,9 @@ For small batches (fewer than ~50 photos) it typically takes a few minutes. For 
 **Collection vs Series?**
 Collections are unordered thematic groups. Series are ordered narrative sequences with drag-and-drop reordering.
 
+**What are Collection Sets?**
+Sets are folders that group collections into a hierarchy. A set can contain collections and nested child sets. Sets don't hold photos directly -- only collections do. Deleting a set is safe: its child sets and collections are promoted to the parent level automatically.
+
 **Can I share my work?**
 Yes, Series and 3D Atlas have public shareable URLs.
 
@@ -840,6 +866,7 @@ Yes, with an adapted layout. Canvas, 3D Atlas, and Series are desktop-only. All 
 
 ## KEY TERMINOLOGY
 
+Collection Set -- Folder that groups collections into a hierarchical structure. Sets can be nested. Deleting a set promotes its contents to the parent level
 Catalog -- All processed photos in your library
 Lightbox -- Uploaded but unprocessed photos (visible only in Sync Area)
 Analysis -- AI processing pipeline that extracts tags, scores, embeddings, and metadata
