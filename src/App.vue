@@ -159,8 +159,8 @@
             @close="welcomeBatchDismissed = true"
           />
 
-          <!-- Assistant Chat Widget (route-driven visibility) -->
-          <AssistantChatWidget />
+          <!-- Assistant Chat Widget (route-driven visibility, hidden for demo users) -->
+          <AssistantChatWidget v-if="!isDemoUser" />
         </template>
       </n-message-provider>
     </n-notification-provider>
@@ -258,6 +258,10 @@ const showDashboardHeader = computed(() => {
   return allowedHeaderViews.some(
     (prefix) => typeof route.name === "string" && route.name.startsWith(prefix),
   );
+});
+
+const isDemoUser = computed(() => {
+  return userStore.user?.email === "demo@photorekatest.com";
 });
 const photosStore = usePhotosStore();
 const collectionsStore = useCollectionsStore();
