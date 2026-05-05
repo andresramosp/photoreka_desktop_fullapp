@@ -123,12 +123,20 @@ const handleClick = () => {
   border-color: var(--border-color);
 }
 
-/* Promo badge */
+/* Promo badge, cursiva y negrita y con una fuente cool. Y uppercase */
 .card-badge {
   position: absolute;
   top: 10px;
   right: 10px;
   z-index: 2;
+  font-style: italic;
+  font-weight: bold;
+  /* font-family: "Comic Sans MS", cursive, sans-serif; */
+  text-transform: uppercase;
+}
+
+.card-badge :deep(.n-tag__content) {
+  font-size: 10px;
 }
 
 /* Patrón decorativo de fondo - ahora está en global.scss */

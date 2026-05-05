@@ -27,7 +27,7 @@
           :description="tool.description"
           additional-classes="explorer"
           icon-color="var(--primary-color)"
-          badge="New Feature!"
+          badge="New Feature"
           :disabled="appAccessMode === 'blocked'"
           @click="goToTool(tool.id)"
         />
