@@ -55,10 +55,13 @@ router
 router
   .group(() => {
     router.post('/api/auth_lr/create-handoff', [AuthLrController, 'createHandoff'])
+    router.post('/api/auth_lr/complete-device-session', [AuthLrController, 'completeDeviceSession'])
   })
   .use(middleware.auth())
 
 router.post('/api/auth_lr/consume-handoff', [AuthLrController, 'consumeHandoff'])
+router.post('/api/auth_lr/create-device-session', [AuthLrController, 'createDeviceSession'])
+router.get('/api/auth_lr/poll-device-session', [AuthLrController, 'pollDeviceSession'])
 
 const AnalyzerController = () => import('#controllers/analyzer_controller')
 const CatalogController = () => import('#controllers/catalog_controller')

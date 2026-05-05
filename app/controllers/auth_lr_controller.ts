@@ -91,4 +91,125 @@ export default class AuthLrController {
       token: accessToken.value!.release(),
     })
   }
+
+  // ─── Device Authorization Flow (for Google / browser-based login from LR) ───
+
+  /**
+   * Step 1 — Plugin calls this (no auth) to create a pending session.
+   * Returns a sessionId that the plugin will poll.
+   */
+  async createDeviceSession({ response }: HttpContext) {
+    const sessionId = this.generateToken()
+    const redisKey = `lr:device:${sessionId}`
+
+    await redis.set(
+      redisKey,
+      JSON.stringify({ status: 'pending' }),
+      'EX',
+      600 // 10 minutes
+    )
+
+    return response.ok({
+      sessionId,
+      expiresInSeconds: 600,
+    })
+  }
+
+  /**
+   * Step 2 — Web app calls this (requires auth) after the user logs in via browser.
+   * Associates the logged-in user's token with the pending session.
+   */
+  async completeDeviceSession({ auth, request, response }: HttpContext) {
+    await auth.use('api').check()
+    const user = auth.use('api').user as User
+
+    const { sessionId } = request.only(['sessionId'])
+
+    if (!sessionId) {
+      return response.badRequest({ message: 'Missing sessionId' })
+    }
+
+    const redisKey = `lr:device:${sessionId}`
+    const raw = await redis.get(redisKey)
+
+    if (!raw) {
+      return response.notFound({ message: 'Session not found or expired' })
+    }
+
+    let data: { status: string }
+    try {
+      data = JSON.parse(raw)
+    } catch {
+      return response.badRequest({ message: 'Invalid session data' })
+    }
+
+    if (data.status !== 'pending') {
+      return response.badRequest({ message: 'Session already completed' })
+    }
+
+    const accessToken = await User.accessTokens.create(user, ['*'])
+    const tokenValue = accessToken.value!.release()
+
+    await redis.set(
+      redisKey,
+      JSON.stringify({
+        status: 'completed',
+        token: tokenValue,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          preferredSource: user.preferredSource,
+          isActive: user.isActive,
+          isEmailConfirmed: user.isEmailConfirmed,
+        },
+      }),
+      'EX',
+      300 // 5 more minutes for the plugin to consume it
+    )
+
+    return response.ok({ message: 'Session completed' })
+  }
+
+  /**
+   * Step 3 — Plugin polls this (no auth) to check if the session is ready.
+   * When status is 'completed', returns the token and deletes the session atomically.
+   */
+  async pollDeviceSession({ request, response }: HttpContext) {
+    const sessionId = request.input('sessionId')
+
+    if (!sessionId) {
+      return response.badRequest({ message: 'Missing sessionId' })
+    }
+
+    const redisKey = `lr:device:${sessionId}`
+
+    const pipeline = redis.multi()
+    pipeline.get(redisKey)
+
+    const peeked = await redis.get(redisKey)
+
+    if (!peeked) {
+      return response.ok({ status: 'expired' })
+    }
+
+    let data: { status: string; token?: string; user?: object }
+    try {
+      data = JSON.parse(peeked)
+    } catch {
+      return response.ok({ status: 'expired' })
+    }
+
+    if (data.status === 'completed') {
+      // Consume atomically
+      await redis.del(redisKey)
+      return response.ok({
+        status: 'completed',
+        token: data.token,
+        user: data.user,
+      })
+    }
+
+    return response.ok({ status: 'pending' })
+  }
 }
