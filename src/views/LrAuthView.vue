@@ -292,6 +292,7 @@ function handleSwitchAccount() {
 .state-title {
   font-size: 20px;
   font-weight: 600;
+  color: var(--text-primary);
   margin: 0;
 }
 
