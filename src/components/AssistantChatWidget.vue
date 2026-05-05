@@ -8,7 +8,7 @@
         title="Open Assistant"
         @click="store.open()"
       >
-        <n-icon :size="22">
+        <n-icon :size="34">
           <ChatIcon />
         </n-icon>
         <!-- <span v-if="store.messages.length > 0" class="assistant-fab-dot" /> -->
@@ -35,7 +35,9 @@
         <div class="assistant-panel-header">
           <div class="assistant-header-brand">
             <AppLogo layout="icon" :height="26" />
-            <span class="assistant-header-title">Assistant</span>
+            <span class="assistant-header-title"
+              >{{ store.activeSection }} Help</span
+            >
           </div>
           <div class="assistant-header-controls">
             <n-button
@@ -66,7 +68,7 @@
         <div class="assistant-body" ref="messagesRef">
           <!-- Welcome state (no messages yet) -->
           <div v-if="store.messages.length === 0" class="assistant-welcome">
-            <n-icon :size="44" class="assistant-welcome-icon">
+            <n-icon :size="54" class="assistant-welcome-icon">
               <ChatIcon />
             </n-icon>
             <p class="assistant-welcome-text">How can I help you here?</p>
@@ -174,6 +176,7 @@
             @click="showPills = true"
           >
             <n-icon :size="14"><ChevronUpIcon /></n-icon>
+            <span>Open suggestions</span>
           </button>
         </div>
 
@@ -214,7 +217,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { NIcon, NButton, NInput } from "naive-ui";
 import { useRouter } from "vue-router";
 import AppLogo from "@/components/AppLogo.vue";
@@ -227,7 +230,7 @@ import {
   CloseOutline as CloseIcon,
   SendOutline as SendIcon,
   CreateOutline as CreateIcon,
-  ChatbubblesOutline as ChatIcon,
+  HelpCircleOutline as ChatIcon,
   ChevronUpOutline as ChevronUpIcon,
 } from "@vicons/ionicons5";
 
@@ -255,8 +258,23 @@ const messagesRef = ref<HTMLElement | null>(null);
 const isMobile = ref(window.innerWidth < 768);
 const showPhotoInfoDialog = ref(false);
 const selectedDialogPhoto = ref<any>(null);
-const showPills = ref(true);
-const clickedPillLabels = ref(new Set<string>());
+const showPillsBySection = ref<Record<string, boolean>>({});
+const clickedPillsBySection = ref<Record<string, Set<string>>>({});
+
+const showPills = computed({
+  get: () => showPillsBySection.value[store.activeSection ?? ""] ?? true,
+  set: (val: boolean) => {
+    showPillsBySection.value[store.activeSection ?? ""] = val;
+  },
+});
+
+const getClickedPills = (): Set<string> => {
+  const key = store.activeSection ?? "";
+  if (!clickedPillsBySection.value[key]) {
+    clickedPillsBySection.value[key] = new Set();
+  }
+  return clickedPillsBySection.value[key];
+};
 
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 
@@ -272,9 +290,11 @@ watch(
   () => store.messages.length,
   (newLen) => {
     scrollToBottom();
-    // Reset clicked pills when starting a new session
+    // When a session is cleared, reset this section's pills state
     if (newLen === 0) {
-      clickedPillLabels.value.clear();
+      const key = store.activeSection ?? "";
+      delete clickedPillsBySection.value[key];
+      showPillsBySection.value[key] = true;
     }
   },
   { flush: "post" },
@@ -299,7 +319,8 @@ const scrollToBottom = async () => {
 
 const availablePills = () => {
   const pills = store.pillsForSection(store.activeSection ?? "");
-  return pills.filter((pill) => !clickedPillLabels.value.has(pill.label));
+  const clicked = getClickedPills();
+  return pills.filter((pill) => !clicked.has(pill.label));
 };
 
 // ── Markdown rendering (mirrors ChatView logic) ───────────────────────────────
@@ -413,7 +434,7 @@ const handleKeyDown = (e: KeyboardEvent) => {
 const handlePillClick = (pill: Pill) => {
   inputText.value = pill.prompt;
   showPills.value = false;
-  clickedPillLabels.value.add(pill.label);
+  getClickedPills().add(pill.label);
   if (pill.autoSend !== false) {
     sendMessage();
   }
@@ -795,7 +816,7 @@ const navigateTo = (path: string) => {
   border-top: 1px solid var(--divider-color, rgba(255, 255, 255, 0.07));
   flex-shrink: 0;
   display: flex;
-  min-height: 46px;
+  min-height: 35px;
 }
 
 .assistant-pills-row {
@@ -842,6 +863,9 @@ const navigateTo = (path: string) => {
   transition:
     color 0.15s,
     background 0.15s;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
 }
 .assistant-pills-toggle:hover {
   color: var(--text-color-1, #e8e8e8);

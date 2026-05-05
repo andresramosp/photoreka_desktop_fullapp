@@ -160,7 +160,7 @@
           />
 
           <!-- Assistant Chat Widget (route-driven visibility) -->
-          <!-- <AssistantChatWidget /> -->
+          <AssistantChatWidget />
         </template>
       </n-message-provider>
     </n-notification-provider>
@@ -198,7 +198,13 @@ const assistantChatStore = useAssistantChatStore();
 // Keep the assistant widget in sync with the active route
 watch(
   () => route.name,
-  (name) => assistantChatStore.setActiveRoute(name),
+  (name, oldName) => {
+    if (oldName !== undefined) {
+      // Explicit close on every navigation, regardless of store logic
+      assistantChatStore.close();
+    }
+    assistantChatStore.setActiveRoute(name);
+  },
   { immediate: true },
 );
 
