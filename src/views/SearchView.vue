@@ -128,6 +128,13 @@
       @close="closeToolSelector"
     />
 
+    <!-- Demo Safe-Search Warning Modal -->
+    <DemoSearchWarningModal
+      :show="showDemoWarningModal"
+      :type="demoWarningType"
+      @close="closeDemoWarningModal"
+    />
+
     <!-- Floating Action Bar -->
     <FloatingActionBar
       :selected-ids="localSelectedPhotoIds"
@@ -183,10 +190,20 @@ import { useCollectionsStore } from "@/stores/collections";
 import { usePhotoScored } from "@/composables/usePhotoScored";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection";
 import { usePhotoDownload } from "@/composables/usePhotoDownload";
+import { useDemoSafeSearch } from "@/composables/useDemoSafeSearch";
+import DemoSearchWarningModal from "@/components/DemoSearchWarningModal.vue";
 
 const photoStore = usePhotosStore();
 const searchStore = useSearchStore();
 const collectionsStore = useCollectionsStore();
+
+// Demo safe-search guard
+const {
+  checkQuery: demoCheckQuery,
+  showWarningModal: showDemoWarningModal,
+  warningType: demoWarningType,
+  closeWarningModal: closeDemoWarningModal,
+} = useDemoSafeSearch();
 const showPhotoInfoDialog = ref(false);
 const selectedDialogPhoto = ref();
 
@@ -487,6 +504,14 @@ function clearSearch() {
 
 // Ejecución de búsqueda
 async function performSearch() {
+  // Demo safe-search: check query text (semantic) or included tags (tags search)
+  const queryToCheck =
+    searchStore.activeSearchType === "semantic"
+      ? searchStore.currentSearchState.query || ""
+      : (searchStore.currentSearchState.includedTags || []).join(" ");
+
+  if (demoCheckQuery(queryToCheck)) return; // blocked – modal will open
+
   clearSelection();
   searchStore.resetCurrentIteration();
   stopReferencesPolling(); // Stop any previous polling
