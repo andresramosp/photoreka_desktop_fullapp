@@ -36,6 +36,7 @@ export type ActivityType =
   | 'series_remove_photos'
   // Portfolio & Visualization
   | 'portfolio_build'
+  | 'report_build'
   | 'view_3d'
   // Embeddings
   | 'generate_embeddings'

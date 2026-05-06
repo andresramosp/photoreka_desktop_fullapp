@@ -270,11 +270,32 @@ const ROUTE_MAP: RouteDescriptor[] = [
   // ─── Portfolio & 3D ───
   {
     method: 'GET',
-    pattern: /\/portfolio-review\/should-build$/,
-    type: 'portfolio_build',
+    pattern: /\/report-review\/should-build$/,
+    type: 'report_build',
     meta: (_b, _p, r) => ({
       action: r?.action ?? null,
       currentPhotos: r?.stats?.currentPhotos ?? null,
+    }),
+  },
+  {
+    method: 'POST',
+    pattern: /\/portfolio-build\/start$/,
+    type: 'portfolio_build',
+    meta: (b, _p, r) => ({
+      buildId: r?.buildId ?? null,
+      targetSize: b?.targetSize ?? null,
+      coherenceMode: b?.coherenceMode ?? null,
+      isManual: false,
+    }),
+  },
+  {
+    method: 'POST',
+    pattern: /\/portfolio-build\/manual$/,
+    type: 'portfolio_build',
+    meta: (b, _p, r) => ({
+      buildId: r?.buildId ?? null,
+      photoCount: Array.isArray(b?.photos) ? b.photos.length : null,
+      isManual: true,
     }),
   },
   {

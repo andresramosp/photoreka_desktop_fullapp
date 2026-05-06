@@ -1,23 +1,23 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import pLimit from 'p-limit'
-import PortfolioReviewManager from '../managers/portfolio_review_manager.js'
-import type { ReviewType } from '../managers/portfolio_review_manager.js'
+import ReportReviewManager from '../managers/report_review_manager.js'
+import type { ReviewType } from '../managers/report_review_manager.js'
 import User from '#models/user'
 import Photo from '#models/photo'
 import AnalyzerProcess from '#models/analyzer/analyzerProcess'
 import UserCostService from '#services/user_cost_service'
 import MailService from '#services/mail_service'
-import { portfolioReviewBuildTemplate } from '../utils/email_templates.js'
+import { reportReviewBuildTemplate } from '../utils/email_templates.js'
 
 const REVIEW_TYPES: ReviewType[] = ['general', 'story', 'context']
 const BUILD_THRESHOLD_PHOTOS = 200
 const REBUILD_THRESHOLD_CHANGES = 250 // Número absoluto de fotos añadidas/borradas para rebuild
 const BUILD_TIMEOUT_MS = 60 * 60 * 1000 // 60 minutos - tiempo máximo esperado para un build
 
-export default class PortfolioReviewController {
+export default class ReportReviewController {
   /**
    * Construye y almacena los patrones de todos los reviewTypes en el usuario
-   * POST /portfolio-review/build
+   * POST /report-review/build
    */
   public async buildPatterns({ response, auth }: HttpContext) {
     try {
@@ -37,7 +37,7 @@ export default class PortfolioReviewController {
       }
       await userModelStart.save()
 
-      const portfolioReviewManager = new PortfolioReviewManager()
+      const reportReviewManager = new ReportReviewManager()
       const catalogPatterns: Record<string, any> = {}
       let totalCostInEur = 0
 
@@ -53,17 +53,13 @@ export default class PortfolioReviewController {
           // Obtener patrones previos para este reviewType (si existen)
           const previousPatterns = existingCatalogPatterns[reviewType] || []
 
-          const result = await portfolioReviewManager.getPatterns(
-            userId,
-            reviewType,
-            previousPatterns
-          )
+          const result = await reportReviewManager.getPatterns(userId, reviewType, previousPatterns)
           catalogPatterns[reviewType] = result
 
           // Acumular costo y registrar inmediatamente (así queda guardado aunque el build falle en steps posteriores)
           if (result?.cost?.totalCostInEur) {
             totalCostInEur += result.cost.totalCostInEur
-            UserCostService.record(user.id, 'portfolio_review', result.cost.totalCostInEur, 1, {
+            UserCostService.record(user.id, 'report_review', result.cost.totalCostInEur, 1, {
               task: reviewType,
             }).catch(() => {})
           }
@@ -125,7 +121,7 @@ export default class PortfolioReviewController {
           }
         }
 
-        const html = portfolioReviewBuildTemplate(userModel.name || 'there', {
+        const html = reportReviewBuildTemplate(userModel.name || 'there', {
           isRebuild,
           photosAdded,
           photosRemoved,
@@ -177,7 +173,7 @@ export default class PortfolioReviewController {
 
   /**
    * Decide si se debe hacer build y lo lanza de forma asíncrona
-   * GET /portfolio-review/should-build
+   * GET /report-review/should-build
    */
   public async shouldBuild({ response, auth }: HttpContext) {
     try {
@@ -211,10 +207,7 @@ export default class PortfolioReviewController {
             },
           })
         } else {
-          // Build expirado, permitir nuevo build
-          console.log(
-            `Build expirado (${Math.floor(elapsedMs / 60000)} minutos). Permitiendo nuevo build.`
-          )
+          // Build expirado, continuar evaluación normal
         }
       }
 
@@ -340,7 +333,7 @@ export default class PortfolioReviewController {
 
   /**
    * Obtiene los patrones identificados en el portfolio del usuario
-   * GET /portfolio-review/:reviewType
+   * GET /report-review/:reviewType
    */
   public async getPatterns({ params, response, auth }: HttpContext) {
     try {
@@ -349,11 +342,11 @@ export default class PortfolioReviewController {
       const userId = user.id.toString()
 
       const reviewType = (params.reviewType || 'general') as ReviewType
-      const portfolioReviewManager = new PortfolioReviewManager()
-      const result = await portfolioReviewManager.getPatterns(userId, reviewType)
+      const reportReviewManager = new ReportReviewManager()
+      const result = await reportReviewManager.getPatterns(userId, reviewType)
 
       if (result?.cost?.totalCostInEur) {
-        UserCostService.record(user.id, 'portfolio_review', result.cost.totalCostInEur, 1, {
+        UserCostService.record(user.id, 'report_review', result.cost.totalCostInEur, 1, {
           task: reviewType,
         }).catch(() => {})
       }
@@ -370,23 +363,19 @@ export default class PortfolioReviewController {
 
   /**
    * Endpoint público para obtener patrones por userId
-   * GET /portfolio-review/:reviewType/user/:userId
+   * GET /report-review/:reviewType/user/:userId
    */
   public async getPatternsByUserId({ params, response }: HttpContext) {
     try {
       const { userId, reviewType } = params
       const reviewTypeParam = (reviewType || 'general') as ReviewType
-      const portfolioReviewManager = new PortfolioReviewManager()
-      const result = await portfolioReviewManager.getPatterns(userId, reviewTypeParam)
+      const reportReviewManager = new ReportReviewManager()
+      const result = await reportReviewManager.getPatterns(userId, reviewTypeParam)
 
       if (result?.cost?.totalCostInEur) {
-        UserCostService.record(
-          parseInt(userId),
-          'portfolio_review',
-          result.cost.totalCostInEur,
-          1,
-          { task: reviewTypeParam }
-        ).catch(() => {})
+        UserCostService.record(parseInt(userId), 'report_review', result.cost.totalCostInEur, 1, {
+          task: reviewTypeParam,
+        }).catch(() => {})
       }
 
       return response.ok(result)

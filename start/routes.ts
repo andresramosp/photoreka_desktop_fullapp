@@ -75,7 +75,7 @@ const SeriesController = () => import('#controllers/series_controller')
 const UsageController = () => import('#controllers/usage_controller')
 const ThreeDViewController = () => import('#controllers/3dview_controller')
 const TagCloudController = () => import('#controllers/tagcloud_controller')
-const PortfolioReviewController = () => import('#controllers/portfolio_review_controller')
+const ReportReviewController = () => import('#controllers/report_review_controller')
 const ChatController = () => import('#controllers/chat_controller')
 const CanvasController = () => import('#controllers/canvas_controller')
 const PaymentController = () => import('#controllers/payment_controller')
@@ -97,9 +97,9 @@ router.post('/api/3d/catalog/:id', [ThreeDViewController, 'get3DPhotosByIdOrUser
 // Series public endpoint (no auth required)
 router.get('/api/series/by-name/:name', [SeriesController, 'showByName'])
 
-// Portfolio Review public endpoint (no auth required)
-router.get('/api/portfolio-review/:reviewType/user/:userId', [
-  PortfolioReviewController,
+// Report Review public endpoint (no auth required)
+router.get('/api/report-review/:reviewType/user/:userId', [
+  ReportReviewController,
   'getPatternsByUserId',
 ])
 
@@ -183,9 +183,9 @@ router
     // Tag Cloud (2D semantic visualization of user's tags)
     router.post('/api/tagcloud/2d', [TagCloudController, 'get2DTags'])
 
-    // Portfolio Review endpoints
-    // router.get('/api/portfolio-review/:reviewType', [PortfolioReviewController, 'getPatterns'])
-    router.get('/api/portfolio-review/should-build', [PortfolioReviewController, 'shouldBuild'])
+    // Report Review endpoints
+    // router.get('/api/report-review/:reviewType', [ReportReviewController, 'getPatterns'])
+    router.get('/api/report-review/should-build', [ReportReviewController, 'shouldBuild'])
 
     // Portfolio Builder endpoints
     router.post('/api/portfolio-build/start', [PortfolioBuildController, 'start'])

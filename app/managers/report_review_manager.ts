@@ -14,7 +14,7 @@ import {
   ExistingPatternSummary,
   PatternForDeduplication,
   PROMPT_PORTFOLIO_VISUAL_ACCENTS,
-} from '../utils/prompts/portfolio_review.js'
+} from '../utils/prompts/report_review.js'
 
 // ========================================
 // CONFIGURACIÓN GLOBAL

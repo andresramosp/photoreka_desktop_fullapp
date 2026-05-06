@@ -679,7 +679,7 @@ export function analysisCompleteTemplate(
 /**
  * Portfolio review build complete notification email
  */
-export function portfolioReviewBuildTemplate(
+export function reportReviewBuildTemplate(
   userName: string,
   params: {
     isRebuild: boolean
