@@ -351,17 +351,15 @@ const renderMarkdown = (content: string): string => {
         `<span class="app-url-link" data-app-url="${path}">${label || path}</span>`,
     );
 };
-
 const handleMarkdownClick = (e: MouseEvent) => {
-  // App-internal URL links
+  // Handle app-internal URL links
   const urlTarget = (e.target as HTMLElement).closest(
     "[data-app-url]",
   ) as HTMLElement | null;
   if (urlTarget) {
     const appUrl = urlTarget.dataset.appUrl;
     if (appUrl) {
-      const resolved = router.resolve(appUrl);
-      window.open(window.location.origin + resolved.href, "_blank");
+      router.push(appUrl);
       return;
     }
   }
