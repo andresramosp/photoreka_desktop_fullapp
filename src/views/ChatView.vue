@@ -1208,9 +1208,7 @@ const handleMarkdownClick = (e: MouseEvent) => {
   if (urlTarget) {
     const appUrl = urlTarget.dataset.appUrl;
     if (appUrl) {
-      const resolved = router.resolve(appUrl);
-      const fullUrl = window.location.origin + resolved.href;
-      window.open(fullUrl, "_blank");
+      router.push(appUrl);
       return;
     }
   }
