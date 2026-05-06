@@ -272,10 +272,14 @@ const ROUTE_MAP: RouteDescriptor[] = [
     method: 'GET',
     pattern: /\/report-review\/should-build$/,
     type: 'report_build',
-    meta: (_b, _p, r) => ({
-      action: r?.action ?? null,
-      currentPhotos: r?.stats?.currentPhotos ?? null,
-    }),
+    meta: (_b, _p, r) => {
+      const action = r?.action ?? null
+      if (action !== 'BUILDING' && action !== 'RE-BUILDING') return null
+      return {
+        action,
+        currentPhotos: r?.stats?.currentPhotos ?? null,
+      }
+    },
   },
   {
     method: 'POST',
@@ -397,6 +401,8 @@ export default class ActivityLoggerMiddleware {
     }
 
     const metadata = descriptor.meta ? descriptor.meta(body, params, resBody) : null
+
+    if (descriptor.meta && metadata === null) return
 
     await UserActivity.create({
       userId,
