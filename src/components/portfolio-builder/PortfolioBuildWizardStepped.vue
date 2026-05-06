@@ -349,6 +349,25 @@
                   :max-tag-count="2"
                 />
               </div>
+
+              <Transition name="hint-fade">
+                <div
+                  v-if="
+                    filterEligibility && filterEligibility.eligible === false
+                  "
+                  class="size-error"
+                >
+                  <n-icon :size="16"><InformationCircleOutline /></n-icon>
+                  <div class="size-error-text">
+                    <strong>Not enough analyzed photos</strong>
+                    <span>{{ filterEligibility.reason }}</span>
+                    <span class="size-error-hint">
+                      Try removing some filters, reducing the portfolio size, or
+                      analyze more photos from your catalog.
+                    </span>
+                  </div>
+                </div>
+              </Transition>
             </div>
           </div>
 
@@ -523,6 +542,7 @@ import { getVisualAspectsOptions } from "@/stores/searchStore";
 import { getGenrePresetKeys, getProfileVariant } from "@/config/photo_schema";
 import { useCollectionsStore } from "@/stores/collections";
 import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds";
+import { usePhotosStore } from "@/stores/photos";
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -536,6 +556,7 @@ const PortfolioIcon = TOOL_ICONS[getToolById("portfolios").icon];
 const message = useMessage();
 const collectionsStore = useCollectionsStore();
 const portfolioStore = usePortfolioBuildsStore();
+const photosStore = usePhotosStore();
 
 const { genrePresets, formatCriterionName, artisticScores } = useArtisticScores(
   { profile: () => useUserStore().user?.profiles },
@@ -878,6 +899,123 @@ const canSubmit = computed(() => {
   return true;
 });
 
+// ── Filter-scoped eligibility (frontend-only) ──────────────
+// Mirrors the backend pool formula. Keep in sync with
+// PortfolioBuildService.requiredPoolForTargetSize.
+const POOL_RECALL_MULTIPLIER = 7;
+const POOL_RECALL_MAX = 800;
+const POOL_OVER_GENERATE_RATIO = 0.35;
+const POOL_OVER_GENERATE_MIN = 3;
+
+function requiredPoolForTargetSize(targetSize) {
+  const normalized = Math.max(10, Math.min(60, Math.ceil(targetSize)));
+  const recallTarget = Math.min(
+    normalized * POOL_RECALL_MULTIPLIER,
+    POOL_RECALL_MAX,
+  );
+  const overBuffer = Math.max(
+    POOL_OVER_GENERATE_MIN,
+    Math.ceil(normalized * POOL_OVER_GENERATE_RATIO),
+  );
+  return Math.max(recallTarget, normalized + overBuffer);
+}
+
+// Evaluated whenever the filter state or targetSize changes. Only active when
+// at least one filter is set (otherwise the global sizeEligibility covers it).
+const filterEligibility = computed(() => {
+  const hasFilters =
+    selectedVisualAspects.value.length > 0 ||
+    selectedCollections.value.length > 0 ||
+    dateFrom.value != null ||
+    dateTo.value != null;
+  if (!hasFilters) return null;
+
+  const analyzedPhotos = photosStore.processedPhotos;
+  if (!analyzedPhotos || analyzedPhotos.length === 0) return null;
+
+  // Build collection photo-ID set
+  let collectionPhotoIdSet = null;
+  if (selectedCollections.value.length > 0) {
+    const ids = new Set();
+    for (const collId of selectedCollections.value) {
+      const coll = collectionsStore.allCollections.find((c) => c.id === collId);
+      if (coll?.photos) {
+        for (const p of coll.photos) ids.add(p.id);
+      }
+    }
+    collectionPhotoIdSet = ids;
+  }
+
+  // Build visual-aspects filter map  { category: [values] }
+  let vaFilter = null;
+  if (selectedVisualAspects.value.length > 0) {
+    vaFilter = {};
+    for (const key of selectedVisualAspects.value) {
+      const colonIdx = key.indexOf(":");
+      if (colonIdx === -1) continue;
+      const group = key.slice(0, colonIdx);
+      const value = key.slice(colonIdx + 1);
+      if (!vaFilter[group]) vaFilter[group] = [];
+      vaFilter[group].push(value);
+    }
+  }
+
+  // Build date range strings
+  const dateFromStr = dateFrom.value
+    ? new Date(dateFrom.value).toISOString().split("T")[0]
+    : null;
+  const dateToStr = dateTo.value
+    ? new Date(dateTo.value).toISOString().split("T")[0]
+    : null;
+
+  let count = 0;
+  for (const photo of analyzedPhotos) {
+    // Collection filter
+    if (collectionPhotoIdSet && !collectionPhotoIdSet.has(photo.id)) continue;
+
+    // Visual aspects filter
+    if (vaFilter) {
+      const va = photo.descriptions?.visual_aspects;
+      let pass = true;
+      for (const [category, accepted] of Object.entries(vaFilter)) {
+        if (!accepted || accepted.length === 0) continue;
+        const photoVals = va?.[category];
+        if (!photoVals) {
+          pass = false;
+          break;
+        }
+        const arr = Array.isArray(photoVals) ? photoVals : [photoVals];
+        if (!arr.some((v) => accepted.includes(v))) {
+          pass = false;
+          break;
+        }
+      }
+      if (!pass) continue;
+    }
+
+    // Date filter
+    if (dateFromStr || dateToStr) {
+      const dateTaken = photo.descriptions?.EXIF?.dateTaken;
+      if (!dateTaken) continue;
+      if (dateFromStr && dateTaken < dateFromStr) continue;
+      if (dateToStr && dateTaken > dateToStr) continue;
+    }
+
+    count++;
+  }
+
+  const requiredPool = requiredPoolForTargetSize(form.targetSize);
+  if (count >= requiredPool) return null; // eligible — no error to show
+  return {
+    eligible: false,
+    reason: `Your current filters leave only ${count} analyzed photo${
+      count === 1 ? "" : "s"
+    } in scope. You need at least ${requiredPool} to build a portfolio of ${form.targetSize} photos.`,
+    requiredPool,
+    stats: { analyzed: count },
+  };
+});
+
 // ── Dynamic size eligibility ───────────────────────────────
 // The backend enforces that the user has enough *analyzed* photos to feed the
 // recall/evaluation pool for the chosen targetSize. We re-check every time the
@@ -916,10 +1054,15 @@ watch(
 );
 
 // Block moving past the Size step if the user is not eligible for the chosen size.
+// Also block past the Filters step if the chosen filters reduce the pool too much.
 const canAdvance = computed(() => {
   if (currentStep.value === 1) {
     if (isCheckingEligibility.value) return false;
     if (sizeEligibility.value && sizeEligibility.value.eligible === false)
+      return false;
+  }
+  if (currentStep.value === 3) {
+    if (filterEligibility.value && filterEligibility.value.eligible === false)
       return false;
   }
   return true;
