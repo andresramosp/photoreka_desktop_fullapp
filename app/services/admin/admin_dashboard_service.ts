@@ -97,15 +97,20 @@ export default class AdminDashboardService {
           AND user_id IS NOT NULL
       `),
 
-      // Health: photo-level missing data
+      // Health: photo-level missing data — only processed photos
       db.rawQuery(`
         SELECT
           COUNT(*)::int AS total,
-          COUNT(*) FILTER (WHERE embedding IS NULL)::int AS missing_embeddings,
-          COUNT(*) FILTER (WHERE descriptions IS NULL)::int AS missing_descriptions,
-          COUNT(*) FILTER (WHERE color_histogram IS NULL)::int AS missing_color
+          COUNT(*) FILTER (WHERE photos.embedding IS NULL)::int AS missing_embeddings,
+          COUNT(*) FILTER (WHERE photos.descriptions IS NULL)::int AS missing_descriptions,
+          COUNT(*) FILTER (WHERE photos.color_histogram IS NULL)::int AS missing_color
         FROM photos
-        WHERE deleted_at IS NULL
+        JOIN analyzer_processes ap ON photos.analyzer_process_id = ap.id
+          AND (
+            ap.mode IN ('admin_retry', 'overwrite_metadata')
+            OR (ap.is_preprocess = false AND ap.current_stage = 'finished')
+          )
+        WHERE photos.deleted_at IS NULL
       `),
 
       // Recent processes (last 8)

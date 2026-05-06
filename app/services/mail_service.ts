@@ -62,6 +62,16 @@ export default class MailService {
       },
     }
 
+    // Dry run: solo loguear sin enviar
+    if (process.env.MAIL_DRY_RUN === 'true') {
+      console.log('[MailService DRY RUN] Email not sent:', {
+        from: mailOptions.from,
+        to: mailOptions.to,
+        subject: mailOptions.subject,
+      })
+      return { dryRun: true }
+    }
+
     // Enviar el email
     return transporter.sendMail(mailOptions)
   }

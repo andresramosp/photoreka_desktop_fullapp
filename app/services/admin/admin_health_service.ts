@@ -41,17 +41,22 @@ export default class AdminHealthService {
    * Lightweight overview — single query on photos table + counts on tags/chunks
    */
   static async overview(): Promise<HealthOverview> {
-    // Per-user photo stats (no joins)
+    // Per-user photo stats — only processed photos (excludes 'uploaded', 'processing', etc.)
     const rows = await db.rawQuery(`
       SELECT
-        user_id,
+        photos.user_id,
         COUNT(*)::int AS total,
-        COUNT(*) FILTER (WHERE embedding IS NOT NULL)::int AS with_embedding,
-        COUNT(*) FILTER (WHERE descriptions IS NOT NULL)::int AS with_descriptions,
-        COUNT(*) FILTER (WHERE color_histogram IS NOT NULL)::int AS with_color
+        COUNT(*) FILTER (WHERE photos.embedding IS NOT NULL)::int AS with_embedding,
+        COUNT(*) FILTER (WHERE photos.descriptions IS NOT NULL)::int AS with_descriptions,
+        COUNT(*) FILTER (WHERE photos.color_histogram IS NOT NULL)::int AS with_color
       FROM photos
-      WHERE deleted_at IS NULL
-      GROUP BY user_id
+      JOIN analyzer_processes ap ON photos.analyzer_process_id = ap.id
+        AND (
+          ap.mode IN ('admin_retry', 'overwrite_metadata')
+          OR (ap.is_preprocess = false AND ap.current_stage = 'finished')
+        )
+      WHERE photos.deleted_at IS NULL
+      GROUP BY photos.user_id
       ORDER BY total DESC
     `)
 
@@ -138,6 +143,13 @@ export default class AdminHealthService {
   static async userHealthCheck(userId: number) {
     const photoIds = await Photo.query()
       .where('userId', userId)
+      .whereHas('analyzerProcess', (q) => {
+        q.where((inner) => {
+          inner.whereIn('mode', ['admin_retry', 'overwrite_metadata']).orWhere((inner2) => {
+            inner2.where('is_preprocess', false).where('current_stage', 'finished')
+          })
+        })
+      })
       .select('id')
       .then((photos) => photos.map((p) => p.id))
 
@@ -185,6 +197,13 @@ export default class AdminHealthService {
     // Run health to find unhealthy photos
     const photoIds = await Photo.query()
       .where('userId', userId)
+      .whereHas('analyzerProcess', (q) => {
+        q.where((inner) => {
+          inner.whereIn('mode', ['admin_retry', 'overwrite_metadata']).orWhere((inner2) => {
+            inner2.where('is_preprocess', false).where('current_stage', 'finished')
+          })
+        })
+      })
       .select('id')
       .then((photos) => photos.map((p) => p.id))
 
@@ -335,6 +354,13 @@ export default class AdminHealthService {
     const photos = await Photo.query()
       .whereNull('embedding')
       .whereNull('deletedAt')
+      .whereHas('analyzerProcess', (q) => {
+        q.where((inner) => {
+          inner.whereIn('mode', ['admin_retry', 'overwrite_metadata']).orWhere((inner2) => {
+            inner2.where('is_preprocess', false).where('current_stage', 'finished')
+          })
+        })
+      })
       .select('id', 'name')
 
     if (photos.length === 0) {

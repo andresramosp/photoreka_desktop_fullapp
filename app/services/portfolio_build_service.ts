@@ -1488,6 +1488,7 @@ ${coherenceInstruction ? `\n## Coherence directive\n${coherenceInstruction}` : '
 
 ## Rules
 - Judge each photo visually: composition, impact, technical quality, emotional resonance.
+- Each photo includes a metadata line with \`score:X.X\` — a pre-computed composite artistic score (0–10). Use it as a soft tiebreaker when photos are visually close, but trust your visual assessment first.
 - Be selective — a smaller, stronger portfolio beats a padded one.
 - Duplicates are handled separately; focus on individual photo merit.
 
@@ -1585,9 +1586,17 @@ Return JSON: { "decisions": [ { "id": <number>, "analysis": "<one sentence asses
     while (remaining.length > targetSize && round < REFINEMENT_MAX_ROUNDS) {
       round++
       const excess = remaining.length - targetSize
+      // Shuffle before batching so no single batch ends up with only the
+      // top-scoring photos. Without this, the sequential slice would cluster
+      // rank-1..15 into batch 0 and force the LLM to cut from among the best.
+      const shuffled = [...remaining]
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+      }
       const batches: ScoredCandidate[][] = []
-      for (let i = 0; i < remaining.length; i += REFINEMENT_BATCH_SIZE) {
-        batches.push(remaining.slice(i, i + REFINEMENT_BATCH_SIZE))
+      for (let i = 0; i < shuffled.length; i += REFINEMENT_BATCH_SIZE) {
+        batches.push(shuffled.slice(i, i + REFINEMENT_BATCH_SIZE))
       }
 
       // Max cuts this round: proportional to excess but at most REFINEMENT_CUT_RATIO per batch
@@ -1763,6 +1772,7 @@ ${previousNotes ? `\n## Notes from previous review rounds\n${previousNotes}` : '
 ## Your task
 The portfolio currently has ${currentTotal} photos and must be trimmed to ${targetSize}.
 You are reviewing a batch of ${batch.length} photos from this portfolio.
+Each photo includes a metadata line with \`score:X.X\` — a pre-computed composite artistic score (0–10). Use it as a soft tiebreaker when photos are visually close, but trust your visual assessment first.
 Examine each photo and flag UP TO ${maxCuts} photo(s) that clearly do NOT belong — the weakest, most redundant, or least fitting for this portfolio.
 
 ## Rules
@@ -2538,11 +2548,10 @@ Return JSON:
 
     const parts = [`id:${photo.id}`, photo.originalFileName]
 
-    // if (typeof photo.compositeScore === 'number') {
-    //   parts.push(`composite:${photo.compositeScore.toFixed(1)}`)
-    // }
+    if (typeof photo.compositeScore === 'number') {
+      parts.push(`score:${photo.compositeScore.toFixed(1)}`)
+    }
 
-    // parts.push(`scores:${scores ? JSON.stringify(scores) : 'N/A'}`)
     parts.push(`genre:${va?.genre ?? 'unknown'}`)
     // parts.push(`lighting:${va?.lighting ?? 'unknown'}`)
     // parts.push(`palette:${va?.palette ?? 'unknown'}`)
