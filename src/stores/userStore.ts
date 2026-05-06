@@ -510,7 +510,7 @@ export const useUserStore = defineStore("user", () => {
 
     try {
       const response = await api_analyzer.get(
-        "/api/portfolio-review/should-build",
+        "/api/report-review/should-build",
       );
       const { action } = response.data;
 
