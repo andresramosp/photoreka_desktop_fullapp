@@ -368,7 +368,7 @@
                 <div class="keyboard-key">S</div>
                 <div class="keyboard-key">D</div>
               </div>
-              <span class="control-text">Up/left/down/right</span>
+              <span class="control-text">Pan up/left/down/right</span>
             </div>
           </div>
           <div class="control-tip">
@@ -391,7 +391,17 @@
           <div class="control-tip">
             <div class="control-icon-group">
               <span class="control-icon-text">👆</span>
-              <span class="control-text">Click on photos to select them</span>
+              <span class="control-text">Click a photo to select it</span>
+            </div>
+          </div>
+          <div class="control-tip">
+            <div class="control-icon-group">
+              <div class="keyboard-keys-group">
+                <div class="keyboard-key">{{ isMac ? "⌘ Cmd" : "Ctrl" }}</div>
+              </div>
+              <span class="control-text"
+                >+&nbsp;drag to draw a selection rectangle</span
+              >
             </div>
           </div>
         </div>
@@ -569,6 +579,11 @@ const emit = defineEmits([
 const isExpanded = computed({
   get: () => props.showConfigPanel,
   set: (value) => emit("update:showConfigPanel", value),
+});
+
+// Detect if user is on macOS
+const isMac = computed(() => {
+  return navigator.platform.toUpperCase().indexOf("MAC") >= 0;
 });
 
 // Control which section is expanded (null, 'patterns', 'displayOptions', 'filters', 'navigation')
@@ -932,6 +947,11 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
   display: flex;
   gap: 3px;
   flex-shrink: 0;
+}
+
+.control-tip-sub {
+  margin-top: 2px;
+  opacity: 0.7;
 }
 
 @keyframes slideDown {

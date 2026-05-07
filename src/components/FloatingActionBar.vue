@@ -6,6 +6,13 @@
         'floating-action-bar',
         { 'floating-action-bar--embedded': embedded },
       ]"
+      :style="{
+        top: embedded
+          ? 'auto'
+          : typeof topPosition === 'number'
+            ? topPosition + 'px'
+            : topPosition,
+      }"
     >
       <div class="floating-action-content">
         <template v-if="!embedded">
@@ -293,6 +300,10 @@ const props = defineProps({
   embedded: {
     type: Boolean,
     default: false,
+  },
+  topPosition: {
+    type: [String, Number],
+    default: 75,
   },
 });
 

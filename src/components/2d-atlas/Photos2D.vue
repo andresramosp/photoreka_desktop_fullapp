@@ -10,7 +10,12 @@
     </div>
 
     <!-- PixiJS Canvas Container -->
-    <div v-else ref="pixiContainer" class="pixi-container"></div>
+    <div
+      v-else
+      ref="pixiContainer"
+      class="pixi-container"
+      :class="{ 'rect-selecting': isRectSelecting }"
+    ></div>
 
     <!-- Tag Beacons Display (long-distance zone indicators) -->
     <div
@@ -174,69 +179,22 @@
       </div>
     </div>
 
-    <!-- Selected Photos Container -->
-    <div
-      v-if="selectedPhotos.length > 0 && !isPlayground"
-      class="selected-photos-container"
-      @click.stop
-      @mousedown.stop
-      @mouseup.stop
-      @touchstart.stop
-      @touchend.stop
-      @touchmove.stop
-    >
-      <div class="selected-photos-header">
-        <div class="header-left-group">
-          <span class="selected-count"
-            >{{ selectedPhotos.length }} selected</span
-          >
-          <FixedActionBar
-            :selectedCount="selectedPhotos.length"
-            :showDelete="false"
-            :showAddToCollection="!isPlayground"
-            :showMoveToTool="!isPlayground"
-            :showSendToChat="!isPlayground"
-            :isDownloading="isDownloading"
-            @download="handleDownloadPhotos"
-            @add-to-collection="handleAddToCollection"
-            @move-to-tool="handleMoveToTool"
-            @send-to-chat="handleSendToChat"
-          />
-        </div>
-        <button
-          @click="clearSelection"
-          class="clear-selection-btn"
-          title="Clear selection"
-          size="tiny"
-        >
-          <n-icon size="11">
-            <CloseOutlined />
-          </n-icon>
-        </button>
-      </div>
-      <div class="selected-photos-list">
-        <div
-          v-for="photo in selectedPhotos"
-          :key="photo.id"
-          class="selected-photo-item"
-        >
-          <img
-            :src="photo.thumbnailUrl"
-            :alt="photo.id"
-            class="selected-photo-thumb"
-          />
-          <button
-            @click="removeSelectedPhoto(photo.id)"
-            class="remove-photo-btn"
-            title="Remove from selection"
-          >
-            <n-icon size="12">
-              <CloseOutlined />
-            </n-icon>
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- Floating Action Bar (standard selection toolbar) -->
+    <FloatingActionBar
+      v-if="!isPlayground"
+      :selected-ids="selectedPhotoIds"
+      :show-delete="false"
+      :show-add-to-collection="true"
+      :show-move-to-tool="true"
+      :show-send-to-chat="true"
+      :is-downloading="isDownloading"
+      :top-position="20"
+      @clear-selection="clearSelection"
+      @download="handleDownloadPhotos"
+      @add-to-collection="handleAddToCollection"
+      @move-to-tool="handleMoveToTool"
+      @send-to-chat="handleSendToChat"
+    />
 
     <!-- Discrete Loading Indicator -->
     <div v-if="showDiscreteLoader" class="discrete-loader">
@@ -276,6 +234,13 @@
     <!-- <div class="photo-count-indicator">
       {{ visiblePhotosCount }} / {{ totalPhotosCount }} photos
     </div> -->
+
+    <!-- Rect-select overlay (shown while Ctrl/Cmd + drag is active) -->
+    <div
+      v-if="isRectSelecting"
+      class="rect-select-overlay"
+      :style="rectSelectStyle"
+    />
 
     <!-- Collection Modal -->
     <CollectionModal
@@ -318,7 +283,7 @@ import {
 import { useRouter } from "vue-router";
 import * as PIXI from "pixi.js";
 
-import FixedActionBar from "@/components/3d-atlas/FixedActionBar.vue";
+import FloatingActionBar from "@/components/FloatingActionBar.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import Photos2DConfigPanel from "@/components/2d-atlas/Photos2DConfigPanel.vue";
@@ -542,6 +507,24 @@ const photoSize = ref(80);
 const isDragging = ref(false);
 const dragStartPosition = ref({ x: 0, y: 0 });
 const lastPointerPosition = ref({ x: 0, y: 0 });
+
+// Rect-select state (Ctrl/Cmd + drag)
+const isRectSelecting = ref(false);
+const rectSelectStart = ref({ x: 0, y: 0 }); // screen coords (local to pixi container)
+const rectSelectEnd = ref({ x: 0, y: 0 }); // screen coords (local to pixi container)
+
+const rectSelectStyle = computed(() => {
+  const x1 = Math.min(rectSelectStart.value.x, rectSelectEnd.value.x);
+  const y1 = Math.min(rectSelectStart.value.y, rectSelectEnd.value.y);
+  const x2 = Math.max(rectSelectStart.value.x, rectSelectEnd.value.x);
+  const y2 = Math.max(rectSelectStart.value.y, rectSelectEnd.value.y);
+  return {
+    left: x1 + "px",
+    top: y1 + "px",
+    width: x2 - x1 + "px",
+    height: y2 - y1 + "px",
+  };
+});
 const isPinching = ref(false);
 const lastPinchDistance = ref(0);
 const touchStartTime = ref(0);
@@ -1168,6 +1151,20 @@ const handleWheel = (e) => {
 
 const handleMouseDown = (e) => {
   if (e.button !== 0) return;
+
+  if (e.ctrlKey || e.metaKey) {
+    // Ctrl/Cmd + drag → rect selection mode
+    const rect = pixiContainer.value?.getBoundingClientRect();
+    if (!rect) return;
+    const localX = e.clientX - rect.left;
+    const localY = e.clientY - rect.top;
+    isRectSelecting.value = true;
+    rectSelectStart.value = { x: localX, y: localY };
+    rectSelectEnd.value = { x: localX, y: localY };
+    dragStartPosition.value = { x: e.clientX, y: e.clientY };
+    return;
+  }
+
   isDragging.value = true;
   dragStartPosition.value = { x: e.clientX, y: e.clientY };
   lastPointerPosition.value = { x: e.clientX, y: e.clientY };
@@ -1177,6 +1174,16 @@ const handleMouseDown = (e) => {
 const handleMouseMove = (e) => {
   // Update hover detection
   updateHoverState(e);
+
+  if (isRectSelecting.value) {
+    const rect = pixiContainer.value?.getBoundingClientRect();
+    if (!rect) return;
+    rectSelectEnd.value = {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    };
+    return;
+  }
 
   if (!isDragging.value) return;
 
@@ -1192,7 +1199,52 @@ const handleMouseMove = (e) => {
   // Do NOT schedule LOD during drag — wait until mouseUp
 };
 
+const commitRectSelection = () => {
+  // Convert screen rect corners to world coordinates
+  const x1s = Math.min(rectSelectStart.value.x, rectSelectEnd.value.x);
+  const y1s = Math.min(rectSelectStart.value.y, rectSelectEnd.value.y);
+  const x2s = Math.max(rectSelectStart.value.x, rectSelectEnd.value.x);
+  const y2s = Math.max(rectSelectStart.value.y, rectSelectEnd.value.y);
+
+  // Ignore tiny accidental rects (less than 5px in any dimension)
+  if (x2s - x1s < 5 && y2s - y1s < 5) return;
+
+  const worldTL = screenToWorld(x1s, y1s);
+  const worldBR = screenToWorld(x2s, y2s);
+
+  const newIds = [];
+  for (const photo of filteredPhotos.value) {
+    const sprite = photoSprites.value.get(photo.id);
+    if (!sprite) continue;
+    const [px, py] = photo.position || [0, 0];
+    const wx = px * SCALE_FACTOR;
+    const wy = py * SCALE_FACTOR;
+    if (
+      wx >= worldTL.x &&
+      wx <= worldBR.x &&
+      wy >= worldTL.y &&
+      wy <= worldBR.y
+    ) {
+      newIds.push(photo.id);
+    }
+  }
+
+  // Add newly rect-selected ids to existing selection
+  for (const id of newIds) {
+    if (!selectedPhotoIds.value.includes(id)) {
+      selectedPhotoIds.value.push(id);
+    }
+    updateSpriteSelection(id);
+  }
+};
+
 const handleMouseUp = (e) => {
+  if (isRectSelecting.value) {
+    commitRectSelection();
+    isRectSelecting.value = false;
+    return;
+  }
+
   if (isDragging.value && e) {
     // Check if it was a click (not a drag)
     const dx = Math.abs(e.clientX - dragStartPosition.value.x);
@@ -1450,12 +1502,105 @@ const handleClick = (e) => {
   // This function is kept for backwards compatibility but is no longer used
 };
 
+// PIXI selection borders (photoId -> PIXI.Graphics in photoContainer space)
+const selectionBordersMap = new Map();
+
+// Below this world-scale the border becomes too thin to see; switch to fill overlay
+const SELECTION_FILL_THRESHOLD = 0.35;
+
+const getAccentColorNumber = () => {
+  try {
+    const cssColor = getComputedStyle(document.documentElement)
+      .getPropertyValue("--accent-color")
+      .trim();
+    if (cssColor && PIXI?.Color) {
+      return new PIXI.Color(cssColor).toNumber();
+    }
+  } catch (_) {}
+  return 0x6366f1;
+};
+
+const drawSelectionOverlay = (photoId) => {
+  const sprite = photoSprites.value.get(photoId);
+  if (!sprite || !photoContainer.value) return;
+
+  let g = selectionBordersMap.get(photoId);
+  if (!g || g.destroyed) {
+    g = new PIXI.Graphics();
+    photoContainer.value.addChild(g);
+    selectionBordersMap.set(photoId, g);
+  }
+  g.clear();
+  g.x = sprite.x;
+  g.y = sprite.y;
+  const halfW = sprite.width / 2;
+  const halfH = sprite.height / 2;
+  const accentColor = getAccentColorNumber();
+
+  if (scale.value < SELECTION_FILL_THRESHOLD) {
+    // Fill mode: solid accent overlay when too zoomed-out for a border to be visible
+    g.rect(-halfW, -halfH, sprite.width, sprite.height);
+    g.fill({ color: accentColor, alpha: 0.55 });
+  } else {
+    // Border mode: accent stroke
+    g.rect(-halfW - 1, -halfH - 1, sprite.width + 2, sprite.height + 2);
+    g.stroke({ color: accentColor, width: 3 });
+  }
+};
+
+const clearSelectionOverlay = (photoId) => {
+  const g = selectionBordersMap.get(photoId);
+  if (!g) return;
+  g.clear();
+  if (photoContainer.value) {
+    try {
+      photoContainer.value.removeChild(g);
+    } catch (_) {}
+  }
+  try {
+    g.destroy();
+  } catch (_) {}
+  selectionBordersMap.delete(photoId);
+};
+
+const updateAllSelectionOverlayPositions = () => {
+  if (selectionBordersMap.size === 0) return;
+  const accentColor = getAccentColorNumber();
+  const fillMode = scale.value < SELECTION_FILL_THRESHOLD;
+  selectionBordersMap.forEach((g, photoId) => {
+    if (!g || g.destroyed) return;
+    const sprite = photoSprites.value.get(photoId);
+    if (!sprite) return;
+    g.clear();
+    g.x = sprite.x;
+    g.y = sprite.y;
+    const halfW = sprite.width / 2;
+    const halfH = sprite.height / 2;
+    if (fillMode) {
+      g.rect(-halfW, -halfH, sprite.width, sprite.height);
+      g.fill({ color: accentColor, alpha: 0.55 });
+    } else {
+      g.rect(-halfW - 1, -halfH - 1, sprite.width + 2, sprite.height + 2);
+      g.stroke({ color: accentColor, width: 3 });
+    }
+  });
+};
+
+// Redraw selection overlays when zoom crosses the fill/border threshold
+const selectionFillMode = computed(
+  () => scale.value < SELECTION_FILL_THRESHOLD,
+);
+watch(selectionFillMode, () => {
+  updateAllSelectionOverlayPositions();
+});
+
 // Update sprite selection visual
 const updateSpriteSelection = (photoId) => {
-  const sprite = photoSprites.value.get(photoId);
-  if (sprite) {
-    const isSelected = selectedPhotoIds.value.includes(photoId);
-    // sprite.tint = isSelected ? 0x88ff88 : 0xffffff;
+  const isSelected = selectedPhotoIds.value.includes(photoId);
+  if (isSelected) {
+    drawSelectionOverlay(photoId);
+  } else {
+    clearSelectionOverlay(photoId);
   }
 };
 
@@ -1512,6 +1657,13 @@ const updateTransitionPositions = (currentTime) => {
 
       sprite.x = startX + (targetX - startX) * easedProgress;
       sprite.y = startY + (targetY - startY) * easedProgress;
+
+      // Keep selection overlay in sync during transition
+      const selBorder = selectionBordersMap.get(photoId);
+      if (selBorder && !selBorder.destroyed) {
+        selBorder.x = sprite.x;
+        selBorder.y = sprite.y;
+      }
     }
   });
 
@@ -1533,6 +1685,9 @@ const updateTransitionPositions = (currentTime) => {
     animationTargetPositions.clear();
     console.log("✅ Position transition completed");
 
+    // Sync selection overlay positions to final sprite positions.
+    updateAllSelectionOverlayPositions();
+
     // Rebuild spatial index after positions change.
     buildHiResSpatialIndex();
 
@@ -1551,6 +1706,10 @@ const loadPhotosToPixi = async () => {
   isLoadingTextures.value = true;
   loadingProgress.value = 0;
   loaderTitle.value = "Loading photos";
+
+  // Clear any existing selection (selection Graphics are wiped by removeChildren below)
+  selectedPhotoIds.value = [];
+  selectionBordersMap.clear();
 
   // Clear existing sprites - DESTROY them to free GPU memory (not just remove from container)
   for (const sprite of photoSprites.value.values()) {
@@ -2332,20 +2491,9 @@ const stopAnimationLoop = () => {
 
 // Selection handlers
 const clearSelection = () => {
-  selectedPhotoIds.value.forEach((id) => {
-    const sprite = photoSprites.value.get(id);
-    if (sprite) sprite.tint = 0xffffff;
-  });
+  const ids = [...selectedPhotoIds.value];
   selectedPhotoIds.value = [];
-};
-
-const removeSelectedPhoto = (photoId) => {
-  const index = selectedPhotoIds.value.indexOf(photoId);
-  if (index !== -1) {
-    selectedPhotoIds.value.splice(index, 1);
-    const sprite = photoSprites.value.get(photoId);
-    if (sprite) sprite.tint = 0xffffff;
-  }
+  ids.forEach((id) => clearSelectionOverlay(id));
 };
 
 // Filter change handlers
@@ -2994,6 +3142,10 @@ watch(isTransitioning, (v) => {
   cursor: pointer; /* applied at canvas level instead of per-sprite to avoid per-sprite eventMode overhead */
 }
 
+.pixi-container.rect-selecting canvas {
+  cursor: crosshair;
+}
+
 /* Error screen */
 .error-screen {
   display: flex;
@@ -3109,175 +3261,14 @@ watch(isTransitioning, (v) => {
   display: block;
 }
 
-/* Selected photos container */
-.selected-photos-container {
+/* Rect-select overlay */
+.rect-select-overlay {
   position: absolute;
-  left: 10px;
-  top: 10px;
-  background: var(--bg-container);
-  backdrop-filter: blur(12px);
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  padding: 10px;
-  width: 287px;
-  z-index: 1500;
-  pointer-events: auto;
-  animation: slideInFromLeft 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-@keyframes slideInFromLeft {
-  from {
-    opacity: 0;
-    transform: translateX(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-.selected-photos-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.header-left-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 1;
-  min-width: 0;
-}
-
-.selected-count {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.8);
-  font-weight: 500;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.clear-selection-btn {
-  background: rgba(255, 82, 82, 0.2);
-  border: 1px solid rgba(255, 82, 82, 0.3);
-  border-radius: 4px;
-  padding: 4px 8px;
-  cursor: pointer;
-  color: #ff5252;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.clear-selection-btn:hover {
-  background: rgba(255, 82, 82, 0.3);
-  border-color: rgba(255, 82, 82, 0.5);
-}
-
-.selected-photos-list {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 4px 0;
-  max-width: 100%;
-}
-
-.selected-photos-list::-webkit-scrollbar {
-  height: 6px;
-}
-
-.selected-photos-list::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 3px;
-}
-
-.selected-photos-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 3px;
-}
-
-.selected-photos-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.selected-photo-item {
-  position: relative;
-  flex-shrink: 0;
-  width: 60px;
-  height: 60px;
-  border-radius: 6px;
-  overflow: hidden;
-  border: 2px solid rgba(100, 181, 246, 0.5);
-  transition: all 0.2s ease;
-  cursor: pointer;
-}
-
-/* .selected-photo-item:hover {
-  transform: scale(1.05);
-  border-color: rgba(100, 181, 246, 0.8);
-} */
-
-.selected-photo-thumb {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.remove-photo-btn {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  background: rgba(0, 0, 0, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 50%;
-  width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: white;
-  transition: all 0.2s ease;
-  opacity: 0;
-}
-
-.selected-photo-item:hover .remove-photo-btn {
-  opacity: 1;
-}
-
-.remove-photo-btn:hover {
-  background: rgba(255, 82, 82, 0.9);
-  border-color: rgba(255, 82, 82, 0.5);
-}
-
-/* Mobile adjustments for selected photos */
-@media (max-width: 767px) {
-  .selected-photos-container {
-    left: 10px;
-    right: 0px;
-    top: auto;
-    bottom: 0px;
-    max-width: calc(100vw - 10px);
-    padding: 8px;
-  }
-
-  .selected-photo-item {
-    width: 50px;
-    height: 50px;
-  }
-
-  .zoom-controls {
-    right: 5px !important;
-    bottom: 5px !important;
-  }
+  pointer-events: none;
+  border: 2px solid var(--accent-color, #6366f1);
+  background: color-mix(in srgb, var(--accent-color, #6366f1) 15%, transparent);
+  border-radius: 2px;
+  z-index: 900;
 }
 
 /* Discrete loader */
