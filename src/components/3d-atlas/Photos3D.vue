@@ -122,69 +122,22 @@
       </div>
     </div>
 
-    <!-- Selected Photos Container -->
-    <div
-      v-if="selectedPhotos.length > 0 && !isPlayground"
-      class="selected-photos-container"
-      @click.stop
-      @mousedown.stop
-      @mouseup.stop
-      @touchstart.stop
-      @touchend.stop
-      @touchmove.stop
-    >
-      <div class="selected-photos-header">
-        <div class="header-left-group">
-          <span class="selected-count"
-            >{{ selectedPhotos.length }} selected</span
-          >
-          <FixedActionBar
-            :selectedCount="selectedPhotos.length"
-            :showDelete="false"
-            :showAddToCollection="!isPlayground"
-            :showMoveToTool="!isPlayground"
-            :showSendToChat="!isPlayground"
-            :isDownloading="isDownloading"
-            @download="handleDownloadPhotos"
-            @add-to-collection="handleAddToCollection"
-            @move-to-tool="handleMoveToTool"
-            @send-to-chat="handleSendToChat"
-          />
-        </div>
-        <button
-          @click="clearSelection"
-          class="clear-selection-btn"
-          title="Clear selection"
-          size="tiny"
-        >
-          <n-icon size="11">
-            <CloseOutlined />
-          </n-icon>
-        </button>
-      </div>
-      <div class="selected-photos-list">
-        <div
-          v-for="photo in selectedPhotos"
-          :key="photo.id"
-          class="selected-photo-item"
-        >
-          <img
-            :src="photo.thumbnailUrl || photo.url || photo.originalUrl"
-            :alt="photo.id"
-            class="selected-photo-thumb"
-          />
-          <button
-            @click="removeSelectedPhoto(photo.id)"
-            class="remove-photo-btn"
-            title="Remove from selection"
-          >
-            <n-icon size="12">
-              <CloseOutlined />
-            </n-icon>
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- Floating Action Bar (standard selection toolbar) -->
+    <FloatingActionBar
+      v-if="!isPlayground"
+      :selected-ids="selectedPhotoIds"
+      :show-delete="false"
+      :show-add-to-collection="true"
+      :show-move-to-tool="true"
+      :show-send-to-chat="true"
+      :is-downloading="isDownloading"
+      :top-position="20"
+      @clear-selection="clearSelection"
+      @download="handleDownloadPhotos"
+      @add-to-collection="handleAddToCollection"
+      @move-to-tool="handleMoveToTool"
+      @send-to-chat="handleSendToChat"
+    />
 
     <!-- Discrete Loading Indicator -->
     <div v-if="showDiscreteLoader" class="discrete-loader">
@@ -250,7 +203,7 @@ import {
 } from "@vicons/antd";
 import { useRouter } from "vue-router";
 
-import FixedActionBar from "@/components/3d-atlas/FixedActionBar.vue";
+import FloatingActionBar from "@/components/FloatingActionBar.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import Photos3DConfigPanel from "@/components/3d-atlas/Photos3DConfigPanel.vue";
@@ -413,7 +366,7 @@ const cameraRef = ref();
 const currentPosition = ref({ x: 0, y: 0, z: 80 });
 
 // Panel state (managed by Photos3DConfigPanel component)
-const selectByClick = ref(false);
+const selectByClick = ref(true);
 const timeRangeFilter = ref(null);
 
 // =============================
@@ -2610,16 +2563,57 @@ const handleRightClick = (event) => {
   }
 };
 
+// ── Selection border helpers ──────────────────────────────────────────────
+const getAccentColor3D = () => {
+  const cssColor = getComputedStyle(document.documentElement)
+    .getPropertyValue("--accent-color")
+    .trim();
+  if (/^#([0-9a-fA-F]{6})$/.test(cssColor)) {
+    return parseInt(cssColor.replace("#", ""), 16);
+  }
+  return 0x6366f1;
+};
+
+const applySelectionBorder = (photo) => {
+  if (!photo.lodObject) return;
+  if (photo.lodObject.getObjectByName("selectionBorder")) return; // already added
+  const geo = new THREE.PlaneGeometry(4.2, 3.2);
+  const mat = new THREE.MeshBasicMaterial({
+    color: getAccentColor3D(),
+    transparent: true,
+    opacity: 1,
+    depthTest: true,
+    depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.z = -0.015; // slightly behind the hover border (-0.01)
+  mesh.name = "selectionBorder";
+  photo.lodObject.add(mesh);
+};
+
+const removeSelectionBorder = (photo) => {
+  if (!photo?.lodObject) return;
+  const mesh = photo.lodObject.getObjectByName("selectionBorder");
+  if (mesh) {
+    if (mesh.geometry) mesh.geometry.dispose();
+    if (mesh.material) mesh.material.dispose();
+    photo.lodObject.remove(mesh);
+  }
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 const togglePhotoSelection = (photo) => {
   const index = selectedPhotos.value.findIndex((p) => p.id === photo.id);
 
   if (index !== -1) {
     // Ya está seleccionada, deseleccionar
     selectedPhotos.value.splice(index, 1);
+    removeSelectionBorder(photo);
     console.log(`📸 Foto deseleccionada: ${photo.id}`);
   } else {
     // No está seleccionada, seleccionar
     selectedPhotos.value.push(photo);
+    applySelectionBorder(photo);
     console.log(`📸 Foto seleccionada: ${photo.id}`);
   }
 };
@@ -2627,16 +2621,18 @@ const togglePhotoSelection = (photo) => {
 const removeSelectedPhoto = (photoId) => {
   const index = selectedPhotos.value.findIndex((p) => p.id === photoId);
   if (index !== -1) {
+    removeSelectionBorder(selectedPhotos.value[index]);
     selectedPhotos.value.splice(index, 1);
   }
 };
 
 const clearSelection = () => {
+  selectedPhotos.value.forEach((photo) => removeSelectionBorder(photo));
   selectedPhotos.value = [];
   console.log("🗑️ Selección limpiada");
 };
 
-// Event handlers for FixedActionBar actions
+// Event handlers for FloatingActionBar actions
 const handleDownloadPhotos = async () => {
   try {
     console.log(

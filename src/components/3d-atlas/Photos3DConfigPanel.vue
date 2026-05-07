@@ -775,7 +775,7 @@
             "
           >
             <span class="control-label">
-              Select by click
+              Fly by click
               <n-tooltip trigger="hover" placement="top">
                 <template #trigger>
                   <n-icon
@@ -786,11 +786,11 @@
                     <InfoCircleFilled />
                   </n-icon>
                 </template>
-                Click photos to select/deselect them
+                Click photos to fly to them
               </n-tooltip>
             </span>
             <n-switch
-              :value="selectByClick"
+              :value="!selectByClick"
               @update:value="handleSelectByClickChange"
               :disabled="showDiscreteLoader"
             />
@@ -935,7 +935,7 @@ const props = defineProps({
   },
   selectByClick: {
     type: Boolean,
-    default: false,
+    default: true,
   },
   controlMode: {
     type: String,
@@ -1161,7 +1161,7 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
 };
 
 const handleSelectByClickChange = (value) => {
-  emit("update:selectByClick", value);
+  emit("update:selectByClick", !value);
 };
 </script>
 
