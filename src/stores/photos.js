@@ -300,36 +300,62 @@ export const usePhotosStore = defineStore("photos", {
       }
     },
 
-    async checkDuplicates(photoIds = null) {
-      // Si ya se verificaron duplicados y no hay IDs específicos, no hacer nada
-      if (this.duplicatesChecked && !photoIds) {
-        return {};
-      }
-
+    async checkSimilarDuplicates(photoIds = null, scope = "lightbox") {
       try {
-        const payload = photoIds ? { newPhotoIds: photoIds } : {};
-        const res = await api.post("/api/catalog/checkDuplicates", payload);
+        const payload = { scope };
+        if (photoIds) payload.newPhotoIds = photoIds;
+        const res = await api.post(
+          "/api/catalog/checkSimilarDuplicates",
+          payload,
+        );
         const duplicatesMap = res.data;
 
-        for (const photo of this.photos) {
-          if (!photoIds || photoIds.includes(photo.id)) {
-            const duplicates = duplicatesMap[photo.id] || [];
-            this.updatePhoto(photo.id, {
-              duplicates,
-              isDuplicate: duplicates.length > 0,
-            });
+        if (scope === "workspace") {
+          for (const photo of this.photos) {
+            if (!photoIds || photoIds.includes(photo.id)) {
+              const allDupIds = duplicatesMap[photo.id] || [];
+              this.updatePhoto(photo.id, {
+                exactDuplicates: allDupIds,
+                isExactDuplicate: allDupIds.length > 0,
+                alreadyAnalyzedIds: [],
+                isAlreadyAnalyzed: false,
+              });
+            }
           }
-        }
+        } else {
+          const processedIds = new Set(
+            this.photos
+              .filter(
+                (p) => p.status === "processed" || p.status === "processing",
+              )
+              .map((p) => p.id),
+          );
 
-        // Marcar como verificado solo si se hizo verificación completa
-        if (!photoIds) {
-          this.duplicatesChecked = true;
+          for (const photo of this.photos) {
+            if (!photoIds || photoIds.includes(photo.id)) {
+              const allDupIds = duplicatesMap[photo.id] || [];
+              const lightboxDupIds = allDupIds.filter(
+                (id) => !processedIds.has(id),
+              );
+              const workspaceDupIds = allDupIds.filter((id) =>
+                processedIds.has(id),
+              );
+              this.updatePhoto(photo.id, {
+                exactDuplicates: lightboxDupIds,
+                isExactDuplicate: lightboxDupIds.length > 0,
+                alreadyAnalyzedIds: workspaceDupIds,
+                isAlreadyAnalyzed: workspaceDupIds.length > 0,
+              });
+            }
+          }
         }
 
         return duplicatesMap;
       } catch (error) {
-        console.warn("API not available for checkDuplicates:", error.message);
-        // Return empty duplicates map as fallback
+        console.warn(
+          "API not available for checkSimilarDuplicates:",
+          error.message,
+        );
         return {};
       }
     },

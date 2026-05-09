@@ -32,35 +32,30 @@
         </div>
 
         <div class="duplicates-controls-container desktop-only">
-          <!-- Find Exact Duplicates Button -->
-          <n-tooltip
+          <!-- Find Duplicates Dropdown Button -->
+          <n-dropdown
             v-if="findDuplicatesEnabled"
-            placement="bottom"
-            trigger="hover"
+            :options="duplicateCheckOptions"
+            :disabled="isDemoUser || isCheckingDuplicates"
+            trigger="click"
+            placement="bottom-start"
+            @select="handleDuplicateCheckSelect"
           >
-            <template #trigger>
-              <n-button
-                type="info"
-                size="small"
-                secondary
-                :disabled="isDemoUser || duplicatesReviewed"
-                :loading="isCheckingDuplicates"
-                @click="handleReviewDuplicates('exact')"
-              >
-                <template #icon v-if="!isCheckingDuplicates">
-                  <n-icon>
-                    <DuplicateOutline />
-                  </n-icon>
-                </template>
-                Check duplicates
-              </n-button>
-            </template>
-            <span>{{
-              isDemoUser
-                ? "Not available in demo mode"
-                : "Find exact duplicate photos in your selection"
-            }}</span>
-          </n-tooltip>
+            <n-button
+              type="info"
+              size="small"
+              secondary
+              :disabled="isDemoUser"
+              :loading="isCheckingDuplicates"
+            >
+              <template #icon v-if="!isCheckingDuplicates">
+                <n-icon>
+                  <DuplicateOutline />
+                </n-icon>
+              </template>
+              Check duplicates
+            </n-button>
+          </n-dropdown>
 
           <!-- Duplicates filter (only show if duplicates were reviewed and found) -->
           <div
@@ -474,10 +469,50 @@
         <span class="dup-check-title">Finding duplicates</span>
         <n-spin size="large" />
         <p class="dup-check-subtitle">
-          Analyzing {{ props.photos.length }} photos for duplicates...
+          {{
+            lastDuplicateType === "similar"
+              ? "Analyzing visual similarity for duplicates"
+              : "Analyzing"
+          }}
+          {{ props.photos.length }} photos for duplicates...
         </p>
         <n-button @click="cancelDuplicatesCheck">Cancel</n-button>
       </div>
+    </n-modal>
+
+    <!-- EXIF Warning Modal -->
+    <n-modal
+      v-model:show="showExifWarningModal"
+      preset="dialog"
+      :closable="true"
+    >
+      <template #header>
+        <div style="font-size: 18px; font-weight: 600">
+          Insufficient EXIF Data
+        </div>
+      </template>
+      <div style="padding: 16px 0">
+        <p style="margin-bottom: 16px; font-size: 15px; line-height: 1.6">
+          Your photos don't have enough EXIF data for exact duplicate checking
+          (less than 90% have a capture date). Would you like to perform a
+          similarity check instead?
+        </p>
+      </div>
+      <template #action>
+        <div style="display: flex; gap: 8px; justify-content: flex-end">
+          <n-button @click="showExifWarningModal = false">Cancel</n-button>
+          <n-button type="info" @click="handleExifWarningProceedSimilar">
+            Check similarity
+          </n-button>
+          <n-button
+            type="default"
+            secondary
+            @click="handleExifWarningProceedExact"
+          >
+            Run exact anyway
+          </n-button>
+        </div>
+      </template>
     </n-modal>
 
     <!-- Delete Duplicates Confirmation Modal -->
@@ -677,6 +712,7 @@ const duplicatesReviewed = ref(false);
 const hasDuplicates = ref(false);
 const lastDuplicateType = ref(null); // 'exact' or 'similar'
 const duplicatesCheckCancelled = ref(false);
+const showExifWarningModal = ref(false);
 const showDeleteDuplicatesConfirmDialog = ref(false);
 const duplicatesToDeleteCount = ref(0);
 let pendingDeleteAction = null;
@@ -994,17 +1030,61 @@ const handleArtisticScoresChange = (filters) => {
   artisticScoreFilters.value = filters;
 };
 
+// Dropdown options for duplicate check methods
+const duplicateCheckOptions = computed(() => [
+  {
+    label: "Exact timestamp",
+    key: "exact",
+  },
+  {
+    label: "Visual similarity",
+    key: "similar",
+  },
+]);
+
+const handleDuplicateCheckSelect = (key) => {
+  if (key === "exact") {
+    // Check if >90% of photos have dateTaken in EXIF
+    const total = props.photos.length;
+    if (total > 0) {
+      const withDate = props.photos.filter(
+        (p) => !!p.descriptions?.EXIF?.dateTaken,
+      ).length;
+      if (withDate / total < 0.9) {
+        showExifWarningModal.value = true;
+        return;
+      }
+    }
+  }
+  handleReviewDuplicates(key);
+};
+
+const handleExifWarningProceedSimilar = () => {
+  showExifWarningModal.value = false;
+  handleReviewDuplicates("similar");
+};
+
+const handleExifWarningProceedExact = () => {
+  showExifWarningModal.value = false;
+  handleReviewDuplicates("exact");
+};
+
 // Handle review duplicates (preprocess and check)
 const handleReviewDuplicates = async (type = "exact") => {
   isCheckingDuplicates.value = true;
   duplicatesCheckCancelled.value = false;
-  lastDuplicateType.value = "exact";
+  lastDuplicateType.value = type;
   try {
     const photoIds = props.photos.map((photo) => photo.id);
     const scope = props.context === "workspace" ? "workspace" : "lightbox";
 
-    // dHash-based exact duplicate detection
-    await photosStore.checkExactDuplicates(photoIds, scope);
+    if (type === "similar") {
+      // Visual similarity duplicate detection
+      await photosStore.checkSimilarDuplicates(photoIds, scope);
+    } else {
+      // File origin exact duplicate detection
+      await photosStore.checkExactDuplicates(photoIds, scope);
+    }
 
     if (duplicatesCheckCancelled.value) return;
 
