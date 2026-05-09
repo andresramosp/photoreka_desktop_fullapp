@@ -50,7 +50,7 @@
             >
               <template #icon v-if="!isCheckingDuplicates">
                 <n-icon>
-                  <DuplicateOutline />
+                  <TheaterComedyOutlined />
                 </n-icon>
               </template>
               Check duplicates
@@ -576,7 +576,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted, onUnmounted, nextTick } from "vue";
+import { computed, ref, watch, onMounted, onUnmounted, nextTick, h } from "vue";
 import {
   NButton,
   NButtonGroup,
@@ -592,11 +592,12 @@ import {
   NTooltip,
 } from "naive-ui";
 import {
-  DuplicateOutline,
   CloseOutline,
   AddOutline,
   SparklesOutline,
   TrashOutline,
+  FingerPrintOutline,
+  EyeOutline,
 } from "@vicons/ionicons5";
 import { SquareOutline } from "@vicons/ionicons5";
 import { useRouter } from "vue-router";
@@ -619,6 +620,7 @@ import {
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { CheckmarkSquare24Filled, SelectAllOn24Regular } from "@vicons/fluent";
+import { TheaterComedyOutlined } from "@vicons/material";
 
 const emit = defineEmits([
   "refreshCollection",
@@ -1035,10 +1037,12 @@ const duplicateCheckOptions = computed(() => [
   {
     label: "Exact timestamp",
     key: "exact",
+    icon: () => h(NIcon, null, { default: () => h(FingerPrintOutline) }),
   },
   {
     label: "Visual similarity",
     key: "similar",
+    icon: () => h(NIcon, null, { default: () => h(EyeOutline) }),
   },
 ]);
 
