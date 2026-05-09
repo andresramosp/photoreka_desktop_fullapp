@@ -12,7 +12,7 @@ import type { SearchMode, SearchType } from './search_text_service.js'
 import TagPhotoManager from '../managers/tag_photo_manager.js'
 import TagManager from '../managers/tag_manager.js'
 import TagPhoto from '#models/tag_photo'
-import { EmbeddingStoreService, EmbeddingType } from './embeddings_store_service.js'
+import { EmbeddingStoreService } from './embeddings_store_service.js'
 import NLPService from './nlp_service.js'
 const require = createRequire(import.meta.url)
 const pluralize = require('pluralize')
@@ -195,7 +195,7 @@ export default class ScoringService {
       needsSegmentEmbeddings || needsNuancesEmbeddings || needsFullQueryTextEmbedding
 
     const filteredTerms = [...new Set(terms.filter(Boolean))]
-    await EmbeddingStoreService.calculateEmbeddings(
+    await EmbeddingStoreService.preloadEmbeddings(
       filteredTerms,
       needsClipEmbedding,
       needsTextEmbedding
@@ -397,7 +397,7 @@ export default class ScoringService {
     const query = this.prepareQueryFromTags(included, excluded)
     const normalizedExcluded = this.nlpService.normalizeTerms(excluded)
 
-    await EmbeddingStoreService.calculateEmbeddings(
+    await EmbeddingStoreService.preloadEmbeddings(
       [...query.positiveSegments, ...normalizedExcluded, query.fullQuery],
       config.imageThreshold !== null
     )
@@ -744,7 +744,7 @@ export default class ScoringService {
     categories: string[],
     areas: string[] = []
   ): Promise<{ id: number; descScore: number; matchingChunks: any[] }[]> {
-    const embedding = EmbeddingStoreService.getEmbedding(segment.name)
+    const embedding = (await EmbeddingStoreService.getTextEmbeddings([segment.name]))[0]
     if (!embedding || embedding.length === 0) {
       console.warn(
         `[getScoredPhotoDescBySegment] No embedding found for segment: '${segment.name}', skipping`
@@ -822,7 +822,7 @@ export default class ScoringService {
     embeddingsProximityThreshold: number = 0.25,
     userId: string = ''
   ): Promise<{ id: number; imageScore: number }[]> {
-    const embedding = EmbeddingStoreService.getEmbedding(fullQuery, EmbeddingType.CLIP)
+    const embedding = (await EmbeddingStoreService.getCLIPEmbeddings([fullQuery]))[0]
 
     if (!embedding) {
       console.warn(
@@ -972,7 +972,9 @@ export default class ScoringService {
     areas: string[],
     refineMode: RefineMode
   ) {
-    const embedding = EmbeddingStoreService.getEmbedding(term)
+    const embedding = (await EmbeddingStoreService.getTextEmbeddings([term]))[0]
+
+    if (!embedding) return []
 
     const excludeSustantives = term.trim().split(/\s+/).length > 1
 

@@ -3,6 +3,7 @@
 import Tag from '#models/tag'
 import DescriptionChunk from '#models/descriptionChunk'
 import VectorService from '#services/vector_service'
+import { EmbeddingStoreService } from '#services/embeddings_store_service'
 import { AnalyzerTask } from './analyzerTask.js'
 import Logger, { LogLevel } from '../../utils/logger.js'
 import Photo from '#models/photo'
@@ -67,7 +68,7 @@ export class GlobalEmbeddingsTagsTask extends AnalyzerTask {
 
       try {
         // Obtener embeddings para el lote
-        const { embeddings } = await this.modelsService.getEmbeddingsCPU(batch)
+        const embeddings = await EmbeddingStoreService.getTextEmbeddings(batch)
 
         // Guardar en paralelo con límite de concurrencia
         const limit = pLimit(concurrencyLimit)
@@ -122,7 +123,7 @@ export class GlobalEmbeddingsTagsTask extends AnalyzerTask {
 
       try {
         // Obtener embeddings para el lote
-        const { embeddings } = await this.modelsService.getEmbeddingsCPU(batch)
+        const embeddings = await EmbeddingStoreService.getTextEmbeddings(batch)
 
         // Guardar en paralelo con límite de concurrencia
         const limit = pLimit(concurrencyLimit)

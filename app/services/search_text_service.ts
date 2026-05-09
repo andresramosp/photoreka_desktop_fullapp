@@ -873,12 +873,12 @@ export default class SearchTextService {
 
       if (tagIdsForSemanticSearch.length > 0) {
         // Calcular embeddings para todos los términos de búsqueda
-        await EmbeddingStoreService.calculateEmbeddings(normalizedIncluded, false)
+        const termEmbeddings = await EmbeddingStoreService.getTextEmbeddings(normalizedIncluded)
 
         // Buscar tags similares en paralelo para todos los términos de búsqueda
-        const semanticSearchPromises = normalizedIncluded.map(async (searchTag) => {
+        const semanticSearchPromises = normalizedIncluded.map(async (searchTag, i) => {
           try {
-            const embedding = EmbeddingStoreService.getEmbedding(searchTag)
+            const embedding = termEmbeddings[i]
 
             if (!embedding) {
               console.warn(`No se pudo obtener embedding para "${searchTag}"`)

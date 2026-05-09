@@ -8,7 +8,7 @@ import ScoringService from './scoring_service.js'
 import StatsService from './stats_service.js'
 import SearchPhotoService from './search_photo_service.js'
 import VectorService from './vector_service.js'
-import { EmbeddingStoreService, EmbeddingType } from './embeddings_store_service.js'
+import { EmbeddingStoreService } from './embeddings_store_service.js'
 import User from '#models/user'
 import Photo from '#models/photo'
 import Collection from '#models/collection'
@@ -516,8 +516,7 @@ export default class AgentToolsService {
 
     /** Semantic style search → direct CLIP vector search, returns IDs ordered by cosine similarity. */
     const _getIdsByStyle = async (query: string): Promise<number[]> => {
-      await EmbeddingStoreService.calculateEmbeddings([query], true, false)
-      const embedding = EmbeddingStoreService.getEmbedding(query, EmbeddingType.CLIP)
+      const [embedding] = await EmbeddingStoreService.getCLIPEmbeddings([query])
       if (!embedding) return []
 
       const allPhotoIds = await photoManager.getPhotosIdsForSearch(userId.toString())
