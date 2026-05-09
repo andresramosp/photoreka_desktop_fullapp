@@ -25,6 +25,8 @@ export class CacheInvalidationService {
   static async onPhotoListChanged(userId: string): Promise<void> {
     await invalidateCache(`getPhotosByUser_${userId}`)
     await invalidateCache(`getPhotosPreview_${userId}`)
+    await invalidateCacheByPattern(`checkSimilarDuplicates:${userId}:*`)
+    await invalidateCacheByPattern(`checkExactDuplicates:${userId}:*`)
     console.log(
       `[CacheInvalidation] onPhotoListChanged: Invalidated photo list caches for user ${userId}`
     )
@@ -51,6 +53,8 @@ export class CacheInvalidationService {
     await invalidateCacheByPattern(`getScoredPhotosByTags:${userId}:*`)
     await invalidateCacheByPattern(`getScoredPhotoImageByFullQuery:${userId}:*`)
     await invalidateCacheByPattern(`searchByPhotos:${userId}:*`)
+    await invalidateCacheByPattern(`checkSimilarDuplicates:${userId}:*`)
+    await invalidateCacheByPattern(`checkExactDuplicates:${userId}:*`)
     console.log(
       `[CacheInvalidation] onPhotosDeleted: Invalidated caches for user ${userId} (photoCount=${photoCount}, expensive=${photoCount >= EXPENSIVE_CACHE_DELETE_THRESHOLD})`
     )
@@ -77,6 +81,8 @@ export class CacheInvalidationService {
     await invalidateCacheByPattern(`getScoredPhotosByTags:${userId}:*`)
     await invalidateCacheByPattern(`getScoredPhotoImageByFullQuery:${userId}:*`)
     await invalidateCacheByPattern(`searchByPhotos:${userId}:*`)
+    await invalidateCacheByPattern(`checkSimilarDuplicates:${userId}:*`)
+    await invalidateCacheByPattern(`checkExactDuplicates:${userId}:*`)
     console.log(
       `[CacheInvalidation] onAnalysisCompleted: Invalidated all caches for user ${userId} (photoCount=${photoCount}, expensive=${photoCount >= EXPENSIVE_CACHE_ANALYSIS_THRESHOLD})`
     )

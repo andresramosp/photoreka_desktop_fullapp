@@ -121,8 +121,11 @@ router
     // Content moderation
     router.post('/api/moderation/safe-search', [SafeSearchController, 'check'])
 
-    router.post('/api/catalog/checkDuplicates', [CatalogController, 'checkDuplicates'])
     router.post('/api/catalog/checkExactDuplicates', [CatalogController, 'checkExactDuplicates'])
+    router.post('/api/catalog/checkSimilarDuplicates', [
+      CatalogController,
+      'checkSimilarDuplicates',
+    ])
     router.post('/api/catalog/deleteDuplicates', [CatalogController, 'deleteDuplicates'])
 
     router.post('/api/catalog/:id/note', [CatalogController, 'savePhotoNote'])

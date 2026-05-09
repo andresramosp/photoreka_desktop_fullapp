@@ -7,29 +7,19 @@ import User from '#models/user'
 import PhotoManager from '../managers/photo_manager.js'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { CacheInvalidationService } from '../services/cache_invalidation_service.js'
-import VectorService from '#services/vector_service'
+import DuplicatesService from '#services/duplicates_service'
 import ModelsService from '#services/models_service'
 import UserCostService from '#services/user_cost_service'
 import { CostTracker, createTrackedModelsService } from '../utils/cost_tracker.js'
 
 import HealthPhotoService from '#services/health_photo_service'
 import {
-  MESSAGE_PHOTO_INSIGHTS,
-  MESSAGE_PHOTO_INSIGHTS_WITH_SCORES,
-  MESSAGE_PHOTO_INSIGHT_CULTURAL,
-  MESSAGE_PHOTO_INSIGHT_TECHNICAL,
-  MESSAGE_PHOTO_INSIGHT_ARTISTIC,
-  MESSAGE_PHOTO_INSIGHT_CUSTOM,
   getMessagePhotoInsights,
   getMessagePhotoInsightsWithScores,
   getMessagePhotoInsightSpecific,
 } from '../utils/prompts/descriptions.js'
 import PhotoImageService from '#services/photo_image_service'
 import DescriptionChunk from '#models/descriptionChunk'
-import { computeDHash, DHASH_DUPLICATE_THRESHOLD } from '../utils/dhash.js'
-import pLimit from 'p-limit'
-import axios from 'axios'
-import CpuWorkerPool from '#services/cpu_worker_pool'
 
 const s3 = new S3Client({
   region: 'auto',
@@ -283,48 +273,14 @@ export default class CatalogController {
     }
   }
 
-  public async checkDuplicates({ request, response, auth }: HttpContext) {
+  public async checkSimilarDuplicates({ request, response, auth }: HttpContext) {
     await auth.use('api').check()
     const user = auth.use('api').user! as any
     const userId = user.id.toString()
 
-    const { newPhotoIds } = request.only(['newPhotoIds'])
+    const { newPhotoIds, scope } = request.only(['newPhotoIds', 'scope'])
 
-    const vectorService = new VectorService()
-
-    const userPhotos = await Photo.query().where('user_id', userId)
-
-    // 2. Selección de fotos nuevas
-    const newPhotos =
-      !newPhotoIds || newPhotoIds.length === 0
-        ? userPhotos
-        : userPhotos.filter((p) => newPhotoIds.includes(p.id))
-
-    // 3. Buscar duplicados usando similitud de embeddings (paralelizado)
-    const results: Record<number, number[]> = {}
-
-    await Promise.all(
-      newPhotos.map(async (newPhoto) => {
-        if (!newPhoto.embedding) return
-
-        const similarPhotos = await vectorService.findSimilarPhotoToEmbedding(
-          VectorService.getParsedEmbedding(newPhoto.embedding)!!,
-          0.92,
-          5,
-          'cosine_similarity',
-          userPhotos.map((p) => p.id)
-        )
-
-        const matches = similarPhotos
-          .filter((match: any) => match.id !== newPhoto.id)
-          .map((match: any) => match.id)
-
-        if (matches.length > 0) {
-          results[newPhoto.id] = matches
-        }
-      })
-    )
-
+    const results = await new DuplicatesService().checkSimilarDuplicates(userId, newPhotoIds, scope)
     return response.ok(results)
   }
 
@@ -335,57 +291,7 @@ export default class CatalogController {
 
     const { newPhotoIds, scope } = request.only(['newPhotoIds', 'scope'])
 
-    let userPhotos: Photo[]
-
-    if (scope === 'workspace') {
-      // Workspace: only compare processed photos (finished, non-preprocess analyzer)
-      userPhotos = await Photo.query()
-        .where('user_id', userId)
-        .whereHas('analyzerProcess', (query) => {
-          query.where('is_preprocess', false).where('current_stage', 'finished')
-        })
-    } else {
-      // Lightbox: compare against all user photos
-      userPhotos = await Photo.query().where('user_id', userId)
-    }
-
-    const photosToCheck =
-      !newPhotoIds || newPhotoIds.length === 0
-        ? userPhotos
-        : userPhotos.filter((p) => newPhotoIds.includes(p.id))
-
-    // Compute dHash on-the-fly: use cached DB value if available, otherwise download via public URL
-    const limit = pLimit(10)
-    const photoHashes: { id: number; hash: string }[] = []
-
-    await Promise.all(
-      userPhotos.map((photo) =>
-        limit(async () => {
-          try {
-            let hash = photo.dhash
-            if (!hash) {
-              const res = await axios.get(photo.thumbnailUrl, { responseType: 'arraybuffer' })
-              const buffer = Buffer.from(res.data)
-              hash = await computeDHash(buffer)
-              photo.dhash = hash
-              await photo.save()
-            }
-            photoHashes.push({ id: photo.id, hash })
-          } catch {
-            // skip photo if unreachable
-          }
-        })
-      )
-    )
-
-    // Offload CPU-heavy pairwise comparison to a worker thread
-    const photosToCheckIds = photosToCheck.map((p) => p.id)
-    const results = await CpuWorkerPool.run<Record<number, number[]>>('dhash_compare', {
-      photoHashes,
-      photosToCheckIds,
-      threshold: DHASH_DUPLICATE_THRESHOLD,
-    })
-
+    const results = await new DuplicatesService().checkExactDuplicates(userId, newPhotoIds, scope)
     return response.ok(results)
   }
 
