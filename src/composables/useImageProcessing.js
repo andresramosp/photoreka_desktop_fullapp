@@ -17,6 +17,13 @@ export function useImageProcessing() {
   const picaInstance = pica();
 
   async function resizeImage(file, targetWidth, maxSizeBytes = 512000) {
+    // On Android, pica produces a tiled/puzzle artifact because its internal
+    // getImageData calls are silently corrupted by canvas fingerprinting protection.
+    // Skip directly to the native drawImage-based step-down which is unaffected.
+    if (/android/i.test(navigator.userAgent)) {
+      return await resizeWithStepDown(file, targetWidth, maxSizeBytes);
+    }
+
     try {
       // Intentar usar pica primero para máxima calidad
       return await resizeWithPica(file, targetWidth, maxSizeBytes);
@@ -27,7 +34,6 @@ export function useImageProcessing() {
         error.message,
       );
       return await resizeWithStepDown(file, targetWidth, maxSizeBytes);
-      // Re-lanzar otros errores
     }
   }
 
