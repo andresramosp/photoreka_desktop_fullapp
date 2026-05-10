@@ -12,6 +12,10 @@ export class EmbeddingStoreService {
   private static embeddingsMap: Map<string, number[]> = new Map()
   private static embeddingsMapCLIP: Map<string, number[]> = new Map()
 
+  private static normalize(text: string): string {
+    return text.trim().toLowerCase()
+  }
+
   /** FIFO eviction: when the map is full, drop the oldest inserted entry. */
   private static setToCache(map: Map<string, number[]>, key: string, value: number[]): void {
     if (map.size >= EmbeddingStoreService.MAX_CACHE_SIZE) {
@@ -24,15 +28,16 @@ export class EmbeddingStoreService {
     pairs: { key: string; value: number[] }[],
     type: EmbeddingType = EmbeddingType.Text
   ): void {
+    const normalizedPairs = pairs.map(({ key, value }) => ({ key: this.normalize(key), value }))
     const targetMap = type === EmbeddingType.CLIP ? this.embeddingsMapCLIP : this.embeddingsMap
-    for (const { key, value } of pairs) {
+    for (const { key, value } of normalizedPairs) {
       this.setToCache(targetMap, key, value)
     }
     // Persist to DB as durable backing store (fire-and-forget)
-    if (pairs.length > 0) {
+    if (normalizedPairs.length > 0) {
       const col = type === EmbeddingType.CLIP ? 'embedding_clip' : 'embedding_text'
-      const placeholders = pairs.map(() => `(?, ?::vector)`).join(',')
-      const values = pairs.flatMap(({ key, value }) => [key, JSON.stringify(value)])
+      const placeholders = normalizedPairs.map(() => `(?, ?::vector)`).join(',')
+      const values = normalizedPairs.flatMap(({ key, value }) => [key, JSON.stringify(value)])
       db.rawQuery(
         `INSERT INTO cached_embeddings (text, ${col}) VALUES ${placeholders}
          ON CONFLICT (text) DO UPDATE SET ${col} = EXCLUDED.${col}`,
@@ -190,13 +195,15 @@ export class EmbeddingStoreService {
   }
 
   public static async getTextEmbeddings(terms: string[]): Promise<(number[] | null)[]> {
-    await this.preloadEmbeddings(terms, false, true)
-    return terms.map((t) => this.embeddingsMap.get(t) ?? null)
+    const normalized = terms.map((t) => this.normalize(t))
+    await this.preloadEmbeddings(normalized, false, true)
+    return normalized.map((t) => this.embeddingsMap.get(t) ?? null)
   }
 
   public static async getCLIPEmbeddings(terms: string[]): Promise<(number[] | null)[]> {
-    await this.preloadEmbeddings(terms, true, false)
-    return terms.map((t) => this.embeddingsMapCLIP.get(t) ?? null)
+    const normalized = terms.map((t) => this.normalize(t))
+    await this.preloadEmbeddings(normalized, true, false)
+    return normalized.map((t) => this.embeddingsMapCLIP.get(t) ?? null)
   }
 
   public static async preloadEmbeddings(
@@ -204,11 +211,12 @@ export class EmbeddingStoreService {
     includeCLIP = false,
     includeText = true
   ): Promise<void> {
+    const normalizedTerms = terms.map((t) => this.normalize(t))
     const newTerms = includeText
-      ? [...new Set(terms.filter((term) => !this.embeddingsMap.has(term)))]
+      ? [...new Set(normalizedTerms.filter((term) => !this.embeddingsMap.has(term)))]
       : []
     const newTermsCLIP = includeCLIP
-      ? [...new Set(terms.filter((term) => !this.embeddingsMapCLIP.has(term)))]
+      ? [...new Set(normalizedTerms.filter((term) => !this.embeddingsMapCLIP.has(term)))]
       : []
 
     if (newTerms.length === 0 && newTermsCLIP.length === 0) {
