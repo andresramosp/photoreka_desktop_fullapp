@@ -575,7 +575,14 @@ export default class PhotoManager {
     }
 
     if (userId) {
-      await CacheInvalidationService.onPhotosDeleted(userId, ids.length)
+      const analyzedCount = photos.filter((p) => p.analyzerProcessId !== null).length
+      if (analyzedCount === 0) {
+        // All deleted photos were still 'uploaded' (no analysis data), so only the
+        // basic photo-list caches need to be flushed — skip tags, search, 3D, etc.
+        await CacheInvalidationService.onPhotoListChanged(userId)
+      } else {
+        await CacheInvalidationService.onPhotosDeleted(userId, analyzedCount)
+      }
     }
 
     return { message: 'Photos marked for deletion', ids, deletedAt }

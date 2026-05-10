@@ -20,7 +20,8 @@ export class CacheInvalidationService {
    * Called when photos are uploaded or their metadata changes in place
    * (no structural change to tags or search embeddings yet).
    * Does NOT invalidate search index — unanalyzed photos aren't searchable.
-   * Used by: catalog_controller (upload, note, swap), analyzer_service.initProcess
+   * Used by: catalog_controller (upload, note, swap), analyzer_service.initProcess,
+   *          photo_manager.deletePhotos (when all deleted photos were still 'uploaded')
    */
   static async onPhotoListChanged(userId: string): Promise<void> {
     await invalidateCache(`getPhotosByUser_${userId}`)
