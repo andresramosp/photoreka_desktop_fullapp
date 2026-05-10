@@ -1,12 +1,13 @@
 <template>
   <div class="portfolio-grid-wrapper" ref="wrapperRef">
-    <div v-if="!ready" class="grid-loading">
-      <n-spin :size="24" />
-      <span>Measuring photos…</span>
-    </div>
+    <!-- <div v-if="!ready" class="grid-loading">
+      <div class="loader-content">
+        <n-spin size="large" />
+        <p class="loader-text">Loading photos…</p>
+      </div>
+    </div> -->
 
     <draggable
-      v-else
       :list="photos"
       item-key="id"
       class="portfolio-grid"
@@ -189,19 +190,32 @@ defineExpose({
 <style scoped>
 .portfolio-grid-wrapper {
   /* background: var(--bg-container); */
+  position: relative;
   border-radius: 8px;
   padding: 3px;
-  min-height: 200px;
+  min-height: 500px;
 }
 
 .grid-loading {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 60px 0;
-  color: var(--text-secondary);
-  font-size: 13px;
+}
+
+.loader-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.loader-text {
+  color: var(--text-secondary, #a8a8a8);
+  font-size: 16px;
+  margin: 0;
+  font-weight: 500;
 }
 
 .portfolio-grid {

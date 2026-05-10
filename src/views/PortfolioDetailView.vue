@@ -89,7 +89,8 @@
 
     <!-- Loading state -->
     <div v-if="isLoading" class="loading-state">
-      <n-spin :size="32" />
+      <n-spin size="large" />
+      <p class="loading-state-text">Loading your portfolio…</p>
     </div>
 
     <!-- Error state -->
@@ -740,7 +741,22 @@ onBeforeRouteLeave((_to, _from, next) => {
   gap: 8px;
 }
 
-.loading-state,
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100svh - 160px);
+  gap: 24px;
+}
+
+.loading-state-text {
+  color: var(--text-secondary, #a8a8a8);
+  font-size: 16px;
+  margin: 0;
+  font-weight: 500;
+}
+
 .error-state,
 .pending-state {
   display: flex;
