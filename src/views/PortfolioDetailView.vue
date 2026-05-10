@@ -255,12 +255,42 @@
         </p>
       </div>
     </n-modal>
+
+    <!-- Unsaved Changes Dialog -->
+    <n-modal
+      v-model:show="showUnsavedModal"
+      preset="dialog"
+      title="Unsaved Changes"
+      positive-text="Save & Leave"
+      negative-text="Leave Without Saving"
+      type="warning"
+      :mask-closable="false"
+      style="width: 524px"
+      @positive-click="handleSaveAndLeave"
+      @negative-click="handleLeaveWithoutSaving"
+      @close="handleStayOnPage"
+    >
+      <div class="unsaved-changes-confirmation">
+        <p>You have unsaved changes in this portfolio.</p>
+        <p class="unsaved-warning">
+          <n-icon size="16" style="margin-right: 8px; flex-shrink: 0">
+            <svg viewBox="0 0 24 24">
+              <path
+                fill="currentColor"
+                d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"
+              />
+            </svg>
+          </n-icon>
+          If you leave now, your changes to the photo layout will be lost.
+        </p>
+      </div>
+    </n-modal>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
 import { NIcon, NSpin, NButton, NDropdown, NModal, useMessage } from "naive-ui";
 import {
   SaveOutline,
@@ -320,6 +350,10 @@ const {
 } = usePhotoToolSelection();
 
 const showCollectionModal = ref(false);
+
+// Unsaved changes navigation guard state
+const showUnsavedModal = ref(false);
+let pendingNavigation = null;
 
 const build = ref(null);
 const photos = ref([]);
@@ -653,6 +687,44 @@ function formatDate(isoStr) {
     year: "numeric",
   });
 }
+
+// Unsaved changes modal handlers
+function handleLeaveWithoutSaving() {
+  showUnsavedModal.value = false;
+  if (pendingNavigation) {
+    const next = pendingNavigation;
+    pendingNavigation = null;
+    next();
+  }
+}
+
+function handleStayOnPage() {
+  showUnsavedModal.value = false;
+  if (pendingNavigation) {
+    const next = pendingNavigation;
+    pendingNavigation = null;
+    next(false);
+  }
+}
+
+async function handleSaveAndLeave() {
+  await saveLayout();
+  showUnsavedModal.value = false;
+  if (pendingNavigation) {
+    const next = pendingNavigation;
+    pendingNavigation = null;
+    next();
+  }
+}
+
+onBeforeRouteLeave((_to, _from, next) => {
+  if (hasChanges.value) {
+    pendingNavigation = next;
+    showUnsavedModal.value = true;
+  } else {
+    next();
+  }
+});
 </script>
 
 <style scoped>

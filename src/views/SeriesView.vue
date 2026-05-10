@@ -461,12 +461,42 @@
       :selected-photo="selectedPhotoForInfo"
       @change-photo="selectedPhotoForInfo = $event"
     />
+
+    <!-- Unsaved Changes Dialog -->
+    <n-modal
+      v-model:show="showUnsavedModal"
+      preset="dialog"
+      title="Unsaved Changes"
+      positive-text="Save & Leave"
+      negative-text="Leave Without Saving"
+      type="warning"
+      :mask-closable="false"
+      style="width: 524px"
+      @positive-click="handleSaveAndLeave"
+      @negative-click="handleLeaveWithoutSaving"
+      @close="handleStayOnPage"
+    >
+      <div class="unsaved-changes-confirmation">
+        <p>You have unsaved changes in this series.</p>
+        <p class="unsaved-warning">
+          <n-icon size="16" style="margin-right: 8px; flex-shrink: 0">
+            <svg viewBox="0 0 24 24">
+              <path
+                fill="currentColor"
+                d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"
+              />
+            </svg>
+          </n-icon>
+          If you leave now, your changes to the photo order will be lost.
+        </p>
+      </div>
+    </n-modal>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
 
 defineOptions({
   name: "SeriesView",
@@ -547,6 +577,10 @@ const createDialogVisible = ref(false);
 const photosDialogVisible = ref(false);
 const showCollectionModal = ref(false);
 const deleteConfirmationVisible = ref(false);
+
+// Unsaved changes navigation guard state
+const showUnsavedModal = ref(false);
+let pendingNavigation = null;
 const fullscreenViewerVisible = ref(false);
 const photoInfoDialogVisible = ref(false);
 const selectedPhotoForInfo = ref(null);
@@ -1086,16 +1120,57 @@ const openSeries = (series) => {
 
 const backToSeries = () => {
   if (hasChanges.value) {
-    const confirmLeave = window.confirm(
-      "You have unsaved changes. Leave without saving?",
-    );
-    if (!confirmLeave) return;
+    pendingNavigation = () => {
+      recentlySuggestedPhotos.value.clear();
+      discardedPhotosByContext.value.clear();
+      router.push({ name: "series" });
+    };
+    showUnsavedModal.value = true;
+    return;
   }
   // Clear suggestion tracking when leaving series detail
   recentlySuggestedPhotos.value.clear();
   discardedPhotosByContext.value.clear();
   router.push({ name: "series" });
 };
+
+// Unsaved changes modal handlers
+const handleLeaveWithoutSaving = () => {
+  showUnsavedModal.value = false;
+  if (pendingNavigation) {
+    const nav = pendingNavigation;
+    pendingNavigation = null;
+    nav();
+  }
+};
+
+const handleStayOnPage = () => {
+  showUnsavedModal.value = false;
+  if (pendingNavigation) {
+    const nav = pendingNavigation;
+    pendingNavigation = null;
+    nav(false);
+  }
+};
+
+const handleSaveAndLeave = async () => {
+  await saveChanges();
+  showUnsavedModal.value = false;
+  if (pendingNavigation) {
+    const nav = pendingNavigation;
+    pendingNavigation = null;
+    nav();
+  }
+};
+
+onBeforeRouteLeave((_to, _from, next) => {
+  if (hasChanges.value && showSeriesView.value && !isPublicView.value) {
+    pendingNavigation = next;
+    showUnsavedModal.value = true;
+  } else {
+    next();
+  }
+});
 
 // Edit title methods
 const startEditTitle = () => {
