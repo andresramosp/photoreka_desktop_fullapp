@@ -88,10 +88,11 @@
           <!-- Divider: only shown when group 2 has at least one button -->
           <div
             v-if="
-              showMoveToTool ||
-              showAddToCollection ||
-              showSendToChat ||
-              showAttachToChat
+              !embedded &&
+              (showMoveToTool ||
+                showAddToCollection ||
+                showSendToChat ||
+                showAttachToChat)
             "
             class="action-separator"
           ></div>
@@ -174,7 +175,7 @@
           </n-tooltip>
 
           <!-- Divider before delete -->
-          <div v-if="showDelete" class="action-separator"></div>
+          <div v-if="showDelete && !embedded" class="action-separator"></div>
 
           <!-- Group 3: Delete -->
           <template v-if="showDelete">
@@ -423,6 +424,28 @@ const handleClearSelection = () => {
   height: 24px;
   background-color: rgba(255, 255, 255, 0.15);
   margin: 0 4px;
+}
+
+/* Embedded (inline in header) compact mode */
+.floating-action-bar--embedded {
+  background: transparent;
+  backdrop-filter: none;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+}
+
+.floating-action-bar--embedded .floating-action-buttons {
+  gap: 4px;
+}
+
+.floating-action-bar--embedded .floating-action-buttons :deep(.n-button) {
+  --n-width: 28px !important;
+  --n-height: 28px !important;
+  width: 28px;
+  height: 28px;
+  min-width: unset;
+  padding: 0;
 }
 
 /* Transition animations */

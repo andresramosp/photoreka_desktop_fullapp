@@ -4,6 +4,7 @@
     v-model:show="visibleModel"
     placement="bottom"
     :height="'100%'"
+    :width="'100%'"
     :trap-focus="true"
     :close-on-esc="true"
     class="photo-info-mobile-drawer"
@@ -813,6 +814,13 @@ const navigateTo = (routeName, id) => {
 </script>
 
 <style scoped>
+.photo-info-mobile-drawer :deep(.n-drawer) {
+  width: 100% !important;
+  max-width: 100% !important;
+  left: 0 !important;
+  right: 0 !important;
+}
+
 .photo-info-mobile-drawer :deep(.n-drawer-header) {
   padding: var(--spacing-sm) var(--spacing-md) !important;
   border-bottom: 1px solid var(--border-color);
@@ -847,6 +855,8 @@ const navigateTo = (routeName, id) => {
   display: flex;
   flex-direction: column;
   height: 100%;
+  overflow-x: hidden;
+  width: 100%;
 }
 
 /* Photo Container */
@@ -1358,6 +1368,17 @@ const navigateTo = (routeName, id) => {
 
 <style>
 /* Mobile drawer styles - must be outside scoped to affect drawer elements */
+.photo-info-mobile-drawer,
+.photo-info-mobile-drawer .n-drawer,
+.photo-info-mobile-drawer .n-drawer-content,
+.photo-info-mobile-drawer .n-drawer-body,
+.photo-info-mobile-drawer .n-drawer-body-content-wrapper,
+.photo-info-mobile-drawer .n-scrollbar,
+.photo-info-mobile-drawer .n-scrollbar-container {
+  overflow-x: hidden !important;
+  max-width: 100vw !important;
+}
+
 .photo-info-mobile-drawer .n-drawer-content .n-drawer-body-content-wrapper {
   box-sizing: border-box;
   padding: 8px !important;
