@@ -1264,10 +1264,6 @@ watch(
 
 /* Mobile styles */
 @media (max-width: 767px) {
-  .filter-controls-section-header {
-    padding: 10px 12px;
-  }
-
   .filter-controls-section-label {
     font-size: 12px;
   }

@@ -202,7 +202,7 @@
           >
             Upload limit reached
           </h1>
-          <h1 v-else class="first-import-title">
+          <!-- <h1 v-else class="first-import-title">
             Continue expanding your catalog
           </h1>
           <p class="first-import-subtitle">
@@ -211,7 +211,7 @@
                 ? uploadDisabledMessage
                 : "Add more photos using one of the following options"
             }}
-          </p>
+          </p> -->
         </template>
       </div>
 
@@ -289,6 +289,7 @@
 
         <div
           class="import-card lightroom-card"
+          :class="{ 'import-card--disabled': isUploadDisabled }"
           @click="showLightroomModal = true"
         >
           <div class="import-card-icon">

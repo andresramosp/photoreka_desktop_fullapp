@@ -7,11 +7,12 @@
         { 'floating-action-bar--embedded': embedded },
       ]"
       :style="{
-        top: embedded
-          ? 'auto'
-          : typeof topPosition === 'number'
-            ? topPosition + 'px'
-            : topPosition,
+        top:
+          embedded || isMobile
+            ? 'auto'
+            : typeof topPosition === 'number'
+              ? topPosition + 'px'
+              : topPosition,
       }"
     >
       <div class="floating-action-content">
@@ -249,9 +250,11 @@ import { MagicWand } from "@vicons/carbon";
 import { computed } from "vue";
 import { usePhotosStore } from "@/stores/photos";
 import { useMobilePhotoSelection } from "@/composables/useMobilePhotoSelection";
+import { useIsMobile } from "@/composables/useIsMobile";
 
 // Get mobile selection composable to reset mode
 const { exitSelectionMode } = useMobilePhotoSelection();
+const { isMobile } = useIsMobile();
 
 const photosStore = usePhotosStore();
 const message = useMessage();
