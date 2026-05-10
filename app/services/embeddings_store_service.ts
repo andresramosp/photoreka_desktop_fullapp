@@ -1,5 +1,5 @@
 import ModelsService from './models_service.js'
-import redis from '@adonisjs/redis/services/main'
+import db from '@adonisjs/lucid/services/db'
 
 export enum EmbeddingType {
   Text = 'text',
@@ -7,50 +7,53 @@ export enum EmbeddingType {
 }
 
 export class EmbeddingStoreService {
-  private static embeddingsMap: Record<string, number[]> = {}
-  private static embeddingsMapCLIP: Record<string, number[]> = {}
+  private static readonly MAX_CACHE_SIZE = 1000
+
+  private static embeddingsMap: Map<string, number[]> = new Map()
+  private static embeddingsMapCLIP: Map<string, number[]> = new Map()
+
+  /** FIFO eviction: when the map is full, drop the oldest inserted entry. */
+  private static setToCache(map: Map<string, number[]>, key: string, value: number[]): void {
+    if (map.size >= EmbeddingStoreService.MAX_CACHE_SIZE) {
+      map.delete(map.keys().next().value!)
+    }
+    map.set(key, value)
+  }
 
   public static addEmbeddings(
     pairs: { key: string; value: number[] }[],
     type: EmbeddingType = EmbeddingType.Text
   ): void {
     const targetMap = type === EmbeddingType.CLIP ? this.embeddingsMapCLIP : this.embeddingsMap
-    const redisPrefix = type === EmbeddingType.CLIP ? 'clip' : 'text'
     for (const { key, value } of pairs) {
-      targetMap[key] = value
-      // Persist to Redis so embeddings survive server restarts (fire-and-forget)
-      redis.set(`embedding:${redisPrefix}:${key}`, JSON.stringify(value)).catch(() => {})
+      this.setToCache(targetMap, key, value)
     }
-  }
-
-  public static getEmbedding(
-    key: string,
-    type: EmbeddingType = EmbeddingType.Text
-  ): number[] | null {
-    const targetMap = type === EmbeddingType.CLIP ? this.embeddingsMapCLIP : this.embeddingsMap
-    const found = targetMap[key]
-    if (found) {
-      // console.log(`[EmbeddingStoreService] Recuperado embedding ${type} para clave '${key}'`)
-      return found
-    } else {
-      console.warn(
-        `[EmbeddingStoreService] No se encontró embedding ${type} para la clave '${key}'`
-      )
-      return null
+    // Persist to DB as durable backing store (fire-and-forget)
+    if (pairs.length > 0) {
+      const col = type === EmbeddingType.CLIP ? 'embedding_clip' : 'embedding_text'
+      const placeholders = pairs.map(() => `(?, ?::vector)`).join(',')
+      const values = pairs.flatMap(({ key, value }) => [key, JSON.stringify(value)])
+      db.rawQuery(
+        `INSERT INTO cached_embeddings (text, ${col}) VALUES ${placeholders}
+         ON CONFLICT (text) DO UPDATE SET ${col} = EXCLUDED.${col}`,
+        values
+      ).catch((error) => {
+        console.error(`[EmbeddingStoreService] Error al persistir embeddings ${type}:`, error)
+      })
     }
   }
 
   public static getAllKeys(type: EmbeddingType = EmbeddingType.Text): string[] {
     const targetMap = type === EmbeddingType.CLIP ? this.embeddingsMapCLIP : this.embeddingsMap
-    const keys = Object.keys(targetMap)
+    const keys = [...targetMap.keys()]
     console.log(`[EmbeddingStoreService] Claves ${type} almacenadas: [${keys.join(', ')}]`)
     return keys
   }
 
   public static clearEmbedding(key: string, type: EmbeddingType = EmbeddingType.Text): void {
     const targetMap = type === EmbeddingType.CLIP ? this.embeddingsMapCLIP : this.embeddingsMap
-    if (targetMap[key]) {
-      delete targetMap[key]
+    if (targetMap.has(key)) {
+      targetMap.delete(key)
       console.log(`[EmbeddingStoreService] Embedding ${type} para la clave '${key}' eliminado`)
     } else {
       console.warn(
@@ -61,46 +64,82 @@ export class EmbeddingStoreService {
 
   public static clearAll(type?: EmbeddingType): void {
     if (type === EmbeddingType.CLIP) {
-      this.embeddingsMapCLIP = {}
+      this.embeddingsMapCLIP.clear()
       console.log(`[EmbeddingStoreService] Todos los embeddings CLIP han sido eliminados`)
     } else if (type === EmbeddingType.Text) {
-      this.embeddingsMap = {}
+      this.embeddingsMap.clear()
       console.log(`[EmbeddingStoreService] Todos los embeddings Text han sido eliminados`)
     } else {
-      this.embeddingsMap = {}
-      this.embeddingsMapCLIP = {}
+      this.embeddingsMap.clear()
+      this.embeddingsMapCLIP.clear()
       console.log(`[EmbeddingStoreService] Todos los embeddings han sido eliminados`)
     }
   }
 
-  private static async calculateTextEmbeddings(
+  private static async fetchTextEmbeddings(
     newTerms: string[],
     modelsService: ModelsService
   ): Promise<void> {
     if (newTerms.length === 0) return
 
-    // Check Redis L2 before hitting the CPU API
-    const redisValues = await redis.mget(...newTerms.map((t) => `embedding:text:${t}`))
-    const termsToCompute: string[] = []
-    for (let i = 0; i < newTerms.length; i++) {
-      if (redisValues[i]) {
-        this.embeddingsMap[newTerms[i]] = JSON.parse(redisValues[i]!)
+    // L2: Check DB
+    const cachedRows = await db
+      .from('cached_embeddings')
+      .select(db.raw('text, embedding_text::text'))
+      .whereIn('text', newTerms)
+      .whereNotNull('embedding_text')
+
+    const afterDb: string[] = []
+    for (const term of newTerms) {
+      const row = cachedRows.find((r: any) => r.text === term)
+      if (row) {
+        this.setToCache(this.embeddingsMap, term, JSON.parse(row.embedding_text))
+        console.log('[fetchTextEmbeddings] Found text embedding in BD for ', term)
       } else {
-        termsToCompute.push(newTerms[i])
+        afterDb.push(term)
       }
     }
 
-    if (termsToCompute.length === 0) return
+    if (afterDb.length === 0) return
 
-    const { embeddings } = await modelsService.getEmbeddingsCPU(termsToCompute)
+    // L2.5: Check tags table (predates cached_embeddings; may have embeddings not yet backfilled)
+    const tagRows = await db
+      .from('tags')
+      .select(db.raw('name, embedding::text'))
+      .whereIn('name', afterDb)
+      .whereNotNull('embedding')
 
-    if (!embeddings || embeddings.length !== termsToCompute.length) {
+    const afterTags: string[] = []
+    const backfillPairs: { key: string; value: number[] }[] = []
+    for (const term of afterDb) {
+      const row = tagRows.find((r: any) => r.name === term)
+      if (row) {
+        const embedding = JSON.parse(row.embedding)
+        this.setToCache(this.embeddingsMap, term, embedding)
+        backfillPairs.push({ key: term, value: embedding })
+        console.log('[fetchTextEmbeddings] Found text embedding in tags for ', term)
+      } else {
+        afterTags.push(term)
+      }
+    }
+
+    // Backfill found tag embeddings into cached_embeddings for future L2 hits
+    if (backfillPairs.length > 0) {
+      this.addEmbeddings(backfillPairs, EmbeddingType.Text)
+    }
+
+    if (afterTags.length === 0) return
+
+    // L3: Compute via Python API
+    const { embeddings } = await modelsService.getEmbeddingsCPU(afterTags)
+
+    if (!embeddings || embeddings.length !== afterTags.length) {
       throw new Error(
-        `[EmbeddingStoreService] Error: Mismatch entre entrada (${termsToCompute.length}) y embeddings devueltos (${embeddings?.length})`
+        `[EmbeddingStoreService] Error: Mismatch entre entrada (${afterTags.length}) y embeddings devueltos (${embeddings?.length})`
       )
     }
 
-    const pairs = termsToCompute.map((key, index) => ({
+    const pairs = afterTags.map((key, index) => ({
       key,
       value: embeddings[index],
     }))
@@ -108,20 +147,27 @@ export class EmbeddingStoreService {
     this.addEmbeddings(pairs, EmbeddingType.Text)
   }
 
-  private static async calculateCLIPEmbeddings(
+  private static async fetchCLIPEmbeddings(
     newTermsCLIP: string[],
     modelsService: ModelsService
   ): Promise<void> {
     if (newTermsCLIP.length === 0) return
 
-    // Check Redis L2 before hitting the CPU API
-    const redisValues = await redis.mget(...newTermsCLIP.map((t) => `embedding:clip:${t}`))
+    // L2: Check DB
+    const cachedRows = await db
+      .from('cached_embeddings')
+      .select(db.raw('text, embedding_clip::text'))
+      .whereIn('text', newTermsCLIP)
+      .whereNotNull('embedding_clip')
+
     const termsToCompute: string[] = []
-    for (let i = 0; i < newTermsCLIP.length; i++) {
-      if (redisValues[i]) {
-        this.embeddingsMapCLIP[newTermsCLIP[i]] = JSON.parse(redisValues[i]!)
+    for (const term of newTermsCLIP) {
+      const row = cachedRows.find((r: any) => r.text === term)
+      if (row) {
+        this.setToCache(this.embeddingsMapCLIP, term, JSON.parse(row.embedding_clip))
+        console.log('[fetchCLIPEmbeddings] Found CLIP embedding in BD for ', term)
       } else {
-        termsToCompute.push(newTermsCLIP[i])
+        termsToCompute.push(term)
       }
     }
 
@@ -143,16 +189,26 @@ export class EmbeddingStoreService {
     this.addEmbeddings(pairsCLIP, EmbeddingType.CLIP)
   }
 
-  public static async calculateEmbeddings(
+  public static async getTextEmbeddings(terms: string[]): Promise<(number[] | null)[]> {
+    await this.preloadEmbeddings(terms, false, true)
+    return terms.map((t) => this.embeddingsMap.get(t) ?? null)
+  }
+
+  public static async getCLIPEmbeddings(terms: string[]): Promise<(number[] | null)[]> {
+    await this.preloadEmbeddings(terms, true, false)
+    return terms.map((t) => this.embeddingsMapCLIP.get(t) ?? null)
+  }
+
+  public static async preloadEmbeddings(
     terms: string[],
     includeCLIP = false,
     includeText = true
   ): Promise<void> {
     const newTerms = includeText
-      ? [...new Set(terms.filter((term) => !this.embeddingsMap[term]))]
+      ? [...new Set(terms.filter((term) => !this.embeddingsMap.has(term)))]
       : []
     const newTermsCLIP = includeCLIP
-      ? [...new Set(terms.filter((term) => !this.embeddingsMapCLIP[term]))]
+      ? [...new Set(terms.filter((term) => !this.embeddingsMapCLIP.has(term)))]
       : []
 
     if (newTerms.length === 0 && newTermsCLIP.length === 0) {
@@ -166,8 +222,8 @@ export class EmbeddingStoreService {
 
     // Calcular embeddings en paralelo
     await Promise.all([
-      this.calculateTextEmbeddings(newTerms, modelsService),
-      includeCLIP ? this.calculateCLIPEmbeddings(newTermsCLIP, modelsService) : Promise.resolve(),
+      this.fetchTextEmbeddings(newTerms, modelsService),
+      includeCLIP ? this.fetchCLIPEmbeddings(newTermsCLIP, modelsService) : Promise.resolve(),
     ])
   }
 }

@@ -425,7 +425,9 @@ export default class ModelsService {
       if (responseFormat) payload.response_format = responseFormat
 
       const shouldCache = useCache && !containsImages(userContent)
-      const cacheKey = shouldCache ? llmCacheKey({ systemContent, userContent, model, responseFormat }) : null
+      const cacheKey = shouldCache
+        ? llmCacheKey({ systemContent, userContent, model, responseFormat })
+        : null
 
       // Check cache
       if (shouldCache) {

@@ -135,7 +135,7 @@ export const packages = [
               },
             ],
           },
-          // Sub-etapa: análisis narrativo y topológico
+          // Sub-etapa: análisis narrativo
           {
             type: 'sequential',
             tasks: [

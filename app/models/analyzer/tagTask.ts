@@ -15,6 +15,7 @@ import AnalyzerProcess from './analyzerProcess.js'
 import Logger, { LogLevel } from '../../utils/logger.js'
 import pLimit from 'p-limit'
 import VectorService from '#services/vector_service'
+import db from '@adonisjs/lucid/services/db'
 
 const logger = Logger.getInstance('AnalyzerProcess', 'TagTask')
 logger.setLevel(LogLevel.DEBUG)
@@ -153,6 +154,24 @@ export class TagTask extends AnalyzerTask {
     for (const tag of existingTags) {
       const embedding = VectorService.getParsedEmbedding(tag.embedding)
       if (embedding) this.embeddingsMap.set(tag.name, embedding)
+    }
+
+    // 4. Para los que no están en tags, buscar en cached_embeddings (readonly, sin persistir)
+    const termsAfterTags = termsArray.filter((term) => !this.embeddingsMap.has(term))
+    if (termsAfterTags.length > 0) {
+      const cachedRows = await db
+        .from('cached_embeddings')
+        .select(db.raw('text, embedding_text::text'))
+        .whereIn('text', termsAfterTags)
+        .whereNotNull('embedding_text')
+
+      for (const row of cachedRows) {
+        const embedding = JSON.parse(row.embedding_text)
+        if (embedding) {
+          this.embeddingsMap.set(row.text, embedding)
+          console.log(`[TagTask] Found embedding in cached_embeddings for term: ${row.text}`)
+        }
+      }
     }
 
     // 5. Obtener embeddings solo para los que no los tienen aún con concurrencia
