@@ -266,7 +266,7 @@ The AI analysis pipeline extracts:
 - Allows connecting external sources: **Lightroom**, **Google Photos**, and **Dropbox**
 - Allows selecting photos individually or in bulk to send for analysis
 - Floating **"Analyze Photos"** button appears when there are photos in the lightbox
-- **Duplicate detection**: automatically identifies duplicate photos via perceptual hashing (dHash) during upload. Two modes: exact duplicates and similar duplicates. Context-aware actions depending on whether duplicates are in lightbox or already analyzed. Bulk clean option available
+- **Duplicate detection**: automatically identifies duplicate photos during upload with two search modes. **Exact duplicates** match photos taken at the same capture moment using the EXIF "dateTaken" timestamp (truncated to the second), which is useful even if the file was edited, resized, re-exported, or cropped. **Similar duplicates** use perceptual hashing (dHash) to find visually near-identical images and minor re-saves. Context-aware actions depend on whether duplicates are in the lightbox or already analyzed in the workspace. Bulk clean option available
 - **Swap Photo**: allows replacing an already-analyzed photo with a new version without losing its position in the catalog
 
 ### Analyses Tab
@@ -333,7 +333,7 @@ All imports go through a unified pipeline: EXIF extraction -> client-side resize
 - **Artistic Score filters**: filter by score thresholds with >= and <= operators on any of the 8 criteria
 - **Genre filter**: filter by photographic genre
 - **Custom Artistic Weights**: manually adjust weight sliders for each scoring criterion to customize the global rating calculation
-- **Duplicate detection**: find and clean duplicate photos directly from workspace
+- **Duplicate detection**: find and clean duplicate photos directly from workspace, using both the **Exact duplicates** mode (same EXIF "dateTaken" capture timestamp) and the **Similar duplicates** mode (visual similarity via dHash)
 - **Photo Info Panel**: click any photo to open detailed info
 - **Multi-selection**: select multiple photos for batch actions
 - **Take to Tool**: send selected photos to Canvas, Framer, or Atlas
@@ -762,9 +762,9 @@ The search bar in the top header (desktop only) provides instant search across:
 Results appear in a grouped dropdown with keyboard navigation. This is distinct from the Search tool -- it's a quick-access navigation feature.
 
 ### Duplicate Detection
-Photoreka detects duplicate photos using perceptual hashing (dHash):
-- **Exact duplicates**: identical or near-identical photos
-- **Similar duplicates**: visually similar photos (higher Hamming distance tolerance)
+Photoreka offers two complementary ways to search for duplicates:
+- **Exact duplicates**: photos with the same EXIF "dateTaken" capture timestamp, normalized to the second. This is designed to catch the same capture event even if the file was later resized, color-graded, converted, or cropped
+- **Similar duplicates**: photos that are visually near-identical according to perceptual hashing (dHash). This catches pixel-level duplicates and minor re-saves, but it is less robust to aggressive edits or crops than the exact mode
 - Context-aware: identifies whether duplicates are in the lightbox (unanalyzed) or workspace (already analyzed)
 - Bulk clean actions: remove all duplicates at once
 - Filter view: All / Duplicates Only / Unique Only
@@ -857,7 +857,7 @@ A quick-access search bar (desktop only) that searches across photos, collection
 Credits are the internal currency for AI operations. Every search, chat message, and photo insight consumes credits. Your plan includes a monthly credit budget.
 
 **How does duplicate detection work?**
-Photoreka uses perceptual hashing to find duplicate or near-duplicate photos. You can detect duplicates in the Lightbox or Workspace and clean them in bulk.
+Photoreka has two duplicate search modes available in the Lightbox and Workspace. **Exact duplicates** groups photos that share the same EXIF "dateTaken" timestamp to the second, which is useful for catching the same shot across exports or edits. **Similar duplicates** uses perceptual hashing (dHash) to find visually near-identical photos and minor re-saves. You can review results and clean them in bulk.
 
 **Can I use Photoreka on mobile?**
 Yes, with an adapted layout. Canvas, 3D Atlas, and Series are desktop-only. All other tools work on mobile.
@@ -881,7 +881,7 @@ Daily Eureka -- Dashboard card showing a daily rediscovered photo with AI insigh
 ChatLab -- AI assistant with 3 intelligence modes (Scout, Assistant, Curator)
 Credits -- Internal currency consumed by AI operations (search, chat, insights, analysis)
 Omni-Search -- Global search bar in the header for quick navigation across all content types
-Duplicate Detection -- Perceptual hash based system to find and clean duplicate photos
+Duplicate Detection -- Two duplicate search modes: Exact duplicates by EXIF "dateTaken" capture timestamp, and Similar duplicates by perceptual hash (dHash)
 Swap Photo -- Replace an already-analyzed photo with a new version
 
 `.trim()
