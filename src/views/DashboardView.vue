@@ -172,6 +172,7 @@
           :item="item"
           :type="item.itemType"
           :show-update-date="false"
+          :selectable="false"
           @click="
             item.itemType === 'collection'
               ? openProject(item.id)

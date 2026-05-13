@@ -61,62 +61,17 @@
       <p class="action-description">Discover daily insights in your images</p>
     </div>
 
-    <!-- Carousel overlay -->
+    <!-- Insight overlay -->
     <div
-      v-show="
-        isHoveringInsight &&
-        photoInsight &&
-        photoInsight.insights &&
-        photoInsight.insights.length > 0
-      "
+      v-show="isHoveringInsight && photoInsight && photoInsight.insight"
       class="insight-carousel-overlay"
     >
       <div class="carousel-content">
-        <button
-          v-if="photoInsight && photoInsight.insights.length > 1"
-          class="carousel-arrow carousel-arrow-left"
-          @click.stop="prevInsight"
-        >
-          <n-icon size="20">
-            <ArrowLeftIcon />
-          </n-icon>
-        </button>
-
         <div class="insight-text-container">
-          <transition name="insight-slide" mode="out-in">
-            <div :key="currentInsightIndex" class="insight-text-slide">
-              <p>
-                {{
-                  photoInsight ? photoInsight.insights[currentInsightIndex] : ""
-                }}
-              </p>
-            </div>
-          </transition>
+          <div class="insight-text-slide">
+            <p>{{ photoInsight ? photoInsight.insight : "" }}</p>
+          </div>
         </div>
-
-        <button
-          v-if="photoInsight && photoInsight.insights.length > 1"
-          class="carousel-arrow carousel-arrow-right"
-          @click.stop="nextInsight"
-        >
-          <n-icon size="20">
-            <ArrowRightIcon />
-          </n-icon>
-        </button>
-      </div>
-
-      <!-- Dots indicator -->
-      <div
-        v-if="photoInsight && photoInsight.insights.length > 1"
-        class="carousel-dots"
-      >
-        <div
-          v-for="(_, index) in photoInsight.insights"
-          :key="index"
-          class="carousel-dot"
-          :class="{ active: index === currentInsightIndex }"
-          @click.stop="currentInsightIndex = index"
-        ></div>
       </div>
     </div>
   </div>
@@ -135,8 +90,6 @@ import { usePhotosStore } from "@/stores/photos.js";
 import { api } from "@/utils/axios.js";
 import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
 import {
-  ChevronBackOutline as ArrowLeftIcon,
-  ChevronForwardOutline as ArrowRightIcon,
   InformationCircleOutline as InfoIcon,
   BulbOutline as InsightIcon,
 } from "@vicons/ionicons5";
@@ -150,14 +103,15 @@ interface PhotoInsight {
     thumbnailUrl: string;
     originalUrl: string;
   };
-  insights: string[];
+  insight: string;
+  genre?: string;
 }
 
 const photoInsight = ref<PhotoInsight | null>(null);
 const isLoadingInsight = ref(false);
 const isHoveringInsight = ref(false);
-const currentInsightIndex = ref(0);
 const insightFetchLimit = 1;
+const insightCacheKey = "photoInsightData:v2";
 const showPhotoInfoDialog = ref(false);
 const selectedDialogPhoto = ref();
 
@@ -179,49 +133,20 @@ const fetchPhotoInsight = async () => {
       fetchCount = 0;
     }
 
-    const cachedInsight = localStorage.getItem("photoInsightData");
+    const cachedInsight = localStorage.getItem(insightCacheKey);
     if (cachedInsight && fetchCount >= insightFetchLimit) {
       photoInsight.value = JSON.parse(cachedInsight);
       return;
     }
 
-    const randomIndex = Math.floor(Math.random() * photosStore.photos.length);
-    const randomPhoto = photosStore.photos[randomIndex];
-
-    if (!randomPhoto || !randomPhoto.id) {
-      return;
-    }
-
     isLoadingInsight.value = true;
-    const { data } = await api.get(
-      `/api/catalog/photoInsight/${randomPhoto.id}`,
-    );
+    const { data } = await api.get("/api/photoInsight");
+    photoInsight.value = data;
 
-    if (
-      data &&
-      typeof data === "object" &&
-      (data.cultural || data.technical || data.evaluation)
-    ) {
-      const insights = [];
-      if (data.cultural) insights.push(data.cultural);
-      if (data.technical) insights.push(data.technical);
-      if (data.evaluation) insights.push(data.evaluation);
-
-      photoInsight.value = {
-        photo: randomPhoto,
-        insights: insights,
-      };
-    } else {
-      photoInsight.value = data;
-    }
-
-    localStorage.setItem(
-      "photoInsightData",
-      JSON.stringify(photoInsight.value),
-    );
+    localStorage.setItem(insightCacheKey, JSON.stringify(photoInsight.value));
     localStorage.setItem("photoInsightLastFetch", today);
     localStorage.setItem("photoInsightFetchCount", String(fetchCount + 1));
-    localStorage.setItem("photoInsightPhotoId", String(randomPhoto.id));
+    localStorage.setItem("photoInsightPhotoId", String(data?.photo?.id || ""));
   } catch (error) {
     console.error("Error fetching photo insight:", error);
   } finally {
@@ -242,22 +167,6 @@ watch(
   },
   { immediate: true },
 );
-
-const nextInsight = () => {
-  if (photoInsight.value && photoInsight.value.insights) {
-    currentInsightIndex.value =
-      (currentInsightIndex.value + 1) % photoInsight.value.insights.length;
-  }
-};
-
-const prevInsight = () => {
-  if (photoInsight.value && photoInsight.value.insights) {
-    currentInsightIndex.value =
-      currentInsightIndex.value === 0
-        ? photoInsight.value.insights.length - 1
-        : currentInsightIndex.value - 1;
-  }
-};
 
 const handleMouseEnter = () => {
   isHoveringInsight.value = true;
@@ -404,36 +313,6 @@ const showPhotoInfo = async () => {
   pointer-events: auto;
 }
 
-.carousel-arrow {
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-primary);
-  cursor: pointer;
-  backdrop-filter: blur(10px);
-  flex-shrink: 0;
-  pointer-events: auto;
-}
-
-.carousel-arrow:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.carousel-arrow-left {
-  margin-right: var(--spacing-md);
-  margin-left: 10px;
-}
-
-.carousel-arrow-right {
-  margin-left: var(--spacing-md);
-  margin-right: 10px;
-}
-
 .insight-text-container {
   flex: 1;
   padding: 0 var(--spacing-sm);
@@ -454,22 +333,6 @@ const showPhotoInfo = async () => {
   height: 100%;
 }
 
-/* Transición para el slider de insights */
-.insight-slide-enter-active,
-.insight-slide-leave-active {
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.insight-slide-enter-from {
-  opacity: 0;
-  transform: translateX(30px);
-}
-
-.insight-slide-leave-to {
-  opacity: 0;
-  transform: translateX(-30px);
-}
-
 .insight-text-slide p {
   color: var(--text-primary);
   font-size: 13px;
@@ -477,32 +340,6 @@ const showPhotoInfo = async () => {
   margin: 0;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
   font-weight: 500;
-}
-
-.carousel-dots {
-  position: absolute;
-  bottom: var(--spacing-md);
-  left: 50%;
-  display: flex;
-  gap: var(--spacing-xs);
-  z-index: 5;
-  pointer-events: auto;
-}
-
-.carousel-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.4);
-  cursor: pointer;
-}
-
-.carousel-dot.active {
-  background: white;
-}
-
-.carousel-dot:hover {
-  background: rgba(255, 255, 255, 0.7);
 }
 
 .insight-content {
@@ -634,10 +471,6 @@ const showPhotoInfo = async () => {
   flex-shrink: 0;
 }
 
-.insight-text {
-  /* font-style: italic; */
-}
-
 .action-description {
   font-size: 13px;
   color: var(--text-secondary);
@@ -666,30 +499,8 @@ const showPhotoInfo = async () => {
     padding: var(--spacing-md);
   }
 
-  .carousel-arrow {
-    width: 28px;
-    height: 28px;
-  }
-
-  .carousel-arrow-left {
-    margin-right: var(--spacing-sm);
-  }
-
-  .carousel-arrow-right {
-    margin-left: var(--spacing-sm);
-  }
-
   .insight-text-slide p {
     font-size: var(--font-size-sm);
-  }
-
-  .carousel-dots {
-    bottom: var(--spacing-sm);
-  }
-
-  .carousel-dot {
-    width: 6px;
-    height: 6px;
   }
 }
 </style>

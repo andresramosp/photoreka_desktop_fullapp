@@ -985,7 +985,7 @@ const getSpecificInsight = async (type) => {
 
   try {
     const { data } = await api.post(
-      `/api/catalog/photoInsightSpecific/${props.selectedPhoto.id}`,
+      `/api/photoInsightSpecific/${props.selectedPhoto.id}`,
       {
         type: type,
         provider: "gpt",
@@ -1065,7 +1065,7 @@ const submitCustomQuestion = async () => {
     const history = buildInsightHistory(allPhotoInsights.value);
 
     const { data } = await api.post(
-      `/api/catalog/photoInsightSpecific/${props.selectedPhoto.id}`,
+      `/api/photoInsightSpecific/${props.selectedPhoto.id}`,
       {
         type: "custom",
         question: savedQuestion,

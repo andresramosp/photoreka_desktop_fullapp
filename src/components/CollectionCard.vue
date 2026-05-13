@@ -5,8 +5,9 @@
       'is-dragging': isDragging,
       'is-selected': isSelected,
       'is-selection-mode': isSelectionMode,
+      'not-selectable': !selectable,
     }"
-    draggable="true"
+    :draggable="selectable ? 'true' : 'false'"
     @click="handleClick"
     @dragstart="onDragStart"
     @dragend="onDragEnd"
@@ -258,7 +259,7 @@ const formatDate = (date: Date | string) => {
   );
 }
 
-.action-card[draggable="true"] {
+.action-card[draggable="true"]:not(.not-selectable) {
   cursor: grab;
 }
 
