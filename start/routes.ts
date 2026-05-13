@@ -82,6 +82,7 @@ const CanvasController = () => import('#controllers/canvas_controller')
 const PaymentController = () => import('#controllers/payment_controller')
 const PortfolioBuildController = () => import('#controllers/portfolio_build_controller')
 const SafeSearchController = () => import('#controllers/safe_search_controller')
+const ActivityController = () => import('#controllers/activity_controller')
 
 // Stripe webhook (no auth — verified by signature)
 router.post('/api/payments/webhook', [PaymentController, 'webhook'])
@@ -119,6 +120,9 @@ router
 
     router.post('/api/catalog/uploadPhoto', [CatalogController, 'uploadPhoto'])
     router.post('/api/catalog/uploadFinished', [CatalogController, 'uploadFinished'])
+
+    // Frontend activity logging
+    router.post('/api/activity/log', [ActivityController, 'log'])
 
     // Content moderation
     router.post('/api/moderation/safe-search', [SafeSearchController, 'check'])

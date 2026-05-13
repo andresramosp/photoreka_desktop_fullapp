@@ -43,6 +43,10 @@ export type ActivityType =
   // Canvas
   | 'canvas_create'
   | 'canvas_delete'
+  // Frontend-initiated events
+  | 'photo_rank'
+  | 'filter_apply'
+  | 'ui_action'
 
 export default class UserActivity extends BaseModel {
   @column({ isPrimary: true })
