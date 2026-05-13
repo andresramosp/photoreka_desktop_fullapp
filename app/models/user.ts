@@ -8,6 +8,10 @@ import { DbAccessTokensProvider } from '@adonisjs/auth/access_tokens'
 import type { Usage } from '#services/usage_service'
 import type { CostHistory } from '#services/user_cost_service'
 
+export type InsightsState = {
+  shownPhotoIds: number[]
+}
+
 export type PreferredSource = 'web' | 'lightroom' | null
 export type UserProvider = 'email' | 'google'
 export type UserRole = 'user' | 'admin'
@@ -70,6 +74,9 @@ export default class User extends compose(BaseModel, AuthFinder) {
 
   @column({ columnName: 'catalog_patterns' })
   declare catalogPatterns: Record<string, any> | null
+
+  @column()
+  declare insightsState: InsightsState | null
 
   // Email confirmation fields
   @column.dateTime()

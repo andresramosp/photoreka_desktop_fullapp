@@ -76,6 +76,7 @@ const UsageController = () => import('#controllers/usage_controller')
 const ThreeDViewController = () => import('#controllers/3dview_controller')
 const TagCloudController = () => import('#controllers/tagcloud_controller')
 const ReportReviewController = () => import('#controllers/report_review_controller')
+const InsightsController = () => import('#controllers/insights_controller')
 const ChatController = () => import('#controllers/chat_controller')
 const CanvasController = () => import('#controllers/canvas_controller')
 const PaymentController = () => import('#controllers/payment_controller')
@@ -387,11 +388,8 @@ router
 
     // Semantic search endpoints - AI-powered search
     router.post('/api/search/semantic/stream', [SearchController, 'searchSemanticStream'])
-    router.get('/api/catalog/photoInsight/:id?', [CatalogController, 'photoInsight'])
-    router.post('/api/catalog/photoInsightSpecific/:id?', [
-      CatalogController,
-      'photoInsightSpecific',
-    ])
+    router.get('/api/photoInsight/:id?', [InsightsController, 'photoInsight'])
+    router.post('/api/photoInsightSpecific/:id?', [InsightsController, 'photoInsightSpecific'])
   })
   .use([middleware.auth(), middleware.readOnly(), middleware.llmRateLimit()]) // Apply auth, readOnly and LLM rate limiting
 
