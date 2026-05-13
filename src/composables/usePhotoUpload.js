@@ -324,6 +324,22 @@ export function usePhotoUpload() {
 
       // Post-procesamiento común
       await handlePostUpload(photosToUpload);
+
+      // Log a single batch activity for all successfully uploaded photos
+      if (photosToUpload.length > 0) {
+        const source =
+          srcType === "google"
+            ? "google"
+            : srcType === "dropbox"
+              ? "dropbox"
+              : "local";
+        api
+          .post("/api/catalog/uploadFinished", {
+            count: photosToUpload.length,
+            source,
+          })
+          .catch(() => {});
+      }
     } catch (error) {
       console.error("❌ Error en la subida:", error);
       message.error("An unexpected error occurred during upload.");

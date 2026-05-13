@@ -432,7 +432,7 @@ const activityTypeOptions = [
   { label: "Search (tags)", value: "search_tags" },
   { label: "Search (visual)", value: "search_visual" },
   { label: "Chat", value: "chat_message" },
-  { label: "Photo upload", value: "photo_upload" },
+  { label: "Photo upload", value: "photos_uploaded" },
   { label: "Photo analyze", value: "photo_analyze" },
   { label: "Photo delete", value: "photo_delete" },
   { label: "Photo download", value: "photo_download" },
@@ -563,7 +563,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   search_tags: "Tag search",
   search_visual: "Visual search",
   chat_message: "Chat",
-  photo_upload: "Photo upload",
+  photos_uploaded: "Photos uploaded",
   photo_analyze: "Analysis",
   photo_delete: "Photo delete",
   photo_download: "Download",
@@ -599,7 +599,11 @@ function activityTagType(
   if (type === "chat_message") return "warning";
   if (type.startsWith("photo_delete") || type.includes("delete"))
     return "error";
-  if (type.startsWith("photo_") || type === "generate_embeddings")
+  if (
+    type.startsWith("photo_") ||
+    type === "photos_uploaded" ||
+    type === "generate_embeddings"
+  )
     return "success";
   if (
     type.startsWith("collection_") ||
@@ -615,7 +619,8 @@ function activityColor(type: string): string {
   if (type.startsWith("search_")) return "dot-blue";
   if (type === "chat_message") return "dot-amber";
   if (type.includes("delete")) return "dot-red";
-  if (type.startsWith("photo_")) return "dot-green";
+  if (type.startsWith("photo_") || type === "photos_uploaded")
+    return "dot-green";
   if (type === "portfolio_build" || type === "view_3d") return "dot-purple";
   return "dot-gray";
 }
@@ -632,8 +637,8 @@ function activitySummary(act: ActivityItem): string {
       return `${m.resultCount ?? "?"} similar photos found`;
     case "chat_message":
       return `${m.toolsUsed?.length || 0} tools · ${m.costEur != null ? "€" + Number(m.costEur).toFixed(4) : ""}`;
-    case "photo_upload":
-      return `${m.fileName || "photo"} (${m.source})`;
+    case "photos_uploaded":
+      return `${m.count} photo(s) · ${m.source || "local"}`;
     case "photo_analyze":
       return `${m.photoCount} photo(s)`;
     case "photo_delete":

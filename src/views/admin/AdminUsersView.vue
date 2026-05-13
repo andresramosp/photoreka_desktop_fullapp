@@ -145,7 +145,10 @@
             striped
           />
         </div>
-        <div v-if="activityMeta && activityMeta.lastPage > 1" class="table-pagination">
+        <div
+          v-if="activityMeta && activityMeta.lastPage > 1"
+          class="table-pagination"
+        >
           <n-pagination
             v-model:page="activityPage"
             :page-size="activityMeta.perPage"
@@ -271,7 +274,7 @@ const activityTypeOptions = [
   { label: "Search (tags)", value: "search_tags" },
   { label: "Search (visual)", value: "search_visual" },
   { label: "Chat", value: "chat_message" },
-  { label: "Photo upload", value: "photo_upload" },
+  { label: "Photo upload", value: "photos_uploaded" },
   { label: "Photo analyze", value: "photo_analyze" },
   { label: "Photo delete", value: "photo_delete" },
   { label: "Photo download", value: "photo_download" },
@@ -370,7 +373,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   search_tags: "Tag search",
   search_visual: "Visual search",
   chat_message: "Chat",
-  photo_upload: "Photo upload",
+  photos_uploaded: "Photos uploaded",
   photo_analyze: "Analysis",
   photo_delete: "Photo delete",
   photo_download: "Download",
@@ -406,7 +409,11 @@ function activityTagType(
   if (type === "chat_message") return "warning";
   if (type.startsWith("photo_delete") || type.includes("delete"))
     return "error";
-  if (type.startsWith("photo_") || type === "generate_embeddings")
+  if (
+    type.startsWith("photo_") ||
+    type === "photos_uploaded" ||
+    type === "generate_embeddings"
+  )
     return "success";
   if (
     type.startsWith("collection_") ||
@@ -430,8 +437,8 @@ function activitySummary(act: GlobalActivityItem): string {
       return `${m.resultCount ?? "?"} similar photos found`;
     case "chat_message":
       return `${m.toolsUsed?.length || 0} tools · ${m.costEur != null ? "€" + Number(m.costEur).toFixed(4) : ""}`;
-    case "photo_upload":
-      return `${m.fileName || "photo"} (${m.source})`;
+    case "photos_uploaded":
+      return `${m.count} photo(s) · ${m.source || "local"}`;
     case "photo_analyze":
       return `${m.photoCount} photo(s)`;
     case "photo_delete":
@@ -601,8 +608,7 @@ const columns = computed<DataTableColumn<UserRow>[]>(() => [
             },
           },
           {
-            icon: () =>
-              h(NIcon, { size: 16 }, { default: () => h(TrashIcon) }),
+            icon: () => h(NIcon, { size: 16 }, { default: () => h(TrashIcon) }),
           },
         ),
       ]);
@@ -611,67 +617,61 @@ const columns = computed<DataTableColumn<UserRow>[]>(() => [
 ]);
 
 // ─── Global Activity Columns ───
-const activityColumns = computed<DataTableColumn<GlobalActivityItem>[]>(
-  () => [
-    {
-      title: "Time",
-      key: "createdAt",
-      width: 120,
-      render(row) {
-        return h("span", { class: "cell-dim" }, formatDateTime(row.createdAt));
-      },
+const activityColumns = computed<DataTableColumn<GlobalActivityItem>[]>(() => [
+  {
+    title: "Time",
+    key: "createdAt",
+    width: 120,
+    render(row) {
+      return h("span", { class: "cell-dim" }, formatDateTime(row.createdAt));
     },
-    {
-      title: "User",
-      key: "user",
-      width: 180,
-      render(row) {
-        if (!row.user) return h("span", { class: "cell-dim" }, "—");
-        return h(
-          "a",
-          {
-            class: "cell-user-link",
-            onClick: (e: Event) => {
-              e.stopPropagation();
-              router.push({
-                name: "admin-user-detail",
-                params: { id: row.user!.id },
-              });
-            },
+  },
+  {
+    title: "User",
+    key: "user",
+    width: 180,
+    render(row) {
+      if (!row.user) return h("span", { class: "cell-dim" }, "—");
+      return h(
+        "a",
+        {
+          class: "cell-user-link",
+          onClick: (e: Event) => {
+            e.stopPropagation();
+            router.push({
+              name: "admin-user-detail",
+              params: { id: row.user!.id },
+            });
           },
-          row.user.name,
-        );
-      },
+        },
+        row.user.name,
+      );
     },
-    {
-      title: "Type",
-      key: "type",
-      width: 140,
-      render(row) {
-        return h(
-          NTag,
-          {
-            size: "tiny",
-            bordered: false,
-            type: activityTagType(row.type),
-          },
-          { default: () => activityLabel(row.type) },
-        );
-      },
+  },
+  {
+    title: "Type",
+    key: "type",
+    width: 140,
+    render(row) {
+      return h(
+        NTag,
+        {
+          size: "tiny",
+          bordered: false,
+          type: activityTagType(row.type),
+        },
+        { default: () => activityLabel(row.type) },
+      );
     },
-    {
-      title: "Details",
-      key: "details",
-      render(row) {
-        return h(
-          "span",
-          { class: "cell-activity-detail" },
-          activitySummary(row),
-        );
-      },
+  },
+  {
+    title: "Details",
+    key: "details",
+    render(row) {
+      return h("span", { class: "cell-activity-detail" }, activitySummary(row));
     },
-  ],
-);
+  },
+]);
 
 // ─── API calls ───
 async function fetchUsers() {
