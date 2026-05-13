@@ -118,6 +118,7 @@ router
     router.post('/api/catalog/photosByIds', [CatalogController, 'getPhotosByIds'])
 
     router.post('/api/catalog/uploadPhoto', [CatalogController, 'uploadPhoto'])
+    router.post('/api/catalog/uploadFinished', [CatalogController, 'uploadFinished'])
 
     // Content moderation
     router.post('/api/moderation/safe-search', [SafeSearchController, 'check'])

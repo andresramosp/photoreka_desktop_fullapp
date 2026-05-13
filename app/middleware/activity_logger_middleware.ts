@@ -106,11 +106,11 @@ const ROUTE_MAP: RouteDescriptor[] = [
   // ─── Photo operations ───
   {
     method: 'POST',
-    pattern: /\/catalog\/uploadPhoto$/,
-    type: 'photo_upload',
+    pattern: /\/catalog\/uploadFinished$/,
+    type: 'photos_uploaded',
     meta: (b) => ({
-      source: b?.source ?? 'local',
-      fileName: b?.originalName ?? null,
+      count: typeof b?.count === 'number' ? b.count : 0,
+      source: b?.source ?? null,
     }),
   },
   {
@@ -118,7 +118,7 @@ const ROUTE_MAP: RouteDescriptor[] = [
     pattern: /\/analyzer\/?$/,
     type: 'photo_analyze',
     meta: (b, _p, r) => ({
-      photoCount: Array.isArray(b?.photos) ? b.photos.length : 1,
+      photoCount: Array.isArray(b?.photoIds) ? b.photoIds.length : null,
       processId: r?.processId ?? r?.id ?? null,
     }),
   },

@@ -501,4 +501,24 @@ export default class CatalogController {
       return response.internalServerError({ message: 'Error swapping photos' })
     }
   }
+
+  /**
+   * Records a single "photos_uploaded" activity after a batch upload completes.
+   * Body: { count: number, source?: string }
+   */
+  public async uploadFinished({ request, response, auth }: HttpContext) {
+    try {
+      await auth.use('api').authenticate()
+      const { count, source } = request.only(['count', 'source'])
+
+      if (typeof count !== 'number' || count < 1) {
+        return response.badRequest({ message: 'count must be a positive number' })
+      }
+
+      return response.ok({ count, source: source ?? null })
+    } catch (error) {
+      console.error('Error recording upload batch:', error)
+      return response.internalServerError({ message: 'Error recording upload batch' })
+    }
+  }
 }

@@ -14,7 +14,7 @@ export type ActivityType =
   // Chat
   | 'chat_message'
   // Photos
-  | 'photo_upload'
+  | 'photos_uploaded'
   | 'photo_analyze'
   | 'photo_delete'
   | 'photo_download'
