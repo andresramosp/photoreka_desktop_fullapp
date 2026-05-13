@@ -612,7 +612,7 @@ const form = reactive({
   weights: portfolioStore.defaultWeights
     ? { ...portfolioStore.defaultWeights }
     : getFallbackWeights(),
-  coherenceMode: "visual", // 'free' | 'visual' | 'chromatic' | 'narrative' | 'heterogeneous'
+  coherenceMode: "free", // 'free' | 'visual' | 'chromatic' | 'narrative' | 'heterogeneous'
   themePreferences: "",
   sequencing: false,
   sequencingPreferences: "",
@@ -787,9 +787,14 @@ const runStylePreview = async (text) => {
 // ── Coherence modes ────────────────────────────────────────
 const coherenceModes = [
   {
+    value: "free",
+    label: "Free",
+    description: "Based on pure quality selection.",
+  },
+  {
     value: "visual",
     label: "Visual",
-    description: "Favor photos with similar visual style and aesthetics.",
+    description: "Favor photos with similar visual style.",
   },
 
   {
@@ -806,11 +811,6 @@ const coherenceModes = [
     value: "heterogeneous",
     label: "Heterogeneous",
     description: "Maximize variety and diversity.",
-  },
-  {
-    value: "free",
-    label: "Free",
-    description: "No coherence constraint — pure quality selection.",
   },
 ];
 
@@ -1209,7 +1209,7 @@ const resetForm = () => {
   form.weights = portfolioStore.defaultWeights
     ? { ...portfolioStore.defaultWeights }
     : getFallbackWeights();
-  form.coherenceMode = "visual";
+  form.coherenceMode = "free";
   form.themePreferences = "";
   form.sequencing = false;
   form.sequencingPreferences = "";
