@@ -619,6 +619,7 @@ import {
 } from "@/composables/useArtisticScores.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
+import { useActivityLogger } from "@/composables/useActivityLogger";
 import { CheckmarkSquare24Filled, SelectAllOn24Regular } from "@vicons/fluent";
 import { TheaterComedyOutlined } from "@vicons/material";
 
@@ -699,6 +700,7 @@ const {
 } = usePhotoToolSelection();
 
 const { isMobile } = useIsMobile();
+const { logActivity } = useActivityLogger();
 
 // Check if user is demo
 const isDemoUser = computed(() => {
@@ -936,6 +938,11 @@ const handleBasicSortChange = (value) => {
     // Deactivate scores sorting
     sortingType.value = "none";
     selectedCriteria.value = [];
+    logActivity("filter_apply", {
+      context: props.context,
+      filter: "basic_sort",
+      sortType: value,
+    });
   }
 };
 
@@ -979,6 +986,18 @@ const handleSelectAllFiltered = () => {
 // Handler functions for PhotosGridControls events
 const handleFiltersChange = (newFilters) => {
   selectedFilters.value = newFilters;
+  const active = Object.keys(newFilters).filter((k) => {
+    const v = newFilters[k];
+    return (
+      v !== null &&
+      v !== undefined &&
+      v !== false &&
+      !(Array.isArray(v) && v.length === 0)
+    );
+  });
+  if (active.length > 0) {
+    logActivity("filter_apply", { context: props.context, filters: active });
+  }
 };
 
 const handleSortingChange = (isActive) => {
@@ -996,11 +1015,21 @@ const handleCriteriaChange = (newCriteria) => {
   if (newCriteria.length > 0) {
     basicSortActive.value = false;
     basicSortType.value = null;
+    logActivity("filter_apply", {
+      context: props.context,
+      filter: "criteria",
+      criteria: newCriteria,
+    });
   }
 };
 
 const handleGenreChange = (newGenre) => {
   selectedGenre.value = newGenre;
+  logActivity("filter_apply", {
+    context: props.context,
+    filter: "genre",
+    genre: newGenre,
+  });
 };
 
 const handleSortingTypeChange = (newType) => {
@@ -1009,6 +1038,11 @@ const handleSortingTypeChange = (newType) => {
   if (newType !== "none") {
     basicSortActive.value = false;
     basicSortType.value = null;
+    logActivity("filter_apply", {
+      context: props.context,
+      filter: "sort_type",
+      sortingType: newType,
+    });
   }
 };
 

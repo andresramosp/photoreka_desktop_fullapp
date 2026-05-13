@@ -3,6 +3,7 @@ import AppInitLoader from "../components/AppInitLoader.vue";
 import { useUserStore } from "../stores/userStore";
 import { useMaintenanceMode } from "../composables/useMaintenanceMode";
 import { trackPageView } from "../utils/analytics";
+import { useActivityLogger } from "../composables/useActivityLogger";
 import DashboardView from "../views/DashboardView.vue";
 import CanvasView from "../views/CanvasView.vue";
 import SearchView from "../views/SearchView.vue";
@@ -637,6 +638,16 @@ router.afterEach((to) => {
 
   // Track page view with GA4
   trackPageView(to.fullPath, pageTitle);
+
+  // Log route entry for authenticated users
+  const routeName = to.name as string | undefined;
+  if (routeName && to.meta?.requiresAuth === true) {
+    const userStore = useUserStore();
+    if (userStore.isAuthenticated) {
+      const { logActivity } = useActivityLogger();
+      logActivity("ui_action", { action: "enter_route", name: routeName });
+    }
+  }
 });
 
 // Helper function to update meta tags

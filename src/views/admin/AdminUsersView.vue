@@ -287,6 +287,8 @@ const activityTypeOptions = [
   { label: "Embeddings", value: "generate_embeddings" },
   { label: "Login", value: "login" },
   { label: "Register", value: "register" },
+  { label: "Filter / Sort", value: "filter_apply" },
+  { label: "Navigation", value: "ui_action" },
 ];
 
 let activityRefreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -396,6 +398,9 @@ const ACTIVITY_LABELS: Record<string, string> = {
   generate_embeddings: "Embeddings",
   canvas_create: "Canvas created",
   canvas_delete: "Canvas deleted",
+  photo_rank: "Photo rank",
+  filter_apply: "Filter / Sort",
+  ui_action: "Navigation",
 };
 
 function activityLabel(type: string): string {
@@ -422,6 +427,8 @@ function activityTagType(
   )
     return "default";
   if (type === "login" || type === "register") return "info";
+  if (type === "ui_action" || type === "filter_apply" || type === "photo_rank")
+    return "default";
   return "default";
 }
 
@@ -466,6 +473,21 @@ function activitySummary(act: GlobalActivityItem): string {
       return m.provider || "email";
     case "register":
       return m.provider || "email";
+    case "ui_action":
+      return m.action === "enter_route" ? `→ ${m.name}` : m.action || "";
+    case "filter_apply": {
+      const parts: string[] = [];
+      if (m.context) parts.push(String(m.context));
+      if (m.filter) parts.push(String(m.filter));
+      if (m.filters) parts.push((m.filters as string[]).join(", "));
+      if (m.sortType) parts.push(String(m.sortType));
+      if (m.criteria) parts.push((m.criteria as string[]).join(", "));
+      if (m.genre) parts.push(String(m.genre));
+      if (m.sortingType) parts.push(String(m.sortingType));
+      return parts.join(" · ");
+    }
+    case "photo_rank":
+      return `photo ${m.photoId ?? "?"} → rank ${m.rank ?? "?"}`;
     default:
       return "";
   }
