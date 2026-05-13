@@ -33,6 +33,7 @@ export default class ReadOnlyMiddleware {
     '/api/catalog/photosByIds',
     '/api/portfolio-build', // Allows start, abort, and layout updates for demo portfolios
     '/api/tagcloud/2d',
+    '/api/activity/log',
   ]
 
   /**
