@@ -54,8 +54,10 @@
       :tagCount="tags.length"
       :totalCandidates="metadata?.totalCandidates ?? null"
       :availableGroups="availableGroups"
+      :availableTags="tags"
       @filters-changed="onFiltersChanged"
       @reset-view="resetView"
+      @fly-to-tag="flyToTag"
     />
 
     <!-- Hover tooltip: full (visible label) -->
@@ -642,6 +644,58 @@ const zoomOut = () => {
   zoomCameraAboutPoint(centerX, centerY, targetCamera.scale / 1.2);
 };
 
+// Fly the camera to a tag by id, centering it at a comfortable zoom level
+const easeInOutCubic = (t) =>
+  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+// flightState: active timed-lerp flight (bypasses regular camera lerp)
+let flightState = null;
+
+const flyToTag = (tagId) => {
+  if (!app || !positions || !dotRadii) return;
+  const index = tags.value.findIndex((t) => t.id === tagId);
+  if (index < 0) return;
+
+  const wx = positions[index * 2];
+  const wy = positions[index * 2 + 1];
+
+  const w = app.renderer.width;
+  const h = app.renderer.height;
+
+  // Scale so the dot's radius covers ~35% of the smaller screen dimension
+  const r = Math.max(0.0001, dotRadii[index]);
+  const desiredScreenRadius = Math.min(w, h) * 0.35;
+  const toScale = Math.min(
+    maxScale,
+    Math.max(minScale, desiredScreenRadius / r),
+  );
+  const toX = w / 2 - wx * toScale;
+  const toY = h / 2 - wy * toScale;
+
+  // Duration: min 900ms, max 2200ms, based on screen-space distance + scale change
+  const dx = toX - camera.x;
+  const dy = toY - camera.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const scaleDiff = Math.abs(toScale - camera.scale);
+  const duration = Math.max(900, Math.min(2200, dist * 0.4 + scaleDiff * 150));
+
+  flightState = {
+    startTime: performance.now(),
+    duration,
+    startX: camera.x,
+    startY: camera.y,
+    startScale: camera.scale,
+    toX,
+    toY,
+    toScale,
+  };
+
+  // Also update targetCamera so user interactions after landing are consistent
+  targetCamera.x = toX;
+  targetCamera.y = toY;
+  targetCamera.scale = toScale;
+};
+
 const onTick = () => {
   if (!app) return;
 
@@ -649,31 +703,56 @@ const onTick = () => {
   const lerpFactor = 1 - Math.pow(1 - CAMERA_LERP, delta);
   let cameraChanged = false;
 
-  const dx = targetCamera.x - camera.x;
-  const dy = targetCamera.y - camera.y;
-  const ds = targetCamera.scale - camera.scale;
+  // --- Timed flight (flyToTag) overrides the regular lerp ---
+  if (flightState) {
+    const now = performance.now();
+    const elapsed = now - flightState.startTime;
+    const progress = Math.min(elapsed / flightState.duration, 1);
+    const eased = easeInOutCubic(progress);
 
-  if (
-    Math.abs(dx) > CAMERA_EPSILON ||
-    Math.abs(dy) > CAMERA_EPSILON ||
-    Math.abs(ds) > CAMERA_EPSILON
-  ) {
-    camera.x += dx * lerpFactor;
-    camera.y += dy * lerpFactor;
-    camera.scale += ds * lerpFactor;
-
-    if (Math.abs(targetCamera.x - camera.x) <= CAMERA_EPSILON) {
-      camera.x = targetCamera.x;
-    }
-    if (Math.abs(targetCamera.y - camera.y) <= CAMERA_EPSILON) {
-      camera.y = targetCamera.y;
-    }
-    if (Math.abs(targetCamera.scale - camera.scale) <= CAMERA_EPSILON) {
-      camera.scale = targetCamera.scale;
-    }
-
+    camera.x =
+      flightState.startX + (flightState.toX - flightState.startX) * eased;
+    camera.y =
+      flightState.startY + (flightState.toY - flightState.startY) * eased;
+    camera.scale =
+      flightState.startScale +
+      (flightState.toScale - flightState.startScale) * eased;
     cameraChanged = true;
-  }
+
+    if (progress >= 1) {
+      camera.x = flightState.toX;
+      camera.y = flightState.toY;
+      camera.scale = flightState.toScale;
+      flightState = null;
+      syncTargetCamera();
+    }
+  } else {
+    const dx = targetCamera.x - camera.x;
+    const dy = targetCamera.y - camera.y;
+    const ds = targetCamera.scale - camera.scale;
+
+    if (
+      Math.abs(dx) > CAMERA_EPSILON ||
+      Math.abs(dy) > CAMERA_EPSILON ||
+      Math.abs(ds) > CAMERA_EPSILON
+    ) {
+      camera.x += dx * lerpFactor;
+      camera.y += dy * lerpFactor;
+      camera.scale += ds * lerpFactor;
+
+      if (Math.abs(targetCamera.x - camera.x) <= CAMERA_EPSILON) {
+        camera.x = targetCamera.x;
+      }
+      if (Math.abs(targetCamera.y - camera.y) <= CAMERA_EPSILON) {
+        camera.y = targetCamera.y;
+      }
+      if (Math.abs(targetCamera.scale - camera.scale) <= CAMERA_EPSILON) {
+        camera.scale = targetCamera.scale;
+      }
+
+      cameraChanged = true;
+    }
+  } // end else (not flying)
 
   if (cameraChanged) {
     applyCamera();
@@ -1661,6 +1740,7 @@ onBeforeUnmount(() => {
 
 defineExpose({
   clearSelection,
+  flyToTag,
 });
 </script>
 

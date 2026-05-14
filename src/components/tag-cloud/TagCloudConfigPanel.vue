@@ -112,6 +112,28 @@
               @click.stop
             />
           </div>
+          <!-- Tag finder -->
+          <div class="control-item-full">
+            <n-select
+              :value="tagFinderValue"
+              filterable
+              clearable
+              placeholder="Search a tag…"
+              :options="tagFinderOptions"
+              :filter="() => true"
+              @search="onTagFinderSearch"
+              @update:value="onTagFinderSelect"
+              size="small"
+              class="tag-finder-select"
+              @click.stop
+            >
+              <template #empty>
+                <div style="padding: 8px; color: #888; font-size: 12px">
+                  No tags found
+                </div>
+              </template>
+            </n-select>
+          </div>
           <!-- Group filter -->
           <div v-if="availableGroups.length > 0" class="control-item-full">
             <div
@@ -208,6 +230,8 @@
               @click.stop
             />
           </div>
+
+          <!-- 
           <div
             v-if="false"
             class="control-item-full"
@@ -242,7 +266,7 @@
               class="tag-slider"
               @click.stop
             />
-          </div>
+          </div> -->
         </div>
       </div>
 
@@ -429,8 +453,8 @@
 </template>
 
 <script setup>
-import { ref, watch } from "vue";
-import { NIcon, NSwitch, NSlider, NTooltip } from "naive-ui";
+import { ref, computed, watch } from "vue";
+import { NIcon, NSwitch, NSlider, NTooltip, NSelect } from "naive-ui";
 import {
   SettingOutlined,
   CloseOutlined,
@@ -481,6 +505,10 @@ const props = defineProps({
     type: Array, // [{ key, label, color (number), count }]
     default: () => [],
   },
+  availableTags: {
+    type: Array, // [{ id, name, group, photoCount, ... }] — tags currently rendered in PIXI
+    default: () => [],
+  },
 });
 
 const emit = defineEmits([
@@ -493,6 +521,7 @@ const emit = defineEmits([
   "update:selectedGroups",
   "reset-view",
   "filters-changed",
+  "fly-to-tag",
 ]);
 
 const isExpanded = ref(true);
@@ -586,6 +615,36 @@ watch(
   },
   { deep: true },
 );
+
+// ---------------------------------------------------------------------------
+// Tag finder
+// ---------------------------------------------------------------------------
+const tagFinderQuery = ref("");
+const tagFinderValue = ref(null);
+
+const tagFinderOptions = computed(() => {
+  const q = tagFinderQuery.value.trim().toLowerCase();
+  if (!q) return [];
+  return props.availableTags
+    .filter((t) => t.name?.toLowerCase().includes(q))
+    .slice(0, 100)
+    .map((t) => ({
+      label: t.name,
+      value: t.id,
+    }));
+});
+
+const onTagFinderSearch = (q) => {
+  tagFinderQuery.value = q;
+};
+
+const onTagFinderSelect = (id) => {
+  if (id == null) return;
+  emit("fly-to-tag", id);
+  // Reset so the same tag can be re-selected
+  tagFinderValue.value = null;
+  tagFinderQuery.value = "";
+};
 
 const hexToCSS = (hex) => "#" + hex.toString(16).padStart(6, "0");
 
@@ -972,6 +1031,17 @@ const clearGroupFilter = () => {
   min-width: 22px;
   text-align: right;
   flex-shrink: 0;
+}
+
+.tag-finder-select {
+  --n-color: rgba(255, 255, 255, 0.04);
+  --n-color-active: rgba(255, 255, 255, 0.08);
+  --n-border: 1px solid rgba(255, 255, 255, 0.12);
+  --n-border-active: 1px solid rgba(255, 255, 255, 0.25);
+  --n-border-focus: 1px solid var(--primary-color, #3b82f6);
+  --n-text-color: #e5e7eb;
+  --n-placeholder-color: #6b7280;
+  font-size: 12px;
 }
 
 .group-filter-clear-inline {
