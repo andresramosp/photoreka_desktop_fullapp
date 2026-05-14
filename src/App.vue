@@ -250,6 +250,7 @@ const allowedHeaderViews = [
   "help",
   "report",
   "chat-lab",
+  // "world-map",
   // "settings",
   // Add more route names as needed
 ];

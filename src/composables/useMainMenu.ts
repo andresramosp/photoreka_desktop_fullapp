@@ -278,7 +278,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
 
   // Atlas (root-level, with 2D/3D children)
   const atlasOption = computed<MenuOption>(() => ({
-    label: "Atlas",
+    label: "Topography",
     key: "atlas-group",
     disabled: isBlocked.value,
     icon: renderIcon(MapIcon),
@@ -325,15 +325,15 @@ export function useMainMenu(closeMobileMenu?: () => void) {
               },
             },
             [
-              h("span", "Tag Cloud"),
-              isToolDisabledOnMobile("tagcloud")
+              h("span", "World Map"),
+              isToolDisabledOnMobile("world-map")
                 ? renderLaptopSuffix()()
                 : null,
             ],
           ),
-        key: "tagcloud",
-        icon: renderIcon(toolIcon("tagcloud")),
-        disabled: isToolDisabledOnMobile("tagcloud") || isBlocked.value,
+        key: "world-map",
+        icon: renderIcon(toolIcon("world-map")),
+        disabled: isToolDisabledOnMobile("world-map") || isBlocked.value,
       },
     ],
   }));
@@ -433,6 +433,28 @@ export function useMainMenu(closeMobileMenu?: () => void) {
           })),
   }));
 
+  // Tag Cloud (root-level)
+  const tagcloudOption = computed<MenuOption>(() => ({
+    label: () =>
+      h(
+        "span",
+        {
+          style: {
+            display: "flex",
+            alignItems: "center",
+            width: "100%",
+          },
+        },
+        [
+          h("span", "Tag Cloud"),
+          isToolDisabledOnMobile("tagcloud") ? renderLaptopSuffix()() : null,
+        ],
+      ),
+    key: "tagcloud",
+    disabled: isToolDisabledOnMobile("tagcloud") || isBlocked.value,
+    icon: renderIcon(toolIcon("tagcloud")),
+  }));
+
   // Chat option (global, like Sync Area)
   const chatOption = computed<MenuOption>(() => ({
     label: "ChatLab",
@@ -457,7 +479,9 @@ export function useMainMenu(closeMobileMenu?: () => void) {
         key: "group1-divider",
       } as MenuOption,
       searchOption.value,
+      tagcloudOption.value,
       atlasOption.value,
+
       canvasOption.value,
 
       chatOption.value,

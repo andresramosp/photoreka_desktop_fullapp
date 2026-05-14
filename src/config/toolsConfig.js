@@ -19,6 +19,7 @@ import {
   HelpCircleOutline,
   Image,
   DesktopOutline,
+  EarthOutline,
 } from "@vicons/ionicons5";
 import { RobotOutlined } from "@vicons/antd";
 
@@ -48,6 +49,7 @@ export const TOOL_ICONS = {
   HelpCircleOutline,
   Image,
   DesktopOutline,
+  EarthOutline,
   WordCloud,
   RobotOutlined,
 };
@@ -208,6 +210,16 @@ export const TOOLS_CONFIG = [
     route: "/help",
     availableOn: TOOL_AVAILABILITY.BOTH,
     menuSection: "system",
+    showInPhotoSelector: false,
+  },
+  {
+    id: "world-map",
+    name: "World Map",
+    description: "Visualize your photos on a world map",
+    icon: "EarthOutline",
+    route: "/world-map",
+    availableOn: TOOL_AVAILABILITY.DESKTOP_ONLY,
+    menuSection: "global",
     showInPhotoSelector: false,
   },
 ];

@@ -5,3 +5,11 @@ declare module "*.vue" {
   const component: DefineComponent<{}, {}, any>;
   export default component;
 }
+
+declare module "@/stores/photos" {
+  export function usePhotosStore(): any;
+}
+
+declare module "@/stores/photos.js" {
+  export function usePhotosStore(): any;
+}
