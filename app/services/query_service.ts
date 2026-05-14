@@ -6,6 +6,7 @@ import withCost from '../decorators/withCost.js'
 import {
   MESSAGE_QUERY_CLASSIFICATION,
   // MESSAGE_QUERY_CURATORIAL_CLASSIFICATION,
+  MESSAGE_QUERY_COMPACT,
   MESSAGE_QUERY_METADATA,
   MESSAGE_QUERY_NO_PREFIX_AND_TRANSLATION,
   MESSAGE_QUERY_STRUCTURE,
@@ -62,9 +63,43 @@ export default class QueryService {
   //   }
   // }
 
+  /** Maximum word count before compacting the query for CLIP (77-token limit) */
+  private static readonly CLIP_MAX_WORDS = 25
+
+  /**
+   * If the query exceeds the CLIP word limit, calls Gemini to produce a
+   * shortened version that fits within the limit while preserving key visual
+   * concepts. Returns null when no compaction is needed.
+   */
+  @withCache({
+    provider: 'redis',
+  })
+  public async compactQuery(
+    query: string
+  ): Promise<{ compact_query: string | null; cost: number }> {
+    const wordCount = query.trim().split(/\s+/).length
+    if (wordCount <= QueryService.CLIP_MAX_WORDS) {
+      return { compact_query: null, cost: 0 }
+    }
+
+    try {
+      const { result, cost } = await this.modelsService.getGeminiResponse(
+        MESSAGE_QUERY_COMPACT(QueryService.CLIP_MAX_WORDS),
+        JSON.stringify({ query }),
+        'gemini-2.5-flash-lite',
+        { temperature: 0.1 },
+        true
+      )
+      return { compact_query: result?.compact_query ?? null, cost: cost ?? 0 }
+    } catch (error) {
+      console.error('[QueryService] compactQuery error:', error)
+      return { compact_query: null, cost: 0 }
+    }
+  }
+
   public async structureQuery(query: string, searchMode: SearchMode) {
     const numberOfWords = query.split(' ').length
-    const emptyResult = {
+    const baseResult = {
       structuredResult: {
         original: query,
         positive_segments: [query],
@@ -76,7 +111,7 @@ export default class QueryService {
     if (numberOfWords > 2 || searchMode == 'curation') {
       return this.structureQueryLLM(query, searchMode)
     } else {
-      return emptyResult
+      return baseResult
     }
   }
 

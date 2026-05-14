@@ -104,6 +104,7 @@ interface PreparedQuery {
   positiveSegments: string[]
   nuancesSegments: string[]
   fullQuery: string
+  clipQuery: string
   includeVisualAspects: boolean
 }
 
@@ -151,22 +152,30 @@ export default class ScoringService {
     }
   }
 
-  private prepareQuery(structuredQuery: any): PreparedQuery {
+  private prepareQuery(structuredQuery: any, searchMode?: SearchMode): PreparedQuery {
+    const noPrefix = structuredQuery.no_prefix || ''
+    const clipQuery =
+      searchMode === 'broad' && structuredQuery.compact_query
+        ? structuredQuery.compact_query
+        : noPrefix
     return {
       positiveSegments: this.nlpService.normalizeTerms(structuredQuery.positive_segments),
       nuancesSegments: structuredQuery.nuances_segments?.length
         ? this.nlpService.normalizeTerms(structuredQuery.nuances_segments)
         : [],
-      fullQuery: structuredQuery.no_prefix || '',
+      fullQuery: noPrefix,
+      clipQuery,
       includeVisualAspects: structuredQuery.include_visual_aspects || false,
     }
   }
 
   private prepareQueryFromTags(included: string[], excluded: string[]): PreparedQuery {
+    const joinedTerms = this.nlpService.normalizeTerms(included).join(', ')
     return {
       positiveSegments: this.nlpService.normalizeTerms(included),
       nuancesSegments: [],
-      fullQuery: this.nlpService.normalizeTerms(included).join(', '),
+      fullQuery: joinedTerms,
+      clipQuery: joinedTerms,
       includeVisualAspects: true,
     }
   }
@@ -187,8 +196,11 @@ export default class ScoringService {
     if (needsNuancesEmbeddings) {
       terms.push(...query.nuancesSegments)
     }
-    if ((needsFullQueryTextEmbedding || needsClipEmbedding) && query.fullQuery) {
+    if (needsFullQueryTextEmbedding && query.fullQuery) {
       terms.push(query.fullQuery)
+    }
+    if (needsClipEmbedding && query.clipQuery) {
+      terms.push(query.clipQuery)
     }
 
     const needsTextEmbedding =
@@ -292,7 +304,7 @@ export default class ScoringService {
     const config = this.getEffectiveConfig(searchMode, 'full')
 
     // 2. Preparar query (normalizar términos)
-    const query = this.prepareQuery(structuredQuery)
+    const query = this.prepareQuery(structuredQuery, searchMode)
 
     // 3. Pre-calcular embeddings necesarios
     await this.prepareEmbeddings(query, config)
@@ -307,7 +319,7 @@ export default class ScoringService {
         this.processFullQuery(photoIds, query, config),
         this.processNotes(photoIds, query, config),
         this.processNuances(photoIds, query, config, userId),
-        this.processImageSimilarity(photoIds, query.fullQuery, config, userId),
+        this.processImageSimilarity(photoIds, query.clipQuery, config, userId),
       ])
 
     // 6. Merge todos los resultados
@@ -422,7 +434,7 @@ export default class ScoringService {
     // 6. Ejecutar en paralelo: tags e image
     const [tagScores, imageScores] = await Promise.all([
       this.processPositiveSegments(initialScores, query, config, userId),
-      this.processImageSimilarity(filteredIds, query.fullQuery, config),
+      this.processImageSimilarity(filteredIds, query.clipQuery, config),
     ])
 
     // 7. Merge image scores

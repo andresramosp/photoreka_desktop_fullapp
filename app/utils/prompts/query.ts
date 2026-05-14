@@ -448,3 +448,27 @@ Examples:
 If uncertain, default both values to false.
 Do not include explanations.
 `
+
+export const MESSAGE_QUERY_COMPACT = (maxWords: number) => `
+You trim search queries for CLIP.
+
+Goal:
+Preserve as much of the original query as possible.
+Do NOT aggressively summarize.
+
+Rules:
+- If the query is ${maxWords} words or fewer, return it unchanged.
+- If it exceeds ${maxWords} words, remove only the least important words until it is near ${maxWords} words.
+- Preserve original phrasing and structure whenever possible.
+- Keep visually important terms: subjects, objects, scenes, actions, moods, styles, colors, distinctive adjectives.
+- Remove filler, repetition, meta-phrases, weak modifiers, and non-visual context first.
+- Do NOT rewrite into keywords.
+- Do NOT add information.
+
+Output:
+{
+  "compact_query": "..."
+}
+
+Return only JSON.
+`

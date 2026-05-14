@@ -112,10 +112,15 @@ export default class SearchTextService {
       artisticScores && Object.keys(artisticScores).length > 0 ? artisticScores : undefined
     )
 
+    const { compact_query: compactQuery, cost: compactCost } =
+      await this.queryService.compactQuery(query)
     const { structuredResult, useImage, expansionCost } = await this.queryService.structureQuery(
       query,
       searchMode
     )
+    if (compactQuery) {
+      structuredResult.compact_query = compactQuery
+    }
 
     let photosResult = []
     let modelCosts = []
@@ -143,7 +148,7 @@ export default class SearchTextService {
           results: {
             [iteration]: paginatedPhotos,
           },
-          cost: { expansionCost },
+          cost: { expansionCost, compactCost },
           iteration: iteration,
           structuredResult,
         },
@@ -198,7 +203,7 @@ export default class SearchTextService {
             attempts < maxPageAttempts &&
             photosResult.filter((p) => p.matchScore >= minMatchScore).length === 0
           ),
-          cost: { expansionCost, modelCosts },
+          cost: { expansionCost, compactCost, modelCosts },
           iteration: iteration - 1,
           structuredResult,
           requireSource: { useImage },
@@ -264,10 +269,15 @@ export default class SearchTextService {
         ? rawPhotoIds.filter((id) => (candidateIds as number[]).includes(id))
         : rawPhotoIds
 
+    const { compact_query: compactQuery, cost: compactCost } =
+      await this.queryService.compactQuery(query)
     const { structuredResult, useImage, expansionCost } = await this.queryService.structureQuery(
       query,
       searchMode
     )
+    if (compactQuery) {
+      structuredResult.compact_query = compactQuery
+    }
 
     // Guardar refs en Redis si hay searchId
     if (searchId) {
@@ -354,6 +364,7 @@ export default class SearchTextService {
         },
         cost: {
           expansionCost,
+          compactCost,
           modelCosts: modelCosts.length > 0 ? modelCosts : undefined,
         },
         iteration,
