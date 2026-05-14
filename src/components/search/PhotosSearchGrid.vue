@@ -114,7 +114,9 @@
               <SelectAllOn24Regular />
             </n-icon>
           </template>
-          <span>{{ allSelected ? "Deselect All" : "Select All" }}</span>
+          <span v-if="!isMobile">{{
+            allSelected ? "Deselect All" : "Select All"
+          }}</span>
         </n-button>
       </div>
     </div>
@@ -973,6 +975,8 @@ defineExpose({
 @media (max-width: 768px) {
   .controls-right {
     gap: 12px;
+    width: 100%;
+    justify-content: space-between;
   }
 
   .star-filter {
@@ -998,6 +1002,8 @@ defineExpose({
 @media (max-width: 480px) {
   .controls-right {
     gap: 8px;
+    width: 100%;
+    justify-content: space-between;
   }
 
   .star-filter {
