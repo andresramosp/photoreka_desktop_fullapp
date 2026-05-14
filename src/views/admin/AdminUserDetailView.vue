@@ -45,6 +45,19 @@
               </n-button>
               <n-button
                 size="small"
+                type="info"
+                quaternary
+                :loading="impersonating"
+                title="Open app as this user (2h token)"
+                @click="impersonateUser"
+              >
+                <template #icon>
+                  <n-icon size="16"><ImpersonateIcon /></n-icon>
+                </template>
+                Impersonate
+              </n-button>
+              <n-button
+                size="small"
                 type="error"
                 quaternary
                 :disabled="user.role === 'admin'"
@@ -365,6 +378,7 @@ import {
   BanOutline as BanIcon,
   CheckmarkCircleOutline as ActivateIcon,
   RefreshOutline as RefreshIcon,
+  PersonOutline as ImpersonateIcon,
 } from "@vicons/ionicons5";
 import { api } from "../../utils/axios";
 
@@ -409,6 +423,7 @@ const loading = ref(true);
 const showDeleteModal = ref(false);
 const deleting = ref(false);
 const savingUsage = ref(false);
+const impersonating = ref(false);
 
 const editUsage = ref({
   analyzedPhotosLimit: 0,
@@ -501,6 +516,40 @@ async function fetchActivities(page: number = 1) {
     message.error("Failed to load activities");
   } finally {
     activitiesLoading.value = false;
+  }
+}
+
+async function impersonateUser() {
+  if (!user.value) return;
+  impersonating.value = true;
+  try {
+    const { data } = await api.post(
+      `/api/admin/users/${user.value.id}/impersonate`,
+    );
+    const appUrl = `${window.location.origin}/auth/callback?token=${encodeURIComponent(data.token)}`;
+
+    // Try to open directly in Microsoft Edge using the ms-edge protocol (Windows only).
+    // This avoids losing the current session since it launches a separate browser.
+    const edgeUrl = `microsoft-edge:${appUrl}`;
+    window.location.href = edgeUrl;
+
+    // Copy URL to clipboard regardless, as fallback if Edge isn't installed
+    try {
+      await navigator.clipboard.writeText(appUrl);
+      message.success(
+        `Opening in Edge as ${data.userName}. Link also copied — paste in another browser if Edge didn't open.`,
+        { duration: 7000 },
+      );
+    } catch {
+      message.info(
+        `Link ready for ${data.userName}. Paste it in Edge or incognito. (Token valid 2h)`,
+      );
+    }
+  } catch (err: any) {
+    const msg = err?.response?.data?.message || "Failed to impersonate user";
+    message.error(msg);
+  } finally {
+    impersonating.value = false;
   }
 }
 
