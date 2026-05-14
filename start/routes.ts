@@ -429,6 +429,7 @@ router
     router.put('/api/admin/users/:id/usage', [UsersAdminController, 'updateUsage'])
     router.get('/api/admin/users/:id/activities', [UsersAdminController, 'activities'])
     router.get('/api/admin/activities', [UsersAdminController, 'globalActivities'])
+    router.post('/api/admin/users/:id/impersonate', [UsersAdminController, 'impersonate'])
 
     // Admin Processes management
     router.get('/api/admin/processes', [ProcessesAdminController, 'index'])

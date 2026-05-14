@@ -185,4 +185,36 @@ export default class UsersAdminController {
       })
     }
   }
+
+  /**
+   * Generate a short-lived impersonation token for a user (admin only)
+   */
+  async impersonate({ params, response }: HttpContext) {
+    try {
+      const User = (await import('#models/user')).default
+
+      const user = await User.find(params.id)
+      if (!user) {
+        return response.notFound({ message: 'User not found' })
+      }
+
+      // Create a token that expires in 2 hours
+      const token = await User.accessTokens.create(user, ['*'], {
+        name: 'impersonation',
+        expiresIn: '2 hours',
+      })
+
+      return response.ok({
+        token: token.value!.release(),
+        userId: user.id,
+        userName: user.name,
+        userEmail: user.email,
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to generate impersonation token',
+        error: error.message,
+      })
+    }
+  }
 }
