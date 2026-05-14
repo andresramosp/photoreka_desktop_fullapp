@@ -18,13 +18,20 @@
               </n-icon>
             </template>
           </n-input>
+          <span
+            v-if="activeSearchType === 'semantic' && semanticWordCount >= 80"
+            class="word-counter"
+            :class="{ 'at-limit': semanticWordCount >= 100 }"
+          >
+            {{ semanticWordCount }}/100
+          </span>
         </div>
 
         <!-- Search Button -->
         <n-button
           type="primary"
           :loading="isSearching"
-          :disabled="!hasSearchQuery"
+          :disabled="!hasSearchQuery || isSemanticOverLimit"
           @click="emit('search')"
           class="mobile-search-button"
         >
@@ -357,6 +364,15 @@ const semanticQuery = computed({
   set: (value) => searchStore.updateSemanticQuery(value),
 });
 
+const semanticWordCount = computed(() => {
+  const q = searchStore.currentSearchState.query || "";
+  return q.trim() === "" ? 0 : q.trim().split(/\s+/).length;
+});
+
+const isSemanticOverLimit = computed(
+  () => activeSearchType.value === "semantic" && semanticWordCount.value > 100,
+);
+
 const includedTags = computed({
   get: () => searchStore.currentSearchState.includedTags || [],
   set: (value) =>
@@ -563,10 +579,25 @@ watch(
 .mobile-search-input-wrapper {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .mobile-search-input {
   width: 100%;
+}
+
+.word-counter {
+  align-self: flex-end;
+  font-size: 10px;
+  color: var(--text-secondary, #9ca3af);
+  margin-top: 2px;
+  transition: color 0.2s;
+}
+
+.word-counter.at-limit {
+  color: #ef4444;
+  font-weight: 600;
 }
 
 .mobile-search-button {

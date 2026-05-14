@@ -346,20 +346,29 @@
           class="semantic-search-section"
         >
           <div class="search-input-row">
-            <n-input
-              v-model:value="semanticQuery"
-              type="textarea"
-              placeholder="Describe what you're looking for... e.g., 'sunset photos with people on the beach' or 'close-up portraits with red background'"
-              :autosize="{ minRows: 1, maxRows: 2 }"
-              class="semantic-input"
-              @keydown.enter.prevent="handleSemanticInputEnter"
-            />
+            <div class="semantic-input-wrapper">
+              <n-input
+                v-model:value="semanticQuery"
+                type="textarea"
+                placeholder="Describe what you're looking for... e.g., 'sunset photos with people on the beach' or 'close-up portraits with red background'"
+                :autosize="{ minRows: 1, maxRows: 2 }"
+                class="semantic-input"
+                @keydown.enter.prevent="handleSemanticInputEnter"
+              />
+              <span
+                v-if="semanticWordCount >= 80"
+                class="word-counter"
+                :class="{ 'at-limit': semanticWordCount >= 100 }"
+              >
+                {{ semanticWordCount }}/100
+              </span>
+            </div>
 
             <div class="search-actions-inline">
               <n-button
                 type="primary"
                 :loading="isSearching"
-                :disabled="!hasSearchQuery"
+                :disabled="!hasSearchQuery || isSemanticOverLimit"
                 @click="handleSearch"
                 class="search-button"
               >
@@ -570,6 +579,15 @@ const semanticQuery = computed({
   get: () => searchStore.currentSearchState.query || "",
   set: (value) => searchStore.updateSemanticQuery(value),
 });
+
+const semanticWordCount = computed(() => {
+  const q = searchStore.currentSearchState.query || "";
+  return q.trim() === "" ? 0 : q.trim().split(/\s+/).length;
+});
+
+const isSemanticOverLimit = computed(
+  () => activeSearchType.value === "semantic" && semanticWordCount.value > 100,
+);
 
 const includedTags = computed({
   get: () => searchStore.currentSearchState.includedTags || [],
@@ -1078,8 +1096,29 @@ function handleSelectShowChange(show) {
   align-items: flex-start;
 }
 
+.semantic-input-wrapper {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
 .semantic-input {
   flex: 1;
+}
+
+.word-counter {
+  align-self: flex-end;
+  font-size: 11px;
+  color: var(--text-secondary, #9ca3af);
+  margin-top: 2px;
+  padding-right: 2px;
+  transition: color 0.2s;
+}
+
+.word-counter.at-limit {
+  color: #ef4444;
+  font-weight: 600;
 }
 
 .search-actions-inline {
