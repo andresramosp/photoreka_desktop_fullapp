@@ -9,19 +9,40 @@
 
     <!-- No GPS photos message -->
     <div v-if="photosWithGps.length === 0" class="no-gps-message">
-      <n-empty description="No photos with GPS data" style="margin-top: 60px">
-        <template #icon>
-          <n-icon size="80" :component="LocationOutline" />
-        </template>
-      </n-empty>
-      <div
-        style="
-          text-align: center;
-          margin-top: 20px;
-          color: var(--text-secondary);
-        "
-      >
-        <p>Upload photos with GPS information to see them on the map</p>
+      <div class="no-gps-content">
+        <n-icon
+          :size="64"
+          color="#6b7280"
+          class="no-gps-icon"
+          :component="EarthOutline"
+        />
+        <h2 class="no-gps-title">Your map is empty</h2>
+        <p class="no-gps-description">
+          Upload photos with GPS metadata and watch your map come to life.
+        </p>
+        <div class="no-gps-instructions">
+          <div class="no-gps-instruction-item">
+            <n-icon><CameraOutline /></n-icon>
+            <span
+              >Enable <strong>location services</strong> on your camera or phone
+              before shooting.</span
+            >
+          </div>
+          <div class="no-gps-instruction-item">
+            <n-icon><NavigateOutline /></n-icon>
+            <span
+              >Photos with <strong>EXIF GPS data</strong> are automatically
+              placed on the map.</span
+            >
+          </div>
+          <!-- <div class="no-gps-instruction-item">
+            <n-icon><ImagesOutline /></n-icon>
+            <span
+              >Explore <strong>clusters and patterns</strong> to discover where
+              you shoot the most.</span
+            >
+          </div> -->
+        </div>
       </div>
     </div>
 
@@ -78,7 +99,13 @@ import {
   watch,
 } from "vue";
 import { usePhotosStore } from "@/stores/photos";
-import { LocationOutline } from "@vicons/ionicons5";
+import {
+  LocationOutline,
+  EarthOutline,
+  CameraOutline,
+  NavigateOutline,
+  ImagesOutline,
+} from "@vicons/ionicons5";
 import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
 import { LMap, LTileLayer, LControlLayers } from "@vue-leaflet/vue-leaflet";
 import L from "leaflet";
@@ -494,7 +521,59 @@ onUnmounted(() => {
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 24px;
+  pointer-events: none;
+}
+
+.no-gps-content {
   text-align: center;
+  max-width: 550px;
+  pointer-events: auto;
+}
+
+.no-gps-icon {
+  margin-bottom: var(--spacing-lg);
+}
+
+.no-gps-title {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+  margin: 0 0 0 0;
+}
+
+.no-gps-description {
+  font-size: var(--font-size-md);
+  color: var(--text-secondary);
+  margin-top: 10px;
+  margin-bottom: 5px;
+  line-height: var(--line-height-relaxed);
+}
+
+.no-gps-instructions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-lg);
+  border-radius: var(--radius-md);
+  margin-top: var(--spacing-lg);
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-container);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 2px 12px rgba(18, 24, 38, 0.1);
+}
+
+.no-gps-instruction-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: 14px;
+  color: var(--text-secondary);
 }
 
 .map-container {
