@@ -1367,9 +1367,9 @@ onUnmounted(() => {
 
 .user-photos-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
-  gap: 6px;
-  max-height: 480px;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+  max-height: 540px;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: #e2e8f0 transparent;
@@ -1390,12 +1390,15 @@ onUnmounted(() => {
   overflow: hidden;
   background: #e8ecf0;
   aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .user-photo-thumb {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 

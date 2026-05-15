@@ -1217,8 +1217,8 @@ onMounted(() => {
 
 .photos-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
   max-height: 60vh;
   overflow-y: auto;
   padding: 4px 2px;
@@ -1230,12 +1230,15 @@ onMounted(() => {
   overflow: hidden;
   background: #f1f5f9;
   aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .photo-thumb {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 
