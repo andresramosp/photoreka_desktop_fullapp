@@ -19,6 +19,7 @@ const ROUTE_TO_SECTION = {
   "series-detail": "series",
   portfolios: "portfolios",
   "portfolio-detail": "portfolios",
+  settings: "settings",
 };
 
 /**
@@ -38,6 +39,8 @@ const SECTION_UI_CONTEXT = {
     "The user is currently on the **Series** screen — where they create ordered sequences of photos that tell a visual story, with fullscreen viewer and public sharing capabilities.",
   portfolios:
     "The user is currently on the **Portfolios** screen — where AI curates a polished selection of their best photos into an exportable portfolio with customisable layout and style.",
+  settings:
+    "The user is currently on the **Settings** screen — where they manage their account, billing, API integrations, notification preferences, and usage quotas. Photoreka does not have subscription plans; users purchase fixed photo packages (each includes a bundle of AI analysis credits) or buy additional AI credits separately.",
 };
 
 /**
@@ -173,6 +176,32 @@ const PILLS_BY_SECTION = {
     {
       label: "How can I take Workspace photos to another tool?",
       prompt: "How can I take a photo from the Workspace to another tool?",
+      autoSend: true,
+    },
+  ],
+  settings: [
+    {
+      label: "What photo packages are available?",
+      prompt:
+        "What photo packages can I buy in Photoreka and what do they include?",
+      autoSend: true,
+    },
+    {
+      label: "What are AI analysis credits and how are they used?",
+      prompt:
+        "What are AI analysis credits in Photoreka, how are they consumed, and can I buy extra ones separately?",
+      autoSend: true,
+    },
+    {
+      label: "Do photo packages include AI credits?",
+      prompt:
+        "Do photo packages in Photoreka come with AI analysis credits included?",
+      autoSend: true,
+    },
+    {
+      label: "How do I connect Lightroom or other integrations?",
+      prompt:
+        "How do I connect Lightroom or other third-party integrations in Photoreka settings?",
       autoSend: true,
     },
   ],

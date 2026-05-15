@@ -38,7 +38,7 @@
     bordered
     collapse-mode="width"
     :collapsed-width="64"
-    :width="260"
+    :width="240"
     :collapsed="collapsed"
     class="sidebar"
     @mouseenter="handleMouseEnter"
@@ -312,7 +312,7 @@ onUnmounted(() => {
 }
 
 .logo-container {
-  padding: 0 18px 0 28px;
+  padding: 0 18px 0 25px;
   border-bottom: 1px solid var(--border-color);
   transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   height: 64px;
@@ -555,7 +555,7 @@ onUnmounted(() => {
 
 @keyframes slideIn {
   from {
-    left: -260px;
+    left: -240px;
   }
   to {
     left: 0;

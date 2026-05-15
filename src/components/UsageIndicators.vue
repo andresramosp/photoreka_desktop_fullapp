@@ -37,7 +37,10 @@
   </div> -->
 
   <!-- Desktop: Full card -->
-  <div class="usage-indicators" :class="{ 'settings-mode': settingsMode }">
+  <div
+    class="usage-indicators"
+    :class="{ 'settings-mode': settingsMode, 'large-mode': large }"
+  >
     <div class="usage-card">
       <div class="usage-header">
         <div class="usage-title">
@@ -79,7 +82,7 @@
       </div>
     </div>
 
-    <div class="usage-card">
+    <!-- <div class="usage-card">
       <div class="usage-header">
         <div class="usage-title">
           <n-icon size="16" color="var(--info-color)">
@@ -104,7 +107,7 @@
           >{{ photosRemaining }} photos remaining</span
         >
       </div>
-    </div>
+    </div> -->
   </div>
 </template>
 
@@ -122,7 +125,13 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  large: {
+    type: Boolean,
+    default: false,
+  },
 });
+
+const { large } = props;
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -160,48 +169,54 @@ const analysisPercentage = computed(() => {
 <style scoped>
 .usage-indicators {
   display: flex;
-  gap: var(--spacing-lg);
-  align-items: stretch;
+  flex-direction: column;
+  gap: var(--spacing-sm);
 }
 
 .usage-card {
-  flex: 1;
   background-color: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  padding: var(--spacing-lg);
-  min-width: 200px;
+  padding: 8px 10px;
+  min-width: 0;
 }
 
 .usage-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--spacing-sm);
+  margin-bottom: 4px;
+  gap: 4px;
 }
 
 .usage-title {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  font-size: var(--font-size-sm);
+  gap: 4px;
+  font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
   color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .usage-count {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
   color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .progress-bar {
   width: 100%;
-  height: 8px;
+  height: 5px;
   background-color: var(--bg-container);
   border-radius: var(--radius-full);
   overflow: hidden;
-  margin-bottom: var(--spacing-xs);
+  margin-bottom: 4px;
 }
 
 .progress-fill {
@@ -227,7 +242,45 @@ const analysisPercentage = computed(() => {
 }
 
 .usage-indicators.settings-mode {
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.usage-indicators.settings-mode .usage-card {
+  flex: 1;
+  min-width: 180px;
+}
+
+/* Large / original style */
+.usage-indicators.large-mode {
+  flex-direction: row;
+  gap: var(--spacing-md);
+  align-items: stretch;
+}
+
+.usage-indicators.large-mode .usage-card {
+  flex: 1;
+  min-width: 200px;
+  padding: var(--spacing-md);
+}
+
+.usage-indicators.large-mode .usage-header {
+  margin-bottom: var(--spacing-sm);
+}
+
+.usage-indicators.large-mode .usage-title {
+  font-size: var(--font-size-sm);
+  gap: var(--spacing-xs);
+  white-space: normal;
+}
+
+.usage-indicators.large-mode .usage-count {
+  font-size: var(--font-size-sm);
+}
+
+.usage-indicators.large-mode .progress-bar {
+  height: 8px;
+  margin-bottom: var(--spacing-xs);
 }
 
 .usage-footer {

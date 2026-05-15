@@ -17,8 +17,8 @@
         <n-badge :value="processedPhotos.length + ' photos'" type="info">
         </n-badge>
       </div>
-      <!-- <div class="header-actions">
-        <UsageIndicators />
+      <!-- <div v-if="!isMobile" class="header-actions">
+        <UsageIndicators :large="false" />
       </div> -->
     </div>
 
