@@ -345,6 +345,41 @@
       :error="healthError"
       @retry="runHealthCheck"
     />
+
+    <!-- Photos Grid Modal -->
+    <n-modal
+      v-model:show="photosModalVisible"
+      preset="card"
+      :title="`Photos — Process #${photosModalProcessId}`"
+      style="max-width: 880px; width: 95vw"
+      :segmented="{ content: true }"
+    >
+      <div v-if="photosModalLoading" class="photos-modal-loading">
+        <n-spin show />
+      </div>
+      <div v-else-if="photosModalError" class="photos-modal-error">
+        Failed to load photos.
+      </div>
+      <div v-else-if="photosModalItems.length === 0" class="photos-modal-empty">
+        No photos found for this process.
+      </div>
+      <div v-else class="photos-grid">
+        <div
+          v-for="photo in photosModalItems"
+          :key="photo.id"
+          class="photo-thumb-wrap"
+          :title="photo.originalFileName ?? String(photo.id)"
+        >
+          <img
+            :src="photo.thumbnailUrl"
+            :alt="photo.originalFileName ?? String(photo.id)"
+            class="photo-thumb"
+            loading="lazy"
+          />
+          <span class="photo-thumb-id">#{{ photo.id }}</span>
+        </div>
+      </div>
+    </n-modal>
   </div>
 </template>
 
@@ -359,6 +394,7 @@ import {
   NDataTable,
   NSpin,
   NPagination,
+  NModal,
   useMessage,
   useDialog,
 } from "naive-ui";
@@ -597,6 +633,25 @@ const columns = computed<DataTableColumn<ProcessRow>[]>(() => [
       return h("span", { class: "cell-dim" }, formatDate(row.createdAt));
     },
   },
+  {
+    title: "",
+    key: "_photos",
+    width: 70,
+    render(row) {
+      return h(
+        NButton,
+        {
+          size: "tiny",
+          type: "default",
+          onClick: (e: MouseEvent) => {
+            e.stopPropagation();
+            openPhotosModal(row);
+          },
+        },
+        { default: () => "Images" },
+      );
+    },
+  },
 ]);
 
 // API calls
@@ -714,6 +769,31 @@ async function launchRetry() {
     message.error(msg);
   } finally {
     retryLoading.value = false;
+  }
+}
+
+// Photos modal
+const photosModalVisible = ref(false);
+const photosModalLoading = ref(false);
+const photosModalError = ref(false);
+const photosModalProcessId = ref<string>("");
+const photosModalItems = ref<
+  { id: number; thumbnailUrl: string; originalFileName: string | null }[]
+>([]);
+
+async function openPhotosModal(row: ProcessRow) {
+  photosModalProcessId.value = row.id;
+  photosModalItems.value = [];
+  photosModalError.value = false;
+  photosModalLoading.value = true;
+  photosModalVisible.value = true;
+  try {
+    const { data } = await api.get(`/api/admin/processes/${row.id}/photos`);
+    photosModalItems.value = data.photos;
+  } catch {
+    photosModalError.value = true;
+  } finally {
+    photosModalLoading.value = false;
   }
 }
 
@@ -1121,5 +1201,53 @@ onMounted(() => {
   .detail-title-info h2 {
     font-size: 16px;
   }
+}
+
+/* ===== Photos Modal ===== */
+.photos-modal-loading,
+.photos-modal-error,
+.photos-modal-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.photos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+
+.photo-thumb-wrap {
+  position: relative;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f1f5f9;
+  aspect-ratio: 1 / 1;
+}
+
+.photo-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.photo-thumb-id {
+  position: absolute;
+  bottom: 3px;
+  left: 4px;
+  font-size: 10px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 3px;
+  padding: 1px 4px;
+  line-height: 1.4;
 }
 </style>

@@ -330,6 +330,55 @@
               />
             </div>
           </div>
+          <!-- Photos Section -->
+          <div class="photos-section">
+            <button class="photos-section-toggle" @click="togglePhotos">
+              <span class="photos-section-title">
+                Photos
+                <span class="photos-section-count">
+                  {{ user.photosCount }}
+                </span>
+              </span>
+              <n-icon
+                size="16"
+                :style="{
+                  transform: photosExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.2s',
+                  color: '#94a3b8',
+                }"
+              >
+                <ChevronDownIcon />
+              </n-icon>
+            </button>
+
+            <div v-if="photosExpanded" class="photos-section-body">
+              <div v-if="photosLoading" class="photos-loading">
+                <n-spin size="small" />
+              </div>
+              <div v-else-if="photosError" class="photos-empty">
+                Failed to load photos.
+              </div>
+              <div v-else-if="userPhotos.length === 0" class="photos-empty">
+                No photos found.
+              </div>
+              <div v-else class="user-photos-grid">
+                <div
+                  v-for="photo in userPhotos"
+                  :key="photo.id"
+                  class="user-photo-thumb-wrap"
+                  :title="photo.originalFileName ?? String(photo.id)"
+                >
+                  <img
+                    :src="photo.thumbnailUrl"
+                    :alt="photo.originalFileName ?? String(photo.id)"
+                    class="user-photo-thumb"
+                    loading="lazy"
+                  />
+                  <span class="user-photo-id">#{{ photo.id }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </template>
@@ -379,6 +428,7 @@ import {
   CheckmarkCircleOutline as ActivateIcon,
   RefreshOutline as RefreshIcon,
   PersonOutline as ImpersonateIcon,
+  ChevronDownOutline as ChevronDownIcon,
 } from "@vicons/ionicons5";
 import { api } from "../../utils/axios";
 
@@ -780,6 +830,36 @@ function userInitials(name: string): string {
     .join("")
     .toUpperCase()
     .slice(0, 2);
+}
+
+// ─── Photos section ───
+const photosExpanded = ref(false);
+const photosLoading = ref(false);
+const photosError = ref(false);
+const userPhotos = ref<
+  { id: number; thumbnailUrl: string; originalFileName: string | null }[]
+>([]);
+
+async function togglePhotos() {
+  photosExpanded.value = !photosExpanded.value;
+  if (
+    photosExpanded.value &&
+    userPhotos.value.length === 0 &&
+    !photosLoading.value
+  ) {
+    photosLoading.value = true;
+    photosError.value = false;
+    try {
+      const { data } = await api.get(
+        `/api/admin/users/${user.value!.id}/photos`,
+      );
+      userPhotos.value = data.photos;
+    } catch {
+      photosError.value = true;
+    } finally {
+      photosLoading.value = false;
+    }
+  }
 }
 
 onMounted(async () => {
@@ -1219,5 +1299,115 @@ onUnmounted(() => {
   .detail-title-info h2 {
     font-size: 16px;
   }
+}
+
+/* ===== Photos section ===== */
+.photos-section {
+  margin-top: 16px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.photos-section-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 14px 18px;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.photos-section-toggle:hover {
+  background: #f1f5f9;
+}
+
+.photos-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.photos-section-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: #6366f1;
+  border-radius: 10px;
+  padding: 1px 7px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.photos-section-body {
+  border-top: 1px solid #f1f5f9;
+  padding: 14px 18px 18px;
+}
+
+.photos-loading,
+.photos-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
+  color: #94a3b8;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.user-photos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 6px;
+  max-height: 480px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #e2e8f0 transparent;
+}
+
+.user-photos-grid::-webkit-scrollbar {
+  width: 4px;
+}
+
+.user-photos-grid::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 4px;
+}
+
+.user-photo-thumb-wrap {
+  position: relative;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #e8ecf0;
+  aspect-ratio: 1 / 1;
+}
+
+.user-photo-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.user-photo-id {
+  position: absolute;
+  bottom: 2px;
+  left: 3px;
+  font-size: 9px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 3px;
+  padding: 1px 3px;
+  line-height: 1.4;
 }
 </style>
