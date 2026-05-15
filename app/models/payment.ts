@@ -33,9 +33,6 @@ export default class Payment extends BaseModel {
   declare productName: string | null
 
   @column()
-  declare photosGranted: number
-
-  @column()
   declare analyzedPhotosGranted: number
 
   @column()

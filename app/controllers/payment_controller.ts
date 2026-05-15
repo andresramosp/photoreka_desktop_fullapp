@@ -117,7 +117,6 @@ export default class PaymentController {
           stripePriceId: payment.stripePriceId,
           stripeProductId: payment.stripeProductId,
           productName: payment.productName,
-          photosGranted: payment.photosGranted,
           analyzedPhotosGranted: payment.analyzedPhotosGranted,
           creditsGranted: payment.creditsGranted,
           amountEur: payment.amountEur,

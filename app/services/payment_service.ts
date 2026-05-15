@@ -79,8 +79,7 @@ export default class PaymentService {
   ): Promise<{ url: string }> {
     const stripe = getStripe()
     const item = await this.getCatalogItemForCheckout(stripePriceId, type)
-    const photosGranted = item.type === 'photo_package' ? item.photos : 0
-    const analyzedPhotosGranted = item.type === 'photo_package' ? item.analyzedPhotos : 0
+    const analyzedPhotosGranted = item.type === 'photo_package' ? item.photos : 0
 
     // Crear registro de pago pendiente
     const payment = await Payment.create({
@@ -90,7 +89,6 @@ export default class PaymentService {
       stripePriceId: item.stripePriceId,
       stripeProductId: item.stripeProductId,
       productName: item.name,
-      photosGranted,
       analyzedPhotosGranted,
       creditsGranted: item.credits,
       amountEur: item.priceEur,
@@ -231,7 +229,7 @@ export default class PaymentService {
       analyzedPhotosUsed: 0,
     }
 
-    usage.photosLimit += payment.photosGranted
+    usage.photosLimit += payment.analyzedPhotosGranted
     usage.analyzedPhotosLimit += payment.analyzedPhotosGranted
     usage.creditsAvailable += payment.creditsGranted
 
@@ -243,7 +241,7 @@ export default class PaymentService {
     const usage = user.usage
     if (!usage) return
 
-    usage.photosLimit = Math.max(0, usage.photosLimit - payment.photosGranted)
+    usage.photosLimit = Math.max(0, usage.photosLimit - payment.analyzedPhotosGranted)
     usage.analyzedPhotosLimit = Math.max(
       0,
       usage.analyzedPhotosLimit - payment.analyzedPhotosGranted

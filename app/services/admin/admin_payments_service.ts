@@ -39,7 +39,6 @@ export default class AdminPaymentsService {
         COALESCE(SUM(amount_eur) FILTER (WHERE status = 'refunded'), 0)::float AS refunded_eur,
         COALESCE(SUM(amount_eur) FILTER (WHERE status = 'pending'), 0)::float AS pending_eur,
         COALESCE(AVG(amount_eur) FILTER (WHERE status = 'completed'), 0)::float AS avg_order_eur,
-        COALESCE(SUM(photos_granted) FILTER (WHERE status = 'completed'), 0)::int AS photos_granted,
         COALESCE(SUM(analyzed_photos_granted) FILTER (WHERE status = 'completed'), 0)::int AS analyzed_photos_granted,
         COALESCE(SUM(credits_granted) FILTER (WHERE status = 'completed'), 0)::int AS credits_granted
       FROM payments
@@ -79,7 +78,6 @@ export default class AdminPaymentsService {
         type,
         COUNT(*)::int AS count,
         COALESCE(SUM(amount_eur) FILTER (WHERE status = 'completed'), 0)::float AS revenue_eur,
-        COALESCE(SUM(photos_granted) FILTER (WHERE status = 'completed'), 0)::int AS photos_granted,
         COALESCE(SUM(analyzed_photos_granted) FILTER (WHERE status = 'completed'), 0)::int AS analyzed_photos_granted,
         COALESCE(SUM(credits_granted) FILTER (WHERE status = 'completed'), 0)::int AS credits_granted
       FROM payments
@@ -159,7 +157,6 @@ export default class AdminPaymentsService {
             ? this.round(((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100)
             : null,
         avgOrderEur: this.round(totals.avg_order_eur),
-        photosGranted: Number(totals.photos_granted || 0),
         analyzedPhotosGranted: Number(totals.analyzed_photos_granted || 0),
         creditsGranted: Number(totals.credits_granted || 0),
       },
@@ -182,7 +179,6 @@ export default class AdminPaymentsService {
           type,
           count: Number(row?.count || 0),
           revenueEur: this.round(row?.revenue_eur),
-          photosGranted: Number(row?.photos_granted || 0),
           analyzedPhotosGranted: Number(row?.analyzed_photos_granted || 0),
           creditsGranted: Number(row?.credits_granted || 0),
         }
@@ -223,7 +219,6 @@ export default class AdminPaymentsService {
         'p.stripe_price_id',
         'p.stripe_product_id',
         'p.product_name',
-        'p.photos_granted',
         'p.analyzed_photos_granted',
         'p.credits_granted',
         'p.amount_eur',
@@ -261,7 +256,6 @@ export default class AdminPaymentsService {
         COUNT(*) FILTER (WHERE status = 'refunded')::int AS refunded_payments,
         COALESCE(SUM(amount_eur) FILTER (WHERE status = 'completed'), 0)::float AS total_paid_eur,
         COALESCE(SUM(amount_eur) FILTER (WHERE status = 'refunded'), 0)::float AS refunded_eur,
-        COALESCE(SUM(photos_granted) FILTER (WHERE status = 'completed'), 0)::int AS photos_granted,
         COALESCE(SUM(analyzed_photos_granted) FILTER (WHERE status = 'completed'), 0)::int AS analyzed_photos_granted,
         COALESCE(SUM(credits_granted) FILTER (WHERE status = 'completed'), 0)::int AS credits_granted,
         MAX(created_at) AS last_payment_at
@@ -285,7 +279,6 @@ export default class AdminPaymentsService {
       refundedPayments: Number(totals.refunded_payments || 0),
       totalPaidEur: this.round(totals.total_paid_eur),
       refundedEur: this.round(totals.refunded_eur),
-      photosGranted: Number(totals.photos_granted || 0),
       analyzedPhotosGranted: Number(totals.analyzed_photos_granted || 0),
       creditsGranted: Number(totals.credits_granted || 0),
       lastPaymentAt: totals.last_payment_at ? new Date(totals.last_payment_at).toISOString() : null,
@@ -295,7 +288,6 @@ export default class AdminPaymentsService {
         status: payment.status,
         productName: payment.productName,
         amountEur: this.round(payment.amountEur),
-        photosGranted: payment.photosGranted,
         analyzedPhotosGranted: payment.analyzedPhotosGranted,
         creditsGranted: payment.creditsGranted,
         createdAt: payment.createdAt.toISO(),
@@ -341,7 +333,6 @@ export default class AdminPaymentsService {
       stripePriceId: row.stripe_price_id,
       stripeProductId: row.stripe_product_id,
       productName: row.product_name,
-      photosGranted: Number(row.photos_granted || 0),
       analyzedPhotosGranted: Number(row.analyzed_photos_granted || 0),
       creditsGranted: Number(row.credits_granted || 0),
       amountEur: this.round(row.amount_eur),

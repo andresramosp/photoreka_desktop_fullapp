@@ -11,7 +11,6 @@ export default class extends BaseSchema {
       table.string('stripe_payment_intent_id').unique().nullable()
       table.enum('type', ['photo_package', 'credits']).notNullable()
       table.string('package_id').notNullable()
-      table.integer('photos_granted').notNullable().defaultTo(0)
       table.integer('analyzed_photos_granted').notNullable().defaultTo(0)
       table.integer('credits_granted').notNullable().defaultTo(0)
       table.decimal('amount_eur', 10, 2).notNullable()
