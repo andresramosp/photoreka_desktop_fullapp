@@ -5,6 +5,7 @@ import User from '#models/user'
 import db from '@adonisjs/lucid/services/db'
 import HealthPhotoService from '#services/health_photo_service'
 import AnalyzerProcessRunner from '#services/analyzer_service'
+import Photo from '#models/photo'
 
 export interface ProcessListItem {
   id: string

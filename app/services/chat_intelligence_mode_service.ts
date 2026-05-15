@@ -35,7 +35,7 @@ const CHAT_INTELLIGENCE_MODES: ReadonlyArray<ChatIntelligenceModeDefinition> = [
   },
   {
     id: 'default',
-    name: 'Assistant',
+    name: 'Curator',
     description: 'Balanced mode for the standard ChatLab experience.',
     modelPhase1: 'gemini-3-flash-preview',
     modelPhase2Cheap: 'gemini-3-flash-preview',
