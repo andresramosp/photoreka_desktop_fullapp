@@ -19,7 +19,6 @@ interface PaymentProductBase {
 export interface PhotoPackage extends PaymentProductBase {
   type: 'photo_package'
   photos: number
-  analyzedPhotos: number
   credits: number
 }
 
@@ -88,7 +87,6 @@ export function parsePaymentCatalogItem(
       ...base,
       type,
       photos,
-      analyzedPhotos: parseOptionalInteger(metadata.analyzed_photos, photos),
       credits: parseOptionalInteger(metadata.credits, 0),
     }
   }
