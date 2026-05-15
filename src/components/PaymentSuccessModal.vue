@@ -42,17 +42,31 @@
             <div
               v-if="summary.analyzedPhotosGranted > 0"
               class="ps-reward-tile"
+              :class="{
+                'ps-reward-tile--featured': summary.type === 'photo_package',
+              }"
             >
-              <span class="ps-reward-value"
+              <span
+                class="ps-reward-value"
+                :class="{
+                  'ps-reward-value--featured': summary.type === 'photo_package',
+                }"
                 >+{{ summary.analyzedPhotosGranted.toLocaleString() }}</span
               >
               <span class="ps-reward-label">photo analyses</span>
             </div>
             <div
               v-if="summary.creditsGranted > 0"
-              class="ps-reward-tile ps-reward-tile--credits"
+              class="ps-reward-tile"
+              :class="{
+                'ps-reward-tile--credits': summary.type !== 'photo_package',
+              }"
             >
-              <span class="ps-reward-value ps-reward-value--credits"
+              <span
+                class="ps-reward-value"
+                :class="{
+                  'ps-reward-value--credits': summary.type !== 'photo_package',
+                }"
                 >+{{ summary.creditsGranted.toLocaleString() }}</span
               >
               <span class="ps-reward-label">AI credits</span>
@@ -365,6 +379,10 @@ function clearPaymentQuery() {
   border-top-color: var(--accent-color);
 }
 
+.ps-reward-tile--featured {
+  border-top-color: var(--accent-color);
+}
+
 .ps-reward-value {
   font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-bold);
@@ -374,6 +392,10 @@ function clearPaymentQuery() {
 }
 
 .ps-reward-value--credits {
+  color: var(--accent-color);
+}
+
+.ps-reward-value--featured {
   color: var(--accent-color);
 }
 
