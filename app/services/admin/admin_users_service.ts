@@ -1,5 +1,6 @@
 import User from '#models/user'
 import Photo from '#models/photo'
+import AdminPaymentsService from '#services/admin/admin_payments_service'
 import db from '@adonisjs/lucid/services/db'
 import { DateTime } from 'luxon'
 import { DeleteObjectsCommand, S3Client } from '@aws-sdk/client-s3'
@@ -39,6 +40,7 @@ export interface AdminUserDetail extends AdminUserListItem {
   avatar: string | null
   googleId: string | null
   catalogPatterns: Record<string, any> | null
+  paymentSummary: Record<string, any>
 }
 
 export default class AdminUsersService {
@@ -127,6 +129,7 @@ export default class AdminUsersService {
       .whereNull('deletedAt')
       .count('* as total')
     const photosCount = Number(photosCountResult[0]?.$extras.total || 0)
+    const paymentSummary = await AdminPaymentsService.getUserSummary(userId)
 
     return {
       id: user.id,
@@ -147,6 +150,7 @@ export default class AdminUsersService {
       avatar: user.avatar,
       googleId: user.googleId,
       catalogPatterns: user.catalogPatterns,
+      paymentSummary,
     }
   }
 

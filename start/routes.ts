@@ -412,6 +412,7 @@ const UsersAdminController = () => import('#controllers/admin/users_admin_contro
 const ProcessesAdminController = () => import('#controllers/admin/processes_admin_controller')
 const HealthAdminController = () => import('#controllers/admin/health_admin_controller')
 const CostsAdminController = () => import('#controllers/admin/costs_admin_controller')
+const PaymentsAdminController = () => import('#controllers/admin/payments_admin_controller')
 
 router
   .group(() => {
@@ -444,6 +445,10 @@ router
 
     // Admin Costs dashboard
     router.get('/api/admin/costs/overview', [CostsAdminController, 'overview'])
+
+    // Admin Payments dashboard
+    router.get('/api/admin/payments/overview', [PaymentsAdminController, 'overview'])
+    router.get('/api/admin/payments', [PaymentsAdminController, 'index'])
     router.post('/api/admin/health/users/:id/check', [HealthAdminController, 'userCheck'])
     router.post('/api/admin/health/users/:id/retry', [HealthAdminController, 'userRetry'])
     router.get('/api/admin/health/global-embeddings', [
