@@ -44,9 +44,9 @@
         <div v-if="selected" class="ppm-details">
           <div class="ppm-row">
             <span class="ppm-row-label">Photo analysis</span>
-            <span class="ppm-row-value">{{
-              selected.photos.toLocaleString()
-            }}</span>
+            <span class="ppm-row-value"
+              >+{{ selected.photos.toLocaleString() }}</span
+            >
           </div>
           <div v-if="selected.credits > 0" class="ppm-row">
             <span class="ppm-row-label">Included credits</span>

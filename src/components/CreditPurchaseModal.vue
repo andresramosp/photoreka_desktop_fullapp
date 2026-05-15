@@ -151,7 +151,7 @@ const selected = computed(() => creditSteps.value[selectedIndex.value] ?? null);
 
 const selectOptions = computed(() =>
   creditSteps.value.map((s, i) => ({
-    label: `${s.credits.toLocaleString()} credits · €${s.priceEur.toFixed(2)}`,
+    label: `${s.credits.toLocaleString()} credits`,
     value: i,
   })),
 );
