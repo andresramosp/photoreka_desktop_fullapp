@@ -781,6 +781,8 @@ Your plan includes a credit budget. When credits run out, AI features become tem
 
 Usage indicators in the sidebar show: analyzed photos count vs. limit, and storage usage.
 
+To expand your photo limit or top up credits, see the **Payments & Purchases** section below or visit {url:/settings|Settings}.
+
 ### Locked vs Unlocked Tools
 When the user has no processed photos, most tools appear locked (greyed out with a visual indicator). Processing at least 1 photo unlocks the full app.
 
@@ -812,6 +814,37 @@ ChatLab
 Report
 Framer
 Settings
+
+---
+
+## PAYMENTS & PURCHASES
+
+Photoreka uses a **one-time payment model** — no subscriptions. All purchases are processed securely via Stripe Checkout. There are two types of purchasable items:
+
+### Photo Analysis Packages
+Photo packages expand your **analyzed photo limit** — the total number of photos you can process with AI.
+- Each package grants a fixed number of **analyzed photo slots** (e.g. 500, 1 000 photos)
+- May include **bonus AI credits** at no extra cost
+- One-time purchase; slots do not expire
+
+### AI Credit Packages
+Credit packages top up your **AI credit balance** for operations such as semantic search, ChatLab, photo insights, and portfolio builder.
+- Each package grants a fixed number of **AI credits**
+- One-time purchase; credits do not expire
+
+### How to Purchase
+Go to {url:/settings|Settings} or click any "Buy more" / "Upgrade" prompt that appears when you reach a capacity or credit limit. You will be redirected to Stripe Checkout. After payment, your new photo slots and/or credits are applied to your account immediately.
+
+### Purchase History
+Past purchases are visible in {url:/settings|Settings} under the Payments section. After returning from Stripe Checkout the app verifies the session and activates the granted resources automatically.
+
+### Storage Costs
+Storage is **free for the first 2 years** from your first photo analysis. After that, the cost is very marginal — and still free for very small catalogs.
+
+Monthly cost examples:
+- ~5 000 photos: **≈ €0.25 / month**
+- ~10 000 photos: **≈ €0.50 / month**
+- ~20 000 photos: **≈ €1.00 / month**
 
 ---
 
@@ -854,7 +887,13 @@ Yes, with a 5 MB per file limit. Connect via Sync Area.
 A quick-access search bar (desktop only) that searches across photos, collections, series, canvases, tools, and help topics simultaneously. Different from the Search tool.
 
 **What are credits?**
-Credits are the internal currency for AI operations. Every search, chat message, and photo insight consumes credits. Your plan includes a monthly credit budget.
+Credits are the internal currency for AI operations. Every search, chat message, and photo insight consumes credits. Your plan includes a credit budget. You can top up credits at any time with a one-time Credit Package purchase — go to {url:/settings|Settings} or click any "Buy more" prompt.
+
+**How do I get more analyzed photo slots?**
+Purchase a Photo Analysis Package via {url:/settings|Settings}. Each package adds a fixed number of photo slots to your account, optionally with bonus AI credits included. Purchases are one-time and slots do not expire.
+
+**How much does storage cost?**
+Storage is free for the first 2 years from your first photo analysis. After that the cost is very marginal: approximately €0.25/month for ~5 000 photos, €0.50/month for ~10 000 photos, and €1.00/month for ~20 000 photos. Very small catalogs remain free.
 
 **How does duplicate detection work?**
 Photoreka has two duplicate search modes available in the Lightbox and Workspace. **Exact duplicates** groups photos that share the same EXIF "dateTaken" timestamp to the second, which is useful for catching the same shot across exports or edits. **Similar duplicates** uses perceptual hashing (dHash) to find visually near-identical photos and minor re-saves. You can review results and clean them in bulk.
@@ -883,6 +922,9 @@ Credits -- Internal currency consumed by AI operations (search, chat, insights, 
 Omni-Search -- Global search bar in the header for quick navigation across all content types
 Duplicate Detection -- Two duplicate search modes: Exact duplicates by EXIF "dateTaken" capture timestamp, and Similar duplicates by perceptual hash (dHash)
 Swap Photo -- Replace an already-analyzed photo with a new version
+Photo Package -- One-time purchase that expands the analyzed photo limit; may include bonus AI credits
+Credit Package -- One-time purchase that tops up the AI credit balance for search, chat, insights, and other AI operations
+Storage Cost -- Monthly fee for storing analyzed photos; free for the first 2 years from first analysis, then very marginal (≈ €0.25/month per ~5 000 photos)
 
 `.trim()
 // -----------------------------------------------------------------
