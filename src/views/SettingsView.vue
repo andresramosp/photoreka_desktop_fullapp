@@ -356,6 +356,7 @@
                 <n-button
                   type="info"
                   size="small"
+                  :disabled="isDemoUser"
                   @click="
                     ENABLE_REAL_PURCHASE
                       ? (showPhotosModal = true)
@@ -415,6 +416,7 @@
                 <n-button
                   type="info"
                   size="small"
+                  :disabled="isDemoUser"
                   @click="
                     ENABLE_REAL_PURCHASE
                       ? (showCreditsModal = true)
