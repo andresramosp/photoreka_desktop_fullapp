@@ -8,7 +8,7 @@
       <template #header>
         <div class="cpm-header">
           <n-icon size="20" color="var(--accent-color)">
-            <StarOutline />
+            <SparklesOutline />
           </n-icon>
           <span>Buy Credits</span>
         </div>
@@ -21,21 +21,23 @@
         </n-button>
       </template>
 
+      <p class="cpm-subtitle">
+        Buy credits to power AI analysis features. One-time purchase &mdash;
+        credits are added to your balance instantly and never expire.
+      </p>
+
       <div v-if="isLoading" class="cpm-loading">
         <n-spin size="medium" />
       </div>
 
       <template v-else-if="creditSteps.length">
         <label class="cpm-label">Select amount</label>
-        <div class="cpm-slider-wrap">
-          <n-slider
+        <div class="cpm-select-wrap">
+          <n-select
             :value="selectedIndex"
             @update:value="selectedIndex = $event"
-            :min="0"
-            :max="creditSteps.length - 1"
-            :step="1"
-            :marks="sliderMarks"
-            :tooltip="false"
+            :options="selectOptions"
+            size="medium"
           />
         </div>
 
@@ -67,13 +69,23 @@
         </div>
 
         <n-button
-          type="primary"
           block
           size="large"
           :loading="isCheckingOut"
           :disabled="!selected"
-          @click="selected && handleBuy(selected.id)"
+          @click="selected && handleBuy(selected.stripePriceId)"
           class="cpm-buy"
+          style="
+            --n-color: var(--accent-color);
+            --n-color-hover: var(--accent-color);
+            --n-color-pressed: var(--accent-color);
+            --n-color-focus: var(--accent-color);
+            --n-text-color: #0a0a0a;
+            --n-text-color-hover: #0a0a0a;
+            --n-text-color-pressed: #0a0a0a;
+            --n-border: none;
+            --n-ripple-color: var(--accent-color);
+          "
         >
           Buy for €{{ selected?.priceEur.toFixed(2) }}
         </n-button>
@@ -94,10 +106,10 @@ import {
   NButton,
   NIcon,
   NSpin,
-  NSlider,
+  NSelect,
   useMessage,
 } from "naive-ui";
-import { StarOutline, CloseOutline } from "@vicons/ionicons5";
+import { SparklesOutline, CloseOutline } from "@vicons/ionicons5";
 import { usePayments } from "@/composables/usePayments";
 
 defineProps<{ show: boolean }>();
@@ -117,22 +129,16 @@ fetchPackages().then(() => {
 
 const selected = computed(() => creditSteps.value[selectedIndex.value] ?? null);
 
-const sliderMarks = computed(() => {
-  const m: Record<number, string> = {};
-  creditSteps.value.forEach((s, i) => {
-    m[i] = formatCredits(s.credits);
-  });
-  return m;
-});
+const selectOptions = computed(() =>
+  creditSteps.value.map((s, i) => ({
+    label: `${s.credits.toLocaleString()} credits · €${s.priceEur.toFixed(2)}`,
+    value: i,
+  })),
+);
 
-function formatCredits(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k`;
-  return String(n);
-}
-
-const handleBuy = async (stepId: string) => {
+const handleBuy = async (stripePriceId: string) => {
   try {
-    await checkout("credits", stepId);
+    await checkout("credits", stripePriceId);
   } catch (err: any) {
     const msg = err?.response?.data?.error || err?.message || "Checkout failed";
     message.error(msg);
@@ -155,6 +161,14 @@ const handleBuy = async (stepId: string) => {
   color: var(--text-primary);
 }
 
+/* ── Subtitle ── */
+.cpm-subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0 0 var(--spacing-lg) 0;
+  line-height: 1.5;
+}
+
 .cpm-loading {
   display: flex;
   justify-content: center;
@@ -170,10 +184,9 @@ const handleBuy = async (stepId: string) => {
   margin-bottom: var(--spacing-sm);
 }
 
-/* ── Slider ── */
-.cpm-slider-wrap {
-  padding: 0 var(--spacing-sm);
-  margin-bottom: var(--spacing-xl);
+/* ── Select ── */
+.cpm-select-wrap {
+  margin-bottom: var(--spacing-lg);
 }
 
 /* ── Details rows ── */

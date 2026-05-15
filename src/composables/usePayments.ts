@@ -8,7 +8,11 @@ export interface PhotoPackage {
   analyzedPhotos: number;
   credits: number;
   priceEur: number;
-  stripePriceId: string | null;
+  stripePriceId: string;
+  stripeProductId: string;
+  currency: string;
+  imageUrl: string | null;
+  sortOrder: number;
   highlighted?: boolean;
 }
 
@@ -17,7 +21,11 @@ export interface CreditStep {
   credits: number;
   priceEur: number;
   description: string;
-  stripePriceId: string | null;
+  stripePriceId: string;
+  stripeProductId: string;
+  currency: string;
+  imageUrl: string | null;
+  sortOrder: number;
 }
 
 const photoPackages = ref<PhotoPackage[]>([]);
@@ -45,13 +53,13 @@ export function usePayments() {
 
   async function checkout(
     type: "photo_package" | "credits",
-    itemId: string,
+    stripePriceId: string,
   ): Promise<boolean> {
     try {
       isCheckingOut.value = true;
       const { data } = await api.post("/api/payments/checkout", {
         type,
-        itemId,
+        itemId: stripePriceId,
       });
       if (data.url) {
         window.location.href = data.url;

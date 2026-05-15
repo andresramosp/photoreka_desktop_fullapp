@@ -318,7 +318,7 @@
               <div class="storage-header">
                 <div class="storage-title-row">
                   <n-icon size="20" color="var(--primary-color)">
-                    <InProgress />
+                    <LayersOutline />
                   </n-icon>
                   <span class="storage-title">Analyzed Photos</span>
                   <n-tooltip trigger="hover" placement="top">
@@ -377,7 +377,7 @@
               <div class="storage-header">
                 <div class="storage-title-row">
                   <n-icon size="20" color="var(--accent-color)">
-                    <StarOutline />
+                    <SparklesOutline />
                   </n-icon>
                   <span class="storage-title">Consumed Credits</span>
                   <n-tooltip trigger="hover" placement="top">
@@ -448,6 +448,12 @@
 
   <!-- Credit Purchase Modal -->
   <CreditPurchaseModal v-model:show="showCreditsModal" />
+
+  <!-- Payment Success Modal -->
+  <PaymentSuccessModal
+    v-model:show="showPaymentSuccessModal"
+    :session-id="paymentSessionId"
+  />
 
   <!-- Plans & Credits Coming Soon Modal -->
   <n-modal
@@ -528,6 +534,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
+import { useRoute } from "vue-router";
 import {
   NInput,
   NSelect,
@@ -550,7 +557,9 @@ import {
   SendOutline,
   StarOutline,
 } from "@vicons/ionicons5";
-import { InProgress } from "@vicons/carbon";
+import { SparklesOutline } from "@vicons/ionicons5";
+
+import { LayersOutline } from "@vicons/ionicons5";
 import { InfoCircleFilled } from "@vicons/antd";
 import googlePhotosIconUrl from "@/assets/logos/google_photos.png";
 import dropboxIconUrl from "@/assets/logos/dropbox.svg";
@@ -561,6 +570,7 @@ import { useDropbox } from "@/composables/useDropbox.js";
 import { api } from "@/utils/axios";
 import PhotoPackagesModal from "@/components/PhotoPackagesModal.vue";
 import CreditPurchaseModal from "@/components/CreditPurchaseModal.vue";
+import PaymentSuccessModal from "@/components/PaymentSuccessModal.vue";
 
 // ============================================================
 // Toggle: set to true to enable real purchase modals,
@@ -570,6 +580,7 @@ const ENABLE_REAL_PURCHASE = false;
 
 // Stores and composables
 const userStore = useUserStore();
+const route = useRoute();
 const { isDarkMode, setTheme } = useTheme();
 const googlePhotos = useGooglePhotos();
 const dropbox = useDropbox();
@@ -578,7 +589,21 @@ const message = useMessage();
 // Refresh usage on component mount
 onMounted(async () => {
   await userStore.fetchUsage();
+  checkPaymentRedirect();
 });
+
+// Payment success modal
+const showPaymentSuccessModal = ref(false);
+const paymentSessionId = ref<string | null>(null);
+
+function checkPaymentRedirect() {
+  if (route.query.payment !== "success") return;
+  const sid =
+    typeof route.query.session_id === "string" ? route.query.session_id : null;
+  if (!sid) return;
+  paymentSessionId.value = sid;
+  showPaymentSuccessModal.value = true;
+}
 
 // Check if user is demo
 const isDemoUser = computed(() => {

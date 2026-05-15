@@ -2,20 +2,15 @@
   <n-modal
     :show="show"
     @update:show="$emit('update:show', $event)"
-    :style="{ width: '920px', maxWidth: '95vw' }"
+    :style="{ width: '520px', maxWidth: '95vw' }"
   >
-    <n-card
-      :bordered="false"
-      role="dialog"
-      aria-modal="true"
-      class="packages-modal-card"
-    >
+    <n-card :bordered="false" role="dialog" aria-modal="true" class="ppm-card">
       <template #header>
-        <div class="packages-modal-header">
-          <n-icon size="24" color="var(--accent-color)">
-            <InProgress />
+        <div class="ppm-header">
+          <n-icon size="20" color="var(--primary-color)">
+            <LayersOutline />
           </n-icon>
-          <span>Photo Analysis Packages</span>
+          <span>Expand your catalog</span>
         </div>
       </template>
       <template #header-extra>
@@ -26,95 +21,140 @@
         </n-button>
       </template>
 
-      <p class="packages-subtitle">
-        Buy once, use forever. Each pack adds photos and bonus credits to your
-        account instantly.
+      <p class="ppm-subtitle">
+        Add photos to your library quota. One-time purchase — photos and bonus
+        credits are added to your account instantly and never expire.
       </p>
 
-      <div v-if="isLoading" class="packages-loading">
+      <div v-if="isLoading" class="ppm-loading">
         <n-spin size="medium" />
       </div>
 
-      <div v-else class="packages-grid">
-        <div
-          v-for="pkg in photoPackages"
-          :key="pkg.id"
-          class="package-card"
-          :class="{ highlighted: pkg.highlighted }"
-        >
-          <div v-if="pkg.highlighted" class="package-badge">
-            <n-icon size="12"><StarOutline /></n-icon>
-            Popular
-          </div>
+      <template v-else-if="photoPackages.length">
+        <label class="ppm-label">Select package</label>
+        <div class="ppm-select-wrap">
+          <n-select
+            :value="selectedIndex"
+            @update:value="selectedIndex = $event"
+            :options="selectOptions"
+            size="medium"
+          />
+        </div>
 
-          <div class="package-name">{{ pkg.name }}</div>
-
-          <div class="package-photos-block">
-            <span class="package-photos-number">{{
-              pkg.photos.toLocaleString()
+        <div v-if="selected" class="ppm-details">
+          <div class="ppm-row">
+            <span class="ppm-row-label">Photos</span>
+            <span class="ppm-row-value">{{
+              selected.photos.toLocaleString()
             }}</span>
-            <span class="package-photos-label">photos</span>
           </div>
-
-          <div class="package-credits-pill">
-            +{{ pkg.credits.toLocaleString() }} credits
-          </div>
-
-          <div class="package-divider" />
-
-          <div class="package-price">€{{ pkg.priceEur.toFixed(2) }}</div>
-
-          <n-button
-            :type="pkg.highlighted ? 'primary' : 'default'"
-            block
-            :loading="isCheckingOut"
-            @click="handleBuy(pkg.id)"
+          <div
+            v-if="
+              selected.analyzedPhotos &&
+              selected.analyzedPhotos !== selected.photos
+            "
+            class="ppm-row"
           >
-            Buy now
-          </n-button>
+            <span class="ppm-row-label">Analyzed photos</span>
+            <span class="ppm-row-value">{{
+              selected.analyzedPhotos.toLocaleString()
+            }}</span>
+          </div>
+          <div v-if="selected.credits > 0" class="ppm-row">
+            <span class="ppm-row-label">Included credits</span>
+            <span class="ppm-row-value"
+              >+{{ selected.credits.toLocaleString() }}</span
+            >
+          </div>
+          <div class="ppm-row">
+            <span class="ppm-row-label">Price</span>
+            <div class="ppm-price-col">
+              <span class="ppm-row-value"
+                >€{{ selected.priceEur.toFixed(2) }}</span
+              >
+              <span class="ppm-unit">
+                {{ ((selected.priceEur / selected.photos) * 100).toFixed(2) }}
+                cents / photo
+              </span>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <template #action>
-        <div class="packages-modal-footer">
-          <n-icon size="14" color="var(--text-tertiary)">
-            <ShieldCheckmarkOutline />
-          </n-icon>
-          <span class="packages-footer-note">
-            One-time purchase &mdash; no subscription. Photos and credits never
-            expire.
-          </span>
-        </div>
+        <n-button
+          block
+          size="large"
+          :loading="isCheckingOut"
+          :disabled="!selected"
+          @click="selected && handleBuy(selected.stripePriceId)"
+          class="ppm-buy"
+          style="
+            --n-color: var(--accent-color);
+            --n-color-hover: var(--accent-color);
+            --n-color-pressed: var(--accent-color);
+            --n-color-focus: var(--accent-color);
+            --n-text-color: #0a0a0a;
+            --n-text-color-hover: #0a0a0a;
+            --n-text-color-pressed: #0a0a0a;
+            --n-border: none;
+            --n-ripple-color: var(--accent-color);
+          "
+        >
+          Buy for €{{ selected?.priceEur.toFixed(2) }}
+        </n-button>
+
+        <p class="ppm-note">
+          One-time purchase. Photos are added to your quota instantly and never
+          expire.
+        </p>
       </template>
     </n-card>
   </n-modal>
 </template>
 
 <script setup lang="ts">
-import { NModal, NCard, NButton, NIcon, NSpin, useMessage } from "naive-ui";
+import { ref, computed } from "vue";
 import {
-  CloseOutline,
-  StarOutline,
-  ShieldCheckmarkOutline,
-} from "@vicons/ionicons5";
-import { InProgress } from "@vicons/carbon";
-
+  NModal,
+  NCard,
+  NButton,
+  NIcon,
+  NSpin,
+  NSelect,
+  useMessage,
+} from "naive-ui";
+import { CloseOutline } from "@vicons/ionicons5";
 import { usePayments } from "@/composables/usePayments";
-import { useUserStore } from "@/stores/userStore";
+import { LayersOutline } from "@vicons/ionicons5";
 
 defineProps<{ show: boolean }>();
 defineEmits<{ (e: "update:show", value: boolean): void }>();
 
 const { photoPackages, isLoading, isCheckingOut, fetchPackages, checkout } =
   usePayments();
-const userStore = useUserStore();
 const message = useMessage();
 
-fetchPackages();
+const selectedIndex = ref(0);
 
-const handleBuy = async (packageId: string) => {
+fetchPackages().then(() => {
+  if (photoPackages.value.length) {
+    selectedIndex.value = 0;
+  }
+});
+
+const selected = computed(
+  () => photoPackages.value[selectedIndex.value] ?? null,
+);
+
+const selectOptions = computed(() =>
+  photoPackages.value.map((pkg, i) => ({
+    label: `${pkg.name} · ${pkg.photos.toLocaleString()} photos`,
+    value: i,
+  })),
+);
+
+const handleBuy = async (stripePriceId: string) => {
   try {
-    await checkout("photo_package", packageId);
+    await checkout("photo_package", stripePriceId);
   } catch (err: any) {
     const msg = err?.response?.data?.error || err?.message || "Checkout failed";
     message.error(msg);
@@ -123,12 +163,12 @@ const handleBuy = async (packageId: string) => {
 </script>
 
 <style scoped>
-.packages-modal-card {
+.ppm-card {
   background-color: var(--bg-surface);
   border: 1px solid var(--border-color);
 }
 
-.packages-modal-header {
+.ppm-header {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
@@ -137,176 +177,91 @@ const handleBuy = async (packageId: string) => {
   color: var(--text-primary);
 }
 
-.packages-subtitle {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  margin: 0 0 var(--spacing-lg) 0;
-}
-
-.packages-loading {
+.ppm-loading {
   display: flex;
   justify-content: center;
   padding: var(--spacing-2xl) 0;
 }
 
-/* ── Grid ── */
-.packages-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: var(--spacing-md);
-}
-
-/* ── Color tiers — basic → pro ── */
-.package-card:nth-child(1) {
-  --card-accent: #9ca3af;
-  --card-accent-bg: rgba(156, 163, 175, 0.10);
-  --card-glow: rgba(156, 163, 175, 0.15);
-}
-.package-card:nth-child(2) {
-  --card-accent: var(--primary-color);
-  --card-accent-bg: rgba(37, 99, 235, 0.1);
-  --card-glow: rgba(37, 99, 235, 0.15);
-}
-.package-card:nth-child(3) {
-  --card-accent: var(--accent-color);
-  --card-accent-bg: rgba(0, 255, 255, 0.1);
-  --card-glow: rgba(0, 255, 255, 0.15);
-}
-.package-card:nth-child(4) {
-  --card-accent: var(--warning-color);
-  --card-accent-bg: rgba(245, 158, 11, 0.1);
-  --card-glow: rgba(245, 158, 11, 0.15);
-}
-
-/* ── Card ── */
-.package-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: var(--spacing-xl) var(--spacing-md) var(--spacing-lg);
-  border-radius: var(--radius-lg);
-  background-color: var(--bg-container);
-  border: 1px solid var(--border-color);
-  border-top: 3px solid var(--card-accent);
-  text-align: center;
-  transition: var(--transition-fast);
-  gap: 0;
-}
-
-.package-card.highlighted {
-  border-color: var(--card-accent);
-  border-top-color: var(--card-accent);
-  box-shadow:
-    0 0 0 1px var(--card-accent),
-    0 4px 24px var(--card-glow);
-}
-
-/* ── Badge ── */
-.package-badge {
-  position: absolute;
-  top: -12px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: linear-gradient(135deg, var(--card-accent), var(--primary-color));
-  color: #000;
-  font-size: 11px;
-  font-weight: var(--font-weight-bold);
-  padding: 3px 12px;
-  border-radius: var(--radius-full);
-  white-space: nowrap;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-}
-
-/* ── Name ── */
-.package-name {
+/* ── Label ── */
+.ppm-label {
+  display: block;
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: var(--spacing-md);
-}
-
-/* ── Photo count block – fixed height for alignment ── */
-.package-photos-block {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 64px;
   margin-bottom: var(--spacing-sm);
 }
 
-.package-photos-number {
-  font-size: var(--font-size-3xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--card-accent);
-  line-height: 1;
+/* ── Select ── */
+.ppm-select-wrap {
+  margin-bottom: var(--spacing-lg);
+}
+
+/* ── Details rows ── */
+.ppm-details {
+  background-color: var(--bg-container);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding-left: var(--spacing-md);
+  padding-right: var(--spacing-md);
+  padding-top: 5px;
+  padding-bottom: 5px;
+  margin-bottom: var(--spacing-lg);
+}
+
+.ppm-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-xs) 0;
+}
+
+.ppm-row + .ppm-row {
+  border-top: 1px solid var(--border-color);
+}
+
+.ppm-row-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.ppm-row-value {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }
 
-.package-photos-label {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-tertiary);
-  margin-top: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-/* ── Credits pill ── */
-.package-credits-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  color: var(--card-accent);
-  background: var(--card-accent-bg);
-  padding: 3px 10px;
-  border-radius: var(--radius-full);
-  white-space: nowrap;
-  margin-bottom: var(--spacing-md);
-}
-
-/* ── Divider ── */
-.package-divider {
-  width: 100%;
-  height: 1px;
-  background-color: var(--border-color);
-  margin-bottom: var(--spacing-md);
-}
-
-/* ── Price ── */
-.package-price {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
-  margin-bottom: var(--spacing-md);
-}
-
-/* ── Footer ── */
-.packages-modal-footer {
+.ppm-price-col {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-xs);
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
 }
 
-.packages-footer-note {
+.ppm-unit {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  text-align: center;
 }
 
-@media (max-width: 560px) {
-  .packages-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
+/* ── Buy button ── */
+.ppm-buy {
+  margin-bottom: var(--spacing-sm);
+}
+
+/* ── Subtitle ── */
+.ppm-subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0 0 var(--spacing-lg) 0;
+  line-height: 1.5;
+}
+
+/* ── Footer note ── */
+.ppm-note {
+  text-align: center;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  margin: 0;
 }
 </style>

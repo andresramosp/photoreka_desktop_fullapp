@@ -24,7 +24,9 @@ export async function extractBasicExifData(file) {
         "Flash", // Información del flash
         "WhiteBalance", // Balance de blancos
         "GPSLatitude", // Latitud GPS
+        "GPSLatitudeRef", // Referencia hemisférica latitud (N/S)
         "GPSLongitude", // Longitud GPS
+        "GPSLongitudeRef", // Referencia hemisférica longitud (E/W)
         "GPSAltitude", // Altitud GPS
         "Orientation", // Orientación de la imagen
         "ColorSpace", // Espacio de color
@@ -65,8 +67,14 @@ export async function extractBasicExifData(file) {
       gps:
         exifData.GPSLatitude && exifData.GPSLongitude
           ? {
-              latitude: exifData.GPSLatitude,
-              longitude: exifData.GPSLongitude,
+              latitude:
+                exifData.GPSLatitudeRef === "S"
+                  ? -Math.abs(exifData.GPSLatitude)
+                  : Math.abs(exifData.GPSLatitude),
+              longitude:
+                exifData.GPSLongitudeRef === "W"
+                  ? -Math.abs(exifData.GPSLongitude)
+                  : Math.abs(exifData.GPSLongitude),
               altitude: exifData.GPSAltitude || null,
             }
           : null,
@@ -95,12 +103,12 @@ export function formatExifDate(exifDate) {
     // Si ya es un objeto Date
     if (exifDate instanceof Date) {
       return `${exifDate.getFullYear()}-${String(
-        exifDate.getMonth() + 1
+        exifDate.getMonth() + 1,
       ).padStart(2, "0")}-${String(exifDate.getDate()).padStart(
         2,
-        "0"
+        "0",
       )} ${String(exifDate.getHours()).padStart(2, "0")}:${String(
-        exifDate.getMinutes()
+        exifDate.getMinutes(),
       ).padStart(2, "0")}:${String(exifDate.getSeconds()).padStart(2, "0")}`;
     }
 
@@ -111,7 +119,7 @@ export function formatExifDate(exifDate) {
       // Si tiene offset y Z, elimina la Z y lo que sigue
       normalizedDate = normalizedDate.replace(
         /([+-]\d{2}:\d{2})(\.\d+)?Z$/,
-        "$1"
+        "$1",
       );
       // Si tiene offset y .000Z, elimina solo la Z
       normalizedDate = normalizedDate.replace(/([+-]\d{2}:\d{2})\.\d+Z$/, "$1");
@@ -124,12 +132,12 @@ export function formatExifDate(exifDate) {
       if (!isNaN(date.getTime())) {
         return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
           2,
-          "0"
+          "0",
         )}-${String(date.getDate()).padStart(2, "0")} ${String(
-          date.getHours()
+          date.getHours(),
         ).padStart(2, "0")}:${String(date.getMinutes()).padStart(
           2,
-          "0"
+          "0",
         )}:${String(date.getSeconds()).padStart(2, "0")}`;
       }
     }
