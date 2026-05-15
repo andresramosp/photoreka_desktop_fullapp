@@ -164,7 +164,7 @@ const body = computed(() => {
     return "This payment has been refunded, so the related rewards are no longer active.";
   if (summary.value.status === "failed")
     return "The checkout session was not completed. Your balance has not changed.";
-  return "The new allowance has been added to your account. Time to put it to work.";
+  return "The new allowance has been added to your account.";
 });
 
 // ─── Logic ────────────────────────────────────────────────────────────────────

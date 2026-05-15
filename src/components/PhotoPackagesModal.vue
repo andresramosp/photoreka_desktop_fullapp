@@ -66,6 +66,33 @@
               >+{{ selected.credits.toLocaleString() }}</span
             >
           </div>
+          <div class="ppm-row ppm-row--storage">
+            <span class="ppm-row-label">Storage cost</span>
+            <div class="ppm-price-col">
+              <span class="ppm-row-value">€0</span>
+              <button
+                class="ppm-read-more"
+                @click="showStorageInfo = !showStorageInfo"
+              >
+                {{ showStorageInfo ? "Hide" : "Read more" }}
+              </button>
+            </div>
+          </div>
+          <Transition name="ppm-expand">
+            <div v-if="showStorageInfo" class="ppm-storage-info">
+              <p>
+                Storage is <strong>free for the first 2 years</strong> from your
+                first photo analysis. After that, the cost is very marginal —
+                and still free for very small catalogs.
+              </p>
+              <p class="ppm-storage-examples">Monthly cost examples:</p>
+              <ul>
+                <li>~5,000 photos: <strong>≈ €0.25 / month</strong></li>
+                <li>~10,000 photos: <strong>≈ €0.50 / month</strong></li>
+                <li>~20,000 photos: <strong>≈ €1.00 / month</strong></li>
+              </ul>
+            </div>
+          </Transition>
           <div class="ppm-row">
             <span class="ppm-row-label">Price</span>
             <div class="ppm-price-col">
@@ -134,6 +161,7 @@ const { photoPackages, isLoading, isCheckingOut, fetchPackages, checkout } =
 const message = useMessage();
 
 const selectedIndex = ref(0);
+const showStorageInfo = ref(false);
 
 fetchPackages().then(() => {
   if (photoPackages.value.length) {
@@ -263,5 +291,62 @@ const handleBuy = async (stripePriceId: string) => {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   margin: 0;
+}
+
+/* ── Read more button ── */
+.ppm-read-more {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  color: var(--primary-color);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  line-height: 1;
+}
+.ppm-read-more:hover {
+  opacity: 0.75;
+}
+
+/* ── Storage expand transition ── */
+.ppm-expand-enter-active,
+.ppm-expand-leave-active {
+  transition:
+    max-height 0.28s ease,
+    opacity 0.22s ease;
+  overflow: hidden;
+  max-height: 200px;
+}
+.ppm-expand-enter-from,
+.ppm-expand-leave-to {
+  max-height: 0;
+  opacity: 0;
+}
+
+/* ── Storage expandable info ── */
+.ppm-storage-info {
+  padding: var(--spacing-sm) 0 var(--spacing-xs) 0;
+  border-bottom: 1px solid var(--border-color);
+}
+.ppm-storage-info p {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0 0 var(--spacing-xs) 0;
+  line-height: 1.5;
+}
+.ppm-storage-examples {
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary) !important;
+  margin-top: var(--spacing-xs) !important;
+}
+.ppm-storage-info ul {
+  margin: 2px 0 0 0;
+  padding-left: 1.2em;
+}
+.ppm-storage-info li {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
 }
 </style>
