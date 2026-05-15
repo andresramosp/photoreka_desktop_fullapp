@@ -246,6 +246,10 @@
           <span class="ql-icon">💰</span>
           <span class="ql-label">Costs</span>
         </button>
+        <button class="quick-link" @click="goTo('admin-payments')">
+          <span class="ql-icon">€</span>
+          <span class="ql-label">Payments</span>
+        </button>
         <button class="quick-link" @click="goTo('admin-health')">
           <span class="ql-icon">🩺</span>
           <span class="ql-label">Health</span>
@@ -844,7 +848,7 @@ onMounted(() => fetchData());
 /* ═══ Quick Links ═══ */
 .quick-links {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 12px;
   margin-top: 4px;
 }
@@ -894,7 +898,7 @@ onMounted(() => fetchData());
   }
 
   .quick-links {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .card {

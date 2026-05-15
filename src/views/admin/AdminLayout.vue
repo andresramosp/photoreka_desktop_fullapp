@@ -116,6 +116,7 @@ import {
   AnalyticsOutline as AnalyzerIcon,
   PeopleOutline as UsersIcon,
   WalletOutline as CostsIcon,
+  ReceiptOutline as PaymentsIcon,
   PulseOutline as HealthIcon,
   MenuOutline as MenuIcon,
   LogOutOutline as LogOutIcon,
@@ -141,6 +142,7 @@ const menuItems = [
   { label: "Processes", key: "admin-processes", icon: AnalyzerIcon },
   { label: "Users", key: "admin-users", icon: UsersIcon },
   { label: "Costs", key: "admin-costs", icon: CostsIcon },
+  { label: "Payments", key: "admin-payments", icon: PaymentsIcon },
   { label: "Health", key: "admin-health", icon: HealthIcon },
 ];
 

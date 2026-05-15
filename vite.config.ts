@@ -52,7 +52,7 @@ export default defineConfig({
       workbox: {
         // Only precache the app shell; don't cache API calls or large media
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
-        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB limit per file
+        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024, // 6 MB limit per file
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api\//, /^\/auth\//],
       },
@@ -66,6 +66,26 @@ export default defineConfig({
   build: {
     rollupOptions: {
       maxParallelFileOps: 20,
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules")) {
+            if (id.includes("pixi.js") || id.includes("@pixi"))
+              return "vendor-pixi";
+            if (id.includes("konva") || id.includes("vue-konva"))
+              return "vendor-konva";
+            if (id.includes("leaflet") || id.includes("vue-leaflet"))
+              return "vendor-leaflet";
+            if (id.includes("firebase")) return "vendor-firebase";
+            if (
+              id.includes("vue") ||
+              id.includes("pinia") ||
+              id.includes("vue-router")
+            )
+              return "vendor-vue";
+            return "vendor";
+          }
+        },
+      },
     },
   },
   server: {

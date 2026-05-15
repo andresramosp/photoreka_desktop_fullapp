@@ -220,6 +220,89 @@
               </template>
               <p v-else class="no-data">No cost data</p>
             </div>
+
+            <div class="detail-card">
+              <div class="detail-card-title-row">
+                <h4>Payments</h4>
+                <n-button size="tiny" quaternary @click="goToUserPayments">
+                  View all
+                </n-button>
+              </div>
+              <template v-if="user.paymentSummary">
+                <div class="info-row">
+                  <span class="info-label">Total paid</span>
+                  <span class="info-value cost-value">
+                    €{{ money(user.paymentSummary.totalPaidEur) }}
+                  </span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Transactions</span>
+                  <span class="info-value">
+                    {{ user.paymentSummary.totalPayments }} total ·
+                    {{ user.paymentSummary.completedPayments }} completed
+                  </span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Pending / failed</span>
+                  <span class="info-value">
+                    {{ user.paymentSummary.pendingPayments }} /
+                    {{ user.paymentSummary.failedPayments }}
+                  </span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Refunded</span>
+                  <span class="info-value">
+                    €{{ money(user.paymentSummary.refundedEur) }} ·
+                    {{ user.paymentSummary.refundedPayments }} tx
+                  </span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Granted</span>
+                  <span class="info-value">
+                    {{ user.paymentSummary.analyzedPhotosGranted }} analyzed ·
+                    {{ user.paymentSummary.creditsGranted }} credits
+                  </span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Last payment</span>
+                  <span class="info-value">
+                    {{ formatDate(user.paymentSummary.lastPaymentAt) }}
+                  </span>
+                </div>
+
+                <div
+                  v-if="user.paymentSummary.recent?.length"
+                  class="payment-mini-list"
+                >
+                  <div
+                    v-for="payment in user.paymentSummary.recent"
+                    :key="payment.id"
+                    class="payment-mini-row"
+                  >
+                    <div class="payment-mini-main">
+                      <span class="payment-mini-name">
+                        {{ payment.productName || paymentTypeLabel(payment.type) }}
+                      </span>
+                      <span class="payment-mini-date">
+                        {{ formatDate(payment.createdAt) }}
+                      </span>
+                    </div>
+                    <n-tag
+                      size="tiny"
+                      :bordered="false"
+                      :type="paymentStatusTagType(payment.status)"
+                    >
+                      {{ paymentStatusLabel(payment.status) }}
+                    </n-tag>
+                    <span class="payment-mini-amount">
+                      €{{ money(payment.amountEur) }}
+                    </span>
+                  </div>
+                </div>
+                <p v-else class="no-data payment-empty">No payments yet</p>
+              </template>
+              <p v-else class="no-data">No payment data</p>
+            </div>
           </div>
 
           <!-- Activity Log Card -->
@@ -451,6 +534,35 @@ interface UserDetail {
   avatar?: string | null;
   googleId?: string | null;
   catalogPatterns?: any;
+  paymentSummary?: PaymentSummary | null;
+}
+
+type PaymentStatus = "pending" | "completed" | "failed" | "refunded";
+type PaymentType = "photo_package" | "credits";
+
+interface PaymentSummary {
+  totalPayments: number;
+  completedPayments: number;
+  pendingPayments: number;
+  failedPayments: number;
+  refundedPayments: number;
+  totalPaidEur: number;
+  refundedEur: number;
+  photosGranted: number;
+  analyzedPhotosGranted: number;
+  creditsGranted: number;
+  lastPaymentAt: string | null;
+  recent: {
+    id: number;
+    type: PaymentType;
+    status: PaymentStatus;
+    productName: string | null;
+    amountEur: number;
+    photosGranted: number;
+    analyzedPhotosGranted: number;
+    creditsGranted: number;
+    createdAt: string;
+  }[];
 }
 
 interface ActivityItem {
@@ -518,6 +630,11 @@ let activityRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
 function goBack() {
   router.push({ name: "admin-users" });
+}
+
+function goToUserPayments() {
+  if (!user.value) return;
+  router.push({ name: "admin-payments", query: { userId: user.value.id } });
 }
 
 const usageChanged = computed(() => {
@@ -823,6 +940,34 @@ function formatDateTime(iso: string | null): string {
   });
 }
 
+function money(value: number | null | undefined): string {
+  return Number(value || 0).toFixed(2);
+}
+
+function paymentTypeLabel(type: PaymentType): string {
+  return type === "photo_package" ? "Photo Package" : "Credits";
+}
+
+function paymentStatusLabel(status: PaymentStatus): string {
+  const labels: Record<PaymentStatus, string> = {
+    pending: "Pending",
+    completed: "Completed",
+    failed: "Failed",
+    refunded: "Refunded",
+  };
+  return labels[status];
+}
+
+function paymentStatusTagType(
+  status: PaymentStatus,
+): "default" | "info" | "success" | "warning" | "error" {
+  if (status === "completed") return "success";
+  if (status === "pending") return "warning";
+  if (status === "failed") return "error";
+  if (status === "refunded") return "info";
+  return "default";
+}
+
 function userInitials(name: string): string {
   return name
     .split(" ")
@@ -990,6 +1135,18 @@ onUnmounted(() => {
   letter-spacing: 0.4px;
 }
 
+.detail-card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.detail-card-title-row h4 {
+  margin: 0;
+}
+
 .info-row {
   display: flex;
   justify-content: space-between;
@@ -1061,6 +1218,61 @@ onUnmounted(() => {
 .cat-name {
   font-weight: 500;
   word-break: break-all;
+}
+
+/* ===== Payment summary ===== */
+.payment-mini-list {
+  margin-top: 12px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.payment-mini-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.payment-mini-row:last-child {
+  border-bottom: none;
+}
+
+.payment-mini-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.payment-mini-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-mini-date {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.payment-mini-amount {
+  font-size: 12px;
+  font-weight: 700;
+  color: #6366f1;
+  font-variant-numeric: tabular-nums;
+}
+
+.payment-empty {
+  margin-top: 12px;
 }
 
 /* ===== Activity Log ===== */
