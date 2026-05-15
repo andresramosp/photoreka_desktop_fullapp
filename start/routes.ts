@@ -428,6 +428,7 @@ router
     router.delete('/api/admin/users/:id', [UsersAdminController, 'destroy'])
     router.put('/api/admin/users/:id/usage', [UsersAdminController, 'updateUsage'])
     router.get('/api/admin/users/:id/activities', [UsersAdminController, 'activities'])
+    router.get('/api/admin/users/:id/photos', [UsersAdminController, 'photos'])
     router.get('/api/admin/activities', [UsersAdminController, 'globalActivities'])
     router.post('/api/admin/users/:id/impersonate', [UsersAdminController, 'impersonate'])
 

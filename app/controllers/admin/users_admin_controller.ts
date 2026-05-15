@@ -187,6 +187,21 @@ export default class UsersAdminController {
   }
 
   /**
+   * Get all photos (thumbnails) for a user
+   */
+  async photos({ params, response }: HttpContext) {
+    try {
+      const photos = await AdminUsersService.getPhotos(Number(params.id))
+      return response.ok({ photos })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to fetch user photos',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
    * Generate a short-lived impersonation token for a user (admin only)
    */
   async impersonate({ params, response }: HttpContext) {

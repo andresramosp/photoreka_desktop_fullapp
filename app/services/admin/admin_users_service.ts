@@ -240,4 +240,23 @@ export default class AdminUsersService {
 
     return usage
   }
+
+  /**
+   * Get all non-deleted photos for a user with their thumbnailUrl
+   */
+  static async getPhotos(
+    userId: number
+  ): Promise<{ id: number; thumbnailUrl: string; originalFileName: string | null }[]> {
+    const photos = await Photo.query()
+      .where('user_id', userId)
+      .whereNull('deleted_at')
+      .select('id', 'thumbnail_name', 'original_file_name')
+      .orderBy('id', 'desc')
+
+    return photos.map((p: any) => ({
+      id: p.id,
+      thumbnailUrl: p.thumbnailUrl,
+      originalFileName: p.originalFileName ?? null,
+    }))
+  }
 }
