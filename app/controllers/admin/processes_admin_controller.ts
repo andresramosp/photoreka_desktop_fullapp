@@ -64,6 +64,24 @@ export default class ProcessesAdminController {
   }
 
   /**
+   * Get photos (thumbnails) for a process
+   */
+  async photos({ params, response }: HttpContext) {
+    try {
+      const photos = await AdminProcessesService.getPhotos(params.id)
+      if (photos === null) {
+        return response.notFound({ message: 'Process not found' })
+      }
+      return response.ok({ photos })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to fetch process photos',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
    * Manual retry of a process (admin_retry mode)
    */
   async retry({ params, response }: HttpContext) {

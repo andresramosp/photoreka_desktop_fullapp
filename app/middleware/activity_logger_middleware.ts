@@ -363,7 +363,10 @@ export default class ActivityLoggerMiddleware {
     let userId: number | null = null
     try {
       await auth.use('api').check()
-      userId = auth.use('api').user?.id ?? null
+      const authedUser = auth.use('api').user
+      userId = authedUser?.id ?? null
+      // Skip logging for impersonation sessions
+      if ((authedUser as any)?.currentAccessToken?.name === 'impersonation') return
     } catch {
       // For login/register, extract userId from response body
       const resBody = response.getBody()

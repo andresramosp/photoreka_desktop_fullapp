@@ -434,6 +434,7 @@ router
     // Admin Processes management
     router.get('/api/admin/processes', [ProcessesAdminController, 'index'])
     router.get('/api/admin/processes/:id', [ProcessesAdminController, 'show'])
+    router.get('/api/admin/processes/:id/photos', [ProcessesAdminController, 'photos'])
     router.post('/api/admin/processes/:id/health', [ProcessesAdminController, 'healthCheck'])
     router.post('/api/admin/processes/:id/retry', [ProcessesAdminController, 'retry'])
 

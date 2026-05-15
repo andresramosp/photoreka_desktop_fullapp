@@ -23,7 +23,12 @@ export default class ActivityController {
       return response.badRequest({ message: 'Invalid or disallowed activity type.' })
     }
 
-    const userId = auth.use('api').user!.id
+    const authedUser = auth.use('api').user!
+    // Skip logging for impersonation sessions
+    if ((authedUser as any)?.currentAccessToken?.name === 'impersonation') {
+      return response.noContent()
+    }
+    const userId = authedUser.id
 
     await UserActivity.create({
       userId,

@@ -285,6 +285,28 @@ export default class AdminProcessesService {
 
     return { processId: p.id }
   }
+
+  /**
+   * Get thumbnails for all photos belonging to a process
+   */
+  static async getPhotos(
+    processId: string
+  ): Promise<{ id: number; thumbnailUrl: string; originalFileName: string | null }[] | null> {
+    const p = await AnalyzerProcess.find(processId)
+    if (!p) return null
+
+    const photos = await Photo.query()
+      .where('analyzer_process_id', processId)
+      .whereNull('deleted_at')
+      .select('id', 'thumbnail_name', 'original_file_name')
+      .orderBy('id', 'asc')
+
+    return photos.map((photo: any) => ({
+      id: photo.id,
+      thumbnailUrl: photo.thumbnailUrl,
+      originalFileName: photo.originalFileName ?? null,
+    }))
+  }
 }
 
 /**
