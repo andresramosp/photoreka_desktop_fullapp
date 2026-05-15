@@ -139,7 +139,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import {
   NModal,
   NCard,
@@ -152,16 +152,37 @@ import {
 import { CloseOutline } from "@vicons/ionicons5";
 import { usePayments } from "@/composables/usePayments";
 import { LayersOutline } from "@vicons/ionicons5";
+import { useActivityLogger } from "@/composables/useActivityLogger";
 
-defineProps<{ show: boolean }>();
+const props = defineProps<{ show: boolean }>();
 defineEmits<{ (e: "update:show", value: boolean): void }>();
 
 const { photoPackages, isLoading, isCheckingOut, fetchPackages, checkout } =
   usePayments();
 const message = useMessage();
+const { logActivity } = useActivityLogger();
 
 const selectedIndex = ref(0);
 const showStorageInfo = ref(false);
+
+watch(
+  () => props.show,
+  (val) => {
+    if (val) logActivity("ui_action", { action: "open_photo_packages_modal" });
+  },
+);
+
+watch(selectedIndex, (idx) => {
+  const pkg = photoPackages.value[idx];
+  if (pkg) {
+    logActivity("ui_action", {
+      action: "view_photo_package",
+      packageName: pkg.name,
+      photos: pkg.photos,
+      priceEur: pkg.priceEur,
+    });
+  }
+});
 
 fetchPackages().then(() => {
   if (photoPackages.value.length) {
@@ -181,6 +202,16 @@ const selectOptions = computed(() =>
 );
 
 const handleBuy = async (stripePriceId: string) => {
+  const pkg = selected.value;
+  if (pkg) {
+    logActivity("ui_action", {
+      action: "buy_photo_package_clicked",
+      packageName: pkg.name,
+      photos: pkg.photos,
+      priceEur: pkg.priceEur,
+      stripePriceId,
+    });
+  }
   try {
     await checkout("photo_package", stripePriceId);
   } catch (err: any) {

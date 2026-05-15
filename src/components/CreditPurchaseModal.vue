@@ -99,7 +99,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import {
   NModal,
   NCard,
@@ -111,15 +111,35 @@ import {
 } from "naive-ui";
 import { SparklesOutline, CloseOutline } from "@vicons/ionicons5";
 import { usePayments } from "@/composables/usePayments";
+import { useActivityLogger } from "@/composables/useActivityLogger";
 
-defineProps<{ show: boolean }>();
+const props = defineProps<{ show: boolean }>();
 defineEmits<{ (e: "update:show", value: boolean): void }>();
 
 const { creditSteps, isLoading, isCheckingOut, fetchPackages, checkout } =
   usePayments();
 const message = useMessage();
+const { logActivity } = useActivityLogger();
 
 const selectedIndex = ref(0);
+
+watch(
+  () => props.show,
+  (val) => {
+    if (val) logActivity("ui_action", { action: "open_credit_purchase_modal" });
+  },
+);
+
+watch(selectedIndex, (idx) => {
+  const step = creditSteps.value[idx];
+  if (step) {
+    logActivity("ui_action", {
+      action: "view_credit_step",
+      credits: step.credits,
+      priceEur: step.priceEur,
+    });
+  }
+});
 
 fetchPackages().then(() => {
   if (creditSteps.value.length) {
@@ -137,6 +157,15 @@ const selectOptions = computed(() =>
 );
 
 const handleBuy = async (stripePriceId: string) => {
+  const step = selected.value;
+  if (step) {
+    logActivity("ui_action", {
+      action: "buy_credits_clicked",
+      credits: step.credits,
+      priceEur: step.priceEur,
+      stripePriceId,
+    });
+  }
   try {
     await checkout("credits", stripePriceId);
   } catch (err: any) {
