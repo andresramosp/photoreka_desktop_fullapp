@@ -8,8 +8,8 @@ export default class PaymentController {
    */
   async packages({ response }: HttpContext) {
     return response.json({
-      photoPackages: PaymentService.getPhotoPackages(),
-      creditSteps: PaymentService.getCreditSteps(),
+      photoPackages: await PaymentService.getPhotoPackages(),
+      creditSteps: await PaymentService.getCreditSteps(),
     })
   }
 
@@ -17,6 +17,7 @@ export default class PaymentController {
    * Crear sesión de Stripe Checkout
    * POST /api/payments/checkout
    * Body: { type: 'photo_package' | 'credits', itemId: string }
+   * itemId debe ser el Stripe Price ID devuelto por GET /api/payments/packages
    */
   async checkout({ auth, request, response }: HttpContext) {
     try {
@@ -41,7 +42,7 @@ export default class PaymentController {
     } catch (error: any) {
       const message = error?.message || 'Failed to create checkout session'
 
-      if (message.startsWith('Unknown')) {
+      if (message.startsWith('Unknown') || message.includes('Stripe metadata')) {
         return response.status(400).json({ error: message })
       }
 
@@ -113,7 +114,11 @@ export default class PaymentController {
           status: payment.status,
           type: payment.type,
           packageId: payment.packageId,
+          stripePriceId: payment.stripePriceId,
+          stripeProductId: payment.stripeProductId,
+          productName: payment.productName,
           photosGranted: payment.photosGranted,
+          analyzedPhotosGranted: payment.analyzedPhotosGranted,
           creditsGranted: payment.creditsGranted,
           amountEur: payment.amountEur,
         },

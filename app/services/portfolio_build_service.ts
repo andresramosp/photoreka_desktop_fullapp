@@ -50,7 +50,7 @@ const EVALUATION_MODEL = 'gemini-3-flash-preview'
 /** LLM model for the refinement pass (must support vision). */
 const REFINEMENT_MODEL = 'gpt-5.1' //'gpt-5.1'
 /** Cheap model used to parse freetext into structured filters. */
-const PARSE_MODEL = 'gemini-3.1-flash-lite-preview'
+const PARSE_MODEL = 'gemini-3.1-flash-lite'
 /** Photos per batch in the iterative refinement pass. */
 const REFINEMENT_BATCH_SIZE = 15
 /** Max fraction of photos the LLM may flag per batch (~15%). */

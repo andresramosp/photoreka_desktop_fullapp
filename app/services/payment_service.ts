@@ -4,15 +4,18 @@ import Payment from '#models/payment'
 import User from '#models/user'
 import UsageService from '#services/usage_service'
 import {
-  getPhotoPackage,
-  getCreditStep,
-  photoPackages,
-  creditSteps,
   type PhotoPackage,
   type CreditStep,
-} from '../payment_packages.js'
+  type PaymentCatalog,
+  type PaymentCatalogItem,
+  parsePaymentCatalogItem,
+  tryParsePaymentCatalogItem,
+} from '../payment_products.js'
 
 let _stripe: Stripe | null = null
+let catalogCache: { expiresAt: number; catalog: PaymentCatalog } | null = null
+
+const CATALOG_CACHE_TTL_MS = 60_000
 
 function getStripe(): Stripe {
   if (!_stripe) {
@@ -24,12 +27,47 @@ function getStripe(): Stripe {
 export default class PaymentService {
   // ─── Catálogo ─────────────────────────────────────────────────────────────
 
-  static getPhotoPackages(): PhotoPackage[] {
-    return photoPackages
+  static async getCatalog(): Promise<PaymentCatalog> {
+    if (catalogCache && catalogCache.expiresAt > Date.now()) {
+      return catalogCache.catalog
+    }
+
+    const stripe = getStripe()
+    const prices = await stripe.prices.list({
+      active: true,
+      expand: ['data.product'],
+      limit: 100,
+    })
+
+    const items = prices.data
+      .map((price) =>
+        tryParsePaymentCatalogItem(price, {
+          requireActive: true,
+          currency: stripeConfig.catalogCurrency,
+        })
+      )
+      .filter((item): item is PaymentCatalogItem => item !== null)
+      .sort(sortCatalogItems)
+
+    const catalog = {
+      photoPackages: items.filter((item): item is PhotoPackage => item.type === 'photo_package'),
+      creditSteps: items.filter((item): item is CreditStep => item.type === 'credits'),
+    }
+
+    catalogCache = {
+      expiresAt: Date.now() + CATALOG_CACHE_TTL_MS,
+      catalog,
+    }
+
+    return catalog
   }
 
-  static getCreditSteps(): CreditStep[] {
-    return creditSteps
+  static async getPhotoPackages(): Promise<PhotoPackage[]> {
+    return (await this.getCatalog()).photoPackages
+  }
+
+  static async getCreditSteps(): Promise<CreditStep[]> {
+    return (await this.getCatalog()).creditSteps
   }
 
   // ─── Checkout ─────────────────────────────────────────────────────────────
@@ -37,44 +75,25 @@ export default class PaymentService {
   static async createCheckoutSession(
     userId: number,
     type: 'photo_package' | 'credits',
-    itemId: string
+    stripePriceId: string
   ): Promise<{ url: string }> {
     const stripe = getStripe()
-
-    let name: string
-    let description: string
-    let priceEur: number
-    let photosGranted = 0
-    let analyzedPhotosGranted = 0
-    let creditsGranted = 0
-
-    if (type === 'photo_package') {
-      const pkg = getPhotoPackage(itemId)
-      if (!pkg) throw new Error(`Unknown photo package: ${itemId}`)
-      name = `${pkg.name} — ${pkg.photos.toLocaleString()} photos`
-      description = `${pkg.photos.toLocaleString()} photos + ${pkg.credits.toLocaleString()} credits`
-      priceEur = pkg.priceEur
-      photosGranted = pkg.photos
-      analyzedPhotosGranted = pkg.analyzedPhotos
-      creditsGranted = pkg.credits
-    } else {
-      const step = getCreditStep(itemId)
-      if (!step) throw new Error(`Unknown credit step: ${itemId}`)
-      name = `${step.credits.toLocaleString()} credits`
-      description = step.description
-      priceEur = step.priceEur
-      creditsGranted = step.credits
-    }
+    const item = await this.getCatalogItemForCheckout(stripePriceId, type)
+    const photosGranted = item.type === 'photo_package' ? item.photos : 0
+    const analyzedPhotosGranted = item.type === 'photo_package' ? item.analyzedPhotos : 0
 
     // Crear registro de pago pendiente
     const payment = await Payment.create({
       userId,
       type,
-      packageId: itemId,
+      packageId: item.id,
+      stripePriceId: item.stripePriceId,
+      stripeProductId: item.stripeProductId,
+      productName: item.name,
       photosGranted,
       analyzedPhotosGranted,
-      creditsGranted,
-      amountEur: priceEur,
+      creditsGranted: item.credits,
+      amountEur: item.priceEur,
       status: 'pending',
     })
 
@@ -84,22 +103,28 @@ export default class PaymentService {
       payment_method_types: ['card'],
       line_items: [
         {
-          price_data: {
-            currency: 'eur',
-            product_data: {
-              name,
-              description,
-            },
-            unit_amount: Math.round(priceEur * 100), // Stripe usa céntimos
-          },
+          price: item.stripePriceId,
           quantity: 1,
         },
       ],
+      client_reference_id: String(userId),
       metadata: {
         userId: String(userId),
         paymentId: String(payment.id),
+        type,
+        stripePriceId: item.stripePriceId,
+        stripeProductId: item.stripeProductId,
       },
-      success_url: `${stripeConfig.successUrl}&session_id={CHECKOUT_SESSION_ID}`,
+      payment_intent_data: {
+        metadata: {
+          userId: String(userId),
+          paymentId: String(payment.id),
+          type,
+          stripePriceId: item.stripePriceId,
+          stripeProductId: item.stripeProductId,
+        },
+      },
+      success_url: appendSessionId(stripeConfig.successUrl),
       cancel_url: stripeConfig.cancelUrl,
     })
 
@@ -127,6 +152,11 @@ export default class PaymentService {
         await this.handleCheckoutCompleted(session)
         break
       }
+      case 'checkout.session.expired': {
+        const session = event.data.object as Stripe.Checkout.Session
+        await this.handleCheckoutExpired(session)
+        break
+      }
       case 'charge.refunded': {
         const charge = event.data.object as Stripe.Charge
         await this.handleRefund(charge)
@@ -137,9 +167,10 @@ export default class PaymentService {
 
   private static async handleCheckoutCompleted(session: Stripe.Checkout.Session): Promise<void> {
     const paymentId = Number(session.metadata?.paymentId)
-    if (!paymentId) return
+    const payment = paymentId
+      ? await Payment.find(paymentId)
+      : await Payment.query().where('stripe_session_id', session.id).first()
 
-    const payment = await Payment.find(paymentId)
     if (!payment) return
 
     // Idempotencia: si ya está completado, no hacer nada
@@ -154,6 +185,18 @@ export default class PaymentService {
 
     // Provisionar al usuario
     await this.provisionPayment(payment)
+  }
+
+  private static async handleCheckoutExpired(session: Stripe.Checkout.Session): Promise<void> {
+    const paymentId = Number(session.metadata?.paymentId)
+    const payment = paymentId
+      ? await Payment.find(paymentId)
+      : await Payment.query().where('stripe_session_id', session.id).first()
+
+    if (!payment || payment.status !== 'pending') return
+
+    payment.status = 'failed'
+    await payment.save()
   }
 
   private static async handleRefund(charge: Stripe.Charge): Promise<void> {
@@ -221,4 +264,47 @@ export default class PaymentService {
   static async verifySession(sessionId: string, userId: number): Promise<Payment | null> {
     return Payment.query().where('stripe_session_id', sessionId).where('user_id', userId).first()
   }
+
+  private static async getCatalogItemForCheckout(
+    stripePriceId: string,
+    expectedType: 'photo_package' | 'credits'
+  ): Promise<PaymentCatalogItem> {
+    const stripe = getStripe()
+
+    let price: Stripe.Price
+
+    try {
+      price = await stripe.prices.retrieve(stripePriceId, {
+        expand: ['product'],
+      })
+    } catch (error) {
+      if ((error as { type?: string }).type === 'StripeInvalidRequestError') {
+        throw new Error(`Unknown ${expectedType} price: ${stripePriceId}`)
+      }
+
+      throw error
+    }
+
+    const item = parsePaymentCatalogItem(price, {
+      requireActive: true,
+      currency: stripeConfig.catalogCurrency,
+    })
+
+    if (item.type !== expectedType) {
+      throw new Error(`Unknown ${expectedType} price: ${stripePriceId}`)
+    }
+
+    return item
+  }
+}
+
+function sortCatalogItems(a: PaymentCatalogItem, b: PaymentCatalogItem): number {
+  if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+  if (a.priceEur !== b.priceEur) return a.priceEur - b.priceEur
+  return a.name.localeCompare(b.name)
+}
+
+function appendSessionId(successUrl: string): string {
+  const separator = successUrl.includes('?') ? '&' : '?'
+  return `${successUrl}${separator}session_id={CHECKOUT_SESSION_ID}`
 }

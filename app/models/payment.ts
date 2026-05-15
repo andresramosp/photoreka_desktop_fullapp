@@ -24,6 +24,15 @@ export default class Payment extends BaseModel {
   declare packageId: string
 
   @column()
+  declare stripePriceId: string | null
+
+  @column()
+  declare stripeProductId: string | null
+
+  @column()
+  declare productName: string | null
+
+  @column()
   declare photosGranted: number
 
   @column()
