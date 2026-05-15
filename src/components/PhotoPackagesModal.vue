@@ -43,21 +43,9 @@
 
         <div v-if="selected" class="ppm-details">
           <div class="ppm-row">
-            <span class="ppm-row-label">Photos</span>
+            <span class="ppm-row-label">Photo analysis</span>
             <span class="ppm-row-value">{{
               selected.photos.toLocaleString()
-            }}</span>
-          </div>
-          <div
-            v-if="
-              selected.analyzedPhotos &&
-              selected.analyzedPhotos !== selected.photos
-            "
-            class="ppm-row"
-          >
-            <span class="ppm-row-label">Analyzed photos</span>
-            <span class="ppm-row-value">{{
-              selected.analyzedPhotos.toLocaleString()
             }}</span>
           </div>
           <div v-if="selected.credits > 0" class="ppm-row">
@@ -196,7 +184,7 @@ const selected = computed(
 
 const selectOptions = computed(() =>
   photoPackages.value.map((pkg, i) => ({
-    label: `${pkg.name} · ${pkg.photos.toLocaleString()} photos`,
+    label: `${pkg.name} (${pkg.credits.toLocaleString()} credits included)`,
     value: i,
   })),
 );
