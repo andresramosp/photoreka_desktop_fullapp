@@ -269,37 +269,6 @@
                     {{ formatDate(user.paymentSummary.lastPaymentAt) }}
                   </span>
                 </div>
-
-                <div
-                  v-if="user.paymentSummary.recent?.length"
-                  class="payment-mini-list"
-                >
-                  <div
-                    v-for="payment in user.paymentSummary.recent"
-                    :key="payment.id"
-                    class="payment-mini-row"
-                  >
-                    <div class="payment-mini-main">
-                      <span class="payment-mini-name">
-                        {{ payment.productName || paymentTypeLabel(payment.type) }}
-                      </span>
-                      <span class="payment-mini-date">
-                        {{ formatDate(payment.createdAt) }}
-                      </span>
-                    </div>
-                    <n-tag
-                      size="tiny"
-                      :bordered="false"
-                      :type="paymentStatusTagType(payment.status)"
-                    >
-                      {{ paymentStatusLabel(payment.status) }}
-                    </n-tag>
-                    <span class="payment-mini-amount">
-                      €{{ money(payment.amountEur) }}
-                    </span>
-                  </div>
-                </div>
-                <p v-else class="no-data payment-empty">No payments yet</p>
               </template>
               <p v-else class="no-data">No payment data</p>
             </div>
@@ -537,9 +506,6 @@ interface UserDetail {
   paymentSummary?: PaymentSummary | null;
 }
 
-type PaymentStatus = "pending" | "completed" | "failed" | "refunded";
-type PaymentType = "photo_package" | "credits";
-
 interface PaymentSummary {
   totalPayments: number;
   completedPayments: number;
@@ -552,17 +518,6 @@ interface PaymentSummary {
   analyzedPhotosGranted: number;
   creditsGranted: number;
   lastPaymentAt: string | null;
-  recent: {
-    id: number;
-    type: PaymentType;
-    status: PaymentStatus;
-    productName: string | null;
-    amountEur: number;
-    photosGranted: number;
-    analyzedPhotosGranted: number;
-    creditsGranted: number;
-    createdAt: string;
-  }[];
 }
 
 interface ActivityItem {
@@ -944,30 +899,6 @@ function money(value: number | null | undefined): string {
   return Number(value || 0).toFixed(2);
 }
 
-function paymentTypeLabel(type: PaymentType): string {
-  return type === "photo_package" ? "Photo Package" : "Credits";
-}
-
-function paymentStatusLabel(status: PaymentStatus): string {
-  const labels: Record<PaymentStatus, string> = {
-    pending: "Pending",
-    completed: "Completed",
-    failed: "Failed",
-    refunded: "Refunded",
-  };
-  return labels[status];
-}
-
-function paymentStatusTagType(
-  status: PaymentStatus,
-): "default" | "info" | "success" | "warning" | "error" {
-  if (status === "completed") return "success";
-  if (status === "pending") return "warning";
-  if (status === "failed") return "error";
-  if (status === "refunded") return "info";
-  return "default";
-}
-
 function userInitials(name: string): string {
   return name
     .split(" ")
@@ -1115,8 +1046,9 @@ onUnmounted(() => {
 /* ===== Detail Grid ===== */
 .detail-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+  align-items: stretch;
 }
 
 .detail-card {
@@ -1124,6 +1056,7 @@ onUnmounted(() => {
   border: 1px solid #f1f5f9;
   border-radius: 10px;
   padding: 16px 18px;
+  min-width: 0;
 }
 
 .detail-card h4 {
@@ -1151,6 +1084,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
   padding: 5px 0;
   border-bottom: 1px solid #f1f5f9;
 }
@@ -1163,12 +1097,16 @@ onUnmounted(() => {
   font-size: 12px;
   color: #94a3b8;
   font-weight: 500;
+  flex-shrink: 0;
 }
 
 .info-value {
   font-size: 13px;
   color: #334155;
   font-weight: 500;
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .editable-row {
@@ -1218,61 +1156,6 @@ onUnmounted(() => {
 .cat-name {
   font-weight: 500;
   word-break: break-all;
-}
-
-/* ===== Payment summary ===== */
-.payment-mini-list {
-  margin-top: 12px;
-  border-top: 1px solid #e2e8f0;
-  padding-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.payment-mini-row {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.payment-mini-row:last-child {
-  border-bottom: none;
-}
-
-.payment-mini-main {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.payment-mini-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: #334155;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.payment-mini-date {
-  font-size: 11px;
-  color: #94a3b8;
-}
-
-.payment-mini-amount {
-  font-size: 12px;
-  font-weight: 700;
-  color: #6366f1;
-  font-variant-numeric: tabular-nums;
-}
-
-.payment-empty {
-  margin-top: 12px;
 }
 
 /* ===== Activity Log ===== */
@@ -1480,7 +1363,7 @@ onUnmounted(() => {
 }
 
 /* ===== Responsive ===== */
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .admin-section {
     padding: 0 4px;
   }
@@ -1510,6 +1393,15 @@ onUnmounted(() => {
 @media (max-width: 480px) {
   .detail-title-info h2 {
     font-size: 16px;
+  }
+
+  .info-row {
+    gap: 10px;
+  }
+
+  .info-label,
+  .info-value {
+    font-size: 12px;
   }
 }
 

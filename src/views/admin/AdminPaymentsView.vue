@@ -27,9 +27,7 @@
             v-if="overview.totals.monthOverMonthPct !== null"
             class="kpi-badge"
             :class="
-              overview.totals.monthOverMonthPct >= 0
-                ? 'badge-up'
-                : 'badge-down'
+              overview.totals.monthOverMonthPct >= 0 ? 'badge-up' : 'badge-down'
             "
           >
             {{ overview.totals.monthOverMonthPct >= 0 ? "▲" : "▼" }}
@@ -154,7 +152,11 @@
                 <span class="cost-value">€{{ money(item.revenueEur) }}</span>
               </div>
               <div class="breakdown-meta">
-                <span>{{ item.count }} transaction{{ item.count !== 1 ? "s" : "" }}</span>
+                <span
+                  >{{ item.count }} transaction{{
+                    item.count !== 1 ? "s" : ""
+                  }}</span
+                >
                 <span class="dim">{{ grantSummary(item) }}</span>
               </div>
             </div>
@@ -266,7 +268,10 @@
 
         <div class="table-wrapper">
           <div class="table-body">
-            <div v-if="paymentsLoading && payments.length === 0" class="table-loading-state">
+            <div
+              v-if="paymentsLoading && payments.length === 0"
+              class="table-loading-state"
+            >
               <n-spin show />
             </div>
             <n-data-table
@@ -280,7 +285,10 @@
               striped
             />
           </div>
-          <div v-if="paymentMeta && paymentMeta.lastPage > 1" class="table-pagination">
+          <div
+            v-if="paymentMeta && paymentMeta.lastPage > 1"
+            class="table-pagination"
+          >
             <n-pagination
               v-model:page="paymentPage"
               :page-size="paymentMeta.perPage"
@@ -526,12 +534,14 @@ function typeLabel(type: PaymentType): string {
 }
 
 function grantSummary(item: PaymentTypeBreakdown): string {
-  if (item.type === "credits") return `${item.creditsGranted.toLocaleString()} credits`;
+  if (item.type === "credits")
+    return `${item.creditsGranted.toLocaleString()} credits`;
   return `${item.analyzedPhotosGranted.toLocaleString()} analyzed photos`;
 }
 
 function paymentGrantSummary(row: PaymentRow): string {
-  if (row.type === "credits") return `${row.creditsGranted.toLocaleString()} credits`;
+  if (row.type === "credits")
+    return `${row.creditsGranted.toLocaleString()} credits`;
   const parts = [`${row.photosGranted.toLocaleString()} photos`];
   if (row.analyzedPhotosGranted > 0) {
     parts.push(`${row.analyzedPhotosGranted.toLocaleString()} analyzed`);
@@ -594,7 +604,11 @@ const columns = computed<DataTableColumn<PaymentRow>[]>(() => [
     minWidth: 180,
     render(row) {
       return h("div", { class: "cell-product" }, [
-        h("span", { class: "cell-product-name" }, row.productName || row.packageId),
+        h(
+          "span",
+          { class: "cell-product-name" },
+          row.productName || row.packageId,
+        ),
         h("span", { class: "cell-dim" }, typeLabel(row.type)),
       ]);
     },
@@ -643,7 +657,9 @@ const columns = computed<DataTableColumn<PaymentRow>[]>(() => [
             disabled: !row.stripeSessionId,
             onClick: () => copyText(row.stripeSessionId, "Session ID"),
           },
-          { icon: () => h(NIcon, { size: 15 }, { default: () => h(CopyIcon) }) },
+          {
+            icon: () => h(NIcon, { size: 15 }, { default: () => h(CopyIcon) }),
+          },
         ),
         h(
           NButton,
@@ -653,7 +669,9 @@ const columns = computed<DataTableColumn<PaymentRow>[]>(() => [
             title: "Open user",
             onClick: () => goToUser(row.userId),
           },
-          { icon: () => h(NIcon, { size: 15 }, { default: () => h(OpenIcon) }) },
+          {
+            icon: () => h(NIcon, { size: 15 }, { default: () => h(OpenIcon) }),
+          },
         ),
       ]);
     },

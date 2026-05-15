@@ -10,7 +10,7 @@
           <n-icon size="20" color="var(--accent-color)">
             <SparklesOutline />
           </n-icon>
-          <span>Buy Credits</span>
+          <span>Purchase Credits</span>
         </div>
       </template>
       <template #header-extra>
