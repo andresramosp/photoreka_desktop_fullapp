@@ -66,26 +66,6 @@ export default defineConfig({
   build: {
     rollupOptions: {
       maxParallelFileOps: 20,
-      output: {
-        manualChunks(id) {
-          if (id.includes("node_modules")) {
-            if (id.includes("pixi.js") || id.includes("@pixi"))
-              return "vendor-pixi";
-            if (id.includes("konva") || id.includes("vue-konva"))
-              return "vendor-konva";
-            if (id.includes("leaflet") || id.includes("vue-leaflet"))
-              return "vendor-leaflet";
-            if (id.includes("firebase")) return "vendor-firebase";
-            if (
-              id.includes("vue") ||
-              id.includes("pinia") ||
-              id.includes("vue-router")
-            )
-              return "vendor-vue";
-            return "vendor";
-          }
-        },
-      },
     },
   },
   server: {
