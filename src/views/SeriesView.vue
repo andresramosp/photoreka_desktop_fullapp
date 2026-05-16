@@ -364,6 +364,45 @@
             </n-button>
           </div>
 
+          <div class="sort-controls">
+            <n-select
+              v-model:value="sortType"
+              :options="sortOptions"
+              size="small"
+              style="width: 120px"
+              clearable
+              placeholder="Sort"
+              :filterable="false"
+            />
+            <n-button
+              v-if="sortActive"
+              text
+              size="tiny"
+              @click="toggleSortOrder"
+              class="sort-order-icon"
+              :title="
+                sortOrder === 'desc'
+                  ? 'Descending (click for Ascending)'
+                  : 'Ascending (click for Descending)'
+              "
+            >
+              <n-icon size="18">
+                <svg viewBox="0 0 24 24" style="width: 18px; height: 18px">
+                  <path
+                    v-if="sortOrder === 'desc'"
+                    d="M19,17H22L18,21L14,17H17V3H19V17M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
+                    fill="currentColor"
+                  />
+                  <path
+                    v-else
+                    d="M19,7H22L18,3L14,7H17V21H19V7M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </n-icon>
+            </n-button>
+          </div>
+
           <div class="set-actions">
             <n-button
               v-if="seriesSelection.isSelectionMode.value"
@@ -473,14 +512,51 @@
           </template>
           New Set
         </n-button>
-        <n-button
-          v-if="seriesSelection.isSelectionMode.value"
-          type="error"
-          ghost
-          @click="showBulkDeleteConfirmation"
-        >
-          Delete Selected ({{ seriesSelection.selectedIds.value.length }})
-        </n-button>
+        <div class="sort-controls">
+          <n-button
+            v-if="seriesSelection.isSelectionMode.value"
+            type="error"
+            ghost
+            @click="showBulkDeleteConfirmation"
+          >
+            Delete Selected ({{ seriesSelection.selectedIds.value.length }})
+          </n-button>
+          <n-select
+            v-model:value="sortType"
+            :options="sortOptions"
+            style="width: 120px"
+            clearable
+            placeholder="Sort"
+            :filterable="false"
+          />
+          <n-button
+            v-if="sortActive"
+            text
+            size="tiny"
+            @click="toggleSortOrder"
+            class="sort-order-icon"
+            :title="
+              sortOrder === 'desc'
+                ? 'Descending (click for Ascending)'
+                : 'Ascending (click for Descending)'
+            "
+          >
+            <n-icon size="18">
+              <svg viewBox="0 0 24 24" style="width: 18px; height: 18px">
+                <path
+                  v-if="sortOrder === 'desc'"
+                  d="M19,17H22L18,21L14,17H17V3H19V17M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
+                  fill="currentColor"
+                />
+                <path
+                  v-else
+                  d="M19,7H22L18,3L14,7H17V21H19V7M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
+                  fill="currentColor"
+                />
+              </svg>
+            </n-icon>
+          </n-button>
+        </div>
       </div>
 
       <div v-if="!isLoading" class="card-grid">
@@ -803,6 +879,7 @@ import {
   NFormItem,
   NInput,
   NSpin,
+  NSelect,
   useMessage,
 } from "naive-ui";
 import {
@@ -991,16 +1068,54 @@ const isLoading = computed(() => {
 
 // Computed properties for store data
 const allSeries = computed(() => seriesStore.allSeries);
-const rootSeries = computed(() => seriesStore.rootSeries);
-const rootSets = computed(() => seriesStore.rootSets);
+
+// Sorting
+const sortType = ref(null); // null | 'name' | 'date'
+const sortOrder = ref("desc"); // 'asc' | 'desc'
+const sortActive = computed(() => sortType.value !== null);
+
+const sortOptions = [
+  { label: "Name", value: "name" },
+  { label: "Date", value: "date" },
+];
+
+const toggleSortOrder = () => {
+  sortOrder.value = sortOrder.value === "asc" ? "desc" : "asc";
+};
+
+const _sortList = (list, nameKey) => {
+  if (!list || list.length === 0) return list;
+  if (!sortType.value) return list;
+  return [...list].sort((a, b) => {
+    let va, vb;
+    if (sortType.value === "name") {
+      va = (a[nameKey] || a.name || a.title || "").toLowerCase();
+      vb = (b[nameKey] || b.name || b.title || "").toLowerCase();
+    } else if (sortType.value === "date") {
+      va = new Date(a.createdAt || 0).getTime();
+      vb = new Date(b.createdAt || 0).getTime();
+    }
+    const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+    return sortOrder.value === "asc" ? cmp : -cmp;
+  });
+};
+
+const rootSeries = computed(() => _sortList(seriesStore.rootSeries, "name"));
+const rootSets = computed(() => _sortList(seriesStore.rootSets, "name"));
 const hasRootContent = computed(
   () => seriesStore.rootSeries.length > 0 || seriesStore.rootSets.length > 0,
 );
 const currentChildSets = computed(() =>
-  viewingSet.value ? seriesStore.childSetsOf(viewingSet.value.id) : [],
+  _sortList(
+    viewingSet.value ? seriesStore.childSetsOf(viewingSet.value.id) : [],
+    "name",
+  ),
 );
 const currentSetSeries = computed(() =>
-  viewingSet.value ? seriesStore.seriesInSet(viewingSet.value.id) : [],
+  _sortList(
+    viewingSet.value ? seriesStore.seriesInSet(viewingSet.value.id) : [],
+    "name",
+  ),
 );
 const setIsEmpty = computed(
   () =>
@@ -2243,6 +2358,23 @@ watch(fullscreenViewerVisible, (isVisible) => {
   justify-content: space-between;
   gap: var(--spacing-md);
   margin-bottom: var(--spacing-lg);
+}
+
+.sort-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.sort-order-icon {
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+  padding: 0;
+  min-width: 32px;
+}
+
+.sort-order-icon:hover {
+  color: var(--primary-color);
 }
 
 .set-header {
