@@ -39,6 +39,7 @@ export default class PaymentService {
       limit: 100,
     })
 
+    const seenProductIds = new Set<string>()
     const items = prices.data
       .map((price) =>
         tryParsePaymentCatalogItem(price, {
@@ -47,6 +48,11 @@ export default class PaymentService {
         })
       )
       .filter((item): item is PaymentCatalogItem => item !== null)
+      .filter((item) => {
+        if (seenProductIds.has(item.stripeProductId)) return false
+        seenProductIds.add(item.stripeProductId)
+        return true
+      })
       .sort(sortCatalogItems)
 
     const catalog = {
