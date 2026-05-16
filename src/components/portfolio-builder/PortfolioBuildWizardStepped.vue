@@ -548,6 +548,7 @@ const props = defineProps({
   show: { type: Boolean, default: false },
   /** Pre-fill the wizard from an existing build config (used for variants). */
   prefillConfig: { type: Object, default: null },
+  targetSetId: { type: [Number, String], default: null },
 });
 const emit = defineEmits(["update:show", "build-complete"]);
 
@@ -1081,6 +1082,10 @@ const handleSubmit = async () => {
     coherenceMode: form.coherenceMode,
     sequencing: form.sequencing,
   };
+
+  if (props.targetSetId) {
+    config.setId = props.targetSetId;
+  }
 
   if (form.weightMode === "advanced") {
     config.weights = Object.fromEntries(

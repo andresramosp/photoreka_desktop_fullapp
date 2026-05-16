@@ -79,6 +79,7 @@ interface CollectionSetItem {
   parentSetId?: number | null;
   collectionsCount?: number;
   seriesCount?: number;
+  portfolioBuildsCount?: number;
   childSetsCount?: number;
   updatedAt?: Date | string;
 }
@@ -153,7 +154,11 @@ const onDrop = (e: DragEvent) => {
 };
 
 const contentCount = computed(
-  () => props.item.collectionsCount ?? props.item.seriesCount ?? 0,
+  () =>
+    props.item.collectionsCount ??
+    props.item.seriesCount ??
+    props.item.portfolioBuildsCount ??
+    0,
 );
 
 const totalCount = computed(

@@ -411,6 +411,7 @@ watch(
       seriesStore.getOrFetch(true);
       seriesStore.getOrFetchSets(true);
       portfolioBuildsStore.getOrFetch(true);
+      portfolioBuildsStore.getOrFetchSets(true);
       tagCloudStore.prefetch();
       userStore.processPatterns();
     } else {

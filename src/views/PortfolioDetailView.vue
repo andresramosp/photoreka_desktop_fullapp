@@ -15,7 +15,7 @@
                 </svg>
               </n-icon>
             </template>
-            Back to Portfolios
+            {{ backLabel }}
           </n-button>
 
           <div class="header-actions-buttons" v-if="build">
@@ -182,6 +182,7 @@
     <PortfolioBuildWizard
       v-model:show="showVariantWizard"
       :prefill-config="variantPrefillConfig"
+      :target-set-id="build?.setId || null"
       @build-complete="onVariantBuildComplete"
     />
 
@@ -421,6 +422,14 @@ const currentPhotoIds = computed(() => photos.value.map((p) => p.id));
 
 const isManualBuild = computed(() => Boolean(build.value?.config?.isManual));
 
+const parentSet = computed(() =>
+  build.value?.setId ? store.getSetById(build.value.setId) : null,
+);
+
+const backLabel = computed(() =>
+  parentSet.value ? `Back to ${parentSet.value.name}` : "Back to Portfolios",
+);
+
 function handleAddPhotos(newPhotos) {
   if (!Array.isArray(newPhotos) || newPhotos.length === 0) return;
   const existing = new Set(photos.value.map((p) => p.id));
@@ -458,6 +467,9 @@ async function loadBuild(buildIdParam) {
 
     const data = await store.getBuildStatus(buildId);
     build.value = data;
+    if (data.setId && !store.setsHaveBeenLoaded) {
+      await store.getOrFetchSets();
+    }
 
     if (data.status === "completed" && data.result?.photoItems?.length) {
       photos.value = data.result.photoItems.map((p) => ({ ...p }));
@@ -536,7 +548,14 @@ async function saveLayout() {
 }
 
 function goBack() {
-  router.push({ name: "portfolios" });
+  if (build.value?.setId) {
+    router.push({
+      name: "portfolio-set",
+      params: { setId: build.value.setId },
+    });
+  } else {
+    router.push({ name: "portfolios" });
+  }
 }
 
 function showDeleteConfirmation() {
@@ -567,9 +586,16 @@ function openVariantWizard() {
   showVariantWizard.value = true;
 }
 
-function onVariantBuildComplete() {
-  store.fetchBuilds();
-  router.push({ name: "portfolios" });
+async function onVariantBuildComplete() {
+  await Promise.all([store.fetchBuilds(), store.fetchBuildSets()]);
+  if (build.value?.setId) {
+    router.push({
+      name: "portfolio-set",
+      params: { setId: build.value.setId },
+    });
+  } else {
+    router.push({ name: "portfolios" });
+  }
 }
 
 function onCollectionAdded() {
@@ -609,7 +635,7 @@ async function deletePortfolio() {
       }" deleted successfully`,
     );
     deleteConfirmationVisible.value = false;
-    router.push({ name: "portfolios" });
+    goBack();
   } catch (err) {
     console.error("[PortfolioDetailView] delete error:", err);
     message.error("Failed to delete portfolio");

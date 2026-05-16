@@ -186,6 +186,10 @@ const activeKey = computed(() => {
     return `portfolio-${route.params.id}`;
   }
 
+  if (routeName === "portfolio-set" && route.params.setId) {
+    return `portfolio-set-${route.params.setId}`;
+  }
+
   // Handle collections list view - mark the group as active
   if (routeName === "collections") {
     return "collections-group";
@@ -233,6 +237,9 @@ const handleMenuSelect = (key: string) => {
       // Extraer el id después de "series-"
       const id = key.replace("series-", "");
       router.push(`/series/${id}`);
+    } else if (key.startsWith("portfolio-set-")) {
+      const id = key.replace("portfolio-set-", "");
+      router.push(`/portfolios/set/${id}`);
     } else {
       const id = key.replace("portfolio-", "");
       router.push(`/portfolios/${id}`);

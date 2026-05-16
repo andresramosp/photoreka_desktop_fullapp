@@ -173,14 +173,58 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     return [...rootSetNodes, ...rootSeriesNodes];
   });
 
-  const portfolios = computed<MenuLeafItem[]>(() =>
-    portfolioBuildsStore.allBuilds.map(
-      (build: { id: string | number; config?: { name?: string } }) => ({
+  const buildPortfolioSetChildren = (setId: string | number): MenuOption[] => {
+    const childSets: MenuOption[] = portfolioBuildsStore
+      .childSetsOf(setId)
+      .map((s: { id: string | number; name?: string }) => ({
+        label: () =>
+          h("span", { class: "collection-menu-item" }, s.name || `Set ${s.id}`),
+        key: `portfolio-set-${s.id}`,
+        icon: renderIcon(FolderIcon),
+        children: buildPortfolioSetChildren(s.id),
+      }));
+
+    const portfolioNodes: MenuOption[] = portfolioBuildsStore
+      .buildsInSet(setId)
+      .map((build: { id: string | number; config?: { name?: string } }) => ({
+        label: () =>
+          h(
+            "span",
+            { class: "collection-menu-item" },
+            build.config?.name || `Portfolio #${build.id}`,
+          ),
         key: `portfolio-${build.id}`,
-        label: build.config?.name || `Portfolio #${build.id}`,
+      }));
+
+    return [...childSets, ...portfolioNodes];
+  };
+
+  const portfolioTreeChildren = computed<MenuOption[]>(() => {
+    const rootSetNodes: MenuOption[] = portfolioBuildsStore.rootSets.map(
+      (s: { id: string | number; name?: string }) => ({
+        label: () =>
+          h("span", { class: "collection-menu-item" }, s.name || `Set ${s.id}`),
+        key: `portfolio-set-${s.id}`,
+        icon: renderIcon(FolderIcon),
+        children: buildPortfolioSetChildren(s.id),
       }),
-    ),
-  );
+    );
+
+    const rootPortfolioNodes: MenuOption[] =
+      portfolioBuildsStore.rootBuilds.map(
+        (build: { id: string | number; config?: { name?: string } }) => ({
+          label: () =>
+            h(
+              "span",
+              { class: "collection-menu-item" },
+              build.config?.name || `Portfolio #${build.id}`,
+            ),
+          key: `portfolio-${build.id}`,
+        }),
+      );
+
+    return [...rootSetNodes, ...rootPortfolioNodes];
+  });
 
   const appAccessMode = computed(() => photosStore.appAccessMode);
   const isBlocked = computed(() => appAccessMode.value === "blocked");
@@ -474,11 +518,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     children:
       isToolDisabledOnMobile("portfolios") || isBlocked.value
         ? undefined
-        : portfolios.value.map((portfolio) => ({
-            label: () =>
-              h("span", { class: "collection-menu-item" }, portfolio.label),
-            key: portfolio.key,
-          })),
+        : portfolioTreeChildren.value,
   }));
 
   // Tag Cloud (root-level)

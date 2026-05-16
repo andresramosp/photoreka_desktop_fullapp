@@ -4,14 +4,43 @@ import { api } from "@/utils/axios";
 export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
   state: () => ({
     builds: null, // null = not loaded, [] = loaded but empty
+    buildSets: null, // null = not loaded, [] = loaded but empty
     isLoading: false,
     isCreating: false,
+    isDeleting: false,
     defaultWeights: null, // null = not yet fetched; cached after first call
   }),
 
   getters: {
     allBuilds: (state) => (Array.isArray(state.builds) ? state.builds : []),
+    allBuildSets: (state) =>
+      Array.isArray(state.buildSets) ? state.buildSets : [],
+    rootBuilds: (state) => {
+      if (!Array.isArray(state.builds)) return [];
+      return state.builds.filter((build) => !build.setId);
+    },
+    rootSets: (state) => {
+      if (!Array.isArray(state.buildSets)) return [];
+      return state.buildSets.filter((set) => !set.parentSetId);
+    },
+    getSetById: (state) => (id) => {
+      if (!Array.isArray(state.buildSets)) return null;
+      return state.buildSets.find((set) => String(set.id) === String(id));
+    },
+    buildsInSet: (state) => (setId) => {
+      if (!Array.isArray(state.builds)) return [];
+      return state.builds.filter(
+        (build) => String(build.setId) === String(setId),
+      );
+    },
+    childSetsOf: (state) => (setId) => {
+      if (!Array.isArray(state.buildSets)) return [];
+      return state.buildSets.filter(
+        (set) => String(set.parentSetId) === String(setId),
+      );
+    },
     hasBeenLoaded: (state) => state.builds !== null,
+    setsHaveBeenLoaded: (state) => state.buildSets !== null,
     totalBuilds: (state) =>
       Array.isArray(state.builds) ? state.builds.length : 0,
   },
@@ -19,8 +48,10 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
   actions: {
     resetStore() {
       this.builds = null;
+      this.buildSets = null;
       this.isLoading = false;
       this.isCreating = false;
+      this.isDeleting = false;
       // Keep defaultWeights cached — they never change between sessions.
     },
 
@@ -29,6 +60,13 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
         return this.allBuilds;
       }
       return await this.fetchBuilds();
+    },
+
+    async getOrFetchSets(force = false) {
+      if (this.setsHaveBeenLoaded && !force) {
+        return this.allBuildSets;
+      }
+      return await this.fetchBuildSets();
     },
 
     async fetchBuilds() {
@@ -43,6 +81,20 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
         return [];
       } finally {
         this.isLoading = false;
+      }
+    },
+
+    async fetchBuildSets() {
+      try {
+        const response = await api.get("/api/portfolio-build-sets");
+        this.buildSets = response.data.map((set) => ({
+          ...set,
+          updatedAt: new Date(set.updatedAt || set.created_at || new Date()),
+        }));
+        return this.buildSets;
+      } catch (error) {
+        console.error("[PortfolioBuildsStore] fetchBuildSets error:", error);
+        throw error;
       }
     },
 
@@ -90,12 +142,13 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
      * Create a manually-curated (empty) portfolio. No AI build runs; the
      * user will add photos through the detail view.
      */
-    async createManual({ name, description }) {
+    async createManual({ name, description, setId }) {
       this.isCreating = true;
       try {
         const response = await api.post("/api/portfolio-build/manual", {
           name,
           description,
+          setId: setId || null,
         });
         return response.data;
       } catch (error) {
@@ -103,6 +156,128 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
         throw error;
       } finally {
         this.isCreating = false;
+      }
+    },
+
+    async createBuildSet(data) {
+      try {
+        const payload = {
+          name: data.name,
+          description: data.description || null,
+          parentSetId: data.parentSetId || null,
+        };
+        const response = await api.post("/api/portfolio-build-sets", payload);
+        const newSet = {
+          ...response.data,
+          updatedAt: new Date(response.data.updatedAt || new Date()),
+        };
+        if (Array.isArray(this.buildSets)) {
+          this.buildSets.push(newSet);
+        } else {
+          this.buildSets = [newSet];
+        }
+        return newSet;
+      } catch (error) {
+        console.error("[PortfolioBuildsStore] createBuildSet error:", error);
+        throw error;
+      }
+    },
+
+    async updateBuildSet(id, data) {
+      try {
+        const payload = {
+          name: data.name,
+          description: data.description ?? null,
+          parentSetId: data.parentSetId ?? undefined,
+        };
+        await api.put(`/api/portfolio-build-sets/${id}`, payload);
+        if (Array.isArray(this.buildSets)) {
+          const idx = this.buildSets.findIndex(
+            (set) => String(set.id) === String(id),
+          );
+          if (idx !== -1) {
+            this.buildSets[idx] = {
+              ...this.buildSets[idx],
+              ...payload,
+              updatedAt: new Date(),
+            };
+          }
+        }
+        return true;
+      } catch (error) {
+        console.error("[PortfolioBuildsStore] updateBuildSet error:", error);
+        throw error;
+      }
+    },
+
+    async deleteBuildSet(id) {
+      try {
+        const deletedSet = Array.isArray(this.buildSets)
+          ? this.buildSets.find((set) => String(set.id) === String(id))
+          : null;
+        const promotedParentId = deletedSet?.parentSetId ?? null;
+
+        await api.delete(`/api/portfolio-build-sets/${id}`);
+        if (Array.isArray(this.buildSets)) {
+          this.buildSets = this.buildSets.filter(
+            (set) => String(set.id) !== String(id),
+          );
+          this.buildSets.forEach((set) => {
+            if (String(set.parentSetId) === String(id)) {
+              set.parentSetId = promotedParentId;
+            }
+          });
+        }
+        if (Array.isArray(this.builds)) {
+          this.builds.forEach((build) => {
+            if (String(build.setId) === String(id)) {
+              build.setId = promotedParentId;
+            }
+          });
+        }
+        return true;
+      } catch (error) {
+        console.error("[PortfolioBuildsStore] deleteBuildSet error:", error);
+        throw error;
+      }
+    },
+
+    async moveBuildToSet(buildId, targetSetId) {
+      try {
+        await api.patch("/api/portfolio-build/move", {
+          buildId,
+          targetSetId: targetSetId || null,
+        });
+        if (Array.isArray(this.builds)) {
+          const build = this.builds.find(
+            (b) => String(b.id) === String(buildId),
+          );
+          if (build) {
+            const oldSetId = build.setId;
+            build.setId = targetSetId || null;
+            if (Array.isArray(this.buildSets)) {
+              if (oldSetId) {
+                const oldSet = this.buildSets.find(
+                  (set) => String(set.id) === String(oldSetId),
+                );
+                if (oldSet && oldSet.portfolioBuildsCount > 0)
+                  oldSet.portfolioBuildsCount -= 1;
+              }
+              if (targetSetId) {
+                const newSet = this.buildSets.find(
+                  (set) => String(set.id) === String(targetSetId),
+                );
+                if (newSet)
+                  newSet.portfolioBuildsCount =
+                    (newSet.portfolioBuildsCount ?? 0) + 1;
+              }
+            }
+          }
+        }
+        return true;
+      } catch (error) {
+        console.error("[PortfolioBuildsStore] moveBuildToSet error:", error);
+        throw error;
       }
     },
 
@@ -216,16 +391,75 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
     },
 
     async deleteBuild(buildId) {
+      this.isDeleting = true;
       try {
         const response = await api.delete(`/api/portfolio-build/${buildId}`);
         if (Array.isArray(this.builds)) {
+          const deletedBuild = this.builds.find(
+            (b) => String(b.id) === String(buildId),
+          );
           this.builds = this.builds.filter((b) => b.id !== buildId);
+          if (deletedBuild?.setId && Array.isArray(this.buildSets)) {
+            const set = this.buildSets.find(
+              (s) => String(s.id) === String(deletedBuild.setId),
+            );
+            if (set && set.portfolioBuildsCount > 0)
+              set.portfolioBuildsCount -= 1;
+          }
         }
         return response.data;
       } catch (error) {
         console.error("[PortfolioBuildsStore] deleteBuild error:", error);
         throw error;
+      } finally {
+        this.isDeleting = false;
       }
+    },
+
+    async deleteBuilds(ids) {
+      this.isDeleting = true;
+      try {
+        const response = await api.delete("/api/portfolio-build", {
+          data: { ids },
+        });
+        if (Array.isArray(this.builds)) {
+          const idSet = new Set(ids.map(String));
+          const deletedBuilds = this.builds.filter((build) =>
+            idSet.has(String(build.id)),
+          );
+          this.builds = this.builds.filter(
+            (build) => !idSet.has(String(build.id)),
+          );
+          if (Array.isArray(this.buildSets)) {
+            deletedBuilds.forEach((build) => {
+              if (!build.setId) return;
+              const set = this.buildSets.find(
+                (s) => String(s.id) === String(build.setId),
+              );
+              if (set && set.portfolioBuildsCount > 0)
+                set.portfolioBuildsCount -= 1;
+            });
+          }
+        }
+        return response.data;
+      } catch (error) {
+        console.error("[PortfolioBuildsStore] deleteBuilds error:", error);
+        throw error;
+      } finally {
+        this.isDeleting = false;
+      }
+    },
+
+    getBreadcrumbFor(setId) {
+      const trail = [];
+      let current = this.getSetById(setId);
+      while (current) {
+        trail.unshift(current);
+        current = current.parentSetId
+          ? this.getSetById(current.parentSetId)
+          : null;
+      }
+      return trail;
     },
   },
 });

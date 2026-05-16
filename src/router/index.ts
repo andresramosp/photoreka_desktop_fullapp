@@ -397,6 +397,14 @@ const router = createRouter({
       },
     },
     {
+      path: "/portfolios/set/:setId",
+      name: "portfolio-set",
+      component: PortfolioBuilderView,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
       path: "/portfolios/:id",
       name: "portfolio-detail",
       component: PortfolioDetailView,

@@ -5,8 +5,175 @@
       <n-spin :size="32" />
     </div>
 
+    <!-- Set View -->
+    <div v-else-if="showSetView && viewingSet" class="set-view">
+      <div class="set-header">
+        <div class="breadcrumb">
+          <n-button
+            text
+            class="breadcrumb-item"
+            :class="{ 'breadcrumb-drop-target': breadcrumbDragOver === 'root' }"
+            @click="backToRoot"
+            @dragover.prevent="onBreadcrumbDragOver('root', $event)"
+            @dragleave="onBreadcrumbDragLeave($event)"
+            @drop.prevent="onBreadcrumbDrop(null, $event)"
+          >
+            <template #icon>
+              <n-icon><GridOutline /></n-icon>
+            </template>
+            Portfolios
+          </n-button>
+          <template v-for="(crumb, i) in breadcrumb" :key="crumb.id">
+            <n-icon size="14" class="breadcrumb-sep">
+              <ChevronForwardOutline />
+            </n-icon>
+            <n-button
+              text
+              class="breadcrumb-item"
+              :class="{
+                'breadcrumb-current': i === breadcrumb.length - 1,
+                'breadcrumb-drop-target': breadcrumbDragOver === crumb.id,
+              }"
+              @click="
+                i < breadcrumb.length - 1 ? navigateToSet(crumb.id) : null
+              "
+              @dragover.prevent="onBreadcrumbDragOver(crumb.id, $event)"
+              @dragleave="onBreadcrumbDragLeave($event)"
+              @drop.prevent="onBreadcrumbDrop(crumb.id, $event)"
+            >
+              {{ crumb.name }}
+            </n-button>
+          </template>
+        </div>
+
+        <div class="set-title-row">
+          <div v-if="!editingSetTitle" class="title-display">
+            <h1 class="detail-title">{{ viewingSet.name }}</h1>
+            <n-button text class="edit-button" @click="startEditSetTitle">
+              <template #icon>
+                <n-icon size="20"><CreateOutline /></n-icon>
+              </template>
+            </n-button>
+          </div>
+          <div v-else class="title-edit">
+            <n-input
+              v-model:value="editedSetTitle"
+              placeholder="Enter set name..."
+              maxlength="100"
+            />
+            <n-button
+              text
+              class="action-button"
+              @click="saveSetTitle"
+              :loading="isSavingSetTitle"
+            >
+              <template #icon>
+                <n-icon size="20"><CheckmarkOutline /></n-icon>
+              </template>
+            </n-button>
+            <n-button text class="action-button" @click="cancelEditSetTitle">
+              <template #icon>
+                <n-icon size="20"><CloseOutline /></n-icon>
+              </template>
+            </n-button>
+          </div>
+
+          <div class="set-actions">
+            <n-button
+              v-if="portfolioSelection.isSelectionMode.value"
+              type="error"
+              ghost
+              @click="showBulkDeleteConfirmation"
+            >
+              Delete Selected ({{
+                portfolioSelection.selectedIds.value.length
+              }})
+            </n-button>
+            <n-button type="primary" ghost @click="openWizardInSet">
+              <template #icon>
+                <n-icon><SparklesOutline /></n-icon>
+              </template>
+              New Portfolio
+            </n-button>
+            <n-button @click="showCreateSubsetDialog">
+              <template #icon>
+                <n-icon><FolderOutline /></n-icon>
+              </template>
+              New Set
+            </n-button>
+            <n-button type="error" ghost @click="showDeleteSetConfirmation">
+              Delete Set
+            </n-button>
+          </div>
+        </div>
+
+        <p v-if="viewingSet.description" class="set-description">
+          {{ viewingSet.description }}
+        </p>
+      </div>
+
+      <div v-if="setIsEmpty" class="portfolio-placeholder compact">
+        <div class="placeholder-content">
+          <n-icon :size="64" color="var(--text-tertiary)">
+            <FolderOpenOutline />
+          </n-icon>
+          <h3 class="placeholder-title">This set is empty</h3>
+          <p class="placeholder-description">
+            Add sets or portfolios to organize your work.
+          </p>
+          <div class="placeholder-actions">
+            <n-button type="primary" @click="openWizardInSet">
+              <template #icon>
+                <n-icon><SparklesOutline /></n-icon>
+              </template>
+              New Portfolio
+            </n-button>
+            <n-button @click="showCreateSubsetDialog">
+              <template #icon>
+                <n-icon><FolderOutline /></n-icon>
+              </template>
+              New Set
+            </n-button>
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="card-grid">
+        <CollectionSetCard
+          v-for="childSet in currentChildSets"
+          :key="`set-${childSet.id}`"
+          :item="childSet"
+          item-type="portfolio"
+          content-label="portfolio"
+          @click="navigateToSet(childSet.id)"
+          @drop-items="onDropBuildsIntoSet"
+        />
+
+        <CollectionCard
+          v-for="item in currentSetItems"
+          :key="item.id"
+          :item="item"
+          type="collection"
+          drag-type="portfolio"
+          item-label="portfolio"
+          :show-update-date="false"
+          :is-selected="portfolioSelection.isSelected(item.id)"
+          :is-selection-mode="portfolioSelection.isSelectionMode.value"
+          :selected-ids="portfolioSelection.selectedIds.value"
+          @click="(_, ev) => onPortfolioCardClick(item, ev, currentSetItems)"
+          @select-toggle="
+            () =>
+              portfolioSelection.toggleSelectItem(
+                item.id,
+                currentSetItems.map((p) => p.id),
+              )
+          "
+        />
+      </div>
+    </div>
+
     <!-- Empty state placeholder -->
-    <div v-if="!isLoading && builds.length === 0" class="portfolio-placeholder">
+    <div v-else-if="!hasRootContent" class="portfolio-placeholder">
       <div class="placeholder-content">
         <n-icon
           :size="64"
@@ -63,6 +230,12 @@
             </template>
             Build a new portfolio
           </n-button>
+          <n-button size="large" @click="showCreateSetDialog">
+            <template #icon>
+              <n-icon><FolderOutline /></n-icon>
+            </template>
+            Create Set
+          </n-button>
           <!-- <n-button size="large" @click="openManualDialog">
             <template #icon>
               <n-icon><CreateOutline /></n-icon>
@@ -74,79 +247,154 @@
     </div>
 
     <!-- Content with cards (when builds exist) -->
-    <div v-else-if="!isLoading" class="card-grid">
-      <!-- Create card -->
-      <CreateCard
-        v-if="!ENABLE_CREATE_OPTIONS"
-        title="New Portfolio"
-        subtitle="Start compiling your best photos"
-        @click="openWizard"
-      />
-
-      <!-- Dual-action create card (ENABLE_CREATE_OPTIONS = true) -->
-      <div
-        v-else
-        class="portfolio-create-card"
-        :class="{ 'is-open': showCreateOptions }"
-        @click="showCreateOptions && (showCreateOptions = false)"
-      >
-        <Transition name="create-fade" mode="out-in">
-          <div
-            v-if="!showCreateOptions"
-            key="closed"
-            class="portfolio-create-default"
-            @click.stop="showCreateOptions = true"
-          >
-            <div class="portfolio-create-icon">
-              <n-icon :size="32" color="var(--primary-color)">
-                <AddOutline />
-              </n-icon>
-            </div>
-            <h3 class="portfolio-create-title">New Portfolio</h3>
-            <p class="portfolio-create-subtitle">
-              Choose how you want to build it
-            </p>
-          </div>
-          <div v-else key="open" class="portfolio-create-options">
-            <button
-              type="button"
-              class="portfolio-create-btn ai"
-              @click.stop="openWizard"
-            >
-              <n-icon :size="18"><SparklesOutline /></n-icon>
-              <span class="btn-label">AI Powered</span>
-              <span class="btn-desc">Wizard + automatic curation</span>
-            </button>
-            <button
-              type="button"
-              class="portfolio-create-btn manual"
-              @click.stop="openManualDialog"
-            >
-              <n-icon :size="18"><CreateOutline /></n-icon>
-              <span class="btn-label">Manual</span>
-              <span class="btn-desc">Start empty and pick photos</span>
-            </button>
-          </div>
-        </Transition>
+    <div v-else>
+      <div class="root-toolbar">
+        <n-button @click="showCreateSetDialog">
+          <template #icon>
+            <n-icon><FolderOutline /></n-icon>
+          </template>
+          New Set
+        </n-button>
+        <n-button
+          v-if="portfolioSelection.isSelectionMode.value"
+          type="error"
+          ghost
+          @click="showBulkDeleteConfirmation"
+        >
+          Delete Selected ({{ portfolioSelection.selectedIds.value.length }})
+        </n-button>
       </div>
 
-      <!-- Existing build cards -->
-      <CollectionCard
-        v-for="item in buildItems"
-        :key="item.id"
-        :item="item"
-        type="collection"
-        :show-update-date="false"
-        @click="handleBuildClick"
-        :selectable="false"
-      />
+      <div class="card-grid">
+        <!-- Create card -->
+        <CreateCard
+          v-if="!ENABLE_CREATE_OPTIONS"
+          title="New Portfolio"
+          subtitle="Start compiling your best photos"
+          @click="openWizard"
+        />
+
+        <!-- Dual-action create card (ENABLE_CREATE_OPTIONS = true) -->
+        <div
+          v-else
+          class="portfolio-create-card"
+          :class="{ 'is-open': showCreateOptions }"
+          @click="showCreateOptions && (showCreateOptions = false)"
+        >
+          <Transition name="create-fade" mode="out-in">
+            <div
+              v-if="!showCreateOptions"
+              key="closed"
+              class="portfolio-create-default"
+              @click.stop="showCreateOptions = true"
+            >
+              <div class="portfolio-create-icon">
+                <n-icon :size="32" color="var(--primary-color)">
+                  <AddOutline />
+                </n-icon>
+              </div>
+              <h3 class="portfolio-create-title">New Portfolio</h3>
+              <p class="portfolio-create-subtitle">
+                Choose how you want to build it
+              </p>
+            </div>
+            <div v-else key="open" class="portfolio-create-options">
+              <button
+                type="button"
+                class="portfolio-create-btn ai"
+                @click.stop="openWizard"
+              >
+                <n-icon :size="18"><SparklesOutline /></n-icon>
+                <span class="btn-label">AI Powered</span>
+                <span class="btn-desc">Wizard + automatic curation</span>
+              </button>
+              <button
+                type="button"
+                class="portfolio-create-btn manual"
+                @click.stop="openManualDialog"
+              >
+                <n-icon :size="18"><CreateOutline /></n-icon>
+                <span class="btn-label">Manual</span>
+                <span class="btn-desc">Start empty and pick photos</span>
+              </button>
+            </div>
+          </Transition>
+        </div>
+
+        <CollectionSetCard
+          v-for="set in rootSets"
+          :key="`set-${set.id}`"
+          :item="set"
+          item-type="portfolio"
+          content-label="portfolio"
+          @click="navigateToSet(set.id)"
+          @drop-items="onDropBuildsIntoSet"
+        />
+
+        <!-- Existing build cards -->
+        <CollectionCard
+          v-for="item in rootItems"
+          :key="item.id"
+          :item="item"
+          type="collection"
+          drag-type="portfolio"
+          item-label="portfolio"
+          :show-update-date="false"
+          :is-selected="portfolioSelection.isSelected(item.id)"
+          :is-selection-mode="portfolioSelection.isSelectionMode.value"
+          :selected-ids="portfolioSelection.selectedIds.value"
+          @click="(_, ev) => onPortfolioCardClick(item, ev, rootItems)"
+          @select-toggle="
+            () =>
+              portfolioSelection.toggleSelectItem(
+                item.id,
+                rootItems.map((p) => p.id),
+              )
+          "
+        />
+      </div>
     </div>
 
     <!-- Build wizard dialog -->
     <PortfolioBuildWizard
       v-model:show="showWizard"
+      :target-set-id="createSetParentId"
       @build-complete="onBuildComplete"
     />
+
+    <!-- Create Set Dialog -->
+    <n-modal
+      v-model:show="showSetDialog"
+      preset="dialog"
+      title="Create New Set"
+      positive-text="Create Set"
+      negative-text="Cancel"
+      @positive-click="createBuildSet"
+      @negative-click="showSetDialog = false"
+    >
+      <div class="manual-form">
+        <n-form ref="setFormRef" :model="setForm" :rules="setRules">
+          <n-form-item label="Name" path="name">
+            <n-input
+              v-model:value="setForm.name"
+              placeholder="Enter set name..."
+              maxlength="100"
+              show-count
+            />
+          </n-form-item>
+          <n-form-item label="Description" path="description">
+            <n-input
+              v-model:value="setForm.description"
+              type="textarea"
+              placeholder="Add a description (optional)..."
+              :rows="3"
+              maxlength="500"
+              show-count
+            />
+          </n-form-item>
+        </n-form>
+      </div>
+    </n-modal>
 
     <!-- Manual create dialog -->
     <n-modal
@@ -182,12 +430,49 @@
         </n-form>
       </div>
     </n-modal>
+
+    <!-- Bulk Delete Confirmation Dialog -->
+    <n-modal
+      v-model:show="bulkDeleteVisible"
+      preset="dialog"
+      title="Delete Selected Portfolios"
+      positive-text="Delete Selected"
+      negative-text="Cancel"
+      type="error"
+      :loading="store.isDeleting"
+      @positive-click="bulkDeleteBuilds"
+      @negative-click="bulkDeleteVisible = false"
+    >
+      <p>
+        Are you sure you want to delete
+        <strong>{{ portfolioSelection.selectedIds.value.length }}</strong>
+        selected portfolios?
+      </p>
+    </n-modal>
+
+    <!-- Delete Set Confirmation Dialog -->
+    <n-modal
+      v-model:show="deleteSetVisible"
+      preset="dialog"
+      title="Delete Set"
+      positive-text="Delete Set"
+      negative-text="Cancel"
+      type="error"
+      @positive-click="deleteBuildSet"
+      @negative-click="deleteSetVisible = false"
+    >
+      <p>
+        Are you sure you want to delete the set
+        <strong>"{{ viewingSet?.name }}"</strong>?
+      </p>
+      <p>Child sets and portfolios will be moved to the parent set.</p>
+    </n-modal>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
-import { useRouter } from "vue-router";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import {
   NIcon,
   NSpin,
@@ -204,30 +489,58 @@ import {
   ImagesOutline,
   OptionsOutline,
   CreateOutline,
+  FolderOutline,
+  FolderOpenOutline,
+  GridOutline,
+  ChevronForwardOutline,
+  CheckmarkOutline,
+  CloseOutline,
 } from "@vicons/ionicons5";
 import { TOOL_ICONS, getToolById } from "@/config/toolsConfig";
 import CollectionCard from "@/components/CollectionCard.vue";
+import CollectionSetCard from "@/components/CollectionSetCard.vue";
 import CreateCard from "@/components/photos-grid/CreateCard.vue";
 import PortfolioBuildWizard from "@/components/portfolio-builder/PortfolioBuildWizardStepped.vue";
 import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds";
+import { useCardSelection } from "@/composables/useCardSelection";
 
 const PortfolioIcon = TOOL_ICONS[getToolById("portfolios").icon];
 
 defineOptions({ name: "PortfolioBuilderView" });
 
+const route = useRoute();
 const router = useRouter();
 const message = useMessage();
 const store = usePortfolioBuildsStore();
+const portfolioSelection = useCardSelection();
 
 // Set to true to re-enable the AI / Manual split options on the create card
 const ENABLE_CREATE_OPTIONS = false;
 
 const showWizard = ref(false);
 const showManualDialog = ref(false);
+const showSetDialog = ref(false);
+const bulkDeleteVisible = ref(false);
+const deleteSetVisible = ref(false);
 const showCreateOptions = ref(false);
+const createSetParentId = ref(null);
+const viewingSet = ref(null);
+const showSetView = ref(false);
+const editingSetTitle = ref(false);
+const editedSetTitle = ref("");
+const isSavingSetTitle = ref(false);
 const manualFormRef = ref(null);
+const setFormRef = ref(null);
 const manualForm = ref({ name: "", description: "" });
+const setForm = ref({ name: "", description: "" });
 const manualRules = {
+  name: {
+    required: true,
+    message: "Please enter a name",
+    trigger: "blur",
+  },
+};
+const setRules = {
   name: {
     required: true,
     message: "Please enter a name",
@@ -237,35 +550,70 @@ const manualRules = {
 const isCreatingManual = ref(false);
 
 const isLoading = computed(() => store.isLoading);
-const builds = computed(() => store.allBuilds);
-
-const buildItems = computed(() =>
-  builds.value.map((build) => {
-    const previews = (build.photoItems || []).slice(0, 3);
-    const total = build.resultCount ?? build.targetSize ?? previews.length;
-    const filler = Array.from(
-      { length: Math.max(0, total - previews.length) },
-      () => ({ id: null, url: "" }),
-    );
-    return {
-      id: build.id,
-      name: build.config?.name || `Portfolio #${build.id}`,
-      photos: [...previews, ...filler],
-      updatedAt: build.createdAt,
-    };
-  }),
+const rootSets = computed(() => store.rootSets);
+const rootBuilds = computed(() => store.rootBuilds);
+const hasRootContent = computed(
+  () => store.rootBuilds.length > 0 || store.rootSets.length > 0,
+);
+const currentChildSets = computed(() =>
+  viewingSet.value ? store.childSetsOf(viewingSet.value.id) : [],
+);
+const currentSetBuilds = computed(() =>
+  viewingSet.value ? store.buildsInSet(viewingSet.value.id) : [],
+);
+const setIsEmpty = computed(
+  () =>
+    currentChildSets.value.length === 0 && currentSetBuilds.value.length === 0,
+);
+const breadcrumb = computed(() =>
+  viewingSet.value ? store.getBreadcrumbFor(viewingSet.value.id) : [],
 );
 
-onMounted(() => {
-  store.getOrFetch();
+const mapBuildToItem = (build) => {
+  const previews = (build.photoItems || []).slice(0, 3);
+  const total = build.resultCount ?? build.targetSize ?? previews.length;
+  const filler = Array.from(
+    { length: Math.max(0, total - previews.length) },
+    () => ({ id: null, url: "" }),
+  );
+  return {
+    id: build.id,
+    name: build.config?.name || `Portfolio #${build.id}`,
+    photos: [...previews, ...filler],
+    updatedAt: build.createdAt,
+    setId: build.setId,
+  };
+};
+
+const rootItems = computed(() => rootBuilds.value.map(mapBuildToItem));
+const currentSetItems = computed(() =>
+  currentSetBuilds.value.map(mapBuildToItem),
+);
+
+onMounted(async () => {
+  document.addEventListener("keydown", onKeyDown);
+  await Promise.all([store.getOrFetch(), store.getOrFetchSets()]);
+  updateViewState();
+});
+
+onUnmounted(() => {
+  document.removeEventListener("keydown", onKeyDown);
 });
 
 const openWizard = async () => {
+  createSetParentId.value = null;
+  showCreateOptions.value = false;
+  showWizard.value = true;
+};
+
+const openWizardInSet = async () => {
+  createSetParentId.value = viewingSet.value?.id ?? null;
   showCreateOptions.value = false;
   showWizard.value = true;
 };
 
 const openManualDialog = () => {
+  if (!showSetView.value) createSetParentId.value = null;
   showCreateOptions.value = false;
   manualForm.value = { name: "", description: "" };
   showManualDialog.value = true;
@@ -282,13 +630,14 @@ const createManualPortfolio = async () => {
     const { buildId } = await store.createManual({
       name: manualForm.value.name.trim(),
       description: manualForm.value.description.trim() || undefined,
+      setId: createSetParentId.value,
     });
     showManualDialog.value = false;
     message.success(
       `Portfolio "${manualForm.value.name.trim()}" created successfully`,
     );
     manualForm.value = { name: "", description: "" };
-    store.fetchBuilds();
+    await Promise.all([store.fetchBuilds(), store.fetchBuildSets()]);
     router.push({ name: "portfolio-detail", params: { id: buildId } });
   } catch (err) {
     console.error("[PortfolioBuilderView] createManual error:", err);
@@ -299,14 +648,219 @@ const createManualPortfolio = async () => {
   }
 };
 
-const onBuildComplete = (result) => {
+const onBuildComplete = async (result) => {
   console.log("[PortfolioBuilderView] Build complete:", result);
-  store.fetchBuilds();
+  await Promise.all([store.fetchBuilds(), store.fetchBuildSets()]);
 };
 
 const handleBuildClick = (item) => {
   router.push({ name: "portfolio-detail", params: { id: item.id } });
 };
+
+const backToRoot = () => router.push({ name: "portfolios" });
+const navigateToSet = (setId) =>
+  router.push({ name: "portfolio-set", params: { setId } });
+
+const showCreateSetDialog = () => {
+  createSetParentId.value = null;
+  setForm.value = { name: "", description: "" };
+  showSetDialog.value = true;
+};
+
+const showCreateSubsetDialog = () => {
+  createSetParentId.value = viewingSet.value?.id ?? null;
+  setForm.value = { name: "", description: "" };
+  showSetDialog.value = true;
+};
+
+const createBuildSet = async () => {
+  try {
+    await setFormRef.value?.validate();
+    await store.createBuildSet({
+      name: setForm.value.name,
+      description: setForm.value.description,
+      parentSetId: createSetParentId.value,
+    });
+    message.success(`Set "${setForm.value.name}" created successfully`);
+    setForm.value = { name: "", description: "" };
+    showSetDialog.value = false;
+  } catch (error) {
+    console.error("[PortfolioBuilderView] createBuildSet error:", error);
+  }
+};
+
+const startEditSetTitle = () => {
+  editedSetTitle.value = viewingSet.value?.name ?? "";
+  editingSetTitle.value = true;
+};
+
+const saveSetTitle = async () => {
+  if (!viewingSet.value || !editedSetTitle.value.trim()) {
+    message.warning("Set name cannot be empty");
+    return;
+  }
+  isSavingSetTitle.value = true;
+  try {
+    await store.updateBuildSet(viewingSet.value.id, {
+      name: editedSetTitle.value.trim(),
+      description: viewingSet.value.description,
+    });
+    message.success("Set name updated");
+    editingSetTitle.value = false;
+    updateViewState();
+  } catch (error) {
+    console.error("[PortfolioBuilderView] saveSetTitle error:", error);
+  } finally {
+    isSavingSetTitle.value = false;
+  }
+};
+
+const cancelEditSetTitle = () => {
+  editingSetTitle.value = false;
+  editedSetTitle.value = "";
+};
+
+const showDeleteSetConfirmation = () => {
+  deleteSetVisible.value = true;
+};
+
+const deleteBuildSet = async () => {
+  if (!viewingSet.value) return;
+  try {
+    const parentId = viewingSet.value.parentSetId;
+    const setName = viewingSet.value.name;
+    await store.deleteBuildSet(viewingSet.value.id);
+    message.success(`Set "${setName}" deleted`);
+    deleteSetVisible.value = false;
+    if (parentId) navigateToSet(parentId);
+    else backToRoot();
+  } catch (error) {
+    console.error("[PortfolioBuilderView] deleteBuildSet error:", error);
+  }
+};
+
+const showBulkDeleteConfirmation = () => {
+  bulkDeleteVisible.value = true;
+};
+
+const bulkDeleteBuilds = async () => {
+  const ids = [...portfolioSelection.selectedIds.value];
+  if (ids.length === 0) return;
+  try {
+    await store.deleteBuilds(ids);
+    message.success(
+      `${ids.length} portfolio${ids.length === 1 ? "" : "s"} deleted`,
+    );
+    portfolioSelection.clearAll();
+    bulkDeleteVisible.value = false;
+  } catch (error) {
+    console.error("[PortfolioBuilderView] bulkDeleteBuilds error:", error);
+    message.error("Failed to delete portfolios");
+  }
+};
+
+const onPortfolioCardClick = (item, nativeEvent, orderedList) => {
+  const orderedIds = orderedList.map((portfolio) => portfolio.id);
+  const handled = portfolioSelection.handleCardSelect(
+    item.id,
+    nativeEvent,
+    orderedIds,
+  );
+  if (!handled) handleBuildClick(item);
+};
+
+const onDropBuildsIntoSet = async (buildIds, setId) => {
+  const ids = Array.isArray(buildIds) ? buildIds : [buildIds];
+  try {
+    await Promise.all(ids.map((id) => store.moveBuildToSet(id, setId)));
+    const set = store.getSetById(setId);
+    message.success(
+      ids.length === 1
+        ? `Portfolio moved to "${set?.name || "set"}"`
+        : `${ids.length} portfolios moved to "${set?.name || "set"}"`,
+    );
+    portfolioSelection.clearAll();
+  } catch (error) {
+    console.error("[PortfolioBuilderView] onDropBuildsIntoSet error:", error);
+    message.error("Failed to move portfolios");
+  }
+};
+
+const breadcrumbDragOver = ref(null);
+
+const onBreadcrumbDragOver = (crumbId, event) => {
+  if (
+    event.dataTransfer?.types.includes("application/x-portfolio-id") ||
+    event.dataTransfer?.types.includes("application/x-portfolio-ids")
+  ) {
+    breadcrumbDragOver.value = crumbId;
+    event.dataTransfer.dropEffect = "move";
+  }
+};
+
+const onBreadcrumbDragLeave = (event) => {
+  if (!event.currentTarget.contains(event.relatedTarget)) {
+    breadcrumbDragOver.value = null;
+  }
+};
+
+const onBreadcrumbDrop = async (targetSetId, event) => {
+  breadcrumbDragOver.value = null;
+  let ids = [];
+  const multiRaw = event.dataTransfer?.getData("application/x-portfolio-ids");
+  if (multiRaw) {
+    try {
+      const parsed = JSON.parse(multiRaw);
+      if (Array.isArray(parsed)) ids = parsed;
+    } catch {
+      ids = [];
+    }
+  }
+  if (ids.length === 0) {
+    const single = event.dataTransfer?.getData("application/x-portfolio-id");
+    if (single) ids = [single];
+  }
+  if (ids.length === 0) return;
+
+  try {
+    await Promise.all(ids.map((id) => store.moveBuildToSet(id, targetSetId)));
+    portfolioSelection.clearAll();
+    message.success(
+      targetSetId
+        ? `${ids.length} portfolio${ids.length === 1 ? "" : "s"} moved`
+        : `${ids.length} portfolio${ids.length === 1 ? "" : "s"} moved to root`,
+    );
+  } catch (error) {
+    console.error("[PortfolioBuilderView] onBreadcrumbDrop error:", error);
+    message.error("Failed to move portfolios");
+  }
+};
+
+const onKeyDown = (event) => {
+  if (event.key === "Escape" && portfolioSelection.isSelectionMode.value) {
+    portfolioSelection.clearAll();
+  }
+};
+
+const updateViewState = () => {
+  const setId = route.params.setId;
+  if (setId) {
+    const set = store.getSetById(setId);
+    if (set) {
+      viewingSet.value = set;
+      showSetView.value = true;
+      return;
+    }
+  }
+  viewingSet.value = null;
+  showSetView.value = false;
+};
+
+watch([() => route.params.setId, () => store.allBuildSets], updateViewState);
+watch(
+  () => route.fullPath,
+  () => portfolioSelection.clearAll(),
+);
 </script>
 
 <style scoped>
@@ -569,6 +1123,106 @@ const handleBuildClick = (item) => {
   padding: 4px 0;
 }
 
+.root-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.set-view {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.set-header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-height: 32px;
+}
+
+.breadcrumb-item {
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+}
+
+.breadcrumb-current {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.breadcrumb-drop-target {
+  background-color: rgba(37, 99, 235, 0.12);
+  color: var(--primary-color);
+}
+
+.breadcrumb-sep {
+  color: var(--text-tertiary);
+}
+
+.set-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.title-display,
+.title-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 240px;
+  flex: 1 1 auto;
+}
+
+.title-edit {
+  max-width: 520px;
+}
+
+.detail-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.edit-button,
+.action-button {
+  color: var(--text-secondary);
+}
+
+.set-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.set-description {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.portfolio-placeholder.compact {
+  min-height: 360px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .portfolio-builder-view {
@@ -581,6 +1235,21 @@ const handleBuildClick = (item) => {
 
   .view-header {
     margin-bottom: var(--spacing-lg);
+  }
+
+  .set-title-row,
+  .set-actions,
+  .root-toolbar {
+    align-items: stretch;
+  }
+
+  .set-actions,
+  .root-toolbar {
+    flex-direction: column;
+  }
+
+  .detail-title {
+    font-size: 22px;
   }
 }
 </style>
