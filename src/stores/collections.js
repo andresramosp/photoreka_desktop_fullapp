@@ -328,6 +328,35 @@ export const useCollectionsStore = defineStore("collections", {
       }
     },
 
+    // Bulk delete collections
+    async deleteCollections(ids) {
+      this.isDeleting = true;
+      try {
+        await api.delete("/api/collections", { data: { ids } });
+
+        if (Array.isArray(this.collections)) {
+          const idSet = new Set(ids.map(String));
+          this.collections = this.collections.filter(
+            (c) => !idSet.has(String(c.id)),
+          );
+        }
+
+        if (
+          this.currentCollection &&
+          ids.map(String).includes(String(this.currentCollection.id))
+        ) {
+          this.currentCollection = null;
+        }
+
+        return true;
+      } catch (error) {
+        console.error("Error bulk deleting collections:", error);
+        throw error;
+      } finally {
+        this.isDeleting = false;
+      }
+    },
+
     // Delete collection
     async deleteCollection(id) {
       this.isDeleting = true;

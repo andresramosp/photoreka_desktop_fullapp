@@ -307,6 +307,26 @@
 
           <!-- Set actions -->
           <div class="set-actions desktop-actions">
+            <n-button
+              v-if="collectionSelection.isSelectionMode.value"
+              type="error"
+              ghost
+              @click="showBulkDeleteConfirmation"
+            >
+              <template #icon>
+                <n-icon>
+                  <svg viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
+                    />
+                  </svg>
+                </n-icon>
+              </template>
+              Delete Selected ({{
+                collectionSelection.selectedCollectionIds.value.length
+              }})
+            </n-button>
             <n-button type="primary" ghost @click="showCreateCollectionInSet">
               <template #icon
                 ><n-icon><AddOutline /></n-icon
@@ -439,6 +459,26 @@
           New Set
         </n-button>
         <div class="sort-controls">
+          <n-button
+            v-if="collectionSelection.isSelectionMode.value"
+            type="error"
+            ghost
+            @click="showBulkDeleteConfirmation"
+          >
+            <template #icon>
+              <n-icon>
+                <svg viewBox="0 0 24 24">
+                  <path
+                    fill="currentColor"
+                    d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
+                  />
+                </svg>
+              </n-icon>
+            </template>
+            Delete Selected ({{
+              collectionSelection.selectedCollectionIds.value.length
+            }})
+          </n-button>
           <n-select
             v-model:value="sortType"
             :options="sortOptions"
@@ -698,6 +738,39 @@
       </div>
     </n-modal>
 
+    <!-- Bulk Delete Collections Confirmation Dialog -->
+    <n-modal
+      v-model:show="bulkDeleteConfirmationVisible"
+      preset="dialog"
+      title="Delete Collections"
+      positive-text="Delete All"
+      negative-text="Cancel"
+      type="error"
+      :loading="collectionsStore.isDeleting"
+      @positive-click="bulkDeleteCollections"
+      @negative-click="bulkDeleteConfirmationVisible = false"
+    >
+      <div class="delete-confirmation">
+        <p>
+          Are you sure you want to delete
+          <strong
+            >{{
+              collectionSelection.selectedCollectionIds.value.length
+            }}
+            collection{{
+              collectionSelection.selectedCollectionIds.value.length !== 1
+                ? "s"
+                : ""
+            }}</strong
+          >?
+        </p>
+        <p class="delete-warning">
+          This action cannot be undone. The collections will be permanently
+          deleted. Photos inside them will not be deleted.
+        </p>
+      </div>
+    </n-modal>
+
     <!-- Delete Set Confirmation Dialog -->
     <n-modal
       v-model:show="deleteSetConfirmationVisible"
@@ -809,6 +882,7 @@ const photosDialogVisible = ref(false);
 const suggestDialogVisible = ref(false);
 const deleteConfirmationVisible = ref(false);
 const deleteSetConfirmationVisible = ref(false);
+const bulkDeleteConfirmationVisible = ref(false);
 const createSetParentId = ref(null);
 
 // Sorting
@@ -1166,6 +1240,24 @@ const refreshCollection = async () => {
 };
 const showDeleteConfirmation = () => {
   deleteConfirmationVisible.value = true;
+};
+const showBulkDeleteConfirmation = () => {
+  bulkDeleteConfirmationVisible.value = true;
+};
+const bulkDeleteCollections = async () => {
+  const ids = [...collectionSelection.selectedCollectionIds.value];
+  if (ids.length === 0) return;
+  try {
+    await collectionsStore.deleteCollections(ids);
+    message.success(
+      `${ids.length} collection${ids.length !== 1 ? "s" : ""} deleted successfully`,
+    );
+    bulkDeleteConfirmationVisible.value = false;
+    collectionSelection.clearAll();
+  } catch (error) {
+    console.error("Error bulk deleting collections:", error);
+    message.error("Failed to delete collections");
+  }
 };
 const deleteCollection = async () => {
   if (!viewingCollection.value) return;
@@ -1631,7 +1723,7 @@ watch(
 .sort-controls {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-md);
 }
 
 .sort-label {
