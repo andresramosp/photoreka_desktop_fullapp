@@ -2,6 +2,8 @@ import type { HttpContext } from '@adonisjs/core/http'
 import PortfolioBuildService from '#services/portfolio_build_service'
 import CreditService from '#services/credit_service'
 import Photo from '#models/photo'
+import PortfolioBuild from '#models/portfolio_build'
+import PortfolioBuildSet from '#models/portfolio_build_set'
 import type { PortfolioBuildConfig } from '#models/portfolio_build'
 import {
   getArtisticExternalKeys,
@@ -24,6 +26,7 @@ export default class PortfolioBuildController {
 
       const body = request.body()
       const config = this.parseAndValidateConfig(body, user.profiles)
+      const setId = await this.parseAndValidateSetId(body.setId, user.id)
 
       const hasCredits = await CreditService.canAfford(user.id)
       if (!hasCredits) {
@@ -63,12 +66,13 @@ export default class PortfolioBuildController {
       }
 
       const wait = Boolean(body.wait ?? false)
-      const build = await service.startBuild(user.id, config, wait)
+      const build = await service.startBuild(user.id, config, wait, setId)
 
       if (wait) {
         return response.ok({
           success: true,
           buildId: build.id,
+          setId: build.setId,
           status: build.status,
           result: build.result,
           costEur: build.costEur,
@@ -79,10 +83,17 @@ export default class PortfolioBuildController {
       return response.accepted({
         success: true,
         buildId: build.id,
+        setId: build.setId,
         status: build.status,
         message: 'Portfolio build started. You will be notified when it completes.',
       })
     } catch (error: any) {
+      if (error.message?.includes('Portfolio set not found')) {
+        return response.notFound({ error: error.message })
+      }
+      if (error.message?.includes('setId must be')) {
+        return response.badRequest({ error: error.message })
+      }
       if (error.message?.includes('already in progress')) {
         return response.conflict({ error: error.message })
       }
@@ -109,6 +120,7 @@ export default class PortfolioBuildController {
 
       return response.ok({
         id: build.id,
+        setId: build.setId,
         status: build.status,
         progress: build.progress,
         config: build.config,
@@ -140,6 +152,7 @@ export default class PortfolioBuildController {
       return response.ok({
         builds: builds.map((b) => ({
           id: b.id,
+          setId: b.setId,
           status: b.status,
           progress: b.progress,
           config: b.config,
@@ -204,6 +217,37 @@ export default class PortfolioBuildController {
       return response.ok({ success: true })
     } catch (error: any) {
       console.error('[PortfolioBuildController] delete error:', error)
+      return response.internalServerError({ error: error.message })
+    }
+  }
+
+  /**
+   * DELETE /api/portfolio-build
+   * Permanently delete multiple portfolio build records.
+   */
+  public async deleteMany({ request, response, auth }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as any
+      const { ids } = request.only(['ids'])
+
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return response.badRequest({ error: 'Build IDs are required.' })
+      }
+
+      const builds = await PortfolioBuild.query().whereIn('id', ids).where('userId', user.id)
+
+      if (builds.length === 0) {
+        return response.notFound({ error: 'No matching portfolios found.' })
+      }
+
+      for (const build of builds) {
+        await build.delete()
+      }
+
+      return response.ok({ success: true, deletedCount: builds.length })
+    } catch (error: any) {
+      console.error('[PortfolioBuildController] deleteMany error:', error)
       return response.internalServerError({ error: error.message })
     }
   }
@@ -349,14 +393,22 @@ export default class PortfolioBuildController {
       }
 
       const service = new PortfolioBuildService()
-      const build = await service.createManual(user.id, name, description)
+      const setId = await this.parseAndValidateSetId(body.setId, user.id)
+      const build = await service.createManual(user.id, name, description, setId)
 
       return response.ok({
         success: true,
         buildId: build.id,
+        setId: build.setId,
         status: build.status,
       })
     } catch (error: any) {
+      if (error.message?.includes('Portfolio set not found')) {
+        return response.notFound({ error: error.message })
+      }
+      if (error.message?.includes('setId must be')) {
+        return response.badRequest({ error: error.message })
+      }
       console.error('[PortfolioBuildController] createManual error:', error)
       return response.internalServerError({ error: error.message })
     }
@@ -548,5 +600,23 @@ export default class PortfolioBuildController {
     }
 
     return config
+  }
+
+  private async parseAndValidateSetId(rawSetId: any, userId: number): Promise<number | null> {
+    if (rawSetId === undefined || rawSetId === null || rawSetId === '') {
+      return null
+    }
+
+    const setId = Number(rawSetId)
+    if (!Number.isFinite(setId)) {
+      throw new Error('setId must be a valid number.')
+    }
+
+    const set = await PortfolioBuildSet.query().where('id', setId).where('userId', userId).first()
+    if (!set) {
+      throw new Error('Portfolio set not found.')
+    }
+
+    return setId
   }
 }

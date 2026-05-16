@@ -2,6 +2,7 @@ import { DateTime } from 'luxon'
 import { BaseModel, belongsTo, column } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 import User from './user.js'
+import PortfolioBuildSet from './portfolio_build_set.js'
 
 export type PortfolioBuildStatus =
   | 'pending'
@@ -81,6 +82,9 @@ export default class PortfolioBuild extends BaseModel {
   declare userId: number
 
   @column()
+  declare setId: number | null
+
+  @column()
   declare status: PortfolioBuildStatus
 
   @column()
@@ -115,4 +119,7 @@ export default class PortfolioBuild extends BaseModel {
 
   @belongsTo(() => User)
   declare user: BelongsTo<typeof User>
+
+  @belongsTo(() => PortfolioBuildSet, { foreignKey: 'setId' })
+  declare set: BelongsTo<typeof PortfolioBuildSet>
 }

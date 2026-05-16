@@ -82,6 +82,7 @@ const ChatController = () => import('#controllers/chat_controller')
 const CanvasController = () => import('#controllers/canvas_controller')
 const PaymentController = () => import('#controllers/payment_controller')
 const PortfolioBuildController = () => import('#controllers/portfolio_build_controller')
+const PortfolioBuildSetsController = () => import('#controllers/portfolio_build_sets_controller')
 const SafeSearchController = () => import('#controllers/safe_search_controller')
 const ActivityController = () => import('#controllers/activity_controller')
 
@@ -224,10 +225,19 @@ router
     ])
     router.get('/api/portfolio-build/eligibility', [PortfolioBuildController, 'eligibility'])
     router.get('/api/portfolio-build/list', [PortfolioBuildController, 'list'])
+    router.delete('/api/portfolio-build', [PortfolioBuildController, 'deleteMany'])
+    router.patch('/api/portfolio-build/move', [PortfolioBuildSetsController, 'moveBuild'])
     router.get('/api/portfolio-build/:id', [PortfolioBuildController, 'getStatus'])
     router.post('/api/portfolio-build/:id/abort', [PortfolioBuildController, 'abort'])
     router.delete('/api/portfolio-build/:id', [PortfolioBuildController, 'delete'])
     router.patch('/api/portfolio-build/:id/layout', [PortfolioBuildController, 'updateLayout'])
+
+    // Portfolio Sets endpoints
+    router.get('/api/portfolio-build-sets', [PortfolioBuildSetsController, 'index'])
+    router.get('/api/portfolio-build-sets/:id', [PortfolioBuildSetsController, 'show'])
+    router.post('/api/portfolio-build-sets', [PortfolioBuildSetsController, 'store'])
+    router.put('/api/portfolio-build-sets/:id', [PortfolioBuildSetsController, 'update'])
+    router.delete('/api/portfolio-build-sets/:id', [PortfolioBuildSetsController, 'destroy'])
 
     // Payment endpoints
     router.post('/api/payments/checkout', [PaymentController, 'checkout'])

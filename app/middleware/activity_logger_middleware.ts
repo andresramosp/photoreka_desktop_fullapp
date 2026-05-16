@@ -2,6 +2,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
 import type { ActivityType } from '#models/user_activity'
 import UserActivity from '#models/user_activity'
+import { NO_ACTIVITY_EMAILS } from '#config/no_activity_emails'
 
 /**
  * Route descriptor: maps an endpoint pattern to an activity type
@@ -367,10 +368,14 @@ export default class ActivityLoggerMiddleware {
       userId = authedUser?.id ?? null
       // Skip logging for impersonation sessions
       if ((authedUser as any)?.currentAccessToken?.name === 'impersonation') return
+      // Skip logging for excluded emails
+      if (authedUser?.email && NO_ACTIVITY_EMAILS.has(authedUser.email.toLowerCase())) return
     } catch {
       // For login/register, extract userId from response body
       const resBody = response.getBody()
       if (resBody?.user?.id) userId = resBody.user.id
+      // Skip logging for excluded emails on auth routes
+      if (resBody?.user?.email && NO_ACTIVITY_EMAILS.has(resBody.user.email.toLowerCase())) return
     }
     if (!userId) return
 

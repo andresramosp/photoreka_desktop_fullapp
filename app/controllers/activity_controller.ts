@@ -1,6 +1,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import type { ActivityType } from '#models/user_activity'
 import UserActivity from '#models/user_activity'
+import { NO_ACTIVITY_EMAILS } from '#config/no_activity_emails'
 
 /** Activity types that are allowed to be submitted from the frontend. */
 const ALLOWED_FRONTEND_TYPES: ReadonlySet<ActivityType> = new Set<ActivityType>([
@@ -26,6 +27,10 @@ export default class ActivityController {
     const authedUser = auth.use('api').user!
     // Skip logging for impersonation sessions
     if ((authedUser as any)?.currentAccessToken?.name === 'impersonation') {
+      return response.noContent()
+    }
+    // Skip logging for excluded emails
+    if (authedUser.email && NO_ACTIVITY_EMAILS.has(authedUser.email.toLowerCase())) {
       return response.noContent()
     }
     const userId = authedUser.id

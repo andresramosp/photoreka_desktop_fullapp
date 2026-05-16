@@ -224,7 +224,8 @@ export default class PortfolioBuildService {
   public async startBuild(
     userId: number,
     config: PortfolioBuildConfig,
-    wait = false
+    wait = false,
+    setId: number | null = null
   ): Promise<PortfolioBuild> {
     // Validate no concurrent build
     const running = await PortfolioBuild.query()
@@ -237,6 +238,7 @@ export default class PortfolioBuildService {
 
     const build = await PortfolioBuild.create({
       userId,
+      setId,
       status: 'pending',
       config,
       progress: 0,
@@ -338,7 +340,8 @@ export default class PortfolioBuildService {
   public async createManual(
     userId: number,
     name: string,
-    description?: string
+    description?: string,
+    setId: number | null = null
   ): Promise<PortfolioBuild> {
     const config: PortfolioBuildConfig = {
       name,
@@ -353,6 +356,7 @@ export default class PortfolioBuildService {
     const now = DateTime.now()
     const build = await PortfolioBuild.create({
       userId,
+      setId,
       status: 'completed',
       config,
       progress: 100,
@@ -374,7 +378,7 @@ export default class PortfolioBuildService {
    * List builds for a user (most recent first).
    */
   public async listBuilds(userId: number): Promise<PortfolioBuild[]> {
-    return PortfolioBuild.query().where('user_id', userId).orderBy('created_at', 'desc').limit(20)
+    return PortfolioBuild.query().where('user_id', userId).orderBy('created_at', 'desc')
   }
 
   /**
