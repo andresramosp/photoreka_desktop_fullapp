@@ -448,6 +448,9 @@
         <strong>{{ user?.name }}</strong> ({{ user?.email }})? This will
         soft-delete all their photos and permanently remove the account.
       </p>
+      <n-checkbox v-model:checked="runSchedulerNow" style="margin-top: 12px">
+        Run deletion scheduler immediately
+      </n-checkbox>
       <template #action>
         <n-button @click="showDeleteModal = false">Cancel</n-button>
         <n-button type="error" :loading="deleting" @click="confirmDelete">
@@ -471,6 +474,7 @@ import {
   NSpin,
   NInputNumber,
   NPagination,
+  NCheckbox,
   useMessage,
 } from "naive-ui";
 import {
@@ -538,6 +542,7 @@ const user = ref<UserDetail | null>(null);
 const loading = ref(true);
 
 const showDeleteModal = ref(false);
+const runSchedulerNow = ref(false);
 const deleting = ref(false);
 const savingUsage = ref(false);
 const impersonating = ref(false);
@@ -696,9 +701,12 @@ async function confirmDelete() {
   if (!user.value) return;
   deleting.value = true;
   try {
-    await api.delete(`/api/admin/users/${user.value.id}`);
+    await api.delete(`/api/admin/users/${user.value.id}`, {
+      params: { runSchedulerNow: runSchedulerNow.value },
+    });
     message.success("User deleted successfully");
     showDeleteModal.value = false;
+    runSchedulerNow.value = false;
     router.push({ name: "admin-users" });
   } catch (err: any) {
     const msg = err?.response?.data?.message || "Failed to delete user";
