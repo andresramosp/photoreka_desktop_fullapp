@@ -65,7 +65,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
       .map((s: { id: string | number; name?: string }) => ({
         label: () =>
           h("span", { class: "collection-menu-item" }, s.name || `Set ${s.id}`),
-        key: `set-${s.id}`,
+        key: `collection-set-${s.id}`,
         icon: renderIcon(FolderIcon),
         children: buildSetChildren(s.id),
       }));
@@ -91,7 +91,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
       (s: { id: string | number; name?: string }) => ({
         label: () =>
           h("span", { class: "collection-menu-item" }, s.name || `Set ${s.id}`),
-        key: `set-${s.id}`,
+        key: `collection-set-${s.id}`,
         icon: renderIcon(FolderIcon),
         children: buildSetChildren(s.id),
       }),
@@ -120,6 +120,58 @@ export function useMainMenu(closeMobileMenu?: () => void) {
       }),
     ),
   );
+
+  const buildSeriesSetChildren = (setId: string | number): MenuOption[] => {
+    const childSets: MenuOption[] = seriesStore
+      .childSetsOf(setId)
+      .map((s: { id: string | number; name?: string }) => ({
+        label: () =>
+          h("span", { class: "collection-menu-item" }, s.name || `Set ${s.id}`),
+        key: `series-set-${s.id}`,
+        icon: renderIcon(FolderIcon),
+        children: buildSeriesSetChildren(s.id),
+      }));
+
+    const seriesNodes: MenuOption[] = seriesStore
+      .seriesInSet(setId)
+      .map((ser: { id: string | number; title?: string; name?: string }) => ({
+        label: () =>
+          h(
+            "span",
+            { class: "collection-menu-item" },
+            ser.title || ser.name || `Series ${ser.id}`,
+          ),
+        key: `series-${ser.id}`,
+      }));
+
+    return [...childSets, ...seriesNodes];
+  };
+
+  const seriesTreeChildren = computed<MenuOption[]>(() => {
+    const rootSetNodes: MenuOption[] = seriesStore.rootSets.map(
+      (s: { id: string | number; name?: string }) => ({
+        label: () =>
+          h("span", { class: "collection-menu-item" }, s.name || `Set ${s.id}`),
+        key: `series-set-${s.id}`,
+        icon: renderIcon(FolderIcon),
+        children: buildSeriesSetChildren(s.id),
+      }),
+    );
+
+    const rootSeriesNodes: MenuOption[] = seriesStore.rootSeries.map(
+      (ser: { id: string | number; title?: string; name?: string }) => ({
+        label: () =>
+          h(
+            "span",
+            { class: "collection-menu-item" },
+            ser.title || ser.name || `Series ${ser.id}`,
+          ),
+        key: `series-${ser.id}`,
+      }),
+    );
+
+    return [...rootSetNodes, ...rootSeriesNodes];
+  });
 
   const portfolios = computed<MenuLeafItem[]>(() =>
     portfolioBuildsStore.allBuilds.map(
@@ -242,11 +294,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
         children:
           isToolDisabledOnMobile("series") || isBlocked.value
             ? undefined
-            : series.value.map((ser) => ({
-                label: () =>
-                  h("span", { class: "collection-menu-item" }, ser.label),
-                key: ser.key,
-              })),
+            : seriesTreeChildren.value,
       },
       portfolioBuilderOption.value,
     ];

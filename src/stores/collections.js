@@ -261,23 +261,28 @@ export const useCollectionsStore = defineStore("collections", {
     // Delete a collection set
     async deleteCollectionSet(id) {
       try {
+        const deletedSet = Array.isArray(this.collectionSets)
+          ? this.collectionSets.find((s) => String(s.id) === String(id))
+          : null;
+        const promotedParentId = deletedSet?.parentSetId ?? null;
+
         await api.delete(`/api/collection-sets/${id}`);
         if (Array.isArray(this.collectionSets)) {
           this.collectionSets = this.collectionSets.filter(
             (s) => String(s.id) !== String(id),
           );
-          // Promote child sets to root in local state
+          // Promote child sets to the deleted set's parent in local state
           this.collectionSets.forEach((s) => {
             if (String(s.parentSetId) === String(id)) {
-              s.parentSetId = null;
+              s.parentSetId = promotedParentId;
             }
           });
         }
-        // Move orphaned collections to root in local state
+        // Move orphaned collections to the deleted set's parent in local state
         if (Array.isArray(this.collections)) {
           this.collections.forEach((c) => {
             if (String(c.setId) === String(id)) {
-              c.setId = null;
+              c.setId = promotedParentId;
             }
           });
         }

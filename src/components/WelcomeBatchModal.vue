@@ -18,6 +18,19 @@
             </p>
           </div>
 
+          <!-- Legend -->
+          <div class="wbm-legend">
+            <span class="wbm-legend-item"
+              ><span class="wbm-status wbm-ok">✓</span> Works great</span
+            >
+            <span class="wbm-legend-item"
+              ><span class="wbm-status wbm-maybe">?</span> Limited value</span
+            >
+            <span class="wbm-legend-item"
+              ><span class="wbm-status wbm-no">✗</span> Not useful yet</span
+            >
+          </div>
+
           <!-- Feature Table -->
           <div class="wbm-table-wrapper">
             <table class="wbm-table">
@@ -26,7 +39,9 @@
                   <th class="wbm-th-photos">Photos</th>
                   <th class="wbm-th-profile">Usage Profile</th>
                   <th v-for="f in features" :key="f.key" class="wbm-th-feature">
-                    <span class="wbm-feature-icon">{{ f.icon }}</span>
+                    <span class="wbm-feature-icon">
+                      <n-icon :size="16"><component :is="f.icon" /></n-icon>
+                    </span>
                     <span class="wbm-feature-label">{{ f.label }}</span>
                   </th>
                 </tr>
@@ -61,24 +76,35 @@
             </table>
           </div>
 
-          <!-- Legend -->
-          <div class="wbm-legend">
-            <span class="wbm-legend-item"
-              ><span class="wbm-status wbm-ok">✓</span> Works great</span
-            >
-            <span class="wbm-legend-item"
-              ><span class="wbm-status wbm-maybe">?</span> Limited value</span
-            >
-            <span class="wbm-legend-item"
-              ><span class="wbm-status wbm-no">✗</span> Not useful yet</span
-            >
-          </div>
-
-          <!-- CTA -->
-          <div class="wbm-cta">
-            <button class="wbm-btn-primary" @click="goUpload">
-              Upload Your First Batch
-            </button>
+          <!-- Analysis capacity -->
+          <div v-if="analyzedPhotosLimit !== null" class="wbm-capacity-row">
+            <div class="wbm-card wbm-card-quota">
+              <span class="wbm-capacity-free-badge">Welcome Pack</span>
+              <div class="wbm-capacity-info">
+                <span class="wbm-capacity-number">{{
+                  analyzedPhotosLimit.toLocaleString()
+                }}</span>
+                <span class="wbm-capacity-desc"
+                  >photos included for AI analysis</span
+                >
+              </div>
+              <router-link
+                to="/settings"
+                class="wbm-capacity-upgrade"
+                @click="dismiss"
+              >
+                Need more? Upgrade &rarr;
+              </router-link>
+            </div>
+            <div class="wbm-card wbm-card-upload">
+              <p class="wbm-upload-hint">Ready to get started?</p>
+              <button class="wbm-btn-primary" @click="goUpload">
+                Upload Your First Batch
+              </button>
+              <!-- <button class="wbm-btn-maybe" @click="dismiss">
+                Maybe later
+              </button> -->
+            </div>
           </div>
 
           <!-- Don't show again -->
@@ -91,9 +117,6 @@
               />
               <span>Don't show this again</span>
             </label>
-            <button class="wbm-btn-dismiss" @click="dismiss">
-              Maybe later
-            </button>
           </div>
         </div>
       </div>
@@ -102,9 +125,24 @@
 </template>
 
 <script setup>
-import { ref, watch } from "vue";
+import { ref, watch, computed } from "vue";
 import { useRouter } from "vue-router";
+import { NIcon } from "naive-ui";
+import { useUserStore } from "../stores/userStore";
 import AppLogo from "./AppLogo.vue";
+import {
+  SearchOutline,
+  BriefcaseOutline,
+  ListOutline,
+  CubeOutline,
+  AnalyticsOutline,
+} from "@vicons/ionicons5";
+import { RobotOutlined } from "@vicons/antd";
+
+const userStore = useUserStore();
+const analyzedPhotosLimit = computed(
+  () => userStore.user?.usage?.analyzedPhotosLimit ?? null,
+);
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -127,14 +165,14 @@ watch(
 );
 
 const features = [
-  // { key: "framer", label: "Framer", icon: "🖼️" },
-  { key: "search", label: "Semantic Search", icon: "🔍" },
-  // { key: "canvas", label: "Canvas", icon: "🎨" },
-  { key: "chat", label: "ChatLab AI", icon: "🤖" },
-  { key: "collections_series", label: "Series & Collections", icon: "📁" },
-
-  { key: "atlas", label: "2D/3D Atlas", icon: "🗺️" },
-  { key: "report", label: "Patterns & Report", icon: "📊" },
+  // { key: "framer", label: "Framer", icon: FramerIcon },
+  { key: "search", label: "Search", icon: SearchOutline },
+  // { key: "canvas", label: "Canvas", icon: CanvasIcon },
+  { key: "chat", label: "ChatLab AI", icon: RobotOutlined },
+  { key: "portfolios", label: "Portfolios", icon: BriefcaseOutline },
+  { key: "collections_series", label: "Series", icon: ListOutline },
+  { key: "atlas", label: "2D/3D Atlas", icon: CubeOutline },
+  { key: "report", label: "Patterns", icon: AnalyticsOutline },
 ];
 
 const tiers = [
@@ -146,6 +184,7 @@ const tiers = [
       framer: "ok",
       search: "maybe",
       collections_series: "no",
+      portfolios: "no",
       canvas: "maybe",
       atlas: "no",
       report: "no",
@@ -160,6 +199,7 @@ const tiers = [
       framer: "ok",
       search: "ok",
       collections_series: "maybe",
+      portfolios: "maybe",
       canvas: "ok",
       atlas: "maybe",
       report: "maybe",
@@ -174,6 +214,7 @@ const tiers = [
       framer: "ok",
       search: "ok",
       collections_series: "ok",
+      portfolios: "ok",
       canvas: "ok",
       atlas: "maybe",
       report: "maybe",
@@ -188,6 +229,7 @@ const tiers = [
       framer: "ok",
       search: "ok",
       collections_series: "ok",
+      portfolios: "ok",
       canvas: "ok",
       atlas: "ok",
       report: "ok",
@@ -259,7 +301,7 @@ const goUpload = () => {
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
-  padding: 32px;
+  padding: 32px 32px 16px;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -285,7 +327,7 @@ const goUpload = () => {
 
 .wbm-subtitle {
   margin: 8px auto 0;
-  max-width: 600px;
+  max-width: 800px;
   font-size: var(--font-size-base, 14px);
   line-height: 1.6;
   color: var(--text-secondary, rgba(255, 255, 255, 0.45));
@@ -338,8 +380,8 @@ const goUpload = () => {
 }
 
 .wbm-feature-icon {
-  display: block;
-  font-size: 16px;
+  display: flex;
+  justify-content: center;
   margin-bottom: 2px;
 }
 
@@ -447,13 +489,103 @@ const goUpload = () => {
   font-size: 10px;
 }
 
-/* CTA */
-.wbm-cta {
+/* Analysis capacity row */
+.wbm-capacity-row {
   display: flex;
+  gap: 12px;
+}
+
+.wbm-card {
+  border-radius: var(--radius-md, 12px);
+  border: 1px solid var(--border-color, #2c2c32);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.wbm-card-quota {
+  flex: 1;
+  background:
+    linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(37, 99, 235, 0) 55%),
+    var(--bg-surface, #2c2c32);
+}
+
+.wbm-card-upload {
+  flex: 1;
+  background: var(--bg-surface, #2c2c32);
   justify-content: center;
 }
 
+.wbm-upload-hint {
+  margin: 0;
+  font-size: var(--font-size-sm, 12px);
+  color: var(--text-secondary, rgba(255, 255, 255, 0.45));
+}
+
+.wbm-capacity-free-badge {
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold, 600);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--accent-color, #2563eb);
+  background: rgba(37, 99, 235, 0.12);
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.wbm-capacity-info {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+}
+
+.wbm-capacity-number {
+  font-size: var(--font-size-2xl, 24px);
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--text-primary, rgba(255, 255, 255, 0.82));
+  line-height: 1;
+}
+
+.wbm-capacity-desc {
+  font-size: var(--font-size-sm, 12px);
+  color: var(--text-secondary, rgba(255, 255, 255, 0.45));
+}
+
+.wbm-capacity-upgrade {
+  font-size: var(--font-size-xs, 10px);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--accent-color, rgba(255, 255, 255, 0.3));
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+
+.wbm-capacity-upgrade:hover {
+  color: var(--accent-color, #2563eb);
+}
+
+.wbm-btn-maybe {
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  color: var(--text-tertiary, rgba(255, 255, 255, 0.25));
+  font-size: var(--font-size-xs, 10px);
+  cursor: pointer;
+  font-family: inherit;
+  transition: color 0.15s ease;
+}
+
+.wbm-btn-maybe:hover {
+  color: var(--text-secondary, rgba(255, 255, 255, 0.45));
+}
+
 .wbm-btn-primary {
+  flex-shrink: 0;
+  width: min(100%, 340px);
   padding: 12px 32px;
   border: none;
   border-radius: var(--radius-sm, 8px);
@@ -481,8 +613,9 @@ const goUpload = () => {
 .wbm-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 12px;
+  padding-top: 4px;
 }
 
 .wbm-checkbox-label {
@@ -550,7 +683,7 @@ const goUpload = () => {
 /* ─── Responsive ─── */
 @media (max-width: 768px) {
   .wbm-modal {
-    padding: 20px 16px;
+    padding: 20px 16px 12px;
     max-height: 92vh;
     gap: 16px;
     border-radius: var(--radius-md, 12px);
@@ -604,19 +737,18 @@ const goUpload = () => {
     font-size: 11px;
   }
 
+  .wbm-capacity-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+
   .wbm-btn-primary {
     width: 100%;
     padding: 12px 24px;
   }
 
   .wbm-footer {
-    flex-direction: column;
     gap: 12px;
-  }
-
-  .wbm-btn-dismiss {
-    width: 100%;
-    text-align: center;
   }
 
   .wbm-legend {

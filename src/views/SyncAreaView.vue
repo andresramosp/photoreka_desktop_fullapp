@@ -6,6 +6,9 @@
         <h1 class="page-title">Sync Area</h1>
         <p class="page-subtitle">Import and process your photos here.</p>
       </div>
+      <div v-if="!isMobile" class="header-actions">
+        <UsageIndicators :large="true" />
+      </div>
     </div>
 
     <!-- Tabs Section -->
@@ -76,6 +79,7 @@ defineOptions({
   name: "SyncAreaView",
 });
 import LightboxPhotos from "@/components/sync-area/LightboxPhotos.vue";
+import UsageIndicators from "@/components/UsageIndicators.vue";
 import ProcessingPhotos from "@/components/sync-area/ProcessingPhotos.vue";
 import FloatingProcessPhotosButton from "@/components/FloatingProcessPhotosButton.vue";
 import { usePhotosStore } from "@/stores/photos.js";

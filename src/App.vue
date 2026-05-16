@@ -409,6 +409,7 @@ watch(
       collectionsStore.getOrFetch(true);
       collectionsStore.getOrFetchSets(true);
       seriesStore.getOrFetch(true);
+      seriesStore.getOrFetchSets(true);
       portfolioBuildsStore.getOrFetch(true);
       tagCloudStore.prefetch();
       userStore.processPatterns();

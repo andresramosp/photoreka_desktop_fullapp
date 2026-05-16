@@ -226,6 +226,14 @@ const router = createRouter({
       },
     },
     {
+      path: "/series/set/:setId",
+      name: "series-set",
+      component: SeriesView,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
       path: "/series/:id",
       name: "series-detail",
       component: SeriesView,

@@ -18,7 +18,7 @@
       class="selection-circle"
       :class="{ 'is-checked': isSelected }"
       @click.stop="handleCircleClick"
-      :aria-label="isSelected ? 'Deselect collection' : 'Select collection'"
+      :aria-label="isSelected ? `Deselect ${itemLabel}` : `Select ${itemLabel}`"
       tabindex="0"
     >
       <svg v-if="isSelected" viewBox="0 0 24 24" class="check-icon">
@@ -126,6 +126,8 @@ interface Props {
   isSelectionMode?: boolean;
   selectedIds?: string[];
   selectable?: boolean;
+  dragType?: string;
+  itemLabel?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -134,6 +136,8 @@ const props = withDefaults(defineProps<Props>(), {
   isSelectionMode: false,
   selectedIds: () => [],
   selectable: true,
+  dragType: "collection",
+  itemLabel: "collection",
 });
 
 const emit = defineEmits<{
@@ -155,17 +159,13 @@ const isDragging = ref(false);
 const onDragStart = (e: DragEvent) => {
   isDragging.value = true;
   e.dataTransfer!.effectAllowed = "move";
+  const singleMime = `application/x-${props.dragType}-id`;
+  const multiMime = `application/x-${props.dragType}-ids`;
   if (props.isSelected && props.selectedIds.length > 1) {
     // Encode all selected IDs for multi-drag
-    e.dataTransfer!.setData(
-      "application/x-collection-ids",
-      JSON.stringify(props.selectedIds),
-    );
+    e.dataTransfer!.setData(multiMime, JSON.stringify(props.selectedIds));
   } else {
-    e.dataTransfer!.setData(
-      "application/x-collection-id",
-      String(props.item.id),
-    );
+    e.dataTransfer!.setData(singleMime, String(props.item.id));
   }
 };
 

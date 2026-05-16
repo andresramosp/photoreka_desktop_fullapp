@@ -168,9 +168,17 @@ const activeKey = computed(() => {
     return `collection-${route.params.id}`;
   }
 
+  if (routeName === "collection-set" && route.params.setId) {
+    return `collection-set-${route.params.setId}`;
+  }
+
   // Handle series detail routes
   if (routeName === "series-detail" && route.params.id) {
     return `series-${route.params.id}`;
+  }
+
+  if (routeName === "series-set" && route.params.setId) {
+    return `series-set-${route.params.setId}`;
   }
 
   // Handle portfolio detail routes
@@ -211,10 +219,16 @@ const handleMenuSelect = (key: string) => {
     key.startsWith("portfolio-")
   ) {
     // Navegación usando /id en vez de query string
-    if (key.startsWith("collection-")) {
+    if (key.startsWith("collection-set-")) {
+      const id = key.replace("collection-set-", "");
+      router.push(`/collections/set/${id}`);
+    } else if (key.startsWith("collection-")) {
       // Extraer el id después de "collection-"
       const id = key.replace("collection-", "");
       router.push(`/collections/${id}`);
+    } else if (key.startsWith("series-set-")) {
+      const id = key.replace("series-set-", "");
+      router.push(`/series/set/${id}`);
     } else if (key.startsWith("series-")) {
       // Extraer el id después de "series-"
       const id = key.replace("series-", "");

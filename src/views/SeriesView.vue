@@ -58,7 +58,7 @@
                   </svg>
                 </n-icon>
               </template>
-              Back to Series
+              {{ backLabel }}
             </n-button>
             <div style="display: flex; gap: 12px">
               <n-button
@@ -286,6 +286,175 @@
       </div>
     </div>
 
+    <!-- Set View (when browsing a series set) -->
+    <div v-else-if="showSetView && viewingSet" class="set-view">
+      <div class="set-header">
+        <div class="breadcrumb">
+          <n-button
+            text
+            class="breadcrumb-item"
+            :class="{ 'breadcrumb-drop-target': breadcrumbDragOver === 'root' }"
+            @click="backToSeriesRoot"
+            @dragover.prevent="onBreadcrumbDragOver('root', $event)"
+            @dragleave="onBreadcrumbDragLeave('root', $event)"
+            @drop.prevent="onBreadcrumbDrop(null, $event)"
+          >
+            <template #icon>
+              <n-icon><GridOutline /></n-icon>
+            </template>
+            Series
+          </n-button>
+          <template v-for="(crumb, i) in breadcrumb" :key="crumb.id">
+            <n-icon size="14" class="breadcrumb-sep">
+              <ChevronForwardOutline />
+            </n-icon>
+            <n-button
+              text
+              class="breadcrumb-item"
+              :class="{
+                'breadcrumb-current': i === breadcrumb.length - 1,
+                'breadcrumb-drop-target': breadcrumbDragOver === crumb.id,
+              }"
+              @click="
+                i < breadcrumb.length - 1 ? navigateToSet(crumb.id) : null
+              "
+              @dragover.prevent="onBreadcrumbDragOver(crumb.id, $event)"
+              @dragleave="onBreadcrumbDragLeave(crumb.id, $event)"
+              @drop.prevent="onBreadcrumbDrop(crumb.id, $event)"
+            >
+              {{ crumb.name }}
+            </n-button>
+          </template>
+        </div>
+
+        <div class="set-title-row">
+          <div v-if="!editingSetTitle" class="title-display">
+            <h1 class="detail-title">{{ viewingSet.name }}</h1>
+            <n-button
+              text
+              class="edit-button"
+              @click="startEditSetTitle"
+              title="Edit set name"
+            >
+              <template #icon>
+                <n-icon size="20"><CreateOutline /></n-icon>
+              </template>
+            </n-button>
+          </div>
+          <div v-else class="title-edit">
+            <n-input
+              v-model:value="editedSetTitle"
+              placeholder="Enter set name..."
+              maxlength="100"
+            />
+            <n-button
+              text
+              class="action-button"
+              @click="saveSetTitle"
+              :loading="isSavingSetTitle"
+            >
+              <template #icon>
+                <n-icon size="20"><CheckmarkOutline /></n-icon>
+              </template>
+            </n-button>
+            <n-button text class="action-button" @click="cancelEditSetTitle">
+              <template #icon>
+                <n-icon size="20"><CloseOutline /></n-icon>
+              </template>
+            </n-button>
+          </div>
+
+          <div class="set-actions">
+            <n-button
+              v-if="seriesSelection.isSelectionMode.value"
+              type="error"
+              ghost
+              @click="showBulkDeleteConfirmation"
+            >
+              Delete Selected ({{ seriesSelection.selectedIds.value.length }})
+            </n-button>
+            <n-button type="primary" ghost @click="showCreateSeriesInSet">
+              <template #icon>
+                <n-icon><AddOutline /></n-icon>
+              </template>
+              New Series
+            </n-button>
+            <n-button @click="showCreateSubsetDialog">
+              <template #icon>
+                <n-icon><FolderOutline /></n-icon>
+              </template>
+              New Set
+            </n-button>
+            <n-button type="error" ghost @click="showDeleteSetConfirmation">
+              Delete Set
+            </n-button>
+          </div>
+        </div>
+
+        <p v-if="viewingSet.description" class="set-description">
+          {{ viewingSet.description }}
+        </p>
+      </div>
+
+      <div v-if="setIsEmpty" class="empty-series-state">
+        <div class="empty-series-content">
+          <n-icon size="64" class="empty-series-icon">
+            <FolderOpenOutline />
+          </n-icon>
+          <h3 class="empty-series-title">This set is empty</h3>
+          <p class="empty-series-description">
+            Add sets or series to organize your sequences.
+          </p>
+          <div class="empty-actions">
+            <n-button type="primary" @click="showCreateSeriesInSet">
+              <template #icon>
+                <n-icon><AddOutline /></n-icon>
+              </template>
+              New Series
+            </n-button>
+            <n-button @click="showCreateSubsetDialog">
+              <template #icon>
+                <n-icon><FolderOutline /></n-icon>
+              </template>
+              New Set
+            </n-button>
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="card-grid">
+        <CollectionSetCard
+          v-for="childSet in currentChildSets"
+          :key="`set-${childSet.id}`"
+          :item="childSet"
+          item-type="series"
+          content-label="series"
+          @click="navigateToSet(childSet.id)"
+          @drop-items="onDropSeriesIntoSet"
+        />
+
+        <CollectionCard
+          v-for="series in currentSetSeries"
+          :key="`series-${series.id}`"
+          :item="series"
+          type="series"
+          drag-type="series"
+          item-label="series"
+          :is-selected="seriesSelection.isSelected(series.id)"
+          :is-selection-mode="seriesSelection.isSelectionMode.value"
+          :selected-ids="seriesSelection.selectedIds.value"
+          @click="(_, ev) => onSeriesCardClick(series, ev, currentSetSeries)"
+          @select-toggle="
+            () =>
+              seriesSelection.toggleSelectItem(
+                series.id,
+                currentSetSeries.map((s) => s.id),
+              )
+          "
+        />
+      </div>
+    </div>
+
     <!-- Series Grid View (default view) -->
     <div v-else>
       <!-- Header Section -->
@@ -297,27 +466,65 @@
         </n-spin>
       </div>
 
-      <div v-else class="card-grid">
+      <div v-if="!isLoading && hasRootContent" class="root-toolbar">
+        <n-button @click="showCreateSetDialog">
+          <template #icon>
+            <n-icon><FolderOutline /></n-icon>
+          </template>
+          New Set
+        </n-button>
+        <n-button
+          v-if="seriesSelection.isSelectionMode.value"
+          type="error"
+          ghost
+          @click="showBulkDeleteConfirmation"
+        >
+          Delete Selected ({{ seriesSelection.selectedIds.value.length }})
+        </n-button>
+      </div>
+
+      <div v-if="!isLoading" class="card-grid">
         <!-- Create New Series Card (only show when there are existing series) -->
         <CreateCard
-          v-if="allSeries.length > 0"
+          v-if="hasRootContent"
           title="Create New Series"
           subtitle="Start your photo sequence"
           @click="showCreateDialog"
         />
 
+        <CollectionSetCard
+          v-for="set in rootSets"
+          :key="`set-${set.id}`"
+          :item="set"
+          item-type="series"
+          content-label="series"
+          @click="navigateToSet(set.id)"
+          @drop-items="onDropSeriesIntoSet"
+        />
+
         <!-- Existing Series -->
         <CollectionCard
-          v-for="series in allSeries"
+          v-for="series in rootSeries"
           :key="series.id"
           :item="series"
           type="series"
-          @click="openSeries(series)"
-          :selectable="false"
+          drag-type="series"
+          item-label="series"
+          :is-selected="seriesSelection.isSelected(series.id)"
+          :is-selection-mode="seriesSelection.isSelectionMode.value"
+          :selected-ids="seriesSelection.selectedIds.value"
+          @click="(_, ev) => onSeriesCardClick(series, ev, rootSeries)"
+          @select-toggle="
+            () =>
+              seriesSelection.toggleSelectItem(
+                series.id,
+                rootSeries.map((s) => s.id),
+              )
+          "
         />
 
         <!-- Empty State (when no series exist) -->
-        <div v-if="allSeries.length === 0" class="empty-series-state">
+        <div v-if="!hasRootContent" class="empty-series-state">
           <div class="empty-series-content">
             <n-icon size="64" class="empty-series-icon">
               <ListOutline />
@@ -327,18 +534,24 @@
               Create your first series to start arranging your photos in a
               sequential narrative.
             </p>
-            <n-button
-              type="primary"
-              @click="showCreateDialog"
-              class="create-series-btn"
-            >
-              <template #icon>
-                <n-icon>
-                  <AddOutline />
-                </n-icon>
-              </template>
-              Create Your First Series
-            </n-button>
+            <div class="empty-actions">
+              <n-button
+                type="primary"
+                @click="showCreateDialog"
+                class="create-series-btn"
+              >
+                <template #icon>
+                  <n-icon><AddOutline /></n-icon>
+                </template>
+                Create Series
+              </n-button>
+              <n-button @click="showCreateSetDialog" class="create-series-btn">
+                <template #icon>
+                  <n-icon><FolderOutline /></n-icon>
+                </template>
+                Create Set
+              </n-button>
+            </div>
           </div>
         </div>
       </div>
@@ -367,6 +580,39 @@
           <n-form-item label="Description" path="description">
             <n-input
               v-model:value="formData.description"
+              placeholder="Add a description (optional)..."
+              :rows="3"
+              maxlength="500"
+              show-count
+            />
+          </n-form-item>
+        </n-form>
+      </div>
+    </n-modal>
+
+    <!-- Create Set Dialog -->
+    <n-modal
+      v-model:show="createSetDialogVisible"
+      preset="dialog"
+      title="Create New Set"
+      positive-text="Create Set"
+      negative-text="Cancel"
+      @positive-click="createSeriesSet"
+      @negative-click="createSetDialogVisible = false"
+    >
+      <div class="create-form">
+        <n-form ref="setFormRef" :model="setFormData" :rules="setFormRules">
+          <n-form-item label="Name" path="name">
+            <n-input
+              v-model:value="setFormData.name"
+              placeholder="Enter set name..."
+              maxlength="100"
+              show-count
+            />
+          </n-form-item>
+          <n-form-item label="Description" path="description">
+            <n-input
+              v-model:value="setFormData.description"
               placeholder="Add a description (optional)..."
               :rows="3"
               maxlength="500"
@@ -417,6 +663,53 @@
           </n-icon>
           Don't worry - your photos will not be deleted, only the series will be
           removed.
+        </p>
+      </div>
+    </n-modal>
+
+    <!-- Bulk Delete Series Confirmation Dialog -->
+    <n-modal
+      v-model:show="bulkDeleteConfirmationVisible"
+      preset="dialog"
+      title="Delete Selected Series"
+      positive-text="Delete Selected"
+      negative-text="Cancel"
+      type="error"
+      :loading="seriesStore.isDeleting"
+      @positive-click="bulkDeleteSeries"
+      @negative-click="bulkDeleteConfirmationVisible = false"
+    >
+      <div class="delete-confirmation">
+        <p>
+          Are you sure you want to delete
+          <strong>{{ seriesSelection.selectedIds.value.length }}</strong>
+          selected series?
+        </p>
+        <p class="delete-warning">
+          Don't worry - your photos will not be deleted, only the series will be
+          removed.
+        </p>
+      </div>
+    </n-modal>
+
+    <!-- Delete Set Confirmation Dialog -->
+    <n-modal
+      v-model:show="deleteSetConfirmationVisible"
+      preset="dialog"
+      title="Delete Set"
+      positive-text="Delete Set"
+      negative-text="Cancel"
+      type="error"
+      @positive-click="deleteSeriesSet"
+      @negative-click="deleteSetConfirmationVisible = false"
+    >
+      <div class="delete-confirmation">
+        <p>
+          Are you sure you want to delete the set
+          <strong>"{{ viewingSet?.name }}"</strong>?
+        </p>
+        <p class="delete-warning">
+          Child sets and series will be moved to the parent set.
         </p>
       </div>
     </n-modal>
@@ -495,7 +788,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from "vue";
+import { ref, onMounted, onUnmounted, computed, watch } from "vue";
 import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
 
 defineOptions({
@@ -522,9 +815,14 @@ import {
   CloseOutline,
   SaveOutline,
   ArrowUndoOutline,
+  FolderOutline,
+  FolderOpenOutline,
+  GridOutline,
+  ChevronForwardOutline,
 } from "@vicons/ionicons5";
 import PhotosDialog from "@/components/PhotosDialog.vue";
 import CollectionCard from "@/components/CollectionCard.vue";
+import CollectionSetCard from "@/components/CollectionSetCard.vue";
 import CreateCard from "@/components/photos-grid/CreateCard.vue";
 import FloatingActionBar from "@/components/FloatingActionBar.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
@@ -536,6 +834,7 @@ import SeriesFullscreenViewer from "@/components/SeriesFullscreenViewer.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useSeriesStore } from "@/stores/series.js";
 import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection";
+import { useCardSelection } from "@/composables/useCardSelection";
 import { usePhotoDownload } from "@/composables/usePhotoDownload";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection";
 import { usePhotoQueryParams } from "@/composables/usePhotoQueryParams.js";
@@ -556,6 +855,8 @@ const {
   clearAllSelections: localClearAllSelections,
 } = useLocalPhotoSelection();
 
+const seriesSelection = useCardSelection();
+
 // Photo download utilities
 const { downloadPhotosZip, isDownloading } = usePhotoDownload();
 
@@ -574,9 +875,13 @@ const {
 
 // State
 const createDialogVisible = ref(false);
+const createSetDialogVisible = ref(false);
 const photosDialogVisible = ref(false);
 const showCollectionModal = ref(false);
 const deleteConfirmationVisible = ref(false);
+const deleteSetConfirmationVisible = ref(false);
+const bulkDeleteConfirmationVisible = ref(false);
+const createSetParentId = ref(null);
 
 // Unsaved changes navigation guard state
 const showUnsavedModal = ref(false);
@@ -585,8 +890,11 @@ const fullscreenViewerVisible = ref(false);
 const photoInfoDialogVisible = ref(false);
 const selectedPhotoForInfo = ref(null);
 const formRef = ref(null);
+const setFormRef = ref(null);
 const viewingSeries = ref(null); // Series being viewed
+const viewingSet = ref(null);
 const showSeriesView = ref(false); // Whether to show series view or grid view
+const showSetView = ref(false);
 const isPublicView = ref(false); // Whether this is a public anonymous view
 const publicLoadError = ref(false); // Whether there was an error loading the public series
 
@@ -597,6 +905,11 @@ const editedTitle = ref("");
 const editedDescription = ref("");
 const isSavingTitle = ref(false);
 const isSavingDescription = ref(false);
+
+// Edit states for set
+const editingSetTitle = ref(false);
+const editedSetTitle = ref("");
+const isSavingSetTitle = ref(false);
 
 // When user opens a “hole” between photos, we store the target insert position here.
 // This is the index in the ordered photos array where the new photo(s) should be inserted.
@@ -645,9 +958,17 @@ const formData = ref({
   title: "",
   description: "",
 });
+const setFormData = ref({ name: "", description: "" });
 
 const formRules = {
   title: {
+    required: true,
+    message: "Please enter a name",
+    trigger: "blur",
+  },
+};
+const setFormRules = {
+  name: {
     required: true,
     message: "Please enter a name",
     trigger: "blur",
@@ -670,6 +991,31 @@ const isLoading = computed(() => {
 
 // Computed properties for store data
 const allSeries = computed(() => seriesStore.allSeries);
+const rootSeries = computed(() => seriesStore.rootSeries);
+const rootSets = computed(() => seriesStore.rootSets);
+const hasRootContent = computed(
+  () => seriesStore.rootSeries.length > 0 || seriesStore.rootSets.length > 0,
+);
+const currentChildSets = computed(() =>
+  viewingSet.value ? seriesStore.childSetsOf(viewingSet.value.id) : [],
+);
+const currentSetSeries = computed(() =>
+  viewingSet.value ? seriesStore.seriesInSet(viewingSet.value.id) : [],
+);
+const setIsEmpty = computed(
+  () =>
+    currentChildSets.value.length === 0 && currentSetSeries.value.length === 0,
+);
+const breadcrumb = computed(() =>
+  viewingSet.value ? seriesStore.getBreadcrumbFor(viewingSet.value.id) : [],
+);
+const backLabel = computed(() => {
+  if (viewingSeries.value?.setId) {
+    const set = seriesStore.getSetById(viewingSeries.value.setId);
+    return set ? `Back to "${set.name}"` : "Back to Series";
+  }
+  return "Back to Series";
+});
 
 // Computed: Map of suggested photo IDs with their info for the current series
 const suggestedPhotosInfo = computed(() => {
@@ -697,6 +1043,13 @@ const resolvePhotoById = (id) => {
 };
 
 const showCreateDialog = () => {
+  createSetParentId.value = null;
+  formData.value = { title: "", description: "" };
+  createDialogVisible.value = true;
+};
+
+const showCreateSeriesInSet = () => {
+  createSetParentId.value = viewingSet.value?.id ?? null;
   formData.value = { title: "", description: "" };
   createDialogVisible.value = true;
 };
@@ -711,6 +1064,7 @@ const createSeries = async () => {
       title: formData.value.title,
       description: formData.value.description,
       photoIds: [], // Empty series
+      setId: createSetParentId.value,
     };
 
     const newSeries = await seriesStore.createSeries(seriesData);
@@ -727,6 +1081,87 @@ const createSeries = async () => {
     });
   } catch (error) {
     console.error("Error creating series:", error);
+  }
+};
+
+const showCreateSetDialog = () => {
+  createSetParentId.value = null;
+  setFormData.value = { name: "", description: "" };
+  createSetDialogVisible.value = true;
+};
+
+const showCreateSubsetDialog = () => {
+  createSetParentId.value = viewingSet.value?.id ?? null;
+  setFormData.value = { name: "", description: "" };
+  createSetDialogVisible.value = true;
+};
+
+const createSeriesSet = async () => {
+  try {
+    await setFormRef.value?.validate();
+    createSetDialogVisible.value = false;
+    await seriesStore.createSeriesSet({
+      name: setFormData.value.name,
+      description: setFormData.value.description,
+      parentSetId: createSetParentId.value,
+    });
+    message.success(`Set "${setFormData.value.name}" created successfully`);
+    setFormData.value = { name: "", description: "" };
+  } catch (error) {
+    console.error("Error creating series set:", error);
+  }
+};
+
+const startEditSetTitle = () => {
+  editedSetTitle.value = viewingSet.value?.name ?? "";
+  editingSetTitle.value = true;
+};
+
+const saveSetTitle = async () => {
+  if (!viewingSet.value || !editedSetTitle.value.trim()) {
+    message.warning("Set name cannot be empty");
+    return;
+  }
+  isSavingSetTitle.value = true;
+  try {
+    await seriesStore.updateSeriesSet(viewingSet.value.id, {
+      name: editedSetTitle.value.trim(),
+      description: viewingSet.value.description,
+    });
+    message.success("Set name updated");
+    editingSetTitle.value = false;
+    updateViewingSeries();
+  } catch (error) {
+    console.error("Error updating set name:", error);
+  } finally {
+    isSavingSetTitle.value = false;
+  }
+};
+
+const cancelEditSetTitle = () => {
+  editingSetTitle.value = false;
+  editedSetTitle.value = "";
+};
+
+const showDeleteSetConfirmation = () => {
+  deleteSetConfirmationVisible.value = true;
+};
+
+const deleteSeriesSet = async () => {
+  if (!viewingSet.value) return;
+  try {
+    const parentId = viewingSet.value.parentSetId;
+    const setName = viewingSet.value.name;
+    await seriesStore.deleteSeriesSet(viewingSet.value.id);
+    message.success(`Set "${setName}" deleted`);
+    deleteSetConfirmationVisible.value = false;
+    if (parentId) {
+      router.push({ name: "series-set", params: { setId: parentId } });
+    } else {
+      router.push({ name: "series" });
+    }
+  } catch (error) {
+    console.error("Error deleting series set:", error);
   }
 };
 
@@ -1118,20 +1553,28 @@ const openSeries = (series) => {
   router.push({ name: "series-detail", params: { id: series.id } });
 };
 
+const backToSeriesRoot = () => router.push({ name: "series" });
+const navigateToSet = (setId) =>
+  router.push({ name: "series-set", params: { setId } });
+
 const backToSeries = () => {
-  if (hasChanges.value) {
-    pendingNavigation = () => {
-      recentlySuggestedPhotos.value.clear();
-      discardedPhotosByContext.value.clear();
+  const targetSetId = viewingSeries.value?.setId;
+  const navigateBack = () => {
+    recentlySuggestedPhotos.value.clear();
+    discardedPhotosByContext.value.clear();
+    if (targetSetId) {
+      router.push({ name: "series-set", params: { setId: targetSetId } });
+    } else {
       router.push({ name: "series" });
-    };
+    }
+  };
+
+  if (hasChanges.value) {
+    pendingNavigation = navigateBack;
     showUnsavedModal.value = true;
     return;
   }
-  // Clear suggestion tracking when leaving series detail
-  recentlySuggestedPhotos.value.clear();
-  discardedPhotosByContext.value.clear();
-  router.push({ name: "series" });
+  navigateBack();
 };
 
 // Unsaved changes modal handlers
@@ -1244,15 +1687,134 @@ const deleteSeries = async () => {
   if (!viewingSeries.value) return;
 
   try {
+    const parentSetId = viewingSeries.value.setId;
     await seriesStore.deleteSeries(viewingSeries.value.id);
 
     message.success(`Series deleted successfully`);
     deleteConfirmationVisible.value = false;
 
-    // Redirect back to series list
-    router.push({ name: "series" });
+    if (parentSetId) {
+      router.push({ name: "series-set", params: { setId: parentSetId } });
+    } else {
+      router.push({ name: "series" });
+    }
   } catch (error) {
     console.error("Error deleting series:", error);
+  }
+};
+
+const showBulkDeleteConfirmation = () => {
+  bulkDeleteConfirmationVisible.value = true;
+};
+
+const bulkDeleteSeries = async () => {
+  const ids = [...seriesSelection.selectedIds.value];
+  if (ids.length === 0) return;
+  try {
+    await seriesStore.deleteSeriesMany(ids);
+    message.success(
+      `${ids.length} ${ids.length === 1 ? "series" : "series"} deleted`,
+    );
+    bulkDeleteConfirmationVisible.value = false;
+    seriesSelection.clearAll();
+  } catch (error) {
+    console.error("Error bulk deleting series:", error);
+    message.error("Failed to delete series");
+  }
+};
+
+const onSeriesCardClick = (series, nativeEvent, orderedList) => {
+  const orderedIds = orderedList.map((s) => s.id);
+  const handled = seriesSelection.handleCardSelect(
+    series.id,
+    nativeEvent,
+    orderedIds,
+  );
+  if (!handled) openSeries(series);
+};
+
+const onDropSeriesIntoSet = async (seriesIds, setId) => {
+  const ids = Array.isArray(seriesIds) ? seriesIds : [seriesIds];
+  try {
+    await Promise.all(ids.map((id) => seriesStore.moveSeriesToSet(id, setId)));
+    const set = seriesStore.getSetById(setId);
+    message.success(
+      ids.length === 1
+        ? `Series moved to "${set?.name || "set"}"`
+        : `${ids.length} series moved to "${set?.name || "set"}"`,
+    );
+    seriesSelection.clearAll();
+  } catch (error) {
+    console.error("Error moving series:", error);
+    message.error("Failed to move series");
+  }
+};
+
+const breadcrumbDragOver = ref(null);
+
+const onBreadcrumbDragOver = (crumbId, e) => {
+  if (
+    e.dataTransfer?.types.includes("application/x-series-id") ||
+    e.dataTransfer?.types.includes("application/x-series-ids")
+  ) {
+    breadcrumbDragOver.value = crumbId;
+    e.dataTransfer.dropEffect = "move";
+  }
+};
+
+const onBreadcrumbDragLeave = (crumbId, e) => {
+  if (!e.currentTarget.contains(e.relatedTarget)) {
+    breadcrumbDragOver.value = null;
+  }
+};
+
+const onBreadcrumbDrop = async (targetSetId, e) => {
+  breadcrumbDragOver.value = null;
+
+  let ids = [];
+  const multiRaw = e.dataTransfer?.getData("application/x-series-ids");
+  if (multiRaw) {
+    try {
+      const parsed = JSON.parse(multiRaw);
+      if (Array.isArray(parsed)) ids = parsed;
+    } catch {
+      ids = [];
+    }
+  }
+  if (ids.length === 0) {
+    const single = e.dataTransfer?.getData("application/x-series-id");
+    if (single) ids = [single];
+  }
+  if (ids.length === 0) return;
+
+  try {
+    await Promise.all(
+      ids.map((id) => seriesStore.moveSeriesToSet(id, targetSetId)),
+    );
+    seriesSelection.clearAll();
+    if (targetSetId) {
+      const set = seriesStore.getSetById(targetSetId);
+      message.success(
+        ids.length === 1
+          ? `Series moved to "${set?.name || "set"}"`
+          : `${ids.length} series moved to "${set?.name || "set"}"`,
+      );
+    } else {
+      message.success(
+        ids.length === 1
+          ? "Series moved to root"
+          : `${ids.length} series moved to root`,
+      );
+    }
+  } catch (error) {
+    console.error("Error moving series via breadcrumb:", error);
+    message.error("Failed to move series");
+  }
+};
+
+const _onKeyDown = (e) => {
+  if (e.key === "Escape" && seriesSelection.isSelectionMode.value) {
+    seriesSelection.clearAll();
   }
 };
 
@@ -1324,7 +1886,9 @@ const updateViewingSeries = () => {
         discardedPhotosByContext.value.clear();
       }
       viewingSeries.value = series;
+      viewingSet.value = null;
       showSeriesView.value = true;
+      showSetView.value = false;
       seriesStore.setCurrentSeries(series);
 
       // Initialize editable state only when loading a different series,
@@ -1335,8 +1899,24 @@ const updateViewingSeries = () => {
       return;
     }
   }
+
+  const setId = route.params.setId;
+  if (setId) {
+    const set = seriesStore.getSetById(setId);
+    if (set) {
+      viewingSet.value = set;
+      viewingSeries.value = null;
+      showSetView.value = true;
+      showSeriesView.value = false;
+      seriesStore.clearCurrentSeries();
+      return;
+    }
+  }
+
   viewingSeries.value = null;
+  viewingSet.value = null;
   showSeriesView.value = false;
+  showSetView.value = false;
   seriesStore.clearCurrentSeries();
   if (currentEditingSeriesId.value !== null) {
     editablePhotos.value = [];
@@ -1376,6 +1956,8 @@ const loadPublicSeries = async () => {
 };
 
 onMounted(async () => {
+  document.addEventListener("keydown", _onKeyDown);
+
   // Check if this is a public view route
   if (route.name === "shared-series") {
     isPublicView.value = true;
@@ -1385,8 +1967,11 @@ onMounted(async () => {
 
   // Normal authenticated flow
   try {
-    await photosStore.getOrFetch();
-    await seriesStore.getOrFetch();
+    await Promise.all([
+      photosStore.getOrFetch(),
+      seriesStore.getOrFetch(),
+      seriesStore.getOrFetchSets(),
+    ]);
     updateViewingSeries();
 
     // Load photos from query params if present (e.g., ?source=lightroom&ids=123,456)
@@ -1414,8 +1999,18 @@ onMounted(async () => {
   }
 });
 
+onUnmounted(() => {
+  document.removeEventListener("keydown", _onKeyDown);
+});
+
 watch(
-  [() => route.params.id, allSeries, () => photosStore.allPhotos],
+  [
+    () => route.params.id,
+    () => route.params.setId,
+    allSeries,
+    () => seriesStore.allSeriesSets,
+    () => photosStore.allPhotos,
+  ],
   updateViewingSeries,
 );
 
@@ -1640,6 +2235,86 @@ watch(fullscreenViewerVisible, (isVisible) => {
 
 .series-photos {
   width: 100%;
+}
+
+.root-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.set-header {
+  margin-bottom: var(--spacing-2xl);
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.breadcrumb-item {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  padding: 0 2px;
+}
+
+.breadcrumb-item:hover {
+  color: var(--primary-color);
+}
+
+.breadcrumb-item.breadcrumb-drop-target {
+  color: var(--primary-color);
+  background: color-mix(
+    in srgb,
+    var(--primary-color, #6366f1) 10%,
+    transparent
+  );
+  border-radius: 6px;
+  outline: 2px solid var(--primary-color, #6366f1);
+  outline-offset: 1px;
+}
+
+.breadcrumb-current {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+  cursor: default;
+}
+
+.breadcrumb-sep {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.set-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.set-actions {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.set-description {
+  color: var(--text-secondary);
+  font-size: var(--font-size-md);
+  margin: var(--spacing-xs) 0 0 0;
+}
+
+.empty-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
 }
 
 /* Empty Series State */

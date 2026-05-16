@@ -58,17 +58,12 @@
             (item.childSetsCount ?? 0) !== 1 ? "s" : ""
           }}</span
         >
-        <span
-          v-if="
-            (item.childSetsCount ?? 0) > 0 && (item.collectionsCount ?? 0) > 0
-          "
-        >
+        <span v-if="(item.childSetsCount ?? 0) > 0 && contentCount > 0">
           ·
         </span>
-        <span v-if="(item.collectionsCount ?? 0) > 0"
-          >{{ item.collectionsCount ?? 0 }} collection{{
-            (item.collectionsCount ?? 0) !== 1 ? "s" : ""
-          }}</span
+        <span v-if="contentCount > 0"
+          >{{ contentCount }} {{ contentLabel
+          }}{{ contentCount !== 1 ? "s" : "" }}</span
         >
         <span v-if="totalCount === 0" class="empty-meta">Empty set</span>
       </p>
@@ -83,19 +78,26 @@ interface CollectionSetItem {
   description?: string | null;
   parentSetId?: number | null;
   collectionsCount?: number;
+  seriesCount?: number;
   childSetsCount?: number;
   updatedAt?: Date | string;
 }
 
 interface Props {
   item: CollectionSetItem;
+  itemType?: string;
+  contentLabel?: string;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  itemType: "collection",
+  contentLabel: "collection",
+});
 
 const emit = defineEmits<{
   click: [item: CollectionSetItem];
   dropCollections: [collectionIds: (string | number)[], setId: string | number];
+  dropItems: [itemIds: (string | number)[], setId: string | number];
 }>();
 
 const handleClick = () => {
@@ -106,7 +108,12 @@ import { ref, computed } from "vue";
 const isDragOver = ref(false);
 
 const onDragOver = (e: DragEvent) => {
-  if (e.dataTransfer?.types.includes("application/x-collection-id")) {
+  const singleMime = `application/x-${props.itemType}-id`;
+  const multiMime = `application/x-${props.itemType}-ids`;
+  if (
+    e.dataTransfer?.types.includes(singleMime) ||
+    e.dataTransfer?.types.includes(multiMime)
+  ) {
     isDragOver.value = true;
     e.dataTransfer.dropEffect = "move";
   }
@@ -121,12 +128,15 @@ const onDragLeave = (e: DragEvent) => {
 
 const onDrop = (e: DragEvent) => {
   isDragOver.value = false;
+  const singleMime = `application/x-${props.itemType}-id`;
+  const multiMime = `application/x-${props.itemType}-ids`;
   // Try multi-id format first
-  const multiRaw = e.dataTransfer?.getData("application/x-collection-ids");
+  const multiRaw = e.dataTransfer?.getData(multiMime);
   if (multiRaw) {
     try {
       const ids = JSON.parse(multiRaw) as (string | number)[];
       if (Array.isArray(ids) && ids.length > 0) {
+        emit("dropItems", ids, props.item.id);
         emit("dropCollections", ids, props.item.id);
         return;
       }
@@ -135,14 +145,19 @@ const onDrop = (e: DragEvent) => {
     }
   }
   // Fall back to single id
-  const collectionId = e.dataTransfer?.getData("application/x-collection-id");
-  if (collectionId) {
-    emit("dropCollections", [collectionId], props.item.id);
+  const itemId = e.dataTransfer?.getData(singleMime);
+  if (itemId) {
+    emit("dropItems", [itemId], props.item.id);
+    emit("dropCollections", [itemId], props.item.id);
   }
 };
 
+const contentCount = computed(
+  () => props.item.collectionsCount ?? props.item.seriesCount ?? 0,
+);
+
 const totalCount = computed(
-  () => (props.item.collectionsCount ?? 0) + (props.item.childSetsCount ?? 0),
+  () => contentCount.value + (props.item.childSetsCount ?? 0),
 );
 </script>
 
