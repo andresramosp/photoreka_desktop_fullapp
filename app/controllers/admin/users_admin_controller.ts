@@ -73,9 +73,10 @@ export default class UsersAdminController {
   /**
    * Delete a user
    */
-  async destroy({ params, response }: HttpContext) {
+  async destroy({ params, request, response }: HttpContext) {
     try {
-      await AdminUsersService.deleteUser(params.id)
+      const runSchedulerNow = request.input('runSchedulerNow', false)
+      await AdminUsersService.deleteUser(params.id, runSchedulerNow)
       return response.ok({ message: 'User deleted successfully' })
     } catch (error) {
       if (error.message === 'Cannot delete admin users') {

@@ -8,9 +8,9 @@ export default class PhotoDeletionService {
    * Then purge soft-deleted users whose photos are all gone.
    */
   static async deletePhysically(batchSize: number = 50, dryRun: boolean = false) {
-    logger.info('[PhotoDeletion] Starting physical deletion of ALL soft-deleted photos')
-    logger.info(`[PhotoDeletion] Batch size: ${batchSize}`)
-    logger.info(`[PhotoDeletion] Dry run: ${dryRun ? 'YES' : 'NO'}`)
+    console.log('[PhotoDeletion] Starting physical deletion of ALL soft-deleted photos')
+    console.log(`[PhotoDeletion] Batch size: ${batchSize}`)
+    console.log(`[PhotoDeletion] Dry run: ${dryRun ? 'YES' : 'NO'}`)
 
     let totalProcessed = 0
     let totalDeleted = 0
@@ -25,11 +25,11 @@ export default class PhotoDeletionService {
         .select('id', 'name', 'thumbnail_name', 'deleted_at')
 
       if (photos.length === 0) {
-        logger.info('[PhotoDeletion] No more photos to delete')
+        console.log('[PhotoDeletion] No more photos to delete')
         break
       }
 
-      logger.info(`[PhotoDeletion] Processing batch of ${photos.length} photos...`)
+      console.log(`[PhotoDeletion] Processing batch of ${photos.length} photos...`)
 
       if (!dryRun) {
         // Hard-delete photo rows in bulk (CASCADE cleans junction tables)
@@ -38,14 +38,14 @@ export default class PhotoDeletionService {
         try {
           await db.from('photos').whereIn('id', photoIds).delete()
           totalDeleted += photoIds.length
-          logger.info(`[PhotoDeletion] Deleted ${photoIds.length} photo rows from DB`)
+          console.log(`[PhotoDeletion] Deleted ${photoIds.length} photo rows from DB`)
         } catch (error: any) {
           totalErrors += photoIds.length
           logger.error(`[PhotoDeletion] Error deleting photo batch: ${error.message}`)
         }
       } else {
         totalDeleted += photos.length
-        logger.info(`[PhotoDeletion] [DRY RUN] Would delete ${photos.length} photos`)
+        console.log(`[PhotoDeletion] [DRY RUN] Would delete ${photos.length} photos`)
       }
 
       totalProcessed += photos.length
@@ -58,15 +58,15 @@ export default class PhotoDeletionService {
     await this.purgeDeletedUsers(dryRun)
 
     // Final summary
-    logger.info('[PhotoDeletion] ═══════════════════════════════════════')
-    logger.info('[PhotoDeletion] Physical deletion process completed')
-    logger.info(`[PhotoDeletion] Total photos processed: ${totalProcessed}`)
-    logger.info(`[PhotoDeletion] Total photos deleted: ${totalDeleted}`)
-    logger.info(`[PhotoDeletion] Total errors: ${totalErrors}`)
+    console.log('[PhotoDeletion] ═══════════════════════════════════════')
+    console.log('[PhotoDeletion] Physical deletion process completed')
+    console.log(`[PhotoDeletion] Total photos processed: ${totalProcessed}`)
+    console.log(`[PhotoDeletion] Total photos deleted: ${totalDeleted}`)
+    console.log(`[PhotoDeletion] Total errors: ${totalErrors}`)
     if (dryRun) {
       logger.warn('[PhotoDeletion] This was a DRY RUN - no actual deletions were performed')
     }
-    logger.info('[PhotoDeletion] ═══════════════════════════════════════')
+    console.log('[PhotoDeletion] ═══════════════════════════════════════')
 
     return {
       totalProcessed,
@@ -76,8 +76,9 @@ export default class PhotoDeletionService {
   }
 
   /**
-   * Clean up remaining data for soft-deleted users whose photos are all gone.
-   * The user row is kept (soft-deleted) to block re-registration with the same email.
+   * Hard-delete soft-deleted users whose photos are all gone.
+   * Nullifies payments.user_id (email already captured in user_email_snapshot).
+   * Removes the user row — re-registration is not blocked by a kept row.
    */
   private static async purgeDeletedUsers(dryRun: boolean) {
     // Find soft-deleted users with zero remaining photos
@@ -90,17 +91,17 @@ export default class PhotoDeletionService {
       .select('users.id')
 
     if (users.length === 0) {
-      logger.info('[PhotoDeletion] No soft-deleted users to clean up')
+      console.log('[PhotoDeletion] No soft-deleted users to clean up')
       return
     }
 
     const userIds = users.map((u: any) => u.id)
-    logger.info(
+    console.log(
       `[PhotoDeletion] Cleaning up data for ${userIds.length} soft-deleted user(s): [${userIds.join(', ')}]`
     )
 
     if (dryRun) {
-      logger.info(`[PhotoDeletion] [DRY RUN] Would clean up ${userIds.length} user(s)`)
+      console.log(`[PhotoDeletion] [DRY RUN] Would clean up ${userIds.length} user(s)`)
       return
     }
 
@@ -113,7 +114,13 @@ export default class PhotoDeletionService {
     await db.from('user_activities').whereIn('user_id', userIds).delete()
     await db.from('analyzer_processes').whereIn('user_id', userIds).update({ user_id: null })
     await db.from('auth_access_tokens').whereIn('tokenable_id', userIds).delete()
+    // Nullify payments.user_id — email is preserved in user_email_snapshot for auditing
+    await db.from('payments').whereIn('user_id', userIds).update({ user_id: null })
+    // Hard-delete user rows. The email is retained in user_email_snapshot on payment records.
+    await db.from('users').whereIn('id', userIds).delete()
 
-    logger.info(`[PhotoDeletion] ✓ Cleaned up data for ${userIds.length} user(s)`)
+    console.log(
+      `[PhotoDeletion] ✓ Hard-deleted ${userIds.length} user(s) and nullified their payments`
+    )
   }
 }

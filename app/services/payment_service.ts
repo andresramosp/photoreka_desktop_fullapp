@@ -82,8 +82,10 @@ export default class PaymentService {
     const analyzedPhotosGranted = item.type === 'photo_package' ? item.photos : 0
 
     // Crear registro de pago pendiente
+    const user = await User.findOrFail(userId)
     const payment = await Payment.create({
       userId,
+      userEmailSnapshot: user.email,
       type,
       packageId: item.id,
       stripePriceId: item.stripePriceId,

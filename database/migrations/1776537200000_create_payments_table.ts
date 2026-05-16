@@ -6,7 +6,8 @@ export default class extends BaseSchema {
   async up() {
     this.schema.createTable(this.tableName, (table) => {
       table.increments('id')
-      table.integer('user_id').unsigned().notNullable().references('id').inTable('users')
+      table.integer('user_id').unsigned().nullable().references('id').inTable('users')
+      table.string('user_email_snapshot', 255).nullable()
       table.string('stripe_session_id').unique().nullable()
       table.string('stripe_payment_intent_id').unique().nullable()
       table.enum('type', ['photo_package', 'credits']).notNullable()

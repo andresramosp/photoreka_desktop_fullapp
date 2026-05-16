@@ -9,7 +9,10 @@ export default class Payment extends BaseModel {
   declare id: number
 
   @column()
-  declare userId: number
+  declare userId: number | null
+
+  @column()
+  declare userEmailSnapshot: string | null
 
   @column()
   declare stripeSessionId: string | null

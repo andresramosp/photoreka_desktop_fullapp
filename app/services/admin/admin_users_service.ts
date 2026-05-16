@@ -1,6 +1,7 @@
 import User from '#models/user'
 import Photo from '#models/photo'
 import AdminPaymentsService from '#services/admin/admin_payments_service'
+import PhotoDeletionService from '#services/photo_deletion_service'
 import db from '@adonisjs/lucid/services/db'
 import { DateTime } from 'luxon'
 import { DeleteObjectsCommand, S3Client } from '@aws-sdk/client-s3'
@@ -166,9 +167,10 @@ export default class AdminUsersService {
 
   /**
    * Soft-delete a user and their photos.
-   * The photo deletion scheduler will handle R2 cleanup and hard-deletes later.
+   * If runSchedulerNow is true, immediately triggers photo physical deletion and user hard-delete
+   * instead of waiting for the scheduled run.
    */
-  static async deleteUser(userId: number): Promise<void> {
+  static async deleteUser(userId: number, runSchedulerNow: boolean = false): Promise<void> {
     const user = await User.findOrFail(userId)
 
     if (user.role === 'admin') {
@@ -213,6 +215,12 @@ export default class AdminUsersService {
     user.deletedAt = DateTime.fromJSDate(now)
     user.isActive = false
     await user.save()
+
+    if (runSchedulerNow) {
+      PhotoDeletionService.deletePhysically().catch((err) => {
+        logger.error('[AdminDeleteUser] Immediate scheduler run failed: %o', err)
+      })
+    }
   }
 
   /**
