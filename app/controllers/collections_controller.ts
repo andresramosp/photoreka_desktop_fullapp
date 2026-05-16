@@ -289,6 +289,39 @@ export default class CollectionsController {
   }
 
   /**
+   * Eliminar múltiples colecciones de una vez
+   */
+  async destroyMany({ auth, request, response }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as any
+      const { ids } = request.only(['ids'])
+
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return response.badRequest('Collection IDs are required')
+      }
+
+      const collections = await Collection.query().whereIn('id', ids).where('userId', user.id)
+
+      if (collections.length === 0) {
+        return response.notFound('No matching collections found')
+      }
+
+      for (const collection of collections) {
+        await collection.related('photos').detach()
+        await collection.delete()
+      }
+
+      return response.ok({
+        message: `${collections.length} collection(s) deleted successfully`,
+        deletedCount: collections.length,
+      })
+    } catch (error) {
+      return response.badRequest('Error deleting collections')
+    }
+  }
+
+  /**
    * Quitar fotos de una colección
    */
   async removePhotos({ auth, params, request, response }: HttpContext) {

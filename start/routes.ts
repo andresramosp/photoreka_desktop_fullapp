@@ -155,6 +155,7 @@ router
     router.post('/api/collections', [CollectionsController, 'store'])
     router.put('/api/collections/:id', [CollectionsController, 'update'])
     router.delete('/api/collections/:id', [CollectionsController, 'destroy'])
+    router.delete('/api/collections', [CollectionsController, 'destroyMany'])
     router.post('/api/collections/:id/photos', [CollectionsController, 'addPhotos'])
     router.delete('/api/collections/:id/photos', [CollectionsController, 'removePhotos'])
     router.patch('/api/collections/move', [CollectionSetsController, 'moveCollection'])
