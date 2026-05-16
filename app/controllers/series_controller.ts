@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import Series from '#models/series'
+import SeriesSet from '#models/series_set'
 import Photo from '#models/photo'
 import db from '@adonisjs/lucid/services/db'
 import { inject } from '@adonisjs/core'
@@ -26,6 +27,7 @@ export default class SeriesController {
         id: series.id,
         name: series.name,
         description: series.description,
+        setId: series.setId,
         createdAt: series.createdAt,
         updatedAt: series.updatedAt,
         photosCount: series.photos.length,
@@ -74,6 +76,7 @@ export default class SeriesController {
         id: series.id,
         name: series.name,
         description: series.description,
+        setId: series.setId,
         createdAt: series.createdAt,
         updatedAt: series.updatedAt,
         photos: series.photos.map((photo) => ({
@@ -132,6 +135,7 @@ export default class SeriesController {
         id: series.id,
         name: series.name,
         description: series.description,
+        setId: series.setId,
         createdAt: series.createdAt,
         updatedAt: series.updatedAt,
         photos: series.photos.map((photo) => ({
@@ -159,7 +163,12 @@ export default class SeriesController {
     try {
       await auth.use('api').check()
       const user = auth.use('api').user! as any
-      const { name, description, photoIds } = request.only(['name', 'description', 'photoIds'])
+      const { name, description, photoIds, setId } = request.only([
+        'name',
+        'description',
+        'photoIds',
+        'setId',
+      ])
 
       if (!name || name.trim().length === 0) {
         return response.badRequest('Series name is required')
@@ -175,11 +184,20 @@ export default class SeriesController {
         return response.badRequest('A series with this name already exists')
       }
 
+      if (setId) {
+        const set = await SeriesSet.query().where('id', setId).where('userId', user.id).first()
+
+        if (!set) {
+          return response.notFound('Series set not found')
+        }
+      }
+
       // Crear la serie
       const series = await Series.create({
         userId: user.id,
         name: name.trim(),
         description: description?.trim() || null,
+        setId: setId || null,
       })
 
       // Si se proporcionaron fotos iniciales, añadirlas a la serie con orden
@@ -210,6 +228,7 @@ export default class SeriesController {
         id: series.id,
         name: series.name,
         description: series.description,
+        setId: series.setId,
         createdAt: series.createdAt,
         updatedAt: series.updatedAt,
         photos: series.photos.map((photo) => ({
@@ -256,6 +275,7 @@ export default class SeriesController {
         id: series.id,
         name: series.name,
         description: series.description,
+        setId: series.setId,
         createdAt: series.createdAt,
         updatedAt: series.updatedAt,
       })
@@ -286,6 +306,39 @@ export default class SeriesController {
       await series.delete()
 
       return response.ok({ message: 'Series deleted successfully' })
+    } catch (error) {
+      return response.badRequest('Error deleting series')
+    }
+  }
+
+  /**
+   * Eliminar múltiples series de una vez
+   */
+  async destroyMany({ auth, request, response }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as any
+      const { ids } = request.only(['ids'])
+
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return response.badRequest('Series IDs are required')
+      }
+
+      const seriesList = await Series.query().whereIn('id', ids).where('userId', user.id)
+
+      if (seriesList.length === 0) {
+        return response.notFound('No matching series found')
+      }
+
+      for (const series of seriesList) {
+        await series.related('photos').detach()
+        await series.delete()
+      }
+
+      return response.ok({
+        message: `${seriesList.length} series deleted successfully`,
+        deletedCount: seriesList.length,
+      })
     } catch (error) {
       return response.badRequest('Error deleting series')
     }
