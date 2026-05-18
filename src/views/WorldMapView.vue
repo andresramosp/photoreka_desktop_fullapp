@@ -86,6 +86,8 @@
       <l-map
         ref="map"
         :bounds="initialMapBounds || undefined"
+        :center="initialMapBounds ? undefined : [20, 0]"
+        :zoom="initialMapBounds ? undefined : 2"
         :options="{ zoomControl: false }"
         @ready="onMapReady"
         style="height: 100%; width: 100%"
