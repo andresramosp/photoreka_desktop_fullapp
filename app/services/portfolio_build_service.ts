@@ -77,9 +77,13 @@ const OVER_GENERATE_RATIO = 0.35
 /** Minimum over-generate buffer (absolute). */
 const OVER_GENERATE_MIN = 3
 /** Cosine similarity threshold — rejects candidates too similar to already-selected photos. */
-const SIMILARITY_GATE_THRESHOLD = 0.75
+const SIMILARITY_GATE_THRESHOLD = 0.8
 /** Commercial work often contains valid near-variants; allow more similarity before rejecting. */
 const COMMERCIAL_SIMILARITY_GATE_THRESHOLD = 0.8
+/** Fallback threshold used only when the strict gate would undershoot the requested target size. */
+const RELAXED_SIMILARITY_GATE_THRESHOLD = 0.9
+/** Commercial fallback threshold used only to avoid completing below the requested target size. */
+const COMMERCIAL_RELAXED_SIMILARITY_GATE_THRESHOLD = 0.92
 /** Max retries for LLM calls before giving up. */
 const LLM_MAX_RETRIES = 3
 /** Base delay in ms between retries (exponential backoff). */
@@ -1103,7 +1107,11 @@ Only include fields that are clearly indicated by the user's text. If nothing is
   }
 
   // ── Step 3: Coherence scoring ──────────────────────────────
-
+  // TODO: Consider replacing the single top-N centroid with a local-neighborhood
+  // coherence score. Recall is already theme-biased and the LLM receives the
+  // coherence directive during evaluation/refinement, so this centroid boost is
+  // intentionally a lightweight pre-LLM ordering nudge for now. A kNN/anchor-based
+  // score would better preserve local visual/chromatic/narrative clusters.
   private async computeCoherenceScores(
     candidates: ScoredCandidate[],
     mode: CoherenceMode,
@@ -1262,6 +1270,7 @@ Only include fields that are clearly indicated by the user's text. If nothing is
       batches.push(sorted.slice(i, i + BATCH_SIZE))
     }
 
+    tracker.setCurrentTask('evaluation')
     let completedBatches = 0
     let evaluatedCandidates = 0
     let aborted = false
@@ -1278,6 +1287,58 @@ Only include fields that are clearly indicated by the user's text. If nothing is
       }
 
       return gated
+    }
+
+    const backfillToRequestedTarget = (
+      strictGated: ScoredCandidate[],
+      selectedCandidates: ScoredCandidate[]
+    ): ScoredCandidate[] => {
+      if (strictGated.length >= config.targetSize) return strictGated
+
+      const backfilled = [...strictGated]
+      const backfilledIds = new Set(backfilled.map((candidate) => candidate.id))
+      const relaxedThreshold = this.getRelaxedSimilarityGateThreshold(variant)
+      const backfillCandidates = [...selectedCandidates]
+        .filter((candidate) => !backfilledIds.has(candidate.id))
+        .map((candidate) => ({
+          candidate,
+          maxSimilarity: this.getMaxSimilarityToSelection(candidate, strictGated),
+        }))
+        .sort((first, second) => {
+          if (first.maxSimilarity !== second.maxSimilarity) {
+            return first.maxSimilarity - second.maxSimilarity
+          }
+          if (second.candidate.compositeScore !== first.candidate.compositeScore) {
+            return second.candidate.compositeScore - first.candidate.compositeScore
+          }
+          return first.candidate.id - second.candidate.id
+        })
+
+      for (const { candidate } of backfillCandidates) {
+        if (backfilled.length >= config.targetSize) break
+        if (!this.checkSimilarityGate(candidate, backfilled, relaxedThreshold)) continue
+
+        backfilled.push(candidate)
+        backfilledIds.add(candidate.id)
+      }
+
+      for (const { candidate } of backfillCandidates) {
+        if (backfilled.length >= config.targetSize) break
+        if (backfilledIds.has(candidate.id)) continue
+
+        backfilled.push(candidate)
+        backfilledIds.add(candidate.id)
+      }
+
+      if (backfilled.length > strictGated.length) {
+        console.warn(
+          `[PortfolioBuild] ⚠️ Similarity gate backfilled ${backfilled.length - strictGated.length} LLM-approved candidate(s) ` +
+            `to satisfy target ${config.targetSize} (strict: ${strictGated.length}, ` +
+            `final: ${backfilled.length}, relaxed threshold: ${relaxedThreshold.toFixed(2)})`
+        )
+      }
+
+      return backfilled
     }
 
     const appendSelectedDecisions = (
@@ -1301,8 +1362,6 @@ Only include fields that are clearly indicated by the user's text. If nothing is
         console.log(`[PortfolioBuild] 🛑 Build ${build.id} aborted — stopping evaluation`)
         return { batch, decisions: [] as BatchDecision[] }
       }
-
-      tracker.setCurrentTask(`evaluation_batch_${batchIdx}`)
 
       // Debug: save batch grid image
       if (DEBUG_SAVE_BATCH_GRID) {
@@ -1422,6 +1481,16 @@ Only include fields that are clearly indicated by the user's text. If nothing is
       gated = applySimilarityGate(allSelected)
     }
 
+    const strictGatedCount = gated.length
+    gated = backfillToRequestedTarget(gated, allSelected)
+
+    if (!aborted && gated.length < config.targetSize) {
+      throw new Error(
+        `Portfolio build selected only ${gated.length}/${config.targetSize} photos. ` +
+          `The LLM approved ${allSelected.length} candidate(s), and the similarity gate could not produce enough usable selections from the recall pool.`
+      )
+    }
+
     const gatedIdSet = new Set(gated.map((candidate) => candidate.id))
     for (const candidate of [...allSelected].sort((a, b) => b.compositeScore - a.compositeScore)) {
       if (!gatedIdSet.has(candidate.id)) {
@@ -1449,7 +1518,9 @@ Only include fields that are clearly indicated by the user's text. If nothing is
     this.emitProgress(build)
 
     console.log(
-      `[PortfolioBuild] ✅ Evaluation done: ${allSelected.length} LLM-selected → ${gated.length} after similarity gate (target: ${evaluationTarget})`
+      `[PortfolioBuild] ✅ Evaluation done: ${allSelected.length} LLM-selected → ` +
+        `${strictGatedCount} strict-gated → ${gated.length} final selected before refinement ` +
+        `(eval target: ${evaluationTarget}, final target: ${config.targetSize})`
     )
 
     // Trim to evaluation target if we overshot
@@ -2349,18 +2420,34 @@ Return JSON:
       : SIMILARITY_GATE_THRESHOLD
   }
 
+  private getRelaxedSimilarityGateThreshold(variant: PromptVariant): number {
+    return variant === 'commercial'
+      ? COMMERCIAL_RELAXED_SIMILARITY_GATE_THRESHOLD
+      : RELAXED_SIMILARITY_GATE_THRESHOLD
+  }
+
   private checkSimilarityGate(
     candidate: ScoredCandidate,
     selected: ScoredCandidate[],
     threshold: number
   ): boolean {
-    if (!candidate._embedding || selected.length === 0) return true
-    for (const sel of selected) {
-      if (!sel._embedding) continue
-      const sim = this.cosineSimilarity(candidate._embedding, sel._embedding)
-      if (sim > threshold) return false
+    return this.getMaxSimilarityToSelection(candidate, selected) <= threshold
+  }
+
+  private getMaxSimilarityToSelection(
+    candidate: ScoredCandidate,
+    selected: ScoredCandidate[]
+  ): number {
+    if (!candidate._embedding || selected.length === 0) return 0
+
+    let maxSimilarity = 0
+    for (const selectedPhoto of selected) {
+      if (!selectedPhoto._embedding) continue
+      const similarity = this.cosineSimilarity(candidate._embedding, selectedPhoto._embedding)
+      maxSimilarity = Math.max(maxSimilarity, similarity)
     }
-    return true
+
+    return maxSimilarity
   }
 
   private cosineSimilarity(a: number[], b: number[]): number {
