@@ -1,14 +1,25 @@
 <template>
   <div class="world-map-view">
-    <!-- Top-right label showing photos with GPS -->
-    <div class="gps-photos-label">
-      <n-icon :component="LocationOutline" class="gps-label-icon" />
-      <span class="gps-label-count">{{ photosWithGps.length }}</span>
-      <span class="gps-label-text">photos with location</span>
-    </div>
+    <n-button
+      v-if="photosWithGps.length > 0"
+      class="ai-location-button"
+      type="info"
+      :loading="isAiLocationRunning"
+      @click="openAiLocationDialog"
+    >
+      <template #icon>
+        <n-icon :component="SparklesOutline" />
+      </template>
+      AI locate
+    </n-button>
 
     <!-- No GPS photos message -->
-    <div v-if="photosWithGps.length === 0" class="no-gps-message">
+    <div v-if="!hasLoadedInitialPhotos" class="map-loading-state" />
+
+    <div
+      v-else-if="photosWithGps.length === 0 && !isAiLocationRunning"
+      class="no-gps-message"
+    >
       <div class="no-gps-content">
         <n-icon
           :size="64"
@@ -43,47 +54,88 @@
             >
           </div> -->
         </div>
+
+        <div class="no-gps-ai-cta">
+          <p class="no-gps-ai-label">
+            Already uploaded photos? Let AI find where they were taken.
+          </p>
+          <n-button
+            type="info"
+            :disabled="isAiLocationButtonDisabled"
+            :loading="isAiLocationRunning"
+            @click="openAiLocationDialog"
+          >
+            <template #icon>
+              <n-icon :component="SparklesOutline" />
+            </template>
+            AI locate photos
+          </n-button>
+        </div>
       </div>
     </div>
 
     <!-- Map container -->
-    <div v-else ref="mapContainer" class="map-container">
+    <div
+      v-else
+      ref="mapContainer"
+      :class="[
+        'map-container',
+        { 'map-container--pending': !isMapViewportReady },
+      ]"
+    >
       <l-map
         ref="map"
-        :zoom="2"
-        :center="[20, 0]"
+        :bounds="initialMapBounds || undefined"
         :options="{ zoomControl: false }"
         @ready="onMapReady"
         style="height: 100%; width: 100%"
       >
         <!-- Layer control -->
-        <LControlLayers position="topright" />
+        <LControlLayers position="bottomleft" />
 
         <!-- Base layer: OpenStreetMap -->
         <LTileLayer
           name="OpenStreetMap"
           layer-type="base"
+          :visible="false"
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution="© OpenStreetMap contributors"
-          :maxZoom="19"
+          :maxZoom="18"
         />
 
         <!-- Base layer: Esri Satellite -->
         <LTileLayer
           name="Satélite (Esri)"
           layer-type="base"
+          :visible="true"
           url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
           attribution="© Esri, Maxar, Earthstar Geographics"
-          :maxZoom="19"
+          :maxZoom="18"
         />
       </l-map>
     </div>
+
+    <!-- Map config panel (Filters) -->
+    <WorldMapConfigPanel
+      v-if="photosWithGps.length > 0"
+      v-model:confidence-filter="confidenceFilter"
+      v-model:granularity-filter="granularityFilter"
+    />
 
     <!-- Photo Info Dialog -->
     <PhotoInfoDialog
       v-model="showPhotoInfoDialog"
       :selected-photo="selectedDialogPhoto"
       @change-photo="selectedDialogPhoto = $event"
+    />
+
+    <AiLocationModal
+      v-model:show="showAiLocationDialog"
+      :photos-without-location="backendPhotosWithoutLocation"
+      :estimated-credits="estimatedAiLocationCredits"
+      :status="aiLocationStatus"
+      :is-starting="isStartingAiLocation"
+      @start="startAiLocationInference"
     />
   </div>
 </template>
@@ -99,15 +151,22 @@ import {
   watch,
 } from "vue";
 import { usePhotosStore } from "@/stores/photos";
+import { useUserStore } from "@/stores/userStore";
+import { api } from "@/utils/axios";
+import { useMessage } from "naive-ui";
 import {
-  LocationOutline,
   EarthOutline,
   CameraOutline,
   NavigateOutline,
-  ImagesOutline,
+  SparklesOutline,
 } from "@vicons/ionicons5";
+import WorldMapConfigPanel from "@/components/world-map/WorldMapConfigPanel.vue";
 import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
+import AiLocationModal from "@/components/AiLocationModal.vue";
+import type { AiLocationJobStatus } from "@/components/AiLocationModal.vue";
 import { LMap, LTileLayer, LControlLayers } from "@vue-leaflet/vue-leaflet";
+import { useIsMobile } from "@/composables/useIsMobile.js";
+
 import L from "leaflet";
 import "leaflet.markercluster";
 import "leaflet/dist/leaflet.css";
@@ -131,13 +190,31 @@ interface PhotoWithGps {
 type PhotoMarker = L.Marker & { photo: PhotoWithGps };
 
 const photosStore = usePhotosStore();
+const userStore = useUserStore();
+const message = useMessage();
 const mapContainer = ref<HTMLElement | null>(null);
 const map = ref<any>(null);
 const markerClusterLayer = shallowRef<L.MarkerClusterGroup | null>(null);
-const hasFittedInitialBounds = ref(false);
+const hasLoadedInitialPhotos = ref(false);
+const initialMapBounds = ref<GpsCoordinates[] | null>(null);
+const isMapViewportReady = ref(false);
 const showPhotoInfoDialog = ref(false);
 const selectedDialogPhoto = ref<any>(null);
+const showAiLocationDialog = ref(false);
+const isFinalizingAiLocation = ref(false);
+const isStartingAiLocation = ref(false);
+const aiLocationStatus = ref<AiLocationJobStatus | null>(null);
+const aiLocationSummaryCount = ref<number | null>(null);
+const aiLocationEstimatedCredits = ref<number | null>(null);
 let resizeObserver: ResizeObserver | null = null;
+let aiLocationPollTimer: ReturnType<typeof window.setInterval> | null = null;
+const { isMobile } = useIsMobile();
+
+// Map filter panel state
+type ConfidenceFilter = "gps" | "very_likely" | "likely";
+type GranularityFilter = "city_region" | "country";
+const confidenceFilter = ref<ConfidenceFilter>("likely");
+const granularityFilter = ref<GranularityFilter>("country");
 
 // Function to convert GPS array format to decimal degrees
 function convertGpsArrayToDecimal(gpsArray: number[]): number {
@@ -211,8 +288,166 @@ const photosWithGps = computed<PhotoWithGps[]>(() => {
     .filter((photo): photo is PhotoWithGps => photo !== null);
 });
 
+const photosWithoutGps = computed(() => {
+  const allPhotos: any[] = photosStore.allPhotos || [];
+  return allPhotos.filter((photo) => !extractGpsCoordinates(photo));
+});
+
+// Filtered view of photosWithGps based on confidence + granularity filters
+const filteredPhotosWithGps = computed<PhotoWithGps[]>(() => {
+  return photosWithGps.value.filter((photo) => {
+    const exif = (photo.descriptions?.EXIF ?? {}) as Record<string, any>;
+    const aiInference = exif.aiLocationInference ?? null;
+    const isRealGps = !aiInference;
+    const reliability: string | null = aiInference?.reliability ?? null;
+    const granularity: string | null = aiInference?.geocodeGranularity ?? null;
+
+    // --- Confidence filter ---
+    switch (confidenceFilter.value) {
+      case "gps":
+        if (!isRealGps) return false;
+        break;
+      case "very_likely":
+        if (!isRealGps && reliability !== "very_likely") return false;
+        break;
+      case "likely":
+        if (
+          !isRealGps &&
+          reliability !== "very_likely" &&
+          reliability !== "likely"
+        )
+          return false;
+        break;
+    }
+
+    // --- Granularity filter (real GPS always passes) ---
+    if (!isRealGps && granularityFilter.value === "city_region") {
+      if (granularity !== "city" && granularity !== "region") return false;
+    }
+
+    return true;
+  });
+});
+
+const activeFiltersCount = computed(() => {
+  let count = 0;
+  if (confidenceFilter.value !== "likely") count++;
+  if (granularityFilter.value !== "country") count++;
+  return count;
+});
+
+const backendPhotosWithoutLocation = computed(
+  () => aiLocationSummaryCount.value ?? photosWithoutGps.value.length,
+);
+
+const estimatedAiLocationCredits = computed(
+  () =>
+    aiLocationEstimatedCredits.value ??
+    Math.max(1, backendPhotosWithoutLocation.value),
+);
+
+const isAiLocationRunning = computed(
+  () =>
+    aiLocationStatus.value?.status === "running" ||
+    isFinalizingAiLocation.value,
+);
+
+const isAiLocationButtonDisabled = computed(
+  () => isAiLocationRunning.value || backendPhotosWithoutLocation.value === 0,
+);
+
+async function refreshAiLocationSummary() {
+  const previousJob = aiLocationStatus.value;
+  const wasRunning = previousJob?.status === "running";
+  const params = previousJob?.jobId ? { jobId: previousJob.jobId } : undefined;
+
+  try {
+    const { data } = await api.get("/api/location-inference/summary", {
+      params,
+    });
+    aiLocationSummaryCount.value = data.photosWithoutLocation ?? null;
+    aiLocationEstimatedCredits.value = data.estimatedCredits ?? null;
+
+    const newJob: AiLocationJobStatus | null = data.job ?? null;
+
+    if (newJob?.status === "running") {
+      aiLocationStatus.value = newJob;
+      startAiLocationPolling();
+      return;
+    }
+
+    stopAiLocationPolling();
+
+    if (wasRunning) {
+      isFinalizingAiLocation.value = true;
+      try {
+        await photosStore.getOrFetch(true);
+        await userStore.fetchUsage();
+        await nextTick();
+        refreshPhotoMarkers();
+        getLeafletMap()?.invalidateSize();
+        aiLocationStatus.value = newJob ?? {
+          ...previousJob,
+          status: "completed",
+          processed: previousJob.total,
+        };
+        showAiLocationDialog.value = true;
+      } finally {
+        isFinalizingAiLocation.value = false;
+      }
+      return;
+    }
+
+    aiLocationStatus.value = null;
+  } catch (error) {
+    console.warn("Error fetching AI location summary:", error);
+  }
+}
+
+function startAiLocationPolling() {
+  if (aiLocationPollTimer) return;
+  aiLocationPollTimer = window.setInterval(refreshAiLocationSummary, 5000);
+}
+
+function stopAiLocationPolling() {
+  if (!aiLocationPollTimer) return;
+  window.clearInterval(aiLocationPollTimer);
+  aiLocationPollTimer = null;
+}
+
+async function openAiLocationDialog() {
+  if (aiLocationStatus.value?.status !== "running") {
+    aiLocationStatus.value = null;
+  }
+  showAiLocationDialog.value = true;
+  await refreshAiLocationSummary();
+}
+
+async function startAiLocationInference() {
+  isStartingAiLocation.value = true;
+  isFinalizingAiLocation.value = false;
+  try {
+    const { data } = await api.post("/api/location-inference/start");
+    aiLocationStatus.value = data.job;
+    message.success("Location analysis started");
+    await userStore.fetchUsage();
+    startAiLocationPolling();
+  } catch (error) {
+    await refreshAiLocationSummary();
+  } finally {
+    isStartingAiLocation.value = false;
+  }
+}
+
 function getLeafletMap(): L.Map | null {
   return map.value?.leafletObject ?? null;
+}
+
+function updateInitialMapBounds() {
+  initialMapBounds.value = filteredPhotosWithGps.value.length
+    ? filteredPhotosWithGps.value.map((photo) => photo.coordinates)
+    : null;
+  isMapViewportReady.value = photosWithGps.value.length === 0;
 }
 
 function getPhotoThumbnail(photo: PhotoWithGps): string {
@@ -339,39 +574,15 @@ function ensureMarkerClusterLayer(): L.MarkerClusterGroup | null {
   return markerClusterLayer.value;
 }
 
-function fitInitialBounds() {
-  const leafletMap = getLeafletMap();
-  if (
-    !leafletMap ||
-    hasFittedInitialBounds.value ||
-    photosWithGps.value.length === 0
-  ) {
-    return;
-  }
-
-  const bounds = L.latLngBounds(
-    photosWithGps.value.map((photo) => photo.coordinates),
-  );
-
-  if (!bounds.isValid()) return;
-
-  if (photosWithGps.value.length === 1) {
-    leafletMap.setView(bounds.getCenter(), 12, { animate: false });
-  } else {
-    leafletMap.fitBounds(bounds, { maxZoom: 13, padding: [56, 56] });
-  }
-
-  hasFittedInitialBounds.value = true;
-}
-
 function refreshPhotoMarkers() {
   const clusterLayer = ensureMarkerClusterLayer();
   if (!clusterLayer) return;
 
   clusterLayer.clearLayers();
 
-  const markers = photosWithGps.value.map((photo) => {
+  const markers = filteredPhotosWithGps.value.map((photo) => {
     const marker = L.marker(photo.coordinates, {
+      autoPanOnFocus: false,
       icon: createPhotoMarkerIcon(photo),
       keyboard: true,
       title: getPhotoTitle(photo),
@@ -387,7 +598,6 @@ function refreshPhotoMarkers() {
   });
 
   clusterLayer.addLayers(markers);
-  fitInitialBounds();
 }
 
 function removeMarkerClusterLayer() {
@@ -422,8 +632,20 @@ const onMapReady = () => {
   const leafletMap = getLeafletMap();
   if (leafletMap) {
     L.control.zoom({ position: "bottomright" }).addTo(leafletMap);
+    if (filteredPhotosWithGps.value.length > 1) {
+      leafletMap.fitBounds(
+        filteredPhotosWithGps.value.map((photo) => photo.coordinates),
+        {
+          animate: false,
+          maxZoom: 13,
+          padding: isMobile.value ? [0, 0] : [56, 56],
+        },
+      );
+    }
   }
+  initialMapBounds.value = null;
   refreshPhotoMarkers();
+  isMapViewportReady.value = true;
 };
 
 // Watch only the stable identity of each marker (id + coords).
@@ -438,13 +660,25 @@ const photosWithGpsKey = computed<string>(() =>
     .join("|"),
 );
 
+watch([confidenceFilter, granularityFilter], () => {
+  if (!hasLoadedInitialPhotos.value) return;
+  refreshPhotoMarkers();
+});
+
 watch(photosWithGpsKey, async () => {
+  if (!hasLoadedInitialPhotos.value) return;
+
   await nextTick();
 
   if (photosWithGps.value.length === 0) {
-    hasFittedInitialBounds.value = false;
+    initialMapBounds.value = null;
+    isMapViewportReady.value = true;
     removeMarkerClusterLayer();
     return;
+  }
+
+  if (!map.value) {
+    updateInitialMapBounds();
   }
 
   refreshPhotoMarkers();
@@ -453,8 +687,11 @@ watch(photosWithGpsKey, async () => {
 // Load photos on mount
 onMounted(async () => {
   await photosStore.getOrFetch(false);
+  updateInitialMapBounds();
+  hasLoadedInitialPhotos.value = true;
   await nextTick();
   refreshPhotoMarkers();
+  void refreshAiLocationSummary();
 
   if (mapContainer.value) {
     resizeObserver = new ResizeObserver(() => {
@@ -467,6 +704,7 @@ onMounted(async () => {
 onUnmounted(() => {
   resizeObserver?.disconnect();
   resizeObserver = null;
+  stopAiLocationPolling();
   removeMarkerClusterLayer();
 });
 </script>
@@ -480,39 +718,20 @@ onUnmounted(() => {
 }
 
 .gps-photos-label {
+  display: none;
+}
+
+.map-loading-state {
+  width: 100%;
+  height: 100%;
+}
+
+.ai-location-button {
   position: absolute;
   top: 16px;
   left: 16px;
   z-index: 1000;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 14px 7px 10px;
-  background: var(--bg-container);
-  border-radius: var(--radius-md);
-  /* box-shadow:
-    0 2px 12px rgba(18, 24, 38, 0.14),
-    0 0 0 1px var(--border-color); */
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-  pointer-events: none;
-  user-select: none;
-}
-
-.gps-label-icon {
-  font-size: 16px;
-  color: var(--primary-color);
-  flex-shrink: 0;
-}
-
-.gps-label-count {
-  font-weight: 700;
-  color: var(--primary-color);
-}
-
-.gps-label-text {
-  color: var(--text-secondary);
+  box-shadow: 0 2px 12px rgba(18, 24, 38, 0.16);
 }
 
 .no-gps-message {
@@ -576,9 +795,31 @@ onUnmounted(() => {
   color: var(--text-secondary);
 }
 
+.no-gps-ai-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--border-color);
+}
+
+.no-gps-ai-label {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
 .map-container {
   width: 100%;
   height: 100%;
+  opacity: 1;
+  transition: opacity 0.18s ease;
+}
+
+.map-container--pending {
+  opacity: 0;
 }
 
 :deep(.photo-map-div-icon) {
@@ -681,7 +922,7 @@ onUnmounted(() => {
   min-width: 26px;
   height: 26px;
   padding: 0 7px;
-  border: 2px solid var(--bg-container);
+  border: 1px solid var(--bg-container);
   border-radius: 999px;
   background: var(--primary-color);
   box-shadow: 0 3px 10px rgba(18, 24, 38, 0.28);

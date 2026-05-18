@@ -9,7 +9,7 @@
     :close-on-esc="true"
     class="photo-info-mobile-drawer"
   >
-    <n-drawer-content :native-scrollbar="false">
+    <n-drawer-content :native-scrollbar="false" :closable="false">
       <!-- Header with photo name and close -->
       <template #header>
         <div class="mobile-header">
@@ -17,8 +17,8 @@
             <span class="mobile-photo-name">
               {{
                 selectedPhoto?.originalFileName &&
-                selectedPhoto.originalFileName.length > 15
-                  ? selectedPhoto.originalFileName.slice(0, 15) + "…"
+                selectedPhoto.originalFileName.length > 10
+                  ? selectedPhoto.originalFileName.slice(0, 10) + "…"
                   : selectedPhoto?.originalFileName || "Untitled"
               }}
             </span>
@@ -35,23 +35,26 @@
               </template>
             </n-button>
           </div>
-          <FloatingActionBar
-            :embedded="true"
-            :selected-ids="selectedPhoto?.id ? [selectedPhoto.id] : []"
-            :show-delete="showDelete"
-            :show-add-to-collection="showAddToCollection"
-            :show-move-to-tool="showMoveToTool"
-            :show-send-to-chat="showSendToChat"
-            @delete="emit('delete-photo')"
-            @download="emit('download')"
-            @add-to-collection="emit('add-to-collection')"
-            @move-to-tool="emit('move-to-tool')"
-            @send-to-chat="emit('send-to-chat')"
-          />
+          <div class="mobile-fab-wrapper">
+            <FloatingActionBar
+              :embedded="true"
+              :selected-ids="selectedPhoto?.id ? [selectedPhoto.id] : []"
+              :show-delete="showDelete"
+              :show-add-to-collection="showAddToCollection"
+              :show-move-to-tool="showMoveToTool"
+              :show-send-to-chat="showSendToChat"
+              @delete="emit('delete-photo')"
+              @download="emit('download')"
+              @add-to-collection="emit('add-to-collection')"
+              @move-to-tool="emit('move-to-tool')"
+              @send-to-chat="emit('send-to-chat')"
+            />
+          </div>
           <n-button
             quaternary
             circle
             size="small"
+            class="mobile-close-btn"
             @click="visibleModel = false"
           >
             <template #icon>
@@ -832,6 +835,18 @@ const navigateTo = (routeName, id) => {
   justify-content: space-between;
   width: 100%;
   gap: var(--spacing-sm);
+  overflow: hidden;
+}
+
+.mobile-fab-wrapper {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+}
+
+.mobile-close-btn {
+  flex-shrink: 0 !important;
 }
 
 .mobile-header-title {
@@ -1383,6 +1398,10 @@ const navigateTo = (routeName, id) => {
   box-sizing: border-box;
   padding: 8px !important;
   height: 100%;
+}
+
+.photo-info-mobile-drawer .n-drawer-header {
+  display: block !important;
 }
 
 /* Library tab styles */

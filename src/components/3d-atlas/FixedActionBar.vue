@@ -69,7 +69,7 @@
             :disabled="selectedCount === 0"
           >
             <template #icon>
-              <n-icon color="var(--color-primary)" size="16">
+              <n-icon color="var(--primary-color)" size="16">
                 <RobotOutlined />
               </n-icon>
             </template>

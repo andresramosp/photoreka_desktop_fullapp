@@ -250,13 +250,17 @@ const allowedHeaderViews = [
   "help",
   "report",
   "chat-lab",
-  // "world-map",
   // "settings",
   // Add more route names as needed
 ];
 
 const showDashboardHeader = computed(() => {
   if (!route.name) return false;
+
+  if (typeof route.name === "string" && route.name.startsWith("world-map")) {
+    return isMobile.value;
+  }
+
   return allowedHeaderViews.some(
     (prefix) => typeof route.name === "string" && route.name.startsWith(prefix),
   );

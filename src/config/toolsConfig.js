@@ -218,7 +218,7 @@ export const TOOLS_CONFIG = [
     description: "Visualize your photos on a world map",
     icon: "EarthOutline",
     route: "/world-map",
-    availableOn: TOOL_AVAILABILITY.DESKTOP_ONLY,
+    availableOn: TOOL_AVAILABILITY.BOTH,
     menuSection: "global",
     showInPhotoSelector: false,
   },
