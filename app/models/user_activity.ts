@@ -37,6 +37,7 @@ export type ActivityType =
   // Portfolio & Visualization
   | 'portfolio_build'
   | 'report_build'
+  | 'location_inference'
   | 'view_3d'
   // Embeddings
   | 'generate_embeddings'

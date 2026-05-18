@@ -14,7 +14,11 @@ import server from '@adonisjs/core/services/server'
 import db from '@adonisjs/lucid/services/db'
 import app from '@adonisjs/core/services/app'
 import { MigrationRunner } from '@adonisjs/lucid/migration'
-import { invalidateCache } from '../app/decorators/withCache.js'
+import {
+  invalidateCache,
+  invalidateCacheByPattern,
+  removeByKey,
+} from '../app/decorators/withCache.js'
 
 /**
  * The error handler is used to convert an exception
@@ -58,6 +62,9 @@ const migrator = new MigrationRunner(db, app, {
   direction: 'up',
   dryRun: false,
 })
+
+// removeByKey('location_inference:*')
+// invalidateCache()
 
 try {
   await migrator.run()

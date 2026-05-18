@@ -83,6 +83,7 @@ const CanvasController = () => import('#controllers/canvas_controller')
 const PaymentController = () => import('#controllers/payment_controller')
 const PortfolioBuildController = () => import('#controllers/portfolio_build_controller')
 const PortfolioBuildSetsController = () => import('#controllers/portfolio_build_sets_controller')
+const AiLocationInferenceController = () => import('#controllers/ai_location_inference_controller')
 const SafeSearchController = () => import('#controllers/safe_search_controller')
 const ActivityController = () => import('#controllers/activity_controller')
 
@@ -231,6 +232,14 @@ router
     router.post('/api/portfolio-build/:id/abort', [PortfolioBuildController, 'abort'])
     router.delete('/api/portfolio-build/:id', [PortfolioBuildController, 'delete'])
     router.patch('/api/portfolio-build/:id/layout', [PortfolioBuildController, 'updateLayout'])
+
+    // AI Location Inference endpoints
+    router.get('/api/location-inference/estimate-credits', [
+      AiLocationInferenceController,
+      'estimateCredits',
+    ])
+    router.get('/api/location-inference/summary', [AiLocationInferenceController, 'summary'])
+    router.post('/api/location-inference/start', [AiLocationInferenceController, 'start'])
 
     // Portfolio Sets endpoints
     router.get('/api/portfolio-build-sets', [PortfolioBuildSetsController, 'index'])

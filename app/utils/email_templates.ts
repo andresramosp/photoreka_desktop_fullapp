@@ -316,7 +316,7 @@ If you didn't request this, you can safely ignore this message.
  */
 export function inviteUserTemplate(
   inviterName: string,
-  inviteCode: string,
+  _inviteCode: string,
   registerUrl: string,
   photosAllowance: number = 500
 ): string {
@@ -393,7 +393,7 @@ export function inviteUserTemplate(
 
 export function grantUserTemplate(
   inviterName: string,
-  inviteCode: string,
+  _inviteCode: string,
   registerUrl: string,
   photosAllowance: number = 500
 ): string {
@@ -579,7 +579,6 @@ export function analysisCompleteTemplate(
       </tr>`
     )
     .join('')
-
   const summaryItems = [
     `<strong style="color: ${TEXT_COLOR};">${processedPhotos}</strong> photo${processedPhotos !== 1 ? 's' : ''} processed`,
     ...(failedPhotos > 0
@@ -674,6 +673,70 @@ export function analysisCompleteTemplate(
   `
 
   return baseLayout(content, 'Analysis Complete - Photoreka')
+}
+
+export function aiLocationInferenceCompleteTemplate(
+  userName: string,
+  stats: {
+    total: number
+    located: number
+    unknown: number
+    uncertain: number
+    geocodeMiss: number
+    failed: number
+    creditsCharged: number
+    costEur: number
+    mapUrl: string
+  }
+): string {
+  const content = `
+    <h1 style="margin: 0 0 20px; font-size: 28px; font-weight: 700; color: ${TEXT_COLOR}; text-align: center;">
+      Location analysis complete
+    </h1>
+    <p style="margin: 0 0 10px; font-size: 16px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+      Hi ${userName},
+    </p>
+    <p style="margin: 0 0 22px; font-size: 16px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+      Photoreka finished trying to infer locations for your photos without GPS metadata.
+    </p>
+
+    <div style="background-color: rgba(99, 102, 241, 0.08); border-radius: 8px; padding: 20px; margin: 20px 0;">
+      <p style="margin: 0 0 8px; font-size: 14px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+        <strong style="color: ${TEXT_COLOR};">${stats.located}</strong> placed on the map
+      </p>
+      <p style="margin: 0 0 8px; font-size: 14px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+        <strong style="color: ${TEXT_COLOR};">${stats.unknown}</strong> no visual evidence
+      </p>
+      ${
+        stats.uncertain > 0
+          ? `<p style="margin: 0 0 8px; font-size: 14px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+        <strong style="color: ${TEXT_COLOR};">${stats.uncertain}</strong> low confidence, not geocoded
+      </p>`
+          : ''
+      }
+      ${
+        stats.geocodeMiss > 0
+          ? `<p style="margin: 0 0 8px; font-size: 14px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+        <strong style="color: ${TEXT_COLOR};">${stats.geocodeMiss}</strong> geocoding returned no results
+      </p>`
+          : ''
+      }
+      ${
+        stats.failed > 0
+          ? `<p style="margin: 0 0 8px; font-size: 14px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+        <strong style="color: #ef4444;">${stats.failed}</strong> processing error
+      </p>`
+          : ''
+      }
+      <p style="margin: 0; font-size: 13px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+        Credits charged: <strong style="color: ${TEXT_COLOR};">${stats.creditsCharged}</strong> 
+      </p>
+    </div>
+
+    ${emailButton('Open World Map', stats.mapUrl)}
+  `
+
+  return baseLayout(content, 'Location analysis complete - Photoreka')
 }
 
 /**
@@ -827,7 +890,7 @@ export function portfolioBuildCompleteTemplate(
     hasSequencing: boolean
   }
 ): string {
-  const { photoCount, targetSize, recallSize, portfolioUrl, hasSequencing } = params
+  const { photoCount, recallSize, portfolioUrl, hasSequencing } = params
 
   const content = `
     <h1 style="margin: 0 0 20px; font-size: 28px; font-weight: 700; color: ${TEXT_COLOR}; text-align: center;">

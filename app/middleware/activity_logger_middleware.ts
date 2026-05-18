@@ -305,6 +305,16 @@ const ROUTE_MAP: RouteDescriptor[] = [
   },
   {
     method: 'POST',
+    pattern: /\/location-inference\/start$/,
+    type: 'location_inference',
+    meta: (_b, _p, r) => ({
+      jobId: r?.job?.jobId ?? null,
+      photoCount: r?.job?.total ?? null,
+      estimatedCredits: r?.job?.creditsCharged ?? r?.estimatedCredits ?? null,
+    }),
+  },
+  {
+    method: 'POST',
     pattern: /\/3d\/photos$/,
     type: 'view_3d',
     meta: (b, _p, r) => ({

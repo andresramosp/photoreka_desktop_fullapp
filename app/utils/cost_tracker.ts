@@ -8,6 +8,7 @@ export type CostCategory =
   | 'report_review'
   | 'search'
   | 'portfolio_build'
+  | 'location_inference'
   | 'other'
 
 export interface CostEntry {

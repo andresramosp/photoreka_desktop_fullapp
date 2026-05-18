@@ -33,6 +33,14 @@ export class CacheInvalidationService {
     )
   }
 
+  static async onPhotosGeolocationUpdate(userId: string): Promise<void> {
+    await invalidateCache(`getPhotosByUser_${userId}`)
+    await invalidateCache(`getPhotosPreview_${userId}`)
+    console.log(
+      `[CacheInvalidation] onPhotosGeolocationUpdate: Invalidated photo list caches for user ${userId}`
+    )
+  }
+
   /**
    * Called when photos are soft-deleted.
    * Tags may be affected; UMAP/3D is NOT invalidated here — wait for onAnalysisCompleted.

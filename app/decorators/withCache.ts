@@ -90,6 +90,18 @@ export async function invalidateCacheByPattern(pattern: string) {
   console.log(`[invalidateCacheByPattern] Deleted ${keys.length} key(s) matching: ${redisPattern}`)
 }
 
+/**
+ * Invalidate all Redis cache keys matching a glob pattern (e.g. 'getPhotosIdsForSearch:5:*')
+ */
+export async function removeByKey(key: string) {
+  const redisPattern = `${key}`
+  const keys = await redis.keys(redisPattern)
+  if (keys.length > 0) {
+    await redis.del(...keys)
+  }
+  console.log(`[removeByKey] Deleted ${keys.length} key(s) matching: ${redisPattern}`)
+}
+
 export async function invalidateCache(key?: string, provider: 'nodecache' | 'redis' = 'redis') {
   if (provider === 'nodecache') {
     if (key) {
