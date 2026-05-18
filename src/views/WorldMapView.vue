@@ -4,6 +4,7 @@
       v-if="photosWithGps.length > 0"
       class="ai-location-button"
       type="info"
+      :disabled="true"
       :loading="isAiLocationRunning"
       @click="openAiLocationDialog"
     >
