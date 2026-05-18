@@ -108,21 +108,22 @@
                   v-model:value="form.themePreferences"
                   type="textarea"
                   placeholder="e.g. 'European cities at night, moody urban vibes' or 'nature macro photography, vibrant colors'…"
-                  :autosize="{ minRows: 3, maxRows: 5 }"
-                  :maxlength="2000"
+                  :autosize="{ minRows: 2, maxRows: 3 }"
+                  :maxlength="200"
                   show-count
                 />
               </div>
               <Transition name="hint-fade">
                 <div
-                  v-if="form.themePreferences.trim().length > 0"
+                  v-if="form.themePreferences.trim().length > 90"
                   class="theme-hint"
                 >
                   <n-icon :size="14"><InformationCircleOutline /></n-icon>
                   <span>
-                    This preference acts as a soft bias, not a strict filter.
-                    For stricter thematic restrictions, consider filtering by
-                    collections in the Filters step.
+                    Please note that this text acts as a
+                    <strong>soft bias</strong>, not a strict filter. For
+                    stricter thematic or specific photo restrictions, consider
+                    filtering by collections in the Filters step.
                   </span>
                 </div>
               </Transition>
@@ -1697,8 +1698,8 @@ watch(
   gap: 8px;
   padding: 10px 12px;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--info-color) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--info-color) 18%, transparent);
+  background: color-mix(in srgb, var(--error-color) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--error-color) 18%, transparent);
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.5;
