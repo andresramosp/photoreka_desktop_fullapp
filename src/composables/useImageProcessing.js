@@ -5,6 +5,11 @@
 // 2. Si falla por protección de fingerprinting, usa step-down nativo de alta calidad
 // 3. Maneja automáticamente la compresión para controlar el tamaño de archivo
 //
+// NOTE: pica is intentionally created WITHOUT 'ww' (WebWorkers) and 'cib' (createImageBitmap).
+// Chromium 131+ (Nov 2024) introduced a bug where createImageBitmap no longer respects
+// EXIF Orientation when tiling inside WebWorkers, producing a scrambled puzzle artifact.
+// Confirmed fix: https://github.com/nodeca/pica/issues/217
+// Using only ['js', 'wasm'] keeps WASM acceleration while avoiding the buggy code path.
 import { ref } from "vue";
 import pica from "pica";
 import {
@@ -14,16 +19,14 @@ import {
 } from "@/config/uploadConfig.js";
 
 export function useImageProcessing() {
-  const picaInstance = pica();
+  // Exclude 'cib' (createImageBitmap) to avoid the Chromium 131+ tile-scrambling bug.
+  // The bug is triggered by cib + WebWorkers: Chrome 131+ no longer respects EXIF Orientation
+  // in createImageBitmap when used inside workers, causing a tiled/puzzle artifact.
+  // Removing only 'cib' fixes all platforms while keeping 'ww' (WebWorker parallelism) intact.
+  // Confirmed root cause: https://github.com/nodeca/pica/issues/217
+  const picaInstance = pica({ features: ["js", "wasm", "ww"] });
 
   async function resizeImage(file, targetWidth, maxSizeBytes = 512000) {
-    // On Android, pica produces a tiled/puzzle artifact because its internal
-    // getImageData calls are silently corrupted by canvas fingerprinting protection.
-    // Skip directly to the native drawImage-based step-down which is unaffected.
-    if (/android/i.test(navigator.userAgent)) {
-      return await resizeWithStepDown(file, targetWidth, maxSizeBytes);
-    }
-
     try {
       // Intentar usar pica primero para máxima calidad
       return await resizeWithPica(file, targetWidth, maxSizeBytes);
