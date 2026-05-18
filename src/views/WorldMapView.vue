@@ -356,7 +356,7 @@ const isAiLocationRunning = computed(
 );
 
 const isAiLocationButtonDisabled = computed(
-  () => isAiLocationRunning.value || backendPhotosWithoutLocation.value === 0,
+  () => true, // isAiLocationRunning.value || backendPhotosWithoutLocation.value === 0,
 );
 
 async function refreshAiLocationSummary() {
