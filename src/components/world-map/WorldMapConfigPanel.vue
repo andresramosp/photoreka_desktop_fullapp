@@ -53,34 +53,39 @@
               </button>
             </template>
             Camera GPS: only photos with device GPS data.<br />
-            AI confident: adds high-reliability AI-inferred locations.<br />
-            All sources: includes GPS and all AI-inferred locations.
+            AI Confident: includes high and moderate confidence AI-inferred
+            locations.<br />
+            Uncertain: lower-confidence AI inferences.
           </n-tooltip>
         </div>
         <div class="filter-btn-group">
           <button
             class="filter-btn"
-            :class="{ active: confidenceFilter === 'gps' }"
-            title="Camera GPS coordinates only"
-            @click="emit('update:confidenceFilter', 'gps')"
+            :class="{ active: confidenceFilter.includes('gps') }"
+            title="Camera GPS coordinates"
+            @click="toggleConfidence('gps')"
           >
-            Camera GPS
+            GPS
           </button>
           <button
             class="filter-btn"
-            :class="{ active: confidenceFilter === 'very_likely' }"
-            title="GPS + high-confidence AI inference"
-            @click="emit('update:confidenceFilter', 'very_likely')"
+            :class="{
+              active:
+                confidenceFilter.includes('very_likely') ||
+                confidenceFilter.includes('likely'),
+            }"
+            title="AI-inferred locations (high + moderate confidence)"
+            @click="toggleAiConfident()"
           >
-            AI confident
+            AI Confident
           </button>
           <button
             class="filter-btn"
-            :class="{ active: confidenceFilter === 'likely' }"
-            title="GPS + all accepted AI inference"
-            @click="emit('update:confidenceFilter', 'likely')"
+            :class="{ active: confidenceFilter.includes('uncertain') }"
+            title="Lower-confidence AI inference"
+            @click="toggleConfidence('uncertain')"
           >
-            All sources
+            Uncertain
           </button>
         </div>
       </div>
@@ -88,7 +93,7 @@
       <!-- Location detail -->
       <div
         class="filter-group last"
-        :class="{ 'filter-group-disabled': confidenceFilter === 'gps' }"
+        :class="{ 'filter-group-disabled': !granularityEnabled }"
       >
         <div class="filter-label">
           Location detail
@@ -104,35 +109,31 @@
                 /></n-icon>
               </button>
             </template>
-            City / Region: show only photos inferred by AI to a specific city or
+            City / Region: show only photos pinned to a specific city or
             region.<br />
-            Country too: show also photos inferred by AI to country level.<br />
+            Only country: also include photos where only the country was
+            identified.<br />
+            <em>Applies only when AI sources are selected.</em>
           </n-tooltip>
         </div>
         <div class="filter-btn-group">
           <button
             class="filter-btn"
-            :class="{ active: granularityFilter === 'city_region' }"
-            :disabled="confidenceFilter === 'gps'"
-            title="Only city or region precision"
-            @click="
-              confidenceFilter !== 'gps' &&
-              emit('update:granularityFilter', 'city_region')
-            "
+            :class="{ active: granularityFilter.includes('city_region') }"
+            :disabled="!granularityEnabled"
+            title="City or region precision"
+            @click="granularityEnabled && toggleGranularity('city_region')"
           >
             City / Region
           </button>
           <button
             class="filter-btn"
-            :class="{ active: granularityFilter === 'country' }"
-            :disabled="confidenceFilter === 'gps'"
+            :class="{ active: granularityFilter.includes('country') }"
+            :disabled="!granularityEnabled"
             title="Include country-level AI locations"
-            @click="
-              confidenceFilter !== 'gps' &&
-              emit('update:granularityFilter', 'country')
-            "
+            @click="granularityEnabled && toggleGranularity('country')"
           >
-            Country too
+            Only country
           </button>
         </div>
       </div>
@@ -190,35 +191,39 @@
                   </button>
                 </template>
                 Camera GPS: only photos with device GPS data.<br />
-                AI confident: adds high-reliability AI-inferred locations.<br />
-                All sources: includes all AI-inferred locations accepted by
-                Photoreka.
+                AI Confident: includes high and moderate confidence AI-inferred
+                locations.<br />
+                Uncertain: lower-confidence AI inferences.
               </n-tooltip>
             </div>
             <div class="filter-btn-group">
               <button
                 class="filter-btn"
-                :class="{ active: confidenceFilter === 'gps' }"
-                title="Camera GPS coordinates only"
-                @click="emit('update:confidenceFilter', 'gps')"
+                :class="{ active: confidenceFilter.includes('gps') }"
+                title="Camera GPS coordinates"
+                @click="toggleConfidence('gps')"
               >
-                Camera GPS
+                GPS
               </button>
               <button
                 class="filter-btn"
-                :class="{ active: confidenceFilter === 'very_likely' }"
-                title="GPS + high-confidence AI inference"
-                @click="emit('update:confidenceFilter', 'very_likely')"
+                :class="{
+                  active:
+                    confidenceFilter.includes('very_likely') ||
+                    confidenceFilter.includes('likely'),
+                }"
+                title="AI-inferred locations (high + moderate confidence)"
+                @click="toggleAiConfident()"
               >
-                AI confident
+                AI Confident
               </button>
               <button
                 class="filter-btn"
-                :class="{ active: confidenceFilter === 'likely' }"
-                title="GPS + all accepted AI inference"
-                @click="emit('update:confidenceFilter', 'likely')"
+                :class="{ active: confidenceFilter.includes('uncertain') }"
+                title="Lower-confidence AI inference"
+                @click="toggleConfidence('uncertain')"
               >
-                All sources
+                Uncertain
               </button>
             </div>
           </div>
@@ -226,7 +231,7 @@
           <!-- Location detail -->
           <div
             class="filter-group last"
-            :class="{ 'filter-group-disabled': confidenceFilter === 'gps' }"
+            :class="{ 'filter-group-disabled': !granularityEnabled }"
           >
             <div class="filter-label">
               Location detail
@@ -246,33 +251,27 @@
                 region.<br />
                 Country too: also include photos where only the country was
                 identified.<br />
-                <em>Not applicable when only Camera GPS is selected.</em>
+                <em>Applies only when AI sources are selected.</em>
               </n-tooltip>
             </div>
             <div class="filter-btn-group">
               <button
                 class="filter-btn"
-                :class="{ active: granularityFilter === 'city_region' }"
-                :disabled="confidenceFilter === 'gps'"
-                title="Only city or region precision"
-                @click="
-                  confidenceFilter !== 'gps' &&
-                  emit('update:granularityFilter', 'city_region')
-                "
+                :class="{ active: granularityFilter.includes('city_region') }"
+                :disabled="!granularityEnabled"
+                title="City or region precision"
+                @click="granularityEnabled && toggleGranularity('city_region')"
               >
                 City / Region
               </button>
               <button
                 class="filter-btn"
-                :class="{ active: granularityFilter === 'country' }"
-                :disabled="confidenceFilter === 'gps'"
+                :class="{ active: granularityFilter.includes('country') }"
+                :disabled="!granularityEnabled"
                 title="Include country-level AI locations"
-                @click="
-                  confidenceFilter !== 'gps' &&
-                  emit('update:granularityFilter', 'country')
-                "
+                @click="granularityEnabled && toggleGranularity('country')"
               >
-                Country too
+                Only country
               </button>
             </div>
           </div>
@@ -295,8 +294,11 @@ import { useIsMobile } from "@/composables/useIsMobile.js";
 
 // ── Props & emits ────────────────────────────────────────────────────────────
 
-type ConfidenceFilter = "gps" | "very_likely" | "likely";
-type GranularityFilter = "city_region" | "country";
+type ConfidenceLevel = "gps" | "very_likely" | "likely" | "uncertain";
+type GranularityLevel = "city_region" | "country";
+
+type ConfidenceFilter = ConfidenceLevel[];
+type GranularityFilter = GranularityLevel[];
 
 const props = defineProps<{
   confidenceFilter: ConfidenceFilter;
@@ -314,14 +316,44 @@ const { isMobile } = useIsMobile();
 const isExpanded = ref(false);
 const mobileModal = ref<string | null>(null);
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function toggleConfidence(val: ConfidenceLevel) {
+  const set = new Set(props.confidenceFilter);
+  if (set.has(val)) set.delete(val);
+  else set.add(val);
+  emit("update:confidenceFilter", [...set]);
+}
+
+function toggleAiConfident() {
+  const set = new Set(props.confidenceFilter);
+  const hasAny = set.has("very_likely") || set.has("likely");
+  if (hasAny) {
+    set.delete("very_likely");
+    set.delete("likely");
+  } else {
+    set.add("very_likely");
+    set.add("likely");
+  }
+  emit("update:confidenceFilter", [...set]);
+}
+
+function toggleGranularity(val: GranularityLevel) {
+  const set = new Set(props.granularityFilter);
+  if (set.has(val)) set.delete(val);
+  else set.add(val);
+  emit("update:granularityFilter", [...set]);
+}
+
 // ── Computed ─────────────────────────────────────────────────────────────────
 
-const activeFiltersCount = computed(() => {
-  let count = 0;
-  if (props.confidenceFilter !== "likely") count++;
-  if (props.granularityFilter !== "country") count++;
-  return count;
-});
+const granularityEnabled = computed(() =>
+  props.confidenceFilter.some((f) => f !== "gps"),
+);
+
+const activeFiltersCount = computed(
+  () => props.confidenceFilter.length + props.granularityFilter.length,
+);
 </script>
 
 <style scoped>
@@ -362,7 +394,7 @@ const activeFiltersCount = computed(() => {
   position: absolute;
   top: 16px;
   right: 16px;
-  width: 260px;
+  width: 325px;
   max-height: calc(100% - 32px);
   background: var(--bg-card);
   border-radius: 12px;

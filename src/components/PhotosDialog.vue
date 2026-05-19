@@ -735,6 +735,9 @@ watch(
       selectedIds.value = [];
       clearSearch();
 
+      // Trash mode only needs discardedPhotos which are already in memory
+      if (props.isTrash) return;
+
       // Ensure photos are loaded
       await photosStore.getOrFetch();
 
@@ -750,8 +753,8 @@ watch(
 
 // Fetch photos on mount
 onMounted(async () => {
-  // Ensure photos are loaded if dialog is already open
-  if (props.modelValue) {
+  // Ensure photos are loaded if dialog is already open (skip for trash mode)
+  if (props.modelValue && !props.isTrash) {
     await photosStore.getOrFetch();
     allCatalogPhotos.value = photosStore.processedPhotos.filter(
       (p) =>

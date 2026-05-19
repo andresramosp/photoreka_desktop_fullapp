@@ -4,7 +4,7 @@
       v-if="photosWithGps.length > 0"
       class="ai-location-button"
       type="info"
-      :disabled="true"
+      :disabled="isAiLocationButtonDisabled"
       :loading="isAiLocationRunning"
       @click="openAiLocationDialog"
     >
@@ -214,10 +214,16 @@ let aiLocationPollTimer: ReturnType<typeof window.setInterval> | null = null;
 const { isMobile } = useIsMobile();
 
 // Map filter panel state
-type ConfidenceFilter = "gps" | "very_likely" | "likely";
-type GranularityFilter = "city_region" | "country";
-const confidenceFilter = ref<ConfidenceFilter>("likely");
-const granularityFilter = ref<GranularityFilter>("country");
+type ConfidenceLevel = "gps" | "very_likely" | "likely" | "uncertain";
+type GranularityLevel = "city_region" | "country";
+type ConfidenceFilter = ConfidenceLevel[];
+type GranularityFilter = GranularityLevel[];
+const confidenceFilter = ref<ConfidenceFilter>([
+  "gps",
+  "very_likely",
+  "likely",
+]);
+const granularityFilter = ref<GranularityFilter>(["city_region", "country"]);
 
 // Function to convert GPS array format to decimal degrees
 function convertGpsArrayToDecimal(gpsArray: number[]): number {
@@ -305,39 +311,37 @@ const filteredPhotosWithGps = computed<PhotoWithGps[]>(() => {
     const reliability: string | null = aiInference?.reliability ?? null;
     const granularity: string | null = aiInference?.geocodeGranularity ?? null;
 
-    // --- Confidence filter ---
-    switch (confidenceFilter.value) {
-      case "gps":
-        if (!isRealGps) return false;
-        break;
-      case "very_likely":
-        if (!isRealGps && reliability !== "very_likely") return false;
-        break;
-      case "likely":
-        if (
-          !isRealGps &&
-          reliability !== "very_likely" &&
-          reliability !== "likely"
-        )
-          return false;
-        break;
+    // --- Confidence filter (multi-select: photo passes if it matches any selected tier) ---
+    if (isRealGps) {
+      if (!confidenceFilter.value.includes("gps")) return false;
+    } else {
+      const matchesConfidence =
+        (reliability === "very_likely" &&
+          confidenceFilter.value.includes("very_likely")) ||
+        (reliability === "likely" &&
+          confidenceFilter.value.includes("likely")) ||
+        (reliability === "uncertain" &&
+          confidenceFilter.value.includes("uncertain"));
+      if (!matchesConfidence) return false;
     }
 
-    // --- Granularity filter (real GPS always passes) ---
-    if (!isRealGps && granularityFilter.value === "city_region") {
-      if (granularity !== "city" && granularity !== "region") return false;
+    // --- Granularity filter (real GPS and proximity-located photos always pass) ---
+    if (!isRealGps && granularity !== null) {
+      const isCityOrRegion = granularity === "city" || granularity === "region";
+      const isCountry = granularity === "country";
+      const matchesGranularity =
+        (isCityOrRegion && granularityFilter.value.includes("city_region")) ||
+        (isCountry && granularityFilter.value.includes("country"));
+      if (!matchesGranularity) return false;
     }
 
     return true;
   });
 });
 
-const activeFiltersCount = computed(() => {
-  let count = 0;
-  if (confidenceFilter.value !== "likely") count++;
-  if (granularityFilter.value !== "country") count++;
-  return count;
-});
+const activeFiltersCount = computed(
+  () => confidenceFilter.value.length + granularityFilter.value.length,
+);
 
 const backendPhotosWithoutLocation = computed(
   () => aiLocationSummaryCount.value ?? photosWithoutGps.value.length,
@@ -356,7 +360,7 @@ const isAiLocationRunning = computed(
 );
 
 const isAiLocationButtonDisabled = computed(
-  () => true, // isAiLocationRunning.value || backendPhotosWithoutLocation.value === 0,
+  () => import.meta.env.VITE_AI_LOCATION_DISABLED === "true",
 );
 
 async function refreshAiLocationSummary() {

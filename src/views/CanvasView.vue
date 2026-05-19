@@ -1002,6 +1002,8 @@ const canvasWoodSurfaceStyle = computed(() => {
 });
 
 // State
+const showPhotosDialog = ref(false);
+const showTrashDialog = ref(false);
 const basicModeDismissed = ref(false);
 const expansionMode = ref(isPlayground.value ? "canvas" : "catalog");
 const interactionMode = ref("pan");
