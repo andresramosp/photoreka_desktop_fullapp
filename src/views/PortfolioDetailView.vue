@@ -208,6 +208,7 @@
     <!-- Floating action bar -->
     <FloatingActionBar
       :selected-ids="selectedPhotoIds"
+      :show-send-to-chat="true"
       :show-delete="false"
       :show-add-to-collection="true"
       :show-move-to-tool="true"

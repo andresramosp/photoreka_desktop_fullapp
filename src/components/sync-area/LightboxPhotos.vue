@@ -502,6 +502,7 @@
       <!-- Photos Grid Component -->
       <PhotosGrid
         :photos="filteredPhotos"
+        :displaySendToChat="false"
         :displayAddToCollection="false"
         :displayMoveToTool="false"
         :hideControls="true"
