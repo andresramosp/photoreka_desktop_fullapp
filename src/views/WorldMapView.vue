@@ -1,10 +1,9 @@
 <template>
   <div class="world-map-view">
     <n-button
-      v-if="photosWithGps.length > 0"
+      v-if="photosWithGps.length > 0 && !isAiLocationButtonDisabled"
       class="ai-location-button"
       type="info"
-      :disabled="isAiLocationButtonDisabled"
       :loading="isAiLocationRunning"
       @click="openAiLocationDialog"
     >
@@ -138,8 +137,29 @@
       :estimated-credits="estimatedAiLocationCredits"
       :status="aiLocationStatus"
       :is-starting="isStartingAiLocation"
+      :forecast="aiLocationForecast"
       @start="startAiLocationInference"
     />
+
+    <!-- Single-marker hover tooltip -->
+    <div
+      v-if="hoveredMapPhoto"
+      class="map-photo-tooltip"
+      :style="{
+        left: mapTooltipPosition.x + 'px',
+        top: mapTooltipPosition.y + 'px',
+      }"
+    >
+      <img
+        v-if="getPhotoThumbnail(hoveredMapPhoto)"
+        :src="getPhotoThumbnail(hoveredMapPhoto)"
+        class="map-tooltip-image"
+        alt=""
+      />
+      <div v-if="getPhotoAddress(hoveredMapPhoto)" class="map-tooltip-footer">
+        {{ getPhotoAddress(hoveredMapPhoto) }}
+      </div>
+    </div>
   </div>
 </template>
 
@@ -165,8 +185,11 @@ import {
 } from "@vicons/ionicons5";
 import WorldMapConfigPanel from "@/components/world-map/WorldMapConfigPanel.vue";
 import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
-import AiLocationModal from "@/components/AiLocationModal.vue";
-import type { AiLocationJobStatus } from "@/components/AiLocationModal.vue";
+import AiLocationModal from "@/components/world-map/AiLocationModal.vue";
+import type {
+  AiLocationJobStatus,
+  GeolocatabilityForecast,
+} from "@/components/world-map/AiLocationModal.vue";
 import { LMap, LTileLayer, LControlLayers } from "@vue-leaflet/vue-leaflet";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 
@@ -209,13 +232,20 @@ const isStartingAiLocation = ref(false);
 const aiLocationStatus = ref<AiLocationJobStatus | null>(null);
 const aiLocationSummaryCount = ref<number | null>(null);
 const aiLocationEstimatedCredits = ref<number | null>(null);
+const aiLocationForecast = ref<GeolocatabilityForecast | null>(null);
 let resizeObserver: ResizeObserver | null = null;
 let aiLocationPollTimer: ReturnType<typeof window.setInterval> | null = null;
 const { isMobile } = useIsMobile();
 
+// Photo IDs that were newly geo-inferred in the last completed AI location job.
+// Cleared when a filter is applied or on the next visit (component remount).
+const newlyLocatedPhotoIds = ref<Set<string | number>>(new Set());
+const hoveredMapPhoto = ref<PhotoWithGps | null>(null);
+const mapTooltipPosition = ref({ x: 0, y: 0 });
+
 // Map filter panel state
 type ConfidenceLevel = "gps" | "very_likely" | "likely" | "uncertain";
-type GranularityLevel = "city_region" | "country";
+type GranularityLevel = "place" | "city" | "region" | "country";
 type ConfidenceFilter = ConfidenceLevel[];
 type GranularityFilter = GranularityLevel[];
 const confidenceFilter = ref<ConfidenceFilter>([
@@ -223,7 +253,7 @@ const confidenceFilter = ref<ConfidenceFilter>([
   "very_likely",
   "likely",
 ]);
-const granularityFilter = ref<GranularityFilter>(["city_region", "country"]);
+const granularityFilter = ref<GranularityFilter>(["place", "city"]);
 
 // Function to convert GPS array format to decimal degrees
 function convertGpsArrayToDecimal(gpsArray: number[]): number {
@@ -253,16 +283,19 @@ function extractGpsCoordinates(photo: any): GpsCoordinates | null {
     lat = applyGpsReference(exif.gpsLatitude, exif.gpsLatitudeRef);
     lng = applyGpsReference(exif.gpsLongitude, exif.gpsLongitudeRef);
   }
-  // Format 2: Array format [degrees, minutes, seconds]
-  else if (exif.gps?.lat && exif.gps?.lng) {
-    lat = applyGpsReference(
-      convertGpsArrayToDecimal(exif.gps.lat),
-      exif.gps.latRef,
-    );
-    lng = applyGpsReference(
-      convertGpsArrayToDecimal(exif.gps.lng),
-      exif.gps.lngRef,
-    );
+  // Format 2: gps compact object {lat, lng} — values are already signed decimals
+  // (produced by getCompactExifSummary). convertGpsArrayToDecimal must NOT be
+  // called here; those values are numbers, not DMS arrays.
+  else if (exif.gps?.lat != null && exif.gps?.lng != null) {
+    const rawLat = Array.isArray(exif.gps.lat)
+      ? convertGpsArrayToDecimal(exif.gps.lat)
+      : Number(exif.gps.lat);
+    const rawLng = Array.isArray(exif.gps.lng)
+      ? convertGpsArrayToDecimal(exif.gps.lng)
+      : Number(exif.gps.lng);
+    // Apply ref only when explicitly present (legacy array-format gps objects)
+    lat = exif.gps.latRef ? applyGpsReference(rawLat, exif.gps.latRef) : rawLat;
+    lng = exif.gps.lngRef ? applyGpsReference(rawLng, exif.gps.lngRef) : rawLng;
   }
 
   // Validate coordinates
@@ -327,11 +360,9 @@ const filteredPhotosWithGps = computed<PhotoWithGps[]>(() => {
 
     // --- Granularity filter (real GPS and proximity-located photos always pass) ---
     if (!isRealGps && granularity !== null) {
-      const isCityOrRegion = granularity === "city" || granularity === "region";
-      const isCountry = granularity === "country";
-      const matchesGranularity =
-        (isCityOrRegion && granularityFilter.value.includes("city_region")) ||
-        (isCountry && granularityFilter.value.includes("country"));
+      const matchesGranularity = granularityFilter.value.includes(
+        granularity as GranularityLevel,
+      );
       if (!matchesGranularity) return false;
     }
 
@@ -375,6 +406,18 @@ async function refreshAiLocationSummary() {
     aiLocationSummaryCount.value = data.photosWithoutLocation ?? null;
     aiLocationEstimatedCredits.value = data.estimatedCredits ?? null;
 
+    // Fetch forecast in parallel only when opening idle modal (not during polling)
+    if (!wasRunning && data.job?.status !== "running") {
+      api
+        .get("/api/location-inference/assess")
+        .then(({ data: f }) => {
+          aiLocationForecast.value = f ?? null;
+        })
+        .catch(() => {
+          aiLocationForecast.value = null;
+        });
+    }
+
     const newJob: AiLocationJobStatus | null = data.job ?? null;
 
     if (newJob?.status === "running") {
@@ -388,7 +431,13 @@ async function refreshAiLocationSummary() {
     if (wasRunning) {
       isFinalizingAiLocation.value = true;
       try {
+        const previousGpsIds = new Set(photosWithGps.value.map((p) => p.id));
         await photosStore.getOrFetch(true);
+        const newIds = new Set<string | number>();
+        photosWithGps.value.forEach((p) => {
+          if (!previousGpsIds.has(p.id)) newIds.add(p.id);
+        });
+        newlyLocatedPhotoIds.value = newIds;
         await userStore.fetchUsage();
         await nextTick();
         refreshPhotoMarkers();
@@ -472,6 +521,14 @@ function getPhotoTitle(photo: PhotoWithGps): string {
   return photo.title || photo.name || photo.filename || "Photo";
 }
 
+function getPhotoAddress(photo: PhotoWithGps): string | null {
+  return (
+    (photo.descriptions?.EXIF as any)?.aiLocationInference?.geocodeQuery ??
+    (photo.descriptions?.EXIF as any)?.aiLocationInference?.formattedAddress ??
+    null
+  );
+}
+
 function escapeHtml(value: unknown): string {
   return String(value ?? "").replace(/[&<>"']/g, (character) => {
     const replacements: Record<string, string> = {
@@ -496,10 +553,30 @@ function createPhotoImageMarkup(photo: PhotoWithGps): string {
   return `<img src="${escapeHtml(thumbnailUrl)}" alt="" loading="lazy" />`;
 }
 
+function getGranularityMarkerClass(photo: PhotoWithGps): string {
+  const exif = (photo.descriptions?.EXIF ?? {}) as Record<string, any>;
+  const granularity: string | null =
+    exif.aiLocationInference?.geocodeGranularity ?? null;
+  if (granularity === "place") return "photo-single-marker--place";
+  if (granularity === "city") return "photo-single-marker--city";
+  if (granularity === "region") return "photo-single-marker--region";
+  if (granularity === "country") return "photo-single-marker--country";
+  return "";
+}
+
 function createPhotoMarkerIcon(photo: PhotoWithGps): L.DivIcon {
+  const isNew = newlyLocatedPhotoIds.value.has(photo.id);
+  const granularityClass = getGranularityMarkerClass(photo);
+  const classes = [
+    "photo-single-marker",
+    granularityClass,
+    isNew ? "photo-single-marker--new" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   return L.divIcon({
     className: "photo-map-div-icon photo-single-div-icon",
-    html: `<div class="photo-single-marker" aria-label="${escapeHtml(
+    html: `<div class="${classes}" aria-label="${escapeHtml(
       getPhotoTitle(photo),
     )}">${createPhotoImageMarkup(photo)}</div>`,
     iconSize: [42, 42],
@@ -531,15 +608,24 @@ function createPhotoClusterIcon(cluster: L.MarkerCluster): L.DivIcon {
   const markers = cluster.getAllChildMarkers() as PhotoMarker[];
   const count = cluster.getChildCount();
   const size = getClusterIconSize(count);
+  const hasNew = markers.some((m) =>
+    newlyLocatedPhotoIds.value.has(m.photo.id),
+  );
+  const badgeClass = hasNew
+    ? "photo-cluster-count photo-cluster-count--new"
+    : "photo-cluster-count";
+  const mosaicClass = hasNew
+    ? "photo-cluster-mosaic photo-cluster-mosaic--new"
+    : "photo-cluster-mosaic";
 
   return L.divIcon({
     className: "photo-map-div-icon photo-cluster-div-icon",
     html: `
       <div class="photo-cluster-marker" aria-label="${count} photos">
-        <div class="photo-cluster-mosaic">
+        <div class="${mosaicClass}">
           ${createClusterTileMarkup(markers)}
         </div>
-        <span class="photo-cluster-count">${count}</span>
+        <span class="${badgeClass}">${count}</span>
       </div>
     `,
     iconSize: [size, size],
@@ -592,13 +678,28 @@ function refreshPhotoMarkers() {
       autoPanOnFocus: false,
       icon: createPhotoMarkerIcon(photo),
       keyboard: true,
-      title: getPhotoTitle(photo),
     }) as PhotoMarker;
 
     marker.photo = photo;
     marker.on("click", (e: L.LeafletMouseEvent) => {
       L.DomEvent.stopPropagation(e);
       handleMarkerClick(photo);
+    });
+    marker.on("mouseover", (e: L.LeafletMouseEvent) => {
+      hoveredMapPhoto.value = photo;
+      mapTooltipPosition.value = {
+        x: e.originalEvent.clientX + 16,
+        y: e.originalEvent.clientY + 16,
+      };
+    });
+    marker.on("mousemove", (e: L.LeafletMouseEvent) => {
+      mapTooltipPosition.value = {
+        x: e.originalEvent.clientX + 16,
+        y: e.originalEvent.clientY + 16,
+      };
+    });
+    marker.on("mouseout", () => {
+      hoveredMapPhoto.value = null;
     });
 
     return marker;
@@ -669,6 +770,7 @@ const photosWithGpsKey = computed<string>(() =>
 
 watch([confidenceFilter, granularityFilter], () => {
   if (!hasLoadedInitialPhotos.value) return;
+  newlyLocatedPhotoIds.value = new Set();
   refreshPhotoMarkers();
 });
 
@@ -857,6 +959,60 @@ onUnmounted(() => {
     0 0 0 1px rgba(18, 24, 38, 0.12);
 }
 
+:deep(.photo-single-marker--new) {
+  border-color: var(--accent-color);
+  box-shadow:
+    0 4px 14px rgba(18, 24, 38, 0.28),
+    0 0 0 1px var(--accent-color);
+}
+
+:deep(.photo-single-marker--new:hover) {
+  box-shadow:
+    0 7px 20px rgba(18, 24, 38, 0.34),
+    0 0 0 1px var(--accent-color);
+}
+
+/* Granularity-based border colors for individual photo markers */
+/* place → green (precise) | city → blue (medium) | region/country → amber (approximate) */
+:deep(.photo-single-marker--place) {
+  border-color: #4ade80;
+  box-shadow:
+    0 4px 14px rgba(18, 24, 38, 0.28),
+    0 0 0 1px #4ade80;
+}
+
+:deep(.photo-single-marker--city) {
+  border-color: #60a5fa;
+  box-shadow:
+    0 4px 14px rgba(18, 24, 38, 0.28),
+    0 0 0 1px #60a5fa;
+}
+
+:deep(.photo-single-marker--region) {
+  border-color: #fbbf24;
+  box-shadow:
+    0 4px 14px rgba(18, 24, 38, 0.28),
+    0 0 0 1px #fbbf24;
+}
+
+:deep(.photo-single-marker--country) {
+  border-color: #c084fc;
+  box-shadow:
+    0 4px 14px rgba(18, 24, 38, 0.28),
+    0 0 0 1px #c084fc;
+}
+
+/* --new always wins over granularity colors */
+:deep(.photo-single-marker--new.photo-single-marker--place),
+:deep(.photo-single-marker--new.photo-single-marker--city),
+:deep(.photo-single-marker--new.photo-single-marker--region),
+:deep(.photo-single-marker--new.photo-single-marker--country) {
+  border-color: var(--accent-color);
+  box-shadow:
+    0 4px 14px rgba(18, 24, 38, 0.28),
+    0 0 0 1px var(--accent-color);
+}
+
 :deep(.photo-single-marker img),
 :deep(.photo-cluster-tile img) {
   width: 100%;
@@ -937,6 +1093,61 @@ onUnmounted(() => {
   font-size: 13px;
   font-weight: 700;
   line-height: 1;
+}
+
+:deep(.photo-cluster-count--new) {
+  background: var(--accent-color);
+  color: var(--text-on-accent);
+}
+
+:deep(.photo-cluster-mosaic--new) {
+  border-color: var(--accent-color);
+  box-shadow:
+    0 7px 22px rgba(18, 24, 38, 0.32),
+    0 0 0 1px var(--accent-color);
+}
+
+/* ── Single-marker hover tooltip ────────────────────────────────────────── */
+
+.map-photo-tooltip {
+  position: fixed;
+  z-index: 10000;
+  pointer-events: none;
+  max-width: 220px;
+  padding: 8px;
+  background: var(--bg-container);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+  animation: mapTooltipFadeIn 0.15s ease-out;
+}
+
+@keyframes mapTooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-4px, -4px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+}
+
+.map-tooltip-image {
+  display: block;
+  width: 100%;
+  max-height: 160px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.map-tooltip-footer {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── Leaflet controls: zoom & layers ─────────────────────────────────────── */

@@ -269,21 +269,101 @@
                 </div>
               </div>
 
-              <div v-if="photosWithoutLocation > 0" class="ail-notices">
-                <div class="ail-notice ail-notice--info">
+              <!-- ── Forecast panel ─────────────────────────────────── -->
+              <template
+                v-if="
+                  photosWithoutLocation > 0 && (forecastReady || !timerElapsed)
+                "
+              >
+                <!-- Loader while the fake calculation runs -->
+                <template v-if="!forecastReady">
+                  <div class="ail-forecast-loader">
+                    <n-spin size="small" :stroke-width="16" />
+                    <span class="ail-forecast-loader-text"
+                      >Analysing your photos…</span
+                    >
+                  </div>
+                </template>
+              </template>
+              <template
+                v-if="photosWithoutLocation > 0 && forecastReady && forecast"
+              >
+                <div class="ail-forecast-header">
                   <n-icon
-                    :component="InformationCircleOutline"
-                    size="15"
-                    :color="'var(--info-color)'"
-                    class="ail-notice-icon"
+                    :component="TrendingUpOutline"
+                    size="14"
+                    :color="'var(--text-secondary)'"
                   />
-                  <span>
-                    Results are approximate — usually city or district level,
-                    rarely street level. Several photos may cluster at the same
-                    point when finer data isn't available.
-                  </span>
+                  <span class="ail-forecast-title">Geolocation forecast</span>
                 </div>
-                <div class="ail-notice ail-notice--warning">
+
+                <!-- <p class="ail-forecast-subtitle">
+                  Estimated from each photo's genre, lighting, focus, framing
+                  and palette. Outdoor, well-lit, wide-frame shots score
+                  highest.
+                </p> -->
+
+                <div class="ail-forecast-grid">
+                  <!-- Good -->
+                  <div class="ail-forecast-cell ail-forecast-cell--good">
+                    <div class="ail-forecast-cell-top">
+                      <n-icon
+                        :component="CheckmarkCircleOutline"
+                        size="15"
+                        :color="'var(--success-color)'"
+                      />
+                      <span class="ail-forecast-pct">{{
+                        forecast.good.count
+                      }}</span>
+                    </div>
+                    <span class="ail-forecast-label">Good chances</span>
+                    <span class="ail-forecast-hint"
+                      >Outdoor, natural light, sharp, wide frame</span
+                    >
+                  </div>
+
+                  <!-- Medium -->
+                  <div class="ail-forecast-cell ail-forecast-cell--medium">
+                    <div class="ail-forecast-cell-top">
+                      <n-icon
+                        :component="HelpCircleOutline"
+                        size="15"
+                        :color="'var(--warning-color)'"
+                      />
+                      <span class="ail-forecast-pct">{{
+                        forecast.medium.count
+                      }}</span>
+                    </div>
+                    <span class="ail-forecast-label">Possible</span>
+                    <span class="ail-forecast-hint"
+                      >Mixed cues, result uncertain</span
+                    >
+                  </div>
+
+                  <!-- Poor -->
+                  <div class="ail-forecast-cell ail-forecast-cell--poor">
+                    <div class="ail-forecast-cell-top">
+                      <n-icon
+                        :component="RemoveCircleOutline"
+                        size="15"
+                        :color="'var(--error-color)'"
+                      />
+                      <span class="ail-forecast-pct">{{
+                        forecast.poor.count
+                      }}</span>
+                    </div>
+                    <span class="ail-forecast-label">Unlikely</span>
+                    <span class="ail-forecast-hint"
+                      >Studio, indoor, abstract, blurry</span
+                    >
+                  </div>
+                </div>
+
+                <!-- Low-success warning -->
+                <div
+                  v-if="forecast.lowSuccessWarning"
+                  class="ail-notice ail-notice--warning"
+                >
                   <n-icon
                     :component="WarningOutline"
                     size="15"
@@ -291,10 +371,44 @@
                     class="ail-notice-icon"
                   />
                   <span>
-                    Designed for outdoor catalogs — landscapes, architecture,
-                    street scenes. Not recommended if most photos are studio,
-                    indoor, or abstract.
+                    Most of your photos have low geolocation potential.
+                    <strong>Credits will still be charged</strong> even when the
+                    AI cannot infer a location. We recommend proceeding only if
+                    you understand this.
                   </span>
+                </div>
+              </template>
+
+              <div v-if="photosWithoutLocation > 0 && forecastReady" class="ail-notices">
+                <div class="ail-notice ail-notice--info ail-notice--multi">
+                  <div class="ail-notice-item">
+                    <n-icon
+                      :component="InformationCircleOutline"
+                      size="15"
+                      :color="'var(--info-color)'"
+                      class="ail-notice-icon"
+                    />
+                    <span>
+                      <strong>Results are approximate</strong> — usually
+                      <strong>city or district level</strong>, rarely street
+                      level. Several photos may cluster at the same point when
+                      finer data isn't available.
+                    </span>
+                  </div>
+                  <div class="ail-notice-item">
+                    <n-icon
+                      :component="CreateOutline"
+                      size="15"
+                      :color="'var(--info-color)'"
+                      class="ail-notice-icon"
+                    />
+                    <span>
+                      A <strong>small percentage</strong> of placements may be
+                      <strong>imprecise</strong>; you can always
+                      <strong>correct them manually</strong> through
+                      <strong>the photo details dialog</strong>.
+                    </span>
+                  </div>
                 </div>
               </div>
             </template>
@@ -357,7 +471,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { RocketLaunchOutlined } from "@vicons/material";
 import {
   SparklesOutline,
@@ -366,6 +480,10 @@ import {
   CheckmarkCircleOutline,
   CloseCircleOutline,
   GlobeOutline,
+  TrendingUpOutline,
+  RemoveCircleOutline,
+  HelpCircleOutline,
+  CreateOutline,
 } from "@vicons/ionicons5";
 
 export interface AiLocationJobStatus {
@@ -383,18 +501,54 @@ export interface AiLocationJobStatus {
   error?: string;
 }
 
+export interface GeolocatabilityForecast {
+  total: number;
+  good: { count: number; percentage: number };
+  medium: { count: number; percentage: number };
+  poor: { count: number; percentage: number };
+  lowSuccessWarning: boolean;
+}
+
 const props = defineProps<{
   show: boolean;
   photosWithoutLocation: number;
   estimatedCredits: number;
   status: AiLocationJobStatus | null;
   isStarting: boolean;
+  forecast: GeolocatabilityForecast | null;
 }>();
 
 const emit = defineEmits<{
   "update:show": [value: boolean];
   start: [];
 }>();
+
+// ── Fake forecast loader ──────────────────────────────────────────────
+const timerElapsed = ref(false);
+let forecastTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => props.show,
+  (val) => {
+    if (forecastTimer) clearTimeout(forecastTimer);
+    if (val && props.photosWithoutLocation > 0) {
+      timerElapsed.value = false;
+      forecastTimer = setTimeout(
+        () => {
+          timerElapsed.value = true;
+        },
+        2000 + Math.random() * 1000, // 2.0 – 3.0 s
+      );
+    } else {
+      timerElapsed.value = false;
+    }
+  },
+);
+
+const forecastReady = computed(
+  () => timerElapsed.value && props.forecast !== null,
+);
+// ─────────────────────────────────────────────────────────────────────
 
 type Phase = "idle" | "running" | "completed" | "failed";
 
@@ -667,6 +821,17 @@ const headerIcon = computed(() => {
   margin-top: 1px;
 }
 
+.ail-notice--multi {
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ail-notice-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
 /* ── Progress ─────────────────────────────────────────────── */
 
 .ail-progress-row {
@@ -760,6 +925,131 @@ const headerIcon = computed(() => {
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.5;
+}
+
+/* ── Forecast panel ───────────────────────────────────────── */
+
+.ail-forecast-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ail-forecast-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ail-forecast-subtitle {
+  margin: -4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.ail-forecast-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ail-forecast-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+}
+
+.ail-forecast-cell--good {
+  background: color-mix(in srgb, var(--success-color) 5%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--success-color) 22%, transparent);
+}
+
+.ail-forecast-cell--medium {
+  background: color-mix(in srgb, var(--warning-color) 5%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--warning-color) 22%, transparent);
+}
+
+.ail-forecast-cell--poor {
+  background: color-mix(in srgb, var(--error-color) 5%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--error-color) 22%, transparent);
+}
+
+.ail-forecast-cell--skeleton {
+  background: transparent;
+  border-color: var(--border-color);
+  opacity: 0.6;
+}
+
+/* Loader while calculating */
+.ail-forecast-loader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 0 6px;
+}
+
+.ail-forecast-loader-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* Fade-in when real forecast appears */
+.ail-forecast-grid:not(:has(.ail-forecast-cell--skeleton)) {
+  animation: ail-forecast-fadein 0.4s ease both;
+}
+
+@keyframes ail-forecast-fadein {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ail-forecast-cell-top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 2px;
+}
+
+.ail-forecast-pct {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.ail-forecast-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.ail-forecast-count {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.ail-forecast-hint {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  opacity: 0.75;
 }
 
 /* ── Footer actions ───────────────────────────────────────── */

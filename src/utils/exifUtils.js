@@ -2,6 +2,105 @@
 import exifr from "exifr";
 
 /**
+ * Convierte un valor GPS en formato DMS (grados, minutos, segundos) a grados decimales.
+ * Maneja los distintos formatos que pueden devolver exifr y distintas cámaras:
+ *   - Número decimal ya convertido: 37.823
+ *   - Array DMS: [37, 49, 25.94]
+ *   - String decimal: "37.823"
+ *   - String DMS: "37, 49, 25.94" / "37 49 25.94"
+ * @param {number|number[]|string} value
+ * @returns {number|null}
+ */
+function parseDMSToDecimal(value) {
+  if (value === null || value === undefined) return null;
+
+  // Número: ya es decimal (exifr a veces lo convierte automáticamente)
+  if (typeof value === "number") {
+    return isNaN(value) ? null : value;
+  }
+
+  // Array [grados, minutos, segundos] — formato raw más común
+  if (Array.isArray(value)) {
+    if (value.length === 0) return null;
+    const deg = Number(value[0]) || 0;
+    const min = Number(value[1]) || 0;
+    const sec = Number(value[2]) || 0;
+    const decimal = deg + min / 60 + sec / 3600;
+    return isNaN(decimal) ? null : decimal;
+  }
+
+  // String: intentar decimal primero, luego DMS separado por comas/espacios
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    const asNum = Number(trimmed);
+    if (!isNaN(asNum)) return asNum;
+
+    const parts = trimmed
+      .split(/[\s,;]+/)
+      .map((s) => parseFloat(s))
+      .filter((n) => !isNaN(n));
+    if (parts.length >= 1) {
+      const [deg = 0, min = 0, sec = 0] = parts;
+      return deg + min / 60 + sec / 3600;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Aplica el signo de hemisferio a un valor de coordenada ya en decimal absoluto.
+ * @param {number} value - Valor en grados decimales (siempre positivo tras parseDMSToDecimal)
+ * @param {string|undefined} ref - Referencia hemisférica ("N"/"S" para lat, "E"/"W" para lon)
+ * @param {"lat"|"lon"} type
+ * @returns {number|null}
+ */
+function applyHemisphereSign(value, ref, type) {
+  if (value === null || value === undefined || isNaN(value)) return null;
+  const abs = Math.abs(value);
+  const normalizedRef = (ref || "").trim().toUpperCase();
+  if (type === "lat") {
+    return normalizedRef === "S" ? -abs : abs;
+  } else {
+    return normalizedRef === "W" ? -abs : abs;
+  }
+}
+
+/**
+ * Extrae y normaliza coordenadas GPS de los datos EXIF crudos.
+ * Robusto ante los distintos formatos de distintas cámaras y software.
+ * @param {Object} exifData - Datos EXIF parseados por exifr
+ * @returns {{latitude: number, longitude: number, altitude: number|null}|null}
+ */
+function parseGpsCoordinates(exifData) {
+  const rawLat = parseDMSToDecimal(exifData.GPSLatitude);
+  const rawLon = parseDMSToDecimal(exifData.GPSLongitude);
+
+  if (rawLat === null || rawLon === null) return null;
+
+  const latitude = applyHemisphereSign(rawLat, exifData.GPSLatitudeRef, "lat");
+  const longitude = applyHemisphereSign(
+    rawLon,
+    exifData.GPSLongitudeRef,
+    "lon",
+  );
+
+  if (latitude === null || longitude === null) return null;
+
+  // Altitud: GPSAltitudeRef 0 = sobre el nivel del mar, 1 = bajo el nivel del mar
+  let altitude = null;
+  const rawAlt =
+    exifData.GPSAltitude !== null && exifData.GPSAltitude !== undefined
+      ? Number(exifData.GPSAltitude)
+      : null;
+  if (rawAlt !== null && !isNaN(rawAlt)) {
+    altitude = exifData.GPSAltitudeRef === 1 ? -Math.abs(rawAlt) : rawAlt;
+  }
+
+  return { latitude, longitude, altitude };
+}
+
+/**
  * Extrae datos EXIF básicos de un archivo de imagen
  * @param {File} file - Archivo de imagen
  * @returns {Promise<Object>} - Objeto con datos EXIF básicos
@@ -28,6 +127,7 @@ export async function extractBasicExifData(file) {
         "GPSLongitude", // Longitud GPS
         "GPSLongitudeRef", // Referencia hemisférica longitud (E/W)
         "GPSAltitude", // Altitud GPS
+        "GPSAltitudeRef", // Referencia altitud (0=sobre el nivel del mar, 1=bajo)
         "Orientation", // Orientación de la imagen
         "ColorSpace", // Espacio de color
       ],
@@ -64,25 +164,14 @@ export async function extractBasicExifData(file) {
       },
 
       // Ubicación GPS (si está disponible)
-      gps:
-        exifData.GPSLatitude && exifData.GPSLongitude
-          ? {
-              latitude:
-                exifData.GPSLatitudeRef === "S"
-                  ? -Math.abs(exifData.GPSLatitude)
-                  : Math.abs(exifData.GPSLatitude),
-              longitude:
-                exifData.GPSLongitudeRef === "W"
-                  ? -Math.abs(exifData.GPSLongitude)
-                  : Math.abs(exifData.GPSLongitude),
-              altitude: exifData.GPSAltitude || null,
-            }
-          : null,
+      gps: parseGpsCoordinates(exifData),
 
       // Otros metadatos
       orientation: exifData.Orientation || null,
       colorSpace: exifData.ColorSpace || null,
     };
+
+    console.log("Extracted EXIF data:", basicExif);
 
     return basicExif;
   } catch (error) {

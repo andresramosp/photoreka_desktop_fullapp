@@ -109,31 +109,53 @@
                 /></n-icon>
               </button>
             </template>
-            City / Region: show only photos pinned to a specific city or
-            region.<br />
-            Only country: also include photos where only the country was
-            identified.<br />
+            Place: highest precision, place-level.<br />
+            City: photos pinned to a specific city.<br />
+            Region: photos identified at region level.<br />
+            Country: only the country was identified.<br />
             <em>Applies only when AI sources are selected.</em>
           </n-tooltip>
         </div>
         <div class="filter-btn-group">
           <button
-            class="filter-btn"
-            :class="{ active: granularityFilter.includes('city_region') }"
+            class="filter-btn filter-btn--place"
+            :class="{ active: granularityFilter.includes('place') }"
             :disabled="!granularityEnabled"
-            title="City or region precision"
-            @click="granularityEnabled && toggleGranularity('city_region')"
+            title="Place-level precision"
+            @click="granularityEnabled && toggleGranularity('place')"
           >
-            City / Region
+            <span class="granularity-dot granularity-dot--place" />
+            Place
           </button>
           <button
-            class="filter-btn"
+            class="filter-btn filter-btn--city"
+            :class="{ active: granularityFilter.includes('city') }"
+            :disabled="!granularityEnabled"
+            title="City precision"
+            @click="granularityEnabled && toggleGranularity('city')"
+          >
+            <span class="granularity-dot granularity-dot--city" />
+            City
+          </button>
+          <button
+            class="filter-btn filter-btn--region"
+            :class="{ active: granularityFilter.includes('region') }"
+            :disabled="!granularityEnabled"
+            title="Region precision"
+            @click="granularityEnabled && toggleGranularity('region')"
+          >
+            <span class="granularity-dot granularity-dot--region" />
+            Region
+          </button>
+          <button
+            class="filter-btn filter-btn--country"
             :class="{ active: granularityFilter.includes('country') }"
             :disabled="!granularityEnabled"
-            title="Include country-level AI locations"
+            title="Country-level AI locations"
             @click="granularityEnabled && toggleGranularity('country')"
           >
-            Only country
+            <span class="granularity-dot granularity-dot--country" />
+            Country
           </button>
         </div>
       </div>
@@ -247,31 +269,53 @@
                     /></n-icon>
                   </button>
                 </template>
-                City / Region: show only photos pinned to a specific city or
-                region.<br />
-                Country too: also include photos where only the country was
-                identified.<br />
+                Place: highest precision, place-level.<br />
+                City: photos pinned to a specific city.<br />
+                Region: photos identified at region level.<br />
+                Country: only the country was identified.<br />
                 <em>Applies only when AI sources are selected.</em>
               </n-tooltip>
             </div>
             <div class="filter-btn-group">
               <button
-                class="filter-btn"
-                :class="{ active: granularityFilter.includes('city_region') }"
+                class="filter-btn filter-btn--place"
+                :class="{ active: granularityFilter.includes('place') }"
                 :disabled="!granularityEnabled"
-                title="City or region precision"
-                @click="granularityEnabled && toggleGranularity('city_region')"
+                title="Place-level precision"
+                @click="granularityEnabled && toggleGranularity('place')"
               >
-                City / Region
+                <span class="granularity-dot granularity-dot--place" />
+                Place
               </button>
               <button
-                class="filter-btn"
+                class="filter-btn filter-btn--city"
+                :class="{ active: granularityFilter.includes('city') }"
+                :disabled="!granularityEnabled"
+                title="City precision"
+                @click="granularityEnabled && toggleGranularity('city')"
+              >
+                <span class="granularity-dot granularity-dot--city" />
+                City
+              </button>
+              <button
+                class="filter-btn filter-btn--region"
+                :class="{ active: granularityFilter.includes('region') }"
+                :disabled="!granularityEnabled"
+                title="Region precision"
+                @click="granularityEnabled && toggleGranularity('region')"
+              >
+                <span class="granularity-dot granularity-dot--region" />
+                Region
+              </button>
+              <button
+                class="filter-btn filter-btn--country"
                 :class="{ active: granularityFilter.includes('country') }"
                 :disabled="!granularityEnabled"
-                title="Include country-level AI locations"
+                title="Country-level AI locations"
                 @click="granularityEnabled && toggleGranularity('country')"
               >
-                Only country
+                <span class="granularity-dot granularity-dot--country" />
+                Country
               </button>
             </div>
           </div>
@@ -295,7 +339,7 @@ import { useIsMobile } from "@/composables/useIsMobile.js";
 // ── Props & emits ────────────────────────────────────────────────────────────
 
 type ConfidenceLevel = "gps" | "very_likely" | "likely" | "uncertain";
-type GranularityLevel = "city_region" | "country";
+type GranularityLevel = "place" | "city" | "region" | "country";
 
 type ConfidenceFilter = ConfidenceLevel[];
 type GranularityFilter = GranularityLevel[];
@@ -644,6 +688,9 @@ const activeFiltersCount = computed(
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .filter-btn:hover {
@@ -656,6 +703,59 @@ const activeFiltersCount = computed(
   border-color: color-mix(in srgb, var(--primary-color) 45%, transparent);
   color: var(--primary-color);
   font-weight: 600;
+}
+
+/* Granularity chips: colored dot + per-level active tint */
+.granularity-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 5px;
+  flex-shrink: 0;
+  opacity: 0.55;
+  transition: opacity 0.18s;
+}
+
+.filter-btn.active .granularity-dot {
+  opacity: 1;
+}
+
+.granularity-dot--place {
+  background: #4ade80;
+}
+.granularity-dot--city {
+  background: #60a5fa;
+}
+.granularity-dot--region {
+  background: #fbbf24;
+}
+.granularity-dot--country {
+  background: #c084fc;
+}
+
+.filter-btn--place.active {
+  background: color-mix(in srgb, #4ade80 18%, transparent);
+  border-color: color-mix(in srgb, #4ade80 45%, transparent);
+  color: #4ade80;
+}
+
+.filter-btn--city.active {
+  background: color-mix(in srgb, #60a5fa 18%, transparent);
+  border-color: color-mix(in srgb, #60a5fa 45%, transparent);
+  color: #60a5fa;
+}
+
+.filter-btn--region.active {
+  background: color-mix(in srgb, #fbbf24 18%, transparent);
+  border-color: color-mix(in srgb, #fbbf24 45%, transparent);
+  color: #fbbf24;
+}
+
+.filter-btn--country.active {
+  background: color-mix(in srgb, #c084fc 18%, transparent);
+  border-color: color-mix(in srgb, #c084fc 45%, transparent);
+  color: #c084fc;
 }
 
 .filter-group-disabled {
