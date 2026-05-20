@@ -127,7 +127,7 @@
               :key="`point-${criterion}-${index}`"
             >
               <circle
-                :cx="getDateX(index)"
+                :cx="getXForPoint(point.date)"
                 :cy="getY(point.average)"
                 r="2"
                 :fill="getCriterionColor(criterion)"
@@ -319,9 +319,9 @@ const calculateChartData = (photos, criterion) => {
     .map((photo) => ({
       photo,
       timestamp: new Date(photo.descriptions?.EXIF?.dateTaken).getTime(),
-      score: photo.descriptions.artistic_scores[criterion],
+      score: Number(photo.descriptions.artistic_scores[criterion]),
     }))
-    .filter((item) => !isNaN(item.timestamp) && item.score !== undefined)
+    .filter((item) => !isNaN(item.timestamp) && !isNaN(item.score))
     .sort((a, b) => a.timestamp - b.timestamp);
 
   if (photosWithDates.length === 0) return [];
@@ -356,7 +356,7 @@ const calculateChartData = (photos, criterion) => {
       start: minDate + i * binSize,
       end: minDate + (i + 1) * binSize,
       scores: [],
-      date: new Date(minDate + i * binSize + binSize / 2),
+      timestamps: [],
     }));
 
   photosWithDates.forEach((item) => {
@@ -366,13 +366,16 @@ const calculateChartData = (photos, criterion) => {
     );
     if (binIndex >= 0 && binIndex < bins.length) {
       bins[binIndex].scores.push(item.score);
+      bins[binIndex].timestamps.push(item.timestamp);
     }
   });
 
   return bins
     .filter((bin) => bin.scores.length > 0)
     .map((bin) => ({
-      date: bin.date,
+      date: new Date(
+        bin.timestamps.reduce((sum, t) => sum + t, 0) / bin.timestamps.length,
+      ),
       average: parseFloat(
         (bin.scores.reduce((sum, s) => sum + s, 0) / bin.scores.length).toFixed(
           2,
@@ -393,12 +396,25 @@ const hasChartData = computed(() => {
 });
 
 const timeSpanText = computed(() => {
-  if (allDatePoints.value.length === 0) return "N/A";
+  if (selectedCriteria.value.length === 0) return "N/A";
 
-  const firstDate = allDatePoints.value[0];
-  const lastDate = allDatePoints.value[allDatePoints.value.length - 1];
+  let minTs = Infinity;
+  let maxTs = -Infinity;
 
-  return `${formatDateLabel(firstDate)} - ${formatDateLabel(lastDate)}`;
+  selectedCriteria.value.forEach((criterion) => {
+    props.photos.forEach((photo) => {
+      const scores = photo.descriptions?.artistic_scores;
+      if (!scores || scores[criterion] === undefined) return;
+      const score = Number(scores[criterion]);
+      const ts = new Date(photo.descriptions?.EXIF?.dateTaken).getTime();
+      if (isNaN(score) || isNaN(ts)) return;
+      if (ts < minTs) minTs = ts;
+      if (ts > maxTs) maxTs = ts;
+    });
+  });
+
+  if (!isFinite(minTs) || !isFinite(maxTs)) return "N/A";
+  return `${formatDateLabel(new Date(minTs))} - ${formatDateLabel(new Date(maxTs))}`;
 });
 
 const yAxisLabels = [0, 2.5, 5, 7.5, 10];
@@ -414,6 +430,12 @@ const chartTop = 10;
 const chartPaddingX = 12;
 
 /* X */
+const getXForPoint = (date) => {
+  const time = date.getTime();
+  const idx = allDatePoints.value.findIndex((d) => d.getTime() === time);
+  return getDateX(idx >= 0 ? idx : 0);
+};
+
 const getDateX = (index) => {
   const usableWidth = chartWidth - chartPaddingX * 2;
   const step = usableWidth / Math.max(allDatePoints.value.length - 1, 1);
@@ -429,7 +451,7 @@ const getY = (score) => {
 const generateChartLine = (criterion) => {
   const data = getCriterionChartData(criterion);
   return data
-    .map((point, index) => `${getDateX(index)},${getY(point.average)}`)
+    .map((point) => `${getXForPoint(point.date)},${getY(point.average)}`)
     .join(" ");
 };
 
@@ -437,8 +459,8 @@ const generateAreaPath = (criterion) => {
   const data = getCriterionChartData(criterion);
   if (data.length === 0) return "";
 
-  const points = data.map((point, index) => ({
-    x: getDateX(index),
+  const points = data.map((point) => ({
+    x: getXForPoint(point.date),
     y: getY(point.average),
   }));
 
