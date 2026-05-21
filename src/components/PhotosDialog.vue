@@ -4,7 +4,7 @@
     preset="dialog"
     :style="modalStyle"
     class="photos-dialog-modal"
-    :on-mask-click="close"
+    :on-mask-click="selectionOnly ? undefined : close"
     :closable="false"
     :bordered="false"
   >
@@ -35,16 +35,21 @@
                 <span class="stats-text">
                   {{ processedPhotos.length }}
                   {{
-                    processedPhotos.length === 1 ? "suggestion" : "suggestions"
+                    processedPhotos.length === 1
+                      ? suggestedPhotosSingularLabel
+                      : suggestedPhotosPluralLabel
                   }}
-                  <span v-if="selectedIds.length > 0" class="selected-count">
+                  <span
+                    v-if="!readOnly && selectedIds.length > 0"
+                    class="selected-count"
+                  >
                     &bull; {{ selectedIds.length }} selected
                   </span>
                 </span>
               </div>
               <div class="stats-actions">
                 <n-button
-                  v-if="selectedIds.length > 0"
+                  v-if="!readOnly && selectedIds.length > 0"
                   text
                   type="primary"
                   @click="selectAll"
@@ -52,7 +57,7 @@
                   Select All
                 </n-button>
                 <n-button
-                  v-if="selectedIds.length > 0"
+                  v-if="!readOnly && selectedIds.length > 0"
                   text
                   type="warning"
                   @click="clearSelection"
@@ -72,13 +77,13 @@
               v-for="photo in processedPhotos"
               :key="photo.id"
               :photo="photo"
-              :selected="selectedIds.includes(photo.id)"
+              :selected="!readOnly && selectedIds.includes(photo.id)"
               mode="default"
               @select="toggleSelection"
               @info="showPhotoInfo"
               :show-stars="false"
               :show-tags="false"
-              :show-info-button="false"
+              :show-info-button="showInfoButton"
               :require-long-press="false"
             />
           </div>
@@ -136,14 +141,17 @@
                 {{ processedPhotos.length }}
                 {{ processedPhotos.length === 1 ? "photo" : "photos" }}
                 available
-                <span v-if="selectedIds.length > 0" class="selected-count">
+                <span
+                  v-if="!readOnly && selectedIds.length > 0"
+                  class="selected-count"
+                >
                   • {{ selectedIds.length }} selected
                 </span>
               </span>
             </div>
             <div class="stats-actions">
               <n-button
-                v-if="selectedIds.length > 0"
+                v-if="!readOnly && selectedIds.length > 0"
                 text
                 type="primary"
                 @click="selectAll"
@@ -151,7 +159,7 @@
                 Select All
               </n-button>
               <n-button
-                v-if="selectedIds.length > 0"
+                v-if="!readOnly && selectedIds.length > 0"
                 text
                 type="warning"
                 @click="clearSelection"
@@ -172,13 +180,13 @@
             v-for="photo in processedPhotos"
             :key="photo.id"
             :photo="photo"
-            :selected="selectedIds.includes(photo.id)"
+            :selected="!readOnly && selectedIds.includes(photo.id)"
             mode="default"
             @select="toggleSelection"
             @info="showPhotoInfo"
             :show-stars="false"
             :show-tags="false"
-            :show-info-button="false"
+            :show-info-button="showInfoButton"
             :require-long-press="false"
           />
         </div>
@@ -236,14 +244,17 @@
                 {{ processedPhotos.length }}
                 {{ processedPhotos.length === 1 ? "photo" : "photos" }}
                 available
-                <span v-if="selectedIds.length > 0" class="selected-count">
+                <span
+                  v-if="!readOnly && selectedIds.length > 0"
+                  class="selected-count"
+                >
                   • {{ selectedIds.length }} selected
                 </span>
               </span>
             </div>
             <div class="stats-actions">
               <n-button
-                v-if="selectedIds.length > 0"
+                v-if="!readOnly && selectedIds.length > 0"
                 text
                 type="primary"
                 @click="selectAll"
@@ -251,7 +262,7 @@
                 Select All
               </n-button>
               <n-button
-                v-if="selectedIds.length > 0"
+                v-if="!readOnly && selectedIds.length > 0"
                 text
                 type="warning"
                 @click="clearSelection"
@@ -271,13 +282,13 @@
             v-for="photo in processedPhotos"
             :key="photo.id"
             :photo="photo"
-            :selected="selectedIds.includes(photo.id)"
+            :selected="!readOnly && selectedIds.includes(photo.id)"
             mode="default"
             @select="toggleSelection"
             @info="showPhotoInfo"
             :show-stars="false"
             :show-tags="false"
-            :show-info-button="false"
+            :show-info-button="showInfoButton"
             :require-long-press="false"
           />
         </div>
@@ -335,14 +346,17 @@
                 {{ trashPhotos.length }}
                 {{ trashPhotos.length === 1 ? "photo" : "photos" }}
                 available
-                <span v-if="selectedIds.length > 0" class="selected-count">
+                <span
+                  v-if="!readOnly && selectedIds.length > 0"
+                  class="selected-count"
+                >
                   • {{ selectedIds.length }} selected
                 </span>
               </span>
             </div>
             <div class="stats-actions">
               <n-button
-                v-if="selectedIds.length > 0"
+                v-if="!readOnly && selectedIds.length > 0"
                 text
                 type="primary"
                 @click="selectAll"
@@ -350,7 +364,7 @@
                 Select All
               </n-button>
               <n-button
-                v-if="selectedIds.length > 0"
+                v-if="!readOnly && selectedIds.length > 0"
                 text
                 type="warning"
                 @click="clearSelection"
@@ -371,11 +385,11 @@
             v-for="photo in trashPhotos"
             :key="photo.id"
             :photo="photo"
-            :selected="selectedIds.includes(photo.id)"
+            :selected="!readOnly && selectedIds.includes(photo.id)"
             mode="default"
             @select="toggleSelection"
             @info="showPhotoInfo"
-            :show-info-button="false"
+            :show-info-button="showInfoButton"
             :require-long-press="false"
           />
         </div>
@@ -411,8 +425,11 @@
           </n-button>
         </div>
         <div class="dialog-actions-right">
-          <n-button @click="close">Cancel</n-button>
+          <n-button @click="close">{{
+            readOnly ? "Close" : "Cancel"
+          }}</n-button>
           <n-button
+            v-if="!readOnly && !selectionOnly"
             type="primary"
             :disabled="totalSelectedCount === 0"
             @click="confirmSelection"
@@ -495,9 +512,29 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  readOnly: {
+    type: Boolean,
+    default: false,
+  },
+  suggestedPhotosSingularLabel: {
+    type: String,
+    default: "suggestion",
+  },
+  suggestedPhotosPluralLabel: {
+    type: String,
+    default: "suggestions",
+  },
+  selectionOnly: {
+    type: Boolean,
+    default: false,
+  },
 });
 
-const emit = defineEmits(["update:modelValue", "add-photos"]);
+const emit = defineEmits([
+  "update:modelValue",
+  "add-photos",
+  "selection-change",
+]);
 
 // Reactive dialog state
 const dialog = computed({
@@ -575,8 +612,19 @@ const photos = computed(() => {
 // Total selected count
 const totalSelectedCount = computed(() => selectedIds.value.length);
 
+// Emit selection changes in real-time for parent components that don't use the Add button
+watch(
+  selectedIds,
+  (newIds) => {
+    emit("selection-change", [...newIds]);
+  },
+  { deep: true },
+);
+
 // Selection methods
 function toggleSelection(photoId) {
+  if (props.readOnly) return;
+
   if (props.singleSelection) {
     // For single selection mode, directly select or deselect
     selectedIds.value = selectedIds.value.includes(photoId) ? [] : [photoId];
@@ -591,20 +639,25 @@ function toggleSelection(photoId) {
 }
 
 function selectAll() {
+  if (props.readOnly) return;
+
   selectedIds.value = photos.value.map((p) => p.id);
 }
 
 function clearSelection() {
+  if (props.readOnly) return;
+
   selectedIds.value = [];
 }
 
 function showPhotoInfo(photo) {
-  // TODO: Implement photo info modal
-  console.log("Show photo info:", photo);
+  emit("photo-info", photo);
 }
 
 // Main actions
 async function confirmSelection() {
+  if (props.readOnly) return;
+
   let photosToAdd = [];
 
   if (props.isTrash) {

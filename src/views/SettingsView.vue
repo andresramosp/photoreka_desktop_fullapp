@@ -358,7 +358,7 @@
                   size="small"
                   :disabled="isDemoUser"
                   @click="
-                    ENABLE_REAL_PURCHASE
+                    isPurchaseEnabledForUser
                       ? (showPhotosModal = true)
                       : (showPlansModal = true)
                   "
@@ -418,7 +418,7 @@
                   size="small"
                   :disabled="isDemoUser"
                   @click="
-                    ENABLE_REAL_PURCHASE
+                    isPurchaseEnabledForUser
                       ? (showCreditsModal = true)
                       : (showPlansModal = true)
                   "
@@ -577,9 +577,18 @@ import PaymentSuccessModal from "@/components/PaymentSuccessModal.vue";
 // ============================================================
 // Toggle: set to true to enable real purchase modals,
 //         set to false to show "coming soon" placeholder modal.
+// Whitelist: specific emails can have purchase enabled
+//            regardless of VITE_ENABLE_REAL_PURCHASE setting
 // ============================================================
 const ENABLE_REAL_PURCHASE =
   import.meta.env.VITE_ENABLE_REAL_PURCHASE === "true";
+
+const PURCHASE_ENABLED_EMAILS = (
+  import.meta.env.VITE_PURCHASE_ENABLED_EMAILS || ""
+)
+  .split(",")
+  .map((email) => email.trim().toLowerCase())
+  .filter((email) => email.length > 0);
 
 // Stores and composables
 const userStore = useUserStore();
@@ -611,6 +620,18 @@ function checkPaymentRedirect() {
 // Check if user is demo
 const isDemoUser = computed(() => {
   return userStore.user?.email === "demo@photorekatest.com";
+});
+
+// Check if purchase is enabled for current user
+const isPurchaseEnabledForUser = computed(() => {
+  // Check if globally enabled
+  if (ENABLE_REAL_PURCHASE) return true;
+
+  // Check if user email is in whitelist
+  const userEmail = userStore.user?.email;
+  if (!userEmail) return false;
+
+  return PURCHASE_ENABLED_EMAILS.includes(userEmail.toLowerCase());
 });
 
 // User data (real)

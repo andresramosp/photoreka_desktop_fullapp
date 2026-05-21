@@ -4,7 +4,6 @@
       v-if="photosWithGps.length > 0 && !isAiLocationButtonDisabled"
       class="ai-location-button"
       type="info"
-      :loading="isAiLocationRunning"
       @click="openAiLocationDialog"
     >
       <template #icon>
@@ -81,8 +80,23 @@
       :class="[
         'map-container',
         { 'map-container--pending': !isMapViewportReady },
+        { 'map-container--rect-selecting': isRectSelecting },
       ]"
     >
+      <!-- Rect-select capture layer: blocks Leaflet events when Ctrl/Cmd is held -->
+      <div
+        class="map-rect-select-layer"
+        :class="{ 'map-rect-select-layer--active': ctrlKeyHeld }"
+        @mousedown.prevent="handleRectLayerMouseDown"
+      />
+
+      <!-- Rect-select visual overlay -->
+      <div
+        v-if="isRectSelecting"
+        class="map-rect-select-overlay"
+        :style="rectSelectStyle"
+      />
+
       <l-map
         ref="map"
         :bounds="initialMapBounds || undefined"
@@ -122,6 +136,10 @@
       v-if="photosWithGps.length > 0"
       v-model:confidence-filter="confidenceFilter"
       v-model:granularity-filter="granularityFilter"
+      v-model:selected-visual-aspects="selectedVisualAspects"
+      v-model:artistic-score-filters="artisticScoreFilters"
+      v-model:time-range-filter="timeRangeFilter"
+      :processed-photos="photosWithGps"
     />
 
     <!-- Photo Info Dialog -->
@@ -129,6 +147,52 @@
       v-model="showPhotoInfoDialog"
       :selected-photo="selectedDialogPhoto"
       @change-photo="selectedDialogPhoto = $event"
+    />
+
+    <PhotosDialog
+      v-model="showLocationPhotosDialog"
+      title="Photos at this location"
+      selection-only
+      show-info-button
+      :display-search="false"
+      :suggested-photos="locationDialogPhotos"
+      suggested-photos-singular-label="photo"
+      suggested-photos-plural-label="photos"
+      @selection-change="handleLocationSelectionChange"
+      @photo-info="handleLocationPhotoInfo"
+    />
+
+    <!-- Floating Action Bar for map-location selections -->
+    <FloatingActionBar
+      :selected-ids="locationSelectedIds"
+      :top-position="20"
+      :show-delete="false"
+      :show-add-to-collection="true"
+      :show-move-to-tool="true"
+      :show-send-to-chat="true"
+      :is-downloading="isDownloading"
+      @clear-selection="locationClearAllSelections"
+      @download="handleLocationDownload"
+      @add-to-collection="handleLocationAddToCollection"
+      @move-to-tool="openToolSelector"
+      @send-to-chat="handleLocationSendToChat"
+    />
+
+    <CollectionModal
+      :show="showLocationCollectionModal"
+      :photo-count="locationSelectedIds.length"
+      :photo-ids="locationSelectedIds"
+      @add-to-collection="handleLocationCollectionAdded"
+      @add-to-series="handleLocationCollectionAdded"
+      @cancel="showLocationCollectionModal = false"
+    />
+
+    <PhotoToolSelector
+      :show="showToolSelector"
+      :photo-count="locationSelectedIds.length"
+      :is-processing="isProcessingTool"
+      @tool-selected="handleLocationToolSelected"
+      @close="closeToolSelector"
     />
 
     <AiLocationModal
@@ -160,6 +224,20 @@
         {{ getPhotoAddress(hoveredMapPhoto) }}
       </div>
     </div>
+
+    <!-- Location correction popup -->
+    <LocationCorrectionPopup
+      v-model:show="showCorrectionPopup"
+      :photo-id="correctionPhoto?.id ?? null"
+      :photo-name="correctionPhoto ? getPhotoTitle(correctionPhoto) : ''"
+      :photo-thumbnail="
+        correctionPhoto ? getPhotoThumbnail(correctionPhoto) : null
+      "
+      :current-address="
+        correctionPhoto ? getPhotoAddress(correctionPhoto) : null
+      "
+      @confirmed="handleCorrectionConfirmed"
+    />
   </div>
 </template>
 
@@ -184,8 +262,17 @@ import {
   SparklesOutline,
 } from "@vicons/ionicons5";
 import WorldMapConfigPanel from "@/components/world-map/WorldMapConfigPanel.vue";
+import { visualAspectsOptions } from "@/stores/searchStore.js";
+import LocationCorrectionPopup from "@/components/world-map/LocationCorrectionPopup.vue";
 import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
+import PhotosDialog from "@/components/PhotosDialog.vue";
 import AiLocationModal from "@/components/world-map/AiLocationModal.vue";
+import FloatingActionBar from "@/components/FloatingActionBar.vue";
+import CollectionModal from "@/components/CollectionModal.vue";
+import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
+import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection";
+import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
+import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import type {
   AiLocationJobStatus,
   GeolocatabilityForecast,
@@ -199,6 +286,8 @@ import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 
 type GpsCoordinates = [number, number];
+const MAX_SPIDERFY_MARKERS_PER_POINT = 42;
+const VISIBLE_PHOTOS_PER_OVERFLOW_POINT = MAX_SPIDERFY_MARKERS_PER_POINT - 1;
 
 interface PhotoWithGps {
   id: string | number;
@@ -213,7 +302,17 @@ interface PhotoWithGps {
   [key: string]: any;
 }
 
-type PhotoMarker = L.Marker & { photo: PhotoWithGps };
+type PhotoMarker = L.Marker & {
+  photo: PhotoWithGps;
+  photoCount?: number;
+};
+
+type PhotoOverflowMarker = L.Marker & {
+  photos: PhotoWithGps[];
+  photoCount: number;
+};
+
+type MapPhotoMarker = PhotoMarker | PhotoOverflowMarker;
 
 const photosStore = usePhotosStore();
 const userStore = useUserStore();
@@ -226,7 +325,30 @@ const initialMapBounds = ref<GpsCoordinates[] | null>(null);
 const isMapViewportReady = ref(false);
 const showPhotoInfoDialog = ref(false);
 const selectedDialogPhoto = ref<any>(null);
+const showLocationPhotosDialog = ref(false);
+const locationDialogPhotos = ref<PhotoWithGps[]>([]);
 const showAiLocationDialog = ref(false);
+const showLocationCollectionModal = ref(false);
+
+// Local photo selection for map-location dialog
+const {
+  selectedPhotoIds: locationSelectedIds,
+  selectAllPhotos: locationSelectAllPhotos,
+  clearAllSelections: locationClearAllSelections,
+} = useLocalPhotoSelection();
+
+// Download composable
+const { downloadPhotosZip, isDownloading } = usePhotoDownload();
+
+// Tool selection composable
+const {
+  isProcessing: isProcessingTool,
+  showToolSelector,
+  takeToTool,
+  takeToChat,
+  openToolSelector,
+  closeToolSelector,
+} = usePhotoToolSelection();
 const isFinalizingAiLocation = ref(false);
 const isStartingAiLocation = ref(false);
 const aiLocationStatus = ref<AiLocationJobStatus | null>(null);
@@ -240,8 +362,112 @@ const { isMobile } = useIsMobile();
 // Photo IDs that were newly geo-inferred in the last completed AI location job.
 // Cleared when a filter is applied or on the next visit (component remount).
 const newlyLocatedPhotoIds = ref<Set<string | number>>(new Set());
+// Photo IDs whose location was manually corrected (triggers a brief pulse animation).
+const correctedPhotoIds = ref<Set<string | number>>(new Set());
 const hoveredMapPhoto = ref<PhotoWithGps | null>(null);
 const mapTooltipPosition = ref({ x: 0, y: 0 });
+
+// Location correction popup state
+const showCorrectionPopup = ref(false);
+const correctionPhoto = ref<PhotoWithGps | null>(null);
+
+// Rect-select state (Ctrl/Cmd + drag over the map)
+const ctrlKeyHeld = ref(false);
+const isRectSelecting = ref(false);
+const rectSelectStart = ref({ x: 0, y: 0 });
+const rectSelectEnd = ref({ x: 0, y: 0 });
+
+const rectSelectStyle = computed(() => {
+  const x1 = Math.min(rectSelectStart.value.x, rectSelectEnd.value.x);
+  const y1 = Math.min(rectSelectStart.value.y, rectSelectEnd.value.y);
+  const x2 = Math.max(rectSelectStart.value.x, rectSelectEnd.value.x);
+  const y2 = Math.max(rectSelectStart.value.y, rectSelectEnd.value.y);
+  return {
+    left: x1 + "px",
+    top: y1 + "px",
+    width: x2 - x1 + "px",
+    height: y2 - y1 + "px",
+  };
+});
+
+function handleRectKeyDown(e: KeyboardEvent) {
+  if (e.key === "Control" || e.key === "Meta") ctrlKeyHeld.value = true;
+}
+
+function handleRectKeyUp(e: KeyboardEvent) {
+  if (e.key === "Control" || e.key === "Meta") {
+    ctrlKeyHeld.value = false;
+    if (isRectSelecting.value) {
+      isRectSelecting.value = false;
+    }
+  }
+}
+
+function handleRectLayerMouseDown(e: MouseEvent) {
+  if (e.button !== 0) return;
+  const rect = mapContainer.value?.getBoundingClientRect();
+  if (!rect) return;
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  isRectSelecting.value = true;
+  rectSelectStart.value = { x, y };
+  rectSelectEnd.value = { x, y };
+  window.addEventListener("mousemove", handleRectWindowMouseMove);
+  window.addEventListener("mouseup", handleRectWindowMouseUp);
+}
+
+function handleRectWindowMouseMove(e: MouseEvent) {
+  if (!isRectSelecting.value) return;
+  const rect = mapContainer.value?.getBoundingClientRect();
+  if (!rect) return;
+  rectSelectEnd.value = {
+    x: e.clientX - rect.left,
+    y: e.clientY - rect.top,
+  };
+}
+
+function handleRectWindowMouseUp() {
+  window.removeEventListener("mousemove", handleRectWindowMouseMove);
+  window.removeEventListener("mouseup", handleRectWindowMouseUp);
+  if (isRectSelecting.value) {
+    commitMapRectSelection();
+    isRectSelecting.value = false;
+  }
+}
+
+function commitMapRectSelection() {
+  const leafletMap = getLeafletMap();
+  if (!leafletMap) return;
+
+  const x1s = Math.min(rectSelectStart.value.x, rectSelectEnd.value.x);
+  const y1s = Math.min(rectSelectStart.value.y, rectSelectEnd.value.y);
+  const x2s = Math.max(rectSelectStart.value.x, rectSelectEnd.value.x);
+  const y2s = Math.max(rectSelectStart.value.y, rectSelectEnd.value.y);
+
+  // Ignore accidental tiny rects
+  if (x2s - x1s < 5 && y2s - y1s < 5) return;
+
+  // Convert screen corners to geographic coordinates
+  const topLeft = leafletMap.containerPointToLatLng(L.point(x1s, y1s));
+  const bottomRight = leafletMap.containerPointToLatLng(L.point(x2s, y2s));
+
+  const latMin = Math.min(topLeft.lat, bottomRight.lat);
+  const latMax = Math.max(topLeft.lat, bottomRight.lat);
+  const lngMin = Math.min(topLeft.lng, bottomRight.lng);
+  const lngMax = Math.max(topLeft.lng, bottomRight.lng);
+
+  const selectedIds = filteredPhotosWithGps.value
+    .filter((photo) => {
+      const [lat, lng] = photo.coordinates;
+      return lat >= latMin && lat <= latMax && lng >= lngMin && lng <= lngMax;
+    })
+    .map((photo) => photo.id);
+
+  if (selectedIds.length === 0) return;
+
+  locationClearAllSelections();
+  locationSelectAllPhotos(selectedIds);
+}
 
 // Map filter panel state
 type ConfidenceLevel = "gps" | "very_likely" | "likely" | "uncertain";
@@ -254,6 +480,22 @@ const confidenceFilter = ref<ConfidenceFilter>([
   "likely",
 ]);
 const granularityFilter = ref<GranularityFilter>(["place", "city"]);
+
+// Search filters (visual aspects, artistic scores, time range)
+const selectedVisualAspects = ref<string[]>([]);
+const artisticScoreFilters = ref<Record<string, any>>({});
+const timeRangeFilter = ref<[number, number] | null>(null);
+
+// Visual aspects category map for fast lookup during filtering
+const visualAspectCategoryMap = (() => {
+  const map = new Map<string, string>();
+  visualAspectsOptions.forEach((group: any) => {
+    group.children.forEach((child: any) => {
+      map.set(child.value, group.key);
+    });
+  });
+  return map;
+})();
 
 // Function to convert GPS array format to decimal degrees
 function convertGpsArrayToDecimal(gpsArray: number[]): number {
@@ -366,6 +608,67 @@ const filteredPhotosWithGps = computed<PhotoWithGps[]>(() => {
       if (!matchesGranularity) return false;
     }
 
+    // --- Visual aspects filter ---
+    if (selectedVisualAspects.value.length > 0) {
+      const visualAspects = photo.descriptions?.visual_aspects;
+      if (!visualAspects) return false;
+      if (Array.isArray(visualAspects)) {
+        if (!selectedVisualAspects.value.some((a) => visualAspects.includes(a)))
+          return false;
+      } else if (typeof visualAspects === "object") {
+        const selectedByCategory = new Map<string, string[]>();
+        selectedVisualAspects.value.forEach((aspect) => {
+          const category = visualAspectCategoryMap.get(aspect);
+          if (!category) return;
+          if (!selectedByCategory.has(category))
+            selectedByCategory.set(category, []);
+          selectedByCategory.get(category)!.push(aspect);
+        });
+        if (selectedByCategory.size === 0) return false;
+        const passes = Array.from(selectedByCategory.entries()).every(
+          ([category, aspects]) => {
+            const photoAspects = (visualAspects as any)[category];
+            return (
+              Array.isArray(photoAspects) &&
+              aspects.some((a) => photoAspects.includes(a))
+            );
+          },
+        );
+        if (!passes) return false;
+      } else {
+        return false;
+      }
+    }
+
+    // --- Artistic score filters ---
+    if (Object.keys(artisticScoreFilters.value).length > 0) {
+      const scores = (photo.descriptions?.artistic_scores ?? {}) as Record<
+        string,
+        number
+      >;
+      const passes = Object.entries(artisticScoreFilters.value).every(
+        ([key, filterVal]: [string, any]) => {
+          const score = scores[key];
+          if (score === undefined) return false;
+          const value =
+            typeof filterVal === "object" ? filterVal.value : filterVal;
+          const operator =
+            typeof filterVal === "object" ? (filterVal.operator ?? ">=") : ">=";
+          return operator === ">=" ? score >= value : score <= value;
+        },
+      );
+      if (!passes) return false;
+    }
+
+    // --- Time range filter ---
+    if (timeRangeFilter.value !== null) {
+      const [minDate, maxDate] = timeRangeFilter.value;
+      const ts = new Date(
+        photo.descriptions?.EXIF?.dateTaken ?? (photo as any).dateTaken,
+      ).getTime();
+      if (isNaN(ts) || ts < minDate || ts > maxDate) return false;
+    }
+
     return true;
   });
 });
@@ -421,14 +724,20 @@ async function refreshAiLocationSummary() {
     const newJob: AiLocationJobStatus | null = data.job ?? null;
 
     if (newJob?.status === "running") {
+      const wasAlreadyRunning = aiLocationStatus.value?.status === "running";
       aiLocationStatus.value = newJob;
       startAiLocationPolling();
+      // Re-open the progress modal when returning to the view mid-job
+      if (!wasAlreadyRunning) {
+        showAiLocationDialog.value = true;
+      }
       return;
     }
 
     stopAiLocationPolling();
 
-    if (wasRunning) {
+    // Helper: refresh photos, highlight new markers, show results modal
+    async function finalizeCompletedJob(resolvedJob: AiLocationJobStatus) {
       isFinalizingAiLocation.value = true;
       try {
         const previousGpsIds = new Set(photosWithGps.value.map((p) => p.id));
@@ -442,16 +751,32 @@ async function refreshAiLocationSummary() {
         await nextTick();
         refreshPhotoMarkers();
         getLeafletMap()?.invalidateSize();
-        aiLocationStatus.value = newJob ?? {
-          ...previousJob,
-          status: "completed",
-          processed: previousJob.total,
-        };
+        aiLocationStatus.value = resolvedJob;
         showAiLocationDialog.value = true;
+        // Mark this job as handled so we don't show the modal again on re-visit
+        sessionStorage.setItem("ai-location-handled-job", resolvedJob.jobId);
       } finally {
         isFinalizingAiLocation.value = false;
       }
+    }
+
+    if (wasRunning) {
+      const resolvedJob: AiLocationJobStatus = newJob ?? {
+        ...previousJob,
+        status: "completed",
+        processed: previousJob.total,
+      };
+      await finalizeCompletedJob(resolvedJob);
       return;
+    }
+
+    // Returning to the view after job completed while the user was away
+    if (newJob?.status === "completed" && newJob.jobId) {
+      const lastHandled = sessionStorage.getItem("ai-location-handled-job");
+      if (lastHandled !== newJob.jobId) {
+        await finalizeCompletedJob(newJob);
+        return;
+      }
     }
 
     aiLocationStatus.value = null;
@@ -485,7 +810,6 @@ async function startAiLocationInference() {
   try {
     const { data } = await api.post("/api/location-inference/start");
     aiLocationStatus.value = data.job;
-    message.success("Location analysis started");
     await userStore.fetchUsage();
     startAiLocationPolling();
   } catch (error) {
@@ -566,11 +890,13 @@ function getGranularityMarkerClass(photo: PhotoWithGps): string {
 
 function createPhotoMarkerIcon(photo: PhotoWithGps): L.DivIcon {
   const isNew = newlyLocatedPhotoIds.value.has(photo.id);
+  const isCorrected = correctedPhotoIds.value.has(photo.id);
   const granularityClass = getGranularityMarkerClass(photo);
   const classes = [
     "photo-single-marker",
     granularityClass,
     isNew ? "photo-single-marker--new" : "",
+    isCorrected ? "photo-single-marker--corrected" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -578,7 +904,19 @@ function createPhotoMarkerIcon(photo: PhotoWithGps): L.DivIcon {
     className: "photo-map-div-icon photo-single-div-icon",
     html: `<div class="${classes}" aria-label="${escapeHtml(
       getPhotoTitle(photo),
-    )}">${createPhotoImageMarkup(photo)}</div>`,
+    )}">${createPhotoImageMarkup(photo)}${isAiLocatedPhoto(photo) ? '<button class="photo-marker-correct-btn" title="Correct location" aria-label="Correct location"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75z"/></svg></button>' : ""}</div>`,
+    iconSize: [42, 42],
+    iconAnchor: [21, 21],
+  });
+}
+
+function createPhotoOverflowMarkerIcon(
+  hiddenCount: number,
+  totalCount: number,
+): L.DivIcon {
+  return L.divIcon({
+    className: "photo-map-div-icon photo-overflow-div-icon",
+    html: `<div class="photo-overflow-marker" aria-label="Open ${totalCount} photos at this location"><span>+</span><small>${hiddenCount}</small></div>`,
     iconSize: [42, 42],
     iconAnchor: [21, 21],
   });
@@ -590,8 +928,30 @@ function getClusterIconSize(count: number): number {
   return 58;
 }
 
-function createClusterTileMarkup(markers: PhotoMarker[]): string {
-  const photos = markers.slice(0, 4).map((marker) => marker.photo);
+function getMarkerPreviewPhoto(marker: MapPhotoMarker): PhotoWithGps | null {
+  if ("photo" in marker) return marker.photo;
+  return marker.photos[0] ?? null;
+}
+
+function getMarkerPhotoCount(marker: MapPhotoMarker): number {
+  return marker.photoCount ?? 1;
+}
+
+function isNewMarker(marker: MapPhotoMarker): boolean {
+  if ("photo" in marker) {
+    return newlyLocatedPhotoIds.value.has(marker.photo.id);
+  }
+
+  return marker.photos.some((photo) =>
+    newlyLocatedPhotoIds.value.has(photo.id),
+  );
+}
+
+function createClusterTileMarkup(markers: MapPhotoMarker[]): string {
+  const photos = markers
+    .slice(0, 4)
+    .map(getMarkerPreviewPhoto)
+    .filter((photo): photo is PhotoWithGps => photo !== null);
   const tileCount = Math.max(1, photos.length);
 
   return photos
@@ -605,12 +965,13 @@ function createClusterTileMarkup(markers: PhotoMarker[]): string {
 }
 
 function createPhotoClusterIcon(cluster: L.MarkerCluster): L.DivIcon {
-  const markers = cluster.getAllChildMarkers() as PhotoMarker[];
-  const count = cluster.getChildCount();
-  const size = getClusterIconSize(count);
-  const hasNew = markers.some((m) =>
-    newlyLocatedPhotoIds.value.has(m.photo.id),
+  const markers = cluster.getAllChildMarkers() as MapPhotoMarker[];
+  const count = markers.reduce(
+    (total, marker) => total + getMarkerPhotoCount(marker),
+    0,
   );
+  const size = getClusterIconSize(count);
+  const hasNew = markers.some(isNewMarker);
   const badgeClass = hasNew
     ? "photo-cluster-count photo-cluster-count--new"
     : "photo-cluster-count";
@@ -631,6 +992,23 @@ function createPhotoClusterIcon(cluster: L.MarkerCluster): L.DivIcon {
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
   });
+}
+
+function getCoordinateKey(coordinates: GpsCoordinates): string {
+  return `${coordinates[0].toFixed(6)},${coordinates[1].toFixed(6)}`;
+}
+
+function groupPhotosByCoordinate(photos: PhotoWithGps[]): PhotoWithGps[][] {
+  const photosByCoordinate = new Map<string, PhotoWithGps[]>();
+
+  photos.forEach((photo) => {
+    const coordinateKey = getCoordinateKey(photo.coordinates);
+    const coordinatePhotos = photosByCoordinate.get(coordinateKey) ?? [];
+    coordinatePhotos.push(photo);
+    photosByCoordinate.set(coordinateKey, coordinatePhotos);
+  });
+
+  return Array.from(photosByCoordinate.values());
 }
 
 function getClusterRadius(zoom: number): number {
@@ -673,39 +1051,147 @@ function refreshPhotoMarkers() {
 
   clusterLayer.clearLayers();
 
-  const markers = filteredPhotosWithGps.value.map((photo) => {
-    const marker = L.marker(photo.coordinates, {
-      autoPanOnFocus: false,
-      icon: createPhotoMarkerIcon(photo),
-      keyboard: true,
-    }) as PhotoMarker;
+  const markers = groupPhotosByCoordinate(filteredPhotosWithGps.value).flatMap(
+    (coordinatePhotos) => {
+      if (coordinatePhotos.length > MAX_SPIDERFY_MARKERS_PER_POINT) {
+        const visiblePhotos = coordinatePhotos.slice(
+          0,
+          VISIBLE_PHOTOS_PER_OVERFLOW_POINT,
+        );
+        const hiddenCount = coordinatePhotos.length - visiblePhotos.length;
 
-    marker.photo = photo;
-    marker.on("click", (e: L.LeafletMouseEvent) => {
-      L.DomEvent.stopPropagation(e);
-      handleMarkerClick(photo);
-    });
-    marker.on("mouseover", (e: L.LeafletMouseEvent) => {
-      hoveredMapPhoto.value = photo;
-      mapTooltipPosition.value = {
-        x: e.originalEvent.clientX + 16,
-        y: e.originalEvent.clientY + 16,
-      };
-    });
-    marker.on("mousemove", (e: L.LeafletMouseEvent) => {
-      mapTooltipPosition.value = {
-        x: e.originalEvent.clientX + 16,
-        y: e.originalEvent.clientY + 16,
-      };
-    });
-    marker.on("mouseout", () => {
-      hoveredMapPhoto.value = null;
-    });
+        return [
+          ...visiblePhotos.map(createPhotoMarker),
+          createPhotoOverflowMarker(coordinatePhotos, hiddenCount),
+        ];
+      }
 
-    return marker;
-  });
+      return coordinatePhotos.map(createPhotoMarker);
+    },
+  );
 
   clusterLayer.addLayers(markers);
+}
+
+function createPhotoMarker(photo: PhotoWithGps): PhotoMarker {
+  const marker = L.marker(photo.coordinates, {
+    autoPanOnFocus: false,
+    icon: createPhotoMarkerIcon(photo),
+    keyboard: true,
+  }) as PhotoMarker;
+
+  marker.photo = photo;
+  marker.on("click", (e: L.LeafletMouseEvent) => {
+    L.DomEvent.stopPropagation(e);
+    const target = e.originalEvent?.target as HTMLElement | null;
+    if (target?.closest(".photo-marker-correct-btn")) {
+      openCorrectionPopup(photo);
+      return;
+    }
+    handleMarkerClick(photo);
+  });
+  marker.on("mouseover", (e: L.LeafletMouseEvent) => {
+    const target = e.originalEvent?.target as HTMLElement | null;
+    if (target?.closest(".photo-marker-correct-btn")) {
+      hoveredMapPhoto.value = null;
+      return;
+    }
+    hoveredMapPhoto.value = photo;
+    mapTooltipPosition.value = {
+      x: e.originalEvent.clientX + 16,
+      y: e.originalEvent.clientY + 16,
+    };
+  });
+  marker.on("mousemove", (e: L.LeafletMouseEvent) => {
+    const target = e.originalEvent?.target as HTMLElement | null;
+    if (target?.closest(".photo-marker-correct-btn")) {
+      hoveredMapPhoto.value = null;
+      return;
+    }
+    mapTooltipPosition.value = {
+      x: e.originalEvent.clientX + 16,
+      y: e.originalEvent.clientY + 16,
+    };
+  });
+  marker.on("mouseout", () => {
+    hoveredMapPhoto.value = null;
+  });
+
+  return marker;
+}
+
+function createPhotoOverflowMarker(
+  photos: PhotoWithGps[],
+  hiddenCount: number,
+): PhotoOverflowMarker {
+  const marker = L.marker(photos[0].coordinates, {
+    autoPanOnFocus: false,
+    icon: createPhotoOverflowMarkerIcon(hiddenCount, photos.length),
+    keyboard: true,
+    title: `${photos.length} photos at this location`,
+  }) as PhotoOverflowMarker;
+
+  marker.photos = photos;
+  marker.photoCount = hiddenCount;
+  marker.on("click", (e: L.LeafletMouseEvent) => {
+    L.DomEvent.stopPropagation(e);
+    openLocationPhotosDialog(photos);
+  });
+  marker.on("mouseover", () => {
+    hoveredMapPhoto.value = null;
+  });
+
+  return marker;
+}
+
+function openLocationPhotosDialog(photos: PhotoWithGps[]) {
+  locationDialogPhotos.value = photos;
+  hoveredMapPhoto.value = null;
+  showLocationPhotosDialog.value = true;
+}
+
+// Clear FAB selection when the location dialog is closed
+watch(showLocationPhotosDialog, (open) => {
+  if (!open) locationClearAllSelections();
+});
+
+function handleLocationSelectionChange(photoIds: (string | number)[]) {
+  locationClearAllSelections();
+  if (photoIds.length > 0) locationSelectAllPhotos(photoIds);
+}
+
+async function handleLocationDownload() {
+  const photos = locationSelectedIds.value
+    .map((id: number) => photosStore.photos?.find((p: any) => p.id == id))
+    .filter(Boolean);
+  await downloadPhotosZip(photos);
+  locationClearAllSelections();
+}
+
+function handleLocationAddToCollection() {
+  showLocationCollectionModal.value = true;
+}
+
+function handleLocationCollectionAdded() {
+  showLocationCollectionModal.value = false;
+  locationClearAllSelections();
+}
+
+async function handleLocationSendToChat() {
+  await takeToChat(locationSelectedIds.value, locationClearAllSelections);
+}
+
+async function handleLocationToolSelected(
+  toolId: string,
+  canvasId: string | null = null,
+) {
+  await takeToTool(
+    toolId,
+    locationSelectedIds.value,
+    locationClearAllSelections,
+    canvasId,
+  );
+  closeToolSelector();
 }
 
 function removeMarkerClusterLayer() {
@@ -734,6 +1220,16 @@ const handleMarkerClick = async (photo: any) => {
     console.error("Error fetching photo details:", error);
   }
 };
+
+async function handleLocationPhotoInfo(photo: any) {
+  try {
+    const fullPhoto = await photosStore.fetchPhoto(photo.id);
+    selectedDialogPhoto.value = fullPhoto || photo;
+    showPhotoInfoDialog.value = true;
+  } catch (error) {
+    console.error("Error fetching photo details:", error);
+  }
+}
 
 // Map ready handler
 const onMapReady = () => {
@@ -767,6 +1263,66 @@ const photosWithGpsKey = computed<string>(() =>
     )
     .join("|"),
 );
+
+/** Returns true when a photo's location was assigned by AI inference (not real GPS). */
+function isAiLocatedPhoto(photo: PhotoWithGps): boolean {
+  return !!(photo.descriptions?.EXIF as any)?.aiLocationInference;
+}
+
+function openCorrectionPopup(photo: PhotoWithGps) {
+  hoveredMapPhoto.value = null;
+  correctionPhoto.value = photo;
+  showCorrectionPopup.value = true;
+}
+
+interface CorrectionPayload {
+  lat: number;
+  lng: number;
+  formattedAddress: string;
+  placeId: string | null;
+}
+
+function handleCorrectionConfirmed(payload: CorrectionPayload) {
+  const photo = correctionPhoto.value;
+  if (!photo) return;
+
+  // Optimistic store update so the marker relocates immediately
+  const storePhoto = photosStore.allPhotos.find(
+    (p: any) => String(p.id) === String(photo.id),
+  );
+  if (storePhoto) {
+    const existingExif = (storePhoto.descriptions?.EXIF ?? {}) as Record<
+      string,
+      any
+    >;
+    const existingInference = existingExif.aiLocationInference ?? null;
+    photosStore.updatePhoto(storePhoto.id, {
+      descriptions: {
+        ...(storePhoto.descriptions ?? {}),
+        EXIF: {
+          ...existingExif,
+          gpsLatitude: payload.lat,
+          gpsLongitude: payload.lng,
+          gpsLatitudeRef: payload.lat < 0 ? "S" : "N",
+          gpsLongitudeRef: payload.lng < 0 ? "W" : "E",
+          aiLocationInference: existingInference
+            ? {
+                ...existingInference,
+                formattedAddress: payload.formattedAddress,
+                geocodeQuery: payload.formattedAddress,
+                placeId: payload.placeId ?? existingInference.placeId,
+                correctedByUser: true,
+              }
+            : undefined,
+        },
+      },
+    });
+  }
+
+  // Mark as corrected so the refreshed marker gets the pulse animation
+  correctedPhotoIds.value = new Set([...correctedPhotoIds.value, photo.id]);
+  message.success("Location updated");
+}
 
 watch([confidenceFilter, granularityFilter], () => {
   if (!hasLoadedInitialPhotos.value) return;
@@ -808,9 +1364,16 @@ onMounted(async () => {
     });
     resizeObserver.observe(mapContainer.value);
   }
+
+  window.addEventListener("keydown", handleRectKeyDown);
+  window.addEventListener("keyup", handleRectKeyUp);
 });
 
 onUnmounted(() => {
+  window.removeEventListener("keydown", handleRectKeyDown);
+  window.removeEventListener("keyup", handleRectKeyUp);
+  window.removeEventListener("mousemove", handleRectWindowMouseMove);
+  window.removeEventListener("mouseup", handleRectWindowMouseUp);
   resizeObserver?.disconnect();
   resizeObserver = null;
   stopAiLocationPolling();
@@ -824,6 +1387,11 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   overflow: hidden;
+}
+
+/* Ensure the location-selection FAB renders above the PhotosDialog overlay */
+:deep(.floating-action-bar) {
+  z-index: 3000 !important;
 }
 
 .gps-photos-label {
@@ -921,10 +1489,38 @@ onUnmounted(() => {
 }
 
 .map-container {
+  position: relative;
+  flex: 1;
   width: 100%;
   height: 100%;
+  overflow: hidden;
   opacity: 1;
   transition: opacity 0.18s ease;
+}
+
+/* Rect-select: capture layer that blocks Leaflet when Ctrl/Cmd is held */
+.map-rect-select-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 800;
+  pointer-events: none;
+  cursor: default;
+}
+
+.map-rect-select-layer--active {
+  pointer-events: all;
+  cursor: crosshair;
+}
+
+/* Rect-select: visual rectangle drawn while dragging */
+.map-rect-select-overlay {
+  position: absolute;
+  z-index: 801;
+  pointer-events: none;
+  border: 2px solid rgba(99, 102, 241, 0.85);
+  background: rgba(99, 102, 241, 0.12);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2);
 }
 
 .map-container--pending {
@@ -937,10 +1533,11 @@ onUnmounted(() => {
 }
 
 :deep(.photo-single-marker) {
+  position: relative;
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  overflow: hidden;
+  overflow: visible;
   background: #e7e9ee;
   border: 3px solid #fff;
   box-shadow:
@@ -950,6 +1547,16 @@ onUnmounted(() => {
   transition:
     box-shadow 0.18s ease,
     transform 0.18s ease;
+}
+
+/* Clip the photo thumbnail to the circle without clipping the correction button */
+:deep(.photo-single-marker > img),
+:deep(.photo-single-marker > .photo-map-fallback) {
+  border-radius: 50%;
+  overflow: hidden;
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 :deep(.photo-single-marker:hover) {
@@ -1011,6 +1618,58 @@ onUnmounted(() => {
   box-shadow:
     0 4px 14px rgba(18, 24, 38, 0.28),
     0 0 0 1px var(--accent-color);
+}
+
+:deep(.photo-overflow-marker) {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: var(--primary-color);
+  box-shadow:
+    0 4px 14px rgba(18, 24, 38, 0.28),
+    0 0 0 1px rgba(18, 24, 38, 0.08);
+  color: var(--text-on-primary);
+  cursor: pointer;
+  transition:
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+:deep(.photo-overflow-marker:hover) {
+  transform: scale(1.12);
+  box-shadow:
+    0 7px 20px rgba(18, 24, 38, 0.34),
+    0 0 0 1px rgba(18, 24, 38, 0.12);
+}
+
+:deep(.photo-overflow-marker span) {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+:deep(.photo-overflow-marker small) {
+  position: absolute;
+  right: -6px;
+  bottom: -5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: 1px solid var(--bg-container);
+  border-radius: 999px;
+  background: var(--accent-color);
+  color: var(--text-on-accent);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 :deep(.photo-single-marker img),
@@ -1148,6 +1807,62 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ── Pencil correction button inside AI-inferred markers ─────────────────── */
+
+:deep(.photo-marker-correct-btn) {
+  position: absolute;
+  bottom: -4px;
+  left: -4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+  background: var(--secondary-color, #3b82f6);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.7);
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+  z-index: 1;
+}
+
+:deep(.photo-marker-correct-btn svg) {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+}
+
+:deep(.photo-single-marker:hover .photo-marker-correct-btn) {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Corrected-marker pulse animation */
+:deep(.photo-single-marker--corrected) {
+  animation: markerCorrectPulse 0.7s ease-out forwards;
+}
+
+@keyframes markerCorrectPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(99, 179, 237, 0.8);
+  }
+  40% {
+    transform: scale(1.22);
+    box-shadow: 0 0 0 8px rgba(99, 179, 237, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(99, 179, 237, 0);
+  }
 }
 
 /* ── Leaflet controls: zoom & layers ─────────────────────────────────────── */
