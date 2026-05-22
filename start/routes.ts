@@ -84,6 +84,7 @@ const PaymentController = () => import('#controllers/payment_controller')
 const PortfolioBuildController = () => import('#controllers/portfolio_build_controller')
 const PortfolioBuildSetsController = () => import('#controllers/portfolio_build_sets_controller')
 const AiLocationInferenceController = () => import('#controllers/ai_location_inference_controller')
+const GeocodingController = () => import('#controllers/geocoding_controller')
 const SafeSearchController = () => import('#controllers/safe_search_controller')
 const ActivityController = () => import('#controllers/activity_controller')
 
@@ -239,7 +240,13 @@ router
       'estimateCredits',
     ])
     router.get('/api/location-inference/summary', [AiLocationInferenceController, 'summary'])
+    router.get('/api/location-inference/assess', [AiLocationInferenceController, 'assess'])
     router.post('/api/location-inference/start', [AiLocationInferenceController, 'start'])
+
+    // Geocoding autocomplete (Mapbox Search Box) + location correction
+    router.post('/api/geocoding/suggest', [GeocodingController, 'suggest'])
+    router.post('/api/geocoding/retrieve', [GeocodingController, 'retrieve'])
+    router.patch('/api/photos/:id/location', [GeocodingController, 'updatePhotoLocation'])
 
     // Portfolio Sets endpoints
     router.get('/api/portfolio-build-sets', [PortfolioBuildSetsController, 'index'])

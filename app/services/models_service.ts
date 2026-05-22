@@ -931,9 +931,17 @@ export default class ModelsService {
   ): Promise<any> {
     try {
       // Si el modelo es un GPT-5 base/non-chat, no pasar temperature y usar max_completion_tokens
-      const isGpt5NonChat = ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-5.1', 'gpt-5.2'].includes(
-        model
-      )
+      const isGpt5NonChat = [
+        'gpt-5',
+        'gpt-5-mini',
+        'gpt-5-nano',
+        'gpt-5.1',
+        'gpt-5.2',
+        'gpt-5.4',
+        'gpt-5.4-mini',
+        'gpt-5.4-nano',
+        'gpt-5.4-pro',
+      ].includes(model)
 
       let payload: any = {
         model,

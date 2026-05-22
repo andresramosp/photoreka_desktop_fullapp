@@ -534,7 +534,7 @@ export default class AnalyzerProcessRunner {
       const totalUserPhotos = Number(totalResult[0]?.$extras?.total || 0)
 
       const frontendUrl = process.env.FRONTEND_URL || 'https://app.photoreka.com'
-      const processUrl = `${frontendUrl}/sync-area#processing`
+      const processUrl = `${frontendUrl}/import-area#processing`
 
       logger.debug(
         `sendAnalysisCompleteEmail: generando template (processed: ${processedPhotos}, total: ${totalUserPhotos})`

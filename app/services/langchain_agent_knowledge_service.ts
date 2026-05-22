@@ -76,7 +76,7 @@ The user has not uploaded any photos yet.
 
 Your job:
 1. Answer any questions about Photoreka's features using the app knowledge provided below.
-2. Guide the user to upload photos first via the Sync Area.
+2. Guide the user to upload photos first via the Import Area.
 3. Once they have analyzed photos, the full photo assistant is available at {url:/chat-lab}
 4. NEVER invent photo content, filenames, or pretend the catalog has data.`
   }
@@ -90,7 +90,7 @@ The user has ${photoCount} photo(s) uploaded but none have been analyzed yet.
 
 Your job:
 1. Answer any questions about Photoreka's features using the app knowledge provided below.
-2. Guide the user to analyze their photos via the Analyze button in the Sync Area.
+2. Guide the user to analyze their photos via the Analyze button in the Import Area.
 3. Once analyzed, the full photo assistant is available at {url:/chat-lab}
 4. NEVER invent photo content, filenames, or pretend the catalog has data.`
 }
@@ -259,7 +259,7 @@ export default class LangchainAgentKnowledgeService {
       )
     } else if (analyzedCount === 0) {
       lines.push(
-        `- ⚠️ CRITICAL: The user has ${photoCount} photo(s) uploaded but NONE have been analyzed yet. The photos exist in the Sync Area but are NOT searchable, scoreable, or describable — no descriptions, no scores, no visual data is available. Do NOT fabricate any photo filenames, descriptions, or content. Inform the user that their photos need to be analyzed first (via the Analyze button in the Sync Area). Return empty photo_groups.`
+        `- ⚠️ CRITICAL: The user has ${photoCount} photo(s) uploaded but NONE have been analyzed yet. The photos exist in the Import Area but are NOT searchable, scoreable, or describable — no descriptions, no scores, no visual data is available. Do NOT fabricate any photo filenames, descriptions, or content. Inform the user that their photos need to be analyzed first (via the Analyze button in the Import Area). Return empty photo_groups.`
       )
     } else {
       lines.push(

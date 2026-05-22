@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import AiLocationInferenceService from '#services/ai_location_inference_service'
+import LocationGeolocatabilityService from '#services/location_geolocatability_service'
 
 export default class AiLocationInferenceController {
   public async summary({ request, response, auth }: HttpContext) {
@@ -47,6 +48,20 @@ export default class AiLocationInferenceController {
       }
 
       console.error('[AiLocationInferenceController] start error:', error)
+      return response.internalServerError({ error: error.message })
+    }
+  }
+
+  public async assess({ response, auth }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as any
+      const service = new AiLocationInferenceService()
+      const photos = await service.getPhotosWithoutLocation(user.id)
+      const forecast = LocationGeolocatabilityService.forecast(photos)
+      return response.ok(forecast)
+    } catch (error: any) {
+      console.error('[AiLocationInferenceController] assess error:', error)
       return response.internalServerError({ error: error.message })
     }
   }

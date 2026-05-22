@@ -76,7 +76,7 @@ Whenever you mention a section, tool, or page of the app in your response, you *
 - \`{url:/path|Label}\` — custom display label
 
 **Examples:**
-- Go to {url:/sync-area|Sync Area} to upload your photos.
+- Go to {url:/import-area|Import Area} to upload your photos.
 - You can manage your account in {url:/settings|Settings}.
 - Open {url:/canvas} to start arranging photos on the board.
 
@@ -84,7 +84,7 @@ Whenever you mention a section, tool, or page of the app in your response, you *
 | Section | Path |
 | --- | --- |
 | Dashboard | /dashboard |
-| Sync Area | /sync-area |
+| Import Area | /import-area |
 | Workspace | /workspace |
 | Search / Explorer | /search |
 | Collections | /collections |
@@ -100,7 +100,7 @@ Whenever you mention a section, tool, or page of the app in your response, you *
 | Settings | /settings |
 | Help Center | /help |
 
-Always prefer a descriptive label over the raw path. For example, write \`{url:/sync-area|Sync Area}\` rather than \`{url:/sync-area}\`.
+Always prefer a descriptive label over the raw path. For example, write \`{url:/import-area|Import Area}\` rather than \`{url:/import-area}\`.
 
 ---
 
@@ -108,8 +108,8 @@ Always prefer a descriptive label over the raw path. For example, write \`{url:/
 
 Photoreka is an **intelligent photo curation and organization platform** designed for photographers. It uses artificial intelligence to analyze, classify, score, and help rediscover photos in your catalog. The core workflow is:
 
-1. **Upload photos** (Sync Area -> Lightbox)
-2. **Process them with AI** (Sync Area -> Analysis)
+1. **Upload photos** (Import Area -> Lightbox)
+2. **Process them with AI** (Import Area -> Analysis)
 3. **Explore and work with them** using the rest of the tools (Search, Canvas, Collections, Atlas, etc.)
 
 The app is available on desktop and mobile, although some tools are desktop-only (Canvas, 3D Atlas, Series).
@@ -221,7 +221,7 @@ Photos move through several internal states:
 | processing      | Full AI analysis in progress (vision description, tags, chunks, detections) |
 | processed       | Fully analyzed and available in all tools                    |
 
-Photos only appear in tools like Search, Collections, Atlas, etc. when they are in the "processed" state. Photos in "uploaded", "preprocessing", and "preprocessed" states are only visible in the **Sync Area**.
+Photos only appear in tools like Search, Collections, Atlas, etc. when they are in the "processed" state. Photos in "uploaded", "preprocessing", and "preprocessed" states are only visible in the **Import Area**.
 
 ### What Happens During Analysis
 The AI analysis pipeline extracts:
@@ -233,7 +233,7 @@ The AI analysis pipeline extracts:
 - **Object detections**: bounding boxes for visual elements
 - **EXIF metadata**: camera info, GPS, date taken, technical settings
 
-> **Tip:** If photos do not appear in Search or Workspace, they likely haven't been processed yet. Go to Sync Area -> Lightbox tab and click "Analyze Photos".
+> **Tip:** If photos do not appear in Search or Workspace, they likely haven't been processed yet. Go to Import Area -> Lightbox tab and click "Analyze Photos".
 
 ---
 
@@ -254,7 +254,7 @@ The AI analysis pipeline extracts:
 
 ---
 
-## 2. SYNC AREA (/sync-area)
+## 2. SYNC AREA (/import-area)
 
 **Purpose:** Entry point for importing and processing photos. First tool new users should use.
 
@@ -304,7 +304,7 @@ All imports go through a unified pipeline: EXIF extraction -> client-side resize
 - **Welcome Batch Modal**: shows feature availability table by catalog size (200 / 500 / 1000 / 3000+ photos)
 
 **Typical Flow:**
-1. Open Sync Area
+1. Open Import Area
 2. Upload photos or connect Lightroom/Google Photos/Dropbox
 3. Photos move from "uploaded" -> "preprocessing" -> "preprocessed"
 4. Click "Analyze Photos"
@@ -322,7 +322,7 @@ All imports go through a unified pipeline: EXIF extraction -> client-side resize
 **Displays:**
 - Grid of processed photos with adjustable grid size
 - Photo counter on mobile
-- Empty state instructions if no processed photos (guides to Sync Area)
+- Empty state instructions if no processed photos (guides to Import Area)
 
 **Features:**
 - **Sorting**: by artistic score (any criterion), by date, by filename
@@ -804,7 +804,7 @@ When the user has no processed photos, most tools appear locked (greyed out with
 
 ## SIDEBAR NAVIGATION
 
-Sync Area
+Import Area
 Workspace
 Library: Collections / Series
 Search
@@ -851,7 +851,7 @@ Monthly cost examples:
 ## FAQ
 
 **Why don't I see my photos?**
-They must be processed. Go to Sync Area -> Lightbox tab -> click "Analyze Photos".
+They must be processed. Go to Import Area -> Lightbox tab -> click "Analyze Photos".
 
 **How long does photo analysis take?**
 For small batches (fewer than ~50 photos) it typically takes a few minutes. For larger batches (hundreds or thousands of photos) expect 1–4 hours under normal conditions, and up to ~8 hours during peak demand. You do not need to stay on the page -- analysis runs on the server and you will be notified when it finishes. Photos become available in the catalog one by one as they are processed, so you can start using Search, Canvas, and other tools before the full batch is done.
@@ -878,10 +878,10 @@ Depends on your plan. Usage indicators in the sidebar show your current count vs
 Scout (fast, cheap), Assistant (balanced, default), Curator (premium, best quality). Each uses different AI models at different credit costs.
 
 **Can I import from Google Photos?**
-Yes. Connect your Google account in Sync Area or Settings -> Connections. The Google Photos picker lets you select albums or individual photos.
+Yes. Connect your Google account in Import Area or Settings -> Connections. The Google Photos picker lets you select albums or individual photos.
 
 **Can I import from Dropbox?**
-Yes, with a 5 MB per file limit. Connect via Sync Area.
+Yes, with a 5 MB per file limit. Connect via Import Area.
 
 **What is the Omni-Search in the header?**
 A quick-access search bar (desktop only) that searches across photos, collections, series, canvases, tools, and help topics simultaneously. Different from the Search tool.
@@ -907,7 +907,7 @@ Yes, with an adapted layout. Canvas, 3D Atlas, and Series are desktop-only. All 
 
 Collection Set -- Folder that groups collections into a hierarchical structure. Sets can be nested. Deleting a set promotes its contents to the parent level
 Catalog -- All processed photos in your library
-Lightbox -- Uploaded but unprocessed photos (visible only in Sync Area)
+Lightbox -- Uploaded but unprocessed photos (visible only in Import Area)
 Analysis -- AI processing pipeline that extracts tags, scores, embeddings, and metadata
 Embedding -- Vector representation of a photo used for semantic similarity
 Tag -- AI-generated label assigned during analysis, organized by category
