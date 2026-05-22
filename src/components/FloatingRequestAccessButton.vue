@@ -38,8 +38,8 @@ const hiddenRoutes = [
   "help",
   "plan",
   "3d-view",
-  "atlas",
   "2d-view",
+  "world-map",
 ];
 
 // Verificar si el usuario está en modo demo
