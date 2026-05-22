@@ -484,7 +484,12 @@ const confidenceFilter = ref<ConfidenceFilter>([
   "very_likely",
   "likely",
 ]);
-const granularityFilter = ref<GranularityFilter>(["place", "city"]);
+const granularityFilter = ref<GranularityFilter>([
+  "place",
+  "city",
+  "region",
+  "country",
+]);
 
 // Search filters (visual aspects, artistic scores, time range)
 const selectedVisualAspects = ref<string[]>([]);
