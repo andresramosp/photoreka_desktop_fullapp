@@ -362,7 +362,7 @@
                 <!-- Low-success warning -->
                 <div
                   v-if="forecast.lowSuccessWarning"
-                  class="ail-notice ail-notice--warning"
+                  class="ail-notice ail-notice--warning ail-notice--warning-confirm"
                 >
                   <n-icon
                     :component="WarningOutline"
@@ -370,12 +370,18 @@
                     :color="'var(--warning-color)'"
                     class="ail-notice-icon"
                   />
-                  <span>
-                    Most of your photos have low geolocation potential.
-                    <strong>Credits will still be charged</strong> even when the
-                    AI cannot infer a location. We recommend proceeding only if
-                    you understand this.
-                  </span>
+                  <div class="ail-warning-confirm">
+                    <span>
+                      Most of your photos have low geolocation potential.
+                      <strong>Credits will still be charged</strong> even when
+                      the AI cannot infer a location. We recommend proceeding
+                      only if you understand this.
+                    </span>
+                    <label class="ail-warning-checkbox">
+                      <n-checkbox v-model:checked="lowSuccessConfirmed" />
+                      <span>I understand and want to proceed anyway</span>
+                    </label>
+                  </div>
                 </div>
               </template>
 
@@ -442,7 +448,10 @@
               <n-button
                 v-if="phase === 'idle'"
                 type="info"
-                :disabled="photosWithoutLocation === 0"
+                :disabled="
+                  photosWithoutLocation === 0 ||
+                  (forecast?.lowSuccessWarning && !lowSuccessConfirmed)
+                "
                 :loading="isStarting"
                 @click="emit('start')"
               >
@@ -475,6 +484,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { NCheckbox } from "naive-ui";
 import { RocketLaunchOutlined } from "@vicons/material";
 import {
   SparklesOutline,
@@ -526,6 +536,9 @@ const emit = defineEmits<{
   start: [];
 }>();
 
+// ── Low-success confirmation ─────────────────────────────────────────
+const lowSuccessConfirmed = ref(false);
+
 // ── Fake forecast loader ──────────────────────────────────────────────
 const timerElapsed = ref(false);
 let forecastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -535,6 +548,7 @@ watch(
   (val) => {
     if (forecastTimer) clearTimeout(forecastTimer);
     if (val && props.photosWithoutLocation > 0) {
+      lowSuccessConfirmed.value = false;
       timerElapsed.value = false;
       forecastTimer = setTimeout(
         () => {
@@ -602,7 +616,7 @@ const dialogTitle = computed(() => {
   if (phase.value === "running") return "Inferring locations…";
   if (phase.value === "completed") return "Analysis complete";
   if (phase.value === "failed") return "Analysis failed";
-  return "AI location inference";
+  return "AI Location Inference";
 });
 
 const headerIcon = computed(() => {
@@ -817,6 +831,23 @@ const headerIcon = computed(() => {
 .ail-notice--warning {
   background: color-mix(in srgb, var(--error-color) 8%, transparent);
   border-color: color-mix(in srgb, var(--error-color) 45%, transparent);
+}
+
+.ail-warning-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ail-warning-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 500;
+  user-select: none;
 }
 
 .ail-notice-icon {
