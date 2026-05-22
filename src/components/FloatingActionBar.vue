@@ -144,7 +144,10 @@
                 type="primary"
                 size="medium"
                 @click="$emit('send-to-chat')"
-                :disabled="selectedCount === 0"
+                :disabled="
+                  selectedCount === 0 ||
+                  (maxSendToChat !== null && selectedCount > maxSendToChat)
+                "
               >
                 <template #icon>
                   <n-icon>
@@ -153,7 +156,10 @@
                 </template>
               </n-button>
             </template>
-            <span>Send selected photos to ChatLab</span>
+            <span v-if="maxSendToChat !== null && selectedCount > maxSendToChat"
+              >Maximum {{ maxSendToChat }} photos can be sent to ChatLab</span
+            >
+            <span v-else>Send selected photos to ChatLab</span>
           </n-tooltip>
 
           <n-tooltip v-if="showAttachToChat" placement="bottom" trigger="hover">
@@ -162,7 +168,10 @@
                 type="primary"
                 size="medium"
                 @click="$emit('attach-to-chat')"
-                :disabled="selectedCount === 0"
+                :disabled="
+                  selectedCount === 0 ||
+                  (maxAttachToChat !== null && selectedCount > maxAttachToChat)
+                "
               >
                 <template #icon>
                   <n-icon>
@@ -171,7 +180,11 @@
                 </template>
               </n-button>
             </template>
-            <span>Attach selected photos to your message</span>
+            <span
+              v-if="maxAttachToChat !== null && selectedCount > maxAttachToChat"
+              >Maximum {{ maxAttachToChat }} photos can be attached</span
+            >
+            <span v-else>Attach selected photos to your message</span>
           </n-tooltip>
 
           <!-- Divider before delete -->
@@ -281,9 +294,17 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  maxSendToChat: {
+    type: Number,
+    default: 5,
+  },
   showAttachToChat: {
     type: Boolean,
     default: false,
+  },
+  maxAttachToChat: {
+    type: Number,
+    default: 5,
   },
   isDeleting: {
     type: Boolean,

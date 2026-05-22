@@ -247,11 +247,17 @@ export function usePhotoToolSelection() {
         return;
       }
 
+      if (photoIds.length > 5) {
+        message.warning("Only the first 5 photos will be sent to ChatLab");
+      }
+
       // Build minimal photo payloads now, while the store is populated
-      await Promise.all(photoIds.map((id) => photosStore.fetchPhoto(id)));
+      await Promise.all(
+        photoIds.slice(0, 5).map((id) => photosStore.fetchPhoto(id)),
+      );
 
       const photosData = photoIds
-        .slice(0, 10)
+        .slice(0, 5)
         .map((id) =>
           photosStore.photos.find((p) => String(p.id) === String(id)),
         )

@@ -379,7 +379,10 @@
                 </div>
               </template>
 
-              <div v-if="photosWithoutLocation > 0 && forecastReady" class="ail-notices">
+              <div
+                v-if="photosWithoutLocation > 0 && forecastReady"
+                class="ail-notices"
+              >
                 <div class="ail-notice ail-notice--info ail-notice--multi">
                   <div class="ail-notice-item">
                     <n-icon
@@ -406,7 +409,7 @@
                       A <strong>small percentage</strong> of placements may be
                       <strong>imprecise</strong>; you can always
                       <strong>correct them manually</strong> through
-                      <strong>the photo details dialog</strong>.
+                      <strong>the edit button in the marker</strong>.
                     </span>
                   </div>
                 </div>

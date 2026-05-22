@@ -48,7 +48,7 @@ function checkAndShowWelcome() {
   const currentPath = window.location.pathname;
 
   // No mostrar en rutas de configuración de perfil o plan
-  const includedPaths = ["/dashboard", "/workspace", "/sync-area"];
+  const includedPaths = ["/dashboard", "/workspace", "/import-area"];
 
   if (!includedPaths.includes(currentPath)) {
     return;

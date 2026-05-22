@@ -307,7 +307,7 @@
     gap: var(--spacing-lg);
   }
 
-  // .sync-area-header {
+  // .import-area-header {
   //   margin-bottom: 0px !important;
   // }
 }
@@ -340,7 +340,7 @@
     font-size: var(--font-size-sm);
   }
 
-  // .sync-area-header {
+  // .import-area-header {
   //   margin-bottom: 0px !important;
   // }
 }
@@ -393,7 +393,7 @@
 }
 
 /* Catalog Section */
-.sync-area-header {
+.import-area-header {
   // margin-bottom: 24px;
   display: flex;
   gap: 5px;
@@ -403,7 +403,7 @@
   align-items: center;
 }
 
-.sync-area-title {
+.import-area-title {
   font-size: 15px;
   margin-bottom: 5px;
   font-weight: 200;
@@ -413,7 +413,7 @@
 }
 
 @media (max-width: 768px) {
-  .sync-area-title {
+  .import-area-title {
     font-size: 13px;
   }
 }

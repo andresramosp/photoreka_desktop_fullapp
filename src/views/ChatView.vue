@@ -706,6 +706,7 @@
       :show-add-to-collection="true"
       :show-move-to-tool="true"
       :show-attach-to-chat="true"
+      :max-attach-to-chat="5"
       :is-deleting="isDeletingPhotos"
       :is-downloading="isDownloading"
       @clear-selection="clearAllSelectionsAndScopes"

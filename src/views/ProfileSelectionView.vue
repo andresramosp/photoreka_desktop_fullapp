@@ -97,7 +97,7 @@ const completeProfile = async () => {
     const result = await userStore.updateProfile(profilePayload.value);
 
     if (result.success) {
-      router.push({ name: "sync-area", hash: "#upload" });
+      router.push({ name: "import-area", hash: "#upload" });
     } else {
       message.error(result.error || "Error saving profile preferences.");
     }

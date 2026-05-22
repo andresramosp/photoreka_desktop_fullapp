@@ -230,11 +230,11 @@ const APP_TOOLS: SearchResultTool[] = [
   },
   {
     type: "tool",
-    id: "sync-area-upload",
+    id: "import-area-upload",
     name: "Upload Photos",
     description: "Upload and import new photos",
-    icon: "CloudUploadOutline",
-    route: "/sync-area#upload",
+    icon: "ShareOutline",
+    route: "/import-area#upload",
     searchTerms: [
       "upload",
       "import",
@@ -250,11 +250,11 @@ const APP_TOOLS: SearchResultTool[] = [
   },
   {
     type: "tool",
-    id: "sync-area-processing",
+    id: "import-area-processing",
     name: "Photo Processing",
     description: "Analyze and process uploaded photos",
-    icon: "CloudUploadOutline",
-    route: "/sync-area#processing",
+    icon: "ShareOutline",
+    route: "/import-area#processing",
     searchTerms: [
       "process",
       "analyze",

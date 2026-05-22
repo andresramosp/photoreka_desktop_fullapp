@@ -215,8 +215,8 @@ const handleMenuSelect = (key: string) => {
     return;
   }
 
-  if (key === "sync-area") {
-    router.push({ name: "sync-area", hash: "#upload" });
+  if (key === "import-area") {
+    router.push({ name: "import-area", hash: "#upload" });
   } else if (
     key.startsWith("collection-") ||
     key.startsWith("series-") ||

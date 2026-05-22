@@ -44,7 +44,7 @@
               <div class="step-item">
                 1. Go to
                 <button class="tab-link" @click="navigateToSyncArea">
-                  Sync Area
+                  Import Area
                 </button>
               </div>
               <div class="step-item">
@@ -100,7 +100,7 @@ const processedPhotos = computed(() => photosStore.processedPhotos);
 
 // Navigation function for empty state
 const navigateToSyncArea = () => {
-  router.push({ name: "sync-area", hash: "#upload" });
+  router.push({ name: "import-area", hash: "#upload" });
 };
 </script>
 

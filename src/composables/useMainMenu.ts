@@ -249,11 +249,11 @@ export function useMainMenu(closeMobileMenu?: () => void) {
   const isToolDisabledOnMobile = (toolId: string) =>
     isDesktopOnly(toolId) && isMobileDevice();
 
-  // Sync Area (global, outside sections)
+  // Import Area (global, outside sections)
   const syncAreaOption = computed<MenuOption>(() => ({
-    label: "Sync Area",
-    key: "sync-area",
-    icon: renderIcon(toolIcon("sync-area")),
+    label: "Import Area",
+    key: "import-area",
+    icon: renderIcon(toolIcon("import-area")),
   }));
 
   // Workspace (root-level)
@@ -543,7 +543,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     icon: renderIcon(toolIcon("tagcloud")),
   }));
 
-  // Chat option (global, like Sync Area)
+  // Chat option (global, like Import Area)
   const chatOption = computed<MenuOption>(() => ({
     label: "ChatLab",
     key: "chat-lab",

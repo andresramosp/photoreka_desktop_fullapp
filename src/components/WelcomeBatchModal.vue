@@ -273,7 +273,7 @@ const goUpload = () => {
   }
   visible.value = false;
   emit("close");
-  router.push({ name: "sync-area", hash: "#upload" });
+  router.push({ name: "import-area", hash: "#upload" });
 };
 </script>
 

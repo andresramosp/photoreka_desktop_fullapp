@@ -320,6 +320,10 @@ const message = useMessage();
 const mapContainer = ref<HTMLElement | null>(null);
 const map = ref<any>(null);
 const markerClusterLayer = shallowRef<L.MarkerClusterGroup | null>(null);
+// Keeps live marker instances so filter changes can diff instead of clear+rebuild,
+// preventing thumbnail <img> DOM elements from being destroyed and reloaded.
+const photoMarkerMap = new Map<string | number, PhotoMarker>();
+const overflowMarkerMap = new Map<string, PhotoOverflowMarker>(); // key = coordKey
 const hasLoadedInitialPhotos = ref(false);
 const initialMapBounds = ref<GpsCoordinates[] | null>(null);
 const isMapViewportReady = ref(false);
@@ -467,6 +471,7 @@ function commitMapRectSelection() {
 
   locationClearAllSelections();
   locationSelectAllPhotos(selectedIds);
+  nextTick(() => updateMarkerSelectionState());
 }
 
 // Map filter panel state
@@ -749,7 +754,7 @@ async function refreshAiLocationSummary() {
         newlyLocatedPhotoIds.value = newIds;
         await userStore.fetchUsage();
         await nextTick();
-        refreshPhotoMarkers();
+        refreshPhotoMarkers(true);
         getLeafletMap()?.invalidateSize();
         aiLocationStatus.value = resolvedJob;
         showAiLocationDialog.value = true;
@@ -947,6 +952,14 @@ function isNewMarker(marker: MapPhotoMarker): boolean {
   );
 }
 
+function isSelectedMarker(marker: MapPhotoMarker): boolean {
+  const selectedIds = new Set(locationSelectedIds.value);
+  if ("photo" in marker) {
+    return selectedIds.has(marker.photo.id);
+  }
+  return marker.photos.some((photo) => selectedIds.has(photo.id));
+}
+
 function createClusterTileMarkup(markers: MapPhotoMarker[]): string {
   const photos = markers
     .slice(0, 4)
@@ -972,12 +985,21 @@ function createPhotoClusterIcon(cluster: L.MarkerCluster): L.DivIcon {
   );
   const size = getClusterIconSize(count);
   const hasNew = markers.some(isNewMarker);
-  const badgeClass = hasNew
-    ? "photo-cluster-count photo-cluster-count--new"
-    : "photo-cluster-count";
-  const mosaicClass = hasNew
-    ? "photo-cluster-mosaic photo-cluster-mosaic--new"
-    : "photo-cluster-mosaic";
+  const hasSelected = markers.some(isSelectedMarker);
+  const badgeClass = [
+    "photo-cluster-count",
+    hasNew ? "photo-cluster-count--new" : "",
+    hasSelected ? "photo-cluster-count--selected" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const mosaicClass = [
+    "photo-cluster-mosaic",
+    hasNew ? "photo-cluster-mosaic--new" : "",
+    hasSelected ? "photo-cluster-mosaic--selected" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return L.divIcon({
     className: "photo-map-div-icon photo-cluster-div-icon",
@@ -985,6 +1007,7 @@ function createPhotoClusterIcon(cluster: L.MarkerCluster): L.DivIcon {
       <div class="photo-cluster-marker" aria-label="${count} photos">
         <div class="${mosaicClass}">
           ${createClusterTileMarkup(markers)}
+          ${hasSelected ? '<div class="photo-cluster-selection-overlay"></div>' : ""}
         </div>
         <span class="${badgeClass}">${count}</span>
       </div>
@@ -1045,32 +1068,151 @@ function ensureMarkerClusterLayer(): L.MarkerClusterGroup | null {
   return markerClusterLayer.value;
 }
 
-function refreshPhotoMarkers() {
+function clearMarkerMaps() {
+  photoMarkerMap.clear();
+  overflowMarkerMap.clear();
+}
+
+/**
+ * Toggle the --selected class on marker DOM elements to reflect the current
+ * locationSelectedIds set without recreating any DOM or reloading images.
+ * Cluster icons are refreshed via markerClusterGroup.refreshClusters() so
+ * createPhotoClusterIcon can re-evaluate isSelectedMarker for each cluster.
+ */
+function updateMarkerSelectionState() {
+  const selectedIds = new Set(locationSelectedIds.value);
+
+  // Individual photo markers — direct DOM class toggle.
+  photoMarkerMap.forEach((marker, id) => {
+    const iconEl = (marker as any)._icon?.querySelector(
+      ".photo-single-marker",
+    ) as HTMLElement | null;
+    if (!iconEl) return;
+    iconEl.classList.toggle(
+      "photo-single-marker--selected",
+      selectedIds.has(id),
+    );
+  });
+
+  // Overflow markers — toggle if any of their photos are selected.
+  overflowMarkerMap.forEach((marker) => {
+    const iconEl = (marker as any)._icon?.querySelector(
+      ".photo-overflow-marker",
+    ) as HTMLElement | null;
+    if (!iconEl) return;
+    const hasSelected = marker.photos.some((p) => selectedIds.has(p.id));
+    iconEl.classList.toggle("photo-overflow-marker--selected", hasSelected);
+  });
+
+  // Cluster markers — force icon recreation so createPhotoClusterIcon can
+  // read the updated selection state via isSelectedMarker.
+  if (markerClusterLayer.value) {
+    (markerClusterLayer.value as any).refreshClusters?.();
+  }
+}
+
+/**
+ * Update CSS classes on already-rendered marker elements to reflect the current
+ * newlyLocatedPhotoIds / correctedPhotoIds state WITHOUT recreating any DOM or
+ * reloading any image.  Only touches markers that are currently attached to the DOM.
+ */
+function updateExistingMarkerIcons() {
+  photoMarkerMap.forEach((marker, id) => {
+    const iconEl = (marker as any)._icon?.querySelector(
+      ".photo-single-marker",
+    ) as HTMLElement | null;
+    if (!iconEl) return;
+    const isNew = newlyLocatedPhotoIds.value.has(id);
+    const isCorrected = correctedPhotoIds.value.has(id);
+    iconEl.classList.toggle("photo-single-marker--new", isNew);
+    iconEl.classList.toggle("photo-single-marker--corrected", isCorrected);
+  });
+}
+
+function refreshPhotoMarkers(fullReset = false) {
   const clusterLayer = ensureMarkerClusterLayer();
   if (!clusterLayer) return;
 
-  clusterLayer.clearLayers();
+  if (fullReset) {
+    clusterLayer.clearLayers();
+    clearMarkerMaps();
+  }
 
-  const markers = groupPhotosByCoordinate(filteredPhotosWithGps.value).flatMap(
+  // Build the desired set of markers from the current filtered photos.
+  const wantedPhotoIds = new Set<string | number>();
+  const wantedOverflowKeys = new Set<string>();
+  const wantedOverflowData = new Map<
+    string,
+    { photos: PhotoWithGps[]; hiddenCount: number }
+  >();
+  const photoById = new Map<string | number, PhotoWithGps>();
+  filteredPhotosWithGps.value.forEach((p) => photoById.set(p.id, p));
+
+  groupPhotosByCoordinate(filteredPhotosWithGps.value).forEach(
     (coordinatePhotos) => {
+      const coordKey = getCoordinateKey(coordinatePhotos[0].coordinates);
       if (coordinatePhotos.length > MAX_SPIDERFY_MARKERS_PER_POINT) {
         const visiblePhotos = coordinatePhotos.slice(
           0,
           VISIBLE_PHOTOS_PER_OVERFLOW_POINT,
         );
         const hiddenCount = coordinatePhotos.length - visiblePhotos.length;
-
-        return [
-          ...visiblePhotos.map(createPhotoMarker),
-          createPhotoOverflowMarker(coordinatePhotos, hiddenCount),
-        ];
+        visiblePhotos.forEach((p) => wantedPhotoIds.add(p.id));
+        wantedOverflowKeys.add(coordKey);
+        wantedOverflowData.set(coordKey, {
+          photos: coordinatePhotos,
+          hiddenCount,
+        });
+      } else {
+        coordinatePhotos.forEach((p) => wantedPhotoIds.add(p.id));
       }
-
-      return coordinatePhotos.map(createPhotoMarker);
     },
   );
 
-  clusterLayer.addLayers(markers);
+  const toRemove: L.Marker[] = [];
+  const toAdd: L.Marker[] = [];
+
+  // Remove photo markers that are no longer in the filtered set.
+  photoMarkerMap.forEach((marker, id) => {
+    if (!wantedPhotoIds.has(id)) {
+      toRemove.push(marker);
+      photoMarkerMap.delete(id);
+    }
+  });
+
+  // Remove overflow markers that are no longer needed.
+  overflowMarkerMap.forEach((marker, key) => {
+    if (!wantedOverflowKeys.has(key)) {
+      toRemove.push(marker);
+      overflowMarkerMap.delete(key);
+    }
+  });
+
+  // Create markers only for photos not already tracked (keeps existing DOM alive).
+  wantedPhotoIds.forEach((id) => {
+    if (!photoMarkerMap.has(id)) {
+      const photo = photoById.get(id)!;
+      const marker = createPhotoMarker(photo);
+      photoMarkerMap.set(id, marker);
+      toAdd.push(marker);
+    }
+  });
+
+  // Create overflow markers only for coordinate groups not already tracked.
+  wantedOverflowKeys.forEach((key) => {
+    if (!overflowMarkerMap.has(key)) {
+      const { photos, hiddenCount } = wantedOverflowData.get(key)!;
+      const marker = createPhotoOverflowMarker(
+        photos,
+        hiddenCount,
+      ) as PhotoOverflowMarker;
+      overflowMarkerMap.set(key, marker);
+      toAdd.push(marker);
+    }
+  });
+
+  if (toRemove.length > 0) clusterLayer.removeLayers(toRemove);
+  if (toAdd.length > 0) clusterLayer.addLayers(toAdd);
 }
 
 function createPhotoMarker(photo: PhotoWithGps): PhotoMarker {
@@ -1207,6 +1349,7 @@ function removeMarkerClusterLayer() {
   }
 
   markerClusterLayer.value = null;
+  clearMarkerMaps();
 }
 
 // Handle marker click - fetch full photo data and open dialog
@@ -1280,6 +1423,7 @@ interface CorrectionPayload {
   lng: number;
   formattedAddress: string;
   placeId: string | null;
+  granularity: string | null;
 }
 
 function handleCorrectionConfirmed(payload: CorrectionPayload) {
@@ -1311,6 +1455,8 @@ function handleCorrectionConfirmed(payload: CorrectionPayload) {
                 formattedAddress: payload.formattedAddress,
                 geocodeQuery: payload.formattedAddress,
                 placeId: payload.placeId ?? existingInference.placeId,
+                geocodeGranularity:
+                  payload.granularity ?? existingInference.geocodeGranularity,
                 correctedByUser: true,
               }
             : undefined,
@@ -1324,11 +1470,28 @@ function handleCorrectionConfirmed(payload: CorrectionPayload) {
   message.success("Location updated");
 }
 
-watch([confidenceFilter, granularityFilter], () => {
-  if (!hasLoadedInitialPhotos.value) return;
-  newlyLocatedPhotoIds.value = new Set();
-  refreshPhotoMarkers();
+watch(locationSelectedIds, () => {
+  updateMarkerSelectionState();
 });
+
+watch(
+  [
+    confidenceFilter,
+    granularityFilter,
+    selectedVisualAspects,
+    artisticScoreFilters,
+    timeRangeFilter,
+  ],
+  () => {
+    if (!hasLoadedInitialPhotos.value) return;
+    newlyLocatedPhotoIds.value = new Set();
+    refreshPhotoMarkers();
+    // Update CSS classes on existing marker elements to clear the --new
+    // highlight without recreating DOM nodes or reloading thumbnail images.
+    updateExistingMarkerIcons();
+  },
+  { deep: true },
+);
 
 watch(photosWithGpsKey, async () => {
   if (!hasLoadedInitialPhotos.value) return;
@@ -1346,7 +1509,8 @@ watch(photosWithGpsKey, async () => {
     updateInitialMapBounds();
   }
 
-  refreshPhotoMarkers();
+  // Full reset: photo set or coordinates changed (e.g. location correction or AI job).
+  refreshPhotoMarkers(true);
 });
 
 // Load photos on mount
@@ -1701,6 +1865,7 @@ onUnmounted(() => {
 }
 
 :deep(.photo-cluster-mosaic) {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: repeat(2, minmax(0, 1fr));
@@ -1848,6 +2013,69 @@ onUnmounted(() => {
 /* Corrected-marker pulse animation */
 :deep(.photo-single-marker--corrected) {
   animation: markerCorrectPulse 0.7s ease-out forwards;
+}
+
+/* ── Selection overlay — shared accent ring + fill, identical across all marker types ── */
+
+/* Individual photo markers */
+:deep(.photo-single-marker--selected) {
+  border-color: var(--accent-color) !important;
+  box-shadow:
+    0 4px 14px rgba(18, 24, 38, 0.28),
+    0 0 0 3px var(--accent-color) !important;
+}
+
+:deep(.photo-single-marker--selected::after) {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--accent-color);
+  opacity: 0.32;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Overflow (+N) markers */
+:deep(.photo-overflow-marker--selected) {
+  border-color: var(--accent-color) !important;
+  box-shadow:
+    0 4px 14px rgba(18, 24, 38, 0.28),
+    0 0 0 3px var(--accent-color) !important;
+}
+
+:deep(.photo-overflow-marker--selected::after) {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--accent-color);
+  opacity: 0.32;
+  pointer-events: none;
+}
+
+/* Cluster markers — ring on mosaic border */
+:deep(.photo-cluster-mosaic--selected) {
+  border-color: var(--accent-color);
+  box-shadow:
+    0 7px 22px rgba(18, 24, 38, 0.32),
+    0 0 0 3px var(--accent-color);
+}
+
+/* Cluster overlay div injected inside mosaic (clipped to circle by overflow:hidden) */
+:deep(.photo-cluster-selection-overlay) {
+  position: absolute;
+  inset: 0;
+  background: var(--accent-color);
+  opacity: 0.32;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Cluster count badge */
+:deep(.photo-cluster-count--selected) {
+  background: var(--accent-color);
+  color: var(--text-on-accent);
 }
 
 @keyframes markerCorrectPulse {

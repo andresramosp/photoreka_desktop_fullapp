@@ -9,7 +9,7 @@ import CanvasView from "../views/CanvasView.vue";
 import SearchView from "../views/SearchView.vue";
 import CollectionsView from "../views/CollectionsView.vue";
 import SeriesView from "../views/SeriesView.vue";
-import SyncAreaView from "../views/SyncAreaView.vue";
+import ImportAreaView from "../views/ImportAreaView.vue";
 import WorkspaceView from "../views/WorkspaceView.vue";
 import ProjectBuilderView from "../views/ProjectBuilderView.vue";
 import FramerView from "../views/FramerView.vue";
@@ -256,9 +256,9 @@ const router = createRouter({
       },
     },
     {
-      path: "/sync-area",
-      name: "sync-area",
-      component: SyncAreaView,
+      path: "/import-area",
+      name: "import-area",
+      component: ImportAreaView,
       meta: {
         requiresAuth: true,
       },

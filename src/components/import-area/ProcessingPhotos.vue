@@ -3,11 +3,11 @@
     <div class="processing-section">
       <!-- Processing Jobs Table -->
 
-      <div class="sync-area-header">
+      <div class="import-area-header">
         <n-icon size="18" color="var(--primary-color)">
           <BookInformation20Regular />
         </n-icon>
-        <h3 class="sync-area-title">
+        <h3 class="import-area-title">
           <span class="desktop-only"
             >Here you can monitor the analysis process for your photos. They
             will appear in your Workspace once the process is complete (up to
@@ -634,7 +634,7 @@ function isLastFinishedJob(job) {
 .tab-content {
   /* Inherits from .tab-content-container global class */
 }
-/* Responsive text for .sync-area-title */
+/* Responsive text for .import-area-title */
 .mobile-only {
   display: none;
 }

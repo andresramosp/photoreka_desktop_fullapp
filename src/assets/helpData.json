@@ -9,13 +9,13 @@
         {
           "id": "what-is-photoreka",
           "title": "What is Photoreka?",
-          "content": "Photoreka is an **intelligent photo curation and organization platform** designed for photographers. It uses artificial intelligence to analyze, classify, score, and help you rediscover photos in your catalog.\n\nThe core workflow is:\n1. **Upload photos** — Sync Area → Lightbox\n2. **Process with AI** — Sync Area → Analysis\n3. **Explore and create** — Search, Canvas, Collections, Atlas, and more\n\nThe app is available on desktop and mobile, although some tools are desktop-only (Canvas, 3D Atlas, Series).",
+          "content": "Photoreka is an **intelligent photo curation and organization platform** designed for photographers. It uses artificial intelligence to analyze, classify, score, and help you rediscover photos in your catalog.\n\nThe core workflow is:\n1. **Upload photos** — Import Area → Lightbox\n2. **Process with AI** — Import Area → Analysis\n3. **Explore and create** — Search, Canvas, Collections, Atlas, and more\n\nThe app is available on desktop and mobile, although some tools are desktop-only (Canvas, 3D Atlas, Series).",
           "image": null
         },
         {
           "id": "photo-lifecycle",
           "title": "Photo Life Cycle",
-          "content": "Photos move through several internal states as they are processed:\n\n| State | Description |\n|---|---|\n| **uploaded** | Just uploaded, not analyzed |\n| **preprocessing** | Basic pre-analysis in progress |\n| **preprocessed** | Ready for full AI analysis |\n| **processing** | Full AI analysis in progress |\n| **processed** | Fully analyzed and available in all tools |\n\nPhotos only appear in Search, Collections, Atlas, Canvas, etc. when they are in the **processed** state. Photos in earlier states are only visible in the Sync Area.\n\n> **Tip:** If photos do not appear in Search or Workspace, they likely haven't been analyzed yet. Go to **Sync Area → Lightbox** and click **Analyze Photos**.",
+          "content": "Photos move through several internal states as they are processed:\n\n| State | Description |\n|---|---|\n| **uploaded** | Just uploaded, not analyzed |\n| **preprocessing** | Basic pre-analysis in progress |\n| **preprocessed** | Ready for full AI analysis |\n| **processing** | Full AI analysis in progress |\n| **processed** | Fully analyzed and available in all tools |\n\nPhotos only appear in Search, Collections, Atlas, Canvas, etc. when they are in the **processed** state. Photos in earlier states are only visible in the Import Area.\n\n> **Tip:** If photos do not appear in Search or Workspace, they likely haven't been analyzed yet. Go to **Import Area → Lightbox** and click **Analyze Photos**.",
           "image": null
         },
         {
@@ -56,24 +56,24 @@
       "id": "importing-photos",
       "title": "Importing Photos",
       "icon": "cloud-upload",
-      "description": "Sync Area, Lightbox, and the analysis workflow",
+      "description": "Import Area, Lightbox, and the analysis workflow",
       "subtopics": [
         {
-          "id": "sync-area-explained",
-          "title": "The Sync Area",
-          "content": "The Sync Area is your entry point for importing and processing photos — the first tool new users should use.\n\nIt has two tabs:\n\n### Lightbox Tab\n- Lists all photos in **uploaded**, **preprocessing**, or **preprocessed** states\n- Upload new photos via drag & drop or file selector\n- Connect external sources: **Lightroom Plugin** and **Google Photos**\n- Select photos individually or in bulk to send for analysis\n- A floating **Analyze Photos** button appears when photos are ready\n\n### Analyses Tab\n- Shows photos currently in the **processing** state\n- Displays analysis progress\n- Allows navigating back to Lightbox",
+          "id": "import-area-explained",
+          "title": "The Import Area",
+          "content": "The Import Area is your entry point for importing and processing photos — the first tool new users should use.\n\nIt has two tabs:\n\n### Lightbox Tab\n- Lists all photos in **uploaded**, **preprocessing**, or **preprocessed** states\n- Upload new photos via drag & drop or file selector\n- Connect external sources: **Lightroom Plugin** and **Google Photos**\n- Select photos individually or in bulk to send for analysis\n- A floating **Analyze Photos** button appears when photos are ready\n\n### Analyses Tab\n- Shows photos currently in the **processing** state\n- Displays analysis progress\n- Allows navigating back to Lightbox",
           "image": null
         },
         {
           "id": "uploading-photos",
           "title": "Uploading Photos",
-          "content": "Upload photos directly from your computer or mobile device:\n\n1. Go to **Sync Area → Lightbox**\n2. Click the upload area or drag and drop files\n3. Supported formats: JPG, PNG, WebP, HEIC\n4. Maximum file size: 20 MB per photo\n\nAfter upload, photos enter the **preprocessing** stage automatically before becoming ready for full analysis.",
+          "content": "Upload photos directly from your computer or mobile device:\n\n1. Go to **Import Area → Lightbox**\n2. Click the upload area or drag and drop files\n3. Supported formats: JPG, PNG, WebP, HEIC\n4. Maximum file size: 20 MB per photo\n\nAfter upload, photos enter the **preprocessing** stage automatically before becoming ready for full analysis.",
           "image": null
         },
         {
           "id": "google-photos-import",
           "title": "Import from Google Photos",
-          "content": "Connect your Google Photos account to sync your library:\n\n1. Go to **Settings → Integrations**\n2. Click **Connect** next to Google Photos\n3. Authorize Photoreka to access your photos\n4. Return to **Sync Area → Lightbox** to see synced photos ready for analysis",
+          "content": "Connect your Google Photos account to sync your library:\n\n1. Go to **Settings → Integrations**\n2. Click **Connect** next to Google Photos\n3. Authorize Photoreka to access your photos\n4. Return to **Import Area → Lightbox** to see synced photos ready for analysis",
           "image": null
         },
         {
@@ -93,7 +93,7 @@
         {
           "id": "workspace",
           "title": "Workspace",
-          "content": "The Workspace (/workspace) is your main library view — a grid of all **processed** photos in your catalog.\n\n**Features:**\n- Adjustable grid layout\n- Click any photo to open the Photo Info panel\n- Multi-select for batch actions (add to collection, send to tool, download)\n- Photo counter on mobile\n\nIf the Workspace is empty, it will guide you to the Sync Area to upload and analyze photos.",
+          "content": "The Workspace (/workspace) is your main library view — a grid of all **processed** photos in your catalog.\n\n**Features:**\n- Adjustable grid layout\n- Click any photo to open the Photo Info panel\n- Multi-select for batch actions (add to collection, send to tool, download)\n- Photo counter on mobile\n\nIf the Workspace is empty, it will guide you to the Import Area to upload and analyze photos.",
           "image": null
         },
         {

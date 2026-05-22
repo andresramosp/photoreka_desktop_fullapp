@@ -29,7 +29,7 @@
               <!-- Local header -->
               <div class="loc-correction-local-header">
                 <div class="loc-correction-local-header-left">
-                  <n-icon size="15" class="loc-correction-header-icon">
+                  <n-icon size="22" class="loc-correction-header-icon">
                     <svg viewBox="0 0 24 24">
                       <path
                         fill="currentColor"
@@ -38,7 +38,7 @@
                     </svg>
                   </n-icon>
                   <div class="loc-correction-local-header-text">
-                    <span class="loc-correction-title">Correct location</span>
+                    <span class="loc-correction-title">Adjust location</span>
                     <span
                       v-if="currentAddress"
                       class="loc-correction-current-address"
@@ -157,9 +157,9 @@
                     </n-icon>
                     <span>{{ pendingAddress }}</span>
                   </div>
-                  <p class="loc-correction-confirm-question">
+                  <!-- <p class="loc-correction-confirm-question">
                     Update the location of this photo to the address above?
-                  </p>
+                  </p> -->
                 </div>
                 <div class="loc-correction-actions">
                   <n-button size="small" @click="step = 'search'"
@@ -203,6 +203,7 @@ const emit = defineEmits<{
       lng: number;
       formattedAddress: string;
       placeId: string | null;
+      granularity: string | null;
     },
   ];
 }>();
@@ -335,6 +336,7 @@ async function confirmUpdate() {
       lng: geo.lng,
       formattedAddress: geo.formattedAddress ?? pendingAddress.value,
       placeId: geo.placeId ?? null,
+      granularity: geo.granularity ?? null,
     });
 
     emit("confirmed", {
@@ -342,6 +344,7 @@ async function confirmUpdate() {
       lng: geo.lng,
       formattedAddress: geo.formattedAddress ?? pendingAddress.value,
       placeId: geo.placeId ?? null,
+      granularity: geo.granularity ?? null,
     });
     emit("update:show", false);
   } catch (error: any) {
@@ -374,7 +377,7 @@ async function confirmUpdate() {
   border: 1px solid var(--border-color);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
   width: 100%;
-  max-width: 520px;
+  max-width: 550px;
   display: flex;
   flex-direction: column;
   /* overflow visible so the absolute suggestions dropdown isn't clipped */
@@ -384,7 +387,7 @@ async function confirmUpdate() {
   display: flex;
   align-items: stretch;
   flex: 1;
-  min-height: 0;
+  min-height: 160px;
 }
 
 .loc-correction-thumb-col {
@@ -392,7 +395,7 @@ async function confirmUpdate() {
   width: 155px;
   min-height: 155px;
   background: var(--bg-surface);
-  border-radius: 12px 0 0 12px;
+  /* border-radius: 12px 0 0 12px; */
   overflow: hidden;
 }
 
@@ -425,7 +428,7 @@ async function confirmUpdate() {
 
 .loc-correction-local-header-left {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   min-width: 0;
 }
@@ -433,14 +436,13 @@ async function confirmUpdate() {
 .loc-correction-local-header-text {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+
   min-width: 0;
 }
 
 .loc-correction-header-icon {
   color: var(--accent-color);
   flex-shrink: 0;
-  margin-top: 2px;
 }
 
 .loc-correction-title {
@@ -571,7 +573,7 @@ async function confirmUpdate() {
   font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
-  padding: 12px;
+  padding: 5px;
   background: var(--bg-surface);
   border-radius: 8px;
   border: 1px solid var(--border-color);

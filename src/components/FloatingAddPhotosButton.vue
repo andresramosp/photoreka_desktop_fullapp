@@ -27,7 +27,7 @@ const router = useRouter();
 const hiddenRoutes = [
   "canvas",
   "grid-maker",
-  "sync-area",
+  "import-area",
   "settings",
   "help",
   "plan",
@@ -43,8 +43,8 @@ const shouldShow = computed(() => {
 
 // Manejar click del botón
 const handleClick = async () => {
-  // Navegar a sync-area con el hash para la pestaña upload
-  await router.push("/sync-area#upload");
+  // Navegar a import-area con el hash para la pestaña upload
+  await router.push("/import-area#upload");
 
   // Esperar un tick para que se renderice la vista
   setTimeout(() => {

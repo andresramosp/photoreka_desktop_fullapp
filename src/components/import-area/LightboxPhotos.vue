@@ -116,12 +116,12 @@
     <!-- Upload Progress Section - hidden during first import state -->
     <div
       v-if="!isFirstImportState || lightboxPhotos.length > 0"
-      class="sync-area-header"
+      class="import-area-header"
     >
       <n-icon size="18" color="var(--primary-color)">
         <BookInformation20Regular />
       </n-icon>
-      <h3 class="sync-area-title">
+      <h3 class="import-area-title">
         Photo upload and preview area. Click on Analyze Photos to
         <strong>start processing</strong>
       </h3>
@@ -1345,7 +1345,7 @@ defineExpose({
     margin: 0 !important;
   }
 
-  .sync-area-header {
+  .import-area-header {
     align-items: flex-start;
     gap: 8px;
   }

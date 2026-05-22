@@ -10,7 +10,7 @@ Disallow: /storage-plan-setup
 Disallow: /canvas
 Disallow: /search
 Disallow: /collections
-Disallow: /sync-area
+Disallow: /import-area
 Disallow: /3dview
 Disallow: /project-builder
 Disallow: /framer

@@ -33,7 +33,7 @@ const isMobile = ref(false);
 const hiddenRoutes = [
   "canvas",
   "grid-maker",
-  "sync-area",
+  "import-area",
   "settings",
   "help",
   "plan",

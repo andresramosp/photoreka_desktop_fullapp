@@ -365,8 +365,7 @@
                 <div class="keyboard-key">{{ isMac ? "⌘ Cmd" : "Ctrl" }}</div>
               </div>
               <span class="control-text"
-                >+&nbsp;drag to draw a selection rectangle — selects all photos
-                inside regardless of zoom or clusters</span
+                >+&nbsp;drag to draw a selection rectangle</span
               >
             </div>
           </div>
@@ -741,8 +740,7 @@
                     </div>
                   </div>
                   <span class="control-text"
-                    >+&nbsp;drag to draw a selection rectangle — selects all
-                    photos inside regardless of zoom or clusters</span
+                    >+&nbsp;drag to draw a selection rectangle</span
                   >
                 </div>
               </div>

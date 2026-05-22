@@ -13,7 +13,7 @@ import { api } from "@/utils/axios";
 const ROUTE_TO_SECTION = {
   search: "search",
   workspace: "workspace",
-  "sync-area": "sync-area",
+  "import-area": "import-area",
   collections: "collections",
   series: "series",
   "series-detail": "series",
@@ -31,8 +31,8 @@ const SECTION_UI_CONTEXT = {
     "The user is currently on the **Search / Explorer** screen — the main tool to semantically search, filter, and browse their photo library.",
   workspace:
     "The user is currently on the **Workspace** screen — a personal curation board where they pin and organise their favourite or in-progress photos.",
-  "sync-area":
-    "The user is currently on the **Sync Area** — the upload and analysis hub where photos are imported, preprocessed, and sent through the AI analysis pipeline.",
+  "import-area":
+    "The user is currently on the **Import Area** — the upload and analysis hub where photos are imported, preprocessed, and sent through the AI analysis pipeline.",
   collections:
     "The user is currently on the **Collections** screen — where they create and manage named groups of photos for organisation and curation purposes.",
   series:
@@ -48,7 +48,7 @@ const SECTION_UI_CONTEXT = {
  * Add new sections here.
  */
 const PILLS_BY_SECTION = {
-  "sync-area": [
+  "import-area": [
     {
       label: "Explain how photo analysis works",
       prompt:

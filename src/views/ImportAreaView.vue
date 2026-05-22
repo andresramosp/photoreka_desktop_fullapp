@@ -1,9 +1,9 @@
 <template>
-  <div class="sync-area-container view-container">
+  <div class="import-area-container view-container">
     <!-- Header Section -->
     <div class="hub-header">
       <div class="header-content">
-        <h1 class="page-title">Sync Area</h1>
+        <h1 class="page-title">Import Area</h1>
         <p class="page-subtitle">Import and process your photos here.</p>
       </div>
       <div v-if="!isMobile" class="header-actions">
@@ -76,11 +76,11 @@
 import { ref, onMounted, watch, computed, KeepAlive } from "vue";
 
 defineOptions({
-  name: "SyncAreaView",
+  name: "ImportAreaView",
 });
-import LightboxPhotos from "@/components/sync-area/LightboxPhotos.vue";
+import LightboxPhotos from "@/components/import-area/LightboxPhotos.vue";
 import UsageIndicators from "@/components/UsageIndicators.vue";
-import ProcessingPhotos from "@/components/sync-area/ProcessingPhotos.vue";
+import ProcessingPhotos from "@/components/import-area/ProcessingPhotos.vue";
 import FloatingProcessPhotosButton from "@/components/FloatingProcessPhotosButton.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useUserStore } from "@/stores/userStore.ts";
@@ -275,7 +275,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.sync-area-container {
+.import-area-container {
   padding: var(--spacing-2xl);
   margin: 0 auto;
   background-color: var(--bg-body);
@@ -573,7 +573,7 @@ onMounted(() => {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .sync-area-container {
+  .import-area-container {
     padding: 16px;
   }
 
@@ -658,7 +658,7 @@ onMounted(() => {
 }
 
 @media (max-width: 480px) {
-  .sync-area-container {
+  .import-area-container {
     padding: 12px;
   }
 

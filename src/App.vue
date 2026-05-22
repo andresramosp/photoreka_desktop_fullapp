@@ -245,7 +245,7 @@ const allowedHeaderViews = [
   "portfolio-detail",
   "framer",
   "workspace",
-  "sync-area",
+  "import-area",
   "settings",
   "help",
   "report",
@@ -279,7 +279,7 @@ const userStore = useUserStore();
 // Punto único de decisión de destino post-autenticación
 const resolvePostAuthTarget = () => {
   if (!userStore.user?.profiles) return "/profile-setup";
-  if (photosStore.appAccessMode === "blocked") return "/sync-area#upload";
+  if (photosStore.appAccessMode === "blocked") return "/import-area#upload";
   return isMobile.value ? "/workspace" : "/dashboard";
 };
 
@@ -308,7 +308,7 @@ const getKeepAliveComponents = () => {
     "CanvasView",
     "SearchView",
     "CollectionsView",
-    "SyncAreaView",
+    "ImportAreaView",
     "ProjectBuilderView",
     "FramerView",
     "GridMakerView",
