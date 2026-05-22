@@ -758,8 +758,6 @@ async function refreshAiLocationSummary() {
         getLeafletMap()?.invalidateSize();
         aiLocationStatus.value = resolvedJob;
         showAiLocationDialog.value = true;
-        // Mark this job as handled so we don't show the modal again on re-visit
-        sessionStorage.setItem("ai-location-handled-job", resolvedJob.jobId);
       } finally {
         isFinalizingAiLocation.value = false;
       }
@@ -773,15 +771,6 @@ async function refreshAiLocationSummary() {
       };
       await finalizeCompletedJob(resolvedJob);
       return;
-    }
-
-    // Returning to the view after job completed while the user was away
-    if (newJob?.status === "completed" && newJob.jobId) {
-      const lastHandled = sessionStorage.getItem("ai-location-handled-job");
-      if (lastHandled !== newJob.jobId) {
-        await finalizeCompletedJob(newJob);
-        return;
-      }
     }
 
     aiLocationStatus.value = null;
