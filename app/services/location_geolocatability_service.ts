@@ -151,7 +151,7 @@ export default class LocationGeolocatabilityService {
 
     const pct = (n: number) => Math.round((n / total) * 100)
 
-    const lowSuccessWarning = (goodCount + mediumCount) / total < 0.3
+    const lowSuccessWarning = (goodCount + mediumCount) / total < 0.5
 
     return {
       total,

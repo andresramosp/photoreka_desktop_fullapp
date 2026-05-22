@@ -101,7 +101,7 @@ const ESTIMATE_FLOOR_EUR = 0.02
 const RUNNING_STALE_MS = 1000 * 60 * 60 * 12
 
 // TODO: remove before production — limits photos processed during manual testing
-const TEST_PHOTO_LIMIT: number | null = 700
+const TEST_PHOTO_LIMIT: number | null = null
 
 /** Photos taken within this window from the same camera are co-located automatically. */
 const PROXIMITY_WINDOW_MS = 3 * 60 * 1000 // 3 minutes
@@ -910,23 +910,23 @@ export default class AiLocationInferenceService {
     const photos = await query
 
     ///
-    const exhaustedPhotoIds = photos
-      .filter((photo) => this.isLocationExhausted(photo))
-      .map((photo) => photo.id)
-    if (exhaustedPhotoIds.length > 0) {
-      console.log(
-        `[AiLocationInference] Found ${exhaustedPhotoIds.length} exhausted photos: [${exhaustedPhotoIds.join(', ')}]`
-      )
-    }
+    // const exhaustedPhotoIds = photos
+    //   .filter((photo) => this.isLocationExhausted(photo))
+    //   .map((photo) => photo.id)
+    // if (exhaustedPhotoIds.length > 0) {
+    //   console.log(
+    //     `[AiLocationInference] Found ${exhaustedPhotoIds.length} exhausted photos: [${exhaustedPhotoIds.join(', ')}]`
+    //   )
+    // }
 
-    const alreadyLocatedPhotoIds = photos
-      .filter((photo) => this.hasGpsCoordinates(photo))
-      .map((photo) => photo.id)
-    if (alreadyLocatedPhotoIds.length > 0) {
-      console.log(
-        `[AiLocationInference] Found ${alreadyLocatedPhotoIds.length} already located photos: [${alreadyLocatedPhotoIds.join(', ')}]`
-      )
-    }
+    // const alreadyLocatedPhotoIds = photos
+    //   .filter((photo) => this.hasGpsCoordinates(photo))
+    //   .map((photo) => photo.id)
+    // if (alreadyLocatedPhotoIds.length > 0) {
+    //   console.log(
+    //     `[AiLocationInference] Found ${alreadyLocatedPhotoIds.length} already located photos: [${alreadyLocatedPhotoIds.join(', ')}]`
+    //   )
+    // }
 
     const photosWithoutLocation = photos.filter(
       (photo) =>
