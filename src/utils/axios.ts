@@ -54,7 +54,7 @@ const handleApiError = (error: AxiosError) => {
         if (!requestUrl.includes("/api/chat")) {
           notification.warning({
             title: "Insufficient Credits",
-            content: errorData.message || "No credits remaining.",
+            content: errorData.message || "Not enough credits.",
             action: () =>
               h(
                 "a",
