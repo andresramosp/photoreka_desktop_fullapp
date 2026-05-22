@@ -1,6 +1,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import AiLocationInferenceService from '#services/ai_location_inference_service'
 import LocationGeolocatabilityService from '#services/location_geolocatability_service'
+import CreditService from '#services/credit_service'
 
 export default class AiLocationInferenceController {
   public async summary({ request, response, auth }: HttpContext) {
@@ -31,6 +32,16 @@ export default class AiLocationInferenceController {
       await auth.use('api').check()
       const user = auth.use('api').user! as any
       const service = new AiLocationInferenceService()
+
+      const photos = await service.getPhotosWithoutLocation(user.id)
+      const estimatedCredits = AiLocationInferenceService.estimateCredits(photos.length)
+      const hasCredits = await CreditService.canAfford(user.id, estimatedCredits)
+      if (!hasCredits) {
+        return response.status(402).json({
+          message: 'No credits remaining. Please purchase more credits to continue.',
+          code: 'INSUFFICIENT_CREDITS',
+        })
+      }
 
       const job = await service.start(user.id)
       return response.accepted({

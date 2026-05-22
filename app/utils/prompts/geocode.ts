@@ -48,14 +48,14 @@ Set whenever it improves geocoding precision.
 Null if unknown or unhelpful.
 
 - "city":
-City or town name only when reasonably identifiable.
+City or town name ONLY when reasonably identifiable.
 
 Examples:
 "Paris"
 "Madrid"
 "Denpasar"
 
-Null otherwise.
+If not reasonably identifiable, be content with region or country-level inference and set city=null.
 
 - "place":
 ONLY for globally world-famous landmarks or streets whose names are universally recognized geocoding targets.
