@@ -1,10 +1,11 @@
 <template>
   <div class="world-map-view">
     <n-button
-      v-if="photosWithGps.length > 0 && !isAiLocationButtonDisabled"
+      v-if="photosWithGps.length > 0"
       class="ai-location-button"
       type="info"
-      @click="openAiLocationDialog"
+      :loading="isAiLocationRunning"
+      @click="handleAiLocationClick"
     >
       <template #icon>
         <n-icon :component="SparklesOutline" />
@@ -60,9 +61,8 @@
           </p>
           <n-button
             type="info"
-            :disabled="isAiLocationButtonDisabled"
             :loading="isAiLocationRunning"
-            @click="openAiLocationDialog"
+            @click="handleAiLocationClick"
           >
             <template #icon>
               <n-icon :component="SparklesOutline" />
@@ -799,6 +799,14 @@ function stopAiLocationPolling() {
   if (!aiLocationPollTimer) return;
   window.clearInterval(aiLocationPollTimer);
   aiLocationPollTimer = null;
+}
+
+function handleAiLocationClick() {
+  if (isAiLocationButtonDisabled.value) {
+    message.info("Coming Soon!");
+    return;
+  }
+  openAiLocationDialog();
 }
 
 async function openAiLocationDialog() {
