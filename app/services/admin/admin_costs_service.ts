@@ -81,11 +81,24 @@ export default class AdminCostsService {
    * All temporal data now comes from cost_logs table.
    * Falls back to user.costHistory for users who have legacy data without logs.
    */
-  static async getOverview(): Promise<CostsOverview> {
+  static async getOverview(month?: string): Promise<CostsOverview> {
     const now = new Date()
     const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
     const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
     const lastMonthKey = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`
+
+    // ── Month filter ──
+    let filterStart: Date | null = null
+    let filterEnd: Date | null = null
+    if (month && /^\d{4}-\d{2}$/.test(month)) {
+      const [y, m] = month.split('-').map(Number)
+      filterStart = new Date(y, m - 1, 1)
+      filterEnd = new Date(y, m, 1)
+    }
+    const filterClause = filterStart ? 'AND created_at >= ? AND created_at < ?' : ''
+    const filterParams: string[] = filterStart
+      ? [filterStart.toISOString(), filterEnd!.toISOString()]
+      : []
 
     // ── 1. Monthly aggregation from cost_logs (last 12 months) ──
     const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1)
@@ -196,15 +209,19 @@ export default class AdminCostsService {
       lastMonthCost > 0 ? this.round(((thisMonthCost - lastMonthCost) / lastMonthCost) * 100) : null
 
     // ── 4. Category breakdown from cost_logs ──
-    const categoryRows = await db.rawQuery(`
+    const categoryRows = await db.rawQuery(
+      `
       SELECT
         category,
         COALESCE(SUM(cost_in_eur), 0)::float AS cost_eur,
         COALESCE(SUM(calls), 0)::int AS calls
       FROM cost_logs
+      WHERE true ${filterClause}
       GROUP BY category
       ORDER BY cost_eur DESC
-    `)
+    `,
+      filterParams
+    )
 
     const categoryTotal = categoryRows.rows.reduce((s: number, r: any) => s + r.cost_eur, 0)
     const byCategory: CategoryBreakdown[] = categoryRows.rows.map((r: any) => ({
@@ -215,16 +232,19 @@ export default class AdminCostsService {
     }))
 
     // ── 5. Model breakdown from cost_logs ──
-    const modelRows = await db.rawQuery(`
+    const modelRows = await db.rawQuery(
+      `
       SELECT
         COALESCE(model, 'unknown') AS model,
         COALESCE(SUM(cost_in_eur), 0)::float AS cost_eur,
         COALESCE(SUM(calls), 0)::int AS calls
       FROM cost_logs
-      WHERE model IS NOT NULL
+      WHERE model IS NOT NULL ${filterClause}
       GROUP BY model
       ORDER BY cost_eur DESC
-    `)
+    `,
+      filterParams
+    )
 
     const byModel: ModelBreakdown[] = modelRows.rows.map((r: any) => ({
       model: r.model,
@@ -233,16 +253,19 @@ export default class AdminCostsService {
     }))
 
     // ── 6. Task breakdown from cost_logs ──
-    const taskRows = await db.rawQuery(`
+    const taskRows = await db.rawQuery(
+      `
       SELECT
         COALESCE(task, 'unknown') AS task,
         COALESCE(SUM(cost_in_eur), 0)::float AS cost_eur,
         COALESCE(SUM(calls), 0)::int AS calls
       FROM cost_logs
-      WHERE task IS NOT NULL
+      WHERE task IS NOT NULL ${filterClause}
       GROUP BY task
       ORDER BY cost_eur DESC
-    `)
+    `,
+      filterParams
+    )
 
     const byTask: TaskBreakdown[] = taskRows.rows.map((r: any) => ({
       task: r.task,
@@ -251,7 +274,8 @@ export default class AdminCostsService {
     }))
 
     // ── 7. Top users (from cost_logs, enriched with user info) ──
-    const topUserRows = await db.rawQuery(`
+    const topUserRows = await db.rawQuery(
+      `
       SELECT
         cl.user_id,
         u.name,
@@ -268,20 +292,28 @@ export default class AdminCostsService {
           SUM(cost_in_eur)::float AS cat_cost,
           SUM(calls)::int AS cat_calls
         FROM cost_logs
+        WHERE true ${filterClause}
         GROUP BY user_id, category
       ) cl
       JOIN users u ON u.id = cl.user_id
       GROUP BY cl.user_id, u.name, u.email
       ORDER BY total_cost_eur DESC
       LIMIT 15
-    `)
+    `,
+      filterParams
+    )
 
     // Get this month's cost per top user
     const topUserIds = topUserRows.rows.map((r: any) => r.user_id)
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
 
     let thisMonthByUser: Record<number, number> = {}
-    if (topUserIds.length > 0) {
+    if (filterStart) {
+      // When filtering by month, thisMonthCost = the filtered period's cost
+      for (const r of topUserRows.rows) {
+        thisMonthByUser[r.user_id] = r.total_cost_eur
+      }
+    } else if (topUserIds.length > 0) {
       const thisMonthUserRows = await db.rawQuery(
         `
         SELECT

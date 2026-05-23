@@ -7,9 +7,10 @@ export default class CostsAdminController {
   /**
    * Full costs overview dashboard data
    */
-  async overview({ response }: HttpContext) {
+  async overview({ request, response }: HttpContext) {
     try {
-      const data = await AdminCostsService.getOverview()
+      const month = request.input('month') as string | undefined
+      const data = await AdminCostsService.getOverview(month)
       return response.ok(data)
     } catch (error) {
       return response.internalServerError({
