@@ -68,6 +68,7 @@
               class="bar-col"
               @mouseenter="hoveredMonth = m"
               @mouseleave="hoveredMonth = null"
+              @click="selectMonth(m.month)"
             >
               <div class="bar-tooltip" v-if="hoveredMonth === m">
                 <strong>{{ formatMonthLabel(m.month) }}</strong
@@ -77,12 +78,28 @@
               <div
                 class="bar-fill"
                 :style="{ height: barHeight(m.costEur) + '%' }"
-                :class="{ 'bar-current': m.month === currentMonthKey }"
+                :class="{
+                  'bar-current': m.month === currentMonthKey,
+                  'bar-selected': selectedMonth === m.month,
+                  'bar-dimmed':
+                    selectedMonth !== null && selectedMonth !== m.month,
+                }"
               ></div>
               <span class="bar-label">{{ shortMonth(m.month) }}</span>
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- ═══ Month filter badge ═══ -->
+      <div v-if="selectedMonth" class="month-filter-badge">
+        <span
+          >Showing breakdown for:
+          <strong>{{ formatMonthLabel(selectedMonth) }}</strong></span
+        >
+        <button class="clear-filter-btn" @click="clearFilter">
+          ✕ Clear filter
+        </button>
       </div>
 
       <!-- ═══ Category + Model side-by-side ═══ -->
@@ -239,6 +256,7 @@ const message = useMessage();
 const loading = ref(false);
 const data = ref<CostsData | null>(null);
 const hoveredMonth = ref<CostsData["monthly"][0] | null>(null);
+const selectedMonth = ref<string | null>(null);
 
 const now = new Date();
 const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -305,16 +323,32 @@ function topCategory(
   return formatCategoryName(top[0]);
 }
 
-async function fetchData() {
-  loading.value = true;
+async function fetchData(month?: string) {
+  if (!data.value) loading.value = true;
   try {
-    const res = await api.get("/api/admin/costs/overview");
+    const params = month ? { month } : {};
+    const res = await api.get("/api/admin/costs/overview", { params });
     data.value = res.data;
   } catch {
     message.error("Failed to load costs data");
   } finally {
     loading.value = false;
   }
+}
+
+function selectMonth(monthKey: string) {
+  if (selectedMonth.value === monthKey) {
+    selectedMonth.value = null;
+    fetchData();
+  } else {
+    selectedMonth.value = monthKey;
+    fetchData(monthKey);
+  }
+}
+
+function clearFilter() {
+  selectedMonth.value = null;
+  fetchData();
 }
 
 onMounted(() => fetchData());
@@ -445,7 +479,7 @@ onMounted(() => fetchData());
   justify-content: flex-end;
   height: 100%;
   position: relative;
-  cursor: default;
+  cursor: pointer;
 }
 
 .bar-fill {
@@ -461,8 +495,51 @@ onMounted(() => fetchData());
   background: #6366f1;
 }
 
+.bar-fill.bar-selected {
+  background: #4f46e5;
+  box-shadow: 0 0 0 2px #c7d2fe;
+}
+
+.bar-fill.bar-dimmed {
+  opacity: 0.35;
+}
+
 .bar-col:hover .bar-fill {
   opacity: 0.85;
+}
+
+/* ═══ Month filter badge ═══ */
+.month-filter-badge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 8px;
+  padding: 8px 14px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: #4338ca;
+}
+
+.month-filter-badge strong {
+  color: #3730a3;
+}
+
+.clear-filter-btn {
+  background: none;
+  border: 1px solid #a5b4fc;
+  border-radius: 6px;
+  color: #6366f1;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.clear-filter-btn:hover {
+  background: #e0e7ff;
 }
 
 .bar-label {
