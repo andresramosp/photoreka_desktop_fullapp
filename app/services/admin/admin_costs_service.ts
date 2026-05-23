@@ -81,19 +81,27 @@ export default class AdminCostsService {
    * All temporal data now comes from cost_logs table.
    * Falls back to user.costHistory for users who have legacy data without logs.
    */
-  static async getOverview(month?: string): Promise<CostsOverview> {
+  static async getOverview(dateFrom?: string, dateTo?: string): Promise<CostsOverview> {
     const now = new Date()
     const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
     const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
     const lastMonthKey = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`
 
-    // ── Month filter ──
+    // ── Date range filter ──
     let filterStart: Date | null = null
     let filterEnd: Date | null = null
-    if (month && /^\d{4}-\d{2}$/.test(month)) {
-      const [y, m] = month.split('-').map(Number)
-      filterStart = new Date(y, m - 1, 1)
-      filterEnd = new Date(y, m, 1)
+    if (dateFrom && /^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) {
+      filterStart = new Date(dateFrom + 'T00:00:00.000Z')
+    }
+    if (dateTo && /^\d{4}-\d{2}-\d{2}$/.test(dateTo)) {
+      const d = new Date(dateTo + 'T00:00:00.000Z')
+      d.setUTCDate(d.getUTCDate() + 1) // exclusive upper bound
+      filterEnd = d
+    }
+    // Require both bounds; ignore partial ranges
+    if (!filterStart || !filterEnd) {
+      filterStart = null
+      filterEnd = null
     }
     const filterClause = filterStart ? 'AND created_at >= ? AND created_at < ?' : ''
     const filterParams: string[] = filterStart

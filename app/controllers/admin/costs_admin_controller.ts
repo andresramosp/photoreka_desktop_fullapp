@@ -9,8 +9,9 @@ export default class CostsAdminController {
    */
   async overview({ request, response }: HttpContext) {
     try {
-      const month = request.input('month') as string | undefined
-      const data = await AdminCostsService.getOverview(month)
+      const dateFrom = request.input('dateFrom') as string | undefined
+      const dateTo = request.input('dateTo') as string | undefined
+      const data = await AdminCostsService.getOverview(dateFrom, dateTo)
       return response.ok(data)
     } catch (error) {
       return response.internalServerError({
