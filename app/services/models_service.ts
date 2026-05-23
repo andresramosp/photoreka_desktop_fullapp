@@ -1051,7 +1051,12 @@ export default class ModelsService {
     model: ModelName,
     generationConfig: any = { temperature: 0.1 },
     useCache: boolean = true,
-    throwOnError: boolean = false
+    throwOnError: boolean = false,
+    thinkingConfigOverride?: {
+      thinkingBudget?: number
+      thinkingLevel?: string
+      includeThoughts?: boolean
+    }
   ): Promise<any> {
     let finalResult, parsedResult, rawResult
     try {
@@ -1073,13 +1078,38 @@ export default class ModelsService {
         apiKey: env.get('GEMINI_API_KEY'),
       })
 
-      // Configure generation options
-      generationConfig = {
+      // Configure generation options.
+      // Minimum thinking by default: Gemini 2.5 → thinkingBudget:0 (fully off);
+      // Gemini 3 → MINIMAL (closest to off; model may still think for hard tasks).
+      // Callers can override via thinkingConfigOverride without changing their call-site.
+      const isGemini3 = model.startsWith('gemini-3')
+      const defaultThinkingConfig = isGemini3
+        ? { thinkingLevel: 'MINIMAL' } // MINIMAL = lowest Gemini 3 level (Google docs, 2026-05-18)
+        : { thinkingBudget: 0 } // Gemini 2.5: 0 fully disables thinking
+      const config: GenerateContentConfig = {
         ...generationConfig,
         topP: 1,
         topK: 30,
-        thinkingConfig: { includeThoughts: false, thinkingBudget: 0 },
+        thinkingConfig: thinkingConfigOverride ?? defaultThinkingConfig,
         maxOutputTokens: 2500,
+        safetySettings: [
+          {
+            category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+            threshold: HarmBlockThreshold.BLOCK_NONE,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+            threshold: HarmBlockThreshold.BLOCK_NONE,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+            threshold: HarmBlockThreshold.BLOCK_NONE,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+            threshold: HarmBlockThreshold.BLOCK_NONE,
+          },
+        ],
       }
 
       // Generate content using the client (with retries for transient errors)
@@ -1090,25 +1120,7 @@ export default class ModelsService {
           result = await ai.models.generateContent({
             model,
             contents,
-            generationConfig,
-            safetySettings: [
-              {
-                category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-                threshold: HarmBlockThreshold.BLOCK_NONE,
-              },
-              {
-                category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                threshold: HarmBlockThreshold.BLOCK_NONE,
-              },
-              {
-                category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                threshold: HarmBlockThreshold.BLOCK_NONE,
-              },
-              {
-                category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                threshold: HarmBlockThreshold.BLOCK_NONE,
-              },
-            ],
+            config,
           })
           break // success, exit retry loop
         } catch (retryError: any) {
@@ -1138,11 +1150,16 @@ export default class ModelsService {
       const usageMetadata = result.usageMetadata || {}
       const promptTokens = usageMetadata.promptTokenCount || 0
       const completionTokens = usageMetadata.candidatesTokenCount || 0
-      const totalTokens = usageMetadata.totalTokenCount || promptTokens + completionTokens
+      // Thinking tokens are billed separately by Google (even when thinkingBudget: 0 is set,
+      // some models may still emit a small number). Use output price as a conservative estimate
+      // since Google charges thinking tokens at the output rate.
+      const thinkingTokens = (usageMetadata as any).thoughtsTokenCount || 0
+      const totalTokens =
+        usageMetadata.totalTokenCount || promptTokens + completionTokens + thinkingTokens
 
       // Calculate costs
       const inputCost = promptTokens * PRICES[model].input_cache_miss * USD_TO_EUR
-      const outputCost = completionTokens * PRICES[model].output * USD_TO_EUR
+      const outputCost = (completionTokens + thinkingTokens) * PRICES[model].output * USD_TO_EUR
       const totalCostInEur = inputCost + outputCost
 
       rawResult = result.text || ''
@@ -1159,6 +1176,7 @@ export default class ModelsService {
           totalTokens,
           promptTokens,
           completionTokens,
+          thinkingTokens,
           // Gemini no reporta cached tokens de la misma manera
           promptCacheMissTokens: promptTokens,
           promptCacheHitTokens: 0,

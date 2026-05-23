@@ -1,6 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import pLimit from 'p-limit'
-import ReportReviewManager from '../managers/report_review_manager.js'
+import ReportReviewManager, { REVIEW_TYPE_CONFIG } from '../managers/report_review_manager.js'
 import type { ReviewType } from '../managers/report_review_manager.js'
 import User from '#models/user'
 import Photo from '#models/photo'
@@ -61,6 +61,7 @@ export default class ReportReviewController {
             totalCostInEur += result.cost.totalCostInEur
             UserCostService.record(user.id, 'report_review', result.cost.totalCostInEur, 1, {
               task: reviewType,
+              model: REVIEW_TYPE_CONFIG[reviewType].model,
             }).catch(() => {})
           }
 
@@ -348,6 +349,7 @@ export default class ReportReviewController {
       if (result?.cost?.totalCostInEur) {
         UserCostService.record(user.id, 'report_review', result.cost.totalCostInEur, 1, {
           task: reviewType,
+          model: REVIEW_TYPE_CONFIG[reviewType].model,
         }).catch(() => {})
       }
 
@@ -375,6 +377,7 @@ export default class ReportReviewController {
       if (result?.cost?.totalCostInEur) {
         UserCostService.record(parseInt(userId), 'report_review', result.cost.totalCostInEur, 1, {
           task: reviewTypeParam,
+          model: REVIEW_TYPE_CONFIG[reviewTypeParam].model,
         }).catch(() => {})
       }
 

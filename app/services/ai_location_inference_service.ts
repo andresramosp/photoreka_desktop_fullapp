@@ -30,6 +30,7 @@ export type LocationInferenceStatus = 'running' | 'completed' | 'failed'
 interface AiLocationInferenceConfig {
   provider: LLMProvider
   model: ModelName
+  thinkingLevel: 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH'
   batchSize: number
   batchConcurrency: number
   imageSource: ImageSource
@@ -81,6 +82,7 @@ export interface LocationInferenceJobState {
 export const AI_LOCATION_INFERENCE_CONFIG: AiLocationInferenceConfig = {
   provider: 'gemini',
   model: 'gemini-3-flash-preview',
+  thinkingLevel: 'MINIMAL',
   batchSize: 4,
   batchConcurrency: 8,
   imageSource: 'thumbnail',
@@ -101,7 +103,7 @@ const ESTIMATE_FLOOR_EUR = 0.02
 const RUNNING_STALE_MS = 1000 * 60 * 60 * 12
 
 // TODO: remove before production — limits photos processed during manual testing
-const TEST_PHOTO_LIMIT: number | null = null
+const TEST_PHOTO_LIMIT: number | null = 100
 
 /** Photos taken within this window from the same camera are co-located automatically. */
 const PROXIMITY_WINDOW_MS = 3 * 60 * 1000 // 3 minutes
@@ -695,7 +697,8 @@ export default class AiLocationInferenceService {
                   mediaResolution: MediaResolution.MEDIA_RESOLUTION_HIGH,
                 },
                 false,
-                true
+                true,
+                { thinkingLevel: AI_LOCATION_INFERENCE_CONFIG.thinkingLevel }
               )
             : await trackedModels.getGPTResponse(
                 opts.systemPrompt,

@@ -247,7 +247,7 @@ export default class AdminCostsService {
         COALESCE(SUM(cost_in_eur), 0)::float AS cost_eur,
         COALESCE(SUM(calls), 0)::int AS calls
       FROM cost_logs
-      WHERE model IS NOT NULL ${filterClause}
+      WHERE true ${filterClause}
       GROUP BY model
       ORDER BY cost_eur DESC
     `,

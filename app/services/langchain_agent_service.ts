@@ -214,6 +214,7 @@ export type TokenUsageEntry = {
   inputTokens: number
   cachedTokens: number
   outputTokens: number
+  thinkingTokens: number
   totalTokens: number
   costEur: number
 }
@@ -1012,7 +1013,7 @@ export default class LangchainAgentService {
       `[Agent] ✅ Done. Tools used: [${session.toolsUsed.join(', ') || 'none'}] | Photo groups: ${photoGroups.length} (${allPhotoIds.length} total IDs)`
     )
     console.log(
-      `[Agent] 💰 Cost: €${total.costEur.toFixed(6)} | Tokens in=${total.inputTokens} (cached=${total.cachedTokens}) out=${total.outputTokens}`
+      `[Agent] 💰 Cost: €${total.costEur.toFixed(6)} | Tokens in=${total.inputTokens} (cached=${total.cachedTokens}) out=${total.outputTokens} thinking=${total.thinkingTokens}`
     )
     console.log(
       `[Agent] 📤 Output preview: "${output.slice(0, 200)}${output.length > 200 ? '…' : ''}"`
@@ -1152,11 +1153,20 @@ export default class LangchainAgentService {
   ) {
     const provider = LangchainAgentService.getProviderFromModel(model)
     if (provider === 'gemini') {
+      // Gemini 2.5 disables thinking via thinkingBudget:0; Gemini 3+ uses thinkingLevel.
+      // When thinking is enabled, includeThoughts surfaces the reasoning in the response
+      // for cost-tracking verification (total_tokens still includes thinking either way).
+      const isGemini3 = model.startsWith('gemini-3')
+      const thinkingConfig = disableThinking
+        ? isGemini3
+          ? { thinkingLevel: 'LOW' as any } // LangChain types lag; Google API accepts MINIMAL (lowest level)
+          : { thinkingBudget: 0 }
+        : { includeThoughts: true }
       return new ChatGoogleGenerativeAI({
         apiKey: process.env.GEMINI_API_KEY,
         model,
         maxOutputTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
-        ...(disableThinking ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+        thinkingConfig,
         safetySettings: [
           {
             category: HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -1490,7 +1500,15 @@ export default class LangchainAgentService {
     const inputTokens = usageMeta?.input_tokens ?? 0
     const outputTokens = usageMeta?.output_tokens ?? 0
     const cachedTokens = usageMeta?.input_token_details?.cache_read ?? 0
-    const totalTokens = usageMeta?.total_tokens ?? inputTokens + outputTokens
+    const totalFromMeta = usageMeta?.total_tokens ?? 0
+    // LangChain's convertUsageMetadata maps candidatesTokenCount → output_tokens but does NOT
+    // expose thoughtsTokenCount. However, Google's API always sets:
+    //   totalTokenCount = promptTokenCount + candidatesTokenCount + thoughtsTokenCount
+    // so we derive thinking tokens as the difference. If the model is not thinking, the
+    // difference will be 0. This is the only reliable way to get thinking tokens from LangChain.
+    const thinkingTokens =
+      totalFromMeta > 0 ? Math.max(0, totalFromMeta - inputTokens - outputTokens) : 0
+    const totalTokens = totalFromMeta || inputTokens + outputTokens
 
     const prices = (
       PRICES as Record<
@@ -1504,11 +1522,11 @@ export default class LangchainAgentService {
       costEur =
         (cacheMiss * prices.input_cache_miss +
           cachedTokens * prices.input_cache_hit +
-          outputTokens * prices.output) *
+          (outputTokens + thinkingTokens) * prices.output) *
         USD_TO_EUR
     }
 
-    return { label, inputTokens, cachedTokens, outputTokens, totalTokens, costEur }
+    return { label, inputTokens, cachedTokens, outputTokens, thinkingTokens, totalTokens, costEur }
   }
 
   private static sumUsageEntries(entries: TokenUsageEntry[]): TokenUsageEntry {
@@ -1518,6 +1536,7 @@ export default class LangchainAgentService {
         inputTokens: acc.inputTokens + e.inputTokens,
         cachedTokens: acc.cachedTokens + e.cachedTokens,
         outputTokens: acc.outputTokens + e.outputTokens,
+        thinkingTokens: acc.thinkingTokens + e.thinkingTokens,
         totalTokens: acc.totalTokens + e.totalTokens,
         costEur: acc.costEur + e.costEur,
       }),
@@ -1526,6 +1545,7 @@ export default class LangchainAgentService {
         inputTokens: 0,
         cachedTokens: 0,
         outputTokens: 0,
+        thinkingTokens: 0,
         totalTokens: 0,
         costEur: 0,
       }
