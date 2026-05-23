@@ -57,6 +57,18 @@
         </div>
       </div>
 
+      <!-- ═══ Date range filter bar ═══ -->
+      <div class="filter-bar">
+        <span class="filter-label">Date range</span>
+        <n-date-picker
+          v-model:value="dateRange"
+          type="daterange"
+          clearable
+          size="small"
+          @update:value="onDateRangeChange"
+        />
+      </div>
+
       <!-- ═══ Monthly Chart ═══ -->
       <div class="card">
         <h3 class="card-title">Monthly Cost Trend</h3>
@@ -80,9 +92,9 @@
                 :style="{ height: barHeight(m.costEur) + '%' }"
                 :class="{
                   'bar-current': m.month === currentMonthKey,
-                  'bar-selected': selectedMonth === m.month,
+                  'bar-selected': activeMonthKey === m.month,
                   'bar-dimmed':
-                    selectedMonth !== null && selectedMonth !== m.month,
+                    activeMonthKey !== null && activeMonthKey !== m.month,
                 }"
               ></div>
               <span class="bar-label">{{ shortMonth(m.month) }}</span>
@@ -92,10 +104,9 @@
       </div>
 
       <!-- ═══ Month filter badge ═══ -->
-      <div v-if="selectedMonth" class="month-filter-badge">
+      <div v-if="dateRange" class="month-filter-badge">
         <span
-          >Showing breakdown for:
-          <strong>{{ formatMonthLabel(selectedMonth) }}</strong></span
+          >Showing breakdown for: <strong>{{ formatDateRange() }}</strong></span
         >
         <button class="clear-filter-btn" @click="clearFilter">
           ✕ Clear filter
@@ -215,7 +226,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { NSpin, useMessage } from "naive-ui";
+import { NSpin, NDatePicker, useMessage } from "naive-ui";
 import { api } from "../../utils/axios";
 
 interface CostsData {
@@ -256,7 +267,8 @@ const message = useMessage();
 const loading = ref(false);
 const data = ref<CostsData | null>(null);
 const hoveredMonth = ref<CostsData["monthly"][0] | null>(null);
-const selectedMonth = ref<string | null>(null);
+const dateRange = ref<[number, number] | null>(null);
+const activeMonthKey = ref<string | null>(null);
 
 const now = new Date();
 const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -323,10 +335,31 @@ function topCategory(
   return formatCategoryName(top[0]);
 }
 
-async function fetchData(month?: string) {
+function toDateStr(ts: number): string {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function formatDateRange(): string {
+  if (!dateRange.value) return "";
+  const opts: Intl.DateTimeFormatOptions = {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  };
+  const from = new Date(dateRange.value[0]).toLocaleDateString("en-US", opts);
+  const to = new Date(dateRange.value[1]).toLocaleDateString("en-US", opts);
+  return `${from} – ${to}`;
+}
+
+async function fetchData() {
   if (!data.value) loading.value = true;
   try {
-    const params = month ? { month } : {};
+    const params: Record<string, string> = {};
+    if (dateRange.value) {
+      params.dateFrom = toDateStr(dateRange.value[0]);
+      params.dateTo = toDateStr(dateRange.value[1]);
+    }
     const res = await api.get("/api/admin/costs/overview", { params });
     data.value = res.data;
   } catch {
@@ -337,17 +370,27 @@ async function fetchData(month?: string) {
 }
 
 function selectMonth(monthKey: string) {
-  if (selectedMonth.value === monthKey) {
-    selectedMonth.value = null;
-    fetchData();
+  const [y, m] = monthKey.split("-").map(Number);
+  if (activeMonthKey.value === monthKey) {
+    activeMonthKey.value = null;
+    dateRange.value = null;
   } else {
-    selectedMonth.value = monthKey;
-    fetchData(monthKey);
+    activeMonthKey.value = monthKey;
+    const start = new Date(y, m - 1, 1);
+    const end = new Date(y, m, 0); // last day of month
+    dateRange.value = [start.getTime(), end.getTime()];
   }
+  fetchData();
+}
+
+function onDateRangeChange(_val: [number, number] | null) {
+  activeMonthKey.value = null;
+  fetchData();
 }
 
 function clearFilter() {
-  selectedMonth.value = null;
+  dateRange.value = null;
+  activeMonthKey.value = null;
   fetchData();
 }
 
@@ -457,6 +500,21 @@ onMounted(() => fetchData());
   color: #94a3b8;
   font-size: 13px;
   font-style: italic;
+}
+
+/* ═══ Filter bar ═══ */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.filter-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  white-space: nowrap;
 }
 
 /* ═══ Bar Chart ═══ */
