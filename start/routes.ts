@@ -505,6 +505,10 @@ router
       'runGlobalClipEmbeddings',
     ])
     router.get('/api/admin/health/tasks', [HealthAdminController, 'activeTasks'])
+
+    // Admin System management
+    const SystemAdminController = () => import('#controllers/admin/system_admin_controller')
+    router.post('/api/admin/system/cache/invalidate', [SystemAdminController, 'invalidateCache'])
   })
   .use([middleware.auth(), middleware.admin()])
 
