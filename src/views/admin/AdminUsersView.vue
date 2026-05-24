@@ -320,11 +320,23 @@ const reviewFilterOptions = [
   { label: "Reviewed", value: "reviewed" },
 ];
 
+function getUserPhotoCount(user: UserRow): number {
+  return Number(user.usage?.analyzedPhotosUsed ?? user.photosCount ?? 0);
+}
+
+function hasReviewablePhotos(user: UserRow): boolean {
+  return getUserPhotoCount(user) > 0;
+}
+
 const filteredUsers = computed(() => {
   if (filterNeedsReview.value === "pending")
-    return users.value.filter((u) => !u.photosReviewedAt);
+    return users.value.filter(
+      (u) => hasReviewablePhotos(u) && !u.photosReviewedAt,
+    );
   if (filterNeedsReview.value === "reviewed")
-    return users.value.filter((u) => !!u.photosReviewedAt);
+    return users.value.filter(
+      (u) => hasReviewablePhotos(u) && !!u.photosReviewedAt,
+    );
   return users.value;
 });
 
@@ -700,7 +712,7 @@ const columns = computed<DataTableColumn<UserRow>[]>(() => [
     width: 100,
     sorter: true,
     render(row) {
-      return h("span", null, String(row.usage?.analyzedPhotosUsed || 0));
+      return h("span", null, String(getUserPhotoCount(row)));
     },
   },
   {
@@ -741,6 +753,8 @@ const columns = computed<DataTableColumn<UserRow>[]>(() => [
     key: "_review",
     width: 105,
     render(row) {
+      if (!hasReviewablePhotos(row)) return null;
+
       const reviewed = !!row.photosReviewedAt;
       return h(
         NButton,
