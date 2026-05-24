@@ -46,6 +46,7 @@ import AdminUsersView from "../views/admin/AdminUsersView.vue";
 import AdminCostsView from "../views/admin/AdminCostsView.vue";
 import AdminPaymentsView from "../views/admin/AdminPaymentsView.vue";
 import AdminHealthView from "../views/admin/AdminHealthView.vue";
+import AdminSystemView from "../views/admin/AdminSystemView.vue";
 import AdminUserDetailView from "../views/admin/AdminUserDetailView.vue";
 
 const router = createRouter({
@@ -481,6 +482,11 @@ const router = createRouter({
           path: "health",
           name: "admin-health",
           component: AdminHealthView,
+        },
+        {
+          path: "system",
+          name: "admin-system",
+          component: AdminSystemView,
         },
       ],
     },
