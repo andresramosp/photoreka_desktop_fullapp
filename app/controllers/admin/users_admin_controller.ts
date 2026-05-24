@@ -203,6 +203,21 @@ export default class UsersAdminController {
   }
 
   /**
+   * Mark a user's photos as reviewed
+   */
+  async markPhotosReviewed({ params, response }: HttpContext) {
+    try {
+      const result = await AdminUsersService.markPhotosReviewed(params.id)
+      return response.ok({ message: 'Photos marked as reviewed', ...result })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to mark photos as reviewed',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
    * Generate a short-lived impersonation token for a user (admin only)
    */
   async impersonate({ params, response }: HttpContext) {

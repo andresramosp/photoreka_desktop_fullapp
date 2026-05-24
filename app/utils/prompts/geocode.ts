@@ -20,6 +20,7 @@ Core rules:
 - Leave fields null rather than guessing.
 - Never invent details to make a location appear more complete.
 - Never force all fields to be filled.
+- Images that are too abstract, heavily blurred, extremely close-up, low-detail, overexposed, underexposed, motion-blurred, or lacking meaningful contextual geographic evidence must be classified as "unknown" with all location fields set to null.
 
 Field definitions:
 

@@ -5,8 +5,8 @@ import UsageService from '#services/usage_service'
 /** 1 credit = €0.001 */
 const EUR_PER_CREDIT = 0.001
 
-/** Default margin applied on top of the raw EUR cost for variable-cost LLM usage. */
-export const DEFAULT_COST_MARGIN_PERCENT = 30
+/** Default billing multiplier applied to raw EUR cost for variable-cost LLM usage. */
+export const DEFAULT_COST_MULTIPLIER = 2
 
 // ─── Fixed credit costs ─────────────────────────────────
 
@@ -20,17 +20,17 @@ export const CLIP_CROP_CREDITS = 5
 
 export default class CreditService {
   /**
-   * Margin percent applied to variable EUR costs before converting them to credits.
-   * Override with CREDIT_MARGIN_PERCENT if needed.
+   * Billing multiplier applied to variable EUR costs before converting them to credits.
+   * Override with CREDIT_MARGIN_MULTIPLIER if needed.
    */
-  static getCostMarginPercent(): number {
-    const configuredPercent = Number(process.env.CREDIT_MARGIN_PERCENT)
+  static getCostMultiplier(): number {
+    const configuredMultiplier = Number(process.env.CREDIT_MARGIN_MULTIPLIER)
 
-    if (!Number.isFinite(configuredPercent) || configuredPercent < 0) {
-      return DEFAULT_COST_MARGIN_PERCENT
+    if (Number.isFinite(configuredMultiplier) && configuredMultiplier >= 1) {
+      return configuredMultiplier
     }
 
-    return configuredPercent
+    return DEFAULT_COST_MULTIPLIER
   }
 
   /**
@@ -39,8 +39,7 @@ export default class CreditService {
   static applyMargin(costEur: number): number {
     if (costEur <= 0) return 0
 
-    const multiplier = 1 + this.getCostMarginPercent() / 100
-    return costEur * multiplier
+    return costEur * this.getCostMultiplier()
   }
 
   /**

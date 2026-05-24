@@ -217,10 +217,10 @@ router
       PortfolioBuildController,
       'previewStyleWeights',
     ])
-    router.get('/api/portfolio-build/estimate-credits', [
-      PortfolioBuildController,
-      'estimateCredits',
-    ])
+    // router.get('/api/portfolio-build/estimate-credits', [
+    //   PortfolioBuildController,
+    //   'estimateCredits',
+    // ])
     router.get('/api/portfolio-build/default-weights', [
       PortfolioBuildController,
       'getDefaultWeights',
@@ -240,7 +240,6 @@ router
       'estimateCredits',
     ])
     router.get('/api/location-inference/summary', [AiLocationInferenceController, 'summary'])
-    router.get('/api/location-inference/assess', [AiLocationInferenceController, 'assess'])
     router.post('/api/location-inference/start', [AiLocationInferenceController, 'start'])
 
     // Geocoding autocomplete (Mapbox Search Box) + location correction
@@ -467,6 +466,10 @@ router
     router.put('/api/admin/users/:id/usage', [UsersAdminController, 'updateUsage'])
     router.get('/api/admin/users/:id/activities', [UsersAdminController, 'activities'])
     router.get('/api/admin/users/:id/photos', [UsersAdminController, 'photos'])
+    router.post('/api/admin/users/:id/mark-photos-reviewed', [
+      UsersAdminController,
+      'markPhotosReviewed',
+    ])
     router.get('/api/admin/activities', [UsersAdminController, 'globalActivities'])
     router.post('/api/admin/users/:id/impersonate', [UsersAdminController, 'impersonate'])
 

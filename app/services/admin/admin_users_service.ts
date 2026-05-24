@@ -28,6 +28,7 @@ export interface AdminUserListItem {
   preferredSource: string | null
   profiles: string | null
   emailConfirmedAt: string | null
+  photosReviewedAt: string | null
   createdAt: string
   updatedAt: string
   // Computed
@@ -115,6 +116,7 @@ export default class AdminUsersService {
       totalCostEur: u.costHistory?.totalCostInEur ?? 0,
       usage: u.usage,
       costHistory: u.costHistory,
+      photosReviewedAt: u.photosReviewedAt?.toISO() ?? null,
     }))
   }
 
@@ -251,6 +253,16 @@ export default class AdminUsersService {
     await user.save()
 
     return usage
+  }
+
+  /**
+   * Mark a user's photos as reviewed (sets photos_reviewed_at to now)
+   */
+  static async markPhotosReviewed(userId: number): Promise<{ photosReviewedAt: string }> {
+    const user = await User.findOrFail(userId)
+    user.photosReviewedAt = DateTime.now()
+    await user.save()
+    return { photosReviewedAt: user.photosReviewedAt.toISO()! }
   }
 
   /**

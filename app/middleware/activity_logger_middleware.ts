@@ -208,6 +208,16 @@ const ROUTE_MAP: RouteDescriptor[] = [
     type: 'collection_delete',
     meta: (_b, p) => ({ collectionId: p?.id }),
   },
+  // Bulk delete (destroyMany)
+  {
+    method: 'DELETE',
+    pattern: /\/collections$/,
+    type: 'collection_delete',
+    meta: (b) => ({
+      collectionIds: Array.isArray(b?.ids) ? b.ids : [],
+      count: Array.isArray(b?.ids) ? b.ids.length : 0,
+    }),
+  },
   {
     method: 'POST',
     pattern: /\/collections\/\d+\/photos$/,
@@ -273,14 +283,12 @@ const ROUTE_MAP: RouteDescriptor[] = [
     method: 'GET',
     pattern: /\/report-review\/should-build$/,
     type: 'report_build',
-    meta: (_b, _p, r) => {
-      const action = r?.action ?? null
-      if (action !== 'BUILDING' && action !== 'RE-BUILDING') return null
-      return {
-        action,
-        currentPhotos: r?.stats?.currentPhotos ?? null,
-      }
-    },
+    meta: (_b, _p, r) => ({
+      action: r?.action ?? null,
+      reason: r?.reason ?? null,
+      currentPhotos: r?.stats?.currentPhotos ?? null,
+      totalChanges: r?.stats?.totalChanges ?? null,
+    }),
   },
   {
     method: 'POST',

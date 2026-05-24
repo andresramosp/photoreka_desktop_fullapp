@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import AiLocationInferenceService from '#services/ai_location_inference_service'
-import LocationGeolocatabilityService from '#services/location_geolocatability_service'
 import CreditService from '#services/credit_service'
 
 export default class AiLocationInferenceController {
@@ -18,23 +17,28 @@ export default class AiLocationInferenceController {
     }
   }
 
-  public async estimateCredits({ request, response }: HttpContext) {
-    const count = Number(request.qs().count ?? 0)
-    return response.ok({
-      photoCount: Math.max(0, Math.floor(count)),
-      estimatedCredits: AiLocationInferenceService.estimateCredits(count),
-      estimatedRawEur: AiLocationInferenceService.estimateRawEur(count),
-    })
-  }
+  // public async estimateCredits({ request, response }: HttpContext) {
+  //   const count = Number(request.qs().count ?? 0)
+  //   const rawRange = AiLocationInferenceService.estimateRawEurRange(count)
+  //   return response.ok({
+  //     photoCount: Math.max(0, Math.floor(count)),
+  //     estimatedCredits: AiLocationInferenceService.estimateCreditsRange(count),
+  //     estimatedRawEur: rawRange,
+  //   })
+  // }
 
-  public async start({ response, auth }: HttpContext) {
+  public async start({ request, response, auth }: HttpContext) {
     try {
       await auth.use('api').check()
       const user = auth.use('api').user! as any
       const service = new AiLocationInferenceService()
 
+      const rawLimit = request.body()?.limit
+      const limit = typeof rawLimit === 'number' && rawLimit > 0 ? Math.floor(rawLimit) : undefined
+
       const photos = await service.getPhotosWithoutLocation(user.id)
-      const estimatedCredits = AiLocationInferenceService.estimateCredits(photos.length)
+      const effectiveCount = limit !== undefined ? Math.min(limit, photos.length) : photos.length
+      const estimatedCredits = AiLocationInferenceService.estimateCredits(effectiveCount)
       const hasCredits = await CreditService.canAfford(user.id, estimatedCredits)
       if (!hasCredits) {
         return response.status(402).json({
@@ -43,7 +47,7 @@ export default class AiLocationInferenceController {
         })
       }
 
-      const job = await service.start(user.id)
+      const job = await service.start(user.id, limit)
       return response.accepted({
         success: true,
         job,
@@ -59,20 +63,6 @@ export default class AiLocationInferenceController {
       }
 
       console.error('[AiLocationInferenceController] start error:', error)
-      return response.internalServerError({ error: error.message })
-    }
-  }
-
-  public async assess({ response, auth }: HttpContext) {
-    try {
-      await auth.use('api').check()
-      const user = auth.use('api').user! as any
-      const service = new AiLocationInferenceService()
-      const photos = await service.getPhotosWithoutLocation(user.id)
-      const forecast = LocationGeolocatabilityService.forecast(photos)
-      return response.ok(forecast)
-    } catch (error: any) {
-      console.error('[AiLocationInferenceController] assess error:', error)
       return response.internalServerError({ error: error.message })
     }
   }
