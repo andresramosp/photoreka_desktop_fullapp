@@ -30,6 +30,15 @@
         @update:value="fetchUsers"
       />
 
+      <n-select
+        v-model:value="filterNeedsReview"
+        placeholder="Photo review"
+        clearable
+        size="small"
+        style="width: 155px"
+        :options="reviewFilterOptions"
+      />
+
       <div class="filters-spacer" />
 
       <n-tag :bordered="false" size="small" type="info">
@@ -79,7 +88,7 @@
         <n-pagination
           v-model:page="currentPage"
           :page-size="pageSize"
-          :item-count="users.length"
+          :item-count="filteredUsers.length"
           size="small"
         />
       </div>
@@ -160,6 +169,61 @@
       </div>
     </div>
 
+    <!-- Review Images Modal -->
+    <n-modal
+      v-model:show="reviewModalVisible"
+      preset="card"
+      :title="`Photos — ${reviewModalUserName} (${reviewModalItems.length})`"
+      style="max-width: 920px; width: 95vw"
+      :segmented="{ content: true, footer: true }"
+    >
+      <div v-if="reviewModalLoading" class="photos-modal-loading">
+        <n-spin show />
+      </div>
+      <div v-else-if="reviewModalError" class="photos-modal-error">
+        Failed to load photos.
+      </div>
+      <div v-else-if="reviewModalItems.length === 0" class="photos-modal-empty">
+        No photos found for this user.
+      </div>
+      <div v-else class="photos-grid">
+        <div
+          v-for="photo in reviewModalItems"
+          :key="photo.id"
+          class="photo-thumb-wrap"
+          :title="photo.originalFileName ?? String(photo.id)"
+        >
+          <img
+            :src="photo.thumbnailUrl"
+            :alt="photo.originalFileName ?? String(photo.id)"
+            class="photo-thumb"
+            loading="lazy"
+          />
+          <span class="photo-thumb-id">#{{ photo.id }}</span>
+        </div>
+      </div>
+      <template #footer>
+        <div class="review-modal-footer">
+          <span
+            v-if="reviewModalReviewedAt"
+            class="review-modal-status reviewed"
+          >
+            ✓ Reviewed on {{ formatDate(reviewModalReviewedAt) }}
+          </span>
+          <span v-else class="review-modal-status pending"
+            >Not yet reviewed</span
+          >
+          <n-button
+            type="success"
+            :loading="reviewModalMarkingReviewed"
+            @click="markPhotosReviewed"
+          >
+            {{ reviewModalReviewedAt ? "Update review" : "Mark as reviewed" }}
+          </n-button>
+        </div>
+      </template>
+    </n-modal>
+
     <!-- Delete confirmation modal -->
     <n-modal v-model:show="showDeleteModal" preset="dialog" type="error">
       <template #header>Delete User</template>
@@ -202,6 +266,8 @@ import {
   CheckmarkCircleOutline as ActivateIcon,
   RefreshOutline as RefreshIcon,
   CopyOutline as CopyIcon,
+  EyeOutline as EyeIcon,
+  CheckmarkDoneOutline as CheckedIcon,
 } from "@vicons/ionicons5";
 import { api } from "../../utils/axios";
 
@@ -215,6 +281,7 @@ interface UserRow {
   preferredSource: string | null;
   profiles: string | null;
   emailConfirmedAt: string | null;
+  photosReviewedAt: string | null;
   createdAt: string;
   updatedAt: string;
   photosCount: number;
@@ -241,20 +308,89 @@ const loading = ref(false);
 
 const searchQuery = ref("");
 const filterActive = ref<string | null>(null);
+const filterNeedsReview = ref<string | null>(null);
 const sortBy = ref<string | null>(null);
 const sortDir = ref<string | null>(null);
 
 const currentPage = ref(1);
 const pageSize = 20;
 
+const reviewFilterOptions = [
+  { label: "Needs review", value: "pending" },
+  { label: "Reviewed", value: "reviewed" },
+];
+
+const filteredUsers = computed(() => {
+  if (filterNeedsReview.value === "pending")
+    return users.value.filter((u) => !u.photosReviewedAt);
+  if (filterNeedsReview.value === "reviewed")
+    return users.value.filter((u) => !!u.photosReviewedAt);
+  return users.value;
+});
+
 const paginatedUsers = computed(() => {
   const start = (currentPage.value - 1) * pageSize;
-  return users.value.slice(start, start + pageSize);
+  return filteredUsers.value.slice(start, start + pageSize);
 });
 
 const showDeleteModal = ref(false);
 const userToDelete = ref<UserRow | null>(null);
 const deleting = ref(false);
+
+// ─── Review Images Modal ───
+const reviewModalVisible = ref(false);
+const reviewModalLoading = ref(false);
+const reviewModalError = ref(false);
+const reviewModalMarkingReviewed = ref(false);
+const reviewModalUserId = ref<number | null>(null);
+const reviewModalUserName = ref("");
+const reviewModalReviewedAt = ref<string | null>(null);
+const reviewModalItems = ref<
+  { id: number; thumbnailUrl: string; originalFileName: string | null }[]
+>([]);
+
+async function openReviewModal(row: UserRow) {
+  reviewModalUserId.value = row.id;
+  reviewModalUserName.value = row.name;
+  reviewModalReviewedAt.value = row.photosReviewedAt;
+  reviewModalItems.value = [];
+  reviewModalError.value = false;
+  reviewModalLoading.value = true;
+  reviewModalVisible.value = true;
+  try {
+    const { data } = await api.get(`/api/admin/users/${row.id}/photos`);
+    reviewModalItems.value = data.photos;
+  } catch {
+    reviewModalError.value = true;
+  } finally {
+    reviewModalLoading.value = false;
+  }
+}
+
+async function markPhotosReviewed() {
+  if (!reviewModalUserId.value) return;
+  reviewModalMarkingReviewed.value = true;
+  try {
+    const { data } = await api.post(
+      `/api/admin/users/${reviewModalUserId.value}/mark-photos-reviewed`,
+    );
+    reviewModalReviewedAt.value = data.photosReviewedAt;
+    const idx = users.value.findIndex((u) => u.id === reviewModalUserId.value);
+    if (idx !== -1) {
+      users.value[idx] = {
+        ...users.value[idx],
+        photosReviewedAt: data.photosReviewedAt,
+      };
+    }
+    message.success("Photos marked as reviewed");
+    // cerrar dialog
+    reviewModalVisible.value = false;
+  } catch {
+    message.error("Failed to mark photos as reviewed");
+  } finally {
+    reviewModalMarkingReviewed.value = false;
+  }
+}
 
 // ─── Global Activity Log ───
 const activities = ref<GlobalActivityItem[]>([]);
@@ -316,7 +452,7 @@ const activeOptions = [
   { label: "Inactive", value: "false" },
 ];
 
-const filteredCount = computed(() => users.value.length);
+const filteredCount = computed(() => filteredUsers.value.length);
 
 function goToUser(row: UserRow) {
   router.push({ name: "admin-user-detail", params: { id: row.id } });
@@ -580,17 +716,17 @@ const columns = computed<DataTableColumn<UserRow>[]>(() => [
       );
     },
   },
-  {
-    title: "Credits",
-    key: "credits",
-    width: 100,
-    render(row) {
-      if (!row.usage) return h("span", { class: "cell-dim" }, "—");
-      const used = row.usage.creditsUsed || 0;
-      const available = row.usage.creditsAvailable || 0;
-      return h("span", null, `${used}/${available}`);
-    },
-  },
+  // {
+  //   title: "Credits",
+  //   key: "credits",
+  //   width: 100,
+  //   render(row) {
+  //     if (!row.usage) return h("span", { class: "cell-dim" }, "—");
+  //     const used = row.usage.creditsUsed || 0;
+  //     const available = row.usage.creditsAvailable || 0;
+  //     return h("span", null, `${used}/${available}`);
+  //   },
+  // },
   {
     title: "Created",
     key: "createdAt",
@@ -598,6 +734,38 @@ const columns = computed<DataTableColumn<UserRow>[]>(() => [
     sorter: true,
     render(row) {
       return h("span", { class: "cell-dim" }, formatDate(row.createdAt));
+    },
+  },
+  {
+    title: "Review",
+    key: "_review",
+    width: 105,
+    render(row) {
+      const reviewed = !!row.photosReviewedAt;
+      return h(
+        NButton,
+        {
+          size: "tiny",
+          type: reviewed ? "success" : "warning",
+          secondary: true,
+          title: reviewed
+            ? `Reviewed on ${formatDate(row.photosReviewedAt)}`
+            : "Photos not yet reviewed",
+          onClick: (e: MouseEvent) => {
+            e.stopPropagation();
+            openReviewModal(row);
+          },
+        },
+        {
+          icon: () =>
+            h(
+              NIcon,
+              { size: 14 },
+              { default: () => h(reviewed ? CheckedIcon : EyeIcon) },
+            ),
+          default: () => (reviewed ? "Reviewed" : "Review"),
+        },
+      );
     },
   },
   {
@@ -1037,5 +1205,76 @@ onMounted(() => {
   .section-header h1 {
     font-size: 18px;
   }
+}
+
+/* ===== Review Images Modal ===== */
+.photos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+
+.photo-thumb-wrap {
+  position: relative;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f1f5f9;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.photo-thumb-id {
+  position: absolute;
+  bottom: 3px;
+  left: 4px;
+  font-size: 10px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 3px;
+  padding: 1px 4px;
+  line-height: 1.4;
+}
+
+.photos-modal-loading,
+.photos-modal-error,
+.photos-modal-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.review-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.review-modal-status {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.review-modal-status.reviewed {
+  color: #22c55e;
+}
+
+.review-modal-status.pending {
+  color: #94a3b8;
 }
 </style>

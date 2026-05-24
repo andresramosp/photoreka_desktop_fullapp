@@ -197,11 +197,12 @@
 
     <AiLocationModal
       v-model:show="showAiLocationDialog"
-      :photos-without-location="backendPhotosWithoutLocation"
+      :photos-to-process="backendPhotosToProcess"
+      :discarded-photos="aiLocationDiscardedPhotos"
       :estimated-credits="estimatedAiLocationCredits"
       :status="aiLocationStatus"
       :is-starting="isStartingAiLocation"
-      :forecast="aiLocationForecast"
+      :forecast="aiLocationGeolocatability"
       @start="startAiLocationInference"
     />
 
@@ -222,6 +223,17 @@
       />
       <div v-if="getPhotoAddress(hoveredMapPhoto)" class="map-tooltip-footer">
         {{ getPhotoAddress(hoveredMapPhoto) }}
+      </div>
+      <!-- [DEBUG] Proximity anchor info -->
+      <div
+        v-if="
+          ENABLE_DEBUG_PROXITTY &&
+          getProximitySourceId(hoveredMapPhoto) !== null
+        "
+        class="map-tooltip-dbg-proximity"
+      >
+        <span class="map-tooltip-dbg-badge">↗</span>
+        Anchor #{{ getProximitySourceId(hoveredMapPhoto) }}
       </div>
     </div>
 
@@ -275,7 +287,7 @@ import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import type {
   AiLocationJobStatus,
-  GeolocatabilityForecast,
+  GeolocatabilityAssessment,
 } from "@/components/world-map/AiLocationModal.vue";
 import { LMap, LTileLayer, LControlLayers } from "@vue-leaflet/vue-leaflet";
 import { useIsMobile } from "@/composables/useIsMobile.js";
@@ -320,6 +332,7 @@ const message = useMessage();
 const mapContainer = ref<HTMLElement | null>(null);
 const map = ref<any>(null);
 const markerClusterLayer = shallowRef<L.MarkerClusterGroup | null>(null);
+const fitViewControl = shallowRef<L.Control | null>(null);
 // Keeps live marker instances so filter changes can diff instead of clear+rebuild,
 // preventing thumbnail <img> DOM elements from being destroyed and reloaded.
 const photoMarkerMap = new Map<string | number, PhotoMarker>();
@@ -357,10 +370,14 @@ const isFinalizingAiLocation = ref(false);
 const isStartingAiLocation = ref(false);
 const aiLocationStatus = ref<AiLocationJobStatus | null>(null);
 const aiLocationSummaryCount = ref<number | null>(null);
-const aiLocationEstimatedCredits = ref<number | null>(null);
-const aiLocationForecast = ref<GeolocatabilityForecast | null>(null);
+const aiLocationDiscardedPhotos = ref(0);
+const aiLocationEstimatedCredits = ref<{ min: number; max: number } | null>(
+  null,
+);
+const aiLocationGeolocatability = ref<GeolocatabilityAssessment | null>(null);
 let resizeObserver: ResizeObserver | null = null;
 let aiLocationPollTimer: ReturnType<typeof window.setInterval> | null = null;
+let aiLocationSummaryRequestSeq = 0;
 const { isMobile } = useIsMobile();
 
 // Photo IDs that were newly geo-inferred in the last completed AI location job.
@@ -368,6 +385,8 @@ const { isMobile } = useIsMobile();
 const newlyLocatedPhotoIds = ref<Set<string | number>>(new Set());
 // Photo IDs whose location was manually corrected (triggers a brief pulse animation).
 const correctedPhotoIds = ref<Set<string | number>>(new Set());
+// [DEBUG] Enable to visualise proximity-located photos and their anchor markers.
+const ENABLE_DEBUG_PROXITTY = false;
 const hoveredMapPhoto = ref<PhotoWithGps | null>(null);
 const mapTooltipPosition = ref({ x: 0, y: 0 });
 
@@ -687,14 +706,16 @@ const activeFiltersCount = computed(
   () => confidenceFilter.value.length + granularityFilter.value.length,
 );
 
-const backendPhotosWithoutLocation = computed(
-  () => aiLocationSummaryCount.value ?? photosWithoutGps.value.length,
+const backendPhotosToProcess = computed(
+  () => aiLocationSummaryCount.value ?? 0,
 );
 
 const estimatedAiLocationCredits = computed(
   () =>
-    aiLocationEstimatedCredits.value ??
-    Math.max(1, backendPhotosWithoutLocation.value),
+    aiLocationEstimatedCredits.value ?? {
+      min: 0,
+      max: 0,
+    },
 );
 
 const isAiLocationRunning = computed(
@@ -707,7 +728,50 @@ const isAiLocationButtonDisabled = computed(
   () => import.meta.env.VITE_AI_LOCATION_DISABLED === "true",
 );
 
+function mergeAiLocationJobStatus(
+  previous: AiLocationJobStatus | null,
+  next: AiLocationJobStatus,
+): AiLocationJobStatus {
+  if (!previous || previous.jobId !== next.jobId) return next;
+
+  const previousIsTerminal = previous.status !== "running";
+  const status =
+    previousIsTerminal && next.status === "running"
+      ? previous.status
+      : next.status;
+  const progressPercent =
+    status === "completed"
+      ? 100
+      : Math.max(previous.progressPercent ?? 0, next.progressPercent ?? 0);
+
+  return {
+    ...next,
+    status,
+    total: Math.max(previous.total || 0, next.total || 0),
+    processed: Math.max(previous.processed || 0, next.processed || 0),
+    located: Math.max(previous.located || 0, next.located || 0),
+    unknown: Math.max(previous.unknown || 0, next.unknown || 0),
+    uncertain: Math.max(previous.uncertain || 0, next.uncertain || 0),
+    geocodeMiss: Math.max(previous.geocodeMiss || 0, next.geocodeMiss || 0),
+    failed: Math.max(previous.failed || 0, next.failed || 0),
+    creditsCharged: Math.max(
+      previous.creditsCharged || 0,
+      next.creditsCharged || 0,
+    ),
+    costEur: Math.max(previous.costEur || 0, next.costEur || 0),
+    llmInferred: Math.max(previous.llmInferred || 0, next.llmInferred || 0),
+    progressPercent,
+    progressStage:
+      status === "completed"
+        ? "completed"
+        : status === "failed"
+          ? "failed"
+          : (next.progressStage ?? previous.progressStage),
+  };
+}
+
 async function refreshAiLocationSummary() {
+  const requestSeq = ++aiLocationSummaryRequestSeq;
   const previousJob = aiLocationStatus.value;
   const wasRunning = previousJob?.status === "running";
   const params = previousJob?.jobId ? { jobId: previousJob.jobId } : undefined;
@@ -716,26 +780,23 @@ async function refreshAiLocationSummary() {
     const { data } = await api.get("/api/location-inference/summary", {
       params,
     });
-    aiLocationSummaryCount.value = data.photosWithoutLocation ?? null;
-    aiLocationEstimatedCredits.value = data.estimatedCredits ?? null;
+    if (requestSeq !== aiLocationSummaryRequestSeq) return;
 
-    // Fetch forecast in parallel only when opening idle modal (not during polling)
-    if (!wasRunning && data.job?.status !== "running") {
-      api
-        .get("/api/location-inference/assess")
-        .then(({ data: f }) => {
-          aiLocationForecast.value = f ?? null;
-        })
-        .catch(() => {
-          aiLocationForecast.value = null;
-        });
-    }
+    aiLocationSummaryCount.value =
+      data.photosToProcess ?? data.photosWithoutLocation ?? null;
+    aiLocationDiscardedPhotos.value =
+      data.discardedPhotos ?? data.geolocatability?.discarded?.count ?? 0;
+    aiLocationEstimatedCredits.value = data.estimatedCredits ?? null;
+    aiLocationGeolocatability.value = data.geolocatability ?? null;
 
     const newJob: AiLocationJobStatus | null = data.job ?? null;
 
     if (newJob?.status === "running") {
       const wasAlreadyRunning = aiLocationStatus.value?.status === "running";
-      aiLocationStatus.value = newJob;
+      aiLocationStatus.value = mergeAiLocationJobStatus(
+        aiLocationStatus.value,
+        newJob,
+      );
       startAiLocationPolling();
       // Re-open the progress modal when returning to the view mid-job
       if (!wasAlreadyRunning) {
@@ -773,8 +834,12 @@ async function refreshAiLocationSummary() {
         ...previousJob,
         status: "completed",
         processed: previousJob.total,
+        progressPercent: 100,
+        progressStage: "completed",
       };
-      await finalizeCompletedJob(resolvedJob);
+      await finalizeCompletedJob(
+        mergeAiLocationJobStatus(aiLocationStatus.value, resolvedJob),
+      );
       return;
     }
 
@@ -786,7 +851,7 @@ async function refreshAiLocationSummary() {
 
 function startAiLocationPolling() {
   if (aiLocationPollTimer) return;
-  aiLocationPollTimer = window.setInterval(refreshAiLocationSummary, 5000);
+  aiLocationPollTimer = window.setInterval(refreshAiLocationSummary, 2000);
 }
 
 function stopAiLocationPolling() {
@@ -811,11 +876,12 @@ async function openAiLocationDialog() {
   await refreshAiLocationSummary();
 }
 
-async function startAiLocationInference() {
+async function startAiLocationInference(limit: number) {
+  aiLocationSummaryRequestSeq++;
   isStartingAiLocation.value = true;
   isFinalizingAiLocation.value = false;
   try {
-    const { data } = await api.post("/api/location-inference/start");
+    const { data } = await api.post("/api/location-inference/start", { limit });
     aiLocationStatus.value = data.job;
     await userStore.fetchUsage();
     startAiLocationPolling();
@@ -828,6 +894,59 @@ async function startAiLocationInference() {
 
 function getLeafletMap(): L.Map | null {
   return map.value?.leafletObject ?? null;
+}
+
+function fitMapToVisiblePhotos(options?: L.FitBoundsOptions) {
+  const leafletMap = getLeafletMap();
+  const coordinates = filteredPhotosWithGps.value.map(
+    (photo) => photo.coordinates,
+  );
+
+  if (!leafletMap || coordinates.length === 0) return;
+
+  leafletMap.fitBounds(coordinates, {
+    animate: false,
+    maxZoom: 13,
+    padding: isMobile.value ? [0, 0] : [56, 56],
+    ...options,
+  });
+}
+
+function ensureFitViewControl() {
+  const leafletMap = getLeafletMap();
+  if (!leafletMap || fitViewControl.value) return;
+
+  const FitViewControl = L.Control.extend({
+    onAdd() {
+      const container = L.DomUtil.create(
+        "div",
+        "leaflet-bar leaflet-control leaflet-control-fit-view",
+      );
+      const button = L.DomUtil.create(
+        "a",
+        "leaflet-control-fit-view-button",
+        container,
+      );
+
+      button.href = "#";
+      button.title = "Fit to view";
+      button.setAttribute("aria-label", "Fit to view");
+      button.innerHTML =
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h6v2H6v4H4V4zm10 0h6v6h-2V6h-4V4zM4 14h2v4h4v2H4v-6zm14 0h2v6h-6v-2h4v-4z"/></svg>';
+
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.disableScrollPropagation(container);
+      L.DomEvent.on(button, "click", (event: Event) => {
+        L.DomEvent.stop(event);
+        fitMapToVisiblePhotos();
+      });
+
+      return container;
+    },
+  });
+
+  fitViewControl.value = new FitViewControl({ position: "bottomright" });
+  fitViewControl.value.addTo(leafletMap);
 }
 
 function updateInitialMapBounds() {
@@ -1240,11 +1359,21 @@ function createPhotoMarker(photo: PhotoWithGps): PhotoMarker {
       hoveredMapPhoto.value = null;
       return;
     }
-    hoveredMapPhoto.value = photo;
-    mapTooltipPosition.value = {
-      x: e.originalEvent.clientX + 16,
-      y: e.originalEvent.clientY + 16,
-    };
+    // [DEBUG] When debug mode is on, suppress tooltip and only show highlights
+    if (!ENABLE_DEBUG_PROXITTY) {
+      hoveredMapPhoto.value = photo;
+      mapTooltipPosition.value = {
+        x: e.originalEvent.clientX + 16,
+        y: e.originalEvent.clientY + 16,
+      };
+    }
+    // [DEBUG] Highlight the anchor marker for proximity-located photos
+    if (ENABLE_DEBUG_PROXITTY) {
+      const srcId = getProximitySourceId(photo);
+      if (srcId != null) dbgHighlightAnchorMarker(srcId, true);
+      // [DEBUG] Highlight all proxied photos if this is an anchor
+      dbgHighlightProxiedMarkers(photo.id, true);
+    }
   });
   marker.on("mousemove", (e: L.LeafletMouseEvent) => {
     const target = e.originalEvent?.target as HTMLElement | null;
@@ -1259,6 +1388,12 @@ function createPhotoMarker(photo: PhotoWithGps): PhotoMarker {
   });
   marker.on("mouseout", () => {
     hoveredMapPhoto.value = null;
+    // [DEBUG] Remove proximity highlights
+    if (ENABLE_DEBUG_PROXITTY) {
+      const srcId = getProximitySourceId(photo);
+      if (srcId != null) dbgHighlightAnchorMarker(srcId, false);
+      dbgHighlightProxiedMarkers(photo.id, false);
+    }
   });
 
   return marker;
@@ -1354,6 +1489,13 @@ function removeMarkerClusterLayer() {
   clearMarkerMaps();
 }
 
+function removeFitViewControl() {
+  if (!fitViewControl.value) return;
+
+  fitViewControl.value.remove();
+  fitViewControl.value = null;
+}
+
 // Handle marker click - fetch full photo data and open dialog
 const handleMarkerClick = async (photo: any) => {
   try {
@@ -1381,15 +1523,9 @@ const onMapReady = () => {
   const leafletMap = getLeafletMap();
   if (leafletMap) {
     L.control.zoom({ position: "bottomright" }).addTo(leafletMap);
-    if (filteredPhotosWithGps.value.length > 1) {
-      leafletMap.fitBounds(
-        filteredPhotosWithGps.value.map((photo) => photo.coordinates),
-        {
-          animate: false,
-          maxZoom: 13,
-          padding: isMobile.value ? [0, 0] : [56, 56],
-        },
-      );
+    ensureFitViewControl();
+    if (filteredPhotosWithGps.value.length > 0) {
+      fitMapToVisiblePhotos();
     }
   }
   initialMapBounds.value = null;
@@ -1413,6 +1549,83 @@ const photosWithGpsKey = computed<string>(() =>
 function isAiLocatedPhoto(photo: PhotoWithGps): boolean {
   return !!(photo.descriptions?.EXIF as any)?.aiLocationInference;
 }
+
+// ── [DEBUG] Proximity location helpers ───────────────────────────────────────
+
+function isProximityLocatedPhoto(photo: PhotoWithGps): boolean {
+  return !!(photo.descriptions?.EXIF as any)?.aiLocationInference
+    ?.proximityLocated;
+}
+
+function getProximitySourceId(photo: PhotoWithGps | null): number | null {
+  if (!photo) return null;
+  return (
+    (photo.descriptions?.EXIF as any)?.aiLocationInference
+      ?.proximitySourcePhotoId ?? null
+  );
+}
+
+// anchorPhotoId → ids of all photos proximity-located from it
+const proximityByAnchorId = computed<Map<string | number, (string | number)[]>>(
+  () => {
+    const m = new Map<string | number, (string | number)[]>();
+    photosWithGps.value.forEach((p) => {
+      const srcId = getProximitySourceId(p);
+      if (srcId == null) return;
+      if (!m.has(srcId)) m.set(srcId, []);
+      m.get(srcId)!.push(p.id);
+    });
+    return m;
+  },
+);
+
+function dbgGetProxiedIds(anchorId: string | number): (string | number)[] {
+  return (
+    proximityByAnchorId.value.get(anchorId) ??
+    proximityByAnchorId.value.get(
+      typeof anchorId === "string" ? Number(anchorId) : String(anchorId),
+    ) ??
+    []
+  );
+}
+
+function isAnchorPhoto(photo: PhotoWithGps): boolean {
+  return dbgGetProxiedIds(photo.id).length > 0;
+}
+
+function dbgHighlightAnchorMarker(
+  anchorId: number | string,
+  highlight: boolean,
+) {
+  const marker =
+    photoMarkerMap.get(anchorId) ??
+    photoMarkerMap.get(
+      typeof anchorId === "string" ? Number(anchorId) : String(anchorId),
+    );
+  if (!marker) return;
+  const iconEl = (marker as any)._icon?.querySelector(
+    ".photo-single-marker",
+  ) as HTMLElement | null;
+  iconEl?.classList.toggle("photo-single-marker--dbg-anchor", highlight);
+}
+
+function dbgHighlightProxiedMarkers(
+  anchorId: string | number,
+  highlight: boolean,
+) {
+  dbgGetProxiedIds(anchorId).forEach((id) => {
+    const marker =
+      photoMarkerMap.get(id) ??
+      photoMarkerMap.get(typeof id === "string" ? Number(id) : String(id));
+    if (!marker) return;
+    const iconEl = (marker as any)._icon?.querySelector(
+      ".photo-single-marker",
+    ) as HTMLElement | null;
+    iconEl?.classList.toggle("photo-single-marker--dbg-proxied", highlight);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function openCorrectionPopup(photo: PhotoWithGps) {
   hoveredMapPhoto.value = null;
@@ -1543,6 +1756,7 @@ onUnmounted(() => {
   resizeObserver?.disconnect();
   resizeObserver = null;
   stopAiLocationPolling();
+  removeFitViewControl();
   removeMarkerClusterLayer();
 });
 </script>
@@ -2095,6 +2309,53 @@ onUnmounted(() => {
   }
 }
 
+/* ── [DEBUG] Proximity location hover highlights ─────────────────────────── */
+
+/* Anchor marker highlight — orange ring on hover of a proximity photo */
+:deep(.photo-single-marker--dbg-anchor) {
+  border-color: #f97316 !important;
+  box-shadow:
+    0 0 0 3px #f97316,
+    0 4px 20px rgba(249, 115, 22, 0.55) !important;
+  transform: scale(1.14);
+}
+
+/* Proxied photos highlight — cyan ring on hover of an anchor photo */
+:deep(.photo-single-marker--dbg-proxied) {
+  border-color: #22d3ee !important;
+  box-shadow:
+    0 0 0 3px #22d3ee,
+    0 4px 20px rgba(34, 211, 238, 0.55) !important;
+  transform: scale(1.14);
+}
+
+/* Tooltip proximity row */
+.map-tooltip-dbg-proximity {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(249, 115, 22, 0.3);
+  font-size: 11px;
+  color: #f97316;
+  font-weight: 500;
+}
+
+.map-tooltip-dbg-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #f97316;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
 /* ── Leaflet controls: zoom & layers ─────────────────────────────────────── */
 
 :deep(.leaflet-bar) {
@@ -2131,6 +2392,15 @@ onUnmounted(() => {
   color: var(--text-secondary);
   background-color: var(--bg-container);
   cursor: default;
+}
+
+:deep(.leaflet-control-fit-view) {
+  margin-bottom: 12px;
+}
+
+:deep(.leaflet-control-fit-view-button svg) {
+  width: 16px;
+  height: 16px;
 }
 
 /* Layers control toggle button */

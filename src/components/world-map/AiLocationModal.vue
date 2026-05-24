@@ -4,7 +4,8 @@
       <div
         v-if="show"
         class="ai-location-backdrop"
-        @click.self="emit('update:show', false)"
+        @mousedown.self="backdropPressed = true"
+        @click.self="onBackdropClick"
       >
         <n-card
           class="ai-location-card"
@@ -48,14 +49,27 @@
             <!-- ── Running ──────────────────────────────────────────── -->
             <template v-if="phase === 'running'">
               <div class="ail-progress-row">
-                <span
-                  >{{ status?.processed || 0 }} / {{ status?.total || 0 }}</span
-                >
-                <strong>{{ progress }}%</strong>
+                <span class="ail-analyzing-label">
+                  <n-spin
+                    v-if="displayProgress === 0"
+                    size="tiny"
+                    :stroke-width="20"
+                  />
+                  {{ runningStatusLabel }}
+                </span>
+                <span class="ail-progress-meta">
+                  <span>{{ runningProgressDetail }}</span>
+                  <strong>{{ displayProgress }}%</strong>
+                </span>
+              </div>
+
+              <div v-if="displayProgress === 0" class="ail-indeterminate-track">
+                <div class="ail-indeterminate-bar" />
               </div>
               <n-progress
+                v-else
                 type="line"
-                :percentage="progress"
+                :percentage="displayProgress"
                 :show-indicator="false"
                 color="var(--accent-color)"
                 rail-color="var(--border-color)"
@@ -230,16 +244,13 @@
                   Track your journey
                 </n-tag>
                 <p class="ail-hero-text">
-                  Our AI engine will inspect photos without GPS metadata, infer
-                  a city or region from visual context (environment, signs,
-                  landmarks, etc.), and place only reliable matches on your map.
+                  Our AI engine will inspect eligible photos without GPS
+                  metadata, infer a place, city or country from visual context
+                  and place reliable matches on the map.
                 </p>
               </div>
 
-              <div
-                v-if="photosWithoutLocation === 0"
-                class="ail-all-located-banner"
-              >
+              <div v-if="photosToProcess === 0" class="ail-all-located-banner">
                 <n-icon
                   :component="CheckmarkCircleOutline"
                   size="20"
@@ -248,31 +259,23 @@
                 />
                 <div class="ail-all-located-text">
                   <span class="ail-all-located-headline"
-                    >No photos found to infer location</span
+                    >No photos to process</span
                   >
-                  <span class="ail-all-located-sub"
-                    >It seems all your photos already have a location, or we
-                    couldn't infer their location in a previous analysis. Upload
-                    new photos to the app and run the analysis on them.</span
-                  >
-                </div>
-              </div>
-
-              <div v-else class="ail-cards">
-                <div class="ail-card">
-                  <span>Photos without location</span>
-                  <strong>{{ photosWithoutLocation }}</strong>
-                </div>
-                <div class="ail-card">
-                  <span>Estimated cost</span>
-                  <strong>{{ estimatedCredits }} credits</strong>
+                  <span class="ail-all-located-sub">
+                    It looks like you don't have any photos to geotag. They may
+                    have already been analyzed in a previous run, or your
+                    remaining photos may not meet the acceptance criteria. You
+                    can upload more photos and try again.
+                  </span>
                 </div>
               </div>
 
               <!-- ── Forecast panel ─────────────────────────────────── -->
               <template
                 v-if="
-                  photosWithoutLocation > 0 && (forecastReady || !timerElapsed)
+                  candidatePhotoTotal > 0 &&
+                  photosToProcess > 0 &&
+                  (forecastReady || !timerElapsed)
                 "
               >
                 <!-- Loader while the fake calculation runs -->
@@ -286,7 +289,12 @@
                 </template>
               </template>
               <template
-                v-if="photosWithoutLocation > 0 && forecastReady && forecast"
+                v-if="
+                  candidatePhotoTotal > 0 &&
+                  photosToProcess > 0 &&
+                  forecastReady &&
+                  forecast
+                "
               >
                 <div class="ail-forecast-header">
                   <n-icon
@@ -294,7 +302,12 @@
                     size="14"
                     :color="'var(--text-secondary)'"
                   />
-                  <span class="ail-forecast-title">Geolocation forecast</span>
+                  <span class="ail-forecast-title">
+                    <span class="ail-forecast-title-count"
+                      >{{ candidatePhotoTotal }} PHOTOS</span
+                    >
+                    WITHOUT GPS DATA
+                  </span>
                 </div>
 
                 <!-- <p class="ail-forecast-subtitle">
@@ -304,7 +317,7 @@
                 </p> -->
 
                 <div class="ail-forecast-grid">
-                  <!-- Good -->
+                  <!-- Plausible -->
                   <div class="ail-forecast-cell ail-forecast-cell--good">
                     <div class="ail-forecast-cell-top">
                       <n-icon
@@ -313,34 +326,17 @@
                         :color="'var(--success-color)'"
                       />
                       <span class="ail-forecast-pct">{{
-                        forecast.good.count
+                        forecast.plausible.count
                       }}</span>
                     </div>
                     <span class="ail-forecast-label">Good chances</span>
                     <span class="ail-forecast-hint"
-                      >Outdoor, natural light, sharp, wide frame</span
+                      >Passed acceptance rules (outdoor, well-lit, nitid focus,
+                      documentary)</span
                     >
                   </div>
 
-                  <!-- Medium -->
-                  <div class="ail-forecast-cell ail-forecast-cell--medium">
-                    <div class="ail-forecast-cell-top">
-                      <n-icon
-                        :component="HelpCircleOutline"
-                        size="15"
-                        :color="'var(--warning-color)'"
-                      />
-                      <span class="ail-forecast-pct">{{
-                        forecast.medium.count
-                      }}</span>
-                    </div>
-                    <span class="ail-forecast-label">Possible</span>
-                    <span class="ail-forecast-hint"
-                      >Mixed cues, result uncertain</span
-                    >
-                  </div>
-
-                  <!-- Poor -->
+                  <!-- Discarded -->
                   <div class="ail-forecast-cell ail-forecast-cell--poor">
                     <div class="ail-forecast-cell-top">
                       <n-icon
@@ -349,19 +345,22 @@
                         :color="'var(--error-color)'"
                       />
                       <span class="ail-forecast-pct">{{
-                        forecast.poor.count
+                        forecast.discarded.count
                       }}</span>
                     </div>
-                    <span class="ail-forecast-label">Unlikely</span>
+                    <span class="ail-forecast-label">Skipped</span>
                     <span class="ail-forecast-hint"
-                      >Studio, indoor, abstract, blurry</span
+                      >Matched exclusion rules (studio, indoor, abstract,
+                      low-quality, etc.)</span
                     >
                   </div>
                 </div>
 
                 <!-- Low-success warning -->
                 <div
-                  v-if="forecast.lowSuccessWarning"
+                  v-if="
+                    forecast.lowSuccessWarning && forecast.plausible.count > 0
+                  "
                   class="ail-notice ail-notice--warning ail-notice--warning-confirm"
                 >
                   <n-icon
@@ -372,21 +371,65 @@
                   />
                   <div class="ail-warning-confirm">
                     <span>
-                      Most of your photos have low geolocation potential.
-                      <strong>Credits will still be charged</strong> even when
-                      the AI cannot infer a location. We recommend proceeding
-                      only if you understand this.
+                      Most of your photos don't seem suitable for geolocation.
+                      This may be due to their content (e.g. mostly indoor,
+                      studio, abstract shots), or to their technical quality.
                     </span>
-                    <label class="ail-warning-checkbox">
-                      <n-checkbox v-model:checked="lowSuccessConfirmed" />
-                      <span>I understand and want to proceed anyway</span>
-                    </label>
                   </div>
                 </div>
               </template>
 
+              <!-- ── Photo limit slider ──────────────────────────────── -->
               <div
-                v-if="photosWithoutLocation > 0 && forecastReady"
+                v-if="photosToProcess > 1 && forecastReady"
+                class="ail-limit-row"
+              >
+                <div class="ail-limit-header">
+                  <span class="ail-limit-label">Limit photos</span>
+                </div>
+                <n-slider
+                  v-model:value="selectedPhotoLimit"
+                  :min="sliderMin"
+                  :max="photosToProcess"
+                  :step="1"
+                />
+                <div class="ail-limit-footer">
+                  <span
+                    >{{ selectedPhotoLimit }}
+                    {{ selectedPhotoLimit === 1 ? "photo" : "photos" }}</span
+                  >
+                  <span
+                    v-if="selectedPhotoLimit < photosToProcess"
+                    class="ail-limit-sub"
+                    >Best-scored {{ selectedPhotoLimit }} of
+                    {{ photosToProcess }}</span
+                  >
+                </div>
+              </div>
+
+              <div
+                v-if="photosToProcess > 0 && forecastReady"
+                class="ail-cards"
+              >
+                <div class="ail-card">
+                  <span>Photos to process</span>
+                  <strong>{{ selectedPhotoLimit }}</strong>
+                </div>
+                <div class="ail-card">
+                  <span>Estimated cost interval</span>
+                  <strong
+                    >{{ adjustedCredits.min }} –
+                    {{ adjustedCredits.max }} credits</strong
+                  >
+                </div>
+              </div>
+
+              <div
+                v-if="
+                  candidatePhotoTotal > 0 &&
+                  photosToProcess > 0 &&
+                  forecastReady
+                "
                 class="ail-notices"
               >
                 <div class="ail-notice ail-notice--info ail-notice--multi">
@@ -448,12 +491,9 @@
               <n-button
                 v-if="phase === 'idle'"
                 type="info"
-                :disabled="
-                  photosWithoutLocation === 0 ||
-                  (forecast?.lowSuccessWarning && !lowSuccessConfirmed)
-                "
+                :disabled="photosToProcess === 0"
                 :loading="isStarting"
-                @click="emit('start')"
+                @click="emit('start', selectedPhotoLimit)"
               >
                 <template #icon>
                   <n-icon size="20"><RocketLaunchOutlined /></n-icon>
@@ -465,7 +505,7 @@
               <!-- <n-button
                 v-else-if="phase === 'completed' || phase === 'failed'"
                 type="primary"
-                :disabled="photosWithoutLocation === 0"
+                :disabled="photosToProcess === 0"
                 :loading="isStarting"
                 @click="emit('start')"
               >
@@ -484,7 +524,6 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { NCheckbox } from "naive-ui";
 import { RocketLaunchOutlined } from "@vicons/material";
 import {
   SparklesOutline,
@@ -495,7 +534,6 @@ import {
   GlobeOutline,
   TrendingUpOutline,
   RemoveCircleOutline,
-  HelpCircleOutline,
   CreateOutline,
 } from "@vicons/ionicons5";
 
@@ -511,44 +549,105 @@ export interface AiLocationJobStatus {
   failed: number;
   creditsCharged: number;
   costEur: number;
+  llmInferred?: number;
+  progressPercent?: number;
+  progressStage?:
+    | "preparing"
+    | "matching"
+    | "inferring"
+    | "placing"
+    | "completed"
+    | "failed";
   error?: string;
 }
 
-export interface GeolocatabilityForecast {
+export interface GeolocatabilityAssessment {
   total: number;
-  good: { count: number; percentage: number };
-  medium: { count: number; percentage: number };
-  poor: { count: number; percentage: number };
+  plausible: { count: number; percentage: number };
+  discarded: { count: number; percentage: number };
   lowSuccessWarning: boolean;
 }
 
 const props = defineProps<{
   show: boolean;
-  photosWithoutLocation: number;
-  estimatedCredits: number;
+  photosToProcess: number;
+  discardedPhotos: number;
+  estimatedCredits: { min: number; max: number };
   status: AiLocationJobStatus | null;
   isStarting: boolean;
-  forecast: GeolocatabilityForecast | null;
+  forecast: GeolocatabilityAssessment | null;
 }>();
 
 const emit = defineEmits<{
   "update:show": [value: boolean];
-  start: [];
+  start: [limit: number];
 }>();
 
-// ── Low-success confirmation ─────────────────────────────────────────
-const lowSuccessConfirmed = ref(false);
+const backdropPressed = ref(false);
+function onBackdropClick() {
+  if (backdropPressed.value) emit("update:show", false);
+  backdropPressed.value = false;
+}
+
+// ── Local credit estimate (mirrors backend formula, geocoding is €0) ────────
+const EST_BATCH_SIZE = 4;
+const EST_LLM_EUR_PER_PHOTO = 0.0008;
+const EST_FLOOR_EUR = 0.02;
+const EST_DB_PREMATCH_RATIO = 0.08;
+const EST_CLUSTER_RATIO = 0.3;
+const EST_FOLLOWER_RATIO = 0.5;
+const EST_CLUSTER_SUCCESS = 0.7;
+const EST_EUR_PER_CREDIT = 0.001;
+const EST_MARGIN = 2;
+
+function calcCreditsRange(n: number): { min: number; max: number } {
+  if (n <= 0) return { min: 0, max: 0 };
+  const toCredits = (eur: number) =>
+    Math.max(1, Math.ceil((eur * EST_MARGIN) / EST_EUR_PER_CREDIT));
+  const billedSlots = Math.ceil(n / EST_BATCH_SIZE) * EST_BATCH_SIZE;
+  const maxEur = Math.max(EST_FLOOR_EUR, billedSlots * EST_LLM_EUR_PER_PHOTO);
+  const effective = n * (1 - EST_DB_PREMATCH_RATIO);
+  const clustered = effective * EST_CLUSTER_RATIO;
+  const saved = clustered * EST_FOLLOWER_RATIO * EST_CLUSTER_SUCCESS;
+  const effectiveLlm = effective - saved;
+  const minEur = Math.max(EST_FLOOR_EUR, effectiveLlm * EST_LLM_EUR_PER_PHOTO);
+  return { min: toCredits(minEur), max: toCredits(maxEur) };
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Photo limit slider ────────────────────────────────────────────────
+const sliderMin = computed(() => (props.photosToProcess < 50 ? 1 : 10));
+const selectedPhotoLimit = ref(props.photosToProcess);
+
+watch(
+  () => props.photosToProcess,
+  (val) => {
+    selectedPhotoLimit.value = val;
+  },
+);
+
+watch(sliderMin, (min) => {
+  if (selectedPhotoLimit.value < min) selectedPhotoLimit.value = min;
+});
+
+const adjustedCredits = computed(() =>
+  calcCreditsRange(selectedPhotoLimit.value),
+);
+// ─────────────────────────────────────────────────────────────────────
 
 // ── Fake forecast loader ──────────────────────────────────────────────
 const timerElapsed = ref(false);
 let forecastTimer: ReturnType<typeof setTimeout> | null = null;
 
+const candidatePhotoTotal = computed(
+  () => props.forecast?.total ?? props.photosToProcess + props.discardedPhotos,
+);
+
 watch(
-  () => props.show,
-  (val) => {
+  () => [props.show, candidatePhotoTotal.value] as const,
+  ([val, total]) => {
     if (forecastTimer) clearTimeout(forecastTimer);
-    if (val && props.photosWithoutLocation > 0) {
-      lowSuccessConfirmed.value = false;
+    if (val && total > 0) {
       timerElapsed.value = false;
       forecastTimer = setTimeout(
         () => {
@@ -576,10 +675,62 @@ const phase = computed<Phase>(() => {
   return "idle";
 });
 
-const progress = computed(() => {
+const finalizedCount = computed(() => {
   const s = props.status;
   if (!s?.total) return 0;
-  return Math.min(100, Math.round((s.processed / s.total) * 100));
+  return Math.min(s.total, Math.max(0, s.processed || 0));
+});
+
+const inferredCount = computed(() => {
+  const s = props.status;
+  if (!s?.total) return 0;
+  return Math.min(s.total, Math.max(0, s.llmInferred || 0));
+});
+
+const fallbackProgressPercent = computed(() => {
+  const s = props.status;
+  if (!s?.total) return 0;
+  if (s.status === "completed") return 100;
+
+  const inferredAhead = Math.min(
+    Math.max(0, inferredCount.value - finalizedCount.value),
+    Math.max(0, s.total - finalizedCount.value),
+  );
+  const weightedUnits = finalizedCount.value + inferredAhead * 0.35;
+  return Math.min(99, Math.round((weightedUnits / s.total) * 100));
+});
+
+const displayProgress = computed(() => {
+  const backendProgress = props.status?.progressPercent;
+  if (typeof backendProgress === "number" && Number.isFinite(backendProgress)) {
+    return Math.min(100, Math.max(0, Math.round(backendProgress)));
+  }
+  return fallbackProgressPercent.value;
+});
+
+const runningStatusLabel = computed(() => {
+  switch (props.status?.progressStage) {
+    case "matching":
+      return "Matching nearby photos…";
+    case "placing":
+      return "Placing confirmed locations…";
+    case "inferring":
+      return "Inferring locations with AI…";
+    default:
+      return "Preparing location inference…";
+  }
+});
+
+const runningProgressDetail = computed(() => {
+  const s = props.status;
+  if (!s?.total) return "Starting";
+  if (finalizedCount.value > 0) {
+    return `${finalizedCount.value} / ${s.total} finalized`;
+  }
+  if (inferredCount.value > 0) {
+    return `${inferredCount.value} / ${s.total} inferred`;
+  }
+  return `${s.total} queued`;
 });
 
 const notPlaced = computed(() => {
@@ -609,7 +760,7 @@ const statusMessage = computed(() => {
     return s?.error || "An unexpected error occurred. Please try again.";
   }
 
-  return "You can close this dialog. Photoreka will keep working in the background and email you when the map update is ready.";
+  return "You can close this dialog. We will email you when the map update is ready.";
 });
 
 const dialogTitle = computed(() => {
@@ -638,7 +789,7 @@ const headerIcon = computed(() => {
 }
 
 .ai-location-card {
-  width: min(500px, 100%);
+  width: min(600px, 100%);
 }
 
 .ai-location-fade-enter-active,
@@ -730,7 +881,7 @@ const headerIcon = computed(() => {
   flex-direction: column;
   gap: 4px;
   min-width: 0;
-  padding: 12px;
+  padding: 10px;
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: 12px;
@@ -877,6 +1028,58 @@ const headerIcon = computed(() => {
   color: var(--text-secondary);
 }
 
+.ail-analyzing-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.ail-analyzing-count {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.ail-progress-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.ail-progress-meta strong {
+  color: var(--text-primary);
+}
+
+/* Indeterminate progress bar (LLM phase) */
+.ail-indeterminate-track {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-color);
+  overflow: hidden;
+}
+
+.ail-indeterminate-bar {
+  height: 100%;
+  width: 40%;
+  border-radius: 2px;
+  background: var(--accent-color);
+  animation: ail-slide 1.6s ease-in-out infinite;
+}
+
+@keyframes ail-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}
+
 .ail-copy {
   margin: 0;
   font-size: 12px;
@@ -977,6 +1180,15 @@ const headerIcon = computed(() => {
   letter-spacing: 0.5px;
 }
 
+.ail-forecast-title-count {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-right: 4px;
+}
+
 .ail-forecast-subtitle {
   margin: -4px 0 0;
   font-size: 12px;
@@ -986,7 +1198,7 @@ const headerIcon = computed(() => {
 
 .ail-forecast-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -1084,6 +1296,53 @@ const headerIcon = computed(() => {
   line-height: 1.4;
   color: var(--text-secondary);
   opacity: 0.75;
+}
+
+/* ── Limit slider ─────────────────────────────────────────── */
+
+.ail-limit-row {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+}
+
+.ail-limit-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ail-limit-info {
+  display: inline-flex;
+  align-items: center;
+  cursor: help;
+  flex-shrink: 0;
+}
+
+.ail-limit-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ail-limit-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.ail-limit-sub {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 400;
 }
 
 /* ── Footer actions ───────────────────────────────────────── */

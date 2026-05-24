@@ -33,6 +33,8 @@ import {
   NMessageProvider,
   NNotificationProvider,
   NDialogProvider,
+  NSlider,
+  NTooltip,
 } from "naive-ui";
 
 import App from "./App.vue";
@@ -72,6 +74,8 @@ const naive = create({
     NMessageProvider,
     NNotificationProvider,
     NDialogProvider,
+    NSlider,
+    NTooltip,
   ],
 });
 
