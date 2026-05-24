@@ -1731,6 +1731,7 @@ function handleCorrectionConfirmed(payload: CorrectionPayload) {
             lat: payload.lat,
             lng: payload.lng,
             formattedAddress: payload.formattedAddress,
+            queryNormalized: payload.formattedAddress,
             granularity:
               payload.granularity ??
               (storePhoto as any).inferredLocation?.granularity,
