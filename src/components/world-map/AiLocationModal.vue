@@ -456,7 +456,7 @@
                     />
                     <span>
                       A <strong>small percentage</strong> of placements may be
-                      <strong>imprecise</strong>; you can always
+                      <strong>imprecise or wrong</strong>; you can always
                       <strong>correct them manually</strong> through
                       <strong>the edit button in the marker</strong>.
                     </span>

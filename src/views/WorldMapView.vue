@@ -543,6 +543,18 @@ function applyGpsReference(value: number, reference?: string): number {
 
 // Function to extract GPS coordinates from photo
 function extractGpsCoordinates(photo: any): GpsCoordinates | null {
+  // 1. AI-inferred location (geocode_cache FK) — lat/lng live on the inferredLocation object
+  if (
+    photo.inferredLocation?.lat != null &&
+    photo.inferredLocation?.lng != null
+  ) {
+    const lat = Number(photo.inferredLocation.lat);
+    const lng = Number(photo.inferredLocation.lng);
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return [lat, lng];
+    }
+  }
+
   const exif = photo.descriptions?.EXIF;
   if (!exif) return null;
 
@@ -613,7 +625,11 @@ const filteredPhotosWithGps = computed<PhotoWithGps[]>(() => {
     const aiInference = exif.aiLocationInference ?? null;
     const isRealGps = !aiInference;
     const reliability: string | null = aiInference?.reliability ?? null;
-    const granularity: string | null = aiInference?.geocodeGranularity ?? null;
+    // Granularity: FK row is source of truth for new AI photos; fall back to legacy EXIF
+    const granularity: string | null =
+      (photo as any).inferredLocation?.granularity ??
+      aiInference?.geocodeGranularity ??
+      null;
 
     // --- Confidence filter (multi-select: photo passes if it matches any selected tier) ---
     if (isRealGps) {
@@ -971,12 +987,61 @@ function getPhotoTitle(photo: PhotoWithGps): string {
   return photo.title || photo.name || photo.filename || "Photo";
 }
 
+function formatAddressToTitleCase(address: string): string {
+  // Words that should not be capitalized (unless they're the first word of a section)
+  const smallWords = new Set([
+    "and",
+    "or",
+    "but",
+    "nor",
+    "yet",
+    "a",
+    "an",
+    "the",
+    "in",
+    "on",
+    "at",
+    "by",
+    "to",
+    "from",
+    "of",
+    "with",
+    "for",
+    "as",
+    "is",
+    "be",
+    "&",
+  ]);
+
+  return address
+    .split(", ") // Split by commas to handle each location section
+    .map((part) => {
+      const words = part.split(" ");
+      return words
+        .map((word, index) => {
+          // Always capitalize first and last word of each section
+          // Also capitalize if not a small word
+          if (
+            index === 0 ||
+            index === words.length - 1 ||
+            !smallWords.has(word.toLowerCase())
+          ) {
+            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+          }
+          return word.toLowerCase();
+        })
+        .join(" ");
+    })
+    .join(", ");
+}
+
 function getPhotoAddress(photo: PhotoWithGps): string | null {
-  return (
-    (photo.descriptions?.EXIF as any)?.aiLocationInference?.geocodeQuery ??
-    (photo.descriptions?.EXIF as any)?.aiLocationInference?.formattedAddress ??
-    null
-  );
+  // New AI photos: address lives in geocode_cache (passed as inferredLocation.formattedAddress)
+  if ((photo as any).inferredLocation?.queryNormalized) {
+    return formatAddressToTitleCase(
+      (photo as any).inferredLocation.queryNormalized,
+    );
+  }
 }
 
 function escapeHtml(value: unknown): string {
@@ -1005,8 +1070,11 @@ function createPhotoImageMarkup(photo: PhotoWithGps): string {
 
 function getGranularityMarkerClass(photo: PhotoWithGps): string {
   const exif = (photo.descriptions?.EXIF ?? {}) as Record<string, any>;
+  // FK row is source of truth; fall back to legacy EXIF for pre-migration photos
   const granularity: string | null =
-    exif.aiLocationInference?.geocodeGranularity ?? null;
+    (photo as any).inferredLocation?.granularity ??
+    exif.aiLocationInference?.geocodeGranularity ??
+    null;
   if (granularity === "place") return "photo-single-marker--place";
   if (granularity === "city") return "photo-single-marker--city";
   if (granularity === "region") return "photo-single-marker--region";
@@ -1656,22 +1724,29 @@ function handleCorrectionConfirmed(payload: CorrectionPayload) {
     >;
     const existingInference = existingExif.aiLocationInference ?? null;
     photosStore.updatePhoto(storePhoto.id, {
+      // Optimistically update inferredLocation (lat/lng + display fields) so the marker relocates immediately
+      inferredLocation: (storePhoto as any).inferredLocation
+        ? {
+            ...(storePhoto as any).inferredLocation,
+            lat: payload.lat,
+            lng: payload.lng,
+            formattedAddress: payload.formattedAddress,
+            granularity:
+              payload.granularity ??
+              (storePhoto as any).inferredLocation?.granularity,
+          }
+        : (storePhoto as any).inferredLocation,
       descriptions: {
         ...(storePhoto.descriptions ?? {}),
         EXIF: {
           ...existingExif,
-          gpsLatitude: payload.lat,
-          gpsLongitude: payload.lng,
-          gpsLatitudeRef: payload.lat < 0 ? "S" : "N",
-          gpsLongitudeRef: payload.lng < 0 ? "W" : "E",
           aiLocationInference: existingInference
             ? {
-                ...existingInference,
-                formattedAddress: payload.formattedAddress,
-                geocodeQuery: payload.formattedAddress,
-                placeId: payload.placeId ?? existingInference.placeId,
-                geocodeGranularity:
-                  payload.granularity ?? existingInference.geocodeGranularity,
+                reliability: existingInference.reliability,
+                inferredAt: existingInference.inferredAt,
+                proximityLocated: existingInference.proximityLocated,
+                proximitySourcePhotoId:
+                  existingInference.proximitySourcePhotoId,
                 correctedByUser: true,
               }
             : undefined,

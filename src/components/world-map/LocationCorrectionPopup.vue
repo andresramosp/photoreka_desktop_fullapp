@@ -309,9 +309,9 @@ async function fetchSuggestions() {
 async function selectSuggestion(suggestion: Suggestion) {
   pendingMapboxId.value = suggestion.mapbox_id;
   pendingAddress.value =
-    suggestion.full_address ??
-    suggestion.place_formatted ??
-    suggestion.name ??
+    suggestion.full_address ||
+    suggestion.place_formatted ||
+    suggestion.name ||
     "";
   step.value = "confirm";
 }
@@ -330,13 +330,9 @@ async function confirmUpdate() {
       throw new Error("Could not retrieve coordinates");
     }
 
-    // Apply the new coordinates on the backend
+    // Apply the new location on the backend — just pass the cache row id
     await api.patch(`/api/photos/${props.photoId}/location`, {
-      lat: geo.lat,
-      lng: geo.lng,
-      formattedAddress: geo.formattedAddress ?? pendingAddress.value,
-      placeId: geo.placeId ?? null,
-      granularity: geo.granularity ?? null,
+      geocodeCacheId: geo.geocodeCacheId,
     });
 
     emit("confirmed", {
