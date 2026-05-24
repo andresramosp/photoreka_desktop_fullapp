@@ -18,6 +18,7 @@ import AnalyzerProcess from './analyzer/analyzerProcess.js'
 import DetectionPhoto from './detection_photo.js'
 import Collection from './collection.js'
 import Series from './series.js'
+import GeocodeCache from './geocode_cache.js'
 import EmbeddingService from '#services/embedding_service'
 
 export type DescriptionType =
@@ -139,6 +140,12 @@ export default class Photo extends BaseModel {
 
   @belongsTo(() => AnalyzerProcess)
   declare analyzerProcess: BelongsTo<typeof AnalyzerProcess>
+
+  @column()
+  declare inferredLocationId: number | null
+
+  @belongsTo(() => GeocodeCache, { foreignKey: 'inferredLocationId' })
+  declare inferredLocation: BelongsTo<typeof GeocodeCache>
 
   @computed()
   public get status(): PhotoStatus | null {

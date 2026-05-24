@@ -3,6 +3,97 @@ import { DateTime } from 'luxon'
 import GeocodeCache from '#models/geocode_cache'
 import db from '@adonisjs/lucid/services/db'
 
+/**
+ * Maps a normalised LLM-inferred country name to the alternate names that
+ * geocoding APIs may return for the same territory.
+ *
+ * Two categories:
+ *   1. Official renames   — e.g. Turkey → Türkiye (LLM trained on old name)
+ *   2. SAR / territories  — e.g. China → Hong Kong (APIs treat HK as a separate entity)
+ */
+const COUNTRY_NAME_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  // ── Official renames ──────────────────────────────────────────────────────
+  'turkey': ['türkiye', 'turkiye'],
+  'türkiye': ['turkey'],
+  'turkiye': ['turkey'],
+  'czechia': ['czech republic'],
+  'czech republic': ['czechia'],
+  'north macedonia': ['macedonia', 'republic of north macedonia'],
+  'macedonia': ['north macedonia'],
+  'eswatini': ['swaziland'],
+  'swaziland': ['eswatini'],
+  'timor-leste': ['east timor'],
+  'east timor': ['timor-leste'],
+  'cabo verde': ['cape verde'],
+  'cape verde': ['cabo verde'],
+
+  // ── SARs and overseas territories treated as separate entities by APIs ────
+  // China
+  'china': ['hong kong', 'macao', 'macau'],
+  // United States
+  'united states': [
+    'puerto rico',
+    'guam',
+    'us virgin islands',
+    'american samoa',
+    'northern mariana islands',
+  ],
+  'usa': ['puerto rico', 'guam', 'us virgin islands', 'american samoa'],
+  // France
+  'france': [
+    'french polynesia',
+    'new caledonia',
+    'réunion',
+    'reunion',
+    'martinique',
+    'guadeloupe',
+    'french guiana',
+    'mayotte',
+    'saint barthélemy',
+    'saint martin',
+  ],
+  // Netherlands
+  'netherlands': ['aruba', 'curaçao', 'curacao', 'sint maarten', 'caribbean netherlands'],
+  // Denmark
+  'denmark': ['greenland', 'faroe islands'],
+  // New Zealand
+  'new zealand': ['cook islands', 'niue'],
+  // Australia
+  'australia': ['norfolk island', 'christmas island', 'cocos islands', 'cocos (keeling) islands'],
+  // United Kingdom
+  'united kingdom': [
+    'gibraltar',
+    'jersey',
+    'guernsey',
+    'isle of man',
+    'bermuda',
+    'cayman islands',
+    'british virgin islands',
+    'turks and caicos islands',
+    'falkland islands',
+    'saint helena',
+  ],
+  'uk': ['gibraltar', 'jersey', 'guernsey', 'isle of man'],
+  // Norway
+  'norway': ['svalbard and jan mayen', 'svalbard'],
+  // Finland
+  'finland': ['åland islands', 'aland islands'],
+}
+
+/**
+ * Returns true when `apiCountry` (as returned by a geocoding provider) satisfies
+ * the `expected` country preference coming from the LLM inference.
+ * Handles official country renames and SAR / overseas territories that geocoding
+ * APIs report as independent entities even though they fall under a sovereign state.
+ */
+function countryMatches(apiCountry: string, expected: string): boolean {
+  const a = apiCountry.trim().toLowerCase()
+  const e = expected.trim().toLowerCase()
+  if (a.includes(e) || e.includes(a)) return true
+  const aliases = COUNTRY_NAME_ALIASES[e]
+  return aliases !== undefined && aliases.some((alias) => a.includes(alias) || alias.includes(a))
+}
+
 export type GeocodingProvider = 'google' | 'mapbox'
 export type GeocodingGranularity = 'place' | 'city' | 'region' | 'country'
 export type GeocodingFailureReason = 'no_result' | 'country_mismatch' | 'provider_error'
@@ -30,6 +121,8 @@ export interface GeocodingResult {
   externalCalls: number
   /** True when the result came after a configured fallback attempt. */
   usedFallback?: boolean
+  /** ID of the geocode_cache row backing this result (when result is not null). */
+  cacheId?: number
 }
 
 interface ProviderGeocodingResult {
@@ -82,7 +175,7 @@ export const GEOCODING_API_POLICY: GeocodingApiPolicy = {
   },
   defaultProviderOrder: ['mapbox', 'google'],
   preferredProviderByGranularity: {
-    // place: 'google',
+    place: 'google',
   },
   fallbackProviders: {
     mapbox: {
@@ -171,6 +264,7 @@ export default class GeocodingService {
         fromCache: true,
         provider: cached.provider as GeocodingProvider,
         externalCalls: 0,
+        cacheId: cached.id,
       }
     }
 
@@ -213,8 +307,16 @@ export default class GeocodingService {
           console.log(
             `[GeocodingService] ${provider} OK — "${raw.result.formattedAddress}" (${raw.result.lat}, ${raw.result.lng}) | externalCalls=${externalCalls} usedFallback=${isFallback}`
           )
+          let cacheId: number | undefined
           if (GEOCODING_API_POLICY.cache_enabled) {
-            await this.cacheResult(normalized, provider, raw.result, options.granularity ?? null)
+            cacheId =
+              (await this.cacheResult(
+                normalized,
+                provider,
+                raw.result,
+                options.granularity ?? null,
+                options.structured ?? null
+              )) ?? undefined
           }
           return {
             result: raw.result,
@@ -222,6 +324,7 @@ export default class GeocodingService {
             provider,
             externalCalls,
             usedFallback: isFallback,
+            cacheId,
           }
         }
 
@@ -383,10 +486,11 @@ export default class GeocodingService {
     normalized: string,
     provider: GeocodingProvider,
     result: GeocodedLocation,
-    granularity: string | null = null
-  ): Promise<void> {
+    granularity: string | null = null,
+    structured?: { street?: string; place?: string; region?: string; country?: string } | null
+  ): Promise<number | null> {
     try {
-      await GeocodeCache.create({
+      const row = await GeocodeCache.create({
         queryNormalized: normalized,
         provider,
         lat: result.lat,
@@ -394,12 +498,24 @@ export default class GeocodingService {
         formattedAddress: result.formattedAddress,
         placeId: result.placeId,
         granularity,
+        // In Mapbox structured params: street=place-level, place=city-level
+        place: structured?.street ?? null,
+        city: structured?.place ?? null,
+        region: structured?.region ?? null,
+        country: structured?.country ?? null,
       })
       console.log(
         `[GeocodingService] Cached result for "${normalized}" — provider=${provider} address="${result.formattedAddress}"`
       )
+      return row.id
     } catch {
-      // Ignore write failures (e.g. race condition on the unique index)
+      // Race condition on unique index — row already exists, fetch it
+      try {
+        const existing = await GeocodeCache.findBy('query_normalized', normalized)
+        return existing?.id ?? null
+      } catch {
+        return null
+      }
     }
   }
 
@@ -435,13 +551,12 @@ export default class GeocodingService {
 
       let chosen = results[0]
       if (preferredCountry) {
-        const expected = preferredCountry.trim().toLowerCase()
         const match = results.find((r) => {
           const countryComp = (r.address_components ?? []).find(
             (c: any) => Array.isArray(c.types) && c.types.includes('country')
           )
-          const name = (countryComp?.long_name ?? '').toLowerCase()
-          return name.includes(expected) || expected.includes(name)
+          const name = countryComp?.long_name ?? ''
+          return countryMatches(name, preferredCountry)
         })
         if (match) {
           chosen = match
@@ -513,10 +628,9 @@ export default class GeocodingService {
 
       let chosen = features[0]
       if (preferredCountry) {
-        const expected = preferredCountry.trim().toLowerCase()
         const match = features.find((f) => {
-          const name = (f.properties?.context?.country?.name ?? '').toLowerCase()
-          return name.includes(expected) || expected.includes(name)
+          const name = f.properties?.context?.country?.name ?? ''
+          return countryMatches(name, preferredCountry)
         })
         if (match) {
           chosen = match
@@ -586,10 +700,9 @@ export default class GeocodingService {
 
       let chosen = features[0]
       if (preferredCountry) {
-        const expected = preferredCountry.trim().toLowerCase()
         const match = features.find((f) => {
-          const name = (f.properties?.context?.country?.name ?? '').toLowerCase()
-          return name.includes(expected) || expected.includes(name)
+          const name = f.properties?.context?.country?.name ?? ''
+          return countryMatches(name, preferredCountry)
         })
         if (match) {
           chosen = match

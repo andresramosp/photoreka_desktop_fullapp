@@ -6,6 +6,7 @@ import GeocodingService, {
   type GeocodedLocation,
 } from './geocoding_service.js'
 import redis from '@adonisjs/redis/services/main'
+import db from '@adonisjs/lucid/services/db'
 import Photo from '#models/photo'
 import User from '#models/user'
 import Ws from '#services/ws'
@@ -46,7 +47,7 @@ interface ProximityClusterConfig {
 }
 
 export const PROXIMITY_CLUSTER_CONFIG: ProximityClusterConfig = {
-  proximityWindowMs: 3 * 60 * 1000, // 3 minutes
+  proximityWindowMs: 5 * 60 * 1000, // 3 minutes
   representativeRatio: 0.1, // 10% of cluster photos
   minRepresentatives: 3, // minimum reps to attempt consensus
   maxRepresentatives: 5, // maximum reps to avoid bloating
@@ -140,9 +141,6 @@ const ESTIMATE_GEOCODE_LOCATE_RATE = 0.65 // ~65% of individual geocode requests
 const ESTIMATE_DB_PREMATCH_RATIO = 0.08 // ~8% of photos may match an already-geolocated photo in the library (returning users)
 const RUNNING_STALE_MS = 1000 * 60 * 60 * 12
 
-// TODO: remove before production — limits photos processed during manual testing
-const TEST_PHOTO_LIMIT: number | null = null
-
 interface PhotoProximityData {
   dateTakenMs: number | null
   cameraKey: string | null
@@ -152,6 +150,8 @@ interface ProximityClaim {
   geocode: GeocodedLocation
   sourcePhotoId: number
   geocodeGranularity: LocationGranularity | null
+  /** geocode_cache.id for the row backing this location (null for real-GPS or pre-migration anchors). */
+  cacheId: number | null
 }
 
 interface TemporalCluster {
@@ -793,12 +793,7 @@ export default class AiLocationInferenceService {
         `[AiLocationInference] Pre-matched DB shortcut photo ${photo.id} — same camera+time as DB photo ${claim.sourcePhotoId} → ${claim.geocode.formattedAddress}`
       )
       try {
-        await this.persistProximityLocation(
-          photo,
-          claim.geocode,
-          claim.sourcePhotoId,
-          claim.geocodeGranularity
-        )
+        await this.persistProximityLocation(photo, claim.sourcePhotoId, claim.cacheId)
         await this.updateRunProgress(context, {
           processedDelta: 1,
           locatedDelta: 1,
@@ -1063,7 +1058,7 @@ export default class AiLocationInferenceService {
       )
 
       // Guard/persist the anchor photo with the complete found address
-      await this.persistLocation(photo, result, lookup.result)
+      await this.persistLocation(photo, result, lookup.cacheId ?? null)
       await this.updateRunProgress(context, {
         processedDelta: 1,
         locatedDelta: 1,
@@ -1078,12 +1073,7 @@ export default class AiLocationInferenceService {
 
       for (const companion of othersInCluster) {
         try {
-          await this.persistProximityLocation(
-            companion,
-            lookup.result,
-            photo.id,
-            result.geocodeGranularity
-          )
+          await this.persistProximityLocation(companion, photo.id, lookup.cacheId ?? null)
           await this.updateRunProgress(context, {
             processedDelta: 1,
             locatedDelta: 1,
@@ -1203,7 +1193,7 @@ export default class AiLocationInferenceService {
         context.paidGeocodeRequests += lookup.externalCalls
 
         if (lookup.result) {
-          await this.persistLocation(photo, result, lookup.result)
+          await this.persistLocation(photo, result, lookup.cacheId ?? null)
           located = true
         } else {
           await this.persistInferenceOnly(photo, result)
@@ -1660,25 +1650,21 @@ export default class AiLocationInferenceService {
   private async persistLocation(
     photo: Photo,
     inference: LocationInferenceResult,
-    geocode: GeocodedLocation
+    cacheId: number | null
   ): Promise<void> {
+    // Store only the fields that don't live in geocode_cache (granularity, address, placeId are there)
     await this.photoManager.updatePhotoDescriptions(String(photo.id), {
       EXIF: {
-        gpsLatitude: geocode.lat,
-        gpsLongitude: geocode.lng,
-        gpsLatitudeRef: geocode.lat < 0 ? 'S' : 'N',
-        gpsLongitudeRef: geocode.lng < 0 ? 'W' : 'E',
         aiLocationInference: {
           reliability: inference.reliability,
-          geocodeQuery: inference.geocodeQuery,
-          geocodeGranularity: inference.geocodeGranularity,
-          formattedAddress: geocode.formattedAddress,
-          placeId: geocode.placeId ?? null,
-          reasoning: inference.reasoning ?? null,
           inferredAt: nowIso(),
         },
       },
     })
+    // Point the photo to the geocode_cache row
+    if (cacheId != null) {
+      await db.from('photos').where('id', photo.id).update({ inferred_location_id: cacheId })
+    }
   }
 
   private async persistInferenceOnly(
@@ -1690,9 +1676,6 @@ export default class AiLocationInferenceService {
         aiLocationExhausted: true,
         aiLocationInference: {
           reliability: inference.reliability,
-          geocodeQuery: inference.geocodeQuery,
-          geocodeGranularity: inference.geocodeGranularity,
-          reasoning: inference.reasoning ?? null,
           inferredAt: nowIso(),
         },
       },
@@ -1719,11 +1702,8 @@ export default class AiLocationInferenceService {
         'original_file_name',
         'descriptions',
         'analyzer_process_id',
+        'inferred_location_id',
       ])
-
-    if (TEST_PHOTO_LIMIT !== null) {
-      query.limit(TEST_PHOTO_LIMIT)
-    }
 
     const photos = await query
 
@@ -1742,6 +1722,9 @@ export default class AiLocationInferenceService {
   }
 
   private hasGpsCoordinates(photo: Photo): boolean {
+    // NEW: AI-inferred location stored via FK (post-migration)
+    if (photo.inferredLocationId != null) return true
+
     const exif = (photo.descriptions as any)?.EXIF
     if (!exif) return false
 
@@ -1831,7 +1814,8 @@ export default class AiLocationInferenceService {
 
     const existingPhotos = await Photo.query()
       .where('user_id', userId)
-      .select(['id', 'descriptions'])
+      .select(['id', 'descriptions', 'inferred_location_id'])
+      .preload('inferredLocation')
 
     // Build a time-sorted array of geolocated library entries.
     const sortedGeolocated: Array<{
@@ -1839,41 +1823,55 @@ export default class AiLocationInferenceService {
       dateTakenMs: number
       geocode: GeocodedLocation
       geocodeGranularity: LocationGranularity | null
+      cacheId: number | null
     }> = []
 
     for (const photo of existingPhotos) {
       if (excludeSet.has(photo.id)) continue
 
       const exif = (photo.descriptions as any)?.EXIF
-      if (!exif) continue
+      let lat: number
+      let lng: number
+      let formattedAddress: string
+      let placeId: string | null
+      let cacheId: number | null = null
 
-      // Only use photos with a flat numeric GPS (written by this service or by the client).
-      const lat = Number(exif.gpsLatitude)
-      const lng = Number(exif.gpsLongitude)
-      if (
-        !Number.isFinite(lat) ||
-        !Number.isFinite(lng) ||
-        lat < -90 ||
-        lat > 90 ||
-        lng < -180 ||
-        lng > 180
-      )
-        continue
-
-      // Don't use proximity-located photos as anchors — prevents cross-job transitive chains
-      // where a photo located by proximity in a previous job anchors photos in the current one.
-      if (exif.aiLocationInference?.proximityLocated === true) continue
+      if (photo.inferredLocation) {
+        // New AI-inferred photo (post-migration): coordinates and address live in geocode_cache
+        lat = Number(photo.inferredLocation.lat)
+        lng = Number(photo.inferredLocation.lng)
+        cacheId = photo.inferredLocation.id
+        formattedAddress = photo.inferredLocation.formattedAddress ?? ''
+        placeId = photo.inferredLocation.placeId ?? null
+        if (!exif) continue
+        // Don't use proximity-located photos as anchors
+        if (exif.aiLocationInference?.proximityLocated === true) continue
+      } else {
+        // Real GPS or legacy AI-inferred (pre-migration): coordinates in EXIF
+        if (!exif) continue
+        lat = Number(exif.gpsLatitude)
+        lng = Number(exif.gpsLongitude)
+        if (
+          !Number.isFinite(lat) ||
+          !Number.isFinite(lng) ||
+          lat < -90 ||
+          lat > 90 ||
+          lng < -180 ||
+          lng > 180
+        )
+          continue
+        if (exif.aiLocationInference?.proximityLocated === true) continue
+        formattedAddress = exif.aiLocationInference?.formattedAddress ?? ''
+        placeId = exif.aiLocationInference?.placeId ?? null
+      }
 
       const pd = this.extractProximityData(photo)
       if (!pd.dateTakenMs) continue
 
-      const geocode: GeocodedLocation = {
-        lat,
-        lng,
-        formattedAddress: exif.aiLocationInference?.formattedAddress ?? '',
-        placeId: exif.aiLocationInference?.placeId ?? null,
-      }
-      const granularityRaw = exif.aiLocationInference?.geocodeGranularity
+      const geocode: GeocodedLocation = { lat, lng, formattedAddress, placeId }
+      // Granularity: FK row is the source of truth; fall back to legacy EXIF for pre-migration photos
+      const granularityRaw =
+        photo.inferredLocation?.granularity ?? exif?.aiLocationInference?.geocodeGranularity
       const geocodeGranularity: LocationGranularity | null = LOCATION_GRANULARITIES.includes(
         granularityRaw
       )
@@ -1885,6 +1883,7 @@ export default class AiLocationInferenceService {
         dateTakenMs: pd.dateTakenMs,
         geocode,
         geocodeGranularity,
+        cacheId,
       })
     }
 
@@ -1906,6 +1905,7 @@ export default class AiLocationInferenceService {
             geocode: candidate.geocode,
             sourcePhotoId: candidate.id,
             geocodeGranularity: candidate.geocodeGranularity,
+            cacheId: candidate.cacheId,
           })
           break
         }
@@ -1971,29 +1971,24 @@ export default class AiLocationInferenceService {
    */
   private async persistProximityLocation(
     photo: Photo,
-    geocode: GeocodedLocation,
     sourcePhotoId: number,
-    geocodeGranularity: LocationGranularity | null
+    cacheId: number | null
   ): Promise<void> {
+    // Store only the fields that don't live in geocode_cache
     await this.photoManager.updatePhotoDescriptions(String(photo.id), {
       EXIF: {
-        gpsLatitude: geocode.lat,
-        gpsLongitude: geocode.lng,
-        gpsLatitudeRef: geocode.lat < 0 ? 'S' : 'N',
-        gpsLongitudeRef: geocode.lng < 0 ? 'W' : 'E',
         aiLocationInference: {
           reliability: 'very_likely',
-          geocodeQuery: null,
-          geocodeGranularity,
-          formattedAddress: geocode.formattedAddress,
-          placeId: geocode.placeId ?? null,
-          reasoning: null,
           inferredAt: nowIso(),
           proximityLocated: true,
           proximitySourcePhotoId: sourcePhotoId,
         },
       },
     })
+    // Point the photo to the same geocode_cache row as the anchor
+    if (cacheId != null) {
+      await db.from('photos').where('id', photo.id).update({ inferred_location_id: cacheId })
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -2017,7 +2012,7 @@ export default class AiLocationInferenceService {
     const photos = await Photo.query()
       .whereIn('id', jobPhotoIds)
       .where('user_id', userId)
-      .select(['id', 'descriptions'])
+      .select(['id', 'descriptions', 'inferred_location_id'])
 
     const RANK: Record<LocationReliability, number> = {
       very_likely: 3,
@@ -2038,10 +2033,22 @@ export default class AiLocationInferenceService {
       const exif = (photo.descriptions as any)?.EXIF
       if (!exif) continue
 
-      // Only consider photos that were actually geocoded in this job.
-      const lat = Number(exif.gpsLatitude)
-      const lng = Number(exif.gpsLongitude)
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue
+      // Only consider photos that were actually geocoded in this job (FK set or legacy EXIF GPS).
+      const hasLocation =
+        photo.inferredLocationId != null ||
+        (() => {
+          const lat = Number(exif.gpsLatitude)
+          const lng = Number(exif.gpsLongitude)
+          return (
+            Number.isFinite(lat) &&
+            Number.isFinite(lng) &&
+            lat >= -90 &&
+            lat <= 90 &&
+            lng >= -180 &&
+            lng <= 180
+          )
+        })()
+      if (!hasLocation) continue
 
       const inference = exif.aiLocationInference
       if (!inference) continue

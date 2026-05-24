@@ -141,6 +141,7 @@ export default class GeocodingController {
         `[GeocodingController] retrieve cache hit for mapbox_id="${mapboxId}" — address="${cachedByPlace.formattedAddress}"`
       )
       return response.ok({
+        geocodeCacheId: cachedByPlace.id,
         lat: Number(cachedByPlace.lat),
         lng: Number(cachedByPlace.lng),
         formattedAddress: cachedByPlace.formattedAddress,
@@ -188,8 +189,9 @@ export default class GeocodingController {
 
       // Persist to geocode_cache so future retrieves (and suggests) are served from DB
       const normalizedAddress = GeocodingService.normalizeQuery(String(address))
+      let geocodeCacheId: number | null = null
       try {
-        await GeocodeCache.create({
+        const created = await GeocodeCache.create({
           queryNormalized: normalizedAddress,
           provider: 'mapbox',
           lat: Number(lat),
@@ -198,14 +200,18 @@ export default class GeocodingController {
           placeId: placeIdResult,
           granularity,
         })
+        geocodeCacheId = created.id
         console.log(
-          `[GeocodingController] Cached retrieve result for "${normalizedAddress}" — mapbox_id="${mapboxId}"`
+          `[GeocodingController] Cached retrieve result for "${normalizedAddress}" — mapbox_id="${mapboxId}" id=${geocodeCacheId}`
         )
       } catch {
-        // Ignore write failures (e.g. race condition on the unique index)
+        // Race condition — row already exists, fetch its id
+        const existing = await GeocodeCache.findBy('query_normalized', normalizedAddress)
+        geocodeCacheId = existing?.id ?? null
       }
 
       return response.ok({
+        geocodeCacheId,
         lat: Number(lat),
         lng: Number(lng),
         formattedAddress: String(address),
@@ -222,9 +228,11 @@ export default class GeocodingController {
   }
 
   /**
-   * Overwrite the coordinates of an AI-inferred photo location.
-   * The existing aiLocationInference metadata is preserved and annotated
-   * with correctedByUser=true so the UI can reflect the manual correction.
+   * Point a photo at a geocode_cache row (by id) to correct its displayed location.
+   *
+   * The geocode_cache table is append-only from the app's perspective — coordinates
+   * are never mutated here. Correcting a photo simply re-points its FK to the row
+   * that was returned by the /retrieve endpoint.
    */
   public async updatePhotoLocation({ params, request, response, auth }: HttpContext) {
     await auth.use('api').authenticate()
@@ -236,40 +244,39 @@ export default class GeocodingController {
       return response.notFound({ error: 'Photo not found' })
     }
 
-    const lat = Number(request.input('lat'))
-    const lng = Number(request.input('lng'))
-    const formattedAddress = String(request.input('formattedAddress', ''))
-    const placeId = request.input('placeId', null)
-    const granularity = request.input('granularity', null) as LocationGranularity | null
-
-    if (isNaN(lat) || lat < -90 || lat > 90 || isNaN(lng) || lng < -180 || lng > 180) {
-      return response.badRequest({ error: 'Invalid coordinates' })
+    const geocodeCacheId = Number(request.input('geocodeCacheId'))
+    if (!Number.isInteger(geocodeCacheId) || geocodeCacheId <= 0) {
+      return response.badRequest({ error: 'geocodeCacheId must be a positive integer' })
     }
 
+    const cacheRow = await GeocodeCache.find(geocodeCacheId)
+    if (!cacheRow) {
+      return response.notFound({ error: 'Geocode cache entry not found' })
+    }
+
+    // Re-point the photo FK — no geocode_cache coordinates are touched
+    photo.inferredLocationId = geocodeCacheId
+    await photo.save()
+
+    // Annotate EXIF only for photos that already had AI inference metadata
     const existingInference = (photo.descriptions as any)?.EXIF?.aiLocationInference ?? null
+    if (existingInference) {
+      const manager = new PhotoManager()
+      await manager.updatePhotoDescriptions(String(photo.id), {
+        EXIF: {
+          aiLocationInference: {
+            reliability: existingInference.reliability,
+            inferredAt: existingInference.inferredAt,
+            proximityLocated: existingInference.proximityLocated,
+            proximitySourcePhotoId: existingInference.proximitySourcePhotoId,
+            correctedByUser: true,
+            correctedAt: new Date().toISOString(),
+          },
+        },
+      })
+    }
 
-    const manager = new PhotoManager()
-    await manager.updatePhotoDescriptions(String(photo.id), {
-      EXIF: {
-        gpsLatitude: lat,
-        gpsLongitude: lng,
-        gpsLatitudeRef: lat < 0 ? 'S' : 'N',
-        gpsLongitudeRef: lng < 0 ? 'W' : 'E',
-        aiLocationInference: existingInference
-          ? {
-              ...existingInference,
-              formattedAddress,
-              placeId: placeId ?? existingInference.placeId ?? null,
-              geocodeQuery: formattedAddress,
-              geocodeGranularity: granularity ?? existingInference.geocodeGranularity ?? null,
-              correctedByUser: true,
-              correctedAt: new Date().toISOString(),
-            }
-          : undefined,
-      },
-    })
-
-    const updated = await Photo.find(photo.id)
+    const updated = await Photo.query().where('id', photo.id).preload('inferredLocation').first()
 
     CacheInvalidationService.onPhotosGeolocationUpdate(user.id)
     return response.ok({ success: true, photo: updated?.serialize() })

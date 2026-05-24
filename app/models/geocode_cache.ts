@@ -28,6 +28,18 @@ export default class GeocodeCache extends BaseModel {
   @column()
   declare granularity: string | null
 
+  @column()
+  declare place: string | null
+
+  @column()
+  declare city: string | null
+
+  @column()
+  declare region: string | null
+
+  @column()
+  declare country: string | null
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 }

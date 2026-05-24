@@ -3,12 +3,10 @@ import Photo, { PhotoDescriptions, DescriptionType } from '#models/photo'
 import TagPhoto from '#models/tag_photo'
 import ModelsService from '#services/models_service'
 import NLPService from '#services/nlp_service'
-import { Logger } from '@adonisjs/core/logger'
 
 import { withCache } from '../decorators/withCache.js'
 import { CacheInvalidationService } from '../services/cache_invalidation_service.js'
 import TagPhotoManager from './tag_photo_manager.js'
-import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
 import { DeleteObjectsCommand, S3Client } from '@aws-sdk/client-s3'
 import db from '@adonisjs/lucid/services/db'
 
@@ -77,6 +75,7 @@ export default class PhotoManager {
     const photos = await Photo.query()
       .where('user_id', userId)
       .preload('analyzerProcess')
+      .preload('inferredLocation')
       .orderBy('created_at', 'desc')
     return photos.map((p) => ({
       id: p.id,
@@ -85,6 +84,19 @@ export default class PhotoManager {
       status: p.status,
       originalFileName: p.originalFileName,
       analyzerProcessId: p.analyzerProcessId,
+      inferredLocation: p.inferredLocation
+        ? {
+            lat: Number(p.inferredLocation.lat),
+            lng: Number(p.inferredLocation.lng),
+            // formattedAddress: p.inferredLocation.formattedAddress ?? null,
+            queryNormalized: p.inferredLocation.queryNormalized ?? null,
+            granularity: p.inferredLocation.granularity ?? null,
+            place: p.inferredLocation.place ?? null,
+            city: p.inferredLocation.city ?? null,
+            region: p.inferredLocation.region ?? null,
+            country: p.inferredLocation.country ?? null,
+          }
+        : null,
       descriptions: {
         context: p.descriptions?.context || '',
         visual_aspects: p.descriptions?.visual_aspects || {},
