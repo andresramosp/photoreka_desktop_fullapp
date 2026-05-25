@@ -58,7 +58,6 @@
                   {{ runningStatusLabel }}
                 </span>
                 <span class="ail-progress-meta">
-                  <span>{{ runningProgressDetail }}</span>
                   <strong>{{ displayProgress }}%</strong>
                 </span>
               </div>
@@ -790,6 +789,20 @@ const headerIcon = computed(() => {
 
 .ai-location-card {
   width: min(600px, 100%);
+}
+
+@media (max-width: 639px) {
+  .ai-location-backdrop {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .ai-location-card {
+    width: 100%;
+    height: 100%;
+    border-radius: 0 !important;
+    overflow-y: auto;
+  }
 }
 
 .ai-location-fade-enter-active,

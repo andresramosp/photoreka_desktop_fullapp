@@ -82,6 +82,8 @@
         { 'map-container--pending': !isMapViewportReady },
         { 'map-container--rect-selecting': isRectSelecting },
       ]"
+      @mousedown.capture="clearHoveredMapPhoto"
+      @touchstart.capture="clearHoveredMapPhoto"
     >
       <!-- Rect-select capture layer: blocks Leaflet events when Ctrl/Cmd is held -->
       <div
@@ -412,6 +414,10 @@ const rectSelectStyle = computed(() => {
     height: y2 - y1 + "px",
   };
 });
+
+function clearHoveredMapPhoto() {
+  hoveredMapPhoto.value = null;
+}
 
 function handleRectKeyDown(e: KeyboardEvent) {
   if (e.key === "Control" || e.key === "Meta") ctrlKeyHeld.value = true;
@@ -1098,7 +1104,7 @@ function createPhotoMarkerIcon(photo: PhotoWithGps): L.DivIcon {
     className: "photo-map-div-icon photo-single-div-icon",
     html: `<div class="${classes}" aria-label="${escapeHtml(
       getPhotoTitle(photo),
-    )}">${createPhotoImageMarkup(photo)}${isAiLocatedPhoto(photo) ? '<button class="photo-marker-correct-btn" title="Correct location" aria-label="Correct location"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75z"/></svg></button>' : ""}</div>`,
+    )}">${createPhotoImageMarkup(photo)}${isAiLocatedPhoto(photo) && !isMobile.value ? '<button class="photo-marker-correct-btn" title="Correct location" aria-label="Correct location"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75z"/></svg></button>' : ""}</div>`,
     iconSize: [42, 42],
     iconAnchor: [21, 21],
   });
@@ -1696,6 +1702,7 @@ function dbgHighlightProxiedMarkers(
 // ─────────────────────────────────────────────────────────────────────────────
 
 function openCorrectionPopup(photo: PhotoWithGps) {
+  if (isMobile.value) return;
   hoveredMapPhoto.value = null;
   correctionPhoto.value = photo;
   showCorrectionPopup.value = true;
