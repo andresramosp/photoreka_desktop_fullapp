@@ -14,7 +14,8 @@ export class Logger {
   private constructor(prefix: string, suffix?: string) {
     this.prefix = prefix
     this.suffix = suffix || null
-    this.level = LogLevel.INFO
+    const envLevel = process.env['LOG_LEVEL']
+    this.level = envLevel === 'debug' || envLevel === 'trace' ? LogLevel.DEBUG : LogLevel.INFO
   }
 
   public static getInstance(prefix: string, suffix?: string): Logger {
