@@ -440,9 +440,9 @@
             /></n-icon>
             <span class="credit-estimate-text">Estimated cost:</span>
           </div>
-          <span class="credit-estimate-value"
-            >{{ displayedCredits }} credits</span
-          >
+          <span class="credit-estimate-value">
+            {{ displayedCredits != null ? displayedCredits + " credits" : "…" }}
+          </span>
         </div>
         <div class="footer-actions">
           <n-button
@@ -844,19 +844,8 @@ const estimatedCredits = ref(null); // null = loading/unknown
 let creditEstimateDebounce = null;
 let creditEstimateReqId = 0;
 
-const localFallbackCredits = computed(() => {
-  // Simple local approximation used only as a placeholder while fetching.
-  const base = Math.ceil(
-    (0.006 *
-      form.targetSize *
-      (form.coherenceMode !== "free" ? 1.1 : 1) *
-      1.3) /
-      0.001,
-  );
-  return Math.max(base, 65);
-});
-
 const fetchCreditEstimate = () => {
+  if (!props.show) return; // Don't fetch while the wizard is not open
   if (creditEstimateDebounce) clearTimeout(creditEstimateDebounce);
   creditEstimateDebounce = setTimeout(async () => {
     const reqId = ++creditEstimateReqId;
@@ -867,7 +856,7 @@ const fetchCreditEstimate = () => {
       stylePreferences: form.stylePreferences,
     });
     if (reqId !== creditEstimateReqId) return;
-    estimatedCredits.value = result ?? localFallbackCredits.value;
+    estimatedCredits.value = result;
   }, 400);
 };
 
@@ -882,9 +871,7 @@ watch(
   { immediate: true },
 );
 
-const displayedCredits = computed(
-  () => estimatedCredits.value ?? localFallbackCredits.value,
-);
+const displayedCredits = computed(() => estimatedCredits.value);
 
 // ── Validation ─────────────────────────────────────────────
 const canSubmit = computed(() => {
@@ -1299,6 +1286,11 @@ watch(
     } else {
       resetForm();
     }
+    // Explicitly kick off a fresh estimate now that the wizard is open.
+    // This is necessary because resetForm() nulls estimatedCredits, but the
+    // form-values watcher won't re-fire if targetSize/coherenceMode didn't
+    // change from their current (already-default) values.
+    fetchCreditEstimate();
   },
 );
 </script>

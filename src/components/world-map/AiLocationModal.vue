@@ -588,32 +588,6 @@ function onBackdropClick() {
   backdropPressed.value = false;
 }
 
-// ── Local credit estimate (mirrors backend formula, geocoding is €0) ────────
-const EST_BATCH_SIZE = 4;
-const EST_LLM_EUR_PER_PHOTO = 0.0008;
-const EST_FLOOR_EUR = 0.02;
-const EST_DB_PREMATCH_RATIO = 0.08;
-const EST_CLUSTER_RATIO = 0.3;
-const EST_FOLLOWER_RATIO = 0.5;
-const EST_CLUSTER_SUCCESS = 0.7;
-const EST_EUR_PER_CREDIT = 0.001;
-const EST_MARGIN = 2;
-
-function calcCreditsRange(n: number): { min: number; max: number } {
-  if (n <= 0) return { min: 0, max: 0 };
-  const toCredits = (eur: number) =>
-    Math.max(1, Math.ceil((eur * EST_MARGIN) / EST_EUR_PER_CREDIT));
-  const billedSlots = Math.ceil(n / EST_BATCH_SIZE) * EST_BATCH_SIZE;
-  const maxEur = Math.max(EST_FLOOR_EUR, billedSlots * EST_LLM_EUR_PER_PHOTO);
-  const effective = n * (1 - EST_DB_PREMATCH_RATIO);
-  const clustered = effective * EST_CLUSTER_RATIO;
-  const saved = clustered * EST_FOLLOWER_RATIO * EST_CLUSTER_SUCCESS;
-  const effectiveLlm = effective - saved;
-  const minEur = Math.max(EST_FLOOR_EUR, effectiveLlm * EST_LLM_EUR_PER_PHOTO);
-  return { min: toCredits(minEur), max: toCredits(maxEur) };
-}
-// ─────────────────────────────────────────────────────────────────────────────
-
 // ── Photo limit slider ────────────────────────────────────────────────
 const sliderMin = computed(() => (props.photosToProcess < 50 ? 1 : 10));
 const selectedPhotoLimit = ref(props.photosToProcess);
@@ -629,9 +603,16 @@ watch(sliderMin, (min) => {
   if (selectedPhotoLimit.value < min) selectedPhotoLimit.value = min;
 });
 
-const adjustedCredits = computed(() =>
-  calcCreditsRange(selectedPhotoLimit.value),
-);
+// Scale the backend estimate proportionally when the slider is adjusted
+const adjustedCredits = computed(() => {
+  const base = props.estimatedCredits;
+  if (selectedPhotoLimit.value >= props.photosToProcess) return base;
+  const ratio = selectedPhotoLimit.value / props.photosToProcess;
+  return {
+    min: Math.max(1, Math.round(base.min * ratio)),
+    max: Math.max(1, Math.round(base.max * ratio)),
+  };
+});
 // ─────────────────────────────────────────────────────────────────────
 
 // ── Fake forecast loader ──────────────────────────────────────────────
