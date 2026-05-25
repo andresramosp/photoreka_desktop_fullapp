@@ -5,8 +5,29 @@ import UsageService from '#services/usage_service'
 /** 1 credit = €0.001 */
 const EUR_PER_CREDIT = 0.001
 
-/** Default billing multiplier applied to raw EUR cost for variable-cost LLM usage. */
-export const DEFAULT_COST_MULTIPLIER = 2
+/**
+ * Billing categories for differentiated margin multipliers.
+ */
+export type CostCategory = 'GEO_INFERENCE' | 'SEARCH' | 'PORTFOLIO_BUILD' | 'CHAT'
+
+/**
+ * Per-category billing multipliers applied to raw EUR cost.
+ *
+ * Override individual categories via env vars:
+ *   CREDIT_MARGIN_MULTIPLIER_GEO_INFERENCE
+ *   CREDIT_MARGIN_MULTIPLIER_SEARCH
+ *   CREDIT_MARGIN_MULTIPLIER_PORTFOLIO_BUILD
+ *   CREDIT_MARGIN_MULTIPLIER_CHAT
+ *
+ * A global CREDIT_MARGIN_MULTIPLIER env var serves as fallback for any
+ * category that has no per-category override set.
+ */
+export const COST_MULTIPLIERS: Record<CostCategory, number> = {
+  GEO_INFERENCE: 2.5,
+  SEARCH: 2,
+  PORTFOLIO_BUILD: 2.5,
+  CHAT: 2.25,
+}
 
 // ─── Fixed credit costs ─────────────────────────────────
 
@@ -20,26 +41,30 @@ export const CLIP_CROP_CREDITS = 5
 
 export default class CreditService {
   /**
-   * Billing multiplier applied to variable EUR costs before converting them to credits.
-   * Override with CREDIT_MARGIN_MULTIPLIER if needed.
+   * Billing multiplier for a given cost category.
+   *
+   * Resolution order:
+   *   1. CREDIT_MARGIN_MULTIPLIER_<CATEGORY> per-category env var
+   *   2. CREDIT_MARGIN_MULTIPLIER global env var (applies to all categories)
+   *   3. COST_MULTIPLIERS[category] code default
    */
-  static getCostMultiplier(): number {
-    const configuredMultiplier = Number(process.env.CREDIT_MARGIN_MULTIPLIER)
+  static getCostMultiplier(category: CostCategory): number {
+    const categoryVal = Number(process.env[`CREDIT_MARGIN_MULTIPLIER_${category}`])
+    if (Number.isFinite(categoryVal) && categoryVal >= 1) return categoryVal
 
-    if (Number.isFinite(configuredMultiplier) && configuredMultiplier >= 1) {
-      return configuredMultiplier
-    }
+    const globalVal = Number(process.env.CREDIT_MARGIN_MULTIPLIER)
+    if (Number.isFinite(globalVal) && globalVal >= 1) return globalVal
 
-    return DEFAULT_COST_MULTIPLIER
+    return COST_MULTIPLIERS[category]
   }
 
   /**
-   * Apply the configured pricing margin to a raw EUR cost.
+   * Apply the configured pricing margin for a given category to a raw EUR cost.
    */
-  static applyMargin(costEur: number): number {
+  static applyMargin(costEur: number, category: CostCategory): number {
     if (costEur <= 0) return 0
 
-    return costEur * this.getCostMultiplier()
+    return costEur * this.getCostMultiplier(category)
   }
 
   /**
@@ -69,11 +94,12 @@ export default class CreditService {
   }
 
   /**
-   * Charge credits based on a EUR cost.
+   * Charge credits based on a EUR cost for a given cost category.
+   * The category-specific margin multiplier is applied before conversion.
    * Returns the number of credits charged.
    */
-  static async charge(userId: number, costEur: number): Promise<number> {
-    const credits = this.eurToCredits(this.applyMargin(costEur))
+  static async charge(userId: number, costEur: number, category: CostCategory): Promise<number> {
+    const credits = this.eurToCredits(this.applyMargin(costEur, category))
     if (credits <= 0) return 0
     await UsageService.incrementCreditsUsed(userId, credits)
     return credits

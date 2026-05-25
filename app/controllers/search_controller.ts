@@ -66,7 +66,7 @@ export default class SearchController {
 
       const summary = searchService.costTracker.getSummary()
       if (summary.totalCostInEur > 0) {
-        CreditService.charge(user.id, summary.totalCostInEur).catch(() => {})
+        CreditService.charge(user.id, summary.totalCostInEur, 'SEARCH').catch(() => {})
       }
 
       return response.ok(result)
@@ -130,7 +130,7 @@ export default class SearchController {
 
       const summary = searchService.costTracker.getSummary()
       if (summary.totalCostInEur > 0) {
-        CreditService.charge(user.id, summary.totalCostInEur).catch(() => {})
+        CreditService.charge(user.id, summary.totalCostInEur, 'SEARCH').catch(() => {})
       }
 
       return response.ok({ message: 'Search process initiated' })
@@ -177,7 +177,7 @@ export default class SearchController {
 
       const summary = searchService.costTracker.getSummary()
       if (summary.totalCostInEur > 0) {
-        CreditService.charge(user.id, summary.totalCostInEur).catch(() => {})
+        CreditService.charge(user.id, summary.totalCostInEur, 'SEARCH').catch(() => {})
       }
 
       return response.ok(result)
@@ -218,7 +218,7 @@ export default class SearchController {
 
       const summary = searchService.costTracker.getSummary()
       if (summary.totalCostInEur > 0) {
-        CreditService.charge(user.id, summary.totalCostInEur).catch(() => {})
+        CreditService.charge(user.id, summary.totalCostInEur, 'SEARCH').catch(() => {})
       }
 
       response.header('X-Total-Count', totalCount.toString())

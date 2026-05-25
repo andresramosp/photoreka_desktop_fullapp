@@ -126,7 +126,10 @@ export class TagTask extends AnalyzerTask {
       new Set(
         Object.values(this.data)
           .flat()
-          .map((t) => t.name)
+          .map((t) => {
+            t.name = t.name.trim().toLowerCase()
+            return t.name
+          })
       )
     )
 
@@ -211,10 +214,11 @@ export class TagTask extends AnalyzerTask {
       const tagPhotosList: TagPhoto[] = []
 
       for (const tagData of tagDataList) {
-        const lower = tagData.name.toLocaleLowerCase()
+        const lower = tagData.name.trim().toLocaleLowerCase()
         if (STOPWORDS.includes(lower)) continue
 
-        const emb = this.embeddingsMap.get(tagData.name)
+        tagData.name = lower
+        const emb = this.embeddingsMap.get(lower)
         const existingOrCreatedTag = await tagManager.getOrCreateSimilarTag(tagData, emb)
 
         const tagPhoto = new TagPhoto()

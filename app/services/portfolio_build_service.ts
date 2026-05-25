@@ -334,7 +334,9 @@ export default class PortfolioBuildService {
       'targetSize' | 'coherenceMode' | 'sequencing' | 'stylePreferences'
     >
   ): number {
-    return CreditService.eurToCredits(CreditService.applyMargin(this.estimateRawEur(config)))
+    return CreditService.eurToCredits(
+      CreditService.applyMargin(this.estimateRawEur(config), 'PORTFOLIO_BUILD')
+    )
   }
 
   /**
@@ -715,9 +717,11 @@ Rules:
       // Record cost & charge credits
       UserCostService.recordFromTracker(build.userId, tracker, String(build.id)).catch(() => {})
 
-      // Charge the actual LLM cost with the standard 30% commercial margin.
+      // Charge the actual LLM cost with the configured PORTFOLIO_BUILD margin.
       if (costSummary.totalCostInEur > 0) {
-        CreditService.charge(build.userId, costSummary.totalCostInEur).catch(() => {})
+        CreditService.charge(build.userId, costSummary.totalCostInEur, 'PORTFOLIO_BUILD').catch(
+          () => {}
+        )
       }
 
       // Notify user
@@ -740,7 +744,9 @@ Rules:
       UserCostService.recordFromTracker(build.userId, tracker, String(build.id)).catch(() => {})
 
       if (costSummary.totalCostInEur > 0) {
-        CreditService.charge(build.userId, costSummary.totalCostInEur).catch(() => {})
+        CreditService.charge(build.userId, costSummary.totalCostInEur, 'PORTFOLIO_BUILD').catch(
+          () => {}
+        )
       }
 
       console.error(`[PortfolioBuild] ❌ Build ${build.id} failed:`, err.message)

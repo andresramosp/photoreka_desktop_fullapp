@@ -25,7 +25,7 @@ export default class TagManager {
   }
 
   public async getTagByNameAndGroup(name: string, group: TagGroups): Promise<Tag | null> {
-    return Tag.query().where('name', name).andWhere('group', group).first()
+    return Tag.query().where('name', name.trim().toLowerCase()).andWhere('group', group).first()
   }
 
   // Obtiene todos los Tags

@@ -204,7 +204,7 @@ export default class ChatController {
 
       // Charge credits based on real cost
       if (result.cost?.total?.costEur) {
-        CreditService.charge(user.id, result.cost.total.costEur).catch(() => {})
+        CreditService.charge(user.id, result.cost.total.costEur, 'CHAT').catch(() => {})
       }
 
       // Strip photoDescriptions before sending to frontend (LLM-only field)

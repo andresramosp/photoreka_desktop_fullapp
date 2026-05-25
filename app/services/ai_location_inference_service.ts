@@ -40,17 +40,13 @@ export type LocationInferenceProgressStage =
 
 interface ProximityClusterConfig {
   proximityWindowMs: number
-  representativeRatio: number
-  minRepresentatives: number
-  maxRepresentatives: number
+  representativePhotosPerSlot: number
   requiredAgreementPercentage: number
 }
 
 export const PROXIMITY_CLUSTER_CONFIG: ProximityClusterConfig = {
-  proximityWindowMs: 5 * 60 * 1000, // 3 minutes
-  representativeRatio: 0.1, // 10% of cluster photos
-  minRepresentatives: 3, // minimum reps to attempt consensus
-  maxRepresentatives: 5, // maximum reps to avoid bloating
+  proximityWindowMs: 5 * 60 * 1000, // 5 minutes
+  representativePhotosPerSlot: 5, // 1 representative per 5 photos
   requiredAgreementPercentage: 0.75, // 75% of valid reps must agree on country + city
 }
 
@@ -143,7 +139,6 @@ const RUNNING_STALE_MS = 1000 * 60 * 60 * 12
 
 interface PhotoProximityData {
   dateTakenMs: number | null
-  cameraKey: string | null
 }
 
 interface ProximityClaim {
@@ -237,7 +232,9 @@ export default class AiLocationInferenceService {
    */
   public static estimateCredits(photoCount: number): number {
     if (photoCount <= 0) return 0
-    return CreditService.eurToCredits(CreditService.applyMargin(this.estimateRawEur(photoCount)))
+    return CreditService.eurToCredits(
+      CreditService.applyMargin(this.estimateRawEur(photoCount), 'GEO_INFERENCE')
+    )
   }
 
   /**
@@ -248,7 +245,8 @@ export default class AiLocationInferenceService {
    *
    * Clustering model (min):
    *   - ~60% of photos are expected to form temporal clusters (have dateTaken).
-   *   - Within each cluster ~80% are followers (1 rep per 5 photos).
+   *   - Within each cluster, representatives are selected with the configured rule
+   *     of 1 rep per N photos (default: 5), leaving the rest as followers.
    *   - ~70% of clusters succeed (consensus + geocode OK) → those followers pay nothing.
    *   - Failed clusters dissolve → all photos pay individually.
    *   - Geocoding for successful clusters is amortized (1 call per ~6 photos).
@@ -309,8 +307,8 @@ export default class AiLocationInferenceService {
     if (photoCount <= 0) return { min: 0, max: 0 }
     const raw = this.estimateRawEurRange(photoCount)
     return {
-      min: CreditService.eurToCredits(CreditService.applyMargin(raw.min)),
-      max: CreditService.eurToCredits(CreditService.applyMargin(raw.max)),
+      min: CreditService.eurToCredits(CreditService.applyMargin(raw.min, 'GEO_INFERENCE')),
+      max: CreditService.eurToCredits(CreditService.applyMargin(raw.max, 'GEO_INFERENCE')),
     }
   }
 
@@ -596,7 +594,7 @@ export default class AiLocationInferenceService {
     clusters: TemporalCluster[]
     standalone: Photo[]
   } {
-    // Separate photos with valid proximity data (only dateTakenMs required, cameraKey not mandatory)
+    // Separate photos with valid temporal proximity data.
     const validGroup: Photo[] = []
     const standalone: Photo[] = []
 
@@ -667,8 +665,16 @@ export default class AiLocationInferenceService {
         // Sort descendingly by score (best photos first)
         scoredPhotos.sort((a, b) => b.score - a.score)
 
-        // 1 representative per 5 photos, minimum 1; always keep at least 1 follower.
-        const repCount = Math.max(1, Math.floor(cluster.photos.length / 5))
+        // Representative rule for cluster consensus:
+        // choose 1 representative per configured photo bucket,
+        // with a minimum of 1, while always keeping at least 1 follower.
+        const repCount = Math.max(
+          1,
+          Math.floor(
+            cluster.photos.length /
+              Math.max(1, PROXIMITY_CLUSTER_CONFIG.representativePhotosPerSlot)
+          )
+        )
         const actualRepCount = Math.min(cluster.photos.length - 1, repCount)
 
         const representatives = scoredPhotos.slice(0, actualRepCount).map((sp) => sp.photo)
@@ -762,8 +768,8 @@ export default class AiLocationInferenceService {
     const proximityLocated = new Map<number, ProximityClaim>()
 
     // Pre-match job photos against the user's already-geolocated library in DB.
-    // This catches photos taken at the same time with the same camera as a photo
-    // that was geolocated in a previous job — no LLM or geocoding needed for them.
+    // This catches photos taken at the same time as a photo that was geolocated
+    // in a previous job — no LLM or geocoding needed for them.
     await this.preMatchWithExistingGeolocated(
       context.userId,
       photoIds,
@@ -790,7 +796,7 @@ export default class AiLocationInferenceService {
     for (const photo of preMatchedPhotos) {
       const claim = proximityLocated.get(photo.id)!
       console.log(
-        `[AiLocationInference] Pre-matched DB shortcut photo ${photo.id} — same camera+time as DB photo ${claim.sourcePhotoId} → ${claim.geocode.formattedAddress}`
+        `[AiLocationInference] Pre-matched DB shortcut photo ${photo.id} — same time window as DB photo ${claim.sourcePhotoId} → ${claim.geocode.formattedAddress}`
       )
       try {
         await this.persistProximityLocation(photo, claim.sourcePhotoId, claim.cacheId)
@@ -829,7 +835,7 @@ export default class AiLocationInferenceService {
     console.log(
       ` - ${clusters.length} temporal clusters (total ${clusters.reduce((acc, c) => acc + c.photos.length, 0)} photos)`
     )
-    console.log(` - ${standalone.length} standalone photos (no camera or temporal matches)`)
+    console.log(` - ${standalone.length} standalone photos (no temporal matches)`)
 
     const totalReps = clusters.reduce((acc, c) => acc + c.representatives.length, 0)
     const totalFollowers = clusters.reduce((acc, c) => acc + c.followers.length, 0)
@@ -1308,7 +1314,8 @@ export default class AiLocationInferenceService {
       try {
         completedJob.creditsCharged = await CreditService.charge(
           context.userId,
-          completedJob.costEur
+          completedJob.costEur,
+          'GEO_INFERENCE'
         )
       } catch {}
     }
@@ -1799,10 +1806,10 @@ export default class AiLocationInferenceService {
   /**
    * Before any batch runs, scan the user's already-geolocated photo library and
    * pre-populate `proximityLocated` for job photos that match an existing entry
-   * (same camera key + dateTaken within PROXIMITY_CLUSTER_CONFIG.proximityWindowMs).
+   * (dateTaken within PROXIMITY_CLUSTER_CONFIG.proximityWindowMs).
    *
-   * Cost: one DB query (id + descriptions only) + O(n) in-memory scan grouped by
-   * cameraKey — negligible even for large libraries.
+   * Cost: one DB query (id + descriptions only) + O(n) in-memory scan — negligible
+   * even for large libraries.
    */
   private async preMatchWithExistingGeolocated(
     userId: number,
@@ -1942,27 +1949,16 @@ export default class AiLocationInferenceService {
   }
 
   /**
-   * Extract proximity-matching key from a photo's EXIF.
-   * Returns dateTakenMs and a normalised cameraKey ("make|model").
-   * Both must be non-null for proximity matching to apply.
+   * Extract temporal proximity data from a photo's EXIF.
+   * Returns a UTC millisecond timestamp when available.
    */
   private extractProximityData(photo: Photo): PhotoProximityData {
     const exif = (photo.descriptions as any)?.EXIF
-    if (!exif) return { dateTakenMs: null, cameraKey: null }
+    if (!exif) return { dateTakenMs: null }
 
     const dateTakenMs = this.parseDateTakenMs(exif.dateTaken)
 
-    // Accept all known field name variants sent by different EXIF parsers / clients:
-    //   - 'camera'       → single combined string (e.g. "SONY ILCE-7C")
-    //   - 'make'/'Make'  → manufacturer
-    //   - 'model'/'Model'→ model name
-    const camera = (exif.camera ?? exif.Camera ?? '').toString().trim().toLowerCase()
-    const make = (exif.make ?? exif.Make ?? '').toString().trim().toLowerCase()
-    const model = (exif.model ?? exif.Model ?? '').toString().trim().toLowerCase()
-    // Prefer the combined 'camera' field; fall back to make+model concatenation.
-    const cameraKey = camera || make || model ? camera || `${make}|${model}` : null
-
-    return { dateTakenMs, cameraKey }
+    return { dateTakenMs }
   }
 
   /**
@@ -2003,7 +1999,7 @@ export default class AiLocationInferenceService {
   }
 
   /**
-   * After all batches complete, scan geocoded job photos grouped by cameraKey.
+   * After all batches complete, scan geocoded job photos by temporal proximity.
    * Any photo with reliability < very_likely that has a proximity neighbour with strictly
    * higher reliability gets bumped one tier (uncertain→likely, likely→very_likely).
    * Runs once — handles cases where the uncertain photo was processed before the strong anchor.

@@ -183,7 +183,11 @@ export default class PortfolioBuildController {
       const user = auth.use('api').user! as any
 
       const service = new PortfolioBuildService()
-      const aborted = await service.abort(Number(params.id), user.id)
+      const buildId = Number(params.id)
+      if (!Number.isInteger(buildId) || buildId <= 0) {
+        return response.badRequest({ error: 'Invalid build ID.' })
+      }
+      const aborted = await service.abort(buildId, user.id)
 
       if (!aborted) {
         return response.notFound({ error: 'Build not found or already finished.' })
@@ -206,7 +210,11 @@ export default class PortfolioBuildController {
       const user = auth.use('api').user! as any
 
       const service = new PortfolioBuildService()
-      const build = await service.getStatus(Number(params.id), user.id)
+      const buildId = Number(params.id)
+      if (!Number.isInteger(buildId) || buildId <= 0) {
+        return response.badRequest({ error: 'Invalid build ID.' })
+      }
+      const build = await service.getStatus(buildId, user.id)
 
       if (!build) {
         return response.notFound({ error: 'Build not found.' })
@@ -262,7 +270,11 @@ export default class PortfolioBuildController {
       const user = auth.use('api').user! as any
 
       const service = new PortfolioBuildService()
-      const build = await service.getStatus(Number(params.id), user.id)
+      const buildId = Number(params.id)
+      if (!Number.isInteger(buildId) || buildId <= 0) {
+        return response.badRequest({ error: 'Invalid build ID.' })
+      }
+      const build = await service.getStatus(buildId, user.id)
 
       if (!build) {
         return response.notFound({ error: 'Build not found.' })
