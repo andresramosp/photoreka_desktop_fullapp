@@ -32,9 +32,9 @@
                   class="setting-input"
                   disabled
                 />
-                <n-button text type="primary" class="change-btn" disabled>
+                <!-- <n-button text type="primary" class="change-btn" disabled>
                   Save
-                </n-button>
+                </n-button> -->
               </div>
             </div>
 
@@ -52,69 +52,11 @@
                   class="setting-input"
                   disabled
                 />
-                <n-button text type="primary" class="change-btn" disabled>
+                <!-- <n-button text type="primary" class="change-btn" disabled>
                   Save
-                </n-button>
+                </n-button> -->
               </div>
             </div>
-
-            <!-- Invite Friends Card -->
-            <div class="invite-card" :class="{ disabled: isDemoUser }">
-              <div class="invite-card-header">
-                <div class="invite-icon-wrapper">
-                  <n-icon size="24" color="var(--accent-color)">
-                    <MailOutline />
-                  </n-icon>
-                </div>
-                <div class="invite-card-info">
-                  <span class="invite-card-title">Invite Friends</span>
-                  <span class="invite-card-description">
-                    <template v-if="isDemoUser">
-                      This feature is not available for demo accounts.
-                    </template>
-                    <template v-else>
-                      Give your friends access to Photoreka with a free batch of
-                      1000 photos.
-                    </template>
-                  </span>
-                </div>
-              </div>
-              <div class="invite-card-form">
-                <n-input
-                  v-model:value="inviteEmail"
-                  placeholder="friend@email.com"
-                  type="text"
-                  class="invite-card-input"
-                  :disabled="isSendingInvite || isDemoUser"
-                  @keyup.enter="sendInvitation"
-                />
-                <n-button
-                  type="info"
-                  :loading="isSendingInvite"
-                  :disabled="!inviteEmail || isSendingInvite || isDemoUser"
-                  @click="sendInvitation"
-                >
-                  <template #icon>
-                    <n-icon>
-                      <SendOutline />
-                    </n-icon>
-                  </template>
-                  Send
-                </n-button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Preferences Section -->
-        <section class="settings-section">
-          <div class="section-header">
-            <n-icon size="24" color="var(--primary-color)">
-              <SettingsOutline />
-            </n-icon>
-            <h2 class="section-title">Preferences</h2>
-          </div>
-          <div class="section-content">
             <div class="setting-item">
               <div class="setting-info">
                 <label class="setting-label">Profile</label>
@@ -126,7 +68,6 @@
                 </n-tag>
               </div>
             </div>
-
             <div class="setting-item">
               <div class="setting-info">
                 <label class="setting-label">Preferred Source</label>
@@ -139,151 +80,26 @@
               </div>
             </div>
 
-            <div class="setting-item">
+            <!-- Delete Account -->
+            <div class="setting-item danger-zone-item">
               <div class="setting-info">
-                <label class="setting-label">Language</label>
+                <label class="setting-label danger-label">Delete Account</label>
                 <p class="setting-description">
-                  Choose your preferred language
+                  Permanently delete your account and all your photos.
                 </p>
               </div>
               <div class="setting-control">
-                <n-select
-                  disabled
-                  v-model:value="selectedLanguage"
-                  :options="languageOptions"
-                  class="setting-select"
-                />
-              </div>
-            </div>
-
-            <div class="setting-item">
-              <div class="setting-info">
-                <label class="setting-label">Theme</label>
-                <p class="setting-description">Select your visual preference</p>
-              </div>
-              <div class="setting-control">
-                <n-select
-                  v-model:value="selectedTheme"
-                  :options="themeOptions"
-                  class="setting-select"
-                />
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Connections Section -->
-        <section class="settings-section">
-          <div class="section-header">
-            <n-icon size="24" color="var(--primary-color)">
-              <LinkOutline />
-            </n-icon>
-            <h2 class="section-title">Connections</h2>
-          </div>
-          <div class="section-content">
-            <!-- Google Photos -->
-            <div class="connection-item">
-              <div class="connection-info">
-                <img
-                  :src="googlePhotosIconUrl"
-                  alt="Google Photos"
-                  class="connection-icon"
-                />
-                <div class="connection-details">
-                  <span class="connection-name">Google Photos</span>
-                  <span class="connection-description"
-                    >Import and sync photos from your library</span
-                  >
-                </div>
-              </div>
-              <div class="connection-actions">
-                <n-tag
-                  v-if="isGooglePhotosConnected"
-                  type="success"
-                  size="small"
-                  round
-                >
-                  Connected
-                </n-tag>
-                <n-tag v-else type="warning" size="small" round>
-                  Not connected
-                </n-tag>
                 <n-button
-                  v-if="isGooglePhotosConnected"
-                  text
                   type="error"
-                  size="small"
-                  @click="disconnectGooglePhotos"
+                  :disabled="isDemoUser"
+                  @click="showDeleteAccountModal = true"
                 >
-                  Disconnect
-                </n-button>
-                <n-button
-                  v-else
-                  type="primary"
-                  size="small"
-                  @click="connectGooglePhotos"
-                >
-                  Connect
-                </n-button>
-              </div>
-            </div>
-
-            <!-- Instagram -->
-            <div class="connection-item coming-soon">
-              <div class="connection-info">
-                <div class="connection-icon-wrapper instagram">
-                  <n-icon size="24" color="#fff">
-                    <LogoInstagram />
-                  </n-icon>
-                </div>
-                <div class="connection-details">
-                  <span class="connection-name">Instagram</span>
-                  <span class="connection-description"
-                    >Connect your Instagram account</span
-                  >
-                </div>
-              </div>
-              <div class="connection-actions">
-                <n-tag type="info" size="small" round> Coming soon </n-tag>
-              </div>
-            </div>
-
-            <!-- Dropbox -->
-            <div class="connection-item">
-              <div class="connection-info">
-                <img
-                  :src="dropboxIconUrl"
-                  alt="Dropbox"
-                  class="connection-icon"
-                />
-                <div class="connection-details">
-                  <span class="connection-name">Dropbox</span>
-                  <span class="connection-description"
-                    >Import photos from your Dropbox</span
-                  >
-                </div>
-              </div>
-              <div class="connection-actions">
-                <n-tag v-if="isDropboxReady" type="success" size="small" round>
-                  Ready
-                </n-tag>
-                <n-tag v-else type="warning" size="small" round>
-                  Not connected
-                </n-tag>
-                <n-button
-                  v-if="!isDropboxReady"
-                  type="primary"
-                  size="small"
-                  @click="connectDropbox"
-                  :loading="dropbox.isLoading.value"
-                >
-                  Connect
+                  Delete Account
                 </n-button>
               </div>
             </div>
           </div>
         </section>
-
         <!-- Plans & Storage Section -->
         <section class="settings-section">
           <div class="section-header">
@@ -432,6 +248,203 @@
                 </n-button>
               </div>
             </div>
+
+            <!-- Invite Friends Card -->
+            <div class="invite-card" :class="{ disabled: isDemoUser }">
+              <div class="invite-card-header">
+                <div class="invite-icon-wrapper">
+                  <n-icon size="24" color="var(--accent-color)">
+                    <MailOutline />
+                  </n-icon>
+                </div>
+                <div class="invite-card-info">
+                  <span class="invite-card-title">Invite Friends</span>
+                  <span class="invite-card-description">
+                    <template v-if="isDemoUser">
+                      This feature is not available for demo accounts.
+                    </template>
+                    <template v-else>
+                      Get a bonus of 500 credits for each successful referral!
+                    </template>
+                  </span>
+                </div>
+              </div>
+              <div class="invite-card-form">
+                <n-input
+                  v-model:value="inviteEmail"
+                  placeholder="friend@email.com"
+                  type="text"
+                  class="invite-card-input"
+                  :disabled="isSendingInvite || isDemoUser"
+                  @keyup.enter="sendInvitation"
+                />
+                <n-button
+                  type="info"
+                  :loading="isSendingInvite"
+                  :disabled="!inviteEmail || isSendingInvite || isDemoUser"
+                  @click="sendInvitation"
+                >
+                  <template #icon>
+                    <n-icon>
+                      <SendOutline />
+                    </n-icon>
+                  </template>
+                  Send
+                </n-button>
+              </div>
+            </div>
+          </div>
+        </section>
+        <!-- Preferences Section -->
+        <section class="settings-section">
+          <div class="section-header">
+            <n-icon size="24" color="var(--primary-color)">
+              <SettingsOutline />
+            </n-icon>
+            <h2 class="section-title">Preferences</h2>
+          </div>
+          <div class="section-content">
+            <div class="setting-item">
+              <div class="setting-info">
+                <label class="setting-label">Language</label>
+                <p class="setting-description">
+                  Choose your preferred language
+                </p>
+              </div>
+              <div class="setting-control">
+                <n-select
+                  disabled
+                  v-model:value="selectedLanguage"
+                  :options="languageOptions"
+                  class="setting-select"
+                />
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <label class="setting-label">Theme</label>
+                <p class="setting-description">Select your visual preference</p>
+              </div>
+              <div class="setting-control">
+                <n-select
+                  v-model:value="selectedTheme"
+                  :options="themeOptions"
+                  class="setting-select"
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Connections Section -->
+        <section class="settings-section">
+          <div class="section-header">
+            <n-icon size="24" color="var(--primary-color)">
+              <LinkOutline />
+            </n-icon>
+            <h2 class="section-title">Connections</h2>
+          </div>
+          <div class="section-content">
+            <!-- Google Photos -->
+            <div class="connection-item">
+              <div class="connection-info">
+                <img
+                  :src="googlePhotosIconUrl"
+                  alt="Google Photos"
+                  class="connection-icon"
+                />
+                <div class="connection-details">
+                  <span class="connection-name">Google Photos</span>
+                  <span class="connection-description"
+                    >Import and sync photos from your library</span
+                  >
+                </div>
+              </div>
+              <div class="connection-actions">
+                <n-tag
+                  v-if="isGooglePhotosConnected"
+                  type="success"
+                  size="small"
+                  round
+                >
+                  Connected
+                </n-tag>
+                <n-tag v-else type="warning" size="small" round>
+                  Not connected
+                </n-tag>
+                <n-button
+                  v-if="isGooglePhotosConnected"
+                  text
+                  type="error"
+                  size="small"
+                  @click="disconnectGooglePhotos"
+                >
+                  Disconnect
+                </n-button>
+                <n-button
+                  v-else
+                  type="primary"
+                  size="small"
+                  @click="connectGooglePhotos"
+                >
+                  Connect
+                </n-button>
+              </div>
+            </div>
+
+            <!-- Dropbox -->
+            <div class="connection-item">
+              <div class="connection-info">
+                <img
+                  :src="dropboxIconUrl"
+                  alt="Dropbox"
+                  class="connection-icon"
+                />
+                <div class="connection-details">
+                  <span class="connection-name">Dropbox</span>
+                  <span class="connection-description"
+                    >Import photos from your Dropbox</span
+                  >
+                </div>
+              </div>
+              <div class="connection-actions">
+                <n-tag v-if="isDropboxReady" type="success" size="small" round>
+                  Ready
+                </n-tag>
+                <n-tag v-else type="warning" size="small" round>
+                  Not connected
+                </n-tag>
+                <n-button
+                  v-if="!isDropboxReady"
+                  type="primary"
+                  size="small"
+                  @click="connectDropbox"
+                  :loading="dropbox.isLoading.value"
+                >
+                  Connect
+                </n-button>
+              </div>
+            </div>
+            <!-- Instagram -->
+            <div class="connection-item coming-soon">
+              <div class="connection-info">
+                <div class="connection-icon-wrapper instagram">
+                  <n-icon size="24" color="#fff">
+                    <LogoInstagram />
+                  </n-icon>
+                </div>
+                <div class="connection-details">
+                  <span class="connection-name">Instagram</span>
+                  <span class="connection-description"
+                    >Connect your Instagram account</span
+                  >
+                </div>
+              </div>
+              <div class="connection-actions">
+                <n-tag type="info" size="small" round> Coming soon </n-tag>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -532,11 +545,87 @@
       </template>
     </n-card>
   </n-modal>
+
+  <!-- Delete Account Confirmation Modal -->
+  <n-modal
+    v-model:show="showDeleteAccountModal"
+    :style="{ width: '460px', maxWidth: '92vw' }"
+  >
+    <n-card
+      :bordered="false"
+      role="dialog"
+      aria-modal="true"
+      class="delete-account-modal-card"
+    >
+      <template #header-extra>
+        <n-button
+          text
+          @click="showDeleteAccountModal = false"
+          aria-label="Close"
+        >
+          <n-icon size="20"><CloseOutline /></n-icon>
+        </n-button>
+      </template>
+
+      <div class="delete-account-modal-content">
+        <div class="delete-account-icon-wrapper">
+          <n-icon size="32" color="var(--error-color)"><TrashOutline /></n-icon>
+        </div>
+        <h3 class="delete-account-title">Delete Account</h3>
+        <p class="delete-account-body">
+          This action is <strong>permanent and cannot be undone</strong>. Your
+          account will be deactivated and all your photos will be scheduled for
+          permanent deletion.
+        </p>
+        <div class="delete-account-warning">
+          <n-icon size="16" color="var(--error-color)"
+            ><WarningOutline
+          /></n-icon>
+          <span
+            >All your analyzed photos, tags, collections and data will be lost
+            forever.</span
+          >
+        </div>
+        <p class="delete-account-confirm-label">
+          Type <strong>DELETE</strong> to confirm:
+        </p>
+        <n-input
+          v-model:value="deleteConfirmText"
+          placeholder="DELETE"
+          class="delete-account-input"
+          :status="
+            deleteConfirmText && deleteConfirmText !== 'DELETE'
+              ? 'error'
+              : undefined
+          "
+        />
+      </div>
+
+      <template #action>
+        <div class="delete-account-actions">
+          <n-button
+            @click="showDeleteAccountModal = false"
+            :disabled="isDeletingAccount"
+          >
+            Cancel
+          </n-button>
+          <n-button
+            type="error"
+            :loading="isDeletingAccount"
+            :disabled="deleteConfirmText !== 'DELETE' || isDeletingAccount"
+            @click="handleDeleteAccount"
+          >
+            Delete my account forever
+          </n-button>
+        </div>
+      </template>
+    </n-card>
+  </n-modal>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import {
   NInput,
   NSelect,
@@ -558,6 +647,9 @@ import {
   MailOutline,
   SendOutline,
   StarOutline,
+  TrashOutline,
+  WarningOutline,
+  CloseOutline,
 } from "@vicons/ionicons5";
 import { SparklesOutline } from "@vicons/ionicons5";
 
@@ -593,6 +685,7 @@ const PURCHASE_ENABLED_EMAILS = (
 // Stores and composables
 const userStore = useUserStore();
 const route = useRoute();
+const router = useRouter();
 const { isDarkMode, setTheme } = useTheme();
 const googlePhotos = useGooglePhotos();
 const dropbox = useDropbox();
@@ -796,6 +889,32 @@ const saveSettings = () => {
   // TODO: Implement save settings
   console.log("Save settings");
 };
+
+// Delete account
+const showDeleteAccountModal = ref(false);
+const deleteConfirmText = ref("");
+const isDeletingAccount = ref(false);
+
+const handleDeleteAccount = async () => {
+  if (deleteConfirmText.value !== "DELETE") return;
+  try {
+    isDeletingAccount.value = true;
+    await api.delete("/api/account");
+    showDeleteAccountModal.value = false;
+    userStore.logout();
+    router.push("/auth/login");
+  } catch (error: any) {
+    const msg =
+      error?.response?.data?.message ||
+      error?.message ||
+      "Failed to delete account";
+    message.error(msg);
+    console.error("[DeleteAccount] Error:", error);
+  } finally {
+    isDeletingAccount.value = false;
+    deleteConfirmText.value = "";
+  }
+};
 </script>
 
 <style scoped>
@@ -837,6 +956,8 @@ const saveSettings = () => {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .section-header {
@@ -860,6 +981,7 @@ const saveSettings = () => {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg);
+  flex: 1;
 }
 
 /* Setting Item Styles */
@@ -1250,14 +1372,18 @@ const saveSettings = () => {
 .invite-card {
   padding: var(--spacing-md);
   border-radius: var(--radius-md);
-  background-color: var(--bg-container);
-  border: 1px solid var(--border-color);
+  background: linear-gradient(
+    135deg,
+    rgba(59, 130, 246, 0.07) 0%,
+    rgba(99, 102, 241, 0.05) 100%
+  );
+  border: 1px solid rgba(59, 130, 246, 0.2);
   transition: var(--transition-fast);
 }
 
 .invite-card:hover {
-  border-color: var(--primary-color-hover);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.08);
 }
 
 .invite-card.disabled {
@@ -1333,5 +1459,87 @@ const saveSettings = () => {
   .settings-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Danger zone */
+.danger-zone-item {
+  border-bottom: none;
+  margin-top: auto;
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--border-color);
+}
+
+.danger-label {
+  color: var(--error-color) !important;
+}
+
+/* Delete Account Modal */
+.delete-account-modal-card {
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-surface);
+}
+
+.delete-account-modal-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) 0;
+}
+
+.delete-account-icon-wrapper {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  background: rgba(239, 68, 68, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-account-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--error-color);
+  margin: 0;
+}
+
+.delete-account-body {
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.delete-account-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  background-color: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  text-align: left;
+  width: 100%;
+}
+
+.delete-account-confirm-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0;
+  align-self: flex-start;
+}
+
+.delete-account-input {
+  width: 100%;
+}
+
+.delete-account-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
 }
 </style>

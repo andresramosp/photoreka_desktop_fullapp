@@ -196,31 +196,6 @@
         </div>
       </div>
 
-      <!-- ═══ Top Users ═══ -->
-      <div class="card">
-        <h3 class="card-title">Top Users by Cost</h3>
-        <div v-if="data.topUsers.length === 0" class="no-data">No data yet</div>
-        <div v-else class="task-table">
-          <div class="task-header">
-            <span>User</span>
-            <span>Total Cost</span>
-            <span>This Month</span>
-            <span>Top Category</span>
-          </div>
-          <div v-for="u in data.topUsers" :key="u.id" class="task-row">
-            <span class="task-name">
-              {{ u.name }}
-              <span class="dim" style="margin-left: 6px; font-weight: 400">{{
-                u.email
-              }}</span>
-            </span>
-            <span class="cost-value">€{{ fmt(u.totalCostEur) }}</span>
-            <span>€{{ fmt(u.thisMonthCostEur) }}</span>
-            <span>{{ topCategory(u.byCategory) }}</span>
-          </div>
-        </div>
-      </div>
-
       <!-- ═══ Transaction Log ═══ -->
       <div class="card">
         <h3 class="card-title">Transaction Log</h3>
@@ -381,6 +356,31 @@
           >
             ›
           </button>
+        </div>
+      </div>
+
+      <!-- ═══ Top Users ═══ -->
+      <div class="card">
+        <h3 class="card-title">Top Users by Cost</h3>
+        <div v-if="data.topUsers.length === 0" class="no-data">No data yet</div>
+        <div v-else class="task-table">
+          <div class="task-header">
+            <span>User</span>
+            <span>Total Cost</span>
+            <span>This Month</span>
+            <span>Top Category</span>
+          </div>
+          <div v-for="u in data.topUsers" :key="u.id" class="task-row">
+            <span class="task-name">
+              {{ u.name }}
+              <span class="dim" style="margin-left: 6px; font-weight: 400">{{
+                u.email
+              }}</span>
+            </span>
+            <span class="cost-value">€{{ fmt(u.totalCostEur) }}</span>
+            <span>€{{ fmt(u.thisMonthCostEur) }}</span>
+            <span>{{ topCategory(u.byCategory) }}</span>
+          </div>
         </div>
       </div>
     </template>

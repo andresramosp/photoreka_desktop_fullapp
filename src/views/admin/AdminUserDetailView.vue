@@ -153,13 +153,25 @@
                 <!-- Editable: analyzedPhotosLimit -->
                 <div class="info-row editable-row">
                   <span class="info-label">Analyzed limit</span>
-                  <n-input-number
-                    v-model:value="editUsage.analyzedPhotosLimit"
-                    size="tiny"
-                    :min="0"
-                    :step="100"
-                    style="width: 120px"
-                  />
+                  <div class="editable-row-right">
+                    <span
+                      class="remaining-badge"
+                      :class="
+                        analyzedRemaining <= 0
+                          ? 'remaining-empty'
+                          : 'remaining-ok'
+                      "
+                    >
+                      {{ analyzedRemaining }} left
+                    </span>
+                    <n-input-number
+                      v-model:value="editUsage.analyzedPhotosLimit"
+                      size="tiny"
+                      :min="0"
+                      :step="100"
+                      style="width: 120px"
+                    />
+                  </div>
                 </div>
                 <div class="info-row">
                   <span class="info-label">Credits used</span>
@@ -170,13 +182,25 @@
                 <!-- Editable: creditsAvailable -->
                 <div class="info-row editable-row">
                   <span class="info-label">Credits available</span>
-                  <n-input-number
-                    v-model:value="editUsage.creditsAvailable"
-                    size="tiny"
-                    :min="0"
-                    :step="100"
-                    style="width: 120px"
-                  />
+                  <div class="editable-row-right">
+                    <span
+                      class="remaining-badge"
+                      :class="
+                        creditsRemaining <= 0
+                          ? 'remaining-empty'
+                          : 'remaining-ok'
+                      "
+                    >
+                      {{ creditsRemaining }} left
+                    </span>
+                    <n-input-number
+                      v-model:value="editUsage.creditsAvailable"
+                      size="tiny"
+                      :min="0"
+                      :step="100"
+                      style="width: 120px"
+                    />
+                  </div>
                 </div>
                 <n-button
                   size="small"
@@ -274,114 +298,6 @@
             </div>
           </div>
 
-          <!-- Activity Log Card -->
-          <div class="activity-card">
-            <div class="activity-card-header">
-              <h4>Activity Log</h4>
-              <div class="activity-controls">
-                <span class="activity-live-badge">● LIVE</span>
-                <n-select
-                  v-model:value="activityFilter"
-                  placeholder="All types"
-                  clearable
-                  size="tiny"
-                  style="width: 170px"
-                  :options="activityTypeOptions"
-                  @update:value="fetchActivities(1)"
-                />
-                <n-button
-                  size="tiny"
-                  quaternary
-                  :loading="activitiesLoading"
-                  title="Refresh activities"
-                  @click="fetchActivities(activityPage)"
-                >
-                  <template #icon>
-                    <n-icon size="14"><RefreshIcon /></n-icon>
-                  </template>
-                </n-button>
-              </div>
-            </div>
-
-            <div
-              v-if="activitiesLoading && activities.length === 0"
-              class="activity-loading"
-            >
-              <n-spin size="small" />
-            </div>
-            <div v-else-if="activities.length === 0" class="activity-empty">
-              No activity recorded yet
-            </div>
-            <div v-else class="activity-timeline">
-              <div
-                v-for="act in activities"
-                :key="act.id"
-                class="activity-item"
-              >
-                <div class="activity-dot" :class="activityColor(act.type)" />
-                <div class="activity-content">
-                  <div class="activity-top">
-                    <n-tag
-                      size="tiny"
-                      :bordered="false"
-                      :type="activityTagType(act.type)"
-                    >
-                      {{ activityLabel(act.type) }}
-                    </n-tag>
-                    <span class="activity-time">{{
-                      formatDateTime(act.createdAt)
-                    }}</span>
-                  </div>
-                  <div class="activity-meta">
-                    {{ activitySummary(act) }}
-                  </div>
-                  <!-- Expandable chat content -->
-                  <template
-                    v-if="
-                      act.type === 'chat_message' &&
-                      act.metadata &&
-                      (act.metadata.question || act.metadata.answer)
-                    "
-                  >
-                    <button
-                      class="activity-expand-btn"
-                      @click="act._expanded = !act._expanded"
-                    >
-                      {{ act._expanded ? "Collapse" : "Show conversation" }}
-                    </button>
-                    <div v-if="act._expanded" class="activity-chat-detail">
-                      <div
-                        v-if="act.metadata.question"
-                        class="chat-bubble chat-q"
-                      >
-                        <span class="chat-label">User</span>
-                        {{ act.metadata.question }}
-                      </div>
-                      <div
-                        v-if="act.metadata.answer"
-                        class="chat-bubble chat-a"
-                      >
-                        <span class="chat-label">Agent</span>
-                        {{ act.metadata.answer }}
-                      </div>
-                    </div>
-                  </template>
-                </div>
-              </div>
-            </div>
-            <div
-              v-if="activityMeta && activityMeta.lastPage > 1"
-              class="activity-pagination"
-            >
-              <n-pagination
-                v-model:page="activityPage"
-                :page-size="activityMeta.perPage"
-                :item-count="activityMeta.total"
-                size="small"
-                @update:page="fetchActivities"
-              />
-            </div>
-          </div>
           <!-- Credit Ledger Card -->
           <div class="credits-card">
             <div class="credits-card-header">
@@ -505,7 +421,114 @@
               />
             </div>
           </div>
+          <!-- Activity Log Card -->
+          <div class="activity-card">
+            <div class="activity-card-header">
+              <h4>Activity Log</h4>
+              <div class="activity-controls">
+                <span class="activity-live-badge">● LIVE</span>
+                <n-select
+                  v-model:value="activityFilter"
+                  placeholder="All types"
+                  clearable
+                  size="tiny"
+                  style="width: 170px"
+                  :options="activityTypeOptions"
+                  @update:value="fetchActivities(1)"
+                />
+                <n-button
+                  size="tiny"
+                  quaternary
+                  :loading="activitiesLoading"
+                  title="Refresh activities"
+                  @click="fetchActivities(activityPage)"
+                >
+                  <template #icon>
+                    <n-icon size="14"><RefreshIcon /></n-icon>
+                  </template>
+                </n-button>
+              </div>
+            </div>
 
+            <div
+              v-if="activitiesLoading && activities.length === 0"
+              class="activity-loading"
+            >
+              <n-spin size="small" />
+            </div>
+            <div v-else-if="activities.length === 0" class="activity-empty">
+              No activity recorded yet
+            </div>
+            <div v-else class="activity-timeline">
+              <div
+                v-for="act in activities"
+                :key="act.id"
+                class="activity-item"
+              >
+                <div class="activity-dot" :class="activityColor(act.type)" />
+                <div class="activity-content">
+                  <div class="activity-top">
+                    <n-tag
+                      size="tiny"
+                      :bordered="false"
+                      :type="activityTagType(act.type)"
+                    >
+                      {{ activityLabel(act.type) }}
+                    </n-tag>
+                    <span class="activity-time">{{
+                      formatDateTime(act.createdAt)
+                    }}</span>
+                  </div>
+                  <div class="activity-meta">
+                    {{ activitySummary(act) }}
+                  </div>
+                  <!-- Expandable chat content -->
+                  <template
+                    v-if="
+                      act.type === 'chat_message' &&
+                      act.metadata &&
+                      (act.metadata.question || act.metadata.answer)
+                    "
+                  >
+                    <button
+                      class="activity-expand-btn"
+                      @click="act._expanded = !act._expanded"
+                    >
+                      {{ act._expanded ? "Collapse" : "Show conversation" }}
+                    </button>
+                    <div v-if="act._expanded" class="activity-chat-detail">
+                      <div
+                        v-if="act.metadata.question"
+                        class="chat-bubble chat-q"
+                      >
+                        <span class="chat-label">User</span>
+                        {{ act.metadata.question }}
+                      </div>
+                      <div
+                        v-if="act.metadata.answer"
+                        class="chat-bubble chat-a"
+                      >
+                        <span class="chat-label">Agent</span>
+                        {{ act.metadata.answer }}
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </div>
+            <div
+              v-if="activityMeta && activityMeta.lastPage > 1"
+              class="activity-pagination"
+            >
+              <n-pagination
+                v-model:page="activityPage"
+                :page-size="activityMeta.perPage"
+                :item-count="activityMeta.total"
+                size="small"
+                @update:page="fetchActivities"
+              />
+            </div>
+          </div>
           <!-- Photos Section -->
           <div class="photos-section">
             <button class="photos-section-toggle" @click="togglePhotos">
@@ -797,6 +820,19 @@ function goToUserPayments() {
   if (!user.value) return;
   router.push({ name: "admin-payments", query: { userId: user.value.id } });
 }
+
+const analyzedRemaining = computed(() => {
+  if (!user.value?.usage) return 0;
+  return (
+    editUsage.value.analyzedPhotosLimit -
+    (user.value.usage.analyzedPhotosUsed || 0)
+  );
+});
+
+const creditsRemaining = computed(() => {
+  if (!user.value?.usage) return 0;
+  return editUsage.value.creditsAvailable - (user.value.usage.creditsUsed || 0);
+});
 
 const usageChanged = computed(() => {
   if (!user.value?.usage) return false;
@@ -1321,6 +1357,33 @@ onUnmounted(() => {
 
 .editable-row {
   padding: 3px 0;
+}
+
+.editable-row-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.remaining-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.remaining-ok {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.remaining-empty {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
 }
 
 .no-data {
