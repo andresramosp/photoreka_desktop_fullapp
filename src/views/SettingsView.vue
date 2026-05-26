@@ -526,7 +526,7 @@
             <StarOutline />
           </n-icon>
           <span>
-            You also can<strong>invite friends</strong> and earn bonus photos
+            You also can <strong>invite friends</strong> and earn bonus photos
             and credits for every successful referral.
           </span>
         </div>
