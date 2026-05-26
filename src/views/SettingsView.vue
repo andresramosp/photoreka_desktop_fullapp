@@ -526,8 +526,8 @@
             <StarOutline />
           </n-icon>
           <span>
-            <strong>Coming soon:</strong> earn bonus photos and credits for
-            every friend you invite to Photoreka.
+            You also can<strong>invite friends</strong> and earn bonus photos
+            and credits for every successful referral.
           </span>
         </div>
       </div>
