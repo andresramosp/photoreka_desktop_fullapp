@@ -220,6 +220,169 @@
           </div>
         </div>
       </div>
+
+      <!-- ═══ Transaction Log ═══ -->
+      <div class="card">
+        <h3 class="card-title">Transaction Log</h3>
+
+        <!-- Filters row -->
+        <div class="txn-filters">
+          <select
+            v-model="txnCategory"
+            class="txn-select"
+            @change="fetchTransactions(1)"
+          >
+            <option value="">All categories</option>
+            <option value="photo_analysis">Photo Analysis</option>
+            <option value="chat">Chat</option>
+            <option value="report_review">Report Review</option>
+            <option value="search">Search</option>
+            <option value="portfolio_build">Portfolio Build</option>
+            <option value="location_inference">Location Inference</option>
+            <option value="other">Other</option>
+          </select>
+          <label class="txn-toggle">
+            <input
+              type="checkbox"
+              v-model="txnOnlyCharged"
+              @change="fetchTransactions(1)"
+            />
+            <span>Credits only</span>
+          </label>
+          <input
+            type="date"
+            v-model="txnDateFrom"
+            class="date-input"
+            placeholder="From"
+            @change="fetchTransactions(1)"
+          />
+          <input
+            type="date"
+            v-model="txnDateTo"
+            class="date-input"
+            placeholder="To"
+            @change="fetchTransactions(1)"
+          />
+          <button
+            v-if="txnCategory || txnOnlyCharged || txnDateFrom || txnDateTo"
+            class="clear-filter-btn"
+            @click="clearTxnFilters"
+          >
+            ✕ Clear
+          </button>
+        </div>
+
+        <!-- Summary bar -->
+        <div v-if="txnSummary" class="txn-summary-bar">
+          <span class="txn-kpi"
+            ><span class="txn-kpi-label">Rows</span
+            ><span class="txn-kpi-value">{{
+              txnSummary.totalRows.toLocaleString()
+            }}</span></span
+          >
+          <span class="txn-kpi"
+            ><span class="txn-kpi-label">Total raw cost</span
+            ><span class="txn-kpi-value cost-value"
+              >€{{ fmt(txnSummary.totalCostEur) }}</span
+            ></span
+          >
+          <span class="txn-kpi"
+            ><span class="txn-kpi-label">Total credits</span
+            ><span class="txn-kpi-value credit-value"
+              >{{ txnSummary.totalCreditsCharged.toLocaleString() }} cr</span
+            ></span
+          >
+        </div>
+
+        <div v-if="txnLoading" class="txn-loading"><n-spin size="small" /></div>
+        <div v-else-if="txnRows.length === 0" class="no-data">
+          No transactions found
+        </div>
+        <div v-else class="txn-table-wrap">
+          <table class="txn-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>User</th>
+                <th>Category</th>
+                <th>Task</th>
+                <th>Model</th>
+                <th>Calls</th>
+                <th>Raw cost</th>
+                <th>Credits</th>
+                <th>Margin</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in txnRows" :key="row.id">
+                <td class="dim nowrap">{{ fmtDate(row.createdAt) }}</td>
+                <td>
+                  <router-link
+                    :to="`/admin/users/${row.userId}`"
+                    class="user-link"
+                  >
+                    {{ row.userName }}
+                    <span class="dim" style="font-size: 11px">{{
+                      row.userEmail
+                    }}</span>
+                  </router-link>
+                </td>
+                <td>
+                  <span
+                    class="cat-badge"
+                    :style="{
+                      background: catColor(row.category) + '22',
+                      color: catColor(row.category),
+                    }"
+                  >
+                    {{ formatCategoryName(row.category) }}
+                  </span>
+                </td>
+                <td class="dim">
+                  {{ row.task ? formatTaskName(row.task) : "—" }}
+                </td>
+                <td class="dim nowrap">{{ row.model ?? "—" }}</td>
+                <td class="dim">{{ row.calls }}</td>
+                <td class="cost-value">€{{ fmt(row.costInEur) }}</td>
+                <td>
+                  <span v-if="row.creditsCharged !== null" class="credit-badge"
+                    >{{ row.creditsCharged }} cr</span
+                  >
+                  <span v-else class="dim">—</span>
+                </td>
+                <td class="dim">
+                  <span v-if="row.marginMultiplier !== null"
+                    >×{{ row.marginMultiplier.toFixed(2) }}</span
+                  >
+                  <span v-else-if="row.creditsCharged !== null">fixed</span>
+                  <span v-else>—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div v-if="txnMeta && txnMeta.lastPage > 1" class="txn-pagination">
+          <button
+            class="page-btn"
+            :disabled="txnMeta.currentPage <= 1"
+            @click="fetchTransactions(txnMeta.currentPage - 1)"
+          >
+            ‹
+          </button>
+          <span class="page-info"
+            >Page {{ txnMeta.currentPage }} / {{ txnMeta.lastPage }}</span
+          >
+          <button
+            class="page-btn"
+            :disabled="txnMeta.currentPage >= txnMeta.lastPage"
+            @click="fetchTransactions(txnMeta.currentPage + 1)"
+          >
+            ›
+          </button>
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -227,6 +390,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import { NSpin, NDatePicker, useMessage } from "naive-ui";
+import { useRouter } from "vue-router";
 import { api } from "../../utils/axios";
 
 interface CostsData {
@@ -264,6 +428,7 @@ interface CostsData {
 }
 
 const message = useMessage();
+const router = useRouter();
 const loading = ref(false);
 const data = ref<CostsData | null>(null);
 const hoveredMonth = ref<CostsData["monthly"][0] | null>(null);
@@ -394,7 +559,86 @@ function clearFilter() {
   fetchData();
 }
 
-onMounted(() => fetchData());
+// ─── Transaction log ───────────────────────────────────────────────────────
+
+interface TxnRow {
+  id: number;
+  createdAt: string;
+  userId: number;
+  userName: string;
+  userEmail: string;
+  category: string;
+  task: string | null;
+  model: string | null;
+  calls: number;
+  costInEur: number;
+  creditsCharged: number | null;
+  marginMultiplier: number | null;
+  referenceId: string | null;
+}
+
+const txnRows = ref<TxnRow[]>([]);
+const txnLoading = ref(false);
+const txnCategory = ref("");
+const txnOnlyCharged = ref(false);
+const txnDateFrom = ref("");
+const txnDateTo = ref("");
+const txnMeta = ref<{
+  total: number;
+  perPage: number;
+  currentPage: number;
+  lastPage: number;
+} | null>(null);
+const txnSummary = ref<{
+  totalCostEur: number;
+  totalCreditsCharged: number;
+  totalRows: number;
+} | null>(null);
+
+async function fetchTransactions(page = 1) {
+  txnLoading.value = true;
+  try {
+    const params: Record<string, string> = { page: String(page), limit: "50" };
+    if (txnCategory.value) params.category = txnCategory.value;
+    if (txnOnlyCharged.value) params.onlyCharged = "true";
+    if (txnDateFrom.value) params.dateFrom = txnDateFrom.value;
+    if (txnDateTo.value) params.dateTo = txnDateTo.value;
+    const res = await api.get("/api/admin/costs/transactions", { params });
+    txnRows.value = res.data.rows;
+    txnMeta.value = res.data.meta;
+    txnSummary.value = res.data.summary;
+  } catch {
+    message.error("Failed to load transactions");
+  } finally {
+    txnLoading.value = false;
+  }
+}
+
+function clearTxnFilters() {
+  txnCategory.value = "";
+  txnOnlyCharged.value = false;
+  txnDateFrom.value = "";
+  txnDateTo.value = "";
+  fetchTransactions(1);
+}
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  return (
+    d.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "2-digit",
+    }) +
+    " " +
+    d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+  );
+}
+
+onMounted(() => {
+  fetchData();
+  fetchTransactions(1);
+});
 </script>
 
 <style scoped>
@@ -772,5 +1016,203 @@ onMounted(() => fetchData());
   .section-header h1 {
     font-size: 18px;
   }
+}
+
+/* ═══ Transaction Log ═══ */
+.txn-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.txn-select {
+  padding: 5px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #334155;
+  background: #fff;
+  cursor: pointer;
+  outline: none;
+}
+
+.txn-select:focus {
+  border-color: #a5b4fc;
+}
+
+.txn-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #475569;
+  cursor: pointer;
+  user-select: none;
+}
+
+.date-input {
+  padding: 5px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #334155;
+  background: #fff;
+  outline: none;
+}
+
+.date-input:focus {
+  border-color: #a5b4fc;
+}
+
+.txn-summary-bar {
+  display: flex;
+  gap: 24px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.txn-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.txn-kpi-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.txn-kpi-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+  font-variant-numeric: tabular-nums;
+}
+
+.credit-value {
+  color: #06b6d4;
+}
+
+.txn-loading {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0;
+}
+
+.txn-table-wrap {
+  overflow-x: auto;
+}
+
+.txn-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.txn-table th {
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 0 10px 8px;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.txn-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #f8fafc;
+  vertical-align: middle;
+  color: #334155;
+}
+
+.txn-table tr:last-child td {
+  border-bottom: none;
+}
+
+.txn-table tr:hover td {
+  background: #f8fafc;
+}
+
+.user-link {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-weight: 600;
+  color: #4f46e5;
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.user-link:hover {
+  text-decoration: underline;
+}
+
+.cat-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.credit-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #ecfeff;
+  color: #0891b2;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.txn-pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  justify-content: center;
+}
+
+.page-btn {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 16px;
+  cursor: pointer;
+  color: #475569;
+  transition: background 0.15s;
+}
+
+.page-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+
+.page-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.page-info {
+  font-size: 13px;
+  color: #64748b;
 }
 </style>

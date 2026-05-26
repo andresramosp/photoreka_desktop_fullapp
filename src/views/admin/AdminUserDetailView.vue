@@ -382,6 +382,130 @@
               />
             </div>
           </div>
+          <!-- Credit Ledger Card -->
+          <div class="credits-card">
+            <div class="credits-card-header">
+              <h4>Credit Charges</h4>
+              <div class="credits-controls">
+                <n-select
+                  v-model:value="creditCategoryFilter"
+                  placeholder="All categories"
+                  clearable
+                  size="tiny"
+                  style="width: 160px"
+                  :options="creditCategoryOptions"
+                  @update:value="fetchCreditLedger(1)"
+                />
+                <input
+                  v-model="creditDateFrom"
+                  type="date"
+                  class="date-input"
+                  @change="fetchCreditLedger(1)"
+                />
+                <input
+                  v-model="creditDateTo"
+                  type="date"
+                  class="date-input"
+                  @change="fetchCreditLedger(1)"
+                />
+                <n-button
+                  size="tiny"
+                  quaternary
+                  :loading="creditsLoading"
+                  @click="fetchCreditLedger(creditPage)"
+                >
+                  <template #icon>
+                    <n-icon size="14"><RefreshIcon /></n-icon>
+                  </template>
+                </n-button>
+              </div>
+            </div>
+
+            <!-- Summary KPIs -->
+            <div v-if="creditSummary" class="credits-summary">
+              <div class="credits-kpi">
+                <span class="credits-kpi-label">Credits charged</span>
+                <span class="credits-kpi-value primary">{{
+                  creditSummary.totalCredits.toLocaleString()
+                }}</span>
+              </div>
+              <div class="credits-kpi">
+                <span class="credits-kpi-label">Raw cost (my side)</span>
+                <span class="credits-kpi-value"
+                  >€{{ creditSummary.totalCostEur.toFixed(4) }}</span
+                >
+              </div>
+              <div v-if="creditSummary.totalCredits > 0" class="credits-kpi">
+                <span class="credits-kpi-label">Est. billed EUR</span>
+                <span class="credits-kpi-value"
+                  >€{{ (creditSummary.totalCredits * 0.001).toFixed(4) }}</span
+                >
+              </div>
+            </div>
+
+            <div
+              v-if="creditsLoading && creditRows.length === 0"
+              class="credits-loading"
+            >
+              <n-spin size="small" />
+            </div>
+            <div v-else-if="creditRows.length === 0" class="credits-empty">
+              No credit charges recorded yet
+            </div>
+            <div v-else class="credits-table-wrap">
+              <table class="credits-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Category</th>
+                    <th>Task</th>
+                    <th>Model</th>
+                    <th class="num">Credits</th>
+                    <th class="num">Raw cost</th>
+                    <th class="num">Margin</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in creditRows" :key="row.id">
+                    <td class="dim">{{ formatDateTime(row.createdAt) }}</td>
+                    <td>
+                      <n-tag
+                        size="tiny"
+                        :bordered="false"
+                        :type="creditCategoryTagType(row.category)"
+                      >
+                        {{ row.category }}
+                      </n-tag>
+                    </td>
+                    <td class="dim">{{ row.task || "—" }}</td>
+                    <td class="dim model-cell">{{ row.model || "—" }}</td>
+                    <td class="num credits-val">{{ row.creditsCharged }}</td>
+                    <td class="num dim">€{{ row.costInEur.toFixed(4) }}</td>
+                    <td class="num dim">
+                      {{
+                        row.marginMultiplier != null
+                          ? `×${row.marginMultiplier}`
+                          : "fixed"
+                      }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div
+              v-if="creditMeta && creditMeta.lastPage > 1"
+              class="credits-pagination"
+            >
+              <n-pagination
+                v-model:page="creditPage"
+                :page-size="creditMeta.perPage"
+                :item-count="creditMeta.total"
+                size="small"
+                @update:page="fetchCreditLedger"
+              />
+            </div>
+          </div>
+
           <!-- Photos Section -->
           <div class="photos-section">
             <button class="photos-section-toggle" @click="togglePhotos">
@@ -534,6 +658,18 @@ interface ActivityItem {
   _expanded?: boolean;
 }
 
+interface CreditLedgerRow {
+  id: number;
+  category: string;
+  task: string | null;
+  model: string | null;
+  costInEur: number;
+  creditsCharged: number;
+  marginMultiplier: number | null;
+  referenceId: string | null;
+  createdAt: string;
+}
+
 const route = useRoute();
 const router = useRouter();
 const message = useMessage();
@@ -587,6 +723,71 @@ const activityTypeOptions = [
 ];
 
 let activityRefreshTimer: ReturnType<typeof setInterval> | null = null;
+
+// ─── Credit Ledger ───
+interface CreditMeta {
+  total: number;
+  perPage: number;
+  currentPage: number;
+  lastPage: number;
+}
+
+const creditRows = ref<CreditLedgerRow[]>([]);
+const creditsLoading = ref(false);
+const creditPage = ref(1);
+const creditMeta = ref<CreditMeta | null>(null);
+const creditSummary = ref<{
+  totalCredits: number;
+  totalCostEur: number;
+} | null>(null);
+const creditCategoryFilter = ref<string | null>(null);
+const creditDateFrom = ref<string>("");
+const creditDateTo = ref<string>("");
+
+const creditCategoryOptions = [
+  { label: "Chat", value: "chat" },
+  { label: "Search", value: "search" },
+  { label: "Portfolio build", value: "portfolio_build" },
+  { label: "Location inference", value: "location_inference" },
+  { label: "Photo analysis", value: "photo_analysis" },
+  { label: "Report review", value: "report_review" },
+  { label: "Other", value: "other" },
+];
+
+function creditCategoryTagType(
+  category: string,
+): "default" | "info" | "success" | "warning" | "error" {
+  if (category === "chat") return "warning";
+  if (category === "search") return "info";
+  if (category === "portfolio_build") return "success";
+  if (category === "location_inference") return "info";
+  if (category === "photo_analysis") return "default";
+  return "default";
+}
+
+async function fetchCreditLedger(page: number = 1) {
+  if (!user.value) return;
+  creditsLoading.value = true;
+  try {
+    const params: Record<string, any> = { page, limit: 30 };
+    if (creditCategoryFilter.value)
+      params.category = creditCategoryFilter.value;
+    if (creditDateFrom.value) params.dateFrom = creditDateFrom.value;
+    if (creditDateTo.value) params.dateTo = creditDateTo.value;
+    const { data } = await api.get(
+      `/api/admin/users/${user.value.id}/credit-ledger`,
+      { params },
+    );
+    creditRows.value = data.rows;
+    creditMeta.value = data.meta;
+    creditSummary.value = data.summary;
+    creditPage.value = page;
+  } catch {
+    message.error("Failed to load credit ledger");
+  } finally {
+    creditsLoading.value = false;
+  }
+}
 
 function goBack() {
   router.push({ name: "admin-users" });
@@ -950,6 +1151,7 @@ onMounted(async () => {
   await fetchUser();
   if (user.value) {
     fetchActivities(1);
+    fetchCreditLedger(1);
     activityRefreshTimer = setInterval(
       () => fetchActivities(activityPage.value),
       20000,
@@ -1411,6 +1613,160 @@ onUnmounted(() => {
   .info-value {
     font-size: 12px;
   }
+}
+
+/* ===== Credit Ledger ===== */
+.credits-card {
+  background: #fff;
+  border: 1px solid #e8ecf0;
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-top: 16px;
+}
+
+.credits-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.credits-card-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.credits-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.credits-summary {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.credits-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.credits-kpi-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.credits-kpi-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+  font-variant-numeric: tabular-nums;
+}
+
+.credits-kpi-value.primary {
+  color: #6366f1;
+}
+
+.credits-loading,
+.credits-empty {
+  text-align: center;
+  padding: 32px 0;
+  color: #94a3b8;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.credits-table-wrap {
+  overflow-x: auto;
+}
+
+.credits-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.credits-table th {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.credits-table th.num,
+.credits-table td.num {
+  text-align: right;
+}
+
+.credits-table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.credits-table tr:last-child td {
+  border-bottom: none;
+}
+
+.credits-val {
+  font-weight: 700;
+  color: #6366f1;
+  font-variant-numeric: tabular-nums;
+}
+
+.model-cell {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dim {
+  color: #94a3b8;
+}
+
+.credits-pagination {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
+}
+
+.date-input {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #334155;
+  background: #fff;
+  outline: none;
+  width: 130px;
+}
+
+.date-input:focus {
+  border-color: #6366f1;
 }
 
 /* ===== Photos section ===== */
