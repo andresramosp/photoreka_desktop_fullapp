@@ -35,6 +35,7 @@ import ConfirmEmailView from "../views/ConfirmEmailView.vue";
 import AuthCallback from "../views/AuthCallback.vue";
 import AuthError from "../views/AuthError.vue";
 import LrAuthView from "../views/LrAuthView.vue";
+import TagCloudView from "../views/TagCloudView.vue";
 
 // Admin views
 // NOTE: AdminLoginView kept as layout reference for a potential standalone admin domain
@@ -300,7 +301,7 @@ const router = createRouter({
     {
       path: "/tagcloud",
       name: "tagcloud",
-      component: () => import("../views/TagCloudView.vue"),
+      component: TagCloudView,
       meta: {
         requiresAuth: true,
       },
@@ -707,5 +708,18 @@ function updateCanonicalUrl(url: string) {
     document.getElementsByTagName("head")[0].appendChild(canonical);
   }
 }
+
+// Handle stale deployment: when a lazy-loaded chunk no longer exists on the server
+// (e.g. after a new deploy replaced the hashed filenames), do a hard reload so the
+// browser fetches the latest assets instead of showing a blank/broken route.
+router.onError((error, to) => {
+  const isChunkLoadError =
+    error.message.includes("Failed to fetch dynamically imported module") ||
+    error.message.includes("Importing a module script failed") ||
+    error.message.includes("Unable to preload CSS");
+  if (isChunkLoadError) {
+    window.location.href = to.fullPath;
+  }
+});
 
 export default router;
