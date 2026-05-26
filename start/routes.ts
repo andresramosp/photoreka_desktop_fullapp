@@ -38,6 +38,7 @@ router
     router.get('/api/auth/profile', [AuthController, 'profile'])
     router.put('/api/auth/profile', [AuthController, 'updateProfile'])
     router.post('/api/auth/change-password', [AuthController, 'changePassword'])
+    router.delete('/api/account', [AuthController, 'deleteAccount'])
   })
   .use(middleware.auth())
 

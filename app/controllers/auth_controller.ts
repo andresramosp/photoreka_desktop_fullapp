@@ -1,5 +1,6 @@
 import User from '#models/user'
 import Invite from '#models/invite'
+import AdminUsersService from '#services/admin/admin_users_service'
 import { EXPIRED_EMAILS } from '#config/expired_emails'
 import {
   changePasswordValidator,
@@ -905,6 +906,38 @@ export default class AuthController {
       return response.redirect(
         `${this.getFrontendUrl()}/auth/error?message=Authentication failed. Please try again.`
       )
+    }
+  }
+
+  /**
+   * Delete the authenticated user's own account (self-deletion).
+   * Performs the same logical deletion as admin user delete:
+   * marks photos as deleted for later physical recycling, then soft-deletes the user.
+   */
+  async deleteAccount({ auth, response }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as unknown as User
+
+      if (user.role === 'admin') {
+        return response.forbidden({ message: 'Admin accounts cannot be self-deleted' })
+      }
+
+      // Revoke all tokens before deletion
+      const tokens = await User.accessTokens.all(user)
+      for (const token of tokens) {
+        await User.accessTokens.delete(user, token.identifier)
+      }
+
+      await AdminUsersService.deleteUser(user.id)
+
+      return response.ok({ message: 'Account deleted successfully' })
+    } catch (error) {
+      console.error('[DeleteAccount] Error:', error)
+      return response.internalServerError({
+        message: 'Failed to delete account',
+        error: error.message,
+      })
     }
   }
 }
