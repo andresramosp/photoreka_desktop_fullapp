@@ -1,0 +1,160 @@
+/**
+ * Upload pipeline for the geo-recovery flow.
+ *
+ * Per file:
+ *   1. Generate a stable clientPhotoId (uuid)
+ *   2. Read EXIF DateTimeOriginal (for temporal clustering)
+ *   3. Resize → thumb blob (uses the project's existing pica-based resizer)
+ *   4. Persist the ORIGINAL in IndexedDB (never leaves the browser)
+ *   5. Ask backend for a signed R2 upload URL
+ *   6. PUT the thumb to R2
+ *   7. Register the photo in the session (server-side metadata only)
+ *
+ * The server never sees the original bytes.
+ */
+
+import pLimit from "p-limit";
+
+import { useImageProcessing } from "@/composables/useImageProcessing.js";
+import {
+  UPLOAD_MIME,
+  UPLOAD_THUMB_MAX_SIZE_BYTES,
+  UPLOAD_THUMB_MAX_WIDTH,
+} from "@/config/uploadConfig.js";
+
+import { getUploadUrl, registerPhotos, uploadBlobToR2 } from "./api";
+import { putPhoto } from "./db";
+import { readTakenAtMs } from "./exif";
+import type { PhotoEntry } from "./types";
+
+const UPLOAD_CONCURRENCY = 4;
+
+function generateId(): string {
+  // crypto.randomUUID is available everywhere we target; fall back just in case.
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+export interface UploadProgress {
+  total: number;
+  done: number;
+  failed: number;
+  current: string | null;
+}
+
+export interface UploadOptions {
+  token: string;
+  files: File[];
+  onProgress?: (p: UploadProgress) => void;
+}
+
+export interface UploadResult {
+  registered: PhotoEntry[];
+  failed: Array<{ file: File; error: string }>;
+}
+
+export async function uploadFiles(
+  options: UploadOptions,
+): Promise<UploadResult> {
+  const { token, files, onProgress } = options;
+  const { resizeImage } = useImageProcessing();
+  const limit = pLimit(UPLOAD_CONCURRENCY);
+
+  const total = files.length;
+  let done = 0;
+  let failed = 0;
+
+  const progress = (current: string | null) => {
+    onProgress?.({ total, done, failed, current });
+  };
+  progress(null);
+
+  const registered: PhotoEntry[] = [];
+  const failures: Array<{ file: File; error: string }> = [];
+
+  await Promise.all(
+    files.map((file) =>
+      limit(async () => {
+        progress(file.name);
+        try {
+          const entry = await processFile(file, token, resizeImage);
+          registered.push(entry);
+          done++;
+        } catch (error: any) {
+          failed++;
+          failures.push({
+            file,
+            error: error?.message ?? String(error),
+          });
+          console.error("[geoRecovery/upload] failed:", file.name, error);
+        }
+        progress(file.name);
+      }),
+    ),
+  );
+
+  // Batch-register all successfully uploaded photos in one round-trip.
+  if (registered.length > 0) {
+    await registerPhotos(token, registered);
+  }
+
+  progress(null);
+  return { registered, failed: failures };
+}
+
+async function processFile(
+  file: File,
+  token: string,
+  resizeImage: (file: File, width: number, maxBytes: number) => Promise<Blob>,
+): Promise<PhotoEntry> {
+  const clientPhotoId = generateId();
+  const originalMime = file.type || "image/jpeg";
+
+  const [takenAtMs, thumbBlob] = await Promise.all([
+    readTakenAtMs(file),
+    resizeImage(file, UPLOAD_THUMB_MAX_WIDTH, UPLOAD_THUMB_MAX_SIZE_BYTES),
+  ]);
+
+  // Persist the original locally (this is the user's "warehouse" — it never
+  // leaves the browser, so even if R2 deletes the thumb after 7 days, we still
+  // have the full-res file to ship out as ZIP).
+  await putPhoto({
+    clientPhotoId,
+    originalBlob: file,
+    originalName: file.name,
+    originalMime,
+    takenAtMs,
+    r2Key: "", // filled in below
+  });
+
+  const contentType = thumbBlob.type || UPLOAD_MIME;
+  const { uploadUrl, r2Key } = await getUploadUrl(
+    token,
+    clientPhotoId,
+    contentType,
+  );
+  await uploadBlobToR2(uploadUrl, thumbBlob);
+
+  // Update the local record with the now-known r2Key.
+  await putPhoto({
+    clientPhotoId,
+    originalBlob: file,
+    originalName: file.name,
+    originalMime,
+    takenAtMs,
+    r2Key,
+  });
+
+  return {
+    clientPhotoId,
+    r2Key,
+    mime: contentType,
+    originalName: file.name,
+    takenAtMs,
+  };
+}

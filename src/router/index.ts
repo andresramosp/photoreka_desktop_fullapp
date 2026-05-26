@@ -36,6 +36,7 @@ import AuthCallback from "../views/AuthCallback.vue";
 import AuthError from "../views/AuthError.vue";
 import LrAuthView from "../views/LrAuthView.vue";
 import TagCloudView from "../views/TagCloudView.vue";
+const GeoRecoveryView = () => import("../views/GeoRecoveryView.vue");
 
 // Admin views
 // NOTE: AdminLoginView kept as layout reference for a potential standalone admin domain
@@ -279,6 +280,17 @@ const router = createRouter({
       component: ThreeDView,
       meta: {
         requiresAuth: true,
+      },
+    },
+    {
+      path: "/geo-recovery",
+      name: "geo-recovery",
+      component: GeoRecoveryView,
+      meta: {
+        requiresGuest: false, // anonymous, no auth required
+        title: "Geo Recovery — Recover GPS for your photos",
+        description:
+          "Upload photos with no GPS data and let our AI guess their location. Originals never leave your browser.",
       },
     },
     {
