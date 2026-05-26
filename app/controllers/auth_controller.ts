@@ -13,7 +13,12 @@ import {
   resendConfirmationValidator,
 } from '#validators/auth'
 import { HttpContext } from '@adonisjs/core/http'
-import UsageService, { getDefaultUsageByTier, UsageTier } from '#services/usage_service'
+import UsageService, {
+  getDefaultUsageByTier,
+  UsageTier,
+  INVITE_REFERRAL_BONUS_CREDITS,
+  INVITE_REFERRAL_BONUS_PHOTOS,
+} from '#services/usage_service'
 import MailService from '#services/mail_service'
 import GoogleOAuthService from '#services/google_oauth_service'
 import { DateTime } from 'luxon'
@@ -24,6 +29,7 @@ import {
   passwordChangedTemplate,
   welcomeEmailTemplate,
   resendConfirmationTemplate,
+  inviteReferralRewardTemplate,
 } from '../utils/email_templates.js'
 
 export default class AuthController {
@@ -135,6 +141,34 @@ export default class AuthController {
         invite.useCount += 1
         invite.usedAt = DateTime.now()
         await invite.save()
+
+        // Reward the inviter with bonus credits when their friend registers
+        if (invite.createdBy) {
+          try {
+            await UsageService.addBonusCredits(invite.createdBy, INVITE_REFERRAL_BONUS_CREDITS)
+            await UsageService.addBonusAnalysisPhotos(
+              invite.createdBy,
+              INVITE_REFERRAL_BONUS_PHOTOS
+            )
+            const inviter = await User.find(invite.createdBy)
+            if (inviter) {
+              await this.mailService.sendEmail({
+                from: 'Photoreka <hello@photoreka.com>',
+                to: inviter.email,
+                subject: 'Your friend just joined Photoreka — you earned credits! 🎉',
+                body: inviteReferralRewardTemplate(
+                  inviter.name,
+                  user.name,
+                  INVITE_REFERRAL_BONUS_CREDITS,
+                  INVITE_REFERRAL_BONUS_PHOTOS
+                ),
+              })
+            }
+          } catch (rewardError) {
+            console.error('[Register] Failed to grant referral reward:', rewardError)
+            // Non-blocking — registration succeeds regardless
+          }
+        }
       }
 
       // Create access token (user can do some things before confirming email)
@@ -865,6 +899,34 @@ export default class AuthController {
           invite.usedAt = DateTime.now()
           await invite.save()
           console.log('[Google OAuth] Invitation code use count incremented')
+
+          // Reward the inviter with bonus credits when their friend registers
+          if (invite.createdBy) {
+            try {
+              await UsageService.addBonusCredits(invite.createdBy, INVITE_REFERRAL_BONUS_CREDITS)
+              await UsageService.addBonusAnalysisPhotos(
+                invite.createdBy,
+                INVITE_REFERRAL_BONUS_PHOTOS
+              )
+              const inviter = await User.find(invite.createdBy)
+              if (inviter) {
+                await this.mailService.sendEmail({
+                  from: 'Photoreka <hello@photoreka.com>',
+                  to: inviter.email,
+                  subject: 'Your friend just joined Photoreka — you earned credits! 🎉',
+                  body: inviteReferralRewardTemplate(
+                    inviter.name,
+                    user.name,
+                    INVITE_REFERRAL_BONUS_CREDITS,
+                    INVITE_REFERRAL_BONUS_PHOTOS
+                  ),
+                })
+              }
+            } catch (rewardError) {
+              console.error('[Google OAuth] Failed to grant referral reward:', rewardError)
+              // Non-blocking — registration succeeds regardless
+            }
+          }
         }
 
         // Send welcome email

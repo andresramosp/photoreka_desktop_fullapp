@@ -7,6 +7,8 @@ import { inviteUserTemplate, grantUserTemplate } from '../utils/email_templates.
 import { UsageTier, UsageTierLimits } from '#services/usage_service'
 import vine from '@vinejs/vine'
 
+const MAX_USER_INVITES = 5
+
 export default class InvitesController {
   private mailService = new MailService()
 
@@ -147,13 +149,22 @@ export default class InvitesController {
         })
       }
 
-      // Generate invitation code (user-generated invites are always BASIC tier)
+      // Check invite limit per user
+      const sentCount = await Invite.query().where('created_by', user.id).count('* as total')
+      const totalSent = Number(sentCount[0]?.$extras.total || 0)
+      if (totalSent >= MAX_USER_INVITES) {
+        return response.badRequest({
+          message: `You have reached the maximum of ${MAX_USER_INVITES} invitations`,
+        })
+      }
+
+      // Generate invitation code (user-generated invites get BASIC tier)
       const code = this.generateInviteCode()
       const invite = await Invite.create({
         code,
         createdBy: user.id,
         maxUses: payload.maxUses ?? 1,
-        tier: UsageTier.PROMOTIONAL,
+        tier: UsageTier.BASIC,
       })
 
       // Create registration URL with invite code
@@ -170,7 +181,7 @@ export default class InvitesController {
             user.name,
             code,
             registerUrl,
-            UsageTierLimits[UsageTier.PROMOTIONAL].analyzedPhotosLimit
+            UsageTierLimits[UsageTier.BASIC].analyzedPhotosLimit
           ),
         })
       } catch (emailError) {

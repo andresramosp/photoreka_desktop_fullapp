@@ -451,6 +451,51 @@ export function grantUserTemplate(
 }
 
 /**
+ * Referral reward notification — sent to the inviter when their friend registers
+ */
+export function inviteReferralRewardTemplate(
+  inviterName: string,
+  inviteeName: string,
+  bonusCredits: number,
+  bonusPhotos: number
+): string {
+  const content = `
+    <h1 style="margin: 0 0 20px; font-size: 28px; font-weight: 700; color: ${TEXT_COLOR}; text-align: center;">
+      Your friend just joined Photoreka!
+    </h1>
+
+    <p style="margin: 0 0 20px; font-size: 16px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+      Hi <strong style="color: ${TEXT_COLOR};">${inviterName}</strong>,
+    </p>
+
+    <p style="margin: 0 0 24px; font-size: 16px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+      <strong style="color: ${TEXT_COLOR};">${inviteeName}</strong> just signed up using your invitation — thanks for spreading the word!
+    </p>
+
+    <div style="background-color: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
+      <p style="margin: 0 0 16px; font-size: 13px; color: ${MUTED_TEXT_COLOR}; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600;">Referral rewards added to your account</p>
+      <div style="display: flex; justify-content: center; gap: 24px; flex-wrap: wrap;">
+        <div style="text-align: center;">
+          <p style="margin: 0; font-size: 32px; font-weight: 700; color: ${PRIMARY_COLOR};">+${bonusCredits.toLocaleString()}</p>
+          <p style="margin: 4px 0 0; font-size: 13px; color: ${MUTED_TEXT_COLOR};">credits</p>
+        </div>
+        <div style="text-align: center;">
+          <p style="margin: 0; font-size: 32px; font-weight: 700; color: #22c55e;">+${bonusPhotos.toLocaleString()}</p>
+          <p style="margin: 4px 0 0; font-size: 13px; color: ${MUTED_TEXT_COLOR};">analysis photos</p>
+        </div>
+      </div>
+    </div>
+
+    <p style="margin: 0 0 0; font-size: 13px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+      Credits are used for AI-powered features like semantic search, ChatLab, and photo analysis.
+      Keep sharing Photoreka and earn more every time a friend joins.
+    </p>
+  `
+
+  return baseLayout(content, 'You earned referral credits on Photoreka')
+}
+
+/**
  * Tier definition for analysis completion email
  */
 interface PhotoTier {

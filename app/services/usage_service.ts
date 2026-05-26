@@ -6,6 +6,12 @@ export enum UsageTier {
   PROMOTIONAL = 'PROMOTIONAL',
 }
 
+/** Credits awarded to the inviter when their invited friend successfully registers */
+export const INVITE_REFERRAL_BONUS_CREDITS = 500
+
+/** Analysis photos awarded to the inviter when their invited friend successfully registers */
+export const INVITE_REFERRAL_BONUS_PHOTOS = 200
+
 export const UsageTierLimits: Record<
   UsageTier,
   Omit<Usage, 'creditsUsed' | 'analyzedPhotosUsed'>
@@ -142,5 +148,27 @@ export default class UsageService {
 
     const remaining = usage.creditsAvailable - (usage.creditsUsed || 0)
     return remaining >= requiredCredits
+  }
+
+  /**
+   * Añade créditos bonus al balance disponible del usuario (sin afectar creditsUsed)
+   */
+  static async addBonusCredits(userId: number, amount: number): Promise<void> {
+    const currentUsage = await this.getBaseUsage(userId)
+    if (!currentUsage) return
+
+    currentUsage.creditsAvailable = (currentUsage.creditsAvailable || 0) + amount
+    await this.updateUsage(userId, currentUsage)
+  }
+
+  /**
+   * Incrementa el límite de fotos analizadas del usuario (bonus por referido)
+   */
+  static async addBonusAnalysisPhotos(userId: number, amount: number): Promise<void> {
+    const currentUsage = await this.getBaseUsage(userId)
+    if (!currentUsage) return
+
+    currentUsage.analyzedPhotosLimit = (currentUsage.analyzedPhotosLimit || 0) + amount
+    await this.updateUsage(userId, currentUsage)
   }
 }
