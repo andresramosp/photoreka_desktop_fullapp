@@ -63,7 +63,7 @@ const migrator = new MigrationRunner(db, app, {
   dryRun: false,
 })
 
-removeByKey('location_inference:*')
+// removeByKey('location_inference:*')
 // invalidateCache()
 
 try {
