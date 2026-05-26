@@ -159,6 +159,10 @@ export default class UsageService {
 
     currentUsage.creditsAvailable = (currentUsage.creditsAvailable || 0) + amount
     await this.updateUsage(userId, currentUsage)
+
+    console.log(
+      `[UsageService] Added ${amount} bonus credits to user ${userId}. New available credits: ${currentUsage.creditsAvailable}`
+    )
   }
 
   /**
@@ -170,5 +174,9 @@ export default class UsageService {
 
     currentUsage.analyzedPhotosLimit = (currentUsage.analyzedPhotosLimit || 0) + amount
     await this.updateUsage(userId, currentUsage)
+
+    console.log(
+      `[UsageService] Added ${amount} bonus analysis photos to user ${userId}. New analyzed photos limit: ${currentUsage.analyzedPhotosLimit}`
+    )
   }
 }

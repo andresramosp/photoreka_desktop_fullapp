@@ -474,16 +474,18 @@ export function inviteReferralRewardTemplate(
 
     <div style="background-color: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
       <p style="margin: 0 0 16px; font-size: 13px; color: ${MUTED_TEXT_COLOR}; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600;">Referral rewards added to your account</p>
-      <div style="display: flex; justify-content: center; gap: 24px; flex-wrap: wrap;">
-        <div style="text-align: center;">
-          <p style="margin: 0; font-size: 32px; font-weight: 700; color: ${PRIMARY_COLOR};">+${bonusCredits.toLocaleString()}</p>
-          <p style="margin: 4px 0 0; font-size: 13px; color: ${MUTED_TEXT_COLOR};">credits</p>
-        </div>
-        <div style="text-align: center;">
-          <p style="margin: 0; font-size: 32px; font-weight: 700; color: #22c55e;">+${bonusPhotos.toLocaleString()}</p>
-          <p style="margin: 4px 0 0; font-size: 13px; color: ${MUTED_TEXT_COLOR};">analysis photos</p>
-        </div>
-      </div>
+      <table role="presentation" style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="text-align: center; padding: 0 12px;">
+            <p style="margin: 0; font-size: 32px; font-weight: 700; color: ${PRIMARY_COLOR};">+${bonusCredits.toLocaleString()}</p>
+            <p style="margin: 4px 0 0; font-size: 13px; color: ${MUTED_TEXT_COLOR};">credits</p>
+          </td>
+          <td style="text-align: center; padding: 0 12px;">
+            <p style="margin: 0; font-size: 32px; font-weight: 700; color: #22c55e;">+${bonusPhotos.toLocaleString()}</p>
+            <p style="margin: 4px 0 0; font-size: 13px; color: ${MUTED_TEXT_COLOR};">analysis photos</p>
+          </td>
+        </tr>
+      </table>
     </div>
 
     <p style="margin: 0 0 0; font-size: 13px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
