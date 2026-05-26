@@ -264,7 +264,9 @@
                       This feature is not available for demo accounts.
                     </template>
                     <template v-else>
-                      Get a bonus of 500 credits for each successful referral!
+                      Get <strong>200 photos</strong> and a bonus of
+                      <strong>500 credits</strong>
+                      for each successful referral!
                     </template>
                   </span>
                 </div>
