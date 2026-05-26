@@ -88,6 +88,7 @@ const AiLocationInferenceController = () => import('#controllers/ai_location_inf
 const GeocodingController = () => import('#controllers/geocoding_controller')
 const SafeSearchController = () => import('#controllers/safe_search_controller')
 const ActivityController = () => import('#controllers/activity_controller')
+const GeoRecoveryController = () => import('#controllers/geo_recovery_controller')
 
 // Stripe webhook (no auth — verified by signature)
 router.post('/api/payments/webhook', [PaymentController, 'webhook'])
@@ -109,6 +110,16 @@ router.get('/api/report-review/:reviewType/user/:userId', [
   ReportReviewController,
   'getPatternsByUserId',
 ])
+
+// Geo Recovery (anonymous one-shot product — auth via signed session token in headers)
+router.post('/api/geo-recovery/session', [GeoRecoveryController, 'createSession'])
+router.post('/api/geo-recovery/upload-url', [GeoRecoveryController, 'getUploadUrl'])
+router.post('/api/geo-recovery/photos', [GeoRecoveryController, 'registerPhotos'])
+router.post('/api/geo-recovery/mock-pay', [GeoRecoveryController, 'mockPay'])
+router.post('/api/geo-recovery/start', [GeoRecoveryController, 'start'])
+router.get('/api/geo-recovery/job', [GeoRecoveryController, 'job'])
+router.post('/api/geo-recovery/geocoding/suggest', [GeoRecoveryController, 'geocodingSuggest'])
+router.post('/api/geo-recovery/geocoding/retrieve', [GeoRecoveryController, 'geocodingRetrieve'])
 
 // Endpoints health (sin auth)
 router.get('/api/analyzer/health/user', [AnalyzerController, 'healthForUser'])
