@@ -32,6 +32,12 @@ export default class CostLog extends BaseModel {
   declare referenceId: string | null
 
   @column()
+  declare creditsCharged: number | null
+
+  @column()
+  declare marginMultiplier: number | null
+
+  @column()
   declare metadata: Record<string, any> | null
 
   @column.dateTime({ autoCreate: true })

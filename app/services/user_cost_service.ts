@@ -1,6 +1,8 @@
 import User from '#models/user'
 import CostLog from '#models/cost_log'
+import CreditService from '#services/credit_service'
 import type { CostCategory, CostSummary, CostTracker } from '../utils/cost_tracker.js'
+import type { CostCategory as CreditCategory } from '#services/credit_service'
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -13,6 +15,10 @@ export interface CostLogOptions {
   model?: string
   task?: string
   referenceId?: string
+  /** Explicit credits charged (overrides auto-computed). Use for fixed-price charges. */
+  creditsCharged?: number
+  /** Explicit margin multiplier (null = fixed price, no multiplier). Overrides auto-computed. */
+  marginMultiplier?: number | null
   metadata?: Record<string, any>
 }
 
@@ -21,6 +27,33 @@ export interface CostLogOptions {
 export default class UserCostService {
   private static round(n: number): number {
     return Math.round(n * 1_000_000) / 1_000_000
+  }
+
+  /**
+   * Maps cost_tracker categories to CreditService billing categories.
+   * Categories not present here (photo_analysis, other) are quota-based and don't charge credits.
+   */
+  private static readonly CREDIT_CATEGORY_MAP: Partial<Record<CostCategory, CreditCategory>> = {
+    chat: 'CHAT',
+    report_review: 'CHAT',
+    search: 'SEARCH',
+    portfolio_build: 'PORTFOLIO_BUILD',
+    location_inference: 'GEO_INFERENCE',
+  }
+
+  /**
+   * Compute credits charged and margin multiplier for a given cost category and EUR amount.
+   * Returns null for categories that don't charge credits (photo_analysis, other).
+   */
+  private static computeCredits(
+    category: CostCategory,
+    costInEur: number
+  ): { creditsCharged: number; marginMultiplier: number } | null {
+    const creditCat = this.CREDIT_CATEGORY_MAP[category]
+    if (!creditCat) return null
+    const multiplier = CreditService.getCostMultiplier(creditCat)
+    const credits = CreditService.eurToCredits(costInEur * multiplier)
+    return { creditsCharged: credits, marginMultiplier: multiplier }
   }
 
   /**
@@ -57,6 +90,11 @@ export default class UserCostService {
     await user.save()
 
     // 2. Insert temporal log entry
+    const isFixedCharge = options?.metadata?.fixedCharge === true
+    const fixedCredits =
+      typeof options?.metadata?.credits === 'number' ? options.metadata.credits : undefined
+    const creditInfo = isFixedCharge ? null : this.computeCredits(category, costInEur)
+
     await CostLog.create({
       userId,
       category,
@@ -65,6 +103,16 @@ export default class UserCostService {
       model: options?.model ?? null,
       task: options?.task ?? null,
       referenceId: options?.referenceId ?? null,
+      creditsCharged:
+        options?.creditsCharged !== undefined
+          ? options.creditsCharged
+          : (fixedCredits ?? creditInfo?.creditsCharged ?? null),
+      marginMultiplier:
+        'marginMultiplier' in (options ?? {})
+          ? (options!.marginMultiplier ?? null)
+          : isFixedCharge
+            ? null
+            : (creditInfo?.marginMultiplier ?? null),
       metadata: options?.metadata ?? null,
     })
   }
@@ -115,6 +163,7 @@ export default class UserCostService {
     for (const [model, data] of Object.entries(summary.byModel)) {
       // Find the dominant task for this model (best effort)
       const taskForModel = this.findDominantTaskForModel(summary, model)
+      const creditInfo = this.computeCredits(summary.category, data.costInEur)
 
       await CostLog.create({
         userId,
@@ -124,6 +173,8 @@ export default class UserCostService {
         model,
         task: taskForModel,
         referenceId: referenceId ?? null,
+        creditsCharged: creditInfo?.creditsCharged ?? null,
+        marginMultiplier: creditInfo?.marginMultiplier ?? null,
         metadata: {
           byTask: summary.byTask,
         },

@@ -7,6 +7,18 @@ import { DateTime } from 'luxon'
 import { DeleteObjectsCommand, S3Client } from '@aws-sdk/client-s3'
 import logger from '@adonisjs/core/services/logger'
 
+export interface CreditLedgerRow {
+  id: number
+  category: string
+  task: string | null
+  model: string | null
+  costInEur: number
+  creditsCharged: number
+  marginMultiplier: number | null
+  referenceId: string | null
+  createdAt: string
+}
+
 const s3 = new S3Client({
   region: 'auto',
   endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -154,6 +166,7 @@ export default class AdminUsersService {
       googleId: user.googleId,
       catalogPatterns: user.catalogPatterns,
       paymentSummary,
+      photosReviewedAt: user.photosReviewedAt?.toISO() ?? null,
     }
   }
 
@@ -282,5 +295,100 @@ export default class AdminUsersService {
       thumbnailUrl: p.thumbnailUrl,
       originalFileName: p.originalFileName ?? null,
     }))
+  }
+
+  /**
+   * Paginated credit ledger for a user.
+   * Returns only rows where credits_charged IS NOT NULL.
+   */
+  static async getCreditLedger(
+    userId: number,
+    page: number = 1,
+    limit: number = 30,
+    filters?: { category?: string; dateFrom?: string; dateTo?: string }
+  ): Promise<{
+    rows: CreditLedgerRow[]
+    meta: { total: number; perPage: number; currentPage: number; lastPage: number }
+    summary: { totalCredits: number; totalCostEur: number }
+  }> {
+    let query = db
+      .from('cost_logs')
+      .where('user_id', userId)
+      .whereNotNull('credits_charged')
+      .orderBy('created_at', 'desc')
+
+    if (filters?.category) {
+      query = query.where('category', filters.category)
+    }
+    if (filters?.dateFrom) {
+      query = query.where('created_at', '>=', filters.dateFrom)
+    }
+    if (filters?.dateTo) {
+      // Include the full dateTo day
+      const endOfDay = DateTime.fromISO(filters.dateTo).endOf('day').toISO()!
+      query = query.where('created_at', '<=', endOfDay)
+    }
+
+    let summaryQuery = db.from('cost_logs').where('user_id', userId).whereNotNull('credits_charged')
+
+    if (filters?.category) summaryQuery = summaryQuery.where('category', filters.category)
+    if (filters?.dateFrom) summaryQuery = summaryQuery.where('created_at', '>=', filters.dateFrom)
+    if (filters?.dateTo) {
+      summaryQuery = summaryQuery.where(
+        'created_at',
+        '<=',
+        DateTime.fromISO(filters.dateTo).endOf('day').toISO()!
+      )
+    }
+
+    const [summaryRow] = await summaryQuery
+      .clone()
+      .sum('credits_charged as total_credits')
+      .sum('cost_in_eur as total_cost_eur')
+
+    const total = await summaryQuery.clone().count('* as total').first()
+
+    const totalCount = Number(total?.total ?? 0)
+    const lastPage = Math.max(1, Math.ceil(totalCount / limit))
+    const offset = (page - 1) * limit
+
+    const rows = await query
+      .select(
+        'id',
+        'category',
+        'task',
+        'model',
+        'cost_in_eur',
+        'credits_charged',
+        'margin_multiplier',
+        'reference_id',
+        'created_at'
+      )
+      .limit(limit)
+      .offset(offset)
+
+    return {
+      rows: rows.map((r: any) => ({
+        id: r.id,
+        category: r.category,
+        task: r.task ?? null,
+        model: r.model ?? null,
+        costInEur: Number(r.cost_in_eur),
+        creditsCharged: Number(r.credits_charged),
+        marginMultiplier: r.margin_multiplier != null ? Number(r.margin_multiplier) : null,
+        referenceId: r.reference_id ?? null,
+        createdAt: new Date(r.created_at).toISOString(),
+      })),
+      meta: {
+        total: totalCount,
+        perPage: limit,
+        currentPage: page,
+        lastPage,
+      },
+      summary: {
+        totalCredits: Number(summaryRow?.total_credits ?? 0),
+        totalCostEur: Number(summaryRow?.total_cost_eur ?? 0),
+      },
+    }
   }
 }

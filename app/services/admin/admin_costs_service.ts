@@ -69,6 +69,28 @@ export interface CostsOverview {
   topUsers: TopUserCost[]
 }
 
+export interface CostTransactionRow {
+  id: number
+  createdAt: string
+  userId: number
+  userName: string
+  userEmail: string
+  category: string
+  task: string | null
+  model: string | null
+  calls: number
+  costInEur: number
+  creditsCharged: number | null
+  marginMultiplier: number | null
+  referenceId: string | null
+}
+
+export interface CostTransactionsResult {
+  rows: CostTransactionRow[]
+  meta: { total: number; perPage: number; currentPage: number; lastPage: number }
+  summary: { totalCostEur: number; totalCreditsCharged: number; totalRows: number }
+}
+
 // ─── Service ─────────────────────────────────────────────
 
 export default class AdminCostsService {
@@ -383,5 +405,120 @@ export default class AdminCostsService {
       }))
 
     return { totals, monthly, daily, byCategory, byModel, byTask, topUsers }
+  }
+
+  /**
+   * Paginated raw transaction log from cost_logs, joined with users.
+   * Filters: dateFrom, dateTo, category, onlyCharged (credits_charged IS NOT NULL)
+   */
+  static async getTransactions(opts: {
+    page?: number
+    limit?: number
+    dateFrom?: string
+    dateTo?: string
+    category?: string
+    onlyCharged?: boolean
+  }): Promise<CostTransactionsResult> {
+    const page = Math.max(1, opts.page ?? 1)
+    const limit = Math.min(200, Math.max(1, opts.limit ?? 50))
+    const offset = (page - 1) * limit
+
+    const conditions: string[] = []
+    const params: any[] = []
+
+    if (opts.dateFrom && /^\d{4}-\d{2}-\d{2}$/.test(opts.dateFrom)) {
+      conditions.push('cl.created_at >= ?')
+      params.push(new Date(opts.dateFrom + 'T00:00:00.000Z').toISOString())
+    }
+    if (opts.dateTo && /^\d{4}-\d{2}-\d{2}$/.test(opts.dateTo)) {
+      const d = new Date(opts.dateTo + 'T00:00:00.000Z')
+      d.setUTCDate(d.getUTCDate() + 1)
+      conditions.push('cl.created_at < ?')
+      params.push(d.toISOString())
+    }
+    if (opts.category) {
+      conditions.push('cl.category = ?')
+      params.push(opts.category)
+    }
+    if (opts.onlyCharged) {
+      conditions.push('cl.credits_charged IS NOT NULL')
+    }
+
+    const whereClause = conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''
+
+    const countResult = await db.rawQuery(
+      `SELECT COUNT(*) AS total FROM cost_logs cl ${whereClause}`,
+      params
+    )
+    const total = Number(countResult.rows[0]?.total ?? 0)
+
+    const summaryResult = await db.rawQuery(
+      `SELECT
+        COALESCE(SUM(cl.cost_in_eur), 0)::float AS total_cost_eur,
+        COALESCE(SUM(cl.credits_charged), 0)::int AS total_credits
+       FROM cost_logs cl ${whereClause}`,
+      params
+    )
+    const summaryRow = summaryResult.rows[0]
+
+    const dataResult = await db.rawQuery(
+      `SELECT
+        cl.id,
+        cl.created_at,
+        cl.category,
+        cl.task,
+        cl.model,
+        cl.calls,
+        cl.cost_in_eur,
+        cl.credits_charged,
+        cl.margin_multiplier,
+        cl.reference_id,
+        u.id AS user_id,
+        u.name AS user_name,
+        u.email AS user_email
+       FROM cost_logs cl
+       JOIN users u ON u.id = cl.user_id
+       ${whereClause}
+       ORDER BY cl.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    )
+
+    const rows: CostTransactionRow[] = dataResult.rows.map((r: any) => ({
+      id: r.id,
+      createdAt: new Date(r.created_at).toISOString(),
+      userId: r.user_id,
+      userName: r.user_name,
+      userEmail: r.user_email,
+      category: r.category,
+      task: r.task ?? null,
+      model: r.model ?? null,
+      calls: r.calls ?? 1,
+      costInEur: this.round(Number(r.cost_in_eur ?? 0)),
+      creditsCharged:
+        r.credits_charged !== null && r.credits_charged !== undefined
+          ? Number(r.credits_charged)
+          : null,
+      marginMultiplier:
+        r.margin_multiplier !== null && r.margin_multiplier !== undefined
+          ? Number(r.margin_multiplier)
+          : null,
+      referenceId: r.reference_id ?? null,
+    }))
+
+    return {
+      rows,
+      meta: {
+        total,
+        perPage: limit,
+        currentPage: page,
+        lastPage: Math.max(1, Math.ceil(total / limit)),
+      },
+      summary: {
+        totalCostEur: this.round(Number(summaryRow?.total_cost_eur ?? 0)),
+        totalCreditsCharged: Number(summaryRow?.total_credits ?? 0),
+        totalRows: total,
+      },
+    }
   }
 }

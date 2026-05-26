@@ -218,6 +218,32 @@ export default class UsersAdminController {
   }
 
   /**
+   * Get paginated credit ledger for a user (cost_logs with credits_charged)
+   */
+  async creditLedger({ params, request, response }: HttpContext) {
+    try {
+      const page = Math.max(1, Number(request.input('page', 1)))
+      const limit = Math.min(Number(request.input('limit', 30)), 100)
+      const category = request.input('category') || undefined
+      const dateFrom = request.input('dateFrom') || undefined
+      const dateTo = request.input('dateTo') || undefined
+
+      const result = await AdminUsersService.getCreditLedger(Number(params.id), page, limit, {
+        category,
+        dateFrom,
+        dateTo,
+      })
+
+      return response.ok(result)
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to fetch credit ledger',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
    * Generate a short-lived impersonation token for a user (admin only)
    */
   async impersonate({ params, response }: HttpContext) {

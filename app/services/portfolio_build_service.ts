@@ -727,10 +727,13 @@ Rules:
       // Notify user
       await this.notifyCompletion(build)
 
+      const creditsCharged = CreditService.eurToCredits(
+        CreditService.applyMargin(costSummary.totalCostInEur, 'PORTFOLIO_BUILD')
+      )
       console.log(
         `[PortfolioBuild] ✅ Build ${build.id} completed | ` +
           `${finalIds.length} photos selected from ${candidates.length} candidates | ` +
-          `Cost: €${costSummary.totalCostInEur.toFixed(4)}`
+          `Cost: €${costSummary.totalCostInEur.toFixed(4)} (${creditsCharged.toFixed(2)} credits)`
       )
     } catch (err: any) {
       build.status = 'failed'

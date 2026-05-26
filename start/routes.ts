@@ -466,6 +466,7 @@ router
     router.put('/api/admin/users/:id/usage', [UsersAdminController, 'updateUsage'])
     router.get('/api/admin/users/:id/activities', [UsersAdminController, 'activities'])
     router.get('/api/admin/users/:id/photos', [UsersAdminController, 'photos'])
+    router.get('/api/admin/users/:id/credit-ledger', [UsersAdminController, 'creditLedger'])
     router.post('/api/admin/users/:id/mark-photos-reviewed', [
       UsersAdminController,
       'markPhotosReviewed',
@@ -485,6 +486,7 @@ router
 
     // Admin Costs dashboard
     router.get('/api/admin/costs/overview', [CostsAdminController, 'overview'])
+    router.get('/api/admin/costs/transactions', [CostsAdminController, 'transactions'])
 
     // Admin Payments dashboard
     router.get('/api/admin/payments/overview', [PaymentsAdminController, 'overview'])
