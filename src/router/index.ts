@@ -282,17 +282,17 @@ const router = createRouter({
         requiresAuth: true,
       },
     },
-    {
-      path: "/geo-recovery",
-      name: "geo-recovery",
-      component: GeoRecoveryView,
-      meta: {
-        requiresGuest: false, // anonymous, no auth required
-        title: "Geo Recovery — Recover GPS for your photos",
-        description:
-          "Upload photos with no GPS data and let our AI guess their location. Originals never leave your browser.",
-      },
-    },
+    // {
+    //   path: "/geo-recovery",
+    //   name: "geo-recovery",
+    //   component: GeoRecoveryView,
+    //   meta: {
+    //     requiresGuest: false, // anonymous, no auth required
+    //     title: "Geo Recovery — Recover GPS for your photos",
+    //     description:
+    //       "Upload photos with no GPS data and let our AI guess their location. Originals never leave your browser.",
+    //   },
+    // },
     {
       path: "/world-map",
       name: "world-map",
