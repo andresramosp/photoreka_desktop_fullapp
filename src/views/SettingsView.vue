@@ -472,10 +472,11 @@
     :session-id="paymentSessionId"
   />
 
-  <!-- Plans & Credits Coming Soon Modal -->
+  <!-- Plans & Credits — Quota Request Modal -->
   <n-modal
     v-model:show="showPlansModal"
     :style="{ width: '480px', maxWidth: '92vw' }"
+    @after-leave="resetQuotaForm"
   >
     <n-card
       :bordered="false"
@@ -502,46 +503,66 @@
             <CloudOutline />
           </n-icon>
         </div>
-        <h3 class="plans-modal-title">Plans & Credits — Coming Soon</h3>
+        <h3 class="plans-modal-title">
+          Photo Packages & Credits — Coming Soon
+        </h3>
         <p class="plans-modal-body">
-          We're working on a full plans and credits system that will let you
-          expand your analysis quota and replenish credits directly from here.
+          We're working on a photo packages and credits system. In the meantime,
+          send us a request and we'll manually increase your photos and credits
+          quota.
         </p>
 
-        <div class="plans-modal-highlight">
-          <n-icon size="16" color="var(--accent-color)">
-            <MailOutline />
-          </n-icon>
-          <span>
-            In the meantime, reach out to us at
-            <a href="mailto:hello@photoreka.com" class="plans-modal-link"
-              >hello@photoreka.com</a
+        <div class="quota-form">
+          <div class="quota-form-field">
+            <label class="quota-form-label"
+              >How many photos do you need?
+              <span class="quota-required">*</span></label
             >
-            and we'll be happy to grant a courtesy increase.
-          </span>
-        </div>
-
-        <div class="plans-modal-highlight plans-modal-highlight--bonus">
-          <n-icon size="16" color="var(--warning-color)">
-            <StarOutline />
-          </n-icon>
-          <span>
-            You also can <strong>invite friends</strong> and earn bonus photos
-            and credits for every successful referral.
-          </span>
+            <n-select
+              v-model:value="quotaPhotosOption"
+              :options="quotaPhotoOptions"
+              placeholder="Select an amount…"
+            />
+          </div>
+          <div class="quota-form-field">
+            <label class="quota-form-label">
+              <template v-if="quotaPhotosOption === 'other'">
+                How many, and any other details
+                <span class="quota-required">*</span>
+              </template>
+              <template v-else
+                >Comments
+                <span class="quota-optional">(optional)</span></template
+              >
+            </label>
+            <n-input
+              v-model:value="quotaComments"
+              type="textarea"
+              :placeholder="
+                quotaPhotosOption === 'other'
+                  ? 'Specify the number of photos and tell us about your use case…'
+                  : 'Tell us about your use case, project, or any other details…'
+              "
+              :autosize="{ minRows: 3, maxRows: 6 }"
+            />
+          </div>
         </div>
       </div>
 
       <template #action>
         <div class="plans-modal-actions">
-          <n-button @click="showPlansModal = false">Close</n-button>
+          <n-button
+            :disabled="isSendingQuotaRequest"
+            @click="showPlansModal = false"
+            >Cancel</n-button
+          >
           <n-button
             type="primary"
-            tag="a"
-            href="mailto:hello@photoreka.com"
-            @click="showPlansModal = false"
+            :loading="isSendingQuotaRequest"
+            :disabled="!isQuotaFormValid || isSendingQuotaRequest"
+            @click="sendQuotaRequest"
           >
-            Contact us
+            Send request
           </n-button>
         </div>
       </template>
@@ -885,6 +906,56 @@ const creditsPercentage = computed(() => {
 const showPhotosModal = ref(false);
 const showCreditsModal = ref(false);
 const showPlansModal = ref(false);
+
+// Quota request form
+const quotaPhotosOption = ref<string | null>(null);
+const quotaComments = ref("");
+const isSendingQuotaRequest = ref(false);
+
+const quotaPhotoOptions = [
+  { label: "500 photos", value: "500" },
+  { label: "1,000 photos", value: "1000" },
+  { label: "2,000 photos", value: "2000" },
+  { label: "Other", value: "other" },
+];
+
+const isQuotaFormValid = computed(() => {
+  if (!quotaPhotosOption.value) return false;
+  if (quotaPhotosOption.value === "other" && !quotaComments.value.trim())
+    return false;
+  return true;
+});
+
+const resetQuotaForm = () => {
+  quotaPhotosOption.value = null;
+  quotaComments.value = "";
+};
+
+const sendQuotaRequest = async () => {
+  if (!isQuotaFormValid.value) return;
+  const photosRequested =
+    quotaPhotosOption.value === "other"
+      ? 0
+      : parseInt(quotaPhotosOption.value!);
+  try {
+    isSendingQuotaRequest.value = true;
+    await api.post("/api/email/quota-request", {
+      photosRequested,
+      comments: quotaComments.value || undefined,
+    });
+    message.success("Request sent! We'll get back to you soon.");
+    showPlansModal.value = false;
+  } catch (error: any) {
+    const msg =
+      error?.response?.data?.message ||
+      error?.message ||
+      "Failed to send request";
+    message.error(msg);
+    console.error("[QuotaRequest] Error:", error);
+  } finally {
+    isSendingQuotaRequest.value = false;
+  }
+};
 
 // Actions
 const saveSettings = () => {
@@ -1461,6 +1532,40 @@ const handleDeleteAccount = async () => {
   .settings-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Quota request form */
+.quota-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  width: 100%;
+  text-align: left;
+}
+
+.quota-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.quota-form-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+}
+
+.quota-required {
+  color: var(--error-color);
+}
+
+.quota-optional {
+  color: var(--text-tertiary, var(--text-secondary));
+  font-weight: var(--font-weight-normal);
+}
+
+.quota-input-number {
+  width: 100%;
 }
 
 /* Danger zone */
