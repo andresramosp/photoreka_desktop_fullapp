@@ -1,4 +1,5 @@
 import { invalidateCache, invalidateCacheByPattern } from '../decorators/withCache.js'
+import db from '@adonisjs/lucid/services/db'
 
 /**
  * Centralized cache invalidation policies.
@@ -10,11 +11,30 @@ import { invalidateCache, invalidateCacheByPattern } from '../decorators/withCac
  *  - onPhotosDeleted     → photo list + search index + tags + 3D/tagcloud/portfolio stale
  *  - onAnalysisCompleted → everything including UMAP/3D/portfolio (expensive reductions)
  *
- * Expensive caches (get3DPhotos, getTagCloud) are only invalidated when photoCount >= this
- * threshold. Below it the 2-week TTL set on the decorator acts as a safety net.
+ * Expensive caches (getPhotosFor3DView, get3DPhotos, getTagCloud, reportEmbeddings) use a
+ * per-user DB watermark. They are only invalidated once the accumulated delta of analyzed photos
+ * (uploads/analysis positive, deletions negative) reaches EXPENSIVE_CACHE_DELTA_THRESHOLD in
+ * either net or churn terms. The 2-week TTL on the decorator acts as an absolute safety net.
+ *
+ * Watermark columns (cache_invalidation_watermarks):
+ *  - net_delta   : signed sum — +N on analysis, -N on deletion
+ *  - churn_delta : unsigned sum — always +=|N|, catches 60+60=120 real changes netting to 0
  */
-const EXPENSIVE_CACHE_DELETE_THRESHOLD = 5
-const EXPENSIVE_CACHE_ANALYSIS_THRESHOLD = 2
+
+/** Number of analyzed-photo changes that must accumulate before flushing expensive caches */
+const EXPENSIVE_CACHE_DELTA_THRESHOLD = 4
+
+/**
+ * The four caches that are expensive to recompute (UMAP/3D/portfolio projections).
+ * Everything else (photo lists, search, scoring, duplicates) is invalidated immediately.
+ */
+const EXPENSIVE_CACHE_PATTERNS: ReadonlyArray<(userId: string) => string> = [
+  (userId) => `getPhotosFor3DView_${userId}_*`,
+  (userId) => `get3DPhotos:${userId}:*`,
+  (userId) => `getTagCloud:${userId}:*`,
+  (userId) => `reportEmbeddings:*:${userId}`,
+]
+
 export class CacheInvalidationService {
   /**
    * Called when photos are uploaded or their metadata changes in place
@@ -42,58 +62,119 @@ export class CacheInvalidationService {
   }
 
   /**
-   * Called when photos are soft-deleted.
-   * Tags may be affected; UMAP/3D is NOT invalidated here — wait for onAnalysisCompleted.
+   * Called when analyzed photos are soft-deleted.
+   * Immediately invalidates correctness-critical caches (search, scoring, tags, duplicates).
+   * Expensive visual caches (3D, tagcloud, portfolio) are deferred via the watermark.
    * Used by: photo_manager.deletePhotos
-   * @param photoCount Number of photos deleted. Expensive caches are only invalidated when >= EXPENSIVE_CACHE_THRESHOLD.
+   * @param photoCount Number of already-analyzed photos deleted (unanalyzed photos don't feed expensive caches).
    */
   static async onPhotosDeleted(userId: string, photoCount: number = 1): Promise<void> {
     await invalidateCache(`getPhotosByUser_${userId}`)
     await invalidateCache(`getPhotosPreview_${userId}`)
     await invalidateCacheByPattern(`getPhotosIdsForSearch:${userId}:*`)
     await invalidateCache(`getTagsByUser_${userId}`)
-    await invalidateCacheByPattern(`getPhotosFor3DView_${userId}_*`)
-    if (photoCount >= EXPENSIVE_CACHE_DELETE_THRESHOLD) {
-      await invalidateCacheByPattern(`get3DPhotos:${userId}:*`)
-      await invalidateCacheByPattern(`getTagCloud:${userId}:*`)
-    }
-    await invalidateCacheByPattern(`portfolioEmbeddings:*:${userId}`)
     await invalidateCacheByPattern(`getScoredPhotosByTagsAndDesc:${userId}:*`)
     await invalidateCacheByPattern(`getScoredPhotosByTags:${userId}:*`)
     await invalidateCacheByPattern(`getScoredPhotoImageByFullQuery:${userId}:*`)
     await invalidateCacheByPattern(`searchByPhotos:${userId}:*`)
     await invalidateCacheByPattern(`checkSimilarDuplicates:${userId}:*`)
     await invalidateCacheByPattern(`checkExactDuplicates:${userId}:*`)
+
+    const invalidated = await this.maybeInvalidateExpensiveCaches(userId, -photoCount)
     console.log(
-      `[CacheInvalidation] onPhotosDeleted: Invalidated caches for user ${userId} (photoCount=${photoCount}, expensive=${photoCount >= EXPENSIVE_CACHE_DELETE_THRESHOLD})`
+      `[CacheInvalidation] onPhotosDeleted: user=${userId} photoCount=${photoCount} expensiveInvalidated=${invalidated}`
     )
   }
 
   /**
    * Called when an analysis pipeline (or global reprocess) finishes.
-   * Invalidates everything including expensive dimensional-reduction caches.
+   * Immediately invalidates correctness-critical caches.
+   * Expensive visual caches (3D, tagcloud, portfolio) are deferred via the watermark.
    * Used by: analyzer_service.runAll
-   * @param photoCount Number of photos analysed. Expensive caches are only invalidated when >= EXPENSIVE_CACHE_THRESHOLD.
+   * @param photoCount Number of photos analysed in this run.
    */
   static async onAnalysisCompleted(userId: string, photoCount: number = 1): Promise<void> {
     await invalidateCache(`getPhotosByUser_${userId}`)
     await invalidateCache(`getPhotosPreview_${userId}`)
     await invalidateCacheByPattern(`getPhotosIdsForSearch:${userId}:*`)
     await invalidateCache(`getTagsByUser_${userId}`)
-    await invalidateCacheByPattern(`getPhotosFor3DView_${userId}_*`)
-    if (photoCount >= EXPENSIVE_CACHE_ANALYSIS_THRESHOLD) {
-      await invalidateCacheByPattern(`get3DPhotos:${userId}:*`)
-      await invalidateCacheByPattern(`getTagCloud:${userId}:*`)
-    }
-    await invalidateCacheByPattern(`portfolioEmbeddings:*:${userId}`)
     await invalidateCacheByPattern(`getScoredPhotosByTagsAndDesc:${userId}:*`)
     await invalidateCacheByPattern(`getScoredPhotosByTags:${userId}:*`)
     await invalidateCacheByPattern(`getScoredPhotoImageByFullQuery:${userId}:*`)
     await invalidateCacheByPattern(`searchByPhotos:${userId}:*`)
     await invalidateCacheByPattern(`checkSimilarDuplicates:${userId}:*`)
     await invalidateCacheByPattern(`checkExactDuplicates:${userId}:*`)
+
+    const invalidated = await this.maybeInvalidateExpensiveCaches(userId, +photoCount)
     console.log(
-      `[CacheInvalidation] onAnalysisCompleted: Invalidated all caches for user ${userId} (photoCount=${photoCount}, expensive=${photoCount >= EXPENSIVE_CACHE_ANALYSIS_THRESHOLD})`
+      `[CacheInvalidation] onAnalysisCompleted: user=${userId} photoCount=${photoCount} expensiveInvalidated=${invalidated}`
     )
+  }
+
+  // ─── Private helpers ────────────────────────────────────────────────────────
+
+  /**
+   * Atomically increments the per-user watermark by `signedDelta`, then checks
+   * whether either accumulator (net or churn) has crossed the threshold.
+   * If it has, all four expensive cache patterns are flushed and the watermark
+   * is reset to zero.
+   *
+   * The upsert is a single SQL statement so concurrent requests can't lose an
+   * increment — the worst case is two requests both see the threshold crossed
+   * and both flush, which is safe (idempotent).
+   *
+   * @param signedDelta  +N for analysis/upload events, -N for deletions.
+   * @returns            true if expensive caches were invalidated this call.
+   */
+  private static async maybeInvalidateExpensiveCaches(
+    userId: string,
+    signedDelta: number
+  ): Promise<boolean> {
+    const absDelta = Math.abs(signedDelta)
+
+    // Atomic upsert: insert first row or increment existing deltas in one round-trip.
+    const result = await db.rawQuery<{ rows: { net_delta: number; churn_delta: number }[] }>(
+      `INSERT INTO cache_invalidation_watermarks (user_id, net_delta, churn_delta, updated_at)
+       VALUES (:userId, :signedDelta, :absDelta, NOW())
+       ON CONFLICT (user_id) DO UPDATE SET
+         net_delta   = cache_invalidation_watermarks.net_delta   + :signedDelta,
+         churn_delta = cache_invalidation_watermarks.churn_delta + :absDelta,
+         updated_at  = NOW()
+       RETURNING net_delta, churn_delta`,
+      { userId: Number(userId), signedDelta, absDelta }
+    )
+
+    const { net_delta, churn_delta } = result.rows[0]
+
+    const shouldInvalidate =
+      Math.abs(net_delta) >= EXPENSIVE_CACHE_DELTA_THRESHOLD ||
+      churn_delta >= EXPENSIVE_CACHE_DELTA_THRESHOLD
+
+    if (!shouldInvalidate) {
+      console.log(
+        `[CacheInvalidation] Expensive caches deferred for user ${userId} ` +
+          `(net_delta=${net_delta}, churn_delta=${churn_delta}, threshold=${EXPENSIVE_CACHE_DELTA_THRESHOLD})`
+      )
+      return false
+    }
+
+    // Reset watermark before flushing so a concurrent request that also crossed
+    // the threshold will start accumulating from 0, not from the old values.
+    await db.rawQuery(
+      `UPDATE cache_invalidation_watermarks
+       SET net_delta = 0, churn_delta = 0, last_invalidated_at = NOW(), updated_at = NOW()
+       WHERE user_id = :userId`,
+      { userId: Number(userId) }
+    )
+
+    for (const pattern of EXPENSIVE_CACHE_PATTERNS) {
+      await invalidateCacheByPattern(pattern(userId))
+    }
+
+    console.log(
+      `[CacheInvalidation] Expensive caches INVALIDATED for user ${userId} ` +
+        `(net_delta=${net_delta}, churn_delta=${churn_delta}, threshold=${EXPENSIVE_CACHE_DELTA_THRESHOLD})`
+    )
+    return true
   }
 }

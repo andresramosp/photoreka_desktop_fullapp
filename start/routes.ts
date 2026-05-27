@@ -42,6 +42,14 @@ router
   })
   .use(middleware.auth())
 
+// Email routes (require authentication)
+const EmailController = () => import('#controllers/email_controller')
+router
+  .group(() => {
+    router.post('/api/email/quota-request', [EmailController, 'sendQuotaRequest'])
+  })
+  .use(middleware.auth())
+
 // Invites routes (require authentication)
 const InvitesController = () => import('#controllers/invites_controller')
 router
