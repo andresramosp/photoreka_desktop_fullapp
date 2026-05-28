@@ -67,8 +67,8 @@ export default class HealthPhotoService {
 
     const visualAspects = d.visual_aspects || {}
     push(
-      'descriptions.visual_aspects.genre',
-      !!(visualAspects.genre && visualAspects.genre.length > 0)
+      'descriptions.visual_aspects.lighting',
+      !!(visualAspects.lighting && visualAspects.lighting.length > 0)
     )
     push(
       'descriptions.visual_aspects.orientation',

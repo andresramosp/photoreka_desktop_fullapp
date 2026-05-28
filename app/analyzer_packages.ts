@@ -123,7 +123,7 @@ export const packages = [
                 imagesPerRequest: 4,
                 // batchAPI: true,
                 promptDependentField: null,
-                checks: ['descriptions.visual_aspects.genre'],
+                checks: ['descriptions.visual_aspects.lighting'],
                 visualAspects: true,
               },
               {
