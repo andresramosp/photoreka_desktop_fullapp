@@ -22,7 +22,7 @@ import db from '@adonisjs/lucid/services/db'
  */
 
 /** Number of analyzed-photo changes that must accumulate before flushing expensive caches */
-const EXPENSIVE_CACHE_DELTA_THRESHOLD = 4
+const EXPENSIVE_CACHE_DELTA_THRESHOLD = 10
 
 /**
  * The four caches that are expensive to recompute (UMAP/3D/portfolio projections).
