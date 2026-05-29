@@ -80,6 +80,18 @@ export type GeoRecoveryResult = LocatedResult | NoLocationResult | FailedResult;
 
 export type GeoRecoveryResultsMap = Record<string, GeoRecoveryResult>;
 
+// ── Front-end preview (before backend upload) ───────────────────────────────
+
+export interface PreviewPhoto {
+  /** Stable client-side UUID, generated on file selection. */
+  id: string;
+  file: File;
+  /** Object URL for display — must be revoked when the preview is removed. */
+  previewUrl: string;
+  name: string;
+  addedAt: number;
+}
+
 // ── Client-local (IndexedDB) ────────────────────────────────────────────────
 
 export interface LocalPhotoRecord {
@@ -93,6 +105,8 @@ export interface LocalPhotoRecord {
   r2Key: string;
   /** Public URL of the R2 thumbnail, returned by the registerPhotos endpoint. */
   thumbUrl?: string | null;
+  /** Monotonically increasing timestamp (batchStartMs + fileIndex) for stable grid ordering. */
+  addedAt?: number;
   /** Manual coord override entered by the user, if any. */
   manualLat?: number;
   manualLng?: number;

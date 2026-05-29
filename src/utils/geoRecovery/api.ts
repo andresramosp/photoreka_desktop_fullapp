@@ -71,7 +71,7 @@ export async function mockPay(token: string): Promise<void> {
 
 export async function startJob(token: string): Promise<GeoRecoveryJobState> {
   const { data } = await client().post(
-    "/api/geo-recovery/start",
+    "/api/geo-recovery/start_",
     {},
     { headers: { Authorization: `Bearer ${token}` } },
   );

@@ -5,7 +5,7 @@ import type { UploadProgress } from "@/utils/geoRecovery/upload";
 import type { ZipProgress } from "@/utils/geoRecovery/zip";
 import type {
   GeoRecoveryJobState,
-  LocalPhotoRecord,
+  PreviewPhoto,
 } from "@/utils/geoRecovery/types";
 import GeoWizardStepWelcome from "./GeoWizardStepWelcome.vue";
 import GeoWizardStepUpload from "./GeoWizardStepUpload.vue";
@@ -16,13 +16,11 @@ import GeoWizardStepResults from "./GeoWizardStepResults.vue";
 const props = defineProps<{
   stepIndex: number;
   hasSession: boolean;
-  photos: LocalPhotoRecord[];
-  pendingFiles: File[];
+  previewPhotos: PreviewPhoto[];
   photoCount: number;
   locatedCount: number;
   unknownCount: number;
   maxPhotos: number;
-  pendingCount: number;
   uploading: boolean;
   uploadProgress: UploadProgress | null;
   payBusy: boolean;
@@ -37,12 +35,12 @@ const props = defineProps<{
 const emit = defineEmits<{
   accepted: [];
   fileChange: [files: File[]];
-  upload: [];
   continue: [];
   back: [];
   pay: [];
   download: [];
   startOver: [];
+  removePhoto: [id: string];
   "update:includeUnlocated": [value: boolean];
 }>();
 </script>
@@ -85,15 +83,11 @@ const emit = defineEmits<{
       <GeoWizardStepUpload
         v-else-if="stepIndex === 1"
         :max-photos="maxPhotos"
-        :photos="photos"
-        :pending-files="pendingFiles"
-        :photo-count="photoCount"
-        :pending-count="pendingCount"
-        :uploading="uploading"
-        :upload-progress="uploadProgress"
+        :preview-photos="previewPhotos"
         @file-change="emit('fileChange', $event)"
-        @upload="emit('upload')"
         @continue="emit('continue')"
+        @remove-photo="emit('removePhoto', $event)"
+        @back="emit('back')"
       />
       <GeoWizardStepPay
         v-else-if="stepIndex === 2"
@@ -111,6 +105,8 @@ const emit = defineEmits<{
     :job="job"
     :photo-count="photoCount"
     :stage-label="jobStageLabel"
+    :uploading="uploading"
+    :upload-progress="uploadProgress"
   />
 
   <!-- Step 4: Results — floating bottom action bar -->
@@ -236,7 +232,7 @@ const emit = defineEmits<{
 }
 .geo-modal-card {
   pointer-events: auto;
-  width: min(580px, 92vw);
+  width: min(740px, 92vw);
   max-height: 86vh;
   overflow-y: auto;
   padding: 22px 24px;

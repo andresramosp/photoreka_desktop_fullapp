@@ -1,392 +1,301 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from "vue";
+import { computed, ref } from "vue";
+import { NButton, NIcon, NText } from "naive-ui";
 import {
-  NButton,
-  NIcon,
-  NProgress,
-  NText,
-  NUpload,
-  NUploadDragger,
-  type UploadCustomRequestOptions,
-} from "naive-ui";
-import { CheckmarkCircleOutline, CloudUploadOutline } from "@vicons/ionicons5";
-import type { UploadProgress } from "@/utils/geoRecovery/upload";
-import type { LocalPhotoRecord } from "@/utils/geoRecovery/types";
+  AddOutline,
+  CloudUploadOutline,
+  CloseOutline,
+} from "@vicons/ionicons5";
+import type { PreviewPhoto } from "@/utils/geoRecovery/types";
 
 const props = defineProps<{
   maxPhotos: number;
-  photos: LocalPhotoRecord[];
-  pendingFiles: File[];
-  photoCount: number;
-  pendingCount: number;
-  uploading: boolean;
-  uploadProgress: UploadProgress | null;
+  previewPhotos: PreviewPhoto[];
 }>();
 
 const emit = defineEmits<{
   fileChange: [files: File[]];
-  upload: [];
   continue: [];
+  removePhoto: [id: string];
+  back: [];
 }>();
 
-// ── Local blob URL management ─────────────────────────────────────────────
+const fileInput = ref<HTMLInputElement | null>(null);
 
-function fileKey(file: File): string {
-  return `${file.name}_${file.size}_${file.lastModified}`;
-}
+const hasAny = computed(() => props.previewPhotos.length > 0);
 
-const pendingUrls = ref<Record<string, string>>({});
+const photoCount = computed(() => props.previewPhotos.length);
 
-watch(
-  () => props.pendingFiles,
-  (newFiles) => {
-    const newKeySet = new Set(newFiles.map(fileKey));
-    // Revoke URLs for files that are no longer pending
-    for (const [key, url] of Object.entries(pendingUrls.value)) {
-      if (!newKeySet.has(key)) URL.revokeObjectURL(url);
-    }
-    // Build updated record, reusing existing URLs
-    const next: Record<string, string> = {};
-    for (const file of newFiles) {
-      const key = fileKey(file);
-      next[key] = pendingUrls.value[key] ?? URL.createObjectURL(file);
-    }
-    pendingUrls.value = next;
-  },
-  { immediate: true },
+const sortedPhotos = computed(() =>
+  [...props.previewPhotos].sort(
+    (a, b) => a.addedAt - b.addedAt || a.id.localeCompare(b.id),
+  ),
 );
 
-onUnmounted(() => {
-  for (const url of Object.values(pendingUrls.value)) URL.revokeObjectURL(url);
-});
+// ── Native file input/drop handlers ───────────────────────────────────────
 
-// ── Grid items ────────────────────────────────────────────────────────────
-
-interface GridItem {
-  key: string;
-  previewUrl: string | null;
-  name: string;
-  isPending: boolean;
+function openFilePicker() {
+  fileInput.value?.click();
 }
 
-const gridItems = computed((): GridItem[] => {
-  const items: GridItem[] = [];
-  for (const photo of props.photos) {
-    items.push({
-      key: `up-${photo.clientPhotoId}`,
-      previewUrl: photo.thumbUrl ?? null,
-      name: photo.originalName,
-      isPending: false,
-    });
-  }
-  for (const file of props.pendingFiles) {
-    const k = fileKey(file);
-    items.push({
-      key: `pend-${k}`,
-      previewUrl: pendingUrls.value[k] ?? null,
-      name: file.name,
-      isPending: true,
-    });
-  }
-  return items;
-});
-
-// ── Progress visibility ───────────────────────────────────────────────────
-
-const showProgress = ref(false);
-let hideTimer: ReturnType<typeof setTimeout> | null = null;
-
-watch(
-  () => props.uploading,
-  (active) => {
-    if (active) {
-      if (hideTimer) {
-        clearTimeout(hideTimer);
-        hideTimer = null;
-      }
-      showProgress.value = true;
-    } else {
-      // Keep visible briefly so the user sees 100%, then fade out
-      hideTimer = setTimeout(() => {
-        showProgress.value = false;
-      }, 1800);
-    }
-  },
-);
-
-watch(
-  () => props.uploadProgress,
-  (p) => {
-    if (p) showProgress.value = true;
-  },
-);
-
-// ── Cell size ─────────────────────────────────────────────────────────────
-
-const cellSize = computed(() => {
-  const n = gridItems.value.length;
-  if (n <= 10) return 92;
-  if (n <= 50) return 68;
-  if (n <= 200) return 50;
-  if (n <= 1000) return 34;
-  if (n <= 3000) return 26;
-  return 20;
-});
-
-const hasAny = computed(() => gridItems.value.length > 0);
-
-// ── Upload handler ────────────────────────────────────────────────────────
-
-function onFileChange(options: { fileList: any[] }) {
-  const files = options.fileList
-    .map((f) => f.file as File | undefined)
-    .filter((f): f is File => Boolean(f));
-  emit("fileChange", files);
+function emitFiles(fileList: FileList | null | undefined) {
+  const files = Array.from(fileList ?? []).filter((file) =>
+    ["image/jpeg", "image/png"].includes(file.type),
+  );
+  if (files.length > 0) emit("fileChange", files);
 }
 
-function customRequest(options: UploadCustomRequestOptions) {
-  options.onFinish();
+function onInputChange(event: Event) {
+  const input = event.target as HTMLInputElement;
+  emitFiles(input.files);
+  input.value = "";
 }
 
-// ── Status label ─────────────────────────────────────────────────────────
-
-const statusLabel = computed(() => {
-  const up = props.photoCount;
-  const pend = props.pendingCount;
-  if (up > 0 && pend > 0) return `${up} uploaded · ${pend} pending`;
-  if (up > 0 && pend === 0) return `${up} photo${up !== 1 ? "s" : ""} uploaded`;
-  if (pend > 0)
-    return `${pend} photo${pend !== 1 ? "s" : ""} selected — click Upload`;
-  return "";
-});
+function onDrop(event: DragEvent) {
+  emitFiles(event.dataTransfer?.files);
+}
 </script>
 
 <template>
-  <h2 class="step-title">Add your photos</h2>
+  <div class="step">
+    <h2 class="step-title">Add your photos</h2>
 
-  <!-- Drop zone — compact once files are selected -->
-  <NUpload
-    multiple
-    :default-upload="false"
-    :custom-request="customRequest"
-    :show-file-list="false"
-    accept="image/jpeg,image/png"
-    @change="onFileChange"
-  >
-    <NUploadDragger :class="['dragger', { 'dragger--compact': hasAny }]">
-      <NIcon :size="hasAny ? 26 : 42" :component="CloudUploadOutline" />
-      <NText :style="{ fontSize: hasAny ? '13px' : '15px' }">
-        {{ hasAny ? "Add more photos" : "Click or drag photos here" }}
-      </NText>
-      <NText v-if="!hasAny" depth="3" style="font-size: 12px; margin-top: 3px">
-        JPEG or PNG · up to {{ maxPhotos }} files
-      </NText>
-    </NUploadDragger>
-  </NUpload>
-
-  <!-- Photo grid — appears as soon as files are selected -->
-  <div v-if="hasAny" class="photo-grid" :style="{ '--cell': cellSize + 'px' }">
-    <div
-      v-for="item in gridItems"
-      :key="item.key"
-      class="photo-cell"
-      :class="{
-        'photo-cell--pending': item.isPending,
-        'photo-cell--uploading': item.isPending && uploading,
-      }"
-      :title="item.name"
-    >
-      <img
-        v-if="item.previewUrl"
-        :src="item.previewUrl"
-        loading="lazy"
-        decoding="async"
-        :alt="item.name"
-        class="photo-cell-img"
-      />
-      <div v-else class="photo-cell-placeholder" />
-      <!-- Dim overlay for pending cells -->
-      <div v-if="item.isPending" class="photo-cell-overlay" />
-    </div>
-  </div>
-
-  <!-- Status line -->
-  <div v-if="hasAny && statusLabel" class="status-line">
-    <NIcon
-      v-if="photoCount > 0 && pendingCount === 0"
-      :component="CheckmarkCircleOutline"
-      size="13"
-      class="status-icon-ok"
+    <input
+      ref="fileInput"
+      class="file-input"
+      type="file"
+      multiple
+      accept="image/jpeg,image/png"
+      @change="onInputChange"
     />
-    {{ statusLabel }}
-  </div>
 
-  <!-- Progress (auto-hides after upload) -->
-  <Transition name="fade">
-    <div v-if="showProgress && uploadProgress" class="progress-block">
-      <NProgress
-        :percentage="
-          Math.round(
-            ((uploadProgress.done + uploadProgress.failed) /
-              Math.max(uploadProgress.total, 1)) *
-              100,
-          )
-        "
-        :status="
-          uploadProgress.failed > 0
-            ? 'warning'
-            : !uploading
-              ? 'success'
-              : 'default'
-        "
-        :indicator-placement="'inside'"
-      />
-      <NText depth="3" style="font-size: 11px; margin-top: 2px">
-        {{ uploadProgress.done }}&thinsp;/&thinsp;{{ uploadProgress.total }}
-        <span v-if="uploadProgress.failed > 0">
-          · {{ uploadProgress.failed }} failed</span
-        >
-        <span v-if="uploading && uploadProgress.current">
-          · {{ uploadProgress.current }}</span
-        >
-      </NText>
-    </div>
-  </Transition>
-
-  <!-- Action buttons -->
-  <div class="action-row">
-    <NButton
-      type="primary"
-      :loading="uploading"
-      :disabled="pendingCount === 0"
-      @click="emit('upload')"
+    <!-- Drop zone: full when empty, compact strip when files present -->
+    <button
+      type="button"
+      :class="['dragger', { 'dragger--compact': hasAny }]"
+      @click="openFilePicker"
+      @dragenter.prevent
+      @dragover.prevent
+      @drop.prevent="onDrop"
     >
-      {{
-        uploading
-          ? "Uploading…"
-          : pendingCount > 0
-            ? `Upload ${pendingCount} photo${pendingCount !== 1 ? "s" : ""}`
-            : "Upload"
-      }}
-    </NButton>
-    <NButton :disabled="photoCount === 0" @click="emit('continue')">
-      Continue →
-    </NButton>
+      <template v-if="!hasAny">
+        <NIcon :component="CloudUploadOutline" size="36" class="dragger-icon" />
+        <NText class="dragger-main">Click or drag photos here</NText>
+        <NText depth="3" class="dragger-sub">
+          JPEG · PNG · up to {{ maxPhotos }} files
+        </NText>
+      </template>
+      <template v-else>
+        <NIcon :component="AddOutline" size="14" />
+        <span class="dragger-add-label">Add more</span>
+      </template>
+    </button>
+
+    <!-- Grid: 5 fixed columns, square cells with contain -->
+    <div v-if="hasAny" class="grid">
+      <div
+        v-for="photo in sortedPhotos"
+        :key="photo.id"
+        class="cell"
+        :title="photo.name"
+      >
+        <img
+          :src="photo.previewUrl"
+          loading="lazy"
+          decoding="async"
+          :alt="photo.name"
+          class="cell-img"
+        />
+        <button
+          type="button"
+          class="cell-remove"
+          :title="`Remove ${photo.name}`"
+          @click.stop="emit('removePhoto', photo.id)"
+        >
+          <NIcon :component="CloseOutline" size="12" />
+        </button>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <div class="footer-actions">
+        <NButton @click="emit('back')">Back</NButton>
+        <NButton
+          type="primary"
+          size="large"
+          :disabled="photoCount === 0"
+          style="flex: 1"
+          @click="emit('continue')"
+        >
+          {{
+            photoCount > 0
+              ? `Continue with ${photoCount} photo${photoCount !== 1 ? "s" : ""} \u2192`
+              : "Select photos to continue"
+          }}
+        </NButton>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .step-title {
-  margin: 0 0 14px;
-  font-size: 20px;
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
 }
 
 /* ── Drop zone ───────────────────────────────────────────────────────────── */
 
-:deep(.dragger.dragger--compact .n-upload-dragger) {
-  padding-top: 10px;
-  padding-bottom: 10px;
+.file-input {
+  display: none;
 }
 
-/* ── Photo grid ──────────────────────────────────────────────────────────── */
-
-.photo-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--cell), 1fr));
-  gap: 3px;
-  margin: 12px 0 6px;
-  max-height: 270px;
-  overflow-y: auto;
-  border-radius: 6px;
-  /* Thin scrollbar so it doesn't intrude */
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
-}
-
-.photo-cell {
-  aspect-ratio: 1 / 1;
-  overflow: hidden;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.06);
-  position: relative;
-}
-
-.photo-cell-img {
+.dragger {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  min-height: 130px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 22px 18px;
+  color: rgba(255, 255, 255, 0.86);
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    opacity 0.18s ease;
+}
+
+.dragger:hover {
+  background: rgba(255, 255, 255, 0.065);
+  border-color: rgba(99, 226, 183, 0.55);
+}
+
+.dragger-icon {
+  color: var(--accent-color, #63e2b7);
+  margin-bottom: 8px;
+}
+
+.dragger-main {
+  font-size: 15px;
+  font-weight: 500;
   display: block;
 }
 
-.photo-cell-placeholder {
+.dragger-sub {
+  font-size: 12px;
+  display: block;
+  margin-top: 4px;
+}
+
+.dragger--compact {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 16px;
+  min-height: 34px;
+  opacity: 0.55;
+}
+
+.dragger--compact:hover {
+  opacity: 1;
+}
+
+.dragger-add-label {
+  font-size: 12px;
+}
+
+/* ── Grid — 5 fixed columns ──────────────────────────────────────────────── */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  /* Explicit row height = column width, so aspect-ratio never causes a
+     circular-dependency bug when overflow-y kicks in and changes container width. */
+  grid-auto-rows: calc((min(740px, 92vw) - 64px) / 5);
+  align-content: start;
+  gap: 4px;
+  max-height: 340px;
+  overflow-y: auto;
+  border-radius: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.cell {
+  overflow: hidden;
+  border-radius: 4px;
+  background: #111;
+  position: relative;
+}
+
+/* Respect photo aspect ratio with contain + dark letterbox */
+.cell-img {
   width: 100%;
   height: 100%;
-  background: rgba(255, 255, 255, 0.08);
+  object-fit: contain;
+  display: block;
 }
 
-/* Dim overlay on pending cells */
-.photo-cell-overlay {
+/* ── Delete button (appears on hover) ───────────────────────────────────── */
+
+.cell-remove {
   position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.32);
-  transition: background 0.3s ease;
-}
-
-/* Pulsing glow when actively uploading */
-.photo-cell--uploading .photo-cell-overlay {
-  animation: pulse-dim 1.3s ease-in-out infinite;
-}
-
-@keyframes pulse-dim {
-  0%,
-  100% {
-    background: rgba(0, 0, 0, 0.32);
-  }
-  50% {
-    background: rgba(0, 0, 0, 0.04);
-  }
-}
-
-/* ── Status line ─────────────────────────────────────────────────────────── */
-
-.status-line {
+  top: 3px;
+  right: 3px;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
-  margin: 4px 0 10px;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.72);
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    background 0.15s ease;
+  padding: 0;
+  line-height: 1;
 }
 
-.status-icon-ok {
-  color: #63e2b7;
-  flex-shrink: 0;
+.cell:hover .cell-remove {
+  opacity: 1;
 }
 
-/* ── Progress ────────────────────────────────────────────────────────────── */
+.cell-remove:hover {
+  background: rgba(220, 50, 50, 0.9);
+}
 
-.progress-block {
-  margin: 0 0 10px;
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+
+.footer {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* ── Action row ──────────────────────────────────────────────────────────── */
-
-.action-row {
+.footer-actions {
   display: flex;
   gap: 8px;
-}
-
-/* ── Fade transition ─────────────────────────────────────────────────────── */
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.5s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
 }
 </style>

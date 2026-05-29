@@ -64,6 +64,7 @@ import type {
   GeoRecoveryResult,
   GeoRecoveryResultsMap,
   LocalPhotoRecord,
+  PreviewPhoto,
   SessionInfo,
 } from "@/utils/geoRecovery/types";
 
@@ -79,7 +80,11 @@ const session = ref<SessionInfo | null>(null);
 const photos = ref<LocalPhotoRecord[]>([]);
 const paid = ref(false);
 
-const pendingFiles = ref<File[]>([]);
+// Front-end preview photos — not uploaded until payment+analysis starts.
+const previewPhotos = ref<PreviewPhoto[]>([]);
+// Fingerprints of file objects already added to preview (dedup across multi-add).
+const previewFileKeys = new Set<string>();
+
 const uploadProgress = ref<UploadProgress | null>(null);
 const uploading = ref(false);
 
@@ -110,7 +115,12 @@ const correctionAddress = ref<string | null>(null);
 
 // ── Computed ───────────────────────────────────────────────────────────────
 
-const photoCount = computed(() => photos.value.length);
+// Before upload, use preview count; after upload (steps 3-4), use DB count.
+const photoCount = computed(() =>
+  previewPhotos.value.length > 0
+    ? previewPhotos.value.length
+    : photos.value.length,
+);
 const hasResults = computed(() =>
   Object.values(results.value).some((r) => r?.status === "located"),
 );
@@ -177,10 +187,10 @@ async function restoreState() {
   } else if (paid.value && photos.value.length > 0) {
     stepIndex.value = 3;
     kickOffPolling();
-  } else if (photos.value.length > 0) {
-    stepIndex.value = 1;
   } else {
-    stepIndex.value = 0;
+    // Session active but no results yet; go to upload step.
+    // previewPhotos will be empty after a page reload — user re-selects files.
+    stepIndex.value = 1;
   }
 }
 
@@ -196,68 +206,95 @@ async function handleAcceptAndStart() {
   }
 }
 
-// ── Upload ────────────────────────────────────────────────────────────────
+// ── Front-end preview (step 1) ────────────────────────────────────────────
+
+function fileFingerprint(f: File): string {
+  return `${f.name}|${f.size}|${f.lastModified}`;
+}
+
+function generateId(): string {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
 
 function onFilesChanged(files: File[]) {
-  pendingFiles.value = files;
-}
-
-async function startUpload() {
-  if (!session.value) return;
-  if (pendingFiles.value.length === 0) {
-    message.warning("Add some photos first");
-    return;
-  }
-  uploading.value = true;
-  uploadProgress.value = {
-    total: pendingFiles.value.length,
-    done: 0,
-    failed: 0,
-    current: null,
-  };
-  try {
-    const result = await uploadFiles({
-      token: session.value.sessionToken,
-      files: pendingFiles.value,
-      onProgress: (p) => (uploadProgress.value = p),
+  const now = Date.now();
+  let added = 0;
+  for (const file of files) {
+    const key = fileFingerprint(file);
+    if (previewFileKeys.has(key)) continue;
+    previewFileKeys.add(key);
+    previewPhotos.value.push({
+      id: generateId(),
+      file,
+      previewUrl: URL.createObjectURL(file),
+      name: file.name,
+      addedAt: now + added,
     });
-    photos.value = await listPhotos();
-
-    if (result.failed.length > 0) {
-      message.warning(
-        `${result.failed.length} photo${
-          result.failed.length === 1 ? "" : "s"
-        } could not be uploaded. ${result.registered.length} succeeded.`,
-      );
-    } else {
-      message.success(`Uploaded ${result.registered.length} photos`);
-    }
-    pendingFiles.value = [];
-    if (result.registered.length > 0) stepIndex.value = 2;
-  } catch (error: any) {
-    message.error(error?.message ?? "Upload failed");
-  } finally {
-    uploading.value = false;
-    setTimeout(() => {
-      uploadProgress.value = null;
-    }, 2200);
+    added++;
   }
 }
 
-// ── Payment ───────────────────────────────────────────────────────────────
+function removePreviewPhoto(id: string) {
+  const idx = previewPhotos.value.findIndex((p) => p.id === id);
+  if (idx === -1) return;
+  const [removed] = previewPhotos.value.splice(idx, 1);
+  URL.revokeObjectURL(removed.previewUrl);
+  previewFileKeys.delete(fileFingerprint(removed.file));
+}
+
+// ── Payment + upload + start (all-in-one) ────────────────────────────────
 
 const payBusy = ref(false);
 async function handlePay() {
   if (!session.value) return;
   payBusy.value = true;
   try {
+    // 1. Mock payment
     await mockPay(session.value.sessionToken);
     paid.value = true;
     await setPaid(true);
     message.success("Payment confirmed");
+
+    // 2. Move to processing card so upload progress is visible
+    stepIndex.value = 3;
+
+    // 3. Upload all preview files to backend
+    const filesToUpload = previewPhotos.value.map((p) => p.file);
+    uploading.value = true;
+    uploadProgress.value = {
+      total: filesToUpload.length,
+      done: 0,
+      failed: 0,
+      current: null,
+    };
+    const result = await uploadFiles({
+      token: session.value.sessionToken,
+      files: filesToUpload,
+      onProgress: (p) => (uploadProgress.value = p),
+    });
+    photos.value = await listPhotos();
+    uploading.value = false;
+
+    if (result.failed.length > 0) {
+      message.warning(
+        `${result.failed.length} photo${
+          result.failed.length === 1 ? "" : "s"
+        } could not be uploaded.`,
+      );
+    }
+
+    // 4. Start geo-inference job
     await handleStart();
   } catch (error: any) {
-    message.error(error?.message ?? "Payment failed");
+    uploading.value = false;
+    message.error(error?.message ?? "Payment or upload failed");
+    stepIndex.value = 2; // send back to pay step on error
   } finally {
     payBusy.value = false;
   }
@@ -269,7 +306,7 @@ async function handleStart() {
   if (!session.value) return;
   try {
     job.value = await startJob(session.value.sessionToken);
-    stepIndex.value = 3;
+    // stepIndex is already 3 (set in handlePay before upload)
     kickOffPolling();
   } catch (error: any) {
     message.error(error?.message ?? "Could not start analysis");
@@ -595,11 +632,17 @@ async function handleStartOver() {
   stopPolling();
   await wipeAll();
   revokeAllThumbUrls();
+  // Revoke all preview object URLs
+  for (const p of previewPhotos.value) URL.revokeObjectURL(p.previewUrl);
+  previewPhotos.value = [];
+  previewFileKeys.clear();
   session.value = null;
   photos.value = [];
   results.value = {};
   paid.value = false;
   job.value = null;
+  uploading.value = false;
+  uploadProgress.value = null;
   stepIndex.value = 0;
   await refreshMarkers();
 }
@@ -621,13 +664,11 @@ const hoveredTooltipAddress = computed(() => {
     <GeoRecoveryWizard
       :step-index="stepIndex"
       :has-session="session !== null"
-      :photos="photos"
-      :pending-files="pendingFiles"
+      :preview-photos="previewPhotos"
       :photo-count="photoCount"
       :located-count="locatedCount"
       :unknown-count="unknownCount"
       :max-photos="session?.maxPhotos ?? 5000"
-      :pending-count="pendingFiles.length"
       :uploading="uploading"
       :upload-progress="uploadProgress"
       :pay-busy="payBusy"
@@ -639,12 +680,12 @@ const hoveredTooltipAddress = computed(() => {
       :include-unlocated="includeUnlocated"
       @accepted="handleAcceptAndStart"
       @file-change="onFilesChanged"
-      @upload="startUpload"
       @continue="stepIndex = 2"
-      @back="stepIndex = 1"
+      @back="stepIndex--"
       @pay="handlePay"
       @download="handleDownload"
       @start-over="handleStartOver"
+      @remove-photo="removePreviewPhoto"
       @update:include-unlocated="(v) => (includeUnlocated = v)"
     />
 

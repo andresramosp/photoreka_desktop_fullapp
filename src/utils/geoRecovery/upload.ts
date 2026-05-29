@@ -77,12 +77,19 @@ export async function uploadFiles(
   const registered: PhotoEntry[] = [];
   const failures: Array<{ file: File; error: string }> = [];
 
+  const batchStartMs = Date.now();
+
   await Promise.all(
-    files.map((file) =>
+    files.map((file, fileIndex) =>
       limit(async () => {
         progress(file.name);
         try {
-          const entry = await processFile(file, token, resizeImage);
+          const entry = await processFile(
+            file,
+            token,
+            resizeImage,
+            batchStartMs + fileIndex,
+          );
           registered.push(entry);
           done++;
         } catch (error: any) {
@@ -121,6 +128,7 @@ async function processFile(
   file: File,
   token: string,
   resizeImage: (file: File, width: number, maxBytes: number) => Promise<Blob>,
+  addedAt: number,
 ): Promise<PhotoEntry> {
   const clientPhotoId = generateId();
   const originalMime = file.type || "image/jpeg";
@@ -140,6 +148,7 @@ async function processFile(
     originalMime,
     takenAtMs,
     r2Key: "", // filled in below
+    addedAt,
   });
 
   const contentType = thumbBlob.type || UPLOAD_MIME;
@@ -158,6 +167,7 @@ async function processFile(
     originalMime,
     takenAtMs,
     r2Key,
+    addedAt,
   });
 
   return {
