@@ -149,7 +149,20 @@ export default class GeoRecoveryController {
     session.photos = merged
     await this.sessionService.save(session)
 
-    return response.ok({ photoCount: session.photos.length })
+    const imagesWorker = (process.env.IMAGES_WORKER ?? '').trim()
+    const base = imagesWorker
+      ? imagesWorker.startsWith('http')
+        ? imagesWorker.replace(/\/+$/, '')
+        : `https://${imagesWorker.replace(/\/+$/, '')}`
+      : null
+    const photoUrls: Record<string, string> = {}
+    if (base) {
+      for (const p of sanitized) {
+        photoUrls[p.clientPhotoId] = `${base}/${p.r2Key}`
+      }
+    }
+
+    return response.ok({ photoCount: session.photos.length, photoUrls })
   }
 
   /**
