@@ -23,7 +23,7 @@ import {
 } from "@/config/uploadConfig.js";
 
 import { getUploadUrl, registerPhotos, uploadBlobToR2 } from "./api";
-import { putPhoto } from "./db";
+import { getPhoto, putPhoto } from "./db";
 import { readTakenAtMs } from "./exif";
 import type { PhotoEntry } from "./types";
 
@@ -99,8 +99,18 @@ export async function uploadFiles(
   );
 
   // Batch-register all successfully uploaded photos in one round-trip.
+  // The backend returns a thumbUrl per photo (composed from IMAGES_WORKER + r2Key).
   if (registered.length > 0) {
-    await registerPhotos(token, registered);
+    const { photoUrls } = await registerPhotos(token, registered);
+    // Persist the thumb URLs into the local IDB records so they survive reloads.
+    await Promise.all(
+      registered.map(async ({ clientPhotoId }) => {
+        const url = photoUrls[clientPhotoId];
+        if (!url) return;
+        const rec = await getPhoto(clientPhotoId);
+        if (rec) await putPhoto({ ...rec, thumbUrl: url });
+      }),
+    );
   }
 
   progress(null);

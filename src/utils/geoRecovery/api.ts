@@ -52,13 +52,13 @@ export async function getUploadUrl(
 export async function registerPhotos(
   token: string,
   photos: PhotoEntry[],
-): Promise<{ photoCount: number }> {
+): Promise<{ photoCount: number; photoUrls: Record<string, string> }> {
   const { data } = await client().post(
     "/api/geo-recovery/photos",
     { photos },
     { headers: { Authorization: `Bearer ${token}` } },
   );
-  return data;
+  return { photoCount: data.photoCount, photoUrls: data.photoUrls ?? {} };
 }
 
 export async function mockPay(token: string): Promise<void> {

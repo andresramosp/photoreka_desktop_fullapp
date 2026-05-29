@@ -20,28 +20,7 @@ import {
   shallowRef,
   watch,
 } from "vue";
-import {
-  NAlert,
-  NButton,
-  NCheckbox,
-  NIcon,
-  NProgress,
-  NSpace,
-  NSpin,
-  NStatistic,
-  NTag,
-  NText,
-  NUpload,
-  NUploadDragger,
-  type UploadCustomRequestOptions,
-  useMessage,
-} from "naive-ui";
-import {
-  CloudUploadOutline,
-  DownloadOutline,
-  LockClosedOutline,
-  TrashOutline,
-} from "@vicons/ionicons5";
+import { useMessage } from "naive-ui";
 import L from "leaflet";
 import "leaflet.markercluster";
 import "leaflet/dist/leaflet.css";
@@ -88,6 +67,7 @@ import type {
   SessionInfo,
 } from "@/utils/geoRecovery/types";
 
+import GeoRecoveryWizard from "@/components/geoRecovery/GeoRecoveryWizard.vue";
 import GeoRecoveryCorrectionPopup from "@/components/geoRecovery/GeoRecoveryCorrectionPopup.vue";
 
 const message = useMessage();
@@ -98,7 +78,6 @@ const stepIndex = ref<number>(0); // 0 welcome | 1 upload | 2 pay | 3 processing
 const session = ref<SessionInfo | null>(null);
 const photos = ref<LocalPhotoRecord[]>([]);
 const paid = ref(false);
-const acceptedPrivacy = ref(false);
 
 const pendingFiles = ref<File[]>([]);
 const uploadProgress = ref<UploadProgress | null>(null);
@@ -163,9 +142,6 @@ const jobStageLabel = computed(() => {
   }
 });
 
-const showWizardBackdrop = computed(() => stepIndex.value <= 2);
-const showMapInteractiveOverlay = computed(() => stepIndex.value >= 3);
-
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 
 onMounted(async () => {
@@ -209,10 +185,6 @@ async function restoreState() {
 }
 
 async function handleAcceptAndStart() {
-  if (!acceptedPrivacy.value) {
-    message.warning("Please confirm the privacy notice to continue.");
-    return;
-  }
   try {
     const info = await createSession();
     session.value = info;
@@ -226,14 +198,8 @@ async function handleAcceptAndStart() {
 
 // ── Upload ────────────────────────────────────────────────────────────────
 
-function onFileChange(options: { fileList: any[] }) {
-  pendingFiles.value = options.fileList
-    .map((f) => f.file as File | undefined)
-    .filter((f): f is File => Boolean(f));
-}
-
-function customRequest(options: UploadCustomRequestOptions) {
-  options.onFinish();
+function onFilesChanged(files: File[]) {
+  pendingFiles.value = files;
 }
 
 async function startUpload() {
@@ -272,6 +238,9 @@ async function startUpload() {
     message.error(error?.message ?? "Upload failed");
   } finally {
     uploading.value = false;
+    setTimeout(() => {
+      uploadProgress.value = null;
+    }, 2200);
   }
 }
 
@@ -630,7 +599,6 @@ async function handleStartOver() {
   photos.value = [];
   results.value = {};
   paid.value = false;
-  acceptedPrivacy.value = false;
   job.value = null;
   stepIndex.value = 0;
   await refreshMarkers();
@@ -649,228 +617,36 @@ const hoveredTooltipAddress = computed(() => {
     <!-- Always-on fullscreen map -->
     <div ref="mapEl" class="geo-recovery-map" />
 
-    <!-- Top-left brand chip — always visible -->
-    <div class="geo-brand">
-      <NIcon size="22" class="geo-brand-icon">
-        <svg viewBox="0 0 24 24">
-          <path
-            fill="currentColor"
-            d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"
-          />
-        </svg>
-      </NIcon>
-      <div class="geo-brand-text">
-        <span class="geo-brand-title">Geo Recovery</span>
-        <span class="geo-brand-subtitle">Add GPS to your photos</span>
-      </div>
-    </div>
-
-    <!-- Stats badge (visible from step 3) -->
-    <div
-      v-if="showMapInteractiveOverlay && photoCount > 0"
-      class="geo-stats-pill"
-    >
-      <NTag :bordered="false" size="small" type="success">
-        {{ locatedCount }} located
-      </NTag>
-      <NTag :bordered="false" size="small"> {{ unknownCount }} unknown </NTag>
-      <NTag :bordered="false" size="small" type="info">
-        {{ photoCount }} total
-      </NTag>
-    </div>
-
-    <!-- Wizard backdrop dim (steps 0–2 only) -->
-    <div v-if="showWizardBackdrop" class="geo-backdrop" />
-
-    <!-- Step 0: Welcome -->
-    <div v-if="stepIndex === 0" class="geo-modal">
-      <div class="geo-modal-card">
-        <h2>Recover the GPS for your photos</h2>
-        <ol class="how">
-          <li>
-            Your <strong>original photos never leave this browser</strong>.
-            They're stored locally and survive reloads.
-          </li>
-          <li>
-            We send only a downscaled <strong>thumbnail</strong> per photo to
-            our server, used exclusively by the AI to recognize what it depicts.
-          </li>
-          <li>Our model proposes a location (city / place) for each photo.</li>
-          <li>
-            You download a ZIP with your <strong>original files</strong>, now
-            with GPS coordinates written into their EXIF.
-          </li>
-        </ol>
-        <NAlert type="info" :show-icon="true" style="margin: 12px 0">
-          <template #header>Privacy</template>
-          Originals stay on your device. Thumbnails on our servers are deleted
-          automatically after 7 days. No account or email required.
-        </NAlert>
-        <NCheckbox v-model:checked="acceptedPrivacy" style="margin: 4px 0 12px">
-          I understand that originals stay in this browser and only thumbnails
-          are uploaded.
-        </NCheckbox>
-        <NButton
-          type="primary"
-          size="large"
-          block
-          :disabled="!acceptedPrivacy"
-          @click="handleAcceptAndStart"
-        >
-          Start
-        </NButton>
-      </div>
-    </div>
-
-    <!-- Step 1: Upload -->
-    <div v-else-if="stepIndex === 1" class="geo-modal">
-      <div class="geo-modal-card">
-        <h2>Add your photos</h2>
-        <NUpload
-          multiple
-          :default-upload="false"
-          :custom-request="customRequest"
-          :show-file-list="true"
-          accept="image/jpeg,image/png"
-          @change="onFileChange"
-        >
-          <NUploadDragger>
-            <NIcon size="44" :component="CloudUploadOutline" />
-            <NText style="font-size: 15px"> Click or drag photos here </NText>
-            <NText depth="3" style="margin-top: 4px">
-              JPEG or PNG · up to {{ session?.maxPhotos ?? 5000 }} files
-            </NText>
-          </NUploadDragger>
-        </NUpload>
-
-        <div v-if="uploadProgress" class="progress-block">
-          <NProgress
-            :percentage="
-              Math.round(
-                ((uploadProgress.done + uploadProgress.failed) /
-                  Math.max(uploadProgress.total, 1)) *
-                  100,
-              )
-            "
-            :status="uploadProgress.failed > 0 ? 'warning' : 'default'"
-          />
-          <NText depth="3" style="font-size: 12px">
-            {{ uploadProgress.done }} / {{ uploadProgress.total }} uploaded
-            <span v-if="uploadProgress.failed > 0"
-              >· {{ uploadProgress.failed }} failed</span
-            >
-            <span v-if="uploadProgress.current">
-              · {{ uploadProgress.current }}</span
-            >
-          </NText>
-        </div>
-
-        <NSpace v-if="photoCount > 0" align="center" style="margin: 10px 0 4px">
-          <NTag type="success">{{ photoCount }} photo(s) ready</NTag>
-        </NSpace>
-
-        <NSpace>
-          <NButton
-            type="primary"
-            :loading="uploading"
-            :disabled="pendingFiles.length === 0"
-            @click="startUpload"
-          >
-            Upload {{ pendingFiles.length || "" }} photo(s)
-          </NButton>
-          <NButton
-            type="default"
-            :disabled="photoCount === 0"
-            @click="stepIndex = 2"
-          >
-            Continue ({{ photoCount }})
-          </NButton>
-        </NSpace>
-      </div>
-    </div>
-
-    <!-- Step 2: Pay -->
-    <div v-else-if="stepIndex === 2" class="geo-modal">
-      <div class="geo-modal-card">
-        <h2>One-time payment</h2>
-        <p class="muted">
-          Your {{ photoCount }} photo(s) are ready to be analyzed. Pay once,
-          analyze once.
-        </p>
-        <NAlert type="warning" :show-icon="true" style="margin-bottom: 14px">
-          Payment is currently mocked. A real Stripe checkout will live here
-          before launch.
-        </NAlert>
-        <NSpace>
-          <NButton :disabled="payBusy" @click="stepIndex = 1">Back</NButton>
-          <NButton
-            type="primary"
-            size="large"
-            :loading="payBusy"
-            @click="handlePay"
-          >
-            <template #icon>
-              <NIcon :component="LockClosedOutline" />
-            </template>
-            Pay &amp; analyze
-          </NButton>
-        </NSpace>
-      </div>
-    </div>
-
-    <!-- Step 3: Processing — floating top-right card, map remains visible/interactive -->
-    <div v-else-if="stepIndex === 3" class="geo-processing-card">
-      <div class="geo-processing-head">
-        <NSpin size="small" />
-        <h3>Analyzing your photos</h3>
-      </div>
-      <p class="muted small">{{ jobStageLabel }}</p>
-      <NProgress
-        type="line"
-        :percentage="job?.progressPercent ?? 0"
-        :status="job?.status === 'failed' ? 'error' : 'default'"
-        style="margin: 8px 0"
-      />
-      <NSpace :size="16" class="processing-stats">
-        <NStatistic label="Processed" :value="job?.processed ?? 0">
-          <template #suffix>/ {{ job?.total ?? photoCount }}</template>
-        </NStatistic>
-        <NStatistic label="Located" :value="job?.located ?? 0" />
-        <NStatistic label="Unknown" :value="job?.unknown ?? 0" />
-      </NSpace>
-    </div>
-
-    <!-- Step 4: Results — floating bottom action bar -->
-    <div v-else-if="stepIndex === 4" class="geo-actions-bar">
-      <NCheckbox v-model:checked="includeUnlocated">
-        Include photos without a guessed location
-      </NCheckbox>
-      <NButton
-        type="primary"
-        :loading="zipBusy"
-        :disabled="!hasResults && !includeUnlocated"
-        @click="handleDownload"
-      >
-        <template #icon>
-          <NIcon :component="DownloadOutline" />
-        </template>
-        Download ZIP
-      </NButton>
-      <span v-if="zipProgress" class="muted small">
-        Packing {{ zipProgress.done }} / {{ zipProgress.total }}…
-      </span>
-    </div>
-
-    <!-- Start-over (always visible if a session exists) -->
-    <button
-      v-if="session"
-      class="geo-startover"
-      @click="handleStartOver"
-      title="Start a new session"
-    >
-      <NIcon :component="TrashOutline" size="14" />
-      <span>Start new</span>
-    </button>
+    <!-- Wizard overlay (all steps, HUD elements, start-over) -->
+    <GeoRecoveryWizard
+      :step-index="stepIndex"
+      :has-session="session !== null"
+      :photos="photos"
+      :pending-files="pendingFiles"
+      :photo-count="photoCount"
+      :located-count="locatedCount"
+      :unknown-count="unknownCount"
+      :max-photos="session?.maxPhotos ?? 5000"
+      :pending-count="pendingFiles.length"
+      :uploading="uploading"
+      :upload-progress="uploadProgress"
+      :pay-busy="payBusy"
+      :job="job"
+      :job-stage-label="jobStageLabel"
+      :zip-busy="zipBusy"
+      :zip-progress="zipProgress"
+      :has-results="hasResults"
+      :include-unlocated="includeUnlocated"
+      @accepted="handleAcceptAndStart"
+      @file-change="onFilesChanged"
+      @upload="startUpload"
+      @continue="stepIndex = 2"
+      @back="stepIndex = 1"
+      @pay="handlePay"
+      @download="handleDownload"
+      @start-over="handleStartOver"
+      @update:include-unlocated="(v) => (includeUnlocated = v)"
+    />
 
     <!-- Hover tooltip (mirrors WorldMapView) -->
     <Transition name="map-tooltip">
@@ -926,188 +702,6 @@ const hoveredTooltipAddress = computed(() => {
   inset: 0;
   z-index: 0;
   background: #0d1117;
-}
-
-/* ── Brand chip (top-left) ───────────────────────────────────────────────── */
-
-.geo-brand {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 14px;
-  background: var(--geo-card-bg);
-  border: 1px solid var(--geo-card-border);
-  border-radius: 999px;
-  color: #fff;
-  backdrop-filter: blur(8px);
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
-}
-.geo-brand-icon {
-  color: var(--accent-color);
-}
-.geo-brand-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.15;
-}
-.geo-brand-title {
-  font-weight: 700;
-  font-size: 14px;
-}
-.geo-brand-subtitle {
-  font-size: 11px;
-  opacity: 0.7;
-}
-
-/* ── Stats pill (top-right) ──────────────────────────────────────────────── */
-
-.geo-stats-pill {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  z-index: 1000;
-  display: flex;
-  gap: 6px;
-  padding: 6px 10px;
-  background: var(--geo-card-bg);
-  border: 1px solid var(--geo-card-border);
-  border-radius: 999px;
-  backdrop-filter: blur(8px);
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
-}
-
-/* ── Start-over button (bottom-left) ─────────────────────────────────────── */
-
-.geo-startover {
-  position: absolute;
-  bottom: 16px;
-  left: 16px;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: var(--geo-card-bg);
-  border: 1px solid var(--geo-card-border);
-  border-radius: 999px;
-  color: rgba(255, 255, 255, 0.65);
-  font-size: 12px;
-  cursor: pointer;
-  backdrop-filter: blur(8px);
-  transition:
-    color 0.18s ease,
-    background 0.18s ease;
-}
-.geo-startover:hover {
-  color: #ff6b6b;
-  background: rgba(40, 30, 30, 0.96);
-}
-
-/* ── Wizard backdrop + centered modal (steps 0–2) ────────────────────────── */
-
-.geo-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(3px);
-  z-index: 500;
-}
-.geo-modal {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 600;
-  pointer-events: none;
-}
-.geo-modal-card {
-  pointer-events: auto;
-  width: min(580px, 92vw);
-  max-height: 86vh;
-  overflow-y: auto;
-  padding: 22px 24px;
-  background: var(--geo-card-bg);
-  border: 1px solid var(--geo-card-border);
-  border-radius: 14px;
-  color: #fff;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(10px);
-}
-.geo-modal-card h2 {
-  margin: 0 0 12px;
-  font-size: 20px;
-}
-.how {
-  padding-left: 22px;
-  line-height: 1.65;
-  margin: 8px 0 12px;
-  font-size: 14px;
-}
-.muted {
-  color: rgba(255, 255, 255, 0.6);
-}
-.small {
-  font-size: 12px;
-}
-.progress-block {
-  margin: 14px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-/* ── Processing floating card (top-right, step 3) ────────────────────────── */
-
-.geo-processing-card {
-  position: absolute;
-  top: 70px;
-  right: 16px;
-  z-index: 900;
-  width: min(360px, 92vw);
-  padding: 14px 16px;
-  background: var(--geo-card-bg);
-  border: 1px solid var(--geo-card-border);
-  border-radius: 12px;
-  color: #fff;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(8px);
-}
-.geo-processing-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.geo-processing-head h3 {
-  margin: 0;
-  font-size: 15px;
-}
-.processing-stats {
-  margin-top: 4px;
-}
-
-/* ── Results action bar (bottom-center, step 4) ──────────────────────────── */
-
-.geo-actions-bar {
-  position: absolute;
-  bottom: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 900;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 10px 16px;
-  background: var(--geo-card-bg);
-  border: 1px solid var(--geo-card-border);
-  border-radius: 12px;
-  color: #fff;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(8px);
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */

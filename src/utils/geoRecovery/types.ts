@@ -91,6 +91,8 @@ export interface LocalPhotoRecord {
   takenAtMs: number | null;
   /** R2 key for the uploaded thumb (cleared from the server at 7 days). */
   r2Key: string;
+  /** Public URL of the R2 thumbnail, returned by the registerPhotos endpoint. */
+  thumbUrl?: string | null;
   /** Manual coord override entered by the user, if any. */
   manualLat?: number;
   manualLng?: number;
