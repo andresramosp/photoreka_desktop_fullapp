@@ -155,6 +155,14 @@
           </div>
         </div>
 
+        <!-- Contact support bar -->
+        <div class="assistant-contact-bar">
+          Need more help?
+          <a href="mailto:hello@photoreka.com" class="assistant-contact-link"
+            >hello@photoreka.com</a
+          >
+        </div>
+
         <!-- Quick pills row (always visible above the input) -->
         <div v-if="availablePills().length" class="assistant-pills-container">
           <transition name="assistant-pills-fade">
@@ -804,6 +812,29 @@ const navigateTo = (path: string) => {
   border-radius: 6px;
   overflow: hidden;
   aspect-ratio: 1;
+}
+
+/* ══════════════════════════════════════════════
+   Contact support bar
+   ══════════════════════════════════════════════ */
+
+.assistant-contact-bar {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border-top: 1px solid var(--divider-color, rgba(255, 255, 255, 0.07));
+  font-size: 11.5px;
+  color: var(--text-color-3, rgba(255, 255, 255, 0.3));
+  text-align: center;
+}
+
+.assistant-contact-link {
+  color: var(--accent-color, #818cf8);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.assistant-contact-link:hover {
+  color: var(--primary-color, #a5b4fc);
+  text-decoration: underline;
 }
 
 /* ══════════════════════════════════════════════

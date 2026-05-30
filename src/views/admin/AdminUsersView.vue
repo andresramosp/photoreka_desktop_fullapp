@@ -287,7 +287,6 @@ interface UserRow {
   photosCount: number;
   totalCostEur: number;
   usage: any;
-  costHistory: any;
 }
 
 interface GlobalActivityItem {

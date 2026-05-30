@@ -218,21 +218,21 @@
 
             <div class="detail-card">
               <h4>Cost History</h4>
-              <template v-if="user.costHistory">
+              <template v-if="user.costSummary">
                 <div class="info-row">
                   <span class="info-label">Total cost</span>
                   <span class="info-value cost-value">
-                    €{{ user.costHistory.totalCostInEur?.toFixed(4) }}
+                    €{{ user.costSummary.totalCostEur?.toFixed(4) }}
                   </span>
                 </div>
-                <div v-if="user.costHistory.byCategory" class="cost-categories">
+                <div v-if="user.costSummary.byCategory" class="cost-categories">
                   <div class="cost-category-header">
                     <span>Category</span>
                     <span>Cost</span>
                     <span>Calls</span>
                   </div>
                   <div
-                    v-for="(val, key) in user.costHistory.byCategory"
+                    v-for="(val, key) in user.costSummary.byCategory"
                     :key="key"
                     class="cost-category-row"
                   >
@@ -650,7 +650,10 @@ interface UserDetail {
   photosCount: number;
   totalCostEur: number;
   usage: any;
-  costHistory: any;
+  costSummary: {
+    totalCostEur: number;
+    byCategory: Record<string, { costInEur: number; calls: number }>;
+  } | null;
   avatar?: string | null;
   googleId?: string | null;
   catalogPatterns?: any;
