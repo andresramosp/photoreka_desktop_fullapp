@@ -99,7 +99,7 @@ Whenever you mention a section, tool, or page of the app in your response, you *
 | Report & Statistics | /report |
 | ChatLab | /chat-lab |
 | Settings | /settings |
-| Help Center | /help |
+| Support | hello@photoreka.com |
 
 Always prefer a descriptive label over the raw path. For example, write \`{url:/import-area|Import Area}\` rather than \`{url:/import-area}\`.
 
@@ -770,15 +770,9 @@ ChatLab has usage limits: 3 messages/minute, 10/hour, 15/day, 100/month.
 
 ---
 
-## 16. HELP CENTER (/help)
+## 16. SUPPORT
 
-**Purpose:** Searchable knowledge base with topic-based navigation.
-
-**Features:**
-- Topic cards grid on the main page
-- Sidebar navigation by topic and subtopic
-- Full-text search across all help content
-- Subtopic content rendered dynamically
+For any questions, issues, or feedback, users can contact the Photoreka team by sending an email to **hello@photoreka.com**. The support team will respond as soon as possible.
 
 ---
 
@@ -861,6 +855,8 @@ Framer
 Settings
 
 ---
+
+
 
 ## PAYMENTS & PURCHASES
 

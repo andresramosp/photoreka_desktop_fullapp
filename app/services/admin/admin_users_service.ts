@@ -47,10 +47,13 @@ export interface AdminUserListItem {
   photosCount: number
   totalCostEur: number
   usage: Record<string, any> | null
-  costHistory: Record<string, any> | null
 }
 
 export interface AdminUserDetail extends AdminUserListItem {
+  costSummary: {
+    totalCostEur: number
+    byCategory: Record<string, { costInEur: number; calls: number }>
+  } | null
   avatar: string | null
   googleId: string | null
   catalogPatterns: Record<string, any> | null
@@ -112,6 +115,17 @@ export default class AdminUsersService {
       countsMap.set(row.user_id, Number(row.photos_count))
     }
 
+    // Get total cost per user from cost_logs
+    const costRows = await db.rawQuery(`
+      SELECT user_id, COALESCE(SUM(cost_in_eur), 0)::float AS total_cost
+      FROM cost_logs
+      GROUP BY user_id
+    `)
+    const costMap = new Map<number, number>()
+    for (const row of costRows.rows) {
+      costMap.set(row.user_id, row.total_cost)
+    }
+
     return users.map((u) => ({
       id: u.id,
       name: u.name,
@@ -125,9 +139,8 @@ export default class AdminUsersService {
       createdAt: u.createdAt.toISO()!,
       updatedAt: u.updatedAt.toISO()!,
       photosCount: countsMap.get(u.id) || 0,
-      totalCostEur: u.costHistory?.totalCostInEur ?? 0,
+      totalCostEur: costMap.get(u.id) ?? 0,
       usage: u.usage,
-      costHistory: u.costHistory,
       photosReviewedAt: u.photosReviewedAt?.toISO() ?? null,
     }))
   }
@@ -146,6 +159,24 @@ export default class AdminUsersService {
     const photosCount = Number(photosCountResult[0]?.$extras.total || 0)
     const paymentSummary = await AdminPaymentsService.getUserSummary(userId)
 
+    // Compute cost summary from cost_logs
+    const costRows = await db.rawQuery(
+      `SELECT category,
+              COALESCE(SUM(cost_in_eur), 0)::float AS cost_eur,
+              COALESCE(SUM(calls), 0)::int AS calls
+       FROM cost_logs
+       WHERE user_id = ?
+       GROUP BY category`,
+      [userId]
+    )
+    const byCategory: Record<string, { costInEur: number; calls: number }> = {}
+    let totalCostEur = 0
+    for (const row of costRows.rows) {
+      byCategory[row.category] = { costInEur: row.cost_eur, calls: row.calls }
+      totalCostEur += row.cost_eur
+    }
+    const costSummary = totalCostEur > 0 ? { totalCostEur, byCategory } : null
+
     return {
       id: user.id,
       name: user.name,
@@ -159,9 +190,9 @@ export default class AdminUsersService {
       createdAt: user.createdAt.toISO()!,
       updatedAt: user.updatedAt.toISO()!,
       photosCount,
-      totalCostEur: user.costHistory?.totalCostInEur ?? 0,
+      totalCostEur,
       usage: user.usage,
-      costHistory: user.costHistory,
+      costSummary,
       avatar: user.avatar,
       googleId: user.googleId,
       catalogPatterns: user.catalogPatterns,

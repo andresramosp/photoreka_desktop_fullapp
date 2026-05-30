@@ -148,35 +148,15 @@ export default class AdminDashboardService {
     }
     const globalScore = totalChecks > 0 ? Math.round((totalPassed / totalChecks) * 100) : 100
 
-    // Costs — use cost_logs for accurate temporal data, fallback to user.costHistory for total
+    // Costs from cost_logs (single source of truth)
     const costTotalRow = await db.rawQuery(`
       SELECT
         COALESCE(SUM(cost_in_eur), 0)::float AS total_cost,
         COALESCE(SUM(calls), 0)::int AS total_calls
       FROM cost_logs
     `)
-    const logTotalCost = costTotalRow.rows[0]?.total_cost ?? 0
-    const logTotalCalls = costTotalRow.rows[0]?.total_calls ?? 0
-
-    // Legacy total from users (for pre-migration data)
-    const users = await User.query().select('id', 'name', 'email', 'costHistory')
-    let legacyTotalCost = 0
-    let legacyTotalCalls = 0
-    for (const u of users) {
-      const history = u.costHistory as {
-        totalCostInEur?: number
-        byCategory?: Record<string, { costInEur: number; calls: number }>
-      } | null
-      if (!history) continue
-      legacyTotalCost += history.totalCostInEur ?? 0
-      const byCategory = history.byCategory ?? {}
-      for (const [, val] of Object.entries(byCategory)) {
-        legacyTotalCalls += val.calls
-      }
-    }
-
-    const totalCostEur = Math.max(logTotalCost, legacyTotalCost)
-    const totalCalls = Math.max(logTotalCalls, legacyTotalCalls)
+    const totalCostEur = costTotalRow.rows[0]?.total_cost ?? 0
+    const totalCalls = costTotalRow.rows[0]?.total_calls ?? 0
 
     // Monthly trend (last 6 months) from cost_logs (all categories)
     const monthlyMap: Record<string, number> = {}

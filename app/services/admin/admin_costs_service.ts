@@ -100,8 +100,7 @@ export default class AdminCostsService {
 
   /**
    * Build the full costs overview dashboard payload.
-   * All temporal data now comes from cost_logs table.
-   * Falls back to user.costHistory for users who have legacy data without logs.
+   * All data comes from the cost_logs table.
    */
   static async getOverview(dateFrom?: string, dateTo?: string): Promise<CostsOverview> {
     const now = new Date()
@@ -221,16 +220,7 @@ export default class AdminCostsService {
     const logTotalCalls = totalsRow.rows[0]?.total_calls ?? 0
     const logTotalUsers = totalsRow.rows[0]?.total_users ?? 0
 
-    // Also get legacy accumulated totals from users who may have pre-migration data
-    const legacyTotalsRow = await db.rawQuery(`
-      SELECT COALESCE(SUM((cost_history->>'totalCostInEur')::float), 0)::float AS legacy_total
-      FROM users
-      WHERE cost_history IS NOT NULL
-    `)
-    const legacyTotal = legacyTotalsRow.rows[0]?.legacy_total ?? 0
-
-    // Use the higher of the two as total (cost_logs will catch up over time)
-    const globalTotalCost = Math.max(logTotalCost, legacyTotal)
+    const globalTotalCost = logTotalCost
 
     // This month / last month from cost_logs (accurate temporal data)
     const thisMonthCost = monthlyMap[thisMonthKey]?.costEur ?? 0

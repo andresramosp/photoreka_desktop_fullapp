@@ -1,4 +1,3 @@
-import User from '#models/user'
 import CostLog from '#models/cost_log'
 import CreditService from '#services/credit_service'
 import type { CostCategory, CostSummary, CostTracker } from '../utils/cost_tracker.js'
@@ -57,8 +56,7 @@ export default class UserCostService {
   }
 
   /**
-   * Record a cost entry for a user. Accumulates totals in the `cost_history` JSONB column
-   * AND inserts a row into `cost_logs` for temporal tracking.
+   * Record a cost entry for a user. Inserts a row into `cost_logs` for temporal tracking.
    * Fire-and-forget safe — callers should `.catch(() => {})`.
    */
   static async record(
@@ -70,26 +68,7 @@ export default class UserCostService {
   ): Promise<void> {
     if (!userId || costInEur <= 0) return
 
-    const user = await User.find(userId)
-    if (!user) return
-
-    // 1. Update accumulated user history (existing behavior)
-    const history: CostHistory = user.costHistory ?? { totalCostInEur: 0, byCategory: {} }
-
-    history.totalCostInEur = this.round((history.totalCostInEur || 0) + costInEur)
-
-    if (!history.byCategory[category]) {
-      history.byCategory[category] = { costInEur: 0, calls: 0 }
-    }
-    history.byCategory[category]!.costInEur = this.round(
-      history.byCategory[category]!.costInEur + costInEur
-    )
-    history.byCategory[category]!.calls += calls
-
-    user.costHistory = history
-    await user.save()
-
-    // 2. Insert temporal log entry
+    // Insert temporal log entry
     const isFixedCharge = options?.metadata?.fixedCharge === true
     const fixedCredits =
       typeof options?.metadata?.credits === 'number' ? options.metadata.credits : undefined
@@ -140,24 +119,6 @@ export default class UserCostService {
     referenceId?: string
   ): Promise<void> {
     if (!userId || summary.totalCostInEur <= 0) return
-
-    // Update accumulated user history (single aggregated call)
-    const user = await User.find(userId)
-    if (!user) return
-
-    const history: CostHistory = user.costHistory ?? { totalCostInEur: 0, byCategory: {} }
-    history.totalCostInEur = this.round((history.totalCostInEur || 0) + summary.totalCostInEur)
-
-    if (!history.byCategory[summary.category]) {
-      history.byCategory[summary.category] = { costInEur: 0, calls: 0 }
-    }
-    history.byCategory[summary.category]!.costInEur = this.round(
-      history.byCategory[summary.category]!.costInEur + summary.totalCostInEur
-    )
-    history.byCategory[summary.category]!.calls += summary.totalCalls
-
-    user.costHistory = history
-    await user.save()
 
     // Insert granular log entries per model for detailed temporal tracking
     for (const [model, data] of Object.entries(summary.byModel)) {
