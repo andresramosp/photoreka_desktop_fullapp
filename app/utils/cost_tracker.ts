@@ -5,6 +5,7 @@ import ModelsService, { PRICES, USD_TO_EUR } from '#services/models_service'
 export type CostCategory =
   | 'photo_analysis'
   | 'chat'
+  | 'chat_knowledge_assistant'
   | 'report_review'
   | 'search'
   | 'portfolio_build'

@@ -59,10 +59,10 @@ export default class ReportReviewController {
           // Acumular costo y registrar inmediatamente (así queda guardado aunque el build falle en steps posteriores)
           if (result?.cost?.totalCostInEur) {
             totalCostInEur += result.cost.totalCostInEur
-            // UserCostService.record(user.id, 'report_review', result.cost.totalCostInEur, 1, {
-            //   task: reviewType,
-            //   model: REVIEW_TYPE_CONFIG[reviewType].model,
-            // }).catch(() => {})
+            UserCostService.record(user.id, 'report_review', result.cost.totalCostInEur, 1, {
+              task: reviewType,
+              model: REVIEW_TYPE_CONFIG[reviewType].model,
+            }).catch(() => {})
           }
 
           return result

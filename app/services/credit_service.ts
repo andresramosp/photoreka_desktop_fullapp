@@ -8,7 +8,12 @@ const EUR_PER_CREDIT = 0.001
 /**
  * Billing categories for differentiated margin multipliers.
  */
-export type CostCategory = 'GEO_INFERENCE' | 'SEARCH' | 'PORTFOLIO_BUILD' | 'CHAT'
+export type CostCategory =
+  | 'GEO_INFERENCE'
+  | 'SEARCH'
+  | 'PORTFOLIO_BUILD'
+  | 'CHAT'
+  | 'CHAT_KNOWLEDGE_ASSISTANT'
 
 /**
  * Per-category billing multipliers applied to raw EUR cost.
@@ -18,6 +23,7 @@ export type CostCategory = 'GEO_INFERENCE' | 'SEARCH' | 'PORTFOLIO_BUILD' | 'CHA
  *   CREDIT_MARGIN_MULTIPLIER_SEARCH
  *   CREDIT_MARGIN_MULTIPLIER_PORTFOLIO_BUILD
  *   CREDIT_MARGIN_MULTIPLIER_CHAT
+ *   CREDIT_MARGIN_MULTIPLIER_CHAT_KNOWLEDGE_ASSISTANT
  *
  * A global CREDIT_MARGIN_MULTIPLIER env var serves as fallback for any
  * category that has no per-category override set.
@@ -27,6 +33,7 @@ export const COST_MULTIPLIERS: Record<CostCategory, number> = {
   SEARCH: 2,
   PORTFOLIO_BUILD: 2.5,
   CHAT: 2.25,
+  CHAT_KNOWLEDGE_ASSISTANT: 1.25,
 }
 
 // ─── Fixed credit costs ─────────────────────────────────

@@ -883,7 +883,7 @@ Go to {url:/settings|Settings} or click any "Buy more" / "Upgrade" prompt that a
 Past purchases are visible in {url:/settings|Settings} under the Payments section. After returning from Stripe Checkout the app verifies the session and activates the granted resources automatically.
 
 ### Storage Costs
-Storage is **free for the first 2 years** from your first photo analysis. After that, the cost is very marginal — and still free for very small catalogs.
+Storage is **free for the first 1 year** from your registration. After that, the cost is very marginal — and still free for very small catalogs.
 
 Monthly cost examples:
 - ~5 000 photos: **≈ €0.25 / month**
@@ -937,7 +937,7 @@ Credits are the internal currency for AI operations. Every search, chat message,
 Purchase a Photo Analysis Package via {url:/settings|Settings}. Each package adds a fixed number of photo slots to your account, optionally with bonus AI credits included. Purchases are one-time and slots do not expire.
 
 **How much does storage cost?**
-Storage is free for the first 2 years from your first photo analysis. After that the cost is very marginal: approximately €0.25/month for ~5 000 photos, €0.50/month for ~10 000 photos, and €1.00/month for ~20 000 photos. Very small catalogs remain free.
+Storage is free for the first 1 year from your registration. After that the cost is very marginal: approximately €0.25/month for ~5 000 photos, €0.50/month for ~10 000 photos, and €1.00/month for ~20 000 photos. Very small catalogs remain free.
 
 **How does AI location inference (geo-inference) work?**
 The geo-inference feature analyses your photos visually and attempts to infer where each one was taken, then converts that to GPS coordinates shown on the {url:/world-map|World Map}. It works best on outdoor photos with visible landmarks, architecture, distinctive landscapes, or recognisable environments. It produces weaker or no results for indoor, dark, abstract, or portrait photos with neutral backgrounds. The engine automatically discards clearly non-geolocatable photos before the job starts. Any inferred location can be corrected at any time from the Photo Info panel or directly on the map using the autocomplete assistant — corrections are free. Credits are charged at the end of the job based on actual usage.
@@ -978,7 +978,7 @@ Geo-Inference -- AI-powered location inference that analyses photo content to in
 Swap Photo -- Replace an already-analyzed photo with a new version
 Photo Package -- One-time purchase that expands the analyzed photo limit; may include bonus AI credits
 Credit Package -- One-time purchase that tops up the AI credit balance for search, chat, insights, and other AI operations
-Storage Cost -- Monthly fee for storing analyzed photos; free for the first 2 years from first analysis, then very marginal (≈ €0.25/month per ~5 000 photos)
+Storage Cost -- Monthly fee for storing analyzed photos; free for the first 1 year from registration, then very marginal (≈ €0.25/month per ~5 000 photos)
 
 `.trim()
 // -----------------------------------------------------------------

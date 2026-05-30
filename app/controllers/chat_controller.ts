@@ -189,7 +189,8 @@ export default class ChatController {
 
       // Record chat cost to user history (analytics)
       if (result.cost?.total?.costEur) {
-        UserCostService.record(user.id, 'chat', result.cost.total.costEur, 1, {
+        const recordCategory = isKnowledgeAssistant === true ? 'chat_knowledge_assistant' : 'chat'
+        UserCostService.record(user.id, recordCategory, result.cost.total.costEur, 1, {
           referenceId: isEphemeral ? undefined : String(resolvedConversationId),
           task: 'chat_message',
           metadata: result.cost?.total
@@ -204,7 +205,8 @@ export default class ChatController {
 
       // Charge credits based on real cost
       if (result.cost?.total?.costEur) {
-        CreditService.charge(user.id, result.cost.total.costEur, 'CHAT').catch(() => {})
+        const chargeCategory = isKnowledgeAssistant === true ? 'CHAT_KNOWLEDGE_ASSISTANT' : 'CHAT'
+        CreditService.charge(user.id, result.cost.total.costEur, chargeCategory).catch(() => {})
       }
 
       // Strip photoDescriptions before sending to frontend (LLM-only field)

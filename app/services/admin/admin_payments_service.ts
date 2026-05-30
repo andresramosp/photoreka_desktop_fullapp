@@ -212,8 +212,10 @@ export default class AdminPaymentsService {
         'p.user_id',
         'u.name as user_name',
         'u.email as user_email',
+        'u.stripe_customer_id as user_stripe_customer_id',
         'p.stripe_session_id',
         'p.stripe_payment_intent_id',
+        'p.stripe_customer_id',
         'p.type',
         'p.package_id',
         'p.stripe_price_id',
@@ -316,6 +318,8 @@ export default class AdminPaymentsService {
           .orWhere('p.product_name', 'ilike', term)
           .orWhere('p.stripe_session_id', 'ilike', term)
           .orWhere('p.stripe_payment_intent_id', 'ilike', term)
+          .orWhere('p.stripe_customer_id', 'ilike', term)
+          .orWhere('u.stripe_customer_id', 'ilike', term)
       })
     }
   }
@@ -326,8 +330,10 @@ export default class AdminPaymentsService {
       userId: Number(row.user_id),
       userName: row.user_name || 'Deleted user',
       userEmail: row.user_email || '—',
+      userStripeCustomerId: row.user_stripe_customer_id,
       stripeSessionId: row.stripe_session_id,
       stripePaymentIntentId: row.stripe_payment_intent_id,
+      stripeCustomerId: row.stripe_customer_id,
       type: row.type,
       packageId: row.package_id,
       stripePriceId: row.stripe_price_id,

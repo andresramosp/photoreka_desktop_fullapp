@@ -10,6 +10,7 @@ export default class PaymentController {
     return response.json({
       photoPackages: await PaymentService.getPhotoPackages(),
       creditSteps: await PaymentService.getCreditSteps(),
+      promotion: await PaymentService.getPromotion(),
     })
   }
 
@@ -114,6 +115,7 @@ export default class PaymentController {
           status: payment.status,
           type: payment.type,
           packageId: payment.packageId,
+          stripeCustomerId: payment.stripeCustomerId,
           stripePriceId: payment.stripePriceId,
           stripeProductId: payment.stripeProductId,
           productName: payment.productName,

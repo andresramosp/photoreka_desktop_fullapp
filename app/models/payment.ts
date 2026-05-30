@@ -21,6 +21,9 @@ export default class Payment extends BaseModel {
   declare stripePaymentIntentId: string | null
 
   @column()
+  declare stripeCustomerId: string | null
+
+  @column()
   declare type: PaymentType
 
   @column()

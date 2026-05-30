@@ -44,3 +44,9 @@ Use `photoreka_id` only if you want a stable friendly ID in API responses. Check
 - Prices must be one-time Prices.
 - The backend only exposes Prices whose currency matches `STRIPE_CATALOG_CURRENCY` (`eur` by default).
 - After a successful Checkout, the granted photos and credits are stored in `payments` so webhooks and refunds stay idempotent even if the Stripe Product changes later.
+
+## Customer records
+
+On the first checkout for a user, the backend creates a Stripe Customer with the user's email, name, and `photorekaUserId` metadata. The Customer ID is stored in `users.stripe_customer_id`, reused for later Checkout Sessions, and copied into each `payments.stripe_customer_id` row as a payment snapshot.
+
+This keeps all purchases grouped under the same Stripe customer and makes later operations easier: invoice lookup, refunds, payment history, support checks, and a future Billing Portal flow if the app adds subscriptions or saved payment methods.

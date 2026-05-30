@@ -35,7 +35,7 @@ export default class UserCostService {
    */
   private static readonly CREDIT_CATEGORY_MAP: Partial<Record<CostCategory, CreditCategory>> = {
     chat: 'CHAT',
-    report_review: 'CHAT',
+    chat_knowledge_assistant: 'CHAT_KNOWLEDGE_ASSISTANT',
     search: 'SEARCH',
     portfolio_build: 'PORTFOLIO_BUILD',
     location_inference: 'GEO_INFERENCE',

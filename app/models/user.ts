@@ -70,6 +70,9 @@ export default class User extends compose(BaseModel, AuthFinder) {
   declare provider: UserProvider | null
 
   @column()
+  declare stripeCustomerId: string | null
+
+  @column()
   declare avatar: string | null
 
   @column({ columnName: 'catalog_patterns' })

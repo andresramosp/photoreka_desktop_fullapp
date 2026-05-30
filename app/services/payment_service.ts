@@ -12,16 +12,25 @@ import {
   tryParsePaymentCatalogItem,
 } from '../payment_products.js'
 
-let _stripe: Stripe | null = null
+export interface PromotionInfo {
+  percentOff: number | null
+  amountOff: number | null
+  currency: string | null
+  name: string | null
+}
+
+let stripeClient: Stripe | null = null
 let catalogCache: { expiresAt: number; catalog: PaymentCatalog } | null = null
+let promotionCache: { expiresAt: number; promotion: PromotionInfo | null } | null = null
 
 const CATALOG_CACHE_TTL_MS = 60_000
+const PROMOTION_CACHE_TTL_MS = 300_000
 
 function getStripe(): Stripe {
-  if (!_stripe) {
-    _stripe = new Stripe(stripeConfig.secretKey, { apiVersion: '2025-04-30.basil' })
+  if (!stripeClient) {
+    stripeClient = new Stripe(stripeConfig.secretKey, { apiVersion: '2026-03-25.dahlia' })
   }
-  return _stripe
+  return stripeClient
 }
 
 export default class PaymentService {
@@ -69,11 +78,39 @@ export default class PaymentService {
   }
 
   static async getPhotoPackages(): Promise<PhotoPackage[]> {
-    return (await this.getCatalog()).photoPackages
+    const catalog = await this.getCatalog()
+    return catalog.photoPackages
   }
 
   static async getCreditSteps(): Promise<CreditStep[]> {
-    return (await this.getCatalog()).creditSteps
+    const catalog = await this.getCatalog()
+    return catalog.creditSteps
+  }
+
+  static async getPromotion(): Promise<PromotionInfo | null> {
+    const couponId = stripeConfig.promotionCouponId
+    if (!couponId) return null
+
+    if (promotionCache && promotionCache.expiresAt > Date.now()) {
+      return promotionCache.promotion
+    }
+
+    try {
+      const stripe = getStripe()
+      const coupon = await stripe.coupons.retrieve(couponId)
+      const promotion: PromotionInfo | null = coupon.valid
+        ? {
+            percentOff: coupon.percent_off ?? null,
+            amountOff: coupon.amount_off ?? null,
+            currency: coupon.currency ?? null,
+            name: coupon.name ?? null,
+          }
+        : null
+      promotionCache = { expiresAt: Date.now() + PROMOTION_CACHE_TTL_MS, promotion }
+      return promotion
+    } catch {
+      return null
+    }
   }
 
   // ─── Checkout ─────────────────────────────────────────────────────────────
@@ -87,11 +124,14 @@ export default class PaymentService {
     const item = await this.getCatalogItemForCheckout(stripePriceId, type)
     const analyzedPhotosGranted = item.type === 'photo_package' ? item.photos : 0
 
-    // Crear registro de pago pendiente
     const user = await User.findOrFail(userId)
+    const stripeCustomerId = await this.ensureStripeCustomer(user)
+
+    // Crear registro de pago pendiente
     const payment = await Payment.create({
       userId,
       userEmailSnapshot: user.email,
+      stripeCustomerId,
       type,
       packageId: item.id,
       stripePriceId: item.stripePriceId,
@@ -106,6 +146,7 @@ export default class PaymentService {
     // Crear sesión de Stripe Checkout
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
+      customer: stripeCustomerId,
       payment_method_types: ['card'],
       line_items: [
         {
@@ -118,6 +159,7 @@ export default class PaymentService {
         userId: String(userId),
         paymentId: String(payment.id),
         type,
+        stripeCustomerId,
         stripePriceId: item.stripePriceId,
         stripeProductId: item.stripeProductId,
       },
@@ -126,12 +168,21 @@ export default class PaymentService {
           userId: String(userId),
           paymentId: String(payment.id),
           type,
+          stripeCustomerId,
           stripePriceId: item.stripePriceId,
           stripeProductId: item.stripeProductId,
         },
       },
       success_url: appendSessionId(stripeConfig.successUrl),
       cancel_url: stripeConfig.cancelUrl,
+      // Descuento automático global. Se aplica si STRIPE_PROMOTION_COUPON_ID está configurado.
+      // Para aplicar un cupón específico por producto, usuario o campaña:
+      //   discounts: [{ coupon: 'coupon_id_especifico' }]
+      // Para permitir que el usuario ingrese un código promo manualmente:
+      //   allow_promotion_codes: true  (no se puede combinar con discounts[])
+      ...(stripeConfig.promotionCouponId
+        ? { discounts: [{ coupon: stripeConfig.promotionCouponId }] }
+        : {}),
     })
 
     // Guardar el session ID de Stripe
@@ -181,6 +232,24 @@ export default class PaymentService {
 
     // Idempotencia: si ya está completado, no hacer nada
     if (payment.status === 'completed') return
+
+    const stripeCustomerId = getStripeCustomerId(session.customer)
+    if (stripeCustomerId) {
+      if (payment.stripeCustomerId && payment.stripeCustomerId !== stripeCustomerId) {
+        console.warn(
+          '[PaymentService] Stripe customer mismatch for payment:',
+          payment.id,
+          payment.stripeCustomerId,
+          stripeCustomerId
+        )
+      } else {
+        payment.stripeCustomerId = stripeCustomerId
+      }
+
+      if (payment.userId) {
+        await this.attachStripeCustomerToUser(payment.userId, stripeCustomerId)
+      }
+    }
 
     payment.stripePaymentIntentId =
       typeof session.payment_intent === 'string'
@@ -271,6 +340,87 @@ export default class PaymentService {
     return Payment.query().where('stripe_session_id', sessionId).where('user_id', userId).first()
   }
 
+  private static async ensureStripeCustomer(user: User): Promise<string> {
+    const stripe = getStripe()
+
+    if (user.stripeCustomerId) {
+      const customer = await this.retrieveActiveStripeCustomer(user.stripeCustomerId)
+      if (customer) {
+        await this.syncStripeCustomer(customer.id, user)
+        return customer.id
+      }
+
+      user.stripeCustomerId = null
+    }
+
+    const customer = await stripe.customers.create(
+      {
+        email: user.email,
+        name: user.name || undefined,
+        metadata: buildUserCustomerMetadata(user.id),
+      },
+      {
+        idempotencyKey: `photoreka-user-${user.id}-stripe-customer`,
+      }
+    )
+
+    user.stripeCustomerId = customer.id
+    await user.save()
+
+    return customer.id
+  }
+
+  private static async retrieveActiveStripeCustomer(
+    stripeCustomerId: string
+  ): Promise<Stripe.Customer | null> {
+    const stripe = getStripe()
+
+    try {
+      const customer = await stripe.customers.retrieve(stripeCustomerId)
+
+      if ('deleted' in customer && customer.deleted) return null
+
+      return customer
+    } catch (error) {
+      if ((error as { type?: string }).type === 'StripeInvalidRequestError') return null
+
+      throw error
+    }
+  }
+
+  private static async syncStripeCustomer(stripeCustomerId: string, user: User): Promise<void> {
+    const stripe = getStripe()
+
+    await stripe.customers.update(stripeCustomerId, {
+      email: user.email,
+      name: user.name || undefined,
+      metadata: buildUserCustomerMetadata(user.id),
+    })
+  }
+
+  private static async attachStripeCustomerToUser(
+    userId: number,
+    stripeCustomerId: string
+  ): Promise<void> {
+    const user = await User.find(userId)
+    if (!user) return
+
+    if (!user.stripeCustomerId) {
+      user.stripeCustomerId = stripeCustomerId
+      await user.save()
+      return
+    }
+
+    if (user.stripeCustomerId !== stripeCustomerId) {
+      console.warn(
+        '[PaymentService] Stripe customer mismatch for user:',
+        userId,
+        user.stripeCustomerId,
+        stripeCustomerId
+      )
+    }
+  }
+
   private static async getCatalogItemForCheckout(
     stripePriceId: string,
     expectedType: 'photo_package' | 'credits'
@@ -313,4 +463,18 @@ function sortCatalogItems(a: PaymentCatalogItem, b: PaymentCatalogItem): number 
 function appendSessionId(successUrl: string): string {
   const separator = successUrl.includes('?') ? '&' : '?'
   return `${successUrl}${separator}session_id={CHECKOUT_SESSION_ID}`
+}
+
+function getStripeCustomerId(
+  customer: string | Stripe.Customer | Stripe.DeletedCustomer | null
+): string | null {
+  if (!customer) return null
+  if (typeof customer === 'string') return customer
+  return customer.id
+}
+
+function buildUserCustomerMetadata(userId: number): Stripe.MetadataParam {
+  return {
+    photorekaUserId: String(userId),
+  }
 }
