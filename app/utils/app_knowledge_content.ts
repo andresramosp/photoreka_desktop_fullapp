@@ -814,11 +814,12 @@ Photoreka offers two complementary ways to search for duplicates:
 - Also supports **Swap Photo**: replace an already-analyzed photo with a new version of the image, skipping the analysis and therefore saving the credits
 
 ### Credits & Usage System
-Every AI-powered operation in Photoreka consumes credits:
+AI credits are consumed by AI-powered operations **after** photos are already processed:
 - **Search** (semantic): standard credit cost per query; Precise mode costs additional GPU credits
 - **ChatLab**: cost varies by intelligence mode (Scout 0.5x, Assistant 1x, Curator 2x)
 - **Photo Insights**: each AI insight call consumes credits
-- **Photo Analysis**: processing new photos consumes credits
+
+**Photo Analysis is different:** processing (analyzing) new photos does **not** consume AI credits. It consumes **photo slots** from your analyzed photo limit. To increase the number of photos you can analyze, purchase a **Photo Analysis Package** (not a Credit Package) — see Payments & Purchases below.
 
 Your plan includes a credit budget. When credits run out, AI features become temporarily unavailable until the budget resets or is expanded. An "Insufficient Credits" notification with a link to Settings appears when a credit-gated action fails.
 
@@ -971,7 +972,7 @@ Expansion -- Canvas feature that finds and adds similar photos automatically
 Take to Tool -- Send selected photos from any view to Canvas, Framer, or Atlas
 Daily Eureka -- Dashboard card showing a daily rediscovered photo with AI insights
 ChatLab -- AI assistant with 3 intelligence modes (Scout, Assistant, Curator)
-Credits -- Internal currency consumed by AI operations (search, chat, insights, analysis)
+Credits -- Internal currency consumed by AI operations (search, chat, insights). **Not** consumed by photo analysis — analysis uses photo slots instead
 Omni-Search -- Global search bar in the header for quick navigation across all content types
 Duplicate Detection -- Two duplicate search modes: Exact duplicates by EXIF "dateTaken" capture timestamp, and Similar duplicates by perceptual hash (dHash)
 Geo-Inference -- AI-powered location inference that analyses photo content to infer GPS coordinates for photos lacking them. Results are best for outdoor/landmark photos and weaker for indoor, dark, or abstract shots. Inferred locations are shown on the World Map and can be corrected with an autocomplete assistant
