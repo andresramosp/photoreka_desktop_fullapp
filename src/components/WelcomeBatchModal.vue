@@ -177,7 +177,7 @@ const features = [
 
 const tiers = [
   {
-    range: "< 50",
+    range: "< 100",
     profile: "Casual single-photo use",
     color: "rgba(239, 68, 68, 0.25)",
     statuses: {
@@ -192,7 +192,7 @@ const tiers = [
     },
   },
   {
-    range: "50 – 500",
+    range: "100 – 1.000",
     profile: "Catalog subset exploration",
     color: "rgba(245, 158, 11, 0.25)",
     statuses: {
@@ -207,7 +207,7 @@ const tiers = [
     },
   },
   {
-    range: "500 – 2k",
+    range: "1.000 – 5.000",
     profile: "Meaningful collection work",
     color: "rgba(6, 182, 212, 0.25)",
     statuses: {
@@ -222,7 +222,7 @@ const tiers = [
     },
   },
   {
-    range: "2k+ - 20k",
+    range: "5.000 – 20.000",
     profile: "Deep archive analysis",
     color: "rgba(34, 197, 94, 0.25)",
     statuses: {
