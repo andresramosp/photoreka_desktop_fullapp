@@ -2,7 +2,7 @@
   <n-modal
     :show="show"
     @update:show="$emit('update:show', $event)"
-    :style="{ width: '520px', maxWidth: '95vw' }"
+    :style="{ width: '600px', maxWidth: '95vw' }"
   >
     <n-card :bordered="false" role="dialog" aria-modal="true" class="cpm-card">
       <template #header>
@@ -49,9 +49,15 @@
             }}</span>
           </div>
           <div class="cpm-row">
-            <span class="cpm-row-label">Price</span>
+            <span class="cpm-row-label">{{
+              discountAmount !== null ? "Original price" : "Price"
+            }}</span>
             <div class="cpm-price-col">
-              <span class="cpm-row-value"
+              <span
+                class="cpm-row-value"
+                :class="{
+                  'cpm-row-value--strikethrough': discountAmount !== null,
+                }"
                 >€{{ selected.priceEur.toFixed(2) }}</span
               >
               <span class="cpm-unit">
@@ -59,6 +65,23 @@
                 cents / credit
               </span>
             </div>
+          </div>
+          <div v-if="discountAmount !== null" class="cpm-row cpm-row--discount">
+            <span class="cpm-row-label">Discount</span>
+            <div class="cpm-price-col">
+              <span class="cpm-row-value cpm-row-value--discount">
+                −€{{ discountAmount.toFixed(2) }}
+              </span>
+              <span v-if="promotion?.percentOff" class="cpm-unit"
+                >{{ promotion.percentOff }}% off</span
+              >
+            </div>
+          </div>
+          <div v-if="finalPrice !== null" class="cpm-row cpm-row--total">
+            <span class="cpm-row-label cpm-row-label--total">You pay</span>
+            <span class="cpm-row-value cpm-row-value--total"
+              >€{{ finalPrice.toFixed(2) }}</span
+            >
           </div>
           <div v-if="selected.description" class="cpm-row">
             <span class="cpm-row-label">Details</span>
@@ -87,7 +110,7 @@
             --n-ripple-color: var(--accent-color);
           "
         >
-          Buy for €{{ selected?.priceEur.toFixed(2) }}
+          Buy for €{{ (finalPrice ?? selected?.priceEur)?.toFixed(2) }}
         </n-button>
 
         <p class="cpm-note">
@@ -116,8 +139,14 @@ import { useActivityLogger } from "@/composables/useActivityLogger";
 const props = defineProps<{ show: boolean }>();
 defineEmits<{ (e: "update:show", value: boolean): void }>();
 
-const { creditSteps, isLoading, isCheckingOut, fetchPackages, checkout } =
-  usePayments();
+const {
+  creditSteps,
+  promotion,
+  isLoading,
+  isCheckingOut,
+  fetchPackages,
+  checkout,
+} = usePayments();
 const message = useMessage();
 const { logActivity } = useActivityLogger();
 
@@ -148,6 +177,23 @@ fetchPackages().then(() => {
 });
 
 const selected = computed(() => creditSteps.value[selectedIndex.value] ?? null);
+
+const discountAmount = computed(() => {
+  if (!selected.value || !promotion.value) return null;
+  if (promotion.value.percentOff) {
+    return (selected.value.priceEur * promotion.value.percentOff) / 100;
+  }
+  if (promotion.value.amountOff) {
+    return promotion.value.amountOff / 100;
+  }
+  return null;
+});
+
+const finalPrice = computed(() =>
+  discountAmount.value !== null
+    ? Math.max(0, selected.value!.priceEur - discountAmount.value)
+    : null,
+);
 
 const selectOptions = computed(() =>
   creditSteps.value.map((s, i) => ({
@@ -282,5 +328,26 @@ const handleBuy = async (stripePriceId: string) => {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   margin: 0;
+}
+
+/* ── Discount / total rows ── */
+.cpm-row-value--strikethrough {
+  text-decoration: line-through;
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-normal);
+}
+
+.cpm-row-value--discount {
+  color: #22c55e;
+}
+
+.cpm-row-label--total {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.cpm-row-value--total {
+  color: var(--accent-color);
+  font-size: var(--font-size-base);
 }
 </style>

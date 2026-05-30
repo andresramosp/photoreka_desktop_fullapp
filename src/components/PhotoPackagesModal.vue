@@ -2,7 +2,7 @@
   <n-modal
     :show="show"
     @update:show="$emit('update:show', $event)"
-    :style="{ width: '520px', maxWidth: '95vw' }"
+    :style="{ width: '600px', maxWidth: '95vw' }"
   >
     <n-card :bordered="false" role="dialog" aria-modal="true" class="ppm-card">
       <template #header>
@@ -69,9 +69,9 @@
           <Transition name="ppm-expand">
             <div v-if="showStorageInfo" class="ppm-storage-info">
               <p>
-                Storage is <strong>free for the first 2 years</strong> from your
-                first photo analysis. After that, the cost is very marginal —
-                and still free for very small catalogs.
+                Storage is <strong>free for the first year</strong> from your
+                registration. After that, the cost is very marginal — and still
+                free for small catalogs.
               </p>
               <p class="ppm-storage-examples">Monthly cost examples:</p>
               <ul>
@@ -82,9 +82,15 @@
             </div>
           </Transition>
           <div class="ppm-row">
-            <span class="ppm-row-label">Price</span>
+            <span class="ppm-row-label">{{
+              discountAmount !== null ? "Original price" : "Price"
+            }}</span>
             <div class="ppm-price-col">
-              <span class="ppm-row-value"
+              <span
+                class="ppm-row-value"
+                :class="{
+                  'ppm-row-value--strikethrough': discountAmount !== null,
+                }"
                 >€{{ selected.priceEur.toFixed(2) }}</span
               >
               <span class="ppm-unit">
@@ -92,6 +98,23 @@
                 cents / photo
               </span>
             </div>
+          </div>
+          <div v-if="discountAmount !== null" class="ppm-row ppm-row--discount">
+            <span class="ppm-row-label">Discount</span>
+            <div class="ppm-price-col">
+              <span class="ppm-row-value ppm-row-value--discount">
+                −€{{ discountAmount.toFixed(2) }}
+              </span>
+              <span v-if="promotion?.percentOff" class="ppm-unit"
+                >{{ promotion.percentOff }}% off</span
+              >
+            </div>
+          </div>
+          <div v-if="finalPrice !== null" class="ppm-row ppm-row--total">
+            <span class="ppm-row-label ppm-row-label--total">You pay</span>
+            <span class="ppm-row-value ppm-row-value--total"
+              >€{{ finalPrice.toFixed(2) }}</span
+            >
           </div>
         </div>
 
@@ -114,7 +137,7 @@
             --n-ripple-color: var(--accent-color);
           "
         >
-          Buy for €{{ selected?.priceEur.toFixed(2) }}
+          Buy for €{{ (finalPrice ?? selected?.priceEur)?.toFixed(2) }}
         </n-button>
 
         <p class="ppm-note">
@@ -145,8 +168,14 @@ import { useActivityLogger } from "@/composables/useActivityLogger";
 const props = defineProps<{ show: boolean }>();
 defineEmits<{ (e: "update:show", value: boolean): void }>();
 
-const { photoPackages, isLoading, isCheckingOut, fetchPackages, checkout } =
-  usePayments();
+const {
+  photoPackages,
+  promotion,
+  isLoading,
+  isCheckingOut,
+  fetchPackages,
+  checkout,
+} = usePayments();
 const message = useMessage();
 const { logActivity } = useActivityLogger();
 
@@ -182,9 +211,26 @@ const selected = computed(
   () => photoPackages.value[selectedIndex.value] ?? null,
 );
 
+const discountAmount = computed(() => {
+  if (!selected.value || !promotion.value) return null;
+  if (promotion.value.percentOff) {
+    return (selected.value.priceEur * promotion.value.percentOff) / 100;
+  }
+  if (promotion.value.amountOff) {
+    return promotion.value.amountOff / 100;
+  }
+  return null;
+});
+
+const finalPrice = computed(() =>
+  discountAmount.value !== null
+    ? Math.max(0, selected.value!.priceEur - discountAmount.value)
+    : null,
+);
+
 const selectOptions = computed(() =>
   photoPackages.value.map((pkg, i) => ({
-    label: `${pkg.name} (${pkg.credits.toLocaleString()} credits included)`,
+    label: `${pkg.name}`,
     value: i,
   })),
 );
@@ -367,5 +413,26 @@ const handleBuy = async (stripePriceId: string) => {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   line-height: 1.6;
+}
+
+/* ── Discount / total rows ── */
+.ppm-row-value--strikethrough {
+  text-decoration: line-through;
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-normal);
+}
+
+.ppm-row-value--discount {
+  color: #22c55e;
+}
+
+.ppm-row-label--total {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ppm-row-value--total {
+  color: var(--accent-color);
+  font-size: var(--font-size-base);
 }
 </style>
