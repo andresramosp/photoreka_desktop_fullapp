@@ -26,8 +26,8 @@ By using Photoreka, you agree to comply with these Terms of Use and our Image Po
 - Photoreka does not sell, license, or redistribute your images without your explicit consent.
 
 ### 4. Image Storage and Resolution
-- Only reduced, low-resolution versions are stored on secure servers (Cloudflare R2) for analysis, searches, and previews.
-- Original images are not permanently stored.
+- **Only reduced, resized versions of your photos are stored** on secure servers (Cloudflare R2): a main version capped at 1500 px on the long side and a thumbnail at 800 px. These lightweight copies are used for analysis, search, previews, and all in-app features.
+- **Original images are never uploaded to or stored on Photoreka's servers.** The resize happens client-side in your browser before upload, so full-resolution originals stay on your device at all times.
 - Data is encrypted in transit and at rest.
 
 ### 5. Image Processing with AI
@@ -42,8 +42,8 @@ By using Photoreka, you agree to comply with these Terms of Use and our Image Po
 - Third-party service providers may access images only as strictly necessary for platform functionality and under binding confidentiality obligations.
 
 ### 7. Retention and Deletion
-- You can delete your images at any time.
-- Upon deletion, stored copies and derived data are removed within 30 days, except where legal retention obligations apply.
+- You can delete individual photos at any time directly from the app. Upon deletion, the stored resized copies and all derived data (tags, embeddings, scores, inferred location, etc.) are removed within 30 days, except where legal retention obligations apply.
+- You can also delete your entire account from Settings, which permanently removes all stored photos, derived data, and personal information under the same 30-day window.
 
 ### 8. Limited License
 By uploading images, you grant Photoreka a limited, non-exclusive, revocable license to store, process, and analyze images solely to provide platform functionalities.
@@ -94,6 +94,7 @@ Whenever you mention a section, tool, or page of the app in your response, you *
 | Framer | /framer |
 | 3D Atlas | /atlas |
 | 2D Atlas | /2d-view |
+| World Map | /world-map |
 | Tag Cloud | /tagcloud |
 | Report & Statistics | /report |
 | ChatLab | /chat-lab |
@@ -136,6 +137,7 @@ Users must choose how they prefer to manage photo imports. This decision affects
 - Full access to all Photoreka web tools and features
 - Search tool integrated directly into Lightroom
 - Perfect for photographers who organize everything in Lightroom
+- **Accepted formats:** JPEG, PNG, and RAW files. RAW files are automatically converted to JPEG by the plugin before upload, so the original RAW is preserved in Lightroom while Photoreka works with the converted version
 - **Important:** If you upload photos directly through the web, they will be analyzed but won't appear in your Lightroom catalog, causing workflow inconsistencies
 - **Best for:** Photographers using Lightroom as their primary photo management system
 
@@ -267,7 +269,7 @@ The AI analysis pipeline extracts:
 - Allows selecting photos individually or in bulk to send for analysis
 - Floating **"Analyze Photos"** button appears when there are photos in the lightbox
 - **Duplicate detection**: automatically identifies duplicate photos during upload with two search modes. **Exact duplicates** match photos taken at the same capture moment using the EXIF "dateTaken" timestamp (truncated to the second), which is useful even if the file was edited, resized, re-exported, or cropped. **Similar duplicates** use perceptual hashing (dHash) to find visually near-identical images and minor re-saves. Context-aware actions depend on whether duplicates are in the lightbox or already analyzed in the workspace. Bulk clean option available
-- **Swap Photo**: allows replacing an already-analyzed photo with a new version without losing its position in the catalog
+- **Swap Photo**: allows replacing an already-analyzed photo with a new version (new edition or slight retouch) without losing its position in the catalog and saving the analysis. It does not perform a new analysis on any aspect.
 
 ### Analyses Tab
 - Shows photos currently being analyzed ("processing" state)
@@ -283,12 +285,12 @@ The AI analysis pipeline extracts:
 ### Import Sources
 Photos can be imported from multiple sources, all going through the same pipeline:
 
-| Source | Details |
-| --- | --- |
-| **Local files** | Drag & drop or file browser. EXIF extracted client-side |
-| **Google Photos** | OAuth integration. Opens Google Photos picker to select albums/photos |
-| **Dropbox** | Chooser integration. 5 MB per file limit |
-| **Lightroom Plugin** | Requires plugin installation. Handoff token authentication. Full walkthrough guide available in-app |
+| Source | Accepted formats | Details |
+| --- | --- | --- |
+| **Local files** | JPEG, PNG | Drag & drop or file browser. EXIF extracted client-side |
+| **Google Photos** | JPEG, PNG | OAuth integration. Opens Google Photos picker to select albums/photos |
+| **Dropbox** | JPEG, PNG | Chooser integration. 5 MB per file limit |
+| **Lightroom Plugin** | JPEG, PNG, RAW | Requires plugin installation. Handoff token authentication. Full walkthrough guide available in-app. RAW files are automatically converted to JPEG before upload |
 
 All imports go through a unified pipeline: EXIF extraction -> client-side resize (1500px main + 800px thumbnail) -> upload to secure cloud storage.
 
@@ -586,7 +588,48 @@ Photos are positioned on a 2D plane based on AI embedding similarity, similar to
 
 ---
 
-## 11. REPORT & STATISTICS (/report)
+## 11. WORLD MAP (/world-map)
+
+**Purpose:** Interactive geographic map showing where your photos were taken. Powered by AI location inference for photos that lack GPS coordinates.
+
+### How it works
+Photoreka's geo-inference engine analyses the visual content of each photo using a vision AI model and attempts to infer its location. It works in stages:
+
+1. **Database pre-matching** — photos taken at the same time as an already-geolocated photo in your library are located instantly, with no AI cost.
+2. **Temporal clustering** — photos with a capture timestamp are grouped by shooting session (same time window). One or a few representative photos per cluster are sent to the AI; the result is propagated to the rest of the group if a strong consensus is reached.
+3. **LLM inference** — representative photos and standalone photos (no timestamp) are analysed in batches by the vision model, which returns an inferred city, region, and country with a confidence level.
+4. **Geocoding** — inferred locations are converted to precise coordinates via a geocoding service and stored.
+5. **Promotion pass** — after all batches, photos with lower-confidence results that have a high-confidence neighbour taken at the same time are automatically upgraded.
+
+### What works well — and what doesn't
+Geo-inference produces the best results for:
+- **Outdoor photos** with recognisable landmarks, architecture, street signs, distinctive landscapes, or characteristic urban/natural environments.
+- **Photos with clear visual references** — a monument, a flag, a recognisable skyline, a national park vista, etc.
+
+Results are less reliable or may be skipped for:
+- **Indoor / studio photos** with no environmental context.
+- **Dark or low-light photos** where the background is not visible.
+- **Abstract or macro shots** that show no geographic clues.
+- **Portraits** with neutral or unidentifiable backgrounds.
+
+The engine automatically **discards photos it deems non-geolocatable** before the job starts (saving credits). Some photos that pass this filter may still return an uncertain or unknown result — this is normal.
+
+### Correcting locations
+Any inferred location can be corrected directly from the Photo Info panel or from the World Map using a built-in autocomplete assistant: start typing a place name and select the correct location from the suggestions. Corrections are applied immediately and do not consume credits.
+
+### Job behaviour
+- Only one geo-inference job can run at a time per user.
+- The job runs in the background on the server — you can leave the page and come back.
+- You will receive an email notification when the job completes.
+- You can abort an in-progress job at any time.
+- Credits are charged at the end of the job based on actual LLM and geocoding usage (not an upfront estimate).
+
+### Geolocatability assessment
+Before starting a job, Photoreka shows a summary: how many photos are candidates, how many are expected to be discarded as non-geolocatable, and a credit cost estimate (min–max range accounting for potential clustering savings).
+
+---
+
+## 12. REPORT & STATISTICS (/report)
 
 **Purpose:** Deep catalog analysis with AI-generated insights. Section-based navigation sidebar.
 
@@ -609,7 +652,7 @@ Overall consistency and coherence assessment of the photographic body of work.
 
 ---
 
-## 12. PHOTO INFO PANEL
+## 13. PHOTO INFO PANEL
 
 Detailed view of an individual photo. Opens as a side panel or dialog. Separate layouts for desktop and mobile. Supports navigation between photos without closing the panel.
 
@@ -663,7 +706,7 @@ A section showing visually or conceptually similar photos from the catalog.
 
 ---
 
-## 13. CHATLAB (/chat-lab)
+## 14. CHATLAB (/chat-lab)
 
 **Purpose:** AI assistant for photo analysis, recommendations, catalog exploration, and collection management. Desktop and mobile.
 
@@ -710,7 +753,7 @@ ChatLab has usage limits: 3 messages/minute, 10/hour, 15/day, 100/month.
 
 ---
 
-## 14. SETTINGS (/settings)
+## 15. SETTINGS (/settings)
 
 **Purpose:** Account and app configuration.
 
@@ -727,7 +770,7 @@ ChatLab has usage limits: 3 messages/minute, 10/hour, 15/day, 100/month.
 
 ---
 
-## 15. HELP CENTER (/help)
+## 16. HELP CENTER (/help)
 
 **Purpose:** Searchable knowledge base with topic-based navigation.
 
@@ -768,7 +811,7 @@ Photoreka offers two complementary ways to search for duplicates:
 - Context-aware: identifies whether duplicates are in the lightbox (unanalyzed) or workspace (already analyzed)
 - Bulk clean actions: remove all duplicates at once
 - Filter view: All / Duplicates Only / Unique Only
-- Also supports **Swap Photo**: replace an already-analyzed photo with a new version
+- Also supports **Swap Photo**: replace an already-analyzed photo with a new version of the image, skipping the analysis and therefore saving the credits
 
 ### Credits & Usage System
 Every AI-powered operation in Photoreka consumes credits:
@@ -809,6 +852,7 @@ Workspace
 Library: Collections / Series
 Search
 Atlas: 2D Atlas / 3D Atlas
+World Map
 Canvas
 ChatLab
 Report
@@ -895,8 +939,17 @@ Purchase a Photo Analysis Package via {url:/settings|Settings}. Each package add
 **How much does storage cost?**
 Storage is free for the first 2 years from your first photo analysis. After that the cost is very marginal: approximately €0.25/month for ~5 000 photos, €0.50/month for ~10 000 photos, and €1.00/month for ~20 000 photos. Very small catalogs remain free.
 
+**How does AI location inference (geo-inference) work?**
+The geo-inference feature analyses your photos visually and attempts to infer where each one was taken, then converts that to GPS coordinates shown on the {url:/world-map|World Map}. It works best on outdoor photos with visible landmarks, architecture, distinctive landscapes, or recognisable environments. It produces weaker or no results for indoor, dark, abstract, or portrait photos with neutral backgrounds. The engine automatically discards clearly non-geolocatable photos before the job starts. Any inferred location can be corrected at any time from the Photo Info panel or directly on the map using the autocomplete assistant — corrections are free. Credits are charged at the end of the job based on actual usage.
+
 **How does duplicate detection work?**
 Photoreka has two duplicate search modes available in the Lightbox and Workspace. **Exact duplicates** groups photos that share the same EXIF "dateTaken" timestamp to the second, which is useful for catching the same shot across exports or edits. **Similar duplicates** uses perceptual hashing (dHash) to find visually near-identical photos and minor re-saves. You can review results and clean them in bulk.
+
+**Are my original photos stored on Photoreka's servers?**
+No. The resize happens in your browser before upload, so only a lightweight version (max 1500 px) is ever sent to Photoreka's servers. Your full-resolution originals stay on your device. When you delete photos or your account, all stored copies and derived data are removed within 30 days.
+
+**What image formats can I upload?**
+When importing from the web (local files, Google Photos, or Dropbox), Photoreka accepts **JPEG and PNG** files. When importing via the **Lightroom Plugin**, JPEG, PNG, and **RAW** files are all supported — RAW files are automatically converted to JPEG by the plugin before upload, preserving your original RAW in Lightroom while Photoreka processes the converted version.
 
 **Can I use Photoreka on mobile?**
 Yes, with an adapted layout. Canvas, 3D Atlas, and Series are desktop-only. All other tools work on mobile.
@@ -921,6 +974,7 @@ ChatLab -- AI assistant with 3 intelligence modes (Scout, Assistant, Curator)
 Credits -- Internal currency consumed by AI operations (search, chat, insights, analysis)
 Omni-Search -- Global search bar in the header for quick navigation across all content types
 Duplicate Detection -- Two duplicate search modes: Exact duplicates by EXIF "dateTaken" capture timestamp, and Similar duplicates by perceptual hash (dHash)
+Geo-Inference -- AI-powered location inference that analyses photo content to infer GPS coordinates for photos lacking them. Results are best for outdoor/landmark photos and weaker for indoor, dark, or abstract shots. Inferred locations are shown on the World Map and can be corrected with an autocomplete assistant
 Swap Photo -- Replace an already-analyzed photo with a new version
 Photo Package -- One-time purchase that expands the analyzed photo limit; may include bonus AI credits
 Credit Package -- One-time purchase that tops up the AI credit balance for search, chat, insights, and other AI operations
