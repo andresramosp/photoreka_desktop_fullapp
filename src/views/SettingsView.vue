@@ -106,7 +106,17 @@
             <n-icon size="24" color="var(--primary-color)">
               <CloudOutline />
             </n-icon>
-            <h2 class="section-title">Photo Analysis & Credits</h2>
+            <div class="section-title-group">
+              <h2 class="section-title">Photo Analysis & Credits</h2>
+              <button
+                class="credits-info-learn-more"
+                @click="showCreditsInfo = true"
+                title="Learn how analyses and credits work"
+              >
+                <n-icon :size="11"><InformationCircleOutline /></n-icon>
+                Learn more about analyses &amp; credits
+              </button>
+            </div>
           </div>
           <div class="section-content">
             <!-- Current Plan -->
@@ -466,6 +476,250 @@
   <!-- Credit Purchase Modal -->
   <CreditPurchaseModal v-model:show="showCreditsModal" />
 
+  <!-- Credits Info Dialog -->
+  <transition name="backdrop-fade">
+    <div
+      v-if="showCreditsInfo"
+      class="credits-info-backdrop"
+      @click="showCreditsInfo = false"
+    />
+  </transition>
+  <transition name="credits-info-pop">
+    <div v-if="showCreditsInfo" class="credits-info-dialog">
+      <div class="chatlab-info-header">
+        <div class="chatlab-info-title-row">
+          <n-icon :size="20" class="chatlab-info-icon">
+            <InformationCircleOutline />
+          </n-icon>
+          <span class="chatlab-info-title">Photo Analysis &amp; Credits</span>
+        </div>
+        <n-button quaternary size="small" @click="showCreditsInfo = false">
+          <template #icon>
+            <n-icon :size="14"><CloseOutline /></n-icon>
+          </template>
+        </n-button>
+      </div>
+      <div class="chatlab-info-body">
+        <p>
+          Photoreka uses <strong>two separate systems</strong> to meter usage:
+          <strong>Analyzed Photo slots</strong> for AI processing of new photos,
+          and <strong>AI Credits</strong> for on-demand intelligent features
+          once photos are already in your catalog.
+        </p>
+
+        <!-- Analyzed Photos -->
+        <h4 class="chatlab-info-h4">
+          <n-icon
+            :size="14"
+            class="chatlab-h4-icon"
+            style="color: var(--primary-color)"
+          >
+            <ImagesOutline />
+          </n-icon>
+          Analyzed Photos (photo slots)
+        </h4>
+        <p>
+          Each time you upload a new photo and run AI analysis on it, it
+          occupies one <strong>photo slot</strong> from your limit —
+          permanently. This covers the full pipeline: visual description, tags,
+          embeddings, artistic scores, EXIF extraction, and object detections.
+        </p>
+        <ul>
+          <li>Does <strong>not</strong> consume AI credits.</li>
+          <li>
+            Slots do not replenish — they expand when you purchase a Photo
+            Analysis Package.
+          </li>
+          <li>
+            Swapping a photo (replacing an analyzed photo with a new version)
+            does <strong>not</strong> consume an additional slot.
+          </li>
+        </ul>
+
+        <!-- AI Credits -->
+        <h4 class="chatlab-info-h4">
+          <n-icon
+            :size="14"
+            class="chatlab-h4-icon"
+            style="color: var(--accent-color)"
+          >
+            <FlashOutline />
+          </n-icon>
+          AI Credits — cost breakdown by tool
+        </h4>
+        <p>
+          Credits are consumed by AI-powered operations on already-processed
+          photos. Below is a per-tool breakdown.
+        </p>
+
+        <!-- Search -->
+        <h4 class="chatlab-info-h4">
+          <n-icon
+            :size="14"
+            class="chatlab-h4-icon"
+            style="color: var(--accent-color); opacity: 0.8"
+          >
+            <SearchOutline />
+          </n-icon>
+          Search &amp; Explorer
+        </h4>
+        <ul>
+          <li>
+            <strong>Broad</strong> — wide semantic scan; best for moods and
+            visual style. <em>Standard cost per query.</em>
+          </li>
+          <li>
+            <strong>Adaptive</strong> — context-enriched; ideal for metaphors
+            and cultural references. <em>Standard cost per query.</em>
+          </li>
+          <li>
+            <strong>Precise</strong> — high-accuracy; best for specific objects
+            and taxonomic distinctions.
+            <em>Standard cost + additional GPU credits (≈ 5 cr).</em>
+          </li>
+          <li>
+            <strong>Search Insights</strong> — AI-generated commentary that
+            enriches search results with contextual observations about the
+            returned photos. <em>Small fixed credit cost per insight call.</em>
+          </li>
+        </ul>
+
+        <!-- Geo-inference -->
+        <h4 class="chatlab-info-h4">
+          <n-icon
+            :size="14"
+            class="chatlab-h4-icon"
+            style="color: var(--accent-color); opacity: 0.8"
+          >
+            <LocationOutline />
+          </n-icon>
+          World Map — Geo-inference
+        </h4>
+        <ul>
+          <li>
+            Credits are charged <strong>at job completion</strong>, based on
+            actual LLM and geocoding calls made — not an upfront flat fee.
+          </li>
+          <li>
+            Photos with known GPS coordinates, or that share a capture timestamp
+            with an already-located photo, are resolved for free.
+          </li>
+          <li>
+            The app shows a <strong>min–max estimate</strong> before you start a
+            job, accounting for potential temporal-clustering savings.
+          </li>
+          <li>
+            Correcting an inferred location manually does
+            <strong>not</strong> consume credits.
+          </li>
+        </ul>
+
+        <!-- Portfolio Builder -->
+        <h4 class="chatlab-info-h4">
+          <n-icon
+            :size="14"
+            class="chatlab-h4-icon"
+            style="color: var(--accent-color); opacity: 0.8"
+          >
+            <ImagesOutline />
+          </n-icon>
+          Portfolio Builder
+        </h4>
+        <ul>
+          <li>
+            Runs an LLM evaluation pipeline across candidate photos in batches
+            (recall → coherence scoring → evaluation → refinement → sequencing).
+          </li>
+          <li>
+            Credit cost scales with the
+            <strong>number of candidates evaluated</strong> and the
+            <strong>target portfolio size</strong>; a cost estimate is shown
+            before the build starts.
+          </li>
+          <li>
+            Aborting a build mid-run charges only for the work already done.
+          </li>
+        </ul>
+
+        <!-- Canvas -->
+        <h4 class="chatlab-info-h4">
+          <n-icon
+            :size="14"
+            class="chatlab-h4-icon"
+            style="color: var(--accent-color); opacity: 0.8"
+          >
+            <ImagesOutline />
+          </n-icon>
+          Canvas
+        </h4>
+        <ul>
+          <li>
+            <strong>Crop-region expansion</strong> — when you use a custom crop
+            region as the search source for Canvas expansion, an on-the-fly CLIP
+            embedding is generated for that region.
+            <em>Small fixed GPU credit cost per crop-region query.</em>
+          </li>
+        </ul>
+
+        <!-- ChatLab -->
+        <h4 class="chatlab-info-h4">
+          <n-icon
+            :size="14"
+            class="chatlab-h4-icon"
+            style="color: var(--accent-color); opacity: 0.8"
+          >
+            <ChatbubblesOutline />
+          </n-icon>
+          ChatLab
+        </h4>
+        <ul>
+          <li>
+            <strong>Scout</strong> — lightweight models, fast responses.
+            <em>0.5× base cost per message.</em>
+          </li>
+          <li>
+            <strong>Curator</strong> — stronger models, deeper analysis
+            (default). <em>1× base cost per message.</em>
+          </li>
+          <li>
+            Attaching photos or triggering catalog searches within a
+            conversation may add marginal extra cost proportional to data
+            retrieved.
+          </li>
+          <li>
+            <strong>App Assistant</strong> — the contextual help chat available
+            in some sections of the app (sidebar panel, distinct from ChatLab).
+            It uses lightweight models and carries a small credit cost per
+            message, comparable to Scout.
+          </li>
+        </ul>
+
+        <!-- How to get more -->
+        <h4 class="chatlab-info-h4">
+          <n-icon :size="14" class="chatlab-h4-icon chatlab-h4-icon--can">
+            <CheckmarkCircleOutline />
+          </n-icon>
+          Getting more photo slots or credits
+        </h4>
+        <ul>
+          <li>
+            <strong>Photo Analysis Packages</strong> expand your analyzed photo
+            limit (slots do not expire). Some packages include bonus credits.
+          </li>
+          <li>
+            <strong>Credit Packages</strong> top up your AI credit balance
+            (credits do not expire).
+          </li>
+          <li>
+            Inviting a friend who creates an account earns you
+            <strong>200 photo slots</strong> and
+            <strong>500 bonus credits</strong>.
+          </li>
+        </ul>
+      </div>
+    </div>
+  </transition>
+
   <!-- Payment Success Modal -->
   <PaymentSuccessModal
     v-model:show="showPaymentSuccessModal"
@@ -673,6 +927,13 @@ import {
   TrashOutline,
   WarningOutline,
   CloseOutline,
+  InformationCircleOutline,
+  SearchOutline,
+  LocationOutline,
+  ImagesOutline,
+  ChatbubblesOutline,
+  FlashOutline,
+  CheckmarkCircleOutline,
 } from "@vicons/ionicons5";
 import { SparklesOutline } from "@vicons/ionicons5";
 
@@ -906,6 +1167,7 @@ const creditsPercentage = computed(() => {
 const showPhotosModal = ref(false);
 const showCreditsModal = ref(false);
 const showPlansModal = ref(false);
+const showCreditsInfo = ref(false);
 
 // Quota request form
 const quotaPhotosOption = ref<string | null>(null);
@@ -1648,5 +1910,149 @@ const handleDeleteAccount = async () => {
   display: flex;
   justify-content: flex-end;
   gap: var(--spacing-sm);
+}
+
+/* ── Section title + subtitle group ── */
+.section-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ── Credits Info "Learn more" button ── */
+.credits-info-learn-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: var(--font-size-xs);
+  color: var(--accent-color);
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s;
+  line-height: 1.4;
+}
+
+.credits-info-learn-more:hover {
+  opacity: 1;
+}
+
+/* ── Credits Info Dialog (shares ChatLab dialog styles) ── */
+.credits-info-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 200;
+}
+
+.credits-info-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 201;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  width: 560px;
+  max-width: 92vw;
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.credits-info-pop-enter-active {
+  transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.credits-info-pop-leave-active {
+  transition: all 0.15s ease;
+}
+.credits-info-pop-enter-from {
+  opacity: 0;
+  transform: translate(-50%, -48%) scale(0.95);
+}
+.credits-info-pop-leave-to {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.97);
+}
+
+/* Reuse chatlab-info-* classes for header, body, h4, icons */
+.credits-info-dialog .chatlab-info-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.credits-info-dialog .chatlab-info-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.credits-info-dialog .chatlab-info-icon {
+  color: var(--accent-color);
+  opacity: 0.8;
+}
+
+.credits-info-dialog .chatlab-info-title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.credits-info-dialog .chatlab-info-body {
+  padding: var(--spacing-lg) var(--spacing-xl);
+  overflow-y: auto;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: var(--line-height-relaxed);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.credits-info-dialog .chatlab-info-body p {
+  margin: 0 0 var(--spacing-md) 0;
+}
+
+.credits-info-dialog .chatlab-info-h4 {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: var(--spacing-lg) 0 var(--spacing-sm) 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.credits-info-dialog .chatlab-info-h4:first-child {
+  margin-top: 0;
+}
+
+.credits-info-dialog .chatlab-h4-icon {
+  flex-shrink: 0;
+}
+
+.credits-info-dialog .chatlab-h4-icon--can {
+  color: var(--success-color, #52c41a);
+}
+
+.credits-info-dialog .chatlab-info-body ul {
+  margin: 0 0 var(--spacing-md) 0;
+  padding-left: var(--spacing-lg);
+}
+
+.credits-info-dialog .chatlab-info-body li {
+  margin-bottom: var(--spacing-xs);
+}
+
+.credits-info-dialog .chatlab-info-body li::marker {
+  color: var(--accent-color);
 }
 </style>
