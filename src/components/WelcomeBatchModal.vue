@@ -222,7 +222,7 @@ const tiers = [
     },
   },
   {
-    range: "2k+",
+    range: "2k+ - 20k",
     profile: "Deep archive analysis",
     color: "rgba(34, 197, 94, 0.25)",
     statuses: {
