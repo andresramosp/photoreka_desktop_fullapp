@@ -255,6 +255,12 @@ export default class PaymentService {
       typeof session.payment_intent === 'string'
         ? session.payment_intent
         : session.payment_intent?.id || null
+
+    // Use the actual charged amount (after discounts) from Stripe, in euros
+    if (session.amount_total != null) {
+      payment.amountEur = session.amount_total / 100
+    }
+
     payment.status = 'completed'
     await payment.save()
 
