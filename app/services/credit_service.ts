@@ -75,11 +75,11 @@ export default class CreditService {
   }
 
   /**
-   * Convert a EUR cost to credits (rounded up, minimum 1).
+   * Convert a EUR cost to credits (with 4 decimal places, minimum 0.0001).
    */
   static eurToCredits(costEur: number): number {
     if (costEur <= 0) return 0
-    return Math.max(1, Math.ceil(costEur / EUR_PER_CREDIT))
+    return Math.round((costEur / EUR_PER_CREDIT) * 10000) / 10000
   }
 
   /**

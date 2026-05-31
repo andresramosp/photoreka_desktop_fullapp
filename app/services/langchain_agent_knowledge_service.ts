@@ -24,11 +24,7 @@ import type {
 } from './langchain_agent_service.js'
 import { makeDebugCallback, makeUsageCallback } from '../utils/agent_utils.js'
 
-type ChatIntelligenceMode = {
-  id: string
-  modelPhase2Lite: string
-}
-
+const KNOWLEDGE_AGENT_MODEL = 'gemini-2.5-flash-lite'
 const MAX_TOKENS = 1200
 const MAX_ATTEMPTS = 2
 
@@ -112,12 +108,11 @@ export default class LangchainAgentKnowledgeService {
     userId: number,
     conversationId: number,
     message: string,
-    selectedMode: ChatIntelligenceMode,
     uiContext?: string
   ): Promise<AgentChatResult> {
-    const modelName = selectedMode.modelPhase2Lite
+    const modelName = KNOWLEDGE_AGENT_MODEL
     console.log(
-      `\n[KnowledgeAgent] ▶ No-photos path | userId=${userId} | mode=${selectedMode.id} | message="${message.slice(0, 80)}${message.length > 80 ? '…' : ''}"`
+      `\n[KnowledgeAgent] ▶ No-photos path | userId=${userId} | model=${modelName} | message="${message.slice(0, 80)}${message.length > 80 ? '…' : ''}"`
     )
 
     const [{ context: userContext, photoCount, analyzedCount }, history] = await Promise.all([

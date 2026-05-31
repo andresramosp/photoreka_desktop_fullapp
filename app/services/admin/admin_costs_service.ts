@@ -445,7 +445,7 @@ export default class AdminCostsService {
     const summaryResult = await db.rawQuery(
       `SELECT
         COALESCE(SUM(cl.cost_in_eur), 0)::float AS total_cost_eur,
-        COALESCE(SUM(cl.credits_charged), 0)::int AS total_credits
+        COALESCE(SUM(cl.credits_charged), 0)::float AS total_credits
        FROM cost_logs cl ${whereClause}`,
       params
     )

@@ -150,7 +150,6 @@ export default class ChatController {
           user.id,
           resolvedConversationId,
           message.trim(),
-          selectedMode,
           typeof uiContext === 'string' ? uiContext : undefined
         )
       } else {
