@@ -13,7 +13,8 @@ function buildAspectList(variant: PromptVariant): string {
   return llmAspects
     .map((a, i) => {
       const values = getAspectValuesForVariant(a, variant)
-      return `${i + 1}. '${a.key}': ${values.map((v) => `'${v}'`).join(', ')}`
+      const guidance = a.promptGuidance ? `\n   Guidance: ${a.promptGuidance}` : ''
+      return `${i + 1}. '${a.key}': ${values.map((v) => `'${v}'`).join(', ')}${guidance}`
     })
     .join('\n')
 }

@@ -37,6 +37,8 @@ export interface VisualAspectDef {
   /** Whether this aspect is produced by the vision LLM or by deterministic metadata analysis. */
   source: VisualAspectSource
   values: readonly string[]
+  /** Optional prompt-only guidance for this aspect. */
+  promptGuidance?: string
   /**
    * Optional per-variant overrides for the list of allowed values.
    * Used e.g. for the `genre` aspect where commercial photographers should
@@ -49,12 +51,6 @@ export interface VisualAspectDef {
 export const VISUAL_ASPECTS_SCHEMA: VisualAspectDef[] = [
   // ── LLM-sourced aspects (evaluated by the vision model) ───────────────
   {
-    key: 'focus',
-    label: 'Focus',
-    source: 'llm',
-    values: ['blurry', 'nitid'],
-  },
-  {
     key: 'lighting_scheme',
     label: 'Lighting Scheme',
     source: 'llm',
@@ -65,18 +61,14 @@ export const VISUAL_ASPECTS_SCHEMA: VisualAspectDef[] = [
     label: 'Stylistic',
     source: 'llm',
     values: ['long exposure', 'motion blur', 'silhouettes', 'bokeh', 'grain'],
+    promptGuidance:
+      "Use these only when the treatment is clear and visually marked. 'motion blur' requires obvious intentional movement blur; 'bokeh' requires prominent out-of-focus background/highlights, not a barely shallow background.",
   },
   {
     key: 'lighting',
     label: 'Lighting',
     source: 'llm',
     values: ['natural', 'artificial', 'backlit', 'frontlit', 'side lit'],
-  },
-  {
-    key: 'depth_of_field',
-    label: 'Depth of Field',
-    source: 'llm',
-    values: ['shallow', 'deep', 'medium'],
   },
   {
     key: 'framing',
@@ -118,6 +110,12 @@ export const VISUAL_ASPECTS_SCHEMA: VisualAspectDef[] = [
     label: 'Orientation',
     source: 'metadata',
     values: ['horizontal', 'vertical', 'square'],
+  },
+  {
+    key: 'depth_of_field',
+    label: 'Depth of Field',
+    source: 'metadata',
+    values: ['shallow', 'deep', 'medium'],
   },
   {
     key: 'temperature',

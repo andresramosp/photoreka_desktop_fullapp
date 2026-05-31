@@ -357,7 +357,6 @@ export class TagTask extends AnalyzerTask {
     // Keys que usan la regla value + key
     const keyWithSuffix = [
       'orientation',
-      'focus',
       'lighting',
       'framing',
       'genre',

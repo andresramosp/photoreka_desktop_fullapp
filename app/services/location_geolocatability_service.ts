@@ -27,11 +27,6 @@ const GENRE_SCORES: Record<string, number> = {
   portrait: -10,
 }
 
-const FOCUS_SCORES: Record<string, number> = {
-  nitid: 15,
-  blurry: -15,
-}
-
 const LIGHTING_SCORES: Record<string, number> = {
   'natural': 15,
   'backlit': 8,
@@ -238,7 +233,6 @@ export default class LocationGeolocatabilityService {
     let score = 50
 
     score += this.applyAspect(va.genre, GENRE_SCORES)
-    score += this.applyAspect(va.focus, FOCUS_SCORES)
     score += this.applyAspect(va.lighting, LIGHTING_SCORES)
     score += this.applyAspect(va.lighting_scheme, LIGHTING_SCHEME_SCORES)
     score += this.applyAspect(va.palette, PALETTE_SCORES)

@@ -15,6 +15,7 @@ interface PhotoMetadata {
   orientation: string[]
   temperature?: string[]
   palette?: string[]
+  depthOfField?: string[]
   width?: number
   height?: number
   fileSize?: number
@@ -24,6 +25,44 @@ interface PhotoMetadata {
 }
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error))
+
+const parseExifNumber = (value: unknown): number | null => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  if (typeof value !== 'string') return null
+
+  const normalized = value.trim().replace(',', '.')
+  const fraction = normalized.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/)
+  if (fraction) {
+    const numerator = Number(fraction[1])
+    const denominator = Number(fraction[2])
+    return denominator !== 0 ? numerator / denominator : null
+  }
+
+  const match = normalized.match(/\d+(?:\.\d+)?/)
+  if (!match) return null
+  const parsed = Number(match[0])
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const detectDepthOfFieldFromExif = (
+  exif: Record<string, any> | null | undefined
+): string | null => {
+  if (!exif || typeof exif !== 'object') return null
+
+  const aperture = parseExifNumber(exif.aperture ?? exif.fNumber ?? exif.FNumber)
+  if (!aperture) return null
+
+  const focalLength = parseExifNumber(exif.focalLength ?? exif.FocalLength)
+
+  if (focalLength !== null && focalLength < 16) return 'deep'
+  if (aperture >= 10) return 'deep'
+  if (aperture >= 7.1 && (focalLength === null || focalLength <= 50)) return 'deep'
+  if (aperture <= 2.8 && (focalLength === null || focalLength >= 24)) return 'shallow'
+  if (focalLength !== null && aperture <= 4 && focalLength >= 50) return 'shallow'
+  if (focalLength !== null && aperture <= 5.6 && focalLength >= 85) return 'shallow'
+
+  return 'medium'
+}
 
 export const detectImagePalette = async (buffer: Buffer): Promise<string[]> => {
   try {
@@ -140,24 +179,18 @@ export class MetadataTask extends AnalyzerTask {
       this.data = {}
     }
 
-    // Si onlyIfNeeded es true, filtrar fotos que ya tienen orientation
+    // Si onlyIfNeeded es true, filtrar fotos que ya tienen los metadatos deterministas disponibles
     let photosToProcess = pendingPhotos
     if (this.onlyIfNeeded) {
-      const HealthPhotoService = (await import('../../services/health_photo_service.js')).default
-      const photosWithoutOrientation = []
+      const photosNeedingMetadata = []
 
       for (const photo of pendingPhotos) {
-        const health = await HealthPhotoService.photoHealth(photo.id)
-        const hasOrientation =
-          health.checks.find((c) => c.label === 'descriptions.visual_aspects.orientation')?.ok ||
-          false
-
-        if (!hasOrientation) {
-          photosWithoutOrientation.push(photo)
+        if (this.shouldProcessPhoto(photo)) {
+          photosNeedingMetadata.push(photo)
         }
       }
 
-      photosToProcess = photosWithoutOrientation
+      photosToProcess = photosNeedingMetadata
       logger.debug(
         `onlyIfNeeded=true: procesando ${photosToProcess.length}/${pendingPhotos.length} fotos`
       )
@@ -209,6 +242,32 @@ export class MetadataTask extends AnalyzerTask {
     }
   }
 
+  private shouldProcessPhoto(photo: Photo): boolean {
+    const descriptions = photo.descriptions as Record<string, any> | null | undefined
+    const visualAspects = descriptions?.visual_aspects ?? {}
+    const exif = descriptions?.EXIF as Record<string, any> | null | undefined
+
+    if (!Array.isArray(visualAspects.orientation) || visualAspects.orientation.length === 0) {
+      return true
+    }
+    if (!Array.isArray(visualAspects.temperature) || visualAspects.temperature.length === 0) {
+      return true
+    }
+    if (!Array.isArray(visualAspects.palette) || visualAspects.palette.length === 0) {
+      return true
+    }
+
+    const depthOfField = detectDepthOfFieldFromExif(exif)
+    if (
+      depthOfField &&
+      (!Array.isArray(visualAspects.depth_of_field) || visualAspects.depth_of_field.length === 0)
+    ) {
+      return true
+    }
+
+    return false
+  }
+
   private async extractPhotoMetadata(photo: Photo): Promise<PhotoMetadata> {
     try {
       const buffer = await photoImageService.getImageBufferFromR2(photo.name)
@@ -238,6 +297,8 @@ export class MetadataTask extends AnalyzerTask {
 
       // Detectar si es color o blanco y negro
       const paletteTypes = await detectImagePalette(buffer)
+      const storedExif = (photo.descriptions as Record<string, any> | null | undefined)?.EXIF
+      const depthOfField = detectDepthOfFieldFromExif(storedExif)
 
       // Determinar orientación basada en dimensiones
       const width = sharpMetadata.width || 0
@@ -267,6 +328,7 @@ export class MetadataTask extends AnalyzerTask {
         orientation: [orientation],
         temperature: [temperature],
         palette: paletteTypes,
+        ...(depthOfField && { depthOfField: [depthOfField] }),
         width,
         height,
         fileSize,
@@ -323,6 +385,7 @@ export class MetadataTask extends AnalyzerTask {
             orientation: metadata.orientation,
             ...(metadata.temperature && { temperature: metadata.temperature }),
             ...(metadata.palette && { palette: metadata.palette }),
+            ...(metadata.depthOfField && { depth_of_field: metadata.depthOfField }),
             // Se pueden agregar más campos aquí en el futuro
             ...(metadata.width &&
               metadata.height && {
