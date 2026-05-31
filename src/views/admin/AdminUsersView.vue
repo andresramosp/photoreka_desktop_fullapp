@@ -39,6 +39,15 @@
         :options="reviewFilterOptions"
       />
 
+      <n-select
+        v-model:value="filterViolations"
+        placeholder="Violations"
+        clearable
+        size="small"
+        style="width: 150px"
+        :options="violationFilterOptions"
+      />
+
       <div class="filters-spacer" />
 
       <n-tag :bordered="false" size="small" type="info">
@@ -271,6 +280,14 @@ import {
 } from "@vicons/ionicons5";
 import { api } from "../../utils/axios";
 
+interface ContentViolation {
+  date: string;
+  reasons: string[];
+  batchViolations: string[];
+  photoIds: number[];
+  ip: string;
+}
+
 interface UserRow {
   id: number;
   name: string;
@@ -287,6 +304,7 @@ interface UserRow {
   photosCount: number;
   totalCostEur: number;
   usage: any;
+  contentViolations: ContentViolation[] | null;
 }
 
 interface GlobalActivityItem {
@@ -319,6 +337,13 @@ const reviewFilterOptions = [
   { label: "Reviewed", value: "reviewed" },
 ];
 
+const violationFilterOptions = [
+  { label: "Has violations", value: "has_violations" },
+  { label: "No violations", value: "no_violations" },
+];
+
+const filterViolations = ref<string | null>(null);
+
 function getUserPhotoCount(user: UserRow): number {
   return Number(user.usage?.analyzedPhotosUsed ?? user.photosCount ?? 0);
 }
@@ -328,15 +353,20 @@ function hasReviewablePhotos(user: UserRow): boolean {
 }
 
 const filteredUsers = computed(() => {
+  let list = users.value;
   if (filterNeedsReview.value === "pending")
-    return users.value.filter(
-      (u) => hasReviewablePhotos(u) && !u.photosReviewedAt,
+    list = list.filter((u) => hasReviewablePhotos(u) && !u.photosReviewedAt);
+  else if (filterNeedsReview.value === "reviewed")
+    list = list.filter((u) => hasReviewablePhotos(u) && !!u.photosReviewedAt);
+  if (filterViolations.value === "has_violations")
+    list = list.filter(
+      (u) => u.contentViolations && u.contentViolations.length > 0,
     );
-  if (filterNeedsReview.value === "reviewed")
-    return users.value.filter(
-      (u) => hasReviewablePhotos(u) && !!u.photosReviewedAt,
+  else if (filterViolations.value === "no_violations")
+    list = list.filter(
+      (u) => !u.contentViolations || u.contentViolations.length === 0,
     );
-  return users.value;
+  return list;
 });
 
 const paginatedUsers = computed(() => {
@@ -524,6 +554,8 @@ function formatDateTime(iso: string | null): string {
 }
 
 function rowClassName(row: UserRow) {
+  if (row.contentViolations && row.contentViolations.length > 0)
+    return "row-violation";
   if (!row.isActive) return "row-inactive";
   return "";
 }
@@ -745,6 +777,28 @@ const columns = computed<DataTableColumn<UserRow>[]>(() => [
     sorter: true,
     render(row) {
       return h("span", { class: "cell-dim" }, formatDate(row.createdAt));
+    },
+  },
+  {
+    title: "Violations",
+    key: "contentViolations",
+    width: 110,
+    render(row) {
+      const count = row.contentViolations?.length ?? 0;
+      if (count === 0) return null;
+      const latest = row.contentViolations![count - 1];
+      const allReasons = [...latest.reasons, ...latest.batchViolations].join(
+        ", ",
+      );
+      return h(
+        NTag,
+        {
+          size: "tiny",
+          type: "error",
+          title: `${count} violation(s). Last: ${allReasons} · IP ${latest.ip} · ${formatDate(latest.date)}`,
+        },
+        { default: () => `${count} violation${count !== 1 ? "s" : ""}` },
+      );
     },
   },
   {
@@ -1066,6 +1120,14 @@ onMounted(() => {
 
 :deep(.n-data-table-tbody tr:hover) {
   background-color: #f1f5f9 !important;
+}
+
+:deep(.row-violation) {
+  background-color: rgba(240, 60, 60, 0.08) !important;
+}
+
+:deep(.row-violation:hover) {
+  background-color: rgba(240, 60, 60, 0.14) !important;
 }
 
 :deep(.row-inactive) {
