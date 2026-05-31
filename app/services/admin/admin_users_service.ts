@@ -47,6 +47,7 @@ export interface AdminUserListItem {
   photosCount: number
   totalCostEur: number
   usage: Record<string, any> | null
+  contentViolations: Record<string, any>[] | null
 }
 
 export interface AdminUserDetail extends AdminUserListItem {
@@ -142,6 +143,7 @@ export default class AdminUsersService {
       totalCostEur: costMap.get(u.id) ?? 0,
       usage: u.usage,
       photosReviewedAt: u.photosReviewedAt?.toISO() ?? null,
+      contentViolations: u.contentViolations ?? null,
     }))
   }
 
@@ -198,6 +200,7 @@ export default class AdminUsersService {
       catalogPatterns: user.catalogPatterns,
       paymentSummary,
       photosReviewedAt: user.photosReviewedAt?.toISO() ?? null,
+      contentViolations: user.contentViolations ?? null,
     }
   }
 

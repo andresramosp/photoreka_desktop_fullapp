@@ -12,6 +12,14 @@ export type InsightsState = {
   shownPhotoIds: number[]
 }
 
+export type ContentViolation = {
+  date: string
+  reasons: string[]
+  batchViolations: string[]
+  photoIds: number[]
+  ip: string
+}
+
 export type PreferredSource = 'web' | 'lightroom' | null
 export type UserProvider = 'email' | 'google'
 export type UserRole = 'user' | 'admin'
@@ -80,6 +88,16 @@ export default class User extends compose(BaseModel, AuthFinder) {
 
   @column()
   declare insightsState: InsightsState | null
+
+  @column({
+    prepare: (value: ContentViolation[] | null) => (value != null ? JSON.stringify(value) : null),
+    consume: (value: string | ContentViolation[] | null) => {
+      if (value == null) return null
+      if (typeof value === 'string') return JSON.parse(value) as ContentViolation[]
+      return value
+    },
+  })
+  declare contentViolations: ContentViolation[] | null
 
   // Email confirmation fields
   @column.dateTime()

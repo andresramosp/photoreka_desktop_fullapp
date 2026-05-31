@@ -2,6 +2,8 @@ import type { HttpContext } from '@adonisjs/core/http'
 import axios from 'axios'
 import UserCostService from '#services/user_cost_service'
 import { USD_TO_EUR } from '#services/models_service'
+import User from '#models/user'
+import type { ContentViolation } from '#models/user'
 
 /** Google Vision Safe Search Detection price: $1.50 per 1,000 images. */
 const SAFE_SEARCH_COST_USD_PER_IMAGE = 0.0015
@@ -49,7 +51,7 @@ export default class SafeSearchController {
         return response.ok({ passed: true, skipped: true })
       }
 
-      const { images } = request.only(['images'])
+      const { images, photoIds } = request.only(['images', 'photoIds'])
 
       if (!images || !Array.isArray(images) || images.length === 0) {
         return response.badRequest({ message: 'No images provided' })
@@ -132,6 +134,35 @@ export default class SafeSearchController {
       }
 
       const passed = violations.length === 0 && batchViolations.length === 0
+
+      // Record violation and deactivate user if content policy was violated
+      if (!passed) {
+        const allReasons = [...new Set(violations.flatMap((v) => v.reasons))]
+        const clientIp =
+          request.header('x-forwarded-for')?.split(',')[0]?.trim() || request.ip() || 'unknown'
+
+        const violation: ContentViolation = {
+          date: new Date().toISOString(),
+          reasons: allReasons,
+          batchViolations,
+          photoIds: Array.isArray(photoIds)
+            ? (photoIds as unknown[]).filter((id): id is number => typeof id === 'number')
+            : [],
+          ip: clientIp,
+        }
+
+        try {
+          const fullUser = await User.find(user.id)
+          if (fullUser) {
+            const existing = fullUser.contentViolations ?? []
+            fullUser.contentViolations = [...existing, violation]
+            fullUser.isActive = false
+            await fullUser.save()
+          }
+        } catch (recordingError) {
+          console.error('Failed to record content violation for user', user.id, recordingError)
+        }
+      }
 
       return response.ok({
         passed,

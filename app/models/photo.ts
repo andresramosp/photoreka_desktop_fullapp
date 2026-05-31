@@ -144,6 +144,9 @@ export default class Photo extends BaseModel {
   @column()
   declare inferredLocationId: number | null
 
+  @column()
+  declare uploadIp: string | null
+
   @belongsTo(() => GeocodeCache, { foreignKey: 'inferredLocationId' })
   declare inferredLocation: BelongsTo<typeof GeocodeCache>
 

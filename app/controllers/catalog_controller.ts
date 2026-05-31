@@ -180,6 +180,9 @@ export default class CatalogController {
 
       // Guarda en base de datos
 
+      const uploadIp =
+        request.header('x-forwarded-for')?.split(',')[0]?.trim() || request.ip() || null
+
       const descriptions: PhotoDescriptions = exifData ? { EXIF: exifData } : {}
       descriptions.source = source
       const photo = await Photo.create({
@@ -188,6 +191,7 @@ export default class CatalogController {
         originalFileName,
         userId: Number(userId),
         descriptions,
+        uploadIp,
         // source,
       })
 
