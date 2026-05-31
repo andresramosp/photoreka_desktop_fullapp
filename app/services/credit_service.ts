@@ -29,9 +29,9 @@ export type CostCategory =
  * category that has no per-category override set.
  */
 export const COST_MULTIPLIERS: Record<CostCategory, number> = {
-  GEO_INFERENCE: 2.5,
+  GEO_INFERENCE: 2, //2.5,
   SEARCH: 2,
-  PORTFOLIO_BUILD: 2.5,
+  PORTFOLIO_BUILD: 2.25, //2.5,
   CHAT: 2.25,
   CHAT_KNOWLEDGE_ASSISTANT: 1.25,
 }
