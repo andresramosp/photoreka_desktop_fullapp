@@ -174,28 +174,6 @@
         </div>
       </div>
 
-      <!-- ═══ Task Breakdown ═══ -->
-      <div class="card">
-        <h3 class="card-title">Cost by Task</h3>
-        <div v-if="data.byTask.length === 0" class="no-data">No data yet</div>
-        <div v-else class="task-table">
-          <div class="task-header">
-            <span>Task</span>
-            <span>Cost</span>
-            <span>Calls</span>
-            <span>Avg / Call</span>
-          </div>
-          <div v-for="t in data.byTask" :key="t.task" class="task-row">
-            <span class="task-name">{{ formatTaskName(t.task) }}</span>
-            <span class="cost-value">€{{ fmt(t.costEur) }}</span>
-            <span>{{ t.calls }}</span>
-            <span class="dim"
-              >€{{ t.calls > 0 ? fmt(t.costEur / t.calls) : "0" }}</span
-            >
-          </div>
-        </div>
-      </div>
-
       <!-- ═══ Transaction Log ═══ -->
       <div class="card">
         <h3 class="card-title">Transaction Log</h3>
@@ -358,7 +336,27 @@
           </button>
         </div>
       </div>
-
+      <!-- ═══ Task Breakdown ═══ -->
+      <div class="card">
+        <h3 class="card-title">Cost by Task</h3>
+        <div v-if="data.byTask.length === 0" class="no-data">No data yet</div>
+        <div v-else class="task-table">
+          <div class="task-header">
+            <span>Task</span>
+            <span>Cost</span>
+            <span>Calls</span>
+            <span>Avg / Call</span>
+          </div>
+          <div v-for="t in data.byTask" :key="t.task" class="task-row">
+            <span class="task-name">{{ formatTaskName(t.task) }}</span>
+            <span class="cost-value">€{{ fmt(t.costEur) }}</span>
+            <span>{{ t.calls }}</span>
+            <span class="dim"
+              >€{{ t.calls > 0 ? fmt(t.costEur / t.calls) : "0" }}</span
+            >
+          </div>
+        </div>
+      </div>
       <!-- ═══ Top Users ═══ -->
       <div class="card">
         <h3 class="card-title">Top Users by Cost</h3>
