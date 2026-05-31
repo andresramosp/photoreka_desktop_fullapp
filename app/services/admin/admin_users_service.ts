@@ -228,12 +228,8 @@ export default class AdminUsersService {
 
     const now = new Date()
 
-    // Fetch photo file names for R2 cleanup
-    const photos = await db
-      .from('photos')
-      .where('user_id', userId)
-      .whereNull('deleted_at')
-      .select('name', 'thumbnail_name')
+    // Fetch photo file names for R2 cleanup (all photos, including already soft-deleted)
+    const photos = await db.from('photos').where('user_id', userId).select('name', 'thumbnail_name')
 
     // Delete files from R2
     const objectsToDelete: { Key: string }[] = []
@@ -242,16 +238,14 @@ export default class AdminUsersService {
       if (p.thumbnail_name) objectsToDelete.push({ Key: p.thumbnail_name })
     }
     if (objectsToDelete.length > 0) {
-      try {
-        s3.send(
-          new DeleteObjectsCommand({
-            Bucket: process.env.R2_BUCKET,
-            Delete: { Objects: objectsToDelete, Quiet: true },
-          })
-        )
-      } catch (err) {
+      s3.send(
+        new DeleteObjectsCommand({
+          Bucket: process.env.R2_BUCKET,
+          Delete: { Objects: objectsToDelete, Quiet: true },
+        })
+      ).catch((err) => {
         logger.warn('[AdminDeleteUser] Failed to delete R2 objects: %o', err)
-      }
+      })
     }
 
     await db

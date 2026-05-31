@@ -572,19 +572,17 @@ export default class PhotoManager {
       if (photo.thumbnailName) objectsToDelete.push(photo.thumbnailName)
     }
 
-    try {
-      s3.send(
-        new DeleteObjectsCommand({
-          Bucket: process.env.R2_BUCKET,
-          Delete: {
-            Objects: objectsToDelete.map((Key) => ({ Key })),
-            Quiet: true,
-          },
-        })
-      )
-    } catch (err) {
+    s3.send(
+      new DeleteObjectsCommand({
+        Bucket: process.env.R2_BUCKET,
+        Delete: {
+          Objects: objectsToDelete.map((Key) => ({ Key })),
+          Quiet: true,
+        },
+      })
+    ).catch((err) => {
       console.warn('⚠️ Fallo al eliminar archivos en R2:', err)
-    }
+    })
 
     if (userId) {
       const analyzedCount = photos.filter((p) => p.analyzerProcessId !== null).length
