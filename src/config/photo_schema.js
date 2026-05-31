@@ -17,12 +17,6 @@
 export const VISUAL_ASPECTS_SCHEMA = [
   // ── LLM-sourced ──────────────────────────────────────────
   {
-    key: "focus",
-    label: "Focus",
-    source: "llm",
-    values: ["blurry", "nitid"],
-  },
-  {
     key: "lighting_scheme",
     label: "Lighting Scheme",
     source: "llm",
@@ -33,18 +27,14 @@ export const VISUAL_ASPECTS_SCHEMA = [
     label: "Stylistic",
     source: "llm",
     values: ["long exposure", "motion blur", "silhouettes", "bokeh", "grain"],
+    promptGuidance:
+      "Use these only when the treatment is clear and visually marked. 'motion blur' requires obvious intentional movement blur; 'bokeh' requires prominent out-of-focus background/highlights, not a barely shallow background.",
   },
   {
     key: "lighting",
     label: "Lighting",
     source: "llm",
     values: ["natural", "artificial", "backlit", "frontlit", "side lit"],
-  },
-  {
-    key: "depth_of_field",
-    label: "Depth of Field",
-    source: "llm",
-    values: ["shallow", "deep", "medium"],
   },
   {
     key: "framing",
@@ -66,6 +56,12 @@ export const VISUAL_ASPECTS_SCHEMA = [
     label: "Temperature",
     source: "metadata",
     values: ["warm", "cold", "neutral"],
+  },
+  {
+    key: "depth_of_field",
+    label: "Depth of Field",
+    source: "metadata",
+    values: ["shallow", "deep", "medium"],
   },
   {
     key: "palette",

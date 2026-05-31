@@ -81,7 +81,7 @@
         <!-- Floating Action Bar centered on hover -->
         <div
           class="photo-action-bar-overlay"
-          :class="{ 'action-bar-hidden': !showActionBar }"
+          :class="{ 'action-bar-hidden_': !showActionBar }"
         >
           <FloatingActionBar
             :embedded="true"
@@ -521,9 +521,9 @@
                     </div>
                   </div>
 
-                  <!-- Photography Type -->
+                  <!-- Genre -->
                   <div class="tech-category">
-                    <h6 class="category-title">Photography Type</h6>
+                    <h6 class="category-title">Genre</h6>
                     <div class="category-tags">
                       <n-tag
                         v-if="
@@ -545,19 +545,6 @@
                         class="tech-tag"
                       >
                         Not Present
-                      </n-tag>
-                      <n-tag
-                        v-if="
-                          selectedPhoto?.descriptions?.visual_aspects
-                            ?.orientation
-                        "
-                        v-for="orientation in selectedPhoto.descriptions
-                          .visual_aspects.orientation"
-                        :key="orientation"
-                        type="info"
-                        class="tech-tag"
-                      >
-                        {{ formatCategoryName(orientation) }}
                       </n-tag>
                     </div>
                   </div>
@@ -581,6 +568,19 @@
                       <n-tag
                         v-if="
                           selectedPhoto?.descriptions?.visual_aspects
+                            ?.orientation
+                        "
+                        v-for="orientation in selectedPhoto.descriptions
+                          .visual_aspects.orientation"
+                        :key="orientation"
+                        type="info"
+                        class="tech-tag"
+                      >
+                        {{ formatCategoryName(orientation) }}
+                      </n-tag>
+                      <n-tag
+                        v-if="
+                          selectedPhoto?.descriptions?.visual_aspects
                             ?.perspective
                         "
                         v-for="perspective in selectedPhoto.descriptions
@@ -589,7 +589,7 @@
                         type="info"
                         class="tech-tag"
                       >
-                        {{ formatCategoryName(perspective) }}
+                        {{ formatCategoryName(perspective) }} perspective
                       </n-tag>
                       <n-tag
                         v-if="
@@ -602,7 +602,7 @@
                         type="info"
                         class="tech-tag"
                       >
-                        {{ formatCategoryName(dof) }}
+                        {{ formatCategoryName(dof) }} DoF
                       </n-tag>
                     </div>
                   </div>
@@ -624,19 +624,6 @@
                         {{ formatCategoryName(light) }}
                       </n-tag>
                       <n-tag
-                        v-if="
-                          selectedPhoto?.descriptions?.visual_aspects
-                            ?.lighting_scheme
-                        "
-                        v-for="scheme in selectedPhoto.descriptions
-                          .visual_aspects.lighting_scheme"
-                        :key="scheme"
-                        type="info"
-                        class="tech-tag"
-                      >
-                        {{ formatCategoryName(scheme) }}
-                      </n-tag>
-                      <n-tag
                         v-if="selectedPhoto?.descriptions?.EXIF?.flash"
                         type="info"
                         class="tech-tag"
@@ -653,9 +640,9 @@
                     </div>
                   </div>
 
-                  <!-- Visual Style -->
+                  <!-- Color Style -->
                   <div class="tech-category">
-                    <h6 class="category-title">Visual Style</h6>
+                    <h6 class="category-title">Color Style</h6>
                     <div class="category-tags">
                       <n-tag
                         v-if="
@@ -680,11 +667,19 @@
                         type="info"
                         class="tech-tag"
                       >
-                        {{ formatCategoryName(temp) }}
+                        {{ formatCategoryName(temp) }} temperature
                       </n-tag>
+                    </div>
+                  </div>
+
+                  <!-- Stylistic -->
+                  <div class="tech-category">
+                    <h6 class="category-title">Stylistic</h6>
+                    <div class="category-tags">
                       <n-tag
                         v-if="
                           selectedPhoto?.descriptions?.visual_aspects?.stylistic
+                            ?.length > 0
                         "
                         v-for="style in selectedPhoto.descriptions
                           .visual_aspects.stylistic"
@@ -694,24 +689,17 @@
                       >
                         {{ formatCategoryName(style) }}
                       </n-tag>
-                    </div>
-                  </div>
-
-                  <!-- Image Quality -->
-                  <div class="tech-category">
-                    <h6 class="category-title">Image Quality</h6>
-                    <div class="category-tags">
                       <n-tag
                         v-if="
-                          selectedPhoto?.descriptions?.visual_aspects?.focus
+                          !selectedPhoto?.descriptions?.visual_aspects
+                            ?.stylistic ||
+                          selectedPhoto.descriptions.visual_aspects.stylistic
+                            .length === 0
                         "
-                        v-for="focus in selectedPhoto.descriptions
-                          .visual_aspects.focus"
-                        :key="focus"
-                        type="info"
+                        type="warning"
                         class="tech-tag"
                       >
-                        {{ formatCategoryName(focus) }}
+                        None
                       </n-tag>
                     </div>
                   </div>

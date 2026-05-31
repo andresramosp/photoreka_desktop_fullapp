@@ -12,7 +12,7 @@ const USE_SHARED_STATE = true;
 
 // Visual aspects options for the UI tree-select.
 // Derived from the central photo schema (#config/photo_schema → @/config/photo_schema).
-// `focus` and `lighting_scheme` are intentionally hidden from the search UI
+// `lighting_scheme` is intentionally hidden from the search UI
 // (mirrors the previous hardcoded behavior).
 //
 // NOTE: this static export contains the FULL union of values across all
@@ -21,7 +21,6 @@ const USE_SHARED_STATE = true;
 // consumers should prefer `getVisualAspectsOptions(profile)` below, which
 // filters the genre list to the user's current profile.
 export const visualAspectsOptions = buildVisualAspectsOptions([
-  "focus",
   "lighting_scheme",
 ]);
 
@@ -34,7 +33,7 @@ export const visualAspectsOptions = buildVisualAspectsOptions([
  * @returns {Array} tree-select options.
  */
 export function getVisualAspectsOptions(profile) {
-  return buildVisualAspectsOptions(["focus", "lighting_scheme"], profile);
+  return buildVisualAspectsOptions(["lighting_scheme"], profile);
 }
 
 // Function to transform artistic scores to tree-select format.

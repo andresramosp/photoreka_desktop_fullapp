@@ -310,9 +310,8 @@
                 </div>
 
                 <!-- <p class="ail-forecast-subtitle">
-                  Estimated from each photo's genre, lighting, focus, framing
-                  and palette. Outdoor, well-lit, wide-frame shots score
-                  highest.
+                  Estimated from each photo's genre, lighting, framing and
+                  palette. Outdoor, well-lit, wide-frame shots score highest.
                 </p> -->
 
                 <div class="ail-forecast-grid">
@@ -330,7 +329,7 @@
                     </div>
                     <span class="ail-forecast-label">Good chances</span>
                     <span class="ail-forecast-hint"
-                      >Passed acceptance rules (outdoor, well-lit, nitid focus,
+                      >Passed acceptance rules (outdoor, well-lit,
                       documentary)</span
                     >
                   </div>
