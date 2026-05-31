@@ -222,7 +222,8 @@
                   </n-tooltip>
                 </div>
                 <span class="storage-count"
-                  >{{ creditsUsed }} / {{ creditsAvailable }}</span
+                  >{{ creditsUsed.toFixed(1) }} /
+                  {{ creditsAvailable.toFixed(1) }}</span
                 >
               </div>
               <div class="storage-progress-bar">
@@ -237,7 +238,8 @@
               </div>
               <div class="storage-footer">
                 <span class="storage-remaining"
-                  >{{ creditsAvailable - creditsUsed }} credits remaining</span
+                  >{{ (creditsAvailable - creditsUsed).toFixed(1) }} credits
+                  remaining</span
                 >
                 <n-button
                   type="info"
