@@ -33,7 +33,7 @@ export const COST_MULTIPLIERS: Record<CostCategory, number> = {
   SEARCH: 2,
   PORTFOLIO_BUILD: 2.25, //2.5,
   CHAT: 2.25,
-  CHAT_KNOWLEDGE_ASSISTANT: 1.25,
+  CHAT_KNOWLEDGE_ASSISTANT: 1,
 }
 
 // ─── Fixed credit costs ─────────────────────────────────
