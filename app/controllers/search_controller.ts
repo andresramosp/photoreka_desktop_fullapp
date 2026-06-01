@@ -157,6 +157,27 @@ export default class SearchController {
 
       const query = request.body()
 
+      // Charge GPU credits upfront for precise mode (non-cursor requests)
+      if (!query.options.cursor && query.options.searchMode === 'precise') {
+        const charged = await CreditService.tryChargeFixed(user.id, PRECISE_GPU_CREDITS)
+        if (!charged) {
+          return response.status(402).json({
+            message: 'No credits remaining. Please purchase more credits to continue.',
+            code: 'INSUFFICIENT_CREDITS',
+          })
+        }
+        UserCostService.record(
+          user.id,
+          'search',
+          CreditService.creditsToEstimatedEur(PRECISE_GPU_CREDITS),
+          1,
+          {
+            task: 'gpu_precise_search',
+            metadata: { fixedCharge: true, credits: PRECISE_GPU_CREDITS },
+          }
+        ).catch(() => {})
+      }
+
       const result = await searchService.searchByTagsSync(
         {
           included: query.included,

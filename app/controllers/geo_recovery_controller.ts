@@ -116,6 +116,36 @@ export default class GeoRecoveryController {
     }
   }
 
+  /**
+   * Creates a free-run session (no payment required).
+   * Enforces two best-effort daily limits via Redis:
+   *   • 1 free run per IP per day
+   *   • 10 free runs globally per day
+   */
+  public async freeSession({ request, response }: HttpContext) {
+    const clientIp =
+      request.header('x-forwarded-for')?.split(',')[0]?.trim() || request.ip() || 'unknown'
+    try {
+      const result = await this.sessionService.createFree(clientIp)
+      if ('error' in result) {
+        const message =
+          result.error === 'ip_limit'
+            ? 'You have already used your free analysis today. Come back tomorrow.'
+            : 'Free analyses are fully booked for today. Come back tomorrow.'
+        return response.tooManyRequests({ error: message, code: result.error.toUpperCase() })
+      }
+      return response.created({
+        sessionToken: result.sessionToken,
+        sessionId: result.state.sessionId,
+        maxPhotos: GEO_RECOVERY_MAX_PHOTOS_PER_SESSION,
+        allowedMimeTypes: ALLOWED_MIME_TYPES,
+      })
+    } catch (error: any) {
+      console.error('[GeoRecovery] freeSession error:', error)
+      return response.internalServerError({ error: error.message })
+    }
+  }
+
   public async getUploadUrl({ request, response }: HttpContext) {
     const session = await this.requireSession(request, response)
     if (!session) return

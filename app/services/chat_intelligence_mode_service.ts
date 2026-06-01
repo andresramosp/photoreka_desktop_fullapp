@@ -22,7 +22,7 @@ const CHAT_INTELLIGENCE_MODES: ReadonlyArray<ChatIntelligenceModeDefinition> = [
   {
     id: 'scout',
     name: 'Scout',
-    description: 'Optimized for quick exploration and broad analysis.',
+    description: 'Quick exploration and broad analysis at cheaper cost.',
     modelPhase1: 'gemini-3.1-flash-lite',
     modelPhase2Cheap: 'gemini-3.1-flash-lite',
     modelPhase2Expensive: 'gemini-3.1-flash-lite',
@@ -36,7 +36,7 @@ const CHAT_INTELLIGENCE_MODES: ReadonlyArray<ChatIntelligenceModeDefinition> = [
   {
     id: 'default',
     name: 'Curator',
-    description: 'Balanced mode for the standard ChatLab experience.',
+    description: 'Best performance for curation and analysis at standard cost.',
     modelPhase1: 'gemini-3-flash-preview',
     modelPhase2Cheap: 'gemini-3-flash-preview',
     modelPhase2Expensive: 'gemini-3-flash-preview',

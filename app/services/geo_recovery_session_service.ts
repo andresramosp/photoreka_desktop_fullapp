@@ -3,6 +3,9 @@ import redis from '@adonisjs/redis/services/main'
 
 export const GEO_RECOVERY_SESSION_TTL_SECONDS = 60 * 60 * 24 * 7 // 7 days
 export const GEO_RECOVERY_MAX_PHOTOS_PER_SESSION = 5000
+export const FREE_RUN_IP_LIMIT_PER_DAY = 1
+export const FREE_RUN_GLOBAL_LIMIT_PER_DAY = 10
+const FREE_RUN_COUNTER_TTL_SECONDS = 60 * 60 * 48 // 48 h so the key outlives the calendar day
 
 export interface GeoRecoveryPhotoEntry {
   clientPhotoId: string
@@ -17,6 +20,7 @@ export interface GeoRecoverySessionState {
   sessionId: string
   createdAt: string
   paid: boolean
+  isFreeRun?: boolean
   photos: GeoRecoveryPhotoEntry[]
 }
 
@@ -43,6 +47,59 @@ function sessionKey(sessionId: string): string {
 }
 
 export default class GeoRecoverySessionService {
+  /**
+   * Creates a free-run session, enforcing two best-effort Redis counters:
+   *   1. Per-IP  : max FREE_RUN_IP_LIMIT_PER_DAY  per calendar day
+   *   2. Global  : max FREE_RUN_GLOBAL_LIMIT_PER_DAY per calendar day
+   *
+   * "Best-effort" means small over-counts are possible under heavy concurrency —
+   * this is explicitly accepted because anonymous sessions cannot be tied to users.
+   */
+  public async createFree(
+    clientIp: string
+  ): Promise<
+    | { sessionToken: string; state: GeoRecoverySessionState }
+    | { error: 'ip_limit' | 'global_limit' }
+  > {
+    const today = new Date().toISOString().slice(0, 10) // YYYY-MM-DD (UTC)
+    // Hash the IP so we never store a raw address in Redis.
+    const ipHash = crypto
+      .createHash('sha256')
+      .update(clientIp || 'unknown')
+      .digest('hex')
+      .slice(0, 16)
+
+    const ipKey = `geo_recovery:free_run:ip:${ipHash}:${today}`
+    const globalKey = `geo_recovery:free_run:global:${today}`
+
+    // INCR is atomic; decrement on limit breach gives best-effort rollback.
+    const newIpCount = await redis.incr(ipKey)
+    if (newIpCount === 1) await redis.expire(ipKey, FREE_RUN_COUNTER_TTL_SECONDS)
+    if (newIpCount > FREE_RUN_IP_LIMIT_PER_DAY) {
+      await redis.decr(ipKey)
+      return { error: 'ip_limit' }
+    }
+
+    const newGlobalCount = await redis.incr(globalKey)
+    if (newGlobalCount === 1) await redis.expire(globalKey, FREE_RUN_COUNTER_TTL_SECONDS)
+    if (newGlobalCount > FREE_RUN_GLOBAL_LIMIT_PER_DAY) {
+      await redis.decr(globalKey)
+      await redis.decr(ipKey)
+      return { error: 'global_limit' }
+    }
+
+    const sessionId = crypto.randomUUID()
+    const state: GeoRecoverySessionState = {
+      sessionId,
+      createdAt: new Date().toISOString(),
+      paid: true, // free run is pre-authorised — no payment step needed
+      isFreeRun: true,
+      photos: [],
+    }
+    await this.save(state)
+    return { sessionToken: `${sessionId}.${sign(sessionId)}`, state }
+  }
+
   public async create(): Promise<{ sessionToken: string; state: GeoRecoverySessionState }> {
     const sessionId = crypto.randomUUID()
     const state: GeoRecoverySessionState = {

@@ -122,6 +122,7 @@ router.get('/api/report-review/:reviewType/user/:userId', [
 // Geo Recovery (anonymous one-shot product — auth via signed session token in headers)
 router.post('/api/geo-recovery/assess', [GeoRecoveryController, 'assess'])
 router.post('/api/geo-recovery/session', [GeoRecoveryController, 'createSession'])
+router.post('/api/geo-recovery/free-session', [GeoRecoveryController, 'freeSession'])
 router.post('/api/geo-recovery/upload-url', [GeoRecoveryController, 'getUploadUrl'])
 router.post('/api/geo-recovery/photos', [GeoRecoveryController, 'registerPhotos'])
 router.post('/api/geo-recovery/mock-pay', [GeoRecoveryController, 'mockPay'])
@@ -512,6 +513,16 @@ router
     // Admin Payments dashboard
     router.get('/api/admin/payments/overview', [PaymentsAdminController, 'overview'])
     router.get('/api/admin/payments', [PaymentsAdminController, 'index'])
+
+    // Admin Geo-Recovery
+    const GeoRecoveryAdminController = () =>
+      import('#controllers/admin/geo_recovery_admin_controller')
+    router.get('/api/admin/geo-recovery/stats', [GeoRecoveryAdminController, 'stats'])
+    router.get('/api/admin/geo-recovery/sessions', [GeoRecoveryAdminController, 'sessions'])
+    router.post('/api/admin/geo-recovery/reset-free-runs', [
+      GeoRecoveryAdminController,
+      'resetFreeRuns',
+    ])
     router.post('/api/admin/health/users/:id/check', [HealthAdminController, 'userCheck'])
     router.post('/api/admin/health/users/:id/retry', [HealthAdminController, 'userRetry'])
     router.get('/api/admin/health/global-embeddings', [
