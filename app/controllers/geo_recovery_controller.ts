@@ -19,6 +19,10 @@ import GeoRecoverySessionService, {
   type GeoRecoverySessionState,
 } from '#services/geo_recovery_session_service'
 import GeoRecoveryInferenceService from '#services/geo_recovery_inference_service'
+import GeoRecoveryAssessmentService, {
+  ASSESS_MAX_PHOTOS,
+  type AssessPhotoInput,
+} from '#services/geo_recovery_assessment_service'
 import GeocodeCache from '#models/geocode_cache'
 import GeocodingService from '#services/geocoding_service'
 
@@ -60,8 +64,42 @@ function mapboxFeatureTypeToGranularity(featureType: string | undefined): Locati
 export default class GeoRecoveryController {
   private sessionService = new GeoRecoverySessionService()
   private inferenceService = new GeoRecoveryInferenceService()
+  private assessmentService = new GeoRecoveryAssessmentService()
 
   // ── Endpoints ──────────────────────────────────────────────────────────────
+
+  // ── Assessment (anonymous, no session required) ─────────────────────────────
+
+  public async assess({ request, response }: HttpContext) {
+    const { images } = request.only(['images']) as { images?: any[] }
+    if (!Array.isArray(images) || images.length === 0) {
+      return response.badRequest({ error: 'images array is required' })
+    }
+
+    const limited = images.slice(0, ASSESS_MAX_PHOTOS)
+    const parsed: AssessPhotoInput[] = []
+
+    for (let i = 0; i < limited.length; i++) {
+      const raw = limited[i]
+      if (typeof raw?.data !== 'string' || raw.data.length === 0) continue
+      const mimeType: AssessPhotoInput['mimeType'] = ALLOWED_MIME_TYPES.includes(raw.mimeType)
+        ? (raw.mimeType as AssessPhotoInput['mimeType'])
+        : 'image/jpeg'
+      parsed.push({ id: i + 1, data: raw.data, mimeType })
+    }
+
+    if (parsed.length === 0) {
+      return response.badRequest({ error: 'No valid images provided' })
+    }
+
+    try {
+      const summary = await this.assessmentService.assess(parsed)
+      return response.ok(summary)
+    } catch (error: any) {
+      console.error('[GeoRecovery] assess error:', error)
+      return response.internalServerError({ error: 'Assessment failed' })
+    }
+  }
 
   public async createSession({ response }: HttpContext) {
     try {

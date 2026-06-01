@@ -17,6 +17,7 @@ import { DateTime } from 'luxon'
 import crypto from 'node:crypto'
 import pLimit from 'p-limit'
 import { MediaResolution } from '@google/genai'
+import { S3Client, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3'
 
 import redis from '@adonisjs/redis/services/main'
 
@@ -172,6 +173,7 @@ function chunk<T>(arr: T[], size: number): T[][] {
 export default class GeoRecoveryInferenceService {
   private photoImageService = PhotoImageService.getInstance()
   private sessionService = new GeoRecoverySessionService()
+  private s3Client = this.createS3Client()
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
@@ -218,6 +220,8 @@ export default class GeoRecoveryInferenceService {
       current.completedAt = nowIso()
       current.updatedAt = nowIso()
       await this.setJob(current)
+      // Clean up R2 files on failure
+      await this.cleanupR2Files(sessionId)
     })
 
     return job
@@ -984,6 +988,8 @@ export default class GeoRecoveryInferenceService {
     job.completedAt = nowIso()
     job.updatedAt = nowIso()
     await this.setJob(job)
+    // Clean up R2 files after successful analysis
+    await this.cleanupR2Files(context.sessionId)
   }
 
   private async setJob(job: GeoRecoveryJobState): Promise<void> {
@@ -993,5 +999,72 @@ export default class GeoRecoveryInferenceService {
       'EX',
       GEO_RECOVERY_SESSION_TTL_SECONDS
     )
+  }
+
+  // ── R2 cleanup ─────────────────────────────────────────────────────────────
+
+  private createS3Client(): S3Client {
+    return new S3Client({
+      region: 'auto',
+      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY!,
+        secretAccessKey: process.env.R2_SECRET_KEY!,
+      },
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
+    })
+  }
+
+  private async cleanupR2Files(sessionId: string): Promise<void> {
+    try {
+      const prefix = `geo-recovery/${sessionId}/`
+      const bucket = process.env.R2_BUCKET
+      if (!bucket) {
+        console.warn('[GeoRecovery] R2_BUCKET not configured; skipping cleanup')
+        return
+      }
+
+      // List all objects under the session prefix
+      const listCommand = new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        MaxKeys: 5000, // Safeguard; GEO_RECOVERY_MAX_PHOTOS_PER_SESSION is 5000
+      })
+
+      const listResult = await this.s3Client.send(listCommand)
+      const keys = listResult.Contents?.map((obj) => ({ Key: obj.Key! })) ?? []
+
+      if (keys.length === 0) {
+        console.info(`[GeoRecovery] No R2 files to clean up for session ${sessionId}`)
+        return
+      }
+
+      // Delete all objects for this session
+      const deleteCommand = new DeleteObjectsCommand({
+        Bucket: bucket,
+        Delete: { Objects: keys },
+      })
+
+      const deleteResult = await this.s3Client.send(deleteCommand)
+      const deleted = deleteResult.Deleted?.length ?? 0
+      const errors = deleteResult.Errors?.length ?? 0
+
+      if (errors > 0) {
+        console.warn(
+          `[GeoRecovery] Deleted ${deleted} R2 files for session ${sessionId}; ${errors} errors occurred`
+        )
+      } else {
+        console.info(
+          `[GeoRecovery] Successfully deleted ${deleted} R2 files for session ${sessionId}`
+        )
+      }
+    } catch (error) {
+      console.error(
+        `[GeoRecovery] R2 cleanup failed for session ${sessionId}:`,
+        error instanceof Error ? error.message : String(error)
+      )
+      // Do not re-throw; cleanup failure should not crash the job completion flow
+    }
   }
 }

@@ -120,6 +120,7 @@ router.get('/api/report-review/:reviewType/user/:userId', [
 ])
 
 // Geo Recovery (anonymous one-shot product — auth via signed session token in headers)
+router.post('/api/geo-recovery/assess', [GeoRecoveryController, 'assess'])
 router.post('/api/geo-recovery/session', [GeoRecoveryController, 'createSession'])
 router.post('/api/geo-recovery/upload-url', [GeoRecoveryController, 'getUploadUrl'])
 router.post('/api/geo-recovery/photos', [GeoRecoveryController, 'registerPhotos'])

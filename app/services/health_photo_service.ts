@@ -4,6 +4,7 @@ import AnalyzerProcess from '#models/analyzer/analyzerProcess'
 import Photo from '#models/photo'
 import PhotoManager from '../managers/photo_manager.js'
 import db from '@adonisjs/lucid/services/db'
+import { VISUAL_ASPECT_LLM_KEYS } from '../../config/photo_schema.js'
 type Check = { label: string; ok: boolean }
 
 export default class HealthPhotoService {
@@ -66,6 +67,10 @@ export default class HealthPhotoService {
     push('descriptions.artistic_scores', !!d.artistic_scores)
 
     const visualAspects = d.visual_aspects || {}
+    push(
+      'descriptions.visual_aspects.llm_any',
+      VISUAL_ASPECT_LLM_KEYS.some((k) => visualAspects[k] && visualAspects[k].length > 0)
+    )
     push(
       'descriptions.visual_aspects.lighting',
       !!(visualAspects.lighting && visualAspects.lighting.length > 0)
