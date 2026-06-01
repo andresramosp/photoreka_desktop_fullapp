@@ -393,6 +393,15 @@ export function getNaiveThemeOverrides(isDark = true) {
       closeColorHover: theme.primary + "15",
       closeColorPressed: theme.primary + "25",
     },
+
+    Checkbox: {
+      // Borde visible en fondos oscuros
+      border: "1px solid rgba(255, 255, 255, 0.35)",
+      borderHover: `1px solid ${theme.primaryHover}`,
+      borderFocus: `1px solid ${theme.primary}`,
+      borderChecked: `1px solid ${theme.primary}`,
+      borderDisabled: "1px solid rgba(255, 255, 255, 0.12)",
+    },
   };
 }
 

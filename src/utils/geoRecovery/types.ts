@@ -22,6 +22,7 @@ export interface SessionInfo {
   sessionId: string;
   maxPhotos: number;
   allowedMimeTypes: readonly string[];
+  isFree?: boolean;
 }
 
 export interface PhotoEntry {

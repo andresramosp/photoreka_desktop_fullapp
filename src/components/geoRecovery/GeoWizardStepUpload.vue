@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, nextTick, reactive, ref, watch } from "vue";
 import { NButton, NIcon, NText } from "naive-ui";
 import {
   AddOutline,
@@ -21,6 +21,7 @@ const emit = defineEmits<{
 }>();
 
 const fileInput = ref<HTMLInputElement | null>(null);
+const gridRef = ref<HTMLDivElement | null>(null);
 
 const hasAny = computed(() => props.previewPhotos.length > 0);
 
@@ -31,6 +32,46 @@ const sortedPhotos = computed(() =>
     (a, b) => a.addedAt - b.addedAt || a.id.localeCompare(b.id),
   ),
 );
+
+// ── Auto-scroll to bottom when new photos are added ─────────────────────
+
+watch(
+  () => props.previewPhotos.length,
+  (newLen, oldLen) => {
+    if (newLen > (oldLen ?? 0)) {
+      nextTick(() => {
+        if (gridRef.value) {
+          gridRef.value.scrollTop = gridRef.value.scrollHeight;
+        }
+      });
+    }
+  },
+);
+
+// ── Preview load tracking ─────────────────────────────────────────────────
+
+const loadingIds = reactive(new Set<string>());
+
+watch(
+  () => props.previewPhotos.map((p) => p.id),
+  (newIds, oldIds) => {
+    const oldSet = new Set(oldIds ?? []);
+    const newSet = new Set(newIds);
+    for (const id of newIds) {
+      if (!oldSet.has(id)) loadingIds.add(id);
+    }
+    for (const id of [...loadingIds]) {
+      if (!newSet.has(id)) loadingIds.delete(id);
+    }
+  },
+  { flush: "sync" },
+);
+
+function onImgDone(id: string) {
+  loadingIds.delete(id);
+}
+
+const isLoadingPreviews = computed(() => loadingIds.size > 0);
 
 // ── Native file input/drop handlers ───────────────────────────────────────
 
@@ -73,6 +114,7 @@ function onDrop(event: DragEvent) {
     <button
       type="button"
       :class="['dragger', { 'dragger--compact': hasAny }]"
+      :disabled="isLoadingPreviews"
       @click="openFilePicker"
       @dragenter.prevent
       @dragover.prevent
@@ -92,7 +134,7 @@ function onDrop(event: DragEvent) {
     </button>
 
     <!-- Grid: 5 fixed columns, square cells with contain -->
-    <div v-if="hasAny" class="grid">
+    <div v-if="hasAny" ref="gridRef" class="grid">
       <div
         v-for="photo in sortedPhotos"
         :key="photo.id"
@@ -101,11 +143,16 @@ function onDrop(event: DragEvent) {
       >
         <img
           :src="photo.previewUrl"
-          loading="lazy"
-          decoding="async"
+          loading="eager"
+          decoding="sync"
           :alt="photo.name"
           class="cell-img"
+          @load="onImgDone(photo.id)"
+          @error="onImgDone(photo.id)"
         />
+        <div v-if="loadingIds.has(photo.id)" class="cell-loading">
+          <span class="cell-spinner" />
+        </div>
         <button
           type="button"
           class="cell-remove"
@@ -120,20 +167,21 @@ function onDrop(event: DragEvent) {
     <!-- Footer -->
     <div class="footer">
       <div class="footer-actions">
-        <NButton @click="emit('back')">Back</NButton>
-        <NButton
-          type="primary"
-          size="large"
-          :disabled="photoCount === 0"
-          style="flex: 1"
-          @click="emit('continue')"
-        >
-          {{
-            photoCount > 0
-              ? `Continue with ${photoCount} photo${photoCount !== 1 ? "s" : ""} \u2192`
-              : "Select photos to continue"
-          }}
-        </NButton>
+        <NButton quaternary @click="emit('back')">Back</NButton>
+        <div class="footer-right">
+          <span v-if="photoCount > 0" class="footer-count">
+            {{ photoCount }} photo{{ photoCount !== 1 ? "s" : "" }} selected
+          </span>
+          <NButton
+            type="primary"
+            :disabled="photoCount === 0 || isLoadingPreviews"
+            @click="emit('continue')"
+          >
+            {{
+              photoCount > 0 ? `Continue \u2192` : "Select photos to continue"
+            }}
+          </NButton>
+        </div>
       </div>
     </div>
   </div>
@@ -207,17 +255,23 @@ function onDrop(event: DragEvent) {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 7px 16px;
-  min-height: 34px;
-  opacity: 0.55;
+  padding: 6px 16px;
+  min-height: 32px;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.18);
+  border-style: solid;
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .dragger--compact:hover {
-  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(99, 226, 183, 0.5);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .dragger-add-label {
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 /* ── Grid — 5 fixed columns ──────────────────────────────────────────────── */
@@ -284,6 +338,34 @@ function onDrop(event: DragEvent) {
   background: rgba(220, 50, 50, 0.9);
 }
 
+/* ── Per-cell loading overlay ────────────────────────────────────────────── */
+
+.cell-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.cell-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
+  animation: cell-spin 0.65s linear infinite;
+}
+
+@keyframes cell-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ── Footer ──────────────────────────────────────────────────────────────── */
 
 .footer {
@@ -296,6 +378,20 @@ function onDrop(event: DragEvent) {
 
 .footer-actions {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
+}
+
+.footer-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.footer-count {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
 }
 </style>

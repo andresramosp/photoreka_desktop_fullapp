@@ -36,6 +36,17 @@ export async function createSession(): Promise<SessionInfo> {
   };
 }
 
+export async function createFreeSession(): Promise<SessionInfo> {
+  const { data } = await client().post("/api/geo-recovery/free-session");
+  return {
+    sessionToken: data.sessionToken,
+    sessionId: data.sessionId,
+    maxPhotos: data.maxPhotos,
+    allowedMimeTypes: data.allowedMimeTypes,
+    isFree: true,
+  };
+}
+
 export async function getUploadUrl(
   token: string,
   clientPhotoId: string,
@@ -71,7 +82,7 @@ export async function mockPay(token: string): Promise<void> {
 
 export async function startJob(token: string): Promise<GeoRecoveryJobState> {
   const { data } = await client().post(
-    "/api/geo-recovery/start_",
+    "/api/geo-recovery/start",
     {},
     { headers: { Authorization: `Bearer ${token}` } },
   );

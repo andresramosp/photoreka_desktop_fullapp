@@ -20,7 +20,7 @@ import {
   shallowRef,
   watch,
 } from "vue";
-import { useMessage } from "naive-ui";
+import { useDialog, useMessage } from "naive-ui";
 import L from "leaflet";
 import "leaflet.markercluster";
 import "leaflet/dist/leaflet.css";
@@ -29,7 +29,10 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import pLimit from "p-limit";
 
 import {
+  createFreeSession,
   createSession,
+  geocodingRetrieve,
+  geocodingSuggest,
   mockPay,
   pollJob,
   startJob,
@@ -69,9 +72,12 @@ import type {
 } from "@/utils/geoRecovery/types";
 
 import GeoRecoveryWizard from "@/components/geoRecovery/GeoRecoveryWizard.vue";
-import GeoRecoveryCorrectionPopup from "@/components/geoRecovery/GeoRecoveryCorrectionPopup.vue";
+import LocationCorrectionPopup, {
+  type LocationSuggestion,
+} from "@/components/world-map/LocationCorrectionPopup.vue";
 
 const message = useMessage();
+const dialog = useDialog();
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -112,6 +118,10 @@ const correctionShow = ref(false);
 const correctionPhotoId = ref<string | null>(null);
 const correctionThumb = ref<string | null>(null);
 const correctionAddress = ref<string | null>(null);
+const correctionSuggestions = ref<LocationSuggestion[]>([]);
+const correctionSearching = ref(false);
+const correctionSaving = ref(false);
+const correctionLimitReached = ref(false);
 
 // ── Computed ───────────────────────────────────────────────────────────────
 
@@ -203,6 +213,47 @@ async function handleAcceptAndStart() {
     stepIndex.value = 1;
   } catch (error: any) {
     message.error(error?.message ?? "Could not start a session");
+  }
+}
+
+// Free geo-inference on the pre-assessed photos (no payment required).
+// Uses a dedicated backend endpoint that enforces daily rate limits:
+// 1 free run per IP per day, 10 total per day.
+async function handleFreeRun(files: File[]) {
+  try {
+    const info = await createFreeSession();
+    session.value = info;
+    await saveSession(info);
+    await requestPersistentStorage();
+    stepIndex.value = 3;
+    uploading.value = true;
+    uploadProgress.value = {
+      total: files.length,
+      done: 0,
+      failed: 0,
+      current: null,
+    };
+    const result = await uploadFiles({
+      token: info.sessionToken,
+      files,
+      onProgress: (p) => (uploadProgress.value = p),
+    });
+    photos.value = await listPhotos();
+    uploading.value = false;
+    if (result.failed.length > 0) {
+      message.warning(
+        `${result.failed.length} photo(s) could not be uploaded.`,
+      );
+    }
+    await handleStart();
+  } catch (error: any) {
+    uploading.value = false;
+    message.error(
+      error?.response?.data?.error ??
+        error?.message ??
+        "Could not start free geo-inference",
+    );
+    stepIndex.value = 0;
   }
 }
 
@@ -548,33 +599,83 @@ function openCorrectionPopup(data: GeoPhotoMarkerData) {
   correctionPhotoId.value = data.photo.clientPhotoId;
   correctionThumb.value = data.thumbUrl;
   correctionAddress.value = getResultAddress(data.result);
+  correctionSuggestions.value = [];
+  correctionSearching.value = false;
+  correctionSaving.value = false;
+  correctionLimitReached.value = false;
   correctionShow.value = true;
 }
 
-async function onCorrectionConfirmed(payload: {
-  photoId: string;
-  lat: number;
-  lng: number;
-  formattedAddress: string;
+async function handleCorrectionSearch(payload: {
+  query: string;
+  sessionToken: string;
 }) {
-  const record = await getPhoto(payload.photoId);
+  if (!session.value?.sessionToken) return;
+  correctionSearching.value = true;
+  try {
+    const data = await geocodingSuggest(
+      session.value.sessionToken,
+      payload.query,
+      payload.sessionToken,
+    );
+    correctionSuggestions.value = data.suggestions ?? [];
+  } catch (error: any) {
+    console.warn("[GeoRecoveryView] correction suggest error:", error?.message);
+    correctionSuggestions.value = [];
+  } finally {
+    correctionSearching.value = false;
+  }
+}
+
+async function onCorrectionConfirmed(payload: {
+  mapboxId: string;
+  sessionToken: string;
+  displayAddress: string;
+}) {
+  if (!correctionPhotoId.value || !session.value?.sessionToken) return;
+  correctionSaving.value = true;
+  let geo: { lat: number; lng: number; formattedAddress: string };
+  try {
+    geo = await geocodingRetrieve(
+      session.value.sessionToken,
+      payload.mapboxId,
+      payload.sessionToken,
+    );
+    if (!geo || geo.lat == null || geo.lng == null)
+      throw new Error("Could not retrieve coordinates");
+  } catch (error: any) {
+    if (error?.response?.status === 429) {
+      correctionLimitReached.value = true;
+    } else {
+      console.warn(
+        "[GeoRecoveryView] correction confirm error:",
+        error?.message,
+      );
+    }
+    correctionSaving.value = false;
+    return;
+  }
+  correctionSaving.value = false;
+  correctionShow.value = false;
+
+  const photoId = correctionPhotoId.value;
+  const record = await getPhoto(photoId);
   if (!record) return;
-  record.manualLat = payload.lat;
-  record.manualLng = payload.lng;
+  record.manualLat = geo.lat;
+  record.manualLng = geo.lng;
   await putPhoto(record);
   photos.value = await listPhotos();
 
-  // Reflect the new address in the stored result so tooltips show the corrected
-  // place name.
-  const current = results.value[payload.photoId];
+  // Reflect the new address in the stored result so tooltips show the corrected place name.
+  const current = results.value[photoId];
   const updated: GeoRecoveryResult = {
     status: "located",
     source: "llm",
     reliability: "very_likely",
     granularity: "place",
-    lat: payload.lat,
-    lng: payload.lng,
-    place: payload.formattedAddress,
+    lat: geo.lat,
+    lng: geo.lng,
+    place: geo.formattedAddress ?? payload.displayAddress,
     city:
       current && current.status === "located" ? (current.city ?? null) : null,
     region:
@@ -584,7 +685,7 @@ async function onCorrectionConfirmed(payload: {
         ? (current.country ?? null)
         : null,
   };
-  results.value = { ...results.value, [payload.photoId]: updated };
+  results.value = { ...results.value, [photoId]: updated };
   await saveResults(results.value);
   message.success("Location updated");
 }
@@ -596,7 +697,12 @@ async function handleDownload() {
   zipProgress.value = null;
   try {
     const summary = await buildZip(
-      { includeUnlocated: includeUnlocated.value },
+      {
+        includeUnlocated: includeUnlocated.value,
+        // watermarkText: session.value?.isFree
+        //   ? "Free Geo-Inference by Photoreka"
+        //   : undefined,
+      },
       (p) => (zipProgress.value = p),
     );
     const url = URL.createObjectURL(summary.blob);
@@ -621,18 +727,21 @@ async function handleDownload() {
 
 // ── Reset ─────────────────────────────────────────────────────────────────
 
-async function handleStartOver() {
-  if (
-    !window.confirm(
-      "This will delete the current session, uploaded thumbs metadata, and the original photos kept in this browser. Continue?",
-    )
-  ) {
-    return;
-  }
+function handleStartOver() {
+  dialog.error({
+    title: "Start over?",
+    content:
+      "This will delete the current session, uploaded thumbs metadata, and the original photos kept in this browser.",
+    positiveText: "Delete and start over",
+    negativeText: "Cancel",
+    onPositiveClick: () => doStartOver(),
+  });
+}
+
+async function doStartOver() {
   stopPolling();
   await wipeAll();
   revokeAllThumbUrls();
-  // Revoke all preview object URLs
   for (const p of previewPhotos.value) URL.revokeObjectURL(p.previewUrl);
   previewPhotos.value = [];
   previewFileKeys.clear();
@@ -679,6 +788,7 @@ const hoveredTooltipAddress = computed(() => {
       :has-results="hasResults"
       :include-unlocated="includeUnlocated"
       @accepted="handleAcceptAndStart"
+      @run-free="handleFreeRun"
       @file-change="onFilesChanged"
       @continue="stepIndex = 2"
       @back="stepIndex--"
@@ -713,12 +823,15 @@ const hoveredTooltipAddress = computed(() => {
     </Transition>
 
     <!-- Correction popup -->
-    <GeoRecoveryCorrectionPopup
+    <LocationCorrectionPopup
       v-model:show="correctionShow"
-      :api-token="session?.sessionToken ?? null"
-      :photo-id="correctionPhotoId"
       :photo-thumbnail="correctionThumb"
       :current-address="correctionAddress"
+      :suggestions="correctionSuggestions"
+      :is-searching="correctionSearching"
+      :is-saving="correctionSaving"
+      :session-limit-reached="correctionLimitReached"
+      @search="handleCorrectionSearch"
       @confirmed="onCorrectionConfirmed"
     />
   </div>

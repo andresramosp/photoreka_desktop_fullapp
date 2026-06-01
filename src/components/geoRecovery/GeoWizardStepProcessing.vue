@@ -23,7 +23,9 @@ const uploadPct = computed(() => {
   <div class="geo-processing-card">
     <div class="geo-processing-head">
       <NSpin size="small" />
-      <h3>{{ uploading ? "Uploading photos…" : "Analyzing your photos" }}</h3>
+      <h3>
+        {{ uploading ? "Preparing thumbnails…" : "Analyzing your photos" }}
+      </h3>
     </div>
     <p class="muted small">{{ stageLabel }}</p>
 

@@ -369,7 +369,7 @@
                   />
                   <div class="ail-warning-confirm">
                     <span>
-                      Most of your photos don't seem suitable for geolocation.
+                      Some of your photos don't seem suitable for geolocation.
                       This may be due to their content (e.g. mostly indoor,
                       studio, abstract shots), or to their technical quality.
                     </span>
@@ -416,8 +416,8 @@
                 <div class="ail-card">
                   <span>Estimated cost interval</span>
                   <strong
-                    >{{ adjustedCredits.min }} –
-                    {{ adjustedCredits.max }} credits</strong
+                    >{{ adjustedCredits.min.toFixed(1) }} –
+                    {{ adjustedCredits.max.toFixed(1) }} credits</strong
                   >
                 </div>
               </div>

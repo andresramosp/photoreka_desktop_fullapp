@@ -289,6 +289,30 @@ export async function injectGpsIntoPng(
   return new Blob(filtered, { type: "image/png" });
 }
 
+// ── EXIF copy (JPEG only) ──────────────────────────────────────────────────
+
+/**
+ * Copy the complete EXIF block from `source` JPEG into `target` JPEG.
+ * Used to restore EXIF after a canvas round-trip (which strips all metadata).
+ */
+export async function copyJpegExif(source: Blob, target: Blob): Promise<Blob> {
+  const srcBinary = await blobToBinaryString(source);
+  const srcDataUri = `data:image/jpeg;base64,${btoa(srcBinary)}`;
+  let exifObj: any;
+  try {
+    exifObj = piexif.load(srcDataUri);
+  } catch {
+    // No EXIF in source – return target unchanged
+    return target;
+  }
+  const tgtBinary = await blobToBinaryString(target);
+  const tgtDataUri = `data:image/jpeg;base64,${btoa(tgtBinary)}`;
+  const exifBytes = piexif.dump(exifObj);
+  const newDataUri = piexif.insert(exifBytes, tgtDataUri);
+  const newBinary = atob(newDataUri.split(",")[1]);
+  return binaryStringToBlob(newBinary, "image/jpeg");
+}
+
 // ── High-level dispatch ────────────────────────────────────────────────────
 
 export async function injectGps(

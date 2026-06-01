@@ -2448,9 +2448,9 @@ const formatRelativeDate = (dateStr: string) => {
   gap: 4px;
   padding: 2px 10px 2px 7px;
   /* border-radius: var(--radius-round); */
-  border: 1px solid var(--border-color);
-  background: var(--bg-surface);
-  color: var(--text-tertiary);
+  border: 1px solid var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 6%, var(--bg-surface));
+  color: var(--accent-color);
   font-size: 11px;
   cursor: pointer;
   transition: all 0.15s;

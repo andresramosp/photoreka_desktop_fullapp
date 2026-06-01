@@ -94,7 +94,10 @@ const RESULTS_KEY = "all";
 export async function saveResults(
   results: GeoRecoveryResultsMap,
 ): Promise<void> {
-  (await db()).put(STORE_RESULTS, results, RESULTS_KEY);
+  // JSON round-trip strips Vue reactive Proxies (and any other non-cloneable
+  // wrappers) before handing the value to IDB's structured clone algorithm.
+  const plain = JSON.parse(JSON.stringify(results)) as GeoRecoveryResultsMap;
+  (await db()).put(STORE_RESULTS, plain, RESULTS_KEY);
 }
 
 export async function loadResults(): Promise<GeoRecoveryResultsMap> {

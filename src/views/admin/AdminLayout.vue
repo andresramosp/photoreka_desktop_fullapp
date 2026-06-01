@@ -118,6 +118,7 @@ import {
   WalletOutline as CostsIcon,
   ReceiptOutline as PaymentsIcon,
   PulseOutline as HealthIcon,
+  LocationOutline as GeoRecoveryIcon,
   SettingsOutline as SystemIcon,
   MenuOutline as MenuIcon,
   LogOutOutline as LogOutIcon,
@@ -145,6 +146,7 @@ const menuItems = [
   { label: "Costs", key: "admin-costs", icon: CostsIcon },
   { label: "Payments", key: "admin-payments", icon: PaymentsIcon },
   { label: "Health", key: "admin-health", icon: HealthIcon },
+  { label: "Geo Recovery", key: "admin-geo-recovery", icon: GeoRecoveryIcon },
   { label: "System", key: "admin-system", icon: SystemIcon },
 ];
 

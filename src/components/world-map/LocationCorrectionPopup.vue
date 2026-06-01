@@ -72,7 +72,7 @@
                       v-model:value="query"
                       placeholder="Search address or place…"
                       clearable
-                      :loading="isLoading"
+                      :loading="isSearching"
                       @input="onQueryInput"
                       @clear="clearSearch"
                       @keydown.escape="handleClose"
@@ -92,7 +92,7 @@
 
                   <!-- Suggestions dropdown — absolutely positioned so it overlays without stretching the card -->
                   <div
-                    v-if="suggestions.length > 0"
+                    v-if="suggestions && suggestions.length > 0"
                     class="loc-correction-suggestions"
                   >
                     <button
@@ -125,9 +125,9 @@
                 <div
                   v-if="
                     query.length >= 2 &&
-                    !isLoading &&
+                    !isSearching &&
                     searched &&
-                    suggestions.length === 0
+                    (!suggestions || suggestions.length === 0)
                   "
                   class="loc-correction-no-results"
                 >
@@ -185,50 +185,54 @@
 
 <script setup lang="ts">
 import { ref, watch, nextTick } from "vue";
-import { api } from "@/utils/axios";
 
-const props = defineProps<{
-  show: boolean;
-  photoId: string | number | null;
-  photoName?: string;
-  photoThumbnail?: string | null;
-  currentAddress?: string | null;
-}>();
-
-const emit = defineEmits<{
-  "update:show": [value: boolean];
-  confirmed: [
-    payload: {
-      lat: number;
-      lng: number;
-      formattedAddress: string;
-      placeId: string | null;
-      granularity: string | null;
-    },
-  ];
-}>();
-
-type Step = "search" | "confirm";
-
-interface Suggestion {
+export interface LocationSuggestion {
   mapbox_id: string;
   name: string;
   place_formatted?: string;
   full_address?: string;
 }
 
+const props = defineProps<{
+  show: boolean;
+  photoThumbnail?: string | null;
+  currentAddress?: string | null;
+  /** Suggestions fed back by the parent after a `search` event. */
+  suggestions?: LocationSuggestion[];
+  /** Show a loading spinner on the search input. */
+  isSearching?: boolean;
+  /** Show a loading spinner on the Confirm button. */
+  isSaving?: boolean;
+  /** Show the monthly-limit warning message. */
+  sessionLimitReached?: boolean;
+}>();
+
+const emit = defineEmits<{
+  "update:show": [value: boolean];
+  /**
+   * Fired (debounced) when the user types ≥ 2 characters.
+   * The parent should call its suggest API and update `suggestions`.
+   */
+  search: [payload: { query: string; sessionToken: string }];
+  /**
+   * Fired when the user clicks Confirm.
+   * The parent should call retrieve, persist the change, and close via `update:show`.
+   */
+  confirmed: [
+    payload: { mapboxId: string; sessionToken: string; displayAddress: string },
+  ];
+}>();
+
+type Step = "search" | "confirm";
+
 const inputRef = ref<any>(null);
 const step = ref<Step>("search");
 const query = ref("");
-const suggestions = ref<Suggestion[]>([]);
-const isLoading = ref(false);
-const isSaving = ref(false);
 const searched = ref(false);
-const sessionLimitReached = ref(false);
 const pendingAddress = ref("");
 const pendingMapboxId = ref("");
 
-/** UUID session token — one per popup open, groups all suggest calls into one billable session */
+/** One token per popup open — groups all suggest+retrieve into one Mapbox session. */
 const sessionToken = ref("");
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -237,7 +241,6 @@ function generateSessionToken(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
     return crypto.randomUUID();
   }
-  // Fallback for environments without crypto.randomUUID
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
     const v = c === "x" ? r : (r & 0x3) | 0x8;
@@ -248,11 +251,7 @@ function generateSessionToken(): string {
 function resetState() {
   step.value = "search";
   query.value = "";
-  suggestions.value = [];
-  isLoading.value = false;
-  isSaving.value = false;
   searched.value = false;
-  sessionLimitReached.value = false;
   pendingAddress.value = "";
   pendingMapboxId.value = "";
   sessionToken.value = generateSessionToken();
@@ -263,9 +262,7 @@ watch(
   (open) => {
     if (open) {
       resetState();
-      nextTick(() => {
-        inputRef.value?.focus();
-      });
+      nextTick(() => inputRef.value?.focus());
     }
   },
 );
@@ -276,83 +273,34 @@ function handleClose() {
 
 function onQueryInput() {
   searched.value = false;
-  suggestions.value = [];
   if (debounceTimer) clearTimeout(debounceTimer);
   if (query.value.length < 2) return;
-  debounceTimer = setTimeout(fetchSuggestions, 280);
+  debounceTimer = setTimeout(emitSearch, 280);
 }
 
 function clearSearch() {
-  suggestions.value = [];
   searched.value = false;
 }
 
-async function fetchSuggestions() {
+function emitSearch() {
   if (!query.value || query.value.length < 2) return;
-  isLoading.value = true;
-  try {
-    const { data } = await api.post("/api/geocoding/suggest", {
-      query: query.value,
-      session_token: sessionToken.value,
-    });
-    suggestions.value = (data.suggestions ?? []) as Suggestion[];
-    searched.value = true;
-  } catch (error: any) {
-    console.warn("[LocationCorrectionPopup] suggest error:", error?.message);
-    suggestions.value = [];
-    searched.value = true;
-  } finally {
-    isLoading.value = false;
-  }
+  searched.value = true;
+  emit("search", { query: query.value, sessionToken: sessionToken.value });
 }
 
-async function selectSuggestion(suggestion: Suggestion) {
-  pendingMapboxId.value = suggestion.mapbox_id;
-  pendingAddress.value =
-    suggestion.full_address ||
-    suggestion.place_formatted ||
-    suggestion.name ||
-    "";
+function selectSuggestion(s: LocationSuggestion) {
+  pendingMapboxId.value = s.mapbox_id;
+  pendingAddress.value = s.full_address || s.place_formatted || s.name || "";
   step.value = "confirm";
 }
 
-async function confirmUpdate() {
-  if (!props.photoId || !pendingMapboxId.value) return;
-  isSaving.value = true;
-  try {
-    // Retrieve coordinates (this finalises the session and increments the monthly counter)
-    const { data: geo } = await api.post("/api/geocoding/retrieve", {
-      mapbox_id: pendingMapboxId.value,
-      session_token: sessionToken.value,
-    });
-
-    if (!geo || geo.lat == null || geo.lng == null) {
-      throw new Error("Could not retrieve coordinates");
-    }
-
-    // Apply the new location on the backend — just pass the cache row id
-    await api.patch(`/api/photos/${props.photoId}/location`, {
-      geocodeCacheId: geo.geocodeCacheId,
-    });
-
-    emit("confirmed", {
-      lat: geo.lat,
-      lng: geo.lng,
-      formattedAddress: geo.formattedAddress ?? pendingAddress.value,
-      placeId: geo.placeId ?? null,
-      granularity: geo.granularity ?? null,
-    });
-    emit("update:show", false);
-  } catch (error: any) {
-    if (error?.response?.status === 429) {
-      sessionLimitReached.value = true;
-      step.value = "search";
-    } else {
-      console.warn("[LocationCorrectionPopup] confirm error:", error?.message);
-    }
-  } finally {
-    isSaving.value = false;
-  }
+function confirmUpdate() {
+  if (!pendingMapboxId.value) return;
+  emit("confirmed", {
+    mapboxId: pendingMapboxId.value,
+    sessionToken: sessionToken.value,
+    displayAddress: pendingAddress.value,
+  });
 }
 </script>
 

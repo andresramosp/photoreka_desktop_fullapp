@@ -34,6 +34,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   accepted: [];
+  runFree: [files: File[]];
   fileChange: [files: File[]];
   continue: [];
   back: [];
@@ -79,7 +80,11 @@ const emit = defineEmits<{
   <!-- Steps 0–2: centered modal wrapper -->
   <div v-if="stepIndex <= 2" class="geo-modal">
     <div class="geo-modal-card">
-      <GeoWizardStepWelcome v-if="stepIndex === 0" @start="emit('accepted')" />
+      <GeoWizardStepWelcome
+        v-if="stepIndex === 0"
+        @start="emit('accepted')"
+        @run-free="emit('runFree', $event)"
+      />
       <GeoWizardStepUpload
         v-else-if="stepIndex === 1"
         :max-photos="maxPhotos"

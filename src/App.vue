@@ -23,148 +23,154 @@
     :theme-overrides="themeOverrides"
   >
     <n-notification-provider>
-      <n-message-provider>
-        <!-- Landing Page Layout (no sidebar) -->
-        <router-view
-          v-if="
-            route.name === 'landing' ||
-            route.name === 'canvas-playground' ||
-            route.name === 'free-framer' ||
-            route.name === '3d-catalog' ||
-            route.name === 'shared-atlas' ||
-            route.name === 'shared-series' ||
-            route.name === 'maintenance' ||
-            route.name === 'reset-password' ||
-            route.name === 'confirm-email' ||
-            route.name === 'auth-callback' ||
-            route.name === 'auth-error' ||
-            route.name === 'lr-auth' ||
-            route.name === 'geo-recovery'
-          "
-        />
+      <n-dialog-provider>
+        <n-message-provider>
+          <!-- Landing Page Layout (no sidebar) -->
+          <router-view
+            v-if="
+              route.name === 'landing' ||
+              route.name === 'canvas-playground' ||
+              route.name === 'free-framer' ||
+              route.name === '3d-catalog' ||
+              route.name === 'shared-atlas' ||
+              route.name === 'shared-series' ||
+              route.name === 'maintenance' ||
+              route.name === 'reset-password' ||
+              route.name === 'confirm-email' ||
+              route.name === 'auth-callback' ||
+              route.name === 'auth-error' ||
+              route.name === 'lr-auth' ||
+              route.name === 'geo-recovery'
+            "
+          />
 
-        <!-- Authentication Layout -->
-        <router-view
-          v-else-if="!userStore.isAuthenticated && route.name === 'auth'"
-        />
+          <!-- Authentication Layout -->
+          <router-view
+            v-else-if="!userStore.isAuthenticated && route.name === 'auth'"
+          />
 
-        <!-- Profile Setup Layout (authenticated but special case) -->
-        <router-view
-          v-else-if="
-            route.name === 'profile-setup' ||
-            route.name === 'storage-plan-setup'
-          "
-        />
+          <!-- Profile Setup Layout (authenticated but special case) -->
+          <router-view
+            v-else-if="
+              route.name === 'profile-setup' ||
+              route.name === 'storage-plan-setup'
+            "
+          />
 
-        <!-- Authenticated App Layout -->
-        <template v-else>
-          <!-- Desktop Layout -->
-          <n-layout
-            v-if="!isMobile"
-            has-sider
-            style="height: 100vh"
-            class="app-layout"
-            :style="{
-              '--total-header-offset': showDashboardHeader ? '112px' : '48px',
-            }"
-          >
-            <DashboardSidebar />
-            <n-layout class="main-layout">
-              <DashboardHeader v-if="showDashboardHeader" />
-              <n-layout-content
-                class="main-content"
-                :style="{
-                  height: showDashboardHeader ? 'calc(100vh - 64px)' : '100vh',
-                }"
-              >
-                <!-- Mostrar loader mientras la app se inicializa (solo en vistas autenticadas) -->
-                <!-- routerReady evita que el loader aparezca brevemente en rutas admin -->
-                <AppInitLoader v-if="!isAppReady && routerReady" />
-                <router-view
-                  v-else-if="isAppReady"
-                  v-slot="{ Component, route }"
+          <!-- Authenticated App Layout -->
+          <template v-else>
+            <!-- Desktop Layout -->
+            <n-layout
+              v-if="!isMobile"
+              has-sider
+              style="height: 100vh"
+              class="app-layout"
+              :style="{
+                '--total-header-offset': showDashboardHeader ? '112px' : '48px',
+              }"
+            >
+              <DashboardSidebar />
+              <n-layout class="main-layout">
+                <DashboardHeader v-if="showDashboardHeader" />
+                <n-layout-content
+                  class="main-content"
+                  :style="{
+                    height: showDashboardHeader
+                      ? 'calc(100vh - 64px)'
+                      : '100vh',
+                  }"
                 >
-                  <KeepAlive :include="getKeepAliveComponents()">
-                    <component :is="Component" />
-                  </KeepAlive>
-                </router-view>
-              </n-layout-content>
+                  <!-- Mostrar loader mientras la app se inicializa (solo en vistas autenticadas) -->
+                  <!-- routerReady evita que el loader aparezca brevemente en rutas admin -->
+                  <AppInitLoader v-if="!isAppReady && routerReady" />
+                  <router-view
+                    v-else-if="isAppReady"
+                    v-slot="{ Component, route }"
+                  >
+                    <KeepAlive :include="getKeepAliveComponents()">
+                      <component :is="Component" />
+                    </KeepAlive>
+                  </router-view>
+                </n-layout-content>
+              </n-layout>
             </n-layout>
-          </n-layout>
 
-          <!-- Mobile Layout -->
-          <div
-            v-else
-            class="mobile-layout"
-            :style="{
-              '--total-header-offset': showDashboardHeader ? '112px' : '48px',
-            }"
-          >
-            <!-- Mobile sidebar overlay - completely separate from layout -->
-            <DashboardSidebar
-              :mobile-menu-open="mobileMenuOpen"
-              @close-mobile-menu="mobileMenuOpen = false"
-            />
-
-            <!-- Main mobile content -->
-            <div class="mobile-content">
-              <DashboardHeader
-                v-if="showDashboardHeader"
-                @toggle-mobile-menu="toggleMobileMenu"
+            <!-- Mobile Layout -->
+            <div
+              v-else
+              class="mobile-layout"
+              :style="{
+                '--total-header-offset': showDashboardHeader ? '112px' : '48px',
+              }"
+            >
+              <!-- Mobile sidebar overlay - completely separate from layout -->
+              <DashboardSidebar
+                :mobile-menu-open="mobileMenuOpen"
+                @close-mobile-menu="mobileMenuOpen = false"
               />
-              <div
-                class="main-content mobile-main-content"
-                :style="{
-                  height: showDashboardHeader ? 'calc(100vh - 64px)' : '100vh',
-                }"
-              >
-                <!-- Mostrar loader mientras la app se inicializa (solo en vistas autenticadas) -->
-                <!-- routerReady evita que el loader aparezca brevemente en rutas admin -->
-                <AppInitLoader v-if="!isAppReady && routerReady" />
-                <router-view
-                  v-else-if="isAppReady"
-                  v-slot="{ Component, route }"
+
+              <!-- Main mobile content -->
+              <div class="mobile-content">
+                <DashboardHeader
+                  v-if="showDashboardHeader"
+                  @toggle-mobile-menu="toggleMobileMenu"
+                />
+                <div
+                  class="main-content mobile-main-content"
+                  :style="{
+                    height: showDashboardHeader
+                      ? 'calc(100vh - 64px)'
+                      : '100vh',
+                  }"
                 >
-                  <KeepAlive :include="getKeepAliveComponents()">
-                    <component :is="Component" />
-                  </KeepAlive>
-                </router-view>
+                  <!-- Mostrar loader mientras la app se inicializa (solo en vistas autenticadas) -->
+                  <!-- routerReady evita que el loader aparezca brevemente en rutas admin -->
+                  <AppInitLoader v-if="!isAppReady && routerReady" />
+                  <router-view
+                    v-else-if="isAppReady"
+                    v-slot="{ Component, route }"
+                  >
+                    <KeepAlive :include="getKeepAliveComponents()">
+                      <component :is="Component" />
+                    </KeepAlive>
+                  </router-view>
+                </div>
               </div>
             </div>
-          </div>
 
-          <!-- Floating Request Access Button (solo en modo demo) -->
-          <FloatingRequestAccessButton />
+            <!-- Floating Request Access Button (solo en modo demo) -->
+            <FloatingRequestAccessButton />
 
-          <!-- Confetti Effect for first process completion -->
-          <ConfettiEffect
-            :show="showConfetti"
-            @hide="hideConfetti"
-            :duration="4000"
-            :colors="[
-              'var(--accent-color)',
-              '#06b6d4',
-              '#10b981',
-              '#f59e0b',
-              '#ef4444',
-              '#f43f5e',
-            ]"
-            :count="120"
-          />
+            <!-- Confetti Effect for first process completion -->
+            <ConfettiEffect
+              :show="showConfetti"
+              @hide="hideConfetti"
+              :duration="4000"
+              :colors="[
+                'var(--accent-color)',
+                '#06b6d4',
+                '#10b981',
+                '#f59e0b',
+                '#ef4444',
+                '#f43f5e',
+              ]"
+              :count="120"
+            />
 
-          <!-- Mobile Welcome Banner -->
-          <MobileWelcomeBanner />
+            <!-- Mobile Welcome Banner -->
+            <MobileWelcomeBanner />
 
-          <!-- Welcome Batch Modal (no processed photos yet) -->
-          <WelcomeBatchModal
-            :show="showWelcomeBatchModal"
-            @close="welcomeBatchDismissed = true"
-          />
+            <!-- Welcome Batch Modal (no processed photos yet) -->
+            <WelcomeBatchModal
+              :show="showWelcomeBatchModal"
+              @close="welcomeBatchDismissed = true"
+            />
 
-          <!-- Assistant Chat Widget (route-driven visibility, hidden for demo users) -->
-          <AssistantChatWidget v-if="!isDemoUser" />
-        </template>
-      </n-message-provider>
+            <!-- Assistant Chat Widget (route-driven visibility, hidden for demo users) -->
+            <AssistantChatWidget v-if="!isDemoUser" />
+          </template>
+        </n-message-provider>
+      </n-dialog-provider>
     </n-notification-provider>
   </n-config-provider>
 </template>

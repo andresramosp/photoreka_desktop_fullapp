@@ -18,14 +18,14 @@ const emit = defineEmits<{
 
 <template>
   <div class="geo-actions-bar">
-    <NCheckbox
+    <!-- <NCheckbox
       :checked="includeUnlocated"
       @update:checked="emit('update:includeUnlocated', $event)"
     >
       Include photos without a guessed location
-    </NCheckbox>
+    </NCheckbox> -->
     <NButton
-      type="primary"
+      type="info"
       :loading="zipBusy"
       :disabled="!hasResults && !includeUnlocated"
       @click="emit('download')"
@@ -33,7 +33,7 @@ const emit = defineEmits<{
       <template #icon>
         <NIcon :component="DownloadOutline" />
       </template>
-      Download ZIP
+      Download Geo-Inferred Photos
     </NButton>
     <span v-if="zipProgress" class="muted small">
       Packing {{ zipProgress.done }} / {{ zipProgress.total }}…
@@ -51,13 +51,13 @@ const emit = defineEmits<{
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 10px 16px;
-  background: var(--geo-card-bg);
-  border: 1px solid var(--geo-card-border);
+  /* padding: 10px 16px;
+  background: var(--geo-card-bg); */
+  /* border: 1px solid var(--geo-card-border);
   border-radius: 12px;
   color: #fff;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px); */
 }
 .muted {
   color: rgba(255, 255, 255, 0.6);

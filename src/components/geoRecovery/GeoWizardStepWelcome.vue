@@ -1,22 +1,332 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, computed, onUnmounted } from "vue";
 import { NButton, NCheckbox, NIcon, NTag } from "naive-ui";
 import {
   GlobeOutline,
   InformationCircleOutline,
   CreateOutline,
   FlaskOutline,
+  ImagesOutline,
+  AddOutline,
+  ArrowBackOutline,
+  CloseOutline,
 } from "@vicons/ionicons5";
+import { useImageProcessing } from "@/composables/useImageProcessing.js";
+import {
+  assessPhotos,
+  type AssessmentSummary,
+} from "@/utils/geoRecovery/assess";
+import GeoAssessPanel from "./GeoAssessPanel.vue";
 
-const emit = defineEmits<{ start: [] }>();
+const ASSESS_MAX_PHOTOS = 10;
 
-const acceptedPrivacy = ref(false);
+const emit = defineEmits<{ start: []; runFree: [files: File[]] }>();
+
+// ── Start consent (replaces the old static privacy checkbox) ───────────────
+// - No checkbox shown initially.
+// - If the user clicks Start without having run the test → checkbox appears
+//   (lazy nudge: they must acknowledge they haven't validated suitability).
+// - If the test returned a "strong" worst-case result (≥ 50 % discarded)
+//   → checkbox also appears, worded more strongly.
+const acceptedWarning = ref(false);
+const startAttempted = ref(false); // true once user clicks Start w/o prior test
+
+const assessDone = computed(() => assessResults.value !== null);
+const assessIsWorstCase = computed(() => {
+  if (!assessResults.value || assessResults.value.total === 0) return false;
+  return assessResults.value.discardedCount / assessResults.value.total >= 0.5;
+});
+
+// Checkbox is required when the user hasn't tested OR worst-case results came back.
+const showConsent = computed(
+  () => startAttempted.value || assessIsWorstCase.value,
+);
+const canStart = computed(() => !showConsent.value || acceptedWarning.value);
+
+function handleStart() {
+  // First click without a test: surface the consent checkbox instead of starting.
+  if (!assessDone.value && !startAttempted.value) {
+    startAttempted.value = true;
+    acceptedWarning.value = false;
+    return;
+  }
+  if (!canStart.value) return;
+  emit("start");
+}
+
+// ── Assess state ────────────────────────────────────────────────────
+const assessMode = ref(false); // true → show GeoAssessPanel (results)
+const assessStaging = ref(false); // true → show incremental photo grid
+const assessFileInput = ref<HTMLInputElement | null>(null);
+const assessFiles = ref<File[]>([]);
+const assessPreviews = ref<string[]>([]);
+const assessBusy = ref(false);
+const assessResults = ref<AssessmentSummary | null>(null);
+const assessError = ref<string | null>(null);
+const assessCountError = ref<string | null>(null);
+
+// ── Daily usage limit ───────────────────────────────────────────────
+const ASSESS_DAILY_LIMIT = 5;
+const ASSESS_STORAGE_KEY = "photoreka_assess_daily";
+
+interface AssessDailyRecord {
+  date: string; // YYYY-MM-DD
+  count: number;
+}
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function readAssessRecord(): AssessDailyRecord {
+  try {
+    const raw = localStorage.getItem(ASSESS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as AssessDailyRecord;
+      if (parsed.date === todayIso()) return parsed;
+    }
+  } catch {}
+  return { date: todayIso(), count: 0 };
+}
+
+function incrementAssessRecord(): void {
+  const rec = readAssessRecord();
+  rec.count += 1;
+  rec.date = todayIso();
+  localStorage.setItem(ASSESS_STORAGE_KEY, JSON.stringify(rec));
+  assessUsedToday.value = rec.count;
+}
+
+const assessUsedToday = ref(readAssessRecord().count);
+const assessLimitReached = computed(
+  () => assessUsedToday.value >= ASSESS_DAILY_LIMIT,
+);
+const assessRemaining = computed(() =>
+  Math.max(0, ASSESS_DAILY_LIMIT - assessUsedToday.value),
+);
+
+function openAssessFilePicker() {
+  if (assessLimitReached.value) return;
+  assessStaging.value = true; // navigate to the incremental photo staging grid
+}
+
+// Incremental file selection inside the staging grid
+async function onStagingFilesSelected(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const files = Array.from(input.files ?? []).filter((f) =>
+    ["image/jpeg", "image/png"].includes(f.type),
+  );
+  input.value = "";
+  if (files.length === 0) return;
+
+  // Never exceed the 10-photo cap
+  const remaining = ASSESS_MAX_PHOTOS - assessFiles.value.length;
+  if (files.length > remaining) {
+    assessCountError.value = `Only ${remaining} slot${
+      remaining === 1 ? "" : "s"
+    } left — extra photos were not added.`;
+  } else {
+    assessCountError.value = null;
+  }
+  const toAdd = files.slice(0, remaining);
+  for (const file of toAdd) {
+    assessFiles.value.push(file);
+    assessPreviews.value.push(URL.createObjectURL(file));
+  }
+
+  // Auto-trigger assessment when the grid is full
+  if (assessFiles.value.length === ASSESS_MAX_PHOTOS) {
+    assessMode.value = true;
+    assessResults.value = null;
+    assessError.value = null;
+    await runAssessment([...assessFiles.value]);
+  }
+}
+
+function removeAssessFileAt(index: number) {
+  URL.revokeObjectURL(assessPreviews.value[index]);
+  assessFiles.value.splice(index, 1);
+  assessPreviews.value.splice(index, 1);
+  assessCountError.value = null;
+}
+
+function closeStagingMode() {
+  revokeAssessPreviews();
+  assessFiles.value = [];
+  assessPreviews.value = [];
+  assessCountError.value = null;
+  assessStaging.value = false;
+}
+
+// Called when GeoAssessPanel emits 'back' — return to staging grid
+function onAssessBack() {
+  assessMode.value = false;
+  // keep assessFiles/assessPreviews so the user sees their photos again
+}
+
+// Called when GeoAssessPanel emits 'runFree'
+function onRunFree() {
+  const files = [...assessFiles.value];
+  revokeAssessPreviews();
+  assessMode.value = false;
+  assessStaging.value = false;
+  assessFiles.value = [];
+  assessPreviews.value = [];
+  assessResults.value = null;
+  startAttempted.value = false;
+  acceptedWarning.value = false;
+  emit("runFree", files);
+}
+
+// Called when GeoAssessPanel emits 'skip' — go straight to the normal paid flow
+function onSkip() {
+  closeAssessPanel();
+  assessStaging.value = false;
+  emit("start");
+}
+
+async function runAssessment(files: File[]) {
+  incrementAssessRecord();
+  assessBusy.value = true;
+  try {
+    const { resizeImage } = useImageProcessing();
+    const images = await Promise.all(
+      files.map(async (file) => {
+        const thumb = await resizeImage(file, 512, 100_000);
+        const base64 = await blobToBase64(thumb);
+        return { data: base64, mimeType: thumb.type || "image/jpeg" };
+      }),
+    );
+    assessResults.value = await assessPhotos(images);
+  } catch (error: any) {
+    assessError.value = "Assessment failed. Please try again.";
+    console.error("[Assess]", error);
+  } finally {
+    assessBusy.value = false;
+  }
+}
+
+function closeAssessPanel() {
+  revokeAssessPreviews();
+  assessMode.value = false;
+  assessFiles.value = [];
+  assessPreviews.value = [];
+  assessCountError.value = null;
+  // Keep assessResults so the welcome screen can reflect worst-case consent.
+  // Reset the manual startAttempted flag; the worst-case computed takes over if needed.
+  startAttempted.value = false;
+  acceptedWarning.value = false;
+}
+
+function revokeAssessPreviews() {
+  assessPreviews.value.forEach((url) => URL.revokeObjectURL(url));
+}
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      resolve(dataUrl.split(",")[1]);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+onUnmounted(() => revokeAssessPreviews());
 </script>
 
 <template>
-  <div class="grw-body">
-    <!-- ── Hero + How it works (shared globe background) ── -->
-    <div class="grw-hero-wrapper">
+  <!-- Assess panel — shows results after the 10-photo analysis -->
+  <GeoAssessPanel
+    v-if="assessMode"
+    :files="assessFiles"
+    :previews="assessPreviews"
+    :busy="assessBusy"
+    :results="assessResults"
+    :error="assessError"
+    @run-free="onRunFree"
+    @skip="onSkip"
+    @back="onAssessBack"
+  />
+
+  <!-- Staging grid — incremental photo selection (up to 10) -->
+  <div v-else-if="assessStaging" class="grw-staging">
+    <input
+      ref="assessFileInput"
+      type="file"
+      multiple
+      accept="image/jpeg,image/png"
+      style="display: none"
+      @change="onStagingFilesSelected"
+    />
+
+    <div class="grw-staging-header">
+      <h3 class="grw-staging-title">Free run — select 10 photos</h3>
+    </div>
+
+    <p class="grw-staging-sub">
+      Choose photos with rich context for the best results. Once you have 10, we
+      will forecast the geo-inference results.
+    </p>
+
+    <!-- 5×2 grid with filled + empty placeholder slots -->
+    <div class="grw-staging-grid">
+      <div
+        v-for="(preview, i) in assessPreviews"
+        :key="i"
+        class="grw-staging-cell"
+      >
+        <img
+          :src="preview"
+          :alt="assessFiles[i]?.name"
+          class="grw-staging-img"
+        />
+        <button class="grw-staging-remove" @click="removeAssessFileAt(i)">
+          <NIcon :component="CloseOutline" size="10" />
+        </button>
+      </div>
+      <!-- Empty placeholder slots -->
+      <div
+        v-for="n in ASSESS_MAX_PHOTOS - assessFiles.length"
+        :key="`empty-${n}`"
+        class="grw-staging-cell grw-staging-cell--empty"
+      />
+    </div>
+
+    <!-- Footer: back + error + add button -->
+    <div class="grw-staging-footer">
+      <NButton size="small" @click="closeStagingMode">
+        <template #icon>
+          <NIcon :component="ArrowBackOutline" />
+        </template>
+        Back
+      </NButton>
+      <span v-if="assessCountError" class="grw-staging-count--error">
+        {{ assessCountError }}
+      </span>
+      <NButton
+        v-if="assessFiles.length < ASSESS_MAX_PHOTOS"
+        type="info"
+        size="small"
+        @click="assessFileInput?.click()"
+      >
+        <template #icon>
+          <NIcon :component="AddOutline" />
+        </template>
+        {{
+          ASSESS_MAX_PHOTOS - assessFiles.length === 1
+            ? "Add 1 more photo"
+            : `Add ${ASSESS_MAX_PHOTOS - assessFiles.length} more photos`
+        }}
+      </NButton>
+    </div>
+  </div>
+
+  <div v-else class="grw-body">
+    <!-- ── Hero card: single-column, correct reading order ── -->
+    <div class="grw-hero-card">
       <svg
         class="grw-hero-globe"
         viewBox="0 0 200 200"
@@ -96,9 +406,7 @@ const acceptedPrivacy = ref(false);
           stroke-width="1.2"
         />
       </svg>
-
-      <!-- ── Hero ─────────────────────────────────────────── -->
-      <div class="grw-hero">
+      <div class="grw-hero-content">
         <NTag
           type="primary"
           size="small"
@@ -106,110 +414,136 @@ const acceptedPrivacy = ref(false);
           :bordered="false"
           class="grw-badge"
         >
-          <template #icon>
-            <NIcon :component="GlobeOutline" />
-          </template>
+          <template #icon><NIcon :component="GlobeOutline" /></template>
           Geo Recovery
         </NTag>
-        <p class="grw-hero-text">
-          Upload your photos and our AI will infer GPS coordinates from visual
-          context, writing them directly into your files' EXIF data.
+        <h2 class="grw-hero-headline">
+          Your photos know where they were taken
+        </h2>
+        <p class="grw-hero-sub">
+          Our AI infers GPS coordinates from visual context and writes them
+          directly into your files' EXIF data — no manual tagging needed.
         </p>
       </div>
-
-      <!-- ── How it works ──────────────────────────────────── -->
-      <div class="grw-section">
-        <div class="grw-section-label">How it works</div>
-        <ol class="grw-how-list">
-          <li>
-            Your <strong>original photos never leave this browser</strong>.
-            They're stored locally and survive reloads.
-          </li>
-          <li>
-            We send only a downscaled <strong>thumbnail</strong> per photo to
-            our server, used exclusively by the AI to recognize what it depicts.
-          </li>
-          <li>Our model proposes a location (city / place) for each photo.</li>
-          <li>
-            You download a ZIP with your <strong>original files</strong>, now
-            with GPS coordinates written into their EXIF.
-          </li>
-        </ol>
-      </div>
     </div>
 
-    <!-- ── Privacy notice ─────────────────────────────────── -->
-    <div class="grw-notice grw-notice--info">
-      <NIcon
-        :component="InformationCircleOutline"
-        size="15"
-        :color="'var(--info-color)'"
-        class="grw-notice-icon"
-      />
-      <span>
-        Originals stay on your device. Thumbnails on our servers are deleted
-        automatically after 7 days.
-        <strong>No account or email required.</strong>
-      </span>
-    </div>
-
-    <!-- ── Approximate results + Try for free ─────────────── -->
-    <div class="grw-notice grw-notice--info grw-notice--multi">
-      <div class="grw-notice-item">
+    <!-- ── 3 key facts (scannable at a glance) ────────────── -->
+    <div class="grw-facts">
+      <div class="grw-fact">
         <NIcon
           :component="InformationCircleOutline"
-          size="15"
-          :color="'var(--info-color)'"
-          class="grw-notice-icon"
+          size="16"
+          class="grw-fact-icon"
         />
-        <span>
-          <strong>Results are approximate</strong> — usually
-          <strong>city or district level</strong>, rarely street level. Several
-          photos may cluster at the same point when finer data isn't available.
-        </span>
+        <div>
+          <strong>City-level accuracy</strong>
+          <span>
+            — results may cluster at a shared point when finer data isn't
+            available.</span
+          >
+        </div>
       </div>
-      <div class="grw-notice-item">
-        <NIcon
-          :component="CreateOutline"
-          size="15"
-          :color="'var(--info-color)'"
-          class="grw-notice-icon"
-        />
-        <span>
-          A <strong>small percentage</strong> of placements may be
-          <strong>imprecise or wrong</strong>; you can always correct them
-          manually.
-        </span>
+      <div class="grw-fact">
+        <NIcon :component="CreateOutline" size="16" class="grw-fact-icon" />
+        <div>
+          <strong>Some placements may be wrong</strong>
+          <span> — review and correct them on the map before downloading.</span>
+        </div>
       </div>
-      <div class="grw-notice-cta">
-        <NButton
-          type="info"
-          size="medium"
-          @click="() => {}"
-          class="grw-test-btn"
-        >
-          <template #icon>
-            <NIcon :component="FlaskOutline" />
-          </template>
-          Test your photos
-        </NButton>
+      <div class="grw-fact">
+        <NIcon :component="ImagesOutline" size="16" class="grw-fact-icon" />
+        <div>
+          <strong>Only thumbnails leave your device</strong>
+          <span> — originals stay local. No account required.</span>
+        </div>
       </div>
     </div>
 
-    <!-- ── Footer: checkbox + start ───────────────────────── -->
+    <!-- ── How it works: 4-step horizontal flow ───────────── -->
+    <div class="grw-steps-wrapper">
+      <div class="grw-steps-label">How it works</div>
+      <div class="grw-steps">
+        <div class="grw-step">
+          <span class="grw-step-num">1</span>
+          <span class="grw-step-text">Photos stay in your browser</span>
+        </div>
+        <div class="grw-step-sep" aria-hidden="true" />
+        <div class="grw-step">
+          <span class="grw-step-num">2</span>
+          <span class="grw-step-text">Thumbnails sent to AI</span>
+        </div>
+        <div class="grw-step-sep" aria-hidden="true" />
+        <div class="grw-step">
+          <span class="grw-step-num">3</span>
+          <span class="grw-step-text">AI proposes a location</span>
+        </div>
+        <div class="grw-step-sep" aria-hidden="true" />
+        <div class="grw-step">
+          <span class="grw-step-num">4</span>
+          <span class="grw-step-text">Download with EXIF GPS</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Free run test: secondary action, clearly separated ─ -->
+    <div class="grw-test-strip">
+      <div class="grw-test-strip-text">
+        <p
+          class="grw-test-strip-label"
+          :class="{ 'grw-test-strip-label--limit': assessLimitReached }"
+        >
+          <template v-if="assessLimitReached"
+            >Daily free-run limit reached — try again tomorrow.</template
+          >
+          <template v-else
+            >Not sure if your photos will geotag well? Test up to 10 for free
+            first.</template
+          >
+        </p>
+        <span
+          v-if="!assessLimitReached && assessUsedToday > 0"
+          class="grw-test-remaining"
+        >
+          {{ assessRemaining }}
+          {{ assessRemaining === 1 ? "test" : "tests" }} remaining today
+        </span>
+      </div>
+      <NButton
+        type="default"
+        size="medium"
+        :disabled="assessLimitReached"
+        @click="openAssessFilePicker"
+        class="grw-test-btn"
+      >
+        <template #icon><NIcon :component="FlaskOutline" /></template>
+        Free Run Test
+      </NButton>
+    </div>
+
+    <!-- ── Footer: conditional consent + primary CTA ─────── -->
     <div class="grw-footer">
-      <NCheckbox v-model:checked="acceptedPrivacy">
-        I understand that originals stay in this browser and only thumbnails are
-        uploaded.
+      <NCheckbox
+        v-if="showConsent"
+        v-model:checked="acceptedWarning"
+        class="grw-consent"
+      >
+        <span v-if="assessIsWorstCase" class="grw-consent-label">
+          I understand that most of my photos are unlikely to be geolocated and
+          that the fee applies regardless of results.
+        </span>
+        <span v-else class="grw-consent-label">
+          I haven't tested my collection. I understand that not all photos can
+          be geolocated and want to proceed anyway.
+        </span>
       </NCheckbox>
       <NButton
         type="primary"
         size="large"
         block
-        :disabled="!acceptedPrivacy"
-        @click="emit('start')"
+        :disabled="!canStart"
+        @click="handleStart"
       >
-        Start
+        Start Geo-Inference Now
       </NButton>
     </div>
   </div>
@@ -222,136 +556,206 @@ const acceptedPrivacy = ref(false);
   gap: 12px;
 }
 
-/* ── Hero wrapper (shared globe) ──────────────────────────── */
+/* ── Hero card ────────────────────────────────────────────── */
 
-.grw-hero-wrapper {
+.grw-hero-card {
   position: relative;
   overflow: hidden;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  flex-direction: column;
+  padding: 22px 20px 20px;
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--primary-color) 22%, #0c0e14) 0%,
+    #0c0e14 65%
+  );
 }
 
 .grw-hero-globe {
   position: absolute;
-  right: -32px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 220px;
-  height: 220px;
-  opacity: 0.25;
+  right: -40px;
+  bottom: -40px;
+  width: 240px;
+  height: 240px;
+  opacity: 0.13;
   color: var(--primary-color);
   pointer-events: none;
 }
 
-/* ── Hero ─────────────────────────────────────────────────── */
-
-.grw-hero {
-  padding: 14px 16px 10px;
+.grw-hero-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 76%;
 }
 
 .grw-badge {
-  margin-bottom: 8px !important;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   font-size: 11px !important;
 }
 
-.grw-hero-text {
+.grw-hero-headline {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.18;
+  letter-spacing: -0.6px;
+  color: #fff;
+}
+
+.grw-hero-sub {
   margin: 0;
   font-size: 13px;
-  line-height: 1.55;
-  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.5);
 }
 
-/* ── How it works ──────────────────────────────────────────── */
+/* ── Key facts ────────────────────────────────────────────── */
 
-.grw-section {
-  padding: 10px 14px 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
-}
-
-.grw-section-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.45);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 8px;
-}
-
-.grw-how-list {
-  margin: 0;
-  padding-left: 20px;
+.grw-facts {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  font-size: 13px;
-  line-height: 1.55;
-  color: rgba(255, 255, 255, 0.75);
+  gap: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
 }
 
-.grw-how-list strong {
-  color: #fff;
+.grw-fact {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.6);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.grw-fact:last-child {
+  border-bottom: none;
+}
+
+.grw-fact strong {
+  color: rgba(255, 255, 255, 0.88);
   font-weight: 600;
 }
 
-/* ── Notices ──────────────────────────────────────────────── */
-
-.grw-notice {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border-left: 3px solid;
-  font-size: 12px;
-  line-height: 1.55;
-  color: rgba(255, 255, 255, 0.65);
-}
-
-.grw-notice--info {
-  background: color-mix(in srgb, var(--info-color) 8%, transparent);
-  border-color: color-mix(in srgb, var(--info-color) 45%, transparent);
-}
-
-.grw-notice strong {
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.grw-notice-icon {
+.grw-fact-icon {
   flex-shrink: 0;
   margin-top: 1px;
+  color: rgba(255, 255, 255, 0.3);
 }
 
-.grw-notice--multi {
-  flex-direction: column;
-  gap: 8px;
+/* ── How it works: horizontal stepper ────────────────────── */
+
+.grw-steps-wrapper {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
 }
 
-.grw-notice-item {
+.grw-steps-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.35);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 10px;
+}
+
+.grw-steps {
   display: flex;
-  align-items: flex-start;
-  gap: 9px;
-}
-
-.grw-notice-cta {
-  width: 100%;
-  padding-top: 12px;
-  padding-bottom: 2px;
-  margin-top: 4px;
-  display: flex;
-  justify-content: center;
   align-items: center;
-  border-top: 1px solid color-mix(in srgb, var(--info-color) 20%, transparent);
+  gap: 6px;
+}
+
+.grw-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.grw-step-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--primary-color) 25%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary-color) 55%, transparent);
+  color: var(--primary-color);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.grw-step-text {
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.grw-step-sep {
+  flex-shrink: 0;
+  width: 20px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.12),
+    rgba(255, 255, 255, 0.06)
+  );
+  margin-bottom: 14px; /* aligns with step number row */
+}
+
+/* ── Free-run test strip ──────────────────────────────────── */
+
+.grw-test-strip {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.grw-test-strip-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.grw-test-strip-label {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.grw-test-strip-label--limit {
+  color: rgba(255, 100, 100, 0.65);
+}
+
+.grw-test-remaining {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.28);
 }
 
 .grw-test-btn {
   font-weight: 600;
   letter-spacing: 0.2px;
-  min-width: 170px;
-  min-width: 160px;
+  flex-shrink: 0;
 }
 
 /* ── Footer ───────────────────────────────────────────────── */
@@ -362,5 +766,129 @@ const acceptedPrivacy = ref(false);
   gap: 10px;
   padding-top: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.grw-consent {
+  display: flex;
+  align-items: flex-start;
+}
+
+.grw-consent-label {
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+/* ── Staging grid ─────────────────────────────────────────────── */
+
+.grw-staging {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.grw-staging-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.grw-staging-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+
+.grw-staging-sub {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.grw-staging-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-auto-rows: calc((min(740px, 92vw) - 64px) / 5);
+  gap: 4px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.grw-staging-cell {
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #1a1a1a;
+}
+
+.grw-staging-cell--empty {
+  /* border: 1px dashed rgba(255, 255, 255, 0.12); */
+  background: rgba(255, 255, 255, 0.025);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.grw-staging-cell--empty::after {
+  content: "";
+  display: block;
+  width: 36px;
+  height: 36px;
+  opacity: 0.15;
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M21 3H3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm0 16H3V5h18v14zm-8.5-5.5-2.5 3.01L8 13l-3 4h14l-4.5-5.5z'/%3E%3C/svg%3E");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.grw-staging-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.grw-staging-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.7);
+  border: none;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.15s,
+    background 0.15s;
+  padding: 0;
+}
+.grw-staging-cell:hover .grw-staging-remove {
+  opacity: 1;
+}
+.grw-staging-remove:hover {
+  background: rgba(220, 50, 50, 0.85);
+}
+
+.grw-staging-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.grw-staging-count--error {
+  color: rgba(255, 100, 100, 0.9);
+  font-weight: 500;
 }
 </style>

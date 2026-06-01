@@ -242,14 +242,17 @@
     <!-- Location correction popup -->
     <LocationCorrectionPopup
       v-model:show="showCorrectionPopup"
-      :photo-id="correctionPhoto?.id ?? null"
-      :photo-name="correctionPhoto ? getPhotoTitle(correctionPhoto) : ''"
       :photo-thumbnail="
         correctionPhoto ? getPhotoThumbnail(correctionPhoto) : null
       "
       :current-address="
         correctionPhoto ? getPhotoAddress(correctionPhoto) : null
       "
+      :suggestions="correctionSuggestions"
+      :is-searching="correctionSearching"
+      :is-saving="correctionSaving"
+      :session-limit-reached="correctionLimitReached"
+      @search="handleCorrectionSearch"
       @confirmed="handleCorrectionConfirmed"
     />
   </div>
@@ -395,6 +398,12 @@ const mapTooltipPosition = ref({ x: 0, y: 0 });
 // Location correction popup state
 const showCorrectionPopup = ref(false);
 const correctionPhoto = ref<PhotoWithGps | null>(null);
+const correctionSuggestions = ref<
+  import("@/components/world-map/LocationCorrectionPopup.vue").LocationSuggestion[]
+>([]);
+const correctionSearching = ref(false);
+const correctionSaving = ref(false);
+const correctionLimitReached = ref(false);
 
 // Rect-select state (Ctrl/Cmd + drag over the map)
 const ctrlKeyHeld = ref(false);
@@ -1705,7 +1714,30 @@ function openCorrectionPopup(photo: PhotoWithGps) {
   if (isMobile.value) return;
   hoveredMapPhoto.value = null;
   correctionPhoto.value = photo;
+  correctionSuggestions.value = [];
+  correctionSearching.value = false;
+  correctionSaving.value = false;
+  correctionLimitReached.value = false;
   showCorrectionPopup.value = true;
+}
+
+async function handleCorrectionSearch(payload: {
+  query: string;
+  sessionToken: string;
+}) {
+  correctionSearching.value = true;
+  try {
+    const { data } = await api.post("/api/geocoding/suggest", {
+      query: payload.query,
+      session_token: payload.sessionToken,
+    });
+    correctionSuggestions.value = data.suggestions ?? [];
+  } catch (error: any) {
+    console.warn("[WorldMapView] correction suggest error:", error?.message);
+    correctionSuggestions.value = [];
+  } finally {
+    correctionSearching.value = false;
+  }
 }
 
 interface CorrectionPayload {
@@ -1716,7 +1748,43 @@ interface CorrectionPayload {
   granularity: string | null;
 }
 
-function handleCorrectionConfirmed(payload: CorrectionPayload) {
+async function handleCorrectionConfirmed(payload: {
+  mapboxId: string;
+  sessionToken: string;
+  displayAddress: string;
+}) {
+  if (!correctionPhoto.value) return;
+  correctionSaving.value = true;
+  let geo: CorrectionPayload;
+  try {
+    const { data } = await api.post("/api/geocoding/retrieve", {
+      mapbox_id: payload.mapboxId,
+      session_token: payload.sessionToken,
+    });
+    if (!data || data.lat == null || data.lng == null)
+      throw new Error("Could not retrieve coordinates");
+    geo = {
+      lat: data.lat,
+      lng: data.lng,
+      formattedAddress: data.formattedAddress ?? payload.displayAddress,
+      placeId: data.placeId ?? null,
+      granularity: data.granularity ?? null,
+    };
+    await api.patch(`/api/photos/${correctionPhoto.value.id}/location`, {
+      geocodeCacheId: data.geocodeCacheId,
+    });
+  } catch (error: any) {
+    if (error?.response?.status === 429) {
+      correctionLimitReached.value = true;
+    } else {
+      console.warn("[WorldMapView] correction confirm error:", error?.message);
+    }
+    correctionSaving.value = false;
+    return;
+  }
+  correctionSaving.value = false;
+  showCorrectionPopup.value = false;
+  const resolvedGeo = geo;
   const photo = correctionPhoto.value;
   if (!photo) return;
 
@@ -1735,12 +1803,12 @@ function handleCorrectionConfirmed(payload: CorrectionPayload) {
       inferredLocation: (storePhoto as any).inferredLocation
         ? {
             ...(storePhoto as any).inferredLocation,
-            lat: payload.lat,
-            lng: payload.lng,
-            formattedAddress: payload.formattedAddress,
-            queryNormalized: payload.formattedAddress,
+            lat: resolvedGeo.lat,
+            lng: resolvedGeo.lng,
+            formattedAddress: resolvedGeo.formattedAddress,
+            queryNormalized: resolvedGeo.formattedAddress,
             granularity:
-              payload.granularity ??
+              resolvedGeo.granularity ??
               (storePhoto as any).inferredLocation?.granularity,
           }
         : (storePhoto as any).inferredLocation,

@@ -50,6 +50,7 @@ import AdminPaymentsView from "../views/admin/AdminPaymentsView.vue";
 import AdminHealthView from "../views/admin/AdminHealthView.vue";
 import AdminSystemView from "../views/admin/AdminSystemView.vue";
 import AdminUserDetailView from "../views/admin/AdminUserDetailView.vue";
+import AdminGeoRecoveryView from "../views/admin/AdminGeoRecoveryView.vue";
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -495,6 +496,11 @@ const router = createRouter({
           path: "health",
           name: "admin-health",
           component: AdminHealthView,
+        },
+        {
+          path: "geo-recovery",
+          name: "admin-geo-recovery",
+          component: AdminGeoRecoveryView,
         },
         {
           path: "system",
