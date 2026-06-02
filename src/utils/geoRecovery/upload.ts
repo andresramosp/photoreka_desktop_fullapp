@@ -27,7 +27,7 @@ import { getPhoto, putPhoto } from "./db";
 import { convertHeicToJpeg, readTakenAtMs } from "./exif";
 import type { PhotoEntry } from "./types";
 
-const UPLOAD_CONCURRENCY = 4;
+const UPLOAD_CONCURRENCY = 10;
 
 function generateId(): string {
   // crypto.randomUUID is available everywhere we target; fall back just in case.
