@@ -68,8 +68,8 @@ const uploadPct = computed(() => {
 <style scoped>
 .geo-processing-card {
   position: absolute;
-  top: 70px;
-  right: 16px;
+  top: 8px;
+  right: 8px;
   z-index: 900;
   width: min(360px, 92vw);
   padding: 14px 16px;

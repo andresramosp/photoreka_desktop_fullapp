@@ -56,6 +56,7 @@ onMounted(async () => {
     stripe.value = stripeInstance;
     elements.value = stripeInstance.elements({
       clientSecret: pricing.clientSecret,
+      loader: "never",
       appearance: {
         theme: "night",
         variables: {

@@ -20,7 +20,7 @@ import {
   shallowRef,
   watch,
 } from "vue";
-import { useDialog, useMessage } from "naive-ui";
+import { NTag, useDialog, useMessage } from "naive-ui";
 import L from "leaflet";
 import "leaflet.markercluster";
 import "leaflet/dist/leaflet.css";
@@ -62,6 +62,7 @@ import {
 } from "@/utils/geoRecovery/markers";
 import { uploadFiles, type UploadProgress } from "@/utils/geoRecovery/upload";
 import { buildZip, type ZipProgress } from "@/utils/geoRecovery/zip";
+import { convertHeicToJpeg } from "@/utils/geoRecovery/exif";
 import type {
   GeoRecoveryJobState,
   GeoRecoveryResult,
@@ -102,6 +103,15 @@ let pollHandle: ReturnType<typeof setInterval> | null = null;
 const zipBusy = ref(false);
 const zipProgress = ref<ZipProgress | null>(null);
 const includeUnlocated = ref(false);
+
+type GranularityLevel = "place" | "city" | "region" | "country";
+type GranularityFilter = GranularityLevel[];
+const granularityFilter = ref<GranularityFilter>([
+  "place",
+  "city",
+  "region",
+  "country",
+]);
 
 // Leaflet
 const mapEl = ref<HTMLElement | null>(null);
@@ -179,6 +189,14 @@ onUnmounted(() => {
 watch(results, async () => {
   await refreshMarkers();
 });
+
+watch(
+  granularityFilter,
+  async () => {
+    await refreshMarkers();
+  },
+  { deep: true },
+);
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────
 
@@ -289,19 +307,41 @@ function generateId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-function onFilesChanged(files: File[]) {
+async function onFilesChanged(files: File[]) {
   const now = Date.now();
   let added = 0;
   for (const file of files) {
     const key = fileFingerprint(file);
     if (previewFileKeys.has(key)) continue;
     previewFileKeys.add(key);
+
+    // ⚠️ HEIC DISABLED: Uncomment the block below to re-enable HEIC → JPEG conversion
+    // Convert HEIC/HEIF → JPEG so browsers can display the preview and
+    // canvas-based resize works everywhere (Chrome/Firefox don't decode HEIC).
+    // let processedFile: File = file;
+    // const isHeic =
+    //   file.type === "image/heic" ||
+    //   file.type === "image/heif" ||
+    //   /\.(heic|heif)$/i.test(file.name);
+    // if (isHeic) {
+    //   try {
+    //     const jpegBlob = await convertHeicToJpeg(file);
+    //     const jpegName = file.name.replace(/\.(heic|heif)$/i, ".jpg");
+    //     processedFile = new File([jpegBlob], jpegName, { type: "image/jpeg" });
+    //   } catch {
+    //     // Fallback: keep original (preview may not display on non-Safari)
+    //     processedFile = file;
+    //   }
+    // }
+    const processedFile = file; // Direct assignment when HEIC is disabled
+
     previewPhotos.value.push({
       id: generateId(),
-      file,
-      previewUrl: URL.createObjectURL(file),
-      name: file.name,
+      file: processedFile,
+      previewUrl: URL.createObjectURL(processedFile),
+      name: file.name, // preserve original filename for display
       addedAt: now + added,
+      originalFingerprint: key, // track original fingerprint for proper cleanup
     });
     added++;
   }
@@ -312,13 +352,22 @@ function removePreviewPhoto(id: string) {
   if (idx === -1) return;
   const [removed] = previewPhotos.value.splice(idx, 1);
   URL.revokeObjectURL(removed.previewUrl);
-  previewFileKeys.delete(fileFingerprint(removed.file));
+  // Use originalFingerprint if available (for converted HEIC), else compute from file
+  const key = removed.originalFingerprint ?? fileFingerprint(removed.file);
+  previewFileKeys.delete(key);
 }
 
 // ── Continue: just advance to the pay step (no upload yet) ────────────────
 
 function handleContinue() {
   stepIndex.value = 2;
+}
+
+function toggleGranularity(val: GranularityLevel) {
+  const set = new Set(granularityFilter.value);
+  if (set.has(val)) set.delete(val);
+  else set.add(val);
+  granularityFilter.value = [...set];
 }
 
 // ── Payment confirmed: upload files then start analysis ───────────────────
@@ -506,6 +555,10 @@ async function refreshMarkers() {
       if (!r) continue;
       const coords = getEffectiveCoords(photo, r);
       if (!coords) continue;
+      const granularity =
+        r.status === "located" ? (r.granularity ?? "place") : "place";
+      if (!granularityFilter.value.includes(granularity as GranularityLevel))
+        continue;
       tasks.push(limit(() => createMarkerForPhoto(photo, r, coords)));
     }
 
@@ -783,14 +836,72 @@ const hoveredTooltipAddress = computed(() => {
     <!-- Always-on fullscreen map -->
     <div ref="mapEl" class="geo-recovery-map" />
 
+    <!-- Stats + filters (top-right) -->
+    <div v-if="stepIndex >= 4 && photoCount > 0" class="geo-stats-stack">
+      <div class="geo-stats-panel">
+        <div class="geo-stats-title">Inference Stats</div>
+        <div class="geo-stats-tags">
+          <NTag :bordered="false" size="small" type="success">
+            {{ locatedCount }} located
+          </NTag>
+          <NTag :bordered="false" size="small">
+            {{ unknownCount }} unknown
+          </NTag>
+          <NTag :bordered="false" size="small" type="info">
+            {{ photoCount }} total
+          </NTag>
+        </div>
+
+        <div v-if="stepIndex >= 4" class="geo-granularity-section">
+          <div class="geo-granularity-label">Location detail</div>
+          <div class="geo-granularity-buttons">
+            <button
+              type="button"
+              class="geo-granularity-btn geo-granularity-btn--place"
+              :class="{ active: granularityFilter.includes('place') }"
+              @click="toggleGranularity('place')"
+            >
+              <span class="geo-granularity-dot geo-granularity-dot--place" />
+              Place
+            </button>
+            <button
+              type="button"
+              class="geo-granularity-btn geo-granularity-btn--city"
+              :class="{ active: granularityFilter.includes('city') }"
+              @click="toggleGranularity('city')"
+            >
+              <span class="geo-granularity-dot geo-granularity-dot--city" />
+              City
+            </button>
+            <button
+              type="button"
+              class="geo-granularity-btn geo-granularity-btn--region"
+              :class="{ active: granularityFilter.includes('region') }"
+              @click="toggleGranularity('region')"
+            >
+              <span class="geo-granularity-dot geo-granularity-dot--region" />
+              Region
+            </button>
+            <button
+              type="button"
+              class="geo-granularity-btn geo-granularity-btn--country"
+              :class="{ active: granularityFilter.includes('country') }"
+              @click="toggleGranularity('country')"
+            >
+              <span class="geo-granularity-dot geo-granularity-dot--country" />
+              Country
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Wizard overlay (all steps, HUD elements, start-over) -->
     <GeoRecoveryWizard
       :step-index="stepIndex"
       :has-session="session !== null"
       :preview-photos="previewPhotos"
       :photo-count="photoCount"
-      :located-count="locatedCount"
-      :unknown-count="unknownCount"
       :max-photos="session?.maxPhotos ?? 5000"
       :uploading="uploading"
       :upload-progress="uploadProgress"
@@ -870,6 +981,159 @@ const hoveredTooltipAddress = computed(() => {
   inset: 0;
   z-index: 0;
   background: #0d1117;
+}
+
+/* ── Stats + granularity filter (top-right) ─────────────────────────────── */
+
+.geo-stats-stack {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.geo-stats-panel {
+  min-width: 300px;
+  padding: 10px 12px 12px;
+  background: var(--geo-card-bg);
+  border: 1px solid var(--geo-card-border);
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
+}
+
+.geo-stats-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 8px;
+}
+
+.geo-stats-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.geo-granularity-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.geo-granularity-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 6px;
+}
+
+.geo-granularity-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.geo-granularity-btn {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.geo-granularity-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.geo-granularity-btn.active {
+  background: color-mix(in srgb, var(--primary-color) 22%, transparent);
+  border-color: color-mix(in srgb, var(--primary-color) 45%, transparent);
+  color: var(--primary-color);
+}
+
+.geo-granularity-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  opacity: 0.6;
+  transition: opacity 0.18s ease;
+}
+
+.geo-granularity-btn.active .geo-granularity-dot {
+  opacity: 1;
+}
+
+.geo-granularity-dot--place {
+  background: #4ade80;
+}
+.geo-granularity-dot--city {
+  background: #60a5fa;
+}
+.geo-granularity-dot--region {
+  background: #fbbf24;
+}
+.geo-granularity-dot--country {
+  background: #c084fc;
+}
+
+.geo-granularity-btn--place.active {
+  background: color-mix(in srgb, #4ade80 18%, transparent);
+  border-color: color-mix(in srgb, #4ade80 45%, transparent);
+  color: #4ade80;
+}
+.geo-granularity-btn--city.active {
+  background: color-mix(in srgb, #60a5fa 18%, transparent);
+  border-color: color-mix(in srgb, #60a5fa 45%, transparent);
+  color: #60a5fa;
+}
+.geo-granularity-btn--region.active {
+  background: color-mix(in srgb, #fbbf24 18%, transparent);
+  border-color: color-mix(in srgb, #fbbf24 45%, transparent);
+  color: #fbbf24;
+}
+.geo-granularity-btn--country.active {
+  background: color-mix(in srgb, #c084fc 18%, transparent);
+  border-color: color-mix(in srgb, #c084fc 45%, transparent);
+  color: #c084fc;
+}
+
+@media (max-width: 768px) {
+  .geo-stats-stack {
+    top: 8px;
+    right: 8px;
+    gap: 6px;
+  }
+
+  .geo-stats-panel {
+    min-width: 230px;
+    padding: 8px 10px 10px;
+  }
+
+  .geo-granularity-btn {
+    font-size: 10px;
+    padding: 4px 6px;
+  }
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */

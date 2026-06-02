@@ -24,7 +24,7 @@ import {
 
 import { getUploadUrl, registerPhotos, uploadBlobToR2 } from "./api";
 import { getPhoto, putPhoto } from "./db";
-import { readTakenAtMs } from "./exif";
+import { convertHeicToJpeg, readTakenAtMs } from "./exif";
 import type { PhotoEntry } from "./types";
 
 const UPLOAD_CONCURRENCY = 4;
@@ -131,11 +131,33 @@ async function processFile(
   addedAt: number,
 ): Promise<PhotoEntry> {
   const clientPhotoId = generateId();
-  const originalMime = file.type || "image/jpeg";
+
+  // Normalize HEIC/HEIF → JPEG: browsers can't draw these on canvas, and we
+  // can't write GPS into them either. The converted JPEG is stored as the
+  // "original" — quality loss is negligible and behaviour is consistent.
+  let originalMime = file.type || "image/jpeg";
+  let fileForProcessing: File = file;
+
+  // Detect HEIC/HEIF by MIME type OR extension (Windows reports empty MIME for HEIC)
+  const isHeic =
+    originalMime === "image/heic" ||
+    originalMime === "image/heif" ||
+    /\.(heic|heif)$/i.test(file.name);
+
+  if (isHeic) {
+    const jpegBlob = await convertHeicToJpeg(file);
+    const jpegName = file.name.replace(/\.(heic|heif)$/i, ".jpg");
+    fileForProcessing = new File([jpegBlob], jpegName, { type: "image/jpeg" });
+    originalMime = "image/jpeg";
+  }
 
   const [takenAtMs, thumbBlob] = await Promise.all([
-    readTakenAtMs(file),
-    resizeImage(file, UPLOAD_THUMB_MAX_WIDTH, UPLOAD_THUMB_MAX_SIZE_BYTES),
+    readTakenAtMs(fileForProcessing),
+    resizeImage(
+      fileForProcessing,
+      UPLOAD_THUMB_MAX_WIDTH,
+      UPLOAD_THUMB_MAX_SIZE_BYTES,
+    ),
   ]);
 
   // Persist the original locally (this is the user's "warehouse" — it never
@@ -143,8 +165,8 @@ async function processFile(
   // have the full-res file to ship out as ZIP).
   await putPhoto({
     clientPhotoId,
-    originalBlob: file,
-    originalName: file.name,
+    originalBlob: fileForProcessing,
+    originalName: fileForProcessing.name,
     originalMime,
     takenAtMs,
     r2Key: "", // filled in below
@@ -162,8 +184,8 @@ async function processFile(
   // Update the local record with the now-known r2Key.
   await putPhoto({
     clientPhotoId,
-    originalBlob: file,
-    originalName: file.name,
+    originalBlob: fileForProcessing,
+    originalName: fileForProcessing.name,
     originalMime,
     takenAtMs,
     r2Key,
@@ -174,7 +196,7 @@ async function processFile(
     clientPhotoId,
     r2Key,
     mime: contentType,
-    originalName: file.name,
+    originalName: fileForProcessing.name,
     takenAtMs,
   };
 }

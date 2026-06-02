@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from "vue";
-import { NButton, NCheckbox, NIcon, NTag } from "naive-ui";
+import { NAlert, NButton, NCheckbox, NIcon, NTag } from "naive-ui";
 import {
   GlobeOutline,
   InformationCircleOutline,
@@ -14,13 +14,14 @@ import {
   CloudUploadOutline,
   LocationOutline,
   DownloadOutline,
-  ArrowForwardOutline,
+  WarningOutline,
 } from "@vicons/ionicons5";
 import { useImageProcessing } from "@/composables/useImageProcessing.js";
 import {
   assessPhotos,
   type AssessmentSummary,
 } from "@/utils/geoRecovery/assess";
+import { convertHeicToJpeg } from "@/utils/geoRecovery/exif";
 import GeoAssessPanel from "./GeoAssessPanel.vue";
 
 const ASSESS_MAX_PHOTOS = 10;
@@ -110,6 +111,10 @@ const assessRemaining = computed(() =>
   Math.max(0, ASSESS_DAILY_LIMIT - assessUsedToday.value),
 );
 
+const assessHasHeic = computed(() =>
+  assessFiles.value.some((f) => /\.(heic|heif)$/i.test(f.name)),
+);
+
 function openAssessFilePicker() {
   if (assessLimitReached.value) return;
   assessStaging.value = true; // navigate to the incremental photo staging grid
@@ -118,25 +123,63 @@ function openAssessFilePicker() {
 // Incremental file selection inside the staging grid
 async function onStagingFilesSelected(event: Event) {
   const input = event.target as HTMLInputElement;
-  const files = Array.from(input.files ?? []).filter((f) =>
-    ["image/jpeg", "image/png"].includes(f.type),
-  );
+  const ACCEPTED_ASSESS_TYPES = [
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    // "image/heic",  // ⚠️ HEIC DISABLED: Uncomment to re-enable HEIC support
+    // "image/heif",  // ⚠️ HEIC DISABLED: Uncomment to re-enable HEIC support
+  ];
+  const ACCEPTED_EXTENSIONS = [
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    // ".heic",  // ⚠️ HEIC DISABLED: Uncomment to re-enable HEIC support
+    // ".heif",  // ⚠️ HEIC DISABLED: Uncomment to re-enable HEIC support
+  ];
+
+  const isAcceptedImage = (f: File) => {
+    if (ACCEPTED_ASSESS_TYPES.includes(f.type)) return true;
+    const ext = f.name.toLowerCase().match(/\.[^.]+$/)?.[0];
+    return ext ? ACCEPTED_EXTENSIONS.includes(ext) : false;
+  };
+
+  const rawFiles = Array.from(input.files ?? []).filter(isAcceptedImage);
   input.value = "";
-  if (files.length === 0) return;
+  if (rawFiles.length === 0) return;
 
   // Never exceed the 10-photo cap
   const remaining = ASSESS_MAX_PHOTOS - assessFiles.value.length;
-  if (files.length > remaining) {
+  if (rawFiles.length > remaining) {
     assessCountError.value = `Only ${remaining} slot${
       remaining === 1 ? "" : "s"
     } left — extra photos were not added.`;
   } else {
     assessCountError.value = null;
   }
-  const toAdd = files.slice(0, remaining);
+  const toAdd = rawFiles.slice(0, remaining);
   for (const file of toAdd) {
-    assessFiles.value.push(file);
-    assessPreviews.value.push(URL.createObjectURL(file));
+    // ⚠️ HEIC DISABLED: Uncomment the block below to re-enable HEIC → JPEG conversion
+    // Convert HEIC/HEIF to JPEG so canvas-based resize and preview work in all browsers
+    // let processedFile: File = file;
+    // const isHeic =
+    //   file.type === "image/heic" ||
+    //   file.type === "image/heif" ||
+    //   /\.(heic|heif)$/i.test(file.name);
+    // if (isHeic) {
+    //   try {
+    //     const jpegBlob = await convertHeicToJpeg(file);
+    //     const jpegName = file.name.replace(/\.(heic|heif)$/i, ".jpg");
+    //     processedFile = new File([jpegBlob], jpegName, { type: "image/jpeg" });
+    //   } catch {
+    //     // Fallback to original on conversion error
+    //     processedFile = file;
+    //   }
+    // }
+    const processedFile = file; // Direct assignment when HEIC is disabled
+    assessFiles.value.push(processedFile);
+    assessPreviews.value.push(URL.createObjectURL(processedFile));
   }
 
   // Auto-trigger assessment when the grid is full
@@ -266,7 +309,7 @@ onUnmounted(() => revokeAssessPreviews());
       ref="assessFileInput"
       type="file"
       multiple
-      accept="image/jpeg,image/png"
+      accept="image/jpeg,image/png,image/webp"
       style="display: none"
       @change="onStagingFilesSelected"
     />
@@ -279,6 +322,22 @@ onUnmounted(() => revokeAssessPreviews());
       Choose the most representative photos of your collection. Once you have
       10, we will forecast the geo-inference results.
     </p>
+
+    <!-- HEIC conversion warning -->
+    <NAlert
+      v-if="assessHasHeic"
+      type="warning"
+      :bordered="false"
+      class="grw-heic-alert"
+    >
+      <template #icon>
+        <NIcon :component="WarningOutline" />
+      </template>
+      <span class="grw-heic-text">
+        <strong>HEIC files detected:</strong> These will be converted to JPEG.
+        Original EXIF data will be replaced with GPS coordinates only.
+      </span>
+    </NAlert>
 
     <!-- 5×2 grid with filled + empty placeholder slots -->
     <div class="grw-staging-grid">
@@ -426,12 +485,14 @@ onUnmounted(() => revokeAssessPreviews());
           <template #icon><NIcon :component="GlobeOutline" /></template>
           Geo Recovery
         </NTag>
-        <h2 class="grw-hero-headline">
+        <!-- <h2 class="grw-hero-headline">
           Your photos know where they were taken
-        </h2>
+        </h2> -->
         <p class="grw-hero-sub">
-          Our AI infers GPS coordinates from visual context and writes them
-          directly into your files' EXIF data — no manual tagging needed.
+          Our AI engine infers GPS coordinates from visual context, placing only
+          reliable locations on the map. After you review it, you can download
+          your original files with the updated EXIF data. No queueing required —
+          process up to 5,000 in minutes.
         </p>
       </div>
     </div>
@@ -445,11 +506,11 @@ onUnmounted(() => revokeAssessPreviews());
               :component="InformationCircleOutline"
               class="grw-fact-title-icon"
             />
-            As precise as the evidence allows
+            As precise as reasonable
           </h3>
           <p class="grw-fact-desc">
             We push accuracy as far as possible, reaching street level in many
-            cases, while only committing to a location when confidence is high.
+            cases, while only committing when confidence is high.
           </p>
         </div>
       </div>
@@ -469,11 +530,11 @@ onUnmounted(() => revokeAssessPreviews());
         <div class="grw-fact-content">
           <h3 class="grw-fact-title">
             <NIcon :component="ImagesOutline" class="grw-fact-title-icon" />
-            Only thumbnails leave your device
+            Your photos stay in the browser
           </h3>
           <p class="grw-fact-desc">
-            Originals stay local and survive browser reloads. No account or
-            registration required.
+            Originals stay local and survive browser reloads. We don't store
+            your files. No account or registration required.
           </p>
         </div>
       </div>
@@ -490,7 +551,21 @@ onUnmounted(() => revokeAssessPreviews());
           <span class="grw-step-text">Select your originals</span>
         </div>
         <div class="grw-step-sep" aria-hidden="true">
-          <NIcon :component="ArrowForwardOutline" size="14" />
+          <svg
+            width="32"
+            height="14"
+            viewBox="0 0 32 14"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M0 7h28M24 3l4 4-4 4"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
         </div>
         <div class="grw-step">
           <span class="grw-step-num">
@@ -499,7 +574,21 @@ onUnmounted(() => revokeAssessPreviews());
           <span class="grw-step-text">Thumbnails sent to AI</span>
         </div>
         <div class="grw-step-sep" aria-hidden="true">
-          <NIcon :component="ArrowForwardOutline" size="14" />
+          <svg
+            width="32"
+            height="14"
+            viewBox="0 0 32 14"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M0 7h28M24 3l4 4-4 4"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
         </div>
         <div class="grw-step">
           <span class="grw-step-num">
@@ -508,7 +597,21 @@ onUnmounted(() => revokeAssessPreviews());
           <span class="grw-step-text">AI proposes a location</span>
         </div>
         <div class="grw-step-sep" aria-hidden="true">
-          <NIcon :component="ArrowForwardOutline" size="14" />
+          <svg
+            width="32"
+            height="14"
+            viewBox="0 0 32 14"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M0 7h28M24 3l4 4-4 4"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
         </div>
         <div class="grw-step">
           <span class="grw-step-num">
@@ -530,7 +633,7 @@ onUnmounted(() => revokeAssessPreviews());
             >Daily free-run limit reached — try again tomorrow.</template
           >
           <template v-else
-            >Not sure if your photos will geotag well? Test up to 10 for free
+            >Not sure if your photos are suitable? Test up to 10 for free
             first.</template
           >
         </p>
@@ -577,7 +680,7 @@ onUnmounted(() => revokeAssessPreviews());
         :disabled="!canStart"
         @click="handleStart"
       >
-        Start Geo-Inference Now
+        Start Geo-Recovery Now
       </NButton>
     </div>
   </div>
@@ -659,6 +762,10 @@ onUnmounted(() => revokeAssessPreviews());
 @media (max-width: 768px) {
   .grw-facts {
     grid-template-columns: 1fr;
+  }
+
+  .grw-steps-wrapper {
+    display: none;
   }
 }
 
@@ -758,8 +865,9 @@ onUnmounted(() => revokeAssessPreviews());
 }
 
 .grw-step-num {
-  width: 36px;
-  height: 36px;
+  width: 42px;
+  height: 42px;
+
   border-radius: 50%;
   background: color-mix(in srgb, var(--primary-color) 25%, transparent);
   border: 1px solid color-mix(in srgb, var(--primary-color) 55%, transparent);
@@ -875,6 +983,20 @@ onUnmounted(() => revokeAssessPreviews());
   font-size: 12.5px;
   line-height: 1.55;
   color: rgba(255, 255, 255, 0.55);
+}
+
+.grw-heic-alert {
+  background: rgba(250, 173, 20, 0.12) !important;
+  border-radius: 6px;
+}
+
+.grw-heic-text {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.grw-heic-text strong {
+  font-weight: 600;
 }
 
 .grw-staging-grid {

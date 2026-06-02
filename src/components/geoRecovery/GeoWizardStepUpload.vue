@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from "vue";
-import { NButton, NIcon, NText } from "naive-ui";
+import { NAlert, NButton, NIcon, NText } from "naive-ui";
 import {
   AddOutline,
   CloudUploadOutline,
   CloseOutline,
+  WarningOutline,
 } from "@vicons/ionicons5";
 import type { PreviewPhoto } from "@/utils/geoRecovery/types";
 
@@ -73,16 +74,45 @@ function onImgDone(id: string) {
 
 const isLoadingPreviews = computed(() => loadingIds.size > 0);
 
+// ── HEIC warning ──────────────────────────────────────────────────────────
+
+const hasHeicFiles = computed(() =>
+  props.previewPhotos.some((p) => /\.(heic|heif)$/i.test(p.name)),
+);
+
 // ── Native file input/drop handlers ───────────────────────────────────────
 
 function openFilePicker() {
   fileInput.value?.click();
 }
 
+const ACCEPTED_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  // "image/heic",  // ⚠️ HEIC DISABLED: Uncomment to re-enable HEIC support
+  // "image/heif",  // ⚠️ HEIC DISABLED: Uncomment to re-enable HEIC support
+];
+
+const ACCEPTED_EXTENSIONS = [
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".webp",
+  // ".heic",  // ⚠️ HEIC DISABLED: Uncomment to re-enable HEIC support
+  // ".heif",  // ⚠️ HEIC DISABLED: Uncomment to re-enable HEIC support
+];
+
+function isAcceptedImage(file: File): boolean {
+  // Check MIME type first
+  if (ACCEPTED_TYPES.includes(file.type)) return true;
+  // Windows often reports empty MIME for HEIC — check extension as fallback
+  const ext = file.name.toLowerCase().match(/\.[^.]+$/)?.[0];
+  return ext ? ACCEPTED_EXTENSIONS.includes(ext) : false;
+}
+
 function emitFiles(fileList: FileList | null | undefined) {
-  const files = Array.from(fileList ?? []).filter((file) =>
-    ["image/jpeg", "image/png"].includes(file.type),
-  );
+  const files = Array.from(fileList ?? []).filter(isAcceptedImage);
   if (files.length > 0) emit("fileChange", files);
 }
 
@@ -106,9 +136,25 @@ function onDrop(event: DragEvent) {
       class="file-input"
       type="file"
       multiple
-      accept="image/jpeg,image/png"
+      accept="image/jpeg,image/png,image/webp"
       @change="onInputChange"
     />
+
+    <!-- HEIC conversion warning -->
+    <NAlert
+      v-if="hasHeicFiles"
+      type="warning"
+      :bordered="false"
+      class="heic-alert"
+    >
+      <template #icon>
+        <NIcon :component="WarningOutline" />
+      </template>
+      <span class="heic-alert-text">
+        <strong>HEIC files detected:</strong> These will be converted to JPEG.
+        Original EXIF data will be replaced with GPS coordinates only.
+      </span>
+    </NAlert>
 
     <!-- Drop zone: full when empty, compact strip when files present -->
     <button
@@ -124,7 +170,7 @@ function onDrop(event: DragEvent) {
         <NIcon :component="CloudUploadOutline" size="36" class="dragger-icon" />
         <NText class="dragger-main">Click or drag photos here</NText>
         <NText depth="3" class="dragger-sub">
-          JPEG · PNG · up to {{ maxPhotos }} files
+          JPEG · PNG · WebP · up to {{ maxPhotos }} files
         </NText>
       </template>
       <template v-else>
@@ -393,5 +439,21 @@ function onDrop(event: DragEvent) {
   font-size: 13px;
   color: rgba(255, 255, 255, 0.45);
   white-space: nowrap;
+}
+
+/* ── HEIC warning ────────────────────────────────────────────────────────── */
+
+.heic-alert {
+  background: rgba(250, 173, 20, 0.12) !important;
+  border-radius: 6px;
+}
+
+.heic-alert-text {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.heic-alert-text strong {
+  font-weight: 600;
 }
 </style>

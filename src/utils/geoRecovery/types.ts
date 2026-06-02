@@ -91,6 +91,8 @@ export interface PreviewPhoto {
   previewUrl: string;
   name: string;
   addedAt: number;
+  /** Fingerprint of the ORIGINAL file selected (for dedup when converted to JPEG). */
+  originalFingerprint?: string;
 }
 
 // ── Client-local (IndexedDB) ────────────────────────────────────────────────

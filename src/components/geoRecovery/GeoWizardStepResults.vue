@@ -33,7 +33,7 @@ const emit = defineEmits<{
       <template #icon>
         <NIcon :component="DownloadOutline" />
       </template>
-      Download Geo-Inferred Photos
+      Download Geo-Recovered Photos
     </NButton>
     <span
       class="muted small progress-text"

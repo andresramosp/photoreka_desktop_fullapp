@@ -9,6 +9,7 @@
 // `piexifjs` ships untyped; declare a minimal interface inline.
 // @ts-expect-error untyped CommonJS module
 import piexif from "piexifjs";
+import heic2any from "heic2any";
 import exifr from "exifr";
 
 // ── Reading ─────────────────────────────────────────────────────────────────
@@ -315,6 +316,50 @@ export async function copyJpegExif(source: Blob, target: Blob): Promise<Blob> {
 
 // ── High-level dispatch ────────────────────────────────────────────────────
 
+// ── HEIC / WebP → JPEG helpers ────────────────────────────────────────────
+
+/**
+ * Convert a HEIC/HEIF blob to JPEG using heic2any.
+ * Exported so upload.ts and GeoRecoveryView.vue can re-use it.
+ */
+export async function convertHeicToJpeg(blob: Blob): Promise<Blob> {
+  const result = await heic2any({ blob, toType: "image/jpeg", quality: 0.92 });
+  return Array.isArray(result) ? result[0] : (result as Blob);
+}
+
+/**
+ * Convert a WebP blob to JPEG via an off-screen canvas.
+ * WebP EXIF injection requires RIFF chunk manipulation; converting to JPEG
+ * is simpler and universally supported.
+ */
+async function convertWebpToJpeg(blob: Blob): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob(
+        (result) => {
+          if (result) resolve(result);
+          else reject(new Error("WebP→JPEG canvas conversion failed"));
+        },
+        "image/jpeg",
+        0.92,
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Failed to load WebP image for conversion"));
+    };
+    img.src = url;
+  });
+}
+
 export async function injectGps(
   original: Blob,
   originalMime: string,
@@ -323,6 +368,16 @@ export async function injectGps(
 ): Promise<Blob> {
   if (originalMime === "image/png") {
     return injectGpsIntoPng(original, lat, lng);
+  }
+  // HEIC/HEIF: convert to JPEG first (no browser API for writing HEIC)
+  if (originalMime === "image/heic" || originalMime === "image/heif") {
+    const jpeg = await convertHeicToJpeg(original);
+    return injectGpsIntoJpeg(jpeg, lat, lng);
+  }
+  // WebP: convert to JPEG (WebP RIFF EXIF chunk injection is non-trivial)
+  if (originalMime === "image/webp") {
+    const jpeg = await convertWebpToJpeg(original);
+    return injectGpsIntoJpeg(jpeg, lat, lng);
   }
   // JPEG (and anything else we treat as JPEG-compatible)
   return injectGpsIntoJpeg(original, lat, lng);

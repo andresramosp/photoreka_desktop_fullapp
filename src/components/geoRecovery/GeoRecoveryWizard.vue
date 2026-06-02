@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NIcon, NTag } from "naive-ui";
+import { NIcon } from "naive-ui";
 import { RefreshOutline } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
 import type { UploadProgress } from "@/utils/geoRecovery/upload";
@@ -19,8 +19,6 @@ const props = defineProps<{
   hasSession: boolean;
   previewPhotos: PreviewPhoto[];
   photoCount: number;
-  locatedCount: number;
-  unknownCount: number;
   maxPhotos: number;
   uploading: boolean;
   uploadProgress: UploadProgress | null;
@@ -61,17 +59,6 @@ const emit = defineEmits<{
       <span class="geo-brand-title">Geo Recovery</span>
       <span class="geo-brand-subtitle">Add GPS to your photos</span>
     </div>
-  </div>
-
-  <!-- Stats badge (visible from step 3) -->
-  <div v-if="stepIndex >= 3 && photoCount > 0" class="geo-stats-pill">
-    <NTag :bordered="false" size="small" type="success">
-      {{ locatedCount }} located
-    </NTag>
-    <NTag :bordered="false" size="small"> {{ unknownCount }} unknown </NTag>
-    <NTag :bordered="false" size="small" type="info">
-      {{ photoCount }} total
-    </NTag>
   </div>
 
   <!-- Wizard backdrop dim (steps 0–2 only) -->
@@ -182,23 +169,6 @@ const emit = defineEmits<{
   white-space: nowrap;
 }
 
-/* ── Stats pill (top-right) ──────────────────────────────────────────────── */
-
-.geo-stats-pill {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  z-index: 1000;
-  display: flex;
-  gap: 6px;
-  padding: 6px 10px;
-  background: var(--geo-card-bg);
-  border: 1px solid var(--geo-card-border);
-  border-radius: 999px;
-  backdrop-filter: blur(8px);
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
-}
-
 /* ── Start-over button (bottom-left) ─────────────────────────────────────── */
 
 .geo-startover {
@@ -249,7 +219,7 @@ const emit = defineEmits<{
 }
 .geo-modal-card {
   pointer-events: auto;
-  width: min(740px, 92vw);
+  width: min(850px, 92vw);
   max-height: 86vh;
   overflow-y: auto;
   padding: 22px 24px;
@@ -279,13 +249,6 @@ const emit = defineEmits<{
 
   .geo-brand-subtitle {
     font-size: 9px;
-  }
-
-  .geo-stats-pill {
-    top: 8px;
-    right: 8px;
-    padding: 4px 8px;
-    gap: 4px;
   }
 
   .geo-startover {
