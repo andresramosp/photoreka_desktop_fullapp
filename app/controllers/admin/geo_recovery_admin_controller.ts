@@ -6,6 +6,8 @@ import {
 } from '#services/geo_recovery_session_service'
 import type { GeoRecoverySessionState } from '#services/geo_recovery_session_service'
 import type { GeoRecoveryJobState } from '#services/geo_recovery_inference_service'
+import GeoRecoveryPayment from '#models/geo_recovery_payment'
+import GeoRecoveryCostLog from '#models/geo_recovery_cost_log'
 
 export default class GeoRecoveryAdminController {
   // ── POST /api/admin/geo-recovery/reset-free-runs ─────────────────────────
@@ -121,7 +123,7 @@ export default class GeoRecoveryAdminController {
       // For each session also fetch the job key
       const sessions: Array<GeoRecoverySessionState & { job: GeoRecoveryJobState | null }> = []
 
-      const jobFetches = rawSessions.map(async (raw, i) => {
+      const jobFetches = rawSessions.map(async (raw) => {
         if (!raw) return
         let session: GeoRecoverySessionState
         try {
@@ -149,6 +151,63 @@ export default class GeoRecoveryAdminController {
       return response.ok({ sessions })
     } catch (error: any) {
       console.error('[GeoRecoveryAdmin] sessions error:', error)
+      return response.internalServerError({ error: error.message })
+    }
+  }
+
+  // ── GET /api/admin/geo-recovery/payments ─────────────────────────────────
+
+  /**
+   * Lists all geo-recovery payments from the database, ordered by newest first.
+   * Supports pagination via ?page=1&limit=50 query params.
+   */
+  public async payments({ request, response }: HttpContext) {
+    try {
+      const page = Math.max(1, Number(request.input('page', 1)))
+      const limit = Math.min(200, Math.max(1, Number(request.input('limit', 50))))
+
+      const paymentsQuery = GeoRecoveryPayment.query()
+        .where('status', 'completed')
+        .orderBy('created_at', 'desc')
+        .paginate(page, limit)
+
+      const result = await paymentsQuery
+
+      return response.ok({
+        payments: result.all(),
+        meta: result.getMeta(),
+      })
+    } catch (error: any) {
+      console.error('[GeoRecoveryAdmin] payments error:', error)
+      return response.internalServerError({ error: error.message })
+    }
+  }
+
+  // ── GET /api/admin/geo-recovery/cost-logs ────────────────────────────────
+
+  /**
+   * Lists all geo-recovery cost logs from the database, ordered by newest first.
+   * Preloads the associated payment for each log.
+   * Supports pagination via ?page=1&limit=50 query params.
+   */
+  public async costLogs({ request, response }: HttpContext) {
+    try {
+      const page = Math.max(1, Number(request.input('page', 1)))
+      const limit = Math.min(200, Math.max(1, Number(request.input('limit', 50))))
+
+      const costLogsQuery = GeoRecoveryCostLog.query()
+        .preload('payment')
+        .orderBy('created_at', 'desc')
+        .paginate(page, limit)
+
+      const result = await costLogsQuery
+
+      return response.ok({
+        costLogs: result.all(),
+        meta: result.getMeta(),
+      })
+    } catch (error: any) {
+      console.error('[GeoRecoveryAdmin] costLogs error:', error)
       return response.internalServerError({ error: error.message })
     }
   }

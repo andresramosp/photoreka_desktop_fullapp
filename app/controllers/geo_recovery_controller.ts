@@ -19,6 +19,10 @@ import GeoRecoverySessionService, {
   type GeoRecoverySessionState,
 } from '#services/geo_recovery_session_service'
 import GeoRecoveryInferenceService from '#services/geo_recovery_inference_service'
+import GeoRecoveryPaymentService, {
+  computeAmountCents,
+  PRICE_PER_PHOTO_EUR,
+} from '#services/geo_recovery_payment_service'
 import GeoRecoveryAssessmentService, {
   ASSESS_MAX_PHOTOS,
   type AssessPhotoInput,
@@ -65,6 +69,7 @@ export default class GeoRecoveryController {
   private sessionService = new GeoRecoverySessionService()
   private inferenceService = new GeoRecoveryInferenceService()
   private assessmentService = new GeoRecoveryAssessmentService()
+  private paymentService = new GeoRecoveryPaymentService()
 
   // ── Endpoints ──────────────────────────────────────────────────────────────
 
@@ -234,17 +239,89 @@ export default class GeoRecoveryController {
   }
 
   /**
-   * Placeholder for the Stripe one-off payment flow.
-   * Flips the session to `paid: true` so /start can run.
-   * Replace with a real checkout-session + webhook before production.
+   * Creates a Stripe PaymentIntent and returns the client_secret.
+   * The frontend mounts the Payment Element with this secret.
+   * Photos have NOT been uploaded yet — photoCount comes from the request body.
+   * POST /api/geo-recovery/payment-intent
    */
-  public async mockPay({ request, response }: HttpContext) {
+  public async createPaymentIntent({ request, response }: HttpContext) {
     const session = await this.requireSession(request, response)
     if (!session) return
 
-    session.paid = true
-    await this.sessionService.save(session)
-    return response.ok({ paid: true })
+    if (session.paid) {
+      return response.badRequest({ error: 'Session is already paid' })
+    }
+
+    const { photoCount } = request.only(['photoCount'])
+    const count = Number(photoCount)
+    if (!Number.isInteger(count) || count < 1) {
+      return response.badRequest({ error: 'photoCount must be a positive integer' })
+    }
+
+    try {
+      const result = await this.paymentService.createPaymentIntent(session.sessionId, count)
+      return response.ok(result)
+    } catch (error: any) {
+      console.error('[GeoRecovery] createPaymentIntent error:', error)
+      return response.internalServerError({ error: 'Failed to create payment intent' })
+    }
+  }
+
+  /**
+   * Returns the price breakdown for the current session.
+   * GET /api/geo-recovery/price
+   */
+  public async price({ request, response }: HttpContext) {
+    const session = await this.requireSession(request, response)
+    if (!session) return
+
+    const photoCount = session.photos.length
+    const amountCents = computeAmountCents(photoCount)
+    return response.ok({
+      photoCount,
+      amountCents,
+      amountEur: amountCents / 100,
+      pricePerPhotoEur: PRICE_PER_PHOTO_EUR,
+    })
+  }
+
+  /**
+   * Verifies a Stripe PaymentIntent and marks the geo-recovery session as paid.
+   * Called by the frontend immediately after stripe.confirmPayment() succeeds,
+   * before uploading files — closes the webhook race condition.
+   * POST /api/geo-recovery/confirm-payment
+   */
+  public async confirmPayment({ request, response }: HttpContext) {
+    const session = await this.requireSession(request, response)
+    if (!session) return
+
+    const { stripePaymentIntentId, customerEmail } = request.only([
+      'stripePaymentIntentId',
+      'customerEmail',
+    ])
+    if (typeof stripePaymentIntentId !== 'string' || !stripePaymentIntentId) {
+      return response.badRequest({ error: 'stripePaymentIntentId is required' })
+    }
+
+    const normalizedCustomerEmail =
+      typeof customerEmail === 'string' && customerEmail.trim().length > 0
+        ? customerEmail.trim()
+        : undefined
+
+    try {
+      const confirmed = await this.paymentService.confirmPaymentIntent(
+        stripePaymentIntentId,
+        session.sessionId,
+        normalizedCustomerEmail
+      )
+      if (!confirmed) {
+        return response.unprocessableEntity({ error: 'Payment could not be confirmed' })
+      }
+      return response.ok({ confirmed: true })
+    } catch (error: any) {
+      console.error('[GeoRecovery] confirmPayment error:', error)
+      return response.internalServerError({ error: 'Payment confirmation failed' })
+    }
   }
 
   public async start({ request, response }: HttpContext) {

@@ -21,11 +21,17 @@ import { S3Client, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/c
 
 import redis from '@adonisjs/redis/services/main'
 
-import GeocodingService, { type GeocodedLocation } from '#services/geocoding_service'
+import GeocodingService, {
+  ACTIVE_GEOCODING_PROVIDER,
+  type GeocodedLocation,
+} from '#services/geocoding_service'
 import ModelsService from '#services/models_service'
 import type { ModelName } from '#services/models_service'
 import PhotoImageService from '#services/photo_image_service'
 import { LOCATION_INFERENCE_SYSTEM_PROMPT } from '../utils/prompts/geocode.js'
+import { CostTracker, createTrackedModelsService } from '../utils/cost_tracker.js'
+import GeoRecoveryCostService from '#services/geo_recovery_cost_service'
+import GeoRecoveryPayment from '#models/geo_recovery_payment'
 
 import GeoRecoverySessionService, {
   GEO_RECOVERY_SESSION_TTL_SECONDS,
@@ -135,8 +141,12 @@ interface TemporalCluster {
 interface RunContext {
   sessionId: string
   jobId: string
+  paymentId: number | null
   geocodingService: GeocodingService
   modelsService: ModelsService
+  tracker: CostTracker
+  paidGeocodeRequests: number
+  geocodeRequests: number
   progressQueue: ReturnType<typeof pLimit>
 }
 
@@ -220,8 +230,8 @@ export default class GeoRecoveryInferenceService {
       current.completedAt = nowIso()
       current.updatedAt = nowIso()
       await this.setJob(current)
-      // Clean up R2 files on failure
-      await this.cleanupR2Files(sessionId)
+      // R2 cleanup disabled: see completeJob comment above.
+      // await this.cleanupR2Files(sessionId)
     })
 
     return job
@@ -264,11 +274,22 @@ export default class GeoRecoveryInferenceService {
   // ── Job runner ─────────────────────────────────────────────────────────────
 
   private async runJob(photos: GeoRecoveryPhotoEntry[], job: GeoRecoveryJobState): Promise<void> {
+    // Get payment ID for cost tracking
+    const payment = await GeoRecoveryPayment.query().where('session_id', job.sessionId).first()
+
+    const tracker = new CostTracker('location_inference')
+    const modelsService = new ModelsService()
+    const trackedModels = createTrackedModelsService(modelsService, tracker)
+
     const context: RunContext = {
       sessionId: job.sessionId,
       jobId: job.jobId,
+      paymentId: payment?.id ?? null,
       geocodingService: new GeocodingService(),
-      modelsService: new ModelsService(),
+      modelsService: trackedModels,
+      tracker,
+      paidGeocodeRequests: 0,
+      geocodeRequests: 0,
       progressQueue: pLimit(1),
     }
 
@@ -701,6 +722,13 @@ export default class GeoRecoveryInferenceService {
           country: result.inferredCountry ?? undefined,
         },
       })
+
+      // Track geocoding requests
+      context.geocodeRequests += 1
+      if (!lookup.fromCache) {
+        context.paidGeocodeRequests += lookup.externalCalls
+      }
+
       geo = lookup.result
     } catch (error) {
       console.warn(`[GeoRecovery] Cluster geocode failed: ${errMsg(error)}`)
@@ -803,6 +831,13 @@ export default class GeoRecoveryInferenceService {
             country: result.inferredCountry ?? undefined,
           },
         })
+
+        // Track geocoding requests
+        context.geocodeRequests += 1
+        if (!lookup.fromCache) {
+          context.paidGeocodeRequests += lookup.externalCalls
+        }
+
         if (lookup.result) {
           await this.recordLocated(context, photo, result, lookup.result, 'llm')
           located = true
@@ -982,14 +1017,71 @@ export default class GeoRecoveryInferenceService {
   private async completeJob(context: RunContext): Promise<void> {
     const job = await this.getJob(context.sessionId)
     if (!job || job.jobId !== context.jobId) return
+
+    // Record costs to database if payment exists
+    if (context.paymentId) {
+      try {
+        // Record LLM costs
+        await GeoRecoveryCostService.recordFromTracker(
+          context.paymentId,
+          context.tracker,
+          context.jobId
+        ).catch(() => {})
+
+        // Record geocoding costs
+        if (context.paidGeocodeRequests > 0) {
+          await GeoRecoveryCostService.record(
+            context.paymentId,
+            'location_inference',
+            context.paidGeocodeRequests * GeocodingService.costEurPerRequest,
+            context.paidGeocodeRequests,
+            {
+              model: `${ACTIVE_GEOCODING_PROVIDER}-geocoding`,
+              task: 'geocode_location',
+              referenceId: context.jobId,
+            }
+          ).catch(() => {})
+        }
+
+        // Log cost summary
+        const costSummary = context.tracker.getSummary()
+        const llmCostEur = costSummary.totalCostInEur
+        const geocodingCostEur = context.paidGeocodeRequests * GeocodingService.costEurPerRequest
+        const totalCostEur = llmCostEur + geocodingCostEur
+
+        console.log(
+          `[GeoRecovery] ══════════════════════════ JOB SUMMARY ══════════════════════════`
+        )
+        console.log(`[GeoRecovery] Job ${context.jobId} — COMPLETED`)
+        console.log(
+          `[GeoRecovery]   Photos       : total=${job.total} | located=${job.located} | unknown=${job.unknown} | uncertain=${job.uncertain} | failed=${job.failed}`
+        )
+        console.log(
+          `[GeoRecovery]   Clustering   : proximitySaved=${job.proximitySaved} | llmInferred=${job.llmInferred}`
+        )
+        console.log(
+          `[GeoRecovery]   Geocoding    : ${context.geocodeRequests} requests total (${context.paidGeocodeRequests} paid / ${context.geocodeRequests - context.paidGeocodeRequests} cached)`
+        )
+        console.log(
+          `[GeoRecovery]   Cost         : €${totalCostEur.toFixed(4)} total | LLM €${llmCostEur.toFixed(4)} | geocoding €${geocodingCostEur.toFixed(4)}`
+        )
+        console.log(
+          `[GeoRecovery] ═══════════════════════════════════════════════════════════════════`
+        )
+      } catch (error) {
+        console.warn(`[GeoRecovery] Error recording costs: ${errMsg(error)}`)
+      }
+    }
+
     job.status = 'completed'
     job.progressStage = 'completed'
     job.progressPercent = 100
     job.completedAt = nowIso()
     job.updatedAt = nowIso()
     await this.setJob(job)
-    // Clean up R2 files after successful analysis
-    await this.cleanupR2Files(context.sessionId)
+    // R2 cleanup disabled: photos are kept for support/refund traceability.
+    // A Cloudflare R2 lifecycle rule on prefix geo-recovery/ handles expiry after N days.
+    // await this.cleanupR2Files(context.sessionId)
   }
 
   private async setJob(job: GeoRecoveryJobState): Promise<void> {

@@ -125,7 +125,9 @@ router.post('/api/geo-recovery/session', [GeoRecoveryController, 'createSession'
 router.post('/api/geo-recovery/free-session', [GeoRecoveryController, 'freeSession'])
 router.post('/api/geo-recovery/upload-url', [GeoRecoveryController, 'getUploadUrl'])
 router.post('/api/geo-recovery/photos', [GeoRecoveryController, 'registerPhotos'])
-router.post('/api/geo-recovery/mock-pay', [GeoRecoveryController, 'mockPay'])
+router.post('/api/geo-recovery/payment-intent', [GeoRecoveryController, 'createPaymentIntent'])
+router.get('/api/geo-recovery/price', [GeoRecoveryController, 'price'])
+router.post('/api/geo-recovery/confirm-payment', [GeoRecoveryController, 'confirmPayment'])
 router.post('/api/geo-recovery/start', [GeoRecoveryController, 'start'])
 router.get('/api/geo-recovery/job', [GeoRecoveryController, 'job'])
 router.post('/api/geo-recovery/geocoding/suggest', [GeoRecoveryController, 'geocodingSuggest'])
@@ -519,6 +521,8 @@ router
       import('#controllers/admin/geo_recovery_admin_controller')
     router.get('/api/admin/geo-recovery/stats', [GeoRecoveryAdminController, 'stats'])
     router.get('/api/admin/geo-recovery/sessions', [GeoRecoveryAdminController, 'sessions'])
+    router.get('/api/admin/geo-recovery/payments', [GeoRecoveryAdminController, 'payments'])
+    router.get('/api/admin/geo-recovery/cost-logs', [GeoRecoveryAdminController, 'costLogs'])
     router.post('/api/admin/geo-recovery/reset-free-runs', [
       GeoRecoveryAdminController,
       'resetFreeRuns',

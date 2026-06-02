@@ -3,6 +3,7 @@ import stripeConfig from '#config/stripe'
 import Payment from '#models/payment'
 import User from '#models/user'
 import UsageService from '#services/usage_service'
+import GeoRecoveryPaymentService from '#services/geo_recovery_payment_service'
 import {
   type PhotoPackage,
   type CreditStep,
@@ -203,15 +204,35 @@ export default class PaymentService {
 
     const event = stripe.webhooks.constructEvent(rawBody, signature, stripeConfig.webhookSecret)
 
+    const geoRecoveryPaymentService = new GeoRecoveryPaymentService()
+
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session
-        await this.handleCheckoutCompleted(session)
+        if (session.metadata?.type !== 'geo_recovery') {
+          await this.handleCheckoutCompleted(session)
+        }
         break
       }
       case 'checkout.session.expired': {
         const session = event.data.object as Stripe.Checkout.Session
-        await this.handleCheckoutExpired(session)
+        if (session.metadata?.type !== 'geo_recovery') {
+          await this.handleCheckoutExpired(session)
+        }
+        break
+      }
+      case 'payment_intent.succeeded': {
+        const pi = event.data.object as Stripe.PaymentIntent
+        if (pi.metadata?.type === 'geo_recovery') {
+          await geoRecoveryPaymentService.handlePaymentIntentSucceeded(pi)
+        }
+        break
+      }
+      case 'payment_intent.payment_failed': {
+        const pi = event.data.object as Stripe.PaymentIntent
+        if (pi.metadata?.type === 'geo_recovery') {
+          await geoRecoveryPaymentService.handlePaymentIntentFailed(pi)
+        }
         break
       }
       case 'charge.refunded': {
