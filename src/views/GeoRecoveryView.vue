@@ -31,9 +31,9 @@ import pLimit from "p-limit";
 import {
   createFreeSession,
   createSession,
+  confirmPayment,
   geocodingRetrieve,
   geocodingSuggest,
-  mockPay,
   pollJob,
   startJob,
 } from "@/utils/geoRecovery/api";
@@ -184,6 +184,7 @@ watch(results, async () => {
 
 async function restoreState() {
   const existing = await loadSession();
+
   if (!existing) return;
   session.value = existing;
   photos.value = await listPhotos();
@@ -195,13 +196,28 @@ async function restoreState() {
     stepIndex.value = 4;
     await refreshMarkers();
   } else if (paid.value && photos.value.length > 0) {
+    // Session was paid and photos are registered — restart the job.
     stepIndex.value = 3;
-    kickOffPolling();
+    await handleStart();
+  } else if (paid.value) {
+    // Paid but upload never completed (page closed mid-upload).
+    // Ask user to re-select files.
+    message.info(
+      "Your payment was confirmed. Please re-select your photos to start the analysis.",
+    );
+    stepIndex.value = 1;
   } else {
-    // Session active but no results yet; go to upload step.
-    // previewPhotos will be empty after a page reload — user re-selects files.
     stepIndex.value = 1;
   }
+}
+
+/**
+ * Called after payment is confirmed (if the session was previously paid but
+ * the job never started — e.g. page reload after upload completed).
+ */
+async function resumeAfterPayment() {
+  if (!session.value) return;
+  await handleStart();
 }
 
 async function handleAcceptAndStart() {
@@ -299,24 +315,23 @@ function removePreviewPhoto(id: string) {
   previewFileKeys.delete(fileFingerprint(removed.file));
 }
 
-// ── Payment + upload + start (all-in-one) ────────────────────────────────
+// ── Continue: just advance to the pay step (no upload yet) ────────────────
+
+function handleContinue() {
+  stepIndex.value = 2;
+}
+
+// ── Payment confirmed: upload files then start analysis ───────────────────
 
 const payBusy = ref(false);
-async function handlePay() {
+async function handlePaid() {
   if (!session.value) return;
-  payBusy.value = true;
-  try {
-    // 1. Mock payment
-    await mockPay(session.value.sessionToken);
-    paid.value = true;
-    await setPaid(true);
-    message.success("Payment confirmed");
+  // Advance to processing step — upload progress will show here.
+  stepIndex.value = 3;
 
-    // 2. Move to processing card so upload progress is visible
-    stepIndex.value = 3;
-
-    // 3. Upload all preview files to backend
-    const filesToUpload = previewPhotos.value.map((p) => p.file);
+  // Upload the selected files to R2 now that payment is confirmed.
+  const filesToUpload = previewPhotos.value.map((p) => p.file);
+  if (filesToUpload.length > 0) {
     uploading.value = true;
     uploadProgress.value = {
       total: filesToUpload.length,
@@ -324,31 +339,30 @@ async function handlePay() {
       failed: 0,
       current: null,
     };
-    const result = await uploadFiles({
-      token: session.value.sessionToken,
-      files: filesToUpload,
-      onProgress: (p) => (uploadProgress.value = p),
-    });
-    photos.value = await listPhotos();
-    uploading.value = false;
-
-    if (result.failed.length > 0) {
-      message.warning(
-        `${result.failed.length} photo${
-          result.failed.length === 1 ? "" : "s"
-        } could not be uploaded.`,
-      );
+    try {
+      const result = await uploadFiles({
+        token: session.value.sessionToken,
+        files: filesToUpload,
+        onProgress: (p) => (uploadProgress.value = p),
+      });
+      photos.value = await listPhotos();
+      uploading.value = false;
+      if (result.failed.length > 0) {
+        message.warning(
+          `${result.failed.length} photo${
+            result.failed.length === 1 ? "" : "s"
+          } could not be uploaded.`,
+        );
+      }
+    } catch (error: any) {
+      uploading.value = false;
+      message.error(error?.message ?? "Upload failed. Please try again.");
+      stepIndex.value = 2;
+      return;
     }
-
-    // 4. Start geo-inference job
-    await handleStart();
-  } catch (error: any) {
-    uploading.value = false;
-    message.error(error?.message ?? "Payment or upload failed");
-    stepIndex.value = 2; // send back to pay step on error
-  } finally {
-    payBusy.value = false;
   }
+
+  await handleStart();
 }
 
 // ── Job ───────────────────────────────────────────────────────────────────
@@ -780,7 +794,7 @@ const hoveredTooltipAddress = computed(() => {
       :max-photos="session?.maxPhotos ?? 5000"
       :uploading="uploading"
       :upload-progress="uploadProgress"
-      :pay-busy="payBusy"
+      :token="session?.sessionToken ?? null"
       :job="job"
       :job-stage-label="jobStageLabel"
       :zip-busy="zipBusy"
@@ -790,9 +804,9 @@ const hoveredTooltipAddress = computed(() => {
       @accepted="handleAcceptAndStart"
       @run-free="handleFreeRun"
       @file-change="onFilesChanged"
-      @continue="stepIndex = 2"
+      @continue="handleContinue"
       @back="stepIndex--"
-      @pay="handlePay"
+      @paid="handlePaid"
       @download="handleDownload"
       @start-over="handleStartOver"
       @remove-photo="removePreviewPhoto"

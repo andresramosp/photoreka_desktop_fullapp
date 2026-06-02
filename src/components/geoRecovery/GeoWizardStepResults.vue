@@ -35,8 +35,13 @@ const emit = defineEmits<{
       </template>
       Download Geo-Inferred Photos
     </NButton>
-    <span v-if="zipProgress" class="muted small">
-      Packing {{ zipProgress.done }} / {{ zipProgress.total }}…
+    <span
+      class="muted small progress-text"
+      :class="{ 'is-hidden': !zipProgress }"
+    >
+      {{
+        zipProgress ? `Packing ${zipProgress.done} / ${zipProgress.total}…` : ""
+      }}
     </span>
   </div>
 </template>
@@ -64,5 +69,22 @@ const emit = defineEmits<{
 }
 .small {
   font-size: 12px;
+}
+.progress-text {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  margin-left: 14px;
+}
+.progress-text.is-hidden {
+  visibility: hidden;
+}
+
+@media (max-width: 768px) {
+  .geo-actions-bar {
+    bottom: 80px;
+  }
 }
 </style>

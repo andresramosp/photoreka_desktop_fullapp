@@ -5,18 +5,22 @@
       <p>Monitor anonymous geo-recovery sessions and manage free-run quotas</p>
     </div>
 
-    <!-- ── Free-run counters ───────────────────────────────────────────── -->
-    <div class="card">
-      <div class="card-title-row">
-        <h3 class="card-title">Free-run quota — today</h3>
+    <div class="summary-card">
+      <div class="panel-header">
+        <div>
+          <h3 class="panel-title">Free-run quota — today</h3>
+          <p class="panel-description">
+            Daily counters for anonymous geo-recovery access.
+          </p>
+        </div>
         <n-button
-          size="tiny"
+          size="small"
           quaternary
           :loading="statsLoading"
           title="Refresh"
           @click="loadStats"
         >
-          ↻
+          Refresh
         </n-button>
       </div>
 
@@ -39,9 +43,10 @@
           <span class="quota-value">{{ stats.ipLimit }}</span>
         </div>
       </div>
-      <div v-else-if="statsLoading" class="loading-inline">
-        <n-spin size="small" />
+      <div v-else-if="statsLoading" class="summary-loading-state">
+        <n-spin show />
       </div>
+      <div v-else class="summary-empty-state">Could not load quota stats.</div>
 
       <div class="reset-row">
         <n-button
@@ -54,98 +59,189 @@
           Reset today's free-run counters
         </n-button>
         <span class="reset-hint">
-          Removes rate-limit keys for today so testing (or a genuine reset) can
-          proceed. Does not affect sessions already created.
+          Removes rate-limit keys for today so testing or a genuine reset can
+          proceed. Existing sessions are not affected.
         </span>
       </div>
     </div>
 
-    <!-- ── Sessions table ─────────────────────────────────────────────── -->
-    <div class="card">
-      <div class="card-title-row">
-        <h3 class="card-title">Active sessions (Redis, last 7 days)</h3>
+    <div class="section-panel">
+      <div class="panel-header">
+        <div>
+          <h3 class="panel-title">Payments</h3>
+          <p class="panel-description">
+            Database records for geo-recovery checkout flow.
+          </p>
+        </div>
         <n-button
-          size="tiny"
+          size="small"
+          quaternary
+          :loading="paymentsLoading"
+          title="Refresh"
+          @click="loadPayments"
+        >
+          Refresh
+        </n-button>
+      </div>
+
+      <div class="table-wrapper">
+        <div class="table-body">
+          <div
+            v-if="paymentsLoading && !payments.length"
+            class="table-loading-state"
+          >
+            <n-spin show />
+          </div>
+          <n-data-table
+            v-else
+            :columns="paymentColumns"
+            :data="payments"
+            :row-key="(row: PaymentRow) => row.id"
+            :bordered="false"
+            size="small"
+            :max-height="460"
+            striped
+          />
+        </div>
+        <div
+          v-if="paymentsMeta"
+          class="table-pagination table-pagination-split"
+        >
+          <span class="dim">{{ paymentsMeta.total }} payments total</span>
+          <n-pagination
+            v-model:page="paymentsPage"
+            :page-count="paymentsMeta.lastPage"
+            :page-slot="5"
+            size="small"
+            @update:page="loadPayments"
+          />
+        </div>
+      </div>
+    </div>
+
+    <div class="section-panel">
+      <div class="panel-header">
+        <div>
+          <h3 class="panel-title">Cost Logs</h3>
+          <p class="panel-description">
+            Detailed cost tracking for geo-recovery operations.
+          </p>
+        </div>
+        <n-button
+          size="small"
+          quaternary
+          :loading="costLogsLoading"
+          title="Refresh"
+          @click="loadCostLogs"
+        >
+          Refresh
+        </n-button>
+      </div>
+
+      <div class="table-wrapper">
+        <div class="table-body">
+          <div
+            v-if="costLogsLoading && !costLogs.length"
+            class="table-loading-state"
+          >
+            <n-spin show />
+          </div>
+          <n-data-table
+            v-else
+            :columns="costLogColumns"
+            :data="costLogs"
+            :row-key="(row: CostLogRow) => row.id"
+            :bordered="false"
+            size="small"
+            :max-height="460"
+            striped
+          />
+        </div>
+        <div
+          v-if="costLogsMeta"
+          class="table-pagination table-pagination-split"
+        >
+          <span class="dim">{{ costLogsMeta.total }} cost logs total</span>
+          <n-pagination
+            v-model:page="costLogsPage"
+            :page-count="costLogsMeta.lastPage"
+            :page-slot="5"
+            size="small"
+            @update:page="loadCostLogs"
+          />
+        </div>
+      </div>
+    </div>
+
+    <div class="section-panel">
+      <div class="panel-header">
+        <div>
+          <h3 class="panel-title">Active sessions</h3>
+          <p class="panel-description">
+            Redis sessions created in the last 7 days.
+          </p>
+        </div>
+        <n-button
+          size="small"
           quaternary
           :loading="sessionsLoading"
           title="Refresh"
           @click="loadSessions"
         >
-          ↻
+          Refresh
         </n-button>
       </div>
 
-      <div v-if="sessionsLoading && !sessions.length" class="loading-inline">
-        <n-spin size="small" />
-      </div>
-
-      <div v-else-if="!sessions.length" class="no-data">No sessions found</div>
-
-      <div v-else class="sessions-table">
-        <div class="tbl-head">
-          <span>Session ID</span>
-          <span>Created</span>
-          <span>Photos</span>
-          <span>Payment</span>
-          <span>Job status</span>
-          <span>Progress</span>
+      <div class="table-wrapper">
+        <div class="table-body">
+          <div
+            v-if="sessionsLoading && !sessions.length"
+            class="table-loading-state"
+          >
+            <n-spin show />
+          </div>
+          <n-data-table
+            v-else
+            :columns="sessionColumns"
+            :data="pagedSessions"
+            :row-key="(row: SessionRow) => row.sessionId"
+            :bordered="false"
+            size="small"
+            :max-height="420"
+            striped
+          />
         </div>
-        <div v-for="s in pagedSessions" :key="s.sessionId" class="tbl-row">
-          <span class="mono dim" :title="s.sessionId">
-            {{ s.sessionId.slice(0, 8) }}…
-          </span>
-          <span class="dim">{{ formatDate(s.createdAt) }}</span>
-          <span>{{ s.photos.length }}</span>
-          <span>
-            <n-tag size="tiny" :type="paymentTagType(s)" :bordered="false">
-              {{ paymentLabel(s) }}
-            </n-tag>
-          </span>
-          <span>
-            <n-tag
-              v-if="s.job"
-              size="tiny"
-              :type="jobTagType(s.job.status)"
-              :bordered="false"
-            >
-              {{ s.job.status }}
-            </n-tag>
-            <span v-else class="dim">—</span>
-          </span>
-          <span class="dim">
-            <template v-if="s.job">
-              {{ s.job.processed }} / {{ s.job.total }}
-              <span v-if="s.job.status === 'completed'">
-                ({{ s.job.located }} located)
-              </span>
-            </template>
-            <template v-else>—</template>
-          </span>
+        <div
+          v-if="sessions.length > pageSize"
+          class="table-pagination table-pagination-split"
+        >
+          <span class="dim">{{ sessions.length }} sessions total</span>
+          <n-pagination
+            v-model:page="page"
+            :page-count="Math.ceil(sessions.length / pageSize)"
+            :page-slot="5"
+            size="small"
+          />
         </div>
-      </div>
-
-      <!-- Pagination -->
-      <div v-if="sessions.length > pageSize" class="tbl-pagination">
-        <span class="dim">{{ sessions.length }} sessions total</span>
-        <n-pagination
-          v-model:page="page"
-          :page-count="Math.ceil(sessions.length / pageSize)"
-          :page-slot="5"
-          size="small"
-        />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { useMessage } from "naive-ui";
+import { computed, h, onMounted, ref } from "vue";
+import {
+  NButton,
+  NDataTable,
+  NPagination,
+  NSpin,
+  NTag,
+  useMessage,
+} from "naive-ui";
+import type { DataTableColumn } from "naive-ui";
 import { api } from "../../utils/axios";
 
 const message = useMessage();
-
-// ── Types ─────────────────────────────────────────────────────────────────
 
 interface FreeRunStats {
   date: string;
@@ -173,12 +269,70 @@ interface SessionRow {
   job: JobSnapshot | null;
 }
 
-// ── State ─────────────────────────────────────────────────────────────────
+interface PaymentRow {
+  id: number;
+  sessionId: string | null;
+  stripeSessionId: string | null;
+  stripePaymentIntentId: string | null;
+  stripeCustomerId: string | null;
+  customerEmail: string | null;
+  photoCount: number;
+  amountEur: number;
+  status: "pending" | "completed" | "failed";
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface PaymentsMeta {
+  total: number;
+  perPage: number;
+  currentPage: number;
+  lastPage: number;
+  firstPage: number;
+  firstPageUrl: string;
+  lastPageUrl: string;
+  nextPageUrl: string | null;
+  previousPageUrl: string | null;
+}
+
+interface CostLogRow {
+  id: number;
+  geoRecoveryPaymentId: number;
+  category: string;
+  costInEur: number;
+  calls: number;
+  model: string | null;
+  task: string | null;
+  referenceId: string | null;
+  metadata: Record<string, any> | null;
+  createdAt: string;
+  payment: PaymentRow | null;
+}
+
+interface CostLogsMeta {
+  total: number;
+  perPage: number;
+  currentPage: number;
+  lastPage: number;
+  firstPage: number;
+  firstPageUrl: string;
+  lastPageUrl: string;
+  nextPageUrl: string | null;
+  previousPageUrl: string | null;
+}
 
 const stats = ref<FreeRunStats | null>(null);
 const statsLoading = ref(false);
 const sessions = ref<SessionRow[]>([]);
 const sessionsLoading = ref(false);
+const payments = ref<PaymentRow[]>([]);
+const paymentsLoading = ref(false);
+const paymentsMeta = ref<PaymentsMeta | null>(null);
+const paymentsPage = ref(1);
+const costLogs = ref<CostLogRow[]>([]);
+const costLogsLoading = ref(false);
+const costLogsMeta = ref<CostLogsMeta | null>(null);
+const costLogsPage = ref(1);
 const resetting = ref(false);
 
 const page = ref(1);
@@ -189,14 +343,276 @@ const pagedSessions = computed(() => {
   return sessions.value.slice(start, start + pageSize.value);
 });
 
-// ── Init ──────────────────────────────────────────────────────────────────
+const sessionColumns = computed<DataTableColumn<SessionRow>[]>(() => [
+  {
+    title: "Session ID",
+    key: "sessionId",
+    width: 130,
+    render(row) {
+      return h(
+        "span",
+        { class: "mono dim", title: row.sessionId },
+        truncate(row.sessionId, 8),
+      );
+    },
+  },
+  {
+    title: "Created",
+    key: "createdAt",
+    width: 155,
+    render(row) {
+      return h("span", { class: "dim" }, formatDate(row.createdAt));
+    },
+  },
+  {
+    title: "Photos",
+    key: "photos",
+    width: 80,
+    render(row) {
+      return row.photos.length;
+    },
+  },
+  {
+    title: "Payment",
+    key: "paid",
+    width: 110,
+    render(row) {
+      return h(
+        NTag,
+        { size: "tiny", type: paymentTagType(row), bordered: false },
+        { default: () => paymentLabel(row) },
+      );
+    },
+  },
+  {
+    title: "Job status",
+    key: "job",
+    width: 120,
+    render(row) {
+      if (!row.job) {
+        return h("span", { class: "dim" }, "—");
+      }
+
+      return h(
+        NTag,
+        { size: "tiny", type: jobTagType(row.job.status), bordered: false },
+        { default: () => row.job?.status ?? "—" },
+      );
+    },
+  },
+  {
+    title: "Progress",
+    key: "progress",
+    minWidth: 180,
+    render(row) {
+      return h(
+        "span",
+        { class: "dim progress-text" },
+        formatJobProgress(row.job),
+      );
+    },
+  },
+]);
+
+const paymentColumns = computed<DataTableColumn<PaymentRow>[]>(() => [
+  {
+    title: "ID",
+    key: "id",
+    width: 70,
+    render(row) {
+      return h("span", { class: "mono" }, `#${row.id}`);
+    },
+  },
+  {
+    title: "Session ID",
+    key: "sessionId",
+    width: 130,
+    render(row) {
+      return h(
+        "span",
+        { class: "mono dim", title: row.sessionId ?? undefined },
+        truncate(row.sessionId, 8),
+      );
+    },
+  },
+  {
+    title: "Email",
+    key: "customerEmail",
+    minWidth: 210,
+    render(row) {
+      return h(
+        "span",
+        { title: row.customerEmail ?? undefined },
+        row.customerEmail || "—",
+      );
+    },
+  },
+  {
+    title: "Photos",
+    key: "photoCount",
+    width: 80,
+  },
+  {
+    title: "Amount €",
+    key: "amountEur",
+    width: 100,
+    render(row) {
+      return h("span", { class: "mono" }, Number(row.amountEur).toFixed(2));
+    },
+  },
+  {
+    title: "Status",
+    key: "status",
+    width: 110,
+    render(row) {
+      return h(
+        NTag,
+        {
+          size: "tiny",
+          type: paymentStatusTagType(row.status),
+          bordered: false,
+        },
+        { default: () => row.status },
+      );
+    },
+  },
+  {
+    title: "Stripe IDs",
+    key: "stripeIds",
+    minWidth: 260,
+    render(row) {
+      const stripeRows = [];
+
+      if (row.stripePaymentIntentId) {
+        stripeRows.push(
+          renderStripeIdRow("PI:", row.stripePaymentIntentId, 20),
+        );
+      }
+      if (row.stripeSessionId) {
+        stripeRows.push(renderStripeIdRow("CS:", row.stripeSessionId, 20));
+      }
+      if (row.stripeCustomerId) {
+        stripeRows.push(renderStripeIdRow("Cust:", row.stripeCustomerId, 18));
+      }
+
+      return h(
+        "div",
+        { class: "stripe-ids" },
+        stripeRows.length ? stripeRows : [h("span", { class: "dim" }, "—")],
+      );
+    },
+  },
+  {
+    title: "Created",
+    key: "createdAt",
+    width: 150,
+    render(row) {
+      return h("span", { class: "dim" }, formatDate(row.createdAt));
+    },
+  },
+]);
+
+const costLogColumns = computed<DataTableColumn<CostLogRow>[]>(() => [
+  {
+    title: "ID",
+    key: "id",
+    width: 80,
+    render(row) {
+      return h("span", { class: "mono" }, `#${row.id}`);
+    },
+  },
+
+  {
+    title: "Email",
+    key: "customerEmail",
+    width: 220,
+    render(row) {
+      return h(
+        "span",
+        { class: "dim", title: row.payment?.customerEmail ?? undefined },
+        truncate(row.payment?.customerEmail, 28),
+      );
+    },
+  },
+  {
+    title: "Category",
+    key: "category",
+    width: 150,
+    render(row) {
+      return h(
+        NTag,
+        { size: "tiny", type: "default", bordered: false },
+        { default: () => row.category },
+      );
+    },
+  },
+  {
+    title: "Cost €",
+    key: "costInEur",
+    width: 100,
+    render(row) {
+      return h("span", { class: "mono" }, row.costInEur.toFixed(4));
+    },
+  },
+  {
+    title: "Payment €",
+    key: "geoRecoveryPaymentId",
+    width: 110,
+    render(row) {
+      const amount = row.payment?.amountEur
+        ? Number(row.payment.amountEur).toFixed(2)
+        : "—";
+      return h(
+        "span",
+        {
+          class: "mono",
+          title: `Payment #${row.geoRecoveryPaymentId}`,
+        },
+        amount,
+      );
+    },
+  },
+  // {
+  //   title: "Calls",
+  //   key: "calls",
+  //   width: 80,
+  // },
+  // {
+  //   title: "Model",
+  //   key: "model",
+  //   width: 170,
+  //   render(row) {
+  //     return h("span", { class: "mono dim" }, row.model || "—");
+  //   },
+  // },
+  {
+    title: "Ref ID",
+    key: "referenceId",
+    width: 120,
+    render(row) {
+      return h(
+        "span",
+        { class: "mono dim", title: row.referenceId ?? undefined },
+        truncate(row.referenceId, 12),
+      );
+    },
+  },
+  {
+    title: "Created",
+    key: "createdAt",
+    width: 150,
+    render(row) {
+      return h("span", { class: "dim" }, formatDate(row.createdAt));
+    },
+  },
+]);
 
 onMounted(() => {
   loadStats();
   loadSessions();
+  loadPayments();
+  loadCostLogs();
 });
-
-// ── Loaders ───────────────────────────────────────────────────────────────
 
 async function loadStats() {
   statsLoading.value = true;
@@ -223,7 +639,41 @@ async function loadSessions() {
   }
 }
 
-// ── Actions ───────────────────────────────────────────────────────────────
+async function loadPayments() {
+  paymentsLoading.value = true;
+  try {
+    const { data } = await api.get("/api/admin/geo-recovery/payments", {
+      params: {
+        page: paymentsPage.value,
+        limit: 50,
+      },
+    });
+    payments.value = data.payments ?? [];
+    paymentsMeta.value = data.meta ?? null;
+  } catch (err: any) {
+    message.error(err.response?.data?.error ?? "Could not load payments");
+  } finally {
+    paymentsLoading.value = false;
+  }
+}
+
+async function loadCostLogs() {
+  costLogsLoading.value = true;
+  try {
+    const { data } = await api.get("/api/admin/geo-recovery/cost-logs", {
+      params: {
+        page: costLogsPage.value,
+        limit: 50,
+      },
+    });
+    costLogs.value = data.costLogs ?? [];
+    costLogsMeta.value = data.meta ?? null;
+  } catch (err: any) {
+    message.error(err.response?.data?.error ?? "Could not load cost logs");
+  } finally {
+    costLogsLoading.value = false;
+  }
+}
 
 async function handleResetFreeRuns() {
   resetting.value = true;
@@ -238,9 +688,16 @@ async function handleResetFreeRuns() {
   }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────
+async function copyToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    message.success("Copied to clipboard");
+  } catch (err) {
+    message.error("Failed to copy");
+  }
+}
 
-function formatDate(iso: string): string {
+function formatDate(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
   return d.toLocaleString(undefined, {
@@ -251,15 +708,30 @@ function formatDate(iso: string): string {
   });
 }
 
-function paymentLabel(s: SessionRow): string {
-  if (s.isFreeRun) return "Free run";
-  if (s.paid) return "Paid";
+function truncate(value: string | null | undefined, length: number): string {
+  if (!value) return "—";
+  if (value.length <= length) return value;
+  return `${value.slice(0, length)}…`;
+}
+
+function formatJobProgress(job: JobSnapshot | null): string {
+  if (!job) return "—";
+  if (job.status === "completed") {
+    return `${job.processed} / ${job.total} (${job.located} located)`;
+  }
+
+  return `${job.processed} / ${job.total}`;
+}
+
+function paymentLabel(session: SessionRow): string {
+  if (session.isFreeRun) return "Free run";
+  if (session.paid) return "Paid";
   return "Unpaid";
 }
 
-function paymentTagType(s: SessionRow): "success" | "info" | "default" {
-  if (s.isFreeRun) return "info";
-  if (s.paid) return "success";
+function paymentTagType(session: SessionRow): "success" | "info" | "default" {
+  if (session.isFreeRun) return "info";
+  if (session.paid) return "success";
   return "default";
 }
 
@@ -268,63 +740,103 @@ function jobTagType(status: string): "success" | "error" | "warning" {
   if (status === "failed") return "error";
   return "warning";
 }
+
+function paymentStatusTagType(status: string): "success" | "error" | "warning" {
+  if (status === "completed") return "success";
+  if (status === "failed") return "error";
+  return "warning";
+}
+
+function renderStripeIdRow(label: string, value: string, length: number) {
+  return h("div", { class: "stripe-id-row" }, [
+    h("span", { class: "stripe-label" }, label),
+    h("span", { class: "mono dim", title: value }, truncate(value, length)),
+    h(
+      NButton,
+      {
+        size: "tiny",
+        text: true,
+        class: "copy-btn",
+        title: "Copy to clipboard",
+        onClick: () => copyToClipboard(value),
+      },
+      { default: () => "📋" },
+    ),
+  ]);
+}
 </script>
 
 <style scoped>
 .admin-section {
-  max-width: 960px;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .section-header {
-  margin-bottom: 28px;
-}
-.section-header h1 {
-  font-size: 22px;
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0 0 4px;
-}
-.section-header p {
-  font-size: 14px;
-  color: #64748b;
-  margin: 0;
+  padding: 0 !important;
 }
 
-/* ── Cards ─────────────────────────────────────────── */
-.card {
-  background: #fff;
-  border: 1px solid #e8ecf0;
-  border-radius: 12px;
-  padding: 22px 24px;
+.section-header h1 {
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.section-header p {
+  margin: 0 0 20px;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.summary-card,
+.section-panel {
   margin-bottom: 24px;
 }
 
-.card-title-row {
+.summary-card {
+  background: #fff;
+  border: 1px solid #e8ecf0;
+  border-radius: 12px;
+  padding: 20px 24px;
+}
+
+.panel-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 16px;
   margin-bottom: 16px;
 }
 
-.card-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1e293b;
+.panel-title {
   margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
 }
 
-/* ── Quota grid ────────────────────────────────────── */
+.panel-description {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
 .quota-grid {
-  display: flex;
-  gap: 32px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
   margin-bottom: 18px;
 }
 
 .quota-item {
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .quota-label {
@@ -333,7 +845,7 @@ function jobTagType(status: string): "success" | "error" | "warning" {
 }
 
 .quota-value {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
   color: #1e293b;
 }
@@ -342,7 +854,17 @@ function jobTagType(status: string): "success" | "error" | "warning" {
   color: #ef4444;
 }
 
-/* ── Reset row ─────────────────────────────────────── */
+.summary-loading-state,
+.summary-empty-state,
+.table-loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
 .reset-row {
   display: flex;
   align-items: center;
@@ -357,38 +879,52 @@ function jobTagType(status: string): "success" | "error" | "warning" {
   color: #94a3b8;
 }
 
-/* ── Sessions table ────────────────────────────────── */
-.sessions-table {
-  font-size: 13px;
+.table-wrapper {
+  background: #fff;
+  border: 1px solid #e8ecf0;
+  border-radius: 12px;
+  overflow: hidden;
 }
 
-.tbl-head,
-.tbl-row {
-  display: grid;
-  grid-template-columns: 120px 140px 70px 100px 110px 1fr;
-  gap: 8px;
-  padding: 8px 6px;
+.table-body {
+  min-height: 0;
+}
+
+.table-pagination {
+  padding: 10px 16px;
+  display: flex;
+  justify-content: center;
+  border-top: 1px solid #f1f5f9;
+}
+
+.table-pagination-split {
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.tbl-head {
-  font-size: 11px;
+:deep(.n-data-table-th) {
+  background: #f8fafc !important;
+  font-size: 12px;
   font-weight: 600;
-  color: #94a3b8;
+  color: #64748b;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  border-bottom: 1px solid #f0f2f5;
-  padding-bottom: 10px;
-  margin-bottom: 2px;
+  letter-spacing: 0.3px;
 }
 
-.tbl-row {
-  border-bottom: 1px solid #f8fafc;
-  color: #334155;
+:deep(.n-data-table-td) {
+  font-size: 13px;
+  padding: 8px 12px !important;
+  vertical-align: top;
 }
 
-.tbl-row:last-child {
-  border-bottom: none;
+:deep(.n-data-table-tbody tr) {
+  transition: background-color 0.15s;
+}
+
+:deep(.n-data-table-tbody tr:hover) {
+  background-color: #f8fafc !important;
 }
 
 .mono {
@@ -399,28 +935,70 @@ function jobTagType(status: string): "success" | "error" | "warning" {
   color: #94a3b8;
 }
 
-/* ── Pagination ────────────────────────────────────── */
-.tbl-pagination {
+.progress-text {
+  line-height: 1.4;
+}
+
+.stripe-ids {
   display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+}
+
+.stripe-id-row {
+  display: flex;
+  gap: 4px;
   align-items: center;
-  justify-content: space-between;
-  padding-top: 14px;
-  margin-top: 4px;
-  border-top: 1px solid #f0f2f5;
+}
+
+.stripe-label {
+  min-width: 32px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.copy-btn {
+  opacity: 0;
+  transition: opacity 0.15s;
+  padding: 0 4px !important;
   font-size: 12px;
 }
 
-/* ── Misc ──────────────────────────────────────────── */
-.loading-inline {
-  display: flex;
-  justify-content: center;
-  padding: 20px 0;
+.stripe-id-row:hover .copy-btn {
+  opacity: 1;
 }
 
-.no-data {
-  text-align: center;
-  color: #94a3b8;
-  font-size: 13px;
-  padding: 24px 0;
+@media (max-width: 768px) {
+  .admin-section {
+    padding: 0 4px;
+  }
+
+  .panel-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .summary-card {
+    padding: 16px;
+  }
+
+  .table-wrapper {
+    border-radius: 8px;
+  }
+
+  .table-pagination-split {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .section-header h1 {
+    font-size: 18px;
+  }
+
+  .quota-value {
+    font-size: 20px;
+  }
 }
 </style>

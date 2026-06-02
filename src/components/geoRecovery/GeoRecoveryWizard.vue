@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { NIcon, NTag } from "naive-ui";
-import { TrashOutline } from "@vicons/ionicons5";
+import { RefreshOutline } from "@vicons/ionicons5";
+import AppLogo from "@/components/AppLogo.vue";
 import type { UploadProgress } from "@/utils/geoRecovery/upload";
 import type { ZipProgress } from "@/utils/geoRecovery/zip";
 import type {
@@ -23,7 +24,7 @@ const props = defineProps<{
   maxPhotos: number;
   uploading: boolean;
   uploadProgress: UploadProgress | null;
-  payBusy: boolean;
+  token: string | null;
   job: GeoRecoveryJobState | null;
   jobStageLabel: string;
   zipBusy: boolean;
@@ -38,7 +39,7 @@ const emit = defineEmits<{
   fileChange: [files: File[]];
   continue: [];
   back: [];
-  pay: [];
+  paid: [];
   download: [];
   startOver: [];
   removePhoto: [id: string];
@@ -49,14 +50,13 @@ const emit = defineEmits<{
 <template>
   <!-- Top-left brand chip — always visible -->
   <div class="geo-brand">
-    <NIcon size="22" class="geo-brand-icon">
-      <svg viewBox="0 0 24 24">
-        <path
-          fill="currentColor"
-          d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"
-        />
-      </svg>
-    </NIcon>
+    <AppLogo
+      layout="horizontal"
+      size="tiny"
+      :click-to-home="true"
+      theme="dark"
+    />
+    <span class="geo-brand-divider" />
     <div class="geo-brand-text">
       <span class="geo-brand-title">Geo Recovery</span>
       <span class="geo-brand-subtitle">Add GPS to your photos</span>
@@ -95,11 +95,11 @@ const emit = defineEmits<{
         @back="emit('back')"
       />
       <GeoWizardStepPay
-        v-else-if="stepIndex === 2"
+        v-else-if="stepIndex === 2 && token"
+        :token="token"
         :photo-count="photoCount"
-        :pay-busy="payBusy"
         @back="emit('back')"
-        @pay="emit('pay')"
+        @paid="emit('paid')"
       />
     </div>
   </div>
@@ -132,7 +132,7 @@ const emit = defineEmits<{
     title="Start a new session"
     @click="emit('startOver')"
   >
-    <NIcon :component="TrashOutline" size="14" />
+    <NIcon :component="RefreshOutline" size="18" />
     <span>Start new</span>
   </button>
 </template>
@@ -156,21 +156,30 @@ const emit = defineEmits<{
   backdrop-filter: blur(8px);
   box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
 }
-.geo-brand-icon {
-  color: var(--accent-color);
+.geo-brand :deep(.photoreka-logo) {
+  cursor: pointer;
+}
+.geo-brand-divider {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
 }
 .geo-brand-text {
   display: flex;
   flex-direction: column;
-  line-height: 1.15;
+  line-height: 1.2;
 }
 .geo-brand-title {
+  font-size: 12px;
   font-weight: 700;
-  font-size: 14px;
+  white-space: nowrap;
 }
 .geo-brand-subtitle {
-  font-size: 11px;
-  opacity: 0.7;
+  font-size: 10px;
+  opacity: 0.6;
+  white-space: nowrap;
 }
 
 /* ── Stats pill (top-right) ──────────────────────────────────────────────── */
@@ -199,22 +208,25 @@ const emit = defineEmits<{
   z-index: 1000;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 8px;
+  padding: 10px 18px;
   background: var(--geo-card-bg);
   border: 1px solid var(--geo-card-border);
   border-radius: 999px;
-  color: rgba(255, 255, 255, 0.65);
-  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
   backdrop-filter: blur(8px);
-  transition:
+  /* transition:
     color 0.18s ease,
-    background 0.18s ease;
+    background 0.18s ease,
+    transform 0.18s ease; */
 }
 .geo-startover:hover {
-  color: #ff6b6b;
-  background: rgba(40, 30, 30, 0.96);
+  /* color: #fff;
+  background: rgba(50, 40, 40, 0.96);
+  transform: scale(1.05); */
 }
 
 /* ── Wizard backdrop + centered modal (steps 0–2) ────────────────────────── */
@@ -251,5 +263,49 @@ const emit = defineEmits<{
 .geo-modal-card :deep(h2) {
   margin: 0 0 12px;
   font-size: 20px;
+}
+
+/* ── Mobile full-screen adjustments ──────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  /* Remove margins from floating elements */
+  .geo-brand {
+    display: none;
+  }
+
+  .geo-brand-title {
+    font-size: 11px;
+  }
+
+  .geo-brand-subtitle {
+    font-size: 9px;
+  }
+
+  .geo-stats-pill {
+    top: 8px;
+    right: 8px;
+    padding: 4px 8px;
+    gap: 4px;
+  }
+
+  .geo-startover {
+    bottom: 8px;
+    left: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+
+  /* Full-screen modal for steps 0-2 */
+  .geo-modal-card {
+    width: 100vw;
+    max-height: 100vh;
+    padding: 16px;
+    border-radius: 0;
+    border: none;
+  }
+
+  .geo-modal {
+    align-items: stretch;
+  }
 }
 </style>

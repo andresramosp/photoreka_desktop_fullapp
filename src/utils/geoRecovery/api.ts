@@ -72,10 +72,31 @@ export async function registerPhotos(
   return { photoCount: data.photoCount, photoUrls: data.photoUrls ?? {} };
 }
 
-export async function mockPay(token: string): Promise<void> {
+export async function createPaymentIntent(
+  token: string,
+  photoCount: number,
+): Promise<{
+  clientSecret: string;
+  pricePerPhotoEur: number;
+  minChargeEur: number;
+  amountEur: number;
+}> {
+  const { data } = await client().post(
+    "/api/geo-recovery/payment-intent",
+    { photoCount },
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  return data;
+}
+
+export async function confirmPayment(
+  token: string,
+  stripePaymentIntentId: string,
+  customerEmail?: string,
+): Promise<void> {
   await client().post(
-    "/api/geo-recovery/mock-pay",
-    {},
+    "/api/geo-recovery/confirm-payment",
+    { stripePaymentIntentId, customerEmail },
     { headers: { Authorization: `Bearer ${token}` } },
   );
 }

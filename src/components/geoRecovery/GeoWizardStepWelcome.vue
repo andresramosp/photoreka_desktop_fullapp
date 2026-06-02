@@ -10,6 +10,11 @@ import {
   AddOutline,
   ArrowBackOutline,
   CloseOutline,
+  LaptopOutline,
+  CloudUploadOutline,
+  LocationOutline,
+  DownloadOutline,
+  ArrowForwardOutline,
 } from "@vicons/ionicons5";
 import { useImageProcessing } from "@/composables/useImageProcessing.js";
 import {
@@ -186,6 +191,10 @@ function onSkip() {
 }
 
 async function runAssessment(files: File[]) {
+  if (assessLimitReached.value) {
+    assessError.value = "Daily free-run limit reached. Try again tomorrow.";
+    return;
+  }
   incrementAssessRecord();
   assessBusy.value = true;
   try {
@@ -263,12 +272,12 @@ onUnmounted(() => revokeAssessPreviews());
     />
 
     <div class="grw-staging-header">
-      <h3 class="grw-staging-title">Free run — select 10 photos</h3>
+      <h3 class="grw-staging-title">Geo-Inference Test — select 10 photos</h3>
     </div>
 
     <p class="grw-staging-sub">
-      Choose photos with rich context for the best results. Once you have 10, we
-      will forecast the geo-inference results.
+      Choose the most representative photos of your collection. Once you have
+      10, we will forecast the geo-inference results.
     </p>
 
     <!-- 5×2 grid with filled + empty placeholder slots -->
@@ -430,31 +439,42 @@ onUnmounted(() => revokeAssessPreviews());
     <!-- ── 3 key facts (scannable at a glance) ────────────── -->
     <div class="grw-facts">
       <div class="grw-fact">
-        <NIcon
-          :component="InformationCircleOutline"
-          size="16"
-          class="grw-fact-icon"
-        />
-        <div>
-          <strong>City-level accuracy</strong>
-          <span>
-            — results may cluster at a shared point when finer data isn't
-            available.</span
-          >
+        <div class="grw-fact-content">
+          <h3 class="grw-fact-title">
+            <NIcon
+              :component="InformationCircleOutline"
+              class="grw-fact-title-icon"
+            />
+            As precise as the evidence allows
+          </h3>
+          <p class="grw-fact-desc">
+            We push accuracy as far as possible, reaching street level in many
+            cases, while only committing to a location when confidence is high.
+          </p>
         </div>
       </div>
       <div class="grw-fact">
-        <NIcon :component="CreateOutline" size="16" class="grw-fact-icon" />
-        <div>
-          <strong>Some placements may be wrong</strong>
-          <span> — review and correct them on the map before downloading.</span>
+        <div class="grw-fact-content">
+          <h3 class="grw-fact-title">
+            <NIcon :component="CreateOutline" class="grw-fact-title-icon" />
+            Fine-tune before you download
+          </h3>
+          <p class="grw-fact-desc">
+            An interactive map lets you review and nudge any placement with a
+            smart auto-complete, so your final files are exactly right.
+          </p>
         </div>
       </div>
       <div class="grw-fact">
-        <NIcon :component="ImagesOutline" size="16" class="grw-fact-icon" />
-        <div>
-          <strong>Only thumbnails leave your device</strong>
-          <span> — originals stay local. No account required.</span>
+        <div class="grw-fact-content">
+          <h3 class="grw-fact-title">
+            <NIcon :component="ImagesOutline" class="grw-fact-title-icon" />
+            Only thumbnails leave your device
+          </h3>
+          <p class="grw-fact-desc">
+            Originals stay local and survive browser reloads. No account or
+            registration required.
+          </p>
         </div>
       </div>
     </div>
@@ -464,22 +484,36 @@ onUnmounted(() => revokeAssessPreviews());
       <div class="grw-steps-label">How it works</div>
       <div class="grw-steps">
         <div class="grw-step">
-          <span class="grw-step-num">1</span>
-          <span class="grw-step-text">Photos stay in your browser</span>
+          <span class="grw-step-num">
+            <NIcon :component="LaptopOutline" size="18" />
+          </span>
+          <span class="grw-step-text">Select your originals</span>
         </div>
-        <div class="grw-step-sep" aria-hidden="true" />
+        <div class="grw-step-sep" aria-hidden="true">
+          <NIcon :component="ArrowForwardOutline" size="14" />
+        </div>
         <div class="grw-step">
-          <span class="grw-step-num">2</span>
+          <span class="grw-step-num">
+            <NIcon :component="CloudUploadOutline" size="18" />
+          </span>
           <span class="grw-step-text">Thumbnails sent to AI</span>
         </div>
-        <div class="grw-step-sep" aria-hidden="true" />
+        <div class="grw-step-sep" aria-hidden="true">
+          <NIcon :component="ArrowForwardOutline" size="14" />
+        </div>
         <div class="grw-step">
-          <span class="grw-step-num">3</span>
+          <span class="grw-step-num">
+            <NIcon :component="LocationOutline" size="18" />
+          </span>
           <span class="grw-step-text">AI proposes a location</span>
         </div>
-        <div class="grw-step-sep" aria-hidden="true" />
+        <div class="grw-step-sep" aria-hidden="true">
+          <NIcon :component="ArrowForwardOutline" size="14" />
+        </div>
         <div class="grw-step">
-          <span class="grw-step-num">4</span>
+          <span class="grw-step-num">
+            <NIcon :component="DownloadOutline" size="18" />
+          </span>
           <span class="grw-step-text">Download with EXIF GPS</span>
         </div>
       </div>
@@ -509,7 +543,7 @@ onUnmounted(() => revokeAssessPreviews());
         </span>
       </div>
       <NButton
-        type="default"
+        type="warning"
         size="medium"
         :disabled="assessLimitReached"
         @click="openAssessFilePicker"
@@ -527,13 +561,13 @@ onUnmounted(() => revokeAssessPreviews());
         v-model:checked="acceptedWarning"
         class="grw-consent"
       >
-        <span v-if="assessIsWorstCase" class="grw-consent-label">
+        <!-- <span v-if="assessIsWorstCase" class="grw-consent-label">
           I understand that most of my photos are unlikely to be geolocated and
           that the fee applies regardless of results.
-        </span>
-        <span v-else class="grw-consent-label">
-          I haven't tested my collection. I understand that not all photos can
-          be geolocated and want to proceed anyway.
+        </span> -->
+        <span class="grw-consent-label">
+          I took the <strong>Free Run Test</strong> and confirmed that my photos
+          are suitable for georeferencing.
         </span>
       </NCheckbox>
       <NButton
@@ -617,38 +651,76 @@ onUnmounted(() => revokeAssessPreviews());
 /* ── Key facts ────────────────────────────────────────────── */
 
 .grw-facts {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  overflow: hidden;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 768px) {
+  .grw-facts {
+    grid-template-columns: 1fr;
+  }
 }
 
 .grw-fact {
+  position: relative;
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px 14px;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.6);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 16px;
+  border-radius: 10px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.01) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  transition: all 0.25s ease;
 }
 
-.grw-fact:last-child {
-  border-bottom: none;
+.grw-fact:hover {
+  /* border-color: color-mix(in srgb, var(--primary-color) 35%, transparent);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25); */
 }
 
-.grw-fact strong {
-  color: rgba(255, 255, 255, 0.88);
+.grw-fact-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.grw-fact-title {
+  margin: 0;
+  font-size: 14px;
   font-weight: 600;
+  line-height: 1.3;
+  color: #fff;
+  letter-spacing: -0.2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.grw-fact-icon {
+.grw-fact-title-icon {
+  font-size: 20px;
+  color: var(--primary-color);
   flex-shrink: 0;
-  margin-top: 1px;
-  color: rgba(255, 255, 255, 0.3);
+}
+
+.grw-fact-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 /* ── How it works: horizontal stepper ────────────────────── */
@@ -667,6 +739,7 @@ onUnmounted(() => revokeAssessPreviews());
   text-transform: uppercase;
   letter-spacing: 0.6px;
   margin-bottom: 10px;
+  text-align: center;
 }
 
 .grw-steps {
@@ -685,8 +758,8 @@ onUnmounted(() => revokeAssessPreviews());
 }
 
 .grw-step-num {
-  width: 22px;
-  height: 22px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: color-mix(in srgb, var(--primary-color) 25%, transparent);
   border: 1px solid color-mix(in srgb, var(--primary-color) 55%, transparent);
@@ -707,14 +780,11 @@ onUnmounted(() => revokeAssessPreviews());
 
 .grw-step-sep {
   flex-shrink: 0;
-  width: 20px;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.12),
-    rgba(255, 255, 255, 0.06)
-  );
-  margin-bottom: 14px; /* aligns with step number row */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.2);
+  margin-bottom: 20px;
 }
 
 /* ── Free-run test strip ──────────────────────────────────── */
@@ -740,7 +810,7 @@ onUnmounted(() => revokeAssessPreviews());
   margin: 0;
   font-size: 12px;
   line-height: 1.5;
-  color: rgba(255, 255, 255, 0.5);
+  /* color: rgba(255, 255, 255, 0.5); */
 }
 
 .grw-test-strip-label--limit {

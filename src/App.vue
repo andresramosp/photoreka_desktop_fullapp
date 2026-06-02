@@ -408,6 +408,9 @@ watch(
 
       // Esperar a cargar el catálogo y decidir a dónde ir
       photosStore.getOrFetch(true).then(() => {
+        // Solo redirigir si el router ya está listo para evitar race conditions
+        if (!routerReady.value) return;
+
         if (
           route.path === "/" ||
           route.path === "/dashboard" ||

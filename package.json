@@ -11,6 +11,7 @@
     "type-check": "vue-tsc --build"
   },
   "dependencies": {
+    "@stripe/stripe-js": "^9.7.0",
     "@tresjs/cientos": "^5.0.0",
     "@tresjs/core": "^5.0.2",
     "@vicons/antd": "^0.13.0",
