@@ -395,6 +395,10 @@ export default class PortfolioBuildService {
   public static async removePhotosFromResults(userId: number, deletedIds: number[]): Promise<void> {
     if (!deletedIds.length) return
 
+    console.log(
+      `[PortfolioBuild] Removing deleted photos from results for user ${userId}: [${deletedIds.join(', ')}]`
+    )
+
     // Build a Postgres array literal from the IDs: ARRAY[1,2,3]
     const pgArray = `ARRAY[${deletedIds.map((id) => Number(id)).join(',')}]`
 
