@@ -9,6 +9,8 @@ import { CacheInvalidationService } from '../services/cache_invalidation_service
 import TagPhotoManager from './tag_photo_manager.js'
 import { DeleteObjectsCommand, S3Client } from '@aws-sdk/client-s3'
 import db from '@adonisjs/lucid/services/db'
+import PortfolioBuildService from '#services/portfolio_build_service'
+import Canvas from '#models/canvas'
 
 const s3 = new S3Client({
   region: 'auto',
@@ -593,6 +595,16 @@ export default class PhotoManager {
       } else {
         await CacheInvalidationService.onPhotosDeleted(userId, analyzedCount)
       }
+
+      // Remove deleted IDs from all portfolio results for this user
+      PortfolioBuildService.removePhotosFromResults(Number(userId), ids).catch((err) => {
+        console.warn('⚠️ Failed to clean deleted photos from portfolio results:', err)
+      })
+
+      // Remove deleted IDs from all canvases for this user
+      Canvas.removePhotosFromData(Number(userId), ids).catch((err) => {
+        console.warn('⚠️ Failed to clean deleted photos from canvases:', err)
+      })
     }
 
     return { message: 'Photos marked for deletion', ids, deletedAt }

@@ -388,6 +388,53 @@ export default class PortfolioBuildService {
   }
 
   /**
+   * Remove deleted photo IDs from all portfolio results belonging to a user.
+   * Cleans photoIds, photoItems, and builderPool in a single raw UPDATE so no
+   * build row needs to be loaded into memory.
+   */
+  public static async removePhotosFromResults(userId: number, deletedIds: number[]): Promise<void> {
+    if (!deletedIds.length) return
+
+    // Build a Postgres array literal from the IDs: ARRAY[1,2,3]
+    const pgArray = `ARRAY[${deletedIds.map((id) => Number(id)).join(',')}]`
+
+    await db.rawQuery(
+      `UPDATE portfolio_builds
+       SET result = jsonb_set(
+         jsonb_set(
+           jsonb_set(
+             result,
+             '{photoIds}',
+             COALESCE(
+               (SELECT jsonb_agg(elem)
+                FROM jsonb_array_elements(result->'photoIds') AS elem
+                WHERE elem::text::int != ALL(${pgArray})),
+               '[]'::jsonb
+             )
+           ),
+           '{photoItems}',
+           COALESCE(
+             (SELECT jsonb_agg(elem)
+              FROM jsonb_array_elements(result->'photoItems') AS elem
+              WHERE (elem->>'id')::int != ALL(${pgArray})),
+             '[]'::jsonb
+           )
+         ),
+         '{builderPool}',
+         COALESCE(
+           (SELECT jsonb_agg(elem)
+            FROM jsonb_array_elements(result->'builderPool') AS elem
+            WHERE (elem->>'id')::int != ALL(${pgArray})),
+           '[]'::jsonb
+         )
+       )
+       WHERE user_id = ?
+         AND result IS NOT NULL`,
+      [userId]
+    )
+  }
+
+  /**
    * Abort an in-progress build.
    */
   public async abort(buildId: number, userId: number): Promise<boolean> {
