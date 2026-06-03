@@ -527,6 +527,7 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useUserStore } from "@/stores/userStore.ts";
 import { usePhotoUpload } from "@/composables/usePhotoUpload.js";
@@ -548,6 +549,9 @@ import SafeSearchViolationModal from "../SafeSearchViolationModal.vue";
 import { NModal, NCheckbox, NTooltip } from "naive-ui";
 
 import { useMessage } from "naive-ui";
+
+const route = useRoute();
+const router = useRouter();
 
 // Maintenance mode check
 const isMaintenanceMode = computed(
@@ -744,6 +748,15 @@ const uploadButtons = computed(() => {
   // Default order for "web"
   // return [buttons.local, buttons.google, buttons.lightroom, buttons.dropbox];
   return [buttons.local, buttons.lightroom, buttons.dropbox];
+});
+
+// Check for lrPlugin query parameter on mount
+onMounted(() => {
+  if (route.query.lrPlugin === "open") {
+    showLightroomModal.value = true;
+    // Clean up the query parameter
+    router.replace({ query: { ...route.query, lrPlugin: undefined } });
+  }
 });
 
 // Watcher para activar warm-up cuando el progreso llega al 75%
