@@ -241,7 +241,7 @@
           <n-tag type="primary" size="large" round>Recommended</n-tag>
         </div>
 
-        <div
+        <!-- <div
           class="import-card"
           :class="{ 'import-card--disabled': isUploadDisabled }"
           @click="importFromGooglePhotos"
@@ -270,7 +270,7 @@
             Disconnected
           </n-tag>
           <n-tag v-else type="success" size="large" round> Connected </n-tag>
-        </div>
+        </div> -->
 
         <div
           class="import-card"
@@ -717,14 +717,14 @@ const uploadButtons = computed(() => {
           showLightroomModal.value = true;
         }),
     },
-    google: {
-      key: "google",
-      label: "Google Photos",
-      compactLabel: "Google Photos",
-      icon: googlePhotos.isAuthorized.value ? "google" : "google-locked",
-      type: "default",
-      action: () => handleSourceSelection("google", importFromGooglePhotos),
-    },
+    // google: {
+    //   key: "google",
+    //   label: "Google Photos",
+    //   compactLabel: "Google Photos",
+    //   icon: googlePhotos.isAuthorized.value ? "google" : "google-locked",
+    //   type: "default",
+    //   action: () => handleSourceSelection("google", importFromGooglePhotos),
+    // },
     dropbox: {
       key: "dropbox",
       label: "Dropbox",
@@ -737,11 +737,13 @@ const uploadButtons = computed(() => {
 
   // Order buttons based on preferredSource
   if (preferredSource === "lightroom") {
-    return [buttons.lightroom, buttons.local, buttons.google, buttons.dropbox];
+    // return [buttons.lightroom, buttons.local, buttons.google, buttons.dropbox];
+    return [buttons.lightroom, buttons.local, buttons.dropbox];
   }
 
   // Default order for "web"
-  return [buttons.local, buttons.google, buttons.lightroom, buttons.dropbox];
+  // return [buttons.local, buttons.google, buttons.lightroom, buttons.dropbox];
+  return [buttons.local, buttons.lightroom, buttons.dropbox];
 });
 
 // Watcher para activar warm-up cuando el progreso llega al 75%
@@ -1423,9 +1425,9 @@ defineExpose({
 
 .import-cards-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 24px;
-  max-width: 1100px;
+  max-width: 900px;
   margin: 0 auto 32px;
 }
 
