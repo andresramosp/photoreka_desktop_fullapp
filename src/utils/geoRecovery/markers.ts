@@ -150,7 +150,10 @@ function granularityClass(granularity: LocationGranularity | null): string {
 
 // ── Icon factories ─────────────────────────────────────────────────────────
 
-export function createPhotoMarkerIcon(data: GeoPhotoMarkerData): L.DivIcon {
+export function createPhotoMarkerIcon(
+  data: GeoPhotoMarkerData,
+  showCorrectionButton = true,
+): L.DivIcon {
   const classes = [
     "photo-single-marker",
     granularityClass(data.granularity),
@@ -159,7 +162,9 @@ export function createPhotoMarkerIcon(data: GeoPhotoMarkerData): L.DivIcon {
     .filter(Boolean)
     .join(" ");
 
-  const pencil = `<button class="photo-marker-correct-btn" title="Correct location" aria-label="Correct location"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75z"/></svg></button>`;
+  const pencil = showCorrectionButton
+    ? `<button class="photo-marker-correct-btn" title="Correct location" aria-label="Correct location"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75z"/></svg></button>`
+    : "";
 
   return L.divIcon({
     className: "photo-map-div-icon photo-single-div-icon",

@@ -82,6 +82,9 @@ const dialog = useDialog();
 
 // ── State ──────────────────────────────────────────────────────────────────
 
+// Configuración: true = click en icono del lápiz, false = click directo en marker
+const enableCorrectionButton = ref(false);
+
 const stepIndex = ref<number>(0); // 0 welcome | 1 upload | 2 pay | 3 processing | 4 results
 const session = ref<SessionInfo | null>(null);
 const photos = ref<LocalPhotoRecord[]>([]);
@@ -477,20 +480,62 @@ function ensureMap() {
     zoomControl: false,
   });
   L.control.zoom({ position: "bottomright" }).addTo(map);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution:
-      "© <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a>, © <a href='https://carto.com/attributions'>CARTO</a>",
-    maxZoom: 19,
-  }).addTo(map);
+
+  // Base layers
+  const osmLayer = L.tileLayer(
+    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    {
+      attribution: "© OpenStreetMap contributors",
+      maxZoom: 18,
+    },
+  );
+
+  const esriSatelliteLayer = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    {
+      attribution: "© Esri, Maxar, Earthstar Geographics",
+      maxZoom: 18,
+    },
+  );
+
+  // Add Esri Satellite as default
+  esriSatelliteLayer.addTo(map);
+
+  // Layer control
+  const baseLayers = {
+    OpenStreetMap: osmLayer,
+    "Satélite (Esri)": esriSatelliteLayer,
+  };
+  L.control
+    .layers(baseLayers, undefined, { position: "bottomright" })
+    .addTo(map);
 
   const cluster = (L as any).markerClusterGroup({
     chunkedLoading: true,
     iconCreateFunction: createPhotoClusterIcon,
     maxClusterRadius: getClusterRadius,
     showCoverageOnHover: false,
-    spiderfyDistanceMultiplier: 1.3,
+    spiderLegPolylineOptions: {
+      color: "#5a3a8a",
+      opacity: 0.35,
+      weight: 1.5,
+    },
+    spiderfyDistanceMultiplier: 1.5,
     spiderfyOnMaxZoom: true,
     zoomToBoundsOnClick: true,
+  });
+  cluster.on("spiderfied", (event: any) => {
+    const clusterMarker = event?.cluster;
+    // Defer so this runs after leaflet.markercluster's own setOpacity(0.3) call.
+    setTimeout(() => {
+      clusterMarker?.setOpacity?.(0);
+      clusterMarker?.setZIndexOffset?.(-9999);
+    }, 0);
+  });
+  cluster.on("unspiderfied", (event: any) => {
+    const clusterMarker = event?.cluster;
+    clusterMarker?.setOpacity?.(1);
+    clusterMarker?.setZIndexOffset?.(0);
   });
   map.addLayer(cluster);
   mapInstance.value = map;
@@ -596,23 +641,33 @@ async function createMarkerForPhoto(
   };
 
   const marker = L.marker([coords.lat, coords.lng], {
-    icon: createPhotoMarkerIcon(data),
+    icon: createPhotoMarkerIcon(data, enableCorrectionButton.value),
     autoPanOnFocus: false,
     keyboard: true,
+    riseOnHover: true,
+    riseOffset: 1000,
   }) as PhotoMarker;
   marker.photoData = data;
 
   marker.on("click", (e: L.LeafletMouseEvent) => {
     L.DomEvent.stopPropagation(e);
-    const target = e.originalEvent?.target as HTMLElement | null;
-    if (target?.closest(".photo-marker-correct-btn")) {
+
+    if (enableCorrectionButton.value) {
+      // Modo con botón del lápiz: solo abrir popup si se hace click en el botón
+      const target = e.originalEvent?.target as HTMLElement | null;
+      if (target?.closest(".photo-marker-correct-btn")) {
+        openCorrectionPopup(data);
+        return;
+      }
+      // Si no se clickeó el botón, centrar en la foto
+      map().setView([coords.lat, coords.lng], Math.max(map().getZoom(), 10));
+    } else {
+      // Modo directo: click en cualquier parte del marker abre el popup
       openCorrectionPopup(data);
-      return;
     }
-    // Center on photo
-    map().setView([coords.lat, coords.lng], Math.max(map().getZoom(), 10));
   });
   marker.on("mouseover", (e: L.LeafletMouseEvent) => {
+    marker.setZIndexOffset(1000);
     const target = e.originalEvent?.target as HTMLElement | null;
     if (target?.closest(".photo-marker-correct-btn")) {
       hoveredMarkerData.value = null;
@@ -636,6 +691,7 @@ async function createMarkerForPhoto(
     };
   });
   marker.on("mouseout", () => {
+    marker.setZIndexOffset(0);
     hoveredMarkerData.value = null;
   });
 
@@ -970,6 +1026,7 @@ const hoveredTooltipAddress = computed(() => {
   background: #0d1117;
   --geo-card-bg: rgba(20, 22, 28, 0.96);
   --geo-card-border: rgba(255, 255, 255, 0.08);
+  --geo-control-size: 38px;
   --accent-color: #60a5fa;
   --primary-color: #3b82f6;
   --text-on-primary: #fff;
@@ -981,6 +1038,78 @@ const hoveredTooltipAddress = computed(() => {
   inset: 0;
   z-index: 0;
   background: #0d1117;
+}
+
+/* Leaflet layers control (match WorldMapView styling) */
+:deep(.leaflet-control-zoom),
+:deep(.leaflet-control-layers) {
+  border: 1px solid var(--geo-card-border) !important;
+  box-shadow: 0 2px 12px rgba(18, 24, 38, 0.14);
+  border-radius: 10px;
+  background: var(--geo-card-bg);
+}
+
+:deep(.leaflet-control-zoom a) {
+  width: var(--geo-control-size);
+  height: var(--geo-control-size);
+  line-height: calc(var(--geo-control-size) - 2px);
+  background: var(--geo-card-bg);
+  color: rgba(255, 255, 255, 0.86);
+  border-bottom: 1px solid var(--geo-card-border);
+  border-radius: 0 !important;
+}
+
+:deep(.leaflet-control-zoom a:hover) {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 0 !important;
+}
+
+:deep(.leaflet-control-zoom a:last-child) {
+  border-bottom: 0;
+}
+
+:deep(.leaflet-control-zoom a:focus) {
+  border-radius: 0 !important;
+}
+
+:deep(.leaflet-control-zoom) {
+  border-radius: 0 !important;
+  overflow: hidden;
+}
+
+:deep(.leaflet-control-zoom a:first-child),
+:deep(.leaflet-control-zoom a:last-child),
+:deep(.leaflet-control-zoom a:active) {
+  border-radius: 0 !important;
+}
+
+:deep(.leaflet-control-layers-toggle) {
+  width: var(--geo-control-size);
+  height: var(--geo-control-size);
+  background-color: transparent;
+  border: 0;
+  border-radius: 10px;
+  filter: invert(1) brightness(1.1);
+}
+
+:deep(.leaflet-control-layers-expanded) {
+  background: var(--geo-card-bg);
+  color: rgba(255, 255, 255, 0.86);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+:deep(.leaflet-control-layers label) {
+  color: rgba(255, 255, 255, 0.86);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+:deep(.leaflet-control-layers-separator) {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin: 4px 0;
 }
 
 /* ── Stats + granularity filter (top-right) ─────────────────────────────── */
@@ -1145,6 +1274,13 @@ const hoveredTooltipAddress = computed(() => {
   border: 0;
 }
 
+/* Raise the hovered marker above ALL siblings so the pencil is always clickable.
+   CSS :hover propagates from every descendant (even overflowing ones), so this
+   fires regardless of the direction the mouse enters the marker. */
+:deep(.photo-map-div-icon:hover) {
+  z-index: 10000 !important;
+}
+
 :deep(.photo-single-marker) {
   position: relative;
   width: 42px;
@@ -1277,6 +1413,13 @@ const hoveredTooltipAddress = computed(() => {
   font-size: 13px;
   font-weight: 700;
   line-height: 1;
+}
+
+/* Hide the center cluster icon while spiderfied (opacity is set via JS on the
+   spiderfied event; this CSS rule is a belt-and-suspenders fallback). */
+:deep(.leaflet-markercluster-spiderfied) {
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* ── Pencil correction button ────────────────────────────────────────────── */

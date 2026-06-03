@@ -303,7 +303,7 @@ import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 
 type GpsCoordinates = [number, number];
-const MAX_SPIDERFY_MARKERS_PER_POINT = 42;
+const MAX_SPIDERFY_MARKERS_PER_POINT = 150;
 const VISIBLE_PHOTOS_PER_OVERFLOW_POINT = MAX_SPIDERFY_MARKERS_PER_POINT - 1;
 
 interface PhotoWithGps {
@@ -1261,9 +1261,22 @@ function ensureMarkerClusterLayer(): L.MarkerClusterGroup | null {
         opacity: 0.35,
         weight: 1.5,
       },
-      spiderfyDistanceMultiplier: 1.3,
+      spiderfyDistanceMultiplier: 1.5,
       spiderfyOnMaxZoom: true,
       zoomToBoundsOnClick: true,
+    });
+    markerClusterLayer.value.on("spiderfied", (event: any) => {
+      const clusterMarker = event?.cluster;
+      // Defer so this runs after leaflet.markercluster's own setOpacity(0.3) call.
+      setTimeout(() => {
+        clusterMarker?.setOpacity?.(0);
+        clusterMarker?.setZIndexOffset?.(-9999);
+      }, 0);
+    });
+    markerClusterLayer.value.on("unspiderfied", (event: any) => {
+      const clusterMarker = event?.cluster;
+      clusterMarker?.setOpacity?.(1);
+      clusterMarker?.setZIndexOffset?.(0);
     });
 
     leafletMap.addLayer(markerClusterLayer.value as unknown as L.Layer);
@@ -1424,6 +1437,8 @@ function createPhotoMarker(photo: PhotoWithGps): PhotoMarker {
     autoPanOnFocus: false,
     icon: createPhotoMarkerIcon(photo),
     keyboard: true,
+    riseOnHover: true,
+    riseOffset: 1000,
   }) as PhotoMarker;
 
   marker.photo = photo;
@@ -1437,6 +1452,7 @@ function createPhotoMarker(photo: PhotoWithGps): PhotoMarker {
     handleMarkerClick(photo);
   });
   marker.on("mouseover", (e: L.LeafletMouseEvent) => {
+    marker.setZIndexOffset(1000);
     const target = e.originalEvent?.target as HTMLElement | null;
     if (target?.closest(".photo-marker-correct-btn")) {
       hoveredMapPhoto.value = null;
@@ -1470,6 +1486,7 @@ function createPhotoMarker(photo: PhotoWithGps): PhotoMarker {
     };
   });
   marker.on("mouseout", () => {
+    marker.setZIndexOffset(0);
     hoveredMapPhoto.value = null;
     // [DEBUG] Remove proximity highlights
     if (ENABLE_DEBUG_PROXITTY) {
@@ -2063,6 +2080,13 @@ onUnmounted(() => {
   border: 0;
 }
 
+/* Raise the hovered marker above ALL siblings so the pencil is always clickable.
+   CSS :hover propagates from every descendant (even overflowing ones), so this
+   fires regardless of the direction the mouse enters the marker. */
+:deep(.photo-map-div-icon:hover) {
+  z-index: 10000 !important;
+}
+
 :deep(.photo-single-marker) {
   position: relative;
   width: 42px;
@@ -2296,6 +2320,13 @@ onUnmounted(() => {
   box-shadow:
     0 7px 22px rgba(18, 24, 38, 0.32),
     0 0 0 1px var(--accent-color);
+}
+
+/* Hide the center cluster icon while spiderfied (opacity is set via JS on the
+   spiderfied event; this CSS rule is a belt-and-suspenders fallback). */
+:deep(.leaflet-markercluster-spiderfied) {
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* ── Single-marker hover tooltip ────────────────────────────────────────── */
