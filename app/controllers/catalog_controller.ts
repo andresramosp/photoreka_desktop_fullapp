@@ -195,7 +195,7 @@ export default class CatalogController {
         uploadIp,
         // Pipeline rows start unconfirmed; the client confirms once both the
         // main and thumbnail have landed in R2 (POST /api/catalog/confirmUpload).
-        confirmed: false,
+        confirmed: true,
         // source,
       })
 
