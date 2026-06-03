@@ -376,7 +376,7 @@
           <n-tag type="primary" size="large" round>Select files</n-tag>
         </div>
 
-        <div
+        <!-- <div
           class="import-card"
           :class="{ 'import-card--disabled': isUploadDisabled }"
           @click="handleSourceSelection('google', importFromGooglePhotos)"
@@ -405,7 +405,7 @@
             Disconnected
           </n-tag>
           <n-tag v-else type="success" size="large" round> Connected </n-tag>
-        </div>
+        </div> -->
 
         <div
           class="import-card"

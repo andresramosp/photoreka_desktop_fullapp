@@ -26,22 +26,29 @@
       </template>
 
       <div class="lightroom-modal-content">
-        <!-- Update Banner -->
-        <div v-if="updateMode" class="update-banner">
-          <div class="update-banner-icon">⚠️</div>
-          <div class="update-banner-text">
-            <strong>Plugin update available!</strong>
-            <span
-              >A new version of the Photoreka Lightroom plugin is available.
-              Please update it to keep exporting photos correctly.</span
-            >
+        <!-- Update Mode: Banner + Logo in same row -->
+        <div v-if="updateMode" class="update-mode-header">
+          <div class="update-banner-compact">
+            <div class="update-banner-icon">⚠️</div>
+            <div class="update-banner-text">
+              <strong>Plugin update available!</strong>
+              <span
+                >A new version of the Photoreka Lightroom plugin is available.
+                Please update it to keep exporting photos correctly.</span
+              >
+            </div>
+          </div>
+          <div class="logo-compact">
+            <img
+              src="/src/assets/logos/lightroom_logo.png"
+              alt="Lightroom Logo"
+              class="plugin-logo-compact"
+            />
           </div>
         </div>
 
-        <!-- Header Section -->
-
-        <!-- Screenshot -->
-        <div class="screenshot-container">
+        <!-- Normal Mode: Screenshot -->
+        <div v-if="!updateMode" class="screenshot-container">
           <img
             src="/src/assets/logos/lightroom_logo.png"
             alt="Lightroom Plugin Screenshot"
@@ -307,7 +314,15 @@ const downloadPlugin = () => {
   font-weight: 600;
 }
 
-.update-banner {
+/* Update Mode Header - Banner + Logo in same row */
+.update-mode-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.update-banner-compact {
   display: flex;
   align-items: flex-start;
   gap: 12px;
@@ -319,7 +334,20 @@ const downloadPlugin = () => {
   border: 1px solid rgba(245, 158, 11, 0.5);
   border-radius: 10px;
   padding: 14px 16px;
-  margin-bottom: 24px;
+  flex: 1;
+}
+
+.logo-compact {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plugin-logo-compact {
+  width: 120px;
+  height: auto;
+  border-radius: 12px;
 }
 
 .update-banner-icon {
@@ -372,6 +400,20 @@ const downloadPlugin = () => {
   .step {
     flex-direction: column;
     gap: 12px;
+  }
+
+  .update-mode-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .logo-compact {
+    justify-content: center;
+    margin-top: 8px;
+  }
+
+  .plugin-logo-compact {
+    width: 100px;
   }
 }
 </style>
