@@ -121,10 +121,15 @@ export function usePhotoUpload() {
     );
     if (failedUploads.length > 0) {
       console.error(`❌ Failed uploads for ${fileName}:`, failedUploads);
+      message.error(`Failed to upload ${fileName}. Please try again later.`);
       throw new Error(
         `Failed to upload ${failedUploads.length} of 2 files for ${fileName}`,
       );
     }
+
+    // Confirmar al backend que ambos objetos (main + thumbnail) llegaron a R2.
+    // Sin esta confirmación, el barrido de huérfanas eliminará la foto.
+    await api.post("/api/catalog/confirmUpload", { photoIds: [photo.id] });
 
     photo.status = "uploaded";
     photo.isDuplicate = false;
