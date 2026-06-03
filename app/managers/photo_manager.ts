@@ -72,6 +72,7 @@ export default class PhotoManager {
   @withCache({
     provider: 'redis',
     key: (userId) => `getPhotosPreview_${userId}`,
+    ttl: 60 * 60 * 24, // 1 día
   })
   public async getPhotosPreview(userId: string) {
     const photos = await Photo.query()
