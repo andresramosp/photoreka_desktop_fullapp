@@ -56,6 +56,7 @@ export default class PhotoManager {
   @withCache({
     provider: 'redis',
     key: (userId) => `getPhotosByUser_${userId}`,
+    ttl: 60 * 60 * 6,
   })
   public async getPhotosByUser(userId: string) {
     const query = Photo.query()
@@ -72,6 +73,7 @@ export default class PhotoManager {
   @withCache({
     provider: 'redis',
     key: (userId) => `getPhotosPreview_${userId}`,
+    ttl: 60 * 60 * 6,
   })
   public async getPhotosPreview(userId: string) {
     const photos = await Photo.query()
@@ -112,6 +114,7 @@ export default class PhotoManager {
   @withCache({
     provider: 'redis',
     key: (userId, embeddingType) => `getPhotosFor3DView_${userId}_${embeddingType}`,
+    ttl: 60 * 60 * 24 * 14,
   })
   public async getPhotosFor3DView(
     userId: string,
@@ -155,6 +158,7 @@ export default class PhotoManager {
       })
       return `getPhotosIdsForSearch:${userId}:${filters}`
     },
+    ttl: 60 * 60 * 12,
   })
   public async getPhotosIdsForSearch(
     userId: string,

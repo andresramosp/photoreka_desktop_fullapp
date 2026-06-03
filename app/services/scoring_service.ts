@@ -293,6 +293,7 @@ export default class ScoringService {
     provider: 'redis',
     key: (photoIds: number[], structuredQuery: any, searchMode: SearchMode, userId: string) =>
       `getScoredPhotosByTagsAndDesc:${userId}:${searchMode}:${JSON.stringify(structuredQuery)}:${JSON.stringify([...photoIds].sort())}`,
+    ttl: 60 * 60 * 12,
   })
   public async getScoredPhotosByTagsAndDesc(
     photoIds: number[],
@@ -394,6 +395,7 @@ export default class ScoringService {
       userId: string
     ) =>
       `getScoredPhotosByTags:${userId}:${searchMode}:${JSON.stringify([...included].sort())}:${JSON.stringify([...excluded].sort())}:${JSON.stringify([...photoIds].sort())}`,
+    ttl: 60 * 60 * 12,
   })
   public async getScoredPhotosByTags(
     photoIds: number[],
@@ -827,6 +829,7 @@ export default class ScoringService {
       userId: string
     ) =>
       `getScoredPhotoImageByFullQuery:${userId}:${fullQuery}:${embeddingsProximityThreshold}:${JSON.stringify([...photoIds].sort())}`,
+    ttl: 60 * 60 * 12,
   })
   private async getScoredPhotoImageByFullQuery(
     photoIds: number[],

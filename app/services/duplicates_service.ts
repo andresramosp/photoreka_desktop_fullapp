@@ -23,7 +23,7 @@ export default class DuplicatesService {
    */
   @withCache({
     provider: 'redis',
-    ttl: 0,
+    ttl: 60 * 60 * 12,
     key: (userId: string, newPhotoIds?: number[], scope: DuplicateScope = 'lightbox') =>
       `checkSimilarDuplicates:${userId}:${scope}:${JSON.stringify((newPhotoIds ?? []).sort((a, b) => a - b))}`,
   })
@@ -97,7 +97,7 @@ export default class DuplicatesService {
    */
   @withCache({
     provider: 'redis',
-    ttl: 0,
+    ttl: 60 * 60 * 12,
     key: (userId: string, newPhotoIds?: number[], scope: DuplicateScope = 'lightbox') =>
       `checkExactDuplicates:${userId}:${scope}:${JSON.stringify((newPhotoIds ?? []).sort((a, b) => a - b))}`,
   })

@@ -409,6 +409,7 @@ export default class PortfolioReviewManager {
   @withCache({
     provider: 'redis',
     key: (userId, reviewType) => `reportEmbeddings:${reviewType}:${userId}`,
+    ttl: 60 * 60 * 24 * 14,
   })
   private async getEmbeddingsByReviewType(userId: string, reviewType: ReviewType) {
     const chunkName = REVIEW_TYPE_TO_CHUNK[reviewType]

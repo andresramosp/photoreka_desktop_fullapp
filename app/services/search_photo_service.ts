@@ -61,6 +61,7 @@ export default class SearchPhotoService {
       const stable = JSON.stringify(rest, (_, v) => (Array.isArray(v) ? [...v].sort() : v))
       return `searchByPhotos:${userId}:${stable}`
     },
+    ttl: 60 * 60 * 12,
   })
   private async searchByPhotosCached(
     query: SearchByPhotoOptions,

@@ -470,7 +470,7 @@ export default class SearchTextService {
 
   @withCache({
     provider: 'redis',
-    ttl: 60 * 5,
+    ttl: 60 * 60 * 24 * 7,
     key: (batch, structuredResult, searchMode) => {
       const photoIds = batch
         .map((item) => item.photo?.id || item.id)

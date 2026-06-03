@@ -73,6 +73,7 @@ export default class QueryService {
    */
   @withCache({
     provider: 'redis',
+    ttl: 60 * 60 * 24 * 7,
   })
   public async compactQuery(
     query: string
@@ -119,6 +120,7 @@ export default class QueryService {
   // TODO: userid!!
   @withCache({
     provider: 'redis',
+    ttl: 60 * 60 * 24 * 7,
   })
   public async structureQueryNLP(query) {
     let expansionCost = 0
@@ -136,6 +138,7 @@ export default class QueryService {
 
   @withCache({
     provider: 'redis',
+    ttl: 60 * 60 * 24 * 7,
   })
   public async structureQueryLLM(query, searchMode: SearchMode) {
     let expansionCost = 0
