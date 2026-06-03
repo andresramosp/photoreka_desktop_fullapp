@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { fileURLToPath, URL } from "node:url";
 
 import { defineConfig } from "vite";
@@ -5,9 +6,35 @@ import vue from "@vitejs/plugin-vue";
 import { templateCompilerOptions } from "@tresjs/core";
 import { VitePWA } from "vite-plugin-pwa";
 
+const packageJson = JSON.parse(
+  readFileSync(new URL("./package.json", import.meta.url), "utf-8"),
+);
+const appVersion = process.env.RAILWAY_GIT_COMMIT_SHA || packageJson.version;
+const builtAt = new Date().toISOString();
+
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+  },
   plugins: [
+    {
+      name: "photoreka-version-manifest",
+      generateBundle() {
+        this.emitFile({
+          type: "asset",
+          fileName: "version.json",
+          source: JSON.stringify(
+            {
+              version: appVersion,
+              builtAt,
+            },
+            null,
+            2,
+          ),
+        });
+      },
+    },
     vue({
       // TresJS template compiler options
       ...templateCompilerOptions,
@@ -53,11 +80,11 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Only precache the app shell; don't cache API calls or large media
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        // Precache hashed static assets, but never the HTML app shell.
+        // A dormant browser must fetch the latest index.html from the network.
+        globPatterns: ["**/*.{js,css,ico,png,svg,woff2}"],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024, // 6 MB limit per file
-        navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/api\//, /^\/auth\//],
+        cleanupOutdatedCaches: true,
         // Force immediate updates for critical changes
         clientsClaim: true,
         skipWaiting: true,
