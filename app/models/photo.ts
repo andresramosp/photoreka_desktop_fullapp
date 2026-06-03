@@ -42,16 +42,17 @@ export default class Photo extends BaseModel {
   declare userId: number
 
   /**
-   * Query scope to exclude soft deleted photos
+   * Query scope to exclude soft deleted photos and unconfirmed (orphan) photos.
+   * `confirmed IS NOT FALSE` lets through NULL (legacy photos) and true, blocks only false.
    */
   @beforeFind()
   public static ignoreDeleted(query: ModelQueryBuilderContract<typeof Photo>) {
-    query.whereNull('deleted_at')
+    query.whereNull('deleted_at').whereRaw('confirmed IS NOT FALSE')
   }
 
   @beforeFetch()
   public static ignoreBatchDeleted(query: ModelQueryBuilderContract<typeof Photo>) {
-    query.whereNull('deleted_at')
+    query.whereNull('deleted_at').whereRaw('confirmed IS NOT FALSE')
   }
 
   /**
@@ -146,6 +147,16 @@ export default class Photo extends BaseModel {
 
   @column()
   declare uploadIp: string | null
+
+  /**
+   * Upload confirmation flag.
+   * - `null`  → legacy photo created before the confirmation system (treated as confirmed).
+   * - `false` → row created by the upload pipeline, R2 bytes not yet confirmed.
+   * - `true`  → client confirmed both main + thumbnail landed in R2.
+   * Only photos with `confirmed = false` are eligible for the orphan sweep.
+   */
+  @column()
+  declare confirmed: boolean | null
 
   @belongsTo(() => GeocodeCache, { foreignKey: 'inferredLocationId' })
   declare inferredLocation: BelongsTo<typeof GeocodeCache>

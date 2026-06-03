@@ -9,6 +9,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { CacheInvalidationService } from '../services/cache_invalidation_service.js'
 import DuplicatesService from '#services/duplicates_service'
 import ModelsService from '#services/models_service'
+import db from '@adonisjs/lucid/services/db'
 
 import HealthPhotoService from '#services/health_photo_service'
 import DescriptionChunk from '#models/descriptionChunk'
@@ -24,7 +25,7 @@ const s3 = new S3Client({
   responseChecksumValidation: 'WHEN_REQUIRED',
 })
 
-const UPLOAD_URL_TTL_SECONDS = 60 * 15
+const UPLOAD_URL_TTL_SECONDS = 60 * 60
 
 export default class CatalogController {
   /**
@@ -192,6 +193,9 @@ export default class CatalogController {
         userId: Number(userId),
         descriptions,
         uploadIp,
+        // Pipeline rows start unconfirmed; the client confirms once both the
+        // main and thumbnail have landed in R2 (POST /api/catalog/confirmUpload).
+        confirmed: false,
         // source,
       })
 
@@ -205,6 +209,47 @@ export default class CatalogController {
     } catch (error) {
       console.error('Error preparando URLs de subida:', error)
       return response.internalServerError({ message: 'Error generando URLs' })
+    }
+  }
+
+  /**
+   * Confirms that a photo's main + thumbnail bytes have successfully landed in R2.
+   * Called by the client right after both uploads succeed. Promotes `confirmed`
+   * from `false` to `true` so the orphan sweep won't soft-delete the row.
+   * POST /catalog/confirmUpload
+   * Body: { photoIds: number[] }  (also tolerates a single { id })
+   */
+  public async confirmUpload({ request, response, auth }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as any
+      const userId = user.id.toString()
+
+      const { photoIds, id } = request.only(['photoIds', 'id'])
+      const rawIds = Array.isArray(photoIds) ? photoIds : id != null ? [id] : []
+      const ids = rawIds
+        .map((value: any) => Number(value))
+        .filter((n: number) => Number.isInteger(n))
+
+      if (ids.length === 0) {
+        return response.badRequest({ message: 'photoIds[] is required' })
+      }
+
+      // Only flip rows owned by the user that are still unconfirmed. Legacy rows
+      // (confirmed = null) and already-confirmed rows are left untouched.
+      // Uses db.from() directly to bypass the @beforeFetch hook (which now filters
+      // out confirmed=false rows) — this is intentionally targeting those rows.
+      await db
+        .from('photos')
+        .where('user_id', userId)
+        .whereIn('id', ids)
+        .where('confirmed', false)
+        .update({ confirmed: true })
+
+      return response.ok({ confirmed: ids })
+    } catch (error) {
+      console.error('Error confirmando subida:', error)
+      return response.internalServerError({ message: 'Error confirmando la subida' })
     }
   }
 
@@ -509,6 +554,7 @@ export default class CatalogController {
   /**
    * Records a single "photos_uploaded" activity after a batch upload completes.
    * Body: { count: number, source?: string }
+
    */
   public async uploadFinished({ request, response, auth }: HttpContext) {
     try {

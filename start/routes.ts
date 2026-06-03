@@ -147,6 +147,7 @@ router
     router.post('/api/catalog/photosByIds', [CatalogController, 'getPhotosByIds'])
 
     router.post('/api/catalog/uploadPhoto', [CatalogController, 'uploadPhoto'])
+    router.post('/api/catalog/confirmUpload', [CatalogController, 'confirmUpload'])
     router.post('/api/catalog/uploadFinished', [CatalogController, 'uploadFinished'])
 
     // Frontend activity logging

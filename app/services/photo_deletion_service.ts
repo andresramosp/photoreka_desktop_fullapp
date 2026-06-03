@@ -1,6 +1,8 @@
 import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
+import { CacheInvalidationService } from '#services/cache_invalidation_service'
 
+// PhotoDeletionService: physical deletion of soft-deleted photos + orphan sweep.
 export default class PhotoDeletionService {
   /**
    * Physically delete all soft-deleted photos in batches,
@@ -73,6 +75,66 @@ export default class PhotoDeletionService {
       totalDeleted,
       totalErrors,
     }
+  }
+
+  /**
+   * Soft-deletes "orphan" upload rows: photos that were created by the upload
+   * pipeline (`confirmed = false`) but were never confirmed by the client after
+   * the configured age threshold. These rows point at R2 objects that either
+   * never finished uploading or only partially landed.
+   *
+   * SAFETY: only rows with `confirmed = false` are touched. Legacy photos
+   * (`confirmed = null`) and confirmed photos (`confirmed = true`) are excluded
+   * by the strict equality, since in PostgreSQL `confirmed = false` never
+   * matches NULL. Already soft-deleted rows are skipped via `deleted_at IS NULL`.
+   *
+   * It only sets `deleted_at`; the existing physical-deletion pass removes the
+   * row (and the orphan never had complete R2 bytes to clean up anyway).
+   */
+  static async sweepUnconfirmedOrphans(ageMinutes: number = 60, dryRun: boolean = false) {
+    const cutoff = new Date(Date.now() - ageMinutes * 60 * 1000)
+
+    const baseQuery = () =>
+      db
+        .from('photos')
+        .where('confirmed', false)
+        .whereNull('deleted_at')
+        .where('created_at', '<', cutoff)
+
+    const candidates = await baseQuery().count('* as total').first()
+    const total = Number(candidates?.total ?? 0)
+
+    if (total === 0) {
+      console.log('[PhotoDeletion -> OrphanSweep] No unconfirmed orphans older than threshold')
+      return { total: 0, softDeleted: 0 }
+    }
+
+    console.log(
+      `[PhotoDeletion -> OrphanSweep] Found ${total} unconfirmed orphan(s) older than ${ageMinutes} min` +
+        (dryRun ? ' [DRY RUN]' : '')
+    )
+
+    if (dryRun) {
+      return { total, softDeleted: 0 }
+    }
+
+    // Collect distinct user IDs before the bulk update so we can invalidate their caches.
+    const affectedRows = await baseQuery().select('user_id').distinct('user_id')
+    const affectedUserIds: string[] = affectedRows
+      .map((r: any) => String(r.user_id))
+      .filter(Boolean)
+
+    const softDeleted = await baseQuery().update({ deleted_at: new Date() })
+    const count = Array.isArray(softDeleted) ? softDeleted.length : Number(softDeleted)
+    console.log(`[PhotoDeletion -> OrphanSweep] Soft-deleted ${count} unconfirmed orphan(s)`)
+
+    // Invalidate photo-list caches for every affected user.
+    // Orphans are never analyzed, so onPhotoListChanged is the correct (lighter) event.
+    for (const userId of affectedUserIds) {
+      await CacheInvalidationService.onPhotoListChanged(userId)
+    }
+
+    return { total, softDeleted: count }
   }
 
   /**

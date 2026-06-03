@@ -22,11 +22,31 @@ const DELETION_INTERVAL_HOURS = parseEnvNumber(process.env.PHOTO_DELETION_INTERV
 const DELETION_BATCH_SIZE = parseEnvNumber(process.env.PHOTO_DELETION_BATCH_SIZE, 50)
 const DELETION_ENABLED = process.env.PHOTO_DELETION_ENABLED?.replace(/^["']|["']$/g, '') !== 'false'
 
+// Orphan sweep: soft-deletes unconfirmed upload rows (confirmed = false) older
+// than the age threshold. Enabled by default; never touches legacy (NULL) or
+// confirmed photos.
+const ORPHAN_SWEEP_ENABLED =
+  process.env.ORPHAN_SWEEP_ENABLED?.replace(/^["']|["']$/g, '') !== 'false'
+const ORPHAN_SWEEP_AGE_MINUTES = parseEnvNumber(process.env.ORPHAN_SWEEP_AGE_MINUTES, 15)
+
+async function runSweepThenDelete() {
+  if (ORPHAN_SWEEP_ENABLED) {
+    try {
+      await PhotoDeletionService.sweepUnconfirmedOrphans(ORPHAN_SWEEP_AGE_MINUTES, false)
+    } catch (error) {
+      logger.error('[PhotoDeletionScheduler] Error in orphan sweep:', error)
+    }
+  }
+  await PhotoDeletionService.deletePhysically(DELETION_BATCH_SIZE, false)
+}
+
 logger.info('[PhotoDeletionScheduler] ========================================')
 logger.info('[PhotoDeletionScheduler] Photo Deletion Scheduler initialized')
 logger.info(`[PhotoDeletionScheduler] Enabled: ${DELETION_ENABLED}`)
 logger.info(`[PhotoDeletionScheduler] Interval: Every ${DELETION_INTERVAL_HOURS} hours`)
 logger.info(`[PhotoDeletionScheduler] Batch size: ${DELETION_BATCH_SIZE}`)
+logger.info(`[PhotoDeletionScheduler] Orphan sweep enabled: ${ORPHAN_SWEEP_ENABLED}`)
+logger.info(`[PhotoDeletionScheduler] Orphan sweep age (min): ${ORPHAN_SWEEP_AGE_MINUTES}`)
 logger.info(`[PhotoDeletionScheduler] Interval in ms: ${DELETION_INTERVAL_HOURS * 60 * 60 * 1000}`)
 logger.info('[PhotoDeletionScheduler] ========================================')
 
@@ -40,7 +60,7 @@ if (DELETION_ENABLED) {
     // Execute immediately on startup (optional)
     if (process.env.PHOTO_DELETION_RUN_ON_STARTUP?.replace(/^["']|["']$/g, '') === 'true') {
       logger.info('[PhotoDeletionScheduler] Running initial deletion on startup...')
-      PhotoDeletionService.deletePhysically(DELETION_BATCH_SIZE, false).catch((error) => {
+      runSweepThenDelete().catch((error) => {
         logger.error('[PhotoDeletionScheduler] Error in startup deletion:', error)
       })
     }
@@ -50,7 +70,7 @@ if (DELETION_ENABLED) {
     setInterval(async () => {
       try {
         logger.info('[PhotoDeletionScheduler] Starting scheduled photo deletion...')
-        await PhotoDeletionService.deletePhysically(DELETION_BATCH_SIZE, false)
+        await runSweepThenDelete()
         logger.info('[PhotoDeletionScheduler] Scheduled photo deletion completed')
       } catch (error) {
         logger.error('[PhotoDeletionScheduler] Error in scheduled deletion:', error)
