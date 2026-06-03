@@ -15,6 +15,9 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       injectRegister: "auto",
+      devOptions: {
+        enabled: false,
+      },
       manifest: {
         name: "Photoreka - Curation Lab",
         short_name: "Photoreka",
@@ -55,6 +58,20 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024, // 6 MB limit per file
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api\//, /^\/auth\//],
+        // Force immediate updates for critical changes
+        clientsClaim: true,
+        skipWaiting: true,
+        // Don't cache anything with these patterns (always network first)
+        runtimeCaching: [
+          {
+            urlPattern: /^\/api\//,
+            handler: "NetworkOnly",
+          },
+          {
+            urlPattern: /^\/auth\//,
+            handler: "NetworkOnly",
+          },
+        ],
       },
     }),
   ],
