@@ -1,6 +1,7 @@
 <template>
   <n-modal
-    v-model:show="isVisible"
+    :show="isVisible"
+    @update:show="handleModalUpdate"
     :style="{ width: '700px', maxWidth: '90vw' }"
   >
     <n-card
@@ -12,7 +13,7 @@
       style="background-color: var(--bg-body); border: 1px solid #2c2c32"
     >
       <template #header-extra>
-        <n-button text @click="isVisible = false">
+        <n-button text @click="handleClose">
           <n-icon size="20">
             <svg viewBox="0 0 24 24">
               <path
@@ -25,6 +26,18 @@
       </template>
 
       <div class="lightroom-modal-content">
+        <!-- Update Banner -->
+        <div v-if="updateMode" class="update-banner">
+          <div class="update-banner-icon">⚠️</div>
+          <div class="update-banner-text">
+            <strong>Plugin update available!</strong>
+            <span
+              >A new version of the Photoreka Lightroom plugin is available.
+              Please update it to keep exporting photos correctly.</span
+            >
+          </div>
+        </div>
+
         <!-- Header Section -->
 
         <!-- Screenshot -->
@@ -108,25 +121,41 @@
             Download Lightroom Plugin
           </n-button>
         </div>
+
+        <!-- Don't show again (only in update mode) -->
+        <div v-if="updateMode" class="dont-show-again">
+          <n-checkbox v-model:checked="dontShowAgain" size="small">
+            Don't show this again
+          </n-checkbox>
+        </div>
       </div>
     </n-card>
   </n-modal>
 </template>
 
 <script setup>
-import { computed } from "vue";
-import { useMessage, NModal, NCard, NButton, NIcon } from "naive-ui";
+import { computed, ref } from "vue";
+import { useMessage, NModal, NCard, NButton, NIcon, NCheckbox } from "naive-ui";
 
 const props = defineProps({
   modelValue: {
     type: Boolean,
     required: true,
   },
+  updateMode: {
+    type: Boolean,
+    default: false,
+  },
+  updateVersion: {
+    type: [String, Number],
+    default: null,
+  },
 });
 
 const emit = defineEmits(["update:modelValue"]);
 
 const message = useMessage();
+const dontShowAgain = ref(false);
 
 const isVisible = computed({
   get() {
@@ -136,6 +165,25 @@ const isVisible = computed({
     emit("update:modelValue", value);
   },
 });
+
+const persistDismissal = () => {
+  if (props.updateMode && dontShowAgain.value && props.updateVersion != null) {
+    localStorage.setItem(
+      "lr_plugin_dismissed_version",
+      String(props.updateVersion),
+    );
+  }
+};
+
+const handleClose = () => {
+  persistDismissal();
+  isVisible.value = false;
+};
+
+const handleModalUpdate = (val) => {
+  if (!val) persistDismissal();
+  emit("update:modelValue", val);
+};
 
 const downloadPlugin = () => {
   const link = document.createElement("a");
@@ -257,6 +305,52 @@ const downloadPlugin = () => {
 .step-content strong {
   color: var(--text-secondary);
   font-weight: 600;
+}
+
+.update-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: linear-gradient(
+    135deg,
+    rgba(245, 158, 11, 0.15),
+    rgba(239, 68, 68, 0.1)
+  );
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 24px;
+}
+
+.update-banner-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.update-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.update-banner-text strong {
+  color: #f59e0b;
+  font-size: 14px;
+}
+
+.update-banner-text span {
+  color: var(--text-secondary);
+}
+
+.dont-show-again {
+  display: flex;
+  justify-content: center;
+  padding-top: 14px;
+  color: var(--text-primary);
+  font-size: 13px;
 }
 
 .modal-actions {

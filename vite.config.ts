@@ -85,6 +85,7 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,ico,png,svg,woff2}"],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024, // 6 MB limit per file
         cleanupOutdatedCaches: true,
+        navigateFallback: null,
         // Force immediate updates for critical changes
         clientsClaim: true,
         skipWaiting: true,

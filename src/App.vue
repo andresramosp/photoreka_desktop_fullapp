@@ -168,6 +168,14 @@
 
             <!-- Assistant Chat Widget (route-driven visibility, hidden for demo users) -->
             <AssistantChatWidget v-if="!isDemoUser" />
+
+            <!-- LR Plugin Update Modal -->
+            <LightroomModal
+              v-if="showLrUpdateModal"
+              v-model="showLrUpdateModal"
+              :update-mode="true"
+              :update-version="LR_PLUGIN_VERSION"
+            />
           </template>
         </n-message-provider>
       </n-dialog-provider>
@@ -193,10 +201,15 @@ import { useThemeInit } from "@/composables/useTheme.js";
 import MobileWelcomeBanner from "./components/MobileWelcomeBanner.vue";
 import WelcomeBatchModal from "./components/WelcomeBatchModal.vue";
 import AssistantChatWidget from "./components/AssistantChatWidget.vue";
+import LightroomModal from "./components/LightroomModal.vue";
 import { useAssistantChatStore } from "@/stores/assistantChat.js";
 import { useWarmUp } from "@/composables/useWarmUp";
 
 const { ensureWarmUp } = useWarmUp();
+
+// LR Plugin update notification
+const LR_PLUGIN_VERSION = import.meta.env.VITE_LR_PLUGIN_VERSION ?? null;
+const showLrUpdateModal = ref(false);
 
 const route = useRoute();
 const router = useRouter();
@@ -482,6 +495,15 @@ watch(
 
 onUnmounted(() => {
   window.removeEventListener("resize", checkIsMobile);
+});
+
+// Show LR plugin update modal when a new version is configured
+watch(isAppReady, (ready) => {
+  if (!ready || !LR_PLUGIN_VERSION) return;
+  if (userStore.user?.preferredSource !== "lightroom") return;
+  const dismissed = localStorage.getItem("lr_plugin_dismissed_version");
+  if (dismissed === String(LR_PLUGIN_VERSION)) return;
+  showLrUpdateModal.value = true;
 });
 </script>
 
