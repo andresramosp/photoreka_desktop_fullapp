@@ -20,9 +20,9 @@ import GeoRecoveryPayment from '#models/geo_recovery_payment'
 import GeoRecoverySessionService from '#services/geo_recovery_session_service'
 
 /** Price per photo in EUR. */
-export const PRICE_PER_PHOTO_EUR = 0.0075
+export const PRICE_PER_PHOTO_EUR = 0.008
 /** Stripe minimum charge in EUR. */
-export const MIN_CHARGE_EUR = 0.25
+export const MIN_CHARGE_EUR = 1
 
 let stripeClient: Stripe | null = null
 
