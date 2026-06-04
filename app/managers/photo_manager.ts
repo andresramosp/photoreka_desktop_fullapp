@@ -7,21 +7,10 @@ import NLPService from '#services/nlp_service'
 import { withCache } from '../decorators/withCache.js'
 import { CacheInvalidationService } from '../services/cache_invalidation_service.js'
 import TagPhotoManager from './tag_photo_manager.js'
-import { DeleteObjectsCommand, S3Client } from '@aws-sdk/client-s3'
 import db from '@adonisjs/lucid/services/db'
 import PortfolioBuildService from '#services/portfolio_build_service'
 import Canvas from '#models/canvas'
-
-const s3 = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY!,
-    secretAccessKey: process.env.R2_SECRET_KEY!,
-  },
-  requestChecksumCalculation: 'WHEN_REQUIRED',
-  responseChecksumValidation: 'WHEN_REQUIRED',
-})
+import PhotoDeletionService from '#services/photo_deletion_service'
 
 export default class PhotoManager {
   constructor() {}
@@ -563,54 +552,70 @@ export default class PhotoManager {
   public async deletePhotos(ids: number[], userId?: string) {
     if (!ids.length) throw new Error('No photo IDs provided')
 
-    // Busca los nombres de archivos a eliminar
-    const photos = await Photo.query().whereIn('id', ids)
-    if (!photos.length) throw new Error('No photos found')
-
-    // Marcar fotos como eliminadas (soft delete)
-    const deletedAt = new Date()
-    await db.from('photos').whereIn('id', ids).update({ deleted_at: deletedAt })
-
-    // Eliminar archivos de R2 inmediatamente
-    const objectsToDelete: string[] = []
-    for (const photo of photos) {
-      objectsToDelete.push(photo.name)
-      if (photo.thumbnailName) objectsToDelete.push(photo.thumbnailName)
+    const photosQuery = db.from('photos').whereIn('id', ids)
+    if (userId) {
+      photosQuery.where('user_id', Number(userId))
     }
 
-    s3.send(
-      new DeleteObjectsCommand({
-        Bucket: process.env.R2_BUCKET,
-        Delete: {
-          Objects: objectsToDelete.map((Key) => ({ Key })),
-          Quiet: true,
-        },
-      })
-    ).catch((err) => {
-      console.warn('⚠️ Fallo al eliminar archivos en R2:', err)
-    })
+    const photos = await photosQuery.select('id', 'name', 'thumbnail_name', 'analyzer_process_id')
+    if (!photos.length) throw new Error('No photos found')
+
+    const deletedAt = new Date()
+
+    const uploadedPhotos = photos.filter((photo) => !photo.analyzer_process_id)
+    const retainedPhotos = photos.filter((photo) => Boolean(photo.analyzer_process_id))
+    const retainedPhotoIds = retainedPhotos.map((photo) => photo.id)
+
+    if (retainedPhotoIds.length > 0) {
+      await db.from('photos').whereIn('id', retainedPhotoIds).update({ deleted_at: deletedAt })
+      console.log(
+        `[PhotoManager] Scheduled retained photo(s) for hard delete after retention window: [${retainedPhotoIds.join(', ')}]`
+      )
+    }
+
+    const uploadedDeleteResult = await PhotoDeletionService.hardDeletePhotosNow(
+      uploadedPhotos,
+      false,
+      'PhotoManager -> UploadedImmediateDelete'
+    )
+
+    const removedPhotoIds = [...retainedPhotoIds, ...uploadedDeleteResult.deletedIds]
 
     if (userId) {
-      const analyzedCount = photos.filter((p) => p.analyzerProcessId !== null).length
-      if (analyzedCount === 0) {
+      const retainedCount = retainedPhotoIds.length
+      const uploadedCount = uploadedDeleteResult.deletedIds.length
+
+      if (retainedCount === 0 && uploadedCount > 0) {
         // All deleted photos were still 'uploaded' (no analysis data), so only the
         // basic photo-list caches need to be flushed — skip tags, search, 3D, etc.
         await CacheInvalidationService.onPhotoListChanged(userId)
-      } else {
-        await CacheInvalidationService.onPhotosDeleted(userId, analyzedCount)
       }
 
-      // Remove deleted IDs from all portfolio results for this user
-      PortfolioBuildService.removePhotosFromResults(Number(userId), ids).catch((err) => {
-        console.warn('⚠️ Failed to clean deleted photos from portfolio results:', err)
-      })
+      if (retainedCount > 0) {
+        await CacheInvalidationService.onPhotosDeleted(userId, retainedCount)
+      }
 
-      // Remove deleted IDs from all canvases for this user
-      Canvas.removePhotosFromData(Number(userId), ids).catch((err) => {
-        console.warn('⚠️ Failed to clean deleted photos from canvases:', err)
-      })
+      if (retainedPhotoIds.length > 0) {
+        // Remove deleted IDs from all portfolio results for this user
+        PortfolioBuildService.removePhotosFromResults(Number(userId), retainedPhotoIds).catch(
+          (err) => {
+            console.warn('⚠️ Failed to clean deleted photos from portfolio results:', err)
+          }
+        )
+
+        // Remove deleted IDs from all canvases for this user
+        Canvas.removePhotosFromData(Number(userId), retainedPhotoIds).catch((err) => {
+          console.warn('⚠️ Failed to clean deleted photos from canvases:', err)
+        })
+      }
     }
 
-    return { message: 'Photos marked for deletion', ids, deletedAt }
+    return {
+      message: 'Photo deletion processed',
+      scheduledIds: retainedPhotoIds,
+      immediateDeletedIds: uploadedDeleteResult.deletedIds,
+      immediateDeleteErrors: uploadedDeleteResult.totalErrors,
+      deletedAt: retainedPhotoIds.length > 0 ? deletedAt : null,
+    }
   }
 }

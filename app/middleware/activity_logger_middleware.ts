@@ -127,9 +127,27 @@ const ROUTE_MAP: RouteDescriptor[] = [
     method: 'POST',
     pattern: /\/catalog\/delete$/,
     type: 'photo_delete',
-    meta: (b) => ({
-      count: Array.isArray(b?.ids) ? b.ids.length : 0,
-    }),
+    meta: (b, _p, r) => {
+      const hardIds = Array.isArray(r?.immediateDeletedIds) ? r.immediateDeletedIds : []
+      const softIds = Array.isArray(r?.scheduledIds) ? r.scheduledIds : []
+      const hardCount = hardIds.length
+      const softCount = softIds.length
+      const mode =
+        hardCount > 0 && softCount === 0
+          ? 'hard'
+          : softCount > 0 && hardCount === 0
+            ? 'soft'
+            : hardCount > 0 && softCount > 0
+              ? 'mixed'
+              : 'unknown'
+
+      return {
+        count: Array.isArray(b?.ids) ? b.ids.length : 0,
+        hardCount,
+        softCount,
+        mode,
+      }
+    },
   },
   {
     method: 'POST',

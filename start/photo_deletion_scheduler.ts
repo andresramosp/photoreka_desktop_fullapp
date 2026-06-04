@@ -14,12 +14,13 @@ function parseEnvNumber(value: string | undefined, defaultValue: number): number
   // Remove quotes if present
   const cleaned = value.replace(/^["']|["']$/g, '')
   const parsed = Number(cleaned)
-  return isNaN(parsed) ? defaultValue : parsed
+  return Number.isNaN(parsed) ? defaultValue : parsed
 }
 
 // Configuration from environment variables
 const DELETION_INTERVAL_HOURS = parseEnvNumber(process.env.PHOTO_DELETION_INTERVAL_HOURS, 24)
 const DELETION_BATCH_SIZE = parseEnvNumber(process.env.PHOTO_DELETION_BATCH_SIZE, 50)
+const DELETION_RETENTION_DAYS = parseEnvNumber(process.env.PHOTO_DELETION_RETENTION_DAYS, 7)
 const DELETION_ENABLED = process.env.PHOTO_DELETION_ENABLED?.replace(/^["']|["']$/g, '') !== 'false'
 
 // Orphan sweep: soft-deletes unconfirmed upload rows (confirmed = false) older
@@ -37,7 +38,7 @@ async function runSweepThenDelete() {
       logger.error('[PhotoDeletionScheduler] Error in orphan sweep:', error)
     }
   }
-  await PhotoDeletionService.deletePhysically(DELETION_BATCH_SIZE, false)
+  await PhotoDeletionService.deletePhysically(DELETION_BATCH_SIZE, false, DELETION_RETENTION_DAYS)
 }
 
 logger.info('[PhotoDeletionScheduler] ========================================')
@@ -45,6 +46,7 @@ logger.info('[PhotoDeletionScheduler] Photo Deletion Scheduler initialized')
 logger.info(`[PhotoDeletionScheduler] Enabled: ${DELETION_ENABLED}`)
 logger.info(`[PhotoDeletionScheduler] Interval: Every ${DELETION_INTERVAL_HOURS} hours`)
 logger.info(`[PhotoDeletionScheduler] Batch size: ${DELETION_BATCH_SIZE}`)
+logger.info(`[PhotoDeletionScheduler] Retention days: ${DELETION_RETENTION_DAYS}`)
 logger.info(`[PhotoDeletionScheduler] Orphan sweep enabled: ${ORPHAN_SWEEP_ENABLED}`)
 logger.info(`[PhotoDeletionScheduler] Orphan sweep age (min): ${ORPHAN_SWEEP_AGE_MINUTES}`)
 logger.info(`[PhotoDeletionScheduler] Interval in ms: ${DELETION_INTERVAL_HOURS * 60 * 60 * 1000}`)

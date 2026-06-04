@@ -4,7 +4,6 @@ import AdminPaymentsService from '#services/admin/admin_payments_service'
 import PhotoDeletionService from '#services/photo_deletion_service'
 import db from '@adonisjs/lucid/services/db'
 import { DateTime } from 'luxon'
-import { DeleteObjectsCommand, S3Client } from '@aws-sdk/client-s3'
 import logger from '@adonisjs/core/services/logger'
 
 export interface CreditLedgerRow {
@@ -18,17 +17,6 @@ export interface CreditLedgerRow {
   referenceId: string | null
   createdAt: string
 }
-
-const s3 = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY!,
-    secretAccessKey: process.env.R2_SECRET_KEY!,
-  },
-  requestChecksumCalculation: 'WHEN_REQUIRED',
-  responseChecksumValidation: 'WHEN_REQUIRED',
-})
 
 export interface AdminUserListItem {
   id: number
@@ -228,31 +216,36 @@ export default class AdminUsersService {
 
     const now = new Date()
 
-    // Fetch photo file names for R2 cleanup (all photos, including already soft-deleted)
-    const photos = await db.from('photos').where('user_id', userId).select('name', 'thumbnail_name')
-
-    // Delete files from R2
-    const objectsToDelete: { Key: string }[] = []
-    for (const p of photos) {
-      if (p.name) objectsToDelete.push({ Key: p.name })
-      if (p.thumbnail_name) objectsToDelete.push({ Key: p.thumbnail_name })
-    }
-    if (objectsToDelete.length > 0) {
-      s3.send(
-        new DeleteObjectsCommand({
-          Bucket: process.env.R2_BUCKET,
-          Delete: { Objects: objectsToDelete, Quiet: true },
-        })
-      ).catch((err) => {
-        logger.warn('[AdminDeleteUser] Failed to delete R2 objects: %o', err)
-      })
-    }
-
-    await db
+    const photos = await db
       .from('photos')
       .where('user_id', userId)
-      .whereNull('deleted_at')
-      .update({ deleted_at: now })
+      .select('id', 'name', 'thumbnail_name', 'analyzer_process_id', 'deleted_at')
+
+    const uploadedPhotos = photos.filter((photo) => !photo.analyzer_process_id)
+    const retainedPhotoIds = photos
+      .filter((photo) => Boolean(photo.analyzer_process_id) && !photo.deleted_at)
+      .map((photo) => photo.id)
+
+    const uploadedDeleteResult = await PhotoDeletionService.hardDeletePhotosNow(
+      uploadedPhotos,
+      false,
+      'AdminDeleteUser -> UploadedImmediateDelete'
+    )
+
+    if (retainedPhotoIds.length > 0) {
+      await db.from('photos').whereIn('id', retainedPhotoIds).update({ deleted_at: now })
+      logger.info(
+        '[AdminDeleteUser] Scheduled retained photo IDs for hard delete after retention window: %o',
+        retainedPhotoIds
+      )
+    }
+
+    logger.info(
+      '[AdminDeleteUser] Immediate uploaded deletions=%d retained scheduled=%d immediate errors=%d',
+      uploadedDeleteResult.deletedIds.length,
+      retainedPhotoIds.length,
+      uploadedDeleteResult.totalErrors
+    )
 
     // Soft-delete the user
     user.deletedAt = DateTime.fromJSDate(now)
