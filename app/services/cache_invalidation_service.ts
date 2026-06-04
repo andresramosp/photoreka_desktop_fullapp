@@ -87,6 +87,28 @@ export class CacheInvalidationService {
   }
 
   /**
+   * Called when soft-deleted photos are restored.
+   * Invalidates the same caches as deletion, but increments the watermark.
+   */
+  static async onPhotosRestored(userId: string, photoCount: number = 1): Promise<void> {
+    await invalidateCache(`getPhotosByUser_${userId}`)
+    await invalidateCache(`getPhotosPreview_${userId}`)
+    await invalidateCacheByPattern(`getPhotosIdsForSearch:${userId}:*`)
+    await invalidateCache(`getTagsByUser_${userId}`)
+    await invalidateCacheByPattern(`getScoredPhotosByTagsAndDesc:${userId}:*`)
+    await invalidateCacheByPattern(`getScoredPhotosByTags:${userId}:*`)
+    await invalidateCacheByPattern(`getScoredPhotoImageByFullQuery:${userId}:*`)
+    await invalidateCacheByPattern(`searchByPhotos:${userId}:*`)
+    await invalidateCacheByPattern(`checkSimilarDuplicates:${userId}:*`)
+    await invalidateCacheByPattern(`checkExactDuplicates:${userId}:*`)
+
+    const invalidated = await this.maybeInvalidateExpensiveCaches(userId, +photoCount)
+    console.log(
+      `[CacheInvalidation] onPhotosRestored: user=${userId} photoCount=${photoCount} expensiveInvalidated=${invalidated}`
+    )
+  }
+
+  /**
    * Called when an analysis pipeline (or global reprocess) finishes.
    * Immediately invalidates correctness-critical caches.
    * Expensive visual caches (3D, tagcloud, portfolio) are deferred via the watermark.

@@ -2,9 +2,19 @@ import User from '#models/user'
 import Photo from '#models/photo'
 import AdminPaymentsService from '#services/admin/admin_payments_service'
 import PhotoDeletionService from '#services/photo_deletion_service'
+import { CacheInvalidationService } from '#services/cache_invalidation_service'
 import db from '@adonisjs/lucid/services/db'
 import { DateTime } from 'luxon'
 import logger from '@adonisjs/core/services/logger'
+
+function parseEnvNumber(value: string | undefined, defaultValue: number): number {
+  if (!value) return defaultValue
+  const cleaned = value.replace(/^["']|["']$/g, '')
+  const parsed = Number(cleaned)
+  return Number.isNaN(parsed) ? defaultValue : parsed
+}
+
+const PHOTO_DELETION_RETENTION_DAYS = parseEnvNumber(process.env.PHOTO_DELETION_RETENTION_DAYS, 7)
 
 export interface CreditLedgerRow {
   id: number
@@ -33,6 +43,7 @@ export interface AdminUserListItem {
   updatedAt: string
   // Computed
   photosCount: number
+  deletedPhotosCount: number
   totalCostEur: number
   usage: Record<string, any> | null
   contentViolations: Record<string, any>[] | null
@@ -67,6 +78,13 @@ export default class AdminUsersService {
       .select('user_id')
       .count('* as photos_count')
       .whereNull('deleted_at')
+      .groupBy('user_id')
+
+    const deletedCountsSub = db
+      .from('photos')
+      .select('user_id')
+      .count('* as deleted_count')
+      .whereNotNull('deleted_at')
       .groupBy('user_id')
 
     let query = User.query().orderBy('created_at', 'desc')
@@ -104,6 +122,12 @@ export default class AdminUsersService {
       countsMap.set(row.user_id, Number(row.photos_count))
     }
 
+    const deletedCounts = await deletedCountsSub
+    const deletedMap = new Map<number, number>()
+    for (const row of deletedCounts) {
+      deletedMap.set(row.user_id, Number(row.deleted_count))
+    }
+
     // Get total cost per user from cost_logs
     const costRows = await db.rawQuery(`
       SELECT user_id, COALESCE(SUM(cost_in_eur), 0)::float AS total_cost
@@ -128,6 +152,7 @@ export default class AdminUsersService {
       createdAt: u.createdAt.toISO()!,
       updatedAt: u.updatedAt.toISO()!,
       photosCount: countsMap.get(u.id) || 0,
+      deletedPhotosCount: deletedMap.get(u.id) || 0,
       totalCostEur: costMap.get(u.id) ?? 0,
       usage: u.usage,
       photosReviewedAt: u.photosReviewedAt?.toISO() ?? null,
@@ -147,6 +172,13 @@ export default class AdminUsersService {
       .whereNull('deletedAt')
       .count('* as total')
     const photosCount = Number(photosCountResult[0]?.$extras.total || 0)
+
+    const deletedCountResult = await db
+      .from('photos')
+      .where('user_id', userId)
+      .whereNotNull('deleted_at')
+      .count('* as total')
+    const deletedPhotosCount = Number(deletedCountResult[0]?.total || 0)
     const paymentSummary = await AdminPaymentsService.getUserSummary(userId)
 
     // Compute cost summary from cost_logs
@@ -180,6 +212,7 @@ export default class AdminUsersService {
       createdAt: user.createdAt.toISO()!,
       updatedAt: user.updatedAt.toISO()!,
       photosCount,
+      deletedPhotosCount,
       totalCostEur,
       usage: user.usage,
       costSummary,
@@ -316,6 +349,84 @@ export default class AdminUsersService {
       thumbnailUrl: p.thumbnailUrl,
       originalFileName: p.originalFileName ?? null,
     }))
+  }
+
+  /**
+   * Get all soft-deleted photos for a user.
+   */
+  static async getDeletedPhotos(userId: number): Promise<
+    {
+      id: number
+      thumbnailUrl: string | null
+      originalFileName: string | null
+      deletedAt: string
+      retentionEndsAt: string
+      timeRemainingMs: number
+    }[]
+  > {
+    const rows = await db
+      .from('photos')
+      .where('user_id', userId)
+      .whereNotNull('deleted_at')
+      .select('id', 'thumbnail_name', 'original_file_name', 'deleted_at')
+      .orderBy('deleted_at', 'desc')
+
+    const nowMs = DateTime.now().toMillis()
+
+    return rows.map((row: any) => {
+      const deletedAtDate =
+        row.deleted_at instanceof Date ? row.deleted_at : new Date(row.deleted_at)
+      const deletedAt = DateTime.fromJSDate(deletedAtDate)
+      const retentionEndsAt = deletedAt.plus({ days: PHOTO_DELETION_RETENTION_DAYS })
+      const timeRemainingMs = Math.max(0, retentionEndsAt.toMillis() - nowMs)
+      const thumbnailUrl = row.thumbnail_name
+        ? `https://${process.env.IMAGES_WORKER}/${row.thumbnail_name}`
+        : null
+
+      return {
+        id: row.id,
+        thumbnailUrl,
+        originalFileName: row.original_file_name ?? null,
+        deletedAt: deletedAt.toISO()!,
+        retentionEndsAt: retentionEndsAt.toISO()!,
+        timeRemainingMs,
+      }
+    })
+  }
+
+  /**
+   * Restore soft-deleted photos for a user.
+   */
+  static async restoreDeletedPhotos(
+    userId: number,
+    ids: number[]
+  ): Promise<{ restoredIds: number[]; restoredCount: number }> {
+    if (ids.length === 0) {
+      return { restoredIds: [], restoredCount: 0 }
+    }
+
+    const photos = await db
+      .from('photos')
+      .where('user_id', userId)
+      .whereIn('id', ids)
+      .whereNotNull('deleted_at')
+      .select('id', 'analyzer_process_id')
+
+    const restoredIds = photos.map((photo: any) => photo.id)
+    if (restoredIds.length === 0) {
+      return { restoredIds: [], restoredCount: 0 }
+    }
+
+    await db.from('photos').whereIn('id', restoredIds).update({ deleted_at: null })
+
+    const analyzedCount = photos.filter((photo: any) => Boolean(photo.analyzer_process_id)).length
+    if (analyzedCount > 0) {
+      await CacheInvalidationService.onPhotosRestored(String(userId), analyzedCount)
+    } else {
+      await CacheInvalidationService.onPhotoListChanged(String(userId))
+    }
+
+    return { restoredIds, restoredCount: restoredIds.length }
   }
 
   /**

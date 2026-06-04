@@ -12,6 +12,12 @@ const updateUsageValidator = vine.compile(
   })
 )
 
+const restoreDeletedPhotosValidator = vine.compile(
+  vine.object({
+    ids: vine.array(vine.number()),
+  })
+)
+
 export default class UsersAdminController {
   /**
    * List all users with optional filters
@@ -197,6 +203,37 @@ export default class UsersAdminController {
     } catch (error) {
       return response.internalServerError({
         message: 'Failed to fetch user photos',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
+   * Get all soft-deleted photos for a user
+   */
+  async deletedPhotos({ params, response }: HttpContext) {
+    try {
+      const photos = await AdminUsersService.getDeletedPhotos(Number(params.id))
+      return response.ok({ photos })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to fetch deleted photos',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
+   * Restore soft-deleted photos for a user
+   */
+  async restoreDeletedPhotos({ params, request, response }: HttpContext) {
+    try {
+      const { ids } = await request.validateUsing(restoreDeletedPhotosValidator)
+      const result = await AdminUsersService.restoreDeletedPhotos(Number(params.id), ids)
+      return response.ok({ message: 'Photos restored', ...result })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to restore photos',
         error: error.message,
       })
     }
