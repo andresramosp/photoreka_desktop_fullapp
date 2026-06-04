@@ -46,11 +46,25 @@ import "./assets/global.scss";
 
 const APP_VERSION = __APP_VERSION__;
 const STALE_VERSION_FLAG = "photoreka:stale-version-recovery";
+const UPDATE_AVAILABLE_FLAG = "photoreka:update-available";
 
-const updateServiceWorker = registerSW({
+function flagUpdateAvailable(version: string, source: "version-check" | "sw") {
+  const key = `${source}:${version}`;
+  if (sessionStorage.getItem(UPDATE_AVAILABLE_FLAG) === key) {
+    return;
+  }
+  sessionStorage.setItem(UPDATE_AVAILABLE_FLAG, key);
+  window.dispatchEvent(
+    new CustomEvent("photoreka:update-available", {
+      detail: { version, source },
+    }),
+  );
+}
+
+registerSW({
   immediate: true,
   onNeedRefresh() {
-    updateServiceWorker(true);
+    flagUpdateAvailable(String(APP_VERSION ?? "unknown"), "sw");
   },
 });
 
@@ -77,22 +91,8 @@ async function recoverFromStaleBundle() {
     }
 
     sessionStorage.setItem(STALE_VERSION_FLAG, latestVersion);
-
-    if ("serviceWorker" in navigator) {
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(
-        registrations.map((registration) => registration.unregister()),
-      );
-    }
-
-    if ("caches" in window) {
-      const cacheKeys = await caches.keys();
-      await Promise.all(cacheKeys.map((cacheKey) => caches.delete(cacheKey)));
-    }
-
-    const reloadUrl = new URL(window.location.href);
-    reloadUrl.searchParams.set("v", latestVersion);
-    window.location.replace(reloadUrl.toString());
+    flagUpdateAvailable(latestVersion, "version-check");
+    return;
   } catch (error) {
     console.warn("Failed to verify deployed app version:", error);
   }
