@@ -302,6 +302,7 @@ interface UserRow {
   createdAt: string;
   updatedAt: string;
   photosCount: number;
+  deletedPhotosCount: number;
   totalCostEur: number;
   usage: any;
   contentViolations: ContentViolation[] | null;
@@ -747,6 +748,15 @@ const columns = computed<DataTableColumn<UserRow>[]>(() => [
     },
   },
   {
+    title: "Deleted",
+    key: "deletedPhotosCount",
+    width: 90,
+    sorter: true,
+    render(row) {
+      return h("span", { class: "cell-dim" }, String(row.deletedPhotosCount));
+    },
+  },
+  {
     title: "Cost (€)",
     key: "totalCostEur",
     width: 90,
@@ -1039,7 +1049,7 @@ onMounted(() => {
 
 <style scoped>
 .admin-section {
-  max-width: 1200px;
+  /* max-width: 1200px; */
   margin: 0 auto;
 }
 

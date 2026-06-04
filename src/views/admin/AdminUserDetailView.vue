@@ -578,6 +578,97 @@
               </div>
             </div>
           </div>
+          <!-- Deleted Photos Section -->
+          <div class="photos-section deleted-photos-section">
+            <button class="photos-section-toggle" @click="toggleDeletedPhotos">
+              <span class="photos-section-title">
+                Deleted photos
+                <span class="photos-section-count">
+                  {{ deletedCountLabel }}
+                </span>
+              </span>
+              <n-icon
+                size="16"
+                :style="{
+                  transform: deletedPhotosExpanded
+                    ? 'rotate(180deg)'
+                    : 'rotate(0deg)',
+                  transition: 'transform 0.2s',
+                  color: '#94a3b8',
+                }"
+              >
+                <ChevronDownIcon />
+              </n-icon>
+            </button>
+
+            <div v-if="deletedPhotosExpanded" class="photos-section-body">
+              <div v-if="deletedPhotosLoading" class="photos-loading">
+                <n-spin size="small" />
+              </div>
+              <div v-else-if="deletedPhotosError" class="photos-empty">
+                Failed to load deleted photos.
+              </div>
+              <div v-else-if="deletedPhotos.length === 0" class="photos-empty">
+                No deleted photos.
+              </div>
+              <div v-else>
+                <div class="deleted-photos-controls">
+                  <n-checkbox
+                    :checked="deletedAllSelected"
+                    @update:checked="selectAllDeleted"
+                  >
+                    Select all
+                  </n-checkbox>
+                  <div class="deleted-photos-actions">
+                    <span class="deleted-selected-count">
+                      {{ deletedSelectedIds.length }} selected
+                    </span>
+                    <n-button
+                      size="small"
+                      type="success"
+                      :disabled="deletedSelectedIds.length === 0"
+                      :loading="deletedRestoring"
+                      @click="restoreDeletedPhotos"
+                    >
+                      Restore selected
+                    </n-button>
+                  </div>
+                </div>
+                <div class="user-photos-grid deleted-photos-grid">
+                  <div
+                    v-for="photo in deletedPhotos"
+                    :key="photo.id"
+                    class="user-photo-thumb-wrap deleted-photo-thumb-wrap"
+                    :class="{
+                      'deleted-photo-selected': isDeletedSelected(photo.id),
+                    }"
+                    :title="`${photo.originalFileName ?? String(photo.id)} | Deleted ${formatDate(photo.deletedAt)}`"
+                    @click="toggleDeletedSelection(photo.id)"
+                  >
+                    <img
+                      v-if="photo.thumbnailUrl"
+                      :src="photo.thumbnailUrl"
+                      :alt="photo.originalFileName ?? String(photo.id)"
+                      class="user-photo-thumb"
+                      loading="lazy"
+                    />
+                    <div v-else class="deleted-photo-missing">No thumbnail</div>
+                    <span class="user-photo-id">#{{ photo.id }}</span>
+                    <span class="deleted-photo-meta">
+                      Delete in
+                      {{ formatDeletionCountdown(photo.timeRemainingMs) }}
+                    </span>
+                    <span
+                      v-if="isDeletedSelected(photo.id)"
+                      class="deleted-photo-check"
+                    >
+                      Selected
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </template>
@@ -648,6 +739,7 @@ interface UserDetail {
   createdAt: string;
   updatedAt: string;
   photosCount: number;
+  deletedPhotosCount: number;
   totalCostEur: number;
   usage: any;
   costSummary: {
@@ -658,6 +750,15 @@ interface UserDetail {
   googleId?: string | null;
   catalogPatterns?: any;
   paymentSummary?: PaymentSummary | null;
+}
+
+interface DeletedPhotoItem {
+  id: number;
+  thumbnailUrl: string | null;
+  originalFileName: string | null;
+  deletedAt: string;
+  retentionEndsAt: string;
+  timeRemainingMs: number;
 }
 
 interface PaymentSummary {
@@ -1164,6 +1265,20 @@ const userPhotos = ref<
   { id: number; thumbnailUrl: string; originalFileName: string | null }[]
 >([]);
 
+async function fetchUserPhotos() {
+  if (!user.value) return;
+  photosLoading.value = true;
+  photosError.value = false;
+  try {
+    const { data } = await api.get(`/api/admin/users/${user.value.id}/photos`);
+    userPhotos.value = data.photos;
+  } catch {
+    photosError.value = true;
+  } finally {
+    photosLoading.value = false;
+  }
+}
+
 async function togglePhotos() {
   photosExpanded.value = !photosExpanded.value;
   if (
@@ -1171,18 +1286,121 @@ async function togglePhotos() {
     userPhotos.value.length === 0 &&
     !photosLoading.value
   ) {
-    photosLoading.value = true;
-    photosError.value = false;
-    try {
-      const { data } = await api.get(
-        `/api/admin/users/${user.value!.id}/photos`,
-      );
-      userPhotos.value = data.photos;
-    } catch {
-      photosError.value = true;
-    } finally {
-      photosLoading.value = false;
+    await fetchUserPhotos();
+  }
+}
+
+// ─── Deleted photos section ───
+const deletedPhotosExpanded = ref(false);
+const deletedPhotosLoading = ref(false);
+const deletedPhotosError = ref(false);
+const deletedPhotos = ref<DeletedPhotoItem[]>([]);
+const deletedSelectedIds = ref<number[]>([]);
+const deletedRestoring = ref(false);
+
+const deletedCountLabel = computed(
+  () => user.value?.deletedPhotosCount ?? deletedPhotos.value.length,
+);
+
+const deletedAllSelected = computed(
+  () =>
+    deletedPhotos.value.length > 0 &&
+    deletedSelectedIds.value.length === deletedPhotos.value.length,
+);
+
+function isDeletedSelected(id: number): boolean {
+  return deletedSelectedIds.value.includes(id);
+}
+
+function toggleDeletedSelection(id: number) {
+  const set = new Set(deletedSelectedIds.value);
+  if (set.has(id)) set.delete(id);
+  else set.add(id);
+  deletedSelectedIds.value = Array.from(set);
+}
+
+function selectAllDeleted(checked: boolean) {
+  if (checked) {
+    deletedSelectedIds.value = deletedPhotos.value.map((photo) => photo.id);
+  } else {
+    deletedSelectedIds.value = [];
+  }
+}
+
+function formatDeletionCountdown(ms: number): string {
+  if (ms <= 0) return "Expired";
+  const totalMinutes = Math.ceil(ms / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+async function fetchDeletedPhotos() {
+  if (!user.value) return;
+  deletedPhotosLoading.value = true;
+  deletedPhotosError.value = false;
+  try {
+    const { data } = await api.get(
+      `/api/admin/users/${user.value.id}/deleted-photos`,
+    );
+    deletedPhotos.value = data.photos;
+    if (user.value) {
+      user.value.deletedPhotosCount = data.photos.length;
     }
+    deletedSelectedIds.value = [];
+  } catch {
+    deletedPhotosError.value = true;
+  } finally {
+    deletedPhotosLoading.value = false;
+  }
+}
+
+async function toggleDeletedPhotos() {
+  deletedPhotosExpanded.value = !deletedPhotosExpanded.value;
+  if (
+    deletedPhotosExpanded.value &&
+    deletedPhotos.value.length === 0 &&
+    !deletedPhotosLoading.value
+  ) {
+    await fetchDeletedPhotos();
+  }
+}
+
+async function restoreDeletedPhotos() {
+  if (!user.value || deletedSelectedIds.value.length === 0) return;
+  deletedRestoring.value = true;
+  try {
+    const { data } = await api.post(
+      `/api/admin/users/${user.value.id}/restore-deleted-photos`,
+      { ids: deletedSelectedIds.value },
+    );
+    const restoredIds = data.restoredIds || [];
+    if (restoredIds.length > 0) {
+      const restoredSet = new Set(restoredIds);
+      deletedPhotos.value = deletedPhotos.value.filter(
+        (photo) => !restoredSet.has(photo.id),
+      );
+      deletedSelectedIds.value = [];
+      if (user.value) {
+        user.value.deletedPhotosCount = Math.max(
+          0,
+          user.value.deletedPhotosCount - restoredIds.length,
+        );
+      }
+      if (photosExpanded.value) {
+        await fetchUserPhotos();
+      }
+      message.success(`Restored ${restoredIds.length} photo(s)`);
+    } else {
+      message.info("No photos restored");
+    }
+  } catch {
+    message.error("Failed to restore photos");
+  } finally {
+    deletedRestoring.value = false;
   }
 }
 
@@ -1205,7 +1423,7 @@ onUnmounted(() => {
 
 <style scoped>
 .admin-section {
-  max-width: 1200px;
+  /* max-width: 1200px; */
   margin: 0 auto;
 }
 
@@ -1946,5 +2164,65 @@ onUnmounted(() => {
   border-radius: 3px;
   padding: 1px 3px;
   line-height: 1.4;
+}
+
+/* ===== Deleted photos ===== */
+.deleted-photos-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.deleted-photos-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.deleted-selected-count {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.deleted-photo-thumb-wrap {
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+
+.deleted-photo-selected {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.35);
+}
+
+.deleted-photo-meta {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  font-size: 9px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 3px;
+  padding: 1px 4px;
+  line-height: 1.4;
+}
+
+.deleted-photo-check {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  font-size: 9px;
+  color: #fff;
+  background: rgba(34, 197, 94, 0.9);
+  border-radius: 3px;
+  padding: 1px 4px;
+  line-height: 1.4;
+}
+
+.deleted-photo-missing {
+  font-size: 10px;
+  color: #94a3b8;
 }
 </style>

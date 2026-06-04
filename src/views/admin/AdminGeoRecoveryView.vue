@@ -768,7 +768,7 @@ function renderStripeIdRow(label: string, value: string, length: number) {
 
 <style scoped>
 .admin-section {
-  max-width: 1200px;
+  /* max-width: 1200px; */
   margin: 0 auto;
 }
 
