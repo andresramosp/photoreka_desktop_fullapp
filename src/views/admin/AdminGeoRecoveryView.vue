@@ -68,17 +68,17 @@
     <div class="section-panel">
       <div class="panel-header">
         <div>
-          <h3 class="panel-title">Payments</h3>
+          <h3 class="panel-title">Analyses</h3>
           <p class="panel-description">
-            Database records for geo-recovery checkout flow.
+            Combined payment and cost summaries per geo-recovery run.
           </p>
         </div>
         <n-button
           size="small"
           quaternary
-          :loading="paymentsLoading"
+          :loading="analysesLoading"
           title="Refresh"
-          @click="loadPayments"
+          @click="loadAnalyses"
         >
           Refresh
         </n-button>
@@ -87,87 +87,33 @@
       <div class="table-wrapper">
         <div class="table-body">
           <div
-            v-if="paymentsLoading && !payments.length"
+            v-if="analysesLoading && !analyses.length"
             class="table-loading-state"
           >
             <n-spin show />
           </div>
           <n-data-table
             v-else
-            :columns="paymentColumns"
-            :data="payments"
-            :row-key="(row: PaymentRow) => row.id"
+            :columns="analysisColumns"
+            :data="analyses"
+            :row-key="(row: AnalysisRow) => row.id"
             :bordered="false"
             size="small"
-            :max-height="460"
+            :max-height="520"
             striped
           />
         </div>
         <div
-          v-if="paymentsMeta"
+          v-if="analysesMeta"
           class="table-pagination table-pagination-split"
         >
-          <span class="dim">{{ paymentsMeta.total }} payments total</span>
+          <span class="dim">{{ analysesMeta.total }} analyses total</span>
           <n-pagination
-            v-model:page="paymentsPage"
-            :page-count="paymentsMeta.lastPage"
+            v-model:page="analysesPage"
+            :page-count="analysesMeta.lastPage"
             :page-slot="5"
             size="small"
-            @update:page="loadPayments"
-          />
-        </div>
-      </div>
-    </div>
-
-    <div class="section-panel">
-      <div class="panel-header">
-        <div>
-          <h3 class="panel-title">Cost Logs</h3>
-          <p class="panel-description">
-            Detailed cost tracking for geo-recovery operations.
-          </p>
-        </div>
-        <n-button
-          size="small"
-          quaternary
-          :loading="costLogsLoading"
-          title="Refresh"
-          @click="loadCostLogs"
-        >
-          Refresh
-        </n-button>
-      </div>
-
-      <div class="table-wrapper">
-        <div class="table-body">
-          <div
-            v-if="costLogsLoading && !costLogs.length"
-            class="table-loading-state"
-          >
-            <n-spin show />
-          </div>
-          <n-data-table
-            v-else
-            :columns="costLogColumns"
-            :data="costLogs"
-            :row-key="(row: CostLogRow) => row.id"
-            :bordered="false"
-            size="small"
-            :max-height="460"
-            striped
-          />
-        </div>
-        <div
-          v-if="costLogsMeta"
-          class="table-pagination table-pagination-split"
-        >
-          <span class="dim">{{ costLogsMeta.total }} cost logs total</span>
-          <n-pagination
-            v-model:page="costLogsPage"
-            :page-count="costLogsMeta.lastPage"
-            :page-slot="5"
-            size="small"
-            @update:page="loadCostLogs"
+            @update:page="loadAnalyses"
           />
         </div>
       </div>
@@ -269,7 +215,7 @@ interface SessionRow {
   job: JobSnapshot | null;
 }
 
-interface PaymentRow {
+interface AnalysisRow {
   id: number;
   sessionId: string | null;
   stripeSessionId: string | null;
@@ -281,35 +227,14 @@ interface PaymentRow {
   status: "pending" | "completed" | "failed";
   createdAt: string;
   updatedAt: string;
+  totalCostEur: number;
+  costLogCount: number;
+  costCategories: string[];
+  costReferenceIds: string[];
+  lastCostAt: string | null;
 }
 
-interface PaymentsMeta {
-  total: number;
-  perPage: number;
-  currentPage: number;
-  lastPage: number;
-  firstPage: number;
-  firstPageUrl: string;
-  lastPageUrl: string;
-  nextPageUrl: string | null;
-  previousPageUrl: string | null;
-}
-
-interface CostLogRow {
-  id: number;
-  geoRecoveryPaymentId: number;
-  category: string;
-  costInEur: number;
-  calls: number;
-  model: string | null;
-  task: string | null;
-  referenceId: string | null;
-  metadata: Record<string, any> | null;
-  createdAt: string;
-  payment: PaymentRow | null;
-}
-
-interface CostLogsMeta {
+interface AnalysesMeta {
   total: number;
   perPage: number;
   currentPage: number;
@@ -325,14 +250,10 @@ const stats = ref<FreeRunStats | null>(null);
 const statsLoading = ref(false);
 const sessions = ref<SessionRow[]>([]);
 const sessionsLoading = ref(false);
-const payments = ref<PaymentRow[]>([]);
-const paymentsLoading = ref(false);
-const paymentsMeta = ref<PaymentsMeta | null>(null);
-const paymentsPage = ref(1);
-const costLogs = ref<CostLogRow[]>([]);
-const costLogsLoading = ref(false);
-const costLogsMeta = ref<CostLogsMeta | null>(null);
-const costLogsPage = ref(1);
+const analyses = ref<AnalysisRow[]>([]);
+const analysesLoading = ref(false);
+const analysesMeta = ref<AnalysesMeta | null>(null);
+const analysesPage = ref(1);
 const resetting = ref(false);
 
 const page = ref(1);
@@ -414,11 +335,11 @@ const sessionColumns = computed<DataTableColumn<SessionRow>[]>(() => [
   },
 ]);
 
-const paymentColumns = computed<DataTableColumn<PaymentRow>[]>(() => [
+const analysisColumns = computed<DataTableColumn<AnalysisRow>[]>(() => [
   {
-    title: "ID",
+    title: "Payment #",
     key: "id",
-    width: 70,
+    width: 90,
     render(row) {
       return h("span", { class: "mono" }, `#${row.id}`);
     },
@@ -438,7 +359,7 @@ const paymentColumns = computed<DataTableColumn<PaymentRow>[]>(() => [
   {
     title: "Email",
     key: "customerEmail",
-    minWidth: 210,
+    minWidth: 190,
     render(row) {
       return h(
         "span",
@@ -453,17 +374,9 @@ const paymentColumns = computed<DataTableColumn<PaymentRow>[]>(() => [
     width: 80,
   },
   {
-    title: "Amount €",
-    key: "amountEur",
-    width: 100,
-    render(row) {
-      return h("span", { class: "mono" }, Number(row.amountEur).toFixed(2));
-    },
-  },
-  {
-    title: "Status",
+    title: "Payment Status",
     key: "status",
-    width: 110,
+    width: 150,
     render(row) {
       return h(
         NTag,
@@ -477,9 +390,49 @@ const paymentColumns = computed<DataTableColumn<PaymentRow>[]>(() => [
     },
   },
   {
+    title: "Payment €",
+    key: "amountEur",
+    width: 110,
+    render(row) {
+      return h("span", { class: "mono" }, Number(row.amountEur).toFixed(2));
+    },
+  },
+  {
+    title: "Cost €",
+    key: "totalCostEur",
+    width: 110,
+    render(row) {
+      return h("span", { class: "mono" }, Number(row.totalCostEur).toFixed(4));
+    },
+  },
+
+  // {
+  //   title: "Ref IDs",
+  //   key: "costReferenceIds",
+  //   minWidth: 160,
+  //   render(row) {
+  //     if (!row.costReferenceIds?.length) {
+  //       return h("span", { class: "dim" }, "—");
+  //     }
+
+  //     const refs = row.costReferenceIds;
+  //     const displayRefs = refs.slice(0, 2);
+  //     const overflow = refs.length - displayRefs.length;
+  //     const items = displayRefs.map((ref) =>
+  //       h("span", { class: "mono dim", title: ref }, truncate(ref, 12)),
+  //     );
+
+  //     if (overflow > 0) {
+  //       items.push(h("span", { class: "dim" }, `+${overflow}`));
+  //     }
+
+  //     return h("div", { class: "ref-ids" }, items);
+  //   },
+  // },
+  {
     title: "Stripe IDs",
     key: "stripeIds",
-    minWidth: 260,
+    minWidth: 300,
     render(row) {
       const stripeRows = [];
 
@@ -510,99 +463,12 @@ const paymentColumns = computed<DataTableColumn<PaymentRow>[]>(() => [
       return h("span", { class: "dim" }, formatDate(row.createdAt));
     },
   },
-]);
-
-const costLogColumns = computed<DataTableColumn<CostLogRow>[]>(() => [
   {
-    title: "ID",
-    key: "id",
-    width: 80,
-    render(row) {
-      return h("span", { class: "mono" }, `#${row.id}`);
-    },
-  },
-
-  {
-    title: "Email",
-    key: "customerEmail",
-    width: 220,
-    render(row) {
-      return h(
-        "span",
-        { class: "dim", title: row.payment?.customerEmail ?? undefined },
-        truncate(row.payment?.customerEmail, 28),
-      );
-    },
-  },
-  {
-    title: "Category",
-    key: "category",
+    title: "Last cost",
+    key: "lastCostAt",
     width: 150,
     render(row) {
-      return h(
-        NTag,
-        { size: "tiny", type: "default", bordered: false },
-        { default: () => row.category },
-      );
-    },
-  },
-  {
-    title: "Cost €",
-    key: "costInEur",
-    width: 100,
-    render(row) {
-      return h("span", { class: "mono" }, row.costInEur.toFixed(4));
-    },
-  },
-  {
-    title: "Payment €",
-    key: "geoRecoveryPaymentId",
-    width: 110,
-    render(row) {
-      const amount = row.payment?.amountEur
-        ? Number(row.payment.amountEur).toFixed(2)
-        : "—";
-      return h(
-        "span",
-        {
-          class: "mono",
-          title: `Payment #${row.geoRecoveryPaymentId}`,
-        },
-        amount,
-      );
-    },
-  },
-  // {
-  //   title: "Calls",
-  //   key: "calls",
-  //   width: 80,
-  // },
-  // {
-  //   title: "Model",
-  //   key: "model",
-  //   width: 170,
-  //   render(row) {
-  //     return h("span", { class: "mono dim" }, row.model || "—");
-  //   },
-  // },
-  {
-    title: "Ref ID",
-    key: "referenceId",
-    width: 120,
-    render(row) {
-      return h(
-        "span",
-        { class: "mono dim", title: row.referenceId ?? undefined },
-        truncate(row.referenceId, 12),
-      );
-    },
-  },
-  {
-    title: "Created",
-    key: "createdAt",
-    width: 150,
-    render(row) {
-      return h("span", { class: "dim" }, formatDate(row.createdAt));
+      return h("span", { class: "dim" }, formatDate(row.lastCostAt));
     },
   },
 ]);
@@ -610,8 +476,7 @@ const costLogColumns = computed<DataTableColumn<CostLogRow>[]>(() => [
 onMounted(() => {
   loadStats();
   loadSessions();
-  loadPayments();
-  loadCostLogs();
+  loadAnalyses();
 });
 
 async function loadStats() {
@@ -639,39 +504,21 @@ async function loadSessions() {
   }
 }
 
-async function loadPayments() {
-  paymentsLoading.value = true;
+async function loadAnalyses() {
+  analysesLoading.value = true;
   try {
-    const { data } = await api.get("/api/admin/geo-recovery/payments", {
+    const { data } = await api.get("/api/admin/geo-recovery/analyses", {
       params: {
-        page: paymentsPage.value,
+        page: analysesPage.value,
         limit: 50,
       },
     });
-    payments.value = data.payments ?? [];
-    paymentsMeta.value = data.meta ?? null;
+    analyses.value = data.analyses ?? [];
+    analysesMeta.value = data.meta ?? null;
   } catch (err: any) {
-    message.error(err.response?.data?.error ?? "Could not load payments");
+    message.error(err.response?.data?.error ?? "Could not load analyses");
   } finally {
-    paymentsLoading.value = false;
-  }
-}
-
-async function loadCostLogs() {
-  costLogsLoading.value = true;
-  try {
-    const { data } = await api.get("/api/admin/geo-recovery/cost-logs", {
-      params: {
-        page: costLogsPage.value,
-        limit: 50,
-      },
-    });
-    costLogs.value = data.costLogs ?? [];
-    costLogsMeta.value = data.meta ?? null;
-  } catch (err: any) {
-    message.error(err.response?.data?.error ?? "Could not load cost logs");
-  } finally {
-    costLogsLoading.value = false;
+    analysesLoading.value = false;
   }
 }
 
@@ -940,6 +787,19 @@ function renderStripeIdRow(label: string, value: string, length: number) {
 }
 
 .stripe-ids {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+}
+
+.tag-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ref-ids {
   display: flex;
   flex-direction: column;
   gap: 2px;
