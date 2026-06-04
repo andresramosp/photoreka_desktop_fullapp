@@ -183,6 +183,104 @@ export default class GeoRecoveryAdminController {
     }
   }
 
+  // ── GET /api/admin/geo-recovery/analyses ────────────────────────────────
+
+  /**
+   * Lists merged payment + cost summaries (one row per analysis).
+   * Supports pagination via ?page=1&limit=50 query params.
+   */
+  public async analyses({ request, response }: HttpContext) {
+    try {
+      const page = Math.max(1, Number(request.input('page', 1)))
+      const limit = Math.min(200, Math.max(1, Number(request.input('limit', 50))))
+
+      const paymentsQuery = GeoRecoveryPayment.query()
+        .where('status', 'completed')
+        .orderBy('created_at', 'desc')
+        .paginate(page, limit)
+
+      const result = await paymentsQuery
+      const payments = result.all()
+      const paymentIds = payments.map((payment) => payment.id)
+
+      const costLogs = paymentIds.length
+        ? await GeoRecoveryCostLog.query()
+            .whereIn('geo_recovery_payment_id', paymentIds)
+            .select(
+              'geo_recovery_payment_id',
+              'category',
+              'cost_in_eur',
+              'reference_id',
+              'created_at'
+            )
+        : []
+
+      const round = (n: number) => Math.round(n * 1_000_000) / 1_000_000
+      const summaries = new Map<
+        number,
+        {
+          totalCostEur: number
+          costLogCount: number
+          categories: Set<string>
+          referenceIds: Set<string>
+          lastCostAt: string | null
+          lastCostAtMs: number
+        }
+      >()
+
+      for (const log of costLogs) {
+        const paymentId = log.geoRecoveryPaymentId
+        if (!paymentId) continue
+
+        const summary = summaries.get(paymentId) ?? {
+          totalCostEur: 0,
+          costLogCount: 0,
+          categories: new Set<string>(),
+          referenceIds: new Set<string>(),
+          lastCostAt: null,
+          lastCostAtMs: 0,
+        }
+
+        summary.totalCostEur = round(summary.totalCostEur + (log.costInEur ?? 0))
+        summary.costLogCount += 1
+
+        if (log.category) summary.categories.add(log.category)
+        if (log.referenceId) summary.referenceIds.add(log.referenceId)
+
+        if (log.createdAt) {
+          const createdMs = log.createdAt.toMillis()
+          if (createdMs > summary.lastCostAtMs) {
+            summary.lastCostAtMs = createdMs
+            summary.lastCostAt = log.createdAt.toISO()
+          }
+        }
+
+        summaries.set(paymentId, summary)
+      }
+
+      const analyses = payments.map((payment) => {
+        const summary = summaries.get(payment.id)
+
+        return {
+          ...payment.serialize(),
+          totalCostEur: summary?.totalCostEur ?? 0,
+          costLogCount: summary?.costLogCount ?? 0,
+          costCategories: summary ? Array.from(summary.categories) : [],
+          costReferenceIds: summary ? Array.from(summary.referenceIds) : [],
+          lastCostAt: summary?.lastCostAt ?? null,
+        }
+      })
+
+      return response.ok({
+        analyses,
+        meta: result.getMeta(),
+      })
+    } catch (error: any) {
+      console.error('[GeoRecoveryAdmin] analyses error:', error)
+      return response.internalServerError({ error: error.message })
+    }
+  }
+
   // ── GET /api/admin/geo-recovery/cost-logs ────────────────────────────────
 
   /**

@@ -22,7 +22,7 @@ import GeoRecoverySessionService from '#services/geo_recovery_session_service'
 /** Price per photo in EUR. */
 export const PRICE_PER_PHOTO_EUR = 0.0075
 /** Stripe minimum charge in EUR. */
-export const MIN_CHARGE_EUR = 1
+export const MIN_CHARGE_EUR = 0.25
 
 let stripeClient: Stripe | null = null
 
@@ -252,9 +252,7 @@ export default class GeoRecoveryPaymentService {
     record.status = 'completed'
     await record.save()
 
-    if (!wasCompleted) {
-      await this.markSessionPaid(record.sessionId)
-    }
+    await this.markSessionPaid(record.sessionId, record.id)
   }
 
   /**
@@ -272,13 +270,16 @@ export default class GeoRecoveryPaymentService {
     await record.save()
   }
 
-  private async markSessionPaid(geoSessionId: string): Promise<void> {
+  private async markSessionPaid(geoSessionId: string, paymentId?: number): Promise<void> {
     const state = await this.sessionService.load(geoSessionId)
     if (!state) {
       console.warn('[GeoRecoveryPaymentService] Could not load session to mark paid:', geoSessionId)
       return
     }
     state.paid = true
+    if (typeof paymentId === 'number' && Number.isFinite(paymentId)) {
+      state.paymentId = paymentId
+    }
     await this.sessionService.save(state)
   }
 }

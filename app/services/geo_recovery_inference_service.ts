@@ -274,8 +274,20 @@ export default class GeoRecoveryInferenceService {
   // ── Job runner ─────────────────────────────────────────────────────────────
 
   private async runJob(photos: GeoRecoveryPhotoEntry[], job: GeoRecoveryJobState): Promise<void> {
-    // Get payment ID for cost tracking
-    const payment = await GeoRecoveryPayment.query().where('session_id', job.sessionId).first()
+    // Get payment ID for cost tracking (prefer the session-linked paymentId)
+    const session = await this.sessionService.load(job.sessionId)
+    let payment: GeoRecoveryPayment | null = null
+    if (session?.paymentId) {
+      payment = await GeoRecoveryPayment.find(session.paymentId)
+      if (payment && payment.status !== 'completed') payment = null
+    }
+    if (!payment) {
+      payment = await GeoRecoveryPayment.query()
+        .where('session_id', job.sessionId)
+        .where('status', 'completed')
+        .orderBy('created_at', 'desc')
+        .first()
+    }
 
     const tracker = new CostTracker('location_inference')
     const modelsService = new ModelsService()

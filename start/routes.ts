@@ -527,6 +527,7 @@ router
       import('#controllers/admin/geo_recovery_admin_controller')
     router.get('/api/admin/geo-recovery/stats', [GeoRecoveryAdminController, 'stats'])
     router.get('/api/admin/geo-recovery/sessions', [GeoRecoveryAdminController, 'sessions'])
+    router.get('/api/admin/geo-recovery/analyses', [GeoRecoveryAdminController, 'analyses'])
     router.get('/api/admin/geo-recovery/payments', [GeoRecoveryAdminController, 'payments'])
     router.get('/api/admin/geo-recovery/cost-logs', [GeoRecoveryAdminController, 'costLogs'])
     router.post('/api/admin/geo-recovery/reset-free-runs', [

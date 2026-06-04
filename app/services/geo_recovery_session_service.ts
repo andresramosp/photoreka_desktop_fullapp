@@ -20,6 +20,7 @@ export interface GeoRecoverySessionState {
   sessionId: string
   createdAt: string
   paid: boolean
+  paymentId?: number | null
   isFreeRun?: boolean
   photos: GeoRecoveryPhotoEntry[]
 }
@@ -93,6 +94,7 @@ export default class GeoRecoverySessionService {
       sessionId,
       createdAt: new Date().toISOString(),
       paid: true, // free run is pre-authorised — no payment step needed
+      paymentId: null,
       isFreeRun: true,
       photos: [],
     }
@@ -106,6 +108,7 @@ export default class GeoRecoverySessionService {
       sessionId,
       createdAt: new Date().toISOString(),
       paid: false,
+      paymentId: null,
       photos: [],
     }
     await this.save(state)
