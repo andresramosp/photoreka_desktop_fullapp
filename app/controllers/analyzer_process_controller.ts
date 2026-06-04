@@ -10,9 +10,9 @@ export default class AnalyzerProcessController {
 
     const processes = await AnalyzerProcess.query()
       .where('user_id', userId)
-      .whereHas('photos', (query) => {
-        query.whereNull('deleted_at')
-      })
+      // .whereHas('photos', (query) => {
+      //   query.whereNull('deleted_at')
+      // })
       .preload('photos', (query) => {
         query.select('id', 'thumbnailName', 'name')
       })
