@@ -1054,35 +1054,38 @@ export default class GeoRecoveryInferenceService {
             }
           ).catch(() => {})
         }
-
-        // Log cost summary
-        const costSummary = context.tracker.getSummary()
-        const llmCostEur = costSummary.totalCostInEur
-        const geocodingCostEur = context.paidGeocodeRequests * GeocodingService.costEurPerRequest
-        const totalCostEur = llmCostEur + geocodingCostEur
-
-        console.log(
-          `[GeoRecovery] ══════════════════════════ JOB SUMMARY ══════════════════════════`
-        )
-        console.log(`[GeoRecovery] Job ${context.jobId} — COMPLETED`)
-        console.log(
-          `[GeoRecovery]   Photos       : total=${job.total} | located=${job.located} | unknown=${job.unknown} | uncertain=${job.uncertain} | failed=${job.failed}`
-        )
-        console.log(
-          `[GeoRecovery]   Clustering   : proximitySaved=${job.proximitySaved} | llmInferred=${job.llmInferred}`
-        )
-        console.log(
-          `[GeoRecovery]   Geocoding    : ${context.geocodeRequests} requests total (${context.paidGeocodeRequests} paid / ${context.geocodeRequests - context.paidGeocodeRequests} cached)`
-        )
-        console.log(
-          `[GeoRecovery]   Cost         : €${totalCostEur.toFixed(4)} total | LLM €${llmCostEur.toFixed(4)} | geocoding €${geocodingCostEur.toFixed(4)}`
-        )
-        console.log(
-          `[GeoRecovery] ═══════════════════════════════════════════════════════════════════`
-        )
       } catch (error) {
         console.warn(`[GeoRecovery] Error recording costs: ${errMsg(error)}`)
       }
+    }
+
+    // Log cost summary even for free sessions
+    try {
+      const costSummary = context.tracker.getSummary()
+      const llmCostEur = costSummary.totalCostInEur
+      const geocodingCostEur = context.paidGeocodeRequests * GeocodingService.costEurPerRequest
+      const totalCostEur = llmCostEur + geocodingCostEur
+      const paymentNote = context.paymentId ? `paymentId=${context.paymentId}` : 'paymentId=none'
+
+      console.log(`[GeoRecovery] ══════════════════════════ JOB SUMMARY ══════════════════════════`)
+      console.log(`[GeoRecovery] Job ${context.jobId} — COMPLETED (${paymentNote})`)
+      console.log(
+        `[GeoRecovery]   Photos       : total=${job.total} | located=${job.located} | unknown=${job.unknown} | uncertain=${job.uncertain} | failed=${job.failed}`
+      )
+      console.log(
+        `[GeoRecovery]   Clustering   : proximitySaved=${job.proximitySaved} | llmInferred=${job.llmInferred}`
+      )
+      console.log(
+        `[GeoRecovery]   Geocoding    : ${context.geocodeRequests} requests total (${context.paidGeocodeRequests} paid / ${context.geocodeRequests - context.paidGeocodeRequests} cached)`
+      )
+      console.log(
+        `[GeoRecovery]   Cost         : €${totalCostEur.toFixed(4)} total | LLM €${llmCostEur.toFixed(4)} | geocoding €${geocodingCostEur.toFixed(4)}`
+      )
+      console.log(
+        `[GeoRecovery] ═══════════════════════════════════════════════════════════════════`
+      )
+    } catch (error) {
+      console.warn(`[GeoRecovery] Error logging cost summary: ${errMsg(error)}`)
     }
 
     job.status = 'completed'
