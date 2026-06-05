@@ -560,20 +560,64 @@
               <div v-else-if="userPhotos.length === 0" class="photos-empty">
                 No photos found.
               </div>
-              <div v-else class="user-photos-grid">
+              <div v-else>
                 <div
-                  v-for="photo in userPhotos"
-                  :key="photo.id"
-                  class="user-photo-thumb-wrap"
-                  :title="photo.originalFileName ?? String(photo.id)"
+                  class="photos-tabs"
+                  role="tablist"
+                  aria-label="Photo groups"
                 >
-                  <img
-                    :src="photo.thumbnailUrl"
-                    :alt="photo.originalFileName ?? String(photo.id)"
-                    class="user-photo-thumb"
-                    loading="lazy"
-                  />
-                  <span class="user-photo-id">#{{ photo.id }}</span>
+                  <button
+                    class="photos-tab"
+                    :class="{
+                      'photos-tab-active': activePhotosTab === 'workspace',
+                    }"
+                    role="tab"
+                    :aria-selected="activePhotosTab === 'workspace'"
+                    @click="activePhotosTab = 'workspace'"
+                  >
+                    Workspace
+                    <span class="photos-tab-count">{{
+                      workspacePhotos.length
+                    }}</span>
+                  </button>
+                  <button
+                    class="photos-tab"
+                    :class="{
+                      'photos-tab-active': activePhotosTab === 'lightbox',
+                    }"
+                    role="tab"
+                    :aria-selected="activePhotosTab === 'lightbox'"
+                    @click="activePhotosTab = 'lightbox'"
+                  >
+                    Lightbox
+                    <span class="photos-tab-count">{{
+                      lightboxPhotos.length
+                    }}</span>
+                  </button>
+                </div>
+
+                <div v-if="activePhotos.length === 0" class="photos-empty">
+                  {{
+                    activePhotosTab === "workspace"
+                      ? "No analyzed photos (processed)."
+                      : "No un-analyzed photos (uploaded)."
+                  }}
+                </div>
+                <div v-else class="user-photos-grid">
+                  <div
+                    v-for="photo in activePhotos"
+                    :key="photo.id"
+                    class="user-photo-thumb-wrap"
+                    :title="photo.originalFileName ?? String(photo.id)"
+                  >
+                    <img
+                      :src="photo.thumbnailUrl"
+                      :alt="photo.originalFileName ?? String(photo.id)"
+                      class="user-photo-thumb"
+                      loading="lazy"
+                    />
+                    <span class="user-photo-id">#{{ photo.id }}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1261,9 +1305,29 @@ function userInitials(name: string): string {
 const photosExpanded = ref(false);
 const photosLoading = ref(false);
 const photosError = ref(false);
+const activePhotosTab = ref<"workspace" | "lightbox">("workspace");
 const userPhotos = ref<
-  { id: number; thumbnailUrl: string; originalFileName: string | null }[]
+  {
+    id: number;
+    thumbnailUrl: string;
+    originalFileName: string | null;
+    status: "processed" | "uploaded";
+  }[]
 >([]);
+
+const workspacePhotos = computed(() =>
+  userPhotos.value.filter((photo) => photo.status === "processed"),
+);
+
+const lightboxPhotos = computed(() =>
+  userPhotos.value.filter((photo) => photo.status === "uploaded"),
+);
+
+const activePhotos = computed(() =>
+  activePhotosTab.value === "workspace"
+    ? workspacePhotos.value
+    : lightboxPhotos.value,
+);
 
 async function fetchUserPhotos() {
   if (!user.value) return;
@@ -1271,7 +1335,10 @@ async function fetchUserPhotos() {
   photosError.value = false;
   try {
     const { data } = await api.get(`/api/admin/users/${user.value.id}/photos`);
-    userPhotos.value = data.photos;
+    userPhotos.value = (data.photos || []).map((photo: any) => ({
+      ...photo,
+      status: photo.status === "uploaded" ? "uploaded" : "processed",
+    }));
   } catch {
     photosError.value = true;
   } finally {
@@ -2104,6 +2171,50 @@ onUnmounted(() => {
 .photos-section-body {
   border-top: 1px solid #f1f5f9;
   padding: 14px 18px 18px;
+}
+
+.photos-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  margin-bottom: 12px;
+}
+
+.photos-tab {
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.photos-tab:hover {
+  background: #f8fafc;
+}
+
+.photos-tab-active {
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.photos-tab-count {
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 700;
+  color: inherit;
+  background: rgba(99, 102, 241, 0.12);
+  border-radius: 999px;
+  padding: 3px 6px;
 }
 
 .photos-loading,

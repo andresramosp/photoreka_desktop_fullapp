@@ -18,6 +18,22 @@ import {
   UPLOAD_QUALITY_DECREMENT,
 } from "@/config/uploadConfig.js";
 
+// One-time probe: does this browser actually produce WebP output when asked?
+// canvas.toBlob('image/webp') silently returns PNG on Safari < 16 / iOS < 16,
+// which breaks the iterative size-control loop (PNG ignores the quality param).
+// Cached at module level — runs at most once per page load.
+let _webpEncodingSupport = null;
+function probeWebpEncoding() {
+  if (_webpEncodingSupport !== null) return _webpEncodingSupport;
+  _webpEncodingSupport = new Promise((resolve) => {
+    const c = document.createElement("canvas");
+    c.width = 1;
+    c.height = 1;
+    c.toBlob((blob) => resolve(blob?.type === "image/webp"), "image/webp");
+  });
+  return _webpEncodingSupport;
+}
+
 export function useImageProcessing() {
   // Exclude 'cib' (createImageBitmap) to avoid the Chromium 131+ tile-scrambling bug.
   // The bug is triggered by cib + WebWorkers: Chrome 131+ no longer respects EXIF Orientation
@@ -44,6 +60,13 @@ export function useImageProcessing() {
   async function resizeWithPica(file, targetWidth, maxSizeBytes = 512000) {
     // 0.5MB = 512000 bytes
     const img = await loadImage(file);
+    // On Safari < 16 / iOS < 16, canvas.toBlob('image/webp') silently returns
+    // PNG and ignores quality, so the iterative size loop does nothing.
+    // Fall back to JPEG on those platforms so compression actually works.
+    const effectiveMime =
+      UPLOAD_MIME === "image/webp" && !(await probeWebpEncoding())
+        ? "image/jpeg"
+        : UPLOAD_MIME;
     const canvas = document.createElement("canvas");
     const scale = targetWidth / img.width;
     canvas.width = targetWidth;
@@ -55,7 +78,7 @@ export function useImageProcessing() {
     if (!maxSizeBytes) {
       const blob = await picaInstance.toBlob(
         canvas,
-        UPLOAD_MIME,
+        effectiveMime,
         UPLOAD_QUALITY_INITIAL,
       );
       return blob;
@@ -69,7 +92,7 @@ export function useImageProcessing() {
     const qualityDecrement = UPLOAD_QUALITY_DECREMENT;
 
     do {
-      blob = await picaInstance.toBlob(canvas, UPLOAD_MIME, quality);
+      blob = await picaInstance.toBlob(canvas, effectiveMime, quality);
 
       if (blob.size <= maxSizeBytes || attempts >= maxAttempts) {
         break;
@@ -85,6 +108,11 @@ export function useImageProcessing() {
   // Fallback con step-down resize para alta calidad sin pica
   async function resizeWithStepDown(file, targetWidth, maxSizeBytes = 512000) {
     const img = await loadImage(file);
+    // Same WebP encoding fallback as resizeWithPica.
+    const effectiveMime =
+      UPLOAD_MIME === "image/webp" && !(await probeWebpEncoding())
+        ? "image/jpeg"
+        : UPLOAD_MIME;
     const targetHeight = Math.round((img.height * targetWidth) / img.width);
 
     let currentCanvas = document.createElement("canvas");
@@ -145,7 +173,7 @@ export function useImageProcessing() {
     // Manejar compresión con control de tamaño
     if (!maxSizeBytes) {
       return new Promise((resolve) => {
-        finalCanvas.toBlob(resolve, UPLOAD_MIME, UPLOAD_QUALITY_INITIAL);
+        finalCanvas.toBlob(resolve, effectiveMime, UPLOAD_QUALITY_INITIAL);
       });
     }
 
@@ -158,7 +186,7 @@ export function useImageProcessing() {
 
     do {
       blob = await new Promise((resolve) => {
-        finalCanvas.toBlob(resolve, UPLOAD_MIME, quality);
+        finalCanvas.toBlob(resolve, effectiveMime, quality);
       });
 
       if (blob.size <= maxSizeBytes || attempts >= maxAttempts) {
