@@ -194,7 +194,7 @@
                 </template>
               </n-button>
             </div>
-            <n-button
+            <!-- <n-button
               text
               class="share-button"
               @click="copySeriesLink"
@@ -205,7 +205,7 @@
                   <ShareSocialOutline />
                 </n-icon>
               </template>
-            </n-button>
+            </n-button> -->
           </div>
           <div v-if="!editingDescription" class="description-display">
             <p class="detail-description" v-if="viewingSeries.description">
