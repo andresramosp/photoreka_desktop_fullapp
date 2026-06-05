@@ -130,6 +130,41 @@ export default class CatalogController {
   }
 
   /**
+   * Normaliza una lista de IDs de foto para validaciones de ownership.
+   */
+  private normalizePhotoIds(rawIds: unknown): number[] {
+    if (!Array.isArray(rawIds)) {
+      return []
+    }
+
+    const normalized = rawIds
+      .map((value) => Number(value))
+      .filter((id) => Number.isInteger(id) && id > 0)
+
+    return [...new Set(normalized)]
+  }
+
+  /**
+   * Devuelve los IDs que no pertenecen al usuario autenticado
+   * (incluye IDs inexistentes para evitar operaciones parciales silenciosas).
+   */
+  private async getNonOwnedPhotoIds(userId: string, photoIds: number[]): Promise<number[]> {
+    const uniqueIds = [...new Set(photoIds)]
+    if (uniqueIds.length === 0) {
+      return []
+    }
+
+    const ownedRows = await db
+      .from('photos')
+      .select('id')
+      .where('user_id', userId)
+      .whereIn('id', uniqueIds)
+
+    const ownedIds = new Set(ownedRows.map((row) => Number(row.id)))
+    return uniqueIds.filter((id) => !ownedIds.has(id))
+  }
+
+  /**
    * Unificado: Sube foto local o de Google Photos según el campo 'source'.
    * Body: { fileType, originalName, source?: 'local' | 'google', googlePhotoId? }
    */
@@ -300,9 +335,19 @@ export default class CatalogController {
       const user = auth.use('api').user! as any
       const userId = user.id.toString()
 
-      const { ids } = request.only(['ids'])
-      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      const { ids: rawIds } = request.only(['ids'])
+      const ids = this.normalizePhotoIds(rawIds)
+
+      if (ids.length === 0) {
         return response.badRequest({ message: 'No photo IDs provided' })
+      }
+
+      const nonOwnedIds = await this.getNonOwnedPhotoIds(userId, ids)
+      if (nonOwnedIds.length > 0) {
+        return response.forbidden({
+          message: 'One or more photos do not belong to the authenticated user',
+          photoIds: nonOwnedIds,
+        })
       }
 
       const photoManager = new PhotoManager()
