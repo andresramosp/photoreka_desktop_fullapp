@@ -563,48 +563,64 @@ export default class PhotoManager {
     const deletedAt = new Date()
 
     const uploadedPhotos = photos.filter((photo) => !photo.analyzer_process_id)
-    const retainedPhotos = photos.filter((photo) => Boolean(photo.analyzer_process_id))
-    const retainedPhotoIds = retainedPhotos.map((photo) => photo.id)
+    const uploadedPhotoIds = uploadedPhotos.map((photo) => photo.id)
+    const processedPhotos = photos.filter((photo) => Boolean(photo.analyzer_process_id))
+    const processedPhotoIds = processedPhotos.map((photo) => photo.id)
+    const softDeleteIds = [...new Set([...uploadedPhotoIds, ...processedPhotoIds])]
 
-    if (retainedPhotoIds.length > 0) {
-      await db.from('photos').whereIn('id', retainedPhotoIds).update({ deleted_at: deletedAt })
+    if (softDeleteIds.length > 0) {
+      await db.from('photos').whereIn('id', softDeleteIds).update({ deleted_at: deletedAt })
       console.log(
-        `[PhotoManager] Scheduled retained photo(s) for hard delete after retention window: [${retainedPhotoIds.join(', ')}]`
+        `[PhotoManager] Soft-deleted photo(s) to hide immediately from user queries: [${softDeleteIds.join(', ')}]`
       )
     }
 
-    const uploadedDeleteResult = await PhotoDeletionService.hardDeletePhotosNow(
-      uploadedPhotos,
-      false,
-      'PhotoManager -> UploadedImmediateDelete'
-    )
+    const uploadedDeleteResult = {
+      totalDeleted: 0,
+      totalErrors: 0,
+      deletedIds: [] as number[],
+    }
 
-    const removedPhotoIds = [...retainedPhotoIds, ...uploadedDeleteResult.deletedIds]
+    if (uploadedPhotos.length > 0) {
+      PhotoDeletionService.hardDeletePhotosInBatches(
+        uploadedPhotos,
+        false,
+        'PhotoManager -> UploadedImmediateDelete'
+      )
+        .then((result) => {
+          console.log(
+            `[PhotoManager] Background hard-delete for uploaded photos finished. Deleted: ${result.totalDeleted}, Errors: ${result.totalErrors}`
+          )
+        })
+        .catch((err) => {
+          console.error('[PhotoManager] Background hard-delete for uploaded photos failed:', err)
+        })
+    }
 
     if (userId) {
-      const retainedCount = retainedPhotoIds.length
-      const uploadedCount = uploadedDeleteResult.deletedIds.length
+      const processedCount = processedPhotoIds.length
+      const uploadedCount = uploadedPhotoIds.length
 
-      if (retainedCount === 0 && uploadedCount > 0) {
+      if (processedCount === 0 && uploadedCount > 0) {
         // All deleted photos were still 'uploaded' (no analysis data), so only the
         // basic photo-list caches need to be flushed — skip tags, search, 3D, etc.
         await CacheInvalidationService.onPhotoListChanged(userId)
       }
 
-      if (retainedCount > 0) {
-        await CacheInvalidationService.onPhotosDeleted(userId, retainedCount)
+      if (processedCount > 0) {
+        await CacheInvalidationService.onPhotosDeleted(userId, processedCount)
       }
 
-      if (retainedPhotoIds.length > 0) {
+      if (processedPhotoIds.length > 0) {
         // Remove deleted IDs from all portfolio results for this user
-        PortfolioBuildService.removePhotosFromResults(Number(userId), retainedPhotoIds).catch(
+        PortfolioBuildService.removePhotosFromResults(Number(userId), processedPhotoIds).catch(
           (err) => {
             console.warn('⚠️ Failed to clean deleted photos from portfolio results:', err)
           }
         )
 
         // Remove deleted IDs from all canvases for this user
-        Canvas.removePhotosFromData(Number(userId), retainedPhotoIds).catch((err) => {
+        Canvas.removePhotosFromData(Number(userId), processedPhotoIds).catch((err) => {
           console.warn('⚠️ Failed to clean deleted photos from canvases:', err)
         })
       }
@@ -612,10 +628,10 @@ export default class PhotoManager {
 
     return {
       message: 'Photo deletion processed',
-      scheduledIds: retainedPhotoIds,
-      immediateDeletedIds: uploadedDeleteResult.deletedIds,
+      scheduledIds: processedPhotoIds,
+      immediateDeletedIds: uploadedPhotoIds,
       immediateDeleteErrors: uploadedDeleteResult.totalErrors,
-      deletedAt: retainedPhotoIds.length > 0 ? deletedAt : null,
+      deletedAt: softDeleteIds.length > 0 ? deletedAt : null,
     }
   }
 }

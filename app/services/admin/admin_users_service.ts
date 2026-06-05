@@ -237,8 +237,8 @@ export default class AdminUsersService {
 
   /**
    * Soft-delete a user and their photos.
-   * If runSchedulerNow is true, immediately triggers photo physical deletion and user hard-delete
-   * instead of waiting for the scheduled run.
+   * If runSchedulerNow is true, immediately purges already-soft-deleted processed
+   * photos for this user instead of waiting for the retention scheduler.
    */
   static async deleteUser(userId: number, runSchedulerNow: boolean = false): Promise<void> {
     const user = await User.findOrFail(userId)
@@ -255,28 +255,28 @@ export default class AdminUsersService {
       .select('id', 'name', 'thumbnail_name', 'analyzer_process_id', 'deleted_at')
 
     const uploadedPhotos = photos.filter((photo) => !photo.analyzer_process_id)
-    const retainedPhotoIds = photos
+    const processedPhotoIds = photos
       .filter((photo) => Boolean(photo.analyzer_process_id) && !photo.deleted_at)
       .map((photo) => photo.id)
 
-    const uploadedDeleteResult = await PhotoDeletionService.hardDeletePhotosNow(
+    const uploadedDeleteResult = await PhotoDeletionService.hardDeletePhotosInBatches(
       uploadedPhotos,
       false,
       'AdminDeleteUser -> UploadedImmediateDelete'
     )
 
-    if (retainedPhotoIds.length > 0) {
-      await db.from('photos').whereIn('id', retainedPhotoIds).update({ deleted_at: now })
+    if (processedPhotoIds.length > 0) {
+      await db.from('photos').whereIn('id', processedPhotoIds).update({ deleted_at: now })
       logger.info(
-        '[AdminDeleteUser] Scheduled retained photo IDs for hard delete after retention window: %o',
-        retainedPhotoIds
+        '[AdminDeleteUser] Scheduled processed photo IDs for hard delete after retention window: %o',
+        processedPhotoIds
       )
     }
 
     logger.info(
-      '[AdminDeleteUser] Immediate uploaded deletions=%d retained scheduled=%d immediate errors=%d',
+      '[AdminDeleteUser] Immediate uploaded deletions=%d processed scheduled=%d immediate errors=%d',
       uploadedDeleteResult.deletedIds.length,
-      retainedPhotoIds.length,
+      processedPhotoIds.length,
       uploadedDeleteResult.totalErrors
     )
 
@@ -286,9 +286,19 @@ export default class AdminUsersService {
     await user.save()
 
     if (runSchedulerNow) {
-      PhotoDeletionService.deletePhysically().catch((err) => {
-        logger.error('[AdminDeleteUser] Immediate scheduler run failed: %o', err)
-      })
+      try {
+        const immediatePurgeResult =
+          await PhotoDeletionService.deleteSoftDeletedPhotosNow(processedPhotoIds)
+
+        logger.info(
+          '[AdminDeleteUser] Immediate processed purge found=%d deleted=%d errors=%d',
+          immediatePurgeResult.totalFound,
+          immediatePurgeResult.totalDeleted,
+          immediatePurgeResult.totalErrors
+        )
+      } catch (err) {
+        logger.error('[AdminDeleteUser] Immediate processed purge failed: %o', err)
+      }
     }
   }
 
@@ -335,19 +345,25 @@ export default class AdminUsersService {
   /**
    * Get all non-deleted photos for a user with their thumbnailUrl
    */
-  static async getPhotos(
-    userId: number
-  ): Promise<{ id: number; thumbnailUrl: string; originalFileName: string | null }[]> {
+  static async getPhotos(userId: number): Promise<
+    {
+      id: number
+      thumbnailUrl: string
+      originalFileName: string | null
+      status: 'processed' | 'uploaded'
+    }[]
+  > {
     const photos = await Photo.query()
       .where('user_id', userId)
       .whereNull('deleted_at')
-      .select('id', 'thumbnail_name', 'original_file_name')
+      .select('id', 'thumbnail_name', 'original_file_name', 'analyzer_process_id')
       .orderBy('id', 'desc')
 
     return photos.map((p: any) => ({
       id: p.id,
       thumbnailUrl: p.thumbnailUrl,
       originalFileName: p.originalFileName ?? null,
+      status: p.analyzerProcessId ? 'processed' : 'uploaded',
     }))
   }
 

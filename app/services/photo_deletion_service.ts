@@ -29,6 +29,11 @@ type PhotoDeletionRow = {
 
 // PhotoDeletionService: physical deletion of soft-deleted photos + orphan sweep.
 export default class PhotoDeletionService {
+  private static readonly R2_DELETE_BATCH_SIZE = 128
+  private static readonly R2_DELETE_MAX_RETRIES = 3
+  private static readonly R2_DELETE_BASE_DELAY_MS = 500
+  private static readonly HARD_DELETE_BATCH_SIZE = 50
+
   private static resolveStatus(photo: PhotoDeletionRow): PhotoStatus | null {
     if (!photo.analyzer_process_id) {
       return 'uploaded'
@@ -58,6 +63,19 @@ export default class PhotoDeletionService {
       .join(', ')
   }
 
+  private static async sleep(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
+  private static shouldRetryR2Delete(error: any): boolean {
+    const statusCode = error?.$metadata?.httpStatusCode
+    const errorName = String(error?.name || '')
+
+    return (
+      statusCode === 429 || (statusCode >= 500 && statusCode < 600) || errorName === 'TimeoutError'
+    )
+  }
+
   private static async deleteR2Objects(
     photos: PhotoDeletionRow[],
     logPrefix: string,
@@ -83,45 +101,107 @@ export default class PhotoDeletionService {
       return { success: true, deletedKeys: objectsToDelete.length }
     }
 
-    try {
-      const result = await s3.send(
-        new DeleteObjectsCommand({
-          Bucket: process.env.R2_BUCKET,
-          Delete: {
-            Objects: objectsToDelete,
-            Quiet: true,
-          },
-        })
-      )
+    const BATCH_SIZE = this.R2_DELETE_BATCH_SIZE
+    let totalDeleted = 0
 
-      const errors = (result.Errors || []).filter((error) => Boolean(error.Key))
-      if (errors.length > 0) {
-        logger.error(`[${logPrefix}] R2 deletion reported key-level errors: %o`, errors)
-        return { success: false, deletedKeys: 0 }
+    try {
+      for (let i = 0; i < objectsToDelete.length; i += BATCH_SIZE) {
+        const batch = objectsToDelete.slice(i, i + BATCH_SIZE)
+        const batchNumber = Math.floor(i / BATCH_SIZE) + 1
+        let result
+
+        for (let attempt = 1; attempt <= this.R2_DELETE_MAX_RETRIES; attempt++) {
+          try {
+            result = await s3.send(
+              new DeleteObjectsCommand({
+                Bucket: process.env.R2_BUCKET,
+                Delete: {
+                  Objects: batch,
+                  Quiet: true,
+                },
+              })
+            )
+            break
+          } catch (error) {
+            if (!this.shouldRetryR2Delete(error) || attempt === this.R2_DELETE_MAX_RETRIES) {
+              throw error
+            }
+
+            const delayMs = this.R2_DELETE_BASE_DELAY_MS * 2 ** (attempt - 1)
+            logger.warn(
+              `[${logPrefix}] R2 delete batch ${batchNumber} failed on attempt ${attempt}/${this.R2_DELETE_MAX_RETRIES}. Retrying in ${delayMs}ms: %o`,
+              error
+            )
+            await this.sleep(delayMs)
+          }
+        }
+
+        const errors = (result?.Errors || []).filter((error) => Boolean(error.Key))
+
+        if (errors.length > 0) {
+          logger.error(
+            `[${logPrefix}] R2 deletion reported key-level errors in batch ${batchNumber}: %o`,
+            errors
+          )
+
+          return {
+            success: false,
+            deletedKeys: totalDeleted,
+          }
+        }
+
+        totalDeleted += batch.length
+
+        console.log(`[${logPrefix}] Deleted batch ${batchNumber} (${batch.length} object(s))`)
       }
 
       console.log(
-        `[${logPrefix}] Deleted ${objectsToDelete.length} R2 object(s) for photo IDs [${photos.map((p) => p.id).join(', ')}]`
+        `[${logPrefix}] Deleted ${totalDeleted} R2 object(s) for photo IDs [${photos.map((p) => p.id).join(', ')}]`
       )
-      return { success: true, deletedKeys: objectsToDelete.length }
+
+      return {
+        success: true,
+        deletedKeys: totalDeleted,
+      }
     } catch (error) {
       logger.error(`[${logPrefix}] Failed deleting R2 objects: %o`, error)
-      return { success: false, deletedKeys: 0 }
+
+      return {
+        success: false,
+        deletedKeys: totalDeleted,
+      }
     }
   }
 
-  static async hardDeletePhotosNow(
+  /**
+   * Core hard-deletion method. It first deletes all associated R2 objects and,
+   * if successful, proceeds to delete the database rows in batches. This ensures
+   * that database rows are only removed if their corresponding files are gone.
+   *
+   * @param photos The photo rows to hard-delete.
+   * @param dryRun If true, simulates the deletion without affecting R2 or the database.
+   * @param logPrefix A prefix for log messages.
+   * @param batchSize The size of each batch for database row deletion.
+   * @returns An object with the results of the deletion (counts of deleted, errors, and IDs).
+   */
+  static async hardDeletePhotosInBatches(
     photos: PhotoDeletionRow[],
     dryRun: boolean = false,
-    logPrefix: string = 'PhotoDeletion'
+    logPrefix: string = 'PhotoDeletion',
+    batchSize?: number
   ) {
     if (photos.length === 0) {
       return { totalDeleted: 0, totalErrors: 0, deletedIds: [] as number[] }
     }
 
-    const photoIds = photos.map((photo) => photo.id)
+    const deleteBatchSize = batchSize && batchSize > 0 ? batchSize : this.HARD_DELETE_BATCH_SIZE
+    const totalBatches = Math.ceil(photos.length / deleteBatchSize)
+    const deletedIds: number[] = []
+    let totalDeleted = 0
+    let totalErrors = 0
+
     console.log(
-      `[${logPrefix}] Hard-deleting ${photos.length} photo(s): [${this.formatPhotoIdsForLog(photos)}]`
+      `[${logPrefix}] Hard-deleting ${photos.length} photo(s) in ${totalBatches} batch(es)`
     )
 
     const r2Result = await this.deleteR2Objects(photos, logPrefix, dryRun)
@@ -129,27 +209,48 @@ export default class PhotoDeletionService {
       logger.error(
         `[${logPrefix}] Skipping DB hard-delete because R2 deletion did not complete cleanly`
       )
-      return { totalDeleted: 0, totalErrors: photoIds.length, deletedIds: [] as number[] }
+      return { totalDeleted: 0, totalErrors: photos.length, deletedIds: [] as number[] }
     }
 
-    if (dryRun) {
+    for (let i = 0; i < photos.length; i += deleteBatchSize) {
+      const batch = photos.slice(i, i + deleteBatchSize)
+      const batchNumber = Math.floor(i / deleteBatchSize) + 1
+      const batchIds = batch.map((photo) => photo.id)
+
       console.log(
-        `[${logPrefix}] [DRY RUN] Would hard-delete DB rows for photo IDs [${photoIds.join(', ')}]`
+        `[${logPrefix}] Hard-deleting batch ${batchNumber}/${totalBatches} (${batch.length} photo(s)): [${this.formatPhotoIdsForLog(batch)}]`
       )
-      return { totalDeleted: photoIds.length, totalErrors: 0, deletedIds: photoIds }
+
+      if (dryRun) {
+        console.log(
+          `[${logPrefix}] [DRY RUN] Would hard-delete DB rows for photo IDs [${batchIds.join(', ')}]`
+        )
+        totalDeleted += batchIds.length
+        deletedIds.push(...batchIds)
+        continue
+      }
+
+      try {
+        await db.from('photos').whereIn('id', batchIds).delete()
+        console.log(`[${logPrefix}] Hard-deleted DB rows for photo IDs [${batchIds.join(', ')}]`)
+        totalDeleted += batchIds.length
+        deletedIds.push(...batchIds)
+      } catch (error) {
+        logger.error(`[${logPrefix}] Failed deleting DB rows for batch ${batchNumber}: %o`, error)
+        totalErrors += batchIds.length
+      }
     }
 
-    try {
-      await db.from('photos').whereIn('id', photoIds).delete()
-      console.log(`[${logPrefix}] Hard-deleted DB rows for photo IDs [${photoIds.join(', ')}]`)
-      return { totalDeleted: photoIds.length, totalErrors: 0, deletedIds: photoIds }
-    } catch (error) {
-      logger.error(`[${logPrefix}] Failed deleting DB rows: %o`, error)
-      return { totalDeleted: 0, totalErrors: photoIds.length, deletedIds: [] as number[] }
-    }
+    return { totalDeleted, totalErrors, deletedIds }
   }
 
-  private static async logSkippedRetainedPhotos(retentionCutoff: Date, retentionDays: number) {
+  /**
+   * Logs information about soft-deleted photos that are skipped from hard-deletion
+   * because they are still within the configured retention period.
+   * @param retentionCutoff The date before which photos are considered eligible for deletion.
+   * @param retentionDays The configured retention period in days.
+   */
+  private static async logSkippedProcessedPhotos(retentionCutoff: Date, retentionDays: number) {
     const skipped = await db
       .from('photos as p')
       .leftJoin('analyzer_processes as ap', 'ap.id', 'p.analyzer_process_id')
@@ -167,114 +268,100 @@ export default class PhotoDeletionService {
       )
 
     if (skipped.length === 0) {
-      console.log('[PhotoDeletion] No retained photos skipped by retention window')
+      console.log('[PhotoDeletion] No processed photos skipped by retention window')
       return
     }
 
     console.log(
-      `[PhotoDeletion] Skipping ${skipped.length} retained photo(s) still inside the ${retentionDays}-day retention window: [${this.formatPhotoIdsForLog(skipped)}]`
+      `[PhotoDeletion] Skipping ${skipped.length} processed photo(s) still inside the ${retentionDays}-day retention window: [${this.formatPhotoIdsForLog(skipped)}]`
     )
   }
 
   /**
-   * Hard-delete uploaded photos immediately and retained/analyzed photos only
-   * after the retention window has elapsed. R2 cleanup happens in the same pass
-   * right before the DB hard-delete.
+   * Finds and hard-deletes soft-deleted photos in two buckets:
+   * 1) "processed" photos older than the configured retention period.
+   * 2) "uploaded" photos (no analyzer process) that were already soft-deleted.
+   *
+   * Bucket (2) is an eventual-consistency fallback for request-time background
+   * deletions of uploaded photos, ensuring rows are eventually hard-deleted even
+   * if the immediate background task fails.
+   *
+   * @param dryRun If true, simulates the deletion without affecting R2 or the database.
+   * @param retentionDays The number of days to retain soft-deleted processed photos.
+   * @returns An object summarizing the results of the cleanup pass.
    */
-  static async deletePhysically(
-    batchSize: number = 50,
+  static async processSoftDeletedRetentionWindow(
     dryRun: boolean = false,
     retentionDays: number = 7
   ) {
     const retentionCutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000)
 
-    console.log('[PhotoDeletion] Starting physical deletion pass')
-    console.log(`[PhotoDeletion] Batch size: ${batchSize}`)
+    console.log('[PhotoDeletion] Starting retention-window cleanup pass')
     console.log(`[PhotoDeletion] Dry run: ${dryRun ? 'YES' : 'NO'}`)
-    console.log(`[PhotoDeletion] Retention days for retained photos: ${retentionDays}`)
+    console.log(`[PhotoDeletion] Retention days for processed photos: ${retentionDays}`)
     console.log(`[PhotoDeletion] Retention cutoff: ${retentionCutoff.toISOString()}`)
 
-    let totalProcessed = 0
-    let totalDeleted = 0
-    let totalErrors = 0
+    await this.logSkippedProcessedPhotos(retentionCutoff, retentionDays)
 
-    await this.logSkippedRetainedPhotos(retentionCutoff, retentionDays)
-
-    while (true) {
-      const uploadedPhotos = await db
-        .from('photos')
-        .whereNotNull('deleted_at')
-        .whereNull('analyzer_process_id')
-        .orderBy('deleted_at', 'asc')
-        .limit(batchSize)
-        .select('id', 'user_id', 'name', 'thumbnail_name', 'deleted_at', 'analyzer_process_id')
-
-      if (uploadedPhotos.length === 0) {
-        break
-      }
-
-      console.log(
-        `[PhotoDeletion] Cleaning up ${uploadedPhotos.length} soft-deleted uploaded photo(s) immediately: [${this.formatPhotoIdsForLog(uploadedPhotos)}]`
+    const processedPhotos = await db
+      .from('photos as p')
+      .leftJoin('analyzer_processes as ap', 'ap.id', 'p.analyzer_process_id')
+      .whereNotNull('p.deleted_at')
+      .whereNotNull('p.analyzer_process_id')
+      .where('p.deleted_at', '<=', retentionCutoff)
+      .orderBy('p.deleted_at', 'asc')
+      .select(
+        'p.id',
+        'p.user_id',
+        'p.name',
+        'p.thumbnail_name',
+        'p.deleted_at',
+        'p.analyzer_process_id',
+        'ap.mode as analyzer_mode',
+        'ap.current_stage as analyzer_current_stage',
+        'ap.is_preprocess as analyzer_is_preprocess'
       )
 
-      const result = await this.hardDeletePhotosNow(
-        uploadedPhotos,
-        dryRun,
-        'PhotoDeletion -> UploadedImmediateCleanup'
-      )
-      totalProcessed += uploadedPhotos.length
-      totalDeleted += result.totalDeleted
-      totalErrors += result.totalErrors
+    if (processedPhotos.length === 0) {
+      console.log('[PhotoDeletion] No processed photos eligible for hard delete')
     }
 
-    while (true) {
-      const photos = await db
-        .from('photos as p')
-        .leftJoin('analyzer_processes as ap', 'ap.id', 'p.analyzer_process_id')
-        .whereNotNull('p.deleted_at')
-        .whereNotNull('p.analyzer_process_id')
-        .where('p.deleted_at', '<=', retentionCutoff)
-        .orderBy('p.deleted_at', 'asc')
-        .limit(batchSize)
-        .select(
-          'p.id',
-          'p.user_id',
-          'p.name',
-          'p.thumbnail_name',
-          'p.deleted_at',
-          'p.analyzer_process_id',
-          'ap.mode as analyzer_mode',
-          'ap.current_stage as analyzer_current_stage',
-          'ap.is_preprocess as analyzer_is_preprocess'
-        )
+    const processedResult = await this.hardDeletePhotosInBatches(
+      processedPhotos,
+      dryRun,
+      'PhotoDeletion -> ProcessedHardDelete'
+    )
 
-      if (photos.length === 0) {
-        console.log('[PhotoDeletion] No more retained photos eligible for hard delete')
-        break
-      }
+    const uploadedSoftDeletedPhotos = await db
+      .from('photos')
+      .whereNotNull('deleted_at')
+      .whereNull('analyzer_process_id')
+      .orderBy('deleted_at', 'asc')
+      .select('id', 'user_id', 'name', 'thumbnail_name', 'deleted_at', 'analyzer_process_id')
 
-      console.log(
-        `[PhotoDeletion] Hard-deleting retained batch of ${photos.length} photo(s): [${this.formatPhotoIdsForLog(photos)}]`
-      )
-
-      const result = await this.hardDeletePhotosNow(
-        photos,
-        dryRun,
-        'PhotoDeletion -> RetainedHardDelete'
-      )
-      totalDeleted += result.totalDeleted
-      totalErrors += result.totalErrors
-
-      totalProcessed += photos.length
+    if (uploadedSoftDeletedPhotos.length === 0) {
+      console.log('[PhotoDeletion] No soft-deleted uploaded photos pending hard delete')
     }
+
+    const uploadedResult = await this.hardDeletePhotosInBatches(
+      uploadedSoftDeletedPhotos,
+      dryRun,
+      'PhotoDeletion -> UploadedSoftDeletedFallback'
+    )
+
+    const totalProcessed = processedPhotos.length
+    const totalUploadedFallback = uploadedSoftDeletedPhotos.length
+    const totalDeleted = processedResult.totalDeleted + uploadedResult.totalDeleted
+    const totalErrors = processedResult.totalErrors + uploadedResult.totalErrors
 
     // Purge soft-deleted users whose photos have all been cleaned up
     await this.purgeDeletedUsers(dryRun)
 
     // Final summary
     console.log('[PhotoDeletion] ═══════════════════════════════════════')
-    console.log('[PhotoDeletion] Physical deletion process completed')
+    console.log('[PhotoDeletion] Retention-window cleanup completed')
     console.log(`[PhotoDeletion] Total photos processed: ${totalProcessed}`)
+    console.log(`[PhotoDeletion] Total uploaded fallback candidates: ${totalUploadedFallback}`)
     console.log(`[PhotoDeletion] Total photos deleted: ${totalDeleted}`)
     console.log(`[PhotoDeletion] Total errors: ${totalErrors}`)
     if (dryRun) {
@@ -284,9 +371,66 @@ export default class PhotoDeletionService {
 
     return {
       totalProcessed,
+      totalUploadedFallback,
       totalDeleted,
       totalErrors,
       retentionDays,
+    }
+  }
+
+  /**
+   * Immediately hard-deletes specific processed photos that are already soft-deleted.
+   * This bypasses the retention cutoff selection, but only for the explicitly
+   * provided IDs.
+   *
+   * @param photoIds The soft-deleted processed photo IDs to purge immediately.
+   * @param dryRun If true, simulates the deletion without affecting R2 or the database.
+   * @returns An object summarizing the targeted deletion pass.
+   */
+  static async deleteSoftDeletedPhotosNow(photoIds: number[], dryRun: boolean = false) {
+    if (photoIds.length === 0) {
+      return { totalFound: 0, totalDeleted: 0, totalErrors: 0, deletedIds: [] as number[] }
+    }
+
+    const processedPhotos = await db
+      .from('photos as p')
+      .leftJoin('analyzer_processes as ap', 'ap.id', 'p.analyzer_process_id')
+      .whereIn('p.id', photoIds)
+      .whereNotNull('p.deleted_at')
+      .whereNotNull('p.analyzer_process_id')
+      .orderBy('p.deleted_at', 'asc')
+      .select(
+        'p.id',
+        'p.user_id',
+        'p.name',
+        'p.thumbnail_name',
+        'p.deleted_at',
+        'p.analyzer_process_id',
+        'ap.mode as analyzer_mode',
+        'ap.current_stage as analyzer_current_stage',
+        'ap.is_preprocess as analyzer_is_preprocess'
+      )
+
+    if (processedPhotos.length === 0) {
+      console.log(
+        '[PhotoDeletion -> ImmediateSoftDeletePurge] No soft-deleted processed photos found'
+      )
+      return { totalFound: 0, totalDeleted: 0, totalErrors: 0, deletedIds: [] as number[] }
+    }
+
+    const result = await this.hardDeletePhotosInBatches(
+      processedPhotos,
+      dryRun,
+      'PhotoDeletion -> ImmediateSoftDeletePurge'
+    )
+
+    await this.purgeDeletedUsers(dryRun)
+
+    return {
+      totalFound: processedPhotos.length,
+      totalDeleted: result.totalDeleted,
+      totalErrors: result.totalErrors,
+      deletedIds: result.deletedIds,
     }
   }
 
@@ -301,7 +445,11 @@ export default class PhotoDeletionService {
    * by the strict equality, since in PostgreSQL `confirmed = false` never
    * matches NULL. Already soft-deleted rows are skipped via `deleted_at IS NULL`.
    * Uploaded rows have no analysis relations yet, so they are deleted from R2
-   * and from the DB immediately instead of entering the retained scheduler flow.
+   * and from the DB immediately instead of entering the processed retention flow.
+   *
+   * @param ageMinutes The minimum age in minutes for an unconfirmed photo to be considered an orphan.
+   * @param dryRun If true, simulates the deletion without affecting R2 or the database.
+   * @returns An object with the total found and hard-deleted orphan counts.
    */
   static async sweepUnconfirmedOrphans(ageMinutes: number = 60, dryRun: boolean = false) {
     const cutoff = new Date(Date.now() - ageMinutes * 60 * 1000)
@@ -329,7 +477,7 @@ export default class PhotoDeletionService {
     const orphanRows = await baseQuery().select('id', 'user_id', 'name', 'thumbnail_name')
     const affectedUserIds: string[] = orphanRows.map((r: any) => String(r.user_id)).filter(Boolean)
 
-    const result = await this.hardDeletePhotosNow(
+    const result = await this.hardDeletePhotosInBatches(
       orphanRows,
       dryRun,
       'PhotoDeletion -> OrphanSweep'
@@ -350,9 +498,11 @@ export default class PhotoDeletionService {
   }
 
   /**
-   * Hard-delete soft-deleted users whose photos are all gone.
-   * Nullifies payments.user_id (email already captured in user_email_snapshot).
-   * Removes the user row — re-registration is not blocked by a kept row.
+   * Finds soft-deleted users who have no remaining photos in the database and
+   * permanently deletes them and their associated data (series, collections, etc.).
+   * Payments are anonymized by nullifying the user_id.
+   *
+   * @param dryRun If true, only logs the users that would be purged.
    */
   private static async purgeDeletedUsers(dryRun: boolean) {
     // Find soft-deleted users with zero remaining photos
