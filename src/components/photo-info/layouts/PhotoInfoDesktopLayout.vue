@@ -79,10 +79,7 @@
         </n-button>
 
         <!-- Floating Action Bar centered on hover -->
-        <div
-          class="photo-action-bar-overlay"
-          :class="{ 'action-bar-hidden_': !showActionBar }"
-        >
+        <div class="photo-action-bar-overlay">
           <FloatingActionBar
             :embedded="true"
             :selected-ids="selectedPhoto?.id ? [selectedPhoto.id] : []"

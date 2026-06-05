@@ -461,10 +461,10 @@ const handleClearSelection = () => {
 }
 
 .floating-action-bar--embedded .floating-action-buttons :deep(.n-button) {
-  --n-width: 28px !important;
-  --n-height: 28px !important;
-  width: 28px;
-  height: 28px;
+  --n-width: 32x !important;
+  --n-height: 32x !important;
+  width: 32px;
+  height: 32px;
   min-width: unset;
   padding: 0;
 }
@@ -560,7 +560,18 @@ const handleClearSelection = () => {
 
 .floating-action-bar--embedded .floating-action-buttons {
   gap: 8px;
-  transform: scale(0.85);
+  /* transform: scale(0.85); */
   transform-origin: center center;
+}
+
+@media (max-width: 768px) {
+  .floating-action-bar--embedded .floating-action-buttons {
+    transform: scale(0.85);
+  }
+
+  .floating-action-bar--embedded .floating-action-buttons :deep(.n-button) {
+    width: 28px;
+    height: 28px;
+  }
 }
 </style>

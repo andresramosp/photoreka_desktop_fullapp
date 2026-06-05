@@ -44,7 +44,7 @@
         class="action-buttons-overlay"
       >
         <n-button
-          v-if="photo.status == 'processed'"
+          v-if="photo.status == 'processed' && !isMobile"
           size="medium"
           class="action-button info-button"
           :loading="!imageLoaded"
@@ -320,6 +320,7 @@ import {
   SwapHorizontalOutline,
 } from "@vicons/ionicons5";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
+import { useIsMobile } from "@/composables/useIsMobile";
 
 interface PhotoInfo {
   id: string;

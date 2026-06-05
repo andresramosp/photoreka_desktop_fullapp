@@ -234,23 +234,11 @@ export function useMobilePhotoSelection() {
           togglePhotoSelection(photoId, onSelect);
         }
       } else {
-        // Selection mode is NOT active - show hover overlay temporarily
-        // But don't prevent default on buttons
-        if (!isButton) {
+        // Selection mode is NOT active. A simple tap should trigger the info action.
+        if (onShowInfo && !isButton) {
           event.preventDefault();
           event.stopPropagation();
-
-          showHoverOverlay.value = true;
-
-          // Clear any existing hover timeout
-          if (hoverTimeout.value) {
-            clearTimeout(hoverTimeout.value);
-          }
-
-          // Hide hover overlay after duration
-          hoverTimeout.value = window.setTimeout(() => {
-            showHoverOverlay.value = false;
-          }, HOVER_DISPLAY_DURATION);
+          onShowInfo();
         }
       }
 

@@ -187,6 +187,13 @@
                       v-for="scoreData in orderedArtisticScores"
                       :key="scoreData.criterion"
                       class="mobile-score-row"
+                      :class="{ 'bonus-item': scoreData.group === 'bonus' }"
+                      :style="{
+                        '--weight-scale':
+                          artisticScoreWeights[scoreData.criterion] ?? 0,
+                        '--weight-opacity':
+                          artisticScoreWeights[scoreData.criterion] ?? 0,
+                      }"
                     >
                       <span class="mobile-score-label">{{
                         scoreData.label
@@ -1157,9 +1164,10 @@ const navigateTo = (routeName, id) => {
   display: flex;
   gap: var(--spacing-sm);
   overflow-x: auto;
-  padding: var(--spacing-xs) 0;
+  padding: var(--spacing-xs) var(--spacing-sm);
   -webkit-overflow-scrolling: touch;
-  justify-content: center;
+  justify-content: flex-start;
+  scroll-padding-left: var(--spacing-sm);
 }
 
 .mobile-genre-pill {
@@ -1195,6 +1203,40 @@ const navigateTo = (routeName, id) => {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  padding: 4px;
+  position: relative;
+}
+
+.mobile-score-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: calc(var(--weight-scale, 0) * (110px + var(--spacing-sm)));
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--primary-color) 0%,
+    rgba(59, 130, 246, 0.4) 80%,
+    rgba(59, 130, 246, 0.1) 100%
+  );
+  border-radius: var(--radius-sm);
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0.25;
+  z-index: 0;
+}
+
+.mobile-score-row.bonus-item::before {
+  background: linear-gradient(
+    90deg,
+    #f59e0b 0%,
+    rgba(245, 158, 11, 0.4) 80%,
+    rgba(245, 158, 11, 0.1) 100%
+  );
+}
+
+.mobile-score-row:hover::before {
+  opacity: 0.4;
 }
 
 .mobile-score-label {
@@ -1202,6 +1244,8 @@ const navigateTo = (routeName, id) => {
   color: var(--text-primary);
   min-width: 100px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .mobile-score-bar-wrap {
@@ -1209,6 +1253,8 @@ const navigateTo = (routeName, id) => {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  position: relative;
+  z-index: 1;
 }
 
 .mobile-score-bar {
