@@ -1757,8 +1757,9 @@ const loadPhotosToPixi = async () => {
   // Fallback: use PIXI.Texture.WHITE if placeholder creation failed
   const textureToUse = placeholderTexture.value || PIXI.Texture.WHITE;
 
-  // Reduce batch size to avoid rate limiting (12 concurrent max, similar to 3D)
-  const batchSize = 24;
+  // Reduce batch size on low-performance devices to avoid rate limiting
+  // For high-performance devices (laptop/pc), use a much larger batch size to load images extremely fast since they are already bulk-cached in memory!
+  const batchSize = useLowPerformance.value ? 24 : 350;
 
   for (let i = 0; i < photosToLoad.length; i += batchSize) {
     const batch = photosToLoad.slice(i, i + batchSize);
@@ -1856,16 +1857,29 @@ const loadPhotosToPixi = async () => {
       }),
     );
 
-    // Free source images from this batch immediately.
-    // The textures are already created — the HTMLImageElements are redundant.
-    // Without this, 5000 decoded bitmaps would accumulate (~1 GB) and crash.
+    // Free source images from this batch immediately (low performance only).
+    // On high-performance/desktop, we avoid intermediate freeing within this loop
+    // so we don't cause tearing or garbage collection stalls during texture creation,
+    // and we free them all at the very end of loadPhotosToPixi to minimize peak load memory.
     for (const photo of batch) {
-      textureManager.freeSourceImage(photo.id);
-      photo.__imageElement = null;
+      if (useLowPerformance.value) {
+        textureManager.freeSourceImage(photo.id);
+        photo.__imageElement = null;
+      }
     }
 
-    // Small delay between batches to avoid overwhelming Cloudflare
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Small delay between batches to avoid overwhelming cloudflare but keep laptop instantaneous
+    if (useLowPerformance.value) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    } else {
+      const hasDownloads = batch.some((p) => !p.__fromCache);
+      if (hasDownloads) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      } else if (i % 600 === 0) {
+        // Micro-yield to keep GUI responsive but extremely fast
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    }
   }
 
   isLoadingTextures.value = false;

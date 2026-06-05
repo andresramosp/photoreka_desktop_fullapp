@@ -50,6 +50,7 @@ export function use2DTextureManager(
     initDB,
     bulkCheckCache,
     bulkCacheImages,
+    bulkLoadFromCache,
     getCachedImage,
     getCacheStats,
     urlToBlob,
@@ -329,33 +330,84 @@ export function use2DTextureManager(
     }
 
     try {
-      // ── LIGHTWEIGHT CHECK ──────────────────────────────────────────────
-      // Only check which photo IDs exist in IndexedDB (getKey, zero blob reads).
-      // Actual blobs are loaded on-demand inside getOrCreateTexture() —
-      // one photo at a time — to keep peak memory under control.
-      // Previously this used bulkLoadFromCache (decoded ALL 5000 blobs
-      // into HTMLImageElements upfront ≈ 1 GB), causing OOM.
-      const cachedIds = await bulkCheckCache(photoIds);
+      if (useLowPerformance) {
+        // ── LIGHTWEIGHT CHECK ──────────────────────────────────────────────
+        // Only check which photo IDs exist in IndexedDB (getKey, zero blob reads).
+        // Actual blobs are loaded on-demand inside getOrCreateTexture() —
+        // one photo at a time — to keep peak memory under control.
+        // Previously this used bulkLoadFromCache (decoded ALL 5000 blobs
+        // into HTMLImageElements upfront ≈ 1 GB), causing OOM.
+        const cachedIds = await bulkCheckCache(photoIds);
 
-      if (cachedIds.size > 0) {
-        cachedPhotoIds.value = new Set(cachedIds);
+        if (cachedIds.size > 0) {
+          cachedPhotoIds.value = new Set(cachedIds);
 
-        for (const p of photos) {
-          if (p?.id && cachedIds.has(p.id)) {
-            // Mark as "present in IDB" so getOrCreateTexture knows
-            // to try getCachedImage() before network download.
-            p.__cachedInIDB = true;
-            p.__fromCache = true;
+          for (const p of photos) {
+            if (p?.id && cachedIds.has(p.id)) {
+              // Mark as "present in IDB" so getOrCreateTexture knows
+              // to try getCachedImage() before network download.
+              p.__cachedInIDB = true;
+              p.__fromCache = true;
+            }
           }
         }
+
+        console.log(
+          `📊 [2D Cache] IndexedDB: ${cachedIds.size}/${photoIds.length} fotos en cache (${photoIds.length - cachedIds.size} se descargarán de red)`,
+        );
+
+        cacheStats.value = await getCacheStats();
+        return new Map(); // no blobs in memory — loaded on-demand
+      } else {
+        // ── HIGH PERFORMANCE BULK LOAD (MATCHING 3D) ──────────────────────
+        // Load actual blobs in bulk to allow instantaneous loading on desktop/laptop
+        console.log(
+          `🔍 [2D Cache] Bulk loading ${photoIds.length} photos from IndexedDB...`,
+        );
+        const cachedBlobs = await bulkLoadFromCache(photoIds);
+        console.log(
+          `✅ [2D Cache] Loaded ${cachedBlobs.size} images from cache`,
+        );
+
+        if (cachedBlobs.size > 0) {
+          loaderSubtitle.value = `Loading ${cachedBlobs.size} photos from cache...`;
+          cachedPhotoIds.value = new Set(cachedBlobs.keys());
+
+          // Convert Blobs to HTMLImageElements in parallel batches to optimize speed and responsiveness
+          const blobEntries = Array.from(cachedBlobs.entries());
+          const decodeLimit = 120; // decode 120 images in parallel at a time
+          for (let i = 0; i < blobEntries.length; i += decodeLimit) {
+            const chunk = blobEntries.slice(i, i + decodeLimit);
+            await Promise.all(
+              chunk.map(async ([photoId, blob]) => {
+                try {
+                  const img = await blobToImageElement(blob);
+                  const thumbKey = cacheKey(photoId, "low");
+                  downloadedImagesCache.set(thumbKey, img);
+
+                  const photo = photos.find((p) => p.id === photoId);
+                  if (photo) {
+                    photo.__imageDownloaded = true;
+                    photo.__downloadError = false;
+                    photo.__canCreateTexture = true;
+                    photo.__fromCache = true;
+                    photo.__imageElement = img;
+                    photo.__imageBlob = blob;
+                  }
+                } catch (error) {
+                  console.warn(
+                    `⚠️ [2D Cache] Error decoding cached image ${photoId}:`,
+                    error,
+                  );
+                }
+              }),
+            );
+          }
+        }
+
+        cacheStats.value = await getCacheStats();
+        return cachedBlobs;
       }
-
-      console.log(
-        `📊 [2D Cache] IndexedDB: ${cachedIds.size}/${photoIds.length} fotos en cache (${photoIds.length - cachedIds.size} se descargarán de red)`,
-      );
-
-      cacheStats.value = await getCacheStats();
-      return new Map(); // no blobs in memory — loaded on-demand
     } catch (error) {
       console.warn(`⚠️ [2D Cache] Error verificando IndexedDB:`, error);
       return new Map();
