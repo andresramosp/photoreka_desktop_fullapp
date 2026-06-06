@@ -148,12 +148,23 @@ export async function extractBasicExifData(file) {
       return null;
     }
 
+    const rawDate =
+      exifData.DateTimeOriginal ||
+      exifData.DateTime ||
+      exifData.CreateDate ||
+      null;
+
+    let dateTaken = null;
+
+    if (rawDate instanceof Date) {
+      dateTaken = rawDate;
+    } else if (typeof rawDate === "string") {
+      const parsed = new Date(rawDate);
+      dateTaken = !isNaN(parsed.getTime()) ? parsed : rawDate;
+    }
+
     const basicExif = {
-      dateTaken:
-        exifData.DateTimeOriginal ||
-        exifData.DateTime ||
-        exifData.CreateDate ||
-        null,
+      dateTaken,
 
       camera: {
         make: exifData.Make || null,
@@ -184,7 +195,6 @@ export async function extractBasicExifData(file) {
     return null;
   }
 }
-
 /**
  * Convierte la fecha EXIF a formato ISO string
  * @param {Date|string} exifDate - Fecha en formato EXIF
