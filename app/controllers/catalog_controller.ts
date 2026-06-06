@@ -1,6 +1,11 @@
 import type { HttpContext } from '@adonisjs/core/http'
 
-import { S3Client, PutObjectCommand, DeleteObjectsCommand } from '@aws-sdk/client-s3'
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectsCommand,
+  CopyObjectCommand,
+} from '@aws-sdk/client-s3'
 import crypto from 'crypto'
 import Photo, { PhotoDescriptions } from '#models/photo'
 import User from '#models/user'
@@ -228,9 +233,9 @@ export default class CatalogController {
         userId: Number(userId),
         descriptions,
         uploadIp,
-        // Pipeline rows start unconfirmed; the client confirms once both the
-        // main and thumbnail have landed in R2 (POST /api/catalog/confirmUpload).
-        confirmed: true,
+        // Para dar tiempo a que los frontales web actualicen cache, dejamos `confirmed` a true directamente.
+        // Para los preferred source Lightroom si lo ponemos a 'false' directamente.
+        confirmed: source.type === 'lightroom' ? false : true,
         // source,
       })
 
@@ -517,14 +522,18 @@ export default class CatalogController {
       const userId = user.id.toString()
 
       const { newPhotoId, targetPhotoIds } = request.only(['newPhotoId', 'targetPhotoIds'])
+      const normalizedTargetIds = Array.isArray(targetPhotoIds)
+        ? [...new Set(targetPhotoIds.map((value: any) => Number(value)).filter(Number.isInteger))]
+        : []
 
-      if (
-        !newPhotoId ||
-        !targetPhotoIds ||
-        !Array.isArray(targetPhotoIds) ||
-        targetPhotoIds.length === 0
-      ) {
+      if (!newPhotoId || normalizedTargetIds.length === 0) {
         return response.badRequest({ message: 'newPhotoId and targetPhotoIds[] are required' })
+      }
+
+      if (normalizedTargetIds.includes(Number(newPhotoId))) {
+        return response.badRequest({
+          message: 'newPhotoId cannot be included in targetPhotoIds[]',
+        })
       }
 
       // Verify the new (lightbox) photo exists and belongs to user
@@ -536,40 +545,76 @@ export default class CatalogController {
 
       // Verify all target photos exist and belong to user
       const targetPhotos = await Photo.query()
-        .whereIn('id', targetPhotoIds)
+        .whereIn('id', normalizedTargetIds)
         .where('user_id', userId)
 
       if (targetPhotos.length === 0) {
         return response.notFound({ message: 'No target photos found' })
       }
 
-      // Collect old R2 keys from targets that will be replaced
-      const oldR2Keys: string[] = []
-      for (const target of targetPhotos) {
-        oldR2Keys.push(target.name)
-        if (target.thumbnailName) oldR2Keys.push(target.thumbnailName)
-      }
+      const bucket = process.env.R2_BUCKET!
+      // Extract extension from the source key (e.g. ".jpg", ".webp", ".png")
+      const ext = newPhoto.name.match(/(\.[^./]+)$/)?.[1] ?? '.jpg'
 
-      // Update each target photo's R2 keys to point to the new photo's files
+      // Copy newPhoto's R2 objects to fresh unique keys for every target BEFORE
+      // touching the database. This preserves the invariant: every active photo
+      // row owns its R2 object exclusively, so deletion can never orphan siblings.
+      const copyResults = await Promise.all(
+        targetPhotos.map(async (target) => {
+          const freshId = crypto.randomUUID()
+          const newKey = `main/${userId}/${freshId}${ext}`
+          const newThumbnailKey = `thumbs/${userId}/${freshId}${ext}`
+
+          await s3.send(
+            new CopyObjectCommand({
+              Bucket: bucket,
+              CopySource: `${bucket}/${newPhoto.name}`,
+              Key: newKey,
+            })
+          )
+
+          await s3.send(
+            new CopyObjectCommand({
+              Bucket: bucket,
+              CopySource: `${bucket}/${newPhoto.thumbnailName}`,
+              Key: newThumbnailKey,
+            })
+          )
+
+          return {
+            target,
+            newKey,
+            newThumbnailKey,
+            oldKey: target.name,
+            oldThumbnailKey: target.thumbnailName,
+          }
+        })
+      )
+
+      // All copies succeeded — update the database
+      const oldR2Keys: string[] = []
       const swapped: number[] = []
-      for (const target of targetPhotos) {
-        target.name = newPhoto.name
-        target.thumbnailName = newPhoto.thumbnailName
+
+      for (const { target, newKey, newThumbnailKey, oldKey, oldThumbnailKey } of copyResults) {
+        oldR2Keys.push(oldKey)
+        if (oldThumbnailKey) oldR2Keys.push(oldThumbnailKey)
+
+        target.name = newKey
+        target.thumbnailName = newThumbnailKey
         target.originalFileName = newPhoto.originalFileName
-        // Reset dhash so it gets recomputed on next duplicate check
         target.dhash = null
         await target.save()
         swapped.push(target.id)
       }
 
-      // Delete old R2 files that are no longer referenced
+      // Delete the old R2 objects — each was exclusively owned by its target row
       if (oldR2Keys.length > 0) {
         try {
           await s3.send(
             new DeleteObjectsCommand({
-              Bucket: process.env.R2_BUCKET,
+              Bucket: bucket,
               Delete: {
-                Objects: oldR2Keys.map((Key) => ({ Key })),
+                Objects: [...new Set(oldR2Keys)].map((Key) => ({ Key })),
                 Quiet: true,
               },
             })
@@ -579,7 +624,8 @@ export default class CatalogController {
         }
       }
 
-      // Soft-delete the new photo record (its R2 files are now used by targets)
+      // Soft-delete the newPhoto record — its R2 keys are exclusively its own
+      // and will be cleaned up by the deletion service.
       newPhoto.deletedAt = (await import('luxon')).DateTime.now()
       await newPhoto.save()
 

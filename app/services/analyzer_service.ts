@@ -140,10 +140,7 @@ export default class AnalyzerProcessRunner {
 
     const hasFailed = this.hasFailedPhotos()
 
-    // Determinar si el package es de preproceso usando la propiedad del proceso
-    const finalStage = hasFailed ? 'failed' : 'finished'
-
-    await this.changeStage('***  Proceso Completado ***', finalStage)
+    await this.changeStage('***  Proceso Completado ***', 'finished')
 
     // Incrementar contador acumulativo de fotos analizadas (solo para procesos no-preprocess y modos nuevos)
     if (!this.process.isPreprocess && this.process.userId) {
