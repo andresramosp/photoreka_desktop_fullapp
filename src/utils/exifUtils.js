@@ -107,53 +107,60 @@ function parseGpsCoordinates(exifData) {
  */
 export async function extractBasicExifData(file) {
   try {
-    const exifData = await exifr.parse(file, {
-      // Especificar qué datos queremos extraer
-      pick: [
-        "DateTimeOriginal", // Fecha y hora de la toma
-        "DateTime", // Fecha y hora de modificación
-        "CreateDate", // Fecha de creación
-        "Make", // Marca de la cámara
-        "Model", // Modelo de la cámara
-        "LensModel", // Modelo del lente
-        "FocalLength", // Distancia focal
-        "FNumber", // Número f (apertura)
-        "ExposureTime", // Tiempo de exposición
-        "ISO", // Sensibilidad ISO
-        "Flash", // Información del flash
-        "WhiteBalance", // Balance de blancos
-        "GPSLatitude", // Latitud GPS
-        "GPSLatitudeRef", // Referencia hemisférica latitud (N/S)
-        "GPSLongitude", // Longitud GPS
-        "GPSLongitudeRef", // Referencia hemisférica longitud (E/W)
-        "GPSAltitude", // Altitud GPS
-        "GPSAltitudeRef", // Referencia altitud (0=sobre el nivel del mar, 1=bajo)
-        "Orientation", // Orientación de la imagen
-        "ColorSpace", // Espacio de color
-      ],
-    });
+    const isPng =
+      file.type === "image/png" || file.name?.toLowerCase().endsWith(".png");
 
-    if (!exifData) {
+    const exifData = isPng
+      ? await exifr.parse(file, {
+          exif: true,
+          xmp: true,
+          icc: true,
+          iptc: true,
+        })
+      : await exifr.parse(file, {
+          pick: [
+            "DateTimeOriginal",
+            "DateTime",
+            "CreateDate",
+            "Make",
+            "Model",
+            "LensModel",
+            "FocalLength",
+            "FNumber",
+            "ExposureTime",
+            "ISO",
+            "Flash",
+            "WhiteBalance",
+            "GPSLatitude",
+            "GPSLatitudeRef",
+            "GPSLongitude",
+            "GPSLongitudeRef",
+            "GPSAltitude",
+            "GPSAltitudeRef",
+            "Orientation",
+            "ColorSpace",
+          ],
+        });
+
+    console.log("RAW EXIF DATA:", exifData);
+
+    if (!exifData || Object.keys(exifData).length === 0) {
       return null;
     }
 
-    // Procesar y normalizar los datos
     const basicExif = {
-      // Fecha de la toma (priorizar DateTimeOriginal, luego DateTime, luego CreateDate)
       dateTaken:
         exifData.DateTimeOriginal ||
         exifData.DateTime ||
         exifData.CreateDate ||
         null,
 
-      // Información de la cámara
       camera: {
         make: exifData.Make || null,
         model: exifData.Model || null,
         lens: exifData.LensModel || null,
       },
 
-      // Configuración de la foto
       settings: {
         focalLength: exifData.FocalLength || null,
         aperture: exifData.FNumber || null,
@@ -163,10 +170,8 @@ export async function extractBasicExifData(file) {
         whiteBalance: exifData.WhiteBalance || null,
       },
 
-      // Ubicación GPS (si está disponible)
       gps: parseGpsCoordinates(exifData),
 
-      // Otros metadatos
       orientation: exifData.Orientation || null,
       colorSpace: exifData.ColorSpace || null,
     };

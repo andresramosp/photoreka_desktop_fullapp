@@ -625,7 +625,11 @@
                         type="info"
                         class="tech-tag"
                       >
-                        {{ selectedPhoto.descriptions.EXIF.flash }}
+                        {{
+                          formatFlashValue(
+                            selectedPhoto.descriptions.EXIF.flash,
+                          )
+                        }}
                       </n-tag>
                       <n-tag
                         v-if="selectedPhoto?.descriptions?.EXIF?.whiteBalance"
@@ -1100,6 +1104,21 @@ const visibleModel = computed({
 const navigateTo = (routeName, id) => {
   emit("update:visible", false);
   router.push({ name: routeName, params: { id } });
+};
+
+const formatFlashValue = (flash) => {
+  if (!flash) return "";
+
+  if (typeof flash === "string") {
+    return flash;
+  }
+
+  if (typeof flash === "object") {
+    const fired = Boolean(flash.Fired);
+    return fired ? "Flash fired" : "Flash did not fire";
+  }
+
+  return String(flash);
 };
 
 const showActionBar = ref(true);

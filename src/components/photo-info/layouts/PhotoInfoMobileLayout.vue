@@ -440,7 +440,11 @@
                         size="small"
                         type="info"
                       >
-                        {{ selectedPhoto.descriptions.EXIF.flash }}
+                        {{
+                          formatFlashValue(
+                            selectedPhoto.descriptions.EXIF.flash,
+                          )
+                        }}
                       </n-tag>
                     </div>
                   </div>
@@ -820,6 +824,21 @@ const visibleModel = computed({
 const navigateTo = (routeName, id) => {
   emit("update:visible", false);
   router.push({ name: routeName, params: { id } });
+};
+
+const formatFlashValue = (flash) => {
+  if (!flash) return "";
+
+  if (typeof flash === "string") {
+    return flash;
+  }
+
+  if (typeof flash === "object") {
+    const fired = Boolean(flash.Fired);
+    return fired ? "Flash fired" : "Flash did not fire";
+  }
+
+  return String(flash);
 };
 </script>
 
