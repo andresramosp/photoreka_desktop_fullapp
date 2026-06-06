@@ -624,10 +624,9 @@ export default class CatalogController {
         }
       }
 
-      // Soft-delete the newPhoto record — its R2 keys are exclusively its own
-      // and will be cleaned up by the deletion service.
-      newPhoto.deletedAt = (await import('luxon')).DateTime.now()
-      await newPhoto.save()
+      // Delete the source lightbox photo through PhotoManager so uploaded
+      // photos are hard-deleted quickly in background (R2 + DB cleanup).
+      await new PhotoManager().deletePhotos([newPhoto.id], userId)
 
       await this.invalidateUserCache(userId)
 
