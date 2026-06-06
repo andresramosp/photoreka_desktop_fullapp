@@ -12,10 +12,10 @@ export default class ThreeDViewController {
       const user = auth.use('api').user! as any
       const userId = user.id.toString()
 
-      const { chunkName, outputDims = 3 } = request.body()
+      const { chunkName, outputDims = 3, limit = 5000 } = request.body()
 
       const threeDManager = new ThreeDManager()
-      const result = await threeDManager.get3DPhotos(userId, chunkName, 10000, outputDims)
+      const result = await threeDManager.get3DPhotos(userId, chunkName, limit, outputDims)
 
       return response.ok(result)
     } catch (error) {
@@ -35,7 +35,7 @@ export default class ThreeDViewController {
   public async get3DPhotosByIdOrUsername({ request, response, params }: HttpContext) {
     try {
       const { id } = params
-      const { chunkName, outputDims = 3 } = request.body()
+      const { chunkName, outputDims = 3, limit = 5000 } = request.body()
 
       if (!id) {
         return response.badRequest({ message: 'El parámetro id es requerido' })
@@ -62,7 +62,7 @@ export default class ThreeDViewController {
       }
 
       const threeDManager = new ThreeDManager()
-      const result = await threeDManager.get3DPhotos(userId, chunkName, 5000, outputDims)
+      const result = await threeDManager.get3DPhotos(userId, chunkName, limit, outputDims)
 
       return response.ok(result)
     } catch (error) {

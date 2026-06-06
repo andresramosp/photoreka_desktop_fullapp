@@ -53,20 +53,20 @@ export default class ThreeDManager {
    * Obtiene fotos con coordenadas 3D basadas en un chunk de descripción
    * @param userId - ID del usuario
    * @param chunkName - Nombre de la categoría de chunk
-   * @param fakeLimit - Límite de fotos (default 5000)
+   * @param limit - Límite de fotos (default 5000)
    * @returns Array de fotos con coordenadas 3D
    */
 
   @withCache({
     provider: 'redis',
-    key: (userId, chunkName, fakeLimit, outputDims) =>
-      `get3DPhotos:${userId}:${chunkName}:${fakeLimit}:${outputDims}`,
+    key: (userId, chunkName, limit, outputDims) =>
+      `get3DPhotos:${userId}:${chunkName}:${limit}:${outputDims}`,
     ttl: 1_209_600, // 2 weeks — fallback expiry if manual invalidation is skipped
   })
   public async get3DPhotos(
     userId: string,
     chunkName: string,
-    fakeLimit: number = 10000,
+    limit: number = 5000,
     outputDims: number = 3
   ) {
     let photosWithCategory
@@ -85,16 +85,22 @@ export default class ThreeDManager {
         WHERE p.user_id = :userId
           AND p.embedding IS NOT NULL
           AND p.deleted_at IS NULL
-        ORDER BY p.id
+        ORDER BY p.created_at DESC
+        LIMIT :limit
       `,
         {
           userId: parseInt(userId),
+          limit,
         }
       )
     } else if (chunkName === 'artistic_scores') {
       // Caso especial: usar el embedding computado de artistic_scores
       const photoManager = new PhotoManager()
-      const photosFromDb = await photoManager.getPhotosFor3DView(userId, 'artistic_scores')
+      const allPhotosArtistic = await photoManager.getPhotosFor3DView(userId, 'artistic_scores')
+      // Prioritize most recent photos (sort by id desc as proxy for created_at)
+      const photosFromDb = [...allPhotosArtistic]
+        .sort((a: any, b: any) => (b.id || 0) - (a.id || 0))
+        .slice(0, limit)
 
       // Convertir a formato compatible con el resto del código
       photosWithCategory = {
@@ -109,7 +115,11 @@ export default class ThreeDManager {
     } else if (chunkName === 'visual_aspects') {
       // Caso especial: usar el embedding computado de visual_aspects
       const photoManager = new PhotoManager()
-      const photosFromDb = await photoManager.getPhotosFor3DView(userId, 'visual_aspects')
+      const allPhotosVisual = await photoManager.getPhotosFor3DView(userId, 'visual_aspects')
+      // Prioritize most recent photos (sort by id desc as proxy for created_at)
+      const photosFromDb = [...allPhotosVisual]
+        .sort((a: any, b: any) => (b.id || 0) - (a.id || 0))
+        .slice(0, limit)
 
       // Convertir a formato compatible con el resto del código
       photosWithCategory = {
@@ -137,10 +147,12 @@ export default class ThreeDManager {
         WHERE p.user_id = :userId
           AND p.${histogramField} IS NOT NULL
           AND p.deleted_at IS NULL
-        ORDER BY p.id
+        ORDER BY p.created_at DESC
+        LIMIT :limit
       `,
         {
           userId: parseInt(userId),
+          limit,
         }
       )
     } else {
@@ -149,25 +161,30 @@ export default class ThreeDManager {
         throw new Error('El parámetro chunkName es requerido')
       }
 
-      // Obtener las fotos únicas que tienen chunks de esta categoría
+      // Obtener las fotos únicas que tienen chunks de esta categoría (más recientes primero)
       photosWithCategory = await db.rawQuery(
         `
-        SELECT DISTINCT
+        SELECT
           p.id,
           p.name,
           p.thumbnail_name,
           p.original_file_name
         FROM photos p
-        JOIN descriptions_chunks dc ON p.id = dc.photo_id
-        WHERE dc.category = :chunkName
-          AND p.user_id = :userId
-          AND dc.embedding IS NOT NULL
+        WHERE p.user_id = :userId
           AND p.deleted_at IS NULL
-        ORDER BY p.id
+          AND EXISTS (
+            SELECT 1 FROM descriptions_chunks dc
+            WHERE dc.photo_id = p.id
+              AND dc.category = :chunkName
+              AND dc.embedding IS NOT NULL
+          )
+        ORDER BY p.created_at DESC
+        LIMIT :limit
       `,
         {
           chunkName,
           userId: parseInt(userId),
+          limit,
         }
       )
     }
@@ -472,7 +489,7 @@ export default class ThreeDManager {
       .filter(Boolean)
 
     // Aplicar límite temporal para pruebas
-    const finalPhotos = photos3D.slice(0, fakeLimit)
+    const finalPhotos = photos3D.slice(0, limit)
 
     return {
       photos: finalPhotos,
