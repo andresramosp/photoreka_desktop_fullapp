@@ -202,9 +202,9 @@
     <div v-show="showDiscreteLoader" class="discrete-loader">
       <div class="loader-spinner"></div>
       <span class="loader-text">{{ loaderTitle }}</span>
-      <!-- <span v-if="loadingProgress > 0" class="loader-percentage"
+      <span v-if="loadingProgress > 0" class="loader-percentage"
         >{{ loadingProgress }}%</span
-      > -->
+      >
     </div>
 
     <!-- Zoom Controls -->
