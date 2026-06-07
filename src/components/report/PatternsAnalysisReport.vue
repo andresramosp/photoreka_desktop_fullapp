@@ -912,6 +912,7 @@ onMounted(() => {
   flex-direction: column;
   height: 370px;
   min-height: 370px;
+  border-left: 3px solid var(--primary-color);
 }
 
 .pattern-card:hover {
@@ -1042,9 +1043,9 @@ onMounted(() => {
   gap: var(--spacing-sm);
 }
 
-.cultural-card {
+/* .cultural-card {
   border-left: 3px solid var(--primary-color);
-}
+} */
 
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
