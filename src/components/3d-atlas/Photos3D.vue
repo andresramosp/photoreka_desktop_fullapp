@@ -321,7 +321,7 @@ const _storedPhotoLimit3D =
 const photoLimit = ref(
   _PHOTO_LIMIT_VALID_3D.includes(_storedPhotoLimit3D)
     ? _storedPhotoLimit3D
-    : 5000,
+    : 10000,
 );
 // Track whether the limit-info message has been shown this session
 const limitMessageShown = ref(false);

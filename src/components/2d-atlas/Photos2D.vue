@@ -392,7 +392,7 @@ const _storedPhotoLimit2D =
 const photoLimit = ref(
   _PHOTO_LIMIT_VALID_2D.includes(_storedPhotoLimit2D)
     ? _storedPhotoLimit2D
-    : 5000,
+    : 10000,
 );
 // Track whether the limit-info message has been shown this session
 const limitMessageShown = ref(false);
