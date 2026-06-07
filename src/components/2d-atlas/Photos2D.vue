@@ -98,6 +98,8 @@
       @fly-to-pattern="flyToPattern"
       @tag-search="handleTagSearch"
       @text-search="handleTextSearch"
+      v-model:photoLimit="photoLimit"
+      @viewport-limit-change="onViewportLimitChange"
     />
 
     <!-- Config Panel Component (Mobile) -->
@@ -197,12 +199,12 @@
     />
 
     <!-- Discrete Loading Indicator -->
-    <div v-if="showDiscreteLoader" class="discrete-loader">
+    <div v-show="showDiscreteLoader" class="discrete-loader">
       <div class="loader-spinner"></div>
       <span class="loader-text">{{ loaderTitle }}</span>
-      <span v-if="loadingProgress > 0" class="loader-percentage"
+      <!-- <span v-if="loadingProgress > 0" class="loader-percentage"
         >{{ loadingProgress }}%</span
-      >
+      > -->
     </div>
 
     <!-- Zoom Controls -->
@@ -378,6 +380,22 @@ const {
   reapplyLayoutForIds,
   reset,
 } = use2DPhotos(props.catalogUserId, useLowPerformance.value);
+
+// Viewport limit: how many photos to load from the backend (most recent first).
+// Pre-read from the same localStorage key used by Photos2DConfigPanel so that the
+// panel's onMounted finds props.photoLimit === persisted and won't emit a second load.
+const _PHOTO_LIMIT_VALID_2D = [5000, 10000, 20000];
+const _storedPhotoLimit2D =
+  typeof window !== "undefined"
+    ? Number(window.localStorage.getItem("photoreka:atlas2d:photoLimit"))
+    : 0;
+const photoLimit = ref(
+  _PHOTO_LIMIT_VALID_2D.includes(_storedPhotoLimit2D)
+    ? _storedPhotoLimit2D
+    : 5000,
+);
+// Track whether the limit-info message has been shown this session
+const limitMessageShown = ref(false);
 
 const reapplyLayoutForCurrentView = () => {
   if (!photos2D.value.length) return;
@@ -617,10 +635,10 @@ const SCALE_FACTOR = 50;
 
 // Zoom constraints
 // Avoid 0 to prevent division-by-zero and unstable transforms.
-const MIN_SCALE = 0.05;
+const MIN_SCALE = 0.005;
 const MAX_SCALE = 12;
-const ZOOM_SENSITIVITY = 0.0035;
-const CAMERA_LERP = 0.18;
+const ZOOM_SENSITIVITY = 0.0015;
+const CAMERA_LERP = 1;
 const CAMERA_EPSILON = 0.001;
 const targetCamera = { x: 0, y: 0, scale: 1 };
 let lastAnimationTick = 0;
@@ -1703,226 +1721,233 @@ const updateTransitionPositions = (currentTime) => {
 const loadPhotosToPixi = async () => {
   if (!photoContainer.value || !pixiApp.value) return;
 
+  photoContainer.value.visible = false;
   isLoadingTextures.value = true;
   loadingProgress.value = 0;
   loaderTitle.value = "Loading photos";
 
-  // Clear any existing selection (selection Graphics are wiped by removeChildren below)
-  selectedPhotoIds.value = [];
-  selectionBordersMap.clear();
-
-  // Clear existing sprites - DESTROY them to free GPU memory (not just remove from container)
-  for (const sprite of photoSprites.value.values()) {
-    try {
-      sprite.destroy({ children: false, texture: false }); // texture managed by textureManager
-    } catch (_) {}
-  }
-  photoContainer.value.removeChildren();
-  photoSprites.value.clear();
-  resetLodState();
-
-  // Recreate the tag layer, since removeChildren() wipes it.
-  ensurePatternTagsLayer();
-
-  // Note: we intentionally DO NOT call PIXI.Assets.reset() here.
-  // Doing so forces re-creation/re-download of textures and defeats the IndexedDB cache.
-
-  const photosToLoad = photos2D.value;
-  const total = photosToLoad.length;
-  let loaded = 0;
-
-  // Prime caches from IndexedDB (fast-path for previously downloaded images)
   try {
-    await textureManager.initDB();
-    await textureManager.loadImagesFromCache(photosToLoad);
-  } catch (_) {
-    // Non-fatal: proceed with network loading
-  }
+    // Clear any existing selection (selection Graphics are wiped by removeChildren below)
+    selectedPhotoIds.value = [];
+    selectionBordersMap.clear();
 
-  // Create placeholder texture ONCE and reuse (GPU memory optimization)
-  if (!placeholderTexture.value || placeholderTexture.value.destroyed) {
-    try {
-      const placeholderGraphics = new PIXI.Graphics();
-      placeholderGraphics.rect(0, 0, photoSize.value, photoSize.value * 0.75);
-      placeholderGraphics.fill({ color: 0x2a2a2a });
-      placeholderGraphics.stroke({ color: 0x3a3a3a, width: 1 });
-      placeholderTexture.value =
-        pixiApp.value.renderer.generateTexture(placeholderGraphics);
-      placeholderGraphics.destroy(); // Free the Graphics object immediately
-    } catch (err) {
-      console.warn("⚠️ Failed to create placeholder texture:", err);
+    // Clear existing sprites - DESTROY them to free GPU memory (not just remove from container)
+    for (const sprite of photoSprites.value.values()) {
+      try {
+        sprite.destroy({ children: false, texture: false }); // texture managed by textureManager
+      } catch (_) {}
     }
-  }
+    photoContainer.value.removeChildren();
+    photoSprites.value.clear();
+    resetLodState();
 
-  // Fallback: use PIXI.Texture.WHITE if placeholder creation failed
-  const textureToUse = placeholderTexture.value || PIXI.Texture.WHITE;
+    // Recreate the tag layer, since removeChildren() wipes it.
+    ensurePatternTagsLayer();
 
-  // Reduce batch size on low-performance devices to avoid rate limiting
-  // For high-performance devices (laptop/pc), use a much larger batch size to load images extremely fast since they are already bulk-cached in memory!
-  const batchSize = useLowPerformance.value ? 24 : 350;
+    // Note: we intentionally DO NOT call PIXI.Assets.reset() here.
+    // Doing so forces re-creation/re-download of textures and defeats the IndexedDB cache.
 
-  for (let i = 0; i < photosToLoad.length; i += batchSize) {
-    const batch = photosToLoad.slice(i, i + batchSize);
+    const photosToLoad = photos2D.value;
+    const total = photosToLoad.length;
+    let loaded = 0;
 
-    await Promise.all(
-      batch.map(async (photo) => {
-        const [x, y] = photo.position || [0, 0];
-        const canvasX = x * SCALE_FACTOR;
-        const canvasY = y * SCALE_FACTOR;
+    // Prime caches from IndexedDB (fast-path for previously downloaded images)
+    try {
+      await textureManager.initDB();
+      await textureManager.loadImagesFromCache(photosToLoad);
+    } catch (_) {
+      // Non-fatal: proceed with network loading
+    }
 
-        // Create sprite with placeholder first
-        const sprite = new PIXI.Sprite(textureToUse);
-        sprite.anchor.set(0.5);
-        sprite.x = canvasX;
-        sprite.y = canvasY;
-        sprite.width = photoSize.value;
-        sprite.height = photoSize.value * 0.75;
-        // Enable interaction for precise touch/click detection
-        sprite.eventMode = "static";
-        sprite.cursor = "pointer";
+    // Create placeholder texture ONCE and reuse (GPU memory optimization)
+    if (!placeholderTexture.value || placeholderTexture.value.destroyed) {
+      try {
+        const placeholderGraphics = new PIXI.Graphics();
+        placeholderGraphics.rect(0, 0, photoSize.value, photoSize.value * 0.75);
+        placeholderGraphics.fill({ color: 0x2a2a2a });
+        placeholderGraphics.stroke({ color: 0x3a3a3a, width: 1 });
+        placeholderTexture.value =
+          pixiApp.value.renderer.generateTexture(placeholderGraphics);
+        placeholderGraphics.destroy(); // Free the Graphics object immediately
+      } catch (err) {
+        console.warn("⚠️ Failed to create placeholder texture:", err);
+      }
+    }
 
-        // Track pointer position to detect panning vs tap
-        let pointerDownPos = null;
-        let pointerDownTime = 0;
+    // Fallback: use PIXI.Texture.WHITE if placeholder creation failed
+    const textureToUse = placeholderTexture.value || PIXI.Texture.WHITE;
 
-        sprite.on("pointerdown", (event) => {
-          // Store initial position and time for movement detection
-          pointerDownPos = { x: event.global.x, y: event.global.y };
-          pointerDownTime = performance.now();
-        });
+    // Reduce batch size on low-performance devices to avoid rate limiting
+    // For high-performance devices (laptop/pc), use a much larger batch size to load images extremely fast since they are already bulk-cached in memory!
+    const batchSize = useLowPerformance.value ? 24 : 350;
 
-        // Handle selection on pointerup (after validating it wasn't a pan)
-        sprite.on("pointerup", (event) => {
-          if (!pointerDownPos || isPinching.value) {
-            pointerDownPos = null;
-            return;
-          }
+    for (let i = 0; i < photosToLoad.length; i += batchSize) {
+      const batch = photosToLoad.slice(i, i + batchSize);
 
-          // Calculate movement since pointerdown
-          const dx = Math.abs(event.global.x - pointerDownPos.x);
-          const dy = Math.abs(event.global.y - pointerDownPos.y);
-          const totalMovement = Math.sqrt(dx * dx + dy * dy);
-          const duration = performance.now() - pointerDownTime;
+      await Promise.all(
+        batch.map(async (photo) => {
+          const [x, y] = photo.position || [0, 0];
+          const canvasX = x * SCALE_FACTOR;
+          const canvasY = y * SCALE_FACTOR;
 
-          // Reset tracking
-          pointerDownPos = null;
-
-          // Only select if:
-          // - Duration < 300ms (quick tap)
-          // - Movement < 10px (minimal drift - stricter than touch threshold)
-          // - Not currently pinching
-          if (duration < 300 && totalMovement < 10) {
-            event.stopPropagation();
-
-            const photoId = photo.id;
-            const index = selectedPhotoIds.value.indexOf(photoId);
-            if (index === -1) {
-              selectedPhotoIds.value.push(photoId);
-            } else {
-              selectedPhotoIds.value.splice(index, 1);
-            }
-            updateSpriteSelection(photoId);
-          }
-        });
-
-        // Clean up tracking if pointer leaves sprite
-        sprite.on("pointerupoutside", () => {
-          pointerDownPos = null;
-        });
-
-        // Store reference
-        photoSprites.value.set(photo.id, sprite);
-        photoContainer.value.addChild(sprite);
-
-        // Load actual texture (cached via IndexedDB + in-memory)
-        const texture = await textureManager.getOrCreateTexture(photo, {
-          quality: "thumb",
-          maxSide: getMaxSideForQuality("low"),
-        });
-        if (texture) {
-          sprite.texture = texture;
-
-          // Adjust aspect ratio
-          const aspectRatio = texture.height / texture.width;
+          // Create sprite with placeholder first
+          const sprite = new PIXI.Sprite(textureToUse);
+          sprite.anchor.set(0.5);
+          sprite.x = canvasX;
+          sprite.y = canvasY;
           sprite.width = photoSize.value;
-          sprite.height = photoSize.value * aspectRatio;
+          sprite.height = photoSize.value * 0.75;
+          // Enable interaction for precise touch/click detection
+          sprite.eventMode = "static";
+          sprite.cursor = "pointer";
+
+          // Track pointer position to detect panning vs tap
+          let pointerDownPos = null;
+          let pointerDownTime = 0;
+
+          sprite.on("pointerdown", (event) => {
+            // Store initial position and time for movement detection
+            pointerDownPos = { x: event.global.x, y: event.global.y };
+            pointerDownTime = performance.now();
+          });
+
+          // Handle selection on pointerup (after validating it wasn't a pan)
+          sprite.on("pointerup", (event) => {
+            if (!pointerDownPos || isPinching.value) {
+              pointerDownPos = null;
+              return;
+            }
+
+            // Calculate movement since pointerdown
+            const dx = Math.abs(event.global.x - pointerDownPos.x);
+            const dy = Math.abs(event.global.y - pointerDownPos.y);
+            const totalMovement = Math.sqrt(dx * dx + dy * dy);
+            const duration = performance.now() - pointerDownTime;
+
+            // Reset tracking
+            pointerDownPos = null;
+
+            // Only select if:
+            // - Duration < 300ms (quick tap)
+            // - Movement < 10px (minimal drift - stricter than touch threshold)
+            // - Not currently pinching
+            if (duration < 300 && totalMovement < 10) {
+              event.stopPropagation();
+
+              const photoId = photo.id;
+              const index = selectedPhotoIds.value.indexOf(photoId);
+              if (index === -1) {
+                selectedPhotoIds.value.push(photoId);
+              } else {
+                selectedPhotoIds.value.splice(index, 1);
+              }
+              updateSpriteSelection(photoId);
+            }
+          });
+
+          // Clean up tracking if pointer leaves sprite
+          sprite.on("pointerupoutside", () => {
+            pointerDownPos = null;
+          });
+
+          // Store reference
+          photoSprites.value.set(photo.id, sprite);
+          photoContainer.value.addChild(sprite);
+
+          // Load actual texture (cached via IndexedDB + in-memory)
+          const texture = await textureManager.getOrCreateTexture(photo, {
+            quality: "thumb",
+            maxSide: getMaxSideForQuality("low"),
+          });
+          if (texture) {
+            sprite.texture = texture;
+
+            // Adjust aspect ratio
+            const aspectRatio = texture.height / texture.width;
+            sprite.width = photoSize.value;
+            sprite.height = photoSize.value * aspectRatio;
+          }
+
+          // Track initial LOD level
+          sprite.__lodLevel = "low";
+          lodCurrentLevel.set(photo.id, "low");
+
+          loaded++;
+          loadingProgress.value = Math.round((loaded / total) * 100);
+        }),
+      );
+
+      // Free source images from this batch immediately (low performance only).
+      // On high-performance/desktop, we avoid intermediate freeing within this loop
+      // so we don't cause tearing or garbage collection stalls during texture creation,
+      // and we free them all at the very end of loadPhotosToPixi to minimize peak load memory.
+      for (const photo of batch) {
+        if (useLowPerformance.value) {
+          textureManager.freeSourceImage(photo.id);
+          photo.__imageElement = null;
         }
+      }
 
-        // Track initial LOD level
-        sprite.__lodLevel = "low";
-        lodCurrentLevel.set(photo.id, "low");
-
-        loaded++;
-        loadingProgress.value = Math.round((loaded / total) * 100);
-      }),
-    );
-
-    // Free source images from this batch immediately (low performance only).
-    // On high-performance/desktop, we avoid intermediate freeing within this loop
-    // so we don't cause tearing or garbage collection stalls during texture creation,
-    // and we free them all at the very end of loadPhotosToPixi to minimize peak load memory.
-    for (const photo of batch) {
+      // Small delay between batches to avoid overwhelming cloudflare but keep laptop instantaneous
       if (useLowPerformance.value) {
-        textureManager.freeSourceImage(photo.id);
-        photo.__imageElement = null;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      } else {
+        const hasDownloads = batch.some((p) => !p.__fromCache);
+        if (hasDownloads) {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        } else if (i % 600 === 0) {
+          // Micro-yield to keep GUI responsive but extremely fast
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
       }
     }
 
-    // Small delay between batches to avoid overwhelming cloudflare but keep laptop instantaneous
-    if (useLowPerformance.value) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    } else {
-      const hasDownloads = batch.some((p) => !p.__fromCache);
-      if (hasDownloads) {
-        await new Promise((resolve) => setTimeout(resolve, 5));
-      } else if (i % 600 === 0) {
-        // Micro-yield to keep GUI responsive but extremely fast
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      }
+    console.log(`✅ Loaded ${loaded} photo textures`);
+
+    // Persist newly downloaded images (so future visits don't re-download)
+    try {
+      await textureManager.bulkCacheDownloadedImages(photosToLoad);
+      const stats = await textureManager.getCacheStats();
+      console.log(
+        `💾 2D IndexedDB cache: ${stats?.totalImages ?? 0} images stored`,
+      );
+    } catch (_) {
+      // Non-fatal
     }
+
+    // ── CRITICAL MEMORY FIX ──────────────────────────────────────────────
+    // Free the decoded HTMLImageElements held in downloadedImagesCache.
+    // With 5000 photos, these consume ~600 MB+ of JS heap memory and are no
+    // longer needed: Pixi textures are already created and cached in textureCache.
+    // Without this, browsers kill the tab on devices with < 4 GB RAM.
+    textureManager.freeSourceImageCache(photosToLoad);
+
+    // After the next render frame, Pixi has uploaded all textures to GPU.
+    // Free the intermediate Canvas elements used by downscaleSource() (~135 MB).
+    // Use a generous delay so Pixi has time to render & upload all textures.
+    setTimeout(() => {
+      textureManager.freeTextureCanvasSources();
+    }, 3000);
+
+    // Apply initial filter visibility
+    updateSpriteVisibility();
+
+    // Build spatial index for hi-res candidate selection.
+    buildHiResSpatialIndex();
+
+    // Ensure the pattern label is visible above sprites.
+    ensurePatternTagsLayer();
+    ensurePatternTag();
+
+    // After initial load, opportunistically upgrade if already zoomed in.
+    scheduleLodUpdate();
+    scheduleHiResUpdate();
+  } finally {
+    if (photoContainer.value) {
+      photoContainer.value.visible = true;
+    }
+    isLoadingTextures.value = false;
   }
-
-  isLoadingTextures.value = false;
-  console.log(`✅ Loaded ${loaded} photo textures`);
-
-  // Persist newly downloaded images (so future visits don't re-download)
-  try {
-    await textureManager.bulkCacheDownloadedImages(photosToLoad);
-    const stats = await textureManager.getCacheStats();
-    console.log(
-      `💾 2D IndexedDB cache: ${stats?.totalImages ?? 0} images stored`,
-    );
-  } catch (_) {
-    // Non-fatal
-  }
-
-  // ── CRITICAL MEMORY FIX ──────────────────────────────────────────────
-  // Free the decoded HTMLImageElements held in downloadedImagesCache.
-  // With 5000 photos, these consume ~600 MB+ of JS heap memory and are no
-  // longer needed: Pixi textures are already created and cached in textureCache.
-  // Without this, browsers kill the tab on devices with < 4 GB RAM.
-  textureManager.freeSourceImageCache(photosToLoad);
-
-  // After the next render frame, Pixi has uploaded all textures to GPU.
-  // Free the intermediate Canvas elements used by downscaleSource() (~135 MB).
-  // Use a generous delay so Pixi has time to render & upload all textures.
-  setTimeout(() => {
-    textureManager.freeTextureCanvasSources();
-  }, 3000);
-
-  // Apply initial filter visibility
-  updateSpriteVisibility();
-
-  // Build spatial index for hi-res candidate selection.
-  buildHiResSpatialIndex();
-
-  // Ensure the pattern label is visible above sprites.
-  ensurePatternTagsLayer();
-  ensurePatternTag();
-
-  // After initial load, opportunistically upgrade if already zoomed in.
-  scheduleLodUpdate();
-  scheduleHiResUpdate();
 };
 
 // Opacity mapping for text search stars
@@ -2537,8 +2562,8 @@ const onChunkChange = async (newChunk) => {
   } else {
     console.log("🧹 First load: loading all photos and textures");
 
-    // First load: full reload
-    await changeChunk(newChunk);
+    // First load: full reload passing current viewport limit
+    await loadAllPhotos(newChunk, false, photoLimit.value);
 
     // Frame the view as soon as we have positions (don't wait for textures)
     await nextTick();
@@ -2786,9 +2811,18 @@ const handleToolSelected = async (toolId, canvasId = null) => {
   closeToolSelector();
 };
 
+// Viewport limit change: full reload with new photo count
+const onViewportLimitChange = async () => {
+  // Full reload — fetching a different set of photos from backend
+  await loadAllPhotos(selectedChunk.value, false, photoLimit.value);
+  await nextTick();
+  resetView(false);
+  await loadPhotosToPixi();
+};
+
 // Retry load
 const retryLoad = async () => {
-  await loadAllPhotos(selectedChunk.value);
+  await loadAllPhotos(selectedChunk.value, false, photoLimit.value);
 
   // Frame immediately after positions are known
   await nextTick();
@@ -2920,13 +2954,22 @@ onMounted(async () => {
   startAnimationLoop();
 
   // Load photos
-  await loadAllPhotos(selectedChunk.value);
+  await loadAllPhotos(selectedChunk.value, false, photoLimit.value);
 
   // Frame the view as soon as we have positions (don't wait for textures)
   await nextTick();
   resetView(false);
 
   await loadPhotosToPixi();
+
+  // Show dismissible info message about the viewport limit (only once per session)
+  // if (!limitMessageShown.value && photos2D.value.length > 0) {
+  //   limitMessageShown.value = true;
+  //   message.info(
+  //     `Showing your ${photoLimit.value.toLocaleString()} most recent photos. Expand the viewport in the settings panel.`,
+  //     { duration: 9000, closable: true },
+  //   );
+  // }
 
   // Once store data is available, try hi-res promotion again.
   storePromise?.then(() => scheduleHiResUpdate());

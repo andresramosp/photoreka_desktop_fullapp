@@ -130,14 +130,27 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
     const ratioScore = clamp01(
       metrics.collisionRatio / AUTO_EXPAND_VERY_HIGH_COLLISION_RATIO,
     );
+
     const occDenom = Math.max(1, AUTO_EXPAND_VERY_HIGH_MAX_OCC - 1);
+
     const occScore = clamp01((metrics.maxOcc - 1) / occDenom);
 
-    // Use whichever indicates stronger crowding.
     const crowdingScore = Math.max(ratioScore, occScore);
+
+    const photoCount = photos.length;
+
+    // 2k fotos -> 0.2
+    // 10k fotos -> ~0.45
+    // 20k fotos -> ~0.60
+    // 50k fotos -> ~0.80
+    const dynamicMaxStrength = Math.min(
+      0.8,
+      0.2 + Math.log10(Math.max(2000, photoCount) / 2000) * 0.15,
+    );
+
     const eased = easeInExp01(crowdingScore);
 
-    return clamp01(eased) * AUTO_EXPAND_TARGET_STRENGTH;
+    return clamp01(eased * dynamicMaxStrength);
   };
 
   const applyLayout = (photos) => {
@@ -261,7 +274,7 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
   /**
    * Load photos from API with 2D coordinates
    */
-  const loadPhotos = async (chunkName) => {
+  const loadPhotos = async (chunkName, limit = 5000) => {
     try {
       let response;
 
@@ -271,6 +284,7 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
           chunkName,
           includeVisualAspects: true,
           outputDims: outputDims, // Always 2D
+          limit,
         });
       } else {
         // Normal authenticated mode
@@ -278,6 +292,7 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
           chunkName,
           includeVisualAspects: true,
           outputDims: outputDims, // Always 2D
+          limit,
         });
       }
 
@@ -291,13 +306,17 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
   /**
    * Main function to load all photos
    */
-  const loadAllPhotos = async (chunkName, reuseExisting = false) => {
+  const loadAllPhotos = async (
+    chunkName,
+    reuseExisting = false,
+    limit = 5000,
+  ) => {
     currentChunk.value = chunkName;
     isLoadingPositions.value = true;
     error.value = null;
 
     try {
-      const photos = await loadPhotos(chunkName);
+      const photos = await loadPhotos(chunkName, limit);
 
       // Check if photos array is empty
       if (!photos || photos.length === 0) {

@@ -161,7 +161,7 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
   ];
 
   // Función para cargar todas las fotos de una vez
-  const loadPhotos = async (chunkName) => {
+  const loadPhotos = async (chunkName, limit = 5000) => {
     try {
       let response;
 
@@ -170,6 +170,7 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
         response = await api.post(`/api/3d/catalog/${userId}`, {
           chunkName,
           includeVisualAspects: true,
+          limit,
         });
       } else {
         // Modo autenticado normal
@@ -177,6 +178,7 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
           chunkName,
           includeVisualAspects: true,
           outputDims: outputDims.value,
+          limit,
         });
       }
 
@@ -188,7 +190,11 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
   };
 
   // Función simplificada para cargar todas las fotos
-  const loadAllPhotos = async (chunkName, reuseExisting = false) => {
+  const loadAllPhotos = async (
+    chunkName,
+    reuseExisting = false,
+    limit = 5000,
+  ) => {
     // Actualizar currentChunk al principio
     currentChunk.value = chunkName;
 
@@ -196,7 +202,7 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
     error.value = null;
 
     try {
-      const photos = await loadPhotos(chunkName);
+      const photos = await loadPhotos(chunkName, limit);
 
       // Check if photos array is empty
       if (!photos || photos.length === 0) {

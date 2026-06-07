@@ -324,6 +324,14 @@
             </n-button>
             <n-button
               size="small"
+              type="warning"
+              :loading="imageHealthCheckLoading"
+              @click="runUserImageHealthCheck"
+            >
+              Run Health Imagen Check
+            </n-button>
+            <n-button
+              size="small"
               type="primary"
               :loading="retryLoading || isUserRetryRunning"
               :disabled="retryLoading || isUserRetryRunning"
@@ -348,6 +356,15 @@
       :report="healthReport"
       :error="healthError"
       @retry="runUserHealthCheck"
+    />
+
+    <ImageHealthReportModal
+      v-model:show="imageHealthModalVisible"
+      :title="`Image Health Check — ${selectedUser?.userName ?? ''}`"
+      :loading="imageHealthCheckLoading"
+      :report="imageHealthReport"
+      :error="imageHealthError"
+      @retry="runUserImageHealthCheck"
     />
 
     <!-- Repair Progress Modal -->
@@ -382,6 +399,8 @@ import { api, api_analyzer } from "../../utils/axios";
 import { io, type Socket } from "socket.io-client";
 import HealthReportModal from "../../components/admin/HealthReportModal.vue";
 import type { HealthReport } from "../../components/admin/HealthReportModal.vue";
+import ImageHealthReportModal from "../../components/admin/ImageHealthReportModal.vue";
+import type { UserImageHealthReport } from "../../components/admin/ImageHealthReportModal.vue";
 import RepairProgressModal from "../../components/admin/RepairProgressModal.vue";
 import type { RepairTaskInfo } from "../../components/admin/RepairProgressModal.vue";
 
@@ -427,6 +446,10 @@ const healthCheckLoading = ref(false);
 const healthModalVisible = ref(false);
 const healthReport = ref<HealthReport | null>(null);
 const healthError = ref(false);
+const imageHealthCheckLoading = ref(false);
+const imageHealthModalVisible = ref(false);
+const imageHealthReport = ref<UserImageHealthReport | null>(null);
+const imageHealthError = ref(false);
 const retryLoading = ref(false);
 
 // Global embeddings state
@@ -659,6 +682,24 @@ async function runUserHealthCheck() {
     healthError.value = true;
   } finally {
     healthCheckLoading.value = false;
+  }
+}
+
+async function runUserImageHealthCheck() {
+  if (!selectedUser.value) return;
+  imageHealthReport.value = null;
+  imageHealthError.value = false;
+  imageHealthCheckLoading.value = true;
+  imageHealthModalVisible.value = true;
+  try {
+    const { data } = await api_analyzer.post(
+      `/api/admin/health/users/${selectedUser.value.userId}/image-check`,
+    );
+    imageHealthReport.value = data.report;
+  } catch {
+    imageHealthError.value = true;
+  } finally {
+    imageHealthCheckLoading.value = false;
   }
 }
 

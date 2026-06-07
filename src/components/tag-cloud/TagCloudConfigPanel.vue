@@ -453,7 +453,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import { NIcon, NSwitch, NSlider, NTooltip, NSelect } from "naive-ui";
 import {
   SettingOutlined,
@@ -541,10 +541,35 @@ const toggleNavigationControls = () => {
 const LIMIT_VALUES = [1000, 5000, 10000, 20000];
 const MIN_PHOTO_COUNT_VALUES = [1, 5, 10, 50];
 const MAX_SEARCH_TAG_VALUES = [5, 10, 20, 35, 50];
+const TAG_LIMIT_STORAGE_KEY = "photoreka:tagCloud:limit";
+
+const isValidTagLimit = (value) => LIMIT_VALUES.includes(value);
+
+const readStoredTagLimit = () => {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(TAG_LIMIT_STORAGE_KEY);
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return isValidTagLimit(parsed) ? parsed : null;
+};
+
+const writeStoredTagLimit = (value) => {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(TAG_LIMIT_STORAGE_KEY, String(value));
+};
 
 const localMinPhotoCount = ref(props.minPhotoCount);
-const localLimit = ref(props.limit);
+const localLimit = ref(readStoredTagLimit() ?? props.limit);
 const localMaxSearchTags = ref(props.maxSearchTags);
+
+onMounted(() => {
+  const persisted = readStoredTagLimit();
+  if (persisted !== null && persisted !== props.limit) {
+    localLimit.value = persisted;
+    emit("update:limit", persisted);
+    emit("filters-changed");
+  }
+});
 
 watch(
   () => props.minPhotoCount,
@@ -583,6 +608,7 @@ const onMinPhotoCountChange = (index) => {
 
 const onLimitChange = (index) => {
   localLimit.value = LIMIT_VALUES[index];
+  writeStoredTagLimit(localLimit.value);
 };
 
 const onMaxSearchTagsChange = (index) => {

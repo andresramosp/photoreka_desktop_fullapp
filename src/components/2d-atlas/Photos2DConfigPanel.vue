@@ -58,6 +58,53 @@
         />
       </div>
 
+      <!-- Viewport Section -->
+      <div class="control-section">
+        <div class="section-toggle" style="cursor: default; margin-bottom: 7px">
+          <div style="display: flex; align-items: center; gap: 6px">
+            <n-icon size="16" color="var(--text-on-primary)">
+              <DatabaseOutlined />
+            </n-icon>
+            <span class="section-toggle-label">Viewport</span>
+          </div>
+        </div>
+        <div class="section-content">
+          <div class="control-item-full" @pointerup="emitPhotoLimit">
+            <div class="slider-header">
+              <div class="control-item-label">
+                <span>Max photos</span>
+                <n-tooltip trigger="hover" placement="top">
+                  <template #trigger>
+                    <n-icon
+                      size="12"
+                      color="var(--text-secondary)"
+                      class="info-icon-small"
+                    >
+                      <InfoCircleOutlined />
+                    </n-icon>
+                  </template>
+                  Maximum number of photos to load. Shows the most recent first.
+                  Lower values improve performance.
+                </n-tooltip>
+              </div>
+              <span class="slider-value">{{
+                localPhotoLimit.toLocaleString()
+              }}</span>
+            </div>
+            <n-slider
+              :value="getPhotoLimitSliderIndex(localPhotoLimit)"
+              @update:value="onPhotoLimitChange"
+              :min="0"
+              :max="2"
+              :step="1"
+              :marks="{ 0: '5k', 1: '10k', 2: '20k' }"
+              class="limit-slider"
+              @click.stop
+            />
+          </div>
+        </div>
+      </div>
+
       <!-- Patterns Section -->
       <div class="control-section">
         <div class="section-toggle" @click="togglePatternsSection">
@@ -411,7 +458,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import { NTooltip, NIcon, NSwitch, NSlider } from "naive-ui";
 import {
   CloseOutlined,
@@ -422,6 +469,7 @@ import {
   TagOutlined,
   TagsOutlined,
   CompassOutlined,
+  DatabaseOutlined,
 } from "@vicons/antd";
 import { AppsOutline } from "@vicons/ionicons5";
 import ClusteringTypeSection from "./sections/ClusteringTypeSection.vue";
@@ -511,6 +559,11 @@ const props = defineProps({
     type: [String, Number],
     default: null,
   },
+  // Viewport limit
+  photoLimit: {
+    type: Number,
+    default: 10000,
+  },
   // Tag beacons
   hasTagBeacons: {
     type: Boolean,
@@ -573,6 +626,8 @@ const emit = defineEmits([
   "update:tagBeaconsMaxBeacons",
   "update:tagBeaconsTopTags",
   "update:tagBeaconsMergeRadius",
+  "update:photoLimit",
+  "viewport-limit-change",
 ]);
 
 // Internal state
@@ -591,6 +646,60 @@ const expandedSection = ref(null);
 const clusteringSectionRef = ref(null);
 const showNavigationControls = ref(false);
 const showTagBeacons = ref(false);
+
+// ---------------------------------------------------------------------------
+// Viewport limit (max photos slider)
+// ---------------------------------------------------------------------------
+const PHOTO_LIMIT_VALUES = [5000, 10000, 20000];
+const PHOTO_LIMIT_STORAGE_KEY = "photoreka:atlas2d:photoLimit";
+
+const isValidPhotoLimit = (value) => PHOTO_LIMIT_VALUES.includes(value);
+
+const readStoredPhotoLimit = () => {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(PHOTO_LIMIT_STORAGE_KEY);
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return isValidPhotoLimit(parsed) ? parsed : null;
+};
+
+const writeStoredPhotoLimit = (value) => {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(PHOTO_LIMIT_STORAGE_KEY, String(value));
+};
+
+const localPhotoLimit = ref(readStoredPhotoLimit() ?? props.photoLimit);
+
+onMounted(() => {
+  const persisted = readStoredPhotoLimit();
+  if (persisted !== null && persisted !== props.photoLimit) {
+    localPhotoLimit.value = persisted;
+    emit("update:photoLimit", persisted);
+    emit("viewport-limit-change");
+  }
+});
+
+watch(
+  () => props.photoLimit,
+  (v) => {
+    localPhotoLimit.value = v;
+  },
+);
+
+const getPhotoLimitSliderIndex = (value) => {
+  const idx = PHOTO_LIMIT_VALUES.indexOf(value);
+  return idx >= 0 ? idx : 0;
+};
+
+const onPhotoLimitChange = (index) => {
+  localPhotoLimit.value = PHOTO_LIMIT_VALUES[index];
+  writeStoredPhotoLimit(localPhotoLimit.value);
+};
+
+const emitPhotoLimit = () => {
+  emit("update:photoLimit", localPhotoLimit.value);
+  emit("viewport-limit-change");
+};
 
 // Local state for artistic score filters (for counting active filters)
 const localArtisticScoreFilters = ref({ ...props.artisticScoreFilters });
@@ -963,5 +1072,53 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* Viewport limit slider */
+.section-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 5px;
+}
+
+.control-item-full {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.slider-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.control-item-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary, #9ca3af);
+}
+
+.slider-value {
+  font-size: 12px;
+  color: var(--text-secondary, #9ca3af);
+}
+
+.info-icon-small {
+  cursor: help;
+}
+
+.limit-slider {
+  --n-rail-color: rgba(255, 255, 255, 0.12);
+  --n-rail-color-hover: rgba(255, 255, 255, 0.2);
+  --n-fill-color: var(--primary-color, #3b82f6);
+  --n-fill-color-hover: var(--primary-color-hover, #2563eb);
+  --n-handle-color: var(--primary-color, #3b82f6);
+  --n-dot-color: rgba(255, 255, 255, 0.25);
+  --n-mark-font-size: 10px;
+  --n-mark-color: #6b7280;
 }
 </style>

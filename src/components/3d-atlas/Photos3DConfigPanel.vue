@@ -68,6 +68,64 @@
         </div>
       </div>
 
+      <!-- Viewport Section -->
+      <div class="control-section">
+        <div class="section-toggle" style="cursor: default; margin-bottom: 7px">
+          <div style="display: flex; align-items: center; gap: 6px">
+            <n-icon size="16">
+              <DatabaseOutlined />
+            </n-icon>
+            <span class="section-toggle-label">Viewport</span>
+          </div>
+        </div>
+        <div class="options-container" style="margin-top: 0">
+          <div class="control-item-full" @pointerup="emitPhotoLimit">
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 6px;
+              "
+            >
+              <div style="display: flex; align-items: center; gap: 4px">
+                <label class="control-label" style="margin: 0"
+                  >Max photos</label
+                >
+                <n-tooltip trigger="hover" placement="top">
+                  <template #trigger>
+                    <n-icon
+                      size="12"
+                      color="var(--text-secondary)"
+                      style="cursor: help"
+                    >
+                      <InfoCircleFilled />
+                    </n-icon>
+                  </template>
+                  Maximum number of photos to load. Shows the most recent first.
+                  Lower values improve performance.
+                </n-tooltip>
+              </div>
+              <span class="control-label" style="margin: 0">{{
+                localPhotoLimit.toLocaleString()
+              }}</span>
+            </div>
+            <div class="slider-container">
+              <n-slider
+                :value="getPhotoLimitSliderIndex(localPhotoLimit)"
+                @update:value="onPhotoLimitChange"
+                :min="0"
+                :max="2"
+                :step="1"
+                :marks="{ 0: '5k', 1: '10k', 2: '20k' }"
+                class="radial-slider"
+                @click.stop
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- More Filters Toggle -->
       <div class="control-section">
         <div class="section-toggle" @click="toggleMoreFilters">
@@ -802,7 +860,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import {
   NTooltip,
   NSelect,
@@ -820,6 +878,7 @@ import {
   TagsOutlined,
   CompassOutlined,
   InfoCircleOutlined,
+  DatabaseOutlined,
 } from "@vicons/antd";
 import { AppsOutline } from "@vicons/ionicons5";
 import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
@@ -945,6 +1004,11 @@ const props = defineProps({
     type: String,
     default: "Left-click on photos to fly to them",
   },
+  // Viewport limit
+  photoLimit: {
+    type: Number,
+    default: 10000,
+  },
 });
 
 // Emits
@@ -968,6 +1032,8 @@ const emit = defineEmits([
   "update:tagBeaconsMergeRadius",
   "update:selectByClick",
   "update:controlMode",
+  "update:photoLimit",
+  "viewport-limit-change",
   "chunk-change",
   "control-mode-change",
   "visual-aspects-change",
@@ -1162,6 +1228,60 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
 
 const handleSelectByClickChange = (value) => {
   emit("update:selectByClick", !value);
+};
+
+// ---------------------------------------------------------------------------
+// Viewport limit (max photos slider)
+// ---------------------------------------------------------------------------
+const PHOTO_LIMIT_VALUES = [5000, 10000, 20000];
+const PHOTO_LIMIT_STORAGE_KEY = "photoreka:atlas3d:photoLimit";
+
+const isValidPhotoLimit = (value) => PHOTO_LIMIT_VALUES.includes(value);
+
+const readStoredPhotoLimit = () => {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(PHOTO_LIMIT_STORAGE_KEY);
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return isValidPhotoLimit(parsed) ? parsed : null;
+};
+
+const writeStoredPhotoLimit = (value) => {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(PHOTO_LIMIT_STORAGE_KEY, String(value));
+};
+
+const localPhotoLimit = ref(readStoredPhotoLimit() ?? props.photoLimit);
+
+onMounted(() => {
+  const persisted = readStoredPhotoLimit();
+  if (persisted !== null && persisted !== props.photoLimit) {
+    localPhotoLimit.value = persisted;
+    emit("update:photoLimit", persisted);
+    emit("viewport-limit-change");
+  }
+});
+
+watch(
+  () => props.photoLimit,
+  (v) => {
+    localPhotoLimit.value = v;
+  },
+);
+
+const getPhotoLimitSliderIndex = (value) => {
+  const idx = PHOTO_LIMIT_VALUES.indexOf(value);
+  return idx >= 0 ? idx : 0;
+};
+
+const onPhotoLimitChange = (index) => {
+  localPhotoLimit.value = PHOTO_LIMIT_VALUES[index];
+  writeStoredPhotoLimit(localPhotoLimit.value);
+};
+
+const emitPhotoLimit = () => {
+  emit("update:photoLimit", localPhotoLimit.value);
+  emit("viewport-limit-change");
 };
 </script>
 

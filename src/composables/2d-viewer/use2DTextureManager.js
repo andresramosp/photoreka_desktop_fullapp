@@ -246,8 +246,14 @@ export function use2DTextureManager(
         imageBlob = null;
       }
 
+      const maxSide = useLowPerformance ? 96 : 128;
       const imageElement = imageBlob
-        ? await blobToImageElement(imageBlob)
+        ? typeof createImageBitmap !== "undefined"
+          ? await createImageBitmap(imageBlob, {
+              resizeWidth: maxSide,
+              resizeQuality: "medium",
+            })
+          : await blobToImageElement(imageBlob)
         : await loadImageElement(imageUrl);
 
       downloadedImagesCache.set(cacheKey(photoObj.id, q), imageElement);
@@ -373,15 +379,28 @@ export function use2DTextureManager(
           loaderSubtitle.value = `Loading ${cachedBlobs.size} photos from cache...`;
           cachedPhotoIds.value = new Set(cachedBlobs.keys());
 
-          // Convert Blobs to HTMLImageElements in parallel batches to optimize speed and responsiveness
+          const maxSide = useLowPerformance ? 96 : 128;
           const blobEntries = Array.from(cachedBlobs.entries());
-          const decodeLimit = 120; // decode 120 images in parallel at a time
+
+          // ImageBitmap decoding is native, asynchronous and performed on background browser threads.
+          // This allows us to scale options.resizeWidth directly on load and avoid overhead.
+          const decodeLimit = 250;
           for (let i = 0; i < blobEntries.length; i += decodeLimit) {
             const chunk = blobEntries.slice(i, i + decodeLimit);
             await Promise.all(
               chunk.map(async ([photoId, blob]) => {
                 try {
-                  const img = await blobToImageElement(blob);
+                  const options = {};
+                  if (typeof createImageBitmap !== "undefined") {
+                    options.resizeWidth = maxSide;
+                    options.resizeQuality = "medium";
+                  }
+
+                  const img =
+                    typeof createImageBitmap !== "undefined"
+                      ? await createImageBitmap(blob, options)
+                      : await blobToImageElement(blob);
+
                   const thumbKey = cacheKey(photoId, "low");
                   downloadedImagesCache.set(thumbKey, img);
 
@@ -685,7 +704,11 @@ export function use2DTextureManager(
     if (!photoId) return;
     // Remove all quality variants of this photo's source image
     for (const q of ["low", "mid", "high", "original"]) {
-      downloadedImagesCache.delete(cacheKey(photoId, q));
+      const key = cacheKey(photoId, q);
+      // IMPORTANT: Do not call ImageBitmap.close() here.
+      // Pixi/WebGL may still be uploading from this source and closing it early
+      // causes: "texSubImage2D: The source data has been detached".
+      downloadedImagesCache.delete(key);
     }
   };
 
@@ -701,6 +724,9 @@ export function use2DTextureManager(
    */
   const freeSourceImageCache = (photos) => {
     // Clear the main in-memory image cache (5000 decoded bitmaps ≈ 600 MB)
+    // IMPORTANT: Do not call ImageBitmap.close() here.
+    // Textures may still reference these sources internally in Pixi/WebGL.
+    // Let browser/Pixi release memory through GC and texture destruction lifecycle.
     downloadedImagesCache.clear();
 
     // Remove duplicate references hanging off photo objects

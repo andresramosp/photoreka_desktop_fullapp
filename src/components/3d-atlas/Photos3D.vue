@@ -69,6 +69,8 @@
       @time-range-change="onTimeRangeChange"
       @dimensions-change="onDimensionsChange"
       @inflate-factor-change="onInflateFactorChange"
+      v-model:photoLimit="photoLimit"
+      @viewport-limit-change="onViewportLimitChange"
     />
 
     <!-- Floating Tags Display (individual floating tags) -->
@@ -307,6 +309,22 @@ const {
   reapplyLayout,
   reset,
 } = use3DPhotos(props.catalogUserId, useLowPerformance.value);
+
+// Viewport limit: how many photos to load from the backend (most recent first).
+// Pre-read from the same localStorage key used by Photos3DConfigPanel so that the
+// panel's onMounted finds props.photoLimit === persisted and won't emit a second load.
+const _PHOTO_LIMIT_VALID_3D = [5000, 10000, 20000];
+const _storedPhotoLimit3D =
+  typeof window !== "undefined"
+    ? Number(window.localStorage.getItem("photoreka:atlas3d:photoLimit"))
+    : 0;
+const photoLimit = ref(
+  _PHOTO_LIMIT_VALID_3D.includes(_storedPhotoLimit3D)
+    ? _storedPhotoLimit3D
+    : 5000,
+);
+// Track whether the limit-info message has been shown this session
+const limitMessageShown = ref(false);
 
 watch(
   gridRelaxationEnabled,
@@ -1957,12 +1975,27 @@ const onDimensionsChange = async (newDims) => {
   await changeDimensions(newDims);
 };
 
+// Viewport limit change: full reload with new photo count
+const onViewportLimitChange = async () => {
+  loaderTitle.value = "Building stage";
+  loadingProgress.value = 0;
+  showLoader();
+
+  // Full reload — fetch a different set of photos from backend
+  visiblePhotos.value = [];
+  originalPositions.value = [];
+  textureQueue.value = [];
+  queuedIds.clear();
+
+  await loadAllPhotos(currentChunk.value, false, photoLimit.value);
+};
+
 // Función de retry
 const retryLoad = async () => {
   reset();
   showLoader();
   loaderTitle.value = "Building stage";
-  await loadAllPhotos(currentChunk.value);
+  await loadAllPhotos(currentChunk.value, false, photoLimit.value);
 };
 
 // Función de animación
@@ -3192,7 +3225,16 @@ onMounted(async () => {
       currentChunk.value = initialChunk;
     }
     loaderTitle.value = "Building stage";
-    await loadAllPhotos(initialChunk);
+    await loadAllPhotos(initialChunk, false, photoLimit.value);
+
+    // Show dismissible info message about the viewport limit (only once per session)
+    // if (!limitMessageShown.value && photos3D.value.length > 0) {
+    //   limitMessageShown.value = true;
+    //   message.info(
+    //     `Showing your ${photoLimit.value.toLocaleString()} most recent photos. Expand the viewport in the settings panel.`,
+    //     { duration: 9000, closable: true },
+    //   );
+    // }
 
     // Load photo from query params if present (e.g., ?source=lightroom&ids=123)
     // This allows Lightroom to deep-link directly to a photo in the 3D Atlas
