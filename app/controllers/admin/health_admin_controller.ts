@@ -29,6 +29,18 @@ export default class HealthAdminController {
     }
   }
 
+  async userImageCheck({ params, response }: HttpContext) {
+    try {
+      const report = await AdminHealthService.userImageHealthCheck(Number(params.id))
+      return response.ok({ report })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to run user image health check',
+        error: error.message,
+      })
+    }
+  }
+
   async userRetry({ params, response }: HttpContext) {
     try {
       const result = await AdminHealthService.userRetry(Number(params.id))

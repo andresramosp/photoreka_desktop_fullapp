@@ -10,6 +10,8 @@ import { GlobalEmbeddingsTagsTask } from '#models/analyzer/globalEmbeddingsTagsT
 import PhotoImageService from '#services/photo_image_service'
 import ModelsService from '#services/models_service'
 import HealthRepairTracker from '#services/admin/health_repair_tracker'
+import pLimit from 'p-limit'
+import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3'
 
 export interface UserHealthRow {
   userId: number
@@ -36,7 +38,44 @@ export interface HealthOverview {
   users: UserHealthRow[]
 }
 
+export type ImageCheckStatus = 'missing' | 'timeout' | 'error'
+
+export interface UserImageHealthRow {
+  photoId: number
+  thumbnailName: string
+  originalFileName: string | null
+  createdAt: string | null
+  deletedAt: string | null
+  confirmed: boolean | null
+  checkStatus: ImageCheckStatus
+  httpStatus: number | null
+  bytesReceived: number
+  latencyMs: number
+  error: string | null
+}
+
+export interface UserImageHealthReport {
+  userId: number
+  totalPhotos: number
+  healthyPhotos: number
+  unhealthyPhotos: number
+  checkedAt: string
+  unhealthyRows: UserImageHealthRow[]
+}
+
 export default class AdminHealthService {
+  private static readonly IMAGE_CHECK_BATCH_SIZE = 400
+  private static readonly IMAGE_CHECK_CONCURRENCY = 20
+  private static readonly IMAGE_CHECK_TIMEOUT_MS = 9000
+  private static readonly r2Client = new S3Client({
+    region: 'auto',
+    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY!,
+      secretAccessKey: process.env.R2_SECRET_KEY!,
+    },
+  })
+
   /**
    * Lightweight overview — single query on photos table + counts on tags/chunks
    */
@@ -185,6 +224,217 @@ export default class AdminHealthService {
       healthyPhotos,
       unhealthyPhotos: photos.length - healthyPhotos,
       photos,
+    }
+  }
+
+  /**
+   * Image presence check for a user.
+   * Includes soft-deleted photos and checks only thumbnail bytes from image worker.
+   * Returns only unhealthy rows to keep payload lightweight.
+   */
+  static async userImageHealthCheck(userId: number): Promise<UserImageHealthReport> {
+    const photos = await db
+      .from('photos')
+      .where('user_id', userId)
+      .select([
+        'id',
+        'thumbnail_name',
+        'original_file_name',
+        'created_at',
+        'deleted_at',
+        'confirmed',
+      ])
+      .orderBy('id', 'asc')
+
+    if (photos.length === 0) {
+      return {
+        userId,
+        totalPhotos: 0,
+        healthyPhotos: 0,
+        unhealthyPhotos: 0,
+        checkedAt: new Date().toISOString(),
+        unhealthyRows: [],
+      }
+    }
+
+    const limit = pLimit(AdminHealthService.IMAGE_CHECK_CONCURRENCY)
+    const unhealthyRows: UserImageHealthRow[] = []
+    let healthyPhotos = 0
+
+    for (let i = 0; i < photos.length; i += AdminHealthService.IMAGE_CHECK_BATCH_SIZE) {
+      const batch = photos.slice(i, i + AdminHealthService.IMAGE_CHECK_BATCH_SIZE)
+
+      const checks = await Promise.all(
+        batch.map((row) =>
+          limit(async () => {
+            const startedAt = Date.now()
+            const thumbnailName = row.thumbnail_name as string | null
+
+            if (!thumbnailName) {
+              return {
+                ok: false,
+                row: {
+                  photoId: Number(row.id),
+                  thumbnailName: '',
+                  originalFileName: row.original_file_name ?? null,
+                  createdAt: row.created_at ? String(row.created_at) : null,
+                  deletedAt: row.deleted_at ? String(row.deleted_at) : null,
+                  confirmed: row.confirmed ?? null,
+                  checkStatus: 'error' as const,
+                  httpStatus: null,
+                  bytesReceived: 0,
+                  latencyMs: Date.now() - startedAt,
+                  error: 'Missing thumbnail_name in DB',
+                } as UserImageHealthRow,
+              }
+            }
+
+            const check = await AdminHealthService.checkThumbnailBytes(thumbnailName)
+
+            if (check.ok) {
+              return { ok: true, row: null }
+            }
+
+            return {
+              ok: false,
+              row: {
+                photoId: Number(row.id),
+                thumbnailName,
+                originalFileName: row.original_file_name ?? null,
+                createdAt: row.created_at ? String(row.created_at) : null,
+                deletedAt: row.deleted_at ? String(row.deleted_at) : null,
+                confirmed: row.confirmed ?? null,
+                checkStatus: check.checkStatus,
+                httpStatus: check.httpStatus,
+                bytesReceived: check.bytesReceived,
+                latencyMs: check.latencyMs,
+                error: check.error,
+              } as UserImageHealthRow,
+            }
+          })
+        )
+      )
+
+      for (const result of checks) {
+        if (result.ok) {
+          healthyPhotos += 1
+          continue
+        }
+        if (result.row) {
+          unhealthyRows.push(result.row)
+        }
+      }
+    }
+
+    return {
+      userId,
+      totalPhotos: photos.length,
+      healthyPhotos,
+      unhealthyPhotos: unhealthyRows.length,
+      checkedAt: new Date().toISOString(),
+      unhealthyRows,
+    }
+  }
+
+  private static async checkThumbnailBytes(thumbnailName: string): Promise<{
+    ok: boolean
+    checkStatus: ImageCheckStatus | 'ok'
+    httpStatus: number | null
+    bytesReceived: number
+    latencyMs: number
+    error: string | null
+  }> {
+    const totalStart = Date.now()
+    const bucket = process.env.R2_BUCKET
+
+    if (!bucket) {
+      return {
+        ok: false,
+        checkStatus: 'error',
+        httpStatus: null,
+        bytesReceived: 0,
+        latencyMs: 0,
+        error: 'R2_BUCKET is not configured',
+      }
+    }
+
+    type AttemptResult = {
+      ok: boolean
+      definitive: boolean
+      checkStatus: ImageCheckStatus | 'ok'
+      httpStatus: number | null
+      bytesReceived: number
+      error: string | null
+    }
+
+    const attempt = async (): Promise<AttemptResult> => {
+      try {
+        const command = new GetObjectCommand({
+          Bucket: bucket,
+          Key: thumbnailName,
+          Range: 'bytes=0-0',
+        })
+        const response = await AdminHealthService.withTimeout(
+          AdminHealthService.r2Client.send(command),
+          AdminHealthService.IMAGE_CHECK_TIMEOUT_MS
+        )
+
+        const status = response?.$metadata?.httpStatusCode ?? null
+        const bytes = response?.Body
+          ? await AdminHealthService.withTimeout(response.Body.transformToByteArray(), 5000)
+          : new Uint8Array()
+        const bytesReceived = bytes?.length ?? 0
+        const ok = status !== null && status >= 200 && status < 300 && bytesReceived > 0
+
+        return {
+          ok,
+          definitive: true,
+          checkStatus: ok ? 'ok' : 'missing',
+          httpStatus: status,
+          bytesReceived,
+          error: ok ? null : `HTTP ${status ?? 'unknown'} – no bytes received`,
+        }
+      } catch (err: any) {
+        const httpStatus = err?.$metadata?.httpStatusCode ?? null
+        const isNoSuchKey =
+          err?.name === 'NoSuchKey' || err?.Code === 'NoSuchKey' || httpStatus === 404
+        const isTimeout = (err?.message as string | undefined)?.startsWith('Timeout after') ?? false
+
+        return {
+          ok: false,
+          // 404/NoSuchKey is definitive — no retry will help
+          definitive: isNoSuchKey,
+          checkStatus: isTimeout ? 'timeout' : isNoSuchKey ? 'missing' : 'error',
+          httpStatus,
+          bytesReceived: 0,
+          error: err?.message || 'Request failed',
+        }
+      }
+    }
+
+    let result = await attempt()
+
+    // Retry once for transient failures (timeout, network, 5xx…)
+    // Do NOT retry definitive 404/NoSuchKey — it won't change
+    if (!result.ok && !result.definitive) {
+      await new Promise((resolve) => setTimeout(resolve, 700))
+      result = await attempt()
+    }
+
+    const { definitive: _d, ...rest } = result
+    return { ...rest, latencyMs: Date.now() - totalStart }
+  }
+
+  private static async withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+    let timeoutId: NodeJS.Timeout | null = null
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error(`Timeout after ${timeoutMs}ms`)), timeoutMs)
+    })
+
+    try {
+      return await Promise.race([promise, timeoutPromise])
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId)
     }
   }
 

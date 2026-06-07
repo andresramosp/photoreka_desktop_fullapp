@@ -37,11 +37,11 @@ export default {
       })
     }
 
-    return serveFromR2(url, env)
+    return serveFromR2(request, url, env)
   },
 }
 
-async function serveFromR2(url, env) {
+async function serveFromR2(request, url, env) {
   const key = url.pathname.slice(1)
   if (!key) {
     return new Response('Not found', {
@@ -50,7 +50,25 @@ async function serveFromR2(url, env) {
     })
   }
 
-  const object = await env.IMAGES.get(key)
+  const bypassCache =
+    url.searchParams.get('nocache') === '1' || request.headers.get('x-photoreka-health-check') === '1'
+
+  const rangeHeader = request.headers.get('Range') || ''
+  const rangeMatch = rangeHeader.match(/^bytes=(\d+)-(\d+)?$/)
+  const getOptions = {}
+
+  if (rangeMatch) {
+    const start = Number(rangeMatch[1])
+    const end = rangeMatch[2] ? Number(rangeMatch[2]) : start
+    if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
+      getOptions.range = {
+        offset: start,
+        length: end - start + 1,
+      }
+    }
+  }
+
+  const object = await env.IMAGES.get(key, getOptions)
   if (!object) {
     return new Response('Not found', {
       status: 404,
@@ -58,11 +76,26 @@ async function serveFromR2(url, env) {
     })
   }
 
+  const baseHeaders = {
+    ...corsHeaders(),
+    'Content-Type': object.httpMetadata?.contentType || 'image/jpeg',
+  }
+
+  if (bypassCache) {
+    baseHeaders['Cache-Control'] = 'private, no-store, no-cache, must-revalidate'
+    baseHeaders['CDN-Cache-Control'] = 'no-store'
+    baseHeaders['Cloudflare-CDN-Cache-Control'] = 'no-store'
+    baseHeaders['Pragma'] = 'no-cache'
+    baseHeaders['Expires'] = '0'
+    baseHeaders['X-Photoreka-Bypass-Cache'] = '1'
+  } else {
+    baseHeaders['Cache-Control'] = 'public, max-age=31536000, immutable'
+  }
+
   return new Response(object.body, {
+    status: rangeMatch ? 206 : 200,
     headers: {
-      ...corsHeaders(),
-      'Content-Type': object.httpMetadata?.contentType || 'image/jpeg',
-      'Cache-Control': 'public, max-age=31536000, immutable',
+      ...baseHeaders,
     },
   })
 }

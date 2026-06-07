@@ -535,6 +535,10 @@ router
       'resetFreeRuns',
     ])
     router.post('/api/admin/health/users/:id/check', [HealthAdminController, 'userCheck'])
+    router.post('/api/admin/health/users/:id/image-check', [
+      HealthAdminController,
+      'userImageCheck',
+    ])
     router.post('/api/admin/health/users/:id/retry', [HealthAdminController, 'userRetry'])
     router.get('/api/admin/health/global-embeddings', [
       HealthAdminController,

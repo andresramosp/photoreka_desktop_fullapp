@@ -128,13 +128,6 @@ export default class CatalogController {
   }
 
   /**
-   * Invalida cache del usuario
-   */
-  private async invalidateUserCache(userId: string) {
-    await CacheInvalidationService.onPhotoListChanged(userId)
-  }
-
-  /**
    * Normaliza una lista de IDs de foto para validaciones de ownership.
    */
   private normalizePhotoIds(rawIds: unknown): number[] {
@@ -239,7 +232,7 @@ export default class CatalogController {
         // source,
       })
 
-      await this.invalidateUserCache(userId)
+      await CacheInvalidationService.onPhotoListChanged(userId)
 
       return response.ok({
         uploadUrl,
@@ -416,10 +409,10 @@ export default class CatalogController {
 
       // Mantener la más sana (última), borrar el resto
       const toDelete = sorted.slice(0, -1)
-      const deleted: number[] = []
-      for (const photo of toDelete) {
-        await photoManager.deletePhotos([photo.id], userId)
-        deleted.push(photo.id)
+      const deleted = toDelete.map((photo) => photo.id)
+
+      if (deleted.length > 0) {
+        await photoManager.deletePhotos(deleted, userId)
       }
 
       return response.ok({
@@ -494,7 +487,7 @@ export default class CatalogController {
         await descriptionChunk.save()
       }
 
-      await this.invalidateUserCache(userId)
+      await CacheInvalidationService.onPhotoListChanged(userId)
 
       return response.ok({
         message: 'Nota guardada exitosamente',
@@ -626,9 +619,11 @@ export default class CatalogController {
 
       // Delete the source lightbox photo through PhotoManager so uploaded
       // photos are hard-deleted quickly in background (R2 + DB cleanup).
+
       await new PhotoManager().deletePhotos([newPhoto.id], userId)
 
-      await this.invalidateUserCache(userId)
+      // Swap mantiene IDs pero cambia media/URLs: invalida tambien caches dependientes de media.
+      await CacheInvalidationService.onPhotoListChanged(userId)
 
       return response.ok({
         message: 'Photos swapped successfully',

@@ -792,6 +792,28 @@ export default class SearchTextService {
    * Matchea si el tag buscado está contenido en el tag de la foto (perro -> perro grande)
    * pero no al revés (perro grande NO matchea con perro)
    */
+  // @withCache({
+  //   provider: 'redis',
+  //   ttl: 60 * 60 * 12,
+  //   key: (
+  //     includedTags: string[],
+  //     excludedTags: string[],
+  //     userId: string | number,
+  //     mode: 'AND' | 'OR' = 'AND',
+  //     semantic: boolean = false,
+  //     limit?: number | null
+  //   ) => {
+  //     const normalize = (arr: string[] = []) =>
+  //       arr
+  //         .map((t) => t.toLowerCase().trim())
+  //         .filter(Boolean)
+  //         .sort()
+  //     const included = normalize(includedTags)
+  //     const excluded = normalize(excludedTags)
+  //     const lim = typeof limit === 'number' ? limit : 'all'
+  //     return `searchByTagsDirect:${userId}:${mode}:${semantic ? '1' : '0'}:${lim}:${JSON.stringify(included)}:${JSON.stringify(excluded)}`
+  //   },
+  // })
   public async searchByTagsDirect(
     includedTags: string[],
     excludedTags: string[],
