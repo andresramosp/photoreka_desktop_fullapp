@@ -321,6 +321,7 @@ import {
 } from "@vicons/ionicons5";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useIsMobile } from "@/composables/useIsMobile";
+import { useBackgroundImageCache } from "@/composables/useBackgroundImageCache.js";
 
 interface PhotoInfo {
   id: string;
@@ -385,6 +386,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<Emits>();
 const { getScoreBgColor } = useArtisticScores();
+const { scheduleBackgroundCache } = useBackgroundImageCache();
 
 // Mobile selection composable
 const {
@@ -476,6 +478,10 @@ const swapPhoto = () => {
 
 const onImageLoad = () => {
   imageLoaded.value = true;
+  scheduleBackgroundCache(
+    props.photo.id,
+    props.photo.thumbnailUrl || props.photo.url,
+  );
 };
 
 const onImageError = () => {

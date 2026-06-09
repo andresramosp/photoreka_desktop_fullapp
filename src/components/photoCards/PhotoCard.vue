@@ -251,9 +251,11 @@ import {
 
 import { usePhotoScored } from "@/composables/usePhotoScored.js";
 import { InfoCircleFilled } from "@vicons/antd";
+import { useBackgroundImageCache } from "@/composables/useBackgroundImageCache.js";
 
 // Photo scoring composable
 const { computePhotoStars, shouldShowLowRelevanceIcon } = usePhotoScored();
+const { scheduleBackgroundCache } = useBackgroundImageCache();
 
 // Calcula la cantidad de estrellas a mostrar (1-3) usando matchScore o labelScore
 const computedStars = computed(() => {
@@ -495,6 +497,10 @@ const toggleSelection = () => {
 
 const onImageLoad = () => {
   imageLoaded.value = true;
+  scheduleBackgroundCache(
+    props.photo.id,
+    props.photo.thumbnailUrl || props.photo.url,
+  );
 };
 
 const onImageError = () => {

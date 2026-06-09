@@ -306,6 +306,7 @@ import { useTheme } from "@/composables/useTheme.js";
 import { isMobileDevice } from "@/utils/utils.js";
 import { api } from "@/utils/axios";
 import { usePhotoScored } from "@/composables/usePhotoScored.js";
+import { use2DLayoutCache } from "@/composables/2d-viewer/use2DLayoutCache.js";
 
 // Props
 const props = defineProps({
@@ -324,6 +325,7 @@ const message = useMessage();
 const router = useRouter();
 const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
 const { computePhotoStars } = usePhotoScored();
+const { saveLayoutToCache } = use2DLayoutCache();
 const {
   isProcessing: isProcessingTool,
   showToolSelector,
@@ -3110,6 +3112,17 @@ watch(gridSnapToGrid, () => {
 watch(
   () => photos2D.value,
   () => {
+    // Save to dashboard cache if not in playground mode
+    if (
+      !props.isPlayground &&
+      !props.catalogUserId &&
+      userStore.user?.id &&
+      photos2D.value &&
+      photos2D.value.length > 0
+    ) {
+      saveLayoutToCache(photos2D.value, selectedChunk.value, userStore.user.id);
+    }
+
     if (isTransitioning.value) return;
     ensurePatternTag();
 

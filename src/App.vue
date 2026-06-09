@@ -204,8 +204,13 @@ import AssistantChatWidget from "./components/AssistantChatWidget.vue";
 import LightroomModal from "./components/LightroomModal.vue";
 import { useAssistantChatStore } from "@/stores/assistantChat.js";
 import { useWarmUp } from "@/composables/useWarmUp";
+import { useProactiveCacheSync } from "@/composables/useProactiveCacheSync.js";
 
 const { ensureWarmUp } = useWarmUp();
+
+// Pre-populate the IndexedDB image cache in the background.
+// Runs during browser idle time so it never competes with UI work.
+// useProactiveCacheSync();
 
 // LR Plugin update notification
 const LR_PLUGIN_VERSION = import.meta.env.VITE_LR_PLUGIN_VERSION ?? null;
