@@ -2,6 +2,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import Collection from '#models/collection'
 import Photo from '#models/photo'
 import { inject } from '@adonisjs/core'
+import { DateTime } from 'luxon'
 
 @inject()
 export default class CollectionsController {
@@ -16,7 +17,7 @@ export default class CollectionsController {
       const collections = await Collection.query()
         .where('userId', user.id)
         .preload('photos')
-        .orderBy('createdAt', 'desc')
+        .orderBy('updatedAt', 'desc')
 
       // Formatear la respuesta para incluir información básica de las fotos
       const formattedCollections = collections.map((collection) => ({
@@ -277,6 +278,8 @@ export default class CollectionsController {
 
       // Usar la relación many-to-many para asociar las nuevas fotos
       await collection.related('photos').attach(newPhotoIds)
+      collection.updatedAt = DateTime.now()
+      await collection.save()
 
       return response.ok({
         message: `${newPhotoIds.length} photos added to collection`,
@@ -346,6 +349,8 @@ export default class CollectionsController {
 
       // Usar la relación many-to-many para desasociar las fotos
       await collection.related('photos').detach(photoIds)
+      collection.updatedAt = DateTime.now()
+      await collection.save()
 
       return response.ok({
         message: `${photoIds.length} photos removed from collection`,

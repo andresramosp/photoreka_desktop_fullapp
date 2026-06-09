@@ -4,6 +4,7 @@ import SeriesSet from '#models/series_set'
 import Photo from '#models/photo'
 import db from '@adonisjs/lucid/services/db'
 import { inject } from '@adonisjs/core'
+import { DateTime } from 'luxon'
 
 @inject()
 export default class SeriesController {
@@ -20,7 +21,7 @@ export default class SeriesController {
         .preload('photos', (query) => {
           query.orderBy('series_photos.order', 'asc')
         })
-        .orderBy('createdAt', 'desc')
+        .orderBy('updatedAt', 'desc')
 
       // Formatear la respuesta para incluir información básica de las fotos con orden
       const formattedSeries = seriesList.map((series) => ({
@@ -397,6 +398,8 @@ export default class SeriesController {
 
       // Usar la relación many-to-many para asociar las nuevas fotos
       await series.related('photos').attach(photosWithOrder)
+      series.updatedAt = DateTime.now()
+      await series.save()
 
       return response.ok({
         message: `${newPhotoIds.length} photos added to series`,
@@ -430,6 +433,8 @@ export default class SeriesController {
 
       // Usar la relación many-to-many para desasociar las fotos
       await series.related('photos').detach(photoIds)
+      series.updatedAt = DateTime.now()
+      await series.save()
 
       return response.ok({
         message: `${photoIds.length} photos removed from series`,
@@ -478,6 +483,9 @@ export default class SeriesController {
           .where('photo_id', photo.photoId)
           .update({ order: photo.order })
       }
+
+      series.updatedAt = DateTime.now()
+      await series.save()
 
       // Cargar la serie actualizada con sus fotos ordenadas
       await series.load('photos', (query) => {
@@ -572,6 +580,9 @@ export default class SeriesController {
           .where('photo_id', orderedPhotos[i].id)
           .update({ order: i })
       }
+
+      series.updatedAt = DateTime.now()
+      await series.save()
 
       // Recargar la serie con el nuevo orden
       await series.load('photos', (query) => {
