@@ -24,6 +24,13 @@
             to:
           </p>
 
+          <n-input
+            v-model:value="collectionSearch"
+            placeholder="Search collections by name..."
+            clearable
+            class="search-input"
+          />
+
           <div v-if="isLoadingCollections" class="loading-state">
             <n-spin size="medium" />
             <span>Loading collections...</span>
@@ -55,9 +62,16 @@
               <p>No collections yet. Create your first one above.</p>
             </div>
 
+            <div
+              v-else-if="filteredCollections.length === 0"
+              class="empty-list-message"
+            >
+              <p>No collections found with that name.</p>
+            </div>
+
             <!-- Existing Collections -->
             <div
-              v-for="collection in collections"
+              v-for="collection in filteredCollections"
               :key="collection.id"
               class="collection-item"
               :class="{ selected: selectedCollection?.id === collection.id }"
@@ -83,6 +97,13 @@
             }}
             to:
           </p>
+
+          <n-input
+            v-model:value="seriesSearch"
+            placeholder="Search series by name..."
+            clearable
+            class="search-input"
+          />
 
           <div v-if="isLoadingSeries" class="loading-state">
             <n-spin size="medium" />
@@ -115,9 +136,16 @@
               <p>No series yet. Create your first one above.</p>
             </div>
 
+            <div
+              v-else-if="filteredSeries.length === 0"
+              class="empty-list-message"
+            >
+              <p>No series found with that name.</p>
+            </div>
+
             <!-- Existing Series -->
             <div
-              v-for="series in seriesList"
+              v-for="series in filteredSeries"
               :key="series.id"
               class="collection-item"
               :class="{ selected: selectedSeries?.id === series.id }"
@@ -245,6 +273,8 @@ const selectedSeries = ref(null);
 const createDialogVisible = ref(false);
 const createDialogType = ref("collection"); // 'collection' or 'series'
 const formRef = ref(null);
+const collectionSearch = ref("");
+const seriesSearch = ref("");
 
 // Form data for creating new collection/series
 const formData = ref({
@@ -266,6 +296,27 @@ const isLoadingCollections = computed(() => collectionsStore.isLoading);
 const seriesList = computed(() => seriesStore.allSeries);
 const isLoadingSeries = computed(() => seriesStore.isLoading);
 const isSeriesAvailable = computed(() => isToolAvailable("series"));
+const filteredCollections = computed(() => {
+  const term = collectionSearch.value.trim().toLowerCase();
+  if (!term) {
+    return collections.value;
+  }
+
+  return collections.value.filter((collection) =>
+    (collection.name || "").toLowerCase().includes(term),
+  );
+});
+const filteredSeries = computed(() => {
+  const term = seriesSearch.value.trim().toLowerCase();
+  if (!term) {
+    return seriesList.value;
+  }
+
+  return seriesList.value.filter((series) => {
+    const seriesName = (series.name || series.title || "").toLowerCase();
+    return seriesName.includes(term);
+  });
+});
 
 // Get photo IDs ordered by horizontal position (for series)
 // Always orders by X position (left to right) when positions are available
@@ -306,6 +357,8 @@ watch(
     if (newShow) {
       selectedCollection.value = null;
       selectedSeries.value = null;
+      collectionSearch.value = "";
+      seriesSearch.value = "";
       loadData();
     }
   },
@@ -620,6 +673,8 @@ const handleCancel = () => {
   showModal.value = false;
   selectedCollection.value = null;
   selectedSeries.value = null;
+  collectionSearch.value = "";
+  seriesSearch.value = "";
   createDialogVisible.value = false;
   formData.value = { title: "", description: "" };
   emit("cancel");
@@ -637,6 +692,10 @@ const handleCancel = () => {
   margin-bottom: 20px;
   margin-top: 16px;
   font-size: 14px;
+}
+
+.search-input {
+  margin-bottom: 12px;
 }
 
 .loading-state {
@@ -666,6 +725,7 @@ const handleCancel = () => {
 }
 
 .collections-list {
+  min-height: 300px;
   max-height: 300px;
   overflow-y: auto;
   border: 1px solid #2c2c32;
