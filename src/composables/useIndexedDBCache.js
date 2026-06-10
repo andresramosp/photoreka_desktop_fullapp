@@ -48,11 +48,30 @@ const initDB = async () => {
  * Convert image URL to Blob
  */
 const urlToBlob = async (url) => {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch image: ${response.statusText}`);
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      const error = new Error(
+        `Failed to fetch image: ${response.status} ${response.statusText}`,
+      );
+      error.status = response.status;
+      error.isHttpError = true;
+      error.isRetriable = response.status === 429 || response.status >= 500;
+      throw error;
+    }
+    return await response.blob();
+  } catch (error) {
+    // Keep HTTP metadata untouched; enrich network/CORS style failures.
+    if (error?.isHttpError) throw error;
+
+    const networkError = new Error(
+      `Network error fetching image: ${error?.message || "Unknown error"}`,
+    );
+    networkError.cause = error;
+    networkError.isNetworkError = true;
+    networkError.isRetriable = true;
+    throw networkError;
   }
-  return await response.blob();
 };
 
 /**
@@ -112,7 +131,7 @@ const getCachedImage = async (photoId) => {
     request.onerror = () => {
       console.error(
         `❌ Error retrieving cached image ${photoId}:`,
-        request.error
+        request.error,
       );
       reject(request.error);
     };
@@ -241,7 +260,7 @@ const bulkCacheImages = async (images) => {
     transaction.onerror = () => {
       console.error(
         "❌ Transaction error during bulk cache:",
-        transaction.error
+        transaction.error,
       );
       reject(transaction.error);
     };
@@ -294,7 +313,7 @@ const bulkLoadFromCache = async (photoIds) => {
     transaction.onerror = () => {
       console.error(
         "❌ Transaction error during bulk load:",
-        transaction.error
+        transaction.error,
       );
       reject(transaction.error);
     };

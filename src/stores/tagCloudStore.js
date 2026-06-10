@@ -2,7 +2,7 @@ import { defineStore } from "pinia";
 import { api } from "@/utils/axios";
 
 const DEFAULT_MIN_PHOTO_COUNT = 1;
-const DEFAULT_LIMIT = 10000;
+const DEFAULT_LIMIT = 5000;
 
 export const useTagCloudStore = defineStore("tagCloud", {
   state: () => ({

@@ -5,6 +5,7 @@
       'is-dragging': isDragging,
       'is-selected': isSelected,
       'is-selection-mode': isSelectionMode,
+      'is-compact': compact,
       'not-selectable': !selectable,
     }"
     :draggable="selectable ? 'true' : 'false'"
@@ -29,6 +30,7 @@
       </svg>
     </button>
     <div class="card-preview">
+      <span v-if="type === 'portfolio'" class="portfolio-badge">Portfolio</span>
       <!-- Series Preview: Sequential photos with numbers -->
       <div
         v-if="type === 'series' && item.photos && item.photos.length > 0"
@@ -51,7 +53,10 @@
       </div>
 
       <!-- Collection Preview: Stacked photos -->
-      <div v-else-if="type === 'collection'" class="photo-stack">
+      <div
+        v-else-if="type === 'collection' || type === 'portfolio'"
+        class="photo-stack"
+      >
         <div
           v-for="(photo, index) in (item.photos || []).slice(0, 3)"
           :key="photo.id"
@@ -120,7 +125,8 @@ interface Item {
 
 interface Props {
   item: Item;
-  type: "series" | "collection";
+  type: "series" | "collection" | "portfolio";
+  compact?: boolean;
   showUpdateDate?: boolean;
   isSelected?: boolean;
   isSelectionMode?: boolean;
@@ -131,6 +137,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  compact: false,
   showUpdateDate: true,
   isSelected: false,
   isSelectionMode: false,
@@ -263,10 +270,14 @@ const formatDate = (date: Date | string) => {
   cursor: grab;
 }
 
+.action-card.is-compact {
+  padding: 0;
+}
+
 .card-preview {
   position: relative;
   height: 120px;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -282,6 +293,35 @@ const formatDate = (date: Date | string) => {
   height: 100%;
 }
 
+.portfolio-badge {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 40%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 78%, transparent);
+  color: var(--primary-color);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1;
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+
+.action-card.is-compact .portfolio-badge {
+  top: 6px;
+  padding: 2px 6px;
+  font-size: 7px;
+  letter-spacing: 0.1em;
+}
+
 .sequence-photo {
   position: relative;
   width: 80px;
@@ -291,10 +331,6 @@ const formatDate = (date: Date | string) => {
   transition: border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: 2px solid var(--border-color);
   background-color: var(--bg-container);
-}
-
-.sequence-photo:hover {
-  border-color: var(--primary-color);
 }
 
 .sequence-photo img {
@@ -318,6 +354,63 @@ const formatDate = (date: Date | string) => {
   align-items: center;
   justify-content: center;
   backdrop-filter: blur(4px);
+}
+
+.action-card.is-compact .card-preview {
+  height: 86px;
+  margin-bottom: 6px;
+}
+
+.action-card.is-compact .photo-sequence {
+  gap: 6px;
+}
+
+.action-card.is-compact .sequence-photo {
+  width: 58px;
+  height: 58px;
+  border-width: 1px;
+  border-radius: 7px;
+}
+
+.action-card.is-compact .sequence-number {
+  width: 15px;
+  height: 15px;
+  font-size: 9px;
+  bottom: 3px;
+  right: 3px;
+}
+
+/* Compact photo stack (collections) */
+.action-card.is-compact .photo-stack {
+  width: 95px;
+  height: 68px;
+}
+
+.action-card.is-compact .photo-stack .photo-item {
+  width: 55px;
+  height: 64px;
+}
+
+.action-card.is-compact .photo-stack .photo-item.photo-1 {
+  transform: translate(-50%, -50%) translateX(-24px) rotate(-15deg);
+}
+
+.action-card.is-compact .photo-stack .photo-item.photo-2 {
+  transform: translate(-50%, -50%) translateY(-3px);
+}
+
+.action-card.is-compact .photo-stack .photo-item.photo-3 {
+  transform: translate(-50%, -50%) translateX(24px) rotate(15deg);
+}
+
+.action-card.is-compact .card-title {
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.action-card.is-compact .card-meta {
+  font-size: 12px;
+  line-height: 1.3;
 }
 
 /* Empty preview state */
@@ -358,7 +451,7 @@ const formatDate = (date: Date | string) => {
 @media (max-width: 768px) {
   .card-preview {
     height: 100px;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
   }
 
   .sequence-photo {
@@ -372,6 +465,31 @@ const formatDate = (date: Date | string) => {
 
   .card-meta {
     font-size: 12px;
+  }
+
+  .portfolio-badge {
+    top: 6px;
+    padding: 2px 6px;
+    font-size: 7px;
+  }
+
+  .action-card.is-compact .card-preview {
+    height: 78px;
+  }
+
+  .action-card.is-compact .sequence-photo {
+    width: 52px;
+    height: 52px;
+  }
+
+  .action-card.is-compact .photo-stack {
+    width: 85px;
+    height: 62px;
+  }
+
+  .action-card.is-compact .photo-stack .photo-item {
+    width: 50px;
+    height: 58px;
   }
 }
 </style>

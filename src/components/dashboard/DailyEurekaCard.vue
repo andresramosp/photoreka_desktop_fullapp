@@ -49,7 +49,7 @@
       </div>
     </div>
     <div
-      v-show="!isHoveringInsight && !isLoadingInsight"
+      v-show="false && !isHoveringInsight && !isLoadingInsight"
       class="insight-overlay"
     >
       <h3 class="action-title">
@@ -216,19 +216,20 @@ const showPhotoInfo = async () => {
   top: 0;
   left: 0;
   right: 0;
-  padding: 5px;
   bottom: 0;
   overflow: hidden;
   z-index: 1;
-  /* background-color: rgba(6, 182, 212, 0.7); */
-  background-color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
   border-radius: 5px;
 }
 
 .insight-photo {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
   display: block;
   border-radius: 16px;
@@ -329,7 +330,7 @@ const showPhotoInfo = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
+  width: 88%;
   height: 100%;
 }
 

@@ -5,180 +5,134 @@
       <!-- LEFT PANEL — Insights & Analytics          -->
       <!-- ══════════════════════════════════════════ -->
       <aside class="panel panel-left">
-        <header class="panel-header">
-          <span class="panel-label">PHOTOREKA INSIGHTS &amp; ANALYTICS</span>
-        </header>
         <div class="panel-body">
           <!-- Welcome block -->
           <div class="welcome-block">
             <h2 class="welcome-name">
-              WELCOME BACK,&nbsp;{{ userStore.userShortName?.toUpperCase() }}.
+              WELCOME BACK,&nbsp;{{ userStore.userShortName?.toUpperCase() }}!👋
             </h2>
             <p class="welcome-tagline">
               <template v-if="avgAestheticScore != null">
-                Your total portfolio Aesthetic Avg. is
-                <strong>{{ avgAestheticScore.toFixed(1) }}</strong
-                >.
+                Ready to organize your photos with Photoreka smart tools.
               </template>
               <template v-else>Ready to explore your photo universe.</template>
             </p>
           </div>
 
-          <!-- Score gauges -->
-          <div class="score-gauges">
-            <ScoreGauge label="Aesthetic Quality" :value="avgAestheticScore" />
-            <ScoreGauge label="Storytelling" :value="avgStorytellingScore" />
+          <div class="photo-stats-block">
+            <!-- Primary stat: total photos -->
+            <button
+              type="button"
+              class="photos-primary-stat"
+              @click="navigateToWorkspace"
+              aria-label="Go to workspace"
+            >
+              <n-icon size="16" class="photos-primary-icon">
+                <LayersOutline />
+              </n-icon>
+              <span class="photos-primary-count">{{
+                photos.length.toLocaleString()
+              }}</span>
+              <span class="photos-primary-label">photos in your Workspace</span>
+            </button>
+
+            <!-- Genre breakdown -->
+            <!-- <div v-if="displayedGenreBadges.length" class="genre-badges-row">
+              <div
+                v-for="badge in displayedGenreBadges"
+                :key="badge.key"
+                class="genre-badge"
+              >
+                <n-icon size="12" class="genre-badge-icon">
+                  <component :is="badge.icon" />
+                </n-icon>
+                <span class="genre-badge-label">{{ badge.label }}</span>
+                <span class="genre-badge-count">{{ badge.count }}</span>
+              </div>
+            </div> -->
           </div>
 
+          <!-- Seccion Basic Stats -->
+          <div class="section-label">Quick Stats</div>
+          <GaugesSection />
           <!-- Daily artistic curation -->
           <div class="section-label">DAILY ARTISTIC CURATION</div>
-          <DailyEurekaCard />
+          <div class="daily-eureka-card">
+            <DailyEurekaCard v-if="!isDashboardEmpty" />
+            <div v-else class="mini-empty daily-eureka-empty">
+              <n-icon size="32" color="var(--text-tertiary)">
+                <CollectionsIcon />
+              </n-icon>
+              <p>Nothing here yet</p>
+            </div>
+          </div>
         </div>
       </aside>
 
       <!-- ══════════════════════════════════════════ -->
       <!-- CENTER — Photo Universe (quantum void)     -->
       <!-- ══════════════════════════════════════════ -->
-      <PhotoUniverse :photo-count="photos.length" />
+      <PhotoUniverse v-if="!isMobileLimitedMode" :photo-count="photos.length" />
 
       <!-- ══════════════════════════════════════════ -->
       <!-- RIGHT PANEL — Catalog Control Panel        -->
       <!-- ══════════════════════════════════════════ -->
       <aside class="panel panel-right">
-        <header class="panel-header">
-          <span class="panel-label">CATALOG CONTROL PANEL</span>
-        </header>
         <div class="panel-body">
           <!-- Smart Tools -->
           <div class="section-label">SMART TOOLS</div>
-          <div class="tools-container">
-            <nav class="tools-list">
-              <!-- Promo tools from config -->
-              <button
-                v-for="tool in promoTools"
-                :key="tool.id"
-                class="tool-item"
-                :class="{ 'tool-item--disabled': appAccessMode === 'blocked' }"
-                :disabled="appAccessMode === 'blocked'"
-                @click="goToTool(tool.id)"
-              >
-                <n-icon size="18" color="var(--primary-color)">
-                  <component :is="getIconComponent(tool.icon)" />
-                </n-icon>
-                <div class="tool-text">
-                  <span class="tool-name">{{ tool.name }}</span>
-                </div>
-                <span class="tool-badge-new">NEW</span>
-              </button>
-
-              <!-- Canvas -->
-              <button
-                v-if="!isMobileLimitedMode"
-                class="tool-item"
-                @click="goToTool('canvas')"
-              >
-                <n-icon size="18" color="var(--primary-color)">
-                  <Workspace />
-                </n-icon>
-                <div class="tool-text">
-                  <span class="tool-name">Canvas</span>
-                  <span v-if="canvasCount > 0" class="tool-sub">{{
-                    activeCanvasName
-                  }}</span>
-                </div>
-              </button>
-
-              <!-- Explorer (mobile only) -->
-              <button
-                v-if="isMobileLimitedMode"
-                class="tool-item"
-                :class="{ 'tool-item--disabled': appAccessMode === 'blocked' }"
-                :disabled="appAccessMode === 'blocked'"
-                @click="goToTool('search')"
-              >
-                <n-icon size="18" color="var(--primary-color)">
-                  <SearchIcon />
-                </n-icon>
-                <span class="tool-name">Explorer</span>
-              </button>
-
-              <!-- Workspace -->
-              <button
-                class="tool-item"
-                :class="{ 'tool-item--disabled': appAccessMode === 'blocked' }"
-                :disabled="appAccessMode === 'blocked'"
-                @click="goToTool('workspace')"
-              >
-                <n-icon size="18" color="var(--primary-color)">
-                  <LayersOutline />
-                </n-icon>
-                <div class="tool-text">
-                  <span class="tool-name">Your Workspace</span>
-                  <span v-if="photos.length > 0" class="tool-sub">
-                    {{ photos.length }}
-                    {{ photos.length === 1 ? "photo" : "photos" }}
-                  </span>
-                </div>
-              </button>
-
-              <!-- Report & Statistics (desktop only) -->
-              <button
-                v-if="!isMobileLimitedMode"
-                class="tool-item"
-                :class="{ 'tool-item--disabled': appAccessMode === 'blocked' }"
-                :disabled="appAccessMode === 'blocked'"
-                @click="goToTool('report')"
-              >
-                <n-icon size="18" color="var(--primary-color)">
-                  <AnalyticsOutline />
-                </n-icon>
-                <div class="tool-text">
-                  <span class="tool-name">Report &amp; Statistics</span>
-                </div>
-              </button>
-            </nav>
-          </div>
+          <SmartToolsSection
+            :app-access-mode="appAccessMode"
+            :is-mobile-limited-mode="isMobileLimitedMode"
+          />
 
           <!-- Recent Collections & Series -->
           <div class="section-label section-label--spaced">
-            RECENT COLLECTIONS &amp; SERIES
+            RECENT COLLECTIONS, SERIES &amp; PORTFOLIOS
           </div>
 
-          <div v-if="isLoadingCollections" class="mini-loading">
-            <div class="mini-spinner" />
-            <span>Loading…</span>
-          </div>
+          <div class="collections-scroll-area">
+            <div v-if="isLoadingCollections" class="mini-loading">
+              <div class="mini-spinner" />
+              <span>Loading…</span>
+            </div>
 
-          <div
-            v-else-if="appAccessMode === 'blocked' || collections.length === 0"
-            class="mini-empty"
-          >
-            <n-icon size="32" color="var(--text-tertiary)">
-              <CollectionsIcon />
-            </n-icon>
-            <p>Nothing here yet</p>
-            <router-link
-              v-if="appAccessMode !== 'blocked'"
-              to="/collections"
-              class="mini-empty-link"
-              >Manage collections</router-link
-            >
-          </div>
-
-          <div v-else class="collections-stack">
-            <CollectionCard
-              v-for="item in collections.slice(0, 3)"
-              :key="item.id"
-              :item="item"
-              :type="item.itemType"
-              :show-update-date="false"
-              :selectable="false"
-              @click="
-                item.itemType === 'collection'
-                  ? openProject(item.id)
-                  : openSeries(item.id)
+            <div
+              v-else-if="
+                appAccessMode === 'blocked' || collections.length === 0
               "
-            />
+              class="mini-empty collections-empty-state"
+            >
+              <n-icon size="32" color="var(--text-tertiary)">
+                <CollectionsIcon />
+              </n-icon>
+              <p>Nothing here yet</p>
+              <router-link
+                v-if="appAccessMode !== 'blocked'"
+                to="/collections"
+                class="mini-empty-link"
+                >Manage collections</router-link
+              >
+            </div>
+
+            <div v-else class="collections-stack">
+              <CollectionCard
+                v-for="item in collections.slice(0, 6)"
+                :key="item.id"
+                :item="item"
+                :type="item.itemType"
+                :compact="true"
+                :show-update-date="false"
+                :selectable="false"
+                @click="
+                  item.itemType === 'collection'
+                    ? openProject(item.id)
+                    : item.itemType === 'series'
+                      ? openSeries(item.id)
+                      : openPortfolio(item.id)
+                "
+              />
+            </div>
           </div>
         </div>
       </aside>
@@ -187,7 +141,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted } from "vue";
+import { computed, watch } from "vue";
 import { useRouter } from "vue-router";
 
 defineOptions({
@@ -196,40 +150,39 @@ defineOptions({
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useSeriesStore } from "@/stores/series.js";
+import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds.js";
 import { useUserStore } from "@/stores/userStore.js";
-import { api } from "@/utils/axios.js"; // Needed for photo insight API call
-import { useMessage } from "naive-ui";
 import CollectionCard from "@/components/CollectionCard.vue";
-import DailyEurekaCard from "@/components/DailyEurekaCard.vue";
-import PhotoUniverse from "@/components/PhotoUniverse.vue";
-import ScoreGauge from "@/components/ScoreGauge.vue";
+import DailyEurekaCard from "@/components/dashboard/DailyEurekaCard.vue";
+import GaugesSection from "@/components/dashboard/GaugesSection.vue";
+import PhotoUniverse from "@/components/dashboard/PhotoUniverse.vue";
+import SmartToolsSection from "@/components/dashboard/SmartToolsSection.vue";
 import { isMobileDevice } from "@/utils/utils.js";
-import { getPromoTools, getIconComponent } from "@/config/toolsConfig.js";
 
 // Import @vicons icons from ionicons5 for reliability
 import {
-  CloudUploadOutline as ArrowUpIcon,
-  AddOutline as AddIcon,
   FolderOpenOutline as CollectionsIcon,
-  ImageOutline as PhotoHubIcon,
-  SettingsOutline as SettingsIcon,
-  HelpCircleOutline as QuestionIcon,
-  AnalyticsOutline as AnalyticsIcon,
-  FilmOutline as SeriesIcon,
-  SearchOutline as SearchIcon,
+  WalkOutline,
+  BriefcaseOutline,
+  CameraOutline,
+  PersonOutline,
+  ImageOutline,
   LayersOutline,
-  AnalyticsOutline,
+  ApertureOutline,
+  MoonOutline,
+  ColorPaletteOutline,
+  GridOutline,
 } from "@vicons/ionicons5";
 
-import { LayersOutlined } from "@vicons/material";
-import { Workspace } from "@vicons/carbon";
+import { BookOpen16Regular, Camera20Regular } from "@vicons/fluent";
+import { PaletteOutlined } from "@vicons/material";
 
 const router = useRouter();
 const photosStore = usePhotosStore();
 const collectionsStore = useCollectionsStore();
 const seriesStore = useSeriesStore();
+const portfolioBuildsStore = usePortfolioBuildsStore();
 const userStore = useUserStore();
-const message = useMessage();
 
 // Check if in mobile limited mode
 const isMobileLimitedMode = computed(() => isMobileDevice());
@@ -244,20 +197,13 @@ const avgAestheticScore = computed(() => {
   return scores.reduce((a: number, b: number) => a + b, 0) / scores.length;
 });
 
-const avgStorytellingScore = computed(() => {
-  const photos = (photosStore.photos || []) as any[];
-  if (!photos.length) return null;
-  const scores = photos
-    .map((p) => p.descriptions?.artistic_scores?.storytelling)
-    .filter((s) => typeof s === "number");
-  if (!scores.length) return null;
-  return scores.reduce((a: number, b: number) => a + b, 0) / scores.length;
-});
+const getItemTimestamp = (item: any): number => {
+  const rawDate =
+    item?.updated_at ?? item?.updatedAt ?? item?.created_at ?? item?.createdAt;
 
-// Promo tools derived from centralized config (desktop-only)
-const promoTools = computed(() =>
-  isMobileLimitedMode.value ? [] : getPromoTools("desktop"),
-);
+  const parsed = rawDate ? new Date(rawDate).getTime() : 0;
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
 
 // Computed collections and series combined from store
 const collections = computed(() => {
@@ -274,60 +220,151 @@ const collections = computed(() => {
           itemType: "series",
         }))
       : []),
+    ...(portfolioBuildsStore.allBuilds || []).map((build: any) => ({
+      ...build,
+      itemType: "portfolio",
+      name: build.config?.name || build.name || `Portfolio #${build.id}`,
+      photos: build.photoItems || [],
+      updatedAt: build.updatedAt || build.createdAt,
+    })),
   ];
 
-  // Ordenar por fecha de actualización descendente y tomar solo los 4 más recientes
+  // Ordenar por fecha de actualización/creación descendente y tomar solo los 4 más recientes
   return allItems
-    .sort(
-      (a: { updatedAt: string }, b: { updatedAt: string }) =>
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-    )
-    .slice(0, 4);
+    .sort((a: any, b: any) => getItemTimestamp(b) - getItemTimestamp(a))
+    .slice(0, 6);
 });
 const isLoadingCollections = computed(
-  () => collectionsStore.isLoading || seriesStore.isLoading,
+  () =>
+    collectionsStore.isLoading ||
+    seriesStore.isLoading ||
+    portfolioBuildsStore.isLoading,
 );
-
-// Canvas data from localStorage
-const canvasData = ref<any>(null);
-
-// Canvas count and active name
-const canvasCount = ref(0);
-const activeCanvasName = ref("");
-
-const loadCanvasInfo = async () => {
-  try {
-    if (userStore.isAuthenticated) {
-      const res = await api.get("/api/canvas");
-      const list = res.data || [];
-      canvasCount.value = list.length;
-      if (list.length > 0) {
-        const activeId = localStorage.getItem("photoreka_active_canvas_id");
-        const active = activeId
-          ? list.find((c: any) => String(c.id) === String(activeId))
-          : null;
-        activeCanvasName.value = (active || list[0]).name || "My Canvas";
-      }
-    } else {
-      const savedCanvas = localStorage.getItem("photoreka_canvas_data");
-      canvasCount.value = savedCanvas ? 1 : 0;
-      activeCanvasName.value = savedCanvas ? "My Canvas" : "";
-    }
-  } catch (error) {
-    console.error("Error loading canvas info:", error);
-  }
-};
 
 // Recent photos for workspace preview
 const photos = computed(() => {
-  if (!photosStore.photos || !Array.isArray(photosStore.photos)) {
+  if (
+    !photosStore.processedPhotos ||
+    !Array.isArray(photosStore.processedPhotos)
+  ) {
     return [];
   }
   // Return all photos for counting, component will slice for display
-  return photosStore.photos;
+  return photosStore.processedPhotos;
 });
 
 const appAccessMode = computed(() => photosStore.appAccessMode);
+const isDashboardEmpty = computed(
+  () => appAccessMode.value === "blocked" || photos.value.length === 0,
+);
+
+const GENRE_BADGE_META: Record<string, { label: string; icon: any }> = {
+  general: { label: "General", icon: Camera20Regular },
+  street: { label: "Street", icon: WalkOutline },
+  documentary: { label: "Documentary", icon: BookOpen16Regular },
+  abstract: { label: "Artistic", icon: PaletteOutlined },
+  commercial: { label: "Commercial", icon: BriefcaseOutline },
+  portrait: { label: "Portrait", icon: PersonOutline },
+  landscape: { label: "Landscape", icon: ImageOutline },
+  architecture: { label: "Architecture", icon: GridOutline },
+  travel: { label: "Travel", icon: CameraOutline },
+  nature: { label: "Nature", icon: ApertureOutline },
+  night: { label: "Night", icon: MoonOutline },
+  conceptual: { label: "Conceptual", icon: ColorPaletteOutline },
+};
+
+const formatGenreLabel = (genre: string) =>
+  genre
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+
+const genreBadges = computed(() => {
+  const counts = new Map<string, number>();
+
+  photos.value.forEach((photo: any) => {
+    const genres = photo?.descriptions?.visual_aspects?.genre;
+    if (Array.isArray(genres) && genres.length > 0) {
+      genres.forEach((rawGenre: string) => {
+        const genre = String(rawGenre || "")
+          .trim()
+          .toLowerCase();
+        if (!genre) return;
+        counts.set(genre, (counts.get(genre) || 0) + 1);
+      });
+    }
+  });
+
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, count]) => {
+      const meta = GENRE_BADGE_META[key];
+      return {
+        key,
+        label: meta?.label || formatGenreLabel(key),
+        icon: meta?.icon || CameraOutline,
+        count,
+      };
+    });
+});
+
+// Pack badges into 2 rows, collapsing overflow into "Other"
+const displayedGenreBadges = computed(() => {
+  const all = genreBadges.value;
+  if (!all.length) return [];
+
+  // Estimate badge pixel width: icon + gaps + label chars + count chars + padding
+  const estimateWidth = (label: string, count: number) =>
+    12 + 5 + label.length * 6.8 + 3 + count.toString().length * 6.8 + 18;
+
+  const PANEL_WIDTH = 300; // ~340px panel minus 32px padding minus scrollbar
+  const GAP = 6;
+  const MAX_ROWS = 2;
+
+  let currentRow = 0;
+  let rowUsed = 0;
+  const visible: typeof all = [];
+
+  for (let i = 0; i < all.length; i++) {
+    const badge = all[i];
+    const w = estimateWidth(badge.label, badge.count);
+    const needed = rowUsed === 0 ? w : w + GAP;
+
+    if (rowUsed + needed > PANEL_WIDTH) {
+      currentRow++;
+      rowUsed = 0;
+    }
+
+    if (currentRow >= MAX_ROWS) {
+      // Aggregate the rest (including current) into Other
+      const otherCount = all.slice(i).reduce((sum, b) => sum + b.count, 0);
+      // Replace last visible badge if it's already "Other", else push
+      const last = visible[visible.length - 1];
+      if (last?.key === "other") {
+        visible[visible.length - 1] = {
+          key: "other",
+          label: "Other",
+          icon: GridOutline,
+          count: last.count + otherCount,
+        };
+      } else {
+        visible.push({
+          key: "other",
+          label: "Other",
+          icon: GridOutline,
+          count: otherCount,
+        });
+      }
+      break;
+    }
+
+    rowUsed += rowUsed === 0 ? w : w + GAP;
+    visible.push(badge);
+  }
+
+  return visible;
+});
 
 // Load collections
 const loadCollections = async () => {
@@ -347,6 +384,15 @@ const loadSeries = async () => {
   }
 };
 
+// Load portfolios
+const loadPortfolios = async () => {
+  try {
+    await portfolioBuildsStore.getOrFetch();
+  } catch (error) {
+    console.error("Error loading portfolios:", error);
+  }
+};
+
 // Watch for changes in appAccessMode to load collections and series
 watch(
   appAccessMode,
@@ -358,6 +404,7 @@ watch(
     ) {
       loadCollections();
       loadSeries();
+      loadPortfolios();
     }
   },
   { immediate: true },
@@ -373,49 +420,14 @@ const openSeries = (seriesId: string) => {
   router.push({ name: "series-detail", params: { id: seriesId } });
 };
 
-const goToTool = (toolName: string) => {
-  // Navigate to specific tool
-  router.push({ name: toolName });
+const openPortfolio = (portfolioId: string) => {
+  // Navigate to portfolio view with the specific portfolio ID
+  router.push({ name: "portfolio-detail", params: { id: portfolioId } });
 };
 
-// Format date helper
-const formatDate = (date: Date) => {
-  const now = new Date();
-  const diffTime = Math.abs(now.getTime() - date.getTime());
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 1) {
-    return "1 day ago";
-  } else if (diffDays < 7) {
-    return `${diffDays} days ago`;
-  } else if (diffDays < 14) {
-    return "1 week ago";
-  } else if (diffDays < 30) {
-    return `${Math.floor(diffDays / 7)} weeks ago`;
-  } else if (diffDays < 60) {
-    return "1 month ago";
-  } else {
-    return `${Math.floor(diffDays / 30)} months ago`;
-  }
+const navigateToWorkspace = () => {
+  router.push({ name: "workspace" });
 };
-
-// Load canvas data from localStorage
-const loadCanvasData = () => {
-  try {
-    const savedCanvas = localStorage.getItem("photoreka_canvas_data");
-    if (savedCanvas) {
-      canvasData.value = JSON.parse(savedCanvas);
-    }
-  } catch (error) {
-    console.error("Error loading canvas data:", error);
-  }
-};
-
-// Load canvas on mount
-onMounted(() => {
-  loadCanvasData();
-  loadCanvasInfo();
-});
 </script>
 
 <style scoped>
@@ -437,7 +449,7 @@ onMounted(() => {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 340px 1fr 340px;
+  grid-template-columns: 400px 1fr 400px;
   grid-template-rows: 1fr;
   overflow: hidden;
 }
@@ -503,6 +515,12 @@ onMounted(() => {
   border-left: 1px solid var(--border-color);
 }
 
+.panel-right .panel-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 /* ─────────────────────────────────────────────
    Section labels
 ───────────────────────────────────────────── */
@@ -518,18 +536,113 @@ onMounted(() => {
 }
 
 .section-label--spaced {
-  margin-top: 28px;
+  margin-top: 8px;
 }
 
 /* ─────────────────────────────────────────────
    Welcome block (left panel)
 ───────────────────────────────────────────── */
 .welcome-block {
+  margin-bottom: 10px;
+}
+
+.photo-stats-block {
   margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.photos-primary-stat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-container);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--primary-color);
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: left;
+  appearance: none;
+  font: inherit;
+  color: inherit;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.photos-primary-stat:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--primary-color) 55%, transparent);
+}
+
+.photos-primary-stat:focus-visible {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--primary-color) 35%, transparent);
+}
+
+.photos-primary-icon {
+  color: var(--accent-color);
+  flex-shrink: 0;
+}
+
+.photos-primary-count {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--accent-color);
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.photos-primary-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.genre-badges-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.genre-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 4px 10px 4px 8px;
+  background: var(--bg-container);
+  white-space: nowrap;
+}
+
+.genre-badge-icon {
+  color: var(--primary-color);
+  flex-shrink: 0;
+}
+
+.genre-badge-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.genre-badge-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  padding-left: 3px;
 }
 
 .welcome-name {
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--text-primary);
@@ -543,99 +656,16 @@ onMounted(() => {
   margin: 0;
 }
 
-/* ─────────────────────────────────────────────
-   Score gauge cards (left panel)
-───────────────────────────────────────────── */
-.score-gauges {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.daily-eureka-card {
   margin-bottom: 24px;
 }
 
-/* ─────────────────────────────────────────────
-   Tools list (right panel)
-───────────────────────────────────────────── */
-.tools-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.tools-container {
-  background: var(--bg-container);
+.daily-eureka-empty {
+  min-height: 180px;
   border: 1px solid var(--border-color);
   border-radius: 14px;
-  padding: 10px;
-  margin-bottom: 4px;
-}
-
-.tool-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 10px 14px;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  background: var(--bg-surface);
-  cursor: pointer;
-  text-align: left;
-  color: var(--text-primary);
-  transition:
-    background-color 0.15s,
-    border-color 0.15s;
-}
-
-.tool-item:hover {
-  background-color: var(--bg-card);
-  border-color: var(--border-color-hover);
-}
-
-.tool-item--disabled {
-  opacity: 0.38;
-  cursor: not-allowed;
-}
-.tool-item--disabled:hover {
-  background-color: transparent;
-}
-
-.tool-text {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-
-.tool-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tool-sub {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tool-badge-new {
-  flex-shrink: 0;
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--primary-color);
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  padding: 2px 5px;
+  background: var(--bg-container);
+  justify-content: center;
 }
 
 /* ─────────────────────────────────────────────
@@ -645,6 +675,25 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.collections-scroll-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.collections-scroll-area::-webkit-scrollbar {
+  width: 4px;
+}
+
+.collections-scroll-area::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 2px;
 }
 
 /* ─────────────────────────────────────────────
@@ -684,6 +733,11 @@ onMounted(() => {
   text-align: center;
 }
 
+.collections-empty-state {
+  min-height: 100%;
+  justify-content: center;
+}
+
 .mini-empty p {
   font-size: 12px;
   color: var(--text-tertiary);
@@ -704,14 +758,11 @@ onMounted(() => {
 ───────────────────────────────────────────── */
 @media (max-width: 1200px) {
   .dashboard-grid {
-    grid-template-columns: 300px 1fr 300px;
+    grid-template-columns: 340px 1fr 340px;
   }
-}
 
-@media (max-width: 900px) {
-  /* Two-column: hide left panel, keep center + right */
   .dashboard-grid {
-    grid-template-columns: 1fr 300px;
+    grid-template-columns: 1fr 340px;
   }
   .panel-left {
     display: none;
@@ -719,19 +770,42 @@ onMounted(() => {
 }
 
 @media (max-width: 680px) {
-  /* Single column: stack all panels */
-  .dashboard-grid {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 300px auto;
+  /* Single column: stack panels in normal document flow */
+  .dashboard-container {
+    height: auto;
+    min-height: 100%;
     overflow-y: auto;
   }
+
+  .dashboard-grid {
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+  }
+
+  .panel {
+    overflow: visible;
+  }
+
   .panel-left {
     display: flex;
   }
+
   .panel-right {
     overflow: visible;
   }
+
   .panel-body {
+    flex: none;
+    overflow: visible;
+  }
+
+  .panel-right .panel-body {
+    overflow: visible;
+  }
+
+  .collections-scroll-area {
+    min-height: auto;
     overflow: visible;
   }
 }

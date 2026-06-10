@@ -8,8 +8,12 @@
     <svg viewBox="0 0 200 110" class="score-gauge__svg">
       <defs>
         <linearGradient :id="`g-${uid}`" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stop-color="#6366f1" stop-opacity="0.7" />
-          <stop offset="100%" stop-color="#06b6d4" />
+          <stop
+            offset="0%"
+            :stop-color="color || '#6366f1'"
+            :stop-opacity="color ? 0.6 : 0.7"
+          />
+          <stop offset="100%" :stop-color="color || '#06b6d4'" />
         </linearGradient>
       </defs>
       <!-- Track -->
@@ -64,6 +68,7 @@ const props = defineProps<{
   label: string;
   value: number | null;
   max?: number;
+  color?: string;
 }>();
 
 const uid = Math.random().toString(36).slice(2, 7);
@@ -91,7 +96,7 @@ const arcPath = computed((): string => {
 .score-gauge {
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  padding: 18px 20px 14px;
+  padding: 7px 10px 7px;
   background: var(--bg-card);
   display: flex;
   flex-direction: column;

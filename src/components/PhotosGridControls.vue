@@ -271,9 +271,7 @@
           >
             <Trophy20Regular />
           </n-icon>
-          <span class="filter-controls-section-label"
-            >Rank by visual scores</span
-          >
+          <span class="filter-controls-section-label">Rank by scores</span>
           <n-button
             v-if="hasActiveSorting"
             text

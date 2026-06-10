@@ -240,10 +240,17 @@ export function use2DTextureManager(
       // Prefer fetching as Blob so caching doesn't rely on canvas reads.
       // If fetch fails (CORS/opaque), fall back to <img> load.
       let imageBlob = null;
+      let blobFetchError = null;
       try {
         imageBlob = await urlToBlob(imageUrl);
-      } catch (_) {
+      } catch (error) {
+        blobFetchError = error;
         imageBlob = null;
+      }
+
+      if (!imageBlob && blobFetchError?.isHttpError) {
+        // HTTP errors (e.g. 404) are definitive for this URL; do not fallback to <img>.
+        throw blobFetchError;
       }
 
       const maxSide = useLowPerformance ? 96 : 128;
@@ -290,7 +297,9 @@ export function use2DTextureManager(
       }
 
       // For <img> loads we rarely get status codes; treat empty message as transient.
-      if (retryCount < MAX_RETRIES && (is429Error || !e?.message)) {
+      const isRetriableError = Boolean(e?.isRetriable) || is429Error;
+
+      if (retryCount < MAX_RETRIES && isRetriableError) {
         error429Stats.value.retried++;
         photoObj[flags.retryCountProp] = retryCount + 1;
 

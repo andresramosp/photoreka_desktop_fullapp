@@ -81,6 +81,8 @@ export const TOOLS_CONFIG = [
     id: "search",
     name: "Search",
     description: "Find photos using AI-powered search",
+    dashboardName: "Explorer",
+    dashboardSubtitle: "Find photos with AI semantic search",
     icon: "SearchOutline",
     route: "/search",
     availableOn: TOOL_AVAILABILITY.BOTH,
@@ -91,6 +93,8 @@ export const TOOLS_CONFIG = [
     id: "report",
     name: "Report",
     description: "View analytics and insights",
+    dashboardName: "Report & Statistics",
+    dashboardSubtitle: "Track performance and visual trends",
     icon: "AnalyticsOutline",
     route: "/report",
     availableOn: TOOL_AVAILABILITY.BOTH,
@@ -124,6 +128,8 @@ export const TOOLS_CONFIG = [
     id: "tagcloud",
     name: "Tag Cloud",
     description: "Browse your tags clustered by semantic proximity",
+    dashboardSubtitle: "Explore your tags by semantic proximity",
+    dashboardBadgeNew: true,
     icon: "WordCloud",
     route: "/tagcloud",
     availableOn: TOOL_AVAILABILITY.DESKTOP_ONLY,
@@ -145,6 +151,7 @@ export const TOOLS_CONFIG = [
     id: "canvas",
     name: "Canvas",
     description: "Create layouts and arrange photos",
+    dashboardSubtitle: "Create and organize visual layouts",
     icon: "Workspace",
     route: "/canvas",
     availableOn: TOOL_AVAILABILITY.DESKTOP_ONLY,
@@ -167,6 +174,9 @@ export const TOOLS_CONFIG = [
     id: "portfolios",
     name: "Create a Portfolio",
     description: "Showcase your best work in a beautiful portfolio",
+    dashboardName: "Portfolios",
+    dashboardSubtitle: "Create AI-powered portfolio presentations",
+    dashboardBadgeNew: true,
     icon: "BriefcaseOutline",
     route: "/portfolios",
     availableOn: TOOL_AVAILABILITY.DESKTOP_ONLY,
@@ -188,6 +198,8 @@ export const TOOLS_CONFIG = [
     id: "import-area",
     name: "Import Area",
     description: "Upload and import photos",
+    dashboardSubtitle: "Upload and process new photos",
+    dashboardRoute: "/import-area#upload",
     icon: "ShareOutline",
     route: "/import-area",
     availableOn: TOOL_AVAILABILITY.BOTH,
@@ -218,11 +230,14 @@ export const TOOLS_CONFIG = [
     id: "world-map",
     name: "World Map",
     description: "Visualize your photos on a world map",
+    dashboardSubtitle: "Geotag your photos with AI",
     icon: "EarthOutline",
     route: "/world-map",
     availableOn: TOOL_AVAILABILITY.BOTH,
     menuSection: "global",
     showInPhotoSelector: false,
+    dashboardBadgeNew: true,
+    promo: true,
   },
 ];
 
@@ -295,6 +310,33 @@ export function getIconComponent(iconKey) {
 export function isDesktopOnly(toolId) {
   const tool = getToolById(toolId);
   return tool?.availableOn === TOOL_AVAILABILITY.DESKTOP_ONLY;
+}
+
+/**
+ * Dashboard Smart Tools are intentionally curated and ordered.
+ * @param {string} platform - 'mobile' or 'desktop'
+ * @returns {Array} Ordered tools for the dashboard smart tools section
+ */
+export function getDashboardSmartTools(platform) {
+  const orderedToolIds =
+    platform === "mobile"
+      ? ["import-area", "search"]
+      : ["import-area", "world-map", "portfolios", "report"];
+
+  return orderedToolIds
+    .map((toolId) => getToolById(toolId))
+    .filter(Boolean)
+    .filter((tool) => {
+      if (tool.availableOn === TOOL_AVAILABILITY.BOTH) return true;
+      return tool.availableOn === platform;
+    })
+    .map((tool) => ({
+      ...tool,
+      dashboardName: tool.dashboardName || tool.name,
+      dashboardSubtitle: tool.dashboardSubtitle || tool.description,
+      dashboardRoute: tool.dashboardRoute || tool.route,
+      dashboardBadgeNew: Boolean(tool.dashboardBadgeNew),
+    }));
 }
 
 /**

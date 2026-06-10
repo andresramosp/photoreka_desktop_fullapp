@@ -47,7 +47,7 @@ const CONFIG_LOD = {
 
 export function usePhotoTextureManager(
   useLowPerformance = false,
-  isPlayground = false
+  isPlayground = false,
 ) {
   // ===== Estado de descarga =====
   const textureQueue = ref([]);
@@ -90,8 +90,13 @@ export function usePhotoTextureManager(
   });
 
   // ===== Caché IndexedDB =====
-  const { initDB, bulkLoadFromCache, bulkCacheImages, getCacheStats } =
-    useIndexedDBCache();
+  const {
+    initDB,
+    bulkLoadFromCache,
+    bulkCacheImages,
+    getCacheStats,
+    urlToBlob,
+  } = useIndexedDBCache();
 
   const cacheStats = ref({ totalImages: 0 });
   const cachedPhotoIds = ref(new Set());
@@ -129,7 +134,7 @@ export function usePhotoTextureManager(
    */
   const updateLoadingProgress = (
     photosWithMaterials,
-    downloadPhaseComplete
+    downloadPhaseComplete,
   ) => {
     if (totalPhotosToLoad.value === 0) {
       loadedPhotosCount.value = 0;
@@ -144,7 +149,7 @@ export function usePhotoTextureManager(
     loadedPhotosCount.value = loadedPhotos.length;
 
     const progress = Math.round(
-      (loadedPhotosCount.value / totalPhotosToLoad.value) * 100
+      (loadedPhotosCount.value / totalPhotosToLoad.value) * 100,
     );
     loadingProgress.value = Math.min(progress, 100);
   };
@@ -155,7 +160,7 @@ export function usePhotoTextureManager(
   const downloadImageOnly = async (
     photoObj,
     retryCount = 0,
-    isOnDemandRetry = false
+    isOnDemandRetry = false,
   ) => {
     if (photoObj.__imageDownloaded || photoObj.__downloading) return;
     photoObj.__downloading = true;
@@ -170,13 +175,41 @@ export function usePhotoTextureManager(
     }
 
     try {
-      const imageElement = await new Promise((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.onload = () => resolve(img);
-        img.onerror = (error) => reject(error);
-        img.src = imageUrl;
-      });
+      let imageBlob = null;
+      let blobFetchError = null;
+
+      try {
+        imageBlob = await urlToBlob(imageUrl);
+      } catch (error) {
+        blobFetchError = error;
+      }
+
+      if (!imageBlob && blobFetchError?.isHttpError) {
+        // HTTP errors (e.g. 404) are definitive for this URL; skip fallback/retries.
+        throw blobFetchError;
+      }
+
+      const imageElement = imageBlob
+        ? await new Promise((resolve, reject) => {
+            const objectUrl = URL.createObjectURL(imageBlob);
+            const img = new Image();
+            img.onload = () => {
+              URL.revokeObjectURL(objectUrl);
+              resolve(img);
+            };
+            img.onerror = (error) => {
+              URL.revokeObjectURL(objectUrl);
+              reject(error);
+            };
+            img.src = objectUrl;
+          })
+        : await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => resolve(img);
+            img.onerror = (error) => reject(error);
+            img.src = imageUrl;
+          });
 
       if (!imageElement) {
         throw new Error("Image element is null");
@@ -195,7 +228,7 @@ export function usePhotoTextureManager(
         error429Stats.value.recovered++;
         console.log(
           `✅ Foto recuperada después de error 429 (retry ${retryCount}):`,
-          photoObj.id
+          photoObj.id,
         );
         photoObj.__had429Error = false;
       }
@@ -211,23 +244,25 @@ export function usePhotoTextureManager(
         console.warn(
           `⚠️ Error 429 detectado para foto ${photoObj.id} (intento ${
             retryCount + 1
-          }/${MAX_RETRIES})`
+          }/${MAX_RETRIES})`,
         );
       }
 
-      if (retryCount < MAX_RETRIES && (is429Error || !e.message)) {
+      const isRetriableError = Boolean(e?.isRetriable) || is429Error;
+
+      if (retryCount < MAX_RETRIES && isRetriableError) {
         error429Stats.value.retried++;
         photoObj.__retryCount = retryCount + 1;
 
         const delay = Math.min(
           INITIAL_RETRY_DELAY * Math.pow(RETRY_MULTIPLIER, retryCount),
-          MAX_RETRY_DELAY
+          MAX_RETRY_DELAY,
         );
 
         console.log(
           `🔄 Reintentando descarga en ${delay}ms... (intento ${
             retryCount + 1
-          })`
+          })`,
         );
 
         await new Promise((resolve) => setTimeout(resolve, delay));
@@ -238,7 +273,7 @@ export function usePhotoTextureManager(
       console.warn(
         `❌ Fallo definitivo descarga imagen (${retryCount} reintentos):`,
         imageUrl,
-        e
+        e,
       );
       error429Stats.value.failed++;
       photoObj.__imageDownloaded = true;
@@ -268,7 +303,7 @@ export function usePhotoTextureManager(
 
     const scale = Math.min(
       maxSide / imageElement.width,
-      maxSide / imageElement.height
+      maxSide / imageElement.height,
     );
     const w = Math.round(imageElement.width * scale);
     const h = Math.round(imageElement.height * scale);
@@ -307,8 +342,8 @@ export function usePhotoTextureManager(
     const maxSide = useLowPerformance
       ? CONFIG_LOD.lowResSize
       : lodLevel === "high"
-      ? CONFIG_LOD.highResSize
-      : CONFIG_LOD.lowResSize;
+        ? CONFIG_LOD.highResSize
+        : CONFIG_LOD.lowResSize;
 
     const { source, width, height } = resizeImage(imageElement, maxSide);
 
@@ -401,7 +436,7 @@ export function usePhotoTextureManager(
     } catch (error) {
       console.warn(
         `❌ Error descargando originalUrl para foto ${photo.id}:`,
-        error
+        error,
       );
       return null;
     }
@@ -524,7 +559,7 @@ export function usePhotoTextureManager(
    */
   const updateTextureLODs = (
     sortedPhotosWithDistance,
-    getPhotoOriginalUrl = null
+    getPhotoOriginalUrl = null,
   ) => {
     if (useLowPerformance) return; // En mobile no hacer LOD dinámico
     if (!sortedPhotosWithDistance || sortedPhotosWithDistance.length === 0)
@@ -555,7 +590,7 @@ export function usePhotoTextureManager(
           // Si hay otra foto en ultra-res, degradarla primero
           if (ultraResPhoto) {
             const prevPhoto = sortedPhotosWithDistance.find(
-              (p) => p.photo.id === ultraResPhoto
+              (p) => p.photo.id === ultraResPhoto,
             );
             if (prevPhoto) {
               downgradeFromUltraRes(prevPhoto.photo);
@@ -573,7 +608,7 @@ export function usePhotoTextureManager(
     } else if (ultraResPhoto && sortedPhotosWithDistance.length > 0) {
       // La foto ultra-res ya no es la más cercana, degradarla
       const ultraPhoto = sortedPhotosWithDistance.find(
-        (p) => p.photo.id === ultraResPhoto
+        (p) => p.photo.id === ultraResPhoto,
       );
       if (ultraPhoto) {
         downgradeFromUltraRes(ultraPhoto.photo);
@@ -614,7 +649,7 @@ export function usePhotoTextureManager(
     ) {
       const ultraMsg = ultraResPhoto ? ` | 🔥 ultra-res: ${ultraResPhoto}` : "";
       console.log(
-        `🔄 LOD: ${highResPhotos.size} en alta res | +${upgrades} upgrades, -${downgrades} downgrades${ultraMsg}`
+        `🔄 LOD: ${highResPhotos.size} en alta res | +${upgrades} upgrades, -${downgrades} downgrades${ultraMsg}`,
       );
     }
   };
@@ -636,7 +671,7 @@ export function usePhotoTextureManager(
   const startTextureCreationLoop = (
     lodGroup,
     photosWithMaterials,
-    onProgressUpdate
+    onProgressUpdate,
   ) => {
     if (textureCreationRunning) return;
     textureCreationRunning = true;
@@ -677,7 +712,7 @@ export function usePhotoTextureManager(
         }
         if (onProgressUpdate) onProgressUpdate();
         console.log(
-          `🧩 Bulk desktop texture creation completada (${created} texturas)`
+          `🧩 Bulk desktop texture creation completada (${created} texturas)`,
         );
       } finally {
         textureCreationRunning = false;
@@ -784,7 +819,7 @@ export function usePhotoTextureManager(
 
     if (cleanedCount > 0) {
       console.log(
-        `🧼 cleanTextureQueue: Limpiados ${cleanedCount} elementos obsoletos de la cola`
+        `🧼 cleanTextureQueue: Limpiados ${cleanedCount} elementos obsoletos de la cola`,
       );
     }
 
@@ -838,7 +873,7 @@ export function usePhotoTextureManager(
     const photoIds = photos.map((p) => p.id);
 
     console.log(
-      `🔍 Cargando fotos desde cache para ${photoIds.length} fotos...`
+      `🔍 Cargando fotos desde cache para ${photoIds.length} fotos...`,
     );
 
     if (isPlayground) {
@@ -890,7 +925,7 @@ export function usePhotoTextureManager(
         }
 
         console.log(
-          `✅ ${loadedFromCache} imágenes cargadas exitosamente desde cache`
+          `✅ ${loadedFromCache} imágenes cargadas exitosamente desde cache`,
         );
       }
 
@@ -946,26 +981,26 @@ export function usePhotoTextureManager(
         } catch (error) {
           console.warn(
             `⚠️ Error preparing image ${photo.id} for cache:`,
-            error
+            error,
           );
         }
       }
     }
 
     console.log(
-      `💾 Cacheando ${imagesToCache.length} imágenes en IndexedDB...`
+      `💾 Cacheando ${imagesToCache.length} imágenes en IndexedDB...`,
     );
 
     if (imagesToCache.length > 0) {
       try {
         const result = await bulkCacheImages(imagesToCache);
         console.log(
-          `✅ Cacheo completado: ${result.success} exitosos, ${result.failed} fallidos`
+          `✅ Cacheo completado: ${result.success} exitosos, ${result.failed} fallidos`,
         );
 
         cacheStats.value = await getCacheStats();
         console.log(
-          `📊 Total de imágenes en cache después de guardar: ${cacheStats.value.totalImages}`
+          `📊 Total de imágenes en cache después de guardar: ${cacheStats.value.totalImages}`,
         );
 
         imagesToCache.forEach(({ id }) => cachedPhotoIds.value.add(id));

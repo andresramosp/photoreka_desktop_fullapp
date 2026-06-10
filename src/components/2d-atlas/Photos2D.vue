@@ -47,7 +47,7 @@
 
     <!-- Config Panel Component (Desktop) -->
     <Photos2DConfigPanel
-      v-if="!isMobile"
+      v-if="!isMobile && !isPreview"
       v-model:showConfigPanel="showConfigPanel"
       v-model:selectedChunk="selectedChunk"
       v-model:selectedVisualAspects="selectedVisualAspects"
@@ -104,7 +104,7 @@
 
     <!-- Config Panel Component (Mobile) -->
     <Photos2DConfigPanelMobile
-      v-else
+      v-else-if="!isPreview"
       v-model:selectedChunk="selectedChunk"
       v-model:selectedVisualAspects="selectedVisualAspects"
       v-model:artisticScoreFilters="artisticScoreFilters"
@@ -131,48 +131,16 @@
     <!-- Hovered Photo Info -->
     <div
       v-if="hoveredPhoto && !showDiscreteLoader"
+      ref="tooltipRef"
       class="photo-tooltip"
+      :class="`tooltip-${tooltipPlacement}`"
       :style="{ left: tooltipPosition.x + 'px', top: tooltipPosition.y + 'px' }"
     >
-      <!-- Search score badge (top-right corner of tooltip) -->
-      <div
-        v-if="textSearchScoreMap && textSearchScoreMap.has(hoveredPhoto.id)"
-        class="tooltip-score-badge"
-      >
-        <svg
-          v-for="star in [3, 2, 1]"
-          :key="star"
-          viewBox="0 0 24 24"
-          class="tooltip-star"
-          :class="{
-            filled: star <= getHoveredPhotoStars(),
-            empty: star > getHoveredPhotoStars(),
-          }"
-          width="14"
-          height="14"
-        >
-          <path
-            fill="currentColor"
-            d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22L12 18.77L5.82 22L7 14.14L2 9.27l6.91-1.01L12 2z"
-          />
-        </svg>
-        <svg
-          v-if="getHoveredPhotoStars() === 0"
-          viewBox="0 0 24 24"
-          class="tooltip-star-question"
-          width="14"
-          height="14"
-        >
-          <path
-            fill="currentColor"
-            d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"
-          />
-        </svg>
-      </div>
       <img
         v-if="hoveredPhoto.thumbnailUrl"
         :src="hoveredPhoto.thumbnailUrl"
         class="tooltip-image"
+        @load="repositionHoveredTooltip"
       />
       <div class="tooltip-info">
         <span v-if="hoveredPhoto.dateTaken" class="tooltip-date">
@@ -183,7 +151,7 @@
 
     <!-- Floating Action Bar (standard selection toolbar) -->
     <FloatingActionBar
-      v-if="!isPlayground"
+      v-if="!isPlayground && !isPreview"
       :selected-ids="selectedPhotoIds"
       :show-delete="false"
       :show-add-to-collection="true"
@@ -199,7 +167,7 @@
     />
 
     <!-- Discrete Loading Indicator -->
-    <div v-show="showDiscreteLoader" class="discrete-loader">
+    <div v-show="showDiscreteLoader && !isPreview" class="discrete-loader">
       <div class="loader-spinner"></div>
       <span class="loader-text">{{ loaderTitle }}</span>
       <span v-if="loadingProgress > 0" class="loader-percentage"
@@ -303,11 +271,10 @@ import { use2DTextureManager } from "@/composables/2d-viewer/use2DTextureManager
 import { use2DLod } from "@/composables/2d-viewer/use2DLod.js";
 import { useTagBeacons2D } from "@/composables/2d-viewer/useTagBeacons2D.js";
 import { useTheme } from "@/composables/useTheme.js";
+import { useSmartTooltipPosition } from "@/composables/useSmartTooltipPosition.js";
 import { isMobileDevice } from "@/utils/utils.js";
 import { api } from "@/utils/axios";
 import { usePhotoScored } from "@/composables/usePhotoScored.js";
-import { use2DLayoutCache } from "@/composables/2d-viewer/use2DLayoutCache.js";
-
 // Props
 const props = defineProps({
   catalogUserId: {
@@ -318,14 +285,22 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  isPreview: {
+    type: Boolean,
+    default: false,
+  },
+  photosLimit: {
+    type: Number,
+    default: null,
+  },
 });
+const emit = defineEmits(["loading-state-change"]);
 
 // Initialize composables
 const message = useMessage();
 const router = useRouter();
 const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
 const { computePhotoStars } = usePhotoScored();
-const { saveLayoutToCache } = use2DLayoutCache();
 const {
   isProcessing: isProcessingTool,
   showToolSelector,
@@ -392,9 +367,11 @@ const _storedPhotoLimit2D =
     ? Number(window.localStorage.getItem("photoreka:atlas2d:photoLimit"))
     : 0;
 const photoLimit = ref(
-  _PHOTO_LIMIT_VALID_2D.includes(_storedPhotoLimit2D)
-    ? _storedPhotoLimit2D
-    : 10000,
+  props.isPreview
+    ? props.photosLimit
+    : _PHOTO_LIMIT_VALID_2D.includes(_storedPhotoLimit2D)
+      ? _storedPhotoLimit2D
+      : 10000,
 );
 // Track whether the limit-info message has been shown this session
 const limitMessageShown = ref(false);
@@ -561,12 +538,19 @@ let keyboardAnimationId = null;
 
 // UI state
 const showConfigPanel = ref(!isMobile.value);
+const isLoadingTextures = ref(false);
 const showDiscreteLoader = computed(
   () => isLoadingPositions.value || isLoadingTextures.value,
 );
+watch(
+  showDiscreteLoader,
+  (isLoading) => {
+    emit("loading-state-change", Boolean(isLoading));
+  },
+  { immediate: true },
+);
 const loaderTitle = ref("Loading photos");
 const loadingProgress = ref(0);
-const isLoadingTextures = ref(false);
 
 // Animation state for cluster transitions
 const isTransitioning = ref(false);
@@ -597,7 +581,25 @@ const photoById = computed(() => {
 // Selection state
 const selectedPhotoIds = ref([]);
 const hoveredPhoto = ref(null);
-const tooltipPosition = ref({ x: 0, y: 0 });
+const tooltipRef = shallowRef(null);
+const {
+  tooltipPosition,
+  tooltipPlacement,
+  placeTooltipAt,
+  repositionTooltip,
+  clearTooltipAnchor,
+} = useSmartTooltipPosition({
+  containerRef,
+  tooltipRef,
+  offset: 14,
+  margin: 8,
+  preferredOrder: ["top", "right", "left", "bottom"],
+});
+
+const repositionHoveredTooltip = () => {
+  if (!hoveredPhoto.value) return;
+  repositionTooltip();
+};
 
 // Modal state
 const showCollectionModal = ref(false);
@@ -1172,7 +1174,7 @@ const handleWheel = (e) => {
 const handleMouseDown = (e) => {
   if (e.button !== 0) return;
 
-  if (e.ctrlKey || e.metaKey) {
+  if ((e.ctrlKey || e.metaKey) && !props.isPreview) {
     // Ctrl/Cmd + drag → rect selection mode
     const rect = pixiContainer.value?.getBoundingClientRect();
     if (!rect) return;
@@ -1444,6 +1446,7 @@ const updateHoverState = (e) => {
       hoverTimer = null;
     }
     hoveredPhoto.value = null;
+    clearTooltipAnchor();
     return;
   }
 
@@ -1454,6 +1457,7 @@ const updateHoverState = (e) => {
       hoverTimer = null;
     }
     hoveredPhoto.value = null;
+    clearTooltipAnchor();
     return;
   }
 
@@ -1506,12 +1510,14 @@ const updateHoverState = (e) => {
       // Show tooltip only when zoom level is below threshold (far away)
       if (scale.value < 1.5) {
         hoveredPhoto.value = foundPhoto;
-        tooltipPosition.value = { x: e.clientX + 15, y: e.clientY + 15 };
+        placeTooltipAt({ x: mouseX, y: mouseY });
       } else {
         hoveredPhoto.value = null;
+        clearTooltipAnchor();
       }
     } else {
       hoveredPhoto.value = null;
+      clearTooltipAnchor();
     }
   }, HOVER_DEBOUNCE_MS);
 };
@@ -1801,7 +1807,7 @@ const loadPhotosToPixi = async () => {
           sprite.height = photoSize.value * 0.75;
           // Enable interaction for precise touch/click detection
           sprite.eventMode = "static";
-          sprite.cursor = "pointer";
+          sprite.cursor = props.isPreview ? "default" : "pointer";
 
           // Track pointer position to detect panning vs tap
           let pointerDownPos = null;
@@ -1815,6 +1821,10 @@ const loadPhotosToPixi = async () => {
 
           // Handle selection on pointerup (after validating it wasn't a pan)
           sprite.on("pointerup", (event) => {
+            if (props.isPreview) {
+              pointerDownPos = null;
+              return;
+            }
             if (!pointerDownPos || isPinching.value) {
               pointerDownPos = null;
               return;
@@ -3073,8 +3083,12 @@ watch(hoveredPhoto, (newPhoto, oldPhoto) => {
       sprite.alpha = 1;
     }
     previousHoveredId = newPhoto.id;
+    nextTick(() => {
+      repositionHoveredTooltip();
+    });
   } else {
     previousHoveredId = null;
+    clearTooltipAnchor();
   }
 });
 
@@ -3113,15 +3127,6 @@ watch(
   () => photos2D.value,
   () => {
     // Save to dashboard cache if not in playground mode
-    if (
-      !props.isPlayground &&
-      !props.catalogUserId &&
-      userStore.user?.id &&
-      photos2D.value &&
-      photos2D.value.length > 0
-    ) {
-      saveLayoutToCache(photos2D.value, selectedChunk.value, userStore.user.id);
-    }
 
     if (isTransitioning.value) return;
     ensurePatternTag();
@@ -3263,7 +3268,7 @@ watch(isTransitioning, (v) => {
 
 /* Photo tooltip */
 .photo-tooltip {
-  position: fixed;
+  position: absolute;
   /* background: rgba(30, 30, 30, 0.95); */
   border-radius: 8px;
   padding: 8px;
