@@ -19,6 +19,7 @@ import {
   invalidateCacheByPattern,
   removeByKey,
 } from '../app/decorators/withCache.js'
+import { CacheInvalidationService } from '#services/cache_invalidation_service'
 
 /**
  * The error handler is used to convert an exception
@@ -64,7 +65,7 @@ const migrator = new MigrationRunner(db, app, {
 })
 
 // removeByKey('location_inference:*')
-// invalidateCache()
+// CacheInvalidationService.invalidateAll(70)
 
 try {
   await migrator.run()

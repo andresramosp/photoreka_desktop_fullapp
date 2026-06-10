@@ -1,5 +1,7 @@
 import { invalidateCache, invalidateCacheByPattern } from '../decorators/withCache.js'
 import db from '@adonisjs/lucid/services/db'
+import ThreeDManager from '../managers/3d_manager.js'
+import TagCloudManager from '../managers/tagcloud_manager.js'
 
 /**
  * Centralized cache invalidation policies.
@@ -19,6 +21,7 @@ import db from '@adonisjs/lucid/services/db'
  * Watermark columns (cache_invalidation_watermarks):
  *  - net_delta   : signed sum — +N on analysis, -N on deletion
  *  - churn_delta : unsigned sum — always +=|N|, catches 60+60=120 real changes netting to 0
+ *  - has_payload : whether the user currently has any expensive-cache-backed data at all
  */
 
 /** Number of analyzed-photo changes that must accumulate before flushing expensive caches */
@@ -34,6 +37,19 @@ const EXPENSIVE_CACHE_PATTERNS: ReadonlyArray<(userId: string) => string> = [
   (userId) => `getTagCloud:${userId}:*`,
   (userId) => `reportEmbeddings:*:${userId}`,
 ]
+
+/**
+ * Canonical dashboard preview variants to keep warm after expensive invalidation.
+ * Tune these values to match front-end preview requests.
+ */
+const WARMUP_2D_VARIANTS: ReadonlyArray<{ chunkName: string; limit: number; outputDims: number }> =
+  [{ chunkName: 'general', limit: 500, outputDims: 2 }]
+
+const WARMUP_TAGCLOUD_VARIANTS: ReadonlyArray<{
+  outputDims: number
+  minPhotoCount: number
+  limit: number
+}> = [{ outputDims: 2, minPhotoCount: 1, limit: 5000 }]
 
 export class CacheInvalidationService {
   /**
@@ -153,32 +169,60 @@ export class CacheInvalidationService {
    */
   private static async maybeInvalidateExpensiveCaches(
     userId: string,
-    signedDelta: number
+    signedDelta: number,
+    force: boolean = false
   ): Promise<boolean> {
     const absDelta = Math.abs(signedDelta)
+    const currentHasPayload = await this.hasExpensiveCachePayload(userId)
+
+    const previousStateResult = await db.rawQuery<{ rows: { has_payload: boolean }[] }>(
+      `SELECT has_payload
+       FROM cache_invalidation_watermarks
+       WHERE user_id = :userId`,
+      { userId: Number(userId) }
+    )
+
+    const previousHasPayload = Boolean(previousStateResult.rows[0]?.has_payload)
+    const crossedPayloadBoundary = previousHasPayload !== currentHasPayload
 
     // Atomic upsert: insert first row or increment existing deltas in one round-trip.
-    const result = await db.rawQuery<{ rows: { net_delta: number; churn_delta: number }[] }>(
-      `INSERT INTO cache_invalidation_watermarks (user_id, net_delta, churn_delta, updated_at)
-       VALUES (:userId, :signedDelta, :absDelta, NOW())
+    const result = await db.rawQuery<{
+      rows: { net_delta: number; churn_delta: number; has_payload: boolean }[]
+    }>(
+      `INSERT INTO cache_invalidation_watermarks (
+         user_id,
+         net_delta,
+         churn_delta,
+         has_payload,
+         updated_at
+       )
+       VALUES (:userId, :signedDelta, :absDelta, :currentHasPayload, NOW())
        ON CONFLICT (user_id) DO UPDATE SET
          net_delta   = cache_invalidation_watermarks.net_delta   + :signedDelta,
          churn_delta = cache_invalidation_watermarks.churn_delta + :absDelta,
+         has_payload = :currentHasPayload,
          updated_at  = NOW()
-       RETURNING net_delta, churn_delta`,
-      { userId: Number(userId), signedDelta, absDelta }
+       RETURNING net_delta, churn_delta, has_payload`,
+      { userId: Number(userId), signedDelta, absDelta, currentHasPayload }
     )
 
-    const { net_delta, churn_delta } = result.rows[0]
+    const { net_delta, churn_delta, has_payload } = result.rows[0]
 
     const shouldInvalidate =
+      force ||
+      crossedPayloadBoundary ||
       Math.abs(net_delta) >= EXPENSIVE_CACHE_DELTA_THRESHOLD ||
       churn_delta >= EXPENSIVE_CACHE_DELTA_THRESHOLD
 
     if (!shouldInvalidate) {
       console.log(
         `[CacheInvalidation] Expensive caches deferred for user ${userId} ` +
-          `(net_delta=${net_delta}, churn_delta=${churn_delta}, threshold=${EXPENSIVE_CACHE_DELTA_THRESHOLD})`
+          `(` +
+          `net_delta=${net_delta}, ` +
+          `churn_delta=${churn_delta}, ` +
+          `has_payload=${has_payload}, ` +
+          `threshold=${EXPENSIVE_CACHE_DELTA_THRESHOLD}` +
+          `)`
       )
       return false
     }
@@ -187,19 +231,134 @@ export class CacheInvalidationService {
     // the threshold will start accumulating from 0, not from the old values.
     await db.rawQuery(
       `UPDATE cache_invalidation_watermarks
-       SET net_delta = 0, churn_delta = 0, last_invalidated_at = NOW(), updated_at = NOW()
+       SET net_delta = 0,
+           churn_delta = 0,
+           has_payload = :currentHasPayload,
+           last_invalidated_at = NOW(),
+           updated_at = NOW()
        WHERE user_id = :userId`,
-      { userId: Number(userId) }
+      { userId: Number(userId), currentHasPayload }
     )
 
     for (const pattern of EXPENSIVE_CACHE_PATTERNS) {
       await invalidateCacheByPattern(pattern(userId))
     }
 
+    await this.warmExpensiveDashboardCaches(userId)
+
     console.log(
       `[CacheInvalidation] Expensive caches INVALIDATED for user ${userId} ` +
-        `(net_delta=${net_delta}, churn_delta=${churn_delta}, threshold=${EXPENSIVE_CACHE_DELTA_THRESHOLD})`
+        `(` +
+        `net_delta=${net_delta}, ` +
+        `churn_delta=${churn_delta}, ` +
+        `has_payload=${has_payload}, ` +
+        `boundary_crossed=${crossedPayloadBoundary}, ` +
+        `threshold=${EXPENSIVE_CACHE_DELTA_THRESHOLD}` +
+        `)`
     )
     return true
+  }
+
+  /**
+   * Detects whether any expensive cache can currently return non-empty data.
+   * This lets us invalidate immediately on 0 -> >0 and >0 -> 0 transitions,
+   * without lowering the normal watermark threshold for steady-state churn.
+   */
+  private static async hasExpensiveCachePayload(userId: string): Promise<boolean> {
+    const result = await db.rawQuery<{ rows: { has_payload: boolean }[] }>(
+      `SELECT (
+         EXISTS (
+           SELECT 1
+           FROM photos p
+           WHERE p.user_id = :userId
+             AND p.deleted_at IS NULL
+             AND (
+               p.embedding IS NOT NULL
+               OR p.descriptions IS NOT NULL
+             )
+         )
+         OR EXISTS (
+           SELECT 1
+           FROM descriptions_chunks dc
+           JOIN photos p ON p.id = dc.photo_id
+           WHERE p.user_id = :userId
+             AND p.deleted_at IS NULL
+             AND dc.embedding IS NOT NULL
+         )
+         OR EXISTS (
+           SELECT 1
+           FROM tags t
+           JOIN tags_photos tp ON tp.tag_id = t.id
+           JOIN photos p ON p.id = tp.photo_id
+           WHERE p.user_id = :userId
+             AND p.deleted_at IS NULL
+             AND t.embedding IS NOT NULL
+         )
+       ) AS has_payload`,
+      { userId: Number(userId) }
+    )
+
+    return Boolean(result.rows[0]?.has_payload)
+  }
+
+  /**
+   * Rebuild selected dashboard preview caches immediately after invalidation so
+   * front requests don't pay cold-start cost.
+   */
+  private static async warmExpensiveDashboardCaches(userId: string): Promise<void> {
+    const threeDManager = new ThreeDManager()
+    const tagCloudManager = new TagCloudManager()
+
+    const warmups: Promise<unknown>[] = []
+
+    for (const variant of WARMUP_2D_VARIANTS) {
+      warmups.push(
+        threeDManager.get3DPhotos(userId, variant.chunkName, variant.limit, variant.outputDims)
+      )
+    }
+
+    for (const variant of WARMUP_TAGCLOUD_VARIANTS) {
+      warmups.push(
+        tagCloudManager.getTagCloud(
+          userId,
+          variant.outputDims,
+          variant.minPhotoCount,
+          variant.limit
+        )
+      )
+    }
+
+    const settled = await Promise.allSettled(warmups)
+    const failed = settled.filter((result) => result.status === 'rejected').length
+
+    if (failed > 0) {
+      console.warn(
+        `[CacheInvalidation] Warm-up completed with ${failed}/${settled.length} failures for user ${userId}`
+      )
+      return
+    }
+
+    console.log(
+      `[CacheInvalidation] Warm-up completed for user ${userId} (${settled.length} cache variants)`
+    )
+  }
+
+  static async invalidateAll(userId: string | number): Promise<void> {
+    await invalidateCache(`getPhotosByUser_${userId}`)
+    await invalidateCache(`getPhotosPreview_${userId}`)
+    await invalidateCache(`getTagsByUser_${userId}`)
+
+    await invalidateCacheByPattern(`getPhotosIdsForSearch:${userId}:*`)
+    await invalidateCacheByPattern(`searchByTagsDirect:${userId}:*`)
+    await invalidateCacheByPattern(`getScoredPhotosByTagsAndDesc:${userId}:*`)
+    await invalidateCacheByPattern(`getScoredPhotosByTags:${userId}:*`)
+    await invalidateCacheByPattern(`getScoredPhotoImageByFullQuery:${userId}:*`)
+    await invalidateCacheByPattern(`searchByPhotos:${userId}:*`)
+    await invalidateCacheByPattern(`checkSimilarDuplicates:${userId}:*`)
+    await invalidateCacheByPattern(`checkExactDuplicates:${userId}:*`)
+
+    await this.maybeInvalidateExpensiveCaches(String(userId), 0, true)
+
+    console.log(`[CacheInvalidation] invalidateAll: Invalidated ALL caches for user ${userId}`)
   }
 }

@@ -17,6 +17,10 @@ export default class CacheInvalidationWatermark extends BaseModel {
   @column()
   declare churnDelta: number
 
+  /** Whether the user currently has any expensive-cache-backed data */
+  @column()
+  declare hasPayload: boolean
+
   /** Last time expensive caches were actually invalidated */
   @column.dateTime()
   declare lastInvalidatedAt: DateTime | null
