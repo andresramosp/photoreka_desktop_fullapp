@@ -70,14 +70,11 @@
       </header>
 
       <div class="universe-content" :class="universeContentClasses">
-        <KeepAlive>
-          <component
-            :is="currentUniverseComponent"
-            :key="currentUniverseComponentKey"
-            v-bind="currentUniverseProps"
-            @loading-state-change="handlePhotos2DLoadingState"
-          />
-        </KeepAlive>
+        <component
+          :is="currentUniverseComponent"
+          v-bind="currentUniverseProps"
+          @loading-state-change="handlePhotos2DLoadingState"
+        />
       </div>
 
       <Transition name="loading-overlay-fade">
@@ -180,16 +177,6 @@ const loadingOverlaySubtitle = computed(() =>
 const universeContentClasses = computed(() => ({
   "is-soft-loading": showLoadingOverlay.value,
 }));
-const tagCloudRenderKey = ref(0);
-const photos2DRenderKey = ref(0);
-
-const currentUniverseComponentKey = computed(() =>
-  visualizationMode.value === "tagcloud"
-    ? `tagcloud-${tagCloudRenderKey.value}`
-    : `photos2d-${photos2DRenderKey.value}`,
-);
-
-let refreshUniverseTimer: ReturnType<typeof setTimeout> | null = null;
 
 let showOverlayTimer: ReturnType<typeof setTimeout> | null = null;
 let hideOverlayTimer: ReturnType<typeof setTimeout> | null = null;
@@ -205,63 +192,6 @@ const clearOverlayTimers = () => {
     hideOverlayTimer = null;
   }
 };
-
-const clearRefreshUniverseTimer = () => {
-  if (refreshUniverseTimer) {
-    clearTimeout(refreshUniverseTimer);
-    refreshUniverseTimer = null;
-  }
-};
-
-const refreshUniverseData = async () => {
-  tagCloudStore.resetStore();
-  tagCloudRenderKey.value += 1;
-  photos2DRenderKey.value += 1;
-
-  if (!isQuantumVoid.value) {
-    try {
-      await tagCloudStore.prefetch();
-    } catch {
-      // Keep UI resilient if prefetch fails; existing error handling is in the store.
-    }
-  }
-};
-
-const processedIdsSignature = computed(() =>
-  photosStore.processedPhotos
-    .map((photo) => Number(photo?.id || 0))
-    .sort((a, b) => a - b)
-    .join(","),
-);
-const photosLength = computed(() => photosStore.photos?.length || 0);
-
-watch(
-  [processedIdsSignature, photosLength],
-  ([nextProcessed, nextLength], [prevProcessed, prevLength]) => {
-    const processedChanged = nextProcessed !== prevProcessed;
-    const lengthChanged = nextLength !== prevLength;
-
-    // Trigger refresh when photos are analyzed (processed set changes)
-    // or when photos are deleted/added (length changes).
-    if (!processedChanged && !lengthChanged) return;
-
-    clearRefreshUniverseTimer();
-    refreshUniverseTimer = setTimeout(() => {
-      refreshUniverseTimer = null;
-      void refreshUniverseData();
-    }, 220);
-  },
-);
-
-watch(
-  [visualizationMode, isQuantumVoid],
-  ([mode, isVoid]) => {
-    if (mode === "tagcloud" && !isVoid && !tagCloudStore.isReady) {
-      void tagCloudStore.prefetch();
-    }
-  },
-  { immediate: true },
-);
 
 watch(
   rawShowLoadingOverlay,
@@ -367,13 +297,12 @@ const handlePhotos2DLoadingState = (isLoading: boolean) => {
 
 onMounted(() => {
   if (!isQuantumVoid.value) {
-    void tagCloudStore.prefetch();
+    tagCloudStore.prefetch();
   }
 });
 
 onBeforeUnmount(() => {
   clearOverlayTimers();
-  clearRefreshUniverseTimer();
 });
 </script>
 

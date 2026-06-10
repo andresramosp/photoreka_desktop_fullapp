@@ -102,6 +102,8 @@ import {
   ref,
   computed,
   onMounted,
+  onActivated,
+  onDeactivated,
   onBeforeUnmount,
   nextTick,
   watch,
@@ -268,6 +270,7 @@ const TOOLTIP_FETCH_DEBOUNCE_MS = 220;
 let tooltipRotationTimer = null;
 let tooltipFetchRequestId = 0;
 let tooltipFetchDebounceTimer = null;
+let interactionsBound = false;
 
 const normalizeGroupName = (groupName) => {
   if (!groupName) return "";
@@ -471,7 +474,7 @@ watch(
 // PIXI init
 // ---------------------------------------------------------------------------
 const initPixi = async () => {
-  if (!pixiContainer.value) return;
+  if (!pixiContainer.value || app) return;
 
   app = new PIXI.Application();
   await app.init({
@@ -481,6 +484,11 @@ const initPixi = async () => {
     autoDensity: true,
     resolution: Math.min(2, window.devicePixelRatio || 1),
   });
+  if (!pixiContainer.value) {
+    app.destroy(true, { children: true, texture: false });
+    app = null;
+    return;
+  }
   pixiContainer.value.appendChild(app.canvas);
 
   world = new PIXI.Container();
@@ -504,7 +512,9 @@ const destroyPixi = () => {
   if (app) {
     try {
       app.ticker.remove(onTick);
-      app.destroy(true, { children: true, texture: true });
+      // Keep texture pools intact; aggressively destroying textures has caused
+      // runtime issues when this component is cached by KeepAlive and revisited.
+      app.destroy(true, { children: true, texture: false });
     } catch (e) {
       console.warn("[PixiTagCloud] destroy error", e);
     }
@@ -516,6 +526,15 @@ const destroyPixi = () => {
     hoveredLabelIndex = -1;
     rawPositions = null;
     currentExpansionStrength = 0;
+  }
+};
+
+const hasUsableApp = () => {
+  if (!app) return false;
+  try {
+    return Boolean(app.renderer && app.stage && app.ticker && app.canvas);
+  } catch {
+    return false;
   }
 };
 
@@ -672,7 +691,7 @@ const resetView = () => {
       (w - padding * 2) / spanX,
       (h - padding * 2) / spanY,
     );
-    camera.scale = fitScale;
+    camera.scale = fitScale * 0.93; // leave a little extra margin
     camera.x = w / 2 - ((minX + maxX) / 2) * fitScale;
     camera.y = h / 2 - ((minY + maxY) / 2) * fitScale;
   } else {
@@ -1327,7 +1346,9 @@ const getTagsInScreenRect = (rx1, ry1, rx2, ry2) => {
 };
 
 const bindInteractions = () => {
+  if (!app || interactionsBound) return;
   const canvas = app.canvas;
+  if (!canvas) return;
   canvas.addEventListener("wheel", onWheel, { passive: false });
   canvas.addEventListener("pointerdown", onPointerDown);
   canvas.addEventListener("pointermove", onCanvasPointerMove);
@@ -1344,11 +1365,16 @@ const bindInteractions = () => {
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
   }
+  interactionsBound = true;
 };
 
 const unbindInteractions = () => {
-  if (!app) return;
+  if (!app || !interactionsBound) return;
   const canvas = app.canvas;
+  if (!canvas) {
+    interactionsBound = false;
+    return;
+  }
   canvas.removeEventListener("wheel", onWheel);
   canvas.removeEventListener("pointerdown", onPointerDown);
   canvas.removeEventListener("pointermove", onCanvasPointerMove);
@@ -1365,6 +1391,7 @@ const unbindInteractions = () => {
     window.removeEventListener("keydown", handleKeyDown);
     window.removeEventListener("keyup", handleKeyUp);
   }
+  interactionsBound = false;
 };
 
 const onWheel = (e) => {
@@ -1807,19 +1834,82 @@ const onResize = () => {
 // ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
+const pauseRuntime = () => {
+  hoveredTag.value = null;
+  dotTooltipTag.value = null;
+  clearTooltipAnchor();
+  setHoveredLabelIndex(-1);
+
+  if (labelUpdateRaf) {
+    cancelAnimationFrame(labelUpdateRaf);
+    labelUpdateRaf = null;
+  }
+  if (dynamicSearchTimer) {
+    clearTimeout(dynamicSearchTimer);
+    dynamicSearchTimer = null;
+  }
+  if (tooltipFetchDebounceTimer) {
+    clearTimeout(tooltipFetchDebounceTimer);
+    tooltipFetchDebounceTimer = null;
+  }
+  if (keyboardAnimationId) {
+    cancelAnimationFrame(keyboardAnimationId);
+    keyboardAnimationId = null;
+  }
+  stopTooltipRotation();
+  unbindInteractions();
+
+  if (app?.stop) {
+    app.stop();
+  }
+};
+
+const resumeRuntime = async () => {
+  if (!hasUsableApp()) {
+    destroyPixi();
+    await initPixi();
+    buildScene();
+    resetView();
+  }
+
+  if (!hasUsableApp()) return;
+
+  let canvas = null;
+  try {
+    canvas = app.canvas;
+  } catch {
+    destroyPixi();
+    return;
+  }
+  if (!canvas) return;
+
+  if (pixiContainer.value && canvas.parentNode !== pixiContainer.value) {
+    pixiContainer.value.appendChild(canvas);
+  }
+
+  bindInteractions();
+  if (app?.start) {
+    app.start();
+  }
+  updateCanvasCursor();
+  scheduleLabelUpdate(true);
+};
+
 onMounted(async () => {
-  await initPixi();
-  buildScene();
-  resetView();
+  await resumeRuntime();
+});
+
+onActivated(() => {
+  void resumeRuntime();
+});
+
+onDeactivated(() => {
+  pauseRuntime();
+  destroyPixi();
 });
 
 onBeforeUnmount(() => {
-  if (labelUpdateRaf) cancelAnimationFrame(labelUpdateRaf);
-  if (dynamicSearchTimer) clearTimeout(dynamicSearchTimer);
-  if (tooltipFetchDebounceTimer) clearTimeout(tooltipFetchDebounceTimer);
-  if (keyboardAnimationId) cancelAnimationFrame(keyboardAnimationId);
-  stopTooltipRotation();
-  unbindInteractions();
+  pauseRuntime();
   destroyPixi();
 });
 

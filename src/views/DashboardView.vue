@@ -55,17 +55,13 @@
           <!-- Seccion Basic Stats -->
           <div class="section-label">Quick Stats</div>
           <GaugesSection />
-          <!-- Daily artistic curation -->
-          <div class="section-label">DAILY ARTISTIC CURATION</div>
-          <div class="daily-eureka-card">
-            <DailyEurekaCard v-if="!isDashboardEmpty" />
-            <div v-else class="mini-empty daily-eureka-empty">
-              <n-icon size="32" color="var(--text-tertiary)">
-                <CollectionsIcon />
-              </n-icon>
-              <p>Nothing here yet</p>
-            </div>
-          </div>
+
+          <!-- Smart Tools -->
+          <div class="section-label">SMART TOOLS</div>
+          <SmartToolsSection
+            :app-access-mode="appAccessMode"
+            :is-mobile-limited-mode="isMobileLimitedMode"
+          />
         </div>
       </aside>
 
@@ -79,12 +75,17 @@
       <!-- ══════════════════════════════════════════ -->
       <aside class="panel panel-right">
         <div class="panel-body">
-          <!-- Smart Tools -->
-          <div class="section-label">SMART TOOLS</div>
-          <SmartToolsSection
-            :app-access-mode="appAccessMode"
-            :is-mobile-limited-mode="isMobileLimitedMode"
-          />
+          <!-- Daily artistic curation -->
+          <div class="section-label">DAILY ARTISTIC CURATION</div>
+          <div class="daily-eureka-card">
+            <DailyEurekaCard v-if="!isDashboardEmpty" />
+            <div v-else class="mini-empty daily-eureka-empty">
+              <n-icon size="32" color="var(--text-tertiary)">
+                <CollectionsIcon />
+              </n-icon>
+              <p>Nothing here yet</p>
+            </div>
+          </div>
 
           <!-- Recent Collections & Series -->
           <div class="section-label section-label--spaced">
