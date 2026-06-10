@@ -904,6 +904,8 @@ const tagBeaconsSystem = useTagBeacons2D(
   beaconsClusterType,
 );
 
+tagBeaconsSystem.config.value.enabled = props.isPreview;
+
 // Selected photos with full data
 const selectedPhotos = computed(() => {
   return photos2D.value.filter((photo) =>
