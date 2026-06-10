@@ -271,6 +271,9 @@ let tooltipRotationTimer = null;
 let tooltipFetchRequestId = 0;
 let tooltipFetchDebounceTimer = null;
 let interactionsBound = false;
+let containerResizeObserver = null;
+let lastViewportWidth = 0;
+let lastViewportHeight = 0;
 
 const normalizeGroupName = (groupName) => {
   if (!groupName) return "";
@@ -1361,6 +1364,13 @@ const bindInteractions = () => {
   window.addEventListener("pointermove", onPointerMove);
   window.addEventListener("pointerup", onPointerUp);
   window.addEventListener("resize", onResize);
+  if (!containerResizeObserver && typeof ResizeObserver !== "undefined") {
+    const resizeTarget = containerRef.value || pixiContainer.value;
+    if (resizeTarget) {
+      containerResizeObserver = new ResizeObserver(() => onResize());
+      containerResizeObserver.observe(resizeTarget);
+    }
+  }
   if (!props.isPreview) {
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
@@ -1369,6 +1379,10 @@ const bindInteractions = () => {
 };
 
 const unbindInteractions = () => {
+  if (containerResizeObserver) {
+    containerResizeObserver.disconnect();
+    containerResizeObserver = null;
+  }
   if (!app || !interactionsBound) return;
   const canvas = app.canvas;
   if (!canvas) {
@@ -1825,7 +1839,17 @@ let resizeRaf = null;
 const onResize = () => {
   if (resizeRaf) cancelAnimationFrame(resizeRaf);
   resizeRaf = requestAnimationFrame(() => {
-    if (!app) return;
+    resizeRaf = null;
+    if (!app || !pixiContainer.value) return;
+    const width = pixiContainer.value.clientWidth;
+    const height = pixiContainer.value.clientHeight;
+    if (!width || !height) return;
+
+    if (width === lastViewportWidth && height === lastViewportHeight) return;
+    lastViewportWidth = width;
+    lastViewportHeight = height;
+
+    app.renderer.resize(width, height);
     buildScene();
     resetView();
   });

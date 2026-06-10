@@ -317,6 +317,7 @@ onBeforeUnmount(() => {
 
 .panel-center {
   background-color: var(--bg-deep-surface);
+  min-width: 0;
   border-left: 1px solid
     color-mix(in srgb, var(--accent-color) 18%, transparent);
   border-right: 1px solid
@@ -497,6 +498,7 @@ onBeforeUnmount(() => {
 
 .universe-content {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   transition:
     opacity 0.22s ease,

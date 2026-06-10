@@ -2855,12 +2855,45 @@ const formatDate = (dateString) => {
 };
 
 // Resize handler
+let resizeObserver = null;
+let resizeRafId = null;
 const handleResize = () => {
-  if (pixiApp.value && pixiContainer.value) {
-    pixiApp.value.renderer.resize(
-      pixiContainer.value.clientWidth,
-      pixiContainer.value.clientHeight,
-    );
+  if (resizeRafId) cancelAnimationFrame(resizeRafId);
+  resizeRafId = requestAnimationFrame(() => {
+    resizeRafId = null;
+    if (!pixiApp.value || !pixiContainer.value) return;
+    const width = pixiContainer.value.clientWidth;
+    const height = pixiContainer.value.clientHeight;
+    if (!width || !height) return;
+    pixiApp.value.renderer.resize(width, height);
+
+    // Match the manual "Fit to view" behavior after layout changes
+    // (e.g. opening/closing dashboard sidebar).
+    if (
+      photos2D.value.length > 0 &&
+      !isLoadingPositions.value &&
+      !isTransitioning.value
+    ) {
+      resetView(false);
+    }
+  });
+};
+
+const observePixiContainerResize = () => {
+  if (resizeObserver || typeof ResizeObserver === "undefined") return;
+  if (!pixiContainer.value) return;
+  resizeObserver = new ResizeObserver(() => handleResize());
+  resizeObserver.observe(pixiContainer.value);
+};
+
+const disconnectPixiContainerResize = () => {
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+    resizeObserver = null;
+  }
+  if (resizeRafId) {
+    cancelAnimationFrame(resizeRafId);
+    resizeRafId = null;
   }
 };
 
@@ -2961,6 +2994,7 @@ onMounted(async () => {
   const storePromise = photosStore.getOrFetch(false).catch(() => null);
 
   window.addEventListener("resize", handleResize);
+  observePixiContainerResize();
 
   // Start animation loop
   startAnimationLoop();
@@ -3023,6 +3057,7 @@ onUnmounted(() => {
   }
 
   window.removeEventListener("resize", handleResize);
+  disconnectPixiContainerResize();
   stopAnimationLoop();
   if (filterSnapReflowTimer) {
     clearTimeout(filterSnapReflowTimer);
