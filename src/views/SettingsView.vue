@@ -1037,7 +1037,7 @@ const userProfileLabel = computed(() => {
 
 const preferredSourceLabel = computed(() => {
   const source = userStore.user?.preferredSource;
-  if (source === "ligthroom") return "Lightroom";
+  if (source === "lightroom") return "Lightroom";
   if (source === "web") return "Web";
   return source || "Web";
 });

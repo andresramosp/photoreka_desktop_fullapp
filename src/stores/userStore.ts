@@ -31,7 +31,7 @@ interface User {
   avatar?: string;
   provider?: "email" | "google" | "facebook";
   usage?: Usage;
-  preferredSource: "web" | "ligthroom";
+  preferredSource: "web" | "lightroom";
   isEmailConfirmed: boolean;
   profiles?: UserProfile;
 }

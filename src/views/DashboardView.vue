@@ -7,50 +7,14 @@
       <aside class="panel panel-left">
         <div class="panel-body">
           <!-- Welcome + Stats -->
-          <div class="panel-section">
-            <div class="welcome-block">
-              <h2 class="welcome-name">
-                WELCOME BACK,&nbsp;{{
-                  userStore.userShortName?.toUpperCase()
-                }}!👋
-              </h2>
-              <p class="welcome-tagline">
-                <template v-if="avgAestheticScore != null">
-                  Ready to organize your photos with Photoreka smart tools.
-                </template>
-                <template v-else
-                  >Ready to explore your photo universe.</template
-                >
-              </p>
-            </div>
-
-            <div class="photo-stats-block">
-              <div
-                class="photos-primary-stat"
-                role="group"
-                aria-label="Photo stats"
-              >
-                <div class="photos-primary-info">
-                  <n-icon size="16" class="photos-primary-icon">
-                    <LayersOutline />
-                  </n-icon>
-                  <span class="photos-primary-count">{{
-                    photos.length.toLocaleString()
-                  }}</span>
-                  <span class="photos-primary-label">Photos</span>
-                </div>
-
-                <n-button
-                  type="info"
-                  size="small"
-                  @click="navigateToWorkspace"
-                  aria-label="See in workspace"
-                >
-                  Open Workspace
-                </n-button>
-              </div>
-            </div>
-          </div>
+          <WelcomeSection
+            :user-short-name="userStore.userShortName"
+            :avg-aesthetic-score="avgAestheticScore"
+            :photos-count="photos.length"
+            :preferred-source="userStore.user?.preferredSource"
+            @go-workspace="navigateToWorkspace"
+            @go-upload="navigateToImportArea"
+          />
 
           <!-- Quick Stats -->
           <div class="panel-section">
@@ -190,6 +154,7 @@ import GaugesSection from "@/components/dashboard/GaugesSection.vue";
 import ModePopoverSelector from "@/components/ModePopoverSelector.vue";
 import PhotoUniverse from "@/components/dashboard/PhotoUniverse.vue";
 import SmartToolsSection from "@/components/dashboard/SmartToolsSection.vue";
+import WelcomeSection from "@/components/dashboard/WelcomeSection.vue";
 import { isMobileDevice } from "@/utils/utils.js";
 
 // Import @vicons icons from ionicons5 for reliability
@@ -200,7 +165,6 @@ import {
   CameraOutline,
   PersonOutline,
   ImageOutline,
-  LayersOutline,
   ApertureOutline,
   MoonOutline,
   ColorPaletteOutline,
@@ -489,6 +453,10 @@ const navigateToWorkspace = () => {
   router.push({ name: "workspace" });
 };
 
+const navigateToImportArea = () => {
+  router.push({ name: "import-area", hash: "#upload" });
+};
+
 const navigateToCollections = () => {
   router.push({ name: "collections" });
 };
@@ -693,13 +661,21 @@ const navigateToCollections = () => {
   /* justify-content: center; */
 }
 
+.photos-primary-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0;
+  justify-content: center;
+}
+
 .photos-primary-icon {
   color: var(--accent-color);
   flex-shrink: 0;
 }
 
 .photos-primary-count {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 800;
   color: var(--accent-color);
   line-height: 1;
@@ -707,57 +683,41 @@ const navigateToCollections = () => {
 }
 
 .photos-primary-label {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-tertiary);
-  font-weight: 500;
+  font-weight: 600;
+  line-height: 1.05;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.photos-workspace-button {
-  flex-shrink: 0;
-  border: 1px solid
-    color-mix(in srgb, var(--primary-color) 45%, var(--border-color));
-  background: color-mix(in srgb, var(--primary-color) 15%, var(--bg-container));
-  color: var(--text-primary);
-  border-radius: 10px;
-  padding: 0 12px;
-  height: 34px;
-  font-size: 12px;
+.photos-workspace-link {
+  margin: 0;
+  height: auto;
+  min-height: 0;
+  line-height: 1.05;
+  text-align: left;
+  justify-content: flex-start;
+}
+
+.photos-workspace-link :deep(.n-button__content) {
+  font-size: 11px;
   font-weight: 600;
-  line-height: 1;
-  transition:
-    border-color 0.18s ease,
-    background-color 0.18s ease,
-    transform 0.18s ease;
+  line-height: 1.05;
 }
 
-.photos-workspace-button:hover {
-  border-color: var(--primary-color);
-  background: color-mix(in srgb, var(--primary-color) 22%, var(--bg-container));
-}
-
-.photos-workspace-button:focus-visible {
-  outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px
-    color-mix(in srgb, var(--primary-color) 35%, transparent);
-}
-
-.photos-workspace-button:active {
-  transform: translateY(1px);
+.photos-workspace-link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary-color) 40%, transparent);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 @media (max-width: 360px) {
   .photos-primary-stat {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .photos-workspace-button {
-    width: 100%;
   }
 }
 
