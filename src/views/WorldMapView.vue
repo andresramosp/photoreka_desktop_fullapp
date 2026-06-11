@@ -208,6 +208,7 @@
     <!-- Single-marker hover tooltip -->
     <div
       v-if="hoveredMapPhoto"
+      ref="mapTooltipRef"
       class="map-photo-tooltip"
       :style="{
         left: mapTooltipPosition.x + 'px',
@@ -293,6 +294,7 @@ import type {
 } from "@/components/world-map/AiLocationModal.vue";
 import { LMap, LTileLayer, LControlLayers } from "@vue-leaflet/vue-leaflet";
 import { useIsMobile } from "@/composables/useIsMobile.js";
+import { useSmartTooltipPosition } from "@/composables/useSmartTooltipPosition.js";
 
 import L from "leaflet";
 import "leaflet.markercluster";
@@ -396,7 +398,19 @@ const correctedPhotoIds = ref<Set<string | number>>(new Set());
 // [DEBUG] Enable to visualise proximity-located photos and their anchor markers.
 const ENABLE_DEBUG_PROXITTY = false;
 const hoveredMapPhoto = ref<PhotoWithGps | null>(null);
-const mapTooltipPosition = ref({ x: 0, y: 0 });
+const mapTooltipRef = ref<HTMLElement | null>(null);
+const {
+  tooltipPosition: mapTooltipPosition,
+  placeTooltipAt,
+  placeTooltipAtNextTick,
+  clearTooltipAnchor,
+} = useSmartTooltipPosition({
+  containerRef: mapContainer,
+  tooltipRef: mapTooltipRef,
+  offset: 14,
+  margin: 10,
+  preferredOrder: ["right", "top", "left", "bottom"],
+});
 
 // Location correction popup state
 const showCorrectionPopup = ref(false);
@@ -429,6 +443,19 @@ const rectSelectStyle = computed(() => {
 
 function clearHoveredMapPhoto() {
   hoveredMapPhoto.value = null;
+  clearTooltipAnchor();
+}
+
+function getTooltipAnchorFromMouseEvent(
+  event: MouseEvent,
+): { x: number; y: number } | null {
+  const rect = mapContainer.value?.getBoundingClientRect();
+  if (!rect) return null;
+
+  return {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top,
+  };
 }
 
 function handleRectKeyDown(e: KeyboardEvent) {
@@ -1471,15 +1498,16 @@ function createPhotoMarker(photo: PhotoWithGps): PhotoMarker {
     const target = e.originalEvent?.target as HTMLElement | null;
     if (target?.closest(".photo-marker-correct-btn")) {
       hoveredMapPhoto.value = null;
+      clearTooltipAnchor();
       return;
     }
     // [DEBUG] When debug mode is on, suppress tooltip and only show highlights
     if (!ENABLE_DEBUG_PROXITTY) {
       hoveredMapPhoto.value = photo;
-      mapTooltipPosition.value = {
-        x: e.originalEvent.clientX + 16,
-        y: e.originalEvent.clientY + 16,
-      };
+      const anchor = getTooltipAnchorFromMouseEvent(e.originalEvent);
+      if (anchor) {
+        void placeTooltipAtNextTick(anchor);
+      }
     }
     // [DEBUG] Highlight the anchor marker for proximity-located photos
     if (ENABLE_DEBUG_PROXITTY) {
@@ -1493,16 +1521,17 @@ function createPhotoMarker(photo: PhotoWithGps): PhotoMarker {
     const target = e.originalEvent?.target as HTMLElement | null;
     if (target?.closest(".photo-marker-correct-btn")) {
       hoveredMapPhoto.value = null;
+      clearTooltipAnchor();
       return;
     }
-    mapTooltipPosition.value = {
-      x: e.originalEvent.clientX + 16,
-      y: e.originalEvent.clientY + 16,
-    };
+    if (!hoveredMapPhoto.value) return;
+    const anchor = getTooltipAnchorFromMouseEvent(e.originalEvent);
+    if (anchor) placeTooltipAt(anchor);
   });
   marker.on("mouseout", () => {
     marker.setZIndexOffset(0);
     hoveredMapPhoto.value = null;
+    clearTooltipAnchor();
     // [DEBUG] Remove proximity highlights
     if (ENABLE_DEBUG_PROXITTY) {
       const srcId = getProximitySourceId(photo);
@@ -2398,7 +2427,7 @@ onUnmounted(() => {
 /* ── Single-marker hover tooltip ────────────────────────────────────────── */
 
 .map-photo-tooltip {
-  position: fixed;
+  position: absolute;
   z-index: 10000;
   pointer-events: none;
   max-width: 220px;
