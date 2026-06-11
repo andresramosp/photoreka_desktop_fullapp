@@ -11,12 +11,15 @@
     <template #trigger>
       <button
         class="mode-selector-chip"
+        :class="{ 'mode-selector-chip--single': singleMode }"
         :style="{ '--chip-color': colorVar }"
         :title="triggerTitle"
         :aria-label="ariaLabel"
       >
         <n-icon :size="13"><component :is="selectedIcon" /></n-icon>
-        <span>{{ selectedOption?.label || placeholder }}</span>
+        <span v-if="!singleMode">{{
+          selectedOption?.label || placeholder
+        }}</span>
       </button>
     </template>
 
@@ -70,6 +73,7 @@ const props = withDefaults(
     width?: number;
     placeholder?: string;
     accent?: boolean;
+    singleMode?: boolean;
   }>(),
   {
     icon: "sparkles",
@@ -78,6 +82,7 @@ const props = withDefaults(
     width: 260,
     placeholder: "Mode",
     accent: true,
+    singleMode: false,
   },
 );
 
@@ -147,6 +152,12 @@ const selectOption = (value: string) => {
     var(--chip-color, var(--accent-color)) 6%,
     var(--bg-surface)
   );
+}
+
+.mode-selector-chip--single,
+.mode-selector-chip--single:hover {
+  background: transparent;
+  border-color: transparent;
 }
 
 .mode-selector-panel {

@@ -48,6 +48,7 @@
             v-model="visualizationMode"
             :accent="false"
             icon="settings"
+            :singleMode="true"
             :width="200"
             :options="visualizationOptions"
             header="Preview Preferences"

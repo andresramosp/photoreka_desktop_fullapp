@@ -1,5 +1,9 @@
 <template>
-  <div class="aspect-card">
+  <div
+    class="aspect-card"
+    :class="{ 'border-hover': props.borderHover }"
+    :style="aspectCardStyle"
+  >
     <div v-if="header" class="aspect-header">
       <div class="aspect-title-wrapper">
         <h3 class="aspect-title">{{ aspect.label }}</h3>
@@ -47,9 +51,10 @@
 </template>
 
 <script setup>
+import { computed } from "vue";
 import { getAspectSliceColor } from "@/components/report/visualAspectsUtils.js";
 
-defineProps({
+const props = defineProps({
   aspect: {
     type: Object,
     required: true,
@@ -58,6 +63,27 @@ defineProps({
     type: Boolean,
     default: true,
   },
+  minHeight: {
+    default: "200px",
+    validator: (value) =>
+      value === null || typeof value === "string" || typeof value === "number",
+  },
+  borderHover: {
+    type: Boolean,
+    default: true,
+  },
+});
+
+const aspectCardStyle = computed(() => {
+  if (props.minHeight === null) {
+    return { minHeight: "unset" };
+  }
+
+  if (typeof props.minHeight === "number") {
+    return { minHeight: `${props.minHeight}px` };
+  }
+
+  return { minHeight: props.minHeight };
 });
 </script>
 
@@ -68,16 +94,9 @@ defineProps({
   border-radius: var(--radius-lg);
   padding: var(--spacing-xl);
   transition: var(--transition-normal);
-  min-height: 200px;
 }
 
-@media (max-width: 768px) {
-  .aspect-card {
-    min-height: unset;
-  }
-}
-
-.aspect-card:hover {
+.aspect-card.border-hover:hover {
   border-color: var(--primary-color);
   box-shadow: var(--shadow-lg);
 }

@@ -59,6 +59,7 @@
               <ModePopoverSelector
                 v-model="gaugesMode"
                 :accent="false"
+                :singleMode="true"
                 icon="settings"
                 :width="190"
                 :options="gaugesModeOptions"
@@ -296,7 +297,7 @@ const savedGaugesMode =
     : null;
 
 const gaugesMode = ref<DashboardGaugesMode>(
-  isDashboardGaugesMode(savedGaugesMode) ? savedGaugesMode : "main",
+  isDashboardGaugesMode(savedGaugesMode) ? savedGaugesMode : "genre",
 );
 
 const gaugesModeOptions = [

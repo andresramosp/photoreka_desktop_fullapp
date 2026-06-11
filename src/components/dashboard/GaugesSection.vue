@@ -1,19 +1,27 @@
 <template>
   <div class="gauges-section">
     <div class="tab-panel-fixed">
-      <div v-if="mode === 'main'" class="score-gauges">
-        <ScoreGauge
-          v-for="gauge in activeGauges"
-          :key="gauge.key"
-          :label="gauge.label"
-          :value="gauge.value"
-          :color="gauge.color"
-        />
-      </div>
-      <template v-else>
-        <AspectCard v-if="genreAspect" :aspect="genreAspect" :header="false" />
-        <div v-else class="genre-empty">No genre stats available</div>
-      </template>
+      <Transition name="mode-fade" mode="out-in">
+        <div v-if="mode === 'main'" key="main" class="score-gauges">
+          <ScoreGauge
+            v-for="gauge in activeGauges"
+            :key="gauge.key"
+            :label="gauge.label"
+            :value="gauge.value"
+            :color="gauge.color"
+          />
+        </div>
+        <div v-else key="genre" class="genre-panel">
+          <AspectCard
+            v-if="genreAspect"
+            :min-height="null"
+            :aspect="genreAspect"
+            :borderHover="false"
+            :header="false"
+          />
+          <div v-else class="genre-empty">No genre stats available</div>
+        </div>
+      </Transition>
     </div>
   </div>
 </template>
@@ -143,8 +151,30 @@ const genreAspect = computed(() => {
 }
 
 .tab-panel-fixed {
-  height: 250px;
-  overflow: auto;
+  height: auto;
+  overflow: visible;
+}
+
+.mode-fade-enter-active,
+.mode-fade-leave-active {
+  transition: opacity 140ms ease;
+}
+
+.mode-fade-enter-from,
+.mode-fade-leave-to {
+  opacity: 0;
+}
+
+.mode-fade-enter-to,
+.mode-fade-leave-from {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-fade-enter-active,
+  .mode-fade-leave-active {
+    transition: opacity 100ms linear;
+  }
 }
 
 .genre-empty {
