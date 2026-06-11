@@ -320,7 +320,7 @@ export function isDesktopOnly(toolId) {
 export function getDashboardSmartTools(platform) {
   const orderedToolIds =
     platform === "mobile"
-      ? ["import-area", "search"]
+      ? ["chat", "world-map", "import-area", "search"]
       : ["chat", "world-map", "portfolios", "canvas", "report"];
 
   return orderedToolIds

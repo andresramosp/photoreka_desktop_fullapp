@@ -204,27 +204,28 @@ const getItemTimestamp = (item: any): number => {
 
 // Computed collections and series combined from store
 const collections = computed(() => {
-  // Combinar colecciones y series (en móvil solo colecciones)
   const allItems = [
     ...(collectionsStore.allCollections || []).map((item: any) => ({
       ...item,
       itemType: "collection",
     })),
-    // Solo incluir series si NO estamos en móvil
-    ...(!isMobileLimitedMode.value
-      ? (seriesStore.allSeries || []).map((item: any) => ({
-          ...item,
-          itemType: "series",
-        }))
-      : []),
-    ...(portfolioBuildsStore.allBuilds || []).map((build: any) => ({
-      ...build,
-      itemType: "portfolio",
-      name: build.config?.name || build.name || `Portfolio #${build.id}`,
-      photos: build.photoItems || [],
-      updatedAt: build.updatedAt || build.createdAt,
-    })),
   ];
+
+  if (!isMobileLimitedMode.value) {
+    allItems.push(
+      ...(seriesStore.allSeries || []).map((item: any) => ({
+        ...item,
+        itemType: "series",
+      })),
+      ...(portfolioBuildsStore.allBuilds || []).map((build: any) => ({
+        ...build,
+        itemType: "portfolio",
+        name: build.config?.name || build.name || `Portfolio #${build.id}`,
+        photos: build.photoItems || [],
+        updatedAt: build.updatedAt || build.createdAt,
+      })),
+    );
+  }
 
   // Ordenar por fecha de actualización/creación descendente y tomar solo los 4 más recientes
   return allItems
@@ -234,8 +235,8 @@ const collections = computed(() => {
 const isLoadingCollections = computed(
   () =>
     collectionsStore.isLoading ||
-    seriesStore.isLoading ||
-    portfolioBuildsStore.isLoading,
+    (!isMobileLimitedMode.value &&
+      (seriesStore.isLoading || portfolioBuildsStore.isLoading)),
 );
 
 // Recent photos for workspace preview
@@ -268,7 +269,11 @@ const savedGaugesMode =
     : null;
 
 const gaugesMode = ref<DashboardGaugesMode>(
-  isDashboardGaugesMode(savedGaugesMode) ? savedGaugesMode : "genre",
+  isDashboardGaugesMode(savedGaugesMode)
+    ? savedGaugesMode
+    : isMobileDevice()
+      ? "main"
+      : "genre",
 );
 
 const gaugesModeOptions = [
