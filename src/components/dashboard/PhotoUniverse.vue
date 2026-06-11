@@ -142,6 +142,23 @@ const props = defineProps<{
   excludedGroups?: string[];
 }>();
 
+type VisualizationMode = "tagcloud" | "photos2d" | "worldmap";
+
+const VISUALIZATION_MODE_STORAGE_KEY = "photoreka:universe:mode";
+
+function isVisualizationMode(value: unknown): value is VisualizationMode {
+  return value === "tagcloud" || value === "photos2d" || value === "worldmap";
+}
+
+function getStoredVisualizationMode(): VisualizationMode | null {
+  if (typeof window === "undefined") return null;
+
+  const storedMode = window.localStorage.getItem(
+    VISUALIZATION_MODE_STORAGE_KEY,
+  );
+  return isVisualizationMode(storedMode) ? storedMode : null;
+}
+
 const photosStore = usePhotosStore();
 
 const tagCloudStore = useTagCloudStore();
@@ -167,13 +184,10 @@ const hasPhotosWithGps = computed(() =>
   ((photosStore.allPhotos as any[]) ?? []).some(hasGpsCoordinates),
 );
 
-const visualizationMode = ref<"tagcloud" | "photos2d" | "worldmap">(
-  (typeof window !== "undefined" &&
-    (window.localStorage.getItem("photoreka:universe:mode") as
-      | "tagcloud"
-      | "photos2d"
-      | "worldmap")) ||
-    "tagcloud",
+const storedVisualizationMode = getStoredVisualizationMode();
+const hasExplicitVisualizationMode = ref(storedVisualizationMode !== null);
+const visualizationMode = ref<VisualizationMode>(
+  storedVisualizationMode ?? (hasPhotosWithGps.value ? "worldmap" : "tagcloud"),
 );
 
 const isPhotos2DLoading = ref(true);
@@ -251,9 +265,25 @@ watch(
   { immediate: true },
 );
 
+watch(
+  hasPhotosWithGps,
+  (hasGps) => {
+    if (hasGps) {
+      if (!hasExplicitVisualizationMode.value) {
+        visualizationMode.value = "worldmap";
+      }
+      return;
+    }
+
+    if (visualizationMode.value === "worldmap") {
+      visualizationMode.value = "tagcloud";
+    }
+  },
+  { immediate: true },
+);
+
 const visualizationOptions = computed(() => [
   { label: "Semantic Highlights", value: "tagcloud" },
-  { label: "Visual Preview", value: "photos2d" },
   {
     label: "Geographic View",
     value: "worldmap",
@@ -262,11 +292,16 @@ const visualizationOptions = computed(() => [
       ? undefined
       : "No geolocalized photos yet",
   },
+  { label: "Visual Preview", value: "photos2d" },
 ]);
 
 const handleModeChange = (val: string) => {
+  if (!isVisualizationMode(val)) return;
+
+  hasExplicitVisualizationMode.value = true;
+
   if (typeof window !== "undefined") {
-    window.localStorage.setItem("photoreka:universe:mode", val);
+    window.localStorage.setItem(VISUALIZATION_MODE_STORAGE_KEY, val);
   }
 };
 

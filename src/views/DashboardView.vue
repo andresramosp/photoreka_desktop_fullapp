@@ -506,9 +506,9 @@ const navigateToWorkspace = () => {
   min-height: 0;
   display: grid;
   grid-template-columns:
-    clamp(250px, 22vw, 450px)
+    clamp(260px, 23vw, 450px)
     minmax(0, 1fr)
-    clamp(260px, 24vw, 450px);
+    clamp(260px, 23vw, 450px);
   grid-template-rows: 1fr;
   overflow: hidden;
 }
