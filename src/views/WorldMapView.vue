@@ -1,7 +1,7 @@
 <template>
   <div class="world-map-view">
     <n-button
-      v-if="photosWithGps.length > 0"
+      v-if="photosWithGps.length > 0 && !props.isPreview"
       class="ai-location-button"
       type="info"
       :loading="isAiLocationRunning"
@@ -135,7 +135,7 @@
 
     <!-- Map config panel (Filters) -->
     <WorldMapConfigPanel
-      v-if="photosWithGps.length > 0"
+      v-if="photosWithGps.length > 0 && !props.isPreview"
       v-model:confidence-filter="confidenceFilter"
       v-model:granularity-filter="granularityFilter"
       v-model:selected-visual-aspects="selectedVisualAspects"
@@ -302,6 +302,10 @@ import "leaflet.markercluster";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 
+const props = defineProps<{
+  isPreview?: boolean;
+}>();
+
 type GpsCoordinates = [number, number];
 const MAX_SPIDERFY_MARKERS_PER_POINT = 150;
 const VISIBLE_PHOTOS_PER_OVERFLOW_POINT = MAX_SPIDERFY_MARKERS_PER_POINT - 1;
@@ -383,7 +387,9 @@ const aiLocationGeolocatability = ref<GeolocatabilityAssessment | null>(null);
 let resizeObserver: ResizeObserver | null = null;
 let aiLocationPollTimer: ReturnType<typeof window.setInterval> | null = null;
 let aiLocationSummaryRequestSeq = 0;
+let previewFitTimer: ReturnType<typeof setTimeout> | null = null;
 const { isMobile } = useIsMobile();
+const previousContainerWidth = ref<number | null>(null);
 
 // Photo IDs that were newly geo-inferred in the last completed AI location job.
 // Cleared when a filter is applied or on the next visit (component remount).
@@ -941,6 +947,22 @@ function fitMapToVisiblePhotos(options?: L.FitBoundsOptions) {
     padding: isMobile.value ? [0, 0] : [56, 56],
     ...options,
   });
+}
+
+function schedulePreviewFit() {
+  if (!props.isPreview) return;
+
+  if (previewFitTimer) {
+    clearTimeout(previewFitTimer);
+  }
+
+  previewFitTimer = setTimeout(() => {
+    previewFitTimer = null;
+    const leafletMap = getLeafletMap();
+    if (!leafletMap || filteredPhotosWithGps.value.length === 0) return;
+    leafletMap.invalidateSize();
+    fitMapToVisiblePhotos({ animate: false });
+  }, 90);
 }
 
 function ensureFitViewControl() {
@@ -1896,6 +1918,19 @@ watch(photosWithGpsKey, async () => {
   refreshPhotoMarkers(true);
 });
 
+watch(
+  [
+    () => props.isPreview,
+    isMapViewportReady,
+    () => filteredPhotosWithGps.value.length,
+  ],
+  ([isPreview, viewportReady, visiblePhotos]) => {
+    if (!isPreview || !viewportReady || visiblePhotos === 0) return;
+    schedulePreviewFit();
+  },
+  { immediate: true },
+);
+
 // Load photos on mount
 onMounted(async () => {
   await photosStore.getOrFetch(false);
@@ -1906,8 +1941,23 @@ onMounted(async () => {
   void refreshAiLocationSummary();
 
   if (mapContainer.value) {
-    resizeObserver = new ResizeObserver(() => {
+    previousContainerWidth.value = mapContainer.value.clientWidth;
+    resizeObserver = new ResizeObserver((entries) => {
+      const width =
+        entries[0]?.contentRect.width ?? mapContainer.value?.clientWidth ?? 0;
+      const previousWidth = previousContainerWidth.value;
+      previousContainerWidth.value = width;
+
       getLeafletMap()?.invalidateSize();
+
+      if (
+        props.isPreview &&
+        previousWidth !== null &&
+        width > 0 &&
+        Math.abs(width - previousWidth) > 1
+      ) {
+        schedulePreviewFit();
+      }
     });
     resizeObserver.observe(mapContainer.value);
   }
@@ -1921,8 +1971,13 @@ onUnmounted(() => {
   window.removeEventListener("keyup", handleRectKeyUp);
   window.removeEventListener("mousemove", handleRectWindowMouseMove);
   window.removeEventListener("mouseup", handleRectWindowMouseUp);
+  if (previewFitTimer) {
+    clearTimeout(previewFitTimer);
+    previewFitTimer = null;
+  }
   resizeObserver?.disconnect();
   resizeObserver = null;
+  previousContainerWidth.value = null;
   stopAiLocationPolling();
   removeFitViewControl();
   removeMarkerClusterLayer();

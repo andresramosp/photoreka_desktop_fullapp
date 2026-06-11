@@ -99,7 +99,13 @@
       <!-- Discrete Hover Floating Button -->
       <div class="floating-btn-container">
         <router-link
-          :to="visualizationMode === 'tagcloud' ? '/tagcloud' : '/2d-view'"
+          :to="
+            visualizationMode === 'tagcloud'
+              ? '/tagcloud'
+              : visualizationMode === 'worldmap'
+                ? '/world-map'
+                : '/2d-view'
+          "
           class="universe-btn"
         >
           <n-icon size="16">
@@ -108,7 +114,9 @@
           <span>{{
             visualizationMode === "tagcloud"
               ? "Open Full Cloud"
-              : "Open Full Atlas"
+              : visualizationMode === "worldmap"
+                ? "Open Full World Map"
+                : "Open Full Atlas"
           }}</span>
         </router-link>
       </div>
@@ -125,6 +133,7 @@ import { usePhotosStore } from "@/stores/photos.js";
 import PixiTagCloud from "@/components/tag-cloud/PixiTagCloud.vue";
 // @ts-ignore
 import Photos2D from "@/components/2d-atlas/Photos2D.vue";
+import WorldMapView from "@/views/WorldMapView.vue";
 import ModePopoverSelector from "@/components/ModePopoverSelector.vue";
 import { NIcon } from "naive-ui";
 import { FullscreenOutlined } from "@vicons/antd";
@@ -137,11 +146,33 @@ const photosStore = usePhotosStore();
 
 const tagCloudStore = useTagCloudStore();
 
-const visualizationMode = ref<"tagcloud" | "photos2d">(
+// Mirror the GPS-extraction logic from WorldMapView so we can disable the
+// worldmap option when the user has no geolocalized photos.
+function hasGpsCoordinates(photo: any): boolean {
+  if (
+    photo.inferredLocation?.lat != null &&
+    photo.inferredLocation?.lng != null
+  ) {
+    return true;
+  }
+  const exif = photo.descriptions?.EXIF;
+  if (!exif) return false;
+  if (exif.gpsLatitude !== undefined && exif.gpsLongitude !== undefined)
+    return true;
+  if (exif.gps?.lat != null && exif.gps?.lng != null) return true;
+  return false;
+}
+
+const hasPhotosWithGps = computed(() =>
+  ((photosStore.allPhotos as any[]) ?? []).some(hasGpsCoordinates),
+);
+
+const visualizationMode = ref<"tagcloud" | "photos2d" | "worldmap">(
   (typeof window !== "undefined" &&
     (window.localStorage.getItem("photoreka:universe:mode") as
       | "tagcloud"
-      | "photos2d")) ||
+      | "photos2d"
+      | "worldmap")) ||
     "tagcloud",
 );
 
@@ -164,7 +195,9 @@ const showLoadingOverlay = ref(false);
 const loadingOverlaySubtitle = computed(() =>
   visualizationMode.value === "tagcloud"
     ? "Mapping semantic space"
-    : "Mapping photo coordinates",
+    : visualizationMode.value === "worldmap"
+      ? "Mapping photo locations"
+      : "Mapping photo coordinates",
 );
 const universeContentClasses = computed(() => ({
   "is-soft-loading": showLoadingOverlay.value,
@@ -218,10 +251,18 @@ watch(
   { immediate: true },
 );
 
-const visualizationOptions = [
+const visualizationOptions = computed(() => [
   { label: "Semantic Highlights", value: "tagcloud" },
   { label: "Visual Preview", value: "photos2d" },
-];
+  {
+    label: "Geographic View",
+    value: "worldmap",
+    disabled: !hasPhotosWithGps.value,
+    description: hasPhotosWithGps.value
+      ? undefined
+      : "No geolocalized photos yet",
+  },
+]);
 
 const handleModeChange = (val: string) => {
   if (typeof window !== "undefined") {
@@ -232,9 +273,11 @@ const handleModeChange = (val: string) => {
 const messageHeader = computed(() => {
   if (visualizationMode.value === "tagcloud") {
     return `Previewing your most relevant tags`;
-  } else {
+  } else if (visualizationMode.value === "photos2d") {
     return `Previewing your 500 most recent photos`;
   }
+
+  return `Previewing your photo locations on the world map`;
 });
 const excludedGroupSet = computed(() => {
   const list = props.excludedGroups?.length
@@ -267,7 +310,11 @@ const tags = computed(() => {
 });
 
 const currentUniverseComponent = computed(() =>
-  visualizationMode.value === "tagcloud" ? PixiTagCloud : Photos2D,
+  visualizationMode.value === "tagcloud"
+    ? PixiTagCloud
+    : visualizationMode.value === "worldmap"
+      ? WorldMapView
+      : Photos2D,
 );
 
 const currentUniverseProps = computed(() =>
@@ -277,10 +324,14 @@ const currentUniverseProps = computed(() =>
         isPreview: true,
         showZoomControls: true,
       }
-    : {
-        isPreview: true,
-        photosLimit: 500,
-      },
+    : visualizationMode.value === "worldmap"
+      ? {
+          isPreview: true,
+        }
+      : {
+          isPreview: true,
+          photosLimit: 500,
+        },
 );
 
 const handlePhotos2DLoadingState = (isLoading: boolean) => {
@@ -486,12 +537,15 @@ onBeforeUnmount(() => {
   );
   overflow: hidden;
   position: relative;
+  isolation: isolate;
 }
 
 .universe-content {
   flex: 1;
   min-width: 0;
   min-height: 0;
+  padding-top: 38px;
+  box-sizing: border-box;
   transition:
     opacity 0.22s ease,
     transform 0.24s ease,
@@ -506,7 +560,7 @@ onBeforeUnmount(() => {
 
 .photos2d-loading-overlay {
   position: absolute;
-  inset: 0;
+  inset: 38px 0 0;
   z-index: 20;
 }
 
@@ -538,7 +592,7 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid
     color-mix(in srgb, var(--border-color) 56%, transparent);
   box-shadow: 0 6px 14px color-mix(in srgb, var(--bg-overlay) 38%, transparent);
-  z-index: 11;
+  z-index: 30;
   pointer-events: none;
 }
 
@@ -586,10 +640,12 @@ onBeforeUnmount(() => {
   opacity: 0;
   pointer-events: none;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  z-index: 10;
+  z-index: 1200;
 }
 
-.photo-universe-filled:hover .floating-btn-container {
+.photo-universe-filled:hover .floating-btn-container,
+.photo-universe-filled:focus-within .floating-btn-container,
+.floating-btn-container:hover {
   opacity: 1;
   pointer-events: auto;
   transform: translateX(-50%) translateY(0);
@@ -647,6 +703,14 @@ onBeforeUnmount(() => {
     gap: 6px;
     flex-wrap: wrap;
     justify-content: center;
+  }
+
+  .universe-content {
+    padding-top: 56px;
+  }
+
+  .photos2d-loading-overlay {
+    inset: 56px 0 0;
   }
 
   .universe-title {

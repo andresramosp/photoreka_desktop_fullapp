@@ -33,8 +33,11 @@
         v-for="option in options"
         :key="option.value"
         class="mode-selector-item"
-        :class="{ active: option.value === currentValue }"
-        @click="selectOption(option.value)"
+        :class="{
+          active: option.value === currentValue,
+          disabled: option.disabled,
+        }"
+        @click="!option.disabled && selectOption(option.value)"
       >
         <div class="mode-selector-item-header">
           <span class="mode-selector-item-name">{{ option.label }}</span>
@@ -60,6 +63,7 @@ interface ModeSelectorOption {
   value: string;
   description?: string;
   costFactor?: number | null;
+  disabled?: boolean;
 }
 
 const props = withDefaults(
@@ -231,5 +235,15 @@ const selectOption = (value: string) => {
   color: var(--text-tertiary);
   line-height: 1.35;
   margin-top: 2px;
+}
+
+.mode-selector-item.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: auto;
+}
+
+.mode-selector-item.disabled:hover {
+  background: transparent;
 }
 </style>
