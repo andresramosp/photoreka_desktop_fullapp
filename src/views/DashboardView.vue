@@ -46,7 +46,7 @@
                   @click="navigateToWorkspace"
                   aria-label="See in workspace"
                 >
-                  Open Workspace
+                  Explore your Workspace
                 </n-button>
               </div>
             </div>
@@ -674,7 +674,7 @@ const navigateToWorkspace = () => {
 
 .photos-primary-info {
   display: flex;
-  gap: 10px;
+  gap: 7px;
   min-width: 0;
   flex: 1;
   overflow: hidden;
