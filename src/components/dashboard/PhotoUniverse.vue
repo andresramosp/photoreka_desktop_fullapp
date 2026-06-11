@@ -622,7 +622,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
-  background: color-mix(in srgb, var(--bg-deep-surface) 92%, var(--bg-card) 8%);
+  background: var(--bg-container);
   border-top: 1px solid color-mix(in srgb, var(--border-color) 56%, transparent);
   border-bottom: 1px solid
     color-mix(in srgb, var(--border-color) 56%, transparent);

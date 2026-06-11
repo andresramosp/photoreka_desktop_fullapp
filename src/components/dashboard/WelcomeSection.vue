@@ -21,9 +21,16 @@
           <n-icon size="18" class="photos-primary-icon">
             <LayersOutline />
           </n-icon>
-          <span class="photos-primary-count">{{
-            photosCount.toLocaleString()
-          }}</span>
+          <span
+            class="photos-primary-count"
+            role="button"
+            tabindex="0"
+            @click="emit('go-workspace')"
+            @keydown.enter.prevent="emit('go-workspace')"
+            @keydown.space.prevent="emit('go-workspace')"
+          >
+            {{ photosCount.toLocaleString() }}
+          </span>
           <div class="photos-primary-meta">
             <span class="photos-primary-label">Total photos</span>
             <n-button
@@ -219,6 +226,10 @@ onBeforeUnmount(() => {
   color: var(--accent-color);
   line-height: 1;
   letter-spacing: -0.03em;
+}
+
+.photos-primary-count:hover {
+  cursor: pointer;
 }
 
 .photos-primary-label {
