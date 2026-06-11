@@ -101,9 +101,6 @@
 
       <l-map
         ref="map"
-        :bounds="initialMapBounds || undefined"
-        :center="initialMapBounds ? undefined : [20, 0]"
-        :zoom="initialMapBounds ? undefined : 2"
         :options="{ zoomControl: false }"
         @ready="onMapReady"
         style="height: 100%; width: 100%"
@@ -347,7 +344,6 @@ const fitViewControl = shallowRef<L.Control | null>(null);
 const photoMarkerMap = new Map<string | number, PhotoMarker>();
 const overflowMarkerMap = new Map<string, PhotoOverflowMarker>(); // key = coordKey
 const hasLoadedInitialPhotos = ref(false);
-const initialMapBounds = ref<GpsCoordinates[] | null>(null);
 const isMapViewportReady = ref(false);
 const showPhotoInfoDialog = ref(false);
 const selectedDialogPhoto = ref<any>(null);
@@ -385,11 +381,12 @@ const aiLocationEstimatedCredits = ref<{ min: number; max: number } | null>(
 );
 const aiLocationGeolocatability = ref<GeolocatabilityAssessment | null>(null);
 let resizeObserver: ResizeObserver | null = null;
-let aiLocationPollTimer: ReturnType<typeof window.setInterval> | null = null;
+let aiLocationPollTimer: ReturnType<typeof setInterval> | null = null;
 let aiLocationSummaryRequestSeq = 0;
 let previewFitTimer: ReturnType<typeof setTimeout> | null = null;
 const { isMobile } = useIsMobile();
 const previousContainerWidth = ref<number | null>(null);
+const previousContainerHeight = ref<number | null>(null);
 
 // Photo IDs that were newly geo-inferred in the last completed AI location job.
 // Cleared when a filter is applied or on the next visit (component remount).
@@ -888,12 +885,12 @@ async function refreshAiLocationSummary() {
 
 function startAiLocationPolling() {
   if (aiLocationPollTimer) return;
-  aiLocationPollTimer = window.setInterval(refreshAiLocationSummary, 2000);
+  aiLocationPollTimer = setInterval(refreshAiLocationSummary, 2000);
 }
 
 function stopAiLocationPolling() {
   if (!aiLocationPollTimer) return;
-  window.clearInterval(aiLocationPollTimer);
+  clearInterval(aiLocationPollTimer);
   aiLocationPollTimer = null;
 }
 
@@ -949,12 +946,10 @@ function fitMapToVisiblePhotos(options?: L.FitBoundsOptions) {
   });
 }
 
-function schedulePreviewFit() {
+function schedulePreviewFit(options?: { markReady?: boolean }) {
   if (!props.isPreview) return;
 
-  if (previewFitTimer) {
-    clearTimeout(previewFitTimer);
-  }
+  if (previewFitTimer) clearTimeout(previewFitTimer);
 
   previewFitTimer = setTimeout(() => {
     previewFitTimer = null;
@@ -962,7 +957,10 @@ function schedulePreviewFit() {
     if (!leafletMap || filteredPhotosWithGps.value.length === 0) return;
     leafletMap.invalidateSize();
     fitMapToVisiblePhotos({ animate: false });
-  }, 90);
+    if (options?.markReady) {
+      isMapViewportReady.value = true;
+    }
+  }, 60);
 }
 
 function ensureFitViewControl() {
@@ -1000,13 +998,6 @@ function ensureFitViewControl() {
 
   fitViewControl.value = new FitViewControl({ position: "bottomright" });
   fitViewControl.value.addTo(leafletMap);
-}
-
-function updateInitialMapBounds() {
-  initialMapBounds.value = filteredPhotosWithGps.value.length
-    ? filteredPhotosWithGps.value.map((photo) => photo.coordinates)
-    : null;
-  isMapViewportReady.value = photosWithGps.value.length === 0;
 }
 
 function getPhotoThumbnail(photo: PhotoWithGps): string {
@@ -1079,6 +1070,8 @@ function getPhotoAddress(photo: PhotoWithGps): string | null {
       (photo as any).inferredLocation.queryNormalized,
     );
   }
+
+  return null;
 }
 
 function escapeHtml(value: unknown): string {
@@ -1646,13 +1639,24 @@ const onMapReady = () => {
   if (leafletMap) {
     L.control.zoom({ position: "bottomright" }).addTo(leafletMap);
     ensureFitViewControl();
-    if (filteredPhotosWithGps.value.length > 0) {
+    if (!props.isPreview && filteredPhotosWithGps.value.length > 0) {
       fitMapToVisiblePhotos();
     }
   }
-  initialMapBounds.value = null;
   refreshPhotoMarkers();
-  isMapViewportReady.value = true;
+
+  if (filteredPhotosWithGps.value.length === 0) {
+    isMapViewportReady.value = true;
+    return;
+  }
+
+  if (props.isPreview) {
+    // First preview fit must happen before revealing the map to avoid
+    // the subtle post-load drift seen on initial mount.
+    schedulePreviewFit({ markReady: true });
+  } else {
+    isMapViewportReady.value = true;
+  }
 };
 
 // Watch only the stable identity of each marker (id + coords).
@@ -1904,58 +1908,64 @@ watch(photosWithGpsKey, async () => {
   await nextTick();
 
   if (photosWithGps.value.length === 0) {
-    initialMapBounds.value = null;
     isMapViewportReady.value = true;
     removeMarkerClusterLayer();
     return;
   }
 
   if (!map.value) {
-    updateInitialMapBounds();
+    isMapViewportReady.value = false;
   }
 
   // Full reset: photo set or coordinates changed (e.g. location correction or AI job).
   refreshPhotoMarkers(true);
 });
 
+// Re-fit preview when the visible photo set changes (e.g. after applying filters)
 watch(
-  [
-    () => props.isPreview,
-    isMapViewportReady,
-    () => filteredPhotosWithGps.value.length,
-  ],
-  ([isPreview, viewportReady, visiblePhotos]) => {
-    if (!isPreview || !viewportReady || visiblePhotos === 0) return;
+  () => filteredPhotosWithGps.value.length,
+  (count) => {
+    if (!isMapViewportReady.value || count === 0) return;
     schedulePreviewFit();
   },
-  { immediate: true },
 );
 
 // Load photos on mount
 onMounted(async () => {
   await photosStore.getOrFetch(false);
-  updateInitialMapBounds();
+  isMapViewportReady.value = photosWithGps.value.length === 0;
   hasLoadedInitialPhotos.value = true;
   await nextTick();
   refreshPhotoMarkers();
   void refreshAiLocationSummary();
 
   if (mapContainer.value) {
-    previousContainerWidth.value = mapContainer.value.clientWidth;
+    // Start as null so the first ResizeObserver callback is always treated as
+    // an initial observation and triggers a preview fit (container dimensions
+    // may not be stable at onMounted time, especially inside flex layouts).
+    previousContainerWidth.value = null;
+    previousContainerHeight.value = null;
     resizeObserver = new ResizeObserver((entries) => {
-      const width =
-        entries[0]?.contentRect.width ?? mapContainer.value?.clientWidth ?? 0;
-      const previousWidth = previousContainerWidth.value;
+      const width = entries[0]?.contentRect.width ?? 0;
+      const height = entries[0]?.contentRect.height ?? 0;
+      const prevW = previousContainerWidth.value;
+      const prevH = previousContainerHeight.value;
       previousContainerWidth.value = width;
+      previousContainerHeight.value = height;
 
       getLeafletMap()?.invalidateSize();
 
-      if (
-        props.isPreview &&
-        previousWidth !== null &&
-        width > 0 &&
-        Math.abs(width - previousWidth) > 1
-      ) {
+      if (!props.isPreview || width <= 0 || height <= 0) return;
+
+      // Fire on the initial observation (prevW === null) OR on any meaningful
+      // size change. Combined with onMapReady calling schedulePreviewFit() as
+      // fallback, this covers all timing scenarios without extra setTimeout hacks.
+      const isInitial = prevW === null;
+      const sizeChanged =
+        !isInitial &&
+        (Math.abs(width - prevW!) > 1 || Math.abs(height - (prevH ?? 0)) > 1);
+
+      if (isInitial || sizeChanged) {
         schedulePreviewFit();
       }
     });
@@ -1978,6 +1988,7 @@ onUnmounted(() => {
   resizeObserver?.disconnect();
   resizeObserver = null;
   previousContainerWidth.value = null;
+  previousContainerHeight.value = null;
   stopAiLocationPolling();
   removeFitViewControl();
   removeMarkerClusterLayer();

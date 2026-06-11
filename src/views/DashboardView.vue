@@ -46,7 +46,7 @@
                   @click="navigateToWorkspace"
                   aria-label="See in workspace"
                 >
-                  Explore your Workspace
+                  Open Workspace
                 </n-button>
               </div>
             </div>
@@ -156,6 +156,12 @@
                         : openPortfolio(item.id)
                   "
                 />
+                <CreateCard
+                  class="dashboard-create-collection-card"
+                  title="Add Collections"
+                  subtitle="Start organizing your photos"
+                  @click="navigateToCollections"
+                />
               </div>
             </div>
           </div>
@@ -178,6 +184,7 @@ import { useSeriesStore } from "@/stores/series.js";
 import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds.js";
 import { useUserStore } from "@/stores/userStore.js";
 import CollectionCard from "@/components/CollectionCard.vue";
+import CreateCard from "@/components/photos-grid/CreateCard.vue";
 import DailyEurekaCard from "@/components/dashboard/DailyEurekaCard.vue";
 import GaugesSection from "@/components/dashboard/GaugesSection.vue";
 import ModePopoverSelector from "@/components/ModePopoverSelector.vue";
@@ -480,6 +487,10 @@ const openPortfolio = (portfolioId: string) => {
 
 const navigateToWorkspace = () => {
   router.push({ name: "workspace" });
+};
+
+const navigateToCollections = () => {
+  router.push({ name: "collections" });
 };
 </script>
 
@@ -821,6 +832,29 @@ const navigateToWorkspace = () => {
   gap: 8px;
 }
 
+.dashboard-create-collection-card {
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.dashboard-create-collection-card :deep(.create-preview) {
+  height: 60px;
+  margin-bottom: 10px;
+}
+
+.dashboard-create-collection-card :deep(.create-icon-circle) {
+  width: 46px;
+  height: 46px;
+}
+
+.dashboard-create-collection-card :deep(.card-title) {
+  font-size: 14px;
+}
+
+.dashboard-create-collection-card :deep(.card-meta) {
+  font-size: 12px;
+}
+
 .collections-scroll-area {
   flex: 1;
   min-height: 0;
@@ -970,12 +1004,21 @@ const navigateToWorkspace = () => {
   }
 
   .panel-left .panel-body {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    gap: var(--dashboard-section-gap);
     overflow: visible;
   }
 
   .panel-right .panel-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dashboard-section-gap);
     overflow: visible;
+  }
+
+  .panel-section--grow {
+    flex: none;
   }
 
   .collections-scroll-area {

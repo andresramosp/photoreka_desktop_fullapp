@@ -188,9 +188,9 @@ const genreAspect = computed(() => {
   font-size: var(--font-size-sm);
 }
 
-@media (max-width: 768px) {
+/* @media (max-width: 768px) {
   .score-gauges {
     grid-template-columns: 1fr;
   }
-}
+} */
 </style>

@@ -125,7 +125,7 @@ const SIDEBAR_KEY = "sidebar-collapsed";
 
 const getSavedCollapsed = () => {
   const saved = localStorage.getItem(SIDEBAR_KEY);
-  return saved !== null ? saved === "true" : false; // default: open
+  return saved !== null ? saved === "true" : true; // default: open
 };
 
 const collapsed = ref(getSavedCollapsed());

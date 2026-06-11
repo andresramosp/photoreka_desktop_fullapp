@@ -542,7 +542,7 @@ router.beforeEach(async (to, from, next) => {
     const result = await userStore.demoLogin();
     if (result.success) {
       const subPath = to.path.slice("/demo".length);
-      next(subPath || "/workspace");
+      next(subPath || "/");
     } else {
       next("/auth");
     }
