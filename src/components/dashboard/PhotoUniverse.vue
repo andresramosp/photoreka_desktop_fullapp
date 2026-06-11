@@ -44,28 +44,18 @@
           {{ messageHeader }}
         </h2>
         <div class="universe-selector-container">
-          <n-popselect
-            v-model:value="visualizationMode"
+          <ModePopoverSelector
+            v-model="visualizationMode"
+            :accent="false"
+            icon="settings"
+            :width="200"
             :options="visualizationOptions"
-            trigger="click"
-            size="small"
+            header="Preview Preferences"
             placement="bottom-end"
-            @update:value="handleModeChange"
-          >
-            <n-button
-              quaternary
-              circle
-              size="tiny"
-              class="universe-settings-trigger"
-              aria-label="Change universe visualization mode"
-            >
-              <template #icon>
-                <n-icon size="14">
-                  <SettingOutlined />
-                </n-icon>
-              </template>
-            </n-button>
-          </n-popselect>
+            aria-label="Change universe visualization mode"
+            class="universe-mode-selector"
+            @update:modelValue="handleModeChange"
+          />
         </div>
       </header>
 
@@ -134,8 +124,9 @@ import { usePhotosStore } from "@/stores/photos.js";
 import PixiTagCloud from "@/components/tag-cloud/PixiTagCloud.vue";
 // @ts-ignore
 import Photos2D from "@/components/2d-atlas/Photos2D.vue";
-import { NButton, NIcon, NPopselect } from "naive-ui";
-import { FullscreenOutlined, SettingOutlined } from "@vicons/antd";
+import ModePopoverSelector from "@/components/ModePopoverSelector.vue";
+import { NIcon } from "naive-ui";
+import { FullscreenOutlined } from "@vicons/antd";
 
 const props = defineProps<{
   excludedGroups?: string[];
@@ -227,11 +218,11 @@ watch(
 );
 
 const visualizationOptions = [
-  { label: "Tags Preview", value: "tagcloud" },
-  { label: "Photos Preview", value: "photos2d" },
+  { label: "Semantic Highlights", value: "tagcloud" },
+  { label: "Visual Preview", value: "photos2d" },
 ];
 
-const handleModeChange = (val: "tagcloud" | "photos2d") => {
+const handleModeChange = (val: string) => {
   if (typeof window !== "undefined") {
     window.localStorage.setItem("photoreka:universe:mode", val);
   }
@@ -562,16 +553,6 @@ onBeforeUnmount(() => {
 
 .universe-selector-container {
   pointer-events: auto;
-}
-
-.universe-settings-trigger {
-  width: 24px;
-  height: 24px;
-  color: color-mix(in srgb, var(--text-secondary) 72%, var(--accent-color) 28%);
-  /* border: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent); */
-  /* background: color-mix(in srgb, var(--bg-card) 80%, transparent); */
-  backdrop-filter: blur(6px);
-  transition: all 0.2s ease;
 }
 
 /* Animation for spinning loading rings */

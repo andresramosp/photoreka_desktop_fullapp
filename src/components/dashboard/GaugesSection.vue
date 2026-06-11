@@ -1,20 +1,33 @@
 <template>
-  <div class="score-gauges">
-    <ScoreGauge
-      v-for="gauge in activeGauges"
-      :key="gauge.key"
-      :label="gauge.label"
-      :value="gauge.value"
-      :color="gauge.color"
-    />
+  <div class="gauges-section">
+    <div class="tab-panel-fixed">
+      <div v-if="mode === 'main'" class="score-gauges">
+        <ScoreGauge
+          v-for="gauge in activeGauges"
+          :key="gauge.key"
+          :label="gauge.label"
+          :value="gauge.value"
+          :color="gauge.color"
+        />
+      </div>
+      <template v-else>
+        <AspectCard v-if="genreAspect" :aspect="genreAspect" :header="false" />
+        <div v-else class="genre-empty">No genre stats available</div>
+      </template>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
 import ScoreGauge from "@/components/ScoreGauge.vue";
+import AspectCard from "@/components/report/AspectCard.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useUserStore } from "@/stores/userStore.js";
+// @ts-ignore
+import { getVisualAspectsOptions } from "@/stores/searchStore.js";
+// @ts-ignore
+import { buildVisualAspectsData } from "@/components/report/visualAspectsUtils.js";
 // @ts-ignore
 import { getProfileVariant, getArtisticSchema } from "@/config/photo_schema";
 import type { UserProfile } from "@/stores/userStore.js";
@@ -31,10 +44,22 @@ type GaugeEntry = {
 const photosStore = usePhotosStore();
 const userStore = useUserStore();
 
+withDefaults(
+  defineProps<{
+    mode?: "main" | "genre";
+  }>(),
+  {
+    mode: "main",
+  },
+);
+
 const profileKey = computed(
   () => (userStore.user?.profiles || "general") as UserProfile,
 );
 const profileVariant = computed(() => getProfileVariant(profileKey.value));
+const visualAspectsOptions = computed(() =>
+  getVisualAspectsOptions(userStore.user?.profiles),
+);
 
 /** Build a lookup: key → { label, color } from the schema for the current variant */
 const criteriaByKey = computed<
@@ -96,13 +121,46 @@ const activeGauges = computed<GaugeEntry[]>(() => {
     };
   });
 });
+
+const genreAspect = computed(() => {
+  const visualAspects = buildVisualAspectsData(
+    photosStore.photos || [],
+    visualAspectsOptions.value,
+  );
+  return visualAspects.find((aspect: any) => aspect.key === "genre") || null;
+});
 </script>
 
 <style scoped>
+.gauges-section {
+  margin: 0;
+}
+
 .score-gauges {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 10px;
-  margin-bottom: 24px;
+}
+
+.tab-panel-fixed {
+  height: 250px;
+  overflow: auto;
+}
+
+.genre-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 140px;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-lg);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+@media (max-width: 768px) {
+  .score-gauges {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -496,47 +496,18 @@
             @keydown="handleKeyDown"
             class="chat-input"
           />
-          <n-popover
+          <div
             v-if="chatStore.chatModes.length > 0 || chatStore.isLoadingModes"
-            v-model:show="showModePopover"
-            trigger="click"
-            placement="top-end"
-            :width="260"
-            raw
-            class="chat-mode-popover"
+            class="chat-mode-selector"
           >
-            <template #trigger>
-              <button
-                class="chat-mode-chip"
-                :title="selectedChatMode?.description || 'Intelligence mode'"
-              >
-                <n-icon :size="13"><SparklesIcon /></n-icon>
-                <span>{{ selectedChatMode?.name || "Mode" }}</span>
-              </button>
-            </template>
-            <div class="chat-mode-panel">
-              <div class="chat-mode-panel-header">Intelligence Mode</div>
-              <div
-                v-for="mode in chatStore.chatModes"
-                :key="mode.id"
-                class="chat-mode-item"
-                :class="{ active: chatStore.selectedModeId === mode.id }"
-                @click="handleModeChange(mode.id)"
-              >
-                <div class="chat-mode-item-header">
-                  <span class="chat-mode-item-name">{{ mode.name }}</span>
-                  <span
-                    v-if="mode.costFactor != null"
-                    class="chat-mode-item-cost"
-                    >×{{ mode.costFactor }}</span
-                  >
-                </div>
-                <div v-if="mode.description" class="chat-mode-item-desc">
-                  {{ mode.description }}
-                </div>
-              </div>
-            </div>
-          </n-popover>
+            <ModePopoverSelector
+              v-model="selectedChatModeBinding"
+              :options="chatModeOptions"
+              header="Intelligence Mode"
+              placement="top-end"
+              aria-label="Change intelligence mode"
+            />
+          </div>
         </div>
         <n-button
           circle
@@ -728,7 +699,7 @@ import {
   onUnmounted,
   onActivated,
 } from "vue";
-import { NIcon, NPopover, useMessage } from "naive-ui";
+import { NIcon, useMessage } from "naive-ui";
 import { useRouter } from "vue-router";
 import PhotosDialog from "@/components/PhotosDialog.vue";
 import PhotoCardHub from "@/components/photoCards/PhotoCardHub.vue";
@@ -736,6 +707,7 @@ import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
 import FloatingActionBar from "@/components/FloatingActionBar.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
+import ModePopoverSelector from "@/components/ModePopoverSelector.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useChatStore } from "@/stores/chat.js";
 import { useUserStore } from "@/stores/userStore";
@@ -827,7 +799,21 @@ const isDemoUser = computed(
   () => userStore.user?.email === "demo@photorekatest.com",
 );
 
-const selectedChatMode = computed(() => chatStore.activeMode);
+const selectedChatModeBinding = computed({
+  get: () => chatStore.selectedModeId,
+  set: (value: string | null) => {
+    chatStore.selectedModeId = value;
+  },
+});
+
+const chatModeOptions = computed(() =>
+  chatStore.chatModes.map((mode: any) => ({
+    label: mode.name,
+    value: mode.id,
+    description: mode.description,
+    costFactor: mode.costFactor ?? null,
+  })),
+);
 
 const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
 const {
@@ -909,7 +895,6 @@ const currentPhotoIndex = computed(() => {
 const showSidebar = ref(false);
 const pendingDeleteId = ref<number | null>(null);
 const showChatLabInfo = ref(false);
-const showModePopover = ref(false);
 
 const suggestions: Suggestion[] = [
   {
@@ -1306,11 +1291,6 @@ const handleKeyDown = (e: KeyboardEvent) => {
     e.preventDefault();
     sendMessage();
   }
-};
-
-const handleModeChange = (modeId: string) => {
-  chatStore.setSelectedMode(modeId);
-  showModePopover.value = false;
 };
 
 // Context photos management — PhotosDialog emits an array of photo IDs
@@ -2439,95 +2419,11 @@ const formatRelativeDate = (dateStr: string) => {
   padding-right: 100px !important;
 }
 
-.chat-mode-chip {
+.chat-mode-selector {
   position: absolute;
-  bottom: 8px;
+  bottom: 6px;
   right: 8px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 10px 2px 7px;
-  /* border-radius: var(--radius-round); */
-  border: 1px solid var(--accent-color);
-  background: color-mix(in srgb, var(--accent-color) 6%, var(--bg-surface));
-  color: var(--accent-color);
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.15s;
-  line-height: 1.4;
   z-index: 1;
-  white-space: nowrap;
-}
-
-.chat-mode-chip:hover {
-  border-color: var(--accent-color);
-  color: var(--accent-color);
-  background: color-mix(in srgb, var(--accent-color) 6%, var(--bg-surface));
-}
-
-.chat-mode-panel {
-  padding: var(--spacing-xs) 0;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-}
-
-.chat-mode-panel-header {
-  padding: var(--spacing-xs) var(--spacing-md) var(--spacing-sm);
-  font-size: 10px;
-  font-weight: var(--font-weight-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-tertiary);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.chat-mode-item {
-  padding: var(--spacing-sm) var(--spacing-md);
-  cursor: pointer;
-  transition: background 0.12s;
-}
-
-.chat-mode-item:hover {
-  background: color-mix(in srgb, var(--accent-color) 6%, var(--bg-surface));
-}
-
-.chat-mode-item.active {
-  background: color-mix(in srgb, var(--accent-color) 10%, var(--bg-surface));
-}
-
-.chat-mode-item.active .chat-mode-item-name {
-  color: var(--accent-color);
-  font-weight: var(--font-weight-semibold);
-}
-
-.chat-mode-item-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-sm);
-}
-
-.chat-mode-item-name {
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
-  line-height: var(--line-height-tight);
-}
-
-.chat-mode-item-cost {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  font-weight: var(--font-weight-semibold);
-  opacity: 0.7;
-  flex-shrink: 0;
-}
-
-.chat-mode-item-desc {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  line-height: 1.35;
-  margin-top: 2px;
 }
 
 .attach-btn {
@@ -2574,7 +2470,7 @@ const formatRelativeDate = (dateStr: string) => {
     gap: var(--spacing-xs);
   }
 
-  .chat-mode-chip {
+  .chat-mode-selector :deep(.mode-selector-chip) {
     font-size: 10px;
     padding: 2px 8px 2px 5px;
   }

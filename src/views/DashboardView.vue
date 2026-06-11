@@ -6,62 +6,81 @@
       <!-- ══════════════════════════════════════════ -->
       <aside class="panel panel-left">
         <div class="panel-body">
-          <!-- Welcome block -->
-          <div class="welcome-block">
-            <h2 class="welcome-name">
-              WELCOME BACK,&nbsp;{{ userStore.userShortName?.toUpperCase() }}!👋
-            </h2>
-            <p class="welcome-tagline">
-              <template v-if="avgAestheticScore != null">
-                Ready to organize your photos with Photoreka smart tools.
-              </template>
-              <template v-else>Ready to explore your photo universe.</template>
-            </p>
-          </div>
+          <!-- Welcome + Stats -->
+          <div class="panel-section">
+            <div class="welcome-block">
+              <h2 class="welcome-name">
+                WELCOME BACK,&nbsp;{{
+                  userStore.userShortName?.toUpperCase()
+                }}!👋
+              </h2>
+              <p class="welcome-tagline">
+                <template v-if="avgAestheticScore != null">
+                  Ready to organize your photos with Photoreka smart tools.
+                </template>
+                <template v-else
+                  >Ready to explore your photo universe.</template
+                >
+              </p>
+            </div>
 
-          <div class="photo-stats-block">
-            <!-- Primary stat: total photos -->
-            <button
-              type="button"
-              class="photos-primary-stat"
-              @click="navigateToWorkspace"
-              aria-label="Go to workspace"
-            >
-              <n-icon size="16" class="photos-primary-icon">
-                <LayersOutline />
-              </n-icon>
-              <span class="photos-primary-count">{{
-                photos.length.toLocaleString()
-              }}</span>
-              <span class="photos-primary-label">photos in your Workspace</span>
-            </button>
-
-            <!-- Genre breakdown -->
-            <!-- <div v-if="displayedGenreBadges.length" class="genre-badges-row">
+            <div class="photo-stats-block">
               <div
-                v-for="badge in displayedGenreBadges"
-                :key="badge.key"
-                class="genre-badge"
+                class="photos-primary-stat"
+                role="group"
+                aria-label="Photo stats"
               >
-                <n-icon size="12" class="genre-badge-icon">
-                  <component :is="badge.icon" />
-                </n-icon>
-                <span class="genre-badge-label">{{ badge.label }}</span>
-                <span class="genre-badge-count">{{ badge.count }}</span>
+                <div class="photos-primary-info">
+                  <n-icon size="16" class="photos-primary-icon">
+                    <LayersOutline />
+                  </n-icon>
+                  <span class="photos-primary-count">{{
+                    photos.length.toLocaleString()
+                  }}</span>
+                  <span class="photos-primary-label">Analyzed Photos</span>
+                </div>
+
+                <n-button
+                  type="info"
+                  size="small"
+                  @click="navigateToWorkspace"
+                  aria-label="See in workspace"
+                >
+                  Open Workspace
+                </n-button>
               </div>
-            </div> -->
+            </div>
           </div>
 
-          <!-- Seccion Basic Stats -->
-          <div class="section-label">Quick Stats</div>
-          <GaugesSection />
+          <!-- Quick Stats -->
+          <div class="panel-section">
+            <div class="section-header-row">
+              <div class="section-label section-label--inline">Quick Stats</div>
+              <ModePopoverSelector
+                v-model="gaugesMode"
+                :accent="false"
+                icon="settings"
+                :width="190"
+                :options="gaugesModeOptions"
+                header="Quick Stats Preferences"
+                placement="bottom-end"
+                aria-label="Change quick stats mode"
+                class="quick-stats-mode-selector"
+              />
+            </div>
+            <GaugesSection :mode="gaugesMode" />
+          </div>
 
           <!-- Smart Tools -->
-          <div class="section-label">SMART TOOLS</div>
-          <SmartToolsSection
-            :app-access-mode="appAccessMode"
-            :is-mobile-limited-mode="isMobileLimitedMode"
-          />
+          <div class="panel-section panel-section--grow">
+            <div class="section-label">SMART TOOLS</div>
+            <div class="smart-tools-scroll-area">
+              <SmartToolsSection
+                :app-access-mode="appAccessMode"
+                :is-mobile-limited-mode="isMobileLimitedMode"
+              />
+            </div>
+          </div>
         </div>
       </aside>
 
@@ -76,63 +95,67 @@
       <aside class="panel panel-right">
         <div class="panel-body">
           <!-- Daily artistic curation -->
-          <div class="section-label">DAILY ARTISTIC CURATION</div>
-          <div class="daily-eureka-card">
-            <DailyEurekaCard v-if="!isDashboardEmpty" />
-            <div v-else class="mini-empty daily-eureka-empty">
-              <n-icon size="32" color="var(--text-tertiary)">
-                <CollectionsIcon />
-              </n-icon>
-              <p>Nothing here yet</p>
+          <div class="panel-section">
+            <div class="section-label">DAILY ARTISTIC CURATION</div>
+            <div class="daily-eureka-card">
+              <DailyEurekaCard v-if="!isDashboardEmpty" />
+              <div v-else class="mini-empty daily-eureka-empty">
+                <n-icon size="32" color="var(--text-tertiary)">
+                  <CollectionsIcon />
+                </n-icon>
+                <p>Nothing here yet</p>
+              </div>
             </div>
           </div>
 
           <!-- Recent Collections & Series -->
-          <div class="section-label section-label--spaced">
-            RECENT COLLECTIONS, SERIES &amp; PORTFOLIOS
-          </div>
-
-          <div class="collections-scroll-area">
-            <div v-if="isLoadingCollections" class="mini-loading">
-              <div class="mini-spinner" />
-              <span>Loading…</span>
+          <div class="panel-section panel-section--grow">
+            <div class="section-label">
+              RECENT COLLECTIONS, SERIES &amp; PORTFOLIOS
             </div>
 
-            <div
-              v-else-if="
-                appAccessMode === 'blocked' || collections.length === 0
-              "
-              class="mini-empty collections-empty-state"
-            >
-              <n-icon size="32" color="var(--text-tertiary)">
-                <CollectionsIcon />
-              </n-icon>
-              <p>Nothing here yet</p>
-              <router-link
-                v-if="appAccessMode !== 'blocked'"
-                to="/collections"
-                class="mini-empty-link"
-                >Manage collections</router-link
-              >
-            </div>
+            <div class="collections-scroll-area">
+              <div v-if="isLoadingCollections" class="mini-loading">
+                <div class="mini-spinner" />
+                <span>Loading…</span>
+              </div>
 
-            <div v-else class="collections-stack">
-              <CollectionCard
-                v-for="item in collections.slice(0, 6)"
-                :key="item.id"
-                :item="item"
-                :type="item.itemType"
-                :compact="true"
-                :show-update-date="false"
-                :selectable="false"
-                @click="
-                  item.itemType === 'collection'
-                    ? openProject(item.id)
-                    : item.itemType === 'series'
-                      ? openSeries(item.id)
-                      : openPortfolio(item.id)
+              <div
+                v-else-if="
+                  appAccessMode === 'blocked' || collections.length === 0
                 "
-              />
+                class="mini-empty collections-empty-state"
+              >
+                <n-icon size="32" color="var(--text-tertiary)">
+                  <CollectionsIcon />
+                </n-icon>
+                <p>Nothing here yet</p>
+                <router-link
+                  v-if="appAccessMode !== 'blocked'"
+                  to="/collections"
+                  class="mini-empty-link"
+                  >Manage collections</router-link
+                >
+              </div>
+
+              <div v-else class="collections-stack">
+                <CollectionCard
+                  v-for="item in collections.slice(0, 6)"
+                  :key="item.id"
+                  :item="item"
+                  :type="item.itemType"
+                  :compact="true"
+                  :show-update-date="false"
+                  :selectable="false"
+                  @click="
+                    item.itemType === 'collection'
+                      ? openProject(item.id)
+                      : item.itemType === 'series'
+                        ? openSeries(item.id)
+                        : openPortfolio(item.id)
+                  "
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -142,7 +165,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 
 defineOptions({
@@ -156,6 +179,7 @@ import { useUserStore } from "@/stores/userStore.js";
 import CollectionCard from "@/components/CollectionCard.vue";
 import DailyEurekaCard from "@/components/dashboard/DailyEurekaCard.vue";
 import GaugesSection from "@/components/dashboard/GaugesSection.vue";
+import ModePopoverSelector from "@/components/ModePopoverSelector.vue";
 import PhotoUniverse from "@/components/dashboard/PhotoUniverse.vue";
 import SmartToolsSection from "@/components/dashboard/SmartToolsSection.vue";
 import { isMobileDevice } from "@/utils/utils.js";
@@ -258,6 +282,33 @@ const appAccessMode = computed(() => photosStore.appAccessMode);
 const isDashboardEmpty = computed(
   () => appAccessMode.value === "blocked" || photos.value.length === 0,
 );
+
+type DashboardGaugesMode = "main" | "genre";
+const DASHBOARD_GAUGES_MODE_KEY = "photoreka:dashboard:gauges:mode";
+
+const isDashboardGaugesMode = (
+  value: string | null,
+): value is DashboardGaugesMode => value === "main" || value === "genre";
+
+const savedGaugesMode =
+  typeof window !== "undefined"
+    ? window.localStorage.getItem(DASHBOARD_GAUGES_MODE_KEY)
+    : null;
+
+const gaugesMode = ref<DashboardGaugesMode>(
+  isDashboardGaugesMode(savedGaugesMode) ? savedGaugesMode : "main",
+);
+
+const gaugesModeOptions = [
+  { label: "Main Scores", value: "main" },
+  { label: "Genre Stats", value: "genre" },
+];
+
+watch(gaugesMode, (mode) => {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(DASHBOARD_GAUGES_MODE_KEY, mode);
+  }
+});
 
 const GENRE_BADGE_META: Record<string, { label: string; icon: any }> = {
   general: { label: "General", icon: Camera20Regular },
@@ -444,6 +495,9 @@ const navigateToWorkspace = () => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  /* ── Single place to tune all inter-section spacing ── */
+  --dashboard-section-gap: 14px;
+  --dashboard-label-gap: 8px;
 }
 
 .dashboard-grid {
@@ -509,6 +563,13 @@ const navigateToWorkspace = () => {
   border-right: 1px solid var(--border-color);
 }
 
+.panel-left .panel-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  gap: var(--dashboard-section-gap);
+}
+
 /* ─────────────────────────────────────────────
    Right panel
 ───────────────────────────────────────────── */
@@ -520,6 +581,22 @@ const navigateToWorkspace = () => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  gap: var(--dashboard-section-gap);
+}
+
+/* ─────────────────────────────────────────────
+   Panel sections — spacing controlled by variables above
+───────────────────────────────────────────── */
+.panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dashboard-label-gap);
+  flex-shrink: 0;
+}
+
+.panel-section--grow {
+  flex: 1;
+  min-height: 0;
 }
 
 /* ─────────────────────────────────────────────
@@ -531,61 +608,74 @@ const navigateToWorkspace = () => {
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--text-tertiary);
-  margin: 0 0 10px;
+  margin: 0;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
-.section-label--spaced {
-  margin-top: 8px;
+.section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.section-label--inline {
+  margin: 0;
+  padding: 0;
+  border-bottom: none;
+}
+
+.quick-stats-mode-selector {
+  flex-shrink: 0;
 }
 
 /* ─────────────────────────────────────────────
    Welcome block (left panel)
 ───────────────────────────────────────────── */
 .welcome-block {
-  margin-bottom: 10px;
+  margin: 0;
 }
 
 .photo-stats-block {
-  margin-bottom: 20px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  width: 100%;
 }
 
 .photos-primary-stat {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   width: 100%;
-  padding: 10px 14px;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 10px;
   background: var(--bg-container);
   border: 1px solid var(--border-color);
   border-left: 3px solid var(--primary-color);
   border-radius: 12px;
-  cursor: pointer;
-  text-align: left;
-  appearance: none;
-  font: inherit;
-  color: inherit;
   transition:
     border-color 0.18s ease,
-    box-shadow 0.18s ease,
-    transform 0.18s ease;
+    box-shadow 0.18s ease;
 }
 
-.photos-primary-stat:hover {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 1px
-    color-mix(in srgb, var(--primary-color) 55%, transparent);
-}
-
-.photos-primary-stat:focus-visible {
-  outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px
-    color-mix(in srgb, var(--primary-color) 35%, transparent);
+.photos-primary-info {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  align-items: center;
+  /* justify-content: center; */
 }
 
 .photos-primary-icon {
@@ -605,6 +695,55 @@ const navigateToWorkspace = () => {
   font-size: 12px;
   color: var(--text-tertiary);
   font-weight: 500;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.photos-workspace-button {
+  flex-shrink: 0;
+  border: 1px solid
+    color-mix(in srgb, var(--primary-color) 45%, var(--border-color));
+  background: color-mix(in srgb, var(--primary-color) 15%, var(--bg-container));
+  color: var(--text-primary);
+  border-radius: 10px;
+  padding: 0 12px;
+  height: 34px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.photos-workspace-button:hover {
+  border-color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 22%, var(--bg-container));
+}
+
+.photos-workspace-button:focus-visible {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--primary-color) 35%, transparent);
+}
+
+.photos-workspace-button:active {
+  transform: translateY(1px);
+}
+
+@media (max-width: 360px) {
+  .photos-primary-stat {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .photos-workspace-button {
+    width: 100%;
+  }
 }
 
 .genre-badges-row {
@@ -658,7 +797,7 @@ const navigateToWorkspace = () => {
 }
 
 .daily-eureka-card {
-  margin-bottom: 24px;
+  margin: 0;
 }
 
 .daily-eureka-empty {
@@ -693,6 +832,25 @@ const navigateToWorkspace = () => {
 }
 
 .collections-scroll-area::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 2px;
+}
+
+.smart-tools-scroll-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.smart-tools-scroll-area::-webkit-scrollbar {
+  width: 4px;
+}
+
+.smart-tools-scroll-area::-webkit-scrollbar-thumb {
   background: var(--border-color);
   border-radius: 2px;
 }
@@ -801,11 +959,21 @@ const navigateToWorkspace = () => {
     overflow: visible;
   }
 
+  .panel-left .panel-body {
+    display: block;
+    overflow: visible;
+  }
+
   .panel-right .panel-body {
     overflow: visible;
   }
 
   .collections-scroll-area {
+    min-height: auto;
+    overflow: visible;
+  }
+
+  .smart-tools-scroll-area {
     min-height: auto;
     overflow: visible;
   }

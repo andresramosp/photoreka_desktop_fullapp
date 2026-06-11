@@ -108,7 +108,6 @@ onMounted(() => {
   border: 1px solid var(--border-color);
   border-radius: 14px;
   padding: 10px;
-  margin-bottom: 4px;
 }
 
 .tool-item {
