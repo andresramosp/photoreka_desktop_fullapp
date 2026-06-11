@@ -694,7 +694,7 @@ const resetView = () => {
       (w - padding * 2) / spanX,
       (h - padding * 2) / spanY,
     );
-    camera.scale = fitScale * 0.93; // leave a little extra margin
+    camera.scale = fitScale * (props.isPreview ? 0.87 : 1); // leave a little extra margin
     camera.x = w / 2 - ((minX + maxX) / 2) * fitScale;
     camera.y = h / 2 - ((minY + maxY) / 2) * fitScale;
   } else {
