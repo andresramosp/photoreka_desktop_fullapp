@@ -37,7 +37,7 @@
                   <span class="photos-primary-count">{{
                     photos.length.toLocaleString()
                   }}</span>
-                  <span class="photos-primary-label">Analyzed Photos</span>
+                  <span class="photos-primary-label">Photos</span>
                 </div>
 
                 <n-button
@@ -505,7 +505,10 @@ const navigateToWorkspace = () => {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 400px 1fr 400px;
+  grid-template-columns:
+    clamp(250px, 22vw, 450px)
+    minmax(0, 1fr)
+    clamp(260px, 24vw, 450px);
   grid-template-rows: 1fr;
   overflow: hidden;
 }
@@ -918,12 +921,18 @@ const navigateToWorkspace = () => {
 ───────────────────────────────────────────── */
 @media (max-width: 1200px) {
   .dashboard-grid {
-    grid-template-columns: 340px 1fr 340px;
+    grid-template-columns:
+      clamp(230px, 24vw, 300px)
+      minmax(0, 1fr)
+      clamp(240px, 28vw, 320px);
+  }
+}
+
+@media (max-width: 1024px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr clamp(250px, 34vw, 350px);
   }
 
-  .dashboard-grid {
-    grid-template-columns: 1fr 340px;
-  }
   .panel-left {
     display: none;
   }
