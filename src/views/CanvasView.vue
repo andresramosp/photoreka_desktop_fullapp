@@ -717,7 +717,7 @@ import {
   nextTick,
   defineOptions,
 } from "vue";
-import { useRoute, onBeforeRouteLeave } from "vue-router";
+import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
 import {
   NButton,
   NButtonGroup,
@@ -768,6 +768,7 @@ const isDemoUser = computed(
   () => userStore.user?.email === "demo@photorekatest.com",
 );
 const route = useRoute();
+const router = useRouter();
 const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
 const {
   hasUnsavedChanges,
@@ -1275,15 +1276,59 @@ const handleSaveCanvas = async () => {
 
 const isSwitchingCanvas = ref(false);
 
-const handleSwitchCanvas = async (id) => {
+const getCanvasIdFromRouteQuery = () => {
+  const canvasIdQuery = Array.isArray(route.query.canvasId)
+    ? route.query.canvasId[0]
+    : route.query.canvasId;
+
+  if (canvasIdQuery == null || String(canvasIdQuery).trim() === "") {
+    return null;
+  }
+
+  const parsed = Number(canvasIdQuery);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const syncCanvasIdToRoute = async (canvasId) => {
+  if (isPlayground.value) return;
+
+  const currentCanvasId = Array.isArray(route.query.canvasId)
+    ? route.query.canvasId[0]
+    : route.query.canvasId;
+  const nextCanvasId =
+    canvasId == null ? undefined : String(Math.trunc(Number(canvasId)));
+
+  if ((currentCanvasId ?? undefined) === nextCanvasId) {
+    return;
+  }
+
+  await router.replace({
+    query: {
+      ...route.query,
+      canvasId: nextCanvasId,
+    },
+  });
+};
+
+const handleSwitchCanvas = async (id, options = {}) => {
+  const { syncQuery = true } = options;
+  const targetId = Number(id);
+
+  if (!Number.isFinite(targetId)) {
+    return;
+  }
+
   // Auto-save current canvas before switching
   if (hasUnsavedChanges.value) {
     await saveCanvas();
   }
   isSwitchingCanvas.value = true;
   try {
-    const ok = await switchCanvas(id);
+    const ok = await switchCanvas(targetId);
     if (ok) {
+      if (syncQuery && !isPlayground.value) {
+        await syncCanvasIdToRoute(targetId);
+      }
       setTimeout(() => fitStageToPhotos(), 100);
     }
   } finally {
@@ -1298,6 +1343,9 @@ const handleCreateCanvas = async () => {
   }
   const newId = await createCanvas();
   if (newId) {
+    await syncCanvasIdToRoute(newId);
+    window.dispatchEvent(new Event("canvas:list-updated"));
+
     // store already cleared by composable; reset stage
     const stage = stageRef.value.getStage();
     stage.scale({ x: 1, y: 1 });
@@ -1309,11 +1357,17 @@ const handleCreateCanvas = async () => {
 };
 
 const handleRenameCanvas = async (id, name) => {
-  await renameCanvas(id, name);
+  const ok = await renameCanvas(id, name);
+  if (ok) {
+    window.dispatchEvent(new Event("canvas:list-updated"));
+  }
 };
 
 const handleDeleteCanvas = async (id) => {
-  await deleteCanvas(id);
+  const ok = await deleteCanvas(id);
+  if (ok) {
+    window.dispatchEvent(new Event("canvas:list-updated"));
+  }
   // If the active canvas changed (deleted), fit stage to new canvas photos
   setTimeout(() => fitStageToPhotos(), 100);
 };
@@ -1927,6 +1981,24 @@ watch(
   { immediate: true },
 );
 
+watch(
+  () => route.query.canvasId,
+  async () => {
+    if (isPlayground.value || isSwitchingCanvas.value) {
+      return;
+    }
+
+    const targetCanvasId = getCanvasIdFromRouteQuery();
+    if (targetCanvasId && targetCanvasId !== activeCanvasId.value) {
+      await handleSwitchCanvas(targetCanvasId, { syncQuery: false });
+    }
+  },
+);
+
+watch(activeCanvasId, (id) => {
+  void syncCanvasIdToRoute(id);
+});
+
 onMounted(async () => {
   window.addEventListener("resize", handleResize);
   document.addEventListener("click", handleClickOutside);
@@ -1974,6 +2046,13 @@ onMounted(async () => {
   try {
     const hasLoaded = await loadCanvas();
     if (hasLoaded) {
+      const targetCanvasId = getCanvasIdFromRouteQuery();
+      if (targetCanvasId && targetCanvasId !== activeCanvasId.value) {
+        await handleSwitchCanvas(targetCanvasId, { syncQuery: false });
+      } else if (activeCanvasId.value) {
+        await syncCanvasIdToRoute(activeCanvasId.value);
+      }
+
       console.log("Canvas loaded successfully");
       // Fit stage to loaded photos after a short delay
       setTimeout(() => {
@@ -1995,7 +2074,7 @@ onMounted(async () => {
     // If a specific canvas was requested, switch to it first
     if (canvasStore.pendingCanvasId === "new") {
       canvasStore.pendingCanvasId = null;
-      await createCanvas();
+      await handleCreateCanvas();
     } else if (canvasStore.pendingCanvasId !== null) {
       const targetId = canvasStore.pendingCanvasId;
       canvasStore.pendingCanvasId = null;
@@ -2008,7 +2087,7 @@ onMounted(async () => {
     const targetId = canvasStore.pendingCanvasId;
     canvasStore.pendingCanvasId = null;
     if (targetId === "new") {
-      await createCanvas();
+      await handleCreateCanvas();
     } else {
       await switchCanvas(targetId);
     }
@@ -2070,7 +2149,7 @@ onActivated(async () => {
     // If a specific canvas was requested, switch to it first
     if (canvasStore.pendingCanvasId === "new") {
       canvasStore.pendingCanvasId = null;
-      await createCanvas();
+      await handleCreateCanvas();
     } else if (canvasStore.pendingCanvasId !== null) {
       const targetId = canvasStore.pendingCanvasId;
       canvasStore.pendingCanvasId = null;
@@ -2085,7 +2164,7 @@ onActivated(async () => {
     const targetId = canvasStore.pendingCanvasId;
     canvasStore.pendingCanvasId = null;
     if (targetId === "new") {
-      await createCanvas();
+      await handleCreateCanvas();
     } else {
       await switchCanvas(targetId);
     }

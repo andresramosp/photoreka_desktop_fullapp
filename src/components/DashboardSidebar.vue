@@ -163,6 +163,18 @@ const {
 const activeKey = computed(() => {
   const routeName = route.name as string;
 
+  if (routeName === "canvas") {
+    const canvasId = Array.isArray(route.query.canvasId)
+      ? route.query.canvasId[0]
+      : route.query.canvasId;
+
+    if (canvasId != null && String(canvasId).trim() !== "") {
+      return `canvas-${canvasId}`;
+    }
+
+    return "canvas-group";
+  }
+
   // Handle collection detail routes
   if (routeName === "collection-detail" && route.params.id) {
     return `collection-${route.params.id}`;
@@ -217,6 +229,9 @@ const handleMenuSelect = (key: string) => {
 
   if (key === "import-area") {
     router.push({ name: "import-area", hash: "#upload" });
+  } else if (key.startsWith("canvas-")) {
+    const canvasId = key.replace("canvas-", "");
+    router.push({ name: "canvas", query: { canvasId } });
   } else if (
     key.startsWith("collection-") ||
     key.startsWith("series-") ||

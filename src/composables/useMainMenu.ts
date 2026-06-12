@@ -1,4 +1,4 @@
-import { computed, h, ref } from "vue";
+import { computed, h, onMounted, onUnmounted, ref, watch } from "vue";
 import { NIcon } from "naive-ui";
 import type { MenuOption } from "naive-ui";
 import { usePhotosStore } from "@/stores/photos";
@@ -7,6 +7,7 @@ import { useSeriesStore } from "@/stores/series";
 import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds";
 import { useUserStore } from "@/stores/userStore";
 import { useRouter } from "vue-router";
+import { api } from "@/utils/axios";
 
 // Centralized tool config: single source of truth for icons & availability
 import { TOOL_ICONS, getToolById, isDesktopOnly } from "@/config/toolsConfig";
@@ -42,6 +43,47 @@ export function useMainMenu(closeMobileMenu?: () => void) {
   // Check if user is demo
   const isDemoUser = computed(() => {
     return userStore.user?.email === "demo@photorekatest.com";
+  });
+
+  const canvasList = ref<Array<{ id: number | string; name?: string }>>([]);
+
+  const loadCanvasList = async () => {
+    if (!userStore.isAuthenticated) {
+      canvasList.value = [];
+      return;
+    }
+
+    try {
+      const res = await api.get("/api/canvas");
+      canvasList.value = res.data || [];
+    } catch (error) {
+      console.error("Error loading canvases for sidebar menu:", error);
+      canvasList.value = [];
+    }
+  };
+
+  const handleCanvasListUpdated = () => {
+    loadCanvasList();
+  };
+
+  watch(
+    () => userStore.isAuthenticated,
+    (isAuthenticated) => {
+      if (isAuthenticated) {
+        loadCanvasList();
+      } else {
+        canvasList.value = [];
+      }
+    },
+    { immediate: true },
+  );
+
+  onMounted(() => {
+    window.addEventListener("canvas:list-updated", handleCanvasListUpdated);
+  });
+
+  onUnmounted(() => {
+    window.removeEventListener("canvas:list-updated", handleCanvasListUpdated);
   });
 
   // Get real collections and series from stores
@@ -224,6 +266,18 @@ export function useMainMenu(closeMobileMenu?: () => void) {
       );
 
     return [...rootSetNodes, ...rootPortfolioNodes];
+  });
+
+  const canvasTreeChildren = computed<MenuOption[]>(() => {
+    return canvasList.value.map((canvas) => ({
+      label: () =>
+        h(
+          "span",
+          { class: "collection-menu-item" },
+          canvas.name || `Canvas ${canvas.id}`,
+        ),
+      key: `canvas-${canvas.id}`,
+    }));
   });
 
   const appAccessMode = computed(() => photosStore.appAccessMode);
@@ -436,6 +490,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
       h(
         "span",
         {
+          class: "second-level-menu-item",
           style: {
             display: "flex",
             alignItems: "center",
@@ -443,13 +498,37 @@ export function useMainMenu(closeMobileMenu?: () => void) {
           },
         },
         [
-          h("span", "Canvas"),
+          h(
+            "span",
+            {
+              onClick: (e: MouseEvent) => {
+                if (!isToolDisabledOnMobile("canvas")) {
+                  e.stopPropagation();
+                  router.push("/canvas");
+                  if (isMobile.value && closeMobileMenu) {
+                    closeMobileMenu();
+                  }
+                }
+              },
+              style: {
+                cursor: isToolDisabledOnMobile("canvas")
+                  ? "default"
+                  : "pointer",
+                display: "inline-block",
+              },
+            },
+            "Canvas",
+          ),
           isToolDisabledOnMobile("canvas") ? renderLaptopSuffix()() : null,
         ],
       ),
-    key: "canvas",
+    key: "canvas-group",
     disabled: isToolDisabledOnMobile("canvas") || isBlocked.value,
     icon: renderIcon(toolIcon("canvas")),
+    children:
+      isToolDisabledOnMobile("canvas") || isBlocked.value
+        ? undefined
+        : canvasTreeChildren.value,
   }));
 
   // Framer (root-level)
