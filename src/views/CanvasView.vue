@@ -399,10 +399,44 @@
                 />
               </h4>
 
-              <!-- Layout Pills -->
               <div
                 class="config-item"
                 :class="{ disabled: !toolbarState.expansion.enabled }"
+              >
+                <span class="config-label">On Canvas</span>
+                <n-switch v-model:value="toolbarState.expansion.onCanvas" />
+              </div>
+
+              <div
+                class="config-item"
+                :class="{
+                  disabled:
+                    !toolbarState.expansion.enabled ||
+                    !toolbarState.expansion.onCanvas,
+                }"
+              >
+                <span class="config-label">Criteria</span>
+                <n-select
+                  v-model:value="toolbarState.expansion.type"
+                  :options="filteredExpansionTypeOptions"
+                  placeholder="Select criteria"
+                  size="tiny"
+                  style="width: 185px"
+                  :disabled="
+                    !toolbarState.expansion.enabled ||
+                    !toolbarState.expansion.onCanvas
+                  "
+                />
+              </div>
+
+              <!-- Layout Pills -->
+              <div
+                class="config-item"
+                :class="{
+                  disabled:
+                    !toolbarState.expansion.enabled ||
+                    !toolbarState.expansion.onCanvas,
+                }"
               >
                 <span class="config-label">Layout</span>
                 <div class="layout-pills">
@@ -416,7 +450,10 @@
                     "
                     size="small"
                     class="layout-pill"
-                    :disabled="!toolbarState.expansion.enabled"
+                    :disabled="
+                      !toolbarState.expansion.enabled ||
+                      !toolbarState.expansion.onCanvas
+                    "
                     @click="toolbarState.photoOptions.spreadMode = layout"
                   >
                     {{ layout.charAt(0).toUpperCase() + layout.slice(1) }}
@@ -427,7 +464,11 @@
               <!-- Photo Count -->
               <div
                 class="config-item"
-                :class="{ disabled: !toolbarState.expansion.enabled }"
+                :class="{
+                  disabled:
+                    !toolbarState.expansion.enabled ||
+                    !toolbarState.expansion.onCanvas,
+                }"
               >
                 <span class="config-label">Photos</span>
                 <n-input-number
@@ -436,7 +477,10 @@
                   :max="5"
                   size="small"
                   style="width: 80px"
-                  :disabled="!toolbarState.expansion.enabled"
+                  :disabled="
+                    !toolbarState.expansion.enabled ||
+                    !toolbarState.expansion.onCanvas
+                  "
                 />
               </div>
             </div>
@@ -458,69 +502,6 @@
             />
           </div>
         </template>
-
-        <!-- Download Button - Only show when photos are selected -->
-        <n-button
-          v-if="selectedPhotosCount > 0"
-          type="primary"
-          :loading="isDownloading"
-          @click="handleDownloadSelectedPhotos"
-        >
-          <template #icon>
-            <n-icon size="20">
-              <CloudDownloadOutline />
-            </n-icon>
-          </template>
-          <span v-if="selectedPhotosCount > 1"
-            >({{ selectedPhotosCount }})</span
-          >
-        </n-button>
-
-        <!-- Add to Collection Button - Only show when photos are selected -->
-        <n-button
-          v-if="selectedPhotosCount > 0"
-          type="info"
-          @click="handleAddToCollection"
-        >
-          <template #icon>
-            <n-icon size="20">
-              <AlbumsOutline />
-            </n-icon>
-          </template>
-          <span v-if="selectedPhotosCount > 1"
-            >({{ selectedPhotosCount }})</span
-          >
-        </n-button>
-
-        <!-- Take Photos To Tool Button - Only show when photos are selected -->
-        <n-button
-          v-if="selectedPhotosCount > 0"
-          type="info"
-          @click="openToolSelector"
-          :disabled="isProcessingTool"
-        >
-          <template #icon>
-            <n-icon> <MagicWand /> </n-icon>
-          </template>
-          <span v-if="selectedPhotosCount > 1"
-            >({{ selectedPhotosCount }})</span
-          >
-        </n-button>
-
-        <!-- Send to Chat Button - Only show when photos are selected -->
-        <n-button
-          v-if="selectedPhotosCount > 0"
-          type="info"
-          @click="handleSendToChat"
-          :disabled="isProcessingTool"
-        >
-          <template #icon>
-            <n-icon> <RobotOutlined /> </n-icon>
-          </template>
-          <span v-if="selectedPhotosCount > 1"
-            >({{ selectedPhotosCount }})</span
-          >
-        </n-button>
 
         <!-- Canvas Manager -->
         <CanvasManagerPopover
@@ -552,87 +533,27 @@
       >
     </div>
 
+    <!-- Floating Action Bar -->
+    <FloatingActionBar
+      :top-position="16"
+      :selected-ids="selectedPhotoIds"
+      :show-delete="false"
+      :show-add-to-collection="true"
+      :show-move-to-tool="true"
+      :show-send-to-chat="true"
+      :is-downloading="isDownloading"
+      :is-deleting="false"
+      @clear-selection="clearCanvasSelections"
+      @download="handleDownloadSelectedPhotos"
+      @add-to-collection="handleAddToCollection"
+      @move-to-tool="openToolSelector"
+      @send-to-chat="handleSendToChat"
+    />
+
     <!-- Playground Logo - Top Right -->
     <div v-if="isPlayground" class="canvas-controls playground-logo">
       <div class="logo-container-playground">
         <AppLogo layout="horizontal" :height="45" />
-      </div>
-    </div>
-
-    <!-- Top Center Mode Switch -->
-    <div
-      v-if="!isPlayground && isExpansionEnabled"
-      class="canvas-controls top-center"
-    >
-      <div class="btn-group-pill">
-        <div class="expandable-button-group" ref="expandableGroupRef">
-          <n-tooltip placement="bottom" trigger="hover">
-            <template #trigger>
-              <n-button
-                :type="expansionMode === 'catalog' ? 'primary' : 'default'"
-                @click="selectCatalogMode"
-                class="mode-button left-button"
-              >
-                <template #icon>
-                  <n-icon>
-                    <FolderOutline />
-                  </n-icon>
-                </template>
-              </n-button>
-            </template>
-            Expand photos from your catalog
-          </n-tooltip>
-
-          <div
-            class="expandable-container"
-            :class="{ expanded: canvasModeIsExpanded }"
-          >
-            <n-tooltip placement="bottom" trigger="hover">
-              <template #trigger>
-                <n-button
-                  :type="expansionMode === 'canvas' ? 'primary' : 'default'"
-                  @click.stop="handleOnCanvasClick"
-                  class="mode-button right-button"
-                >
-                  <template #icon>
-                    <n-icon> <Workspace /></n-icon>
-                  </template>
-                  <span v-if="canvasModeIsExpanded" class="button-text">{{
-                    expansionTypeOptions.find(
-                      (opt) => opt.value == toolbarState.expansion.type,
-                    ).label
-                  }}</span>
-                  <n-icon v-if="canvasModeIsExpanded" class="dropdown-arrow">
-                    <svg viewBox="0 0 24 24">
-                      <path fill="currentColor" d="M7 10l5 5 5-5z" />
-                    </svg>
-                  </n-icon>
-                </n-button>
-              </template>
-              Expand photos directly on canvas
-            </n-tooltip>
-
-            <div v-if="isDropdownOpen" class="dropdown-menu" @click.stop>
-              <div
-                v-for="option in filteredExpansionTypeOptions"
-                :key="option.value"
-                :class="[
-                  'dropdown-item',
-                  {
-                    active: toolbarState.expansion.type === option.value,
-                    disabled: option.disabled,
-                  },
-                ]"
-                @click="!option.disabled && selectOption(option)"
-              >
-                <!-- <n-icon class="option-icon">
-                  <component :is="option.icon" />
-                </n-icon> -->
-                <span>{{ option.label }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -773,7 +694,6 @@ import { useCollectionsStore } from "@/stores/collections.js";
 import {
   AlbumsOutline,
   ExpandOutline,
-  FolderOutline,
   HandLeftOutline,
   ImageOutline,
   RefreshOutline,
@@ -817,13 +737,13 @@ import PhotoCenterButton from "@/components/canvas/PhotoControls/PhotoCenterButt
 import PhotoInfoButton from "@/components/canvas/PhotoControls/PhotoInfoButton.vue";
 import TagPillsCanvas from "@/components/canvas/TagPills/TagPillsCanvas.vue";
 import RelatedPhotosToolbar from "@/components/canvas/RelatedPhotosToolbar.vue";
+import FloatingActionBar from "@/components/FloatingActionBar.vue";
 import PlaygroundUpgradeModal from "@/components/PlaygroundUpgradeModal.vue";
 import PlaygroundPhotosDialog from "@/components/PlaygroundPhotosDialog.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
-import { SaveOutline, CloudDownloadOutline } from "@vicons/ionicons5";
+import { SaveOutline } from "@vicons/ionicons5";
 import { SelectAllFilled } from "@vicons/material";
-import { MagicWand, Workspace } from "@vicons/carbon";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { useCanvasPersistence } from "@/composables/useCanvasPersistence.js";
 import CanvasManagerPopover from "@/components/canvas/CanvasManagerPopover.vue";
@@ -890,7 +810,6 @@ const { basicMode } = storeToRefs(canvasStore);
 // Refs
 const stageRef = ref(null);
 const canvasContainer = ref();
-const expandableGroupRef = ref();
 const relatedPhotosToolbarRef = ref();
 
 const photoRefs = ref({});
@@ -906,6 +825,7 @@ const CANVAS_CONFIG_KEY = "canvas-toolbar-config";
 const getDefaultConfig = () => ({
   expansion: {
     type: "embedding",
+    onCanvas: false,
     inverted: false,
     opposite: false,
     autoAlign: false,
@@ -921,9 +841,23 @@ const getDefaultConfig = () => ({
 
 const getSavedConfig = () => {
   try {
+    const defaults = getDefaultConfig();
     const saved = localStorage.getItem(CANVAS_CONFIG_KEY);
-    if (!saved) return getDefaultConfig();
-    return { ...getDefaultConfig(), ...JSON.parse(saved) };
+    if (!saved) return defaults;
+
+    const parsed = JSON.parse(saved);
+    return {
+      ...defaults,
+      ...parsed,
+      expansion: {
+        ...defaults.expansion,
+        ...(parsed.expansion || {}),
+      },
+      photoOptions: {
+        ...defaults.photoOptions,
+        ...(parsed.photoOptions || {}),
+      },
+    };
   } catch {
     return getDefaultConfig();
   }
@@ -1005,7 +939,6 @@ const canvasWoodSurfaceStyle = computed(() => {
 const showPhotosDialog = ref(false);
 const showTrashDialog = ref(false);
 const basicModeDismissed = ref(false);
-const expansionMode = ref(isPlayground.value ? "canvas" : "catalog");
 const interactionMode = ref("pan");
 const showRelatedPhotos = ref(false);
 const showPhotoInfoDialog = ref(false);
@@ -1022,10 +955,6 @@ const showCollectionModal = ref(false);
 // Unsaved changes navigation guard state
 const showUnsavedModal = ref(false);
 let pendingNavigation = null;
-
-// Expandable dropdown state
-const canvasModeIsExpanded = ref(false);
-const isDropdownOpen = ref(false);
 
 // Config menu state
 const showConfigMenu = ref(false);
@@ -1080,15 +1009,20 @@ const isExpansionEnabled = computed(() => {
   return toolbarState.value.expansion.enabled;
 });
 
-// Update expansionMode based on expansion enabled state
+const expansionMode = computed(() => {
+  if (!toolbarState.value.expansion.enabled) return null;
+  return toolbarState.value.expansion.onCanvas ? "canvas" : "catalog";
+});
+
+// Keep catalog toolbar closed when expansion is disabled or on-canvas mode is active.
 watch(
-  () => toolbarState.value.expansion.enabled,
-  (enabled) => {
-    if (!enabled) {
-      expansionMode.value = null;
+  () => [
+    toolbarState.value.expansion.enabled,
+    toolbarState.value.expansion.onCanvas,
+  ],
+  ([enabled, onCanvas]) => {
+    if (!enabled || onCanvas) {
       showRelatedPhotos.value = false;
-    } else if (expansionMode.value === null) {
-      expansionMode.value = "catalog";
     }
   },
 );
@@ -1476,36 +1410,6 @@ const toggleInteractionMode = () => {
     interactionMode.value === "pan" ? "move" : "select";
 };
 
-// Mode selection functions
-const selectCatalogMode = () => {
-  if (!toolbarState.value.expansion.enabled) return;
-  expansionMode.value = "catalog";
-  canvasModeIsExpanded.value = false;
-  isDropdownOpen.value = false;
-};
-
-const handleOnCanvasClick = () => {
-  if (!toolbarState.value.expansion.enabled) return;
-  if (expansionMode.value !== "canvas") {
-    // First click: switch to catalog mode and expand button
-    expansionMode.value = "canvas";
-    canvasModeIsExpanded.value = true;
-    isDropdownOpen.value = false;
-    showRelatedPhotos.value = false;
-  } else if (!isDropdownOpen.value) {
-    // Second click: open dropdown (already in catalog mode and expanded)
-    isDropdownOpen.value = true;
-  } else {
-    // Third click: close dropdown but keep expanded and in catalog mode
-    isDropdownOpen.value = false;
-  }
-};
-
-const selectOption = (option) => {
-  toolbarState.value.expansion.type = option.value;
-  isDropdownOpen.value = false;
-};
-
 // Toolbar functions
 const hideRelatedPhotos = () => {
   showRelatedPhotos.value = false;
@@ -1541,13 +1445,17 @@ const handleAddToCollection = () => {
   }
 };
 
-const handleCollectionAdded = (data) => {
-  // Clear selections after successfully adding to collection
+const clearCanvasSelections = () => {
   photos.value.forEach((photo) => {
     if (photo.selected) {
       photo.selected = false;
     }
   });
+};
+
+const handleCollectionAdded = (data) => {
+  // Clear selections after successfully adding to collection
+  clearCanvasSelections();
   showCollectionModal.value = false;
 };
 
@@ -1563,11 +1471,7 @@ const handleToolSelected = async (toolId, canvasId = null) => {
 
   // Clear selections
   const clearSelections = () => {
-    photos.value.forEach((photo) => {
-      if (photo.selected) {
-        photo.selected = false;
-      }
-    });
+    clearCanvasSelections();
   };
 
   // When the destination is a canvas and we're already in CanvasView,
@@ -1605,9 +1509,7 @@ const handleSendToChat = async () => {
     .filter((photo) => photo.selected)
     .map((photo) => photo.id);
   const clearSelections = () => {
-    photos.value.forEach((photo) => {
-      if (photo.selected) photo.selected = false;
-    });
+    clearCanvasSelections();
   };
   await takeToChat(selectedIds, clearSelections);
 };
@@ -1653,16 +1555,6 @@ const handleClickOutside = (event) => {
   // Close config menu if clicking outside
   if (configMenuRef.value && !configMenuRef.value.contains(event.target)) {
     closeConfigMenu();
-  }
-  const target = event.target;
-
-  if (
-    isDropdownOpen.value &&
-    expandableGroupRef.value &&
-    !expandableGroupRef.value.contains(target)
-  ) {
-    isDropdownOpen.value = false;
-    // Keep the button expanded if in catalog mode
   }
 };
 
@@ -1747,7 +1639,6 @@ const resetCanvasState = () => {
 
   // Close any open menus
   closeConfigMenu();
-  isDropdownOpen.value = false;
   showRelatedPhotos.value = false;
 };
 
