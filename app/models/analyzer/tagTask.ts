@@ -113,7 +113,7 @@ export class TagTask extends AnalyzerTask {
 
   async commit(): Promise<void> {
     const batchEmbeddingsSize = 150
-    const concurrencyLimit = 25
+    const concurrencyLimit = 15
 
     const tagPhotoManager = new TagPhotoManager()
     const photoManager = new PhotoManager()

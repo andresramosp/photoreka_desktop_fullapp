@@ -19,7 +19,7 @@ const dbConfig = defineConfig({
       },
       pool: {
         min: 2,
-        max: 50,
+        max: 30,
         acquireTimeoutMillis: 120000,
         // Evict idle connections after 10s — well before the server/proxy kills them
         idleTimeoutMillis: 10000,
