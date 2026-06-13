@@ -24,16 +24,31 @@
       <div class="cache-controls">
         <div class="control-row">
           <label class="control-label">Target user</label>
-          <n-radio-group v-model:value="targetMode" size="small">
-            <n-radio-button value="all">All users</n-radio-button>
-            <n-radio-button value="specific">Specific user ID</n-radio-button>
-          </n-radio-group>
+          <div class="target-toggle" role="group" aria-label="Target user mode">
+            <n-button
+              size="small"
+              :type="targetMode === 'all' ? 'primary' : 'default'"
+              :ghost="targetMode !== 'all'"
+              @click="targetMode = 'all'"
+            >
+              All users
+            </n-button>
+            <n-button
+              size="small"
+              :type="targetMode === 'specific' ? 'primary' : 'default'"
+              :ghost="targetMode !== 'specific'"
+              @click="targetMode = 'specific'"
+            >
+              Specific user ID
+            </n-button>
+          </div>
           <n-input
             v-if="targetMode === 'specific'"
             v-model:value="specificUserId"
             placeholder="User ID (numeric)"
             size="small"
             style="width: 180px"
+            inputmode="numeric"
             clearable
           />
         </div>
@@ -57,7 +72,7 @@
             :type="action.type === 'all' ? 'error' : 'primary'"
             :ghost="action.type !== 'all'"
             :loading="loading[action.type]"
-            :disabled="targetMode === 'specific' && !specificUserId.trim()"
+            :disabled="targetMode === 'specific' && !isSpecificUserIdValid"
             @click="triggerInvalidation(action.type)"
           >
             {{ action.type === "all" ? "Invalidate all caches" : "Invalidate" }}
@@ -69,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from "vue";
+import { computed, ref, reactive } from "vue";
 import { useMessage } from "naive-ui";
 import { LayersOutline } from "@vicons/ionicons5";
 import { api } from "../../utils/axios";
@@ -78,6 +93,9 @@ const message = useMessage();
 
 const targetMode = ref<"all" | "specific">("all");
 const specificUserId = ref("");
+const isSpecificUserIdValid = computed(() =>
+  /^\d+$/.test(specificUserId.value.trim()),
+);
 
 type InvalidationType =
   | "photoListChanged"
@@ -107,7 +125,7 @@ const cacheActions: {
     scope: "Light",
     tagType: "default",
     description:
-      "Expires the photo list and preview caches + duplicate checks. Use after manual metadata edits.",
+      "Expires photo list + preview + duplicate-check caches only. Does not touch search, tags, or expensive 3D/tagcloud caches.",
   },
   {
     type: "photosGeolocationUpdate",
@@ -115,7 +133,7 @@ const cacheActions: {
     scope: "Light",
     tagType: "default",
     description:
-      "Expires photo list and preview caches after geolocation data was changed.",
+      "Expires only photo list and preview caches after geolocation edits.",
   },
   {
     type: "photosDeleted",
@@ -123,7 +141,7 @@ const cacheActions: {
     scope: "Medium",
     tagType: "warning",
     description:
-      "Expires photo list, search index, tags, 3D views and portfolio caches. Use after manual photo removal.",
+      "Expires list/search/tags/scoring/duplicates immediately. Expensive 3D/tagcloud/portfolio caches are invalidated when threshold or payload-boundary rules are met.",
   },
   {
     type: "analysisCompleted",
@@ -131,7 +149,7 @@ const cacheActions: {
     scope: "Full",
     tagType: "warning",
     description:
-      "Expires every cache including expensive UMAP/3D reductions. Use after bulk re-analysis.",
+      "Expires list/search/tags/scoring/duplicates immediately. Expensive UMAP/3D/tagcloud/portfolio caches follow watermark threshold (or payload boundary).",
   },
   {
     type: "all",
@@ -139,16 +157,21 @@ const cacheActions: {
     scope: "Nuclear",
     tagType: "error",
     description:
-      "Runs all four invalidations in sequence (photoCount=999). Clears every cache for the target.",
+      "Forces all cache groups for the target user. For global runs (all users), expensive-cache warmup is skipped.",
   },
 ];
 
 async function triggerInvalidation(type: InvalidationType) {
-  const userId =
-    targetMode.value === "all" ? "all" : specificUserId.value.trim();
+  const rawUserId = specificUserId.value.trim();
+  const userId = targetMode.value === "all" ? "all" : rawUserId;
 
   if (targetMode.value === "specific" && !userId) {
     message.warning("Please enter a user ID");
+    return;
+  }
+
+  if (targetMode.value === "specific" && !isSpecificUserIdValid.value) {
+    message.warning("User ID must be a positive integer");
     return;
   }
 
@@ -156,7 +179,7 @@ async function triggerInvalidation(type: InvalidationType) {
   try {
     const { data } = await api.post("/api/admin/system/cache/invalidate", {
       type,
-      userId,
+      userId: targetMode.value === "all" ? "all" : String(Number(rawUserId)),
       photoCount: 999,
     });
     message.success(
@@ -172,10 +195,6 @@ async function triggerInvalidation(type: InvalidationType) {
 </script>
 
 <style scoped>
-.admin-section {
-  max-width: 900px;
-}
-
 .section-header {
   margin-bottom: 28px;
 }
@@ -226,6 +245,10 @@ async function triggerInvalidation(type: InvalidationType) {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+}
+.target-toggle {
+  display: inline-flex;
+  gap: 8px;
 }
 .control-label {
   font-size: 13px;

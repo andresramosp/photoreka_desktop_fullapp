@@ -446,6 +446,9 @@ const activityMeta = ref<{
   currentPage: number;
   lastPage: number;
 } | null>(null);
+const isMobile = ref(
+  typeof window !== "undefined" ? window.innerWidth <= 768 : false,
+);
 
 const activityTypeOptions = [
   { label: "Search (semantic)", value: "search_semantic" },
@@ -485,8 +488,13 @@ const activityTypeOptions = [
 
 let activityRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
+function handleViewportResize() {
+  isMobile.value = window.innerWidth <= 768;
+}
+
 onUnmounted(() => {
   if (activityRefreshTimer) clearInterval(activityRefreshTimer);
+  window.removeEventListener("resize", handleViewportResize);
 });
 
 const activeOptions = [
@@ -902,7 +910,7 @@ const activityColumns = computed<DataTableColumn<GlobalActivityItem>[]>(() => [
   {
     title: "Time",
     key: "createdAt",
-    width: 120,
+    width: isMobile.value ? 82 : 120,
     render(row) {
       return h("span", { class: "cell-dim" }, formatDateTime(row.createdAt));
     },
@@ -910,9 +918,32 @@ const activityColumns = computed<DataTableColumn<GlobalActivityItem>[]>(() => [
   {
     title: "User",
     key: "user",
-    width: 180,
+    width: isMobile.value ? 160 : 180,
     render(row) {
       if (!row.user) return h("span", { class: "cell-dim" }, "—");
+      if (isMobile.value) {
+        return h("div", { class: "cell-activity-mobile-main" }, [
+          h(
+            "a",
+            {
+              class: "cell-user-link",
+              onClick: (e: Event) => {
+                e.stopPropagation();
+                router.push({
+                  name: "admin-user-detail",
+                  params: { id: row.user!.id },
+                });
+              },
+            },
+            row.user.name,
+          ),
+          h(
+            "span",
+            { class: "cell-activity-detail cell-activity-detail-mobile" },
+            activitySummary(row),
+          ),
+        ]);
+      }
       return h(
         "a",
         {
@@ -932,7 +963,7 @@ const activityColumns = computed<DataTableColumn<GlobalActivityItem>[]>(() => [
   {
     title: "Type",
     key: "type",
-    width: 140,
+    width: isMobile.value ? 110 : 140,
     render(row) {
       return h(
         NTag,
@@ -948,6 +979,8 @@ const activityColumns = computed<DataTableColumn<GlobalActivityItem>[]>(() => [
   {
     title: "Details",
     key: "details",
+    width: 300,
+    hide: isMobile.value,
     render(row) {
       return h("span", { class: "cell-activity-detail" }, activitySummary(row));
     },
@@ -1040,6 +1073,8 @@ function handleSort(options: DataTableSortState) {
 onMounted(() => {
   fetchUsers();
   fetchGlobalActivities(1);
+  window.addEventListener("resize", handleViewportResize);
+  handleViewportResize();
   activityRefreshTimer = setInterval(
     () => fetchGlobalActivities(activityPage.value),
     20000,
@@ -1243,7 +1278,24 @@ onMounted(() => {
 .cell-activity-detail {
   font-size: 12px;
   color: #64748b;
-  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.cell-activity-mobile-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cell-activity-detail-mobile {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
 }
 
 /* ===== Responsive ===== */
@@ -1273,6 +1325,11 @@ onMounted(() => {
 
   :deep(.n-data-table) {
     font-size: 12px;
+  }
+
+  :deep(.n-data-table-td) {
+    padding: 6px 8px !important;
+    vertical-align: middle;
   }
 
   .activity-section-header {
