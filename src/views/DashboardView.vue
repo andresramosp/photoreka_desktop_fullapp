@@ -16,7 +16,7 @@
             @go-upload="navigateToImportArea"
           />
 
-          <div class="left-sections-scroll-area">
+          <div class="panel-sections-scroll-area">
             <!-- Smart Tools -->
             <div class="panel-section">
               <div class="section-label">Quick Access</div>
@@ -25,7 +25,91 @@
                 :is-mobile-limited-mode="isMobileLimitedMode"
               />
             </div>
+            <!-- Recent Collections & Series -->
+            <div class="panel-section panel-section--grow">
+              <div class="section-label">
+                RECENT COLLECTIONS, SERIES &amp; PORTFOLIOS
+              </div>
 
+              <div class="collections-scroll-area">
+                <div v-if="isLoadingCollections" class="mini-loading">
+                  <div class="mini-spinner" />
+                  <span>Loading…</span>
+                </div>
+
+                <div
+                  v-else-if="
+                    appAccessMode === 'blocked' || collections.length === 0
+                  "
+                  class="mini-empty collections-empty-state"
+                >
+                  <n-icon size="32" color="var(--text-tertiary)">
+                    <CollectionsIcon />
+                  </n-icon>
+                  <p>Nothing here yet</p>
+                  <router-link
+                    v-if="appAccessMode !== 'blocked'"
+                    to="/collections"
+                    class="mini-empty-link"
+                    >Manage collections</router-link
+                  >
+                </div>
+
+                <div v-else class="collections-stack">
+                  <CollectionCard
+                    v-for="item in collections.slice(0, 6)"
+                    :key="item.id"
+                    :item="item"
+                    :type="item.itemType"
+                    :compact="true"
+                    :show-update-date="false"
+                    :selectable="false"
+                    @click="
+                      item.itemType === 'collection'
+                        ? openProject(item.id)
+                        : item.itemType === 'series'
+                          ? openSeries(item.id)
+                          : openPortfolio(item.id)
+                    "
+                  />
+                  <CreateCard
+                    class="dashboard-create-collection-card"
+                    title="Add Collections"
+                    subtitle="Start organizing your photos"
+                    @click="navigateToCollections"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ══════════════════════════════════════════ -->
+      <!-- CENTER — Photo Universe (quantum void)     -->
+      <!-- ══════════════════════════════════════════ -->
+      <PhotoUniverse v-if="!isMobileLimitedMode" :photo-count="photos.length" />
+
+      <!-- ══════════════════════════════════════════ -->
+      <!-- RIGHT PANEL — Catalog Control Panel        -->
+      <!-- ══════════════════════════════════════════ -->
+      <aside class="panel panel-right">
+        <div class="panel-body">
+          <!-- Daily artistic curation (fixed, non-scrollable) -->
+          <div class="panel-section">
+            <div class="section-label">DAILY ARTISTIC CURATION</div>
+            <div class="daily-eureka-card">
+              <DailyEurekaCard v-if="!isDashboardEmpty" />
+              <div v-else class="mini-empty daily-eureka-empty">
+                <n-icon size="32" color="var(--text-tertiary)">
+                  <CollectionsIcon />
+                </n-icon>
+                <p>Nothing here yet</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-sections-scroll-area">
             <!-- Quick Stats -->
             <div class="panel-section">
               <div class="section-header-row">
@@ -51,89 +135,6 @@
             <!-- Main Patterns -->
             <div class="panel-section">
               <PatternsSection />
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      <!-- ══════════════════════════════════════════ -->
-      <!-- CENTER — Photo Universe (quantum void)     -->
-      <!-- ══════════════════════════════════════════ -->
-      <PhotoUniverse v-if="!isMobileLimitedMode" :photo-count="photos.length" />
-
-      <!-- ══════════════════════════════════════════ -->
-      <!-- RIGHT PANEL — Catalog Control Panel        -->
-      <!-- ══════════════════════════════════════════ -->
-      <aside class="panel panel-right">
-        <div class="panel-body">
-          <!-- Daily artistic curation -->
-          <div class="panel-section">
-            <div class="section-label">DAILY ARTISTIC CURATION</div>
-            <div class="daily-eureka-card">
-              <DailyEurekaCard v-if="!isDashboardEmpty" />
-              <div v-else class="mini-empty daily-eureka-empty">
-                <n-icon size="32" color="var(--text-tertiary)">
-                  <CollectionsIcon />
-                </n-icon>
-                <p>Nothing here yet</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Recent Collections & Series -->
-          <div class="panel-section panel-section--grow">
-            <div class="section-label">
-              RECENT COLLECTIONS, SERIES &amp; PORTFOLIOS
-            </div>
-
-            <div class="collections-scroll-area">
-              <div v-if="isLoadingCollections" class="mini-loading">
-                <div class="mini-spinner" />
-                <span>Loading…</span>
-              </div>
-
-              <div
-                v-else-if="
-                  appAccessMode === 'blocked' || collections.length === 0
-                "
-                class="mini-empty collections-empty-state"
-              >
-                <n-icon size="32" color="var(--text-tertiary)">
-                  <CollectionsIcon />
-                </n-icon>
-                <p>Nothing here yet</p>
-                <router-link
-                  v-if="appAccessMode !== 'blocked'"
-                  to="/collections"
-                  class="mini-empty-link"
-                  >Manage collections</router-link
-                >
-              </div>
-
-              <div v-else class="collections-stack">
-                <CollectionCard
-                  v-for="item in collections.slice(0, 6)"
-                  :key="item.id"
-                  :item="item"
-                  :type="item.itemType"
-                  :compact="true"
-                  :show-update-date="false"
-                  :selectable="false"
-                  @click="
-                    item.itemType === 'collection'
-                      ? openProject(item.id)
-                      : item.itemType === 'series'
-                        ? openSeries(item.id)
-                        : openPortfolio(item.id)
-                  "
-                />
-                <CreateCard
-                  class="dashboard-create-collection-card"
-                  title="Add Collections"
-                  subtitle="Start organizing your photos"
-                  @click="navigateToCollections"
-                />
-              </div>
             </div>
           </div>
         </div>
@@ -566,7 +567,7 @@ const navigateToCollections = () => {
   gap: var(--dashboard-section-gap);
 }
 
-.left-sections-scroll-area {
+.panel-sections-scroll-area {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -582,11 +583,11 @@ const navigateToCollections = () => {
   scrollbar-color: var(--border-color) transparent;
 }
 
-.left-sections-scroll-area::-webkit-scrollbar {
+.panel-sections-scroll-area::-webkit-scrollbar {
   width: 4px;
 }
 
-.left-sections-scroll-area::-webkit-scrollbar-thumb {
+.panel-sections-scroll-area::-webkit-scrollbar-thumb {
   background: var(--border-color);
   border-radius: 2px;
 }
@@ -603,6 +604,30 @@ const navigateToCollections = () => {
   flex-direction: column;
   overflow: hidden;
   gap: var(--dashboard-section-gap);
+}
+
+.panel-right .panel-sections-scroll-area {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--dashboard-section-gap);
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin-right: -16px;
+  padding-right: 12px;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.panel-right .panel-sections-scroll-area::-webkit-scrollbar {
+  width: 4px;
+}
+
+.panel-right .panel-sections-scroll-area::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 2px;
 }
 
 /* ─────────────────────────────────────────────
@@ -989,7 +1014,7 @@ const navigateToCollections = () => {
     overflow: visible;
   }
 
-  .left-sections-scroll-area {
+  .panel-sections-scroll-area {
     flex: none;
     min-height: auto;
     overflow: visible;
