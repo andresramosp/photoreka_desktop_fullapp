@@ -441,6 +441,13 @@ const createCollectionFromPattern = async () => {
 </script>
 
 <style scoped>
+/* ── Section layout ───────────────────────────────────────────────────── */
+.patterns-section {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
 /* ── Header ────────────────────────────────────────────────────────────── */
 .section-header-row {
   display: flex;
@@ -496,8 +503,10 @@ const createCollectionFromPattern = async () => {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  flex: 1;
   gap: 6px;
-  padding: 24px 8px;
+  padding: 8px;
   text-align: center;
 }
 
