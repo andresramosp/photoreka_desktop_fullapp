@@ -20,6 +20,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
   declare resolution: 'low' | 'high' | 'medium'
   declare sequential: boolean
   declare imagesPerRequest: number
+  declare imageUrlSource?: 'original' | 'thumbnail'
   declare retryModel?: ModelName
   declare promptDependentField: DescriptionType
   declare promptsNames: DescriptionType[]
@@ -48,6 +49,14 @@ export class VisionDescriptionTask extends AnalyzerTask {
     return response
   }
 
+  private getPhotoImageUrl(photo: Photo): string {
+    if (this.imageUrlSource === 'thumbnail' && photo.thumbnailUrl) {
+      return photo.thumbnailUrl
+    }
+
+    return photo.originalUrl
+  }
+
   async process(pendingPhotos: Photo[], analyzerProcess: AnalyzerProcess): Promise<void> {
     this.analyzerProcess = analyzerProcess
     // Limpiar requests fallidos al inicio del proceso
@@ -57,7 +66,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
 
     // const threshold =
     // analyzerProcess.mode === 'retry_process' ? this.imagesPerRequest * 2 : this.imagesPerRequest
-    const threshold = 50
+    const threshold = 30
     if (this.batchAPI && pendingPhotos.length > threshold) {
       await this.processWithBatchAPI(pendingPhotos)
     } else {
@@ -252,7 +261,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
         const userContent = batch.map((photo) => ({
           type: 'image_url',
           image_url: {
-            url: photo.originalUrl,
+            url: this.getPhotoImageUrl(photo),
             detail: this.resolution,
           },
         }))
@@ -372,7 +381,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
         const images = batch.map((photo) => ({
           type: 'image_url',
           image_url: {
-            url: photo.originalUrl,
+            url: this.getPhotoImageUrl(photo),
             detail: this.resolution,
           },
         }))
@@ -392,7 +401,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
         const images = batch.map((photo) => ({
           type: 'image_url',
           image_url: {
-            url: photo.originalUrl,
+            url: this.getPhotoImageUrl(photo),
             detail: this.resolution,
           },
         }))

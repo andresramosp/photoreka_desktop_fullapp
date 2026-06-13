@@ -43,13 +43,24 @@ const EXPENSIVE_CACHE_PATTERNS: ReadonlyArray<(userId: string) => string> = [
  * Tune these values to match front-end preview requests.
  */
 const WARMUP_2D_VARIANTS: ReadonlyArray<{ chunkName: string; limit: number; outputDims: number }> =
-  [{ chunkName: 'general', limit: 500, outputDims: 2 }]
+  [
+    { chunkName: 'general', limit: 500, outputDims: 2 }, // dashboard 2D view
+    { chunkName: 'general', limit: 10000, outputDims: 2 }, // full 2D view
+    { chunkName: 'general', limit: 10000, outputDims: 3 }, // full 3D view
+  ]
 
 const WARMUP_TAGCLOUD_VARIANTS: ReadonlyArray<{
   outputDims: number
   minPhotoCount: number
   limit: number
-}> = [{ outputDims: 2, minPhotoCount: 1, limit: 5000 }]
+}> = [
+  { outputDims: 2, minPhotoCount: 1, limit: 5000 }, // dashboard tagcloud
+  { outputDims: 2, minPhotoCount: 1, limit: 10000 }, // full tagcloud
+]
+
+type InvalidationOptions = {
+  skipExpensiveWarmup?: boolean
+}
 
 export class CacheInvalidationService {
   /**
@@ -84,7 +95,11 @@ export class CacheInvalidationService {
    * Used by: photo_manager.deletePhotos
    * @param photoCount Number of already-analyzed photos deleted (unanalyzed photos don't feed expensive caches).
    */
-  static async onPhotosDeleted(userId: string, photoCount: number = 1): Promise<void> {
+  static async onPhotosDeleted(
+    userId: string,
+    photoCount: number = 1,
+    options: InvalidationOptions = {}
+  ): Promise<void> {
     await invalidateCache(`getPhotosByUser_${userId}`)
     await invalidateCache(`getPhotosPreview_${userId}`)
     await invalidateCacheByPattern(`getPhotosIdsForSearch:${userId}:*`)
@@ -97,7 +112,12 @@ export class CacheInvalidationService {
     await invalidateCacheByPattern(`checkSimilarDuplicates:${userId}:*`)
     await invalidateCacheByPattern(`checkExactDuplicates:${userId}:*`)
 
-    const invalidated = await this.maybeInvalidateExpensiveCaches(userId, -photoCount)
+    const invalidated = await this.maybeInvalidateExpensiveCaches(
+      userId,
+      -photoCount,
+      false,
+      options.skipExpensiveWarmup ?? false
+    )
     console.log(
       `[CacheInvalidation] onPhotosDeleted: user=${userId} photoCount=${photoCount} expensiveInvalidated=${invalidated}`
     )
@@ -107,7 +127,11 @@ export class CacheInvalidationService {
    * Called when soft-deleted photos are restored.
    * Invalidates the same caches as deletion, but increments the watermark.
    */
-  static async onPhotosRestored(userId: string, photoCount: number = 1): Promise<void> {
+  static async onPhotosRestored(
+    userId: string,
+    photoCount: number = 1,
+    options: InvalidationOptions = {}
+  ): Promise<void> {
     await invalidateCache(`getPhotosByUser_${userId}`)
     await invalidateCache(`getPhotosPreview_${userId}`)
     await invalidateCacheByPattern(`getPhotosIdsForSearch:${userId}:*`)
@@ -120,7 +144,12 @@ export class CacheInvalidationService {
     await invalidateCacheByPattern(`checkSimilarDuplicates:${userId}:*`)
     await invalidateCacheByPattern(`checkExactDuplicates:${userId}:*`)
 
-    const invalidated = await this.maybeInvalidateExpensiveCaches(userId, +photoCount)
+    const invalidated = await this.maybeInvalidateExpensiveCaches(
+      userId,
+      +photoCount,
+      false,
+      options.skipExpensiveWarmup ?? false
+    )
     console.log(
       `[CacheInvalidation] onPhotosRestored: user=${userId} photoCount=${photoCount} expensiveInvalidated=${invalidated}`
     )
@@ -133,7 +162,11 @@ export class CacheInvalidationService {
    * Used by: analyzer_service.runAll
    * @param photoCount Number of photos analysed in this run.
    */
-  static async onAnalysisCompleted(userId: string, photoCount: number = 1): Promise<void> {
+  static async onAnalysisCompleted(
+    userId: string,
+    photoCount: number = 1,
+    options: InvalidationOptions = {}
+  ): Promise<void> {
     await invalidateCache(`getPhotosByUser_${userId}`)
     await invalidateCache(`getPhotosPreview_${userId}`)
     await invalidateCacheByPattern(`getPhotosIdsForSearch:${userId}:*`)
@@ -146,7 +179,12 @@ export class CacheInvalidationService {
     await invalidateCacheByPattern(`checkSimilarDuplicates:${userId}:*`)
     await invalidateCacheByPattern(`checkExactDuplicates:${userId}:*`)
 
-    const invalidated = await this.maybeInvalidateExpensiveCaches(userId, +photoCount)
+    const invalidated = await this.maybeInvalidateExpensiveCaches(
+      userId,
+      +photoCount,
+      false,
+      options.skipExpensiveWarmup ?? false
+    )
     console.log(
       `[CacheInvalidation] onAnalysisCompleted: user=${userId} photoCount=${photoCount} expensiveInvalidated=${invalidated}`
     )
@@ -170,7 +208,8 @@ export class CacheInvalidationService {
   private static async maybeInvalidateExpensiveCaches(
     userId: string,
     signedDelta: number,
-    force: boolean = false
+    force: boolean = false,
+    skipWarmup: boolean = false
   ): Promise<boolean> {
     const absDelta = Math.abs(signedDelta)
     const currentHasPayload = await this.hasExpensiveCachePayload(userId)
@@ -244,7 +283,13 @@ export class CacheInvalidationService {
       await invalidateCacheByPattern(pattern(userId))
     }
 
-    await this.warmExpensiveDashboardCaches(userId)
+    if (skipWarmup) {
+      console.log(
+        `[CacheInvalidation] Warm-up skipped for user ${userId} due to invalidation options`
+      )
+    } else {
+      await this.warmExpensiveDashboardCaches(userId)
+    }
 
     console.log(
       `[CacheInvalidation] Expensive caches INVALIDATED for user ${userId} ` +
@@ -343,7 +388,10 @@ export class CacheInvalidationService {
     )
   }
 
-  static async invalidateAll(userId: string | number): Promise<void> {
+  static async invalidateAll(
+    userId: string | number,
+    options: InvalidationOptions = {}
+  ): Promise<void> {
     await invalidateCache(`getPhotosByUser_${userId}`)
     await invalidateCache(`getPhotosPreview_${userId}`)
     await invalidateCache(`getTagsByUser_${userId}`)
@@ -357,7 +405,12 @@ export class CacheInvalidationService {
     await invalidateCacheByPattern(`checkSimilarDuplicates:${userId}:*`)
     await invalidateCacheByPattern(`checkExactDuplicates:${userId}:*`)
 
-    await this.maybeInvalidateExpensiveCaches(String(userId), 0, true)
+    await this.maybeInvalidateExpensiveCaches(
+      String(userId),
+      0,
+      true,
+      options.skipExpensiveWarmup ?? false
+    )
 
     console.log(`[CacheInvalidation] invalidateAll: Invalidated ALL caches for user ${userId}`)
   }

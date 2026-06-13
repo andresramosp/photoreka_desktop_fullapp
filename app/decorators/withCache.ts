@@ -7,6 +7,45 @@ interface CacheOptions {
   key?: ((...args: any[]) => string) | string
   provider?: 'nodecache' | 'redis'
   ttl?: number // en segundos
+  /** Override the default semantic-emptiness check for this specific cache. */
+  isEmpty?: (result: any) => boolean
+}
+
+/**
+ * Determines whether a cache result is semantically empty and should not be stored.
+ *
+ * Rules (applied recursively):
+ *  - null / undefined                              → empty
+ *  - array with length 0                           → empty
+ *  - plain object with no keys                     → empty
+ *  - plain object that contains at least one array → empty only if ALL those arrays are empty
+ *  - plain object with no arrays (only scalars /
+ *    nested objects)                               → empty only if ALL values are recursively empty
+ *  - any primitive (number, string, boolean, …)    → NOT empty
+ *
+ * Examples:
+ *  isSemanticallyCacheEmpty([])                                      → true
+ *  isSemanticallyCacheEmpty({ results: [] })                         → true
+ *  isSemanticallyCacheEmpty({ tags: [], metadata: { count: 1122 } }) → true  ← tagcloud case
+ *  isSemanticallyCacheEmpty({ data: [{ id: 1 }], total: 1 })         → false
+ *  isSemanticallyCacheEmpty({ count: 5 })                            → false
+ */
+export function isSemanticallyCacheEmpty(value: unknown): boolean {
+  if (value === null || value === undefined) return true
+  if (Array.isArray(value)) return value.length === 0
+  if (typeof value === 'object') {
+    const values = Object.values(value as Record<string, unknown>)
+    if (values.length === 0) return true
+    const arrays = values.filter(Array.isArray)
+    if (arrays.length > 0) {
+      // If every direct array in this object is empty, the result is empty
+      return arrays.every((arr) => isSemanticallyCacheEmpty(arr))
+    }
+    // No direct arrays: recurse into nested objects/primitives
+    return values.every((v) => isSemanticallyCacheEmpty(v))
+  }
+  // Primitive (number, string, boolean, …) → not empty
+  return false
 }
 
 export function withCache(options: CacheOptions = {}) {
@@ -55,12 +94,7 @@ export function withCache(options: CacheOptions = {}) {
 
       const result = await originalMethod.apply(this, args)
 
-      // No almacenar en caché si el resultado es vacío (null, undefined, array vacío, objeto vacío)
-      const isEmpty =
-        result === null ||
-        result === undefined ||
-        (Array.isArray(result) && result.length === 0) ||
-        (typeof result === 'object' && !Array.isArray(result) && Object.keys(result).length === 0)
+      const isEmpty = options.isEmpty ? options.isEmpty(result) : isSemanticallyCacheEmpty(result)
 
       if (!isEmpty) {
         if (provider === 'nodecache') {

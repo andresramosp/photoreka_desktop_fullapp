@@ -42,13 +42,31 @@ export default class SystemAdminController {
     }
 
     try {
+      const isGlobalInvalidation = userId === 'all'
+
+      if (!isGlobalInvalidation) {
+        const parsedUserId = Number(userId)
+        if (!Number.isInteger(parsedUserId) || parsedUserId <= 0) {
+          return response.badRequest({
+            message: 'Invalid userId. It must be a positive integer or "all".',
+          })
+        }
+
+        const userExists = await User.query().where('id', parsedUserId).first()
+        if (!userExists) {
+          return response.notFound({
+            message: `User ${parsedUserId} not found`,
+          })
+        }
+      }
+
       // Resolve target user IDs
       let userIds: string[]
-      if (userId === 'all') {
+      if (isGlobalInvalidation) {
         const users = await User.query().select('id')
         userIds = users.map((u) => String(u.id))
       } else {
-        userIds = [userId]
+        userIds = [String(Number(userId))]
       }
 
       const results: Record<string, string> = {}
@@ -60,14 +78,17 @@ export default class SystemAdminController {
           } else if (type === 'photosGeolocationUpdate') {
             await CacheInvalidationService.onPhotosGeolocationUpdate(uid)
           } else if (type === 'photosDeleted') {
-            await CacheInvalidationService.onPhotosDeleted(uid, photoCount)
+            await CacheInvalidationService.onPhotosDeleted(uid, photoCount, {
+              skipExpensiveWarmup: isGlobalInvalidation,
+            })
           } else if (type === 'analysisCompleted') {
-            await CacheInvalidationService.onAnalysisCompleted(uid, photoCount)
+            await CacheInvalidationService.onAnalysisCompleted(uid, photoCount, {
+              skipExpensiveWarmup: isGlobalInvalidation,
+            })
           } else if (type === 'all') {
-            await CacheInvalidationService.onPhotoListChanged(uid)
-            await CacheInvalidationService.onPhotosGeolocationUpdate(uid)
-            await CacheInvalidationService.onPhotosDeleted(uid, 999)
-            await CacheInvalidationService.onAnalysisCompleted(uid, 999)
+            await CacheInvalidationService.invalidateAll(uid, {
+              skipExpensiveWarmup: isGlobalInvalidation,
+            })
           }
           results[uid] = 'ok'
         } catch (err) {
