@@ -4,7 +4,15 @@
       arc centre (100, 95), radius 70  →  top at y=25, sides at x=30/170
       with stroke-width 12 → ±6px bleed → viewBox has 30px left margin, 25px top margin
   -->
-  <div class="score-gauge">
+  <div
+    class="score-gauge"
+    :class="{ 'score-gauge--clickable': clickable }"
+    :role="clickable ? 'button' : undefined"
+    :tabindex="clickable ? 0 : undefined"
+    @click="handleActivate"
+    @keydown.enter.prevent="handleActivate"
+    @keydown.space.prevent="handleActivate"
+  >
     <svg viewBox="0 0 200 110" class="score-gauge__svg">
       <defs>
         <linearGradient :id="`g-${uid}`" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -69,9 +77,19 @@ const props = defineProps<{
   value: number | null;
   max?: number;
   color?: string;
+  clickable?: boolean;
+}>();
+
+const emit = defineEmits<{
+  (event: "click"): void;
 }>();
 
 const uid = Math.random().toString(36).slice(2, 7);
+
+const handleActivate = () => {
+  if (!props.clickable) return;
+  emit("click");
+};
 
 const arcPath = computed((): string => {
   const max = props.max ?? 10;
@@ -103,6 +121,26 @@ const arcPath = computed((): string => {
   align-items: center;
   gap: 4px;
   overflow: hidden;
+}
+
+.score-gauge--clickable {
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.score-gauge--clickable:hover,
+.score-gauge--clickable:focus-visible {
+  border-color: var(--primary-color);
+  box-shadow: 0 2px 12px
+    color-mix(in srgb, var(--primary-color) 12%, transparent);
+}
+
+.score-gauge--clickable:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary-color) 40%, transparent);
+  outline-offset: 2px;
 }
 
 .score-gauge__svg {

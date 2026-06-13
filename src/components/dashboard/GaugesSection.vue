@@ -9,16 +9,27 @@
             :label="gauge.label"
             :value="gauge.value"
             :color="gauge.color"
+            :clickable="true"
+            @click="navigateToReportSection('artistic')"
           />
         </div>
         <div v-else key="genre" class="genre-panel">
-          <AspectCard
+          <div
             v-if="genreAspect"
-            :min-height="null"
-            :aspect="genreAspect"
-            :borderHover="false"
-            :header="false"
-          />
+            class="genre-card-button"
+            role="button"
+            tabindex="0"
+            aria-label="Open visual aspects report"
+            @click="navigateToReportSection('visual')"
+            @keydown.enter.prevent="navigateToReportSection('visual')"
+            @keydown.space.prevent="navigateToReportSection('visual')"
+          >
+            <AspectCard
+              :min-height="null"
+              :aspect="genreAspect"
+              :compact="true"
+            />
+          </div>
           <div v-else class="genre-empty">No genre stats available</div>
         </div>
       </Transition>
@@ -28,6 +39,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { useRouter } from "vue-router";
 import ScoreGauge from "@/components/ScoreGauge.vue";
 import AspectCard from "@/components/report/AspectCard.vue";
 import { usePhotosStore } from "@/stores/photos.js";
@@ -51,6 +63,7 @@ type GaugeEntry = {
 
 const photosStore = usePhotosStore();
 const userStore = useUserStore();
+const router = useRouter();
 
 withDefaults(
   defineProps<{
@@ -137,6 +150,13 @@ const genreAspect = computed(() => {
   );
   return visualAspects.find((aspect: any) => aspect.key === "genre") || null;
 });
+
+const navigateToReportSection = (section: "artistic" | "visual") => {
+  router.push({
+    name: "report",
+    query: { section },
+  });
+};
 </script>
 
 <style scoped>
@@ -186,6 +206,22 @@ const genreAspect = computed(() => {
   border-radius: var(--radius-lg);
   color: var(--text-tertiary);
   font-size: var(--font-size-sm);
+}
+
+.genre-card-button {
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+}
+
+.genre-card-button:hover :deep(.aspect-card),
+.genre-card-button:focus-visible :deep(.aspect-card) {
+  border-color: var(--primary-color);
+  box-shadow: var(--shadow-lg);
+}
+
+.genre-card-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary-color) 40%, transparent);
+  outline-offset: 2px;
 }
 
 /* @media (max-width: 768px) {

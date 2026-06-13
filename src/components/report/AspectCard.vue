@@ -1,10 +1,10 @@
 <template>
   <div
     class="aspect-card"
-    :class="{ 'border-hover': props.borderHover }"
+    :class="{ compact: props.compact }"
     :style="aspectCardStyle"
   >
-    <div v-if="header" class="aspect-header">
+    <div v-if="!props.compact" class="aspect-header">
       <div class="aspect-title-wrapper">
         <h3 class="aspect-title">{{ aspect.label }}</h3>
         <span class="aspect-subtitle"
@@ -59,18 +59,14 @@ const props = defineProps({
     type: Object,
     required: true,
   },
-  header: {
-    type: Boolean,
-    default: true,
-  },
   minHeight: {
     default: "200px",
     validator: (value) =>
       value === null || typeof value === "string" || typeof value === "number",
   },
-  borderHover: {
+  compact: {
     type: Boolean,
-    default: true,
+    default: false,
   },
 });
 
@@ -96,9 +92,13 @@ const aspectCardStyle = computed(() => {
   transition: var(--transition-normal);
 }
 
-.aspect-card.border-hover:hover {
+.aspect-card:not(.compact):hover {
   border-color: var(--primary-color);
   box-shadow: var(--shadow-lg);
+}
+
+.aspect-card.compact {
+  padding: var(--spacing-lg);
 }
 
 .aspect-header {
@@ -132,10 +132,18 @@ const aspectCardStyle = computed(() => {
   gap: var(--spacing-lg);
 }
 
+.aspect-card.compact .values-list {
+  gap: var(--spacing-md);
+}
+
 .value-row {
   display: flex;
   align-items: center;
   gap: var(--spacing-lg);
+}
+
+.aspect-card.compact .value-row {
+  gap: var(--spacing-md);
 }
 
 .value-info {
@@ -150,6 +158,10 @@ const aspectCardStyle = computed(() => {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+}
+
+.aspect-card.compact .value-label-row {
+  gap: var(--spacing-xs);
 }
 
 .value-color-dot {
@@ -184,6 +196,10 @@ const aspectCardStyle = computed(() => {
   background-color: var(--bg-secondary);
   border-radius: 0;
   overflow: hidden;
+}
+
+.aspect-card.compact .bar-container {
+  height: 18px;
 }
 
 .bar-fill {

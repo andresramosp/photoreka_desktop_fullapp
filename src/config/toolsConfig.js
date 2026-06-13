@@ -321,7 +321,7 @@ export function getDashboardSmartTools(platform) {
   const orderedToolIds =
     platform === "mobile"
       ? ["chat", "world-map", "import-area", "search"]
-      : ["chat", "world-map", "portfolios", "canvas", "report"];
+      : ["chat", "world-map", "portfolios", "canvas"];
 
   return orderedToolIds
     .map((toolId) => getToolById(toolId))

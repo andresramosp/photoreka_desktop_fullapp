@@ -81,7 +81,8 @@
     <div
       v-for="(section, index) in patternSections"
       :key="section.key"
-      :class="index > 0 ? 'criteria-group' : ''"
+      :id="`patterns-group-${section.key}`"
+      :class="['pattern-section-group', index > 0 ? 'criteria-group' : '']"
     >
       <div class="group-header">
         <div class="group-title-wrapper">
@@ -989,6 +990,10 @@ onMounted(() => {
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
   margin: var(--spacing-sm) 0 0 0;
+}
+
+.pattern-section-group {
+  scroll-margin-top: 120px;
 }
 
 .pattern-strength {

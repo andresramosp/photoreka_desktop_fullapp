@@ -68,8 +68,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from "vue";
 import { usePhotosStore } from "@/stores/photos.js";
+import { useRoute, useRouter } from "vue-router";
 
 defineOptions({
   name: "PortfolioReportView",
@@ -104,6 +105,8 @@ import {
 import VisualAspectsReportNew from "@/components/report/VisualAspectsReportNew.vue";
 
 const photosStore = usePhotosStore();
+const route = useRoute();
+const router = useRouter();
 const message = useMessage();
 
 // Navigation sections
@@ -135,14 +138,95 @@ const patternsRef = ref(null);
 const artisticRef = ref(null);
 
 // Active section tracking
-const activeSection = ref("patterns");
+const VALID_SECTION_IDS = ["patterns", "visual", "artistic"];
+const VALID_PATTERN_TYPE_IDS = ["general", "story", "context"];
+
+const normalizeSectionId = (value) => {
+  if (Array.isArray(value)) {
+    return normalizeSectionId(value[0]);
+  }
+
+  return VALID_SECTION_IDS.includes(value) ? value : null;
+};
+
+const normalizePatternType = (value) => {
+  if (Array.isArray(value)) {
+    return normalizePatternType(value[0]);
+  }
+
+  return VALID_PATTERN_TYPE_IDS.includes(value) ? value : null;
+};
+
+const activeSection = ref(
+  normalizeSectionId(route.query.section) || "patterns",
+);
 
 // Scroll to section
-const scrollToSection = (sectionId) => {
+const scrollToSection = async (sectionId, options = {}) => {
+  const { behavior = "smooth", syncRoute = true } = options;
   const element = document.getElementById(sectionId);
-  if (element) {
-    element.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  if (syncRoute && route.query.section !== sectionId) {
+    const { patternType, ...remainingQuery } = route.query;
+    router.replace({
+      query: {
+        ...remainingQuery,
+        section: sectionId,
+      },
+    });
   }
+
+  if (!element) {
+    await nextTick();
+  }
+
+  const target = document.getElementById(sectionId);
+  if (target) {
+    activeSection.value = sectionId;
+    target.scrollIntoView({ behavior, block: "start" });
+  }
+};
+
+const scrollToPatternGroup = async (patternType, options = {}) => {
+  const { behavior = "smooth" } = options;
+
+  if (!patternType) {
+    return;
+  }
+
+  let target = document.getElementById(`patterns-group-${patternType}`);
+  if (!target) {
+    await nextTick();
+    target = document.getElementById(`patterns-group-${patternType}`);
+  }
+
+  if (target) {
+    target.scrollIntoView({ behavior, block: "start" });
+  }
+};
+
+const navigateToRequestedSection = async (options = {}) => {
+  const { behavior = "smooth" } = options;
+  const requestedSection = normalizeSectionId(route.query.section);
+
+  if (!requestedSection) {
+    return;
+  }
+
+  await scrollToSection(requestedSection, { behavior, syncRoute: false });
+
+  if (requestedSection !== "patterns") {
+    return;
+  }
+
+  const requestedPatternType = normalizePatternType(route.query.patternType);
+  if (!requestedPatternType) {
+    return;
+  }
+
+  window.setTimeout(() => {
+    scrollToPatternGroup(requestedPatternType, { behavior });
+  }, 80);
 };
 
 // IntersectionObserver setup
@@ -184,11 +268,40 @@ onMounted(async () => {
     await photosStore.fetchPhotos();
   }
 
+  if (normalizeSectionId(route.query.section)) {
+    await nextTick();
+    window.setTimeout(() => {
+      navigateToRequestedSection({ behavior: "auto" });
+    }, 100);
+  }
+
   // Setup scroll spy
   setTimeout(() => {
     setupIntersectionObserver();
   }, 100);
 });
+
+watch(
+  [() => route.query.section, () => route.query.patternType],
+  async ([section, patternType], [previousSection, previousPatternType]) => {
+    const requestedSection = normalizeSectionId(section);
+    const requestedPatternType = normalizePatternType(patternType);
+    const previousRequestedPatternType =
+      normalizePatternType(previousPatternType);
+
+    if (
+      !requestedSection ||
+      (requestedSection === activeSection.value &&
+        requestedPatternType === previousRequestedPatternType &&
+        section === previousSection)
+    ) {
+      return;
+    }
+
+    await nextTick();
+    navigateToRequestedSection({ behavior: "smooth" });
+  },
+);
 
 onUnmounted(() => {
   if (observer) {

@@ -16,34 +16,41 @@
             @go-upload="navigateToImportArea"
           />
 
-          <!-- Quick Stats -->
-          <div class="panel-section">
-            <div class="section-header-row">
-              <div class="section-label section-label--inline">Quick Stats</div>
-              <ModePopoverSelector
-                v-model="gaugesMode"
-                :accent="false"
-                :singleMode="true"
-                icon="settings"
-                :width="190"
-                :options="gaugesModeOptions"
-                header="Quick Stats Preferences"
-                placement="bottom-end"
-                aria-label="Change quick stats mode"
-                class="quick-stats-mode-selector"
-              />
-            </div>
-            <GaugesSection :mode="gaugesMode" />
-          </div>
-
-          <!-- Smart Tools -->
-          <div class="panel-section panel-section--grow">
-            <div class="section-label">SMART TOOLS</div>
-            <div class="smart-tools-scroll-area">
+          <div class="left-sections-scroll-area">
+            <!-- Smart Tools -->
+            <div class="panel-section">
+              <div class="section-label">Quick Access</div>
               <SmartToolsSection
                 :app-access-mode="appAccessMode"
                 :is-mobile-limited-mode="isMobileLimitedMode"
               />
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="panel-section">
+              <div class="section-header-row">
+                <div class="section-label section-label--inline">
+                  Genre & Scoring Stats
+                </div>
+                <ModePopoverSelector
+                  v-model="gaugesMode"
+                  :accent="false"
+                  :singleMode="true"
+                  icon="settings"
+                  :width="190"
+                  :options="gaugesModeOptions"
+                  header="Quick Stats Preferences"
+                  placement="bottom-end"
+                  aria-label="Change quick stats mode"
+                  class="quick-stats-mode-selector"
+                />
+              </div>
+              <GaugesSection :mode="gaugesMode" />
+            </div>
+
+            <!-- Main Patterns -->
+            <div class="panel-section">
+              <PatternsSection />
             </div>
           </div>
         </div>
@@ -155,6 +162,7 @@ import ModePopoverSelector from "@/components/ModePopoverSelector.vue";
 import PhotoUniverse from "@/components/dashboard/PhotoUniverse.vue";
 import SmartToolsSection from "@/components/dashboard/SmartToolsSection.vue";
 import WelcomeSection from "@/components/dashboard/WelcomeSection.vue";
+import PatternsSection from "@/components/dashboard/PatternsSection.vue";
 import { isMobileDevice } from "@/utils/utils.js";
 
 // Import @vicons icons from ionicons5 for reliability
@@ -558,6 +566,31 @@ const navigateToCollections = () => {
   gap: var(--dashboard-section-gap);
 }
 
+.left-sections-scroll-area {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--dashboard-section-gap);
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Extend to the panel edge so the scrollbar is not inset by panel-body padding */
+  margin-right: -16px;
+  padding-right: 12px;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.left-sections-scroll-area::-webkit-scrollbar {
+  width: 4px;
+}
+
+.left-sections-scroll-area::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 2px;
+}
+
 /* ─────────────────────────────────────────────
    Right panel
 ───────────────────────────────────────────── */
@@ -839,25 +872,6 @@ const navigateToCollections = () => {
   border-radius: 2px;
 }
 
-.smart-tools-scroll-area {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 2px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
-}
-
-.smart-tools-scroll-area::-webkit-scrollbar {
-  width: 4px;
-}
-
-.smart-tools-scroll-area::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 2px;
-}
-
 /* ─────────────────────────────────────────────
    Mini loading / empty states
 ───────────────────────────────────────────── */
@@ -975,6 +989,14 @@ const navigateToCollections = () => {
     overflow: visible;
   }
 
+  .left-sections-scroll-area {
+    flex: none;
+    min-height: auto;
+    overflow: visible;
+    margin-right: 0;
+    padding-right: 0;
+  }
+
   .panel-right .panel-body {
     display: flex;
     flex-direction: column;
@@ -987,11 +1009,6 @@ const navigateToCollections = () => {
   }
 
   .collections-scroll-area {
-    min-height: auto;
-    overflow: visible;
-  }
-
-  .smart-tools-scroll-area {
     min-height: auto;
     overflow: visible;
   }

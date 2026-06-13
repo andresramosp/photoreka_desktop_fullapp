@@ -881,6 +881,16 @@ onUnmounted(() => {
     width: 16px;
     height: 16px;
   }
+
+  .action-button {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px !important;
+  }
+
+  .action-button :deep(.n-icon) {
+    font-size: 14px !important;
+  }
 }
 
 /* Soporte para navegadores sin container queries - selection indicator */
@@ -965,6 +975,16 @@ onUnmounted(() => {
   .google-photos-logo {
     width: 16px;
     height: 16px;
+  }
+
+  .action-button {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px !important;
+  }
+
+  .action-button :deep(.n-icon) {
+    font-size: 14px !important;
   }
 }
 

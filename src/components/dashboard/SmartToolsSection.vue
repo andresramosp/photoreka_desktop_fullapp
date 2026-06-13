@@ -115,7 +115,7 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   width: 100%;
-  min-height: 52px;
+  min-height: 50px;
   padding: 10px 14px;
   border: 1px solid var(--border-color);
   border-radius: 10px;
