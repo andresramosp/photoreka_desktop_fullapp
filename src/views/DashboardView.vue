@@ -27,9 +27,7 @@
             </div>
             <!-- Recent Collections & Series -->
             <div class="panel-section panel-section--grow">
-              <div class="section-label">
-                RECENT COLLECTIONS, SERIES &amp; PORTFOLIOS
-              </div>
+              <div class="section-label">RECENT LIBRARY</div>
 
               <div class="collections-scroll-area">
                 <div v-if="isLoadingCollections" class="mini-loading">

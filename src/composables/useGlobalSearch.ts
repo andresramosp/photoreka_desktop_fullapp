@@ -6,7 +6,6 @@ import { useSeriesStore } from "@/stores/series.js";
 import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds.js";
 import { useUserStore } from "@/stores/userStore.js";
 import { api } from "@/utils/axios.js";
-import helpData from "@/assets/helpData.json";
 import type { Ref } from "vue";
 
 const CANVAS_STORAGE_KEY = "photoreka_canvas_data";
@@ -48,17 +47,6 @@ export interface SearchResultTool {
   searchTerms?: string[];
 }
 
-export interface SearchResultHelp {
-  type: "help";
-  id: string;
-  topicId: string;
-  subtopicId: string;
-  topicTitle: string;
-  subtopicTitle: string;
-  content: string;
-  route: string;
-}
-
 export interface SearchResultCanvas {
   type: "canvas";
   id: number | string;
@@ -80,13 +68,11 @@ export type SearchResult =
   | SearchResultCollection
   | SearchResultSeries
   | SearchResultTool
-  | SearchResultHelp
   | SearchResultCanvas
   | SearchResultPortfolio;
 
 export interface GroupedResults {
   tools: SearchResultTool[];
-  help: SearchResultHelp[];
   collections: SearchResultCollection[];
   series: SearchResultSeries[];
   portfolios: SearchResultPortfolio[];
@@ -274,24 +260,6 @@ const APP_TOOLS: SearchResultTool[] = [
     route: "/settings",
     searchTerms: ["config", "preferences", "options", "configure", "setup"],
   },
-  {
-    type: "tool",
-    id: "help",
-    name: "Help",
-    description: "Get help and learn about Photoreka features",
-    icon: "HelpCircleOutline",
-    route: "/help",
-    searchTerms: [
-      "help",
-      "support",
-      "guide",
-      "tutorial",
-      "docs",
-      "documentation",
-      "faq",
-      "questions",
-    ],
-  },
 ];
 
 export function useGlobalSearch() {
@@ -341,41 +309,6 @@ export function useGlobalSearch() {
 
       return false;
     }).slice(0, maxResultsPerCategory.value);
-  };
-
-  // Search help topics
-  const searchHelp = (query: string): SearchResultHelp[] => {
-    if (!query || query.length < 2) return [];
-
-    const results: SearchResultHelp[] = [];
-    const topics = helpData.topics || [];
-
-    for (const topic of topics) {
-      if (results.length >= maxResultsPerCategory.value) break;
-
-      for (const subtopic of topic.subtopics || []) {
-        if (results.length >= maxResultsPerCategory.value) break;
-
-        // Only search in topic title and subtopic title
-        if (
-          matchesQuery(topic.title, query) ||
-          matchesQuery(subtopic.title, query)
-        ) {
-          results.push({
-            type: "help",
-            id: `${topic.id}-${subtopic.id}`,
-            topicId: topic.id,
-            subtopicId: subtopic.id,
-            topicTitle: topic.title,
-            subtopicTitle: subtopic.title,
-            content: subtopic.content,
-            route: `/help?topic=${topic.id}&subtopic=${subtopic.id}`,
-          });
-        }
-      }
-    }
-
-    return results;
   };
 
   // Search collections
@@ -513,7 +446,6 @@ export function useGlobalSearch() {
     if (!query || query.length < 2) {
       return {
         tools: [],
-        help: [],
         collections: [],
         series: [],
         portfolios: [],
@@ -524,7 +456,6 @@ export function useGlobalSearch() {
 
     return {
       tools: searchTools(query),
-      help: searchHelp(query),
       collections: searchCollections(query),
       series: searchSeries(query),
       portfolios: searchPortfolios(query),
@@ -538,7 +469,6 @@ export function useGlobalSearch() {
     const results = searchResults.value;
     return (
       results.tools.length +
-      results.help.length +
       results.collections.length +
       results.series.length +
       results.portfolios.length +
@@ -560,7 +490,6 @@ export function useGlobalSearch() {
       ...results.series,
       ...results.portfolios,
       ...results.photos,
-      ...results.help,
     ];
   });
 

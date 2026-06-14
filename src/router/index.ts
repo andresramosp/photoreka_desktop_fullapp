@@ -15,7 +15,6 @@ import ProjectBuilderView from "../views/ProjectBuilderView.vue";
 import FramerView from "../views/FramerView.vue";
 import PortfolioReportView from "../views/PortfolioReportView.vue";
 import SettingsView from "../views/SettingsView.vue";
-import HelpView from "../views/HelpView.vue";
 import PlanView from "../views/PlanView.vue";
 import AuthView from "../views/AuthView.vue";
 import ProfileSelectionView from "../views/ProfileSelectionView.vue";
@@ -431,14 +430,6 @@ const router = createRouter({
       path: "/settings",
       name: "settings",
       component: SettingsView,
-      meta: {
-        requiresAuth: true,
-      },
-    },
-    {
-      path: "/help",
-      name: "help",
-      component: HelpView,
       meta: {
         requiresAuth: true,
       },
