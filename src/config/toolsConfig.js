@@ -81,7 +81,7 @@ export const TOOLS_CONFIG = [
     id: "search",
     name: "Search",
     description: "Find photos using AI-powered search",
-    dashboardName: "Explorer",
+    dashboardName: "Search",
     dashboardSubtitle: "Find photos with AI semantic search",
     icon: "SearchOutline",
     route: "/search",
@@ -320,7 +320,7 @@ export function isDesktopOnly(toolId) {
 export function getDashboardSmartTools(platform) {
   const orderedToolIds =
     platform === "mobile"
-      ? ["chat", "world-map", "import-area", "search"]
+      ? ["chat", "world-map", "search", "report"]
       : ["chat", "world-map", "portfolios", "canvas"];
 
   return orderedToolIds

@@ -305,7 +305,8 @@ const userStore = useUserStore();
 const resolvePostAuthTarget = () => {
   if (!userStore.user?.profiles) return "/profile-setup";
   if (photosStore.appAccessMode === "blocked") return "/import-area#upload";
-  return isMobile.value ? "/workspace" : "/dashboard";
+  return "/dashboard";
+  // return isMobile.value ? "/workspace" : "/dashboard";
 };
 
 // La app está lista cuando:
