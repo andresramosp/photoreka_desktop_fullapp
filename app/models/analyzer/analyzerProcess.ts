@@ -2,12 +2,12 @@ import { DateTime } from 'luxon'
 import { BaseModel, column, hasMany } from '@adonisjs/lucid/orm'
 import type { HasMany } from '@adonisjs/lucid/types/relations'
 import Photo from '../photo.js'
-import User, { type UserProfile } from '../user.js'
+import User from '../user.js'
 import { AnalyzerTask } from './analyzerTask.js'
 import { getTaskList } from '../../analyzer_packages.js'
 import Logger, { LogLevel } from '../../utils/logger.js'
 import _ from 'lodash'
-import { CostTracker, type CostSummary } from '../../utils/cost_tracker.js'
+import { CostTracker } from '../../utils/cost_tracker.js'
 
 const logger = Logger.getInstance('AnalyzerProcess')
 logger.setLevel(LogLevel.DEBUG)
@@ -138,9 +138,6 @@ export default class AnalyzerProcess extends BaseModel {
 
   @column()
   declare notes: string | null
-
-  @column()
-  declare costReport: CostSummary | null
 
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime

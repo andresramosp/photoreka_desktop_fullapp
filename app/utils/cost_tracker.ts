@@ -231,6 +231,9 @@ function resolvePricesModel(model: string): keyof typeof PRICES | null {
   return (candidates[0] as keyof typeof PRICES) || null
 }
 
+// OpenAI Batch API applies a 50% discount vs synchronous API pricing.
+const OPENAI_BATCH_DISCOUNT_MULTIPLIER = 0.5
+
 function recordGPTBatchCost(
   results: any[],
   tracker: CostTracker,
@@ -256,7 +259,7 @@ function recordGPTBatchCost(
       cacheMissTokens * prices.input_cache_miss * USD_TO_EUR +
       cachedTokens * prices.input_cache_hit * USD_TO_EUR
     const outputCost = completionTokens * prices.output * USD_TO_EUR
-    const totalCostInEur = inputCost + outputCost
+    const totalCostInEur = (inputCost + outputCost) * OPENAI_BATCH_DISCOUNT_MULTIPLIER
 
     tracker.record(
       {

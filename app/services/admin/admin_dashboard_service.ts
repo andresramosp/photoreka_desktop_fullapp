@@ -120,7 +120,7 @@ export default class AdminDashboardService {
         .whereNotNull('user_id')
         .orderBy('created_at', 'desc')
         .limit(8)
-        .select('id', 'userId', 'currentStage', 'costReport', 'createdAt', 'processSheet'),
+        .select('id', 'userId', 'currentStage', 'createdAt', 'processSheet'),
 
       // Tags without embedding
       db.rawQuery(`SELECT COUNT(*)::int AS cnt FROM tags WHERE embedding IS NULL`),
@@ -209,8 +209,23 @@ export default class AdminDashboardService {
       }
     }
 
+    const recentProcessIds = recentProcesses.map((p: any) => String(p.id))
+    const costRows = recentProcessIds.length
+      ? await db
+          .from('cost_logs')
+          .select('reference_id')
+          .sum('cost_in_eur as total_cost_eur')
+          .where('category', 'photo_analysis')
+          .whereIn('reference_id', recentProcessIds)
+          .groupBy('reference_id')
+      : []
+
+    const costByProcess = new Map<string, number>()
+    for (const row of costRows as any[]) {
+      costByProcess.set(String(row.reference_id), Number(row.total_cost_eur ?? 0))
+    }
+
     const recentProcessesMapped = recentProcesses.map((p: any) => {
-      const report = p.costReport as { totalCostInEur?: number } | null
       const sheet = p.processSheet as Record<string, any> | null
       let photosTotal = 0
       let photosCompleted = 0
@@ -231,7 +246,7 @@ export default class AdminDashboardService {
         currentStage: p.currentStage,
         photosTotal,
         photosCompleted,
-        totalCostEur: this.round(report?.totalCostInEur ?? 0),
+        totalCostEur: this.round(costByProcess.get(String(p.id)) ?? 0),
         createdAt: p.createdAt.toString(),
       }
     })

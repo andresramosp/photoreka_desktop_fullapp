@@ -26,7 +26,6 @@ import UserCostService from '#services/user_cost_service'
 import User from '#models/user'
 import MailService from '#services/mail_service'
 import { analysisCompleteTemplate } from '../utils/email_templates.js'
-import { mergeCostSummaries } from '../utils/cost_tracker.js'
 import LightroomFolderMirrorService from '#services/lightroom_folder_mirror_service'
 
 const logger = Logger.getInstance('AnalyzerProcess')
@@ -168,14 +167,7 @@ export default class AnalyzerProcessRunner {
     const totalForCache = await this.getTotalProcessPhotos()
     await CacheInvalidationService.onAnalysisCompleted(processUserId, totalForCache)
 
-    // Persistir cost report
-    // El tracker contiene solo las entries del intento actual (se reseteó al
-    // final del intento anterior, si lo hubo). Acumulamos sobre costReport
-    // para que refleje TODO el trabajo real del proceso a través de retries.
     const attemptSummary = this.process.costTracker.getSummary()
-    const cumulativeReport = mergeCostSummaries(this.process.costReport, attemptSummary)
-    this.process.costReport = cumulativeReport
-    await this.process.save()
 
     // Registrar coste en el historial del usuario
     // (incluido admin_retry: el coste es real, solo no se descuenta del crédito del usuario)

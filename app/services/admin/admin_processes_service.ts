@@ -26,8 +26,18 @@ export interface ProcessListItem {
 
 export interface ProcessDetail extends ProcessListItem {
   costReport: Record<string, any> | null
+  costBreakdown: Record<string, any> | null
   processSheetSummary: TaskProgress[] | null
   hadRetry: boolean
+}
+
+interface ProcessCostBreakdownFromLogs {
+  category: string
+  totalCostInEur: number
+  totalCalls: number
+  entries: any[]
+  byTask: Record<string, { costInEur: number; calls: number }>
+  byModel: Record<string, { costInEur: number; calls: number }>
 }
 
 export interface TaskProgress {
@@ -68,6 +78,8 @@ export default class AdminProcessesService {
     }
 
     const processes = await query
+    const processIds = processes.map((p) => String(p.id))
+    const costBreakdowns = await getCostBreakdownsFromLogs(processIds)
 
     // Gather unique user IDs for batch lookup
     const userIds = [...new Set(processes.map((p) => p.userId).filter(Boolean))] as number[]
@@ -80,16 +92,15 @@ export default class AdminProcessesService {
     }
 
     // Count photos per process in batch
-    const photoCountsRaw = await db
-      .from('photos')
-      .select('analyzer_process_id')
-      .count('* as photos_count')
-      .whereIn(
-        'analyzer_process_id',
-        processes.map((p) => p.id)
-      )
-      .whereNull('deleted_at')
-      .groupBy('analyzer_process_id')
+    const photoCountsRaw = processIds.length
+      ? await db
+          .from('photos')
+          .select('analyzer_process_id')
+          .count('* as photos_count')
+          .whereIn('analyzer_process_id', processIds)
+          .whereNull('deleted_at')
+          .groupBy('analyzer_process_id')
+      : []
 
     const photoCounts = new Map<string, number>()
     for (const row of photoCountsRaw) {
@@ -111,6 +122,7 @@ export default class AdminProcessesService {
     return filteredProcesses.map((p) => {
       const user = p.userId ? usersMap.get(p.userId) : null
       const { completed, pending, total } = computeSheetTotals(p.processSheet)
+      const costBreakdown = costBreakdowns.get(String(p.id))
 
       return {
         id: p.id,
@@ -124,7 +136,7 @@ export default class AdminProcessesService {
         photosTotal: total || (photoCounts.get(String(p.id)) ?? 0),
         photosCompleted: completed,
         photosPending: pending,
-        totalCostEur: p.costReport?.totalCostInEur ?? 0,
+        totalCostEur: costBreakdown?.totalCostInEur ?? 0,
         createdAt: p.createdAt.toISO()!,
         updatedAt: p.updatedAt.toISO()!,
         notes: (p as any).notes ?? null,
@@ -146,6 +158,7 @@ export default class AdminProcessesService {
     }
 
     const { completed, pending, total } = computeSheetTotals(p.processSheet)
+    const costReport = (await getCostBreakdownsFromLogs([String(p.id)])).get(String(p.id)) ?? null
 
     // Build per-task summary from processSheet
     let processSheetSummary: TaskProgress[] | null = null
@@ -182,10 +195,12 @@ export default class AdminProcessesService {
       photosTotal,
       photosCompleted: completed,
       photosPending: pending,
-      totalCostEur: p.costReport?.totalCostInEur ?? 0,
+      totalCostEur: costReport?.totalCostInEur ?? 0,
       createdAt: p.createdAt.toISO()!,
       updatedAt: p.updatedAt.toISO()!,
-      costReport: p.costReport ?? null,
+      // Keep both keys temporarily for backward/forward compatibility.
+      costReport,
+      costBreakdown: costReport,
       processSheetSummary,
       hadRetry: p.mode === 'retry_process',
       notes: (p as any).notes ?? null,
@@ -341,4 +356,71 @@ function computeSheetTotals(sheet: any): {
     pending: maxPending,
     total,
   }
+}
+
+async function getCostBreakdownsFromLogs(
+  processIds: string[]
+): Promise<Map<string, ProcessCostBreakdownFromLogs>> {
+  const breakdowns = new Map<string, ProcessCostBreakdownFromLogs>()
+  if (processIds.length === 0) return breakdowns
+
+  const rows = await db
+    .from('cost_logs')
+    .select('reference_id', 'task', 'model', 'calls', 'cost_in_eur', 'metadata')
+    .where('category', 'photo_analysis')
+    .whereIn('reference_id', processIds)
+    .orderBy('id', 'asc')
+
+  for (const row of rows) {
+    const processId = String(row.reference_id)
+    const task = row.task ?? 'unknown'
+    const model = row.model ?? 'unknown'
+    const calls = Number(row.calls ?? 0)
+    const costInEur = Number(row.cost_in_eur ?? 0)
+    const metadata = row.metadata ?? {}
+    const type = metadata.type ?? (metadata.audit?.hasBatchCalls ? 'batch' : 'direct')
+
+    const report = breakdowns.get(processId) ?? {
+      category: 'photo_analysis',
+      totalCostInEur: 0,
+      totalCalls: 0,
+      entries: [],
+      byTask: {},
+      byModel: {},
+    }
+
+    report.totalCostInEur += costInEur
+    report.totalCalls += calls
+    report.entries.push({
+      task,
+      model,
+      method: Array.isArray(metadata.methods) ? metadata.methods.join(',') : null,
+      type,
+      costInEur: roundCost(costInEur),
+      calls,
+      tokens: metadata.tokens ?? null,
+    })
+
+    if (!report.byTask[task]) report.byTask[task] = { costInEur: 0, calls: 0 }
+    report.byTask[task].costInEur += costInEur
+    report.byTask[task].calls += calls
+
+    if (!report.byModel[model]) report.byModel[model] = { costInEur: 0, calls: 0 }
+    report.byModel[model].costInEur += costInEur
+    report.byModel[model].calls += calls
+
+    breakdowns.set(processId, report)
+  }
+
+  for (const report of breakdowns.values()) {
+    report.totalCostInEur = roundCost(report.totalCostInEur)
+    for (const task of Object.values(report.byTask)) task.costInEur = roundCost(task.costInEur)
+    for (const model of Object.values(report.byModel)) model.costInEur = roundCost(model.costInEur)
+  }
+
+  return breakdowns
+}
+
+function roundCost(n: number): number {
+  return Math.round(n * 1_000_000) / 1_000_000
 }

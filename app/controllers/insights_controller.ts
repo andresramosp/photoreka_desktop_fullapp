@@ -121,6 +121,7 @@ export default class InsightsController {
       }
 
       const tracker = new CostTracker('other')
+      tracker.setCurrentTask('insights_photo_eureka')
       const modelsService = createTrackedModelsService(new ModelsService(), tracker)
       const visualAspects = (photo.descriptions?.visual_aspects ?? {}) as Record<string, any>
       const artisticScores = (photo.descriptions?.artistic_scores ?? {}) as Record<string, any>
@@ -254,6 +255,11 @@ export default class InsightsController {
       }
 
       const tracker = new CostTracker('other')
+      const insightTaskName =
+        insightType === 'custom'
+          ? 'insights_photo_specific_custom'
+          : `insights_photo_specific_${insightType}`
+      tracker.setCurrentTask(insightTaskName)
       const modelsService = createTrackedModelsService(new ModelsService(), tracker)
       let systemPrompt: string
 

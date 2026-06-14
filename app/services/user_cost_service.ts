@@ -24,6 +24,8 @@ export interface CostLogOptions {
 // ─── Service ─────────────────────────────────────────────
 
 export default class UserCostService {
+  private static readonly OPENAI_BATCH_DISCOUNT_MULTIPLIER = 0.5
+
   private static round(n: number): number {
     return Math.round(n * 1_000_000) / 1_000_000
   }
@@ -120,10 +122,21 @@ export default class UserCostService {
   ): Promise<void> {
     if (!userId || summary.totalCostInEur <= 0) return
 
-    // Insert granular log entries per model for detailed temporal tracking
-    for (const [model, data] of Object.entries(summary.byModel)) {
-      // Find the dominant task for this model (best effort)
-      const taskForModel = this.findDominantTaskForModel(summary, model)
+    const groupedEntries = this.groupEntriesByTaskModelAndType(summary)
+
+    if (groupedEntries.length === 0) {
+      groupedEntries.push({
+        task: null,
+        model: null,
+        type: 'direct',
+        costInEur: this.round(summary.totalCostInEur),
+        calls: summary.totalCalls || 1,
+        methods: [],
+        tokens: { input: 0, inputCached: 0, output: 0 },
+      })
+    }
+
+    for (const data of groupedEntries) {
       const creditInfo = this.computeCredits(summary.category, data.costInEur)
 
       await CostLog.create({
@@ -131,29 +144,83 @@ export default class UserCostService {
         category: summary.category,
         costInEur: this.round(data.costInEur),
         calls: data.calls,
-        model,
-        task: taskForModel,
+        model: data.model,
+        task: data.task,
         referenceId: referenceId ?? null,
         creditsCharged: creditInfo?.creditsCharged ?? null,
         marginMultiplier: creditInfo?.marginMultiplier ?? null,
         metadata: {
-          byTask: summary.byTask,
+          type: data.type,
+          methods: data.methods,
+          tokens: data.tokens,
+          audit: {
+            hasBatchCalls: data.type === 'batch',
+            directCalls: data.type === 'direct' ? data.calls : 0,
+            batchCalls: data.type === 'batch' ? data.calls : 0,
+            directCostInEur: data.type === 'direct' ? this.round(data.costInEur) : 0,
+            batchCostInEur: data.type === 'batch' ? this.round(data.costInEur) : 0,
+            batchDiscountApplied:
+              data.type === 'batch' ? this.OPENAI_BATCH_DISCOUNT_MULTIPLIER : null,
+          },
         },
       })
     }
   }
 
-  /**
-   * Find the task with highest cost for a given model in the summary.
-   */
-  private static findDominantTaskForModel(
-    summary: ReturnType<CostTracker['getSummary']>,
-    _model: string
-  ): string | null {
-    const tasks = Object.entries(summary.byTask)
-    if (tasks.length === 0) return null
-    if (tasks.length === 1) return tasks[0][0]
-    // Return the highest-cost task as a representative
-    return tasks.sort((a, b) => b[1].costInEur - a[1].costInEur)[0][0]
+  private static groupEntriesByTaskModelAndType(summary: CostSummary): Array<{
+    task: string | null
+    model: string | null
+    type: 'direct' | 'batch'
+    costInEur: number
+    calls: number
+    methods: string[]
+    tokens: { input: number; inputCached: number; output: number }
+  }> {
+    const groups = new Map<
+      string,
+      {
+        task: string | null
+        model: string | null
+        type: 'direct' | 'batch'
+        costInEur: number
+        calls: number
+        methods: Set<string>
+        tokens: { input: number; inputCached: number; output: number }
+      }
+    >()
+
+    for (const entry of summary.entries) {
+      const task = entry.task || null
+      const model = entry.model || null
+      const type = entry.type
+      const key = `${task ?? 'unknown'}::${model ?? 'unknown'}::${type}`
+      const group = groups.get(key) ?? {
+        task,
+        model,
+        type,
+        costInEur: 0,
+        calls: 0,
+        methods: new Set<string>(),
+        tokens: { input: 0, inputCached: 0, output: 0 },
+      }
+
+      group.costInEur += entry.costInEur
+      group.calls += 1
+      group.methods.add(entry.method)
+      group.tokens.input += entry.tokens.input
+      group.tokens.inputCached += entry.tokens.inputCached
+      group.tokens.output += entry.tokens.output
+      groups.set(key, group)
+    }
+
+    return Array.from(groups.values()).map((group) => ({
+      task: group.task,
+      model: group.model,
+      type: group.type,
+      costInEur: this.round(group.costInEur),
+      calls: group.calls,
+      methods: Array.from(group.methods),
+      tokens: group.tokens,
+    }))
   }
 }
