@@ -74,13 +74,11 @@
               :config="{}"
               @mouseover="
                 handleMouseOver(photo);
-                stageRef.getStage().container().style.cursor =
-                  interactionMode === 'select' ? 'pointer' : 'pointer';
+                stageRef.getStage().container().style.cursor = 'pointer';
               "
               @mouseout="
                 handleMouseOut(photo);
-                stageRef.getStage().container().style.cursor =
-                  interactionMode === 'select' ? 'crosshair' : 'default';
+                stageRef.getStage().container().style.cursor = 'default';
               "
             >
               <!-- Área de hover con padding invisible -->
@@ -601,32 +599,6 @@
 
         <n-tooltip placement="right" trigger="hover">
           <template #trigger>
-            <n-button
-              :type="interactionMode === 'pan' ? 'primary' : 'default'"
-              @click="toggleInteractionMode"
-              size="small"
-            >
-              <template #icon>
-                <n-icon v-if="interactionMode === 'pan'">
-                  <HandLeftOutline />
-                </n-icon>
-                <n-icon v-else>
-                  <SelectAllFilled />
-                </n-icon>
-              </template>
-            </n-button>
-          </template>
-          <span v-if="interactionMode === 'pan'">
-            Pan mode active - Click to switch to Select mode (S)
-          </span>
-          <span v-else>
-            Select mode active - Draw rectangle to select photos, Ctrl+click for
-            multi-select (S)
-          </span>
-        </n-tooltip>
-
-        <n-tooltip placement="right" trigger="hover">
-          <template #trigger>
             <n-button @click="unstackPhotos" size="small">
               <template #icon>
                 <n-icon>
@@ -694,7 +666,6 @@ import { useCollectionsStore } from "@/stores/collections.js";
 import {
   AlbumsOutline,
   ExpandOutline,
-  HandLeftOutline,
   ImageOutline,
   RefreshOutline,
   ReloadOutline,
@@ -743,7 +714,6 @@ import PlaygroundPhotosDialog from "@/components/PlaygroundPhotosDialog.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import { SaveOutline } from "@vicons/ionicons5";
-import { SelectAllFilled } from "@vicons/material";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { useCanvasPersistence } from "@/composables/useCanvasPersistence.js";
 import CanvasManagerPopover from "@/components/canvas/CanvasManagerPopover.vue";
@@ -940,7 +910,6 @@ const canvasWoodSurfaceStyle = computed(() => {
 const showPhotosDialog = ref(false);
 const showTrashDialog = ref(false);
 const basicModeDismissed = ref(false);
-const interactionMode = ref("pan");
 const showRelatedPhotos = ref(false);
 const showPhotoInfoDialog = ref(false);
 const selectedPhotosForToolbar = ref([]);
@@ -985,7 +954,6 @@ const {
 } = useCanvasStage(stageRef, photos, toolbarState);
 
 const {
-  handleSelectPhoto,
   handleDragStart,
   handleDragMove,
   handleDragEnd,
@@ -1457,13 +1425,6 @@ onBeforeRouteLeave((_to, _from, next) => {
   }
 });
 
-const toggleInteractionMode = () => {
-  interactionMode.value = interactionMode.value === "pan" ? "select" : "pan";
-  // Update toolbarState.mouseMode to sync with the stage behavior
-  toolbarState.value.mouseMode =
-    interactionMode.value === "pan" ? "move" : "select";
-};
-
 // Toolbar functions
 const hideRelatedPhotos = () => {
   showRelatedPhotos.value = false;
@@ -1632,15 +1593,6 @@ const handleKeyDown = (event) => {
     deleteSelectedPhotos();
   }
 
-  // Toggle interaction mode with 'S' key
-  if (event.key === "s" || event.key === "S") {
-    // Only if not typing in an input field
-    if (!isTyping) {
-      event.preventDefault();
-      toggleInteractionMode();
-    }
-  }
-
   // Zoom in with 'A' key - DISABLED
   // if (event.key === "a" || event.key === "A") {
   //   // Only if not typing in an input field
@@ -1698,11 +1650,8 @@ const resetCanvasState = () => {
 
 const handleStageClick = (event) => {
   // If clicking on empty space (not on a photo), deselect all photos
-  // but only if we're not in select mode or if we're not doing rectangle selection
-  if (
-    event.target === event.target.getStage() &&
-    (interactionMode.value !== "select" || !selectionRect.visible)
-  ) {
+  // unless a rectangle selection is currently being drawn
+  if (event.target === event.target.getStage() && !selectionRect.visible) {
     resetCanvasState();
   }
 };
@@ -1742,10 +1691,7 @@ const handleTouchEnd = (event) => {
     // Consider it a tap if duration < 300ms and distance < 15px (more responsive for stage)
     if (touchDuration < 300 && touchDistance < 15) {
       // If touching empty space (not on a photo), perform same actions as click
-      if (
-        event.target === event.target.getStage() &&
-        (interactionMode.value !== "select" || !selectionRect.visible)
-      ) {
+      if (event.target === event.target.getStage() && !selectionRect.visible) {
         resetCanvasState();
       }
     }
@@ -1760,31 +1706,17 @@ const handlePhotoClick = (photo, event) => {
   // Always toggle hover state
   photo.hovered = !photo.hovered;
 
-  // In select mode, handle photo selection
-  if (interactionMode.value === "select") {
-    const isCtrlOrCmd = event.evt.ctrlKey || event.evt.metaKey;
-
-    if (isCtrlOrCmd) {
-      // Multi-select: toggle this photo's selection
-      photo.selected = !photo.selected;
-    } else {
-      // Single select: deselect all others and select this one
-      photos.value.forEach((p) => {
-        p.selected = p.id === photo.id;
-      });
-    }
-
-    // Prevent stage click handler from running
-    event.cancelBubble = true;
-  } else {
-    // In pan mode, handle selection with single click (avoiding drag conflicts)
-    // Only select if this wasn't part of a drag operation
-    if (!photo._wasDragged) {
-      handleSelectPhoto(photo, event);
-    }
-    // Reset drag flag
+  // Ignore click selection when it was a drag operation
+  if (photo._wasDragged) {
     photo._wasDragged = false;
+    return;
   }
+
+  // Canvas click is additive/toggle by default (multi-select without modifiers).
+  // Ctrl/Cmd keeps the same toggle behavior for consistency across platforms.
+  photo.selected = !photo.selected;
+
+  event.cancelBubble = true;
 };
 
 // Touch handlers for photos
@@ -1831,13 +1763,8 @@ const handlePhotoTouchEnd = (photo, event) => {
       // Toggle hover state on tap
       photo.hovered = !photo.hovered;
 
-      // Handle selection - single tap now selects in both modes
-      if (interactionMode.value === "select") {
-        photo.selected = !photo.selected;
-      } else {
-        // In pan mode, handle selection with tap (same as single click)
-        handleSelectPhoto(photo, event);
-      }
+      // On touch, toggle selected state for quick multi-selection gestures.
+      photo.selected = !photo.selected;
     } else {
       // This was likely a drag, so mark as dragged to prevent selection
       photo._wasDragged = true;
@@ -1962,24 +1889,6 @@ const checkImageValidity = () => {
     }
   });
 };
-
-// Keep interactionMode and toolbarState.mouseMode in sync
-watch(
-  interactionMode,
-  (newMode) => {
-    toolbarState.value.mouseMode = newMode === "pan" ? "move" : "select";
-
-    // Update stage cursor based on interaction mode
-    if (stageRef.value) {
-      const stage = stageRef.value.getStage();
-      if (stage && stage.container()) {
-        stage.container().style.cursor =
-          newMode === "select" ? "crosshair" : "default";
-      }
-    }
-  },
-  { immediate: true },
-);
 
 watch(
   () => route.query.canvasId,

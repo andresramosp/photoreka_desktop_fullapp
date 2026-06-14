@@ -33,7 +33,7 @@ export function useCanvasStage(stageRef, photos, toolbarState) {
     (newVal) => {
       stageConfig.draggable = newVal === "move";
     },
-    { immediate: true }
+    { immediate: true },
   );
 
   const updateStageOffset = () => {
@@ -66,22 +66,22 @@ export function useCanvasStage(stageRef, photos, toolbarState) {
   };
 
   const handleMouseDown = (e) => {
-    // In select mode, only start rectangle selection if clicking on empty stage
-    if (toolbarState.value.mouseMode === "select") {
-      const stage = stageRef.value.getStage();
-      if (e.target === stage) {
-        const pointer = stage.getPointerPosition();
-        const transform = stage.getAbsoluteTransform().copy();
-        transform.invert();
-        selectionStart = transform.point(pointer);
+    const stage = stageRef.value.getStage();
+    const isCtrlOrCmd = e.evt?.ctrlKey || e.evt?.metaKey;
 
-        selectionRect.x = selectionStart.x;
-        selectionRect.y = selectionStart.y;
-        selectionRect.width = 0;
-        selectionRect.height = 0;
-        selectionRect.visible = true;
-        stageConfig.draggable = false;
-      }
+    // Ctrl/Cmd + drag on empty stage starts rectangle selection.
+    if (isCtrlOrCmd && e.target === stage) {
+      const pointer = stage.getPointerPosition();
+      const transform = stage.getAbsoluteTransform().copy();
+      transform.invert();
+      selectionStart = transform.point(pointer);
+
+      selectionRect.x = selectionStart.x;
+      selectionRect.y = selectionStart.y;
+      selectionRect.width = 0;
+      selectionRect.height = 0;
+      selectionRect.visible = true;
+      stageConfig.draggable = false;
       return;
     }
 
@@ -216,8 +216,7 @@ export function useCanvasStage(stageRef, photos, toolbarState) {
   };
 
   const handleMouseMove = (e) => {
-    if (toolbarState.value.mouseMode !== "select" || !selectionRect.visible)
-      return;
+    if (!selectionRect.visible) return;
 
     const stage = stageRef.value.getStage();
     const pointer = stage.getPointerPosition();
@@ -230,8 +229,7 @@ export function useCanvasStage(stageRef, photos, toolbarState) {
   };
 
   const handleMouseUp = () => {
-    if (toolbarState.value.mouseMode !== "select" || !selectionRect.visible)
-      return;
+    if (!selectionRect.visible) return;
 
     const rect = {
       x: Math.min(selectionStart.x, selectionStart.x + selectionRect.width),
@@ -251,7 +249,7 @@ export function useCanvasStage(stageRef, photos, toolbarState) {
     });
 
     selectionRect.visible = false;
-    stageConfig.draggable = toolbarState.value.mouseMode === "move";
+    stageConfig.draggable = true;
   };
 
   const isHoverPhoto = () => {
@@ -315,7 +313,7 @@ export const applyZoom = (
   stage,
   newScale,
   updateOffsetFn,
-  centerPoint = null
+  centerPoint = null,
 ) => {
   const oldScale = stage.scaleX();
 
