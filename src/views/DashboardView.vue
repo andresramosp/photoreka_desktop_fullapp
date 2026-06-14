@@ -12,6 +12,9 @@
             :avg-aesthetic-score="avgAestheticScore"
             :photos-count="photos.length"
             :preferred-source="userStore.user?.preferredSource"
+            :analyzed-photos-remaining="
+              userStore.user?.usage?.analyzedPhotosRemaining
+            "
             @go-workspace="navigateToWorkspace"
             @go-upload="navigateToImportArea"
           />

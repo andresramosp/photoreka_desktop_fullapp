@@ -11,68 +11,70 @@
     </div>
 
     <div class="photo-stats-block">
-      <div
-        class="photos-primary-stat"
-        ref="statBlockRef"
-        role="group"
-        aria-label="Photo stats"
-      >
-        <div class="photos-primary-info">
-          <n-icon size="18" class="photos-primary-icon">
-            <LayersOutline />
-          </n-icon>
-          <span
-            class="photos-primary-count"
+      <!-- <div class="stats-block-header">
+        <span class="stats-block-title">Your Workspace</span>
+      </div> -->
+
+      <div class="photos-primary-stat" ref="statBlockRef">
+        <!-- Stats group: Col 1 + Col 2 -->
+        <div class="stat-group">
+          <!-- Col 1: Total photos -->
+          <div
+            class="stat-col stat-col--clickable"
             role="button"
             tabindex="0"
+            aria-label="Go to workspace"
             @click="emit('go-workspace')"
             @keydown.enter.prevent="emit('go-workspace')"
             @keydown.space.prevent="emit('go-workspace')"
           >
-            {{ photosCount.toLocaleString() }}
-          </span>
-          <div class="photos-primary-meta">
-            <span class="photos-primary-label">Total photos</span>
-            <n-button
-              text
-              type="primary"
-              size="tiny"
-              class="photos-workspace-link"
-              @click="runInlineAction"
-              :aria-label="inlineActionLabel"
-            >
-              {{ inlineActionText }}
-            </n-button>
+            <n-icon size="24" class="stat-icon stat-icon--photos">
+              <LayersOutline />
+            </n-icon>
+            <div class="stat-text">
+              <span class="stat-value">{{ photosCountFormatted }}</span>
+              <span class="stat-label">Total photos</span>
+            </div>
+          </div>
+
+          <div class="stat-divider" />
+
+          <!-- Col 2: Analyses remaining -->
+          <div
+            class="stat-col stat-col--clickable stat-col--analysis-clickable"
+            role="button"
+            tabindex="0"
+            aria-label="Go to settings"
+            @click="goSettings"
+            @keydown.enter.prevent="goSettings"
+            @keydown.space.prevent="goSettings"
+          >
+            <n-icon size="24" class="stat-icon stat-icon--analysis">
+              <InProgress />
+            </n-icon>
+            <div class="stat-text">
+              <span class="stat-value stat-value--analysis">{{
+                analysisRemaining
+              }}</span>
+              <span class="stat-label">Analyses left</span>
+            </div>
           </div>
         </div>
 
-        <n-button
-          v-if="statBlockCompact"
-          type="info"
-          size="small"
-          @click="runPrimaryAction"
-          :aria-label="primaryActionLabel"
-        >
-          <template #icon>
-            <n-icon size="16">
-              <component :is="primaryActionIcon" />
-            </n-icon>
-          </template>
-        </n-button>
-        <n-button
-          v-else
-          type="info"
-          size="small"
-          @click="runPrimaryAction"
-          :aria-label="primaryActionLabel"
-        >
-          <template #icon>
-            <n-icon size="16">
-              <component :is="primaryActionIcon" />
-            </n-icon>
-          </template>
-          {{ primaryActionText }}
-        </n-button>
+        <!-- Action section: Col 3 -->
+        <div class="stat-action-section">
+          <n-button
+            type="info"
+            @click="runPrimaryAction"
+            :aria-label="primaryActionLabel"
+          >
+            <template #icon>
+              <n-icon size="22">
+                <component :is="primaryActionIcon" />
+              </n-icon>
+            </template>
+          </n-button>
+        </div>
       </div>
     </div>
   </div>
@@ -80,13 +82,18 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onBeforeUnmount } from "vue";
+import { useRouter } from "vue-router";
 import { LayersOutline, ShareOutline } from "@vicons/ionicons5";
+import { InProgress } from "@vicons/carbon";
+
+const router = useRouter();
+const goSettings = () => router.push("/settings");
 
 const props = defineProps<{
   userShortName?: string | null;
   avgAestheticScore: number | null;
   photosCount: number;
-  preferredSource?: string | null;
+  analyzedPhotosRemaining?: number | null;
 }>();
 
 const emit = defineEmits<{
@@ -95,173 +102,44 @@ const emit = defineEmits<{
 }>();
 
 const statBlockRef = ref<HTMLElement | null>(null);
-const statBlockCompact = ref(false);
-let statBlockObserver: ResizeObserver | null = null;
 
 const displayName = computed(() =>
   (props.userShortName || "photographer").toUpperCase(),
 );
 
-const normalizedPreferredSource = computed(() =>
-  String(props.preferredSource || "")
-    .trim()
-    .toLowerCase(),
-);
+const primaryActionLabel = "Import Area";
+const primaryActionIcon = ShareOutline;
 
-const isLightroomPreferred = computed(
-  () =>
-    normalizedPreferredSource.value === "lightroom" ||
-    normalizedPreferredSource.value === "ligthroom",
-);
+const countFormatter = new Intl.NumberFormat("es-ES", {
+  maximumFractionDigits: 0,
+  useGrouping: "always",
+});
 
-const primaryActionKind = computed(() =>
-  isLightroomPreferred.value ? "workspace" : "upload",
-);
+const formatCount = (value: number | string | null | undefined) => {
+  if (value == null) return "—";
 
-const inlineActionKind = computed(() =>
-  isLightroomPreferred.value ? "upload" : "workspace",
-);
+  const numericValue =
+    typeof value === "string"
+      ? Number(value.replace(/[^\d-]/g, ""))
+      : Number(value);
 
-const primaryActionText = computed(() =>
-  primaryActionKind.value === "upload" ? "Import Area" : "See Workspace",
-);
+  if (!Number.isFinite(numericValue)) return "—";
 
-const inlineActionText = computed(() =>
-  inlineActionKind.value === "upload" ? "Import Area" : "See Workspace",
-);
-
-const primaryActionLabel = computed(() =>
-  primaryActionKind.value === "upload" ? "Import Area" : "See Workspace",
-);
-
-const inlineActionLabel = computed(() =>
-  inlineActionKind.value === "upload" ? "Import Area" : "See workspace",
-);
-
-const primaryActionIcon = computed(() =>
-  primaryActionKind.value === "upload" ? ShareOutline : LayersOutline,
-);
-
-const runAction = (action: "workspace" | "upload") => {
-  if (action === "upload") {
-    emit("go-upload");
-    return;
-  }
-  emit("go-workspace");
+  return countFormatter.format(Math.trunc(numericValue));
 };
 
-const runPrimaryAction = () => runAction(primaryActionKind.value);
-const runInlineAction = () => runAction(inlineActionKind.value);
+const photosCountFormatted = computed(() => formatCount(props.photosCount));
 
-onMounted(() => {
-  if (statBlockRef.value) {
-    statBlockObserver = new ResizeObserver(([entry]) => {
-      statBlockCompact.value = entry.contentRect.width < 240;
-    });
-    statBlockObserver.observe(statBlockRef.value);
-  }
-});
+const analysisRemaining = computed(() =>
+  formatCount(props.analyzedPhotosRemaining),
+);
 
-onBeforeUnmount(() => {
-  statBlockObserver?.disconnect();
-});
+const runPrimaryAction = () => emit("go-upload");
 </script>
 
 <style scoped>
 .welcome-block {
   margin: 0;
-}
-
-.photo-stats-block {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 100%;
-}
-
-.photos-primary-stat {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-  padding: 10px;
-  background: var(--bg-container);
-  border: 1px solid var(--border-color);
-  border-left: 3px solid var(--primary-color);
-  border-radius: 12px;
-  transition:
-    border-color 0.18s ease,
-    box-shadow 0.18s ease;
-}
-
-.photos-primary-info {
-  display: flex;
-  gap: 7px;
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  align-items: center;
-}
-
-.photos-primary-meta {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  gap: 0;
-  justify-content: center;
-}
-
-.photos-primary-icon {
-  color: var(--accent-color);
-  flex-shrink: 0;
-}
-
-.photos-primary-count {
-  font-size: 24px;
-  font-weight: 800;
-  color: var(--accent-color);
-  line-height: 1;
-  letter-spacing: -0.03em;
-}
-
-.photos-primary-count:hover {
-  cursor: pointer;
-}
-
-.photos-primary-label {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  font-weight: 600;
-  line-height: 1.05;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.photos-workspace-link {
-  margin: 0;
-  height: auto;
-  min-height: 0;
-  line-height: 1.05;
-  text-align: left;
-  justify-content: flex-start;
-}
-
-.photos-workspace-link :deep(.n-button__content) {
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.05;
-}
-
-.photos-workspace-link:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--primary-color) 40%, transparent);
-  outline-offset: 2px;
-  border-radius: 4px;
 }
 
 .welcome-name {
@@ -279,10 +157,170 @@ onBeforeUnmount(() => {
   margin: 0;
 }
 
-@media (max-width: 360px) {
-  .photos-primary-stat {
-    flex-direction: column;
-    align-items: stretch;
-  }
+/* ── Workspace stats block ── */
+.photo-stats-block {
+  width: 100%;
+  background: var(--bg-container);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--primary-color);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.stats-block-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px 5px;
+  border-bottom: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--primary-color) 6%, transparent);
+}
+
+.stats-block-header-icon {
+  color: var(--primary-color);
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.stats-block-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary-color);
+  opacity: 0.9;
+}
+
+/* ── Row wrapper ── */
+.photos-primary-stat {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* ── Stats group (col1 + col2) ── */
+.stat-group {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Action section (col3) ── */
+.stat-action-section {
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  flex-shrink: 0;
+  /* border-left: 2px solid var(--border-color); */
+}
+
+.stat-action-section :deep(.n-button) {
+  height: 100%;
+  width: 100%;
+  min-width: 52px;
+  border-radius: 0;
+  padding: 0 18px;
+}
+
+.stat-divider {
+  width: 1px;
+  background: var(--border-color);
+  flex-shrink: 0;
+  margin: 8px 0;
+}
+
+/* ── Individual column ── */
+.stat-col {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 10px 14px;
+  min-width: 0;
+  flex: 1;
+  transition: background 0.18s ease;
+}
+
+.stat-col--clickable {
+  cursor: pointer;
+  position: relative;
+}
+
+.stat-col--clickable::before {
+  content: "";
+  position: absolute;
+  inset: 2px 3px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+  pointer-events: none;
+}
+
+.stat-col--analysis-clickable::before {
+  background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+}
+
+.stat-col--clickable:hover::before {
+  opacity: 1;
+}
+
+.stat-col--clickable:hover .stat-value {
+  filter: brightness(1.12);
+}
+
+.stat-col--clickable:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary-color) 50%, transparent);
+  outline-offset: -2px;
+}
+
+.stat-icon--photos {
+  color: var(--accent-color);
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.stat-icon--analysis {
+  color: var(--primary-color);
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.stat-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--accent-color);
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.stat-value--analysis {
+  color: var(--primary-color);
+}
+
+.stat-label {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 </style>
