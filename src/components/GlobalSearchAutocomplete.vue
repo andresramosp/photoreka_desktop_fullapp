@@ -10,6 +10,7 @@
       @focus="handleFocus"
       @blur="handleBlur"
       @keydown="handleKeydown"
+      @input="handleInput"
       ref="inputRef"
     >
       <template #prefix>
@@ -339,6 +340,11 @@ import {
   CloudUploadOutline,
   SettingsOutline,
   BriefcaseOutline as PortfolioIcon,
+  ChatbubbleOutline,
+  PricetagsOutline,
+  EarthOutline,
+  ScanOutline,
+  LocationOutline,
 } from "@vicons/ionicons5";
 import { Workspace as WorkspaceIcon } from "@vicons/carbon";
 import {
@@ -393,6 +399,11 @@ const iconComponents: Record<string, any> = {
   LayersOutline: LayersOutline,
   CloudUploadOutline: CloudUploadOutline,
   SettingsOutline: SettingsOutline,
+  ChatbubbleOutline: ChatbubbleOutline,
+  PricetagsOutline: PricetagsOutline,
+  EarthOutline: EarthOutline,
+  ScanOutline: ScanOutline,
+  LocationOutline: LocationOutline,
 };
 
 const getToolIcon = (iconName: string) => {
@@ -440,6 +451,12 @@ const scrollToActiveItem = () => {
 };
 
 // Handlers
+const handleInput = (value: string) => {
+  if (value && value.length >= 2) {
+    showDropdown.value = true;
+  }
+};
+
 const handleFocus = () => {
   isInputFocused.value = true;
   showDropdown.value = true;

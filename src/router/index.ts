@@ -19,7 +19,6 @@ import PlanView from "../views/PlanView.vue";
 import AuthView from "../views/AuthView.vue";
 import ProfileSelectionView from "../views/ProfileSelectionView.vue";
 import StoragePlanSelectionView from "../views/StoragePlanSelectionView.vue";
-import GridMaker from "../views/GridMakerView.vue";
 import ChatView from "../views/ChatView.vue";
 import PortfolioBuilderView from "../views/PortfolioBuilderView.vue";
 import PortfolioDetailView from "../views/PortfolioDetailView.vue";
@@ -386,14 +385,6 @@ const router = createRouter({
       },
     },
 
-    {
-      path: "/grid-maker",
-      name: "grid-maker",
-      component: GridMaker,
-      meta: {
-        requiresAuth: true,
-      },
-    },
     {
       path: "/chat-lab",
       name: "chat-lab",

@@ -318,7 +318,6 @@ const insertingPhotoIds = ref(new Set());
 const lastInsertIndex = ref(null);
 const isFirstLoad = ref(true);
 
-// Suggestion criteria (same options as GridMaker)
 const suggestionCriteriaOptions = [
   { label: "General", value: "embedding" },
   { label: "Context", value: "context" },

@@ -338,7 +338,6 @@ const getKeepAliveComponents = () => {
     "ImportAreaView",
     "ProjectBuilderView",
     "FramerView",
-    "GridMakerView",
     "3DView",
     "2DView",
     "ChatView",
