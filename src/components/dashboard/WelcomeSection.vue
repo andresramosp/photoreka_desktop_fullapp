@@ -62,7 +62,7 @@
         </div>
 
         <!-- Action section: Col 3 -->
-        <div class="stat-action-section">
+        <div class="stat-action-section" v-show="statBlockWidth >= 290">
           <n-button
             type="info"
             @click="runPrimaryAction"
@@ -102,6 +102,21 @@ const emit = defineEmits<{
 }>();
 
 const statBlockRef = ref<HTMLElement | null>(null);
+const statBlockWidth = ref(9999);
+let resizeObserver: ResizeObserver | null = null;
+
+onMounted(() => {
+  if (statBlockRef.value) {
+    resizeObserver = new ResizeObserver((entries) => {
+      statBlockWidth.value = entries[0].contentRect.width;
+    });
+    resizeObserver.observe(statBlockRef.value);
+  }
+});
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+});
 
 const displayName = computed(() =>
   (props.userShortName || "photographer").toUpperCase(),

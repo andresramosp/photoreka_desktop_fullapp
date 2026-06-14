@@ -7,9 +7,9 @@
     <div v-if="!props.compact" class="aspect-header">
       <div class="aspect-title-wrapper">
         <h3 class="aspect-title">{{ aspect.label }}</h3>
-        <span class="aspect-subtitle"
-          >{{ aspect.totalPhotos }} photos with this aspect</span
-        >
+        <span class="aspect-subtitle">
+          {{ aspect.totalPhotos }} photos with this aspect
+        </span>
       </div>
     </div>
 
@@ -27,7 +27,8 @@
             ></div>
             <span class="value-label">{{ item.label }}</span>
           </div>
-          <span class="value-count">{{ item.count }} photos</span>
+
+          <span class="value-count">{{ item.count }}</span>
         </div>
 
         <div class="value-bar-section">
@@ -35,11 +36,7 @@
             <div
               class="bar-fill"
               :style="{
-                width: `${
-                  aspect.totalPhotos > 0
-                    ? (item.count / aspect.totalPhotos) * 100
-                    : 0
-                }%`,
+                width: `${maxCount > 0 ? (item.count / maxCount) * 100 : 0}%`,
                 backgroundColor: getAspectSliceColor(index),
               }"
             ></div>
@@ -80,6 +77,10 @@ const aspectCardStyle = computed(() => {
   }
 
   return { minHeight: props.minHeight };
+});
+
+const maxCount = computed(() => {
+  return Math.max(...props.aspect.breakdown.map((item) => item.count), 0);
 });
 </script>
 
@@ -150,7 +151,7 @@ const aspectCardStyle = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-width: 200px;
+  min-width: 170px;
   flex-shrink: 0;
 }
 
@@ -177,11 +178,19 @@ const aspectCardStyle = computed(() => {
   color: var(--text-primary);
 }
 
+.aspect-card.compact .value-label {
+  font-size: var(--font-size-sm);
+}
+
 .value-count {
   font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   white-space: nowrap;
   margin-left: var(--spacing-md);
+}
+
+.aspect-card.compact .value-count {
+  font-size: 11px;
 }
 
 .value-bar-section {
