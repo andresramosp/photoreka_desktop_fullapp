@@ -10,8 +10,7 @@
         <h3 class="import-area-title">
           <span class="desktop-only"
             >Here you can monitor the analysis process for your photos. They
-            will appear in your Workspace once the process is complete (up to
-            two hours).</span
+            will appear in your Workspace once the process is complete.</span
           >
           <span class="mobile-only">Monitor your photo analysis here.</span>
         </h3>
