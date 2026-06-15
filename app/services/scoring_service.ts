@@ -49,6 +49,8 @@ export interface SearchComposition {
 const MAX_SIMILAR_TAGS = 1250
 const MAX_SIMILAR_CHUNKS = 850
 const MAX_SIMILAR_PHOTOS = 5000
+const MAX_PARALLEL_SCORING_PHOTOS = 5000
+const MAX_CACHEABLE_SCORING_PHOTOS = 5000
 
 export type RefineMode = 'entailment' | 'neutral' | 'none'
 
@@ -296,6 +298,7 @@ export default class ScoringService {
     key: (photoIds: number[], structuredQuery: any, searchMode: SearchMode, userId: string) =>
       `getScoredPhotosByTagsAndDesc:${userId}:${searchMode}:${JSON.stringify(structuredQuery)}:${hashNumberIds(photoIds)}`,
     ttl: 60 * 60 * 12,
+    shouldCache: (_result, [photoIds]) => photoIds.length <= MAX_CACHEABLE_SCORING_PHOTOS,
   })
   public async getScoredPhotosByTagsAndDesc(
     photoIds: number[],
@@ -315,7 +318,37 @@ export default class ScoringService {
     // 4. Inicializar scores
     const initialScores = this.initializeScores(photoIds)
 
-    // 5. Ejecutar en paralelo: segmentos, fullQuery, notes, nuances e image
+    if (photoIds.length > MAX_PARALLEL_SCORING_PHOTOS) {
+      console.log(
+        `[ScoringService] Número de fotos (${photoIds.length}) excede el límite para procesamiento paralelo (${MAX_PARALLEL_SCORING_PHOTOS}). Procesando secuencialmente para evitar sobrecarga.`
+      )
+
+      let finalScores = await this.processPositiveSegments(initialScores, query, config, userId)
+
+      const fullQueryScores = await this.processFullQuery(photoIds, query, config)
+      finalScores = this.mergeTagDescScoredPhotos(finalScores, [], fullQueryScores)
+
+      const notesScores = await this.processNotes(photoIds, query, config)
+      finalScores = this.mergeTagDescScoredPhotos(finalScores, [], notesScores)
+
+      const nuanceScores = await this.processNuances(photoIds, query, config, userId)
+      for (const nuanceScore of nuanceScores) {
+        finalScores = this.mergeTagDescScoredPhotos(finalScores, nuanceScore, [])
+      }
+
+      const imageScores = await this.processImageSimilarity(
+        photoIds,
+        query.clipQuery,
+        config,
+        userId
+      )
+      finalScores = this.mergeImageScores(finalScores, imageScores)
+
+      return this.finalizeScores(finalScores, query, config, searchMode)
+    }
+
+    console.log(`[ScoringService] Procesando ${photoIds.length} fotos en paralelo`)
+
     const [segmentScores, fullQueryScores, notesScores, nuanceScores, imageScores] =
       await Promise.all([
         this.processPositiveSegments(initialScores, query, config, userId),
@@ -398,6 +431,7 @@ export default class ScoringService {
     ) =>
       `getScoredPhotosByTags:${userId}:${searchMode}:${JSON.stringify([...included].sort())}:${JSON.stringify([...excluded].sort())}:${hashNumberIds(photoIds)}`,
     ttl: 60 * 60 * 12,
+    shouldCache: (_result, [photoIds]) => photoIds.length <= MAX_CACHEABLE_SCORING_PHOTOS,
   })
   public async getScoredPhotosByTags(
     photoIds: number[],
@@ -629,22 +663,29 @@ export default class ScoringService {
     const tagsCategories = this.getTagsCategories(query.includeVisualAspects)
     const initialScores = this.initializeScores(photoIds)
 
-    return Promise.all(
-      query.nuancesSegments.map((segment, index) =>
-        this.processSegment(
-          { name: segment, index },
-          initialScores,
-          {
-            tagsThreshold: config.nuancesThreshold,
-            descThreshold: null, // Nuances solo busca en tags
-            refineMode: config.refineMode,
-          },
-          tagsCategories,
-          [],
-          userId
-        )
+    const processNuance = (segment: string, index: number) =>
+      this.processSegment(
+        { name: segment, index },
+        initialScores,
+        {
+          tagsThreshold: config.nuancesThreshold,
+          descThreshold: null, // Nuances solo busca en tags
+          refineMode: config.refineMode,
+        },
+        tagsCategories,
+        [],
+        userId
       )
-    )
+
+    if (photoIds.length <= MAX_PARALLEL_SCORING_PHOTOS) {
+      return Promise.all(query.nuancesSegments.map(processNuance))
+    }
+
+    const nuanceScores: ScoredPhoto[][] = []
+    for (const [index, segment] of query.nuancesSegments.entries()) {
+      nuanceScores.push(await processNuance(segment, index))
+    }
+    return nuanceScores
   }
 
   // Versión para ejecución paralela (usa photoIds directamente)

@@ -9,6 +9,8 @@ interface CacheOptions {
   ttl?: number // en segundos
   /** Override the default semantic-emptiness check for this specific cache. */
   isEmpty?: (result: any) => boolean
+  /** Return false to skip writing a computed result to cache. */
+  shouldCache?: (result: any, args: any[]) => boolean
 }
 
 /**
@@ -95,8 +97,9 @@ export function withCache(options: CacheOptions = {}) {
       const result = await originalMethod.apply(this, args)
 
       const isEmpty = options.isEmpty ? options.isEmpty(result) : isSemanticallyCacheEmpty(result)
+      const canCache = !isEmpty && (!options.shouldCache || options.shouldCache(result, args))
 
-      if (!isEmpty) {
+      if (canCache) {
         if (provider === 'nodecache') {
           nodeCache.set(cacheKey, result, ttl) // ttl=0 means no expiry in node-cache
         } else {
