@@ -37,6 +37,8 @@ export default class AnalyzerProcessRunner {
   private photoImageService: PhotoImageService
   private photoManager: PhotoManager
   private originalMode: AnalyzerMode = 'adding'
+  private measurementStartIso: string | null = null
+  private measurementCommandsPrinted: boolean = false
 
   constructor() {
     this.process = new AnalyzerProcess()
@@ -57,6 +59,11 @@ export default class AnalyzerProcessRunner {
     processId?: number,
     userId?: string
   ) {
+    if (!this.measurementStartIso) {
+      this.measurementStartIso = new Date().toISOString()
+      logger.info(`[COST_MEASURE] Analysis window start (UTC): ${this.measurementStartIso}`)
+    }
+
     const finalUserId = userId
 
     await CacheInvalidationService.onPhotoListChanged(finalUserId)
@@ -191,6 +198,8 @@ export default class AnalyzerProcessRunner {
     // No lanzar autoRetry para admin_retry (el admin decide manualmente)
     if (this.process.mode !== 'admin_retry') {
       await this.handleAutoRetry()
+    } else {
+      this.printCostMeasurementCommands()
     }
 
     return { hasFailed, processId: this.process.id }
@@ -462,6 +471,7 @@ export default class AnalyzerProcessRunner {
         )
         this.process.currentStage = 'finished'
         await this.process.save()
+        this.printCostMeasurementCommands()
         if (shouldNotify) {
           this.sendAnalysisCompleteEmail().catch((e) =>
             logger.error(
@@ -472,6 +482,7 @@ export default class AnalyzerProcessRunner {
         }
       } else {
         logger.info('autoRetry activo, pero no hay fotos fallidas. No se lanza retry_process.')
+        this.printCostMeasurementCommands()
         if (shouldNotify) {
           this.sendAnalysisCompleteEmail().catch((e) =>
             logger.error(
@@ -482,6 +493,7 @@ export default class AnalyzerProcessRunner {
         }
       }
     } else {
+      this.printCostMeasurementCommands()
       if (shouldNotify) {
         this.sendAnalysisCompleteEmail().catch((e) =>
           logger.error(
@@ -550,5 +562,36 @@ export default class AnalyzerProcessRunner {
       const errMsg = error instanceof Error ? `${error.message}\n${error.stack}` : String(error)
       logger.error(`Error enviando email de análisis completado: ${errMsg}`)
     }
+  }
+
+  private printCostMeasurementCommands() {
+    if (this.measurementCommandsPrinted) return
+    this.measurementCommandsPrinted = true
+
+    const startIso =
+      this.measurementStartIso ||
+      (this.process?.createdAt?.toISO ? this.process.createdAt.toISO() : new Date().toISOString())
+    const endIso = new Date().toISOString()
+    const serviceName = process.env.RAILWAY_SERVICE_NAME || 'photoreka_analyzer_api'
+    const environmentName = process.env.RAILWAY_ENVIRONMENT_NAME || 'real'
+    const metricsFile = `metrics-process-${this.process?.id || 'unknown'}.json`
+
+    logger.info(`[COST_MEASURE] Analysis window end (UTC): ${endIso}`)
+
+    console.log('')
+    console.log('================ COST MEASUREMENT COMMANDS ================')
+    console.log(`[COST_MEASURE] PROCESS_ID: ${this.process?.id || 'unknown'}`)
+    console.log(`[COST_MEASURE] START_UTC: ${startIso}`)
+    console.log(`[COST_MEASURE] END_UTC:   ${endIso}`)
+    console.log('1) Export raw Railway CPU/RAM metrics (read-only):')
+    console.log(
+      `npx @railway/cli@4.11.0 metrics --service ${serviceName} --environment ${environmentName} --since "${startIso}" --until "${endIso}" --cpu --memory --raw --json > ${metricsFile}`
+    )
+    console.log('2) Calculate estimated compute cost from exported metrics:')
+    console.log(
+      `node ace railway:compute-cost --metrics-file ${metricsFile} --memory-unit mb --verbose`
+    )
+    console.log('===========================================================')
+    console.log('')
   }
 }
