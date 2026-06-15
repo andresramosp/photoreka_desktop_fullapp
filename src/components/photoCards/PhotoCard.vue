@@ -24,6 +24,7 @@
         :src="photo.thumbnailUrl || photo.url"
         :alt="photo.title"
         class="photo-image"
+        :class="{ 'is-loaded': imageLoaded, 'has-error': imageError }"
         @load="onImageLoad"
         @error="onImageError"
         :style="shouldBlur ? 'filter: blur(8px); transition: filter 0.3s;' : ''"
@@ -505,6 +506,7 @@ const onImageLoad = () => {
 
 const onImageError = () => {
   imageError.value = true;
+  imageLoaded.value = true;
 };
 
 const moveToSelection = () => {
@@ -577,6 +579,29 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   background-color: var(--bg-surface);
+}
+
+.photo-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  opacity: 0;
+  transition:
+    opacity 0.28s ease,
+    filter 0.3s ease;
+}
+
+.photo-image.is-loaded,
+.photo-image.has-error {
+  opacity: 1;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .photo-image {
+    opacity: 1;
+    transition: filter 0.3s ease;
+  }
 }
 
 /* .photo-card:hover .photo-image {

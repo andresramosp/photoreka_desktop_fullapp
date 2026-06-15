@@ -20,7 +20,6 @@
           />
 
           <div class="panel-sections-scroll-area">
-            <!-- Smart Tools -->
             <div class="panel-section">
               <div class="section-label">Quick Access</div>
               <SmartToolsSection
@@ -29,7 +28,7 @@
               />
             </div>
             <!-- Recent Collections & Series -->
-            <div class="panel-section panel-section--grow">
+            <div class="panel-section">
               <div class="section-label">RECENT LIBRARY</div>
 
               <div class="collections-scroll-area">
@@ -880,22 +879,9 @@ const navigateToCollections = () => {
 }
 
 .collections-scroll-area {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 2px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
-}
-
-.collections-scroll-area::-webkit-scrollbar {
-  width: 4px;
-}
-
-.collections-scroll-area::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 2px;
+  min-height: auto;
+  overflow: visible;
+  padding-right: 0;
 }
 
 /* ─────────────────────────────────────────────
@@ -997,6 +983,8 @@ const navigateToCollections = () => {
 
   .panel-left {
     display: flex;
+    max-height: 100dvh;
+    overflow: hidden;
   }
 
   .panel-right {
@@ -1012,7 +1000,18 @@ const navigateToCollections = () => {
     display: flex;
     flex-direction: column;
     gap: var(--dashboard-section-gap);
-    overflow: visible;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .panel-left .panel-sections-scroll-area {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    margin-right: -16px;
+    padding-right: 12px;
   }
 
   .panel-sections-scroll-area {

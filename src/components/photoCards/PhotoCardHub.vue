@@ -27,6 +27,7 @@
         :src="photo.thumbnailUrl || photo.url"
         :alt="photo.name"
         class="photo-image"
+        :class="{ 'is-loaded': imageLoaded, 'has-error': imageError }"
         @load="onImageLoad"
         @error="onImageError"
       />
@@ -486,6 +487,7 @@ const onImageLoad = () => {
 
 const onImageError = () => {
   imageError.value = true;
+  imageLoaded.value = true;
 };
 
 const openInGooglePhotos = () => {
@@ -572,8 +574,23 @@ onUnmounted(() => {
   height: 100%;
   object-fit: contain;
   object-position: center;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  transition:
+    opacity 0.28s ease,
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   background-color: var(--bg-surface);
+}
+
+.photo-image.is-loaded,
+.photo-image.has-error {
+  opacity: 1;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .photo-image {
+    opacity: 1;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
 }
 
 /* Note: Photo skeleton styles moved to global.scss */
