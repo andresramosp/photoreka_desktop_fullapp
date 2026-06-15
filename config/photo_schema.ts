@@ -272,14 +272,25 @@ const STYLE_BONUS: ArtisticScoreCriterionDef[] = [
     },
     weights: { general: 0, street: 0.8, documentary: 0, abstract: 0.4 },
   },
+  // {
+  //   key: 'visual_games',
+  //   label: 'Visual Games',
+  //   descriptions: {
+  //     style:
+  //       "Does the photo feature visual games, illusions, or paradoxes that create a playful or intriguing effect? This could include reflections, curious juxtapositions, or other elements that challenge the viewer's perception, much like a magician would.",
+  //     general:
+  //       "Are there small visual tricks, coincidences, reflections, alignments, or juxtapositions that add interest? These don't need to be sophisticated—just visually engaging.",
+  //   },
+  //   weights: { general: 0, street: 0.8, documentary: 0, abstract: 0.7 },
+  // },
   {
     key: 'visual_games',
     label: 'Visual Games',
     descriptions: {
       style:
-        "Does the photo feature visual games, illusions, or paradoxes that create a playful or intriguing effect? This could include reflections, curious juxtapositions, or other elements that challenge the viewer's perception, much like a magician would.",
+        "Does the photo feature visual games, illusions, surprising alignments, or perceptual tricks that create a playful or intriguing effect? This may involve reflections, unexpected spatial relationships, visual framing, clever compositions, or other elements that challenge or reward the viewer's perception.",
       general:
-        "Are there small visual tricks, coincidences, reflections, alignments, or juxtapositions that add interest? These don't need to be sophisticated—just visually engaging.",
+        "Are there visual coincidences, alignments, framing interactions, reflections, juxtapositions, or other playful relationships between elements that add interest? They don't need to be sophisticated—just visually engaging.",
     },
     weights: { general: 0, street: 0.8, documentary: 0, abstract: 0.7 },
   },

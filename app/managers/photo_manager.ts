@@ -39,6 +39,7 @@ export default class PhotoManager {
         query.preload('tag')
       })
       .preload('analyzerProcess')
+      .preload('inferredLocation')
     return photos
   }
 

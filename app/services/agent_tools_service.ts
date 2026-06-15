@@ -284,14 +284,17 @@ export const WebSearchSchema = z.object({
 /**
  * Standard photo data for tools that need meaningful context (get_photo_info,
  * Phase 2 visual context). Includes narrative fields so the model can
- * understand what the photo depicts, but omits heavy metadata (scores,
- * visual_aspects, EXIF, notes) — those are injected automatically in Phase 2
- * via buildPhase2VisualContext with full data + thumbnail images.
+ * understand what the photo depicts, plus optional inferred location string
+ * from GeocodeCache (resolved through inferredLocationId -> queryNormalized).
+ * Omits heavy metadata (scores, visual_aspects, EXIF, notes) — those are
+ * injected automatically in Phase 2 via buildPhase2VisualContext with full
+ * data + thumbnail images.
  */
 export function photoDataForAgentPreview(photo: any): Record<string, any> {
   const descriptions = photo.descriptions || {}
   const exif = descriptions.EXIF || {}
   const visualAspects = descriptions.visual_aspects || {}
+  const inferredLocation = photo.inferredLocation
   return {
     id: photo.id,
     originalFileName: photo.originalFileName,
@@ -299,6 +302,7 @@ export function photoDataForAgentPreview(photo: any): Record<string, any> {
     context: descriptions.context || null,
     genre: visualAspects.genre ?? null,
     dateTaken: exif.dateTaken ?? null,
+    inferredLocation: inferredLocation?.queryNormalized ?? null,
   }
 }
 
@@ -317,6 +321,7 @@ export function photoDataForAgentSlim(photo: any): Record<string, any> {
     id: photo.id,
     originalFileName: photo.originalFileName,
     genre: visualAspects.genre ?? null,
+    inferredLocation: photo.inferredLocation?.queryNormalized ?? null,
   }
 }
 
@@ -438,7 +443,7 @@ function reciprocalRankFusion(rankedLists: number[][], k = 60): number[] {
 
 export const TOOL_DESCRIPTIONS = {
   get_photo_info:
-    '[BASIC_TOOLS] Get detailed info for one or more photos by their IDs. Call this ONLY for: (1) photo IDs attached by the user in the current message (these are auto-prefetched), (2) photo IDs referenced from conversation history that you need to discuss again. Do NOT call this on photos returned by search_advanced — a later phase automatically injects full descriptions and thumbnails. Pass multiple IDs in a single call to batch-fetch. Returns: story (scene narrative), context, genre, and date taken. Full visual metadata and thumbnail images are provided automatically in the final evaluation step.',
+    '[BASIC_TOOLS] Get detailed info for one or more photos by their IDs. Call this ONLY for: (1) photo IDs attached by the user in the current message (these are auto-prefetched), (2) photo IDs referenced from conversation history that you need to discuss again. Do NOT call this on photos returned by search_advanced — a later phase automatically injects full descriptions and thumbnails. Pass multiple IDs in a single call to batch-fetch. Returns: story (scene narrative), context, genre, date taken, and optional inferredLocation string (geocode_cache.query_normalized via inferredLocationId) when available. Full visual metadata and thumbnail images are provided automatically in the final evaluation step.',
 
   fetch_collections:
     "[BASIC_TOOLS] Get all the user's collections and series, each with their name, description, and sample photo IDs. Use this when the user asks about their collections, series, albums, or organized groups of photos — for example 'what collections do I have?', 'show me my series', 'which albums exist?'. Returns two separate arrays: 'collections' (manually curated groups) and 'series' (ordered sequences/stories). **Important:** this tool only returns metadata and a small sample of IDs per collection — it does NOT provide full photo descriptions or visual thumbnails. Once you identify the collection(s) the user cares about, call `get_photo_info` with those photo IDs to retrieve full descriptions and visuals for evaluation. Exception: if the user only wants a high-level overview of their collections (names, counts, structure), you do NOT need to call `get_photo_info`.",
@@ -447,10 +452,10 @@ export const TOOL_DESCRIPTIONS = {
     "[BASIC_TOOLS] Get all the user's portfolio builds (AI-generated curated portfolios produced by the Portfolio Builder tool). Returns only COMPLETED builds, most recent first, each with its id, name, creation date, target size, coherence mode (free/visual/chromatic/narrative/heterogeneous), whether sequencing was enabled, the user's theme and sequencing preferences, the final ordered photo IDs of the portfolio, and a sample of the builder pool (approved-but-not-selected alternatives). Use this whenever the user asks about their portfolios, generated portfolios, portfolio builds, curated selections, or references an earlier build — for example 'show me my last portfolio', 'what portfolios have I built?', 'open the street portfolio I made'. **Important:** this tool only returns metadata and photo IDs — it does NOT provide full photo descriptions or visual thumbnails. Once you identify the portfolio(s) the user cares about, call `get_photo_info` on a subset of the relevant photo IDs to retrieve descriptions and visuals for evaluation. Exception: if the user only wants a high-level overview of their portfolios (names, counts, config), no `get_photo_info` call is needed.",
 
   search_advanced:
-    '[PHOTO_SEARCH] **The primary search tool.** Combine multiple search strategies in a single call and merge their results with intersect (AND) or union (OR). You can specify any combination of: (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) filter — metadata/score/visual-aspect filtering, (4) similar_to — similarity to reference photos. **ALL parameters MUST ALWAYS BE SPECIFIED IN ENGLISH ONLY** — style descriptions, keywords, and filter values must be in English. All specified sub-searches run in parallel; their full ID sets are combined via the chosen operation; only the final result is sampled and returned with photo ID, filename, and genre. Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) with intersect. "moody portraits or landscapes" → style_query("dark moody") + filter(genre=[portrait,landscape]) with union.',
+    '[PHOTO_SEARCH] **The primary search tool.** Combine multiple search strategies in a single call and merge their results with intersect (AND) or union (OR). You can specify any combination of: (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) filter — metadata/score/visual-aspect filtering, (4) similar_to — similarity to reference photos. **ALL parameters MUST ALWAYS BE SPECIFIED IN ENGLISH ONLY** — style descriptions, keywords, and filter values must be in English. All specified sub-searches run in parallel; their full ID sets are combined via the chosen operation; only the final result is sampled and returned with photo ID, filename, genre, and optional inferredLocation string (query_normalized). Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) with intersect. "moody portraits or landscapes" → style_query("dark moody") + filter(genre=[portrait,landscape]) with union.',
 
   catalog_sample:
-    '[CATALOG_INSIGHT] **Temporal catalog sampling for broad exploration.** Divides the catalog timeline into equal time buckets and samples representative photos from each period. Returns structured data: an array of buckets, each with its date range and sampled photos. Use this for evolution questions, progress over time, or getting a representative cross-section of the catalog. Always pair with `overall_catalog_view` in parallel for holistic context. NEVER use this for targeted searches — use `search_advanced` instead. Optional filters: **genre values MUST ALWAYS BE IN ENGLISH ONLY** (e.g. ["street"] for street photography evolution), date_from/date_to, sort_within (pick best-scored photos per period instead of random), scan_mode (technical for compositional/visual analysis, semantic for subject/theme analysis). Examples: "How has my photography evolved?" → catalog_sample(buckets=6, scan_mode=technical) + overall_catalog_view in parallel. "What subjects appear most in my street work?" → catalog_sample(buckets=5, genre=["street"], scan_mode=semantic) + overall_catalog_view in parallel.',
+    '[CATALOG_INSIGHT] **Temporal catalog sampling for broad exploration.** Divides the catalog timeline into equal time buckets and samples representative photos from each period. Returns structured data: an array of buckets, each with its date range and sampled photos (id, filename, genre, and optional inferredLocation string/query_normalized). Use this for evolution questions, progress over time, or getting a representative cross-section of the catalog. Always pair with `overall_catalog_view` in parallel for holistic context. NEVER use this for targeted searches — use `search_advanced` instead. Optional filters: **genre values MUST ALWAYS BE IN ENGLISH ONLY** (e.g. ["street"] for street photography evolution), date_from/date_to, sort_within (pick best-scored photos per period instead of random), scan_mode (technical for compositional/visual analysis, semantic for subject/theme analysis). Examples: "How has my photography evolved?" → catalog_sample(buckets=6, scan_mode=technical) + overall_catalog_view in parallel. "What subjects appear most in my street work?" → catalog_sample(buckets=5, genre=["street"], scan_mode=semantic) + overall_catalog_view in parallel.',
 
   overall_catalog_view:
     '[CATALOG_INSIGHT] Get a single combined report of the entire catalog: catalog patterns (recurring themes, subjects, narrative motifs), visual aspects distribution, and artistic scores statistics. Use this as the FIRST tool whenever the user asks for advice on improving their photography, critique of their catalog, identification of weak points or strengths, general feedback on their style, or any holistic question about their photographic practice. This tool replaces calling get_catalog_patterns + stats_visual_aspects + stats_artistic_scores individually — it returns all of that data in one shot.',
@@ -486,12 +491,13 @@ export default class AgentToolsService {
     const { photoManager, searchService } = this
 
     // ── Tool 1: get_photo_info ──────────────────────────────
-    // Returns story + context + genre + dateTaken for attached/referenced photos.
+    // Returns story + context + genre + dateTaken + optional inferredLocation
+    // string (queryNormalized) for attached/referenced photos.
     // Full metadata and thumbnail images are injected in Phase 2 by
     // buildPhase2VisualContext — no need to include them here.
     const getPhotoInfo = tool(
       async ({ photoIds: ids }): Promise<string> => {
-        const photos = await photoManager.getPhotosByIds(ids)
+        const photos = await Photo.query().whereIn('id', ids).preload('inferredLocation')
         const photoMap = new Map(photos.map((p) => [p.id, p]))
 
         const results = ids.map((photoId: number) => {
@@ -739,7 +745,7 @@ export default class AgentToolsService {
 
           // Fetch slim photo data for Phase 1 — full data + images are
           // provided exclusively in Phase 2 via buildPhase2VisualContext.
-          const photos = await photoManager.getPhotosByIds(sampledIds)
+          const photos = await Photo.query().whereIn('id', sampledIds).preload('inferredLocation')
           const photoMap = new Map(photos.map((p) => [p.id, p]))
           const formatted = sampledIds
             .map((id) => {
@@ -924,7 +930,14 @@ export default class AgentToolsService {
           // Fetch all photos with date info
           const photos = await Photo.query()
             .where('user_id', userId)
-            .select('id', 'original_file_name', 'descriptions', 'created_at')
+            .select(
+              'id',
+              'original_file_name',
+              'descriptions',
+              'created_at',
+              'inferred_location_id'
+            )
+            .preload('inferredLocation')
             .orderBy('created_at', 'asc')
 
           // Extract date for each photo and apply filters
