@@ -14,6 +14,7 @@ import TagManager from '../managers/tag_manager.js'
 import TagPhoto from '#models/tag_photo'
 import { EmbeddingStoreService } from './embeddings_store_service.js'
 import NLPService from './nlp_service.js'
+import { hashNumberIds } from '../utils/cache_key.js'
 const require = createRequire(import.meta.url)
 const pluralize = require('pluralize')
 
@@ -47,6 +48,7 @@ export interface SearchComposition {
 
 const MAX_SIMILAR_TAGS = 1250
 const MAX_SIMILAR_CHUNKS = 850
+const MAX_SIMILAR_PHOTOS = 5000
 
 export type RefineMode = 'entailment' | 'neutral' | 'none'
 
@@ -292,7 +294,7 @@ export default class ScoringService {
   @withCache({
     provider: 'redis',
     key: (photoIds: number[], structuredQuery: any, searchMode: SearchMode, userId: string) =>
-      `getScoredPhotosByTagsAndDesc:${userId}:${searchMode}:${JSON.stringify(structuredQuery)}:${JSON.stringify([...photoIds].sort())}`,
+      `getScoredPhotosByTagsAndDesc:${userId}:${searchMode}:${JSON.stringify(structuredQuery)}:${hashNumberIds(photoIds)}`,
     ttl: 60 * 60 * 12,
   })
   public async getScoredPhotosByTagsAndDesc(
@@ -394,7 +396,7 @@ export default class ScoringService {
       searchMode: SearchMode,
       userId: string
     ) =>
-      `getScoredPhotosByTags:${userId}:${searchMode}:${JSON.stringify([...included].sort())}:${JSON.stringify([...excluded].sort())}:${JSON.stringify([...photoIds].sort())}`,
+      `getScoredPhotosByTags:${userId}:${searchMode}:${JSON.stringify([...included].sort())}:${JSON.stringify([...excluded].sort())}:${hashNumberIds(photoIds)}`,
     ttl: 60 * 60 * 12,
   })
   public async getScoredPhotosByTags(
@@ -828,7 +830,7 @@ export default class ScoringService {
       embeddingsProximityThreshold: number,
       userId: string
     ) =>
-      `getScoredPhotoImageByFullQuery:${userId}:${fullQuery}:${embeddingsProximityThreshold}:${JSON.stringify([...photoIds].sort())}`,
+      `getScoredPhotoImageByFullQuery:${userId}:${fullQuery}:${embeddingsProximityThreshold}:${hashNumberIds(photoIds)}`,
     ttl: 60 * 60 * 12,
   })
   private async getScoredPhotoImageByFullQuery(
@@ -849,7 +851,7 @@ export default class ScoringService {
     const matchingPhotos = await this.vectorService.findSimilarPhotoToEmbedding(
       embedding,
       embeddingsProximityThreshold,
-      photoIds.length,
+      Math.min(photoIds.length, MAX_SIMILAR_PHOTOS),
       'cosine_similarity',
       photoIds
     )

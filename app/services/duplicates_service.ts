@@ -3,6 +3,7 @@ import VectorService from '#services/vector_service'
 import CpuWorkerPool from '#services/cpu_worker_pool'
 import { computeDHash, DHASH_DUPLICATE_THRESHOLD } from '../utils/dhash.js'
 import { withCache } from '../decorators/withCache.js'
+import { hashNumberIds } from '../utils/cache_key.js'
 import axios from 'axios'
 import pLimit from 'p-limit'
 
@@ -25,7 +26,7 @@ export default class DuplicatesService {
     provider: 'redis',
     ttl: 60 * 60 * 12,
     key: (userId: string, newPhotoIds?: number[], scope: DuplicateScope = 'lightbox') =>
-      `checkSimilarDuplicates:${userId}:${scope}:${JSON.stringify((newPhotoIds ?? []).sort((a, b) => a - b))}`,
+      `checkSimilarDuplicates:${userId}:${scope}:${hashNumberIds(newPhotoIds ?? [])}`,
   })
   public async checkSimilarDuplicates(
     userId: string,
@@ -99,7 +100,7 @@ export default class DuplicatesService {
     provider: 'redis',
     ttl: 60 * 60 * 12,
     key: (userId: string, newPhotoIds?: number[], scope: DuplicateScope = 'lightbox') =>
-      `checkExactDuplicates:${userId}:${scope}:${JSON.stringify((newPhotoIds ?? []).sort((a, b) => a - b))}`,
+      `checkExactDuplicates:${userId}:${scope}:${hashNumberIds(newPhotoIds ?? [])}`,
   })
   public async checkExactDuplicates(
     userId: string,

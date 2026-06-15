@@ -31,6 +31,7 @@ import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
 import { MediaResolution } from '@google/genai'
 import { createRequire } from 'module'
 import { EmbeddingStoreService } from './embeddings_store_service.js'
+import { hashNumberIds } from '../utils/cache_key.js'
 
 const require = createRequire(import.meta.url)
 const pluralize = require('pluralize')
@@ -472,11 +473,8 @@ export default class SearchTextService {
     provider: 'redis',
     ttl: 60 * 60 * 24 * 7,
     key: (batch, structuredResult, searchMode) => {
-      const photoIds = batch
-        .map((item) => item.photo?.id || item.id)
-        .sort()
-        .join(',')
-      return `processBatchInsightsImage:${searchMode}:${JSON.stringify(structuredResult)}:${photoIds}`
+      const photoIds = batch.map((item) => item.photo?.id || item.id).sort((a, b) => a - b)
+      return `processBatchInsightsImage:${searchMode}:${JSON.stringify(structuredResult)}:${hashNumberIds(photoIds)}`
     },
   })
   public async processBatchInsightsImage(
