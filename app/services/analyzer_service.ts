@@ -598,7 +598,7 @@ export default class AnalyzerProcessRunner {
         `npx @railway/cli@4.11.0 metrics --service ${svc} --environment ${environmentName} --since "${startIso}" --until "${endIso}" --cpu --memory --raw --json > ${metricsFile}`
       )
       console.log(
-        `node ace railway:compute-cost --metrics-file ${metricsFile} --memory-unit mb --verbose`
+        `node ace railway:compute-cost --metrics-file ${metricsFile} --cpu-unit auto --memory-unit auto --verbose`
       )
     }
     console.log('===========================================================')

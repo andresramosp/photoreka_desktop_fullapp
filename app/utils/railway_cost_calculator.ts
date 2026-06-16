@@ -12,7 +12,16 @@ export const CPU_COST_PER_VCPU_MINUTE_USD = 0.000463
 export const RAM_COST_PER_GB_MINUTE_USD = 0.000231
 
 type MetricKind = 'cpu' | 'memory'
+export type CpuUnit = 'auto' | 'vcpu' | 'percent' | 'millicores'
+export type MemoryUnit = 'auto' | 'gb' | 'mb' | 'bytes'
 type Point = { timestamp: number; value: number }
+type Series = { points: Point[]; path: string[] }
+
+export type CostCalculationOptions = {
+  cpuUnit?: CpuUnit
+  cpuLimitVcpu?: number
+  memoryUnit?: MemoryUnit
+}
 
 export type ServiceCostResult = {
   service: string
@@ -86,17 +95,17 @@ export async function fetchRailwayMetrics(
 
 /**
  * Calculates cost from raw Railway metrics JSON.
- * Assumes CPU in vCPU and memory in MB (Railway CLI defaults).
+ * By default, units are inferred from Railway metric labels such as
+ * CPU_USAGE, CPU_USAGE_PERCENT, MEMORY_USAGE_GB, MEMORY_USAGE_MB, etc.
  */
 export function calculateCostFromMetrics(
-  metrics: unknown
+  metrics: unknown,
+  options: CostCalculationOptions = {}
 ): Omit<ServiceCostResult, 'service' | 'error'> {
-  const cpuPoints = extractSeries(metrics, 'cpu')
-  // Railway CLI returns memory in MB; convert to GB for GB-minute integration
-  const memoryPoints = extractSeries(metrics, 'memory').map((p) => ({
-    ...p,
-    value: p.value / 1024,
-  }))
+  const cpuSeries = extractSeries(metrics, 'cpu')
+  const memorySeries = extractSeries(metrics, 'memory')
+  const cpuPoints = normalizeCpuSeries(cpuSeries, options)
+  const memoryPoints = normalizeMemorySeries(memorySeries, options)
 
   if (cpuPoints.length < 2) {
     throw new Error(`Not enough CPU data points (${cpuPoints.length})`)
@@ -130,11 +139,12 @@ export async function measureServiceCost(
   service: string,
   environment: string,
   since: string,
-  until: string
+  until: string,
+  options: CostCalculationOptions = {}
 ): Promise<ServiceCostResult> {
   try {
     const metrics = await fetchRailwayMetrics(service, environment, since, until)
-    const result = calculateCostFromMetrics(metrics)
+    const result = calculateCostFromMetrics(metrics, options)
     return { service, ...result }
   } catch (error) {
     return {
@@ -153,8 +163,8 @@ export async function measureServiceCost(
 
 // ── Private series-extraction helpers ────────────────────────────────────────
 
-function extractSeries(metrics: unknown, kind: MetricKind): Point[] {
-  const candidates: Point[][] = []
+function extractSeries(metrics: unknown, kind: MetricKind): Series {
+  const candidates: Series[] = []
 
   const visit = (value: unknown, path: string[]) => {
     if (!value || typeof value !== 'object') return
@@ -162,7 +172,7 @@ function extractSeries(metrics: unknown, kind: MetricKind): Point[] {
     if (Array.isArray(value)) {
       const pts = pointsFromArray(value)
       if (pts.length >= 2 && pathLooksLikeKind(path, kind)) {
-        candidates.push(pts)
+        candidates.push({ points: pts, path })
       }
       for (const item of value) visit(item, path)
       return
@@ -176,8 +186,75 @@ function extractSeries(metrics: unknown, kind: MetricKind): Point[] {
   }
 
   visit(metrics, [])
-  const selected = candidates.sort((a, b) => b.length - a.length)[0] ?? []
-  return dedupeAndSort(selected)
+  const selected = candidates.sort((a, b) => scoreSeries(b, kind) - scoreSeries(a, kind))[0]
+  return selected
+    ? { ...selected, points: dedupeAndSort(selected.points) }
+    : { points: [], path: [] }
+}
+
+function normalizeCpuSeries(series: Series, options: CostCalculationOptions): Point[] {
+  const unit =
+    !options.cpuUnit || options.cpuUnit === 'auto' ? detectCpuUnit(series.path) : options.cpuUnit
+  if (unit === 'percent') {
+    const cpuLimitVcpu = options.cpuLimitVcpu
+    if (!cpuLimitVcpu) {
+      throw new Error('cpuLimitVcpu is required when CPU metrics are percentages')
+    }
+    return series.points.map((point) => ({ ...point, value: (point.value / 100) * cpuLimitVcpu }))
+  }
+  if (unit === 'millicores') {
+    return series.points.map((point) => ({ ...point, value: point.value / 1000 }))
+  }
+  return series.points
+}
+
+function normalizeMemorySeries(series: Series, options: CostCalculationOptions): Point[] {
+  const unit =
+    !options.memoryUnit || options.memoryUnit === 'auto'
+      ? detectMemoryUnit(series.path)
+      : options.memoryUnit
+  return series.points.map((point) => ({
+    ...point,
+    value: normalizeMemoryValue(point.value, unit),
+  }))
+}
+
+function normalizeMemoryValue(value: number, unit: MemoryUnit): number {
+  if (unit === 'bytes') return value / 1024 / 1024 / 1024
+  if (unit === 'mb') return value / 1024
+  return value
+}
+
+function detectCpuUnit(path: string[]): CpuUnit {
+  const normalized = normalizePath(path)
+  if (normalized.includes('percent') || normalized.includes('percentage')) return 'percent'
+  if (normalized.includes('millicore') || normalized.includes('millicpu')) return 'millicores'
+  return 'vcpu'
+}
+
+function detectMemoryUnit(path: string[]): MemoryUnit {
+  const normalized = normalizePath(path)
+  if (normalized.includes('bytes') || normalized.includes('byte')) return 'bytes'
+  if (normalized.includes('memory_usage_gb') || normalized.includes('gb')) return 'gb'
+  if (normalized.includes('memory_usage_mb') || normalized.includes('mb')) return 'mb'
+  return 'gb'
+}
+
+function scoreSeries(series: Series, kind: MetricKind): number {
+  const normalized = normalizePath(series.path)
+  let score = series.points.length
+
+  if (kind === 'cpu') {
+    if (normalized.includes('cpu_usage_percent')) score += 8_000
+    else if (normalized.includes('cpu_usage')) score += 10_000
+    else if (normalized.includes('vcpu')) score += 9_000
+  } else {
+    if (normalized.includes('memory_usage_gb')) score += 10_000
+    if (normalized.includes('memory_usage_mb')) score += 9_000
+    if (normalized.includes('memory_usage')) score += 8_000
+  }
+
+  return score
 }
 
 function pointsFromArray(items: unknown[]): Point[] {
@@ -225,9 +302,16 @@ function readMetricValue(record: Record<string, unknown>): number | null {
 }
 
 function pathLooksLikeKind(path: string[], kind: MetricKind): boolean {
-  const normalized = path.join('.').toLowerCase()
+  const normalized = normalizePath(path)
   if (kind === 'cpu') return normalized.includes('cpu') || normalized.includes('vcpu')
   return normalized.includes('memory') || normalized.includes('ram')
+}
+
+function normalizePath(path: string[]): string {
+  return path
+    .join('.')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
 }
 
 function metricContextLabels(record: Record<string, unknown>): string[] {
