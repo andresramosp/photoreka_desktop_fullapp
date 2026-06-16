@@ -27,6 +27,7 @@ import User from '#models/user'
 import MailService from '#services/mail_service'
 import { analysisCompleteTemplate } from '../utils/email_templates.js'
 import LightroomFolderMirrorService from '#services/lightroom_folder_mirror_service'
+import { measureServiceCost } from '../utils/railway_cost_calculator.js'
 
 const logger = Logger.getInstance('AnalyzerProcess')
 logger.setLevel(LogLevel.DEBUG)
@@ -199,7 +200,7 @@ export default class AnalyzerProcessRunner {
     if (this.process.mode !== 'admin_retry') {
       await this.handleAutoRetry()
     } else {
-      this.printCostMeasurementCommands()
+      this.autoMeasureComputeCost()
     }
 
     return { hasFailed, processId: this.process.id }
@@ -471,7 +472,7 @@ export default class AnalyzerProcessRunner {
         )
         this.process.currentStage = 'finished'
         await this.process.save()
-        this.printCostMeasurementCommands()
+        this.autoMeasureComputeCost()
         if (shouldNotify) {
           this.sendAnalysisCompleteEmail().catch((e) =>
             logger.error(
@@ -482,7 +483,7 @@ export default class AnalyzerProcessRunner {
         }
       } else {
         logger.info('autoRetry activo, pero no hay fotos fallidas. No se lanza retry_process.')
-        this.printCostMeasurementCommands()
+        this.autoMeasureComputeCost()
         if (shouldNotify) {
           this.sendAnalysisCompleteEmail().catch((e) =>
             logger.error(
@@ -493,7 +494,7 @@ export default class AnalyzerProcessRunner {
         }
       }
     } else {
-      this.printCostMeasurementCommands()
+      this.autoMeasureComputeCost()
       if (shouldNotify) {
         this.sendAnalysisCompleteEmail().catch((e) =>
           logger.error(
@@ -564,7 +565,7 @@ export default class AnalyzerProcessRunner {
     }
   }
 
-  private printCostMeasurementCommands() {
+  private autoMeasureComputeCost() {
     if (this.measurementCommandsPrinted) return
     this.measurementCommandsPrinted = true
 
@@ -572,26 +573,66 @@ export default class AnalyzerProcessRunner {
       this.measurementStartIso ||
       (this.process?.createdAt?.toISO ? this.process.createdAt.toISO() : new Date().toISOString())
     const endIso = new Date().toISOString()
-    const serviceName = process.env.RAILWAY_SERVICE_NAME || 'photoreka_analyzer_api'
     const environmentName = process.env.RAILWAY_ENVIRONMENT_NAME || 'real'
-    const metricsFile = `metrics-process-${this.process?.id || 'unknown'}.json`
+    const processId = this.process?.id || 'unknown'
 
     logger.info(`[COST_MEASURE] Analysis window end (UTC): ${endIso}`)
+    logger.info(`[COST_MEASURE] PROCESS_ID: ${processId} | START: ${startIso} | END: ${endIso}`)
 
+    // All Railway services to measure — add env vars for DB and Python in Railway dashboard
+    const services: string[] = [process.env.RAILWAY_SERVICE_NAME || 'photoreka_analyzer_api']
+    if (process.env.RAILWAY_DB_SERVICE_NAME) services.push(process.env.RAILWAY_DB_SERVICE_NAME)
+    if (process.env.RAILWAY_PYTHON_SERVICE_NAME)
+      services.push(process.env.RAILWAY_PYTHON_SERVICE_NAME)
+
+    // Print manual fallback commands for all services
     console.log('')
     console.log('================ COST MEASUREMENT COMMANDS ================')
-    console.log(`[COST_MEASURE] PROCESS_ID: ${this.process?.id || 'unknown'}`)
+    console.log(`[COST_MEASURE] PROCESS_ID: ${processId}`)
     console.log(`[COST_MEASURE] START_UTC: ${startIso}`)
     console.log(`[COST_MEASURE] END_UTC:   ${endIso}`)
-    console.log('1) Export raw Railway CPU/RAM metrics (read-only):')
-    console.log(
-      `npx @railway/cli@4.11.0 metrics --service ${serviceName} --environment ${environmentName} --since "${startIso}" --until "${endIso}" --cpu --memory --raw --json > ${metricsFile}`
-    )
-    console.log('2) Calculate estimated compute cost from exported metrics:')
-    console.log(
-      `node ace railway:compute-cost --metrics-file ${metricsFile} --memory-unit mb --verbose`
-    )
+    for (const svc of services) {
+      const metricsFile = `metrics-process-${processId}-${svc}.json`
+      console.log(`-- Service: ${svc}`)
+      console.log(
+        `npx @railway/cli@4.11.0 metrics --service ${svc} --environment ${environmentName} --since "${startIso}" --until "${endIso}" --cpu --memory --raw --json > ${metricsFile}`
+      )
+      console.log(
+        `node ace railway:compute-cost --metrics-file ${metricsFile} --memory-unit mb --verbose`
+      )
+    }
     console.log('===========================================================')
     console.log('')
+
+    // Auto-fetch and calculate cost for all services in parallel (fire-and-forget)
+    Promise.all(services.map((svc) => measureServiceCost(svc, environmentName, startIso, endIso)))
+      .then((results) => {
+        const total = results.reduce((sum, r) => sum + r.totalCostUsd, 0)
+        console.log('')
+        console.log('================ AUTO COMPUTE COST RESULT ================')
+        console.log(`[COST_MEASURE] PROCESS_ID: ${processId}`)
+        for (const r of results) {
+          if (r.error) {
+            console.log(`  [${r.service}] ERROR: ${r.error}`)
+          } else {
+            console.log(
+              `  [${r.service}] CPU: ${r.cpuVcpuMinutes.toFixed(4)} vCPU-min | RAM: ${r.memoryGbMinutes.toFixed(4)} GB-min | Cost: $${r.totalCostUsd.toFixed(6)}`
+            )
+          }
+        }
+        console.log(`  TOTAL estimated cost: $${total.toFixed(6)} USD`)
+        console.log('===========================================================')
+        console.log('')
+        logger.info(
+          `[COST_MEASURE] Total estimated infra cost for process ${processId}: $${total.toFixed(6)} USD`
+        )
+      })
+      .catch((err) => {
+        logger.error(
+          `[COST_MEASURE] Failed to auto-calculate cost: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        )
+      })
   }
 }
