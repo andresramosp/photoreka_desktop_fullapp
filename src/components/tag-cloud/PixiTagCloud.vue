@@ -490,10 +490,17 @@ const initPixi = async () => {
     resolution: Math.min(2, window.devicePixelRatio || 1),
   });
   if (!pixiContainer.value) {
-    app.destroy(true, { children: true, texture: false });
+    const canvas = app.canvas;
+    canvas?.parentNode?.removeChild(canvas);
+    app.destroy(false, { children: true, texture: false });
     app = null;
     return;
   }
+  pixiContainer.value
+    .querySelectorAll("canvas")
+    .forEach((existingCanvas) =>
+      existingCanvas.parentNode?.removeChild(existingCanvas),
+    );
   pixiContainer.value.appendChild(app.canvas);
 
   world = new PIXI.Container();
@@ -514,14 +521,23 @@ const initPixi = async () => {
 };
 
 const destroyPixi = () => {
-  if (app) {
+  if (resizeRaf) {
+    cancelAnimationFrame(resizeRaf);
+    resizeRaf = null;
+  }
+
+  const pixiApp = app;
+  const canvas = pixiApp?.canvas;
+  if (pixiApp) {
     try {
-      app.ticker.remove(onTick);
+      pixiApp.ticker.remove(onTick);
       // Keep texture pools intact; aggressively destroying textures has caused
       // runtime issues when this component is cached by KeepAlive and revisited.
-      app.destroy(true, { children: true, texture: false });
+      pixiApp.destroy(false, { children: true, texture: false });
     } catch (e) {
       console.warn("[PixiTagCloud] destroy error", e);
+    } finally {
+      canvas?.parentNode?.removeChild(canvas);
     }
     app = null;
     world = null;
@@ -529,7 +545,10 @@ const destroyPixi = () => {
     labelsContainer = null;
     labelsByIndex = new Map();
     hoveredLabelIndex = -1;
+    positions = null;
     rawPositions = null;
+    dotRadii = null;
+    dotColors = null;
     currentExpansionStrength = 0;
   }
 };
@@ -1900,6 +1919,14 @@ const pauseRuntime = () => {
     cancelAnimationFrame(keyboardAnimationId);
     keyboardAnimationId = null;
   }
+  if (resizeRaf) {
+    cancelAnimationFrame(resizeRaf);
+    resizeRaf = null;
+  }
+  tooltipFetchRequestId++;
+  tooltipPhotos.value = [];
+  tooltipLoading.value = false;
+  displayedTooltipTag.value = null;
   stopTooltipRotation();
   unbindInteractions();
 
