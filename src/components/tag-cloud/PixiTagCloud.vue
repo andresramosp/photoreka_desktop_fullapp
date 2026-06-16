@@ -206,6 +206,8 @@ let world = null; // contains the dot layer; transformed by camera
 let dotsGraphics = null; // single Graphics with all dots
 let labelsContainer = null; // screen-space labels
 let labelsByIndex = new Map(); // persistent labels keyed by tag index
+let minPhotoCountForLabels = 0;
+let maxPhotoCountForLabels = 0;
 
 // Parallel typed arrays (indexed like `props.tags`)
 let positions = null; // Float32Array [x0,y0,...] — current (expanded) positions used for rendering
@@ -560,6 +562,8 @@ const buildScene = () => {
     positions = null;
     dotRadii = null;
     dotColors = null;
+    minPhotoCountForLabels = 0;
+    maxPhotoCountForLabels = 0;
     return;
   }
 
@@ -579,6 +583,8 @@ const buildScene = () => {
     if (y > maxY) maxY = y;
   }
   const countSpan = Math.max(1, maxCount - minCount);
+  minPhotoCountForLabels = minCount;
+  maxPhotoCountForLabels = maxCount;
   const spanX = Math.max(0.001, maxX - minX);
   const spanY = Math.max(0.001, maxY - minY);
 
@@ -694,7 +700,7 @@ const resetView = () => {
       (w - padding * 2) / spanX,
       (h - padding * 2) / spanY,
     );
-    camera.scale = fitScale * (props.isPreview ? 0.87 : 1); // leave a little extra margin
+    camera.scale = fitScale * (props.isPreview ? 0.93 : 1); // leave a little extra margin
     camera.x = w / 2 - ((minX + maxX) / 2) * fitScale;
     camera.y = h / 2 - ((minY + maxY) / 2) * fitScale;
   } else {
@@ -870,6 +876,9 @@ const onTick = () => {
 // ---------------------------------------------------------------------------
 const BASE_MAX_VISIBLE_LABELS = 250;
 const MAX_MAX_VISIBLE_LABELS = 1400;
+const MIN_BASE_LABEL_FONT_SIZE = !props.isPreview ? 17 : 21;
+const MAX_BASE_LABEL_FONT_SIZE = !props.isPreview ? 27 : 28;
+const LABEL_PROMINENCE_EXPONENT = 1.11;
 let labelUpdateRaf = null;
 let pendingDynamicSearchRefresh = false;
 
@@ -1160,9 +1169,20 @@ const placeLabelAtIndex = (index, grid, cellKey, cellSize, force = false) => {
     return false;
   }
 
-  const rankRatio = index / Math.max(1, props.tags.length);
   const t = props.tags[index];
-  const baseFs = 11 + (1 - rankRatio) * 14;
+  const photoCountSpan = Math.max(
+    1,
+    maxPhotoCountForLabels - minPhotoCountForLabels,
+  );
+  const normalizedPhotoCount =
+    ((Number(t.photoCount) || 0) - minPhotoCountForLabels) / photoCountSpan;
+  const prominenceCurve = Math.pow(
+    Math.max(0, Math.min(1, normalizedPhotoCount)),
+    LABEL_PROMINENCE_EXPONENT,
+  );
+  const baseFs =
+    MIN_BASE_LABEL_FONT_SIZE +
+    prominenceCurve * (MAX_BASE_LABEL_FONT_SIZE - MIN_BASE_LABEL_FONT_SIZE);
   const fs = Math.max(10, Math.min(28, baseFs * (0.85 + 0.15 * scale)));
   const estW = Math.max(20, t.name.length * fs * 0.55);
   const estH = fs * 1.15;

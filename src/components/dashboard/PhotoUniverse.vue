@@ -314,10 +314,11 @@ const messageHeader = computed(() => {
 
   return `Previewing your photo locations on the world map`;
 });
+const PREVIEW_MIN_PHOTO_COUNT = 2;
 const excludedGroupSet = computed(() => {
   const list = props.excludedGroups?.length
     ? props.excludedGroups
-    : ["misc", "visual aspects", "abstract concept"];
+    : ["misc", "visual aspects", "abstract concept", "artistic scores"];
 
   return new Set(
     list
@@ -344,6 +345,12 @@ const tags = computed(() => {
   });
 });
 
+const previewTags = computed(() =>
+  tags.value.filter(
+    (tag: any) => Number(tag?.photoCount) >= PREVIEW_MIN_PHOTO_COUNT,
+  ),
+);
+
 const currentUniverseComponent = computed(() =>
   visualizationMode.value === "tagcloud"
     ? PixiTagCloud
@@ -355,7 +362,7 @@ const currentUniverseComponent = computed(() =>
 const currentUniverseProps = computed(() =>
   visualizationMode.value === "tagcloud"
     ? {
-        tags: tags.value,
+        tags: previewTags.value,
         isPreview: true,
         showZoomControls: true,
       }
