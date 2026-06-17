@@ -506,7 +506,7 @@ const createCollectionFromPattern = async () => {
   align-items: center;
   justify-content: center;
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 180px;
   gap: 6px;
   padding: 8px;
   text-align: center;
