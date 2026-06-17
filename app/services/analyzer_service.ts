@@ -146,8 +146,11 @@ export default class AnalyzerProcessRunner {
     await HealthPhotoService.updateSheetWithHealth(this.process)
 
     const hasFailed = this.hasFailedPhotos()
+    const isAdminRetryFlow =
+      this.process.mode === 'admin_retry' || this.originalMode === 'admin_retry'
+    const finalStage = hasFailed && !isAdminRetryFlow ? 'failed' : 'finished'
 
-    await this.changeStage('***  Proceso Completado ***', 'finished')
+    await this.changeStage('***  Proceso Completado ***', finalStage)
 
     // Incrementar contador acumulativo de fotos analizadas (solo para procesos no-preprocess y modos nuevos)
     if (!this.process.isPreprocess && this.process.userId) {
@@ -465,7 +468,7 @@ export default class AnalyzerProcessRunner {
         this.process.mode = 'retry_process'
         this.process.attempts = attempts + 1
         await this.process.save()
-        this.run()
+        await this.run()
       } else if (hayFallidas) {
         logger.info(
           `autoRetry: se alcanzó el máximo de intentos (${maxAttempts}). El proceso se marca como 'finished'.`

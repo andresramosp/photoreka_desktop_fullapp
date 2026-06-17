@@ -31,6 +31,7 @@ export class TagTask extends AnalyzerTask {
   private nlpService: NLPService
   private tagToSustantivesMap: Map<string, string[]>
   private embeddingsMap: Map<string, number[]>
+  private resolvedTagsCache: Map<string, Promise<Tag>>
 
   async process(pendingPhotos: Photo[]): Promise<void> {
     this.nlpService = new NLPService()
@@ -119,6 +120,7 @@ export class TagTask extends AnalyzerTask {
     const photoManager = new PhotoManager()
     const tagManager = new TagManager()
     const category = this.descriptionSourceFields.join('_')
+    const resolvedTagsCache = new Map<string, Promise<Tag>>()
     const limit = pLimit(concurrencyLimit)
 
     // 1. Agregar todos los nombres de tags únicos y recolectar sus sustantivos
@@ -219,7 +221,14 @@ export class TagTask extends AnalyzerTask {
 
         tagData.name = lower
         const emb = this.embeddingsMap.get(lower)
-        const existingOrCreatedTag = await tagManager.getOrCreateSimilarTag(tagData, emb)
+        const cacheKey = `${lower}|${tagData.group}`
+        if (!resolvedTagsCache.has(cacheKey)) {
+          console.log(`[TagCache] MISS  "${cacheKey}" (cache size: ${resolvedTagsCache.size})`)
+          resolvedTagsCache.set(cacheKey, tagManager.getOrCreateSimilarTag(tagData, emb))
+        } else {
+          console.log(`[TagCache] HIT   "${cacheKey}" (cache size: ${resolvedTagsCache.size})`)
+        }
+        const existingOrCreatedTag = await resolvedTagsCache.get(cacheKey)!
 
         const tagPhoto = new TagPhoto()
         tagPhoto.tagId = existingOrCreatedTag.id
