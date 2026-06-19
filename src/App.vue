@@ -336,7 +336,6 @@ const getKeepAliveComponents = () => {
     "SearchView",
     "CollectionsView",
     "ImportAreaView",
-    "ProjectBuilderView",
     "FramerView",
     "3DView",
     "2DView",

@@ -11,7 +11,6 @@ import CollectionsView from "../views/CollectionsView.vue";
 import SeriesView from "../views/SeriesView.vue";
 import ImportAreaView from "../views/ImportAreaView.vue";
 import WorkspaceView from "../views/WorkspaceView.vue";
-import ProjectBuilderView from "../views/ProjectBuilderView.vue";
 import FramerView from "../views/FramerView.vue";
 import PortfolioReportView from "../views/PortfolioReportView.vue";
 import SettingsView from "../views/SettingsView.vue";
@@ -346,14 +345,7 @@ const router = createRouter({
           "3D photo viewer, photo catalog, 3D gallery, immersive photo browsing",
       },
     },
-    {
-      path: "/project-builder",
-      name: "project-builder",
-      component: ProjectBuilderView,
-      meta: {
-        requiresAuth: true,
-      },
-    },
+
     {
       path: "/framer",
       name: "framer",

@@ -439,7 +439,6 @@ onUnmounted(() => {
   margin-bottom: var(--spacing-3xl);
 }
 
-/* Empty State Styles (similar to ProjectBuilderView) */
 .empty-state {
   display: flex;
   align-items: center;
