@@ -4,6 +4,8 @@ import UserCostService from '#services/user_cost_service'
 import { USD_TO_EUR } from '#services/models_service'
 import User from '#models/user'
 import type { ContentViolation } from '#models/user'
+import MailService from '#services/mail_service'
+import { contentViolationAdminTemplate } from '../utils/email_templates.js'
 
 /** Google Vision Safe Search Detection price: $1.50 per 1,000 images. */
 const SAFE_SEARCH_COST_USD_PER_IMAGE = 0.0015
@@ -151,8 +153,9 @@ export default class SafeSearchController {
           ip: clientIp,
         }
 
+        let fullUser: User | null = null
         try {
-          const fullUser = await User.find(user.id)
+          fullUser = await User.find(user.id)
           if (fullUser) {
             const existing = fullUser.contentViolations ?? []
             fullUser.contentViolations = [...existing, violation]
@@ -161,6 +164,28 @@ export default class SafeSearchController {
           }
         } catch (recordingError) {
           console.error('Failed to record content violation for user', user.id, recordingError)
+        }
+
+        // Notify admin
+        try {
+          await new MailService().sendEmail({
+            from: 'Photoreka <hello@photoreka.com>',
+            to: 'andreschennai@gmail.com',
+            subject: `⚠ Content Policy Violation — User ${user.id}`,
+            body: contentViolationAdminTemplate({
+              userId: user.id,
+              userName: fullUser?.name ?? 'Unknown',
+              userEmail: fullUser?.email ?? (user as any).email ?? 'Unknown',
+              reasons: allReasons,
+              batchViolations,
+              photoIds: violation.photoIds,
+              ip: violation.ip,
+              date: violation.date,
+              totalImages: imagesToCheck.length,
+            }),
+          })
+        } catch (notifyError) {
+          console.error('Failed to send content violation admin email', notifyError)
         }
       }
 
