@@ -36,8 +36,138 @@ import { hashNumberIds } from '../utils/cache_key.js'
 const require = createRequire(import.meta.url)
 const pluralize = require('pluralize')
 
-export type SearchMode = 'precise' | 'adaptive' | 'broad' | 'curation'
+export type SearchMode = 'precise' | 'adaptive' | 'broad'
 export type SearchType = 'semantic' | 'tags'
+
+export type RefineMode = 'entailment' | 'neutral' | 'none'
+
+export interface SearchScoreWeights {
+  tag: number
+  desc: number
+  fullQueryDesc: number
+  notes: number
+  image: number
+  nuances: number
+}
+
+export interface SearchThresholds {
+  tag: number | null
+  descSegment: number | null
+  descFullQuery: number | null
+  notes: number | null
+  image: number | null
+  nuances: number | null
+}
+
+export interface SearchModeConfig {
+  thresholds: SearchThresholds
+  refineMode: RefineMode
+  queryStructurePrompt: 'standard' | 'implicit_only'
+  forceVisualAspects: boolean
+  scoreWeights: SearchScoreWeights
+  thresholdWeights: SearchScoreWeights
+}
+
+export const SEARCH_MODE_CONFIGURATION: Record<SearchMode, SearchModeConfig> = {
+  broad: {
+    thresholds: {
+      tag: 0.55,
+      descSegment: null,
+      descFullQuery: null,
+      notes: null,
+      image: 0.15,
+      nuances: null,
+    },
+    refineMode: 'none',
+    queryStructurePrompt: 'standard',
+    forceVisualAspects: false,
+    // scoreWeights: contribution added to totalScore when a channel matches.
+    // In broad, tags are only a small corroboration bonus; CLIP remains the main scorer.
+    scoreWeights: {
+      tag: 0.15,
+      desc: 0,
+      fullQueryDesc: 0,
+      notes: 0,
+      image: 1.5,
+      nuances: 0,
+    },
+    // thresholdWeights: contribution added to the excellent/good/fair label baseline.
+    // tag: 0 means broad tags can boost ranking without making CLIP-only matches look worse.
+    // image: 1 preserves the previous CLIP-led label baseline while image score still gets x1.5.
+    thresholdWeights: {
+      tag: 0,
+      desc: 0,
+      fullQueryDesc: 0,
+      notes: 0,
+      image: 1,
+      nuances: 0,
+    },
+  },
+  adaptive: {
+    thresholds: {
+      tag: 0.17,
+      descSegment: 0.2,
+      descFullQuery: 0.25,
+      notes: 0.5,
+      image: 0.2,
+      nuances: 0.35,
+    },
+    refineMode: 'none',
+    queryStructurePrompt: 'implicit_only',
+    forceVisualAspects: true,
+    // scoreWeights: adaptive channel contributions. Text channels add full score; CLIP uses x1.5.
+    scoreWeights: {
+      tag: 1,
+      desc: 1,
+      fullQueryDesc: 1,
+      notes: 1,
+      image: 1.5,
+      nuances: 1,
+    },
+    // thresholdWeights: label baseline. fullQueryDesc: 0.25 preserves the old +0.25 threshold bump.
+    // notes and nuances remain score bonuses only, matching the previous threshold behavior.
+    thresholdWeights: {
+      tag: 1,
+      desc: 1,
+      fullQueryDesc: 0.25,
+      notes: 0,
+      image: 1,
+      nuances: 0,
+    },
+  },
+  precise: {
+    thresholds: {
+      tag: 0.17,
+      descSegment: 0.17,
+      descFullQuery: 0.3,
+      notes: 0.55,
+      image: 0.3,
+      nuances: null,
+    },
+    refineMode: 'entailment',
+    queryStructurePrompt: 'standard',
+    forceVisualAspects: false,
+    // scoreWeights: precise channel contributions. Entailment controls match strictness.
+    scoreWeights: {
+      tag: 1,
+      desc: 1,
+      fullQueryDesc: 1,
+      notes: 1,
+      image: 1.5,
+      nuances: 0,
+    },
+    // thresholdWeights: label baseline. fullQueryDesc: 0.25 preserves the old +0.25 threshold bump.
+    // notes do not raise labels today, so they stay at 0 here.
+    thresholdWeights: {
+      tag: 1,
+      desc: 1,
+      fullQueryDesc: 0.25,
+      notes: 0,
+      image: 1,
+      nuances: 0,
+    },
+  },
+}
 
 export type SearchOptions = {
   searchMode: SearchMode
@@ -85,148 +215,8 @@ export default class SearchTextService {
 
   sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-  public async *searchSemanticStream(
-    query: string,
-    userId: string | number,
-    options: SearchOptions = {
-      searchMode: 'precise',
-      pageSize: 18,
-      iteration: 1,
-    }
-  ) {
-    let {
-      searchMode,
-      pageSize,
-      iteration,
-      minMatchScore,
-      maxPageAttempts = 6,
-      minResults,
-      collections,
-      visualAspects,
-      artisticScores,
-    } = options
-
-    const photoIds = await this.photoManager.getPhotosIdsForSearch(
-      userId?.toString(),
-      collections && collections.length > 0 ? collections : undefined,
-      visualAspects && visualAspects.length > 0 ? visualAspects : undefined,
-      artisticScores && Object.keys(artisticScores).length > 0 ? artisticScores : undefined
-    )
-
-    const { compact_query: compactQuery, cost: compactCost } =
-      await this.queryService.compactQuery(query)
-    const { structuredResult, useImage, expansionCost } = await this.queryService.structureQuery(
-      query,
-      searchMode
-    )
-    if (compactQuery) {
-      structuredResult.compact_query = compactQuery
-    }
-
-    let photosResult = []
-    let modelCosts = []
-    let attempts = 0
-
-    let embeddingScoredPhotos = await this.scoringService.getScoredPhotosByTagsAndDesc(
-      photoIds,
-      structuredResult,
-      // searchMode == 'curation' ? 'broad' : searchMode,
-      searchMode,
-      userId?.toString()
-    )
-
-    do {
-      const { paginatedPhotos, hasMore } = await this.getPaginatedPhotosByPage(
-        embeddingScoredPhotos,
-        pageSize,
-        iteration
-      )
-
-      yield {
-        type: searchMode !== 'curation' ? 'search-matches' : 'curation-matches',
-        data: {
-          hasMore,
-          results: {
-            [iteration]: paginatedPhotos,
-          },
-          cost: { expansionCost, compactCost },
-          iteration: iteration,
-          structuredResult,
-        },
-      }
-
-      if (searchMode !== 'curation') {
-        return
-      }
-
-      const batchSize = 1
-
-      let photoBatches = []
-      for (let i = 0; i < paginatedPhotos.length; i += batchSize) {
-        photoBatches.push(paginatedPhotos.slice(i, i + batchSize))
-      }
-
-      const batchPromises = photoBatches.map(async (batch, index) => {
-        const { modelResult, modelCost } = await this.processBatchInsightsImage(
-          batch,
-          structuredResult,
-          searchMode
-        )
-
-        modelCosts.push(modelCost)
-
-        return batch.map((scoredPhoto, idx) => {
-          const result = modelResult[idx]
-          const reasoning = result?.reasoning || ''
-          const matchScore = result?.matchScore
-
-          return {
-            ...scoredPhoto,
-            score: scoredPhoto.tagScore || scoredPhoto.score,
-            matchScore,
-            reasoning,
-          }
-        })
-      })
-
-      const batchResults = await Promise.all(batchPromises)
-      photosResult = photosResult.concat(...batchResults.flat())
-
-      iteration++
-      attempts++
-
-      yield {
-        type: 'insights',
-        data: {
-          results: { [iteration - 1]: photosResult },
-          hasMore,
-          finished: !(
-            attempts < maxPageAttempts &&
-            photosResult.filter((p) => p.matchScore >= minMatchScore).length === 0
-          ),
-          cost: { expansionCost, compactCost, modelCosts },
-          iteration: iteration - 1,
-          structuredResult,
-          requireSource: { useImage },
-        },
-      }
-
-      if (attempts >= maxPageAttempts || paginatedPhotos.length === 0) {
-        yield {
-          type: 'maxPageAttempts',
-        }
-        return
-      }
-
-      await this.sleep(750)
-    } while (
-      attempts < maxPageAttempts &&
-      photosResult.filter((p) => p.matchScore >= minMatchScore).length < minResults
-    )
-  }
-
   /**
-   * Versión síncrona/paginada de searchSemantic, sin soporte para 'curation'.
+   * Versión síncrona/paginada de searchSemantic.
    * Devuelve solo la página correspondiente a la iteración solicitada.
    * Opcionalmente puede añadir insights si withInsights es true.
    */
@@ -249,14 +239,10 @@ export default class SearchTextService {
       cursor,
       source,
       withInsights = false,
-      searchId, // 👈 nuevo
+      searchId,
       candidateIds,
       lightweight = false,
     } = options
-
-    if (searchMode === 'curation') {
-      throw new Error('searchSemanticSync no soporta el modo curation')
-    }
 
     const rawPhotoIds = await this.photoManager.getPhotosIdsForSearch(
       userId?.toString(),
@@ -270,11 +256,14 @@ export default class SearchTextService {
         ? rawPhotoIds.filter((id) => (candidateIds as number[]).includes(id))
         : rawPhotoIds
 
+    const modeConfig = SEARCH_MODE_CONFIGURATION[searchMode]
     const { compact_query: compactQuery, cost: compactCost } =
-      await this.queryService.compactQuery(query)
+      modeConfig.thresholds.image !== null
+        ? await this.queryService.compactQuery(query)
+        : { compact_query: null, cost: 0 }
     const { structuredResult, useImage, expansionCost } = await this.queryService.structureQuery(
       query,
-      searchMode
+      modeConfig
     )
     if (compactQuery) {
       structuredResult.compact_query = compactQuery
@@ -482,12 +471,7 @@ export default class SearchTextService {
     structuredResult: any,
     searchMode: SearchMode
   ) {
-    const searchModelMessage =
-      searchMode === 'curation'
-        ? MESSAGE_SEARCH_MODEL_CREATIVE_SCORED_IMAGE
-        : MESSAGE_IMAGE_SEARC_INSIGHTS
-
-    const model = searchMode === 'curation' ? 'gemini-2.5-flash-lite' : 'gemini-2.5-flash-lite'
+    const searchModelMessage = MESSAGE_IMAGE_SEARC_INSIGHTS
 
     const imagesPayload = await this.generateImagesPayload(batch.map((cp) => cp.photo))
 

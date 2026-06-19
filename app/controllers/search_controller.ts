@@ -5,6 +5,8 @@ import SearchTextService from '#services/search_text_service'
 import SearchPhotoService from '#services/search_photo_service'
 import UserCostService from '#services/user_cost_service'
 import CreditService, { PRECISE_GPU_CREDITS, CLIP_CROP_CREDITS } from '#services/credit_service'
+import { SEARCH_MODE_CONFIGURATION } from '#services/search_text_service'
+import type { SearchMode } from '#services/search_text_service'
 
 export default class SearchController {
   /**
@@ -24,9 +26,10 @@ export default class SearchController {
 
       const searchService = new SearchTextService()
       const query = request.body()
+      const searchMode = query.options.searchMode as SearchMode
 
-      // Charge GPU credits upfront for precise mode (non-cursor requests)
-      if (!query.options.cursor && query.options.searchMode === 'precise') {
+      // Charge GPU credits upfront for modes that use entailment refinement (non-cursor requests)
+      if (!query.options.cursor && SEARCH_MODE_CONFIGURATION[searchMode]?.refineMode !== 'none') {
         const charged = await CreditService.tryChargeFixed(user.id, PRECISE_GPU_CREDITS)
         if (!charged) {
           return response.status(402).json({
@@ -76,71 +79,6 @@ export default class SearchController {
     }
   }
 
-  public async searchSemanticStream({ request, response, auth }: HttpContext) {
-    const user = auth.use('api').user!
-    try {
-      const hasCredits = await CreditService.canAfford(user.id)
-      if (!hasCredits) {
-        return response.status(402).json({
-          message: 'No credits remaining. Please purchase more credits to continue.',
-          code: 'INSUFFICIENT_CREDITS',
-        })
-      }
-
-      const searchService = new SearchTextService()
-      const query = request.body()
-
-      // Charge GPU credits upfront for precise mode
-      if (query.options.searchMode === 'precise') {
-        const charged = await CreditService.tryChargeFixed(user.id, PRECISE_GPU_CREDITS)
-        if (!charged) {
-          return response.status(402).json({
-            message: 'No credits remaining. Please purchase more credits to continue.',
-            code: 'INSUFFICIENT_CREDITS',
-          })
-        }
-        UserCostService.record(
-          user.id,
-          'search',
-          CreditService.creditsToEstimatedEur(PRECISE_GPU_CREDITS),
-          1,
-          {
-            task: 'gpu_precise_search',
-            metadata: { fixedCharge: true, credits: PRECISE_GPU_CREDITS },
-          }
-        ).catch(() => {})
-      }
-
-      const stream = searchService.searchSemanticStream(query.description, user.id, {
-        searchMode: query.options.searchMode,
-        pageSize: query.options.pageSize,
-        iteration: query.options.iteration,
-        minMatchScore: query.options.minMatchScore,
-        minResults: query.options.minResults,
-        collections: query.options.collections,
-        visualAspects: query.options.visualAspects,
-        artisticScores: query.options.artisticScores,
-      })
-
-      for await (const result of stream) {
-        ws.io?.to(user.id.toString()).emit(result.type, result.data)
-      }
-
-      UserCostService.recordFromTracker(user.id, searchService.costTracker).catch(() => {})
-
-      const summary = searchService.costTracker.getSummary()
-      if (summary.totalCostInEur > 0) {
-        CreditService.charge(user.id, summary.totalCostInEur, 'SEARCH').catch(() => {})
-      }
-
-      return response.ok({ message: 'Search process initiated' })
-    } catch (error) {
-      console.error('Error fetching photos:', error)
-      ws.io?.to(user.id.toString()).emit('searchError', { message: 'Error fetching photos' })
-      return response.internalServerError({ message: 'Error fetching photos' })
-    }
-  }
-
   public async searchByTagsSync({ response, request, auth }: HttpContext) {
     try {
       const user = auth.use('api').user!
@@ -156,9 +94,10 @@ export default class SearchController {
       const searchService = new SearchTextService()
 
       const query = request.body()
+      const searchMode = query.options.searchMode as SearchMode
 
-      // Charge GPU credits upfront for precise mode (non-cursor requests)
-      if (!query.options.cursor && query.options.searchMode === 'precise') {
+      // Charge GPU credits upfront for modes that use entailment refinement (non-cursor requests)
+      if (!query.options.cursor && SEARCH_MODE_CONFIGURATION[searchMode]?.refineMode !== 'none') {
         const charged = await CreditService.tryChargeFixed(user.id, PRECISE_GPU_CREDITS)
         if (!charged) {
           return response.status(402).json({

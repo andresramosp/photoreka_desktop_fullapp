@@ -8,7 +8,8 @@ import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
 import { createRequire } from 'module'
 import VectorService from './vector_service.js'
 import { withCache } from '../decorators/withCache.js'
-import type { SearchMode, SearchType } from './search_text_service.js'
+import type { SearchMode, SearchType, RefineMode, SearchModeConfig } from './search_text_service.js'
+import { SEARCH_MODE_CONFIGURATION } from './search_text_service.js'
 import TagPhotoManager from '../managers/tag_photo_manager.js'
 import TagManager from '../managers/tag_manager.js'
 import TagPhoto from '#models/tag_photo'
@@ -44,6 +45,7 @@ export interface SearchComposition {
   hasNuances: boolean
   segmentCount: number
   searchMode?: SearchMode
+  maxScore?: number
 }
 
 const MAX_SIMILAR_TAGS = 1250
@@ -51,57 +53,7 @@ const MAX_SIMILAR_CHUNKS = 850
 const MAX_SIMILAR_PHOTOS = 5000
 const MAX_PARALLEL_SCORING_PHOTOS = 5000
 const MAX_CACHEABLE_SCORING_PHOTOS = 5000
-
-export type RefineMode = 'entailment' | 'neutral' | 'none'
-
-export interface SearchModeConfig {
-  tagsThreshold: number | null
-  descSegmentThreshold: number | null
-  descFullQueryThreshold: number | null
-  notesThreshold: number | null
-  imageThreshold: number | null
-  refineMode: RefineMode
-  nuancesThreshold: number | null
-}
-
-const SEARCH_MODE_CONFIGURATION: Record<SearchMode, SearchModeConfig> = {
-  broad: {
-    tagsThreshold: null,
-    descSegmentThreshold: null,
-    descFullQueryThreshold: null,
-    notesThreshold: null,
-    imageThreshold: 0.15,
-    refineMode: 'none',
-    nuancesThreshold: null,
-  },
-  adaptive: {
-    tagsThreshold: 0.17,
-    descSegmentThreshold: 0.2,
-    descFullQueryThreshold: 0.25,
-    notesThreshold: 0.5,
-    imageThreshold: 0.2,
-    refineMode: 'none',
-    nuancesThreshold: 0.35,
-  },
-  precise: {
-    tagsThreshold: 0.17,
-    descSegmentThreshold: 0.17,
-    descFullQueryThreshold: 0.3,
-    notesThreshold: 0.55,
-    imageThreshold: 0.3,
-    refineMode: 'entailment',
-    nuancesThreshold: null,
-  },
-  curation: {
-    tagsThreshold: null,
-    descSegmentThreshold: null,
-    descFullQueryThreshold: 0.3,
-    notesThreshold: 0.25,
-    imageThreshold: 0.15,
-    refineMode: 'neutral',
-    nuancesThreshold: 0.35,
-  },
-}
+const SCORING_CACHE_VERSION = 'v2'
 
 // Input normalizado y preparado para scoring
 interface PreparedQuery {
@@ -144,24 +96,33 @@ export default class ScoringService {
     if (searchType === 'tags_only') {
       return {
         ...baseConfig,
-        descSegmentThreshold: null,
-        descFullQueryThreshold: null,
+        thresholds: {
+          ...baseConfig.thresholds,
+          descSegment: null,
+          descFullQuery: null,
+        },
+        scoreWeights: {
+          ...baseConfig.scoreWeights,
+          tag: 1,
+        },
+        thresholdWeights: {
+          ...baseConfig.thresholdWeights,
+          tag: 1,
+        },
         searchInDesc: false,
       }
     }
 
     return {
       ...baseConfig,
-      searchInDesc: baseConfig.descSegmentThreshold !== null,
+      searchInDesc: baseConfig.thresholds.descSegment !== null,
     }
   }
 
-  private prepareQuery(structuredQuery: any, searchMode?: SearchMode): PreparedQuery {
+  private prepareQuery(structuredQuery: any, config: EffectiveConfig): PreparedQuery {
     const noPrefix = structuredQuery.no_prefix || ''
     const clipQuery =
-      searchMode === 'broad' && structuredQuery.compact_query
-        ? structuredQuery.compact_query
-        : noPrefix
+      config.thresholds.image !== null ? structuredQuery.compact_query || noPrefix : noPrefix
     return {
       positiveSegments: this.nlpService.normalizeTerms(structuredQuery.positive_segments),
       nuancesSegments: structuredQuery.nuances_segments?.length
@@ -186,11 +147,11 @@ export default class ScoringService {
 
   private async prepareEmbeddings(query: PreparedQuery, config: EffectiveConfig): Promise<void> {
     const needsSegmentEmbeddings =
-      config.tagsThreshold !== null || config.descSegmentThreshold !== null
-    const needsNuancesEmbeddings = config.nuancesThreshold !== null
+      config.thresholds.tag !== null || config.thresholds.descSegment !== null
+    const needsNuancesEmbeddings = config.thresholds.nuances !== null
     const needsFullQueryTextEmbedding =
-      config.descFullQueryThreshold !== null || config.notesThreshold !== null
-    const needsClipEmbedding = config.imageThreshold !== null
+      config.thresholds.descFullQuery !== null || config.thresholds.notes !== null
+    const needsClipEmbedding = config.thresholds.image !== null
 
     const terms: string[] = []
 
@@ -241,14 +202,38 @@ export default class ScoringService {
     config: EffectiveConfig,
     searchMode: SearchMode
   ): SearchComposition {
+    const hasPositiveTextSegments =
+      query.positiveSegments.length > 0 && (config.thresholds.tag !== null || config.searchInDesc)
+    const positiveSegmentThresholdWeight = Math.max(
+      config.thresholds.tag !== null ? config.thresholdWeights.tag : 0,
+      config.searchInDesc ? config.thresholdWeights.desc : 0
+    )
+    let maxScore = hasPositiveTextSegments
+      ? query.positiveSegments.length * positiveSegmentThresholdWeight
+      : config.thresholdWeights.image
+
+    if (config.thresholds.image !== null) {
+      maxScore = Math.max(maxScore, config.thresholdWeights.image)
+    }
+    if (query.positiveSegments.length > 1 && config.thresholds.descFullQuery !== null) {
+      maxScore += config.thresholdWeights.fullQueryDesc
+    }
+    if (query.fullQuery && config.thresholds.notes !== null) {
+      maxScore += config.thresholdWeights.notes
+    }
+    if (query.nuancesSegments.length && config.thresholds.nuances !== null) {
+      maxScore += query.nuancesSegments.length * config.thresholdWeights.nuances
+    }
+
     return {
-      hasFullQuery: query.positiveSegments.length > 1 && config.descFullQueryThreshold !== null,
+      hasFullQuery: query.positiveSegments.length > 1 && config.thresholds.descFullQuery !== null,
       hasNuances: query.nuancesSegments.length > 0,
       segmentCount:
-        query.positiveSegments.length && (config.tagsThreshold !== null || config.searchInDesc)
+        query.positiveSegments.length && (config.thresholds.tag !== null || config.searchInDesc)
           ? query.positiveSegments.length
           : 1,
       searchMode,
+      maxScore: Math.max(1, maxScore),
     }
   }
 
@@ -256,10 +241,10 @@ export default class ScoringService {
     // Modificador para umbrales menos estrictos (configurable)
     const THRESHOLD_MODIFIER_NON_PRECISE = 0.7
     // Umbrales base normalizados por segmento
-    let segmentCount = Math.max(1, composition.segmentCount)
+    let segmentCount = Math.max(1, composition.maxScore ?? composition.segmentCount)
     // Si hay fullQuery, cuenta como 1/4 segmento adicional
     // Es decir, el score maximo es mas exigente
-    if (composition.hasFullQuery) {
+    if (composition.maxScore === undefined && composition.hasFullQuery) {
       segmentCount += 0.25
     }
 
@@ -296,7 +281,7 @@ export default class ScoringService {
   @withCache({
     provider: 'redis',
     key: (photoIds: number[], structuredQuery: any, searchMode: SearchMode, userId: string) =>
-      `getScoredPhotosByTagsAndDesc:${userId}:${searchMode}:${JSON.stringify(structuredQuery)}:${hashNumberIds(photoIds)}`,
+      `${SCORING_CACHE_VERSION}:getScoredPhotosByTagsAndDesc:${userId}:${searchMode}:${JSON.stringify(structuredQuery)}:${hashNumberIds(photoIds)}`,
     ttl: 60 * 60 * 12,
     shouldCache: (_result, [photoIds]) => photoIds.length <= MAX_CACHEABLE_SCORING_PHOTOS,
   })
@@ -310,7 +295,7 @@ export default class ScoringService {
     const config = this.getEffectiveConfig(searchMode, 'full')
 
     // 2. Preparar query (normalizar términos)
-    const query = this.prepareQuery(structuredQuery, searchMode)
+    const query = this.prepareQuery(structuredQuery, config)
 
     // 3. Pre-calcular embeddings necesarios
     await this.prepareEmbeddings(query, config)
@@ -326,14 +311,20 @@ export default class ScoringService {
       let finalScores = await this.processPositiveSegments(initialScores, query, config, userId)
 
       const fullQueryScores = await this.processFullQuery(photoIds, query, config)
-      finalScores = this.mergeTagDescScoredPhotos(finalScores, [], fullQueryScores)
+      finalScores = this.mergeTagDescScoredPhotos(finalScores, [], fullQueryScores, {
+        desc: config.scoreWeights.fullQueryDesc,
+      })
 
       const notesScores = await this.processNotes(photoIds, query, config)
-      finalScores = this.mergeTagDescScoredPhotos(finalScores, [], notesScores)
+      finalScores = this.mergeTagDescScoredPhotos(finalScores, [], notesScores, {
+        desc: config.scoreWeights.notes,
+      })
 
       const nuanceScores = await this.processNuances(photoIds, query, config, userId)
       for (const nuanceScore of nuanceScores) {
-        finalScores = this.mergeTagDescScoredPhotos(finalScores, nuanceScore, [])
+        finalScores = this.mergeTagDescScoredPhotos(finalScores, nuanceScore, [], {
+          tag: config.scoreWeights.nuances,
+        })
       }
 
       const imageScores = await this.processImageSimilarity(
@@ -342,7 +333,7 @@ export default class ScoringService {
         config,
         userId
       )
-      finalScores = this.mergeImageScores(finalScores, imageScores)
+      finalScores = this.mergeImageScores(finalScores, imageScores, config)
 
       return this.finalizeScores(finalScores, query, config, searchMode)
     }
@@ -359,16 +350,22 @@ export default class ScoringService {
       ])
 
     // 6. Merge todos los resultados
-    let finalScores = this.mergeTagDescScoredPhotos(segmentScores, [], fullQueryScores)
+    let finalScores = this.mergeTagDescScoredPhotos(segmentScores, [], fullQueryScores, {
+      desc: config.scoreWeights.fullQueryDesc,
+    })
 
     // Merge notes scores
-    finalScores = this.mergeTagDescScoredPhotos(finalScores, [], notesScores)
+    finalScores = this.mergeTagDescScoredPhotos(finalScores, [], notesScores, {
+      desc: config.scoreWeights.notes,
+    })
 
     for (const nuanceScore of nuanceScores) {
-      finalScores = this.mergeTagDescScoredPhotos(finalScores, nuanceScore, [])
+      finalScores = this.mergeTagDescScoredPhotos(finalScores, nuanceScore, [], {
+        tag: config.scoreWeights.nuances,
+      })
     }
 
-    finalScores = this.mergeImageScores(finalScores, imageScores)
+    finalScores = this.mergeImageScores(finalScores, imageScores, config)
 
     // 7. Calcular labels y ordenar
     return this.finalizeScores(finalScores, query, config, searchMode)
@@ -429,7 +426,7 @@ export default class ScoringService {
       searchMode: SearchMode,
       userId: string
     ) =>
-      `getScoredPhotosByTags:${userId}:${searchMode}:${JSON.stringify([...included].sort())}:${JSON.stringify([...excluded].sort())}:${hashNumberIds(photoIds)}`,
+      `${SCORING_CACHE_VERSION}:getScoredPhotosByTags:${userId}:${searchMode}:${JSON.stringify([...included].sort())}:${JSON.stringify([...excluded].sort())}:${hashNumberIds(photoIds)}`,
     ttl: 60 * 60 * 12,
     shouldCache: (_result, [photoIds]) => photoIds.length <= MAX_CACHEABLE_SCORING_PHOTOS,
   })
@@ -449,7 +446,7 @@ export default class ScoringService {
 
     await EmbeddingStoreService.preloadEmbeddings(
       [...query.positiveSegments, ...normalizedExcluded, query.fullQuery],
-      config.imageThreshold !== null
+      config.thresholds.image !== null
     )
 
     // 4. Filtrar excluidos
@@ -476,7 +473,7 @@ export default class ScoringService {
     ])
 
     // 7. Merge image scores
-    const finalScores = this.mergeImageScores(tagScores, imageScores)
+    const finalScores = this.mergeImageScores(tagScores, imageScores, config)
 
     // 8. Calcular labels y ordenar
     return this.finalizeScores(finalScores, query, config, searchMode)
@@ -485,9 +482,12 @@ export default class ScoringService {
   private mergeTagDescScoredPhotos(
     aggregatedScores: ScoredPhoto[],
     newScoredTagsPhotos: { id: number; tagScore: number; matchingTags?: any[] }[],
-    newScoredDescsPhotos: { id: number; descScore: number; matchingChunks?: any[] }[]
+    newScoredDescsPhotos: { id: number; descScore: number; matchingChunks?: any[] }[],
+    scoreWeights: { tag?: number; desc?: number } = {}
   ): ScoredPhoto[] {
     const map = new Map<number, ScoredPhoto>()
+    const tagScoreWeight = scoreWeights.tag ?? 1
+    const descScoreWeight = scoreWeights.desc ?? 1
 
     // Inicia con los scores acumulados previos.
     for (const scored of aggregatedScores) {
@@ -500,13 +500,13 @@ export default class ScoringService {
     // Recopilar scores de tags para este segmento
     for (const scored of newScoredTagsPhotos) {
       const currentScore = segmentScores.get(scored.id) || 0
-      segmentScores.set(scored.id, Math.max(currentScore, scored.tagScore))
+      segmentScores.set(scored.id, Math.max(currentScore, scored.tagScore * tagScoreWeight))
     }
 
     // Recopilar scores de descriptions para este segmento
     for (const scored of newScoredDescsPhotos) {
       const currentScore = segmentScores.get(scored.id) || 0
-      segmentScores.set(scored.id, Math.max(currentScore, scored.descScore))
+      segmentScores.set(scored.id, Math.max(currentScore, scored.descScore * descScoreWeight))
     }
 
     // Actualizar o crear entradas con matching tags/chunks
@@ -563,9 +563,11 @@ export default class ScoringService {
 
   private mergeImageScores(
     aggregatedScores: ScoredPhoto[],
-    imageScores: { id: number; imageScore: number; matchingImageSimilarity: number }[]
+    imageScores: { id: number; imageScore: number; matchingImageSimilarity: number }[],
+    config: EffectiveConfig
   ): ScoredPhoto[] {
     const map = new Map<number, ScoredPhoto>()
+    const imageScoreWeight = config.scoreWeights.image
 
     // Inicia con los scores acumulados previos
     for (const scored of aggregatedScores) {
@@ -578,7 +580,7 @@ export default class ScoringService {
       if (map.has(id)) {
         const entry = map.get(id)!
         entry.imageScore = imageData.imageScore
-        entry.totalScore = (entry.totalScore || 0) + imageData.imageScore * 1.5
+        entry.totalScore = (entry.totalScore || 0) + imageData.imageScore * imageScoreWeight
       } else {
         // Crear nueva entrada si no existe
         map.set(id, {
@@ -586,7 +588,7 @@ export default class ScoringService {
           tagScore: 0,
           descScore: 0,
           imageScore: imageData.imageScore,
-          totalScore: imageData.imageScore,
+          totalScore: imageData.imageScore * imageScoreWeight,
           matchingTags: [],
           matchingChunks: [],
         })
@@ -611,9 +613,11 @@ export default class ScoringService {
         { name: segment, index },
         scores,
         {
-          tagsThreshold: config.tagsThreshold,
-          descThreshold: config.descSegmentThreshold,
+          tagsThreshold: config.thresholds.tag,
+          descThreshold: config.thresholds.descSegment,
           refineMode: config.refineMode,
+          tagScoreWeight: config.scoreWeights.tag,
+          descScoreWeight: config.scoreWeights.desc,
         },
         tagsCategories,
         ['context', 'story'],
@@ -632,7 +636,7 @@ export default class ScoringService {
     // Solo procesar si hay más de 1 segmento y fullQuery está habilitado
     if (
       query.positiveSegments.length <= 1 ||
-      config.descFullQueryThreshold === null ||
+      config.thresholds.descFullQuery === null ||
       !query.fullQuery
     ) {
       return []
@@ -641,7 +645,7 @@ export default class ScoringService {
     return this.getScoredPhotoDescBySegment(
       photoIds,
       { name: query.fullQuery, index: -1 },
-      config.descFullQueryThreshold,
+      config.thresholds.descFullQuery,
       config.refineMode,
       true,
       ['context', 'story', 'visual_accents']
@@ -656,7 +660,7 @@ export default class ScoringService {
     userId: string
   ): Promise<ScoredPhoto[][]> {
     // Solo procesar si hay nuances Y config lo permite
-    if (config.nuancesThreshold === null || !query.nuancesSegments.length) {
+    if (config.thresholds.nuances === null || !query.nuancesSegments.length) {
       return []
     }
 
@@ -668,9 +672,11 @@ export default class ScoringService {
         { name: segment, index },
         initialScores,
         {
-          tagsThreshold: config.nuancesThreshold,
+          tagsThreshold: config.thresholds.nuances,
           descThreshold: null, // Nuances solo busca en tags
           refineMode: config.refineMode,
+          tagScoreWeight: config.scoreWeights.nuances,
+          descScoreWeight: 0,
         },
         tagsCategories,
         [],
@@ -695,14 +701,14 @@ export default class ScoringService {
     config: EffectiveConfig
   ): Promise<{ id: number; descScore: number; matchingChunks: any[] }[]> {
     // Solo procesar si notes está habilitado y hay fullQuery
-    if (config.notesThreshold === null || !query.fullQuery) {
+    if (config.thresholds.notes === null || !query.fullQuery) {
       return []
     }
 
     return this.getScoredPhotoDescBySegment(
       photoIds,
       { name: query.fullQuery, index: -2 },
-      config.notesThreshold,
+      config.thresholds.notes,
       'none',
       false,
       ['notes']
@@ -716,11 +722,11 @@ export default class ScoringService {
     config: EffectiveConfig,
     userId: string
   ): Promise<{ id: number; imageScore: number }[]> {
-    if (config.imageThreshold === null || !fullQuery) {
+    if (config.thresholds.image === null || !fullQuery) {
       return []
     }
 
-    return this.getScoredPhotoImageByFullQuery(photoIds, fullQuery, config.imageThreshold, userId)
+    return this.getScoredPhotoImageByFullQuery(photoIds, fullQuery, config.thresholds.image, userId)
   }
 
   private finalizeScores(
@@ -748,6 +754,8 @@ export default class ScoringService {
       tagsThreshold: number | null
       descThreshold: number | null
       refineMode: RefineMode
+      tagScoreWeight?: number
+      descScoreWeight?: number
     },
     tagsCategories: string[],
     descCategories: string[],
@@ -787,7 +795,15 @@ export default class ScoringService {
       ...newDescScores.map((d) => d.id),
     ])
 
-    let updatedScores = this.mergeTagDescScoredPhotos(aggregatedScores, newTagScores, newDescScores)
+    let updatedScores = this.mergeTagDescScoredPhotos(
+      aggregatedScores,
+      newTagScores,
+      newDescScores,
+      {
+        tag: config.tagScoreWeight,
+        desc: config.descScoreWeight,
+      }
+    )
 
     return updatedScores.filter((score) => matchingSegmentPhotoIds.has(score.id))
   }

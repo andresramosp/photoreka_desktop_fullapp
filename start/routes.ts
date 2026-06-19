@@ -259,11 +259,6 @@ router
     router.delete('/api/portfolio-build/:id', [PortfolioBuildController, 'delete'])
     router.patch('/api/portfolio-build/:id/layout', [PortfolioBuildController, 'updateLayout'])
 
-    // AI Location Inference endpoints
-    router.get('/api/location-inference/estimate-credits', [
-      AiLocationInferenceController,
-      'estimateCredits',
-    ])
     router.get('/api/location-inference/summary', [AiLocationInferenceController, 'summary'])
     router.post('/api/location-inference/start', [AiLocationInferenceController, 'start'])
 
@@ -453,7 +448,6 @@ router
     router.post('/api/embeddings/', [EmbeddingController, 'getEmbeddings'])
 
     // Semantic search endpoints - AI-powered search
-    router.post('/api/search/semantic/stream', [SearchController, 'searchSemanticStream'])
     router.get('/api/photoInsight/:id?', [InsightsController, 'photoInsight'])
     router.post('/api/photoInsightSpecific/:id?', [InsightsController, 'photoInsightSpecific'])
   })
