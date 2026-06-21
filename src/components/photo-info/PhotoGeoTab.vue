@@ -9,7 +9,7 @@
       <p class="geo-placeholder-subtitle">
         This photo doesn't have GPS data or an AI-inferred location.
       </p>
-      <n-button type="primary" @click="router.push({ name: 'world-map' })">
+      <n-button type="primary" @click="navigateToWorldMap()">
         <template #icon>
           <n-icon><SparklesOutline /></n-icon>
         </template>
@@ -19,28 +19,6 @@
 
     <!-- Mini map -->
     <div v-else class="geo-map-section">
-      <div class="geo-map-wrap">
-        <div ref="mapEl" class="geo-map-container"></div>
-        <n-button
-          v-if="!isWorldMapRoute"
-          class="geo-map-floating-btn"
-          size="small"
-          type="primary"
-          @click="
-            activeCoordinates &&
-            router.push({
-              name: 'world-map',
-              query: {
-                lat: activeCoordinates[0],
-                lng: activeCoordinates[1],
-                photoId: photo?.id,
-              },
-            })
-          "
-        >
-          View in World Map
-        </n-button>
-      </div>
       <div class="geo-map-footer">
         <div v-if="displayAddress" class="geo-address">
           <n-icon size="13" style="flex-shrink: 0">
@@ -48,6 +26,18 @@
           </n-icon>
           <span>{{ displayAddress }}</span>
         </div>
+      </div>
+      <div class="geo-map-wrap">
+        <div ref="mapEl" class="geo-map-container"></div>
+        <n-button
+          v-if="!isWorldMapRoute"
+          class="geo-map-floating-btn"
+          size="small"
+          type="primary"
+          @click="handleViewInWorldMap"
+        >
+          View in World Map
+        </n-button>
       </div>
     </div>
 
@@ -88,6 +78,8 @@ const props = defineProps<{
   photo: any;
 }>();
 
+const emit = defineEmits(["request-close"]);
+
 const router = useRouter();
 const route = useRoute();
 const message = useMessage();
@@ -96,6 +88,26 @@ const photosStore = usePhotosStore();
 const isWorldMapRoute = computed(() => {
   return route.name === "world-map" || route.path.startsWith("/worldmap");
 });
+
+function navigateToWorldMap(
+  query: Record<string, string | number | undefined> = {},
+) {
+  emit("request-close");
+  void router.push({
+    name: "world-map",
+    query,
+  });
+}
+
+function handleViewInWorldMap() {
+  if (!activeCoordinates.value) return;
+
+  navigateToWorldMap({
+    lat: activeCoordinates.value[0],
+    lng: activeCoordinates.value[1],
+    photoId: props.photo?.id,
+  });
+}
 
 // ─── Location extraction (same logic as WorldMapView) ─────────────────────────
 

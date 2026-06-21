@@ -884,7 +884,10 @@
               </div>
             </template>
             <div class="tab-panel-content">
-              <PhotoGeoTab :photo="selectedPhoto" />
+              <PhotoGeoTab
+                :photo="selectedPhoto"
+                @request-close="emit('update:visible', false)"
+              />
             </div>
           </n-tab-pane>
 
