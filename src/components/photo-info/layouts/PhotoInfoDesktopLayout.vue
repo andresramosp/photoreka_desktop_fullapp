@@ -5,6 +5,7 @@
     :style="{ maxWidth: '90vw', width: '900px', maxHeight: '90vh' }"
     :show-icon="false"
     :closable="true"
+    :trap-focus="false"
     @close="visibleModel = false"
   >
     <template #header>
@@ -872,6 +873,21 @@
             </div>
           </n-tab-pane>
 
+          <!-- Geo Tab -->
+          <n-tab-pane name="geo" display-directive="show:lazy">
+            <template #tab>
+              <div class="tab-content">
+                <n-icon size="18">
+                  <GlobeOutline />
+                </n-icon>
+                <span>Geo</span>
+              </div>
+            </template>
+            <div class="tab-panel-content">
+              <PhotoGeoTab :photo="selectedPhoto" />
+            </div>
+          </n-tab-pane>
+
           <!-- Insights tab (hidden) -->
           <!--
           <n-tab-pane name="insights" display-directive="show:lazy">
@@ -974,6 +990,7 @@ import {
 import CustomArtisticWeights from "../../CustomArtisticWeights.vue";
 import FloatingActionBar from "../../FloatingActionBar.vue";
 import SimilarPhotosSection from "../SimilarPhotosSection.vue";
+import PhotoGeoTab from "../PhotoGeoTab.vue";
 
 // Icons
 import {

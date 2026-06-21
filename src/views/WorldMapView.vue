@@ -266,6 +266,7 @@ import {
   shallowRef,
   watch,
 } from "vue";
+import { useRoute } from "vue-router";
 import { usePhotosStore } from "@/stores/photos";
 import { useUserStore } from "@/stores/userStore";
 import { api } from "@/utils/axios";
@@ -334,6 +335,7 @@ type PhotoOverflowMarker = L.Marker & {
 
 type MapPhotoMarker = PhotoMarker | PhotoOverflowMarker;
 
+const route = useRoute();
 const photosStore = usePhotosStore();
 const userStore = useUserStore();
 const message = useMessage();
@@ -1665,14 +1667,27 @@ async function handleLocationPhotoInfo(photo: any) {
 // Map ready handler
 const onMapReady = () => {
   const leafletMap = getLeafletMap();
+
+  const focusLat = parseFloat(route.query.lat as string);
+  const focusLng = parseFloat(route.query.lng as string);
+  const hasFocusParams = !isNaN(focusLat) && !isNaN(focusLng);
+
   if (leafletMap) {
     L.control.zoom({ position: "bottomright" }).addTo(leafletMap);
     ensureFitViewControl();
-    if (!props.isPreview && filteredPhotosWithGps.value.length > 0) {
+    if (
+      !props.isPreview &&
+      filteredPhotosWithGps.value.length > 0 &&
+      !hasFocusParams
+    ) {
       fitMapToVisiblePhotos();
     }
   }
   refreshPhotoMarkers();
+
+  if (hasFocusParams && leafletMap) {
+    leafletMap.setView([focusLat, focusLng], 14);
+  }
 
   if (filteredPhotosWithGps.value.length === 0) {
     isMapViewportReady.value = true;
