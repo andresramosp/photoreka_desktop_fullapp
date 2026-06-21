@@ -89,8 +89,11 @@
 
     <!-- Loading state -->
     <div v-if="isLoading" class="loading-state">
-      <n-spin size="large" />
-      <p class="loading-state-text">Loading your portfolio…</p>
+      <SpiralGridLoader
+        variant="primary"
+        :size="64"
+        text="Loading your portfolio…"
+      />
     </div>
 
     <!-- Error state -->
@@ -294,7 +297,8 @@
 <script setup>
 import { ref, computed, watch } from "vue";
 import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
-import { NIcon, NSpin, NButton, NDropdown, NModal, useMessage } from "naive-ui";
+import { NIcon, NButton, NDropdown, NModal, useMessage } from "naive-ui";
+import SpiralGridLoader from "../components/SpiralGridLoader.vue";
 import {
   SaveOutline,
   HourglassOutline,

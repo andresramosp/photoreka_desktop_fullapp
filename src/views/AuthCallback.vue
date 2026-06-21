@@ -1,24 +1,24 @@
 <template>
   <div class="auth-callback-view">
     <div class="auth-callback-container">
-      <n-spin size="large" :stroke="loadingColor" />
+      <SpiralGridLoader variant="primary" :size="72" />
       <p class="callback-message">{{ displayMessage }}</p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, computed } from "vue";
+import { onMounted, ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useUserStore } from "../stores/userStore";
 import { useMessage } from "naive-ui";
+import SpiralGridLoader from "../components/SpiralGridLoader.vue";
 
 const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
 const message = useMessage();
 const displayMessage = ref("Processing authentication...");
-const loadingColor = ref("#2563eb");
 
 onMounted(async () => {
   const token = route.query.token as string;
@@ -33,7 +33,6 @@ onMounted(async () => {
 
   if (!token) {
     displayMessage.value = "Invalid authentication response";
-    loadingColor.value = "#ef4444";
     message.error("No authentication token received");
     setTimeout(() => router.push("/"), 2000);
     return;
@@ -44,7 +43,6 @@ onMounted(async () => {
 
   if (result.success) {
     displayMessage.value = "Success! Redirecting...";
-    loadingColor.value = "#10b981";
     message.success("Welcome to Photoreka!");
 
     // If this OAuth was triggered from the Lightroom plugin, go back to lr-auth
@@ -58,7 +56,6 @@ onMounted(async () => {
     // se encarga de redirigir al destino correcto para todos los flujos
   } else {
     displayMessage.value = "Authentication failed";
-    loadingColor.value = "#ef4444";
     message.error(result.error || "Failed to process authentication");
     setTimeout(() => router.push("/"), 2000);
   }

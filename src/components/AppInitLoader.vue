@@ -1,14 +1,17 @@
 <template>
   <div class="app-init-loader">
     <div class="loader-content">
-      <n-spin size="large" />
-      <p class="loader-text">Loading your catalog...</p>
+      <SpiralGridLoader
+        variant="primary"
+        :size="80"
+        text="Loading your catalog..."
+      />
     </div>
   </div>
 </template>
 
 <script setup>
-import { NSpin } from "naive-ui";
+import SpiralGridLoader from "./SpiralGridLoader.vue";
 </script>
 
 <style scoped>
@@ -26,12 +29,5 @@ import { NSpin } from "naive-ui";
   flex-direction: column;
   align-items: center;
   gap: 24px;
-}
-
-.loader-text {
-  color: var(--text-secondary, #a8a8a8);
-  font-size: 16px;
-  margin: 0;
-  font-weight: 500;
 }
 </style>

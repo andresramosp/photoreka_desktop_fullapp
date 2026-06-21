@@ -2,9 +2,7 @@
   <div class="series-view view-container">
     <!-- Public View: Loading State -->
     <div v-if="isPublicView && isLoading" class="public-loading-state">
-      <n-spin size="large">
-        <div class="loading-text">Loading series...</div>
-      </n-spin>
+      <SpiralGridLoader variant="primary" :size="64" text="Loading series..." />
     </div>
 
     <!-- Public View: Error State -->
@@ -500,9 +498,11 @@
 
       <!-- Series Grid -->
       <div v-if="isLoading" class="loading-state">
-        <n-spin size="large">
-          <div class="loading-text">Loading your series...</div>
-        </n-spin>
+        <SpiralGridLoader
+          variant="primary"
+          :size="64"
+          text="Loading your series..."
+        />
       </div>
 
       <div v-if="!isLoading && hasRootContent" class="root-toolbar">
@@ -866,6 +866,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from "vue";
 import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
+import SpiralGridLoader from "../components/SpiralGridLoader.vue";
 
 defineOptions({
   name: "SeriesView",
@@ -878,7 +879,6 @@ import {
   NForm,
   NFormItem,
   NInput,
-  NSpin,
   NSelect,
   useMessage,
 } from "naive-ui";

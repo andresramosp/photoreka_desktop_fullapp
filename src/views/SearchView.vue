@@ -42,7 +42,7 @@
       <div v-else-if="isSearching" class="search-loading">
         <!-- Search Loading Message -->
         <div class="loading-message">
-          <n-spin size="large" />
+          <SpiralGridLoader variant="primary" :size="72" />
           <p class="loading-text">Searching through your photos...</p>
           <transition name="slide-fade" mode="out-in">
             <p
@@ -167,6 +167,7 @@ import {
   nextTick,
 } from "vue";
 import { api } from "@/utils/axios";
+import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 
 // Layout Components
 import SearchPanelDesktopLayout from "@/components/search/layouts/SearchPanelDesktopLayout.vue";

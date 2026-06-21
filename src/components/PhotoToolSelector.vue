@@ -16,7 +16,7 @@
       </p>
 
       <div v-if="isLoadingCanvases" class="canvas-loading">
-        <n-spin size="medium" />
+        <SpiralGridLoader variant="primary" :size="40" />
       </div>
 
       <div v-else class="tools-grid">
@@ -101,7 +101,7 @@
             v-if="isProcessing && selectedTool === tool.id"
             class="processing-indicator"
           >
-            <n-spin size="small" />
+            <SpiralGridLoader variant="primary" :size="24" />
           </div>
         </div>
       </div>
@@ -126,7 +126,8 @@
 
 <script setup>
 import { ref, computed, watch } from "vue";
-import { NModal, NButton, NIcon, NSpin } from "naive-ui";
+import { NModal, NButton, NIcon } from "naive-ui";
+import SpiralGridLoader from "./SpiralGridLoader.vue";
 import { useToolsAvailability } from "@/composables/useToolsAvailability.js";
 import { getIconComponent } from "@/config/toolsConfig";
 import { useUserStore } from "@/stores/userStore";

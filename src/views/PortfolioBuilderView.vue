@@ -2,7 +2,7 @@
   <div class="portfolio-builder-view view-container">
     <!-- Loading state -->
     <div v-if="isLoading" class="loading-state">
-      <n-spin :size="32" />
+      <SpiralGridLoader variant="primary" :size="48" />
     </div>
 
     <!-- Set View -->
@@ -549,9 +549,9 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import SpiralGridLoader from "../components/SpiralGridLoader.vue";
 import {
   NIcon,
-  NSpin,
   NButton,
   NModal,
   NForm,

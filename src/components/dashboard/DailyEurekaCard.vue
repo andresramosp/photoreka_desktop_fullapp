@@ -45,7 +45,7 @@
 
     <div class="insight-content">
       <div v-if="isLoadingInsight" class="insight-loader">
-        <n-spin size="large" />
+        <SpiralGridLoader variant="primary" :size="48" />
       </div>
     </div>
     <div
@@ -89,6 +89,7 @@ import { ref, watch, computed } from "vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { api } from "@/utils/axios.js";
 import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
+import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import {
   InformationCircleOutline as InfoIcon,
   BulbOutline as InsightIcon,

@@ -4,7 +4,7 @@
       <!-- Loading State -->
       <template v-if="pageState === 'loading'">
         <div class="state-container">
-          <n-spin size="large" />
+          <SpiralGridLoader variant="primary" :size="64" />
           <p class="state-message">Validating reset link...</p>
         </div>
       </template>
@@ -111,6 +111,7 @@
 import { ref, reactive, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useMessage } from "naive-ui";
+import SpiralGridLoader from "../components/SpiralGridLoader.vue";
 import type { FormInst, FormRules } from "naive-ui";
 import {
   LockClosedOutline,
@@ -200,7 +201,7 @@ const handleSubmit = async () => {
 
     const result = await userStore.resetPassword(
       token.value,
-      formData.newPassword
+      formData.newPassword,
     );
 
     if (result.success) {

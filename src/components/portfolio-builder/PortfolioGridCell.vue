@@ -44,14 +44,15 @@
     </div>
 
     <div v-if="!loaded" class="cell-placeholder">
-      <n-spin :size="16" />
+      <SpiralGridLoader variant="primary" :size="20" />
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed, ref, watch } from "vue";
-import { NButton, NIcon, NSpin } from "naive-ui";
+import { NButton, NIcon } from "naive-ui";
+import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import { TrashOutline, InformationCircleOutline } from "@vicons/ionicons5";
 
 const ORIGINAL_IMAGE_MIN_RENDERED_WIDTH = 420;

@@ -32,7 +32,7 @@
           />
 
           <div v-if="isLoadingCollections" class="loading-state">
-            <n-spin size="medium" />
+            <SpiralGridLoader variant="primary" :size="40" />
             <span>Loading collections...</span>
           </div>
 
@@ -106,7 +106,7 @@
           />
 
           <div v-if="isLoadingSeries" class="loading-state">
-            <n-spin size="medium" />
+            <SpiralGridLoader variant="primary" :size="40" />
             <span>Loading series...</span>
           </div>
 
@@ -221,7 +221,6 @@ import { ref, computed, watch, h } from "vue";
 import { useRouter } from "vue-router";
 import {
   NModal,
-  NSpin,
   useMessage,
   useNotification,
   NIcon,
@@ -231,6 +230,7 @@ import {
   NTabs,
   NTabPane,
 } from "naive-ui";
+import SpiralGridLoader from "./SpiralGridLoader.vue";
 import { AddOutline } from "@vicons/ionicons5";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useSeriesStore } from "@/stores/series.js";

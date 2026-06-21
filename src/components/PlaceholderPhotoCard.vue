@@ -15,7 +15,7 @@
 
     <!-- Loading State -->
     <div v-if="isLoading" class="loading-state">
-      <n-spin size="large" />
+      <SpiralGridLoader variant="primary" :size="40" />
     </div>
 
     <!-- Menu State -->
@@ -65,7 +65,8 @@
 
 <script setup>
 import { ref, computed } from "vue";
-import { NButton, NIcon, NSpin } from "naive-ui";
+import { NButton, NIcon } from "naive-ui";
+import SpiralGridLoader from "./SpiralGridLoader.vue";
 import {
   AddOutline,
   TrashOutline,

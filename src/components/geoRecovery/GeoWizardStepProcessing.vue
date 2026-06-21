@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { NProgress, NSpace, NSpin, NStatistic } from "naive-ui";
+import { NProgress, NSpace, NStatistic } from "naive-ui";
+import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import type { GeoRecoveryJobState } from "@/utils/geoRecovery/types";
 import type { UploadProgress } from "@/utils/geoRecovery/upload";
 
@@ -22,7 +23,7 @@ const uploadPct = computed(() => {
 <template>
   <div class="geo-processing-card">
     <div class="geo-processing-head">
-      <NSpin size="small" />
+      <SpiralGridLoader variant="white" :size="24" />
       <h3>
         {{ uploading ? "Preparing thumbnails…" : "Analyzing your photos" }}
       </h3>

@@ -340,6 +340,7 @@ const getKeepAliveComponents = () => {
     "3DView",
     "2DView",
     "ChatView",
+    "WorldMapView",
   ];
 
   // Debug: log components being kept alive

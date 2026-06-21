@@ -244,7 +244,7 @@
                 >
                   <AddIcon />
                 </n-icon>
-                <n-spin :size="32" v-else />
+                <SpiralGridLoader v-else variant="primary" :size="32" />
                 <span class="add-photo-card-text">
                   {{ isProcessingFiles ? "Processing..." : "Add Photos" }}
                 </span>
@@ -325,7 +325,7 @@
               >
                 <AddIcon />
               </n-icon>
-              <n-spin :size="24" v-else />
+              <SpiralGridLoader v-else variant="primary" :size="24" />
               <span class="add-photo-card-text">
                 {{ isProcessingFiles ? "Processing..." : "Add" }}
               </span>
@@ -397,7 +397,8 @@ import FramerViewMobile from "@/views/FramerViewMobile.vue";
 import { useFramedPhotoDownload } from "@/composables/useFramedPhotoDownload.js";
 import { useImageProcessing } from "@/composables/useImageProcessing.js";
 import { usePhotoQueryParams } from "@/composables/usePhotoQueryParams.js";
-import { NButton, NIcon, NSlider, NSpin } from "naive-ui";
+import { NButton, NIcon, NSlider } from "naive-ui";
+import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 
 // Icons
 import {

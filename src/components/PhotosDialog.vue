@@ -24,8 +24,11 @@
       >
         <!-- Loading state -->
         <div v-if="loadingSuggestions" class="suggestions-loading">
-          <n-spin size="large" />
-          <p class="suggestions-loading-text">Looking for similar photos...</p>
+          <SpiralGridLoader
+            variant="primary"
+            :size="64"
+            text="Looking for similar photos..."
+          />
         </div>
 
         <template v-else>
@@ -472,7 +475,8 @@ import { useCanvasStore } from "@/stores/canvas";
 import { useIsMobile } from "@/composables/useIsMobile";
 import PhotoCard from "@/components/photoCards/PhotoCard.vue";
 
-import { NModal, NButton, NIcon, NInput, NSpin } from "naive-ui";
+import { NModal, NButton, NIcon, NInput } from "naive-ui";
+import SpiralGridLoader from "./SpiralGridLoader.vue";
 import { api } from "@/utils/axios";
 
 // Import @vicons icons from ionicons5 for reliability

@@ -37,7 +37,11 @@
             :key="`empty-${currentTooltipPhotoKey}`"
             class="tt-preview-photo tt-preview-photo-placeholder"
           >
-            <NSpin v-if="tooltipLoading" size="small" />
+            <SpiralGridLoader
+              v-if="tooltipLoading"
+              variant="primary"
+              :size="24"
+            />
           </div>
         </Transition>
       </div>
@@ -108,7 +112,8 @@ import {
   nextTick,
   watch,
 } from "vue";
-import { NIcon, NSpin } from "naive-ui";
+import { NIcon } from "naive-ui";
+import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import { useSmartTooltipPosition } from "@/composables/useSmartTooltipPosition.js";
 import { api } from "@/utils/axios";
 import { usePhotosStore } from "@/stores/photos.js";

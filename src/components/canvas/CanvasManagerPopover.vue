@@ -151,7 +151,12 @@
           </div>
 
           <!-- Loading spinner -->
-          <n-spin v-if="loadingId === canvas.id" :size="14" class="item-spin" />
+          <SpiralGridLoader
+            v-if="loadingId === canvas.id"
+            variant="primary"
+            :size="18"
+            class="item-spin"
+          />
         </div>
       </div>
     </div>
@@ -160,7 +165,8 @@
 
 <script setup>
 import { ref, nextTick } from "vue";
-import { NPopover, NButton, NIcon, NTooltip, NInput, NSpin } from "naive-ui";
+import { NPopover, NButton, NIcon, NTooltip, NInput } from "naive-ui";
+import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import {
   LayersOutline,
   ChevronDownOutline,

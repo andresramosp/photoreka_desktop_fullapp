@@ -932,7 +932,7 @@
                         {{ pendingInsightLabel }}
                       </h5>
                       <div class="description-content loading-content">
-                        <n-spin size="small" />
+                        <SpiralGridLoader variant="primary" :size="24" />
                         <span class="loading-text">Analyzing image...</span>
                       </div>
                     </div>
@@ -982,11 +982,11 @@ import {
   NButton,
   NTag,
   NInput,
-  NSpin,
   NTooltip,
   NTabs,
   NTabPane,
 } from "naive-ui";
+import SpiralGridLoader from "../../SpiralGridLoader.vue";
 import CustomArtisticWeights from "../../CustomArtisticWeights.vue";
 import FloatingActionBar from "../../FloatingActionBar.vue";
 import SimilarPhotosSection from "../SimilarPhotosSection.vue";

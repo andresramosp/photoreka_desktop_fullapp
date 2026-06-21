@@ -307,7 +307,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from "vue";
-import { NIcon, NSpin, NTooltip } from "naive-ui";
+import { NIcon, NTooltip } from "naive-ui";
 import { useMobilePhotoSelection } from "@/composables/useMobilePhotoSelection";
 
 // Import @vicons icons from ionicons5 for reliability

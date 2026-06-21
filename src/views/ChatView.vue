@@ -27,7 +27,7 @@
         </div>
 
         <div v-if="chatStore.isLoadingConversations" class="sidebar-loading">
-          <n-spin size="small" />
+          <SpiralGridLoader variant="primary" :size="22" />
           <span>Loading…</span>
         </div>
 
@@ -254,7 +254,7 @@
       <div v-else class="chat-messages" ref="messagesRef">
         <!-- Loading indicator when loading a conversation -->
         <div v-if="chatStore.isLoadingMessages" class="loading-messages">
-          <n-spin size="medium" />
+          <SpiralGridLoader variant="primary" :size="40" />
           <span>Loading conversation…</span>
         </div>
 
@@ -702,6 +702,7 @@ import {
 import { NIcon, useMessage } from "naive-ui";
 import { useRouter } from "vue-router";
 import PhotosDialog from "@/components/PhotosDialog.vue";
+import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import PhotoCardHub from "@/components/photoCards/PhotoCardHub.vue";
 import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
 import FloatingActionBar from "@/components/FloatingActionBar.vue";

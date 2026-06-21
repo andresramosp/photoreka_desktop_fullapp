@@ -95,9 +95,10 @@
                 : "Importing Photos"
             }}
           </h3>
-          <n-spin
+          <SpiralGridLoader
             v-if="overallProgress >= 100 && isPreprocessing"
-            size="tiny"
+            variant="primary"
+            :size="18"
             class="preprocessing-spinner"
           />
         </div>
@@ -547,6 +548,7 @@ import LightroomModal from "../LightroomModal.vue";
 import SafeSearchViolationModal from "../SafeSearchViolationModal.vue";
 
 import { NModal, NCheckbox, NTooltip } from "naive-ui";
+import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 
 import { useMessage } from "naive-ui";
 

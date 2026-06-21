@@ -31,7 +31,7 @@
       <div v-else class="generating-cell">
         <n-skeleton height="100%" width="100%" />
         <div v-if="showSpinner" class="generating-overlay">
-          <n-spin size="medium" />
+          <SpiralGridLoader variant="primary" :size="32" />
         </div>
       </div>
     </template>
@@ -190,7 +190,8 @@
 
 <script setup>
 import { computed } from "vue";
-import { NButton, NIcon, NSkeleton, NSpin } from "naive-ui";
+import { NButton, NIcon, NSkeleton } from "naive-ui";
+import SpiralGridLoader from "./SpiralGridLoader.vue";
 import {
   AddOutline,
   TrashOutline,

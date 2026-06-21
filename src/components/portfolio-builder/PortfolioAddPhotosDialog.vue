@@ -160,8 +160,11 @@
             </div>
 
             <div v-if="isLoadingSimilar" class="tab-loading">
-              <n-spin size="large" />
-              <p class="tab-loading-text">Looking for similar photos…</p>
+              <SpiralGridLoader
+                variant="primary"
+                :size="56"
+                text="Looking for similar photos…"
+              />
             </div>
 
             <div
@@ -320,11 +323,11 @@ import {
   NButton,
   NIcon,
   NInput,
-  NSpin,
   NTabs,
   NTabPane,
   NTooltip,
 } from "naive-ui";
+import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import {
   ImageOutline as ImageIcon,
   AddOutline as AddIcon,

@@ -4,7 +4,7 @@
       <!-- Loading -->
       <template v-if="state === 'loading'">
         <div class="state-container">
-          <n-spin size="large" />
+          <SpiralGridLoader variant="primary" :size="64" />
           <p class="state-message">Connecting to Lightroom session...</p>
         </div>
       </template>
@@ -143,6 +143,7 @@ import { ref, h, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useUserStore } from "../stores/userStore";
 import { useMessage } from "naive-ui";
+import SpiralGridLoader from "../components/SpiralGridLoader.vue";
 import {
   CheckmarkCircleOutline,
   CloseCircleOutline,

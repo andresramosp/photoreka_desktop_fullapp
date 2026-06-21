@@ -50,10 +50,10 @@
             <template v-if="phase === 'running'">
               <div class="ail-progress-row">
                 <span class="ail-analyzing-label">
-                  <n-spin
+                  <SpiralGridLoader
                     v-if="displayProgress === 0"
-                    size="tiny"
-                    :stroke-width="20"
+                    variant="primary"
+                    :size="20"
                   />
                   {{ runningStatusLabel }}
                 </span>
@@ -280,7 +280,7 @@
                 <!-- Loader while the fake calculation runs -->
                 <template v-if="!forecastReady">
                   <div class="ail-forecast-loader">
-                    <n-spin size="small" :stroke-width="16" />
+                    <SpiralGridLoader variant="primary" :size="24" />
                     <span class="ail-forecast-loader-text"
                       >Analysing your photos…</span
                     >
@@ -522,6 +522,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import { RocketLaunchOutlined } from "@vicons/material";
 import {
   SparklesOutline,

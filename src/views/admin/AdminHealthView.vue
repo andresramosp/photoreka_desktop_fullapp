@@ -227,7 +227,7 @@
       </div>
       <div class="table-body">
         <div v-if="overviewLoading" class="table-loading-state">
-          <n-spin show />
+          <SpiralGridLoader variant="primary" :size="40" />
         </div>
         <n-data-table
           v-else
@@ -390,6 +390,7 @@ import {
   useDialog,
 } from "naive-ui";
 import type { DataTableColumn } from "naive-ui";
+import SpiralGridLoader from "../../components/SpiralGridLoader.vue";
 import {
   SearchOutline as SearchIcon,
   CloseOutline as CloseIcon,

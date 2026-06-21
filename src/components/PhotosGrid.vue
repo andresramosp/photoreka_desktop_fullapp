@@ -384,9 +384,7 @@
 
     <!-- Loading indicator for infinite scroll -->
     <div v-if="hasMorePhotos && isLoadingMore" class="loading-more-container">
-      <n-spin size="medium">
-        <template #description>Loading more photos...</template>
-      </n-spin>
+      <SpiralGridLoader variant="primary" :size="40" />
     </div>
 
     <!-- End of results indicator -->
@@ -467,7 +465,7 @@
     >
       <div class="dup-check-modal">
         <span class="dup-check-title">Finding duplicates</span>
-        <n-spin size="large" />
+        <SpiralGridLoader variant="primary" :size="48" />
         <p class="dup-check-subtitle">
           {{
             lastDuplicateType === "similar"
@@ -581,7 +579,6 @@ import {
   NButton,
   NButtonGroup,
   NIcon,
-  NSpin,
   NRadioGroup,
   NRadioButton,
   NModal,
@@ -591,6 +588,7 @@ import {
   useMessage,
   NTooltip,
 } from "naive-ui";
+import SpiralGridLoader from "./SpiralGridLoader.vue";
 import {
   CloseOutline,
   AddOutline,

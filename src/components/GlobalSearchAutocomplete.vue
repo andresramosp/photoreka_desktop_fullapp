@@ -40,7 +40,7 @@
       >
         <!-- Loading state -->
         <div v-if="isSearching" class="search-loading">
-          <n-spin size="small" />
+          <SpiralGridLoader variant="primary" :size="24" />
           <span>Searching...</span>
         </div>
 
@@ -325,7 +325,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useRouter } from "vue-router";
-import { NIcon, NSpin, NTag } from "naive-ui";
+import { NIcon, NTag } from "naive-ui";
+import SpiralGridLoader from "./SpiralGridLoader.vue";
 import {
   SearchOutline as SearchIcon,
   AppsOutline,

@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { NButton, NIcon, NAlert, NSpin } from "naive-ui";
+import { NButton, NIcon, NAlert } from "naive-ui";
+import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import { LockClosedOutline } from "@vicons/ionicons5";
 import {
   loadStripe,
@@ -202,7 +203,7 @@ async function handlePay() {
     <!-- Stripe Payment Element -->
     <div class="gwp-payment-form">
       <div v-if="loadingIntent" class="gwp-form-loading">
-        <NSpin size="small" />
+        <SpiralGridLoader variant="primary" :size="28" />
         <span>Loading payment form…</span>
       </div>
       <div id="stripe-contact-details-element" class="gwp-stripe-email" />

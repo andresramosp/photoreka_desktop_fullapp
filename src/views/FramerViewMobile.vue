@@ -196,7 +196,7 @@
             >
               <n-icon :size="20" color="var(--primary-color)">
                 <AddIcon v-if="!isProcessingFiles" />
-                <n-spin v-else :size="20" />
+                <SpiralGridLoader v-else variant="primary" :size="20" />
               </n-icon>
               <span>{{ isProcessingFiles ? "Processing..." : "Add" }}</span>
             </div>
@@ -260,7 +260,8 @@ import PlaygroundPhotosDialog from "@/components/PlaygroundPhotosDialog.vue";
 import FrameVisualizer from "@/components/FrameVisualizer.vue";
 import { useFramedPhotoDownload } from "@/composables/useFramedPhotoDownload.js";
 import { useImageProcessing } from "@/composables/useImageProcessing.js";
-import { NButton, NIcon, NSlider, NSpin } from "naive-ui";
+import { NButton, NIcon, NSlider } from "naive-ui";
+import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 
 // Props
 const props = defineProps({

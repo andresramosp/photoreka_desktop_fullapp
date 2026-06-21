@@ -44,7 +44,7 @@
         </div>
       </div>
       <div v-else-if="statsLoading" class="summary-loading-state">
-        <n-spin show />
+        <SpiralGridLoader variant="primary" :size="40" />
       </div>
       <div v-else class="summary-empty-state">Could not load quota stats.</div>
 
@@ -90,7 +90,7 @@
             v-if="analysesLoading && !analyses.length"
             class="table-loading-state"
           >
-            <n-spin show />
+            <SpiralGridLoader variant="primary" :size="40" />
           </div>
           <n-data-table
             v-else
@@ -144,7 +144,7 @@
             v-if="sessionsLoading && !sessions.length"
             class="table-loading-state"
           >
-            <n-spin show />
+            <SpiralGridLoader variant="primary" :size="40" />
           </div>
           <n-data-table
             v-else
@@ -176,16 +176,10 @@
 
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from "vue";
-import {
-  NButton,
-  NDataTable,
-  NPagination,
-  NSpin,
-  NTag,
-  useMessage,
-} from "naive-ui";
+import { NButton, NDataTable, NPagination, NTag, useMessage } from "naive-ui";
 import type { DataTableColumn } from "naive-ui";
 import { api } from "../../utils/axios";
+import SpiralGridLoader from "../../components/SpiralGridLoader.vue";
 
 const message = useMessage();
 

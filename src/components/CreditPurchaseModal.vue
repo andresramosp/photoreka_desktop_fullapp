@@ -27,7 +27,7 @@
       </p>
 
       <div v-if="isLoading" class="cpm-loading">
-        <n-spin size="medium" />
+        <SpiralGridLoader variant="primary" :size="48" />
       </div>
 
       <template v-else-if="creditSteps.length">
@@ -123,15 +123,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
-import {
-  NModal,
-  NCard,
-  NButton,
-  NIcon,
-  NSpin,
-  NSelect,
-  useMessage,
-} from "naive-ui";
+import { NModal, NCard, NButton, NIcon, NSelect, useMessage } from "naive-ui";
+import SpiralGridLoader from "./SpiralGridLoader.vue";
 import { SparklesOutline, CloseOutline } from "@vicons/ionicons5";
 import { usePayments } from "@/composables/usePayments";
 import { useActivityLogger } from "@/composables/useActivityLogger";

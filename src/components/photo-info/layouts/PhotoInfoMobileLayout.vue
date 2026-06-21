@@ -645,7 +645,7 @@
                     </div>
                   </div>
                   <div v-if="isGeneratingInsight" class="mobile-insight-loading">
-                    <n-spin size="small" />
+                    <SpiralGridLoader variant="primary" :size="24" />
                     <span>{{ pendingInsightLabel || "Analyzing..." }}</span>
                   </div>
                   <div v-if="allPhotoInsights.length === 0 && !isGeneratingInsight" class="mobile-empty-state">
@@ -700,8 +700,8 @@ import {
   NTabs,
   NTabPane,
   NInput,
-  NSpin,
 } from "naive-ui";
+import SpiralGridLoader from "../../SpiralGridLoader.vue";
 
 // Icons
 import {

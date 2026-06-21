@@ -518,9 +518,11 @@
       </div>
 
       <div v-if="isLoading" class="loading-state">
-        <n-spin size="large">
-          <div class="loading-text">Loading your collections...</div>
-        </n-spin>
+        <SpiralGridLoader
+          variant="primary"
+          :size="72"
+          text="Loading your collections..."
+        />
       </div>
 
       <div v-else class="card-grid">
@@ -819,7 +821,6 @@ import {
   NForm,
   NFormItem,
   NInput,
-  NSpin,
   NDropdown,
   NSelect,
   useMessage,
@@ -840,6 +841,7 @@ import PhotosGrid from "@/components/PhotosGrid.vue";
 import CollectionCard from "@/components/CollectionCard.vue";
 import CollectionSetCard from "@/components/CollectionSetCard.vue";
 import CreateCard from "@/components/photos-grid/CreateCard.vue";
+import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useCollectionSelection } from "@/composables/useCollectionSelection.js";
