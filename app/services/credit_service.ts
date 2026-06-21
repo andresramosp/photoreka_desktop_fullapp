@@ -44,6 +44,12 @@ export const PRECISE_GPU_CREDITS = 5
 /** Fixed credit cost for on-the-fly CLIP embedding from a cropped region */
 export const CLIP_CROP_CREDITS = 5
 
+/** Fixed credit cost per requested photo similarity result */
+export const PHOTO_SIMILARITY_RESULT_CREDITS = 0.005
+
+/** Minimum fixed credit cost for a photo similarity search */
+export const PHOTO_SIMILARITY_MIN_CREDITS = 0.05
+
 // ─── Service ─────────────────────────────────────────────
 
 export default class CreditService {

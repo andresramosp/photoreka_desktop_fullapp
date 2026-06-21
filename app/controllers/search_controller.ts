@@ -1,10 +1,14 @@
 import type { HttpContext } from '@adonisjs/core/http'
 
-import ws from '#services/ws'
 import SearchTextService from '#services/search_text_service'
 import SearchPhotoService from '#services/search_photo_service'
 import UserCostService from '#services/user_cost_service'
-import CreditService, { PRECISE_GPU_CREDITS, CLIP_CROP_CREDITS } from '#services/credit_service'
+import CreditService, {
+  PRECISE_GPU_CREDITS,
+  CLIP_CROP_CREDITS,
+  PHOTO_SIMILARITY_RESULT_CREDITS,
+  PHOTO_SIMILARITY_MIN_CREDITS,
+} from '#services/credit_service'
 import { SEARCH_MODE_CONFIGURATION } from '#services/search_text_service'
 import type { SearchMode } from '#services/search_text_service'
 
@@ -197,24 +201,56 @@ export default class SearchController {
       const searchService = new SearchPhotoService()
 
       const query: any = request.body()
+      const resultLength = Number(query.resultLength)
+      const billableResults =
+        Number.isFinite(resultLength) && resultLength > 0 ? Math.ceil(resultLength) : 1
+      const calculatedPhotoSimilarityCredits = billableResults * PHOTO_SIMILARITY_RESULT_CREDITS
+      const photoSimilarityCredits =
+        Math.round(
+          Math.max(calculatedPhotoSimilarityCredits, PHOTO_SIMILARITY_MIN_CREDITS) * 10000
+        ) / 10000
+      const clipCropCredits =
+        query.criteria === 'embedding' && query.cropRegion ? CLIP_CROP_CREDITS : 0
+      const totalFixedCredits = photoSimilarityCredits + clipCropCredits
 
-      // CLIP crop embedding requires a GPU call — charge upfront
-      if (query.criteria === 'embedding' && query.cropRegion) {
-        const charged = await CreditService.tryChargeFixed(user.id, CLIP_CROP_CREDITS)
+      if (totalFixedCredits > 0) {
+        const charged = await CreditService.tryChargeFixed(user.id, totalFixedCredits)
         if (!charged) {
           return response.status(402).json({
             message: 'No credits remaining. Please purchase more credits to continue.',
             code: 'INSUFFICIENT_CREDITS',
           })
         }
+      }
+
+      UserCostService.record(
+        user.id,
+        'search',
+        CreditService.creditsToEstimatedEur(photoSimilarityCredits),
+        billableResults,
+        {
+          task: 'photo_similarity_search',
+          metadata: {
+            fixedCharge: true,
+            credits: photoSimilarityCredits,
+            criteria: query.criteria,
+            resultLength: query.resultLength,
+            creditsPerResult: PHOTO_SIMILARITY_RESULT_CREDITS,
+            minimumCredits: PHOTO_SIMILARITY_MIN_CREDITS,
+          },
+        }
+      ).catch(() => {})
+
+      // CLIP crop embedding requires a GPU call, charged in addition to the per-result search cost
+      if (clipCropCredits > 0) {
         UserCostService.record(
           user.id,
           'search',
-          CreditService.creditsToEstimatedEur(CLIP_CROP_CREDITS),
+          CreditService.creditsToEstimatedEur(clipCropCredits),
           1,
           {
             task: 'clip_crop_embedding',
-            metadata: { fixedCharge: true, credits: CLIP_CROP_CREDITS },
+            metadata: { fixedCharge: true, credits: clipCropCredits },
           }
         ).catch(() => {})
       }
