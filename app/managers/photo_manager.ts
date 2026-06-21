@@ -23,6 +23,7 @@ export default class PhotoManager {
       .preload('detections')
       .preload('descriptionChunks')
       .preload('analyzerProcess')
+      .preload('inferredLocation')
       .firstOrFail()
     if (!photo) {
       throw new Error('Photo not found')
