@@ -1483,7 +1483,7 @@ watch(
 }
 
 .info-sections :deep(.n-tab-pane) {
-  padding: var(--spacing-lg) !important;
+  /* padding: var(--spacing-lg) !important; */
   height: 100%;
   overflow-y: auto;
 }
