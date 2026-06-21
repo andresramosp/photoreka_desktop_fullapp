@@ -562,7 +562,7 @@ async function handleCorrectionConfirmed(payload: {
 
 .geo-map-floating-btn {
   position: absolute;
-  bottom: 12px;
+  bottom: 25px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 401;

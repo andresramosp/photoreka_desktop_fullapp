@@ -624,6 +624,24 @@
               </div>
             </n-tab-pane>
 
+            <!-- Geo Tab -->
+            <n-tab-pane name="geo" display-directive="show:lazy">
+              <template #tab>
+                <div class="mobile-tab">
+                  <n-icon size="16">
+                    <GlobeOutline />
+                  </n-icon>
+                  <span>Geo</span>
+                </div>
+              </template>
+              <div class="mobile-tab-content">
+                <PhotoGeoTab
+                  :photo="selectedPhoto"
+                  @request-close="emit('update:visible', false)"
+                />
+              </div>
+            </n-tab-pane>
+
             <!-- Insights tab (hidden) -->
             <!--
             <n-tab-pane name="insights" display-directive="show:lazy">
@@ -729,6 +747,7 @@ import {
 } from "@vicons/fluent";
 import FloatingActionBar from "../../FloatingActionBar.vue";
 import SimilarPhotosSection from "../SimilarPhotosSection.vue";
+import PhotoGeoTab from "../PhotoGeoTab.vue";
 
 defineOptions({ name: "PhotoInfoMobileLayout" });
 
