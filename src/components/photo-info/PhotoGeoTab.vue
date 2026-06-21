@@ -533,6 +533,7 @@ async function handleCorrectionConfirmed(payload: {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
+  overflow: hidden;
 }
 
 .geo-map-wrap {
