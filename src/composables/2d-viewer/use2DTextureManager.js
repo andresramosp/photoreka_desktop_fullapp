@@ -253,11 +253,16 @@ export function use2DTextureManager(
         throw blobFetchError;
       }
 
-      const maxSide = useLowPerformance ? 96 : 128;
+      // For thumbnail qualities (low), shrink eagerly to save RAM.
+      // For hi-res qualities (original / high / mid), skip the resize here —
+      // getOrCreateTexture will downscale to the correct cap via downscaleSource().
+      const thumbMaxSide = useLowPerformance ? 96 : 128;
+      const shouldResizeOnDecode =
+        q === "low" && typeof createImageBitmap !== "undefined";
       const imageElement = imageBlob
-        ? typeof createImageBitmap !== "undefined"
+        ? shouldResizeOnDecode
           ? await createImageBitmap(imageBlob, {
-              resizeWidth: maxSide,
+              resizeWidth: thumbMaxSide,
               resizeQuality: "medium",
             })
           : await blobToImageElement(imageBlob)
