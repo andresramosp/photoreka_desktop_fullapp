@@ -69,7 +69,10 @@
                   }"
                 >
                   <template v-if="job.status === 'processing'">
-                    <SpiralGridLoader variant="primary" :size="14" />
+                    <n-spin
+                      size="12"
+                      class="spinner-status-badge spinner-small spinner-centered"
+                    />
                   </template>
                   {{ job.status === "processing" ? "Processing" : "Finished" }}
                 </n-tag>
@@ -190,8 +193,13 @@ import PhotoCardHub from "../photoCards/PhotoCardHub.vue";
 import PieProgress from "../PieProgress.vue";
 import CollectionModal from "../CollectionModal.vue";
 import ProcessingSummaryModal from "./ProcessingSummaryModal.vue";
-import { NTooltip, NButton, useMessage, useNotification } from "naive-ui";
-import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
+import {
+  NTooltip,
+  NSpin,
+  NButton,
+  useMessage,
+  useNotification,
+} from "naive-ui";
 import { usePhotosStore } from "@/stores/photos"; // o donde tengas el store
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useRoute } from "vue-router";
