@@ -959,6 +959,20 @@ function getLeafletMap(): L.Map | null {
   return map.value?.leafletObject ?? null;
 }
 
+function getRouteFocusCoordinates(): GpsCoordinates | null {
+  const focusLat = parseFloat(route.query.lat as string);
+  const focusLng = parseFloat(route.query.lng as string);
+  if (isNaN(focusLat) || isNaN(focusLng)) return null;
+  return [focusLat, focusLng];
+}
+
+function applyRouteFocusIfPresent() {
+  const leafletMap = getLeafletMap();
+  const focusCoordinates = getRouteFocusCoordinates();
+  if (!leafletMap || !focusCoordinates) return;
+  leafletMap.setView(focusCoordinates, 14);
+}
+
 function fitMapToVisiblePhotos(options?: L.FitBoundsOptions) {
   const leafletMap = getLeafletMap();
   const coordinates = filteredPhotosWithGps.value.map(
@@ -1667,10 +1681,7 @@ async function handleLocationPhotoInfo(photo: any) {
 // Map ready handler
 const onMapReady = () => {
   const leafletMap = getLeafletMap();
-
-  const focusLat = parseFloat(route.query.lat as string);
-  const focusLng = parseFloat(route.query.lng as string);
-  const hasFocusParams = !isNaN(focusLat) && !isNaN(focusLng);
+  const hasFocusParams = !!getRouteFocusCoordinates();
 
   if (leafletMap) {
     L.control.zoom({ position: "bottomright" }).addTo(leafletMap);
@@ -1685,9 +1696,7 @@ const onMapReady = () => {
   }
   refreshPhotoMarkers();
 
-  if (hasFocusParams && leafletMap) {
-    leafletMap.setView([focusLat, focusLng], 14);
-  }
+  applyRouteFocusIfPresent();
 
   if (filteredPhotosWithGps.value.length === 0) {
     isMapViewportReady.value = true;
@@ -1926,6 +1935,15 @@ async function handleCorrectionConfirmed(payload: {
 watch(locationSelectedIds, () => {
   updateMarkerSelectionState();
 });
+
+// Re-apply map focus when navigating to this route with new lat/lng query params.
+watch(
+  () => [route.query.lat, route.query.lng, route.query.photoId],
+  async () => {
+    await nextTick();
+    applyRouteFocusIfPresent();
+  },
+);
 
 watch(
   [
