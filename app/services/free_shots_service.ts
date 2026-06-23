@@ -27,13 +27,10 @@ export type FreeShotCategory =
 export const FREE_DAILY_SHOTS: Record<FreeShotCategory, number> = {
   SEARCH: 3,
   SEARCH_PRECISE: 1,
-  // Insights searches run an LLM per request (and per pagination), so they are
-  // intentionally excluded from the free bag: 0 means tryConsumeFreeBag always
-  // returns false and the user is billed credits.
   SEARCH_INSIGHTS: 0,
   SEARCH_BY_PHOTO: 5,
   CHAT: 2,
-  CHAT_KNOWLEDGE_ASSISTANT: 5,
+  CHAT_KNOWLEDGE_ASSISTANT: 3,
 }
 
 /** Current day as YYYY-MM-DD (UTC), used to scope and auto-reset the bag daily. */
@@ -61,8 +58,12 @@ export default class FreeShotsService {
    *
    * Returns `true` if the user couldn't afford the operation AND a free shot was
    * available and has been consumed (caller should skip the affordability check
-   * and credit charges). Returns `false` if the user can still pay, or if the
-   * daily allowance is exhausted (caller should fall back to normal billing).
+   * and credit charges).
+   * Returns `false` if the user can still pay (caller should bill credits normally),
+   * or if the category has no free bag (limit = 0).
+   * Returns `'exhausted'` if the user has no credits AND the daily free quota for
+   * this category is fully used up — the caller should return a 402 QUOTA_EXHAUSTED
+   * response instead of a generic INSUFFICIENT_CREDITS one.
    *
    * The bag lives in the user's `usage` object and resets when the stored day no
    * longer matches today.
@@ -71,7 +72,7 @@ export default class FreeShotsService {
     userId: number,
     category: FreeShotCategory,
     minCredits: number = 1
-  ): Promise<boolean> {
+  ): Promise<boolean | 'exhausted'> {
     const limit = FREE_DAILY_SHOTS[category]
     if (!limit || limit <= 0) return false
 
@@ -85,7 +86,7 @@ export default class FreeShotsService {
 
     const bag = bagForToday(usage.freeShots)
     const used = bag.used[category] ?? 0
-    if (used >= limit) return false
+    if (used >= limit) return 'exhausted'
 
     bag.used[category] = used + 1
     usage.freeShots = bag

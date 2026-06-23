@@ -5,7 +5,7 @@ import ConversationService from '#services/conversation_service'
 import Photo from '#models/photo'
 import UserCostService from '#services/user_cost_service'
 import CreditService from '#services/credit_service'
-import FreeShotsService from '#services/free_shots_service'
+import FreeShotsService, { FREE_DAILY_SHOTS } from '#services/free_shots_service'
 import type { FreeShotCategory } from '#services/free_shots_service'
 import {
   findChatIntelligenceMode,
@@ -134,12 +134,20 @@ export default class ChatController {
         minCredits
       )
 
+      if (freeShot === 'exhausted') {
+        return response.status(402).json({
+          code: 'QUOTA_EXHAUSTED',
+          category: freeShotCategory,
+          dailyLimit: FREE_DAILY_SHOTS[freeShotCategory],
+        })
+      }
+
       if (!freeShot) {
         const hasCredits = await CreditService.canAfford(user.id, minCredits)
         if (!hasCredits) {
           return response.status(402).json({
-            message:
-              'No credits remaining. Please purchase more credits to continue. {url:/settings}',
+            code: 'INSUFFICIENT_CREDITS',
+            message: 'No credits remaining. Please purchase more credits to continue.',
           })
         }
       }

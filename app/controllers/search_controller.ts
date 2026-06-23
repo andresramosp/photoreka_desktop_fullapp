@@ -10,7 +10,7 @@ import CreditService, {
   PHOTO_SIMILARITY_MIN_CREDITS,
   SEARCH_INSIGHTS_MIN_CREDITS,
 } from '#services/credit_service'
-import FreeShotsService from '#services/free_shots_service'
+import FreeShotsService, { FREE_DAILY_SHOTS } from '#services/free_shots_service'
 import type { FreeShotCategory } from '#services/free_shots_service'
 import { SEARCH_MODE_CONFIGURATION } from '#services/search_text_service'
 import type { SearchMode } from '#services/search_text_service'
@@ -47,11 +47,19 @@ export default class SearchController {
       // so they must not consume free shots, run affordability checks, or charge credits.
       const isPagination = !!query.options.cursor
 
-      let freeShot = false
+      let freeShot: boolean | 'exhausted' = false
       if (!isPagination) {
         const minCredits = this.getSearchMinCredits(withInsights, isPrecise)
         // Credits first: the free bag only kicks in once the user can't afford it.
         freeShot = await FreeShotsService.tryConsumeFreeBag(user.id, searchCategory, minCredits)
+
+        if (freeShot === 'exhausted') {
+          return response.status(402).json({
+            code: 'QUOTA_EXHAUSTED',
+            category: searchCategory,
+            dailyLimit: FREE_DAILY_SHOTS[searchCategory],
+          })
+        }
 
         if (!freeShot) {
           const hasCredits = await CreditService.canAfford(user.id, minCredits)
@@ -159,11 +167,19 @@ export default class SearchController {
       // so they must not consume free shots, run affordability checks, or charge credits.
       const isPagination = !!query.options.cursor
 
-      let freeShot = false
+      let freeShot: boolean | 'exhausted' = false
       if (!isPagination) {
         const minCredits = this.getSearchMinCredits(withInsights, isPrecise)
         // Credits first: the free bag only kicks in once the user can't afford it.
         freeShot = await FreeShotsService.tryConsumeFreeBag(user.id, searchCategory, minCredits)
+
+        if (freeShot === 'exhausted') {
+          return response.status(402).json({
+            code: 'QUOTA_EXHAUSTED',
+            category: searchCategory,
+            dailyLimit: FREE_DAILY_SHOTS[searchCategory],
+          })
+        }
 
         if (!freeShot) {
           const hasCredits = await CreditService.canAfford(user.id, minCredits)
@@ -305,6 +321,14 @@ export default class SearchController {
         'SEARCH_BY_PHOTO',
         totalFixedCredits
       )
+
+      if (freeShot === 'exhausted') {
+        return response.status(402).json({
+          code: 'QUOTA_EXHAUSTED',
+          category: 'SEARCH_BY_PHOTO',
+          dailyLimit: FREE_DAILY_SHOTS['SEARCH_BY_PHOTO'],
+        })
+      }
 
       if (!freeShot && totalFixedCredits > 0) {
         const charged = await CreditService.tryChargeFixed(user.id, totalFixedCredits)
