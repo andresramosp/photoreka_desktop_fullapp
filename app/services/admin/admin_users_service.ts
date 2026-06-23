@@ -26,6 +26,8 @@ export interface CreditLedgerRow {
   marginMultiplier: number | null
   referenceId: string | null
   createdAt: string
+  isFree: boolean
+  creditsWaived: number | null
 }
 
 export interface AdminUserListItem {
@@ -510,7 +512,8 @@ export default class AdminUsersService {
         'credits_charged',
         'margin_multiplier',
         'reference_id',
-        'created_at'
+        'created_at',
+        'metadata'
       )
       .limit(limit)
       .offset(offset)
@@ -526,6 +529,11 @@ export default class AdminUsersService {
         marginMultiplier: r.margin_multiplier != null ? Number(r.margin_multiplier) : null,
         referenceId: r.reference_id ?? null,
         createdAt: new Date(r.created_at).toISOString(),
+        isFree: r.metadata?.free === true,
+        creditsWaived:
+          r.metadata?.creditsWaived !== null && r.metadata?.creditsWaived !== undefined
+            ? Number(r.metadata.creditsWaived)
+            : null,
       })),
       meta: {
         total: totalCount,

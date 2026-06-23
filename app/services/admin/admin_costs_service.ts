@@ -83,6 +83,8 @@ export interface CostTransactionRow {
   creditsCharged: number | null
   marginMultiplier: number | null
   referenceId: string | null
+  isFree: boolean
+  creditsWaived: number | null
 }
 
 export interface CostTransactionsResult {
@@ -463,6 +465,7 @@ export default class AdminCostsService {
         cl.credits_charged,
         cl.margin_multiplier,
         cl.reference_id,
+        cl.metadata,
         u.id AS user_id,
         u.name AS user_name,
         u.email AS user_email
@@ -494,6 +497,11 @@ export default class AdminCostsService {
           ? Number(r.margin_multiplier)
           : null,
       referenceId: r.reference_id ?? null,
+      isFree: r.metadata?.free === true,
+      creditsWaived:
+        r.metadata?.creditsWaived !== null && r.metadata?.creditsWaived !== undefined
+          ? Number(r.metadata.creditsWaived)
+          : null,
     }))
 
     return {

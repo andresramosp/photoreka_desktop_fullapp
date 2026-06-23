@@ -9,6 +9,8 @@ import CreditService, {
   PHOTO_SIMILARITY_RESULT_CREDITS,
   PHOTO_SIMILARITY_MIN_CREDITS,
 } from '#services/credit_service'
+import FreeShotsService from '#services/free_shots_service'
+import type { FreeShotCategory } from '#services/free_shots_service'
 import { SEARCH_MODE_CONFIGURATION } from '#services/search_text_service'
 import type { SearchMode } from '#services/search_text_service'
 
@@ -20,26 +22,36 @@ export default class SearchController {
   public async searchSemanticSync({ request, response, auth }: HttpContext) {
     const user = auth.use('api').user!
     try {
-      const hasCredits = await CreditService.canAfford(user.id)
-      if (!hasCredits) {
-        return response.status(402).json({
-          message: 'No credits remaining. Please purchase more credits to continue.',
-          code: 'INSUFFICIENT_CREDITS',
-        })
-      }
-
       const searchService = new SearchTextService()
       const query = request.body()
       const searchMode = query.options.searchMode as SearchMode
+      const isPrecise = SEARCH_MODE_CONFIGURATION[searchMode]?.refineMode !== 'none'
+      const freeShotCategory: FreeShotCategory = isPrecise ? 'SEARCH_PRECISE' : 'SEARCH'
 
-      // Charge GPU credits upfront for modes that use entailment refinement (non-cursor requests)
-      if (!query.options.cursor && SEARCH_MODE_CONFIGURATION[searchMode]?.refineMode !== 'none') {
-        const charged = await CreditService.tryChargeFixed(user.id, PRECISE_GPU_CREDITS)
-        if (!charged) {
+      // Consume the daily free allowance before touching real credits.
+      const freeShot = await FreeShotsService.tryConsume(user.id, freeShotCategory)
+
+      if (!freeShot) {
+        const minCredits = isPrecise ? PRECISE_GPU_CREDITS : 1
+        const hasCredits = await CreditService.canAfford(user.id, minCredits)
+        if (!hasCredits) {
           return response.status(402).json({
             message: 'No credits remaining. Please purchase more credits to continue.',
             code: 'INSUFFICIENT_CREDITS',
           })
+        }
+      }
+
+      // Charge GPU credits upfront for modes that use entailment refinement (non-cursor requests)
+      if (!query.options.cursor && isPrecise) {
+        if (!freeShot) {
+          const charged = await CreditService.tryChargeFixed(user.id, PRECISE_GPU_CREDITS)
+          if (!charged) {
+            return response.status(402).json({
+              message: 'No credits remaining. Please purchase more credits to continue.',
+              code: 'INSUFFICIENT_CREDITS',
+            })
+          }
         }
         UserCostService.record(
           user.id,
@@ -48,6 +60,7 @@ export default class SearchController {
           1,
           {
             task: 'gpu_precise_search',
+            free: freeShot,
             metadata: { fixedCharge: true, credits: PRECISE_GPU_CREDITS },
           }
         ).catch(() => {})
@@ -69,11 +82,16 @@ export default class SearchController {
         lightweight: query.options.lightweight || false,
       })
 
-      UserCostService.recordFromTracker(user.id, searchService.costTracker).catch(() => {})
+      UserCostService.recordFromTracker(
+        user.id,
+        searchService.costTracker,
+        undefined,
+        freeShot
+      ).catch(() => {})
 
       const summary = searchService.costTracker.getSummary()
-      if (summary.totalCostInEur > 0) {
-        CreditService.charge(user.id, summary.totalCostInEur, 'SEARCH').catch(() => {})
+      if (!freeShot && summary.totalCostInEur > 0) {
+        CreditService.charge(user.id, summary.totalCostInEur, freeShotCategory).catch(() => {})
       }
 
       return response.ok(result)
@@ -87,27 +105,37 @@ export default class SearchController {
     try {
       const user = auth.use('api').user!
 
-      const hasCredits = await CreditService.canAfford(user.id)
-      if (!hasCredits) {
-        return response.status(402).json({
-          message: 'No credits remaining. Please purchase more credits to continue.',
-          code: 'INSUFFICIENT_CREDITS',
-        })
-      }
-
       const searchService = new SearchTextService()
 
       const query = request.body()
       const searchMode = query.options.searchMode as SearchMode
+      const isPrecise = SEARCH_MODE_CONFIGURATION[searchMode]?.refineMode !== 'none'
+      const freeShotCategory: FreeShotCategory = isPrecise ? 'SEARCH_PRECISE' : 'SEARCH'
 
-      // Charge GPU credits upfront for modes that use entailment refinement (non-cursor requests)
-      if (!query.options.cursor && SEARCH_MODE_CONFIGURATION[searchMode]?.refineMode !== 'none') {
-        const charged = await CreditService.tryChargeFixed(user.id, PRECISE_GPU_CREDITS)
-        if (!charged) {
+      // Consume the daily free allowance before touching real credits.
+      const freeShot = await FreeShotsService.tryConsume(user.id, freeShotCategory)
+
+      if (!freeShot) {
+        const minCredits = isPrecise ? PRECISE_GPU_CREDITS : 1
+        const hasCredits = await CreditService.canAfford(user.id, minCredits)
+        if (!hasCredits) {
           return response.status(402).json({
             message: 'No credits remaining. Please purchase more credits to continue.',
             code: 'INSUFFICIENT_CREDITS',
           })
+        }
+      }
+
+      // Charge GPU credits upfront for modes that use entailment refinement (non-cursor requests)
+      if (!query.options.cursor && isPrecise) {
+        if (!freeShot) {
+          const charged = await CreditService.tryChargeFixed(user.id, PRECISE_GPU_CREDITS)
+          if (!charged) {
+            return response.status(402).json({
+              message: 'No credits remaining. Please purchase more credits to continue.',
+              code: 'INSUFFICIENT_CREDITS',
+            })
+          }
         }
         UserCostService.record(
           user.id,
@@ -116,6 +144,7 @@ export default class SearchController {
           1,
           {
             task: 'gpu_precise_search',
+            free: freeShot,
             metadata: { fixedCharge: true, credits: PRECISE_GPU_CREDITS },
           }
         ).catch(() => {})
@@ -137,11 +166,16 @@ export default class SearchController {
         user.id
       )
 
-      UserCostService.recordFromTracker(user.id, searchService.costTracker).catch(() => {})
+      UserCostService.recordFromTracker(
+        user.id,
+        searchService.costTracker,
+        undefined,
+        freeShot
+      ).catch(() => {})
 
       const summary = searchService.costTracker.getSummary()
-      if (summary.totalCostInEur > 0) {
-        CreditService.charge(user.id, summary.totalCostInEur, 'SEARCH').catch(() => {})
+      if (!freeShot && summary.totalCostInEur > 0) {
+        CreditService.charge(user.id, summary.totalCostInEur, freeShotCategory).catch(() => {})
       }
 
       return response.ok(result)
@@ -155,12 +189,17 @@ export default class SearchController {
     try {
       const user = auth.use('api').user!
 
-      const hasCredits = await CreditService.canAfford(user.id)
-      if (!hasCredits) {
-        return response.status(402).json({
-          message: 'No credits remaining. Please purchase more credits to continue.',
-          code: 'INSUFFICIENT_CREDITS',
-        })
+      // Consume the daily free allowance before touching real credits.
+      const freeShot = await FreeShotsService.tryConsume(user.id, 'SEARCH')
+
+      if (!freeShot) {
+        const hasCredits = await CreditService.canAfford(user.id)
+        if (!hasCredits) {
+          return response.status(402).json({
+            message: 'No credits remaining. Please purchase more credits to continue.',
+            code: 'INSUFFICIENT_CREDITS',
+          })
+        }
       }
 
       const searchService = new SearchTextService()
@@ -178,10 +217,15 @@ export default class SearchController {
         normalizedLimit
       )
 
-      UserCostService.recordFromTracker(user.id, searchService.costTracker).catch(() => {})
+      UserCostService.recordFromTracker(
+        user.id,
+        searchService.costTracker,
+        undefined,
+        freeShot
+      ).catch(() => {})
 
       const summary = searchService.costTracker.getSummary()
-      if (summary.totalCostInEur > 0) {
+      if (!freeShot && summary.totalCostInEur > 0) {
         CreditService.charge(user.id, summary.totalCostInEur, 'SEARCH').catch(() => {})
       }
 
@@ -200,6 +244,9 @@ export default class SearchController {
       const user = auth.use('api').user!
       const searchService = new SearchPhotoService()
 
+      // Consume the daily free allowance before touching real credits.
+      const freeShot = await FreeShotsService.tryConsume(user.id, 'SEARCH_BY_PHOTO')
+
       const query: any = request.body()
       const resultLength = Number(query.resultLength)
       const billableResults =
@@ -213,7 +260,7 @@ export default class SearchController {
         query.criteria === 'embedding' && query.cropRegion ? CLIP_CROP_CREDITS : 0
       const totalFixedCredits = photoSimilarityCredits + clipCropCredits
 
-      if (totalFixedCredits > 0) {
+      if (!freeShot && totalFixedCredits > 0) {
         const charged = await CreditService.tryChargeFixed(user.id, totalFixedCredits)
         if (!charged) {
           return response.status(402).json({
@@ -230,6 +277,7 @@ export default class SearchController {
         billableResults,
         {
           task: 'photo_similarity_search',
+          free: freeShot,
           metadata: {
             fixedCharge: true,
             credits: photoSimilarityCredits,
@@ -250,6 +298,7 @@ export default class SearchController {
           1,
           {
             task: 'clip_crop_embedding',
+            free: freeShot,
             metadata: { fixedCharge: true, credits: clipCropCredits },
           }
         ).catch(() => {})

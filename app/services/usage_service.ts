@@ -37,6 +37,17 @@ export function getDefaultUsageByTier(tier: UsageTier): Usage {
     analyzedPhotosUsed: 0,
   }
 }
+/**
+ * Daily free-usage allowance ("bolsa gratuita diaria").
+ * `date` is the YYYY-MM-DD the counters belong to; when it no longer matches
+ * today the bag is considered reset. `used` maps a FreeShotCategory to the
+ * number of free shots already consumed today.
+ */
+export type FreeShotsState = {
+  date: string
+  used: Record<string, number>
+}
+
 export type Usage = {
   // Límites configurados
   photosLimit: number // Cantidad de fotos permitidas
@@ -44,6 +55,9 @@ export type Usage = {
   creditsAvailable: number // Créditos disponibles
   creditsUsed: number // Créditos gastados
   analyzedPhotosUsed: number // Contador acumulativo de fotos analizadas (no se reduce al borrar)
+
+  // Bolsa gratuita diaria de usos por categoría (se resetea cada día)
+  freeShots?: FreeShotsState
 
   // Datos calculados (opcionales)
   photosUsage?: number // Fotos actualmente subidas

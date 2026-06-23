@@ -5,6 +5,8 @@ import ConversationService from '#services/conversation_service'
 import Photo from '#models/photo'
 import UserCostService from '#services/user_cost_service'
 import CreditService from '#services/credit_service'
+import FreeShotsService from '#services/free_shots_service'
+import type { FreeShotCategory } from '#services/free_shots_service'
 import {
   findChatIntelligenceMode,
   getDefaultChatIntelligenceModeId,
@@ -122,12 +124,20 @@ export default class ChatController {
       }
 
       // ── Credit gate ──────────────────────────────────────
-      const hasCredits = await CreditService.canAfford(user.id)
-      if (!hasCredits) {
-        return response.status(402).json({
-          message:
-            'No credits remaining. Please purchase more credits to continue. {url:/settings}',
-        })
+      // Consume the daily free allowance before touching real credits.
+      const freeShotCategory: FreeShotCategory =
+        isKnowledgeAssistant === true ? 'CHAT_KNOWLEDGE_ASSISTANT' : 'CHAT'
+      const freeShot = await FreeShotsService.tryConsume(user.id, freeShotCategory)
+
+      if (!freeShot) {
+        const minCredits = isKnowledgeAssistant === true ? 5 : 20
+        const hasCredits = await CreditService.canAfford(user.id, minCredits)
+        if (!hasCredits) {
+          return response.status(402).json({
+            message:
+              'No credits remaining. Please purchase more credits to continue. {url:/settings}',
+          })
+        }
       }
 
       // Route to knowledge-only agent when forced via parameter or when user has no analyzed photos.
@@ -192,6 +202,7 @@ export default class ChatController {
         UserCostService.record(user.id, recordCategory, result.cost.total.costEur, 1, {
           referenceId: isEphemeral ? undefined : String(resolvedConversationId),
           task: 'chat_message',
+          free: freeShot,
           metadata: result.cost?.total
             ? {
                 inputTokens: result.cost.total.inputTokens,
@@ -203,7 +214,7 @@ export default class ChatController {
       }
 
       // Charge credits based on real cost
-      if (result.cost?.total?.costEur) {
+      if (!freeShot && result.cost?.total?.costEur) {
         const chargeCategory = isKnowledgeAssistant === true ? 'CHAT_KNOWLEDGE_ASSISTANT' : 'CHAT'
         CreditService.charge(user.id, result.cost.total.costEur, chargeCategory).catch(() => {})
       }

@@ -11,6 +11,8 @@ const EUR_PER_CREDIT = 0.001
 export type CostCategory =
   | 'GEO_INFERENCE'
   | 'SEARCH'
+  | 'SEARCH_PRECISE'
+  | 'SEARCH_BY_PHOTO'
   | 'PORTFOLIO_BUILD'
   | 'CHAT'
   | 'CHAT_KNOWLEDGE_ASSISTANT'
@@ -21,6 +23,8 @@ export type CostCategory =
  * Override individual categories via env vars:
  *   CREDIT_MARGIN_MULTIPLIER_GEO_INFERENCE
  *   CREDIT_MARGIN_MULTIPLIER_SEARCH
+ *   CREDIT_MARGIN_MULTIPLIER_SEARCH_PRECISE
+ *   CREDIT_MARGIN_MULTIPLIER_SEARCH_BY_PHOTO
  *   CREDIT_MARGIN_MULTIPLIER_PORTFOLIO_BUILD
  *   CREDIT_MARGIN_MULTIPLIER_CHAT
  *   CREDIT_MARGIN_MULTIPLIER_CHAT_KNOWLEDGE_ASSISTANT
@@ -31,6 +35,8 @@ export type CostCategory =
 export const COST_MULTIPLIERS: Record<CostCategory, number> = {
   GEO_INFERENCE: 2, //2.5,
   SEARCH: 2,
+  SEARCH_PRECISE: 2,
+  SEARCH_BY_PHOTO: 2,
   PORTFOLIO_BUILD: 2.25, //2.5,
   CHAT: 2.25,
   CHAT_KNOWLEDGE_ASSISTANT: 1,
@@ -45,10 +51,10 @@ export const PRECISE_GPU_CREDITS = 5
 export const CLIP_CROP_CREDITS = 5
 
 /** Fixed credit cost per requested photo similarity result */
-export const PHOTO_SIMILARITY_RESULT_CREDITS = 0.005
+export const PHOTO_SIMILARITY_RESULT_CREDITS = 0.01
 
 /** Minimum fixed credit cost for a photo similarity search */
-export const PHOTO_SIMILARITY_MIN_CREDITS = 0.05
+export const PHOTO_SIMILARITY_MIN_CREDITS = 0.1
 
 // ─── Service ─────────────────────────────────────────────
 

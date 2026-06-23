@@ -18,6 +18,12 @@ export interface CostLogOptions {
   creditsCharged?: number
   /** Explicit margin multiplier (null = fixed price, no multiplier). Overrides auto-computed. */
   marginMultiplier?: number | null
+  /**
+   * Operation was served from the daily free allowance: the company still paid the
+   * underlying cost (costInEur), but the user was NOT charged. The would-be charge is
+   * recorded as `metadata.creditsWaived` and `creditsCharged` is forced to 0.
+   */
+  free?: boolean
   metadata?: Record<string, any>
 }
 
@@ -76,6 +82,14 @@ export default class UserCostService {
       typeof options?.metadata?.credits === 'number' ? options.metadata.credits : undefined
     const creditInfo = isFixedCharge ? null : this.computeCredits(category, costInEur)
 
+    // Credits the user would have been charged if this were not free.
+    const wouldBeCredits =
+      options?.creditsCharged !== undefined
+        ? options.creditsCharged
+        : (fixedCredits ?? creditInfo?.creditsCharged ?? null)
+
+    const isFree = options?.free === true
+
     await CostLog.create({
       userId,
       category,
@@ -84,17 +98,17 @@ export default class UserCostService {
       model: options?.model ?? null,
       task: options?.task ?? null,
       referenceId: options?.referenceId ?? null,
-      creditsCharged:
-        options?.creditsCharged !== undefined
-          ? options.creditsCharged
-          : (fixedCredits ?? creditInfo?.creditsCharged ?? null),
-      marginMultiplier:
-        'marginMultiplier' in (options ?? {})
+      creditsCharged: isFree ? 0 : wouldBeCredits,
+      marginMultiplier: isFree
+        ? null
+        : 'marginMultiplier' in (options ?? {})
           ? (options!.marginMultiplier ?? null)
           : isFixedCharge
             ? null
             : (creditInfo?.marginMultiplier ?? null),
-      metadata: options?.metadata ?? null,
+      metadata: isFree
+        ? { ...(options?.metadata ?? {}), free: true, creditsWaived: wouldBeCredits ?? 0 }
+        : (options?.metadata ?? null),
     })
   }
 
@@ -105,9 +119,10 @@ export default class UserCostService {
   static async recordFromTracker(
     userId: number,
     tracker: CostTracker,
-    referenceId?: string
+    referenceId?: string,
+    free: boolean = false
   ): Promise<void> {
-    return this.recordSummary(userId, tracker.getSummary(), referenceId)
+    return this.recordSummary(userId, tracker.getSummary(), referenceId, free)
   }
 
   /**
@@ -118,7 +133,8 @@ export default class UserCostService {
   static async recordSummary(
     userId: number,
     summary: CostSummary,
-    referenceId?: string
+    referenceId?: string,
+    free: boolean = false
   ): Promise<void> {
     if (!userId || summary.totalCostInEur <= 0) return
 
@@ -147,9 +163,10 @@ export default class UserCostService {
         model: data.model,
         task: data.task,
         referenceId: referenceId ?? null,
-        creditsCharged: creditInfo?.creditsCharged ?? null,
-        marginMultiplier: creditInfo?.marginMultiplier ?? null,
+        creditsCharged: free ? 0 : (creditInfo?.creditsCharged ?? null),
+        marginMultiplier: free ? null : (creditInfo?.marginMultiplier ?? null),
         metadata: {
+          ...(free ? { free: true, creditsWaived: creditInfo?.creditsCharged ?? 0 } : {}),
           type: data.type,
           methods: data.methods,
           tokens: data.tokens,
