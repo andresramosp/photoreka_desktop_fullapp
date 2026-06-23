@@ -59,6 +59,13 @@ export const PHOTO_SIMILARITY_RESULT_CREDITS = 0.01
 /** Minimum fixed credit cost for a photo similarity search */
 export const PHOTO_SIMILARITY_MIN_CREDITS = 0.1
 
+/**
+ * Flat upfront affordability estimate for a Search Insights page. Insights run one
+ * LLM call per photo on every page, so a single page costs well over 1 credit; this
+ * is only the affordability gate, the real cost is charged post-search from the tracker.
+ */
+export const SEARCH_INSIGHTS_MIN_CREDITS = 20
+
 // ─── Service ─────────────────────────────────────────────
 
 export default class CreditService {

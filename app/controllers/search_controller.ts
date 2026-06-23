@@ -8,6 +8,7 @@ import CreditService, {
   CLIP_CROP_CREDITS,
   PHOTO_SIMILARITY_RESULT_CREDITS,
   PHOTO_SIMILARITY_MIN_CREDITS,
+  SEARCH_INSIGHTS_MIN_CREDITS,
 } from '#services/credit_service'
 import FreeShotsService from '#services/free_shots_service'
 import type { FreeShotCategory } from '#services/free_shots_service'
@@ -15,6 +16,14 @@ import { SEARCH_MODE_CONFIGURATION } from '#services/search_text_service'
 import type { SearchMode } from '#services/search_text_service'
 
 export default class SearchController {
+  private getSearchCategory(withInsights: boolean, isPrecise: boolean): FreeShotCategory {
+    return withInsights ? 'SEARCH_INSIGHTS' : isPrecise ? 'SEARCH_PRECISE' : 'SEARCH'
+  }
+
+  private getSearchMinCredits(withInsights: boolean, isPrecise: boolean): number {
+    return withInsights ? SEARCH_INSIGHTS_MIN_CREDITS : isPrecise ? PRECISE_GPU_CREDITS : 1
+  }
+
   /**
    * Handle the upload of multiple photos
    */
@@ -32,11 +41,7 @@ export default class SearchController {
       // they are billed under a dedicated category whose free bag is 0 (see
       // FREE_DAILY_SHOTS): tryConsumeFreeBag always returns false, so the user is
       // charged credits and the daily free quota is never consumed.
-      const freeShotCategory: FreeShotCategory = withInsights
-        ? 'SEARCH_INSIGHTS'
-        : isPrecise
-          ? 'SEARCH_PRECISE'
-          : 'SEARCH'
+      const searchCategory = this.getSearchCategory(withInsights, isPrecise)
 
       // Pagination requests (cursor present) continue an already-billed search,
       // so they must not consume free shots, run affordability checks, or charge credits.
@@ -44,9 +49,9 @@ export default class SearchController {
 
       let freeShot = false
       if (!isPagination) {
-        const minCredits = isPrecise ? PRECISE_GPU_CREDITS : 1
+        const minCredits = this.getSearchMinCredits(withInsights, isPrecise)
         // Credits first: the free bag only kicks in once the user can't afford it.
-        freeShot = await FreeShotsService.tryConsumeFreeBag(user.id, freeShotCategory, minCredits)
+        freeShot = await FreeShotsService.tryConsumeFreeBag(user.id, searchCategory, minCredits)
 
         if (!freeShot) {
           const hasCredits = await CreditService.canAfford(user.id, minCredits)
@@ -81,6 +86,18 @@ export default class SearchController {
             }
           ).catch(() => {})
         }
+      } else if (withInsights) {
+        // Insights pagination keeps running an LLM on every page, so it stays billable
+        // even when a cursor is present. The free bag is always 0 for insights, so we
+        // only verify the user can still afford to continue (the actual cost is charged
+        // post-search from the cost tracker below).
+        const hasCredits = await CreditService.canAfford(user.id, SEARCH_INSIGHTS_MIN_CREDITS)
+        if (!hasCredits) {
+          return response.status(402).json({
+            message: 'No credits remaining. Please purchase more credits to continue.',
+            code: 'INSUFFICIENT_CREDITS',
+          })
+        }
       }
 
       const result = await searchService.searchSemanticSync(query.description, user.id, {
@@ -99,7 +116,8 @@ export default class SearchController {
         lightweight: query.options.lightweight || false,
       })
 
-      if (!isPagination) {
+      // Insights searches compute an LLM per page, so their pagination must be billed too.
+      if (!isPagination || withInsights) {
         UserCostService.recordFromTracker(
           user.id,
           searchService.costTracker,
@@ -109,7 +127,7 @@ export default class SearchController {
 
         const summary = searchService.costTracker.getSummary()
         if (!freeShot && summary.totalCostInEur > 0) {
-          CreditService.charge(user.id, summary.totalCostInEur, freeShotCategory).catch(() => {})
+          CreditService.charge(user.id, summary.totalCostInEur, searchCategory).catch(() => {})
         }
       }
 
@@ -135,11 +153,7 @@ export default class SearchController {
       // they are billed under a dedicated category whose free bag is 0 (see
       // FREE_DAILY_SHOTS): tryConsumeFreeBag always returns false, so the user is
       // charged credits and the daily free quota is never consumed.
-      const freeShotCategory: FreeShotCategory = withInsights
-        ? 'SEARCH_INSIGHTS'
-        : isPrecise
-          ? 'SEARCH_PRECISE'
-          : 'SEARCH'
+      const searchCategory = this.getSearchCategory(withInsights, isPrecise)
 
       // Pagination requests (cursor present) continue an already-billed search,
       // so they must not consume free shots, run affordability checks, or charge credits.
@@ -147,9 +161,9 @@ export default class SearchController {
 
       let freeShot = false
       if (!isPagination) {
-        const minCredits = isPrecise ? PRECISE_GPU_CREDITS : 1
+        const minCredits = this.getSearchMinCredits(withInsights, isPrecise)
         // Credits first: the free bag only kicks in once the user can't afford it.
-        freeShot = await FreeShotsService.tryConsumeFreeBag(user.id, freeShotCategory, minCredits)
+        freeShot = await FreeShotsService.tryConsumeFreeBag(user.id, searchCategory, minCredits)
 
         if (!freeShot) {
           const hasCredits = await CreditService.canAfford(user.id, minCredits)
@@ -184,6 +198,18 @@ export default class SearchController {
             }
           ).catch(() => {})
         }
+      } else if (withInsights) {
+        // Insights pagination keeps running an LLM on every page, so it stays billable
+        // even when a cursor is present. The free bag is always 0 for insights, so we
+        // only verify the user can still afford to continue (the actual cost is charged
+        // post-search from the cost tracker below).
+        const hasCredits = await CreditService.canAfford(user.id, SEARCH_INSIGHTS_MIN_CREDITS)
+        if (!hasCredits) {
+          return response.status(402).json({
+            message: 'No credits remaining. Please purchase more credits to continue.',
+            code: 'INSUFFICIENT_CREDITS',
+          })
+        }
       }
 
       const result = await searchService.searchByTagsSync(
@@ -202,7 +228,8 @@ export default class SearchController {
         user.id
       )
 
-      if (!isPagination) {
+      // Insights searches compute an LLM per page, so their pagination must be billed too.
+      if (!isPagination || withInsights) {
         UserCostService.recordFromTracker(
           user.id,
           searchService.costTracker,
@@ -212,7 +239,7 @@ export default class SearchController {
 
         const summary = searchService.costTracker.getSummary()
         if (!freeShot && summary.totalCostInEur > 0) {
-          CreditService.charge(user.id, summary.totalCostInEur, freeShotCategory).catch(() => {})
+          CreditService.charge(user.id, summary.totalCostInEur, searchCategory).catch(() => {})
         }
       }
 
