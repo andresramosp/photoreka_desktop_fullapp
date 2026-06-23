@@ -823,7 +823,26 @@
             <span class="free-quota-value">1</span>
           </div>
           <div class="free-quota-table-row">
-            <span>Search (Photo Similarity)</span>
+            <span class="free-quota-row-label">
+              Find Similar Photos
+              <n-tooltip trigger="hover" placement="top">
+                <template #trigger>
+                  <n-icon
+                    size="12"
+                    color="var(--text-secondary)"
+                    style="
+                      cursor: help;
+                      vertical-align: middle;
+                      margin-left: 3px;
+                    "
+                  >
+                    <InformationCircleOutline />
+                  </n-icon>
+                </template>
+                Used in Canvas, Series, and the "Similar" tab in the Photo Info
+                panel.
+              </n-tooltip>
+            </span>
             <span class="free-quota-value">5</span>
           </div>
           <div class="free-quota-table-row">
@@ -2326,6 +2345,11 @@ const handleDeleteAccount = async () => {
   color: var(--text-secondary);
   font-weight: var(--font-weight-normal);
   font-style: italic;
+}
+
+.free-quota-row-label {
+  display: inline-flex;
+  align-items: center;
 }
 
 .credits-daily-quota-row {
