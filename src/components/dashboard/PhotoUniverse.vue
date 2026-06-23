@@ -28,17 +28,6 @@
     </div>
 
     <div v-else class="photo-universe-filled">
-      <!-- <div class="floating-stats-container" aria-label="Tag cloud quick stats">
-        <div
-          v-for="badge in topBadges"
-          :key="badge.label"
-          class="universe-stat-badge"
-        >
-          <span class="stat-value">{{ badge.value }}</span>
-          <span class="stat-label">{{ badge.label }}</span>
-        </div>
-      </div> -->
-
       <header class="universe-header" aria-label="Universe view header">
         <h2 class="universe-title">
           {{ messageHeader }}
@@ -69,30 +58,13 @@
       </div>
 
       <Transition name="loading-overlay-fade">
-        <div
-          v-if="showLoadingOverlay"
-          class="quantum-void loading photos2d-loading-overlay"
-        >
-          <div class="void-rings-layer">
-            <div class="void-ring" style="--rs: 120px; --rd: 0s; --rdur: 3s" />
-            <div
-              class="void-ring"
-              style="--rs: 240px; --rd: 0.5s; --rdur: 4s"
-            />
-            <div class="void-ring" style="--rs: 380px; --rd: 1s; --rdur: 5s" />
-            <div
-              class="void-ring"
-              style="--rs: 540px; --rd: 1.5s; --rdur: 6s"
-            />
-            <div class="void-ring" style="--rs: 720px; --rd: 2s; --rdur: 7s" />
-          </div>
-
-          <div class="void-core" />
-
-          <div class="void-caption">
-            <p class="void-caption-main">· · · RENDERING PREVIEW · · ·</p>
-            <p class="void-caption-sub">{{ loadingOverlaySubtitle }}</p>
-          </div>
+        <div v-if="showLoadingOverlay" class="photos2d-loading-overlay">
+          <SpiralGridLoader
+            variant="primary"
+            :size="72"
+            :duration="1200"
+            :text="loadingOverlaySubtitle"
+          />
         </div>
       </Transition>
 
@@ -133,6 +105,7 @@ import { usePhotosStore } from "@/stores/photos.js";
 import PixiTagCloud from "@/components/tag-cloud/PixiTagCloud.vue";
 // @ts-ignore
 import Photos2D from "@/components/2d-atlas/Photos2D.vue";
+import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import WorldMapView from "@/views/WorldMapView.vue";
 import ModePopoverSelector from "@/components/ModePopoverSelector.vue";
 import { NIcon } from "naive-ui";
@@ -604,6 +577,11 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 38px 0 0;
   z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  pointer-events: none;
 }
 
 .loading-overlay-fade-enter-active,
@@ -650,27 +628,6 @@ onBeforeUnmount(() => {
 
 .universe-selector-container {
   pointer-events: auto;
-}
-
-/* Animation for spinning loading rings */
-@keyframes ringSpin {
-  0% {
-    transform: translate(-50%, -50%) rotate(0deg) scale(0.96);
-  }
-  100% {
-    transform: translate(-50%, -50%) rotate(360deg) scale(0.96);
-  }
-}
-
-.quantum-void.loading .void-ring {
-  border-color: color-mix(in srgb, var(--accent-color) 16%, transparent);
-  border-top-color: color-mix(
-    in srgb,
-    var(--accent-color) 85%,
-    var(--text-primary) 15%
-  ); /* highlight top border as a spinner arc */
-  animation: ringSpin var(--rdur, 6s) linear infinite;
-  animation-delay: var(--rd, 0s);
 }
 
 /* Discrete Floating Button Styles */
