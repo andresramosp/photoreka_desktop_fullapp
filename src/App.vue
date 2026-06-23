@@ -6,7 +6,7 @@
     :theme="null"
     :theme-overrides="{}"
   >
-    <n-notification-provider>
+    <n-notification-provider :max-width="480">
       <n-dialog-provider>
         <n-message-provider>
           <router-view />
@@ -22,7 +22,7 @@
     :theme="darkTheme"
     :theme-overrides="themeOverrides"
   >
-    <n-notification-provider>
+    <n-notification-provider :max-width="480">
       <n-dialog-provider>
         <n-message-provider>
           <!-- Landing Page Layout (no sidebar) -->

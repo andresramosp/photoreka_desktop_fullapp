@@ -154,7 +154,7 @@ const loadPhotosFromToolbar = async () => {
 
   await nextTick();
   emit("loading", false);
-  emit("photos-generated", result.slice(0, pageSize));
+  emit("photos-generated", result ? result.slice(0, pageSize) : []);
 };
 
 const loadPhotosFromSelections = debounce(async () => {
@@ -187,7 +187,7 @@ const loadPhotosFromSelections = debounce(async () => {
 
   await nextTick();
   emit("loading", false);
-  emit("photos-generated", result);
+  emit("photos-generated", result ?? []);
 }, 2000);
 
 // const getBoxStyle = (detection) => {
