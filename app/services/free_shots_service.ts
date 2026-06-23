@@ -11,6 +11,7 @@ import type { FreeShotsState } from '#services/usage_service'
 export type FreeShotCategory =
   | 'SEARCH'
   | 'SEARCH_PRECISE'
+  | 'SEARCH_INSIGHTS'
   | 'SEARCH_BY_PHOTO'
   | 'CHAT'
   | 'CHAT_KNOWLEDGE_ASSISTANT'
@@ -26,6 +27,10 @@ export type FreeShotCategory =
 export const FREE_DAILY_SHOTS: Record<FreeShotCategory, number> = {
   SEARCH: 3,
   SEARCH_PRECISE: 1,
+  // Insights searches run an LLM per request (and per pagination), so they are
+  // intentionally excluded from the free bag: 0 means tryConsumeFreeBag always
+  // returns false and the user is billed credits.
+  SEARCH_INSIGHTS: 0,
   SEARCH_BY_PHOTO: 5,
   CHAT: 2,
   CHAT_KNOWLEDGE_ASSISTANT: 5,

@@ -26,7 +26,17 @@ export default class SearchController {
       const query = request.body()
       const searchMode = query.options.searchMode as SearchMode
       const isPrecise = SEARCH_MODE_CONFIGURATION[searchMode]?.refineMode !== 'none'
-      const freeShotCategory: FreeShotCategory = isPrecise ? 'SEARCH_PRECISE' : 'SEARCH'
+      const withInsights = !!query.options.withInsights
+
+      // Insights searches run an LLM per request (and again on every pagination), so
+      // they are billed under a dedicated category whose free bag is 0 (see
+      // FREE_DAILY_SHOTS): tryConsumeFreeBag always returns false, so the user is
+      // charged credits and the daily free quota is never consumed.
+      const freeShotCategory: FreeShotCategory = withInsights
+        ? 'SEARCH_INSIGHTS'
+        : isPrecise
+          ? 'SEARCH_PRECISE'
+          : 'SEARCH'
 
       // Pagination requests (cursor present) continue an already-billed search,
       // so they must not consume free shots, run affordability checks, or charge credits.
@@ -119,7 +129,17 @@ export default class SearchController {
       const query = request.body()
       const searchMode = query.options.searchMode as SearchMode
       const isPrecise = SEARCH_MODE_CONFIGURATION[searchMode]?.refineMode !== 'none'
-      const freeShotCategory: FreeShotCategory = isPrecise ? 'SEARCH_PRECISE' : 'SEARCH'
+      const withInsights = !!query.options.withInsights
+
+      // Insights searches run an LLM per request (and again on every pagination), so
+      // they are billed under a dedicated category whose free bag is 0 (see
+      // FREE_DAILY_SHOTS): tryConsumeFreeBag always returns false, so the user is
+      // charged credits and the daily free quota is never consumed.
+      const freeShotCategory: FreeShotCategory = withInsights
+        ? 'SEARCH_INSIGHTS'
+        : isPrecise
+          ? 'SEARCH_PRECISE'
+          : 'SEARCH'
 
       // Pagination requests (cursor present) continue an already-billed search,
       // so they must not consume free shots, run affordability checks, or charge credits.
