@@ -24,10 +24,10 @@ export type FreeShotCategory =
  * for analytics). The bag resets every calendar day (UTC).
  */
 export const FREE_DAILY_SHOTS: Record<FreeShotCategory, number> = {
-  SEARCH: 3,
+  SEARCH: 2,
   SEARCH_PRECISE: 1,
   SEARCH_BY_PHOTO: 5,
-  CHAT: 2,
+  CHAT: 1,
   CHAT_KNOWLEDGE_ASSISTANT: 5,
 }
 
