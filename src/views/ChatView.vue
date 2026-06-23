@@ -1147,6 +1147,9 @@ const sendMessage = async () => {
   try {
     await chatStore.sendMessage(text, contextPhotoIds, attachedPhotos);
   } catch (error: any) {
+    // 402 responses (INSUFFICIENT_CREDITS / QUOTA_EXHAUSTED) are handled by
+    // the axios interceptor which shows a notification — no in-chat bubble needed.
+    if (error?.response?.status === 402) return;
     const errMsg =
       error?.response?.data?.message ||
       "Something went wrong. Please try again.";

@@ -45,33 +45,64 @@ const handleApiError = (error: AxiosError) => {
       return Promise.reject(error);
     }
 
-    // Detectar créditos insuficientes (402)
+    // Detectar créditos insuficientes o quota diaria agotada (402)
     if (status === 402 && data && typeof data === "object") {
       const errorData = data as any;
-      if (errorData.code === "INSUFFICIENT_CREDITS") {
-        // No mostrar notificación para endpoints de chat (ChatView lo maneja internamente)
-        const requestUrl = error.config?.url || "";
-        if (!requestUrl.includes("/api/chat")) {
-          notification.warning({
-            title: "Insufficient Credits",
-            content: errorData.message || "Not enough credits.",
-            action: () =>
-              h(
-                "a",
-                {
-                  style:
-                    "color: var(--primary-color); cursor: pointer; font-size: 14px;",
-                  onClick: (e: Event) => {
-                    e.preventDefault();
-                    notification.destroyAll();
-                    router.push("/settings");
-                  },
+
+      // Free daily quota exhausted
+      if (errorData.code === "QUOTA_EXHAUSTED") {
+        const categoryLabels: Record<string, string> = {
+          SEARCH: "Semantic Search",
+          SEARCH_PRECISE: "Precise Search",
+          SEARCH_BY_PHOTO: "Photo Similarity Search",
+          CHAT: "ChatLab Assistant",
+          CHAT_KNOWLEDGE_ASSISTANT: "Knowledge Assistant",
+        };
+        const label =
+          categoryLabels[errorData.category as string] ?? "this feature";
+        const limit: number = errorData.dailyLimit ?? 0;
+        notification.warning({
+          title: "Daily free quota reached",
+          content: `You've used all ${limit} free daily request${limit !== 1 ? "s" : ""} for ${label}. Try again tomorrow or top up your credits.`,
+          action: () =>
+            h(
+              "a",
+              {
+                style:
+                  "color: var(--primary-color); cursor: pointer; font-size: 14px;",
+                onClick: (e: Event) => {
+                  e.preventDefault();
+                  notification.destroyAll();
+                  router.push("/settings");
                 },
-                "Go to Settings →",
-              ),
-            duration: 8000,
-          });
-        }
+              },
+              "Top up credits →",
+            ),
+          duration: 8000,
+        });
+        return Promise.reject(error);
+      }
+
+      if (errorData.code === "INSUFFICIENT_CREDITS") {
+        notification.warning({
+          title: "Insufficient Credits",
+          content: errorData.message || "Not enough credits.",
+          action: () =>
+            h(
+              "a",
+              {
+                style:
+                  "color: var(--primary-color); cursor: pointer; font-size: 14px;",
+                onClick: (e: Event) => {
+                  e.preventDefault();
+                  notification.destroyAll();
+                  router.push("/settings");
+                },
+              },
+              "Go to Settings →",
+            ),
+          duration: 8000,
+        });
         return Promise.reject(error);
       }
     }
