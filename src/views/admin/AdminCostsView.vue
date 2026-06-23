@@ -7,7 +7,7 @@
 
     <!-- Loading state -->
     <div v-if="loading" class="loading-state">
-      <SpiralGridLoader variant="primary" :size="48" />
+      <n-spin :size="48" />
     </div>
 
     <template v-else-if="data">
@@ -248,7 +248,7 @@
         </div>
 
         <div v-if="txnLoading" class="txn-loading">
-          <SpiralGridLoader variant="primary" :size="28" />
+          <n-spin :size="28" />
         </div>
         <div v-else-if="txnRows.length === 0" class="no-data">
           No transactions found
@@ -389,10 +389,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { NDatePicker, useMessage } from "naive-ui";
+import { NDatePicker, NSpin, useMessage } from "naive-ui";
 import { useRouter } from "vue-router";
 import { api } from "../../utils/axios";
-import SpiralGridLoader from "../../components/SpiralGridLoader.vue";
 
 interface CostsData {
   totals: {

@@ -72,7 +72,7 @@
     <div class="table-wrapper">
       <div class="table-body">
         <div v-if="loading" class="table-loading-state">
-          <SpiralGridLoader variant="primary" :size="40" />
+          <n-spin :size="40" />
         </div>
         <n-data-table
           v-else
@@ -150,7 +150,7 @@
             v-if="activitiesLoading && activities.length === 0"
             class="table-loading-state"
           >
-            <SpiralGridLoader variant="primary" :size="40" />
+            <n-spin :size="40" />
           </div>
           <n-data-table
             v-else
@@ -187,7 +187,7 @@
       :segmented="{ content: true, footer: true }"
     >
       <div v-if="reviewModalLoading" class="photos-modal-loading">
-        <SpiralGridLoader variant="primary" :size="40" />
+        <n-spin :size="40" />
       </div>
       <div v-else-if="reviewModalError" class="photos-modal-error">
         Failed to load photos.
@@ -261,13 +261,13 @@ import {
   NIcon,
   NInput,
   NSelect,
+  NSpin,
   NDataTable,
   NModal,
   NPagination,
   useMessage,
 } from "naive-ui";
 import type { DataTableColumn, DataTableSortState } from "naive-ui";
-import SpiralGridLoader from "../../components/SpiralGridLoader.vue";
 import {
   SearchOutline as SearchIcon,
   TrashOutline as TrashIcon,

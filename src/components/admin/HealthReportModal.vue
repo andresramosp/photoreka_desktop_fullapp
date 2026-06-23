@@ -11,7 +11,7 @@
   >
     <!-- Loading state -->
     <div v-if="loading" class="health-loading">
-      <SpiralGridLoader variant="primary" :size="48" />
+      <n-spin :size="48" />
       <p>Running health check…</p>
     </div>
 

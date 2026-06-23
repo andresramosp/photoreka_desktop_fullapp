@@ -10,7 +10,7 @@
     @update:show="$emit('update:show', $event)"
   >
     <div v-if="loading" class="img-health-loading">
-      <SpiralGridLoader variant="primary" :size="48" />
+      <n-spin :size="48" />
       <p>Running image health check...</p>
     </div>
 
@@ -77,10 +77,17 @@
 
 <script setup lang="ts">
 import { computed, h } from "vue";
-import { NModal, NTag, NButton, NDataTable, NText, NIcon } from "naive-ui";
+import {
+  NModal,
+  NTag,
+  NButton,
+  NDataTable,
+  NText,
+  NIcon,
+  NSpin,
+} from "naive-ui";
 import type { DataTableColumn } from "naive-ui";
 import { Copy } from "@vicons/carbon";
-import SpiralGridLoader from "../SpiralGridLoader.vue";
 
 export type ImageCheckStatus = "missing" | "timeout" | "error";
 

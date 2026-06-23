@@ -173,7 +173,6 @@
                 >
                   <n-icon :size="16"><InformationCircleOutline /></n-icon>
                   <div class="size-error-text">
-                    <strong>Not enough analyzed photos</strong>
                     <span>{{ sizeEligibility.reason }}</span>
                     <span
                       v-if="

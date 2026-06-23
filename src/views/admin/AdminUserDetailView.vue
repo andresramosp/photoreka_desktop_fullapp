@@ -8,7 +8,7 @@
     </div>
 
     <div v-if="loading" class="loading-state">
-      <SpiralGridLoader variant="primary" :size="56" />
+      <n-spin :size="56" />
     </div>
 
     <template v-else-if="user">
@@ -363,7 +363,7 @@
               v-if="creditsLoading && creditRows.length === 0"
               class="credits-loading"
             >
-              <SpiralGridLoader variant="primary" :size="28" />
+              <n-spin :size="28" />
             </div>
             <div v-else-if="creditRows.length === 0" class="credits-empty">
               No credit charges recorded yet
@@ -454,7 +454,7 @@
               v-if="activitiesLoading && activities.length === 0"
               class="activity-loading"
             >
-              <SpiralGridLoader variant="primary" :size="28" />
+              <n-spin :size="28" />
             </div>
             <div v-else-if="activities.length === 0" class="activity-empty">
               No activity recorded yet
@@ -552,7 +552,7 @@
 
             <div v-if="photosExpanded" class="photos-section-body">
               <div v-if="photosLoading" class="photos-loading">
-                <SpiralGridLoader variant="primary" :size="28" />
+                <n-spin :size="28" />
               </div>
               <div v-else-if="photosError" class="photos-empty">
                 Failed to load photos.
@@ -647,7 +647,7 @@
 
             <div v-if="deletedPhotosExpanded" class="photos-section-body">
               <div v-if="deletedPhotosLoading" class="photos-loading">
-                <SpiralGridLoader variant="primary" :size="28" />
+                <n-spin :size="28" />
               </div>
               <div v-else-if="deletedPhotosError" class="photos-empty">
                 Failed to load deleted photos.
@@ -746,12 +746,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import SpiralGridLoader from "../../components/SpiralGridLoader.vue";
 import {
   NButton,
   NTag,
   NIcon,
   NSelect,
+  NSpin,
   NAvatar,
   NModal,
   NInputNumber,

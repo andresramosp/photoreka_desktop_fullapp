@@ -124,9 +124,6 @@ const rootStyle = computed(() => {
     transform: scale(1);
     opacity: 1;
     background: var(--sg-bright);
-    box-shadow:
-      0 0 calc(var(--sg-size) * 0.18) var(--sg-glow),
-      0 0 calc(var(--sg-size) * 0.06) var(--sg-glow);
   }
 }
 

@@ -7,7 +7,7 @@
 
     <!-- Loading state -->
     <div v-if="loading" class="loading-state">
-      <SpiralGridLoader variant="primary" :size="48" />
+      <n-spin :size="48" />
     </div>
 
     <template v-else-if="data">
@@ -262,9 +262,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { useMessage } from "naive-ui";
+import { NSpin, useMessage } from "naive-ui";
 import { api } from "../../utils/axios";
-import SpiralGridLoader from "../../components/SpiralGridLoader.vue";
 
 interface DashboardData {
   users: { total: number; active: number; recentSignups: number };

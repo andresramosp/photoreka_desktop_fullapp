@@ -6,7 +6,7 @@
     </div>
 
     <div v-if="overviewLoading && !overview" class="loading-state">
-      <SpiralGridLoader variant="primary" :size="48" />
+      <n-spin :size="48" />
     </div>
 
     <template v-else-if="overview">
@@ -272,7 +272,7 @@
               v-if="paymentsLoading && payments.length === 0"
               class="table-loading-state"
             >
-              <SpiralGridLoader variant="primary" :size="40" />
+              <n-spin :size="40" />
             </div>
             <n-data-table
               v-else
@@ -313,11 +313,11 @@ import {
   NInput,
   NPagination,
   NSelect,
+  NSpin,
   NTag,
   useMessage,
 } from "naive-ui";
 import type { DataTableColumn } from "naive-ui";
-import SpiralGridLoader from "../../components/SpiralGridLoader.vue";
 import {
   CopyOutline as CopyIcon,
   OpenOutline as OpenIcon,

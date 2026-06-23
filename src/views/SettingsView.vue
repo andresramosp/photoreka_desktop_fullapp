@@ -718,6 +718,27 @@
             <strong>500 bonus credits</strong>.
           </li>
         </ul>
+
+        <!-- Daily Free Credits callout (distinct info box) -->
+        <div class="daily-free-callout">
+          <div class="daily-free-callout-header">
+            <n-icon :size="16" class="daily-free-callout-icon">
+              <SparklesOutline />
+            </n-icon>
+            <span class="daily-free-callout-title">Daily free credits</span>
+          </div>
+          <p class="daily-free-callout-text">
+            Some tools include a small
+            <strong>daily free credit allowance</strong> that refreshes every
+            day. These free credits are always spent <strong>first</strong>,
+            before your paid balance, so your purchased credits last longer. The
+            allowance is <strong>independent per tool</strong> (for example
+            Search and ChatLab each have their own daily bag) and unused free
+            credits don't roll over to the next day. The heaviest batch
+            operations (Portfolio Builder and geo-inference) generally draw
+            directly from your paid balance.
+          </p>
+        </div>
       </div>
     </div>
   </transition>
@@ -2056,5 +2077,42 @@ const handleDeleteAccount = async () => {
 
 .credits-info-dialog .chatlab-info-body li::marker {
   color: var(--accent-color);
+}
+
+/* ── Daily free credits callout (distinct info box at the bottom) ── */
+.credits-info-dialog .daily-free-callout {
+  margin-top: var(--spacing-lg);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    135deg,
+    rgba(16, 185, 129, 0.08),
+    rgba(59, 130, 246, 0.06)
+  );
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.credits-info-dialog .daily-free-callout-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: var(--spacing-xs);
+}
+
+.credits-info-dialog .daily-free-callout-icon {
+  color: var(--success-color, #10b981);
+  flex-shrink: 0;
+}
+
+.credits-info-dialog .daily-free-callout-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.credits-info-dialog .daily-free-callout-text {
+  margin: 0 !important;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
 }
 </style>
