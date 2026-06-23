@@ -300,13 +300,26 @@
                 <td class="dim">{{ row.calls }}</td>
                 <td class="cost-value">€{{ fmt(row.costInEur) }}</td>
                 <td>
-                  <span v-if="row.creditsCharged !== null" class="credit-badge"
+                  <span
+                    v-if="row.isFree"
+                    class="free-badge"
+                    :title="
+                      row.creditsWaived != null
+                        ? `Waived ${row.creditsWaived} cr (charged to company, not user)`
+                        : 'Free daily usage'
+                    "
+                    >FREE</span
+                  >
+                  <span
+                    v-else-if="row.creditsCharged !== null"
+                    class="credit-badge"
                     >{{ row.creditsCharged }} cr</span
                   >
                   <span v-else class="dim">—</span>
                 </td>
                 <td class="dim">
-                  <span v-if="row.marginMultiplier !== null"
+                  <span v-if="row.isFree">—</span>
+                  <span v-else-if="row.marginMultiplier !== null"
                     >×{{ row.marginMultiplier.toFixed(2) }}</span
                   >
                   <span v-else-if="row.creditsCharged !== null">fixed</span>
@@ -575,6 +588,8 @@ interface TxnRow {
   creditsCharged: number | null;
   marginMultiplier: number | null;
   referenceId: string | null;
+  isFree: boolean;
+  creditsWaived: number | null;
 }
 
 const txnRows = ref<TxnRow[]>([]);
@@ -1177,6 +1192,18 @@ onMounted(() => {
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.free-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #f0fdf4;
+  color: #16a34a;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: help;
 }
 
 .nowrap {

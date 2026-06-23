@@ -395,13 +395,27 @@
                     </td>
                     <td class="dim">{{ row.task || "—" }}</td>
                     <td class="dim model-cell">{{ row.model || "—" }}</td>
-                    <td class="num credits-val">{{ row.creditsCharged }}</td>
+                    <td class="num credits-val">
+                      <span
+                        v-if="row.isFree"
+                        class="free-badge"
+                        :title="
+                          row.creditsWaived != null
+                            ? `Waived ${row.creditsWaived} cr (company paid, user not charged)`
+                            : 'Free daily usage'
+                        "
+                        >FREE</span
+                      >
+                      <template v-else>{{ row.creditsCharged }}</template>
+                    </td>
                     <td class="num dim">€{{ row.costInEur.toFixed(4) }}</td>
                     <td class="num dim">
                       {{
-                        row.marginMultiplier != null
-                          ? `×${row.marginMultiplier}`
-                          : "fixed"
+                        row.isFree
+                          ? "—"
+                          : row.marginMultiplier != null
+                            ? `×${row.marginMultiplier}`
+                            : "fixed"
                       }}
                     </td>
                   </tr>
@@ -839,6 +853,8 @@ interface CreditLedgerRow {
   marginMultiplier: number | null;
   referenceId: string | null;
   createdAt: string;
+  isFree: boolean;
+  creditsWaived: number | null;
 }
 
 const route = useRoute();
@@ -2086,6 +2102,18 @@ onUnmounted(() => {
   font-weight: 700;
   color: #6366f1;
   font-variant-numeric: tabular-nums;
+}
+
+.free-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #f0fdf4;
+  color: #16a34a;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: help;
 }
 
 .model-cell {
