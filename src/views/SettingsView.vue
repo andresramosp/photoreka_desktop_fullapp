@@ -108,14 +108,16 @@
             </n-icon>
             <div class="section-title-group">
               <h2 class="section-title">Photo Analysis & Credits</h2>
-              <button
-                class="credits-info-learn-more"
-                @click="showCreditsInfo = true"
-                title="Learn how analyses and credits work"
-              >
-                <n-icon :size="11"><InformationCircleOutline /></n-icon>
-                Learn more about analyses &amp; credits
-              </button>
+              <div class="section-title-links">
+                <button
+                  class="credits-info-learn-more"
+                  @click="showCreditsInfo = true"
+                  title="Learn how analyses and credits work"
+                >
+                  <n-icon :size="11"><InformationCircleOutline /></n-icon>
+                  Learn more about analyses &amp; credits
+                </button>
+              </div>
             </div>
           </div>
           <div class="section-content">
@@ -217,8 +219,9 @@
                         <InfoCircleFilled />
                       </n-icon>
                     </template>
-                    Credits consumed by PRO tools such as the AI chat and
-                    advanced semantic searches.
+                    Credits consumed by tools such as ChatLab, Search,
+                    Geo-inference, and Portfolio Builder. Each tool has its own
+                    credit cost per use.
                   </n-tooltip>
                 </div>
                 <span class="storage-count"
@@ -237,10 +240,20 @@
                 ></div>
               </div>
               <div class="storage-footer">
-                <span class="storage-remaining"
-                  >{{ (creditsAvailable - creditsUsed).toFixed(1) }} credits
-                  remaining</span
-                >
+                <div class="storage-footer-left">
+                  <span class="storage-remaining"
+                    >{{ (creditsAvailable - creditsUsed).toFixed(1) }} credits
+                    remaining</span
+                  >
+                  <button
+                    class="credits-info-learn-more"
+                    @click="showFreeQuotaInfo = true"
+                    title="View daily free quota per tool"
+                  >
+                    <n-icon :size="11"><SparklesOutline /></n-icon>
+                    Daily free quota
+                  </button>
+                </div>
                 <n-button
                   type="info"
                   size="small"
@@ -720,7 +733,7 @@
         </ul>
 
         <!-- Daily Free Credits callout (distinct info box) -->
-        <div class="daily-free-callout">
+        <!-- <div class="daily-free-callout">
           <div class="daily-free-callout-header">
             <n-icon :size="16" class="daily-free-callout-icon">
               <SparklesOutline />
@@ -728,18 +741,117 @@
             <span class="daily-free-callout-title">Daily free credits</span>
           </div>
           <p class="daily-free-callout-text">
-            Some tools include
-            <strong>small daily free credit allowance</strong> that refreshes
-            every day. These free credits are only used
-            <strong>after your paid balance has been fully spent</strong>. The
-            allowance is <strong>separate for each tool</strong> (for example,
-            Search and ChatLab each have their own daily quota), and
-            <strong>unused free credits do not carry over</strong> to the next
-            day. Heavy batch operations such as
-            <strong>Portfolio Builder</strong> and
-            <strong>Geo Inference</strong> are billed directly against your paid
-            balance.
+            Each tool has its own independent daily quota. Free uses kick in
+            <strong>only after your paid credit balance is fully spent</strong>,
+            and unused allowances <strong>do not carry over</strong>.
           </p>
+          <ul class="daily-free-callout-list">
+            <li>
+              <span class="daily-free-callout-tool">Semantic Search</span>
+              <span class="daily-free-callout-quota">3 / day</span>
+            </li>
+            <li>
+              <span class="daily-free-callout-tool">Precise Search</span>
+              <span class="daily-free-callout-quota">1 / day</span>
+            </li>
+            <li>
+              <span class="daily-free-callout-tool">Search by Photo</span>
+              <span class="daily-free-callout-quota">5 / day</span>
+            </li>
+            <li>
+              <span class="daily-free-callout-tool">ChatLab</span>
+              <span class="daily-free-callout-quota">2 / day</span>
+            </li>
+            <li>
+              <span class="daily-free-callout-tool">Knowledge Assistant</span>
+              <span class="daily-free-callout-quota">3 / day</span>
+            </li>
+          </ul>
+          <p class="daily-free-callout-text daily-free-callout-text--note">
+            <strong>Portfolio Builder</strong>, <strong>Geo Inference</strong>,
+            and <strong>Search Insights</strong> are always billed against your
+            paid balance.
+          </p>
+        </div> -->
+      </div>
+    </div>
+  </transition>
+
+  <!-- Free Quota Dialog -->
+  <transition name="backdrop-fade">
+    <div
+      v-if="showFreeQuotaInfo"
+      class="credits-info-backdrop"
+      @click="showFreeQuotaInfo = false"
+    />
+  </transition>
+  <transition name="credits-info-pop">
+    <div v-if="showFreeQuotaInfo" class="credits-info-dialog free-quota-dialog">
+      <div class="chatlab-info-header">
+        <div class="chatlab-info-title-row">
+          <n-icon :size="20" class="chatlab-info-icon">
+            <SparklesOutline />
+          </n-icon>
+          <span class="chatlab-info-title">Daily Free Quota</span>
+        </div>
+        <n-button quaternary size="small" @click="showFreeQuotaInfo = false">
+          <template #icon>
+            <n-icon :size="14"><CloseOutline /></n-icon>
+          </template>
+        </n-button>
+      </div>
+      <div class="chatlab-info-body">
+        <p>
+          Some tools include a <strong>daily free allowance</strong> that resets
+          every day at UTC midnight. Free uses are consumed
+          <strong>only after your paid credit balance is fully spent</strong> —
+          while you have credits, they are billed normally. Each tool tracks its
+          quota independently, and
+          <strong>unused free uses do not carry over</strong> to the next day.
+        </p>
+        <div class="free-quota-table">
+          <div class="free-quota-table-header">
+            <span>Tool</span>
+            <span>Free uses / day</span>
+          </div>
+          <div class="free-quota-table-row">
+            <span>Search (Broad & Adaptive)</span>
+            <span class="free-quota-value">3</span>
+          </div>
+          <div class="free-quota-table-row">
+            <span>Search (Precise)</span>
+            <span class="free-quota-value">1</span>
+          </div>
+          <div class="free-quota-table-row">
+            <span>Search (Photo Similarity)</span>
+            <span class="free-quota-value">5</span>
+          </div>
+          <div class="free-quota-table-row">
+            <span>ChatLab</span>
+            <span class="free-quota-value">2</span>
+          </div>
+          <div class="free-quota-table-row">
+            <span>Knowledge Assistant</span>
+            <span class="free-quota-value">3</span>
+          </div>
+          <div class="free-quota-table-row free-quota-table-row--muted">
+            <span>Portfolio Builder</span>
+            <span class="free-quota-value free-quota-value--none"
+              >paid only</span
+            >
+          </div>
+          <div class="free-quota-table-row free-quota-table-row--muted">
+            <span>Geo Inference</span>
+            <span class="free-quota-value free-quota-value--none"
+              >paid only</span
+            >
+          </div>
+          <div class="free-quota-table-row free-quota-table-row--muted">
+            <span>Search Insights</span>
+            <span class="free-quota-value free-quota-value--none"
+              >paid only</span
+            >
+          </div>
         </div>
       </div>
     </div>
@@ -1193,6 +1305,7 @@ const showPhotosModal = ref(false);
 const showCreditsModal = ref(false);
 const showPlansModal = ref(false);
 const showCreditsInfo = ref(false);
+const showFreeQuotaInfo = ref(false);
 
 // Quota request form
 const quotaPhotosOption = ref<string | null>(null);
@@ -1563,7 +1676,12 @@ const handleDeleteAccount = async () => {
 .storage-footer {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+}
+
+.storage-footer-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .storage-remaining {
@@ -1941,7 +2059,18 @@ const handleDeleteAccount = async () => {
 .section-title-group {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+}
+
+.section-title-links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.section-title-links-sep {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  opacity: 0.5;
 }
 
 /* ── Credits Info "Learn more" button ── */
@@ -2116,5 +2245,92 @@ const handleDeleteAccount = async () => {
   margin: 0 !important;
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
+}
+
+.credits-info-dialog .daily-free-callout-text--note {
+  margin-top: var(--spacing-sm) !important;
+  opacity: 0.8;
+}
+
+.credits-info-dialog .daily-free-callout-list {
+  list-style: none;
+  margin: var(--spacing-sm) 0 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.credits-info-dialog .daily-free-callout-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--font-size-sm);
+}
+
+.credits-info-dialog .daily-free-callout-tool {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.credits-info-dialog .daily-free-callout-quota {
+  color: var(--success-color, #10b981);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Free Quota Dialog table ── */
+.free-quota-dialog {
+  width: 400px;
+}
+
+.free-quota-table {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+}
+
+.free-quota-table-header {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px var(--spacing-md);
+  background-color: var(--bg-elevated);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.free-quota-table-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px var(--spacing-md);
+  border-top: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.free-quota-table-row--muted {
+  opacity: 0.55;
+}
+
+.free-quota-value {
+  color: var(--success-color, #10b981);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.free-quota-value--none {
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-normal);
+  font-style: italic;
+}
+
+.credits-daily-quota-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--spacing-xs);
 }
 </style>
