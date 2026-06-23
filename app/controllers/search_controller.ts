@@ -28,42 +28,49 @@ export default class SearchController {
       const isPrecise = SEARCH_MODE_CONFIGURATION[searchMode]?.refineMode !== 'none'
       const freeShotCategory: FreeShotCategory = isPrecise ? 'SEARCH_PRECISE' : 'SEARCH'
 
-      // Consume the daily free allowance before touching real credits.
-      const freeShot = await FreeShotsService.tryConsume(user.id, freeShotCategory)
+      // Pagination requests (cursor present) continue an already-billed search,
+      // so they must not consume free shots, run affordability checks, or charge credits.
+      const isPagination = !!query.options.cursor
 
-      if (!freeShot) {
-        const minCredits = isPrecise ? PRECISE_GPU_CREDITS : 1
-        const hasCredits = await CreditService.canAfford(user.id, minCredits)
-        if (!hasCredits) {
-          return response.status(402).json({
-            message: 'No credits remaining. Please purchase more credits to continue.',
-            code: 'INSUFFICIENT_CREDITS',
-          })
-        }
-      }
+      let freeShot = false
+      if (!isPagination) {
+        // Consume the daily free allowance before touching real credits.
+        freeShot = await FreeShotsService.tryConsume(user.id, freeShotCategory)
 
-      // Charge GPU credits upfront for modes that use entailment refinement (non-cursor requests)
-      if (!query.options.cursor && isPrecise) {
         if (!freeShot) {
-          const charged = await CreditService.tryChargeFixed(user.id, PRECISE_GPU_CREDITS)
-          if (!charged) {
+          const minCredits = isPrecise ? PRECISE_GPU_CREDITS : 1
+          const hasCredits = await CreditService.canAfford(user.id, minCredits)
+          if (!hasCredits) {
             return response.status(402).json({
               message: 'No credits remaining. Please purchase more credits to continue.',
               code: 'INSUFFICIENT_CREDITS',
             })
           }
         }
-        UserCostService.record(
-          user.id,
-          'search',
-          CreditService.creditsToEstimatedEur(PRECISE_GPU_CREDITS),
-          1,
-          {
-            task: 'gpu_precise_search',
-            free: freeShot,
-            metadata: { fixedCharge: true, credits: PRECISE_GPU_CREDITS },
+
+        // Charge GPU credits upfront for modes that use entailment refinement
+        if (isPrecise) {
+          if (!freeShot) {
+            const charged = await CreditService.tryChargeFixed(user.id, PRECISE_GPU_CREDITS)
+            if (!charged) {
+              return response.status(402).json({
+                message: 'No credits remaining. Please purchase more credits to continue.',
+                code: 'INSUFFICIENT_CREDITS',
+              })
+            }
           }
-        ).catch(() => {})
+          UserCostService.record(
+            user.id,
+            'search',
+            CreditService.creditsToEstimatedEur(PRECISE_GPU_CREDITS),
+            1,
+            {
+              task: 'gpu_precise_search',
+              free: freeShot,
+              metadata: { fixedCharge: true, credits: PRECISE_GPU_CREDITS },
+            }
+          ).catch(() => {})
+        }
       }
 
       const result = await searchService.searchSemanticSync(query.description, user.id, {
@@ -82,16 +89,18 @@ export default class SearchController {
         lightweight: query.options.lightweight || false,
       })
 
-      UserCostService.recordFromTracker(
-        user.id,
-        searchService.costTracker,
-        undefined,
-        freeShot
-      ).catch(() => {})
+      if (!isPagination) {
+        UserCostService.recordFromTracker(
+          user.id,
+          searchService.costTracker,
+          undefined,
+          freeShot
+        ).catch(() => {})
 
-      const summary = searchService.costTracker.getSummary()
-      if (!freeShot && summary.totalCostInEur > 0) {
-        CreditService.charge(user.id, summary.totalCostInEur, freeShotCategory).catch(() => {})
+        const summary = searchService.costTracker.getSummary()
+        if (!freeShot && summary.totalCostInEur > 0) {
+          CreditService.charge(user.id, summary.totalCostInEur, freeShotCategory).catch(() => {})
+        }
       }
 
       return response.ok(result)
@@ -112,42 +121,49 @@ export default class SearchController {
       const isPrecise = SEARCH_MODE_CONFIGURATION[searchMode]?.refineMode !== 'none'
       const freeShotCategory: FreeShotCategory = isPrecise ? 'SEARCH_PRECISE' : 'SEARCH'
 
-      // Consume the daily free allowance before touching real credits.
-      const freeShot = await FreeShotsService.tryConsume(user.id, freeShotCategory)
+      // Pagination requests (cursor present) continue an already-billed search,
+      // so they must not consume free shots, run affordability checks, or charge credits.
+      const isPagination = !!query.options.cursor
 
-      if (!freeShot) {
-        const minCredits = isPrecise ? PRECISE_GPU_CREDITS : 1
-        const hasCredits = await CreditService.canAfford(user.id, minCredits)
-        if (!hasCredits) {
-          return response.status(402).json({
-            message: 'No credits remaining. Please purchase more credits to continue.',
-            code: 'INSUFFICIENT_CREDITS',
-          })
-        }
-      }
+      let freeShot = false
+      if (!isPagination) {
+        // Consume the daily free allowance before touching real credits.
+        freeShot = await FreeShotsService.tryConsume(user.id, freeShotCategory)
 
-      // Charge GPU credits upfront for modes that use entailment refinement (non-cursor requests)
-      if (!query.options.cursor && isPrecise) {
         if (!freeShot) {
-          const charged = await CreditService.tryChargeFixed(user.id, PRECISE_GPU_CREDITS)
-          if (!charged) {
+          const minCredits = isPrecise ? PRECISE_GPU_CREDITS : 1
+          const hasCredits = await CreditService.canAfford(user.id, minCredits)
+          if (!hasCredits) {
             return response.status(402).json({
               message: 'No credits remaining. Please purchase more credits to continue.',
               code: 'INSUFFICIENT_CREDITS',
             })
           }
         }
-        UserCostService.record(
-          user.id,
-          'search',
-          CreditService.creditsToEstimatedEur(PRECISE_GPU_CREDITS),
-          1,
-          {
-            task: 'gpu_precise_search',
-            free: freeShot,
-            metadata: { fixedCharge: true, credits: PRECISE_GPU_CREDITS },
+
+        // Charge GPU credits upfront for modes that use entailment refinement
+        if (isPrecise) {
+          if (!freeShot) {
+            const charged = await CreditService.tryChargeFixed(user.id, PRECISE_GPU_CREDITS)
+            if (!charged) {
+              return response.status(402).json({
+                message: 'No credits remaining. Please purchase more credits to continue.',
+                code: 'INSUFFICIENT_CREDITS',
+              })
+            }
           }
-        ).catch(() => {})
+          UserCostService.record(
+            user.id,
+            'search',
+            CreditService.creditsToEstimatedEur(PRECISE_GPU_CREDITS),
+            1,
+            {
+              task: 'gpu_precise_search',
+              free: freeShot,
+              metadata: { fixedCharge: true, credits: PRECISE_GPU_CREDITS },
+            }
+          ).catch(() => {})
+        }
       }
 
       const result = await searchService.searchByTagsSync(
@@ -166,16 +182,18 @@ export default class SearchController {
         user.id
       )
 
-      UserCostService.recordFromTracker(
-        user.id,
-        searchService.costTracker,
-        undefined,
-        freeShot
-      ).catch(() => {})
+      if (!isPagination) {
+        UserCostService.recordFromTracker(
+          user.id,
+          searchService.costTracker,
+          undefined,
+          freeShot
+        ).catch(() => {})
 
-      const summary = searchService.costTracker.getSummary()
-      if (!freeShot && summary.totalCostInEur > 0) {
-        CreditService.charge(user.id, summary.totalCostInEur, freeShotCategory).catch(() => {})
+        const summary = searchService.costTracker.getSummary()
+        if (!freeShot && summary.totalCostInEur > 0) {
+          CreditService.charge(user.id, summary.totalCostInEur, freeShotCategory).catch(() => {})
+        }
       }
 
       return response.ok(result)
