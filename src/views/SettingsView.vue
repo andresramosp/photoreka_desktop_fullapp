@@ -728,15 +728,17 @@
             <span class="daily-free-callout-title">Daily free credits</span>
           </div>
           <p class="daily-free-callout-text">
-            Some tools include a small
-            <strong>daily free credit allowance</strong> that refreshes every
-            day. These free credits are always spent <strong>first</strong>,
-            before your paid balance, so your purchased credits last longer. The
-            allowance is <strong>independent per tool</strong> (for example
-            Search and ChatLab each have their own daily bag) and unused free
-            credits don't roll over to the next day. The heaviest batch
-            operations (Portfolio Builder and geo-inference) generally draw
-            directly from your paid balance.
+            Some tools include
+            <strong>small daily free credit allowance</strong> that refreshes
+            every day. These free credits are only used
+            <strong>after your paid balance has been fully spent</strong>. The
+            allowance is <strong>separate for each tool</strong> (for example,
+            Search and ChatLab each have their own daily quota), and
+            <strong>unused free credits do not carry over</strong> to the next
+            day. Heavy batch operations such as
+            <strong>Portfolio Builder</strong> and
+            <strong>Geo Inference</strong> are billed directly against your paid
+            balance.
           </p>
         </div>
       </div>
