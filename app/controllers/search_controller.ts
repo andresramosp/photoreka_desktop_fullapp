@@ -34,11 +34,11 @@ export default class SearchController {
 
       let freeShot = false
       if (!isPagination) {
-        // Consume the daily free allowance before touching real credits.
-        freeShot = await FreeShotsService.tryConsume(user.id, freeShotCategory)
+        const minCredits = isPrecise ? PRECISE_GPU_CREDITS : 1
+        // Credits first: the free bag only kicks in once the user can't afford it.
+        freeShot = await FreeShotsService.tryConsumeFreeBag(user.id, freeShotCategory, minCredits)
 
         if (!freeShot) {
-          const minCredits = isPrecise ? PRECISE_GPU_CREDITS : 1
           const hasCredits = await CreditService.canAfford(user.id, minCredits)
           if (!hasCredits) {
             return response.status(402).json({
@@ -127,11 +127,11 @@ export default class SearchController {
 
       let freeShot = false
       if (!isPagination) {
-        // Consume the daily free allowance before touching real credits.
-        freeShot = await FreeShotsService.tryConsume(user.id, freeShotCategory)
+        const minCredits = isPrecise ? PRECISE_GPU_CREDITS : 1
+        // Credits first: the free bag only kicks in once the user can't afford it.
+        freeShot = await FreeShotsService.tryConsumeFreeBag(user.id, freeShotCategory, minCredits)
 
         if (!freeShot) {
-          const minCredits = isPrecise ? PRECISE_GPU_CREDITS : 1
           const hasCredits = await CreditService.canAfford(user.id, minCredits)
           if (!hasCredits) {
             return response.status(402).json({
@@ -207,19 +207,8 @@ export default class SearchController {
     try {
       const user = auth.use('api').user!
 
-      // Consume the daily free allowance before touching real credits.
-      const freeShot = await FreeShotsService.tryConsume(user.id, 'SEARCH')
-
-      if (!freeShot) {
-        const hasCredits = await CreditService.canAfford(user.id)
-        if (!hasCredits) {
-          return response.status(402).json({
-            message: 'No credits remaining. Please purchase more credits to continue.',
-            code: 'INSUFFICIENT_CREDITS',
-          })
-        }
-      }
-
+      // This endpoint only reads from the database (and reuses cached embeddings when
+      // semantic matching is enabled), so it carries no billable cost: it's free.
       const searchService = new SearchTextService()
 
       const { included = [], excluded = [], mode = 'AND', semantic = false, limit } = request.body()
@@ -234,18 +223,6 @@ export default class SearchController {
         semantic,
         normalizedLimit
       )
-
-      UserCostService.recordFromTracker(
-        user.id,
-        searchService.costTracker,
-        undefined,
-        freeShot
-      ).catch(() => {})
-
-      const summary = searchService.costTracker.getSummary()
-      if (!freeShot && summary.totalCostInEur > 0) {
-        CreditService.charge(user.id, summary.totalCostInEur, 'SEARCH').catch(() => {})
-      }
 
       response.header('X-Total-Count', totalCount.toString())
       response.header('Access-Control-Expose-Headers', 'X-Total-Count')
@@ -262,9 +239,6 @@ export default class SearchController {
       const user = auth.use('api').user!
       const searchService = new SearchPhotoService()
 
-      // Consume the daily free allowance before touching real credits.
-      const freeShot = await FreeShotsService.tryConsume(user.id, 'SEARCH_BY_PHOTO')
-
       const query: any = request.body()
       const resultLength = Number(query.resultLength)
       const billableResults =
@@ -277,6 +251,13 @@ export default class SearchController {
       const clipCropCredits =
         query.criteria === 'embedding' && query.cropRegion ? CLIP_CROP_CREDITS : 0
       const totalFixedCredits = photoSimilarityCredits + clipCropCredits
+
+      // Credits first: the free bag only kicks in once the user can't afford it.
+      const freeShot = await FreeShotsService.tryConsumeFreeBag(
+        user.id,
+        'SEARCH_BY_PHOTO',
+        totalFixedCredits
+      )
 
       if (!freeShot && totalFixedCredits > 0) {
         const charged = await CreditService.tryChargeFixed(user.id, totalFixedCredits)

@@ -24,10 +24,10 @@ export type FreeShotCategory =
  * for analytics). The bag resets every calendar day (UTC).
  */
 export const FREE_DAILY_SHOTS: Record<FreeShotCategory, number> = {
-  SEARCH: 2,
+  SEARCH: 3,
   SEARCH_PRECISE: 1,
   SEARCH_BY_PHOTO: 5,
-  CHAT: 1,
+  CHAT: 2,
   CHAT_KNOWLEDGE_ASSISTANT: 5,
 }
 
@@ -49,19 +49,34 @@ export default class FreeShotsService {
   /**
    * Try to consume one free daily shot for the given category.
    *
-   * Returns `true` if a free shot was available and has been consumed (caller
-   * should skip credit affordability checks and credit charges), or `false` if
-   * the daily allowance is exhausted (caller should fall back to normal billing).
+   * Priority is "credits first, free bag as fallback": the bag only kicks in
+   * once the user cannot afford the operation's real cost (`minCredits`) with
+   * their remaining credits. While they can still pay, this returns `false` so
+   * the caller bills credits normally.
+   *
+   * Returns `true` if the user couldn't afford the operation AND a free shot was
+   * available and has been consumed (caller should skip the affordability check
+   * and credit charges). Returns `false` if the user can still pay, or if the
+   * daily allowance is exhausted (caller should fall back to normal billing).
    *
    * The bag lives in the user's `usage` object and resets when the stored day no
    * longer matches today.
    */
-  static async tryConsume(userId: number, category: FreeShotCategory): Promise<boolean> {
+  static async tryConsumeFreeBag(
+    userId: number,
+    category: FreeShotCategory,
+    minCredits: number = 1
+  ): Promise<boolean> {
     const limit = FREE_DAILY_SHOTS[category]
     if (!limit || limit <= 0) return false
 
     const usage = await UsageService.getBaseUsage(userId)
     if (!usage) return false
+
+    // Inverted priority: spend real credits first. The free bag only unlocks
+    // once the user can no longer afford this operation's cost.
+    const creditsRemaining = usage.creditsAvailable - (usage.creditsUsed || 0)
+    if (creditsRemaining >= minCredits) return false
 
     const bag = bagForToday(usage.freeShots)
     const used = bag.used[category] ?? 0

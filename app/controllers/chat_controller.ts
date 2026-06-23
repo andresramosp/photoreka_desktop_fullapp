@@ -124,13 +124,17 @@ export default class ChatController {
       }
 
       // ── Credit gate ──────────────────────────────────────
-      // Consume the daily free allowance before touching real credits.
+      // Credits first: the free bag only kicks in once the user can't afford it.
       const freeShotCategory: FreeShotCategory =
         isKnowledgeAssistant === true ? 'CHAT_KNOWLEDGE_ASSISTANT' : 'CHAT'
-      const freeShot = await FreeShotsService.tryConsume(user.id, freeShotCategory)
+      const minCredits = isKnowledgeAssistant === true ? 5 : 20
+      const freeShot = await FreeShotsService.tryConsumeFreeBag(
+        user.id,
+        freeShotCategory,
+        minCredits
+      )
 
       if (!freeShot) {
-        const minCredits = isKnowledgeAssistant === true ? 5 : 20
         const hasCredits = await CreditService.canAfford(user.id, minCredits)
         if (!hasCredits) {
           return response.status(402).json({

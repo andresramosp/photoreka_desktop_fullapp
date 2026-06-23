@@ -815,11 +815,30 @@ AI credits are consumed by AI-powered operations **after** photos are already pr
 
 **Photo Analysis is different:** processing (analyzing) new photos does **not** consume AI credits. It consumes **photo slots** from your analyzed photo limit. To increase the number of photos you can analyze, purchase a **Photo Analysis Package** (not a Credit Package) — see Payments & Purchases below.
 
-Your plan includes a credit budget. When credits run out, AI features become temporarily unavailable until the budget resets or is expanded. An "Insufficient Credits" notification with a link to Settings appears when a credit-gated action fails.
+Your plan includes a credit budget. When credits run out, most AI features become temporarily unavailable until the budget is topped up or expanded — except for a small **Daily Free Allowance** (described below) that keeps a few tools usable each day. An "Insufficient Credits" notification with a link to Settings appears when a credit-gated action fails and no free allowance is left for it.
 
 Usage indicators in the sidebar show: analyzed photos count vs. limit, and storage usage.
 
 To expand your photo limit or top up credits, see the **Payments & Purchases** section below or visit {url:/settings|Settings}.
+
+### Daily Free Allowance (Free Daily Uses)
+Even with an empty credit balance, a few AI tools keep working thanks to a small **daily free allowance** that automatically refreshes every day. This allowance is a **fallback, not a perk consumed first**: your AI credits are always spent first, and the free daily uses only kick in once you can no longer afford an operation with your remaining credits. While you still have enough credits, those are used and your free daily uses stay untouched.
+
+Current free daily uses (per user, reset every day):
+
+| Tool | Free uses / day |
+| --- | --- |
+| Semantic / Tag Search (Broad, Adaptive) | 2 |
+| Precise Search | 1 |
+| Search by Photo (photo similarity) | 5 |
+| ChatLab message | 1 |
+| ChatLab app / knowledge questions | 5 |
+
+**Notes:**
+- The allowance resets every calendar day.
+- It only applies once your credits are insufficient for that specific operation.
+- **Photo Insights, Portfolio Builder, and Geo-Inference are not covered** by the free allowance — they always require credits.
+- When both your credits and that day's free uses for a tool are exhausted, the tool is unavailable until you top up credits or the allowance resets the next day.
 
 ### Locked vs Unlocked Tools
 When the user has no processed photos, most tools appear locked (greyed out with a visual indicator). Processing at least 1 photo unlocks the full app.
@@ -930,6 +949,9 @@ A quick-access search bar (desktop only) that searches across photos, collection
 **What are credits?**
 Credits are the internal currency for AI operations. Every search, chat message, and photo insight consumes credits. Your plan includes a credit budget. You can top up credits at any time with a one-time Credit Package purchase — go to {url:/settings|Settings} or click any "Buy more" prompt.
 
+**What happens when I run out of credits? Is there a free allowance?**
+Yes. Your AI credits are always used first, but once they're insufficient for an operation a small **daily free allowance** takes over for a few tools: Search (2/day), Precise Search (1/day), Search by Photo (5/day), ChatLab messages (1/day), and ChatLab app/knowledge questions (5/day). These free uses reset every day. Photo Insights, Portfolio Builder, and Geo-Inference are not included. When both your credits and that day's free uses for a tool are used up, the tool is unavailable until you top up or the allowance resets the next day.
+
 **How do I get more analyzed photo slots?**
 Purchase a Photo Analysis Package via {url:/settings|Settings}. Each package adds a fixed number of photo slots to your account, optionally with bonus AI credits included. Purchases are one-time and slots do not expire.
 
@@ -969,6 +991,7 @@ Take to Tool -- Send selected photos from any view to Canvas, Framer, or Atlas
 Daily Eureka -- Dashboard card showing a daily rediscovered photo with AI insights
 ChatLab -- AI assistant with 3 intelligence modes (Scout, Assistant, Curator)
 Credits -- Internal currency consumed by AI operations (search, chat, insights). **Not** consumed by photo analysis — analysis uses photo slots instead
+Daily Free Allowance -- A small number of free daily uses for some AI tools (Search, Precise Search, Search by Photo, ChatLab, and ChatLab app/knowledge questions) that resets every day. It acts as a fallback: credits are always spent first, and the free uses only apply once credits are insufficient. Does not cover Photo Insights, Portfolio Builder, or Geo-Inference
 Omni-Search -- Global search bar in the header for quick navigation across all content types
 Duplicate Detection -- Two duplicate search modes: Exact duplicates by EXIF "dateTaken" capture timestamp, and Similar duplicates by perceptual hash (dHash)
 Geo-Inference -- AI-powered location inference that analyses photo content to infer GPS coordinates for photos lacking them. Results are best for outdoor/landmark photos and weaker for indoor, dark, or abstract shots. Inferred locations are shown on the World Map and can be corrected with an autocomplete assistant
