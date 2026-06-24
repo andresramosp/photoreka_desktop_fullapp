@@ -7,6 +7,7 @@
     icon="+"
     @click="handleClick"
     :sizeFactor="sizeFactor"
+    :opacity="opacity"
   />
   <PhotoCanvasButton
     v-if="enableDiagonal"
@@ -16,6 +17,7 @@
     icon="+"
     @click="handleClick"
     :sizeFactor="sizeFactor"
+    :opacity="opacity"
   />
   <PhotoCanvasButton
     v-if="enableDiagonal"
@@ -25,6 +27,7 @@
     icon="+"
     @click="handleClick"
     :sizeFactor="sizeFactor"
+    :opacity="opacity"
   />
   <PhotoCanvasButton
     v-if="enableDiagonal"
@@ -34,6 +37,7 @@
     icon="+"
     @click="handleClick"
     :sizeFactor="sizeFactor"
+    :opacity="opacity"
   />
 
   <PhotoCanvasButton
@@ -43,6 +47,7 @@
     icon="+"
     @click="handleClick"
     :sizeFactor="sizeFactor"
+    :opacity="opacity"
   />
 
   <PhotoCanvasButton
@@ -52,6 +57,7 @@
     icon="+"
     @click="handleClick"
     :sizeFactor="sizeFactor"
+    :opacity="opacity"
   />
 
   <PhotoCanvasButton
@@ -61,6 +67,7 @@
     icon="+"
     @click="handleClick"
     :sizeFactor="sizeFactor"
+    :opacity="opacity"
   />
 
   <PhotoCanvasButton
@@ -70,6 +77,7 @@
     icon="+"
     @click="handleClick"
     :sizeFactor="sizeFactor"
+    :opacity="opacity"
   />
 </template>
 
@@ -84,6 +92,7 @@ const props = defineProps({
   photo: Object,
   enableDiagonal: Boolean,
   sizeFactor: { type: Number, default: 1 },
+  opacity: { type: Number, default: 1 },
 });
 const emit = defineEmits(["click"]);
 

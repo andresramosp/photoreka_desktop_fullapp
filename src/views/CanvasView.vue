@@ -210,7 +210,8 @@
                     expansionMode !== 'canvas' &&
                     expansionMode !== null &&
                     !photo.inTrash &&
-                    photo.hovered
+                    (photo.hovered ||
+                      (photo.selected && anySelectedPhotoHovered))
                   "
                   :photo="photo"
                   :fill="accentColor"
@@ -218,6 +219,7 @@
                   font-size="30"
                   @click="handleAddPhotoFromPhoto"
                   :sizeFactor="1.3"
+                  :opacity="photo.hovered ? 1 : 1"
                 />
 
                 <!-- Botón de eliminar para fotos rotas -->
@@ -965,6 +967,10 @@ const {
 } = useCanvasPhoto(stageRef, photos, photoRefs, stageConfig);
 
 const { animatePhotoGroup, animatePhotoGroupExplosion } = usePhotoAnimations();
+
+const anySelectedPhotoHovered = computed(() =>
+  photos.value.some((p) => p.hovered && p.selected),
+);
 
 const dynamicSizeFactor = computed(() => {
   const baseSize = 1.25;

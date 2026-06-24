@@ -1,6 +1,6 @@
 <template>
   <v-group
-    :config="{ x: computedX, y: computedY }"
+    :config="{ x: computedX, y: computedY, opacity: opacity }"
     @click="handleClick"
     @tap="handleClick"
     @touchstart="handleTouchStart"
@@ -41,6 +41,7 @@ const props = defineProps({
   fontSize: { type: Number, default: 24 },
   textColor: { type: String, default: "white" },
   sizeFactor: { type: Number, default: 1 },
+  opacity: { type: Number, default: 1 },
 });
 
 const buttonRadius = computed(() => 24 * props.sizeFactor);

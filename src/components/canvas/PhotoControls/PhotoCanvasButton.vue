@@ -1,6 +1,6 @@
 <template>
   <v-group
-    :config="{ x: computedX, y: computedY }"
+    :config="{ x: computedX, y: computedY, opacity: opacity }"
     @click="handleClick"
     @tap="handleClick"
     @touchstart="handleTouchStart"
@@ -58,6 +58,7 @@ const props = defineProps({
   fontSize: { type: Number, default: 12 },
   textColor: { type: String, default: "white" },
   sizeFactor: { type: Number, default: 1 }, // <- nuevo prop
+  opacity: { type: Number, default: 1 },
 });
 
 const buttonWidth = computed(() => 16 * props.sizeFactor);
