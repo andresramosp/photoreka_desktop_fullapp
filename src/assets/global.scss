@@ -643,7 +643,7 @@
   margin: 0 auto;
   background-color: var(--bg-body);
   height: calc(100vh - var(--total-header-offset));
-  overflow-y: hidden;
+  overflow-y: auto;
 }
 
 .view-header {

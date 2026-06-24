@@ -128,6 +128,7 @@ const navigateToSyncArea = () => {
   margin: 0 auto;
   background-color: var(--bg-body);
   position: relative;
+  overflow-y: hidden;
 }
 
 /* Header Section */
