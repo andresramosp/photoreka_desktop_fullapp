@@ -24,13 +24,14 @@
       <label class="filter-label">File type</label>
       <n-select
         :value="modelValue.fileType"
+        v-model:show="dropdownShow.fileType"
         multiple
         placeholder="All types..."
         :options="options.fileType"
         :disabled="options.fileType.length === 0"
         size="small"
         clearable
-        filterable
+        :filterable="false"
         :max-tag-count="2"
         class="compact-select"
         @update:value="update('fileType', $event)"
@@ -42,13 +43,14 @@
       <label class="filter-label">Camera</label>
       <n-select
         :value="modelValue.camera"
+        v-model:show="dropdownShow.camera"
         multiple
         placeholder="All cameras..."
         :options="options.camera"
         :disabled="options.camera.length === 0"
         size="small"
         clearable
-        filterable
+        :filterable="false"
         :max-tag-count="1"
         class="compact-select"
         @update:value="update('camera', $event)"
@@ -60,13 +62,14 @@
       <label class="filter-label">ISO</label>
       <n-select
         :value="modelValue.iso"
+        v-model:show="dropdownShow.iso"
         multiple
         placeholder="All ISO..."
         :options="options.iso"
         :disabled="options.iso.length === 0"
         size="small"
         clearable
-        filterable
+        :filterable="false"
         :max-tag-count="2"
         class="compact-select"
         @update:value="update('iso', $event)"
@@ -78,13 +81,14 @@
       <label class="filter-label">Aperture</label>
       <n-select
         :value="modelValue.aperture"
+        v-model:show="dropdownShow.aperture"
         multiple
         placeholder="All f-stops..."
         :options="options.aperture"
         :disabled="options.aperture.length === 0"
         size="small"
         clearable
-        filterable
+        :filterable="false"
         :max-tag-count="2"
         class="compact-select"
         @update:value="update('aperture', $event)"
@@ -96,13 +100,14 @@
       <label class="filter-label">Focal length</label>
       <n-select
         :value="modelValue.focalLength"
+        v-model:show="dropdownShow.focalLength"
         multiple
         placeholder="All focal..."
         :options="options.focalLength"
         :disabled="options.focalLength.length === 0"
         size="small"
         clearable
-        filterable
+        :filterable="false"
         :max-tag-count="2"
         class="compact-select"
         @update:value="update('focalLength', $event)"
@@ -114,13 +119,14 @@
       <label class="filter-label">Exposure</label>
       <n-select
         :value="modelValue.exposureTime"
+        v-model:show="dropdownShow.exposureTime"
         multiple
         placeholder="All speeds..."
         :options="options.exposureTime"
         :disabled="options.exposureTime.length === 0"
         size="small"
         clearable
-        filterable
+        :filterable="false"
         :max-tag-count="2"
         class="compact-select"
         @update:value="update('exposureTime', $event)"
@@ -132,12 +138,14 @@
       <label class="filter-label">Flash</label>
       <n-select
         :value="modelValue.flash"
+        v-model:show="dropdownShow.flash"
         multiple
         placeholder="All states..."
         :options="options.flash"
         :disabled="options.flash.length === 0"
         size="small"
         clearable
+        :filterable="false"
         class="compact-select"
         @update:value="update('flash', $event)"
       />
@@ -164,7 +172,7 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, reactive } from "vue";
 import { NInput, NSelect, NIcon } from "naive-ui";
 import { Search20Regular } from "@vicons/fluent";
 import { buildMetadataOptions } from "@/utils/metadataFilters.js";
@@ -190,7 +198,18 @@ const emit = defineEmits(["update:modelValue", "update:filenameSearch"]);
 // Build dynamic options from the photos actually present.
 const options = computed(() => buildMetadataOptions(props.photos));
 
+const dropdownShow = reactive({
+  fileType: false,
+  camera: false,
+  iso: false,
+  aperture: false,
+  focalLength: false,
+  exposureTime: false,
+  flash: false,
+});
+
 const update = (key, value) => {
+  dropdownShow[key] = false;
   emit("update:modelValue", { ...props.modelValue, [key]: value });
 };
 </script>
@@ -198,7 +217,7 @@ const update = (key, value) => {
 <style scoped>
 .metadata-filters-panel {
   display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
   align-items: end;
 }
