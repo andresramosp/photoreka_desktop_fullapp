@@ -76,25 +76,27 @@ const histogramRef = ref(null);
 const containerRef = ref(null);
 const isSmallScreen = ref(false);
 
+// Valid timestamps: only photos with a truthy dateTaken that parses correctly
+const validTimestamps = computed(() => {
+  if (!props.photos || !props.photos.length) return [];
+  return props.photos
+    .map((p) => {
+      const dateTaken = p.descriptions?.EXIF?.dateTaken;
+      if (!dateTaken) return NaN;
+      return new Date(dateTaken).getTime();
+    })
+    .filter((t) => !isNaN(t) && t > 0);
+});
+
 // Calculate min and max timestamps from photos
 const minTimestamp = computed(() => {
-  if (!props.photos || !props.photos.length) return 0;
-
-  const dates = props.photos
-    .map((p) => new Date(p.descriptions?.EXIF?.dateTaken).getTime())
-    .filter((t) => !isNaN(t));
-
-  return dates.length ? Math.min(...dates) : 0;
+  return validTimestamps.value.length ? Math.min(...validTimestamps.value) : 0;
 });
 
 const maxTimestamp = computed(() => {
-  if (!props.photos || !props.photos.length) return Date.now();
-
-  const dates = props.photos
-    .map((p) => new Date(p.descriptions?.EXIF?.dateTaken).getTime())
-    .filter((t) => !isNaN(t));
-
-  return dates.length ? Math.max(...dates) : Date.now();
+  return validTimestamps.value.length
+    ? Math.max(...validTimestamps.value)
+    : Date.now();
 });
 
 // Date range for the slider - always returns a valid array
@@ -142,8 +144,10 @@ const histogramBars = computed(() => {
 
   // Count photos in each bin
   props.photos.forEach((photo) => {
-    const timestamp = new Date(photo.descriptions?.EXIF?.dateTaken).getTime();
-    if (!isNaN(timestamp)) {
+    const dateTaken = photo.descriptions?.EXIF?.dateTaken;
+    if (!dateTaken) return;
+    const timestamp = new Date(dateTaken).getTime();
+    if (!isNaN(timestamp) && timestamp > 0) {
       const binIndex = Math.min(
         Math.floor((timestamp - minTimestamp.value) / binSize),
         numBins - 1,
@@ -263,10 +267,7 @@ const hasValidPhotos = computed(() => {
   if (!props.photos || !props.photos.length) return false;
 
   // Check if at least one photo has a valid date
-  const hasValidDates = props.photos.some((photo) => {
-    const timestamp = new Date(photo.descriptions?.EXIF?.dateTaken).getTime();
-    return !isNaN(timestamp);
-  });
+  const hasValidDates = validTimestamps.value.length > 0;
 
   return hasValidDates && minTimestamp.value < maxTimestamp.value;
 });
