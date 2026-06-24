@@ -128,7 +128,7 @@ watch(
       formData.newPassword = "";
       formData.confirmPassword = "";
     }
-  }
+  },
 );
 
 watch(showModal, (newValue) => {
@@ -140,6 +140,8 @@ const formData = reactive({
   newPassword: "",
   confirmPassword: "",
 });
+
+const SPECIAL_CHAR_REGEX = /[!@#$%^&*(),.?":{}|<>\[\]\\/_\-+=~`]/;
 
 const rules: FormRules = {
   currentPassword: [
@@ -163,6 +165,11 @@ const rules: FormRules = {
     {
       max: 100,
       message: "Password must not exceed 100 characters",
+      trigger: ["input", "blur"],
+    },
+    {
+      validator: (_rule, value: string) => SPECIAL_CHAR_REGEX.test(value),
+      message: "Password must include at least 1 special character",
       trigger: ["input", "blur"],
     },
   ],
@@ -191,7 +198,7 @@ const handleSubmit = async () => {
 
     const result = await userStore.changePassword(
       formData.currentPassword,
-      formData.newPassword
+      formData.newPassword,
     );
 
     if (result.success) {

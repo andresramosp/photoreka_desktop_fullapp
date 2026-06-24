@@ -31,7 +31,7 @@
           <h2 class="form-title">Set New Password</h2>
           <p class="form-description">
             Enter your new password below. Make sure it's at least 8 characters
-            long.
+            long and includes 1 special character.
           </p>
         </div>
 
@@ -142,6 +142,8 @@ const formData = reactive({
   confirmPassword: "",
 });
 
+const SPECIAL_CHAR_REGEX = /[!@#$%^&*(),.?":{}|<>\[\]\\/_\-+=~`]/;
+
 const rules: FormRules = {
   newPassword: [
     {
@@ -157,6 +159,11 @@ const rules: FormRules = {
     {
       max: 100,
       message: "Password must not exceed 100 characters",
+      trigger: ["input", "blur"],
+    },
+    {
+      validator: (_rule, value: string) => SPECIAL_CHAR_REGEX.test(value),
+      message: "Password must include at least 1 special character",
       trigger: ["input", "blur"],
     },
   ],

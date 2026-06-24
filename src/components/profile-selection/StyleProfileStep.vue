@@ -459,7 +459,7 @@ const handleComplete = () => {
 
 .general-card {
   background-color: #2c2c32;
-  border: 2px solid #3c3c42;
+  border: 2px solid rgba(34, 197, 94, 0.35);
   border-radius: 16px;
   padding: 28px 32px;
   text-align: center;
@@ -471,7 +471,7 @@ const handleComplete = () => {
 }
 
 .general-card:hover {
-  border-color: #4c4c52;
+  border-color: rgba(34, 197, 94, 0.6);
 }
 
 .general-card.selected {
@@ -482,11 +482,17 @@ const handleComplete = () => {
 
 .general-card .category-icon {
   margin-bottom: 12px;
-  color: var(--text-secondary);
+  color: #22c55e;
+  background-color: rgba(34, 197, 94, 0.12);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .general-card.selected .category-icon {
-  color: #22c55e;
+  background-color: rgba(34, 197, 94, 0.2);
 }
 
 .mode-badge {
@@ -509,6 +515,19 @@ const handleComplete = () => {
   color: #a855f7;
 }
 
+.commercial-card {
+  border-color: rgba(168, 85, 247, 0.35);
+}
+
+.commercial-card:hover {
+  border-color: rgba(168, 85, 247, 0.6) !important;
+}
+
+.commercial-card .category-icon {
+  color: #a855f7 !important;
+  background-color: rgba(168, 85, 247, 0.12) !important;
+}
+
 .commercial-card.selected {
   border-color: #a855f7;
   background-color: rgba(168, 85, 247, 0.1);
@@ -516,7 +535,8 @@ const handleComplete = () => {
 }
 
 .commercial-card.selected .category-icon {
-  color: #a855f7;
+  color: #a855f7 !important;
+  background-color: rgba(168, 85, 247, 0.2) !important;
 }
 
 /* Professional Categories Grid */
@@ -529,7 +549,7 @@ const handleComplete = () => {
 
 .category-card {
   background-color: #2c2c32;
-  border: 2px solid #3c3c42;
+  border: 2px solid rgba(37, 99, 235, 0.35);
   border-radius: 12px;
   padding: 24px;
   text-align: center;
@@ -542,7 +562,7 @@ const handleComplete = () => {
 }
 
 .pro-card:hover:not(.disabled) {
-  border-color: #4c4c52;
+  border-color: rgba(37, 99, 235, 0.6);
 }
 
 .pro-card.selected {
@@ -558,11 +578,18 @@ const handleComplete = () => {
 
 .category-icon {
   margin-bottom: 12px;
-  color: var(--text-secondary);
+  color: #2563eb;
+  background-color: rgba(37, 99, 235, 0.12);
+  border-radius: 10px;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .pro-card.selected .category-icon {
   color: #2563eb;
+  background-color: rgba(37, 99, 235, 0.22);
 }
 
 .category-title {

@@ -59,6 +59,40 @@
         </n-input>
       </n-form-item>
 
+      <div v-if="formData.password" class="password-strength">
+        <div class="strength-header">
+          <span>Password strength</span>
+          <n-tag
+            :type="
+              passwordStrength.level === 'weak'
+                ? 'error'
+                : passwordStrength.level === 'medium'
+                  ? 'warning'
+                  : 'success'
+            "
+            size="small"
+            round
+            :bordered="false"
+          >
+            {{ passwordStrength.label }}
+          </n-tag>
+        </div>
+        <div class="strength-bars" aria-hidden="true">
+          <span
+            v-for="bar in 3"
+            :key="bar"
+            :class="[
+              'strength-bar',
+              { active: bar <= passwordStrength.bars },
+              `strength-${passwordStrength.level}`,
+            ]"
+          />
+        </div>
+        <div class="strength-hint">
+          Use at least 8 characters and 1 special character.
+        </div>
+      </div>
+
       <div class="form-terms">
         <n-checkbox v-model:checked="acceptTerms" class="terms-checkbox">
           <span class="terms-text">
@@ -97,7 +131,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from "vue";
+import { ref, reactive, computed } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useUserStore } from "../stores/userStore";
 import { useMessage } from "naive-ui";
@@ -183,6 +217,30 @@ const formData = reactive({
   password: "",
 });
 
+const SPECIAL_CHAR_REGEX = /[!@#$%^&*(),.?":{}|<>\[\]\\/_\-+=~`]/;
+
+const passwordStrength = computed(() => {
+  const password = formData.password || "";
+  const checks = [
+    password.length >= 8,
+    /[a-zA-Z]/.test(password),
+    /\d/.test(password),
+    SPECIAL_CHAR_REGEX.test(password),
+  ];
+
+  const score = checks.filter(Boolean).length;
+
+  if (score <= 1) {
+    return { label: "Weak", level: "weak", bars: password.length ? 1 : 0 };
+  }
+
+  if (score <= 3) {
+    return { label: "Medium", level: "medium", bars: 2 };
+  }
+
+  return { label: "Strong", level: "strong", bars: 3 };
+});
+
 const rules: FormRules = {
   name: [
     {
@@ -215,8 +273,13 @@ const rules: FormRules = {
       trigger: ["input", "blur"],
     },
     {
-      min: 6,
-      message: "Password must be at least 6 characters",
+      min: 8,
+      message: "Password must be at least 8 characters",
+      trigger: ["input", "blur"],
+    },
+    {
+      validator: (_rule, value: string) => SPECIAL_CHAR_REGEX.test(value),
+      message: "Password must include at least 1 special character",
       trigger: ["input", "blur"],
     },
   ],
@@ -307,6 +370,51 @@ const handleSubmit = async () => {
   margin-bottom: 12px;
 }
 
+.password-strength {
+  margin-top: -2px;
+  margin-bottom: 12px;
+}
+
+.strength-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.strength-bars {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.strength-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border-color);
+  transition: background-color 0.2s ease;
+}
+
+.strength-bar.active.strength-weak {
+  background-color: #ef4444;
+}
+
+.strength-bar.active.strength-medium {
+  background-color: #f59e0b;
+}
+
+.strength-bar.active.strength-strong {
+  background-color: #22c55e;
+}
+
+.strength-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 .terms-checkbox :deep(.n-checkbox__label) {
   font-size: 14px;
   color: var(--text-primary);
@@ -392,6 +500,11 @@ const handleSubmit = async () => {
 
   .form-terms {
     margin-bottom: 20px;
+  }
+
+  .strength-header,
+  .strength-hint {
+    font-size: 11px;
   }
 
   .terms-checkbox :deep(.n-checkbox__label) {

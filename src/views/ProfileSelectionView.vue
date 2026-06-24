@@ -2,7 +2,7 @@
   <ProfileLayout>
     <div class="profile-selection-content">
       <!-- Step Indicator -->
-      <div class="step-indicator">
+      <!-- <div class="step-indicator">
         <div
           class="step"
           :class="{ active: currentStep === 1, completed: currentStep > 1 }"
@@ -15,7 +15,7 @@
           <div class="step-circle">2</div>
           <span class="step-label">Style Profile</span>
         </div>
-      </div>
+      </div> -->
 
       <!-- Step 1: App Mode Selection -->
       <ImportModeStep
