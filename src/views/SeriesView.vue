@@ -559,10 +559,9 @@
         </div>
       </div>
 
-      <div v-if="!isLoading" class="card-grid">
-        <!-- Create New Series Card (only show when there are existing series) -->
+      <div v-if="!isLoading && hasRootContent" class="card-grid">
+        <!-- Create New Series Card -->
         <CreateCard
-          v-if="hasRootContent"
           title="Create New Series"
           subtitle="Start your photo sequence"
           @click="showCreateDialog"
@@ -598,36 +597,35 @@
               )
           "
         />
+      </div>
 
-        <!-- Empty State (when no series exist) -->
-        <div v-if="!hasRootContent" class="empty-series-state">
-          <div class="empty-series-content">
-            <n-icon size="64" class="empty-series-icon">
-              <ListOutline />
-            </n-icon>
-            <h3 class="empty-series-title">No series yet</h3>
-            <p class="empty-series-description">
-              Create your first series to start arranging your photos in a
-              sequential narrative.
-            </p>
-            <div class="empty-actions">
-              <n-button
-                type="primary"
-                @click="showCreateDialog"
-                class="create-series-btn"
-              >
-                <template #icon>
-                  <n-icon><AddOutline /></n-icon>
-                </template>
-                Create Series
-              </n-button>
-              <n-button @click="showCreateSetDialog" class="create-series-btn">
-                <template #icon>
-                  <n-icon><FolderOutline /></n-icon>
-                </template>
-                Create Set
-              </n-button>
-            </div>
+      <div v-if="!hasRootContent" class="empty-series-state">
+        <div class="empty-series-content">
+          <n-icon size="64" class="empty-series-icon">
+            <ListOutline />
+          </n-icon>
+          <h3 class="empty-series-title">No series yet</h3>
+          <p class="empty-series-description">
+            Create your first series to start arranging your photos in a
+            sequential narrative.
+          </p>
+          <div class="empty-actions">
+            <n-button
+              type="primary"
+              @click="showCreateDialog"
+              class="create-series-btn"
+            >
+              <template #icon>
+                <n-icon><AddOutline /></n-icon>
+              </template>
+              Create Series
+            </n-button>
+            <n-button @click="showCreateSetDialog" class="create-series-btn">
+              <template #icon>
+                <n-icon><FolderOutline /></n-icon>
+              </template>
+              Create Set
+            </n-button>
           </div>
         </div>
       </div>
@@ -2451,13 +2449,10 @@ watch(fullscreenViewerVisible, (isVisible) => {
 
 /* Empty Series State */
 .empty-series-state {
-  grid-column: 1 / -1;
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100%;
-  min-height: calc(100vh - 300px);
-
+  min-height: calc(100vh - 200px);
   text-align: center;
 }
 

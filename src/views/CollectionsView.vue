@@ -525,10 +525,9 @@
         />
       </div>
 
-      <div v-else class="card-grid">
-        <!-- Create New Collection card (only show when there's existing content) -->
+      <div v-else-if="hasRootContent" class="card-grid">
+        <!-- Create New Collection card -->
         <CreateCard
-          v-if="hasRootContent"
           title="New Collection"
           subtitle="Start organizing your photos"
           @click="showCreateDialog"
@@ -563,46 +562,44 @@
               )
           "
         />
+      </div>
 
-        <!-- Empty State -->
-        <div v-if="!hasRootContent" class="empty-collections-state">
-          <div class="empty-collections-content">
-            <n-icon size="64" class="empty-collections-icon">
-              <GridOutline />
-            </n-icon>
-            <h3 class="empty-collections-title">No collections yet</h3>
-            <p class="empty-collections-description">
-              Create your first collection or set to start organizing your
-              photos.
-            </p>
-            <div
-              style="
-                display: flex;
-                gap: 12px;
-                justify-content: center;
-                flex-wrap: wrap;
-              "
+      <div v-if="!hasRootContent" class="empty-collections-state">
+        <div class="empty-collections-content">
+          <n-icon size="64" class="empty-collections-icon">
+            <GridOutline />
+          </n-icon>
+          <h3 class="empty-collections-title">No collections yet</h3>
+          <p class="empty-collections-description">
+            Create your first collection or set to start organizing your photos.
+          </p>
+          <div
+            style="
+              display: flex;
+              gap: 12px;
+              justify-content: center;
+              flex-wrap: wrap;
+            "
+          >
+            <n-button
+              type="primary"
+              @click="showCreateDialog"
+              class="create-collection-btn"
             >
-              <n-button
-                type="primary"
-                @click="showCreateDialog"
-                class="create-collection-btn"
-              >
-                <template #icon
-                  ><n-icon><AddOutline /></n-icon
-                ></template>
-                Create Collection
-              </n-button>
-              <n-button
-                @click="showCreateSetDialog"
-                class="create-collection-btn"
-              >
-                <template #icon
-                  ><n-icon><FolderOutline /></n-icon
-                ></template>
-                Create Set
-              </n-button>
-            </div>
+              <template #icon
+                ><n-icon><AddOutline /></n-icon
+              ></template>
+              Create Collection
+            </n-button>
+            <n-button
+              @click="showCreateSetDialog"
+              class="create-collection-btn"
+            >
+              <template #icon
+                ><n-icon><FolderOutline /></n-icon
+              ></template>
+              Create Set
+            </n-button>
           </div>
         </div>
       </div>
@@ -1652,11 +1649,10 @@ watch(
 }
 
 .empty-collections-state {
-  grid-column: 1 / -1;
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: calc(100vh - 300px);
+  min-height: calc(100vh - 200px);
   text-align: center;
 }
 

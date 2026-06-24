@@ -320,7 +320,20 @@ export function useCanvasPersistence() {
   /**
    * Crea un nuevo canvas vacío, limpia el store, y lo activa.
    */
-  const createCanvas = async (name = "New Canvas") => {
+  const createCanvas = async (name = null) => {
+    // Auto-generate a numbered name that doesn't clash with existing canvases
+    if (name === null) {
+      const base = "New Canvas";
+      const existing = new Set(canvasList.value.map((c) => c.name));
+      if (!existing.has(base)) {
+        name = base;
+      } else {
+        let n = 2;
+        while (existing.has(`${base} ${n}`)) n++;
+        name = `${base} ${n}`;
+      }
+    }
+
     try {
       clearStore();
       const res = await api.post("/api/canvas", {
