@@ -197,7 +197,7 @@
                     </template>
                     Precise
                   </n-button>
-                  <div class="premium-indicator-pill"></div>
+                  <!-- <div class="premium-indicator-pill"></div> -->
                 </div>
               </template>
               Heavy search that prioritizes logical accuracy
@@ -225,7 +225,7 @@
                     </template>
                     Insights
                   </n-button>
-                  <div class="premium-indicator-pill"></div>
+                  <!-- <div class="premium-indicator-pill"></div> -->
                 </div>
               </template>
               Enhance search results with insights and commentary

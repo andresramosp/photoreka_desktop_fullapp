@@ -866,7 +866,7 @@
             >
           </div>
           <div class="free-quota-table-row free-quota-table-row--muted">
-            <span>Search Insights</span>
+            <span>Search + Insights</span>
             <span class="free-quota-value free-quota-value--none"
               >paid only</span
             >

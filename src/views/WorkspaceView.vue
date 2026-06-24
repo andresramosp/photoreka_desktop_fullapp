@@ -28,32 +28,32 @@
       class="workspace-content content-container"
     >
       <!-- Empty State (when no photos) -->
-      <div v-if="processedPhotos.length == 0" class="empty-state-section">
-        <div class="empty-state-container">
-          <div class="empty-state-content">
-            <div class="empty-state-icon">
-              <n-icon size="48" color="var(--primary-color)">
-                <LayersOutline />
-              </n-icon>
-            </div>
-            <h3 class="empty-state-title">Your workspace is empty</h3>
-            <p class="empty-state-subtitle">
-              Start by uploading and processing your photos.
-            </p>
-            <div class="empty-state-steps">
-              <div class="step-item">
-                1. Go to
+      <div v-if="processedPhotos.length == 0" class="empty-state">
+        <div class="empty-content">
+          <n-icon size="64" color="#6b7280" class="empty-icon">
+            <LayersOutline />
+          </n-icon>
+          <h2 class="empty-title">Your workspace is empty</h2>
+          <p class="empty-description">
+            Start by uploading and processing your photos.
+          </p>
+          <div class="instructions-list">
+            <div class="instruction-item">
+              <n-icon><CloudUploadOutline /></n-icon>
+              <span
+                >Go to
                 <button class="tab-link" @click="navigateToSyncArea">
                   Import Area
                 </button>
-              </div>
-              <div class="step-item">
-                2. Upload or sync your photos from any platform
-              </div>
-              <div class="step-item">
-                3. Click Analyze Photos and follow the process evolution in the
-                Analyses tab
-              </div>
+                and upload or sync your photos from any platform</span
+              >
+            </div>
+            <div class="instruction-item">
+              <n-icon><FlashOutline /></n-icon>
+              <span
+                >Click <strong>Analyze Photos</strong> and follow the process in
+                the Analyses tab</span
+              >
             </div>
           </div>
         </div>
@@ -82,7 +82,11 @@ import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { usePhotosStore } from "@/stores/photos.js";
 import { NIcon, NBadge } from "naive-ui";
-import { LayersOutline } from "@vicons/ionicons5";
+import {
+  LayersOutline,
+  CloudUploadOutline,
+  FlashOutline,
+} from "@vicons/ionicons5";
 import PhotosGrid from "@/components/PhotosGrid.vue";
 import UsageIndicators from "@/components/UsageIndicators.vue";
 import { useIsMobile } from "@/composables/useIsMobile.js";
@@ -161,9 +165,57 @@ const navigateToSyncArea = () => {
   /* Inherits from .content-container global class */
 }
 
-/* Empty State - extends global .empty-state-subtitle */
-.empty-state-subtitle {
-  margin-bottom: 32px;
+/* Empty State */
+.empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-2xl) 0;
+}
+
+.empty-content {
+  text-align: center;
+  max-width: 640px;
+}
+
+.empty-icon {
+  margin-bottom: var(--spacing-lg);
+}
+
+.empty-title {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+  margin: 0 0 0 0;
+}
+
+.empty-description {
+  font-size: var(--font-size-md);
+  color: var(--text-secondary);
+  margin-top: 10px;
+  margin-bottom: 5px;
+  line-height: var(--line-height-relaxed);
+}
+
+.instructions-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-lg);
+  border-radius: var(--radius-md);
+  margin-top: var(--spacing-lg);
+  align-content: center;
+  justify-content: center;
+  align-items: center;
+}
+
+.instruction-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: 14px;
+  color: var(--text-secondary);
 }
 
 /* Catalog Section */

@@ -269,6 +269,15 @@ export function useMainMenu(closeMobileMenu?: () => void) {
   });
 
   const canvasTreeChildren = computed<MenuOption[]>(() => {
+    if (canvasList.value.length === 0) {
+      return [
+        {
+          label: () =>
+            h("span", { class: "collection-menu-item" }, "My Canvas"),
+          key: "canvas-placeholder",
+        },
+      ];
+    }
     return canvasList.value.map((canvas) => ({
       label: () =>
         h(
@@ -504,7 +513,14 @@ export function useMainMenu(closeMobileMenu?: () => void) {
               onClick: (e: MouseEvent) => {
                 if (!isToolDisabledOnMobile("canvas")) {
                   e.stopPropagation();
-                  router.push("/canvas");
+                  if (canvasList.value.length === 1) {
+                    router.push({
+                      name: "canvas",
+                      query: { canvasId: String(canvasList.value[0].id) },
+                    });
+                  } else {
+                    router.push("/canvas");
+                  }
                   if (isMobile.value && closeMobileMenu) {
                     closeMobileMenu();
                   }
@@ -687,5 +703,6 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     series,
     exclusiveMenuMode,
     isDemoUser,
+    canvasList,
   };
 }

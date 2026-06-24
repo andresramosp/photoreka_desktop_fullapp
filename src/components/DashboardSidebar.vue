@@ -158,6 +158,7 @@ const {
   isMobile,
   updateIsMobile,
   exclusiveMenuMode,
+  canvasList,
 } = useMainMenu(closeMobileMenu);
 
 const activeKey = computed(() => {
@@ -222,7 +223,23 @@ const activeKey = computed(() => {
 const expandedKeys = ref<string[]>([...defaultExpandedKeys.value]);
 
 const handleMenuSelect = (key: string) => {
-  // Skip navigation for section headers (they don't have routes)
+  // canvas-group: navigate directly when there's only 1 canvas
+  if (key === "canvas-group") {
+    if (canvasList.value.length === 0) {
+      // No real canvases — open the frontend "My Canvas" placeholder
+      router.push({ name: "canvas" });
+    } else if (canvasList.value.length === 1) {
+      // Single real canvas — navigate directly to it
+      router.push({
+        name: "canvas",
+        query: { canvasId: String(canvasList.value[0].id) },
+      });
+    }
+    // Multiple canvases: let the menu expand/popup handle selection
+    return;
+  }
+
+  // Skip navigation for other section headers (they don't have routes)
   if (key.endsWith("-section") || key.endsWith("-group")) {
     return;
   }
@@ -231,7 +248,12 @@ const handleMenuSelect = (key: string) => {
     router.push({ name: "import-area", hash: "#upload" });
   } else if (key.startsWith("canvas-")) {
     const canvasId = key.replace("canvas-", "");
-    router.push({ name: "canvas", query: { canvasId } });
+    if (canvasId === "placeholder") {
+      // Frontend "My Canvas" placeholder — open canvas without a specific ID
+      router.push({ name: "canvas" });
+    } else {
+      router.push({ name: "canvas", query: { canvasId } });
+    }
   } else if (
     key.startsWith("collection-") ||
     key.startsWith("series-") ||
