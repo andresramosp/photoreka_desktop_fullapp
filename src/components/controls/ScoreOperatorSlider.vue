@@ -30,8 +30,8 @@
       </button>
     </div>
     <n-slider
-      :value="currentValue"
-      @update:value="onSliderChange"
+      v-model:value="localValue"
+      @update:value="handleSliderChange"
       :min="min"
       :max="max"
       :step="step"
@@ -45,6 +45,7 @@
 <script setup>
 import { ref, computed, watch } from "vue";
 import { NSlider } from "naive-ui";
+import { useDebounceFn } from "@vueuse/core";
 
 const props = defineProps({
   label: { type: String, required: true },
@@ -58,32 +59,46 @@ const props = defineProps({
 const emit = defineEmits(["update:modelValue"]);
 
 const localOperator = ref(">=");
+const localValue = ref(1);
 
 watch(
   () => props.modelValue,
   (val) => {
-    if (val && typeof val === "object" && val.operator) {
-      localOperator.value = val.operator;
+    if (val && typeof val === "object") {
+      if (val.operator) localOperator.value = val.operator;
+      localValue.value = val.value ?? 1;
+    } else {
+      localValue.value = 1;
     }
   },
   { immediate: true },
 );
 
-const currentValue = computed(() => {
-  if (!props.modelValue) return 1;
-  return typeof props.modelValue === "object"
-    ? props.modelValue.value
-    : props.modelValue;
-});
+const currentValue = computed(() => localValue.value);
 
 const setOperator = (op) => {
   localOperator.value = op;
-  if (currentValue.value > 1) {
-    emit("update:modelValue", { value: currentValue.value, operator: op });
+  if (localValue.value > 1) {
+    emit("update:modelValue", { value: localValue.value, operator: op });
   }
 };
 
+const emitValue = (val) => {
+  if (val <= 1) {
+    emit("update:modelValue", null);
+  } else {
+    emit("update:modelValue", { value: val, operator: localOperator.value });
+  }
+};
+
+// v-model updates localValue immediately (smooth drag); this debounces the emit
+const handleSliderChange = useDebounceFn((val) => {
+  emitValue(val);
+}, 300);
+
+// Clear button — emit immediately
 const onSliderChange = (val) => {
+  localValue.value = val;
   if (val <= 1) {
     emit("update:modelValue", null);
   } else {
