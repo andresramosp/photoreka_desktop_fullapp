@@ -53,6 +53,34 @@
           {{ allSelected ? "Deselect All" : "Select All" }}
         </n-button>
       </div>
+
+      <!-- Undo / Discard / Save -->
+      <div v-if="!isPublicView" class="strip-controls-right">
+        <n-button
+          v-if="canUndo && !isSaving"
+          size="small"
+          @click="$emit('undo')"
+          title="Undo last removal"
+        >
+          <template #icon>
+            <n-icon><ArrowUndoOutline /></n-icon>
+          </template>
+          Undo
+        </n-button>
+        <n-button
+          v-if="hasChanges"
+          size="small"
+          type="primary"
+          ghost
+          :loading="isSaving"
+          @click="$emit('save')"
+        >
+          <template #icon>
+            <n-icon><SaveOutline /></n-icon>
+          </template>
+          Save
+        </n-button>
+      </div>
     </div>
 
     <!-- Empty State -->
@@ -244,9 +272,11 @@ import { NButton, NButtonGroup, NIcon, NEmpty, NSelect } from "naive-ui";
 import {
   AddOutline,
   AddCircleOutline,
+  ArrowUndoOutline,
   CloseOutline,
   GridOutline,
   ReorderFourOutline,
+  SaveOutline,
 } from "@vicons/ionicons5";
 import draggable from "vuedraggable";
 import PhotoSequenceCard from "@/components/PhotoSequenceCard.vue";
@@ -274,6 +304,22 @@ const props = defineProps({
     type: [String, Number],
     default: null,
   },
+  canUndo: {
+    type: Boolean,
+    default: false,
+  },
+  hasChanges: {
+    type: Boolean,
+    default: false,
+  },
+  isSaving: {
+    type: Boolean,
+    default: false,
+  },
+  isPublicView: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits([
@@ -287,6 +333,8 @@ const emit = defineEmits([
   "photos-updated",
   "select-photo",
   "show-info",
+  "undo",
+  "save",
 ]);
 
 // Size options
@@ -630,15 +678,22 @@ const handleSelectAllToggle = () => {
 .strip-controls {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   margin-bottom: 20px;
-  /* margin-left: 40px; */
 }
 
 .strip-controls-left {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.strip-controls-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .size-label {

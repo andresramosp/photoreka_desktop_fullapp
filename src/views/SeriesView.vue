@@ -60,46 +60,6 @@
             </n-button>
             <div style="display: flex; gap: 12px">
               <n-button
-                v-if="!isPublicView"
-                :disabled="!canUndo || isSaving"
-                @click="undoLastChange"
-                title="Undo last removal"
-              >
-                <template #icon>
-                  <n-icon>
-                    <ArrowUndoOutline />
-                  </n-icon>
-                </template>
-                Undo
-              </n-button>
-              <n-button
-                v-if="!isPublicView"
-                :disabled="!hasChanges || isSaving"
-                @click="discardChanges"
-              >
-                <template #icon>
-                  <n-icon>
-                    <CloseOutline />
-                  </n-icon>
-                </template>
-                Discard
-              </n-button>
-              <n-button
-                v-if="!isPublicView"
-                :type="hasChanges ? 'primary' : 'default'"
-                ghost
-                :disabled="!hasChanges || isSaving"
-                :loading="isSaving"
-                @click="saveChanges"
-              >
-                <template #icon>
-                  <n-icon>
-                    <SaveOutline />
-                  </n-icon>
-                </template>
-                Save
-              </n-button>
-              <n-button
                 type="primary"
                 @click="openFullscreenViewer"
                 class="play-series-button"
@@ -280,6 +240,10 @@
           :selected-photo-ids="localSelectedPhotoIds"
           :suggested-photos-info="suggestedPhotosInfo"
           :refreshing-photo-id="refreshingPhotoId"
+          :can-undo="canUndo"
+          :has-changes="hasChanges"
+          :is-saving="isSaving"
+          :is-public-view="isPublicView"
           @add-photos="showAddPhotosDialog"
           @add-photos-at="handleAddPhotosAt"
           @suggest-photo-at="handleSuggestPhotoAt"
@@ -290,6 +254,8 @@
           @photos-updated="handlePhotosUpdated"
           @select-photo="togglePhotoSelection"
           @show-info="handleShowPhotoInfo"
+          @undo="undoLastChange"
+          @save="saveChanges"
         />
       </div>
     </div>
@@ -1016,7 +982,7 @@ const refreshingPhotoId = ref(null);
 const editablePhotos = ref([]); // full photo objects, ordered
 const originalPhotos = ref([]); // snapshot from server for discard
 const originalPhotoIds = ref([]); // id order snapshot for change detection
-const removedPhotosHistory = ref([]); // stack of { photo, index } for Undo
+const undoHistory = ref([]); // stack of photo-array snapshots for full Undo
 const currentEditingSeriesId = ref(null); // track which series is currently loaded editable
 const isSaving = ref(false);
 
@@ -1026,7 +992,12 @@ const hasChanges = computed(() => {
   return currentIds.some((id, i) => id !== originalPhotoIds.value[i]);
 });
 
-const canUndo = computed(() => removedPhotosHistory.value.length > 0);
+const canUndo = computed(() => undoHistory.value.length > 0);
+
+// Capture a snapshot of the current photos before a mutation
+const pushUndoSnapshot = () => {
+  undoHistory.value.push([...editablePhotos.value]);
+};
 
 // Initialize / reset local state from the loaded series
 const initEditableState = (series) => {
@@ -1034,7 +1005,7 @@ const initEditableState = (series) => {
   editablePhotos.value = [...photos];
   originalPhotos.value = [...photos];
   originalPhotoIds.value = photos.map((p) => p.id);
-  removedPhotosHistory.value = [];
+  undoHistory.value = [];
   currentEditingSeriesId.value = series?.id ?? null;
 };
 
@@ -1380,6 +1351,7 @@ const handleSuggestPhotoAt = async (payload) => {
       Math.max(Number(insertIndex) || 0, 0),
       editablePhotos.value.length,
     );
+    pushUndoSnapshot();
     const next = [...editablePhotos.value];
     next.splice(safeIndex, 0, newPhoto);
     editablePhotos.value = next;
@@ -1421,6 +1393,7 @@ const onPhotosSelected = async (photoIds) => {
     return;
   }
 
+  pushUndoSnapshot();
   const next = [...editablePhotos.value];
   if (pendingInsertIndex.value !== null) {
     const safeIndex = Math.min(
@@ -1463,9 +1436,10 @@ const handleRefreshSuggestion = async (photoId) => {
   refreshingPhotoId.value = photoId;
 
   try {
-    // Remove locally (no history push — it was a transient suggestion)
+    // Remove locally (push snapshot so it can be undone)
     const idx = editablePhotos.value.findIndex((p) => p.id === photoId);
     if (idx !== -1) {
+      pushUndoSnapshot();
       const next = [...editablePhotos.value];
       next.splice(idx, 1);
       editablePhotos.value = next;
@@ -1502,9 +1476,8 @@ const handleRemovePhoto = (photoId) => {
 
   const idx = editablePhotos.value.findIndex((p) => p.id === photoId);
   if (idx === -1) return;
-  const [removed] = editablePhotos.value.splice(idx, 1);
-  removedPhotosHistory.value.push({ photo: removed, index: idx });
-  // trigger reactivity
+  pushUndoSnapshot();
+  editablePhotos.value.splice(idx, 1);
   editablePhotos.value = [...editablePhotos.value];
 };
 
@@ -1523,7 +1496,12 @@ const handleMovePhoto = () => {
 const handlePhotosUpdated = (updatedPhotos) => {
   // Strip sends the full ordered photo array after drag/move operations
   if (Array.isArray(updatedPhotos)) {
-    editablePhotos.value = [...updatedPhotos];
+    const currentIds = editablePhotos.value.map((p) => p.id).join(",");
+    const newIds = updatedPhotos.map((p) => p.id).join(",");
+    if (currentIds !== newIds) {
+      pushUndoSnapshot();
+      editablePhotos.value = [...updatedPhotos];
+    }
   }
 };
 
@@ -1567,11 +1545,10 @@ const handleRemoveSelectedFromSeries = () => {
 
   if (toRemove.length === 0) return;
 
+  pushUndoSnapshot();
   editablePhotos.value = editablePhotos.value.filter(
     (p) => !selectedSet.has(p.id),
   );
-  // Push in original-index ascending order so undo pops latest first
-  for (const entry of toRemove) removedPhotosHistory.value.push(entry);
 
   message.info(
     `Removed ${toRemove.length} photo${toRemove.length > 1 ? "s" : ""} (not saved yet)`,
@@ -1579,20 +1556,17 @@ const handleRemoveSelectedFromSeries = () => {
   localClearAllSelections();
 };
 
-// Undo last removal
+// Undo last change (restores previous snapshot)
 const undoLastChange = () => {
-  const last = removedPhotosHistory.value.pop();
-  if (!last) return;
-  const next = [...editablePhotos.value];
-  const insertAt = Math.min(last.index, next.length);
-  next.splice(insertAt, 0, last.photo);
-  editablePhotos.value = next;
+  const prev = undoHistory.value.pop();
+  if (!prev) return;
+  editablePhotos.value = prev;
 };
 
 // Discard all local changes
 const discardChanges = () => {
   editablePhotos.value = [...originalPhotos.value];
-  removedPhotosHistory.value = [];
+  undoHistory.value = [];
   recentlySuggestedPhotos.value.clear();
   discardedPhotosByContext.value.clear();
 };
@@ -1703,6 +1677,7 @@ const backToSeries = () => {
 // Unsaved changes modal handlers
 const handleLeaveWithoutSaving = () => {
   showUnsavedModal.value = false;
+  discardChanges();
   if (pendingNavigation) {
     const nav = pendingNavigation;
     pendingNavigation = null;
