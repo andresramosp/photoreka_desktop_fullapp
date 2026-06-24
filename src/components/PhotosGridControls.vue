@@ -35,226 +35,162 @@
         </n-icon>
       </div>
       <!-- Filters Collapsible Content -->
-      <div
-        v-show="isFiltersExpanded"
-        class="filter-controls-tab-container filters-expanded-content"
-      >
-        <VisualFiltersPanel
-          :visual-aspects="selectedFilters"
-          :score-filters="artisticScoreFilters"
-          :show-section-labels="false"
-          @update:visual-aspects="handleVisualAspectsPanelChange"
-          @update:score-filters="handleScoreFiltersPanelChange"
-        />
-        <!-- Date Range Filter -->
-        <div class="date-range-wrapper">
-          <TimeRangeFilter
-            :photos="photos"
-            @time-range-change="handleTimeRangeChange"
-            :histogram-height="'30px'"
-            :show-title="false"
-            :marksCount="5"
+      <Transition name="slide-down">
+        <div
+          v-if="isFiltersExpanded"
+          class="filter-controls-tab-container filters-expanded-content"
+        >
+          <VisualFiltersPanel
+            :visual-aspects="selectedFilters"
+            :score-filters="artisticScoreFilters"
+            :show-section-labels="false"
+            @update:visual-aspects="handleVisualAspectsPanelChange"
+            @update:score-filters="handleScoreFiltersPanelChange"
           />
-        </div>
+          <!-- Date Range Filter -->
+          <div class="date-range-wrapper">
+            <TimeRangeFilter
+              :photos="photos"
+              @time-range-change="handleTimeRangeChange"
+              :histogram-height="'30px'"
+              :show-title="false"
+              :marksCount="5"
+            />
+          </div>
 
-        <!-- More Filters Toggle -->
-        <div class="more-filters-toggle-wrapper">
-          <n-button
-            text
-            size="small"
-            class="more-filters-toggle-btn"
-            @click.stop="isDateRangeExpanded = !isDateRangeExpanded"
-          >
-            <template #icon>
-              <n-icon size="14">
-                <Settings20Regular />
-              </n-icon>
-            </template>
-            {{
-              isDateRangeExpanded ? "Hide extra filters" : "See more filters"
-            }}
-          </n-button>
-        </div>
+          <!-- More Filters Toggle -->
+          <div class="more-filters-toggle-wrapper">
+            <n-button
+              text
+              size="small"
+              class="more-filters-toggle-btn"
+              @click.stop="isMoreFiltersExpanded = !isMoreFiltersExpanded"
+            >
+              <template #icon>
+                <n-icon size="14" :color="`var(--primary-color)`">
+                  <Settings20Regular />
+                </n-icon>
+              </template>
+              {{
+                isMoreFiltersExpanded
+                  ? "Hide extra filters"
+                  : "See more filters"
+              }}
+            </n-button>
+          </div>
 
-        <!-- More Filters Sub-section -->
-        <div v-show="isDateRangeExpanded" class="more-filters-content">
-          <!-- Tags Filter Row -->
-          <div class="tags-filter-row">
-            <div class="filter-wrapper">
-              <div class="filter-header-row">
-                <div style="display: flex; align-items: center; gap: 6px">
-                  <label class="filter-label">Include tags</label>
-                  <n-tooltip trigger="hover" placement="top">
-                    <template #trigger>
-                      <n-icon
-                        size="14"
-                        style="
-                          color: var(--text-secondary);
-                          cursor: help;
-                          opacity: 0.7;
-                        "
+          <!-- More Filters Sub-section -->
+          <Transition name="slide-down">
+            <div v-if="isMoreFiltersExpanded" class="more-filters-content">
+              <!-- Tags Filter Row -->
+              <div class="tags-filter-row">
+                <div class="filter-wrapper">
+                  <div class="filter-header-row">
+                    <div style="display: flex; align-items: center; gap: 6px">
+                      <label class="filter-label">Include tags</label>
+                      <n-tooltip trigger="hover" placement="top">
+                        <template #trigger>
+                          <n-icon
+                            size="14"
+                            style="
+                              color: var(--text-secondary);
+                              cursor: help;
+                              opacity: 0.7;
+                            "
+                          >
+                            <Info16Regular />
+                          </n-icon>
+                        </template>
+                        Exact tag matching only. Use Search tool for semantic
+                        queries.
+                      </n-tooltip>
+                    </div>
+                    <div class="tags-mode-switch-wrapper">
+                      <span
+                        class="tag-mode-label"
+                        :class="{ active: !isOrMode }"
                       >
-                        <Info16Regular />
-                      </n-icon>
-                    </template>
-                    Exact tag matching only. Use Search tool for semantic
-                    queries.
-                  </n-tooltip>
-                </div>
-                <div class="tags-mode-switch-wrapper">
-                  <span class="tag-mode-label" :class="{ active: !isOrMode }">
-                    All
-                  </span>
-                  <n-switch
-                    v-model:value="isOrMode"
+                        All
+                      </span>
+                      <n-switch
+                        v-model:value="isOrMode"
+                        size="small"
+                        class="tags-mode-switch"
+                      />
+                      <span
+                        class="tag-mode-label"
+                        :class="{ active: isOrMode }"
+                      >
+                        Any
+                      </span>
+                    </div>
+                  </div>
+                  <n-select
+                    v-model:value="includedTags"
+                    v-model:show="includedTagsDropdownShow"
+                    multiple
+                    filterable
+                    clearable
+                    remote
+                    placeholder="Include tags..."
+                    :options="includedTagSuggestionsFormatted"
+                    :filter="() => true"
+                    :clear-filter-after-select="true"
+                    :max-tag-count="3"
+                    :ignore-composition="false"
                     size="small"
-                    class="tags-mode-switch"
-                  />
-                  <span class="tag-mode-label" :class="{ active: isOrMode }">
-                    Any
-                  </span>
+                    @search="handleIncludedTagSearch"
+                    @update:value="handleIncludedTagsUpdate"
+                    class="compact-select"
+                  >
+                    <template #empty>
+                      <div style="padding: 8px; color: #888; font-size: 11px">
+                        Start typing to search tags...
+                      </div>
+                    </template>
+                  </n-select>
+                </div>
+
+                <div class="filter-wrapper">
+                  <label class="filter-label">Exclude tags</label>
+                  <n-select
+                    v-model:value="excludedTags"
+                    v-model:show="excludedTagsDropdownShow"
+                    multiple
+                    filterable
+                    clearable
+                    remote
+                    placeholder="Exclude tags..."
+                    :options="excludedTagSuggestionsFormatted"
+                    :filter="() => true"
+                    :clear-filter-after-select="true"
+                    :max-tag-count="3"
+                    :ignore-composition="false"
+                    size="small"
+                    @search="handleExcludedTagSearch"
+                    @update:value="handleExcludedTagsUpdate"
+                    class="compact-select"
+                  >
+                    <template #empty>
+                      <div style="padding: 8px; color: #888; font-size: 11px">
+                        Start typing to search tags...
+                      </div>
+                    </template>
+                  </n-select>
                 </div>
               </div>
-              <n-select
-                v-model:value="includedTags"
-                v-model:show="includedTagsDropdownShow"
-                multiple
-                filterable
-                clearable
-                remote
-                placeholder="Include tags..."
-                :options="includedTagSuggestionsFormatted"
-                :filter="() => true"
-                :clear-filter-after-select="true"
-                :max-tag-count="3"
-                :ignore-composition="false"
-                size="small"
-                @search="handleIncludedTagSearch"
-                @update:value="handleIncludedTagsUpdate"
-                class="compact-select"
-              >
-                <template #empty>
-                  <div style="padding: 8px; color: #888; font-size: 11px">
-                    Start typing to search tags...
-                  </div>
-                </template>
-              </n-select>
-            </div>
 
-            <div class="filter-wrapper">
-              <label class="filter-label">Exclude tags</label>
-              <n-select
-                v-model:value="excludedTags"
-                v-model:show="excludedTagsDropdownShow"
-                multiple
-                filterable
-                clearable
-                remote
-                placeholder="Exclude tags..."
-                :options="excludedTagSuggestionsFormatted"
-                :filter="() => true"
-                :clear-filter-after-select="true"
-                :max-tag-count="3"
-                :ignore-composition="false"
-                size="small"
-                @search="handleExcludedTagSearch"
-                @update:value="handleExcludedTagsUpdate"
-                class="compact-select"
-              >
-                <template #empty>
-                  <div style="padding: 8px; color: #888; font-size: 11px">
-                    Start typing to search tags...
-                  </div>
-                </template>
-              </n-select>
-            </div>
-          </div>
-
-          <!-- Filename Search + Metadata Filters Row -->
-          <div class="metadata-row">
-            <!-- Filename Search -->
-            <div class="filter-wrapper">
-              <label class="filter-label">File name</label>
-              <n-input
-                v-model:value="filenameSearch"
-                placeholder="Filename..."
-                clearable
-                size="small"
-                class="filename-input"
-                @update:value="handleFilenameSearchChange"
-              >
-                <template #prefix>
-                  <n-icon size="14">
-                    <Search20Regular />
-                  </n-icon>
-                </template>
-              </n-input>
-            </div>
-
-            <!-- File Type Filter -->
-            <div class="filter-wrapper">
-              <label class="filter-label">File type</label>
-              <n-select
-                disabled
-                v-model:value="selectedFileTypes"
-                multiple
-                placeholder="All types..."
-                :options="fileTypeOptions"
-                size="small"
-                clearable
-                filterable
-                class="compact-select"
+              <!-- Filename Search + Metadata Filters Row -->
+              <MetadataFiltersPanel
+                :photos="photos"
+                v-model="metadataFilters"
+                :filename-search="filenameSearch"
+                @update:filename-search="handleFilenameSearchChange"
               />
             </div>
-
-            <!-- ISO Filter -->
-            <div class="filter-wrapper">
-              <label class="filter-label">ISO</label>
-              <n-select
-                v-model:value="selectedISO"
-                multiple
-                disabled
-                placeholder="All ISO..."
-                :options="isoOptions"
-                size="small"
-                clearable
-                filterable
-                class="compact-select"
-              />
-            </div>
-
-            <!-- Flash Filter -->
-            <div class="filter-wrapper">
-              <label class="filter-label">Flash</label>
-              <n-select
-                v-model:value="selectedFlash"
-                disabled
-                placeholder="All states..."
-                :options="flashOptions"
-                size="small"
-                clearable
-                class="compact-select"
-              />
-            </div>
-
-            <!-- Aperture Filter -->
-            <div class="filter-wrapper">
-              <label class="filter-label">Aperture</label>
-              <n-select
-                v-model:value="selectedAperture"
-                disabled
-                multiple
-                placeholder="All f-stops..."
-                :options="apertureOptions"
-                size="small"
-                clearable
-                filterable
-                class="compact-select"
-              />
-            </div>
-          </div>
+          </Transition>
         </div>
-      </div>
+      </Transition>
     </div>
 
     <!-- Sorting Section -->
@@ -328,91 +264,93 @@
           </svg>
         </n-icon>
       </div>
-      <div
-        v-if="isSortingExpanded"
-        class="sorting-wrapper filter-controls-tab-container"
-      >
-        <!-- Sorting Type Selection -->
-        <div class="sorting-type-row">
-          <n-radio-group
-            v-model:value="sortingType"
-            size="small"
-            @update:value="handleSortingTypeChange"
-            class="inline-radios"
-          >
-            <n-radio value="criteria" class="sorting-radio">Criteria</n-radio>
-            <n-radio value="genre" class="sorting-radio">Genre</n-radio>
-          </n-radio-group>
-        </div>
-        <!-- Criteria Selection -->
+      <Transition name="slide-down">
         <div
-          v-if="sortingType === 'criteria'"
-          class="filter-controls-criteria-row"
+          v-if="isSortingExpanded"
+          class="sorting-wrapper filter-controls-tab-container"
         >
-          <template
-            v-for="[groupKey, group] in Object.entries(artisticScores)"
-            :key="groupKey"
-          >
-            <n-button
-              v-for="criterion in group.criteria"
-              :key="criterion.value"
-              secondary
-              :type="
-                selectedCriteria.includes(criterion.value)
-                  ? groupKey === 'fundamentals'
-                    ? 'primary'
-                    : 'warning'
-                  : 'default'
-              "
+          <!-- Sorting Type Selection -->
+          <div class="sorting-type-row">
+            <n-radio-group
+              v-model:value="sortingType"
               size="small"
-              @click="toggleCriterion(criterion.value)"
-              class="filter-controls-criterion-button"
+              @update:value="handleSortingTypeChange"
+              class="inline-radios"
             >
-              <template #icon>
-                <n-icon>
-                  <component :is="criterionIcons[criterion.value]" />
-                </n-icon>
-              </template>
-              {{ formatCriterionName(criterion.value) }}
-            </n-button>
-          </template>
-        </div>
-
-        <!-- Genre Buttons -->
-        <div v-if="sortingType === 'genre'" class="genre-row">
-          <n-tooltip
-            v-for="genre in genres"
-            :key="genre.value"
-            trigger="hover"
-            placement="bottom"
-            :show-arrow="true"
-            delay="1200"
+              <n-radio value="criteria" class="sorting-radio">Criteria</n-radio>
+              <n-radio value="genre" class="sorting-radio">Genre</n-radio>
+            </n-radio-group>
+          </div>
+          <!-- Criteria Selection -->
+          <div
+            v-if="sortingType === 'criteria'"
+            class="filter-controls-criteria-row"
           >
-            <template #trigger>
+            <template
+              v-for="[groupKey, group] in Object.entries(artisticScores)"
+              :key="groupKey"
+            >
               <n-button
-                :type="selectedGenre === genre.value ? 'primary' : 'default'"
-                size="small"
+                v-for="criterion in group.criteria"
+                :key="criterion.value"
                 secondary
-                @click="handleGenreSelect(genre.value)"
-                class="genre-button"
-                :class="{ 'custom-button': genre.value === 'custom' }"
+                :type="
+                  selectedCriteria.includes(criterion.value)
+                    ? groupKey === 'fundamentals'
+                      ? 'primary'
+                      : 'warning'
+                    : 'default'
+                "
+                size="small"
+                @click="toggleCriterion(criterion.value)"
+                class="filter-controls-criterion-button"
               >
                 <template #icon>
                   <n-icon>
-                    <component :is="genre.icon" />
+                    <component :is="criterionIcons[criterion.value]" />
                   </n-icon>
                 </template>
-                {{ genre.label }}
+                {{ formatCriterionName(criterion.value) }}
               </n-button>
             </template>
-            <div
-              v-if="genre.value !== 'custom'"
-              v-html="formatGenreTooltip(genre.value)"
-            ></div>
-            <div v-else>Customize your own scoring weights</div>
-          </n-tooltip>
+          </div>
+
+          <!-- Genre Buttons -->
+          <div v-if="sortingType === 'genre'" class="genre-row">
+            <n-tooltip
+              v-for="genre in genres"
+              :key="genre.value"
+              trigger="hover"
+              placement="bottom"
+              :show-arrow="true"
+              delay="1200"
+            >
+              <template #trigger>
+                <n-button
+                  :type="selectedGenre === genre.value ? 'primary' : 'default'"
+                  size="small"
+                  secondary
+                  @click="handleGenreSelect(genre.value)"
+                  class="genre-button"
+                  :class="{ 'custom-button': genre.value === 'custom' }"
+                >
+                  <template #icon>
+                    <n-icon>
+                      <component :is="genre.icon" />
+                    </n-icon>
+                  </template>
+                  {{ genre.label }}
+                </n-button>
+              </template>
+              <div
+                v-if="genre.value !== 'custom'"
+                v-html="formatGenreTooltip(genre.value)"
+              ></div>
+              <div v-else>Customize your own scoring weights</div>
+            </n-tooltip>
+          </div>
         </div>
-      </div>
+      </Transition>
     </div>
 
     <!-- Custom Weights Modal -->
@@ -467,6 +405,11 @@ import { useSearchTags } from "@/composables/useSearchTags.js";
 import CustomArtisticWeights from "./CustomArtisticWeights.vue";
 import TimeRangeFilter from "./TimeRangeFilter.vue";
 import VisualFiltersPanel from "@/components/photos-grid/VisualFiltersPanel.vue";
+import MetadataFiltersPanel from "@/components/photos-grid/MetadataFiltersPanel.vue";
+import {
+  createEmptyMetadataFilters,
+  countActiveMetadataFilters,
+} from "@/utils/metadataFilters.js";
 import { api } from "@/utils/axios";
 import {
   NButton,
@@ -477,7 +420,6 @@ import {
   NModal,
   NTag,
   NTooltip,
-  NInput,
   NSwitch,
   useMessage,
 } from "naive-ui";
@@ -485,7 +427,6 @@ import {
   BookOpen16Regular,
   Camera20Regular,
   Info16Regular,
-  Search20Regular,
   Settings20Regular,
   Trophy20Regular,
 } from "@vicons/fluent";
@@ -502,10 +443,7 @@ const emit = defineEmits([
   "custom-weights-change",
   "filename-search-change",
   "time-range-change",
-  "file-type-change",
-  "iso-change",
-  "flash-change",
-  "aperture-change",
+  "metadata-filters-change",
   "tag-search",
   "artistic-scores-change",
 ]);
@@ -575,59 +513,16 @@ const tagsMode = computed(() => (isOrMode.value ? "OR" : "AND"));
 // Filename Search
 const filenameSearch = ref("");
 
-// File Type Filter
-const selectedFileTypes = ref([]);
-const fileTypeOptions = [
-  { label: "JPEG", value: "jpg" },
-  { label: "PNG", value: "png" },
-  { label: "HEIC", value: "heic" },
-  { label: "RAW", value: "raw" },
-  { label: "TIFF", value: "tiff" },
-  { label: "WebP", value: "webp" },
-];
-
-// ISO Filter
-const selectedISO = ref([]);
-const isoOptions = [
-  { label: "100", value: 100 },
-  { label: "200", value: 200 },
-  { label: "400", value: 400 },
-  { label: "800", value: 800 },
-  { label: "1600", value: 1600 },
-  { label: "3200", value: 3200 },
-  { label: "6400", value: 6400 },
-  { label: "12800", value: 12800 },
-];
-
-// Flash Filter
-const selectedFlash = ref(null);
-const flashOptions = [
-  { label: "Off", value: "off" },
-  { label: "On", value: "on" },
-  { label: "Auto", value: "auto" },
-];
-
-// Aperture Filter
-const selectedAperture = ref([]);
-const apertureOptions = [
-  { label: "f/1.0", value: 1.0 },
-  { label: "f/1.4", value: 1.4 },
-  { label: "f/1.8", value: 1.8 },
-  { label: "f/2.0", value: 2.0 },
-  { label: "f/2.8", value: 2.8 },
-  { label: "f/4.0", value: 4.0 },
-  { label: "f/5.6", value: 5.6 },
-  { label: "f/8.0", value: 8.0 },
-  { label: "f/11", value: 11.0 },
-  { label: "f/16", value: 16.0 },
-];
+// Metadata filters (file type + EXIF) — options are derived dynamically from
+// the photos present, inside MetadataFiltersPanel.
+const metadataFilters = ref(createEmptyMetadataFilters());
 
 // Visual Aspects Filters
 const selectedFilters = ref({});
 const isFiltersExpanded = ref(false); // Will be set based on mobile on mount
 
-// Date Range Filter
-const isDateRangeExpanded = ref(false);
+// More Filters sub-section
+const isMoreFiltersExpanded = ref(false);
 
 // Quality Sorting
 const sortingType = ref("criteria"); // 'criteria' or 'genre'
@@ -751,9 +646,15 @@ searchStore.visualAspectsOptionsForProfile.forEach((group) => {
 });
 
 // Computed for checking if there are active filters
+const hasActiveMetadataFilters = computed(
+  () => countActiveMetadataFilters(metadataFilters.value) > 0,
+);
+
 const hasActiveFilters = computed(() => {
-  return Object.values(selectedFilters.value).some(
-    (filters) => filters.length > 0,
+  return (
+    Object.values(selectedFilters.value).some(
+      (filters) => filters.length > 0,
+    ) || hasActiveMetadataFilters.value
   );
 });
 
@@ -764,7 +665,8 @@ const totalActiveFilters = computed(() => {
     0,
   );
   const scoreFiltersCount = Object.keys(artisticScoreFilters.value).length;
-  return aspectsCount + scoreFiltersCount;
+  const metadataCount = countActiveMetadataFilters(metadataFilters.value);
+  return aspectsCount + scoreFiltersCount + metadataCount;
 });
 
 // Computed for checking if sorting is active
@@ -854,7 +756,7 @@ const toggleFilters = () => {
   isFiltersExpanded.value = !isFiltersExpanded.value;
   // Collapse more filters when closing the parent
   if (!isFiltersExpanded.value) {
-    isDateRangeExpanded.value = false;
+    isMoreFiltersExpanded.value = false;
   }
 };
 
@@ -862,7 +764,7 @@ const toggleSorting = () => {
   // Close other sections when opening this one
   if (!isSortingExpanded.value) {
     isFiltersExpanded.value = false;
-    isDateRangeExpanded.value = false;
+    isMoreFiltersExpanded.value = false;
   }
   isSortingExpanded.value = !isSortingExpanded.value;
 };
@@ -886,6 +788,7 @@ const handleCriteriaChange = () => {
 };
 
 const handleFilenameSearchChange = (value) => {
+  filenameSearch.value = value;
   emit("filename-search-change", value);
 };
 
@@ -1021,6 +924,15 @@ watch(
   { immediate: true },
 );
 
+// Emit metadata (file type + EXIF) filter changes
+watch(
+  metadataFilters,
+  (newFilters) => {
+    emit("metadata-filters-change", newFilters);
+  },
+  { deep: true },
+);
+
 // Watch for basic sort activation to deactivate scores sorting
 watch(
   () => props.basicSortActive,
@@ -1136,19 +1048,23 @@ watch(
   border: 1px dashed var(--border-color);
 }
 
-.filters-tab-container {
-  animation: slideDown 0.3s ease-out;
+/* Slide-down transition */
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.25s ease;
+  overflow: hidden;
 }
 
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.slide-down-enter-from,
+.slide-down-leave-to {
+  opacity: 0;
+  max-height: 0;
+}
+
+.slide-down-enter-to,
+.slide-down-leave-from {
+  opacity: 1;
+  max-height: 1000px;
 }
 
 .more-filters-toggle-wrapper {
@@ -1159,7 +1075,6 @@ watch(
 
 .more-filters-toggle-btn {
   font-size: 12px;
-  color: var(--secondary-color) !important;
   opacity: 0.85;
   transition: opacity 0.2s;
 }
@@ -1333,7 +1248,7 @@ watch(
 .filters-expanded-content {
   display: flex;
   flex-direction: column;
-  padding: 8px 12px 8px;
+  padding: 8px 12px 2px;
 }
 
 .score-slider-header {

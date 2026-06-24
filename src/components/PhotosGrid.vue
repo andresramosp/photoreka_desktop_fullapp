@@ -14,6 +14,7 @@
       @custom-weights-change="handleCustomWeightsChange"
       @filename-search-change="handleFilenameSearchChange"
       @time-range-change="handleTimeRangeChange"
+      @metadata-filters-change="handleMetadataFiltersChange"
       @tag-search="handleTagSearch"
       @artistic-scores-change="handleArtisticScoresChange"
     />
@@ -618,6 +619,11 @@ import {
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { useActivityLogger } from "@/composables/useActivityLogger";
+import {
+  photoMatchesMetadataFilters,
+  createEmptyMetadataFilters,
+  countActiveMetadataFilters,
+} from "@/utils/metadataFilters.js";
 import { CheckmarkSquare24Filled, SelectAllOn24Regular } from "@vicons/fluent";
 import { TheaterComedyOutlined } from "@vicons/material";
 
@@ -759,6 +765,7 @@ const isLoadingMore = ref(false);
 // State for filters and sorting (managed by PhotosGridControls)
 const selectedFilters = ref({});
 const filenameSearch = ref("");
+const metadataFilters = ref(createEmptyMetadataFilters());
 const timeRange = ref(null);
 const tagFilterResults = ref(null); // Array of photo IDs from tag search
 const artisticScoreFilters = ref({}); // Minimum score thresholds per criterion
@@ -1050,6 +1057,18 @@ const handleCustomWeightsChange = (newWeights) => {
 
 const handleFilenameSearchChange = (searchValue) => {
   filenameSearch.value = searchValue;
+};
+
+const handleMetadataFiltersChange = (filters) => {
+  metadataFilters.value = filters;
+  const activeCount = countActiveMetadataFilters(filters);
+  if (activeCount > 0) {
+    logActivity("filter_apply", {
+      context: props.context,
+      filter: "metadata",
+      count: activeCount,
+    });
+  }
 };
 
 const handleTimeRangeChange = (range) => {
@@ -1497,6 +1516,14 @@ const filteredAndSortedPhotos = computed(() => {
       const filename = (photo.originalFileName || "").toLowerCase();
       return filename.includes(searchTerm);
     });
+  }
+
+  // Apply metadata filters (file type + EXIF: iso, aperture, focal length,
+  // exposure, camera, white balance, flash)
+  if (countActiveMetadataFilters(metadataFilters.value) > 0) {
+    filtered = filtered.filter((photo) =>
+      photoMatchesMetadataFilters(photo, metadataFilters.value),
+    );
   }
 
   // Apply time range filter
