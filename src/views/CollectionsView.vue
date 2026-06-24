@@ -1,5 +1,8 @@
 ﻿<template>
-  <div class="collections-view view-container">
+  <div
+    class="collections-view view-container"
+    :class="{ 'in-detail': showCollectionView }"
+  >
     <!-- Collection View (when viewing a specific collection) -->
     <div v-if="showCollectionView && viewingCollection" class="collection-view">
       <!-- Collection Header -->
@@ -1573,6 +1576,12 @@ watch(
   padding: var(--spacing-2xl);
   margin: 0 auto;
   background-color: var(--bg-body);
+}
+
+@media (min-width: 769px) {
+  .collections-view.in-detail {
+    overflow-y: hidden;
+  }
 }
 
 .loading-state {
