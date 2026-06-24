@@ -7,7 +7,11 @@ export const createAuthValidator = vine.compile(
   vine.object({
     name: vine.string().minLength(2).maxLength(50),
     email: vine.string().email().toLowerCase(),
-    password: vine.string().minLength(8).maxLength(100),
+    password: vine
+      .string()
+      .minLength(8)
+      .maxLength(100)
+      .regex(/[!@#$%^&*(),.?":{}|<>\[\]\\/_\-+=~`]/),
     inviteCode: vine.string().minLength(6).maxLength(20).optional(),
     usageTier: vine.enum(['BASIC', 'PRO', 'PREMIUM']).optional(),
     preferredSource: vine.enum(['web', 'lightroom']).optional(),
@@ -30,7 +34,11 @@ export const createLoginValidator = vine.compile(
 export const changePasswordValidator = vine.compile(
   vine.object({
     currentPassword: vine.string().minLength(1),
-    newPassword: vine.string().minLength(8).maxLength(100),
+    newPassword: vine
+      .string()
+      .minLength(8)
+      .maxLength(100)
+      .regex(/[!@#$%^&*(),.?":{}|<>\[\]\\/_\-+=~`]/),
   })
 )
 
@@ -70,7 +78,11 @@ export const forgotPasswordValidator = vine.compile(
 export const resetPasswordValidator = vine.compile(
   vine.object({
     token: vine.string().minLength(20).maxLength(100),
-    newPassword: vine.string().minLength(8).maxLength(100),
+    newPassword: vine
+      .string()
+      .minLength(8)
+      .maxLength(100)
+      .regex(/[!@#$%^&*(),.?":{}|<>\[\]\\/_\-+=~`]/),
   })
 )
 
