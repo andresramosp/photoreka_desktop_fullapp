@@ -2,7 +2,7 @@
   <div class="workspace-view view-container">
     <!-- Header Section -->
     <div
-      class="workspace-header"
+      class="workspace-header scroll-header"
       :class="{ 'header-hidden': headerHidden, entering: headerEntering }"
     >
       <div class="header-content">
@@ -144,27 +144,7 @@ const navigateToSyncArea = () => {
   margin-bottom: var(--spacing-2xl);
   gap: var(--spacing-2xl);
   position: relative;
-  overflow: hidden;
-  will-change: opacity, transform;
-  transition: none;
   max-height: 110px;
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.workspace-header.entering {
-  transition:
-    max-height 0.2s ease-out,
-    opacity 0.2s ease-out,
-    margin-bottom 0.2s ease-out,
-    transform 0.2s ease-out;
-}
-
-.workspace-header.header-hidden {
-  max-height: 0;
-  opacity: 0;
-  margin-bottom: 0;
-  transform: translateY(-6px);
 }
 
 .header-content {

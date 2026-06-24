@@ -4,7 +4,7 @@
     <div v-if="showCollectionView && viewingCollection" class="collection-view">
       <!-- Collection Header -->
       <div
-        class="detail-header"
+        class="detail-header scroll-header"
         :class="{
           'header-hidden': collectionHeaderHidden,
           entering: collectionHeaderEntering,
@@ -1595,26 +1595,8 @@ watch(
 
 /* Hide/show the collection detail header on scroll */
 .collection-view .detail-header {
-  overflow: hidden;
-  will-change: opacity, transform;
-  transition: none;
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.collection-view .detail-header.entering {
-  transition:
-    max-height 0.2s ease-out,
-    opacity 0.2s ease-out,
-    margin-bottom 0.2s ease-out,
-    transform 0.2s ease-out;
-}
-
-.collection-view .detail-header.header-hidden {
-  max-height: 0;
-  opacity: 0;
-  margin-bottom: 0;
-  transform: translateY(-6px);
+  margin-bottom: var(--spacing-2xl);
+  max-height: 200px;
 }
 
 .title-row {

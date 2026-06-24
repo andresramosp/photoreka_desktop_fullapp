@@ -173,18 +173,13 @@ const totalCount = computed(
   background: var(--bg-surface, #fff);
   /* border: 0.1px solid var(--text-primary, #e5e7eb); */
   padding: 16px;
-  transition:
-    box-shadow 0.2s,
-    border-color 0.2s,
-    transform 0.15s;
+
   display: flex;
   flex-direction: column;
 }
 
 .set-card:hover {
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   border-color: var(--primary-color, #6366f1);
-  transform: translateY(-2px);
 }
 
 .set-card.drag-over {

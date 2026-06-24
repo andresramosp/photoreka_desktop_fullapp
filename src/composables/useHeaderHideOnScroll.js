@@ -15,7 +15,7 @@ import { ref } from "vue";
 export function useHeaderHideOnScroll(options = {}) {
   const {
     nearTopThreshold = 300,
-    hideResizeDelay = 50,
+    hideResizeDelay = 360,
     showResizeDelay = 220,
   } = options;
 
@@ -24,9 +24,9 @@ export function useHeaderHideOnScroll(options = {}) {
 
   const onScrollDirection = ({ direction, scrollTop }) => {
     if (direction === "down") {
-      // Always hide header when scrolling down — instant
+      // Hide header when scrolling down — with transition
       if (headerHidden.value) return;
-      headerEntering.value = false;
+      headerEntering.value = true;
       headerHidden.value = true;
       setTimeout(
         () => window.dispatchEvent(new Event("resize")),
