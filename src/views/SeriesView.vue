@@ -2020,7 +2020,6 @@ const updateViewingSeries = () => {
     editablePhotos.value = [];
     originalPhotos.value = [];
     originalPhotoIds.value = [];
-    removedPhotosHistory.value = [];
     currentEditingSeriesId.value = null;
   }
 };
