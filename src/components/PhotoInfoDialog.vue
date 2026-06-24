@@ -261,6 +261,7 @@ import PhotoInfoMobileLayout from "./photo-info/layouts/PhotoInfoMobileLayout.vu
 
 // Composables
 import { useIsMobile } from "@/composables/useIsMobile.js";
+import { useActivityLogger } from "@/composables/useActivityLogger";
 import { useUserStore } from "@/stores/userStore.ts";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useSeriesStore } from "@/stores/series.js";
@@ -304,6 +305,7 @@ import { PaletteOutlined } from "@vicons/material";
 
 // Mobile detection
 const { isMobile } = useIsMobile();
+const { logActivity } = useActivityLogger();
 const userStore = useUserStore();
 const collectionsStore = useCollectionsStore();
 const seriesStore = useSeriesStore();
@@ -402,6 +404,15 @@ const visible = computed({
   set: (value) => emit("update:modelValue", value),
 });
 
+watch(visible, (isOpen) => {
+  if (isOpen) {
+    logActivity("ui_action", {
+      action: "photo_info_open",
+      photoId: props.selectedPhoto?.id,
+    });
+  }
+});
+
 const photoTags = ref([]);
 const newTagName = ref("");
 const isAddingTag = ref(false);
@@ -490,6 +501,12 @@ const goToPreviousPhoto = () => {
   if (!hasPreviousPhoto.value || isTransitioning.value) return;
   isTransitioning.value = true;
   slideDirection.value = "prev";
+  logActivity("ui_action", {
+    action: "photo_info_navigate",
+    direction: "prev",
+    fromIndex: props.currentPhotoIndex,
+    photoId: props.selectedPhoto?.id,
+  });
   emit("photo-navigate", props.currentPhotoIndex - 1);
   setTimeout(() => {
     isTransitioning.value = false;
@@ -500,6 +517,12 @@ const goToNextPhoto = () => {
   if (!hasNextPhoto.value || isTransitioning.value) return;
   isTransitioning.value = true;
   slideDirection.value = "next";
+  logActivity("ui_action", {
+    action: "photo_info_navigate",
+    direction: "next",
+    fromIndex: props.currentPhotoIndex,
+    photoId: props.selectedPhoto?.id,
+  });
   emit("photo-navigate", props.currentPhotoIndex + 1);
   setTimeout(() => {
     isTransitioning.value = false;
@@ -656,6 +679,10 @@ const formatExposureTime = (exposureTime) => {
 
 const openFullscreen = () => {
   showFullscreenPhoto.value = true;
+  logActivity("ui_action", {
+    action: "photo_info_fullscreen_open",
+    photoId: props.selectedPhoto?.id,
+  });
 };
 
 const closeFullscreen = () => {
@@ -1234,6 +1261,11 @@ const handleSendToChat = async () => {
 };
 
 const handleNavigateToPhoto = async (photo) => {
+  logActivity("ui_action", {
+    action: "photo_info_navigate_related",
+    fromPhotoId: props.selectedPhoto?.id,
+    toPhotoId: photo.id,
+  });
   const fullPhoto = await photosStore.fetchPhoto(photo.id);
   if (fullPhoto) {
     emit("change-photo", fullPhoto);

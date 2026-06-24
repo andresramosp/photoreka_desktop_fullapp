@@ -979,6 +979,7 @@
 <script setup>
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import { useActivityLogger } from "@/composables/useActivityLogger";
 import {
   NModal,
   NIcon,
@@ -1143,6 +1144,7 @@ const formatFlashValue = (flash) => {
 
 const showActionBar = ref(true);
 const activeTab = ref("scores");
+const { logActivity } = useActivityLogger();
 
 watch(
   () => props.selectedPhoto,
@@ -1150,6 +1152,14 @@ watch(
     activeTab.value = "scores";
   },
 );
+
+watch(activeTab, (tab) => {
+  logActivity("ui_action", {
+    action: "photo_info_tab_change",
+    tab,
+    photoId: props.selectedPhoto?.id,
+  });
+});
 </script>
 
 <style scoped>

@@ -709,6 +709,7 @@
 <script setup>
 import { ref, computed, watch } from "vue";
 import { useRouter } from "vue-router";
+import { useActivityLogger } from "@/composables/useActivityLogger";
 import {
   NDrawer,
   NDrawerContent,
@@ -827,6 +828,7 @@ const emit = defineEmits([
 ]);
 
 const activeTab = ref("scores");
+const { logActivity } = useActivityLogger();
 
 watch(
   () => props.selectedPhoto,
@@ -834,6 +836,14 @@ watch(
     activeTab.value = "scores";
   },
 );
+
+watch(activeTab, (tab) => {
+  logActivity("ui_action", {
+    action: "photo_info_tab_change",
+    tab,
+    photoId: props.selectedPhoto?.id,
+  });
+});
 
 const visibleModel = computed({
   get: () => props.visible,
