@@ -32,7 +32,7 @@
         size="small"
         clearable
         :filterable="false"
-        :max-tag-count="2"
+        :max-tag-count="1"
         class="compact-select"
         @update:value="update('fileType', $event)"
       />
@@ -70,7 +70,7 @@
         size="small"
         clearable
         :filterable="false"
-        :max-tag-count="2"
+        :max-tag-count="1"
         class="compact-select"
         @update:value="update('iso', $event)"
       />
@@ -89,7 +89,7 @@
         size="small"
         clearable
         :filterable="false"
-        :max-tag-count="2"
+        :max-tag-count="1"
         class="compact-select"
         @update:value="update('aperture', $event)"
       />
@@ -108,7 +108,7 @@
         size="small"
         clearable
         :filterable="false"
-        :max-tag-count="2"
+        :max-tag-count="1"
         class="compact-select"
         @update:value="update('focalLength', $event)"
       />
@@ -127,7 +127,7 @@
         size="small"
         clearable
         :filterable="false"
-        :max-tag-count="2"
+        :max-tag-count="1"
         class="compact-select"
         @update:value="update('exposureTime', $event)"
       />
@@ -232,6 +232,11 @@ const update = (key, value) => {
 .compact-select,
 .filename-input {
   width: 100%;
+}
+
+.compact-select :deep(.n-base-selection) {
+  flex-wrap: nowrap;
+  overflow: hidden;
 }
 
 .filter-label {
