@@ -212,14 +212,26 @@ export default class ConversationService {
     costEur?: number,
     metadata?: Record<string, any>
   ): Promise<ConversationMessage> {
+    // PostgreSQL UTF-8 rejects null bytes (0x00) — strip them from all text/json fields
+    const sanitize = (s: string) => s.replace(/\0/g, '')
+    const sanitizeJson = (v: any): any => {
+      if (typeof v === 'string') return sanitize(v)
+      if (Array.isArray(v)) return v.map(sanitizeJson)
+      if (v && typeof v === 'object') {
+        return Object.fromEntries(Object.entries(v).map(([k, val]) => [k, sanitizeJson(val)]))
+      }
+      return v
+    }
+
     return ConversationMessage.create({
       conversationId,
       role: 'assistant' as const,
-      content,
-      photoGroups: photoGroups && photoGroups.length > 0 ? photoGroups : null,
+      content: sanitize(content),
+      photoGroups:
+        photoGroups && photoGroups.length > 0 ? (sanitizeJson(photoGroups) as PhotoGroup[]) : null,
       isError,
       costEur: costEur ?? null,
-      metadata: metadata ?? {},
+      metadata: metadata ? (sanitizeJson(metadata) as Record<string, any>) : {},
     })
   }
 
