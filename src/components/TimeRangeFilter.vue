@@ -2,9 +2,17 @@
   <div v-if="hasValidPhotos" class="time-range-filter" ref="containerRef">
     <div class="filter-header">
       <span v-if="showTitle" class="filter-label">Time Range</span>
-      <span v-if="hasActiveFilter" class="date-display">
-        {{ formatDate(dateRange[0]) }} - {{ formatDate(dateRange[1]) }}
-      </span>
+      <div class="filter-header-right">
+        <span v-if="hasActiveFilter" class="date-display">
+          {{ formatDate(dateRange[0]) }} - {{ formatDate(dateRange[1]) }}
+        </span>
+        <span
+          v-if="hasActiveFilter"
+          class="clear-filter-btn"
+          @click="clearFilter"
+          >✕</span
+        >
+      </div>
     </div>
 
     <!-- Histogram visualization -->
@@ -257,6 +265,8 @@ const clearFilter = () => {
   emit("time-range-change", null);
 };
 
+defineExpose({ clearFilter });
+
 // Check if filter is active
 const hasActiveFilter = computed(() => {
   return internalDateRange.value !== null;
@@ -325,6 +335,30 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.filter-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.clear-filter-btn {
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0.7;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition:
+    opacity 0.2s,
+    color 0.2s;
+}
+
+.clear-filter-btn:hover {
+  opacity: 1;
+  color: var(--text-primary);
 }
 
 .filter-label {

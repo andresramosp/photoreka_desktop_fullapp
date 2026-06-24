@@ -3,7 +3,13 @@
     <!-- Collection View (when viewing a specific collection) -->
     <div v-if="showCollectionView && viewingCollection" class="collection-view">
       <!-- Collection Header -->
-      <div class="detail-header">
+      <div
+        class="detail-header"
+        :class="{
+          'header-hidden': collectionHeaderHidden,
+          entering: collectionHeaderEntering,
+        }"
+      >
         <div class="detail-header-content">
           <div class="detail-header-actions">
             <n-button
@@ -178,8 +184,10 @@
           :photos="viewingCollection.photos || []"
           :showSuggestButton="(viewingCollection.photos || []).length > 0"
           :findDuplicatesEnabled="false"
+          :scrollable="true"
           @refreshCollection="refreshCollection"
           @suggest-photos="suggestPhotosForCollection"
+          @scroll-direction="onCollectionHeaderScroll"
         />
       </div>
     </div>
@@ -842,6 +850,7 @@ import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useCollectionSelection } from "@/composables/useCollectionSelection.js";
+import { useHeaderHideOnScroll } from "@/composables/useHeaderHideOnScroll.js";
 import { api } from "@/utils/axios";
 
 const route = useRoute();
@@ -852,6 +861,13 @@ const collectionsStore = useCollectionsStore();
 
 // Multi-select for collection cards
 const collectionSelection = useCollectionSelection();
+
+// Hide/show the collection detail header on scroll
+const {
+  headerHidden: collectionHeaderHidden,
+  headerEntering: collectionHeaderEntering,
+  onScrollDirection: onCollectionHeaderScroll,
+} = useHeaderHideOnScroll();
 
 // View mode
 const showCollectionView = ref(false);
@@ -1565,6 +1581,30 @@ watch(
 
 .collection-photos {
   width: 100%;
+}
+
+/* Hide/show the collection detail header on scroll */
+.collection-view .detail-header {
+  overflow: hidden;
+  will-change: opacity, transform;
+  transition: none;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.collection-view .detail-header.entering {
+  transition:
+    max-height 0.2s ease-out,
+    opacity 0.2s ease-out,
+    margin-bottom 0.2s ease-out,
+    transform 0.2s ease-out;
+}
+
+.collection-view .detail-header.header-hidden {
+  max-height: 0;
+  opacity: 0;
+  margin-bottom: 0;
+  transform: translateY(-6px);
 }
 
 .title-row {

@@ -425,77 +425,43 @@
       </div>
     </div>
 
-    <!-- Compact Upload Section -->
+    <!-- Mobile Upload Buttons (visible only on mobile, desktop uses the slot inside PhotosGrid) -->
     <div
       v-if="!isMaintenanceMode && lightboxPhotos.length > 0"
-      class="header-buttons compact-upload-section"
+      class="mobile-upload-buttons"
     >
-      <div class="">
-        <div class="compact-upload-buttons">
-          <n-tooltip
-            v-for="button in uploadButtons"
-            :key="button.key"
-            trigger="hover"
-            placement="bottom"
+      <n-button
+        v-for="button in uploadButtons"
+        :key="button.key"
+        :type="button.type"
+        size="small"
+        :disabled="isUploadDisabled && button.key === 'local'"
+        @click.stop="button.action"
+      >
+        <template #icon>
+          <n-icon
+            v-if="button.icon === 'FolderOpen'"
+            color="var(--primary-color)"
           >
-            <template #trigger>
-              <n-button
-                :type="button.type"
-                size="medium"
-                :disabled="isUploadDisabled && button.key === 'local'"
-                @click.stop="button.action"
-              >
-                <template #icon>
-                  <n-icon
-                    v-if="button.icon === 'FolderOpen'"
-                    color="var(--primary-color)"
-                  >
-                    <FolderOpen />
-                  </n-icon>
-                  <n-icon v-else-if="button.icon === 'lightroom'">
-                    <img
-                      src="/src/assets/logos/lightroom_logo.png"
-                      alt="Lr"
-                      style="width: 1.1em; height: 1.1em"
-                    />
-                  </n-icon>
-                  <n-icon v-else-if="button.icon === 'google'">
-                    <img
-                      :src="googlePhotosIconUrl"
-                      alt="Google Photos"
-                      style="width: 1em; height: 1em"
-                    />
-                  </n-icon>
-                  <n-icon v-else-if="button.icon === 'google-locked'">
-                    <!-- Candado abierto - indicando desconectado -->
-                    <svg viewBox="0 0 24 24" width="1em" height="1em">
-                      <path
-                        fill="currentColor"
-                        d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h2c0-1.66 1.34-3 3-3s3 1.34 3 3v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"
-                      />
-                    </svg>
-                  </n-icon>
-                  <n-icon v-else-if="button.icon === 'dropbox'">
-                    <img
-                      :src="dropboxIconUrl"
-                      alt="Dropbox"
-                      style="width: 1em; height: 1em"
-                    />
-                  </n-icon>
-                </template>
-                <span class="button-label">{{
-                  isUploadDisabled &&
-                  photosRemaining <= 0 &&
-                  button.key === "local"
-                    ? "Upload Limit Reached"
-                    : button.compactLabel
-                }}</span>
-              </n-button>
-            </template>
-            {{ button.compactLabel }}
-          </n-tooltip>
-        </div>
-      </div>
+            <FolderOpen />
+          </n-icon>
+          <n-icon v-else-if="button.icon === 'lightroom'">
+            <img
+              src="/src/assets/logos/lightroom_logo.png"
+              alt="Lr"
+              style="width: 1.1em; height: 1.1em"
+            />
+          </n-icon>
+          <n-icon v-else-if="button.icon === 'dropbox'">
+            <img
+              :src="dropboxIconUrl"
+              alt="Dropbox"
+              style="width: 1em; height: 1em"
+            />
+          </n-icon>
+        </template>
+        {{ button.compactLabel }}
+      </n-button>
     </div>
 
     <!-- Uploaded Photos -->
@@ -508,10 +474,77 @@
         :displayMoveToTool="false"
         :hideControls="true"
         :findDuplicatesEnabled="true"
+        :scrollable="true"
         context="lightbox"
         @selection-change="handleSelectionChange"
         @duplicates-filter-change="handleDuplicatesFilterChange"
-      />
+      >
+        <template v-if="!isMaintenanceMode" #row1-extra>
+          <div class="compact-upload-buttons">
+            <n-tooltip
+              v-for="button in uploadButtons"
+              :key="button.key"
+              trigger="hover"
+              placement="bottom"
+            >
+              <template #trigger>
+                <n-button
+                  :type="button.type"
+                  size="small"
+                  :disabled="isUploadDisabled && button.key === 'local'"
+                  @click.stop="button.action"
+                >
+                  <template #icon>
+                    <n-icon
+                      v-if="button.icon === 'FolderOpen'"
+                      color="var(--primary-color)"
+                    >
+                      <FolderOpen />
+                    </n-icon>
+                    <n-icon v-else-if="button.icon === 'lightroom'">
+                      <img
+                        src="/src/assets/logos/lightroom_logo.png"
+                        alt="Lr"
+                        style="width: 1.1em; height: 1.1em"
+                      />
+                    </n-icon>
+                    <n-icon v-else-if="button.icon === 'google'">
+                      <img
+                        :src="googlePhotosIconUrl"
+                        alt="Google Photos"
+                        style="width: 1em; height: 1em"
+                      />
+                    </n-icon>
+                    <n-icon v-else-if="button.icon === 'google-locked'">
+                      <svg viewBox="0 0 24 24" width="1em" height="1em">
+                        <path
+                          fill="currentColor"
+                          d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h2c0-1.66 1.34-3 3-3s3 1.34 3 3v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"
+                        />
+                      </svg>
+                    </n-icon>
+                    <n-icon v-else-if="button.icon === 'dropbox'">
+                      <img
+                        :src="dropboxIconUrl"
+                        alt="Dropbox"
+                        style="width: 1em; height: 1em"
+                      />
+                    </n-icon>
+                  </template>
+                  <span class="button-label">{{
+                    isUploadDisabled &&
+                    photosRemaining <= 0 &&
+                    button.key === "local"
+                      ? "Upload Limit Reached"
+                      : button.compactLabel
+                  }}</span>
+                </n-button>
+              </template>
+              {{ button.compactLabel }}
+            </n-tooltip>
+          </div>
+        </template>
+      </PhotosGrid>
     </div>
 
     <!-- Hidden Input -->
@@ -1136,6 +1169,11 @@ defineExpose({
   gap: 12px;
 }
 
+/* Mobile-only upload strip */
+.mobile-upload-buttons {
+  display: none;
+}
+
 .compact-upload-section.compact-drag-over {
   background-color: var(--bg-surface);
   border: 2px dashed var(--accent-color);
@@ -1343,6 +1381,14 @@ defineExpose({
     flex-direction: row;
     width: auto;
     gap: 8px;
+  }
+
+  /* Mobile-only upload strip */
+  .mobile-upload-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
   }
 
   /* Icon-only buttons on mobile */

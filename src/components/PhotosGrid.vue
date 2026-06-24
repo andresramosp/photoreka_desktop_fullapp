@@ -1,10 +1,11 @@
 <template>
-  <div class="photos-grid-container">
+  <div ref="gridContainerRef" class="photos-grid-container">
     <!-- Photos Grid Controls -->
     <PhotosGridControls
       v-if="!props.hideControls"
       :basic-sort-active="basicSortActive"
       :photos="props.photos"
+      :scroll-collapsed="controlsScrollCollapsed"
       @filters-change="handleFiltersChange"
       @sorting-change="handleSortingChange"
       @sort-order-change="handleSortOrderChange"
@@ -110,6 +111,9 @@
             </n-button>
           </template>
         </div>
+
+        <!-- Extra controls slot (e.g. upload buttons from parent) -->
+        <slot name="row1-extra" />
       </div>
 
       <!-- Row 2: Columns + Sort (Desktop) -->
@@ -277,42 +281,95 @@
       </div>
     </div>
 
-    <!-- Select All Banner -->
-    <div v-if="showSelectAllBanner" class="select-all-banner">
-      <span class="banner-text">
-        {{ displayedPhotos.length }} photos selected.
-        <a @click="handleSelectAllFiltered" class="select-all-link">
-          Select all {{ filteredAndSortedPhotos.length }} photos?
-        </a>
-      </span>
-      <n-button
-        text
-        size="tiny"
-        @click="showSelectAllBanner = false"
-        class="banner-close"
-      >
-        <n-icon size="18">
-          <CloseOutline />
-        </n-icon>
-      </n-button>
-    </div>
-
-    <!-- Photo Grid -->
+    <!-- Scrollable photo area (wraps grid + pagination when scrollable=true) -->
     <div
-      class="photos-grid photo-grid-base"
-      :class="`grid-cols-${gridColumns}`"
-      :style="{ '--grid-cols': gridColumns }"
+      ref="scrollAreaRef"
+      :class="{ 'photos-scroll-area': props.scrollable }"
+      :style="
+        props.scrollable && scrollAreaHeight
+          ? { height: scrollAreaHeight + 'px' }
+          : null
+      "
     >
-      <!-- Grouped band view when filtering duplicates -->
-      <template v-if="filterDuplicates && groupedPhotoChunks.length > 0">
-        <div
-          v-for="chunk in groupedPhotoChunks"
-          :key="chunk.groupIndex"
-          class="dup-group-band"
-          :class="`dup-group-color-${chunk.groupIndex % 2}`"
+      <!-- Select All Banner -->
+      <div v-if="showSelectAllBanner" class="select-all-banner">
+        <span class="banner-text">
+          {{ displayedPhotos.length }} photos selected.
+          <a @click="handleSelectAllFiltered" class="select-all-link">
+            Select all {{ filteredAndSortedPhotos.length }} photos?
+          </a>
+        </span>
+        <n-button
+          text
+          size="tiny"
+          @click="showSelectAllBanner = false"
+          class="banner-close"
         >
+          <n-icon size="18">
+            <CloseOutline />
+          </n-icon>
+        </n-button>
+      </div>
+
+      <!-- Photo Grid -->
+      <div
+        class="photos-grid photo-grid-base"
+        :class="`grid-cols-${gridColumns}`"
+        :style="{ '--grid-cols': gridColumns }"
+      >
+        <!-- Grouped band view when filtering duplicates -->
+        <template v-if="filterDuplicates && groupedPhotoChunks.length > 0">
+          <div
+            v-for="chunk in groupedPhotoChunks"
+            :key="chunk.groupIndex"
+            class="dup-group-band"
+            :class="`dup-group-color-${chunk.groupIndex % 2}`"
+          >
+            <PhotoCardHub
+              v-for="photo in chunk.photos"
+              :key="photo.id"
+              :data-photo-id="photo.id"
+              :photo="photo"
+              :selected="selectedPhotosRecord[photo.id]"
+              :focused="
+                focusedByKeyboard && String(photo.id) === String(focusedPhotoId)
+              "
+              @info="showPhotoInfo"
+              @select="
+                (id, evt) =>
+                  handlePhotoSelect(
+                    id,
+                    evt,
+                    displayedPhotos.map((p) => p.id),
+                  )
+              "
+              @swap-photo="handleSwapPhoto"
+              :show-delete="true"
+              :show-name="true"
+              :show-footer="false"
+              :showDuplicate="true"
+              :artistic-score="getPhotoArtisticScore(photo)"
+              :matched-tags="photo.matchedTags"
+            />
+          </div>
+        </template>
+
+        <!-- Normal flat view -->
+        <template v-else>
+          <!-- Suggest Photos Button -->
+          <div
+            v-if="props.showSuggestButton && displayedPhotos.length > 0"
+            class="suggest-photos-card"
+            @click="emit('suggest-photos')"
+            title="Suggest similar photos to add"
+          >
+            <n-icon size="48" color="var(--primary-color)">
+              <AddOutline />
+            </n-icon>
+            <span class="suggest-label">Suggest Photos</span>
+          </div>
           <PhotoCardHub
-            v-for="photo in chunk.photos"
+            v-for="photo in displayedPhotos"
             :key="photo.id"
             :data-photo-id="photo.id"
             :photo="photo"
@@ -337,66 +394,25 @@
             :artistic-score="getPhotoArtisticScore(photo)"
             :matched-tags="photo.matchedTags"
           />
-        </div>
-      </template>
+        </template>
+      </div>
 
-      <!-- Normal flat view -->
-      <template v-else>
-        <!-- Suggest Photos Button -->
-        <div
-          v-if="props.showSuggestButton && displayedPhotos.length > 0"
-          class="suggest-photos-card"
-          @click="emit('suggest-photos')"
-          title="Suggest similar photos to add"
-        >
-          <n-icon size="48" color="var(--primary-color)">
-            <AddOutline />
-          </n-icon>
-          <span class="suggest-label">Suggest Photos</span>
-        </div>
-        <PhotoCardHub
-          v-for="photo in displayedPhotos"
-          :key="photo.id"
-          :data-photo-id="photo.id"
-          :photo="photo"
-          :selected="selectedPhotosRecord[photo.id]"
-          :focused="
-            focusedByKeyboard && String(photo.id) === String(focusedPhotoId)
-          "
-          @info="showPhotoInfo"
-          @select="
-            (id, evt) =>
-              handlePhotoSelect(
-                id,
-                evt,
-                displayedPhotos.map((p) => p.id),
-              )
-          "
-          @swap-photo="handleSwapPhoto"
-          :show-delete="true"
-          :show-name="true"
-          :show-footer="false"
-          :showDuplicate="true"
-          :artistic-score="getPhotoArtisticScore(photo)"
-          :matched-tags="photo.matchedTags"
-        />
-      </template>
-    </div>
+      <!-- Loading indicator for infinite scroll -->
+      <div v-if="hasMorePhotos && isLoadingMore" class="loading-more-container">
+        <SpiralGridLoader variant="primary" :size="40" />
+      </div>
 
-    <!-- Loading indicator for infinite scroll -->
-    <div v-if="hasMorePhotos && isLoadingMore" class="loading-more-container">
-      <SpiralGridLoader variant="primary" :size="40" />
+      <!-- End of results indicator -->
+      <div
+        v-else-if="
+          !hasMorePhotos && filteredAndSortedPhotos.length > PHOTOS_PER_PAGE
+        "
+        class="end-of-results"
+      >
+        <span>You've reached the end of your photos</span>
+      </div>
     </div>
-
-    <!-- End of results indicator -->
-    <div
-      v-else-if="
-        !hasMorePhotos && filteredAndSortedPhotos.length > PHOTOS_PER_PAGE
-      "
-      class="end-of-results"
-    >
-      <span>You've reached the end of your photos</span>
-    </div>
+    <!-- end photos-scroll-area -->
 
     <!-- Dialogs -->
     <PhotoInfoDialog
@@ -632,6 +648,7 @@ const emit = defineEmits([
   "selection-change",
   "suggest-photos",
   "duplicates-filter-change",
+  "scroll-direction",
 ]);
 const props = defineProps({
   photos: {
@@ -671,7 +688,16 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  scrollable: {
+    type: Boolean,
+    default: false,
+  },
 });
+
+const scrollAreaRef = ref(null);
+const gridContainerRef = ref(null);
+const scrollAreaHeight = ref(null);
+let scrollAreaResizeObserver = null;
 
 const message = useMessage();
 const router = useRouter();
@@ -1719,19 +1745,67 @@ const hasMorePhotos = computed(() => {
   return displayedPhotos.value.length < filteredAndSortedPhotos.value.length;
 });
 
-const handleScroll = (e) => {
-  if (isLoadingMore.value || !hasMorePhotos.value) return;
+let _lastScrollTop = 0;
+let _isProgrammaticScroll = false;
+const controlsScrollCollapsed = ref(false);
 
-  const container = document.querySelector(".view-container");
+// Minimum scrollable overflow (px) required before toggling the header on
+// scroll. Must comfortably exceed the height the header frees when it collapses
+// (~110px max-height + bottom margin) so hiding it never removes the overflow
+// and triggers a flicker loop.
+const MIN_OVERFLOW_TO_TOGGLE_HEADER = 220;
+
+const handleScroll = (e) => {
+  const container = props.scrollable
+    ? scrollAreaRef.value
+    : document.querySelector(".view-container");
   if (!container) return;
 
-  const scrollPosition = container.scrollTop + container.clientHeight;
+  const currentScrollTop = container.scrollTop;
+  if (Math.abs(currentScrollTop - _lastScrollTop) > 5) {
+    if (!_isProgrammaticScroll) {
+      const direction = currentScrollTop > _lastScrollTop ? "down" : "up";
+      const nearTop = currentScrollTop <= 300;
+      // Guard against a hide/show oscillation: collapsing the header frees up
+      // vertical space, growing the scroll area. With only a couple of rows the
+      // content can stop overflowing once the header is hidden, snapping
+      // scrollTop back to 0 and re-showing the header — an endless flicker.
+      // Only react when there is enough overflow that hiding the header cannot
+      // remove it entirely.
+      const overflow = container.scrollHeight - container.clientHeight;
+      const hasEnoughOverflow = overflow > MIN_OVERFLOW_TO_TOGGLE_HEADER;
+      if (hasEnoughOverflow) {
+        if (direction === "down") {
+          controlsScrollCollapsed.value = true;
+        } else if (nearTop) {
+          controlsScrollCollapsed.value = false;
+        }
+        emit("scroll-direction", { direction, scrollTop: currentScrollTop });
+      }
+    }
+    _lastScrollTop = currentScrollTop;
+  }
+
+  if (isLoadingMore.value || !hasMorePhotos.value) return;
+
+  const scrollPosition = currentScrollTop + container.clientHeight;
   const documentHeight = container.scrollHeight;
   const threshold = 1000; // Load more when 1000px from bottom
 
   if (scrollPosition >= documentHeight - threshold) {
     loadMorePhotos();
   }
+};
+
+// Measure the available height for the self-scrolling photo area so the
+// controls above it stay fixed regardless of the parent layout. This makes
+// the scrollable behavior centralized and robust across all views.
+const updateScrollAreaHeight = () => {
+  if (!props.scrollable || !scrollAreaRef.value) return;
+  const rect = scrollAreaRef.value.getBoundingClientRect();
+  const bottomGap = 24; // breathing room at the bottom of the viewport
+  const available = window.innerHeight - rect.top - bottomGap;
+  scrollAreaHeight.value = Math.max(Math.round(available), 200);
 };
 
 const loadMorePhotos = async () => {
@@ -1750,6 +1824,23 @@ const loadMorePhotos = async () => {
 const resetPagination = () => {
   currentPage.value = 1;
   isLoadingMore.value = false;
+};
+
+// Scroll the photo area back to top
+const scrollToTop = () => {
+  nextTick(() => {
+    _isProgrammaticScroll = true;
+    if (props.scrollable && scrollAreaRef.value) {
+      scrollAreaRef.value.scrollTop = 0;
+    } else {
+      const container = document.querySelector(".view-container");
+      if (container) container.scrollTop = 0;
+    }
+    // Reset flag after scroll events have fired
+    requestAnimationFrame(() => {
+      _isProgrammaticScroll = false;
+    });
+  });
 };
 
 // Watch for filter/sort changes to reset pagination
@@ -1772,6 +1863,7 @@ watch(
   ],
   () => {
     resetPagination();
+    scrollToTop();
     showSelectAllBanner.value = false;
     allFilteredSelected.value = false;
   },
@@ -1798,15 +1890,32 @@ watch(focusedPhotoId, (id) => {
 
 onMounted(() => {
   nextTick(() => {
-    const container = document.querySelector(".view-container");
-
-    if (container === document.documentElement) {
-      window.addEventListener("scroll", handleScroll, { passive: true });
+    if (props.scrollable) {
+      updateScrollAreaHeight();
+      scrollAreaRef.value?.addEventListener("scroll", handleScroll, {
+        passive: true,
+      });
+      // Recompute available height whenever anything in the page layout above
+      // the grid changes size (filter panels, banners, sibling sections, etc.)
+      // without depending on the parent layout. Observing body catches both
+      // internal control changes and external sibling toggles.
+      if ("ResizeObserver" in window) {
+        scrollAreaResizeObserver = new ResizeObserver(() => {
+          updateScrollAreaHeight();
+        });
+        scrollAreaResizeObserver.observe(document.body);
+        if (gridContainerRef.value) {
+          scrollAreaResizeObserver.observe(gridContainerRef.value);
+        }
+      }
     } else {
-      container.addEventListener("scroll", handleScroll, { passive: true });
+      const container = document.querySelector(".view-container");
+      if (container === document.documentElement) {
+        window.addEventListener("scroll", handleScroll, { passive: true });
+      } else {
+        container.addEventListener("scroll", handleScroll, { passive: true });
+      }
     }
-
-    // Debug initial state
   });
 
   // Add resize listener for responsive column options
@@ -1822,14 +1931,21 @@ onMounted(() => {
 // Handle window resize for responsive columns
 const handleResize = () => {
   windowWidth.value = window.innerWidth;
+  updateScrollAreaHeight();
 };
 
 onUnmounted(() => {
-  const container = document.querySelector(".view-container");
-  if (container === document.documentElement) {
-    window.removeEventListener("scroll", handleScroll);
-  } else if (container && container.removeEventListener) {
-    container.removeEventListener("scroll", handleScroll);
+  if (props.scrollable) {
+    scrollAreaRef.value?.removeEventListener("scroll", handleScroll);
+    scrollAreaResizeObserver?.disconnect();
+    scrollAreaResizeObserver = null;
+  } else {
+    const container = document.querySelector(".view-container");
+    if (container === document.documentElement) {
+      window.removeEventListener("scroll", handleScroll);
+    } else if (container && container.removeEventListener) {
+      container.removeEventListener("scroll", handleScroll);
+    }
   }
 
   // Remove resize listener
@@ -1961,6 +2077,14 @@ const handleSwapComplete = () => {
 <style scoped>
 .photos-grid-container {
   width: 100%;
+}
+
+/* Self-scrolling photo area. Height is measured via JS so the controls
+   above stay fixed regardless of the parent layout (centralized behavior). */
+.photos-scroll-area {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px; /* avoid scrollbar overlap */
 }
 
 /* Grid Controls */

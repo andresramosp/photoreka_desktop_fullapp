@@ -1,7 +1,10 @@
 <template>
   <div class="workspace-view view-container">
     <!-- Header Section -->
-    <div class="workspace-header">
+    <div
+      class="workspace-header"
+      :class="{ 'header-hidden': headerHidden, entering: headerEntering }"
+    >
       <div class="header-content">
         <h1 class="page-title">Your Workspace</h1>
         <p class="page-subtitle">
@@ -17,9 +20,6 @@
         <n-badge :value="processedPhotos.length + ' photos'" type="info">
         </n-badge>
       </div>
-      <!-- <div v-if="!isMobile" class="header-actions">
-        <UsageIndicators :large="false" />
-      </div> -->
     </div>
 
     <!-- Content Section -->
@@ -63,7 +63,12 @@
       <div v-else class="catalog-section">
         <div class="catalog-photos">
           <!-- Photos Grid Component -->
-          <PhotosGrid :photos="processedPhotos" context="workspace" />
+          <PhotosGrid
+            :photos="processedPhotos"
+            context="workspace"
+            :scrollable="true"
+            @scroll-direction="onScrollDirection"
+          />
         </div>
       </div>
     </div>
@@ -71,7 +76,12 @@
     <div v-else class="catalog-section">
       <div class="catalog-photos">
         <!-- Photos Grid Component -->
-        <PhotosGrid :photos="processedPhotos" context="workspace" />
+        <PhotosGrid
+          :photos="processedPhotos"
+          context="workspace"
+          :scrollable="true"
+          @scroll-direction="onScrollDirection"
+        />
       </div>
     </div>
   </div>
@@ -90,6 +100,7 @@ import {
 import PhotosGrid from "@/components/PhotosGrid.vue";
 import UsageIndicators from "@/components/UsageIndicators.vue";
 import { useIsMobile } from "@/composables/useIsMobile.js";
+import { useHeaderHideOnScroll } from "@/composables/useHeaderHideOnScroll.js";
 
 defineOptions({
   name: "WorkspaceView",
@@ -98,6 +109,9 @@ defineOptions({
 const router = useRouter();
 const photosStore = usePhotosStore();
 const { isMobile } = useIsMobile();
+
+const { headerHidden, headerEntering, onScrollDirection } =
+  useHeaderHideOnScroll();
 
 // Processed photos from store
 const processedPhotos = computed(() => photosStore.processedPhotos);
@@ -124,6 +138,27 @@ const navigateToSyncArea = () => {
   margin-bottom: var(--spacing-2xl);
   gap: var(--spacing-2xl);
   position: relative;
+  overflow: hidden;
+  will-change: opacity, transform;
+  transition: none;
+  max-height: 110px;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.workspace-header.entering {
+  transition:
+    max-height 0.2s ease-out,
+    opacity 0.2s ease-out,
+    margin-bottom 0.2s ease-out,
+    transform 0.2s ease-out;
+}
+
+.workspace-header.header-hidden {
+  max-height: 0;
+  opacity: 0;
+  margin-bottom: 0;
+  transform: translateY(-6px);
 }
 
 .header-content {
