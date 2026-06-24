@@ -12,14 +12,17 @@
             <Camera20Regular />
           </n-icon>
           <span class="filter-controls-section-label">Search filters</span>
-          <span
+          <n-tag
             v-if="
               (hasActiveFilters || hasActiveScoreFilters) && !isFiltersExpanded
             "
-            class="filter-controls-active-badge"
+            size="tiny"
+            type="primary"
+            :bordered="false"
+            round
           >
             {{ totalActiveFilters }}
-          </span>
+          </n-tag>
         </div>
         <n-icon
           size="14"
@@ -255,12 +258,15 @@
           >
             Clear
           </n-button>
-          <span
+          <n-tag
             v-if="hasActiveSorting && !isSortingExpanded"
-            class="filter-controls-active-badge"
+            size="tiny"
+            type="warning"
+            :bordered="false"
+            round
           >
             Active
-          </span>
+          </n-tag>
         </div>
         <n-icon
           size="14"

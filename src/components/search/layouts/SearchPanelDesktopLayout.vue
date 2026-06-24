@@ -246,12 +246,15 @@
               <OptionsOutline />
             </n-icon>
             <span class="filter-controls-section-label">More filters</span>
-            <span
+            <n-tag
               v-if="hasActiveFilters && !isFiltersExpanded"
-              class="filter-controls-active-badge"
+              size="tiny"
+              type="primary"
+              :bordered="false"
+              round
             >
               {{ activeFiltersCount }}
-            </span>
+            </n-tag>
           </div>
           <n-icon
             size="14"
