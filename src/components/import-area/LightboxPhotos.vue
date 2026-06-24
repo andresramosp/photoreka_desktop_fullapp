@@ -1402,8 +1402,11 @@ defineExpose({
 
 /* First Import State - Onboarding continuation styles */
 .first-import-section {
-  margin-top: 24px;
-  margin-bottom: 48px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin-bottom: 0;
   animation: fadeIn 0.3s ease;
 }
 

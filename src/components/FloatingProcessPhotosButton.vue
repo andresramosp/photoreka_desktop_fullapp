@@ -110,7 +110,7 @@ const handleClick = () => {
 <style scoped>
 .floating-process-container {
   position: fixed;
-  bottom: 24px;
+  bottom: 35px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 1000;

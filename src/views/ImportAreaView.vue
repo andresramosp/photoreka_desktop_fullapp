@@ -4,7 +4,9 @@
     <div class="hub-header">
       <div class="header-content">
         <h1 class="page-title">Import Area</h1>
-        <p class="page-subtitle">Import and process your photos here.</p>
+        <p class="page-subtitle">
+          Import, review and process your photos here.
+        </p>
       </div>
       <div v-if="!isMobile" class="header-actions">
         <UsageIndicators :large="true" />
@@ -280,6 +282,8 @@ onMounted(() => {
   margin: 0 auto;
   background-color: var(--bg-body);
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Header Section */
@@ -296,7 +300,10 @@ onMounted(() => {
   background-color: var(--bg-container);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
-  margin-bottom: var(--spacing-2xl);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* Custom Tab Navigation */
@@ -341,11 +348,19 @@ onMounted(() => {
 /* Tab Content Container */
 .tab-content-container {
   background-color: var(--bg-container);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .tab-content {
   padding: var(--spacing-2xl);
   background-color: var(--bg-container);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
 }
 
 @media (max-width: 768px) {
