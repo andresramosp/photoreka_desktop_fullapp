@@ -126,9 +126,19 @@
             </div>
           </div>
           <div v-if="!editingDescription" class="description-display">
-            <p class="detail-description" v-if="viewingCollection.description">
+            <n-tooltip
+              v-if="viewingCollection.description"
+              trigger="hover"
+              placement="bottom-start"
+              :style="{ maxWidth: '480px' }"
+            >
+              <template #trigger>
+                <p class="detail-description">
+                  {{ viewingCollection.description }}
+                </p>
+              </template>
               {{ viewingCollection.description }}
-            </p>
+            </n-tooltip>
             <n-button
               text
               class="edit-button"
@@ -1645,6 +1655,13 @@ watch(
 
 .description-display .detail-description {
   margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+  max-width: 700px;
 }
 
 .description-edit {
