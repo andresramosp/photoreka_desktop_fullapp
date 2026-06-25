@@ -106,7 +106,7 @@
 
       <!-- Lightroom source indicator -->
       <n-tooltip
-        v-if="photo.descriptions?.source?.type === 'lightroom'"
+        v-if="showSource && photo.descriptions?.source?.type === 'lightroom'"
         trigger="hover"
         placement="top"
       >
@@ -123,7 +123,7 @@
       </n-tooltip>
       <!-- Google Photos source indicator -->
       <n-tooltip
-        v-if="photo.descriptions?.source?.type === 'google'"
+        v-if="showSource && photo.descriptions?.source?.type === 'google'"
         trigger="hover"
         placement="top"
       >
@@ -137,6 +137,25 @@
           </div>
         </template>
         Click to search in Google Photos
+      </n-tooltip>
+      <!-- Web upload source indicator (base case: no specific source) -->
+      <n-tooltip
+        v-if="
+          showSource &&
+          photo.descriptions?.source?.type !== 'lightroom' &&
+          photo.descriptions?.source?.type !== 'google'
+        "
+        trigger="hover"
+        placement="top"
+      >
+        <template #trigger>
+          <div class="web-upload-indicator">
+            <n-icon size="16" color="white">
+              <CloudUploadOutline />
+            </n-icon>
+          </div>
+        </template>
+        Uploaded from web
       </n-tooltip>
       <!-- Duplicate indicator in top-left corner when footer is hidden -->
       <n-tooltip
@@ -319,6 +338,7 @@ import {
   TrashOutline as DeleteIcon,
   TimeOutline,
   SwapHorizontalOutline,
+  CloudUploadOutline,
 } from "@vicons/ionicons5";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useIsMobile } from "@/composables/useIsMobile";
@@ -367,6 +387,7 @@ interface Props {
   showName: boolean;
   isUploading: boolean;
   showDuplicate: boolean;
+  showSource?: boolean;
   artisticScore?: number | null;
   matchedTags?: string[];
 }
@@ -382,6 +403,7 @@ interface Emits {
 const props = withDefaults(defineProps<Props>(), {
   selected: false,
   focused: false,
+  showSource: true,
   matchedTags: () => [],
 });
 
@@ -826,6 +848,22 @@ onUnmounted(() => {
   object-fit: contain;
 }
 
+/* Web upload source indicator */
+.web-upload-indicator {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  border-radius: 6px;
+  padding: 4px;
+  background-color: rgba(120, 120, 130, 0.75);
+  z-index: 4;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* Variantes responsivas para el indicador de selección */
 @container photo-card (max-width: 200px) {
   .selection-indicator {
@@ -855,6 +893,12 @@ onUnmounted(() => {
   .lightroom-logo {
     width: 18px;
     height: 18px;
+  }
+
+  .web-upload-indicator {
+    bottom: 6px;
+    right: 6px;
+    padding: 3px;
   }
 }
 
@@ -897,6 +941,12 @@ onUnmounted(() => {
   .google-photos-logo {
     width: 16px;
     height: 16px;
+  }
+
+  .web-upload-indicator {
+    bottom: 4px;
+    right: 4px;
+    padding: 2px;
   }
 
   .action-button {
@@ -951,6 +1001,12 @@ onUnmounted(() => {
     width: 18px;
     height: 18px;
   }
+
+  .web-upload-indicator {
+    bottom: 6px;
+    right: 6px;
+    padding: 3px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -992,6 +1048,12 @@ onUnmounted(() => {
   .google-photos-logo {
     width: 16px;
     height: 16px;
+  }
+
+  .web-upload-indicator {
+    bottom: 4px;
+    right: 4px;
+    padding: 2px;
   }
 
   .action-button {

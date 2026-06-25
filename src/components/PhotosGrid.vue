@@ -178,6 +178,19 @@
 
         <n-button
           size="small"
+          :type="showSource ? 'primary' : 'default'"
+          @click="showSource = !showSource"
+          class="source-toggle-btn"
+          title="Toggle source icons (Lightroom, Google Photos)"
+        >
+          <template #icon>
+            <n-icon><CloudOutline /></n-icon>
+          </template>
+          <span>Source</span>
+        </n-button>
+
+        <n-button
+          size="small"
           :type="allSelected ? 'primary' : 'default'"
           @click="handleSelectAllToggle"
           class="select-all-btn"
@@ -348,6 +361,7 @@
               :show-name="true"
               :show-footer="false"
               :showDuplicate="true"
+              :show-source="showSource"
               :artistic-score="getPhotoArtisticScore(photo)"
               :matched-tags="photo.matchedTags"
             />
@@ -391,6 +405,7 @@
             :show-name="true"
             :show-footer="false"
             :showDuplicate="true"
+            :show-source="showSource"
             :artistic-score="getPhotoArtisticScore(photo)"
             :matched-tags="photo.matchedTags"
           />
@@ -613,6 +628,7 @@ import {
   TrashOutline,
   FingerPrintOutline,
   EyeOutline,
+  CloudOutline,
 } from "@vicons/ionicons5";
 import { SquareOutline } from "@vicons/ionicons5";
 import { useRouter } from "vue-router";
@@ -951,6 +967,9 @@ watch([filterDuplicates, duplicatesReviewed], ([newFilter, newReviewed]) => {
 const setGridColumns = (columns) => {
   gridColumns.value = columns;
 };
+
+// Source indicator toggle
+const showSource = ref(false);
 
 // Basic sort order toggle
 const toggleBasicSortOrder = () => {
@@ -2208,7 +2227,6 @@ const handleSwapComplete = () => {
 
 .select-all-btn {
   white-space: nowrap;
-  margin-left: 8px;
 }
 
 /* Select All Banner */
