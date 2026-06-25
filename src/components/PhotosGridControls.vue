@@ -48,6 +48,7 @@
             type="line"
             size="small"
             class="filters-tabs"
+            :theme-overrides="{ tabGapSmallLine: '15px' }"
             @click.stop
           >
             <!-- Tab 1: Basic Filters -->
@@ -286,86 +287,103 @@
           v-if="isSortingExpanded"
           class="sorting-wrapper filter-controls-tab-container"
         >
-          <!-- Sorting Type Selection -->
-          <div class="sorting-type-row">
-            <n-radio-group
-              v-model:value="sortingType"
-              size="small"
-              @update:value="handleSortingTypeChange"
-              class="inline-radios"
-            >
-              <n-radio value="criteria" class="sorting-radio">Criteria</n-radio>
-              <n-radio value="genre" class="sorting-radio">Genre</n-radio>
-            </n-radio-group>
-          </div>
-          <!-- Criteria Selection -->
-          <div
-            v-if="sortingType === 'criteria'"
-            class="filter-controls-criteria-row"
+          <n-tabs
+            v-model:value="sortingType"
+            type="line"
+            size="small"
+            class="sorting-tabs"
+            :theme-overrides="{ tabGapSmallLine: '15px' }"
+            @update:value="handleSortingTypeChange"
+            @click.stop
           >
-            <template
-              v-for="[groupKey, group] in Object.entries(artisticScores)"
-              :key="groupKey"
-            >
-              <n-button
-                v-for="criterion in group.criteria"
-                :key="criterion.value"
-                secondary
-                :type="
-                  selectedCriteria.includes(criterion.value)
-                    ? groupKey === 'fundamentals'
-                      ? 'primary'
-                      : 'warning'
-                    : 'default'
-                "
-                size="small"
-                @click="toggleCriterion(criterion.value)"
-                class="filter-controls-criterion-button"
-              >
-                <template #icon>
-                  <n-icon>
-                    <component :is="criterionIcons[criterion.value]" />
-                  </n-icon>
-                </template>
-                {{ formatCriterionName(criterion.value) }}
-              </n-button>
-            </template>
-          </div>
-
-          <!-- Genre Buttons -->
-          <div v-if="sortingType === 'genre'" class="genre-row">
-            <n-tooltip
-              v-for="genre in genres"
-              :key="genre.value"
-              trigger="hover"
-              placement="bottom"
-              :show-arrow="true"
-              delay="1200"
-            >
-              <template #trigger>
-                <n-button
-                  :type="selectedGenre === genre.value ? 'primary' : 'default'"
-                  size="small"
-                  secondary
-                  @click="handleGenreSelect(genre.value)"
-                  class="genre-button"
-                  :class="{ 'custom-button': genre.value === 'custom' }"
-                >
-                  <template #icon>
-                    <n-icon>
-                      <component :is="genre.icon" />
-                    </n-icon>
-                  </template>
-                  {{ genre.label }}
-                </n-button>
+            <!-- Tab: Criteria -->
+            <n-tab-pane name="criteria" display-directive="show">
+              <template #tab>
+                <n-icon
+                  size="13"
+                  style="margin-right: 4px; vertical-align: middle"
+                  ><Star20Regular
+                /></n-icon>
+                <span class="tab-label">Criteria</span>
               </template>
-              <div
-                v-if="genre.value !== 'custom'"
-                v-html="formatGenreTooltip(genre.value)"
-              ></div>
-              <div v-else>Customize your own scoring weights</div>
-            </n-tooltip>
-          </div>
+              <div class="filter-controls-criteria-row">
+                <template
+                  v-for="[groupKey, group] in Object.entries(artisticScores)"
+                  :key="groupKey"
+                >
+                  <n-button
+                    v-for="criterion in group.criteria"
+                    :key="criterion.value"
+                    secondary
+                    :type="
+                      selectedCriteria.includes(criterion.value)
+                        ? groupKey === 'fundamentals'
+                          ? 'primary'
+                          : 'warning'
+                        : 'default'
+                    "
+                    size="small"
+                    @click="toggleCriterion(criterion.value)"
+                    class="filter-controls-criterion-button"
+                  >
+                    <template #icon>
+                      <n-icon>
+                        <component :is="criterionIcons[criterion.value]" />
+                      </n-icon>
+                    </template>
+                    {{ formatCriterionName(criterion.value) }}
+                  </n-button>
+                </template>
+              </div>
+            </n-tab-pane>
+
+            <!-- Tab: Genre -->
+            <n-tab-pane name="genre" display-directive="show">
+              <template #tab>
+                <n-icon
+                  size="13"
+                  style="margin-right: 4px; vertical-align: middle"
+                  ><Tag20Regular
+                /></n-icon>
+                <span class="tab-label">Genre</span>
+              </template>
+              <div class="genre-row">
+                <n-tooltip
+                  v-for="genre in genres"
+                  :key="genre.value"
+                  trigger="hover"
+                  placement="bottom"
+                  :show-arrow="true"
+                  delay="1200"
+                >
+                  <template #trigger>
+                    <n-button
+                      :type="
+                        selectedGenre === genre.value ? 'primary' : 'default'
+                      "
+                      size="small"
+                      secondary
+                      @click="handleGenreSelect(genre.value)"
+                      class="genre-button"
+                      :class="{ 'custom-button': genre.value === 'custom' }"
+                    >
+                      <template #icon>
+                        <n-icon>
+                          <component :is="genre.icon" />
+                        </n-icon>
+                      </template>
+                      {{ genre.label }}
+                    </n-button>
+                  </template>
+                  <div
+                    v-if="genre.value !== 'custom'"
+                    v-html="formatGenreTooltip(genre.value)"
+                  ></div>
+                  <div v-else>Customize your own scoring weights</div>
+                </n-tooltip>
+              </div>
+            </n-tab-pane>
+          </n-tabs>
         </div>
       </Transition>
     </div>
@@ -411,10 +429,7 @@
 <script setup>
 import { computed, ref, reactive, watch, h, onMounted } from "vue";
 import { useSearchStore } from "@/stores/searchStore.js";
-import {
-  useArtisticScores,
-  getDefaultGenreFromProfile,
-} from "@/composables/useArtisticScores.js";
+import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { useUserStore } from "@/stores/userStore";
 import { getGenrePresetKeys, getProfileVariant } from "@/config/photo_schema";
@@ -432,8 +447,6 @@ import {
   NButton,
   NSelect,
   NIcon,
-  NRadioGroup,
-  NRadio,
   NModal,
   NTag,
   NTooltip,
@@ -448,6 +461,8 @@ import {
   Filter20Regular,
   Info16Regular,
   Settings20Regular,
+  Star20Regular,
+  Tag20Regular,
   Trophy20Regular,
 } from "@vicons/fluent";
 import { PaletteOutlined } from "@vicons/material";
@@ -554,7 +569,7 @@ const activeFiltersTab = ref("basic");
 // Quality Sorting
 const sortingType = ref("criteria"); // 'criteria' or 'genre'
 const selectedCriteria = ref([]); // Start empty (no sorting initially)
-const selectedGenre = ref(getDefaultGenreFromProfile(userStore.user?.profiles));
+const selectedGenre = ref(null);
 const sortOrder = ref("desc"); // 'asc', 'desc'
 const isSortingExpanded = ref(false); // Will be set based on mobile on mount
 
@@ -723,7 +738,7 @@ const hasActiveSorting = computed(() => {
   } else if (sortingType.value === "criteria") {
     return selectedCriteria.value.length > 0;
   } else if (sortingType.value === "genre") {
-    return true; // Genre sorting is always active when selected
+    return selectedGenre.value !== null; // Genre sorting requires a selection
   }
   return false;
 });
@@ -770,6 +785,10 @@ const handleGenreSelect = (genre) => {
   if (genre === "custom") {
     // Open custom weights modal
     showCustomWeightsModal.value = true;
+  } else if (selectedGenre.value === genre) {
+    // Deselect if already selected
+    selectedGenre.value = null;
+    handleGenreChange();
   } else {
     selectedGenre.value = genre;
     handleGenreChange();
@@ -1044,20 +1063,17 @@ watch(
   padding: 0 12px 8px 12px;
 }
 
-.sorting-type-row {
-  display: flex;
-  align-items: center;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--border-color);
-  margin-bottom: 4px;
+.sorting-tabs {
+  width: 100%;
 }
 
-.inline-radios {
-  margin-left: 0;
+.sorting-tabs :deep(.n-tabs-nav) {
+  padding: 0 2px;
+  margin-bottom: 10px;
 }
 
-.sorting-radio {
-  font-size: 13px;
+.sorting-tabs :deep(.n-tab-pane) {
+  padding: 0;
 }
 
 .sort-order-btn {
@@ -1338,7 +1354,7 @@ watch(
 .filters-expanded-content {
   display: flex;
   flex-direction: column;
-  padding: 8px 12px 8px;
+  padding: 0px 12px 8px;
 }
 
 .score-slider-header {

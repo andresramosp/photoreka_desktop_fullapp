@@ -278,7 +278,7 @@ onMounted(() => {
 
 <style scoped>
 .import-area-container {
-  padding: var(--spacing-2xl);
+  /* padding: var(--spacing-2xl); */
   margin: 0 auto;
   background-color: var(--bg-body);
   position: relative;

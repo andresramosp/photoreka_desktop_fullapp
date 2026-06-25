@@ -2124,7 +2124,7 @@ watch(fullscreenViewerVisible, (isVisible) => {
 @import "@/assets/shared-card-styles.scss";
 
 .series-view {
-  padding: var(--spacing-2xl);
+  /* padding: var(--spacing-2xl); */
   margin: 0 auto;
   background-color: var(--bg-body);
 }

@@ -1915,7 +1915,7 @@ const formatRelativeDate = (dateStr: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--spacing-2xl);
+  /* padding: var(--spacing-2xl); */
 }
 
 .welcome-content {
