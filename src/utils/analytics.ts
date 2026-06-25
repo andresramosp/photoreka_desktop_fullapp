@@ -11,8 +11,20 @@ declare global {
 const GA_MEASUREMENT_ID =
   import.meta.env.VITE_GA_MEASUREMENT_ID || "G-WK7N5SVNVD";
 
+const ADMIN_PATH_PREFIX = "/admin";
+
 // Check if we're in development
 const isDevelopment = import.meta.env.DEV;
+
+function isAdminPath(path: string): boolean {
+  return path === ADMIN_PATH_PREFIX || path.startsWith(`${ADMIN_PATH_PREFIX}/`);
+}
+
+function shouldTrackAnalytics(
+  path: string = window.location.pathname,
+): boolean {
+  return !isAdminPath(path);
+}
 
 // Initialize Google Analytics
 export function initGA(): void {
@@ -20,6 +32,11 @@ export function initGA(): void {
   // Uncomment the next 3 lines to disable GA in development:
   if (isDevelopment) {
     console.log("🔧 Google Analytics disabled in development mode");
+    return;
+  }
+
+  if (!shouldTrackAnalytics()) {
+    console.log("🔧 Google Analytics disabled on admin routes");
     return;
   }
 
@@ -43,6 +60,7 @@ export function initGA(): void {
     // Enhanced measurement settings
     page_title: document.title,
     page_location: window.location.href,
+    send_page_view: false,
     // Privacy settings
     anonymize_ip: true,
     allow_google_signals: false,
@@ -71,6 +89,10 @@ export function initGA(): void {
 
 // Track page views
 export function trackPageView(path: string, title: string): void {
+  if (!shouldTrackAnalytics(path)) {
+    return;
+  }
+
   if (typeof window.gtag !== "undefined") {
     window.gtag("config", GA_MEASUREMENT_ID, {
       page_path: path,
@@ -83,8 +105,12 @@ export function trackPageView(path: string, title: string): void {
 // Track custom events
 export function trackEvent(
   eventName: string,
-  parameters: Record<string, any> = {}
+  parameters: Record<string, any> = {},
 ): void {
+  if (!shouldTrackAnalytics()) {
+    return;
+  }
+
   if (typeof window.gtag !== "undefined") {
     // Add environment to all events
     const enhancedParams = {
@@ -101,7 +127,7 @@ export function trackEvent(
 export function trackUserAction(
   action: string,
   section: string,
-  value: any = null
+  value: any = null,
 ): void {
   trackEvent("user_action", {
     action_name: action,
@@ -121,7 +147,7 @@ export function trackAuth(action: string, method: string | null = null): void {
 // Track photo operations
 export function trackPhotoEvent(
   action: string,
-  count: number | null = null
+  count: number | null = null,
 ): void {
   trackEvent("photo_action", {
     action: action, // 'upload', 'analyze', 'download', etc.
