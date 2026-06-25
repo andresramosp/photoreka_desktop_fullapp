@@ -628,10 +628,7 @@ import { useCollectionsStore } from "@/stores/collections.js";
 import { useUserStore } from "@/stores/userStore";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { usePhotoRangeSelection } from "@/composables/usePhotoRangeSelection.js";
-import {
-  useArtisticScores,
-  getDefaultGenreFromProfile,
-} from "@/composables/useArtisticScores.js";
+import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { useActivityLogger } from "@/composables/useActivityLogger";
@@ -797,7 +794,7 @@ const tagFilterResults = ref(null); // Array of photo IDs from tag search
 const artisticScoreFilters = ref({}); // Minimum score thresholds per criterion
 const sortingType = ref("none"); // 'none', 'criteria' or 'genre'
 const selectedCriteria = ref([]);
-const selectedGenre = ref(getDefaultGenreFromProfile(userStore.user?.profiles));
+const selectedGenre = ref(null); // null = nothing selected in the genre tab
 const customWeights = ref({});
 const sortOrder = ref("desc"); // 'asc', 'desc'
 
@@ -824,7 +821,8 @@ const sortByQuality = computed(() => {
   } else if (sortingType.value === "criteria") {
     return selectedCriteria.value.length > 0;
   } else if (sortingType.value === "genre") {
-    return true;
+    // Only active when a genre is actually selected in the genre tab
+    return !!selectedGenre.value;
   }
   return false;
 });
@@ -872,6 +870,9 @@ const getPhotoArtisticScore = (photo) => {
     return scoreResult.average;
   } else if (sortingType.value === "genre") {
     // Genre-based sorting
+    if (!selectedGenre.value) {
+      return null;
+    }
     if (selectedGenre.value === "custom") {
       // Use custom weights
       const scoreResult = calculateArtisticScore(
