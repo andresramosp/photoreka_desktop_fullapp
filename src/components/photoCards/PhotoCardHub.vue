@@ -111,11 +111,11 @@
         placement="top"
       >
         <template #trigger>
-          <div class="lightroom-indicator">
+          <div class="source-indicator lightroom-indicator">
             <img
               src="@/assets/logos/lightroom_logo.png"
               alt="Lightroom"
-              class="lightroom-logo"
+              class="source-logo"
             />
           </div>
         </template>
@@ -128,31 +128,60 @@
         placement="top"
       >
         <template #trigger>
-          <div class="google-photos-indicator" @click.stop="openInGooglePhotos">
+          <div
+            class="source-indicator google-photos-indicator"
+            @click.stop="openInGooglePhotos"
+          >
             <img
               src="@/assets/logos/google_photos.png"
               alt="Google Photos"
-              class="google-photos-logo"
+              class="source-logo"
             />
           </div>
         </template>
         Click to search in Google Photos
+      </n-tooltip>
+      <!-- Dropbox source indicator -->
+      <n-tooltip
+        v-if="showSource && photo.descriptions?.source?.type === 'dropbox'"
+        trigger="hover"
+        placement="top"
+      >
+        <template #trigger>
+          <div class="source-indicator dropbox-indicator">
+            <img
+              src="@/assets/logos/dropbox.svg"
+              alt="Dropbox"
+              class="source-logo"
+            />
+          </div>
+        </template>
+        Photo synced with Dropbox
       </n-tooltip>
       <!-- Web upload source indicator (base case: no specific source) -->
       <n-tooltip
         v-if="
           showSource &&
           photo.descriptions?.source?.type !== 'lightroom' &&
-          photo.descriptions?.source?.type !== 'google'
+          photo.descriptions?.source?.type !== 'google' &&
+          photo.descriptions?.source?.type !== 'dropbox'
         "
         trigger="hover"
         placement="top"
       >
         <template #trigger>
-          <div class="web-upload-indicator">
-            <n-icon size="16" color="white">
-              <CloudUploadOutline />
-            </n-icon>
+          <div class="source-indicator web-upload-indicator">
+            <svg
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="white"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"
+              />
+            </svg>
           </div>
         </template>
         Uploaded from web
@@ -338,7 +367,6 @@ import {
   TrashOutline as DeleteIcon,
   TimeOutline,
   SwapHorizontalOutline,
-  CloudUploadOutline,
 } from "@vicons/ionicons5";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useIsMobile } from "@/composables/useIsMobile";
@@ -796,15 +824,13 @@ onUnmounted(() => {
   text-align: center;
 }
 
-/* Lightroom source indicator */
-.lightroom-indicator {
+/* Shared source indicator (Lightroom, Google Photos, Dropbox, web upload) */
+.source-indicator {
   position: absolute;
   bottom: 8px;
   right: 8px;
   border-radius: 6px;
   padding: 4px;
-  opacity: 0.8;
-  background-color: rgba(49, 168, 240, 0.9);
   z-index: 4;
   backdrop-filter: blur(4px);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
@@ -813,24 +839,23 @@ onUnmounted(() => {
   justify-content: center;
 }
 
-.lightroom-logo {
+.source-logo {
   width: 20px;
   height: 20px;
   object-fit: contain;
 }
 
+/* Lightroom source indicator */
+.lightroom-indicator {
+  opacity: 0.8;
+  background-color: rgba(49, 168, 240, 0.9);
+}
+
 /* Google Photos source indicator */
 .google-photos-indicator {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  border-radius: 6px;
-  padding: 4px;
-  opacity: 1;
-  z-index: 4;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
   cursor: pointer;
   transition:
     transform 0.15s ease,
@@ -842,26 +867,14 @@ onUnmounted(() => {
   opacity: 0.85;
 }
 
-.google-photos-logo {
-  width: 20px;
-  height: 20px;
-  object-fit: contain;
+/* Dropbox source indicator */
+.dropbox-indicator {
+  background-color: rgba(0, 97, 255, 0.9);
 }
 
 /* Web upload source indicator */
 .web-upload-indicator {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  border-radius: 6px;
-  padding: 4px;
   background-color: rgba(120, 120, 130, 0.75);
-  z-index: 4;
-  backdrop-filter: blur(4px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 /* Variantes responsivas para el indicador de selección */
@@ -884,21 +897,15 @@ onUnmounted(() => {
     left: 6px;
   }
 
-  .lightroom-indicator {
+  .source-indicator {
     bottom: 6px;
     right: 6px;
     padding: 3px;
   }
 
-  .lightroom-logo {
+  .source-logo {
     width: 18px;
     height: 18px;
-  }
-
-  .web-upload-indicator {
-    bottom: 6px;
-    right: 6px;
-    padding: 3px;
   }
 }
 
@@ -921,32 +928,15 @@ onUnmounted(() => {
     left: 4px;
   }
 
-  .lightroom-indicator {
+  .source-indicator {
     bottom: 4px;
     right: 4px;
     padding: 2px;
   }
 
-  .lightroom-logo {
+  .source-logo {
     width: 16px;
     height: 16px;
-  }
-
-  .google-photos-indicator {
-    bottom: 4px;
-    right: 4px;
-    padding: 2px;
-  }
-
-  .google-photos-logo {
-    width: 16px;
-    height: 16px;
-  }
-
-  .web-upload-indicator {
-    bottom: 4px;
-    right: 4px;
-    padding: 2px;
   }
 
   .action-button {
@@ -980,32 +970,15 @@ onUnmounted(() => {
     left: 6px;
   }
 
-  .lightroom-indicator {
+  .source-indicator {
     bottom: 6px;
     right: 6px;
     padding: 3px;
   }
 
-  .lightroom-logo {
+  .source-logo {
     width: 18px;
     height: 18px;
-  }
-
-  .google-photos-indicator {
-    bottom: 6px;
-    right: 6px;
-    padding: 3px;
-  }
-
-  .google-photos-logo {
-    width: 18px;
-    height: 18px;
-  }
-
-  .web-upload-indicator {
-    bottom: 6px;
-    right: 6px;
-    padding: 3px;
   }
 }
 
@@ -1028,32 +1001,15 @@ onUnmounted(() => {
     left: 4px;
   }
 
-  .lightroom-indicator {
+  .source-indicator {
     bottom: 4px;
     right: 4px;
     padding: 2px;
   }
 
-  .lightroom-logo {
+  .source-logo {
     width: 16px;
     height: 16px;
-  }
-
-  .google-photos-indicator {
-    bottom: 4px;
-    right: 4px;
-    padding: 2px;
-  }
-
-  .google-photos-logo {
-    width: 16px;
-    height: 16px;
-  }
-
-  .web-upload-indicator {
-    bottom: 4px;
-    right: 4px;
-    padding: 2px;
   }
 
   .action-button {
