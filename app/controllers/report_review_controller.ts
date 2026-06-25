@@ -10,7 +10,7 @@ import MailService from '#services/mail_service'
 import { reportReviewBuildTemplate } from '../utils/email_templates.js'
 
 const REVIEW_TYPES: ReviewType[] = ['general', 'story', 'context']
-const BUILD_THRESHOLD_PHOTOS = 200
+const BUILD_THRESHOLD_PHOTOS = 150
 const REBUILD_THRESHOLD_CHANGES = 250 // Número absoluto de fotos añadidas/borradas para rebuild
 const BUILD_TIMEOUT_MS = 60 * 60 * 1000 // 60 minutos - tiempo máximo esperado para un build
 
