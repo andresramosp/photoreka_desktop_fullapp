@@ -69,6 +69,7 @@
                 <span class="cell-label">Status</span>
                 <n-tag
                   size="small"
+                  :bordered="false"
                   :type="job.status === 'finished' ? 'success' : 'info'"
                 >
                   <span
