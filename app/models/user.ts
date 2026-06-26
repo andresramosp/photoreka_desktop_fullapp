@@ -116,6 +116,16 @@ export default class User extends compose(BaseModel, AuthFinder) {
   @column.dateTime()
   declare passwordResetExpiresAt: DateTime | null
 
+  // Terms of Service / content-policy acceptance evidence
+  @column()
+  declare tosAcceptedVersion: string | null
+
+  @column.dateTime()
+  declare tosAcceptedAt: DateTime | null
+
+  @column()
+  declare tosAcceptedIp: string | null
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 

@@ -21,6 +21,7 @@ import UsageService, {
 } from '#services/usage_service'
 import MailService from '#services/mail_service'
 import GoogleOAuthService from '#services/google_oauth_service'
+import { buildTosAcceptance } from '../utils/legal.js'
 import { DateTime } from 'luxon'
 import crypto from 'crypto'
 import {
@@ -107,6 +108,7 @@ export default class AuthController {
         emailConfirmationSentAt: DateTime.now(),
         preferredSource: null,
         profiles: null,
+        ...buildTosAcceptance(request),
         // emailConfirmedAt remains null until confirmed
       })
 
@@ -889,6 +891,7 @@ export default class AuthController {
           password: null, // No password for Google users
           preferredSource: null,
           profiles: null,
+          ...buildTosAcceptance(request),
         })
 
         console.log('[Google OAuth] New user created:', user.id)

@@ -9,6 +9,7 @@ import {
 import crypto from 'crypto'
 import Photo, { PhotoDescriptions } from '#models/photo'
 import User from '#models/user'
+import UploadAudit from '#models/upload_audit'
 import PhotoManager from '../managers/photo_manager.js'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { CacheInvalidationService } from '../services/cache_invalidation_service.js'
@@ -230,6 +231,21 @@ export default class CatalogController {
         // Para los preferred source Lightroom si lo ponemos a 'false' directamente.
         confirmed: source.type === 'lightroom' ? false : true,
         // source,
+      })
+
+      // Immutable provenance log (chain-of-custody). Truly non-blocking: a failure here
+      // must never break the upload. Decoupled from photos so it survives deletion.
+      UploadAudit.create({
+        userId: Number(userId),
+        photoId: photo.id,
+        objectKey: key,
+        thumbnailKey,
+        originalFileName,
+        contentType: fileType,
+        uploadIp,
+        userAgent: request.header('user-agent')?.slice(0, 1024) ?? null,
+      }).catch((auditError) => {
+        console.error('Failed to write upload audit log for photo', photo.id, auditError)
       })
 
       await CacheInvalidationService.onPhotoListChanged(userId)
