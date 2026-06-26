@@ -2131,7 +2131,7 @@ const handleSwapComplete = () => {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 /* Row 2: Desktop Version */
