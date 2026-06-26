@@ -431,7 +431,7 @@ interface Emits {
 const props = withDefaults(defineProps<Props>(), {
   selected: false,
   focused: false,
-  showSource: true,
+  showSource: false,
   matchedTags: () => [],
 });
 

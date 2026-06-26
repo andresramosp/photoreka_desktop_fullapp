@@ -34,56 +34,67 @@
 
     <n-modal
       v-model:show="showAnalyzeDialog"
-      preset="confirm"
-      title="Confirm Process"
-      :closable="false"
-      @close="closeAnalyzeDialog"
-      :style="{ width: '600px' }"
+      :style="{ width: '500px', maxWidth: '95vw' }"
     >
-      <div style="margin-bottom: 18px">
-        <span>
-          You are about to process
-          {{ selectedCount }}
-          photos. Once started, it cannot be reversed. <br />
-
-          Do you want to continue?
-        </span>
-      </div>
-      <div
-        style="
-          margin-bottom: 16px;
-          display: flex;
-          justify-content: flex-end;
-          align-items: center;
-        "
+      <n-card
+        :bordered="false"
+        role="dialog"
+        aria-modal="true"
+        class="analyze-confirm-card"
       >
-        <div style="display: flex; align-items: center">
-          <n-checkbox disabled size="large" v-model:checked="fastMode">
-            Fast mode
-          </n-checkbox>
-          <!-- <n-tooltip trigger="hover" placement="top">
-            <template #trigger>
-              <n-icon size="12" class="info-icon">
-                <svg viewBox="0 0 24 24">
-                  <path
-                    fill="currentColor"
-                    d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10s10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"
-                  />
-                </svg>
+        <template #header>
+          <div class="analyze-confirm-header">
+            <n-icon size="20" color="var(--primary-color)">
+              <RocketLaunchOutlined />
+            </n-icon>
+            <span>Confirm Analysis</span>
+          </div>
+        </template>
+        <template #header-extra>
+          <n-button text @click="closeAnalyzeDialog" aria-label="Close">
+            <n-icon size="18" color="var(--text-secondary)">
+              <CloseOutline />
+            </n-icon>
+          </n-button>
+        </template>
+
+        <div class="analyze-confirm-body">
+          <p class="analyze-confirm-description">
+            You are about to process
+            <strong
+              >{{ selectedCount }} photo{{
+                selectedCount !== 1 ? "s" : ""
+              }}</strong
+            >. Once started, it cannot be reversed. Do you want to continue?
+          </p>
+
+          <div class="analyze-confirm-info-box">
+            <div class="analyze-confirm-info-header">
+              <n-icon size="15" color="var(--info-color)">
+                <InformationCircleOutline />
               </n-icon>
-            </template>
-            Fast mode is designed for uploading photos that you want to use
-            immediately and has a limit of 10% of your total storage space. If
-            you have a lot of photos, it's recommended to use normal mode.
-          </n-tooltip> -->
+              <span class="analyze-confirm-info-title"
+                >Estimated processing time</span
+              >
+            </div>
+            <p class="analyze-confirm-info-text">
+              Approximately <strong>{{ estimatedTime }}</strong> for
+              {{ selectedCount }} photo{{ selectedCount !== 1 ? "s" : "" }}.
+              This is an estimate — actual times may vary during periods of high
+              demand.
+            </p>
+          </div>
         </div>
-      </div>
-      <div style="display: flex; gap: 14px; justify-content: center">
-        <n-button tertiary @click="closeAnalyzeDialog">Cancel</n-button>
-        <n-button type="primary" @click="confirmAnalyze"
-          >Yes, start process</n-button
-        >
-      </div>
+
+        <template #footer>
+          <div class="analyze-confirm-footer">
+            <n-button tertiary @click="closeAnalyzeDialog">Cancel</n-button>
+            <n-button type="info" @click="confirmAnalyze"
+              >Start Analysis</n-button
+            >
+          </div>
+        </template>
+      </n-card>
     </n-modal>
     <div v-if="isAnyOperationInProgress" class="upload-progress-section">
       <div class="progress-header">
@@ -568,7 +579,13 @@ import { usePhotoUpload } from "@/composables/usePhotoUpload.js";
 import { useWarmUp } from "@/composables/useWarmUp.js";
 import { useGooglePhotos } from "@/composables/useGooglePhotos.js";
 import { useDropbox } from "@/composables/useDropbox.js";
-import { FolderOpen, CloudUploadOutline } from "@vicons/ionicons5";
+import {
+  FolderOpen,
+  CloudUploadOutline,
+  CloseOutline,
+  InformationCircleOutline,
+} from "@vicons/ionicons5";
+import { RocketLaunchOutlined } from "@vicons/material";
 import { BookInformation20Regular } from "@vicons/fluent";
 import pLimit from "p-limit";
 import pica from "pica";
@@ -824,12 +841,6 @@ const fastMode = computed({
     if (fastModeOverride.value !== null) {
       return fastModeOverride.value;
     }
-    // Si es la primera vez subiendo fotos, no activar fast mode automáticamente
-    // if (isFirstTimeUpload.value) {
-    //   return false;
-    // }
-    // // Si hay menos de 8 fotos subidas, activar fast mode automáticamente
-    // return lightboxPhotos.value.length < 8;
   },
   set(value) {
     // Para casos donde se necesite override manual
@@ -1096,6 +1107,15 @@ const cancelSourceWarning = () => {
 };
 
 // Con Picker API, la subida se puede hacer directamente tras triggerGooglePhotos si es necesario
+
+const estimatedTime = computed(() => {
+  const count = selectedCount.value;
+  if (count < 30) return "2 – 10 minutes";
+  if (count <= 100) return "1 – 3 hours";
+  if (count <= 500) return "2 – 6 hours";
+  if (count <= 1000) return "3 – 8 hours";
+  return "4 – 12 hours";
+});
 
 const closeAnalyzeDialog = () => {
   showAnalyzeDialog.value = false;
@@ -1444,6 +1464,70 @@ defineExpose({
     align-items: flex-start;
     gap: 8px;
   }
+}
+
+/* Analyze Confirm Modal */
+.analyze-confirm-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+}
+
+.analyze-confirm-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.analyze-confirm-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.analyze-confirm-description {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.analyze-confirm-info-box {
+  background-color: color-mix(in srgb, var(--info-color) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--info-color) 25%, transparent);
+  border-left: 3px solid var(--info-color);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.analyze-confirm-info-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.analyze-confirm-info-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--info-color);
+}
+
+.analyze-confirm-info-text {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.analyze-confirm-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 /* First Import State - Onboarding continuation styles */

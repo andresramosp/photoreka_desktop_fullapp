@@ -325,7 +325,7 @@ const users = ref<UserRow[]>([]);
 const loading = ref(false);
 
 const searchQuery = ref("");
-const filterActive = ref<string | null>(null);
+const filterActive = ref<string | null>("true");
 const filterNeedsReview = ref<string | null>(null);
 const sortBy = ref<string | null>(null);
 const sortDir = ref<string | null>(null);
