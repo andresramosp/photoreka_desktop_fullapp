@@ -69,15 +69,11 @@
                 <span class="cell-label">Status</span>
                 <n-tag
                   size="small"
-                  class="status-tag"
-                  :class="{
-                    'status-processing': job.status === 'processing',
-                    'status-finished': job.status === 'finished',
-                  }"
+                  :type="job.status === 'finished' ? 'success' : 'warning'"
                 >
                   <span
                     v-if="job.status === 'processing'"
-                    class="status-spinner"
+                    class="stage-spinner"
                   />
                   {{ job.status === "processing" ? "Processing" : "Finished" }}
                 </n-tag>
@@ -886,37 +882,19 @@ function isLastFinishedJob(job) {
   object-fit: cover;
 }
 
-/* Custom Status Badge Colors */
-.status-processing {
-  background-color: var(--warning-color) !important;
-  color: #ffffff !important;
-  border-color: var(--warning-color) !important;
-}
-
-.status-finished {
-  background-color: #10b981 !important;
-  color: #ffffff !important;
-  border-color: #10b981 !important;
-}
-
-.status-tag :deep(.n-tag__content) {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.status-spinner {
+:deep(.stage-spinner) {
   display: inline-block;
-  width: 9px;
-  height: 9px;
-  border: 1.5px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #ffffff;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
   border-radius: 50%;
-  animation: status-spin 0.7s linear infinite;
-  flex-shrink: 0;
+  animation: stage-spin 0.8s linear infinite;
+  vertical-align: middle;
+  margin-right: 4px;
 }
 
-@keyframes status-spin {
+@keyframes stage-spin {
   to {
     transform: rotate(360deg);
   }
