@@ -276,8 +276,8 @@ export default class AnalyzerProcessRunner {
     for (const stage of stages) {
       try {
         await this.executeStage(stage, level)
-        // delay forzado para pruebas
-        await this.sleep(60000 * 2)
+        // // delay forzado para pruebas
+        // await this.sleep(60000 * 2)
       } catch (error) {
         const stageDescription = `stage ${stage.type} (${stage.tasks?.length || 0} items)`
         const errMsg = error instanceof Error ? `${error.message}\n${error.stack}` : String(error)
