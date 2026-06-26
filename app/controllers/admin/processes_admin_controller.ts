@@ -2,6 +2,7 @@
 
 import type { HttpContext } from '@adonisjs/core/http'
 import AdminProcessesService from '#services/admin/admin_processes_service'
+import AnalyzerPoolService from '#services/analyzer_pool_service'
 
 export default class ProcessesAdminController {
   /**
@@ -97,6 +98,42 @@ export default class ProcessesAdminController {
     } catch (error) {
       return response.internalServerError({
         message: 'Failed to launch retry',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
+   * Manually launch a queued process (bypasses the analyzer pool)
+   */
+  async launch({ params, response }: HttpContext) {
+    try {
+      const result = await AdminProcessesService.launchQueued(params.id)
+      if (!result) {
+        return response.notFound({ message: 'Process not found' })
+      }
+      if (result.error) {
+        return response.badRequest({ message: result.error })
+      }
+      return response.ok({ message: 'Queued process launched', processId: result.processId })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to launch queued process',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
+   * Current analyzer pool status (active/capacity)
+   */
+  async poolStatus({ response }: HttpContext) {
+    try {
+      const status = await AnalyzerPoolService.getStatus()
+      return response.ok({ pool: status })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to fetch pool status',
         error: error.message,
       })
     }

@@ -24,6 +24,7 @@ export type AnalyzerMode =
 export type ModelType = 'GPT' | 'Molmo' | 'Qwen' | 'Gemini'
 export type StageType =
   | 'init'
+  | 'queued'
   | 'clip_embeddings'
   | 'vision_context_story_accents'
   | 'tags_context_story'

@@ -500,10 +500,12 @@ router
 
     // Admin Processes management
     router.get('/api/admin/processes', [ProcessesAdminController, 'index'])
+    router.get('/api/admin/processes/pool', [ProcessesAdminController, 'poolStatus'])
     router.get('/api/admin/processes/:id', [ProcessesAdminController, 'show'])
     router.get('/api/admin/processes/:id/photos', [ProcessesAdminController, 'photos'])
     router.post('/api/admin/processes/:id/health', [ProcessesAdminController, 'healthCheck'])
     router.post('/api/admin/processes/:id/retry', [ProcessesAdminController, 'retry'])
+    router.post('/api/admin/processes/:id/launch', [ProcessesAdminController, 'launch'])
 
     // Admin Health dashboard
     router.get('/api/admin/health/overview', [HealthAdminController, 'overview'])

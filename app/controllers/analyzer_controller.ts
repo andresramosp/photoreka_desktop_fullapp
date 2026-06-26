@@ -9,6 +9,7 @@ import HealthPhotoService from '#services/health_photo_service'
 import AnalyzerProcess from '#models/analyzer/analyzerProcess'
 import { packages } from '../analyzer_packages.js'
 import UsageService from '#services/usage_service'
+import AnalyzerPoolService from '#services/analyzer_pool_service'
 
 const logger = Logger.getInstance('AnalyzerProcess')
 
@@ -100,11 +101,31 @@ export default class AnalyzerController {
             await analyzerService.runAll()
           } else {
             if (!isGlobal) {
-              analyzerService.runAll()
+              const newProcessId = analyzerService.getProcessId()
+              const acquired = await AnalyzerPoolService.tryAcquire(newProcessId!)
+              if (acquired) {
+                analyzerService.runAllAndReleasePool()
+                logger.info(`Análisis ejecutado inmediatamente para usuario ${targetUserId}`)
+              } else {
+                await analyzerService.markQueued()
+                logger.info(
+                  `Pool lleno: proceso ${newProcessId} encolado (queued) para usuario ${targetUserId}`
+                )
+                AnalyzerPoolService.notifyQueued({
+                  processId: newProcessId!,
+                  userId: Number(targetUserId),
+                  photoCount: photos.length,
+                }).catch(() => {})
+                return response.ok({
+                  message: 'Analysis queued',
+                  userId: targetUserId,
+                  queued: true,
+                })
+              }
             } else {
               analyzerService.runGlobal()
+              logger.info(`Análisis ejecutado inmediatamente para usuario ${targetUserId}`)
             }
-            logger.info(`Análisis ejecutado inmediatamente para usuario ${targetUserId}`)
           }
         } else {
           logger.info(`Análisis inicializado pero diferido para usuario ${targetUserId}`)

@@ -1088,3 +1088,71 @@ export function contentViolationAdminTemplate(params: {
 
   return baseLayout(content, 'Content Policy Violation - Photoreka Admin')
 }
+
+/**
+ * Admin notification template for a queued analyzer process (pool full).
+ * Sent when there are no free slots and the process must be launched manually.
+ */
+export function processQueuedAdminTemplate(params: {
+  processId: string | number
+  userId: number | null
+  userName: string | null
+  userEmail: string | null
+  photoCount: number
+  poolActive: number
+  poolCapacity: number
+  adminUrl: string
+}): string {
+  const { processId, userId, userName, userEmail, photoCount, poolActive, poolCapacity, adminUrl } =
+    params
+
+  const content = `
+    <h1 style="margin: 0 0 8px; font-size: 24px; font-weight: 700; color: ${PRIMARY_COLOR}; text-align: center;">
+      Process Queued
+    </h1>
+    <p style="margin: 0 0 28px; font-size: 14px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+      The analyzer pool is full (${poolActive}/${poolCapacity}). This process is waiting and must be launched manually.
+    </p>
+
+    <table role="presentation" style="width: 100%; border-collapse: collapse; margin-bottom: 24px; background-color: rgba(15,23,42,0.6); border-radius: 10px; overflow: hidden;">
+      <tr style="background-color: rgba(99,102,241,0.15);">
+        <td colspan="2" style="padding: 10px 16px; font-size: 13px; font-weight: 700; color: ${TEXT_COLOR}; letter-spacing: 0.05em; text-transform: uppercase;">
+          Process Information
+        </td>
+      </tr>
+      <tr>
+        <td style="padding: 10px 16px; font-size: 13px; color: ${MUTED_TEXT_COLOR}; width: 35%; border-bottom: 1px solid rgba(148,163,184,0.1);">Process ID</td>
+        <td style="padding: 10px 16px; font-size: 13px; color: ${TEXT_COLOR}; border-bottom: 1px solid rgba(148,163,184,0.1);">#${processId}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px 16px; font-size: 13px; color: ${MUTED_TEXT_COLOR}; border-bottom: 1px solid rgba(148,163,184,0.1);">User</td>
+        <td style="padding: 10px 16px; font-size: 13px; color: ${TEXT_COLOR}; border-bottom: 1px solid rgba(148,163,184,0.1);">${userName ?? '—'}${userId ? ` (#${userId})` : ''}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px 16px; font-size: 13px; color: ${MUTED_TEXT_COLOR}; border-bottom: 1px solid rgba(148,163,184,0.1);">Email</td>
+        <td style="padding: 10px 16px; font-size: 13px; color: ${TEXT_COLOR}; border-bottom: 1px solid rgba(148,163,184,0.1);">${userEmail ?? '—'}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px 16px; font-size: 13px; color: ${MUTED_TEXT_COLOR};">Photos</td>
+        <td style="padding: 10px 16px; font-size: 13px; color: ${TEXT_COLOR};">${photoCount}</td>
+      </tr>
+    </table>
+
+    <table role="presentation" style="width: 100%; margin: 0 0 8px;">
+      <tr>
+        <td align="center">
+          <a href="${adminUrl}" style="display: inline-block; padding: 12px 28px; background-color: ${PRIMARY_COLOR}; color: #ffffff; font-size: 14px; font-weight: 600; text-decoration: none; border-radius: 8px;">
+            Launch from Admin
+          </a>
+        </td>
+      </tr>
+    </table>
+
+    <hr style="border: none; border-top: 1px solid rgba(148, 163, 184, 0.2); margin: 28px 0;" />
+    <p style="margin: 0; font-size: 12px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+      This is an automated notification from Photoreka.
+    </p>
+  `
+
+  return baseLayout(content, 'Process Queued - Photoreka Admin')
+}

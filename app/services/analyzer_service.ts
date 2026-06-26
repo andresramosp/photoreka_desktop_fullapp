@@ -28,6 +28,7 @@ import MailService from '#services/mail_service'
 import { analysisCompleteTemplate } from '../utils/email_templates.js'
 import LightroomFolderMirrorService from '#services/lightroom_folder_mirror_service'
 import { measureServiceCost } from '../utils/railway_cost_calculator.js'
+import AnalyzerPoolService from '#services/analyzer_pool_service'
 
 const logger = Logger.getInstance('AnalyzerProcess')
 logger.setLevel(LogLevel.DEBUG)
@@ -112,6 +113,65 @@ export default class AnalyzerProcessRunner {
     const { hasFailed } = await this.run()
     await this.runGlobal()
     return { hasFailed }
+  }
+
+  /**
+   * Devuelve el id del proceso actual (disponible tras initProcess).
+   */
+  public getProcessId(): string | number | undefined {
+    return this.process?.id
+  }
+
+  /**
+   * Marca el proceso como encolado (pool lleno). No ejecuta ninguna task.
+   */
+  public async markQueued() {
+    if (!this.process) throw new Exception('[ERROR] No process found')
+    this.process.currentStage = 'queued'
+    await this.process.save()
+  }
+
+  /**
+   * Re-prepara un proceso que quedó en cola (`queued`) reutilizando su fila
+   * existente, para poder lanzarlo manualmente desde Admin como una ejecución
+   * normal ('adding'): cuenta uso y envía email de finalización.
+   */
+  public async prepareQueuedForRun(processId: number) {
+    this.process = await AnalyzerProcess.query()
+      .where('id', processId)
+      .preload('photos')
+      .firstOrFail()
+
+    const photos = this.process.photos || []
+    await this.process.initialize(
+      photos,
+      this.process.packageId,
+      'adding',
+      this.process.isFastMode,
+      this.process.userId ?? undefined
+    )
+    this.originalMode = 'adding'
+    return this.process
+  }
+
+  /**
+   * Ejecuta runAll y libera el slot del pool al terminar (incluye auto-retries).
+   * Mantiene vivo un heartbeat mientras corre, de modo que el slot no se reclama
+   * por antigüedad: solo se libera al terminar (finally) o si la instancia muere
+   * y el heartbeat deja de latir.
+   * Pensado para usarse fire-and-forget tras adquirir un slot.
+   */
+  public async runAllAndReleasePool() {
+    const processId = this.process?.id
+    const heartbeat = processId ? AnalyzerPoolService.startHeartbeat(processId) : null
+    try {
+      return await this.runAll()
+    } finally {
+      AnalyzerPoolService.stopHeartbeat(heartbeat)
+      if (processId) {
+        await AnalyzerPoolService.release(processId)
+      }
+    }
   }
 
   /**
@@ -216,6 +276,8 @@ export default class AnalyzerProcessRunner {
     for (const stage of stages) {
       try {
         await this.executeStage(stage, level)
+        // delay forzado para pruebas
+        await this.sleep(60000 * 2)
       } catch (error) {
         const stageDescription = `stage ${stage.type} (${stage.tasks?.length || 0} items)`
         const errMsg = error instanceof Error ? `${error.message}\n${error.stack}` : String(error)

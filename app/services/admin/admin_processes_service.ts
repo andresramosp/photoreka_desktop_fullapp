@@ -5,6 +5,7 @@ import User from '#models/user'
 import db from '@adonisjs/lucid/services/db'
 import HealthPhotoService from '#services/health_photo_service'
 import AnalyzerProcessRunner from '#services/analyzer_service'
+import AnalyzerPoolService from '#services/analyzer_pool_service'
 import Photo from '#models/photo'
 
 export interface ProcessListItem {
@@ -261,16 +262,14 @@ export default class AdminProcessesService {
     const p = await AnalyzerProcess.find(processId)
     if (!p) return null
 
-    // Only allow retry on non-active processes
+    // Only allow retry on terminal processes
     const terminalStages = ['finished', 'failed']
-    const isStale =
-      !terminalStages.includes(p.currentStage ?? '') && p.updatedAt.diffNow('minutes').minutes < -10
     const isTerminal = terminalStages.includes(p.currentStage ?? '')
 
-    if (!isTerminal && !isStale) {
+    if (!isTerminal) {
       return {
         processId: p.id,
-        error: 'Process appears to still be running. Wait or check if the API restarted.',
+        error: 'Process is still running. Wait for it to finish or check if the API restarted.',
       }
     }
 
@@ -296,8 +295,43 @@ export default class AdminProcessesService {
       await runner['process'].save()
     }
 
+    // Admin manual action: bypass the pool (force a slot) and release on finish
+    await AnalyzerPoolService.forceAcquire(p.id)
+
     // Fire and forget
-    runner.runAll().catch(() => {})
+    runner.runAllAndReleasePool().catch(() => {})
+
+    return { processId: p.id }
+  }
+
+  /**
+   * Manually launch a process that was left queued (analyzer pool was full).
+   * Admin action: bypasses the pool capacity (force-acquires a slot).
+   */
+  static async launchQueued(
+    processId: string
+  ): Promise<{ processId: string; error?: string } | null> {
+    const p = await AnalyzerProcess.find(processId)
+    if (!p) return null
+
+    if (p.currentStage !== 'queued') {
+      return { processId: p.id, error: 'Process is not queued' }
+    }
+
+    await p.load('photos')
+    const photos = p.photos || []
+    if (photos.length === 0) {
+      return { processId: p.id, error: 'No photos associated with this process' }
+    }
+
+    const runner = new AnalyzerProcessRunner()
+    await runner.prepareQueuedForRun(Number(p.id))
+
+    // Admin manual action: bypass the pool (force a slot) and release on finish
+    await AnalyzerPoolService.forceAcquire(p.id)
+
+    // Fire and forget
+    runner.runAllAndReleasePool().catch(() => {})
 
     return { processId: p.id }
   }
