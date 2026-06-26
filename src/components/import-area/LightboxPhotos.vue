@@ -137,7 +137,17 @@
         Photo upload and preview area. Click on Analyze Photos to
         <strong>start processing</strong>
       </h3>
+      <button
+        v-show="lightboxPhotos.length > 0"
+        class="time-estimate-trigger"
+        @click="showTimeEstimateDialog = true"
+      >
+        <n-icon :size="11"><TimeOutline /></n-icon>
+        How long will my analysis take?
+      </button>
     </div>
+
+    <EstimatedTimeModal v-model:show="showTimeEstimateDialog" />
 
     <!-- Maintenance Mode Section -->
     <div v-if="isMaintenanceMode" class="maintenance-section">
@@ -584,6 +594,7 @@ import {
   CloudUploadOutline,
   CloseOutline,
   InformationCircleOutline,
+  TimeOutline,
 } from "@vicons/ionicons5";
 import { RocketLaunchOutlined } from "@vicons/material";
 import { BookInformation20Regular } from "@vicons/fluent";
@@ -596,6 +607,7 @@ import PhotosGrid from "../PhotosGrid.vue";
 import DuplicatePhotosDialog from "../DuplicatePhotosDialog.vue";
 import LightroomModal from "../LightroomModal.vue";
 import SafeSearchViolationModal from "../SafeSearchViolationModal.vue";
+import EstimatedTimeModal from "./EstimatedTimeModal.vue";
 
 import { NModal, NCheckbox, NTooltip } from "naive-ui";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
@@ -848,6 +860,7 @@ const fastMode = computed({
   },
 });
 const showAnalyzeDialog = ref(false);
+const showTimeEstimateDialog = ref(false);
 
 // En el check 'preprocessed' queremos ver todas las usables en las tools, por lo que entran
 // las que están en proceso y por tanto preprocessed
@@ -1528,6 +1541,28 @@ defineExpose({
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+/* Time estimate trigger button */
+.time-estimate-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: var(--font-size-sm);
+  color: var(--accent-color);
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s;
+  line-height: 1.4;
+  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.time-estimate-trigger:hover {
+  opacity: 1;
 }
 
 /* First Import State - Onboarding continuation styles */
