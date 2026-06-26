@@ -8,6 +8,7 @@ import DashboardView from "../views/DashboardView.vue";
 import CanvasView from "../views/CanvasView.vue";
 import SearchView from "../views/SearchView.vue";
 import CollectionsView from "../views/CollectionsView.vue";
+import CollectionDetailView from "../views/CollectionDetailView.vue";
 import SeriesView from "../views/SeriesView.vue";
 import ImportAreaView from "../views/ImportAreaView.vue";
 import WorkspaceView from "../views/WorkspaceView.vue";
@@ -213,7 +214,7 @@ const router = createRouter({
     {
       path: "/collections/:id",
       name: "collection-detail",
-      component: CollectionsView,
+      component: CollectionDetailView,
       meta: {
         requiresAuth: true,
       },
