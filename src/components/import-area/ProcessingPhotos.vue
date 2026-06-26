@@ -14,6 +14,13 @@
           >
           <span class="mobile-only">Monitor your photo analysis here.</span>
         </h3>
+        <button
+          class="time-estimate-trigger"
+          @click="showTimeEstimateDialog = true"
+        >
+          <n-icon :size="11"><TimeOutline /></n-icon>
+          How long will my analysis take?
+        </button>
       </div>
       <div v-if="processingJobs.length > 0" class="processing-table-container">
         <div class="processing-table">
@@ -157,6 +164,69 @@
       </div>
     </div>
 
+    <!-- Time Estimate Dialog -->
+    <transition name="backdrop-fade">
+      <div
+        v-if="showTimeEstimateDialog"
+        class="time-estimate-backdrop"
+        @click="showTimeEstimateDialog = false"
+      />
+    </transition>
+    <transition name="time-estimate-pop">
+      <div v-if="showTimeEstimateDialog" class="time-estimate-dialog">
+        <div class="te-header">
+          <div class="te-title-row">
+            <n-icon :size="20" class="te-icon">
+              <TimeOutline />
+            </n-icon>
+            <span class="te-title">Estimated Processing Time</span>
+          </div>
+          <n-button
+            quaternary
+            size="small"
+            @click="showTimeEstimateDialog = false"
+          >
+            <template #icon>
+              <n-icon :size="14"><CloseOutline /></n-icon>
+            </template>
+          </n-button>
+        </div>
+        <div class="te-body">
+          <p>
+            Processing time depends on the number of photos and current server
+            load. These are estimates — actual times may vary during periods of
+            high demand.
+          </p>
+          <div class="te-table">
+            <div class="te-table-header">
+              <span>Batch size</span>
+              <span>Estimated time</span>
+            </div>
+            <div class="te-table-row">
+              <span>Less than 30 photos</span>
+              <span class="te-value">5 – 20 minutes</span>
+            </div>
+            <div class="te-table-row">
+              <span>Up to 100 photos</span>
+              <span class="te-value">1 – 3 hours</span>
+            </div>
+            <div class="te-table-row">
+              <span>Up to 500 photos</span>
+              <span class="te-value">2 – 6 hours</span>
+            </div>
+            <div class="te-table-row">
+              <span>Up to 1,000 photos</span>
+              <span class="te-value">3 – 8 hours</span>
+            </div>
+            <div class="te-table-row">
+              <span>Up to 5,000 photos</span>
+              <span class="te-value">4 – 12 hours</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
+
     <!-- Processing Summary Modal -->
     <ProcessingSummaryModal
       :show="showSummaryModal"
@@ -188,6 +258,7 @@
 import { ref, onMounted, onBeforeUnmount, h, computed } from "vue";
 import { api } from "@/utils/axios";
 import { BookInformation20Regular } from "@vicons/fluent";
+import { CloseOutline, TimeOutline } from "@vicons/ionicons5";
 import { InProgress } from "@vicons/carbon";
 import PhotoCardHub from "../photoCards/PhotoCardHub.vue";
 import PieProgress from "../PieProgress.vue";
@@ -215,6 +286,7 @@ const emit = defineEmits(["navigate-to-tab", "on-add-to-collection"]);
 // Estado del modal de resumen de procesamiento
 const showSummaryModal = ref(false);
 const summaryModalJob = ref(null);
+const showTimeEstimateDialog = ref(false);
 
 // Estado del modal de colecciones
 const showCollectionModal = ref(false);
@@ -633,6 +705,141 @@ function isLastFinishedJob(job) {
 .tab-content {
   /* Inherits from .tab-content-container global class */
 }
+/* Time Estimate trigger button */
+.time-estimate-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: var(--font-size-sm);
+  color: var(--accent-color);
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s;
+  line-height: 1.4;
+  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.time-estimate-trigger:hover {
+  opacity: 1;
+}
+
+/* Time Estimate Dialog */
+.time-estimate-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 200;
+}
+.time-estimate-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 201;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  width: 400px;
+  max-width: 92vw;
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.backdrop-fade-enter-active {
+  transition: opacity 0.18s ease;
+}
+.backdrop-fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+.backdrop-fade-enter-from,
+.backdrop-fade-leave-to {
+  opacity: 0;
+}
+.time-estimate-pop-enter-active {
+  transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.time-estimate-pop-leave-active {
+  transition: all 0.15s ease;
+}
+.time-estimate-pop-enter-from {
+  opacity: 0;
+  transform: translate(-50%, -48%) scale(0.95);
+}
+.time-estimate-pop-leave-to {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.97);
+}
+.te-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+.te-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+.te-icon {
+  color: var(--accent-color);
+  opacity: 0.8;
+}
+.te-title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+.te-body {
+  padding: var(--spacing-lg) var(--spacing-xl);
+  overflow-y: auto;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: var(--line-height-relaxed);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+.te-body p {
+  margin: 0 0 var(--spacing-md) 0;
+}
+.te-table {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+}
+.te-table-header {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px var(--spacing-md);
+  background-color: var(--bg-elevated);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.te-table-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px var(--spacing-md);
+  border-top: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+.te-value {
+  color: var(--info-color);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Responsive text for .import-area-title */
 .mobile-only {
   display: none;
