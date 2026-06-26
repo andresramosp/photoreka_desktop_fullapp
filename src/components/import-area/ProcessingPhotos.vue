@@ -69,7 +69,7 @@
                 <span class="cell-label">Status</span>
                 <n-tag
                   size="small"
-                  :type="job.status === 'finished' ? 'success' : 'warning'"
+                  :type="job.status === 'finished' ? 'success' : 'info'"
                 >
                   <span
                     v-if="job.status === 'processing'"
