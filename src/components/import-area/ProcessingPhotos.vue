@@ -69,18 +69,16 @@
                 <span class="cell-label">Status</span>
                 <n-tag
                   size="small"
-                  class="status-tag element-with-spinner"
+                  class="status-tag"
                   :class="{
                     'status-processing': job.status === 'processing',
                     'status-finished': job.status === 'finished',
                   }"
                 >
-                  <template v-if="job.status === 'processing'">
-                    <n-spin
-                      size="12"
-                      class="spinner-status-badge spinner-small spinner-centered"
-                    />
-                  </template>
+                  <span
+                    v-if="job.status === 'processing'"
+                    class="status-spinner"
+                  />
                   {{ job.status === "processing" ? "Processing" : "Finished" }}
                 </n-tag>
               </div>
@@ -205,13 +203,7 @@ import PhotoCardHub from "../photoCards/PhotoCardHub.vue";
 import PieProgress from "../PieProgress.vue";
 import CollectionModal from "../CollectionModal.vue";
 import ProcessingSummaryModal from "./ProcessingSummaryModal.vue";
-import {
-  NTooltip,
-  NSpin,
-  NButton,
-  useMessage,
-  useNotification,
-} from "naive-ui";
+import { NTooltip, NButton, useMessage, useNotification } from "naive-ui";
 import { usePhotosStore } from "@/stores/photos"; // o donde tengas el store
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useRoute } from "vue-router";
@@ -905,6 +897,29 @@ function isLastFinishedJob(job) {
   background-color: #10b981 !important;
   color: #ffffff !important;
   border-color: #10b981 !important;
+}
+
+.status-tag :deep(.n-tag__content) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-spinner {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: status-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes status-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Responsive */
