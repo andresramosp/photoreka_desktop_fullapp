@@ -42,6 +42,15 @@
 
       <div class="filters-spacer" />
 
+      <n-tag
+        v-if="poolStatus"
+        :bordered="false"
+        size="small"
+        :type="poolStatus.active >= poolStatus.capacity ? 'warning' : 'success'"
+      >
+        Pool {{ poolStatus.active }}/{{ poolStatus.capacity }}
+      </n-tag>
+
       <n-tag :bordered="false" size="small" type="info">
         {{ filteredCount }} process{{ filteredCount !== 1 ? "es" : "" }}
       </n-tag>
@@ -181,13 +190,7 @@
                     formatDate(selectedProcess.updatedAt)
                   }}</span>
                 </div>
-                <div v-if="isProcessStale(selectedProcess)" class="info-row">
-                  <span class="info-label">Status</span>
-                  <n-tag size="tiny" type="error">
-                    ⚠ Process may be dead — last update
-                    {{ minutesAgo(selectedProcess.updatedAt) }} min ago
-                  </n-tag>
-                </div>
+
                 <div
                   v-if="selectedProcess.mode === 'admin_retry'"
                   class="info-row"
@@ -330,6 +333,16 @@
               >
                 Manual Retry
               </n-button>
+              <n-button
+                v-if="selectedProcess.currentStage === 'queued'"
+                size="small"
+                type="success"
+                :disabled="launchLoading"
+                :loading="launchLoading"
+                @click="confirmLaunch"
+              >
+                Launch (bypass pool)
+              </n-button>
             </div>
           </div>
         </n-spin>
@@ -432,6 +445,7 @@ interface ProcessRow {
 
 const STAGE_LABELS: Record<string, string> = {
   init: "Initializing",
+  queued: "Queued",
   vision_tasks: "Vision Tasks",
   clip_embeddings: "Clip Embeddings",
   vision_context_story_accents: "Vision",
@@ -475,6 +489,7 @@ const paginatedProcesses = computed(() => {
 
 const stageOptions = [
   { label: "Initializing", value: "init" },
+  { label: "Queued", value: "queued" },
   { label: "Finished", value: "finished" },
   { label: "Failed", value: "failed" },
   { label: "Vision", value: "vision_context_story_accents" },
@@ -518,12 +533,15 @@ function stageTagType(
   if (!stage) return "default";
   if (stage === "finished") return "success";
   if (stage === "failed") return "error";
+  if (stage === "queued") return "warning";
   if (stage === "init") return "warning";
   return "info";
 }
 
 function isStageActive(stage: string | null): boolean {
-  return !!stage && stage !== "finished" && stage !== "failed";
+  return (
+    !!stage && stage !== "finished" && stage !== "failed" && stage !== "queued"
+  );
 }
 
 function minutesAgo(iso: string | null): number {
@@ -531,14 +549,8 @@ function minutesAgo(iso: string | null): number {
   return Math.round((Date.now() - new Date(iso).getTime()) / 60000);
 }
 
-function isProcessStale(row: ProcessRow): boolean {
-  return isStageActive(row.currentStage) && minutesAgo(row.updatedAt) > 10;
-}
-
 function canRetry(row: ProcessRow): boolean {
-  const terminal =
-    row.currentStage === "finished" || row.currentStage === "failed";
-  return terminal || isProcessStale(row);
+  return row.currentStage === "finished" || row.currentStage === "failed";
 }
 
 function rowClassName(row: ProcessRow) {
@@ -585,18 +597,15 @@ const columns = computed<DataTableColumn<ProcessRow>[]>(() => [
     render(row) {
       const label = formatStageName(row.currentStage);
       const active = isStageActive(row.currentStage);
-      const stale = isProcessStale(row);
-      const tagType = stale ? "error" : stageTagType(row.currentStage);
+      const tagType = stageTagType(row.currentStage);
       return h(
         NTag,
         { size: "tiny", type: tagType },
         {
           default: () =>
-            stale
-              ? [`⚠ ${label}`]
-              : active
-                ? [h("span", { class: "stage-spinner" }), ` ${label}`]
-                : label,
+            active
+              ? [h("span", { class: "stage-spinner" }), ` ${label}`]
+              : label,
         },
       );
     },
@@ -702,6 +711,7 @@ function handleSort(options: DataTableSortState) {
 
 async function silentRefresh() {
   await fetchProcesses(true);
+  await fetchPoolStatus();
   if (selectedProcess.value) {
     try {
       const { data } = await api.get(
@@ -772,6 +782,51 @@ async function launchRetry() {
   }
 }
 
+// Manual launch of a queued process (bypasses the pool)
+const launchLoading = ref(false);
+
+function confirmLaunch() {
+  if (!selectedProcess.value) return;
+  const p = selectedProcess.value;
+  dialog.warning({
+    title: "Confirm Launch",
+    content: `Launch queued Process #${p.id} now? This bypasses the analyzer pool limit.`,
+    positiveText: "Launch",
+    negativeText: "Cancel",
+    onPositiveClick: () => launchQueued(),
+  });
+}
+
+async function launchQueued() {
+  if (!selectedProcess.value) return;
+  launchLoading.value = true;
+  try {
+    const { data } = await api_analyzer.post(
+      `/api/admin/processes/${selectedProcess.value.id}/launch`,
+    );
+    message.success(`Process #${data.processId} launched`);
+    await fetchProcesses(true);
+    await fetchPoolStatus();
+  } catch (err: any) {
+    const msg = err?.response?.data?.message || "Failed to launch process";
+    message.error(msg);
+  } finally {
+    launchLoading.value = false;
+  }
+}
+
+// Analyzer pool status
+const poolStatus = ref<{ active: number; capacity: number } | null>(null);
+
+async function fetchPoolStatus() {
+  try {
+    const { data } = await api.get("/api/admin/processes/pool");
+    poolStatus.value = data.pool;
+  } catch {
+    // silent
+  }
+}
+
 // Photos modal
 const photosModalVisible = ref(false);
 const photosModalLoading = ref(false);
@@ -799,6 +854,7 @@ async function openPhotosModal(row: ProcessRow) {
 
 onMounted(() => {
   fetchProcesses();
+  fetchPoolStatus();
 });
 </script>
 
