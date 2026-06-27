@@ -837,6 +837,16 @@ watch(overallProgress, (newProgress) => {
   }
 });
 
+// When the upload progress section disappears, the grid shifts up inside a
+// fixed-height container, so document.body never resizes and PhotosGrid's
+// ResizeObserver never fires. Dispatching a resize event forces it to
+// recalculate the scroll-area height.
+watch(isAnyOperationInProgress, (inProgress, wasInProgress) => {
+  if (wasInProgress && !inProgress) {
+    nextTick(() => window.dispatchEvent(new Event("resize")));
+  }
+});
+
 // Watcher para mostrar un aviso de éxito cuando se autoriza Google Photos
 watch(
   () => googlePhotos.isAuthorized.value,

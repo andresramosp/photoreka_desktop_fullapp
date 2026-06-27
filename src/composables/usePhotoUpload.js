@@ -316,16 +316,11 @@ export function usePhotoUpload() {
 
       await Promise.all(uploadPromises);
 
-      // // Mostrar resumen de la subida
-      // if (failedUploads.length > 0) {
-      //   message.warning(
-      //     `${photosToUpload.length} photos uploaded successfully. ${failedUploads.length} photos failed to upload.`
-      //   );
-      // } else {
-      //   console.log(
-      //     `✅ All ${photosToUpload.length} photos uploaded successfully`
-      //   );
-      // }
+      // All files are uploaded — hide the progress bar immediately before
+      // running post-processing (fetchUsage, store updates, etc.)
+      isUploading.value = false;
+      totalFiles.value = 0;
+      uploadedCount.value = 0;
 
       // Post-procesamiento común
       await handlePostUpload(photosToUpload);

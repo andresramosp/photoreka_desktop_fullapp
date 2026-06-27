@@ -1781,6 +1781,7 @@ const hasMorePhotos = computed(() => {
 
 let _lastScrollTop = 0;
 let _isProgrammaticScroll = false;
+let _wheelCollapseHandler = null;
 const controlsScrollCollapsed = ref(false);
 
 // Minimum scrollable overflow (px) required before toggling the header on
@@ -1929,6 +1930,34 @@ onMounted(() => {
       scrollAreaRef.value?.addEventListener("scroll", handleScroll, {
         passive: true,
       });
+      // Intercept the wheel event BEFORE the browser scrolls so we can
+      // collapse the panels on the first downward gesture without any photo
+      // movement. Once panels are already collapsed the handler is a no-op and
+      // normal scrolling is unaffected.
+      _wheelCollapseHandler = (e) => {
+        if (e.deltaY > 0 && !controlsScrollCollapsed.value) {
+          const container = scrollAreaRef.value;
+          if (!container) return;
+          const overflow = container.scrollHeight - container.clientHeight;
+          if (overflow > MIN_OVERFLOW_TO_TOGGLE_HEADER) {
+            e.preventDefault();
+            controlsScrollCollapsed.value = true;
+            emit("scroll-direction", { direction: "down", scrollTop: 0 });
+          }
+        } else if (e.deltaY < 0 && controlsScrollCollapsed.value) {
+          // When panels are collapsed and scrollTop is already 0, the browser
+          // fires no "scroll" event on upward wheel (nothing to scroll up to),
+          // so handleScroll never runs. Detect it here instead.
+          const container = scrollAreaRef.value;
+          if (container && container.scrollTop === 0) {
+            controlsScrollCollapsed.value = false;
+            emit("scroll-direction", { direction: "up", scrollTop: 0 });
+          }
+        }
+      };
+      scrollAreaRef.value?.addEventListener("wheel", _wheelCollapseHandler, {
+        passive: false,
+      });
       // Recompute available height whenever anything in the page layout above
       // the grid changes size (filter panels, banners, sibling sections, etc.)
       // without depending on the parent layout. Observing body catches both
@@ -1971,6 +2000,10 @@ const handleResize = () => {
 onUnmounted(() => {
   if (props.scrollable) {
     scrollAreaRef.value?.removeEventListener("scroll", handleScroll);
+    if (_wheelCollapseHandler) {
+      scrollAreaRef.value?.removeEventListener("wheel", _wheelCollapseHandler);
+      _wheelCollapseHandler = null;
+    }
     scrollAreaResizeObserver?.disconnect();
     scrollAreaResizeObserver = null;
   } else {
