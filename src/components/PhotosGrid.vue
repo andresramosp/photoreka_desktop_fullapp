@@ -5,7 +5,7 @@
       v-if="!props.hideControls"
       :basic-sort-active="basicSortActive"
       :photos="props.photos"
-      :scroll-collapsed="false"
+      :scroll-collapsed="controlsScrollCollapsed"
       @filters-change="handleFiltersChange"
       @sorting-change="handleSortingChange"
       @sort-order-change="handleSortOrderChange"
