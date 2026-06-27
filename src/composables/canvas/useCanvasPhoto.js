@@ -26,7 +26,7 @@ export function useCanvasPhoto(stageRef, photos, photoRefs, stageConfig) {
 
     // Encontrar la foto clickeada
     const clickedPhotoIndex = currentPhotos.findIndex(
-      (p) => p.id === clickedPhotoId
+      (p) => p.id === clickedPhotoId,
     );
     if (clickedPhotoIndex === -1) return;
 
@@ -352,7 +352,7 @@ export function useCanvasPhoto(stageRef, photos, photoRefs, stageConfig) {
           // Distancia mínima deseada entre centros (más compacta)
           const minDistance = Math.max(
             (photoA.config.width + photoB.config.width) / 2 + minMargin,
-            (photoA.config.height + photoB.config.height) / 2 + minMargin
+            (photoA.config.height + photoB.config.height) / 2 + minMargin,
           );
 
           if (distance < minDistance && distance > 0) {
@@ -431,10 +431,10 @@ export function useCanvasPhoto(stageRef, photos, photoRefs, stageConfig) {
     event.preventDefault();
 
     const raw = event.dataTransfer.getData("application/json");
-    if (!raw) return;
+    if (!raw) return 0;
 
     const droppedPhotos = JSON.parse(raw);
-    if (!Array.isArray(droppedPhotos) || droppedPhotos.length === 0) return;
+    if (!Array.isArray(droppedPhotos) || droppedPhotos.length === 0) return 0;
 
     const stage = stageRef.value.getStage();
     const containerRect = stage.container().getBoundingClientRect();
@@ -468,6 +468,8 @@ export function useCanvasPhoto(stageRef, photos, photoRefs, stageConfig) {
       canvasStore.addPhotos([photo]);
       removePhotoFromToolbar(photo.id);
     });
+
+    return droppedPhotos.length;
   }
 
   return {
