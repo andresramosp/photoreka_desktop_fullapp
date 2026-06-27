@@ -1050,15 +1050,25 @@ const handleDragEnd = async (photo, event, autoAlign) => {
 
 // Event handlers
 
-function handlePhotoDropAndRemove(event) {
-  const droppedCount = handlePhotoDrop(
+async function handlePhotoDropAndRemove(event) {
+  const droppedCount = await handlePhotoDrop(
     event,
     relatedPhotosToolbarRef.value.removePhotoFromList,
   );
   if (droppedCount > 0) {
-    void triggerAutoSave();
+    await triggerAutoSave();
   }
 }
+
+const handleTouchDrop = async (e) => {
+  const droppedCount = await handlePhotoDrop(
+    e.detail,
+    relatedPhotosToolbarRef.value.removePhotoFromList,
+  );
+  if (droppedCount > 0) {
+    await triggerAutoSave();
+  }
+};
 
 async function handleAddPhotos(photoIds) {
   // Fetch todas las fotos necesarias en paralelo
@@ -1883,15 +1893,7 @@ onMounted(async () => {
   // Add touch drop support
   const canvasContainerEl = canvasContainer.value;
   if (canvasContainerEl) {
-    canvasContainerEl.addEventListener("touchDrop", (e) => {
-      const droppedCount = handlePhotoDrop(
-        e.detail,
-        relatedPhotosToolbarRef.value.removePhotoFromList,
-      );
-      if (droppedCount > 0) {
-        void triggerAutoSave();
-      }
-    });
+    canvasContainerEl.addEventListener("touchDrop", handleTouchDrop);
   }
 
   updateStageOffset();
@@ -2064,7 +2066,7 @@ onUnmounted(() => {
   // Clean up touch drop listener
   const canvasContainerEl = canvasContainer.value;
   if (canvasContainerEl) {
-    canvasContainerEl.removeEventListener("touchDrop", handlePhotoDrop);
+    canvasContainerEl.removeEventListener("touchDrop", handleTouchDrop);
   }
 
   // No glow interval cleanup needed since we're not using animations
