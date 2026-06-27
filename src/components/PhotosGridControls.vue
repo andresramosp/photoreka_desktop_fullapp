@@ -38,174 +38,174 @@
         </n-icon>
       </div>
       <!-- Filters Collapsible Content -->
-      <Transition name="slide-down">
-        <div
-          v-show="isFiltersExpanded"
-          class="filter-controls-tab-container filters-expanded-content"
+      <!-- <Transition name="slide-down"> -->
+      <div
+        v-show="isFiltersExpanded"
+        class="filter-controls-tab-container filters-expanded-content"
+      >
+        <n-tabs
+          v-model:value="activeFiltersTab"
+          type="line"
+          size="small"
+          class="filters-tabs"
+          :theme-overrides="{ tabGapSmallLine: '15px' }"
+          @click.stop
         >
-          <n-tabs
-            v-model:value="activeFiltersTab"
-            type="line"
-            size="small"
-            class="filters-tabs"
-            :theme-overrides="{ tabGapSmallLine: '15px' }"
-            @click.stop
-          >
-            <!-- Tab 1: Basic Filters -->
-            <n-tab-pane name="basic" display-directive="show">
-              <template #tab>
-                <n-icon
-                  size="13"
-                  style="margin-right: 4px; vertical-align: middle"
-                  ><Filter20Regular
-                /></n-icon>
-                <span class="tab-label">Basic filters</span>
-              </template>
-              <VisualFiltersPanel
-                :visual-aspects="selectedFilters"
-                :score-filters="artisticScoreFilters"
-                :show-section-labels="false"
-                @update:visual-aspects="handleVisualAspectsPanelChange"
-                @update:score-filters="handleScoreFiltersPanelChange"
+          <!-- Tab 1: Basic Filters -->
+          <n-tab-pane name="basic" display-directive="show">
+            <template #tab>
+              <n-icon
+                size="13"
+                style="margin-right: 4px; vertical-align: middle"
+                ><Filter20Regular
+              /></n-icon>
+              <span class="tab-label">Basic filters</span>
+            </template>
+            <VisualFiltersPanel
+              :visual-aspects="selectedFilters"
+              :score-filters="artisticScoreFilters"
+              :show-section-labels="false"
+              @update:visual-aspects="handleVisualAspectsPanelChange"
+              @update:score-filters="handleScoreFiltersPanelChange"
+            />
+          </n-tab-pane>
+
+          <!-- Tab 2: Advanced Filters -->
+          <n-tab-pane name="advanced" display-directive="show">
+            <template #tab>
+              <n-icon
+                size="13"
+                style="margin-right: 4px; vertical-align: middle"
+                ><Settings20Regular
+              /></n-icon>
+              <span class="tab-label">Advanced filters</span>
+              <span
+                v-if="hasActiveMoreFilters || hasActiveMetadataFilters"
+                class="tab-active-dot"
               />
-            </n-tab-pane>
-
-            <!-- Tab 2: Advanced Filters -->
-            <n-tab-pane name="advanced" display-directive="show">
-              <template #tab>
-                <n-icon
-                  size="13"
-                  style="margin-right: 4px; vertical-align: middle"
-                  ><Settings20Regular
-                /></n-icon>
-                <span class="tab-label">Advanced filters</span>
-                <span
-                  v-if="hasActiveMoreFilters || hasActiveMetadataFilters"
-                  class="tab-active-dot"
-                />
-              </template>
-              <div class="advanced-filters-content">
-                <!-- Date Range Filter -->
-                <div class="date-range-wrapper">
-                  <TimeRangeFilter
-                    ref="timeRangeFilterRef"
-                    :photos="photos"
-                    @time-range-change="handleTimeRangeChange"
-                    :histogram-height="'30px'"
-                    :show-title="true"
-                    :marksCount="5"
-                  />
-                </div>
-                <!-- Tags Filter Row -->
-                <div class="tags-filter-row">
-                  <div class="filter-wrapper">
-                    <div class="filter-header-row">
-                      <div style="display: flex; align-items: center; gap: 6px">
-                        <label class="filter-label">Include tags</label>
-                        <n-tooltip trigger="hover" placement="top">
-                          <template #trigger>
-                            <n-icon
-                              size="14"
-                              style="
-                                color: var(--text-secondary);
-                                cursor: help;
-                                opacity: 0.7;
-                              "
-                            >
-                              <Info16Regular />
-                            </n-icon>
-                          </template>
-                          Exact tag matching only. Use Search tool for semantic
-                          queries.
-                        </n-tooltip>
-                      </div>
-                      <div class="tags-mode-switch-wrapper">
-                        <span
-                          class="tag-mode-label"
-                          :class="{ active: !isOrMode }"
-                        >
-                          All
-                        </span>
-                        <n-switch
-                          v-model:value="isOrMode"
-                          size="small"
-                          class="tags-mode-switch"
-                        />
-                        <span
-                          class="tag-mode-label"
-                          :class="{ active: isOrMode }"
-                        >
-                          Any
-                        </span>
-                      </div>
-                    </div>
-                    <n-select
-                      v-model:value="includedTags"
-                      v-model:show="includedTagsDropdownShow"
-                      multiple
-                      filterable
-                      clearable
-                      remote
-                      placeholder="Include tags..."
-                      :options="includedTagSuggestionsFormatted"
-                      :filter="() => true"
-                      :clear-filter-after-select="true"
-                      :max-tag-count="3"
-                      :ignore-composition="false"
-                      size="small"
-                      @search="handleIncludedTagSearch"
-                      @update:value="handleIncludedTagsUpdate"
-                      class="compact-select"
-                    >
-                      <template #empty>
-                        <div style="padding: 8px; color: #888; font-size: 11px">
-                          Start typing to search tags...
-                        </div>
-                      </template>
-                    </n-select>
-                  </div>
-
-                  <div class="filter-wrapper">
-                    <label class="filter-label">Exclude tags</label>
-                    <n-select
-                      v-model:value="excludedTags"
-                      v-model:show="excludedTagsDropdownShow"
-                      multiple
-                      filterable
-                      clearable
-                      remote
-                      placeholder="Exclude tags..."
-                      :options="excludedTagSuggestionsFormatted"
-                      :filter="() => true"
-                      :clear-filter-after-select="true"
-                      :max-tag-count="3"
-                      :ignore-composition="false"
-                      size="small"
-                      @search="handleExcludedTagSearch"
-                      @update:value="handleExcludedTagsUpdate"
-                      class="compact-select"
-                    >
-                      <template #empty>
-                        <div style="padding: 8px; color: #888; font-size: 11px">
-                          Start typing to search tags...
-                        </div>
-                      </template>
-                    </n-select>
-                  </div>
-                </div>
-
-                <!-- Filename Search + Metadata Filters Row -->
-                <MetadataFiltersPanel
+            </template>
+            <div class="advanced-filters-content">
+              <!-- Date Range Filter -->
+              <div class="date-range-wrapper">
+                <TimeRangeFilter
+                  ref="timeRangeFilterRef"
                   :photos="photos"
-                  v-model="metadataFilters"
-                  :filename-search="filenameSearch"
-                  @update:filename-search="handleFilenameSearchChange"
+                  @time-range-change="handleTimeRangeChange"
+                  :histogram-height="'30px'"
+                  :show-title="true"
+                  :marksCount="5"
                 />
               </div>
-            </n-tab-pane>
-          </n-tabs>
-        </div>
-      </Transition>
+              <!-- Tags Filter Row -->
+              <div class="tags-filter-row">
+                <div class="filter-wrapper">
+                  <div class="filter-header-row">
+                    <div style="display: flex; align-items: center; gap: 6px">
+                      <label class="filter-label">Include tags</label>
+                      <n-tooltip trigger="hover" placement="top">
+                        <template #trigger>
+                          <n-icon
+                            size="14"
+                            style="
+                              color: var(--text-secondary);
+                              cursor: help;
+                              opacity: 0.7;
+                            "
+                          >
+                            <Info16Regular />
+                          </n-icon>
+                        </template>
+                        Exact tag matching only. Use Search tool for semantic
+                        queries.
+                      </n-tooltip>
+                    </div>
+                    <div class="tags-mode-switch-wrapper">
+                      <span
+                        class="tag-mode-label"
+                        :class="{ active: !isOrMode }"
+                      >
+                        All
+                      </span>
+                      <n-switch
+                        v-model:value="isOrMode"
+                        size="small"
+                        class="tags-mode-switch"
+                      />
+                      <span
+                        class="tag-mode-label"
+                        :class="{ active: isOrMode }"
+                      >
+                        Any
+                      </span>
+                    </div>
+                  </div>
+                  <n-select
+                    v-model:value="includedTags"
+                    v-model:show="includedTagsDropdownShow"
+                    multiple
+                    filterable
+                    clearable
+                    remote
+                    placeholder="Include tags..."
+                    :options="includedTagSuggestionsFormatted"
+                    :filter="() => true"
+                    :clear-filter-after-select="true"
+                    :max-tag-count="3"
+                    :ignore-composition="false"
+                    size="small"
+                    @search="handleIncludedTagSearch"
+                    @update:value="handleIncludedTagsUpdate"
+                    class="compact-select"
+                  >
+                    <template #empty>
+                      <div style="padding: 8px; color: #888; font-size: 11px">
+                        Start typing to search tags...
+                      </div>
+                    </template>
+                  </n-select>
+                </div>
+
+                <div class="filter-wrapper">
+                  <label class="filter-label">Exclude tags</label>
+                  <n-select
+                    v-model:value="excludedTags"
+                    v-model:show="excludedTagsDropdownShow"
+                    multiple
+                    filterable
+                    clearable
+                    remote
+                    placeholder="Exclude tags..."
+                    :options="excludedTagSuggestionsFormatted"
+                    :filter="() => true"
+                    :clear-filter-after-select="true"
+                    :max-tag-count="3"
+                    :ignore-composition="false"
+                    size="small"
+                    @search="handleExcludedTagSearch"
+                    @update:value="handleExcludedTagsUpdate"
+                    class="compact-select"
+                  >
+                    <template #empty>
+                      <div style="padding: 8px; color: #888; font-size: 11px">
+                        Start typing to search tags...
+                      </div>
+                    </template>
+                  </n-select>
+                </div>
+              </div>
+
+              <!-- Filename Search + Metadata Filters Row -->
+              <MetadataFiltersPanel
+                :photos="photos"
+                v-model="metadataFilters"
+                :filename-search="filenameSearch"
+                @update:filename-search="handleFilenameSearchChange"
+              />
+            </div>
+          </n-tab-pane>
+        </n-tabs>
+      </div>
+      <!-- </Transition> -->
     </div>
 
     <!-- Sorting Section -->
@@ -282,110 +282,110 @@
           </svg>
         </n-icon>
       </div>
-      <Transition name="slide-down">
-        <div
-          v-if="isSortingExpanded"
-          class="sorting-wrapper filter-controls-tab-container"
+      <!-- <Transition name="slide-down"> -->
+      <div
+        v-if="isSortingExpanded"
+        class="sorting-wrapper filter-controls-tab-container"
+      >
+        <n-tabs
+          v-model:value="sortingType"
+          type="line"
+          size="small"
+          class="sorting-tabs"
+          :theme-overrides="{ tabGapSmallLine: '15px' }"
+          @update:value="handleSortingTypeChange"
+          @click.stop
         >
-          <n-tabs
-            v-model:value="sortingType"
-            type="line"
-            size="small"
-            class="sorting-tabs"
-            :theme-overrides="{ tabGapSmallLine: '15px' }"
-            @update:value="handleSortingTypeChange"
-            @click.stop
-          >
-            <!-- Tab: Criteria -->
-            <n-tab-pane name="criteria" display-directive="show">
-              <template #tab>
-                <n-icon
-                  size="13"
-                  style="margin-right: 4px; vertical-align: middle"
-                  ><Star20Regular
-                /></n-icon>
-                <span class="tab-label">Criteria</span>
-              </template>
-              <div class="filter-controls-criteria-row">
-                <template
-                  v-for="[groupKey, group] in Object.entries(artisticScores)"
-                  :key="groupKey"
+          <!-- Tab: Criteria -->
+          <n-tab-pane name="criteria" display-directive="show">
+            <template #tab>
+              <n-icon
+                size="13"
+                style="margin-right: 4px; vertical-align: middle"
+                ><Star20Regular
+              /></n-icon>
+              <span class="tab-label">Criteria</span>
+            </template>
+            <div class="filter-controls-criteria-row">
+              <template
+                v-for="[groupKey, group] in Object.entries(artisticScores)"
+                :key="groupKey"
+              >
+                <n-button
+                  v-for="criterion in group.criteria"
+                  :key="criterion.value"
+                  secondary
+                  :type="
+                    selectedCriteria.includes(criterion.value)
+                      ? groupKey === 'fundamentals'
+                        ? 'primary'
+                        : 'warning'
+                      : 'default'
+                  "
+                  size="small"
+                  @click="toggleCriterion(criterion.value)"
+                  class="filter-controls-criterion-button"
                 >
+                  <template #icon>
+                    <n-icon>
+                      <component :is="criterionIcons[criterion.value]" />
+                    </n-icon>
+                  </template>
+                  {{ formatCriterionName(criterion.value) }}
+                </n-button>
+              </template>
+            </div>
+          </n-tab-pane>
+
+          <!-- Tab: Genre -->
+          <n-tab-pane name="genre" display-directive="show">
+            <template #tab>
+              <n-icon
+                size="13"
+                style="margin-right: 4px; vertical-align: middle"
+                ><Tag20Regular
+              /></n-icon>
+              <span class="tab-label">Genre</span>
+            </template>
+            <div class="genre-row">
+              <n-tooltip
+                v-for="genre in genres"
+                :key="genre.value"
+                trigger="hover"
+                placement="bottom"
+                :show-arrow="true"
+                delay="1200"
+              >
+                <template #trigger>
                   <n-button
-                    v-for="criterion in group.criteria"
-                    :key="criterion.value"
-                    secondary
                     :type="
-                      selectedCriteria.includes(criterion.value)
-                        ? groupKey === 'fundamentals'
-                          ? 'primary'
-                          : 'warning'
-                        : 'default'
+                      selectedGenre === genre.value ? 'primary' : 'default'
                     "
                     size="small"
-                    @click="toggleCriterion(criterion.value)"
-                    class="filter-controls-criterion-button"
+                    secondary
+                    @click="handleGenreSelect(genre.value)"
+                    class="genre-button"
+                    :class="{ 'custom-button': genre.value === 'custom' }"
                   >
                     <template #icon>
                       <n-icon>
-                        <component :is="criterionIcons[criterion.value]" />
+                        <component :is="genre.icon" />
                       </n-icon>
                     </template>
-                    {{ formatCriterionName(criterion.value) }}
+                    {{ genre.label }}
                   </n-button>
                 </template>
-              </div>
-            </n-tab-pane>
-
-            <!-- Tab: Genre -->
-            <n-tab-pane name="genre" display-directive="show">
-              <template #tab>
-                <n-icon
-                  size="13"
-                  style="margin-right: 4px; vertical-align: middle"
-                  ><Tag20Regular
-                /></n-icon>
-                <span class="tab-label">Genre</span>
-              </template>
-              <div class="genre-row">
-                <n-tooltip
-                  v-for="genre in genres"
-                  :key="genre.value"
-                  trigger="hover"
-                  placement="bottom"
-                  :show-arrow="true"
-                  delay="1200"
-                >
-                  <template #trigger>
-                    <n-button
-                      :type="
-                        selectedGenre === genre.value ? 'primary' : 'default'
-                      "
-                      size="small"
-                      secondary
-                      @click="handleGenreSelect(genre.value)"
-                      class="genre-button"
-                      :class="{ 'custom-button': genre.value === 'custom' }"
-                    >
-                      <template #icon>
-                        <n-icon>
-                          <component :is="genre.icon" />
-                        </n-icon>
-                      </template>
-                      {{ genre.label }}
-                    </n-button>
-                  </template>
-                  <div
-                    v-if="genre.value !== 'custom'"
-                    v-html="formatGenreTooltip(genre.value)"
-                  ></div>
-                  <div v-else>Customize your own scoring weights</div>
-                </n-tooltip>
-              </div>
-            </n-tab-pane>
-          </n-tabs>
-        </div>
-      </Transition>
+                <div
+                  v-if="genre.value !== 'custom'"
+                  v-html="formatGenreTooltip(genre.value)"
+                ></div>
+                <div v-else>Customize your own scoring weights</div>
+              </n-tooltip>
+            </div>
+          </n-tab-pane>
+        </n-tabs>
+      </div>
+      <!-- </Transition> -->
     </div>
 
     <!-- Custom Weights Modal -->

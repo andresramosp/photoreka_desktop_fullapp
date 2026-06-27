@@ -138,7 +138,7 @@
         <strong>start processing</strong>
       </h3>
       <button
-        v-show="lightboxPhotos.length > 0"
+        v-show="lightboxPhotos.length > 0 && !isMobile"
         class="time-estimate-trigger"
         @click="showTimeEstimateDialog = true"
       >
@@ -589,6 +589,7 @@ import { usePhotoUpload } from "@/composables/usePhotoUpload.js";
 import { useWarmUp } from "@/composables/useWarmUp.js";
 import { useGooglePhotos } from "@/composables/useGooglePhotos.js";
 import { useDropbox } from "@/composables/useDropbox.js";
+import { useIsMobile } from "@/composables/useIsMobile.js";
 import {
   FolderOpen,
   CloudUploadOutline,
@@ -635,6 +636,7 @@ const message = useMessage();
 const googlePhotos = useGooglePhotos();
 // Dropbox composable
 const dropbox = useDropbox();
+const { isMobile } = useIsMobile();
 const picaInstance = pica();
 const limit = pLimit(10);
 

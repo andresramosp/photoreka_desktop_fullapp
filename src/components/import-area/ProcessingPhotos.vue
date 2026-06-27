@@ -703,6 +703,10 @@ function isLastFinishedJob(job) {
 /* Processing Table */
 .processing-table-container {
   margin-bottom: 32px;
+  max-height: min(62vh, 720px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
 }
 
 .processing-table {
@@ -910,6 +914,11 @@ function isLastFinishedJob(job) {
     border-radius: 12px;
     border: 1px solid var(--border-color);
     margin-bottom: 12px;
+  }
+
+  .processing-table-container {
+    max-height: 58vh;
+    padding-right: 0;
   }
 
   .processing-row:last-child {

@@ -14,53 +14,40 @@
     </div>
 
     <!-- Tabs Section -->
-    <div class="tabs-container">
-      <div class="tab-navigation">
-        <button
-          class="tab-button"
-          :class="{ active: activeTab === 'upload' }"
-          @click="setActiveTab('upload')"
-        >
-          <div class="tab-title">
+    <n-tabs
+      :value="activeTab"
+      type="line"
+      class="import-tabs"
+      @update:value="setActiveTab"
+    >
+      <n-tab-pane name="upload" display-directive="show">
+        <template #tab>
+          <span class="tab-title">
             <n-icon size="18" :color="'var(--primary-color)'">
               <CloudUploadOutline />
             </n-icon>
             Lightbox
-          </div>
-        </button>
-        <button
-          class="tab-button"
-          :class="{ active: activeTab === 'processing' }"
-          @click="setActiveTab('processing')"
-        >
-          <div class="tab-title">
-            <n-icon>
-              <InProgress color="var(--primary-color)" />
+          </span>
+        </template>
+        <LightboxPhotos
+          ref="lightboxRef"
+          @on-analyze="analyze"
+          @selection-change="handleLightboxSelectionChange"
+          @duplicates-filter-change="handleDuplicatesFilterChange"
+        />
+      </n-tab-pane>
+      <n-tab-pane name="processing" display-directive="show">
+        <template #tab>
+          <span class="tab-title">
+            <n-icon size="18" :color="'var(--primary-color)'">
+              <InProgress />
             </n-icon>
             Analyses
-          </div>
-        </button>
-      </div>
-      <div class="tab-content-container">
-        <KeepAlive>
-          <LightboxPhotos
-            ref="lightboxRef"
-            v-show="activeTab === 'upload'"
-            key="lightbox-photos"
-            @on-analyze="analyze"
-            @selection-change="handleLightboxSelectionChange"
-            @duplicates-filter-change="handleDuplicatesFilterChange"
-          />
-        </KeepAlive>
-        <KeepAlive>
-          <ProcessingPhotos
-            v-show="activeTab === 'processing'"
-            key="processing-photos"
-            @navigate-to-tab="setActiveTab"
-          />
-        </KeepAlive>
-      </div>
-    </div>
+          </span>
+        </template>
+        <ProcessingPhotos @navigate-to-tab="setActiveTab" />
+      </n-tab-pane>
+    </n-tabs>
 
     <!-- Floating Process Photos Button -->
     <FloatingProcessPhotosButton
@@ -75,7 +62,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, computed, KeepAlive } from "vue";
+import { ref, onMounted, watch, computed } from "vue";
 
 defineOptions({
   name: "ImportAreaView",
@@ -291,27 +278,20 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: var(--spacing-2xl);
   gap: var(--spacing-2xl);
+
+  margin-bottom: var(--spacing-md);
 }
 
-/* Tabs Section */
-.tabs-container {
-  background-color: var(--bg-container);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
+/* Tabs Section — Naive UI n-tabs overrides */
+.import-tabs {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-/* Custom Tab Navigation */
-.tab-navigation {
-  display: flex;
   background-color: var(--bg-container);
-  padding: var(--spacing-sm);
-  gap: var(--spacing-xs);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
 }
 
 .tab-title {
@@ -321,46 +301,54 @@ onMounted(() => {
   align-items: center;
 }
 
-.tab-button {
-  flex: 1;
-  padding: var(--spacing-md) var(--spacing-2xl);
-  background-color: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
+:deep(.n-tabs-nav) {
+  background-color: var(--bg-container);
+  padding: 0 var(--spacing-sm);
+}
+
+:deep(.n-tabs-tab) {
   color: var(--text-secondary);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium);
-  cursor: pointer;
+  padding: var(--spacing-md) var(--spacing-xl);
   transition: var(--transition-fast);
-  text-align: center;
 }
 
-.tab-button:hover {
-  background-color: var(--bg-surface);
+:deep(.n-tabs-tab:hover) {
   color: var(--text-primary);
 }
 
-.tab-button.active {
-  background-color: var(--bg-surface);
-  color: var(--text-primary);
+:deep(.n-tabs-tab--active) {
+  color: var(--text-primary) !important;
 }
 
-/* Tab Content Container */
-.tab-content-container {
-  background-color: var(--bg-container);
+:deep(.n-tabs-bar) {
+  background-color: var(--primary-color) !important;
+}
+
+:deep(.n-tabs-pane-wrapper) {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.n-tab-pane) {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding: 0 !important;
+  height: 100%;
 }
 
 .tab-content {
   padding: var(--spacing-2xl);
-  background-color: var(--bg-container);
+  background-color: var(--bg-body);
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  overflow-y: hidden;
 }
 
 @media (max-width: 768px) {
@@ -615,26 +603,22 @@ onMounted(() => {
   }
 
   /* Tabs responsive - scrollable on mobile */
-  .tab-navigation {
+  :deep(.n-tabs-nav) {
     overflow-x: auto;
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE/Edge */
-    padding-bottom: 2px; /* Prevent cut-off from scroll */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
 
-  .tab-navigation::-webkit-scrollbar {
-    display: none; /* Chrome/Safari */
+  :deep(.n-tabs-nav)::-webkit-scrollbar {
+    display: none;
   }
 
-  .tab-button {
-    flex: 1 1 0%;
-    width: 100%;
-    padding: var(--spacing-sm) var(--spacing-lg);
-    font-size: var(--font-size-base);
+  :deep(.n-tabs-tab) {
     white-space: nowrap;
     min-width: 0;
+    padding: var(--spacing-sm) var(--spacing-lg);
   }
 
   .tab-title {
@@ -681,9 +665,9 @@ onMounted(() => {
     margin-bottom: var(--spacing-lg);
   }
 
-  .tab-button {
+  :deep(.n-tabs-tab) {
     padding: var(--spacing-sm) var(--spacing-md);
-    font-size: var(--font-size-base); /* 14px - legible on small screens */
+    font-size: var(--font-size-base);
   }
 
   .tab-title {

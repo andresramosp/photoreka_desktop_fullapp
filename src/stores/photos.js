@@ -236,6 +236,17 @@ export const usePhotosStore = defineStore("photos", {
       }
     },
 
+    clearDuplicateFlags(photoIds = null) {
+      if (!Array.isArray(this.photos)) return;
+      for (const photo of this.photos) {
+        if (photoIds && !photoIds.includes(photo.id)) continue;
+        photo.isExactDuplicate = false;
+        photo.isAlreadyAnalyzed = false;
+        photo.exactDuplicates = [];
+        photo.alreadyAnalyzedIds = [];
+      }
+    },
+
     async fetchPhoto(photoId) {
       try {
         const { data: photo } = await api.get(`/api/catalog/${photoId}`);

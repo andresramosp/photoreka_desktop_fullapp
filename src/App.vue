@@ -66,7 +66,7 @@
               style="height: 100vh"
               class="app-layout"
               :style="{
-                '--total-header-offset': showDashboardHeader ? '112px' : '48px',
+                '--total-header-offset': showDashboardHeader ? '90px' : '48px',
               }"
             >
               <DashboardSidebar />

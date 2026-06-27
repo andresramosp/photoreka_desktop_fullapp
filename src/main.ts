@@ -36,6 +36,8 @@ import {
   NDialogProvider,
   NSlider,
   NTooltip,
+  NTabs,
+  NTabPane,
 } from "naive-ui";
 
 import App from "./App.vue";
@@ -131,6 +133,8 @@ const naive = create({
     NDialogProvider,
     NSlider,
     NTooltip,
+    NTabs,
+    NTabPane,
   ],
 });
 

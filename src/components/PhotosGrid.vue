@@ -59,6 +59,17 @@
             </n-button>
           </n-dropdown>
 
+          <!-- Exit duplicate review mode (circular back arrow, right after Check duplicates) -->
+          <n-button
+            v-if="duplicatesReviewed && hasDuplicates"
+            size="small"
+            text
+            @click="resetDuplicateState"
+            title="Exit duplicate review"
+          >
+            <n-icon size="20"><ArrowUndoCircleOutline /></n-icon>
+          </n-button>
+
           <!-- Duplicates filter (only show if duplicates were reviewed and found) -->
           <div
             v-if="duplicatesReviewed && hasDuplicates"
@@ -112,8 +123,8 @@
           </template>
         </div>
 
-        <!-- Extra controls slot (e.g. upload buttons from parent) -->
-        <slot name="row1-extra" />
+        <!-- Extra controls slot (hidden during duplicate review to avoid layout overflow) -->
+        <slot v-if="!duplicatesReviewed" name="row1-extra" />
       </div>
 
       <!-- Row 2: Columns + Sort (Desktop) -->
@@ -629,6 +640,7 @@ import {
   FingerPrintOutline,
   EyeOutline,
   CloudOutline,
+  ArrowUndoCircleOutline,
 } from "@vicons/ionicons5";
 import { SquareOutline } from "@vicons/ionicons5";
 import { useRouter } from "vue-router";
@@ -1243,6 +1255,8 @@ const handleLightboxCleanSelect = (key) => {
 
 // Helper to reset duplicate state after bulk delete
 const resetDuplicateState = () => {
+  const photoIds = props.photos.map((p) => p.id);
+  photosStore.clearDuplicateFlags(photoIds);
   duplicatesReviewed.value = false;
   hasDuplicates.value = false;
   filterDuplicates.value = "all";
