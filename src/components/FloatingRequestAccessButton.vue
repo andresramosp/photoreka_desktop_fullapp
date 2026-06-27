@@ -67,7 +67,11 @@ const shouldShow = computed(() => {
 
 // Manejar click del botón
 const handleClick = () => {
-  showDialog.value = true;
+  // desloguear primero de demo y luego
+  // abrir pestaña nueva a www.photoreka.com/auth
+  userStore.logout();
+  window.open("https://app.photoreka.com/auth");
+  // showDialog.value = true;
 };
 
 onMounted(() => {
