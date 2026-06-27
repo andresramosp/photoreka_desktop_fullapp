@@ -354,6 +354,7 @@ onMounted(() => {
 @media (max-width: 768px) {
   .tab-content {
     padding: var(--spacing-xl);
+    overflow-y: auto;
   }
 }
 
