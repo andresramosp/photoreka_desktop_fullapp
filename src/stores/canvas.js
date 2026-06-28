@@ -149,6 +149,15 @@ async function createPhoto(
       dims = await getImageDimensions(backendPhoto.thumbnailUrl);
     }
 
+    const dimsAreValid =
+      Number.isFinite(dims?.width) &&
+      Number.isFinite(dims?.height) &&
+      dims.width > 0 &&
+      dims.height > 0;
+    if (!dimsAreValid) {
+      throw new Error("Invalid image dimensions");
+    }
+
     // Escalado adaptive: ajusta el tamaño máximo a los valores base, manteniendo el aspect ratio
     const maxW = HORIZONTAL_PHOTO_WIDTH;
     const maxH = VERTICAL_PHOTO_HEIGHT;
@@ -170,8 +179,20 @@ async function createPhoto(
         height = width / aspectRatio;
       }
     }
+
+    if (
+      !Number.isFinite(width) ||
+      !Number.isFinite(height) ||
+      width <= 0 ||
+      height <= 0
+    ) {
+      width = HORIZONTAL_PHOTO_WIDTH;
+      height = HORIZONTAL_PHOTO_HEIGHT;
+    }
   } catch (e) {
     // Si falla, usar horizontal por defecto
+    width = HORIZONTAL_PHOTO_WIDTH;
+    height = HORIZONTAL_PHOTO_HEIGHT;
   }
 
   return {

@@ -94,7 +94,12 @@
 
               <!-- Imagen -->
               <v-image
-                v-if="!photo.imageBroken && photo.image"
+                v-if="
+                  !photo.imageBroken &&
+                  photo.image &&
+                  photo.config.width > 0 &&
+                  photo.config.height > 0
+                "
                 :config="{
                   x: 0,
                   y: 0,
@@ -1805,6 +1810,13 @@ watch(
 
       img.onload = () => {
         _pendingImageLoads.delete(photo.id);
+        if (img.naturalWidth <= 0 || img.naturalHeight <= 0) {
+          photo.imageBroken = true;
+          photo.image = null;
+          const stage = stageRef.value?.getStage();
+          if (stage) stage.batchDraw();
+          return;
+        }
         photo.imageBroken = false;
         // Only assign after successful load — prevents Konva from drawing a broken/pending image
         photo.image = img;
