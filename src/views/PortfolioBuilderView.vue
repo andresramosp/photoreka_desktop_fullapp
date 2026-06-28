@@ -747,9 +747,7 @@ const createManualPortfolio = async () => {
       setId: createSetParentId.value,
     });
     showManualDialog.value = false;
-    message.success(
-      `Portfolio "${manualForm.value.name.trim()}" created successfully`,
-    );
+
     manualForm.value = { name: "", description: "" };
     await Promise.all([store.fetchBuilds(), store.fetchBuildSets()]);
     router.push({ name: "portfolio-detail", params: { id: buildId } });
@@ -795,7 +793,7 @@ const createBuildSet = async () => {
       description: setForm.value.description,
       parentSetId: createSetParentId.value,
     });
-    message.success(`Set "${setForm.value.name}" created successfully`);
+
     setForm.value = { name: "", description: "" };
     showSetDialog.value = false;
   } catch (error) {
@@ -981,7 +979,6 @@ watch(
 @import "@/assets/shared-card-styles.scss";
 
 .portfolio-builder-view {
-  padding: var(--spacing-2xl);
   margin: 0 auto;
   background-color: var(--bg-body);
 }

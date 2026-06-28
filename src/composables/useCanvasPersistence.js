@@ -2,6 +2,7 @@ import { ref, computed, watch } from "vue";
 import { useCanvasStore } from "@/stores/canvas";
 import { api } from "@/utils/axios";
 import { useUserStore } from "@/stores/userStore";
+import { emitRouteTabsInstancePurge } from "@/config/routeTabs";
 
 // Claves localStorage
 const CANVAS_STORAGE_KEY = "photoreka_canvas_data";
@@ -404,6 +405,7 @@ export function useCanvasPersistence() {
   const deleteCanvas = async (id) => {
     try {
       await api.delete(`/api/canvas/${id}`);
+      emitRouteTabsInstancePurge("canvas", [id]);
       canvasList.value = canvasList.value.filter((c) => c.id !== id);
 
       if (activeCanvasId.value === id) {

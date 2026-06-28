@@ -550,9 +550,7 @@ const deleteCollection = async () => {
   if (!viewingCollection.value) return;
   try {
     await collectionsStore.deleteCollection(viewingCollection.value.id);
-    message.success(
-      `Collection "${viewingCollection.value.name || viewingCollection.value.title}" deleted successfully`,
-    );
+
     deleteConfirmationVisible.value = false;
     backFromCollection();
   } catch (error) {

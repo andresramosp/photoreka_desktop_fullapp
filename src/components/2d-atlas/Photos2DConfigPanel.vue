@@ -816,9 +816,8 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
 <style scoped>
 /* Collapsed panel button */
 .collapsed-panel {
-  touch-action: manipulation;
+  top: calc(var(--total-header-offset, 48px) - 17px);
 }
-
 .settings-icon {
   color: #e5e5e5;
   font-size: 20px;

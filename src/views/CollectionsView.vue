@@ -771,9 +771,7 @@ const proceedToCreateCollection = async () => {
     };
     const newCollection =
       await collectionsStore.createCollection(collectionData);
-    message.success(
-      `Collection "${formData.value.title}" created successfully`,
-    );
+
     formData.value = { title: "", description: "" };
     router.push({
       name: "collection-detail",
@@ -804,7 +802,7 @@ const proceedToCreateSet = async () => {
       description: setFormData.value.description,
       parentSetId: createSetParentId.value,
     });
-    message.success(`Set "${setFormData.value.name}" created successfully`);
+   
     setFormData.value = { name: "", description: "" };
   } catch (error) {
     console.error("Error creating set:", error);

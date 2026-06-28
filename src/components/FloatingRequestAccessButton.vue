@@ -38,7 +38,7 @@ const hiddenRoutes = [
   "help",
   "plan",
   "3d-view",
-  "2d-view",
+  "2d-atlas",
   "world-map",
 ];
 

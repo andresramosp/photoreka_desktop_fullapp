@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import { api } from "@/utils/axios";
+import { emitRouteTabsInstancePurge } from "@/config/routeTabs";
 
 export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
   state: () => ({
@@ -394,6 +395,7 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
       this.isDeleting = true;
       try {
         const response = await api.delete(`/api/portfolio-build/${buildId}`);
+        emitRouteTabsInstancePurge("portfolios", [buildId]);
         if (Array.isArray(this.builds)) {
           const deletedBuild = this.builds.find(
             (b) => String(b.id) === String(buildId),
@@ -422,6 +424,7 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
         const response = await api.delete("/api/portfolio-build", {
           data: { ids },
         });
+        emitRouteTabsInstancePurge("portfolios", ids);
         if (Array.isArray(this.builds)) {
           const idSet = new Set(ids.map(String));
           const deletedBuilds = this.builds.filter((build) =>

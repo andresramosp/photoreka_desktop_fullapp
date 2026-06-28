@@ -1,0 +1,435 @@
+import { onMounted, onUnmounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { api } from "@/utils/axios";
+import { useCollectionsStore } from "@/stores/collections";
+import { useSeriesStore } from "@/stores/series";
+import { useChatStore } from "@/stores/chat";
+import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds";
+import {
+  getFallbackTabTitle,
+  getTabToolIdByRouteName,
+  matchRouteToTab,
+  ROUTE_TABS_PURGE_INSTANCES_EVENT,
+  type RouteTabsPurgeDetail,
+  type TabRouteMatch,
+} from "@/config/routeTabs";
+import { useTabDirtyStore } from "@/stores/tabDirtyStore";
+
+export type OpenRouteTab = {
+  key: string;
+  title: string;
+  href: string;
+  routeName: string;
+  toolId: string | null;
+  closable: boolean;
+};
+
+type PersistedRouteTab = {
+  key: string;
+  title: string;
+  href: string;
+  routeName: string;
+  toolId?: string | null;
+};
+
+const STORAGE_KEY = "photoreka-route-tabs-v1";
+
+const safeGetStorage = (): Storage | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return window.localStorage;
+};
+
+const getInstanceIdFromTabKey = (key: string): string | null => {
+  const separatorIndex = key.indexOf(":");
+  if (separatorIndex === -1) {
+    return null;
+  }
+
+  const raw = key.slice(separatorIndex + 1).trim();
+  if (!raw || raw === "default") {
+    return null;
+  }
+
+  return raw;
+};
+
+export const useRouteTabs = () => {
+  const route = useRoute();
+  const router = useRouter();
+  const collectionsStore = useCollectionsStore();
+  const seriesStore = useSeriesStore();
+  const chatStore = useChatStore();
+  const portfolioBuildsStore = usePortfolioBuildsStore();
+  const tabDirtyStore = useTabDirtyStore();
+
+  const tabs = ref<OpenRouteTab[]>([]);
+  const activeTabKey = ref<string | null>(null);
+  const canvasNameCache = new Map<string, string>();
+
+  const loadPersistedTabs = () => {
+    const storage = safeGetStorage();
+    if (!storage) {
+      return;
+    }
+
+    try {
+      const raw = storage.getItem(STORAGE_KEY);
+      if (!raw) {
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as PersistedRouteTab[];
+      if (!Array.isArray(parsed)) {
+        return;
+      }
+
+      tabs.value = parsed
+        .filter((entry) => entry && typeof entry.key === "string")
+        .map((entry) => ({
+          key: entry.key,
+          title: entry.title,
+          href: entry.href,
+          routeName: entry.routeName,
+          toolId: entry.toolId ?? getTabToolIdByRouteName(entry.routeName),
+          closable: true,
+        }));
+    } catch (error) {
+      console.error("Failed to restore route tabs:", error);
+    }
+  };
+
+  const persistTabs = () => {
+    const storage = safeGetStorage();
+    if (!storage) {
+      return;
+    }
+
+    const payload: PersistedRouteTab[] = tabs.value.map((tab) => ({
+      key: tab.key,
+      title: tab.title,
+      href: tab.href,
+      routeName: tab.routeName,
+      toolId: tab.toolId,
+    }));
+    storage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  };
+
+  const ensureCollectionsLoaded = async () => {
+    if (!collectionsStore.hasBeenLoaded) {
+      await collectionsStore.getOrFetch();
+    }
+  };
+
+  const ensureSeriesLoaded = async () => {
+    if (!seriesStore.hasBeenLoaded) {
+      await seriesStore.getOrFetch();
+    }
+  };
+
+  const resolveCanvasName = async (
+    canvasId: string,
+  ): Promise<string | null> => {
+    if (canvasNameCache.has(canvasId)) {
+      return canvasNameCache.get(canvasId) || null;
+    }
+
+    try {
+      const response = await api.get("/api/canvas");
+      const list = Array.isArray(response.data) ? response.data : [];
+      for (const canvas of list) {
+        if (canvas?.id != null && canvas?.name) {
+          canvasNameCache.set(String(canvas.id), String(canvas.name));
+        }
+      }
+      return canvasNameCache.get(canvasId) || null;
+    } catch (error) {
+      console.error("Failed to resolve canvas tab name:", error);
+      return null;
+    }
+  };
+
+  const resolveTabTitle = async (match: TabRouteMatch): Promise<string> => {
+    const fallbackTitle = getFallbackTabTitle(match);
+
+    if (!match.instanceId || !match.config.titleResolver) {
+      return fallbackTitle;
+    }
+
+    try {
+      if (match.config.titleResolver === "collection") {
+        await ensureCollectionsLoaded();
+        const collection = collectionsStore.getCollectionById(match.instanceId);
+        return (
+          collection?.title ||
+          collection?.name ||
+          `${match.config.title} ${match.instanceId}`
+        );
+      }
+
+      if (match.config.titleResolver === "series") {
+        await ensureSeriesLoaded();
+        const series = seriesStore.getSeriesById(match.instanceId);
+        return (
+          series?.title ||
+          series?.name ||
+          `${match.config.title} ${match.instanceId}`
+        );
+      }
+
+      if (match.config.titleResolver === "canvas") {
+        if (!match.instanceId) {
+          return match.config.title;
+        }
+        const canvasName = await resolveCanvasName(match.instanceId);
+        return canvasName || `${match.config.title} ${match.instanceId}`;
+      }
+
+      if (match.config.titleResolver === "portfolios") {
+        if (!portfolioBuildsStore.hasBeenLoaded) {
+          await portfolioBuildsStore.fetchBuilds();
+        }
+        const build = portfolioBuildsStore.allBuilds.find(
+          (b: { id: number; config?: { name?: string } }) =>
+            String(b.id) === match.instanceId,
+        );
+        return (
+          build?.config?.name || `${match.config.title} ${match.instanceId}`
+        );
+      }
+
+      if (match.config.titleResolver === "conversation") {
+        if (
+          !chatStore.conversations.length &&
+          !chatStore.isLoadingConversations
+        ) {
+          await chatStore.fetchConversations();
+        }
+        const conv = chatStore.conversations.find(
+          (c: { id: number; title: string | null }) =>
+            String(c.id) === match.instanceId,
+        );
+        return conv?.title || `${match.config.title} ${match.instanceId}`;
+      }
+    } catch (error) {
+      console.error("Failed to resolve route tab title:", error);
+    }
+
+    return fallbackTitle;
+  };
+
+  const upsertTabFromCurrentRoute = async () => {
+    const match = matchRouteToTab(route);
+
+    if (!match) {
+      activeTabKey.value = null;
+      return;
+    }
+
+    activeTabKey.value = match.key;
+    const routeName = String(route.name || "");
+    const href = route.fullPath;
+    const fallbackTitle = getFallbackTabTitle(match);
+
+    const existingIndex = tabs.value.findIndex((tab) => tab.key === match.key);
+    if (existingIndex === -1) {
+      tabs.value.push({
+        key: match.key,
+        title: fallbackTitle,
+        href,
+        routeName,
+        toolId: match.config.toolId,
+        closable: true,
+      });
+    } else {
+      tabs.value[existingIndex].href = href;
+      tabs.value[existingIndex].routeName = routeName;
+      tabs.value[existingIndex].toolId = match.config.toolId;
+      if (!tabs.value[existingIndex].title) {
+        tabs.value[existingIndex].title = fallbackTitle;
+      }
+    }
+
+    const resolvedTitle = await resolveTabTitle(match);
+    const tab = tabs.value.find((entry) => entry.key === match.key);
+    if (tab) {
+      tab.title = resolvedTitle;
+      persistTabs();
+    }
+  };
+
+  const openTab = async (key: string) => {
+    const tab = tabs.value.find((entry) => entry.key === key);
+    if (!tab) {
+      return;
+    }
+    await router.push(tab.href);
+  };
+
+  const closeTab = async (key: string) => {
+    if (tabDirtyStore.isDirty(key)) {
+      tabDirtyStore.requestClose(key);
+      return;
+    }
+    await _doCloseTab(key);
+  };
+
+  const _doCloseTab = async (key: string) => {
+    const index = tabs.value.findIndex((entry) => entry.key === key);
+    if (index === -1) {
+      return;
+    }
+
+    const wasActive = activeTabKey.value === key;
+    tabs.value.splice(index, 1);
+    persistTabs();
+
+    if (!wasActive) {
+      return;
+    }
+
+    const nextTab = tabs.value[index] || tabs.value[index - 1];
+    if (nextTab) {
+      await router.push(nextTab.href);
+      return;
+    }
+
+    await router.push({ name: "dashboard" });
+  };
+
+  const removeTabsByPredicate = async (
+    predicate: (tab: OpenRouteTab) => boolean,
+  ) => {
+    const currentTabs = tabs.value;
+    const removedTabs = currentTabs.filter(predicate);
+    if (!removedTabs.length) {
+      return;
+    }
+
+    const removedKeys = new Set(removedTabs.map((tab) => tab.key));
+    const activeKey = activeTabKey.value;
+    const activeIndex = activeKey
+      ? currentTabs.findIndex((tab) => tab.key === activeKey)
+      : -1;
+    const activeWasRemoved = !!activeKey && removedKeys.has(activeKey);
+
+    tabs.value = currentTabs.filter((tab) => !removedKeys.has(tab.key));
+    removedKeys.forEach((key) => {
+      tabDirtyStore.unregister(key);
+    });
+    persistTabs();
+
+    if (!activeWasRemoved) {
+      return;
+    }
+
+    const nextTab =
+      tabs.value[activeIndex] ||
+      (activeIndex > 0 ? tabs.value[activeIndex - 1] : null);
+    if (nextTab) {
+      await router.push(nextTab.href);
+      return;
+    }
+
+    activeTabKey.value = null;
+    await router.push({ name: "dashboard" });
+  };
+
+  const purgeInstanceTabs = async (
+    toolId: string,
+    instanceIds: Array<string | number>,
+  ) => {
+    const normalizedToolId = String(toolId).trim();
+    if (!normalizedToolId) {
+      return;
+    }
+
+    const idSet = new Set(
+      instanceIds.map((id) => String(id).trim()).filter((id) => id.length > 0),
+    );
+    if (!idSet.size) {
+      return;
+    }
+
+    await removeTabsByPredicate((tab) => {
+      if (tab.toolId !== normalizedToolId) {
+        return false;
+      }
+
+      const tabInstanceId = getInstanceIdFromTabKey(tab.key);
+      return !!tabInstanceId && idSet.has(tabInstanceId);
+    });
+  };
+
+  const handlePurgeEvent = async (event: Event) => {
+    const customEvent = event as CustomEvent<RouteTabsPurgeDetail>;
+    const detail = customEvent.detail;
+    if (!detail) {
+      return;
+    }
+
+    await purgeInstanceTabs(detail.toolId, detail.instanceIds || []);
+  };
+
+  // Closes a tab bypassing the dirty check (call after user confirms)
+  const forceCloseTab = async (key: string) => {
+    tabDirtyStore.unregister(key);
+    tabDirtyStore.clearPendingClose();
+    await _doCloseTab(key);
+  };
+
+  const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+    const dirtyCount = tabDirtyStore.dirtyTabKeys.size;
+    if (dirtyCount === 0) {
+      return;
+    }
+    const message =
+      dirtyCount === 1
+        ? "You have unsaved changes in 1 tab. If you leave, your changes will be lost."
+        : `You have unsaved changes in ${dirtyCount} tabs. If you leave, your changes will be lost.`;
+    event.preventDefault();
+    event.returnValue = message;
+    return message;
+  };
+
+  loadPersistedTabs();
+
+  onMounted(() => {
+    window.addEventListener(ROUTE_TABS_PURGE_INSTANCES_EVENT, handlePurgeEvent);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+  });
+
+  onUnmounted(() => {
+    window.removeEventListener(
+      ROUTE_TABS_PURGE_INSTANCES_EVENT,
+      handlePurgeEvent,
+    );
+    window.removeEventListener("beforeunload", handleBeforeUnload);
+  });
+
+  watch(
+    () => route.fullPath,
+    () => {
+      upsertTabFromCurrentRoute();
+    },
+    { immediate: true },
+  );
+
+  watch(
+    tabs,
+    () => {
+      persistTabs();
+    },
+    { deep: true },
+  );
+
+  return {
+    tabs,
+    activeTabKey,
+    openTab,
+    closeTab,
+    forceCloseTab,
+    purgeInstanceTabs,
+  };
+};

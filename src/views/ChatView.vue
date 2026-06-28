@@ -642,7 +642,7 @@
             overall library, the output is intentionally limited to keep results
             concise and usable — use
             <RouterLink to="/search">Search</RouterLink>,
-            <RouterLink to="/2d-view">Atlas</RouterLink>, or
+            <RouterLink to="/2d-atlas">Atlas</RouterLink>, or
             <RouterLink to="/workspace">Workspace</RouterLink>
             to explore further.
           </p>
@@ -660,7 +660,7 @@
             suggestion doesn't match your vision, try the
             <strong>visual score filters and rankings</strong> in
             <RouterLink to="/search">Search</RouterLink>,
-            <RouterLink to="/2d-view">Atlas</RouterLink>, or
+            <RouterLink to="atlas">Atlas</RouterLink>, or
             <RouterLink to="/workspace">Workspace</RouterLink> for a data-driven
             first pass, then apply your own eye for the final pick. ChatLab is a
             second opinion, not the last word — the best curation emerges from
@@ -695,12 +695,13 @@ import {
   ref,
   computed,
   nextTick,
+  watch,
   onMounted,
   onUnmounted,
   onActivated,
 } from "vue";
 import { NIcon, useMessage } from "naive-ui";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import PhotosDialog from "@/components/PhotosDialog.vue";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import PhotoCardHub from "@/components/photoCards/PhotoCardHub.vue";
@@ -794,6 +795,7 @@ const photosStore = usePhotosStore();
 const chatStore = useChatStore();
 const userStore = useUserStore();
 const message = useMessage();
+const route = useRoute();
 const router = useRouter();
 
 const isDemoUser = computed(
@@ -1068,13 +1070,21 @@ const checkMobile = () => {
   isMobile.value = window.innerWidth < 768;
 };
 
-const loadPendingChatPhotos = () => {
+const loadPendingChatPhotos = async () => {
   const pending = sessionStorage.getItem("chat_context_photos");
   const pendingMessage = sessionStorage.getItem("chat_pending_message");
 
   if (!pending && !pendingMessage) return;
 
-  // Always start a fresh conversation when arriving with pending content
+  sessionStorage.removeItem("chat_context_photos");
+  sessionStorage.removeItem("chat_pending_message");
+
+  // Navigate away from any conversation route so a fresh one is created
+  if (route.params.id) {
+    await router.replace("/chat-lab");
+  }
+
+  // Start a fresh conversation
   chatStore.startNewConversation();
   contextPhotos.value = [];
   inputText.value = "";
@@ -1082,7 +1092,6 @@ const loadPendingChatPhotos = () => {
   activeSuggestion.value = null;
 
   if (pending) {
-    sessionStorage.removeItem("chat_context_photos");
     try {
       const photos: ContextPhoto[] = JSON.parse(pending);
       if (Array.isArray(photos) && photos.length > 0) {
@@ -1094,11 +1103,56 @@ const loadPendingChatPhotos = () => {
   }
 
   if (pendingMessage) {
-    sessionStorage.removeItem("chat_pending_message");
     inputText.value = pendingMessage;
     nextTick(() => sendMessage());
   }
 };
+
+/** Load a conversation by ID and resolve attached photos for display. */
+const loadConversationById = async (conversationId: number) => {
+  try {
+    await chatStore.loadConversation(conversationId);
+    for (const msg of chatStore.messages as any[]) {
+      if (msg.role === "user" && msg.contextPhotoIds?.length) {
+        msg.attachedPhotos = getPhotosForMessage(msg.contextPhotoIds);
+        delete msg.contextPhotoIds;
+      }
+    }
+    contextPhotos.value = [];
+    inputText.value = "";
+    perMessageSelections.value = {};
+    activeSuggestion.value = null;
+    scrollToBottom();
+  } catch {
+    message.error("Failed to load conversation");
+    router.replace("/chat-lab");
+  }
+};
+
+// Keep state in sync with the route param
+watch(
+  () => route.params.id,
+  async (id) => {
+    // Guard: only react when actually on a chat-lab route (ChatView is kept alive
+    // and route.params.id would otherwise fire for any route that uses :id, e.g. /collections/:id)
+    if (route.name !== "chat-lab-conversation" && route.name !== "chat-lab") {
+      return;
+    }
+
+    if (id) {
+      const numId = parseInt(String(id), 10);
+      if (!isNaN(numId) && numId !== chatStore.activeConversationId) {
+        await loadConversationById(numId);
+      }
+    } else {
+      // /chat-lab with no ID = new conversation
+      if (chatStore.activeConversationId !== null) {
+        resetChat();
+      }
+    }
+  },
+  { immediate: true },
+);
 
 onMounted(() => {
   chatStore.fetchModes();
@@ -1146,6 +1200,10 @@ const sendMessage = async () => {
 
   try {
     await chatStore.sendMessage(text, contextPhotoIds, attachedPhotos);
+    // After the first message the store assigns a conversationId — reflect it in the URL
+    if (chatStore.activeConversationId && !route.params.id) {
+      router.replace(`/chat-lab/${chatStore.activeConversationId}`);
+    }
   } catch (error: any) {
     // 402 responses (INSUFFICIENT_CREDITS / QUOTA_EXHAUSTED) are handled by
     // the axios interceptor which shows a notification — no in-chat bubble needed.
@@ -1550,29 +1608,22 @@ const resetChat = async () => {
   activeSuggestion.value = null;
 };
 
-const handleNewChat = () => {
-  resetChat();
+const handleNewChat = async () => {
   showSidebar.value = false;
+  if (route.params.id) {
+    // Navigate to base route; watcher will call resetChat()
+    await router.push("/chat-lab");
+  } else {
+    // Already on /chat-lab, just reset in-place
+    resetChat();
+  }
 };
 
 const handleLoadConversation = async (conversationId: number) => {
-  try {
-    await chatStore.loadConversation(conversationId);
-    // Resolve persisted contextPhotoIds → attachedPhotos for display
-    for (const msg of chatStore.messages as any[]) {
-      if (msg.role === "user" && msg.contextPhotoIds?.length) {
-        msg.attachedPhotos = getPhotosForMessage(msg.contextPhotoIds);
-        delete msg.contextPhotoIds;
-      }
-    }
-    contextPhotos.value = [];
-    inputText.value = "";
-    perMessageSelections.value = {};
-    activeSuggestion.value = null;
-    showSidebar.value = false;
-    scrollToBottom();
-  } catch {
-    message.error("Failed to load conversation");
+  showSidebar.value = false;
+  // Navigate to the conversation route; the watcher handles loading
+  if (String(conversationId) !== String(route.params.id)) {
+    await router.push(`/chat-lab/${conversationId}`);
   }
 };
 

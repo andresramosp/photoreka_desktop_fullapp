@@ -166,7 +166,7 @@ const router = createRouter({
       },
     },
     {
-      path: "/canvas",
+      path: "/canvas/:canvasId?",
       name: "canvas",
       component: CanvasView,
       meta: {
@@ -274,8 +274,8 @@ const router = createRouter({
       },
     },
     {
-      path: "/atlas",
-      name: "atlas",
+      path: "/3d-atlas",
+      name: "3d-atlas",
       component: ThreeDView,
       meta: {
         requiresAuth: true,
@@ -301,8 +301,8 @@ const router = createRouter({
       },
     },
     {
-      path: "/2d-view",
-      name: "2d-view",
+      path: "/2d-atlas",
+      name: "2d-atlas",
       component: TwoDView,
       meta: {
         requiresAuth: true,
@@ -318,34 +318,34 @@ const router = createRouter({
       },
     },
 
-    {
-      path: "/3d-catalog/:userId",
-      name: "3d-catalog",
-      component: ThreeDView,
-      meta: {
-        requiresGuest: false, // Accessible without authentication
-        playground: true,
-        title: "3D Photo Catalog - Photoreka",
-        description:
-          "Explore photos in an immersive 3D space. Browse and navigate through photo collections in three dimensions.",
-        keywords:
-          "3D photo viewer, photo catalog, 3D gallery, immersive photo browsing",
-      },
-    },
-    {
-      path: "/shared-atlas/:userId",
-      name: "shared-atlas",
-      component: ThreeDView,
-      meta: {
-        requiresGuest: false, // Accessible without authentication
-        playground: true,
-        title: "3D Photo Catalog - Photoreka",
-        description:
-          "Explore photos in an immersive 3D space. Browse and navigate through photo collections in three dimensions.",
-        keywords:
-          "3D photo viewer, photo catalog, 3D gallery, immersive photo browsing",
-      },
-    },
+    // {
+    //   path: "/3d-catalog/:userId",
+    //   name: "3d-catalog",
+    //   component: ThreeDView,
+    //   meta: {
+    //     requiresGuest: false, // Accessible without authentication
+    //     playground: true,
+    //     title: "3D Photo Catalog - Photoreka",
+    //     description:
+    //       "Explore photos in an immersive 3D space. Browse and navigate through photo collections in three dimensions.",
+    //     keywords:
+    //       "3D photo viewer, photo catalog, 3D gallery, immersive photo browsing",
+    //   },
+    // },
+    // {
+    //   path: "/shared-atlas/:userId",
+    //   name: "shared-atlas",
+    //   component: ThreeDView,
+    //   meta: {
+    //     requiresGuest: false, // Accessible without authentication
+    //     playground: true,
+    //     title: "3D Photo Catalog - Photoreka",
+    //     description:
+    //       "Explore photos in an immersive 3D space. Browse and navigate through photo collections in three dimensions.",
+    //     keywords:
+    //       "3D photo viewer, photo catalog, 3D gallery, immersive photo browsing",
+    //   },
+    // },
 
     {
       path: "/framer",
@@ -381,6 +381,14 @@ const router = createRouter({
     {
       path: "/chat-lab",
       name: "chat-lab",
+      component: ChatView,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
+      path: "/chat-lab/:id",
+      name: "chat-lab-conversation",
       component: ChatView,
       meta: {
         requiresAuth: true,

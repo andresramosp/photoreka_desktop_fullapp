@@ -623,36 +623,6 @@
     >
       🗑️
     </div>
-
-    <!-- Unsaved Changes Dialog -->
-    <n-modal
-      v-model:show="showUnsavedModal"
-      preset="dialog"
-      title="Unsaved Changes"
-      positive-text="Save & Leave"
-      negative-text="Leave Without Saving"
-      type="warning"
-      :mask-closable="false"
-      style="width: 524px"
-      @positive-click="handleSaveAndLeave"
-      @negative-click="handleLeaveWithoutSaving"
-      @close="handleStayOnCanvas"
-    >
-      <div class="unsaved-changes-confirmation">
-        <p>You have unsaved changes on the canvas.</p>
-        <p class="unsaved-warning">
-          <n-icon size="16" style="margin-right: 8px; flex-shrink: 0">
-            <svg viewBox="0 0 24 24">
-              <path
-                fill="currentColor"
-                d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"
-              />
-            </svg>
-          </n-icon>
-          If you leave now, your canvas layout and photo positions will be lost.
-        </p>
-      </div>
-    </n-modal>
   </div>
 </template>
 
@@ -694,7 +664,8 @@ import {
   defineOptions,
   markRaw,
 } from "vue";
-import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
+import { useTabDirtyStore } from "@/stores/tabDirtyStore";
 import {
   NButton,
   NButtonGroup,
@@ -928,9 +899,14 @@ const showPlaygroundUpgradeModal = ref(false);
 // Collection modal state
 const showCollectionModal = ref(false);
 
-// Unsaved changes navigation guard state
-const showUnsavedModal = ref(false);
-let pendingNavigation = null;
+const tabDirtyStore = useTabDirtyStore();
+// The canvas tab is a singleton (see ROUTE_TABS_CONFIG): regardless of which
+// canvas is loaded, its tab key is the static "canvas" string. The dirty state
+// must be registered under that same key so the unsaved dot (and close
+// confirmation) match the singleton tab.
+const _tabKey = computed(() =>
+  activeCanvasId.value != null ? "canvas" : null,
+);
 
 // Config menu state
 const showConfigMenu = ref(false);
@@ -1250,25 +1226,21 @@ const handleSaveCanvas = async () => {
 
 const isSwitchingCanvas = ref(false);
 
-const getCanvasIdFromRouteQuery = () => {
-  const canvasIdQuery = Array.isArray(route.query.canvasId)
-    ? route.query.canvasId[0]
-    : route.query.canvasId;
+const getCanvasIdFromRouteParams = () => {
+  const canvasIdParam = route.params.canvasId;
 
-  if (canvasIdQuery == null || String(canvasIdQuery).trim() === "") {
+  if (canvasIdParam == null || String(canvasIdParam).trim() === "") {
     return null;
   }
 
-  const parsed = Number(canvasIdQuery);
+  const parsed = Number(canvasIdParam);
   return Number.isFinite(parsed) ? parsed : null;
 };
 
 const syncCanvasIdToRoute = async (canvasId) => {
   if (isPlayground.value) return;
 
-  const currentCanvasId = Array.isArray(route.query.canvasId)
-    ? route.query.canvasId[0]
-    : route.query.canvasId;
+  const currentCanvasId = route.params.canvasId;
   const nextCanvasId =
     canvasId == null ? undefined : String(Math.trunc(Number(canvasId)));
 
@@ -1277,10 +1249,9 @@ const syncCanvasIdToRoute = async (canvasId) => {
   }
 
   await router.replace({
-    query: {
-      ...route.query,
-      canvasId: nextCanvasId,
-    },
+    name: "canvas",
+    params: { canvasId: nextCanvasId },
+    query: route.query,
   });
 };
 
@@ -1393,43 +1364,23 @@ const openConfig = () => {
   showConfigMenu.value = !showConfigMenu.value;
 };
 
-// Unsaved changes modal handlers
-const handleLeaveWithoutSaving = () => {
-  showUnsavedModal.value = false;
-  if (pendingNavigation) {
-    const next = pendingNavigation;
-    pendingNavigation = null;
-    next();
-  }
-};
-
-const handleStayOnCanvas = () => {
-  showUnsavedModal.value = false;
-  if (pendingNavigation) {
-    const next = pendingNavigation;
-    pendingNavigation = null;
-    next(false);
-  }
-};
-
-const handleSaveAndLeave = async () => {
-  await saveCanvas();
-  showUnsavedModal.value = false;
-  if (pendingNavigation) {
-    const next = pendingNavigation;
-    pendingNavigation = null;
-    next();
-  }
-};
-
-onBeforeRouteLeave((_to, _from, next) => {
-  if (hasUnsavedChanges.value && !isPlayground.value) {
-    pendingNavigation = next;
-    showUnsavedModal.value = true;
-  } else {
-    next();
-  }
-});
+// Register/unregister dirty state for the tab system
+watch(
+  [hasUnsavedChanges, _tabKey],
+  ([dirty, key]) => {
+    if (!key) return;
+    if (dirty && !isPlayground.value) {
+      tabDirtyStore.register(key, {
+        save: async () => {
+          await saveCanvas();
+        },
+      });
+    } else {
+      tabDirtyStore.unregister(key);
+    }
+  },
+  { immediate: true },
+);
 
 // Toolbar functions
 const hideRelatedPhotos = () => {
@@ -1908,13 +1859,13 @@ const checkImageValidity = () => {
 };
 
 watch(
-  () => route.query.canvasId,
+  () => route.params.canvasId,
   async () => {
     if (isPlayground.value || isSwitchingCanvas.value) {
       return;
     }
 
-    const targetCanvasId = getCanvasIdFromRouteQuery();
+    const targetCanvasId = getCanvasIdFromRouteParams();
     if (targetCanvasId && targetCanvasId !== activeCanvasId.value) {
       await handleSwitchCanvas(targetCanvasId, { syncQuery: false });
     }
@@ -1972,7 +1923,7 @@ onMounted(async () => {
   try {
     const hasLoaded = await loadCanvas();
     if (hasLoaded) {
-      const targetCanvasId = getCanvasIdFromRouteQuery();
+      const targetCanvasId = getCanvasIdFromRouteParams();
       if (targetCanvasId && targetCanvasId !== activeCanvasId.value) {
         await handleSwitchCanvas(targetCanvasId, { syncQuery: false });
       } else if (activeCanvasId.value) {
@@ -2139,7 +2090,7 @@ onUnmounted(() => {
 .canvas-container {
   position: relative;
   width: 100%;
-  height: calc(100vh); /* Subtract header height */
+  height: 100%;
   overflow: hidden;
   background: var(--bg-canvas, #1a1a1a);
   touch-action: none; /* Disable default touch behaviors */

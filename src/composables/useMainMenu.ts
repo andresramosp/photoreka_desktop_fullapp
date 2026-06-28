@@ -440,8 +440,8 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     children: [
       {
         label: () => h("span", { class: "collection-menu-item" }, "2D Atlas"),
-        key: "2d-view",
-        icon: renderIcon(toolIcon("2d-view")),
+        key: "2d-atlas",
+        icon: renderIcon(toolIcon("2d-atlas")),
       },
 
       {
@@ -463,7 +463,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
                 : null,
             ],
           ),
-        key: "atlas",
+        key: "3d-atlas",
         icon: renderIcon(toolIcon("3d-atlas")),
         disabled: isToolDisabledOnMobile("3d-atlas") || isBlocked.value,
       },

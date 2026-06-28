@@ -281,6 +281,9 @@ let interactionsBound = false;
 let containerResizeObserver = null;
 let lastViewportWidth = 0;
 let lastViewportHeight = 0;
+// Tracks whether the camera has been fit at least once. After the first fit we
+// preserve the user's viewport (camera x/y/scale) across rebuilds in full mode.
+let viewInitialized = false;
 
 const normalizeGroupName = (groupName) => {
   if (!groupName) return "";
@@ -532,7 +535,12 @@ const destroyPixi = () => {
   }
 
   const pixiApp = app;
-  const canvas = pixiApp?.canvas;
+  let canvas = null;
+  try {
+    canvas = pixiApp?.canvas ?? null;
+  } catch {
+    // canvas getter can throw if the renderer is already torn down
+  }
   if (pixiApp) {
     try {
       pixiApp.ticker.remove(onTick);
@@ -1894,8 +1902,17 @@ const onResize = () => {
     lastViewportHeight = height;
 
     app.renderer.resize(width, height);
-    buildScene();
-    resetView();
+
+    if (props.isPreview) {
+      // Preview (dashboard) adapts the layout to the available width when side
+      // panels open/close, so we refit the scene to the new viewport.
+      buildScene();
+      resetView();
+    } else {
+      // Full tag cloud: preserve the current camera/viewport across resizes;
+      // only the canvas dimensions change, content stays where the user left it.
+      scheduleLabelUpdate(true);
+    }
   });
 };
 
@@ -1944,8 +1961,19 @@ const resumeRuntime = async () => {
   if (!hasUsableApp()) {
     destroyPixi();
     await initPixi();
+    // initPixi awaits; guard against teardown/races during the await.
+    if (!hasUsableApp()) return;
     buildScene();
-    resetView();
+    // Preserve the previous viewport across the destroy/rebuild cycle in full
+    // mode. The `camera` object survives KeepAlive deactivation, so we just
+    // re-apply it instead of refitting. Preview always refits to its width.
+    if (!props.isPreview && viewInitialized) {
+      syncTargetCamera();
+      applyCamera();
+    } else {
+      resetView();
+    }
+    viewInitialized = true;
   }
 
   if (!hasUsableApp()) return;

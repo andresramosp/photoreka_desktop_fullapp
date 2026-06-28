@@ -628,7 +628,7 @@
   --z-max: 999;
 
   /* ===== LAYOUT HEIGHTS ===== */
-  --header-height: 64px;
+  --header-height: 74px;
   --sidebar-height: 48px;
   --total-header-offset: calc(var(--header-height) + var(--sidebar-height));
 }
@@ -1705,6 +1705,11 @@
   transition: all 0.2s ease;
   z-index: 2000;
   pointer-events: auto;
+}
+
+// .app-layout.has-dashboard-header .collapsed-panel,
+.mobile-layout.has-dashboard-header .collapsed-panel {
+  top: 72px;
 }
 
 .score-slider-item {

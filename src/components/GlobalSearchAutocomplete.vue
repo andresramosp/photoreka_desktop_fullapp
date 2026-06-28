@@ -693,7 +693,7 @@ onUnmounted(() => {
   position: relative;
   flex: 1;
   min-width: 200px;
-  max-width: 800px;
+  max-width: 600px;
 }
 
 .search-input {

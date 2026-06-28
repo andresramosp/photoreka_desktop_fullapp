@@ -78,7 +78,7 @@ onMounted(async () => {
 <style scoped>
 .threed-view {
   width: 100%;
-  height: 100vh;
+  height: 100%;
   position: relative;
 }
 
@@ -92,7 +92,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100vh;
+  height: 100%;
   background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
   color: white;
 }
@@ -142,7 +142,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100vh;
+  height: 100%;
   background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
   color: white;
 }

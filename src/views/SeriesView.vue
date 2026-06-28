@@ -804,42 +804,13 @@
       :selected-photo="selectedPhotoForInfo"
       @change-photo="selectedPhotoForInfo = $event"
     />
-
-    <!-- Unsaved Changes Dialog -->
-    <n-modal
-      v-model:show="showUnsavedModal"
-      preset="dialog"
-      title="Unsaved Changes"
-      positive-text="Save & Leave"
-      negative-text="Leave Without Saving"
-      type="warning"
-      :mask-closable="false"
-      style="width: 524px"
-      @positive-click="handleSaveAndLeave"
-      @negative-click="handleLeaveWithoutSaving"
-      @close="handleStayOnPage"
-    >
-      <div class="unsaved-changes-confirmation">
-        <p>You have unsaved changes in this series.</p>
-        <p class="unsaved-warning">
-          <n-icon size="16" style="margin-right: 8px; flex-shrink: 0">
-            <svg viewBox="0 0 24 24">
-              <path
-                fill="currentColor"
-                d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"
-              />
-            </svg>
-          </n-icon>
-          If you leave now, your changes to the photo order will be lost.
-        </p>
-      </div>
-    </n-modal>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from "vue";
-import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
+import { useTabDirtyStore } from "@/stores/tabDirtyStore";
 import SpiralGridLoader from "../components/SpiralGridLoader.vue";
 
 defineOptions({
@@ -934,9 +905,7 @@ const deleteSetConfirmationVisible = ref(false);
 const bulkDeleteConfirmationVisible = ref(false);
 const createSetParentId = ref(null);
 
-// Unsaved changes navigation guard state
-const showUnsavedModal = ref(false);
-let pendingNavigation = null;
+const tabDirtyStore = useTabDirtyStore();
 const fullscreenViewerVisible = ref(false);
 const photoInfoDialogVisible = ref(false);
 const selectedPhotoForInfo = ref(null);
@@ -984,6 +953,20 @@ const originalPhotos = ref([]); // snapshot from server for discard
 const originalPhotoIds = ref([]); // id order snapshot for change detection
 const undoHistory = ref([]); // stack of photo-array snapshots for full Undo
 const currentEditingSeriesId = ref(null); // track which series is currently loaded editable
+const _tabKey = computed(() =>
+  currentEditingSeriesId.value != null
+    ? `series:${currentEditingSeriesId.value}`
+    : null,
+);
+
+// Each kept-alive instance is bound to the route it was created for (KeepAlive
+// key is `series:<id>` / `series-set` / `series`). Inactive instances still
+// observe the global route, so updateViewingSeries must bail out when the
+// current route no longer matches this instance — otherwise navigating between
+// tabs would overwrite this instance's local edit state and dirty registration.
+const _boundSeriesId = route.params.id != null ? String(route.params.id) : null;
+const _boundSetId =
+  route.params.setId != null ? String(route.params.setId) : null;
 const isSaving = ref(false);
 
 const hasChanges = computed(() => {
@@ -1163,8 +1146,6 @@ const createSeries = async () => {
 
     const newSeries = await seriesStore.createSeries(seriesData);
 
-    message.success(`Series "${formData.value.title}" created successfully`);
-
     // Clear form
     formData.value = { title: "", description: "" };
 
@@ -1199,7 +1180,7 @@ const createSeriesSet = async () => {
       description: setFormData.value.description,
       parentSetId: createSetParentId.value,
     });
-    message.success(`Set "${setFormData.value.name}" created successfully`);
+
     setFormData.value = { name: "", description: "" };
   } catch (error) {
     console.error("Error creating series set:", error);
@@ -1406,9 +1387,6 @@ const onPhotosSelected = async (photoIds) => {
   }
   editablePhotos.value = next;
 
-  message.success(
-    `Added ${resolved.length} photo${resolved.length > 1 ? "s" : ""}. Remember to save.`,
-  );
   photosDialogVisible.value = false;
   pendingInsertIndex.value = null;
 };
@@ -1598,8 +1576,6 @@ const saveChanges = async () => {
       currentIds.map((photoId, order) => ({ photoId, order })),
     );
 
-    message.success("Series saved");
-
     // Re-sync snapshots from the updated store
     await seriesStore.getOrFetch(true);
     const fresh = seriesStore.getSeriesWithFullPhotos(seriesId, photosStore);
@@ -1656,62 +1632,33 @@ const navigateToSet = (setId) =>
 
 const backToSeries = () => {
   const targetSetId = viewingSeries.value?.setId;
-  const navigateBack = () => {
-    recentlySuggestedPhotos.value.clear();
-    discardedPhotosByContext.value.clear();
-    if (targetSetId) {
-      router.push({ name: "series-set", params: { setId: targetSetId } });
-    } else {
-      router.push({ name: "series" });
-    }
-  };
-
-  if (hasChanges.value) {
-    pendingNavigation = navigateBack;
-    showUnsavedModal.value = true;
-    return;
-  }
-  navigateBack();
-};
-
-// Unsaved changes modal handlers
-const handleLeaveWithoutSaving = () => {
-  showUnsavedModal.value = false;
-  discardChanges();
-  if (pendingNavigation) {
-    const nav = pendingNavigation;
-    pendingNavigation = null;
-    nav();
-  }
-};
-
-const handleStayOnPage = () => {
-  showUnsavedModal.value = false;
-  if (pendingNavigation) {
-    const nav = pendingNavigation;
-    pendingNavigation = null;
-    nav(false);
-  }
-};
-
-const handleSaveAndLeave = async () => {
-  await saveChanges();
-  showUnsavedModal.value = false;
-  if (pendingNavigation) {
-    const nav = pendingNavigation;
-    pendingNavigation = null;
-    nav();
-  }
-};
-
-onBeforeRouteLeave((_to, _from, next) => {
-  if (hasChanges.value && showSeriesView.value && !isPublicView.value) {
-    pendingNavigation = next;
-    showUnsavedModal.value = true;
+  recentlySuggestedPhotos.value.clear();
+  discardedPhotosByContext.value.clear();
+  if (targetSetId) {
+    router.push({ name: "series-set", params: { setId: targetSetId } });
   } else {
-    next();
+    router.push({ name: "series" });
   }
-});
+};
+
+// Register/unregister dirty state for the tab system
+watch(
+  [hasChanges, _tabKey],
+  ([dirty, key]) => {
+    if (!key) return;
+    if (dirty && showSeriesView.value && !isPublicView.value) {
+      tabDirtyStore.register(key, {
+        save: async () => {
+          await saveChanges();
+        },
+        discard: discardChanges,
+      });
+    } else {
+      tabDirtyStore.unregister(key);
+    }
+  },
+  { immediate: true },
+);
 
 // Edit title methods
 const startEditTitle = () => {
@@ -1788,7 +1735,6 @@ const deleteSeries = async () => {
     const parentSetId = viewingSeries.value.setId;
     await seriesStore.deleteSeries(viewingSeries.value.id);
 
-    message.success(`Series deleted successfully`);
     deleteConfirmationVisible.value = false;
 
     if (parentSetId) {
@@ -1974,6 +1920,12 @@ const updateViewingSeries = () => {
   // Skip if this is a public view (handled separately)
   if (isPublicView.value) return;
 
+  // Ignore route changes that belong to a different kept-alive instance.
+  const curId = route.params.id != null ? String(route.params.id) : null;
+  const curSetId =
+    route.params.setId != null ? String(route.params.setId) : null;
+  if (curId !== _boundSeriesId || curSetId !== _boundSetId) return;
+
   const id = route.params.id;
   if (id && allSeries.value.length > 0) {
     const series = seriesStore.getSeriesWithFullPhotos(id, photosStore);
@@ -2098,6 +2050,9 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener("keydown", _onKeyDown);
+  if (_tabKey.value) {
+    tabDirtyStore.unregister(_tabKey.value);
+  }
 });
 
 watch(

@@ -149,7 +149,7 @@ export function usePhotoToolSelection() {
       clearSelections();
 
       // Navigate to 2D Atlas first
-      await router.push("/2d-view");
+      await router.push("/2d-atlas");
 
       // Dispatch custom event with photo ID for camera flight
       setTimeout(() => {
@@ -161,7 +161,7 @@ export function usePhotoToolSelection() {
         console.log("🚀 Flying to photo in 2D:", photoId);
       }, 100);
 
-      message.info("Navigating to photo in 2D space...");
+      // message.info("Navigating to photo in 2D space...");
     } catch (error) {
       console.error("Error taking photo to 2D Atlas:", error);
       message.error("Failed to navigate to 2D Atlas");
@@ -200,7 +200,7 @@ export function usePhotoToolSelection() {
       clearSelections();
 
       // Navigate to 3D Atlas first
-      await router.push("/atlas");
+      await router.push("/3d-atlas");
 
       // Dispatch custom event with photo IDs for sequential tour
       // Single photo = immediate flight, multiple = sequential tour
@@ -224,7 +224,7 @@ export function usePhotoToolSelection() {
 
       const photoText =
         photoIds.length === 1 ? "photo" : `${photoIds.length} photos`;
-      message.info(`Navigating to ${photoText} in 3D space...`);
+      // message.info(`Navigating to ${photoText} in 3D space...`);
     } catch (error) {
       console.error("Error taking photos to 3D Atlas:", error);
       message.error("Failed to navigate to 3D Atlas");
@@ -324,7 +324,7 @@ export function usePhotoToolSelection() {
       case "framer":
         await takeToFramer(photoIds, clearSelections);
         break;
-      case "2d-view":
+      case "2d-atlas":
         await takeTo2D(photoIds, clearSelections);
         break;
       case "3d-atlas":

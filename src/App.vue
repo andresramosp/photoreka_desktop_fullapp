@@ -65,6 +65,7 @@
               has-sider
               style="height: 100vh"
               class="app-layout"
+              :class="{ 'has-dashboard-header': showDashboardHeader }"
               :style="{
                 '--total-header-offset': showDashboardHeader ? '90px' : '48px',
               }"
@@ -88,7 +89,10 @@
                     v-slot="{ Component, route }"
                   >
                     <KeepAlive :include="getKeepAliveComponents()">
-                      <component :is="Component" />
+                      <component
+                        :is="Component"
+                        :key="getRouteViewKey(route)"
+                      />
                     </KeepAlive>
                   </router-view>
                 </n-layout-content>
@@ -99,6 +103,7 @@
             <div
               v-else
               class="mobile-layout"
+              :class="{ 'has-dashboard-header': showDashboardHeader }"
               :style="{
                 '--total-header-offset': showDashboardHeader ? '112px' : '48px',
               }"
@@ -131,7 +136,10 @@
                     v-slot="{ Component, route }"
                   >
                     <KeepAlive :include="getKeepAliveComponents()">
-                      <component :is="Component" />
+                      <component
+                        :is="Component"
+                        :key="getRouteViewKey(route)"
+                      />
                     </KeepAlive>
                   </router-view>
                 </div>
@@ -205,6 +213,7 @@ import LightroomModal from "./components/LightroomModal.vue";
 import { useAssistantChatStore } from "@/stores/assistantChat.js";
 import { useWarmUp } from "@/composables/useWarmUp";
 import { useProactiveCacheSync } from "@/composables/useProactiveCacheSync.js";
+import { matchRouteToTab } from "@/config/routeTabs";
 
 const { ensureWarmUp } = useWarmUp();
 
@@ -263,11 +272,13 @@ const allowedHeaderViews = [
   "dashboard",
   "collections",
   "collection-detail",
+  "collection-set",
   "photo-hub",
   "series",
   "search",
   "portfolios",
   "portfolio-detail",
+  "portfolio-set",
   "framer",
   "workspace",
   "import-area",
@@ -275,6 +286,11 @@ const allowedHeaderViews = [
   "help",
   "report",
   "chat-lab",
+  "canvas",
+  "world-map",
+  "2d-atlas",
+  "tagcloud",
+  "3d-atlas",
   // "settings",
   // Add more route names as needed
 ];
@@ -282,8 +298,12 @@ const allowedHeaderViews = [
 const showDashboardHeader = computed(() => {
   if (!route.name) return false;
 
-  if (typeof route.name === "string" && route.name.startsWith("world-map")) {
-    return isMobile.value;
+  if (
+    typeof route.name === "string" &&
+    route.name.startsWith("world-map") &&
+    isMobile.value
+  ) {
+    return true;
   }
 
   return allowedHeaderViews.some(
@@ -341,11 +361,26 @@ const getKeepAliveComponents = () => {
     "2DView",
     "ChatView",
     "WorldMapView",
+    "TagCloudView",
+    "SeriesView",
+    "PortfolioDetailView",
   ];
 
   // Debug: log components being kept alive
   console.log("KeepAlive components:", keepAliveComponents);
   return keepAliveComponents;
+};
+
+const getRouteViewKey = (currentRoute) => {
+  const tabMatch = matchRouteToTab(currentRoute);
+  if (
+    tabMatch &&
+    ["series-detail", "portfolio-detail"].includes(String(currentRoute.name))
+  ) {
+    return tabMatch.key;
+  }
+
+  return String(currentRoute.name || currentRoute.fullPath);
 };
 
 const mobileMenuOpen = ref(false);

@@ -2874,7 +2874,8 @@ const handleResize = () => {
     if (
       photos2D.value.length > 0 &&
       !isLoadingPositions.value &&
-      !isTransitioning.value
+      !isTransitioning.value &&
+      props.isPreview
     ) {
       resetView(false);
     }

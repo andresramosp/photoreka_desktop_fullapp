@@ -165,9 +165,7 @@ const activeKey = computed(() => {
   const routeName = route.name as string;
 
   if (routeName === "canvas") {
-    const canvasId = Array.isArray(route.query.canvasId)
-      ? route.query.canvasId[0]
-      : route.query.canvasId;
+    const canvasId = route.params.canvasId;
 
     if (canvasId != null && String(canvasId).trim() !== "") {
       return `canvas-${canvasId}`;
@@ -232,7 +230,7 @@ const handleMenuSelect = (key: string) => {
       // Single real canvas — navigate directly to it
       router.push({
         name: "canvas",
-        query: { canvasId: String(canvasList.value[0].id) },
+        params: { canvasId: String(canvasList.value[0].id) },
       });
     }
     // Multiple canvases: let the menu expand/popup handle selection
@@ -252,7 +250,7 @@ const handleMenuSelect = (key: string) => {
       // Frontend "My Canvas" placeholder — open canvas without a specific ID
       router.push({ name: "canvas" });
     } else {
-      router.push({ name: "canvas", query: { canvasId } });
+      router.push({ name: "canvas", params: { canvasId } });
     }
   } else if (
     key.startsWith("collection-") ||

@@ -1299,9 +1299,13 @@ const emitPhotoLimit = () => {
   animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: fixed;
   right: 15px;
-  top: 15px;
+  top: calc(var(--total-header-offset, 48px) - 17px);
   z-index: 2000;
   pointer-events: auto;
+}
+
+.collapsed-panel {
+  top: calc(var(--total-header-offset, 48px) - 17px);
 }
 
 @media (max-width: 767px) {
@@ -1309,7 +1313,7 @@ const emitPhotoLimit = () => {
     min-width: 280px;
     max-width: calc(100vw - 10px);
     max-height: 80vh;
-    top: 5px;
+    top: calc(var(--total-header-offset, 48px) - 43px);
     right: 5px;
     padding: 8px;
   }
@@ -1509,7 +1513,7 @@ const emitPhotoLimit = () => {
 
 @media (max-width: 767px) {
   .collapsed-panel {
-    top: 5px;
+    top: calc(var(--total-header-offset, 48px) - 43px);
     right: 5px;
     width: 42px;
     height: 42px;

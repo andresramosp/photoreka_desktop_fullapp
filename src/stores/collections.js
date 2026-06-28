@@ -2,6 +2,7 @@
 
 import { defineStore } from "pinia";
 import { api } from "@/utils/axios";
+import { emitRouteTabsInstancePurge } from "@/config/routeTabs";
 
 export const useCollectionsStore = defineStore("collections", {
   state: () => ({
@@ -338,6 +339,7 @@ export const useCollectionsStore = defineStore("collections", {
       this.isDeleting = true;
       try {
         await api.delete("/api/collections", { data: { ids } });
+        emitRouteTabsInstancePurge("collections", ids);
 
         if (Array.isArray(this.collections)) {
           const idSet = new Set(ids.map(String));
@@ -367,6 +369,7 @@ export const useCollectionsStore = defineStore("collections", {
       this.isDeleting = true;
       try {
         await api.delete(`/api/collections/${id}`);
+        emitRouteTabsInstancePurge("collections", [id]);
 
         // Remove from store
         if (Array.isArray(this.collections)) {

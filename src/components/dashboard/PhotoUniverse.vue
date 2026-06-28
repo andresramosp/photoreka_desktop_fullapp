@@ -76,7 +76,7 @@
               ? '/tagcloud'
               : visualizationMode === 'worldmap'
                 ? '/world-map'
-                : '/2d-view'
+                : '/2d-atlas'
           "
           class="universe-btn"
         >

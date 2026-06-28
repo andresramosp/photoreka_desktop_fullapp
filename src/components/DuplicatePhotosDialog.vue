@@ -345,7 +345,7 @@ const deletePhoto = async (photoId) => {
 
     photosStore.checkDuplicates();
 
-    message.success("Photo deleted successfully");
+    // message.success("Photo deleted successfully");
   } catch (error) {}
 };
 
