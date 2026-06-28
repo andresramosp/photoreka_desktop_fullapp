@@ -602,6 +602,8 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   min-width: 0;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .route-tab-icon {

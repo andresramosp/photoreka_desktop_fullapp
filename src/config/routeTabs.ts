@@ -48,13 +48,13 @@ export const ROUTE_TABS_CONFIG: TabRouteConfig[] = [
   },
 
   // Singleton tabs (one tab per route)
-  // {
-  //   key: "search",
-  //   toolId: "search",
-  //   routeName: "search",
-  //   mode: "singleton",
-  //   title: "Search",
-  // },
+  {
+    key: "search",
+    toolId: "search",
+    routeName: "search",
+    mode: "singleton",
+    title: "Search",
+  },
   // {
   //   key: "report",
   //   toolId: "report",
