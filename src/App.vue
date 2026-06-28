@@ -355,6 +355,7 @@ const getKeepAliveComponents = () => {
     "CanvasView",
     "SearchView",
     "CollectionsView",
+    "CollectionDetailView",
     "ImportAreaView",
     "FramerView",
     "3DView",
@@ -373,13 +374,9 @@ const getKeepAliveComponents = () => {
 
 const getRouteViewKey = (currentRoute) => {
   const tabMatch = matchRouteToTab(currentRoute);
-  if (
-    tabMatch &&
-    ["series-detail", "portfolio-detail"].includes(String(currentRoute.name))
-  ) {
+  if (tabMatch?.config.mode === "instance") {
     return tabMatch.key;
   }
-
   return String(currentRoute.name || currentRoute.fullPath);
 };
 
