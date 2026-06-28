@@ -351,6 +351,7 @@ const getKeepAliveComponents = () => {
   // Lista explícita de componentes que deben mantenerse alive
   // Esto es más confiable que intentar extraer nombres dinámicamente
   const keepAliveComponents = [
+    "WorkspaceView",
     "DashboardView",
     "CanvasView",
     "SearchView",

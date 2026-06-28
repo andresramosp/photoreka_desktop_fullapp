@@ -61,7 +61,23 @@
                   :closable="tab.closable"
                 >
                   <template #tab>
-                    <span class="route-tab-label">
+                    <span
+                      class="route-tab-label"
+                      :class="{
+                        'is-dragging': draggedTabKey === tab.key,
+                        'drag-over-before':
+                          dragOverTabKey === tab.key &&
+                          dragOverPosition === 'before',
+                        'drag-over-after':
+                          dragOverTabKey === tab.key &&
+                          dragOverPosition === 'after',
+                      }"
+                      draggable="true"
+                      @dragstart="onTabDragStart($event, tab.key)"
+                      @dragover="onTabDragOver($event, tab.key)"
+                      @drop="onTabDrop($event, tab.key)"
+                      @dragend="onTabDragEnd"
+                    >
                       <n-icon
                         v-if="tab.toolId"
                         size="14"
@@ -227,7 +243,8 @@ const searchExpanded = ref(false);
 
 // Theme management
 const { themeMode, toggleTheme, canToggleTheme } = useTheme();
-const { tabs, activeTabKey, openTab, closeTab, forceCloseTab } = useRouteTabs();
+const { tabs, activeTabKey, openTab, closeTab, forceCloseTab, moveTab } =
+  useRouteTabs();
 const tabDirtyStore = useTabDirtyStore();
 
 const tabsWrapperRef = ref<HTMLElement | null>(null);
@@ -236,6 +253,9 @@ const canScrollLeft = ref(false);
 const canScrollRight = ref(false);
 const TAB_EDGE_SNAP_DISTANCE = 72;
 let scrollSnapTimeout: number | null = null;
+const draggedTabKey = ref<string | null>(null);
+const dragOverTabKey = ref<string | null>(null);
+const dragOverPosition = ref<"before" | "after" | null>(null);
 
 function getTabsScrollEl(): HTMLElement | null {
   return tabsWrapperRef.value?.querySelector(".v-x-scroll") ?? null;
@@ -266,6 +286,99 @@ function getActiveTabEl(): HTMLElement | null {
 
 function getTabsScrollStep(el: HTMLElement): number {
   return Math.max(Math.floor(el.clientWidth * 0.75), 160);
+}
+
+function resolveDropPositionOnTab(
+  event: DragEvent,
+  tabKey: string,
+): "before" | "after" {
+  const target = event.currentTarget as HTMLElement | null;
+  if (!target) {
+    return "after";
+  }
+
+  const rect = target.getBoundingClientRect();
+  const midpoint = rect.left + rect.width / 2;
+  const pointerX = event.clientX;
+  if (!Number.isFinite(pointerX)) {
+    return tabKey === activeTabKey.value ? "after" : "before";
+  }
+  return pointerX < midpoint ? "before" : "after";
+}
+
+function maybeAutoScrollTabsDuringDrag(clientX: number) {
+  const el = getTabsScrollEl();
+  if (!el) {
+    return;
+  }
+
+  const rect = el.getBoundingClientRect();
+  const threshold = 44;
+  const step = 22;
+
+  if (clientX <= rect.left + threshold) {
+    el.scrollLeft = Math.max(el.scrollLeft - step, 0);
+    updateScrollState();
+    return;
+  }
+
+  if (clientX >= rect.right - threshold) {
+    el.scrollLeft = Math.min(el.scrollLeft + step, getTabsMaxScroll(el));
+    updateScrollState();
+  }
+}
+
+function clearDragState() {
+  draggedTabKey.value = null;
+  dragOverTabKey.value = null;
+  dragOverPosition.value = null;
+}
+
+function onTabDragStart(event: DragEvent, tabKey: string) {
+  draggedTabKey.value = tabKey;
+  dragOverTabKey.value = null;
+  dragOverPosition.value = null;
+
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.dropEffect = "move";
+    event.dataTransfer.setData("text/plain", tabKey);
+  }
+}
+
+function onTabDragOver(event: DragEvent, tabKey: string) {
+  if (!draggedTabKey.value || draggedTabKey.value === tabKey) {
+    return;
+  }
+
+  event.preventDefault();
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = "move";
+  }
+
+  dragOverTabKey.value = tabKey;
+  dragOverPosition.value = resolveDropPositionOnTab(event, tabKey);
+  maybeAutoScrollTabsDuringDrag(event.clientX);
+}
+
+function onTabDrop(event: DragEvent, tabKey: string) {
+  event.preventDefault();
+
+  const sourceKey =
+    draggedTabKey.value || event.dataTransfer?.getData("text/plain") || null;
+  if (!sourceKey || sourceKey === tabKey) {
+    clearDragState();
+    return;
+  }
+
+  const position = resolveDropPositionOnTab(event, tabKey);
+  moveTab(sourceKey, tabKey, position);
+  clearDragState();
+  void settleTabsScrollState();
+}
+
+function onTabDragEnd() {
+  clearDragState();
 }
 
 function revealActiveTab() {
@@ -506,6 +619,7 @@ onUnmounted(() => {
   if (scrollSnapTimeout !== null) {
     window.clearTimeout(scrollSnapTimeout);
   }
+  clearDragState();
   unbindTabsScroll();
 });
 </script>
@@ -604,6 +718,35 @@ onUnmounted(() => {
   min-width: 0;
   user-select: none;
   -webkit-user-select: none;
+  position: relative;
+  cursor: grab;
+}
+
+.route-tab-label:active {
+  cursor: grabbing;
+}
+
+.route-tab-label.is-dragging {
+  opacity: 0.58;
+}
+
+.route-tab-label.drag-over-before::before,
+.route-tab-label.drag-over-after::after {
+  content: "";
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--primary-color);
+}
+
+.route-tab-label.drag-over-before::before {
+  left: -8px;
+}
+
+.route-tab-label.drag-over-after::after {
+  right: -8px;
 }
 
 .route-tab-icon {

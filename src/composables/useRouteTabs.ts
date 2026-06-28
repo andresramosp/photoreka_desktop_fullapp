@@ -275,6 +275,31 @@ export const useRouteTabs = () => {
     await _doCloseTab(key);
   };
 
+  const moveTab = (
+    fromKey: string,
+    toKey: string,
+    position: "before" | "after" = "before",
+  ) => {
+    if (!fromKey || !toKey || fromKey === toKey) {
+      return false;
+    }
+
+    const fromIndex = tabs.value.findIndex((entry) => entry.key === fromKey);
+    const toIndex = tabs.value.findIndex((entry) => entry.key === toKey);
+    if (fromIndex === -1 || toIndex === -1) {
+      return false;
+    }
+
+    const [moved] = tabs.value.splice(fromIndex, 1);
+    const adjustedToIndex =
+      fromIndex < toIndex ? Math.max(toIndex - 1, 0) : toIndex;
+    const insertIndex =
+      position === "after" ? adjustedToIndex + 1 : adjustedToIndex;
+    tabs.value.splice(insertIndex, 0, moved);
+    persistTabs();
+    return true;
+  };
+
   const _doCloseTab = async (key: string) => {
     const index = tabs.value.findIndex((entry) => entry.key === key);
     if (index === -1) {
@@ -430,6 +455,7 @@ export const useRouteTabs = () => {
     openTab,
     closeTab,
     forceCloseTab,
+    moveTab,
     purgeInstanceTabs,
   };
 };
