@@ -94,12 +94,7 @@
 
               <!-- Imagen -->
               <v-image
-                v-if="
-                  !photo.imageBroken &&
-                  photo.image &&
-                  photo.config.width > 0 &&
-                  photo.config.height > 0
-                "
+                v-if="!photo.imageBroken && photo.image"
                 :config="{
                   x: 0,
                   y: 0,
@@ -112,6 +107,11 @@
                   shadowBlur: photo.isNew ? 15 : 0,
                   shadowOffset: photo.isNew ? { x: 0, y: 0 } : undefined,
                   shadowOpacity: photo.isNew ? 0.6 : 0,
+                  // Disable Konva's buffer-canvas compositing for images.
+                  // When shadow+stroke are both set, Konva routes rendering through
+                  // stage.bufferCanvas which can have 0×0 dimensions in certain
+                  // timing windows, causing drawImage to throw InvalidStateError.
+                  perfectDrawEnabled: false,
                 }"
               />
 
@@ -215,8 +215,7 @@
                     expansionMode !== 'canvas' &&
                     expansionMode !== null &&
                     !photo.inTrash &&
-                    (photo.hovered ||
-                      (photo.selected && anySelectedPhotoHovered))
+                    photo.hovered
                   "
                   :photo="photo"
                   :fill="accentColor"
@@ -224,7 +223,6 @@
                   font-size="30"
                   @click="handleAddPhotoFromPhoto"
                   :sizeFactor="1.3"
-                  :opacity="photo.hovered ? 1 : 1"
                 />
 
                 <!-- Botón de eliminar para fotos rotas -->
@@ -520,7 +518,22 @@
           @rename-canvas="handleRenameCanvas"
           @delete-canvas="handleDeleteCanvas"
         />
-      </n-space>
+
+        <n-button
+          :disabled="isSaved"
+          :loading="isSaving"
+          @click="handleSaveCanvas"
+          secondary
+          :type="hasUnsavedChanges ? 'primary' : 'default'"
+          :title="hasUnsavedChanges ? 'Save changes' : 'No changes to save'"
+        >
+          <template #icon>
+            <n-icon size="20">
+              <SaveOutline />
+            </n-icon> </template
+          >Save
+        </n-button></n-space
+      >
     </div>
 
     <!-- Floating Action Bar -->
@@ -610,6 +623,36 @@
     >
       🗑️
     </div>
+
+    <!-- Unsaved Changes Dialog -->
+    <n-modal
+      v-model:show="showUnsavedModal"
+      preset="dialog"
+      title="Unsaved Changes"
+      positive-text="Save & Leave"
+      negative-text="Leave Without Saving"
+      type="warning"
+      :mask-closable="false"
+      style="width: 524px"
+      @positive-click="handleSaveAndLeave"
+      @negative-click="handleLeaveWithoutSaving"
+      @close="handleStayOnCanvas"
+    >
+      <div class="unsaved-changes-confirmation">
+        <p>You have unsaved changes on the canvas.</p>
+        <p class="unsaved-warning">
+          <n-icon size="16" style="margin-right: 8px; flex-shrink: 0">
+            <svg viewBox="0 0 24 24">
+              <path
+                fill="currentColor"
+                d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"
+              />
+            </svg>
+          </n-icon>
+          If you leave now, your canvas layout and photo positions will be lost.
+        </p>
+      </div>
+    </n-modal>
   </div>
 </template>
 
@@ -649,12 +692,14 @@ import {
   watchEffect,
   nextTick,
   defineOptions,
+  markRaw,
 } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
 import {
   NButton,
   NButtonGroup,
   NIcon,
+  NModal,
   NSpace,
   NSwitch,
   NInputNumber,
@@ -674,6 +719,7 @@ import PlaygroundUpgradeModal from "@/components/PlaygroundUpgradeModal.vue";
 import PlaygroundPhotosDialog from "@/components/PlaygroundPhotosDialog.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
+import { SaveOutline } from "@vicons/ionicons5";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { useCanvasPersistence } from "@/composables/useCanvasPersistence.js";
 import CanvasManagerPopover from "@/components/canvas/CanvasManagerPopover.vue";
@@ -702,6 +748,8 @@ const router = useRouter();
 const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
 const {
   hasUnsavedChanges,
+  isSaved,
+  isSaving,
   activeCanvasId,
   canvasList,
   currentCanvasName,
@@ -880,6 +928,10 @@ const showPlaygroundUpgradeModal = ref(false);
 // Collection modal state
 const showCollectionModal = ref(false);
 
+// Unsaved changes navigation guard state
+const showUnsavedModal = ref(false);
+let pendingNavigation = null;
+
 // Config menu state
 const showConfigMenu = ref(false);
 const configMenuRef = ref(null);
@@ -910,7 +962,7 @@ const {
 const {
   handleDragStart,
   handleDragMove,
-  handleDragEnd: baseHandleDragEnd,
+  handleDragEnd,
   handleMouseOver,
   handleMouseOut,
   unstackPhotos,
@@ -919,10 +971,6 @@ const {
 } = useCanvasPhoto(stageRef, photos, photoRefs, stageConfig);
 
 const { animatePhotoGroup, animatePhotoGroupExplosion } = usePhotoAnimations();
-
-const anySelectedPhotoHovered = computed(() =>
-  photos.value.some((p) => p.hovered && p.selected),
-);
 
 const dynamicSizeFactor = computed(() => {
   const baseSize = 1.25;
@@ -1022,58 +1070,11 @@ const filterContext = computed(() => ({
   photoIds: collectionPhotoIds.value,
 }));
 
-// Queue saves sequentially to avoid overlapping requests on rapid actions.
-const autoSaveInFlight = ref(false);
-const autoSavePending = ref(false);
-
-const triggerAutoSave = async () => {
-  if (isPlayground.value) return;
-
-  if (autoSaveInFlight.value) {
-    autoSavePending.value = true;
-    return;
-  }
-
-  autoSaveInFlight.value = true;
-  try {
-    await saveCanvas();
-  } catch (error) {
-    console.error("Auto-save failed:", error);
-  } finally {
-    autoSaveInFlight.value = false;
-    if (autoSavePending.value) {
-      autoSavePending.value = false;
-      await triggerAutoSave();
-    }
-  }
-};
-
-const handleDragEnd = async (photo, event, autoAlign) => {
-  await Promise.resolve(baseHandleDragEnd(photo, event, autoAlign));
-  await triggerAutoSave();
-};
-
 // Event handlers
 
-async function handlePhotoDropAndRemove(event) {
-  const droppedCount = await handlePhotoDrop(
-    event,
-    relatedPhotosToolbarRef.value.removePhotoFromList,
-  );
-  if (droppedCount > 0) {
-    await triggerAutoSave();
-  }
+function handlePhotoDropAndRemove(event) {
+  handlePhotoDrop(event, relatedPhotosToolbarRef.value.removePhotoFromList);
 }
-
-const handleTouchDrop = async (e) => {
-  const droppedCount = await handlePhotoDrop(
-    e.detail,
-    relatedPhotosToolbarRef.value.removePhotoFromList,
-  );
-  if (droppedCount > 0) {
-    await triggerAutoSave();
-  }
-};
 
 async function handleAddPhotos(photoIds) {
   // Fetch todas las fotos necesarias en paralelo
@@ -1085,13 +1086,11 @@ async function handleAddPhotos(photoIds) {
 
   // Pass autoFit=true to enable automatic fitting
   await canvasStore.addPhotos(photosToAdd, false, true);
-  await triggerAutoSave();
 }
 
 async function handleAddPlaygroundPhotos(photosData) {
   // For playground mode, use the canvas store like normal mode with auto-fit
   await canvasStore.addPhotos(photosData, false, true);
-  await triggerAutoSave();
 }
 
 // Handle deletion of broken photos (permanent deletion, not trash)
@@ -1117,8 +1116,6 @@ function handleDeleteBrokenPhoto(event) {
     if (stage) {
       stage.batchDraw();
     }
-
-    void triggerAutoSave();
   }
 }
 
@@ -1218,8 +1215,6 @@ const handleAddPhotosToCanvas = async (event) => {
     } else {
       animatePhotoGroupExplosion(photoRefs, photos, basePosition, position);
     }
-
-    await triggerAutoSave();
   } finally {
     // Reset the flag after a delay to allow future expansions
     setTimeout(() => {
@@ -1238,6 +1233,19 @@ const getPhotoStrokeColor = (photo) => {
   if (photo.isNew) return "#22d3ee";
   // if (photo.hovered) return accentColor;
   return "gray";
+};
+
+const handleSaveCanvas = async () => {
+  try {
+    const success = await saveCanvas();
+    if (success) {
+      console.log("Canvas saved successfully");
+    } else {
+      console.error("Failed to save canvas");
+    }
+  } catch (error) {
+    console.error("Error saving canvas:", error);
+  }
 };
 
 const isSwitchingCanvas = ref(false);
@@ -1374,8 +1382,6 @@ const handleClearCanvas = async () => {
 
   // Resetear offset
   updateStageOffset();
-
-  await triggerAutoSave();
 };
 
 const fitStageToPhotos = (extraPaddingRatio = 0.1) => {
@@ -1386,6 +1392,44 @@ const fitStageToPhotos = (extraPaddingRatio = 0.1) => {
 const openConfig = () => {
   showConfigMenu.value = !showConfigMenu.value;
 };
+
+// Unsaved changes modal handlers
+const handleLeaveWithoutSaving = () => {
+  showUnsavedModal.value = false;
+  if (pendingNavigation) {
+    const next = pendingNavigation;
+    pendingNavigation = null;
+    next();
+  }
+};
+
+const handleStayOnCanvas = () => {
+  showUnsavedModal.value = false;
+  if (pendingNavigation) {
+    const next = pendingNavigation;
+    pendingNavigation = null;
+    next(false);
+  }
+};
+
+const handleSaveAndLeave = async () => {
+  await saveCanvas();
+  showUnsavedModal.value = false;
+  if (pendingNavigation) {
+    const next = pendingNavigation;
+    pendingNavigation = null;
+    next();
+  }
+};
+
+onBeforeRouteLeave((_to, _from, next) => {
+  if (hasUnsavedChanges.value && !isPlayground.value) {
+    pendingNavigation = next;
+    showUnsavedModal.value = true;
+  } else {
+    next();
+  }
+});
 
 // Toolbar functions
 const hideRelatedPhotos = () => {
@@ -1473,7 +1517,6 @@ const handleToolSelected = async (toolId, canvasId = null) => {
     }
 
     await canvasStore.addPhotos(photosToAdd, false, true);
-    await triggerAutoSave();
     return;
   }
 
@@ -1596,8 +1639,6 @@ const deleteSelectedPhotos = () => {
   // Update stage after deletion
   const stage = stageRef.value.getStage();
   stage.batchDraw();
-
-  void triggerAutoSave();
 };
 
 // Helper function to reset canvas state (used by both click and touch)
@@ -1768,6 +1809,15 @@ const _pendingImageLoads = new Map();
 watch(
   () => photos.value.map((p) => p.src),
   () => {
+    // Purge stale pending-load entries for photos no longer in the store
+    // (e.g. after a canvas switch the array is fully replaced; without this,
+    // photos that reappear with the same ID would have their load skipped
+    // while photo.image stays null).
+    const currentIds = new Set(photos.value.map((p) => p.id));
+    for (const id of _pendingImageLoads.keys()) {
+      if (!currentIds.has(id)) _pendingImageLoads.delete(id);
+    }
+
     photos.value.forEach((photo) => {
       // Already loaded and valid — nothing to do
       if (photo.image && photo.image.src === photo.src && !photo.imageBroken) {
@@ -1810,16 +1860,11 @@ watch(
 
       img.onload = () => {
         _pendingImageLoads.delete(photo.id);
-        if (img.naturalWidth <= 0 || img.naturalHeight <= 0) {
-          photo.imageBroken = true;
-          photo.image = null;
-          const stage = stageRef.value?.getStage();
-          if (stage) stage.batchDraw();
-          return;
-        }
         photo.imageBroken = false;
-        // Only assign after successful load — prevents Konva from drawing a broken/pending image
-        photo.image = img;
+        // markRaw prevents Vue from wrapping the HTMLImageElement in a reactive Proxy.
+        // Passing a Proxy to the native drawImage() API causes browsers to misidentify
+        // it as a canvas element with 0×0 dimensions, throwing InvalidStateError.
+        photo.image = markRaw(img);
         const stage = stageRef.value?.getStage();
         if (stage) stage.batchDraw();
       };
@@ -1905,7 +1950,12 @@ onMounted(async () => {
   // Add touch drop support
   const canvasContainerEl = canvasContainer.value;
   if (canvasContainerEl) {
-    canvasContainerEl.addEventListener("touchDrop", handleTouchDrop);
+    canvasContainerEl.addEventListener("touchDrop", (e) => {
+      handlePhotoDrop(
+        e.detail,
+        relatedPhotosToolbarRef.value.removePhotoFromList,
+      );
+    });
   }
 
   updateStageOffset();
@@ -2078,7 +2128,7 @@ onUnmounted(() => {
   // Clean up touch drop listener
   const canvasContainerEl = canvasContainer.value;
   if (canvasContainerEl) {
-    canvasContainerEl.removeEventListener("touchDrop", handleTouchDrop);
+    canvasContainerEl.removeEventListener("touchDrop", handlePhotoDrop);
   }
 
   // No glow interval cleanup needed since we're not using animations

@@ -427,7 +427,7 @@ export function useCanvasPhoto(stageRef, photos, photoRefs, stageConfig) {
     if (anyNode) anyNode.getLayer().batchDraw();
   };
 
-  async function handlePhotoDrop(event, removePhotoFromToolbar) {
+  function handlePhotoDrop(event, removePhotoFromToolbar) {
     event.preventDefault();
 
     const raw = event.dataTransfer.getData("application/json");
@@ -451,7 +451,7 @@ export function useCanvasPhoto(stageRef, photos, photoRefs, stageConfig) {
     const defaultHeight = 140;
     const spreadOffset = 30; // distancia entre cada foto
 
-    for (const [index, photo] of droppedPhotos.entries()) {
+    droppedPhotos.forEach((photo, index) => {
       const width = photo.config?.width || defaultWidth;
       const height = photo.config?.height || defaultHeight;
 
@@ -465,9 +465,9 @@ export function useCanvasPhoto(stageRef, photos, photoRefs, stageConfig) {
         height,
       };
 
-      await canvasStore.addPhotos([photo]);
+      canvasStore.addPhotos([photo]);
       removePhotoFromToolbar(photo.id);
-    }
+    });
 
     return droppedPhotos.length;
   }
