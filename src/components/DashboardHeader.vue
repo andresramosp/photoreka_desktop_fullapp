@@ -515,7 +515,7 @@ onUnmounted(() => {
   background-color: var(--bg-body) !important;
   border-bottom: 1px solid var(--border-color) !important;
   padding: 0 var(--spacing-2xl);
-  height: 64px;
+  height: 55px;
   display: flex;
   align-items: center;
   position: relative;
@@ -587,8 +587,8 @@ onUnmounted(() => {
 
 .route-tabs :deep(.n-tabs-tab) {
   max-width: 220px;
-  background: color-mix(in srgb, var(--bg-surface) 85%, transparent);
-  border-color: var(--border-color);
+  /* background: color-mix(in srgb, var(--bg-surface) 85%, transparent);
+  border-color: var(--border-color); */
 }
 
 .route-tabs :deep(.n-tabs-tab__label) {

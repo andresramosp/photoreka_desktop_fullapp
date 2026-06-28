@@ -1305,7 +1305,7 @@ const emitPhotoLimit = () => {
 }
 
 .collapsed-panel {
-  top: calc(var(--total-header-offset, 48px) - 17px);
+  --collapsed-panel-top: calc(var(--total-header-offset, 48px) - 17px);
 }
 
 @media (max-width: 767px) {
@@ -1513,28 +1513,11 @@ const emitPhotoLimit = () => {
 
 @media (max-width: 767px) {
   .collapsed-panel {
-    top: calc(var(--total-header-offset, 48px) - 43px);
-    right: 5px;
-    width: 42px;
-    height: 42px;
+    --collapsed-panel-top-mobile: calc(var(--total-header-offset, 48px) - 43px);
+    --collapsed-panel-right-mobile: 5px;
+    --collapsed-panel-size-mobile: 42px;
+    --collapsed-panel-icon-size-mobile: 18px;
   }
-
-  .collapsed-panel .settings-icon {
-    font-size: 18px;
-  }
-}
-
-.collapsed-panel:hover {
-  background: rgba(35, 35, 40, 0.95);
-  border-color: rgba(255, 255, 255, 0.2);
-  transform: scale(1.05);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-}
-
-.collapsed-panel .settings-icon {
-  color: #ffffff;
-  font-size: 20px;
-  transition: color 0.2s ease;
 }
 
 .close-panel-btn-corner {

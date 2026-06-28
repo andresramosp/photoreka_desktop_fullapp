@@ -692,31 +692,17 @@ const clearGroupFilter = () => {
 
 <style scoped>
 .collapsed-panel {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  z-index: 5;
-  width: 48px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  border-radius: 50%;
-  justify-content: center;
-  background: var(--bg-card, rgba(20, 20, 28, 0.78));
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  cursor: pointer;
-  transition: background 0.2s;
-  touch-action: manipulation;
-}
-
-.collapsed-panel:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.settings-icon {
-  color: #e5e5e5;
-  font-size: 18px;
+  --collapsed-panel-top: calc(var(--total-header-offset, 48px) - 17px);
+  --collapsed-panel-right: 15px;
+  --collapsed-panel-z-index: 5;
+  --collapsed-panel-background: var(--bg-card, rgba(20, 20, 28, 0.78));
+  --collapsed-panel-backdrop: blur(8px);
+  --collapsed-panel-background-hover: rgba(255, 255, 255, 0.08);
+  --collapsed-panel-hover-transform: none;
+  --collapsed-panel-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  --collapsed-panel-shadow-hover: 0 4px 20px rgba(0, 0, 0, 0.5);
+  --collapsed-panel-icon-color: #e5e5e5;
+  /* --collapsed-panel-icon-size: 18px; */
 }
 
 .control-panel {

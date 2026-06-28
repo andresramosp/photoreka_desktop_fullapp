@@ -67,7 +67,7 @@
               class="app-layout"
               :class="{ 'has-dashboard-header': showDashboardHeader }"
               :style="{
-                '--total-header-offset': showDashboardHeader ? '90px' : '48px',
+                '--total-header-offset': showDashboardHeader ? '85px' : '48px',
               }"
             >
               <DashboardSidebar />

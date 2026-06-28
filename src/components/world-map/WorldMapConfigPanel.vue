@@ -927,32 +927,19 @@ const treeSelectOptions = computed(() =>
 /* ── Desktop: collapsed trigger ─────────────────────────────────────────── */
 
 .collapsed-panel {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  z-index: 1000;
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(30, 30, 30, 0.85);
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  cursor: pointer;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
-  transition: all 0.2s;
-  touch-action: manipulation;
-  backdrop-filter: blur(8px);
-}
-
-.collapsed-panel:hover {
-  background: rgba(50, 50, 50, 0.9);
-}
-
-.settings-icon {
-  color: #e5e5e5;
-  font-size: 20px;
+  --collapsed-panel-top: calc(var(--total-header-offset, 48px) - 17px);
+  --collapsed-panel-right: 15px;
+  --collapsed-panel-size: 48px;
+  --collapsed-panel-z-index: 1000;
+  --collapsed-panel-background: rgba(30, 30, 30, 0.85);
+  --collapsed-panel-backdrop: blur(8px);
+  --collapsed-panel-border: 1px solid rgba(255, 255, 255, 0.12);
+  --collapsed-panel-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+  --collapsed-panel-background-hover: rgba(50, 50, 50, 0.9);
+  --collapsed-panel-hover-transform: none;
+  --collapsed-panel-shadow-hover: 0 2px 12px rgba(0, 0, 0, 0.3);
+  --collapsed-panel-icon-color: #e5e5e5;
+  --collapsed-panel-icon-size: 20px;
 }
 
 /* ── Desktop: expanded panel ────────────────────────────────────────────── */

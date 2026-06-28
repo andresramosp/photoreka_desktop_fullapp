@@ -1688,28 +1688,74 @@
 
 .collapsed-panel {
   position: fixed;
-  top: 15px;
-  right: 15px;
-  width: 48px;
-  height: 48px;
-  background: rgba(26, 26, 31, 0.9);
-  backdrop-filter: blur(12px);
+  top: var(
+    --collapsed-panel-top,
+    calc(var(--total-header-offset, 48px) - 17px)
+  );
+  right: var(--collapsed-panel-right, 15px);
+  width: var(--collapsed-panel-size, 48px);
+  height: var(--collapsed-panel-size, 48px);
+  background: var(--collapsed-panel-background, rgba(26, 26, 31, 0.9));
+  backdrop-filter: var(--collapsed-panel-backdrop, blur(12px));
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  border: var(--collapsed-panel-border, 1px solid rgba(255, 255, 255, 0.1));
+  box-shadow: var(--collapsed-panel-shadow, 0 4px 20px rgba(0, 0, 0, 0.5));
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   user-select: none;
   transition: all 0.2s ease;
-  z-index: 2000;
+  z-index: var(--collapsed-panel-z-index, 2000);
   pointer-events: auto;
+  touch-action: manipulation;
 }
 
-// .app-layout.has-dashboard-header .collapsed-panel,
-.mobile-layout.has-dashboard-header .collapsed-panel {
-  top: 72px;
+.collapsed-panel:hover {
+  background: var(--collapsed-panel-background-hover, rgba(35, 35, 40, 0.95));
+  border-color: var(
+    --collapsed-panel-border-color-hover,
+    rgba(255, 255, 255, 0.2)
+  );
+  transform: var(--collapsed-panel-hover-transform, scale(1.05));
+  box-shadow: var(
+    --collapsed-panel-shadow-hover,
+    0 8px 32px rgba(0, 0, 0, 0.3)
+  );
+}
+
+.collapsed-panel .settings-icon {
+  color: var(--collapsed-panel-icon-color, #ffffff);
+  font-size: var(--collapsed-panel-icon-size, 20px);
+  transition: color 0.2s ease;
+}
+
+@media (max-width: 767px) {
+  .collapsed-panel {
+    top: var(
+      --collapsed-panel-top-mobile,
+      var(--collapsed-panel-top, calc(var(--total-header-offset, 48px) - 17px))
+    );
+    right: var(
+      --collapsed-panel-right-mobile,
+      var(--collapsed-panel-right, 15px)
+    );
+    width: var(
+      --collapsed-panel-size-mobile,
+      var(--collapsed-panel-size, 48px)
+    );
+    height: var(
+      --collapsed-panel-size-mobile,
+      var(--collapsed-panel-size, 48px)
+    );
+  }
+
+  .collapsed-panel .settings-icon {
+    font-size: var(
+      --collapsed-panel-icon-size-mobile,
+      var(--collapsed-panel-icon-size, 20px)
+    );
+  }
 }
 
 .score-slider-item {

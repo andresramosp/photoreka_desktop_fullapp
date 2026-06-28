@@ -816,11 +816,7 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
 <style scoped>
 /* Collapsed panel button */
 .collapsed-panel {
-  top: calc(var(--total-header-offset, 48px) - 17px);
-}
-.settings-icon {
-  color: #e5e5e5;
-  font-size: 20px;
+  --collapsed-panel-top: calc(var(--total-header-offset, 48px) - 17px);
 }
 
 .info-icon-btn {
@@ -959,11 +955,6 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
   transition:
     max-height 0.3s ease-out,
     opacity 0.3s ease-out;
-}
-
-/* Filters container */
-.filters-container {
-  /* margin-top: 12px; */
 }
 
 /* Scrollbar styling */
