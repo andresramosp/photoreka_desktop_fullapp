@@ -1512,8 +1512,15 @@ const handleResize = () => {
   if (stageRef.value && canvasContainer.value) {
     const stage = stageRef.value.getStage();
     const container = canvasContainer.value;
-    stage.width(container.clientWidth);
-    stage.height(container.clientHeight);
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    // Never set a zero-sized stage. A resize event can fire while the view is
+    // detached/hidden by KeepAlive (clientWidth/Height === 0), which would
+    // collapse the auto-fit zoom to 0 and make imported photos invisible.
+    if (w > 0 && h > 0) {
+      stage.width(w);
+      stage.height(h);
+    }
   }
 };
 
@@ -1757,6 +1764,8 @@ function zoomTick(direction = 1) {
 // Track in-progress image loads by photo ID to avoid duplicate requests
 const _pendingImageLoads = new Map();
 
+// Schedule a sequence of snapshots to capture state before/after the fit tween.
+
 watch(
   () => photos.value.map((p) => p.src),
   () => {
@@ -1787,7 +1796,15 @@ watch(
       }
 
       // Already loading this exact src — skip
-      if (_pendingImageLoads.get(photo.id) === photo.src) return;
+      if (_pendingImageLoads.get(photo.id) === photo.src) {
+        console.log(
+          "🔍[IMG WATCH] skip (already loading)",
+          photo.id,
+          "hasImage:",
+          !!photo.image,
+        );
+        return;
+      }
 
       // Clear previous image if src changed
       if (photo.image) {
@@ -1817,6 +1834,7 @@ watch(
         // it as a canvas element with 0×0 dimensions, throwing InvalidStateError.
         photo.image = markRaw(img);
         const stage = stageRef.value?.getStage();
+
         if (stage) stage.batchDraw();
       };
 
@@ -1948,6 +1966,16 @@ onMounted(async () => {
   if (canvasStore.pendingPhotosToAdd.length > 0) {
     const pending = [...canvasStore.pendingPhotosToAdd];
     canvasStore.pendingPhotosToAdd = [];
+    console.log(
+      "🔍[MOUNTED] processing pending",
+      pending.length,
+      "ids:",
+      pending.map((p) => p.id),
+      "pendingCanvasId:",
+      canvasStore.pendingCanvasId,
+      "activeCanvasId:",
+      activeCanvasId.value,
+    );
     // If a specific canvas was requested, switch to it first
     if (canvasStore.pendingCanvasId === "new") {
       canvasStore.pendingCanvasId = null;
@@ -1959,6 +1987,7 @@ onMounted(async () => {
     }
     await canvasStore.addPhotos(pending, false, true);
     console.log(`✅ Added ${pending.length} pending photos to canvas`);
+    __diagAfterAdd("MOUNTED");
   } else if (canvasStore.pendingCanvasId !== null) {
     // No photos to add, but a specific canvas was requested (e.g. from global search)
     const targetId = canvasStore.pendingCanvasId;
@@ -2020,9 +2049,13 @@ onActivated(async () => {
     return;
   }
   // Subsequent activations: onMounted won't run, so process pending photos here.
+  // The view was detached by KeepAlive, so the stage may carry a stale/zero size.
+  // Refresh it from the now-visible container before any auto-fit runs.
+  handleResize();
   if (canvasStore.pendingPhotosToAdd.length > 0) {
     const pending = [...canvasStore.pendingPhotosToAdd];
     canvasStore.pendingPhotosToAdd = [];
+
     // If a specific canvas was requested, switch to it first
     if (canvasStore.pendingCanvasId === "new") {
       canvasStore.pendingCanvasId = null;

@@ -246,6 +246,7 @@ export const useCanvasStore = defineStore("canvas", {
       const addedPhotoIds = [];
       const createdPhotos = [];
       const photosToArrange = [];
+
       for (let index = 0; index < photoObjects.length; index++) {
         const photo = photoObjects[index];
         if (!this.photos.some((p) => p.id == photo.id)) {
@@ -262,6 +263,11 @@ export const useCanvasStore = defineStore("canvas", {
           if (!hasCustomPosition) {
             photosToArrange.push(createdPhoto);
           }
+        } else {
+          console.log(
+            "🔍[STORE addPhotos] DEDUP skip (already present)",
+            photo.id,
+          );
         }
       }
 
@@ -284,6 +290,7 @@ export const useCanvasStore = defineStore("canvas", {
       if (autoFit && this.autoFitEnabled && addedPhotoIds.length > 0) {
         // Small delay to ensure photos are rendered
         setTimeout(() => {
+          console.log("🔍[STORE addPhotos] running autoFit");
           this.fitStageToPhotos(0.2);
         }, 100);
       }
@@ -432,11 +439,46 @@ export const useCanvasStore = defineStore("canvas", {
 
     // Fit stage to photos - moved from CanvasView
     fitStageToPhotos(extraPaddingRatio = 0.1) {
-      if (!this.photos.length || !this.stageRef) return;
+      if (!this.photos.length || !this.stageRef) {
+        console.log(
+          "🔍[STORE fitStageToPhotos] EARLY RETURN — photos:",
+          this.photos.length,
+          "stageRef?",
+          !!this.stageRef,
+        );
+        return;
+      }
 
       const stage = this.stageRef.getStage();
-      const containerWidth = stage.width();
-      const containerHeight = stage.height();
+      let containerWidth = stage.width();
+      let containerHeight = stage.height();
+
+      // Recover from a zero-sized stage. On KeepAlive reactivation (and after a
+      // resize fired while the view was detached) stage.width()/height() can be 0,
+      // which would make targetZoom collapse to 0 and scale the whole canvas to
+      // nothing — photos are present but invisible. Re-measure from the wrapper
+      // element; if it isn't laid out yet, retry next frame instead of fitting to 0.
+      if (containerWidth <= 0 || containerHeight <= 0) {
+        const wrapper = stage.container()?.parentElement;
+        const cw = wrapper?.clientWidth || 0;
+        const ch = wrapper?.clientHeight || 0;
+        console.log(
+          "🔍[STORE fitStageToPhotos] zero stage size — remeasured wrapper:",
+          { cw, ch },
+        );
+        if (cw > 0 && ch > 0) {
+          stage.width(cw);
+          stage.height(ch);
+          containerWidth = cw;
+          containerHeight = ch;
+        } else if (typeof requestAnimationFrame !== "undefined") {
+          requestAnimationFrame(() => this.fitStageToPhotos(extraPaddingRatio));
+          return;
+        } else {
+          return;
+        }
+      }
+
       const margin = 40;
 
       // Bounding box de todas las fotos
@@ -493,6 +535,7 @@ export const useCanvasStore = defineStore("canvas", {
           duration: 0.4,
           easing: Konva.default.Easings.EaseInOut,
           onFinish: () => {
+            console.log("🔍[STORE fitStageToPhotos] tween finished");
             // Update toolbar state if available
             if (this.toolbarState && this.toolbarState.value) {
               this.toolbarState.value.zoomLevel = targetZoom;
