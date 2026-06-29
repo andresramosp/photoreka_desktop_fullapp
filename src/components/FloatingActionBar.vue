@@ -130,7 +130,7 @@
               >
                 <template #icon>
                   <n-icon>
-                    <AlbumsOutline />
+                    <LibraryOutline />
                   </n-icon>
                 </template>
               </n-button>
@@ -254,10 +254,10 @@
 <script setup>
 import { NButton, NIcon, NTooltip, NDropdown, useMessage } from "naive-ui";
 import {
-  AlbumsOutline,
   CloudDownloadOutline,
   AttachOutline,
   CopyOutline,
+  LibraryOutline,
 } from "@vicons/ionicons5";
 import { RobotOutlined } from "@vicons/antd";
 import { MagicWand } from "@vicons/carbon";

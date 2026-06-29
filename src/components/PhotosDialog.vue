@@ -312,6 +312,11 @@
 
       <!-- Trash mode (no tabs) -->
       <div v-else class="trash-container">
+        <!-- <p class="trash-info-note">
+          Photos in this trash are excluded from this canvas and will not appear
+          again as similar-photo candidates. Empty the trash if you want them to
+          become candidates again.
+        </p> -->
         <!-- Search and Stats Bar -->
         <div class="stats-bar">
           <div class="search-section">
@@ -884,6 +889,13 @@ onMounted(async () => {
 
 .text-search {
   width: 100%;
+}
+
+.trash-info-note {
+  margin: 0;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
+  color: var(--text-secondary);
 }
 
 .stats-section {

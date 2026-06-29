@@ -314,6 +314,25 @@
       @close="closeToolSelector"
     />
 
+    <n-modal
+      v-model:show="showResetCanvasModal"
+      preset="dialog"
+      title="Reset Canvas"
+      positive-text="Reset"
+      negative-text="Cancel"
+      type="warning"
+      :mask-closable="false"
+      style="width: 480px"
+      @positive-click="handleConfirmClearCanvas"
+      @negative-click="handleCancelClearCanvas"
+      @close="handleCancelClearCanvas"
+    >
+      <p>
+        This will remove all photos from the canvas. This action cannot be
+        undone.
+      </p>
+    </n-modal>
+
     <!-- Top Left Controls -->
     <div class="canvas-controls top-left">
       <n-space>
@@ -333,7 +352,11 @@
 
         <n-tooltip placement="bottom" trigger="hover">
           <template #trigger>
-            <n-button type="primary" secondary @click="handleClearCanvas">
+            <n-button
+              type="primary"
+              secondary
+              @click="showResetCanvasModal = true"
+            >
               <template #icon>
                 <n-icon>
                   <ReloadOutline />
@@ -616,12 +639,19 @@
         </n-tooltip>
       </n-button-group>
     </div>
-    <div
-      v-if="!isPlayground"
-      @click="showTrashDialog = true"
-      :class="['trash-zone', { hovering: isHoveringTrash }]"
-    >
-      🗑️
+    <div v-if="!isPlayground" class="trash-zone-anchor">
+      <div
+        @click="showTrashDialog = true"
+        :class="['trash-zone', { hovering: isHoveringTrash }]"
+      >
+        🗑️
+        <n-badge
+          v-if="trashPhotosCount > 0"
+          class="trash-zone-badge"
+          :value="trashPhotosCount"
+          :max="999"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -667,6 +697,7 @@ import {
 import { useRoute, useRouter } from "vue-router";
 import { useTabDirtyStore } from "@/stores/tabDirtyStore";
 import {
+  NBadge,
   NButton,
   NButtonGroup,
   NIcon,
@@ -892,6 +923,7 @@ const showPhotoInfoDialog = ref(false);
 const selectedPhotosForToolbar = ref([]);
 const selectedDialogPhoto = ref(null);
 const isLoadingRelatedPhotos = ref(false);
+const showResetCanvasModal = ref(false);
 
 // Playground state
 const showPlaygroundUpgradeModal = ref(false);
@@ -914,6 +946,8 @@ const configMenuRef = ref(null);
 
 // Filter state
 const selectedCollectionFilter = ref(null);
+
+const trashPhotosCount = computed(() => canvasStore.discardedPhotos.length);
 
 // Dropdown options with SVG icons
 
@@ -1353,6 +1387,15 @@ const handleClearCanvas = async () => {
 
   // Resetear offset
   updateStageOffset();
+};
+
+const handleConfirmClearCanvas = async () => {
+  showResetCanvasModal.value = false;
+  await handleClearCanvas();
+};
+
+const handleCancelClearCanvas = () => {
+  showResetCanvasModal.value = false;
 };
 
 const fitStageToPhotos = (extraPaddingRatio = 0.1) => {
@@ -2495,12 +2538,10 @@ onUnmounted(() => {
   }
 }
 .trash-zone {
-  position: absolute;
+  position: relative;
   width: 100px;
   height: 100px;
-  bottom: 0px;
   display: flex;
-  right: 1px;
   /* background-color: rgba(255, 0, 0, 0.1); */
   /* border: 1px solid rgba(250, 11, 11, 0.5); */
   border-radius: 8px;
@@ -2517,6 +2558,25 @@ onUnmounted(() => {
   align-content: center;
   justify-content: center;
   cursor: pointer;
+}
+
+.trash-zone-anchor {
+  position: absolute;
+  right: 1px;
+  bottom: 0;
+  z-index: 11;
+}
+
+.trash-zone-badge {
+  position: absolute;
+  top: 16px;
+  right: 14px;
+}
+
+.trash-zone-badge :deep(.n-badge-sup) {
+  background-color: rgba(107, 114, 128, 0.9) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 .trash-zone.hovering {
