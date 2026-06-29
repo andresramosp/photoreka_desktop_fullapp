@@ -1,5 +1,15 @@
-import { onMounted, onUnmounted, ref, watch } from "vue";
+import {
+  computed,
+  defineComponent,
+  h,
+  markRaw,
+  onMounted,
+  onUnmounted,
+  ref,
+  watch,
+} from "vue";
 import { useRoute, useRouter } from "vue-router";
+import type { RouteLocationNormalizedLoaded } from "vue-router";
 import { api } from "@/utils/axios";
 import { useCollectionsStore } from "@/stores/collections";
 import { useSeriesStore } from "@/stores/series";
@@ -9,6 +19,7 @@ import {
   getFallbackTabTitle,
   getTabToolIdByRouteName,
   matchRouteToTab,
+  ROUTE_TABS_CONFIG,
   ROUTE_TABS_PURGE_INSTANCES_EVENT,
   type RouteTabsPurgeDetail,
   type TabRouteMatch,
@@ -55,6 +66,110 @@ const getInstanceIdFromTabKey = (key: string): string | null => {
   return raw;
 };
 
+// Shared module-level state — all composable instances reference the same refs.
+// This allows App.vue and DashboardHeader to read/write the same tab list.
+const tabs = ref<OpenRouteTab[]>([]);
+const activeTabKey = ref<string | null>(null);
+const canvasNameCache = new Map<string, string>();
+let _tabsLoaded = false;
+let _listenersRegistered = false;
+
+// ---------------------------------------------------------------------------
+// KeepAlive helpers (module-level so wrapper identity is stable across renders)
+// ---------------------------------------------------------------------------
+
+/** Views that stay cached unconditionally, regardless of open tabs. */
+const ALWAYS_ALIVE_COMPONENTS = [
+  "WorkspaceView",
+  "DashboardView",
+  "ImportAreaView",
+  "FramerView",
+];
+
+/**
+ * Per-tab wrapper components for instance routes (collection, series, etc.).
+ * Each open tab gets a unique wrapper so KeepAlive can evict it individually
+ * when that specific tab is closed, without affecting other same-type tabs.
+ */
+const instanceKeepAliveWrappers = new Map<string, ReturnType<typeof markRaw>>();
+
+const sanitizeForComponentName = (value: string) =>
+  value.replace(/[^a-zA-Z0-9_]/g, "_");
+
+const getInstanceWrapperName = (tabKey: string) =>
+  `RouteInstance_${sanitizeForComponentName(tabKey)}`;
+
+/**
+ * Returns the component to render inside KeepAlive.
+ * - For instance routes: returns a thin named wrapper so each tab key maps to a
+ *   unique cache slot — closing one collection tab won't evict another.
+ * - For all other routes: passes the component through unchanged.
+ */
+export const getKeepAliveComponent = (
+  component: object,
+  currentRoute: RouteLocationNormalizedLoaded,
+): object => {
+  const tabMatch = matchRouteToTab(currentRoute);
+  if (tabMatch?.config.mode !== "instance") {
+    return component;
+  }
+
+  const existing = instanceKeepAliveWrappers.get(tabMatch.key);
+  if (existing) {
+    return existing;
+  }
+
+  const wrapper = markRaw(
+    defineComponent({
+      name: getInstanceWrapperName(tabMatch.key),
+      setup() {
+        return () => h(component as Parameters<typeof h>[0]);
+      },
+    }),
+  );
+
+  instanceKeepAliveWrappers.set(tabMatch.key, wrapper);
+  return wrapper;
+};
+
+/**
+ * Reactive list of component names to pass to <KeepAlive :include>.
+ * Recalculated whenever tabs change so closing a tab immediately removes
+ * its component from the cache.
+ */
+export const keepAliveComponents = computed(() => {
+  const fromTabs = tabs.value
+    .map((tab) => {
+      const config = ROUTE_TABS_CONFIG.find(
+        (c) => c.routeName === tab.routeName,
+      );
+      if (!config) {
+        return null;
+      }
+      if (config.mode === "instance") {
+        return getInstanceWrapperName(tab.key);
+      }
+      return config.componentName ?? null;
+    })
+    .filter((name): name is string => name !== null);
+
+  return Array.from(new Set([...ALWAYS_ALIVE_COMPONENTS, ...fromTabs]));
+});
+
+// Clean up wrapper references for tabs that have been closed.
+watch(
+  () => tabs.value.map((tab) => tab.key),
+  (keys) => {
+    const liveKeys = new Set(keys);
+    for (const tabKey of instanceKeepAliveWrappers.keys()) {
+      if (!liveKeys.has(tabKey)) {
+        instanceKeepAliveWrappers.delete(tabKey);
+      }
+    }
+  },
+  { immediate: true },
+);
+
 export const useRouteTabs = () => {
   const route = useRoute();
   const router = useRouter();
@@ -63,10 +178,6 @@ export const useRouteTabs = () => {
   const chatStore = useChatStore();
   const portfolioBuildsStore = usePortfolioBuildsStore();
   const tabDirtyStore = useTabDirtyStore();
-
-  const tabs = ref<OpenRouteTab[]>([]);
-  const activeTabKey = ref<string | null>(null);
-  const canvasNameCache = new Map<string, string>();
 
   const loadPersistedTabs = () => {
     const storage = safeGetStorage();
@@ -98,6 +209,7 @@ export const useRouteTabs = () => {
     } catch (error) {
       console.error("Failed to restore route tabs:", error);
     }
+    _tabsLoaded = true;
   };
 
   const persistTabs = () => {
@@ -418,19 +530,25 @@ export const useRouteTabs = () => {
     return message;
   };
 
-  loadPersistedTabs();
+  if (!_tabsLoaded) {
+    loadPersistedTabs();
+  }
 
   onMounted(() => {
-    window.addEventListener(ROUTE_TABS_PURGE_INSTANCES_EVENT, handlePurgeEvent);
-    window.addEventListener("beforeunload", handleBeforeUnload);
+    if (!_listenersRegistered) {
+      _listenersRegistered = true;
+      window.addEventListener(
+        ROUTE_TABS_PURGE_INSTANCES_EVENT,
+        handlePurgeEvent,
+      );
+      window.addEventListener("beforeunload", handleBeforeUnload);
+    }
   });
 
   onUnmounted(() => {
-    window.removeEventListener(
-      ROUTE_TABS_PURGE_INSTANCES_EVENT,
-      handlePurgeEvent,
-    );
-    window.removeEventListener("beforeunload", handleBeforeUnload);
+    // Only the component that registered the listeners should remove them.
+    // We keep listeners alive as long as any composable caller is mounted.
+    // App.vue is always mounted so this is effectively never removed during use.
   });
 
   watch(

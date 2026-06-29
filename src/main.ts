@@ -142,6 +142,39 @@ const app = createApp(App);
 const pinia = createPinia();
 app.use(pinia);
 
+// Debug helper to verify real component teardown when tabs are closed.
+// Keep this list focused on route views to avoid noisy logs from child components.
+const UNMOUNT_DEBUG_COMPONENTS = new Set([
+  "WorkspaceView",
+  "DashboardView",
+  "CanvasView",
+  "SearchView",
+  "CollectionsView",
+  "CollectionDetailView",
+  "ImportAreaView",
+  "FramerView",
+  "3DView",
+  "2DView",
+  "ChatView",
+  "WorldMapView",
+  "TagCloudView",
+  "SeriesView",
+  "PortfolioDetailView",
+]);
+
+app.mixin({
+  unmounted() {
+    const vm = this as { $options?: { name?: string } };
+    const name = vm.$options?.name;
+    if (!name || !UNMOUNT_DEBUG_COMPONENTS.has(name)) {
+      return;
+    }
+
+    const timestamp = new Date().toISOString();
+    console.info(`[UNMOUNT] ${name} at ${timestamp}`);
+  },
+});
+
 // Inicializar Google Analytics
 initGA();
 

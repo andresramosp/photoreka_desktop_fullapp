@@ -88,9 +88,9 @@
                     v-else-if="isAppReady"
                     v-slot="{ Component, route }"
                   >
-                    <KeepAlive :include="getKeepAliveComponents()">
+                    <KeepAlive :include="keepAliveComponents">
                       <component
-                        :is="Component"
+                        :is="getKeepAliveComponent(Component, route)"
                         :key="getRouteViewKey(route)"
                       />
                     </KeepAlive>
@@ -135,9 +135,9 @@
                     v-else-if="isAppReady"
                     v-slot="{ Component, route }"
                   >
-                    <KeepAlive :include="getKeepAliveComponents()">
+                    <KeepAlive :include="keepAliveComponents">
                       <component
-                        :is="Component"
+                        :is="getKeepAliveComponent(Component, route)"
                         :key="getRouteViewKey(route)"
                       />
                     </KeepAlive>
@@ -214,8 +214,16 @@ import { useAssistantChatStore } from "@/stores/assistantChat.js";
 import { useWarmUp } from "@/composables/useWarmUp";
 import { useProactiveCacheSync } from "@/composables/useProactiveCacheSync.js";
 import { matchRouteToTab } from "@/config/routeTabs";
+import {
+  useRouteTabs,
+  keepAliveComponents,
+  getKeepAliveComponent,
+} from "@/composables/useRouteTabs";
 
 const { ensureWarmUp } = useWarmUp();
+
+// Shared tab list — module-level singleton, same ref used by DashboardHeader
+useRouteTabs();
 
 // Pre-populate the IndexedDB image cache in the background.
 // Runs during browser idle time so it never competes with UI work.
@@ -345,33 +353,6 @@ const isAppReady = computed(() => {
 
   return true;
 });
-
-// KeepAlive functionality
-const getKeepAliveComponents = () => {
-  // Lista explícita de componentes que deben mantenerse alive
-  // Esto es más confiable que intentar extraer nombres dinámicamente
-  const keepAliveComponents = [
-    "WorkspaceView",
-    "DashboardView",
-    "CanvasView",
-    "SearchView",
-    "CollectionsView",
-    "CollectionDetailView",
-    "ImportAreaView",
-    "FramerView",
-    "3DView",
-    "2DView",
-    "ChatView",
-    "WorldMapView",
-    "TagCloudView",
-    "SeriesView",
-    "PortfolioDetailView",
-  ];
-
-  // Debug: log components being kept alive
-  console.log("KeepAlive components:", keepAliveComponents);
-  return keepAliveComponents;
-};
 
 const getRouteViewKey = (currentRoute) => {
   const tabMatch = matchRouteToTab(currentRoute);

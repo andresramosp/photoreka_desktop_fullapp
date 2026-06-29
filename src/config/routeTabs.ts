@@ -15,6 +15,8 @@ export interface TabRouteConfig {
   routeName: string;
   mode: TabMode;
   title: string;
+  /** Vue component name for KeepAlive include list */
+  componentName?: string;
   titleResolver?: TitleResolver;
   instanceKey?: string;
   instanceSource?: InstanceSource;
@@ -42,6 +44,7 @@ export const ROUTE_TABS_CONFIG: TabRouteConfig[] = [
     routeName: "chat-lab-conversation",
     mode: "singleton",
     title: "ChatLab",
+    componentName: "ChatView",
     titleResolver: "conversation",
     instanceKey: "id",
     instanceSource: "params",
@@ -54,6 +57,7 @@ export const ROUTE_TABS_CONFIG: TabRouteConfig[] = [
     routeName: "search",
     mode: "singleton",
     title: "Search",
+    componentName: "SearchView",
   },
   // {
   //   key: "report",
@@ -68,6 +72,7 @@ export const ROUTE_TABS_CONFIG: TabRouteConfig[] = [
     routeName: "world-map",
     mode: "singleton",
     title: "World Map",
+    componentName: "WorldMapView",
   },
   {
     key: "2d-atlas",
@@ -75,6 +80,7 @@ export const ROUTE_TABS_CONFIG: TabRouteConfig[] = [
     routeName: "2d-atlas",
     mode: "singleton",
     title: "2D Atlas",
+    componentName: "2DView",
   },
   {
     key: "3d-atlas",
@@ -82,6 +88,7 @@ export const ROUTE_TABS_CONFIG: TabRouteConfig[] = [
     routeName: "3d-atlas",
     mode: "singleton",
     title: "3D Atlas",
+    componentName: "3DView",
   },
   {
     key: "tagcloud",
@@ -89,6 +96,7 @@ export const ROUTE_TABS_CONFIG: TabRouteConfig[] = [
     routeName: "tagcloud",
     mode: "singleton",
     title: "Tag Cloud",
+    componentName: "TagCloudView",
   },
   //   {
   //     key: "workspace",
@@ -110,6 +118,7 @@ export const ROUTE_TABS_CONFIG: TabRouteConfig[] = [
     routeName: "collection-detail",
     mode: "instance",
     title: "Collection",
+    componentName: "CollectionDetailView",
     titleResolver: "collection",
     instanceKey: "id",
     instanceSource: "params",
@@ -120,6 +129,7 @@ export const ROUTE_TABS_CONFIG: TabRouteConfig[] = [
     routeName: "series-detail",
     mode: "instance",
     title: "Series",
+    componentName: "SeriesView",
     titleResolver: "series",
     instanceKey: "id",
     instanceSource: "params",
@@ -130,6 +140,7 @@ export const ROUTE_TABS_CONFIG: TabRouteConfig[] = [
     routeName: "portfolio-detail",
     mode: "instance",
     title: "Portfolios",
+    componentName: "PortfolioDetailView",
     titleResolver: "portfolios",
     instanceKey: "id",
     instanceSource: "params",
@@ -140,6 +151,7 @@ export const ROUTE_TABS_CONFIG: TabRouteConfig[] = [
     routeName: "canvas",
     mode: "singleton",
     title: "Canvas",
+    componentName: "CanvasView",
     titleResolver: "canvas",
     instanceKey: "canvasId",
     instanceSource: "params",
