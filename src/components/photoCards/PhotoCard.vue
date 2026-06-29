@@ -7,6 +7,7 @@
       'selection-mode': mode === 'selection',
       'is-new': props.isNew,
       'show-hover': showHoverOverlay,
+      'info-loading': isInfoLoading,
     }"
     @click="handleClick"
     @touchstart="handleTouchStart"
@@ -126,7 +127,7 @@
         <n-button
           :size="photo.reasoning ? 'small' : 'medium'"
           class="action-button info-button"
-          :loading="!imageLoaded"
+          :loading="!imageLoaded || isInfoLoading"
           @click.stop="showInfo"
         >
           <template #icon>
@@ -358,6 +359,11 @@ const {
 } = useMobilePhotoSelection();
 
 const showInfo = () => {
+  isInfoLoading.value = true;
+  if (infoLoadingTimer) clearTimeout(infoLoadingTimer);
+  infoLoadingTimer = setTimeout(() => {
+    isInfoLoading.value = false;
+  }, 1000);
   emit("info", props.photo);
 };
 
@@ -366,6 +372,8 @@ const imageLoaded = ref(false);
 const imageError = ref(false);
 const showTooltip = ref(false);
 const showHoverContent = ref(false);
+const isInfoLoading = ref(false);
+let infoLoadingTimer: ReturnType<typeof setTimeout> | null = null;
 
 const uniqueMatchingTags = computed(() =>
   Array.from(new Set(props.photo.matchingTags)),
@@ -544,6 +552,7 @@ const handleMouseLeave = () => {
 // Cleanup on unmount
 onUnmounted(() => {
   cleanup();
+  if (infoLoadingTimer) clearTimeout(infoLoadingTimer);
 });
 </script>
 
@@ -700,7 +709,8 @@ onUnmounted(() => {
 }
 
 .photo-card:hover .action-buttons-overlay,
-.photo-card.show-hover .action-buttons-overlay {
+.photo-card.show-hover .action-buttons-overlay,
+.photo-card.info-loading .action-buttons-overlay {
   opacity: 1;
 }
 

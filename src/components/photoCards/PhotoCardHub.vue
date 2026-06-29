@@ -7,6 +7,7 @@
       duplicate: photo.isDuplicate,
       'with-footer': showFooter,
       'show-hover': showHoverOverlay,
+      'info-loading': isInfoLoading,
     }"
     @click="handleClick"
     @touchstart="handleTouchStart"
@@ -48,7 +49,7 @@
           v-if="photo.status == 'processed' && !isMobile"
           size="medium"
           class="action-button info-button"
-          :loading="!imageLoaded"
+          :loading="!imageLoaded || isInfoLoading"
           @click.stop="showInfo"
         >
           <template #icon>
@@ -472,6 +473,8 @@ const isSelected = computed(() => props.selected);
 const imageLoaded = ref(false);
 const imageError = ref(false);
 const showHoverContent = ref(false);
+const isInfoLoading = ref(false);
+let infoLoadingTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Event handlers for mobile touch
 const handleTouchStart = (event: TouchEvent) => {
@@ -503,6 +506,11 @@ const handleMouseLeave = () => {
 };
 
 const showInfo = () => {
+  isInfoLoading.value = true;
+  if (infoLoadingTimer) clearTimeout(infoLoadingTimer);
+  infoLoadingTimer = setTimeout(() => {
+    isInfoLoading.value = false;
+  }, 1000);
   emit("info", props.photo);
 };
 
@@ -572,6 +580,7 @@ const openInGooglePhotos = () => {
 // Cleanup on unmount
 onUnmounted(() => {
   cleanup();
+  if (infoLoadingTimer) clearTimeout(infoLoadingTimer);
 });
 </script>
 
@@ -659,7 +668,8 @@ onUnmounted(() => {
 }
 
 .photo-card-info:hover .action-buttons-overlay,
-.photo-card-info.show-hover .action-buttons-overlay {
+.photo-card-info.show-hover .action-buttons-overlay,
+.photo-card-info.info-loading .action-buttons-overlay {
   opacity: 1;
 }
 
