@@ -1711,6 +1711,7 @@ const filteredAndSortedPhotos = computed(() => {
   }
   // Apply artistic score sorting when no basic sorting is active
   else if (currentSortByQuality) {
+    filtered = filtered.filter((photo) => getPhotoArtisticScore(photo) > 0);
     filtered = [...filtered].sort((a, b) => {
       const scoreA = getPhotoArtisticScore(a);
       const scoreB = getPhotoArtisticScore(b);
