@@ -258,7 +258,7 @@
           </div>
           <h4 class="import-card-title">Local Files</h4>
           <p class="import-card-description">
-            Drag & drop or browse your computer
+            Import photos by browsing your local files
           </p>
           <n-tag type="primary" size="large" round>Recommended</n-tag>
         </div>
@@ -280,7 +280,7 @@
             {{
               googlePhotos.isAuthorized.value
                 ? "Import from your Google Photos library"
-                : "Connect and sync your photos from Google Photos"
+                : "Connect and import your photos from Google Photos"
             }}
           </div>
           <n-tag
@@ -393,7 +393,7 @@
           </div>
           <h4 class="import-card-title">Local Files</h4>
           <p class="import-card-description">
-            Drag & drop or browse your computer
+            Import photos by browsing your local files
           </p>
           <n-tag type="primary" size="large" round>Select files</n-tag>
         </div>
@@ -415,7 +415,7 @@
             {{
               googlePhotos.isAuthorized.value
                 ? "Import from your Google Photos library"
-                : "Connect and sync your photos from Google Photos"
+                : "Connect and import your photos from Google Photos"
             }}
           </div>
           <n-tag
@@ -1619,19 +1619,24 @@ defineExpose({
 }
 
 .import-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
   gap: 24px;
-  max-width: 900px;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 8px;
   margin: 0 auto 32px;
 }
 
 .import-cards-grid.single {
-  grid-template-columns: 1fr;
-  max-width: 350px;
+  justify-content: center;
+  overflow-x: visible;
 }
 
 .import-card {
+  flex: 0 0 260px;
   background-color: var(--bg-surface);
   border: 2px solid var(--border-color);
   border-radius: 16px;
@@ -1647,7 +1652,6 @@ defineExpose({
 
 .import-card:hover {
   border-color: #4c4c52;
-  transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
@@ -1721,11 +1725,18 @@ defineExpose({
   }
 
   .import-cards-grid {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    overflow-x: visible;
     gap: 16px;
   }
 
   .import-card {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 460px;
     padding: 24px 20px;
   }
 }
