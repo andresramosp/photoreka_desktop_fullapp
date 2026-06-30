@@ -59,13 +59,13 @@ export const ROUTE_TABS_CONFIG: TabRouteConfig[] = [
     title: "Search",
     componentName: "SearchView",
   },
-  {
-    key: "report",
-    toolId: "report",
-    routeName: "report",
-    mode: "singleton",
-    title: "Report",
-  },
+  // {
+  //   key: "report",
+  //   toolId: "report",
+  //   routeName: "report",
+  //   mode: "singleton",
+  //   title: "Report",
+  // },
   {
     key: "world-map",
     toolId: "world-map",
