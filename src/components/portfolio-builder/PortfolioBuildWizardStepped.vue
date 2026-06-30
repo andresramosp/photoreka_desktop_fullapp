@@ -343,6 +343,7 @@
                 <n-select
                   v-model:value="selectedCollections"
                   multiple
+                  filterable
                   clearable
                   placeholder="All collections"
                   :options="collectionOptions"
