@@ -207,18 +207,24 @@
                             delay="1200"
                           >
                             <template #trigger>
-                              <div
-                                class="genre-pill"
-                                :class="{
-                                  active: selectedGenre === preset.key,
-                                }"
+                              <n-button
+                                class="preset-button"
+                                :type="
+                                  selectedGenre === preset.key
+                                    ? 'primary'
+                                    : 'default'
+                                "
+                                :ghost="selectedGenre !== preset.key"
+                                size="small"
                                 @click="emit('apply-genre-preset', preset.key)"
                               >
-                                <n-icon size="14" class="genre-icon">
-                                  <component :is="preset.icon" />
-                                </n-icon>
+                                <template #icon>
+                                  <n-icon>
+                                    <component :is="preset.icon" />
+                                  </n-icon>
+                                </template>
                                 {{ preset.label }}
-                              </div>
+                              </n-button>
                             </template>
                             <div v-html="formatGenreTooltip(preset.key)"></div>
                           </n-tooltip>
@@ -1712,45 +1718,15 @@ watch(activeTab, (tab) => {
 
 .genre-pills {
   display: flex;
-  gap: 18px;
+  gap: 8px;
   justify-content: center;
   flex-wrap: wrap;
   padding: 10px 0 12px;
 }
 
-.genre-pill {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 12px;
-  border-radius: 16px;
-  border: 1px solid var(--border-color);
-  background-color: var(--bg-secondary);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-  flex-shrink: 0;
-  user-select: none;
-}
-
-.genre-pill:hover {
-  border-color: var(--primary-color);
-  color: var(--text-primary);
-  background-color: var(--bg-hover);
-  transform: translateY(-1px);
-}
-
-.genre-pill.active {
-  background-color: var(--primary-color);
-  border-color: var(--primary-color);
-  color: var(--text-on-primary);
-}
-
-.genre-icon {
-  flex-shrink: 0;
+.genre-pills :deep(.preset-button) {
+  border-radius: 6px !important;
+  font-size: 12px !important;
 }
 
 /* Weights configuration */

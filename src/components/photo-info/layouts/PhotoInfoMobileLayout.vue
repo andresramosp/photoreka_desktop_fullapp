@@ -169,16 +169,22 @@
 
                   <!-- Genre Pills (Horizontal scroll) -->
                   <div class="mobile-genre-scroll">
-                    <div
+                    <n-button
                       v-for="preset in availableGenrePresets"
                       :key="preset.key"
-                      class="mobile-genre-pill"
-                      :class="{ active: selectedGenre === preset.key }"
+                      class="mobile-preset-button"
+                      :type="
+                        selectedGenre === preset.key ? 'primary' : 'default'
+                      "
+                      :ghost="selectedGenre !== preset.key"
+                      size="small"
                       @click="emit('apply-genre-preset', preset.key)"
                     >
-                      <n-icon size="14"><component :is="preset.icon" /></n-icon>
+                      <template #icon>
+                        <n-icon><component :is="preset.icon" /></n-icon>
+                      </template>
                       {{ preset.label }}
-                    </div>
+                    </n-button>
                   </div>
 
                   <!-- Scores List (Compact) -->
@@ -1218,27 +1224,11 @@ const formatFlashValue = (flash) => {
   scroll-padding-left: var(--spacing-sm);
 }
 
-.mobile-genre-pill {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
-  border-radius: 16px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
+.mobile-genre-scroll :deep(.mobile-preset-button) {
+  border-radius: 6px !important;
+  font-size: 12px !important;
   flex-shrink: 0;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.mobile-genre-pill.active {
-  background: var(--primary-color);
-  border-color: var(--primary-color);
-  color: white;
+  white-space: nowrap;
 }
 
 .mobile-scores-list {
