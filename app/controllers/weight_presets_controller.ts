@@ -1,6 +1,7 @@
 import User from '#models/user'
 import type { WeightPreset } from '#models/user'
 import { HttpContext } from '@adonisjs/core/http'
+import crypto from 'crypto'
 
 export default class WeightPresetsController {
   async index({ auth, response }: HttpContext) {
