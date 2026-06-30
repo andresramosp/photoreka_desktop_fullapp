@@ -3,8 +3,24 @@ import VectorService from '#services/vector_service'
 import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
 import { withCache } from '../decorators/withCache.js'
 import Logger from '../utils/logger.js'
+import db from '@adonisjs/lucid/services/db'
 
 const logger = Logger.getInstance('AnalyzerService')
+
+const INCLUDED_MAIN_TAG_GROUPS = ['person', 'animals', 'objects', 'toponym', 'symbols']
+
+export type TreemapTag = {
+  id: number | string
+  name: string
+  group: string | null
+  photoCount: number
+  percentage: number
+}
+
+export type TreemapResult = {
+  tags: TreemapTag[]
+  totalPhotos: number
+}
 
 export default class TagManager {
   constructor() {}
@@ -130,5 +146,114 @@ export default class TagManager {
       logger.error(`Error al crear tag ${tag.name}:`)
       throw new Error(`No se pudo crear o recuperar el tag: ${tag.name}. Error: ${err.message}`)
     }
+  }
+
+  @withCache({
+    provider: 'redis',
+    key: (userId, mainTags, selectedTags: string[], includeContained, limit) =>
+      `getTreemap:${userId}:${mainTags}:${(selectedTags ?? []).join(',')}:${includeContained}:${limit}`,
+    ttl: 60 * 60 * 12, // 12h — cheap query, invalidated on photo changes
+  })
+  public async getTreemap(
+    userId: string,
+    mainTags: boolean,
+    selectedTags: string[],
+    includeContained: boolean,
+    limit: number
+  ): Promise<TreemapResult> {
+    if (!mainTags) {
+      const valuesSql = selectedTags.map(() => '(?)').join(', ')
+      const rawResult = await db.rawQuery(
+        `
+          WITH selected_terms(name) AS (
+            VALUES ${valuesSql}
+          ),
+          user_photos AS (
+            SELECT p.id
+            FROM photos p
+            WHERE p.user_id = ?
+              AND p.deleted_at IS NULL
+              AND p.confirmed IS NOT FALSE
+          ),
+          user_total AS (
+            SELECT COUNT(*)::int AS total FROM user_photos
+          )
+          SELECT
+            selected_terms.name,
+            MIN(t.id) AS id,
+            MIN(t."group") AS "group",
+            COUNT(DISTINCT p.id)::int AS photo_count,
+            (SELECT total FROM user_total) AS total_photos
+          FROM selected_terms
+          LEFT JOIN tags t ON ${
+            includeContained
+              ? `LOWER(t.name) ~ ('\\m' || selected_terms.name || '\\M')`
+              : `LOWER(t.name) = selected_terms.name`
+          }
+          LEFT JOIN tags_photos tp ON tp.tag_id = t.id
+          LEFT JOIN user_photos p ON p.id = tp.photo_id
+          GROUP BY selected_terms.name
+          ORDER BY photo_count DESC, selected_terms.name ASC
+          `,
+        [...selectedTags, userId]
+      )
+
+      const totalPhotos = Number(rawResult.rows[0]?.total_photos || 0)
+      const tags: TreemapTag[] = rawResult.rows
+        .filter((row: any) => Number(row.photo_count) > 0)
+        .map((row: any) => ({
+          id: row.id || row.name,
+          name: row.name,
+          group: row.group,
+          photoCount: Number(row.photo_count),
+          percentage:
+            totalPhotos > 0
+              ? Number(((Number(row.photo_count) / totalPhotos) * 100).toFixed(2))
+              : 0,
+        }))
+
+      return { tags, totalPhotos }
+    }
+
+    const rawResult = await db.rawQuery(
+      `
+      WITH user_photos AS (
+        SELECT p.id
+        FROM photos p
+        WHERE p.user_id = ?
+          AND p.deleted_at IS NULL
+          AND p.confirmed IS NOT FALSE
+      ),
+      user_total AS (
+        SELECT COUNT(*)::int AS total FROM user_photos
+      )
+      SELECT
+        t.id,
+        t.name,
+        t."group",
+        COUNT(DISTINCT tp.photo_id)::int AS photo_count,
+        (SELECT total FROM user_total) AS total_photos
+      FROM user_photos mp
+      JOIN tags_photos tp ON tp.photo_id = mp.id
+      JOIN tags t ON t.id = tp.tag_id
+      WHERE t."group" IS NULL OR LOWER(t."group") IN (?, ?, ?, ?, ?)
+      GROUP BY t.id, t.name, t."group"
+      ORDER BY photo_count DESC, t.name ASC
+      LIMIT ?
+      `,
+      [userId, ...INCLUDED_MAIN_TAG_GROUPS, limit]
+    )
+
+    const totalPhotos = Number(rawResult.rows[0]?.total_photos || 0)
+    const tags: TreemapTag[] = rawResult.rows.map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      group: row.group,
+      photoCount: Number(row.photo_count),
+      percentage:
+        totalPhotos > 0 ? Number(((Number(row.photo_count) / totalPhotos) * 100).toFixed(2)) : 0,
+    }))
+
+    return { tags, totalPhotos }
   }
 }
