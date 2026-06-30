@@ -398,6 +398,7 @@
     >
       <CustomArtisticWeights
         v-model="customWeights"
+        v-model:selected-preset-id="customWeightsPresetId"
         :format-criterion-name="formatCriterionName"
       />
       <template #footer>
@@ -635,6 +636,7 @@ const clearArtisticScores = () => {
 // Custom weights modal
 const showCustomWeightsModal = ref(false);
 const customWeights = ref({});
+const customWeightsPresetId = ref(null);
 
 // Initialize custom weights with default values (1.0 for all criteria)
 const initializeCustomWeights = () => {
@@ -797,6 +799,7 @@ const handleGenreSelect = (genre) => {
 
 const resetCustomWeights = () => {
   customWeights.value = initializeCustomWeights();
+  customWeightsPresetId.value = null;
 };
 
 const saveCustomWeights = () => {

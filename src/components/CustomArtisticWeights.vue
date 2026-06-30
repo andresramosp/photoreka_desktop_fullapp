@@ -128,7 +128,7 @@
 </template>
 
 <script setup>
-import { computed, ref, nextTick, onMounted } from "vue";
+import { computed, ref, nextTick, onMounted, watch } from "vue";
 import ClickableWeightSlider from "./wrappers/ClickableWeightSlider.vue";
 import { useArtisticScores } from "@/composables/useArtisticScores";
 import { useUserStore } from "@/stores/userStore";
@@ -158,9 +158,13 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  selectedPresetId: {
+    type: String,
+    default: null,
+  },
 });
 
-const emit = defineEmits(["update:modelValue"]);
+const emit = defineEmits(["update:modelValue", "update:selectedPresetId"]);
 
 const message = useMessage();
 
@@ -203,15 +207,25 @@ const presetOptions = computed(() =>
   presets.value.map((p) => ({ label: p.name, value: p.id })),
 );
 
+watch(
+  () => props.selectedPresetId,
+  (id) => {
+    activePresetId.value = id ?? null;
+  },
+  { immediate: true },
+);
+
 const onSelectPreset = (id) => {
   if (!id) {
     activePresetId.value = null;
+    emit("update:selectedPresetId", null);
     return;
   }
   const preset = presets.value.find((p) => p.id === id);
   if (preset) {
     emit("update:modelValue", { ...preset.weights });
     activePresetId.value = id;
+    emit("update:selectedPresetId", id);
   }
 };
 
@@ -242,6 +256,13 @@ onMounted(async () => {
   try {
     const { data } = await api.get("/api/user/weight-presets");
     presets.value = data.presets;
+    if (
+      activePresetId.value &&
+      !presets.value.some((preset) => preset.id === activePresetId.value)
+    ) {
+      activePresetId.value = null;
+      emit("update:selectedPresetId", null);
+    }
   } catch {
     // silently ignore — presets are non-critical
   }
@@ -258,6 +279,7 @@ const savePreset = async () => {
     });
     presets.value = [...presets.value, data.preset];
     activePresetId.value = data.preset.id;
+    emit("update:selectedPresetId", data.preset.id);
     cancelNaming();
     message.success(`Preset "${name}" saved`);
   } catch (err) {
@@ -312,7 +334,10 @@ const deletePreset = async (id) => {
   try {
     await api.delete(`/api/user/weight-presets/${id}`);
     presets.value = presets.value.filter((p) => p.id !== id);
-    if (activePresetId.value === id) activePresetId.value = null;
+    if (activePresetId.value === id) {
+      activePresetId.value = null;
+      emit("update:selectedPresetId", null);
+    }
   } catch {
     message.error("Failed to delete preset");
   } finally {
