@@ -5,7 +5,7 @@
         <n-icon class="section-icon">
           <PricetagIcon />
         </n-icon>
-        Tags Treemap
+        Tags Analysis
       </h2>
       <p class="section-description">
         Proportional presence of tags across the selected part of your catalog

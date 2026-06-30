@@ -112,6 +112,7 @@ import {
   SpeedometerOutline as SpeedometerIcon,
   TrendingUpOutline as TrendingUpIcon,
   WarningOutline as WarningIcon,
+  PricetagsOutline,
 } from "@vicons/ionicons5";
 import VisualAspectsReportNew from "@/components/report/VisualAspectsReportNew.vue";
 
@@ -136,9 +137,9 @@ const sections = [
   },
   {
     id: "tags",
-    label: "Tag Proportions",
+    label: "Tags Analysis",
     shortLabel: "Tags",
-    icon: GridIcon,
+    icon: PricetagsOutline,
   },
 
   {
