@@ -259,6 +259,10 @@ const matchModeOptions = [
 
 const topTags = computed(() => tags.value.slice(0, 12));
 
+const TREEMAP_MIN_RECT_SIDE = 6;
+const TREEMAP_BALANCE_WEIGHT = 0.28;
+const TREEMAP_ORIENTATION_BIAS = 0.16;
+
 // Only one special case: short horizontal strips where the absolute badge
 // would overflow the tile height. Everything else uses the default column layout
 // (label at bottom-left, badge at top-right absolute) which works for any shape.
@@ -279,7 +283,7 @@ const rectangles = computed(() => {
     relativePercentage: ((tag.photoCount / total) * 100).toFixed(1),
   }));
 
-  return binaryTreemap(items, { x: 0, y: 0, width: 100, height: 100 }).map(
+  return buildTreemapLayout(items, { x: 0, y: 0, width: 100, height: 100 }).map(
     (rect) => {
       const pixelWidth = (rect.width / 100) * treemapSize.value.width;
       const pixelHeight = (rect.height / 100) * treemapSize.value.height;
@@ -434,102 +438,194 @@ onBeforeUnmount(() => {
 
 const sumValue = (items) => items.reduce((sum, item) => sum + item.value, 0);
 
-const worstAspectRatio = (row, sideLength) => {
-  if (row.length === 0 || sideLength <= 0) return Infinity;
+const clampRect = (rect) => ({
+  ...rect,
+  width: Math.max(rect.width, 0),
+  height: Math.max(rect.height, 0),
+});
 
-  const rowTotal = sumValue(row);
-  const minValue = Math.min(...row.map((item) => item.value));
-  const maxValue = Math.max(...row.map((item) => item.value));
+const getRectAspectRatio = (width, height) => {
+  if (width <= 0 || height <= 0) return Infinity;
+  return Math.max(width / height, height / width);
+};
 
-  if (rowTotal <= 0 || minValue <= 0) return Infinity;
+const getSplitOrientation = (bounds) =>
+  bounds.width >= bounds.height ? "vertical" : "horizontal";
 
-  return Math.max(
-    (sideLength * sideLength * maxValue) / (rowTotal * rowTotal),
-    (rowTotal * rowTotal) / (sideLength * sideLength * minValue),
+const sliceBounds = (bounds, ratio, orientation) => {
+  const clampedRatio = Math.min(Math.max(ratio, 0), 1);
+
+  if (orientation === "vertical") {
+    const primaryWidth = bounds.width * clampedRatio;
+
+    return [
+      clampRect({
+        x: bounds.x,
+        y: bounds.y,
+        width: primaryWidth,
+        height: bounds.height,
+      }),
+      clampRect({
+        x: bounds.x + primaryWidth,
+        y: bounds.y,
+        width: bounds.width - primaryWidth,
+        height: bounds.height,
+      }),
+    ];
+  }
+
+  const primaryHeight = bounds.height * clampedRatio;
+
+  return [
+    clampRect({
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: primaryHeight,
+    }),
+    clampRect({
+      x: bounds.x,
+      y: bounds.y + primaryHeight,
+      width: bounds.width,
+      height: bounds.height - primaryHeight,
+    }),
+  ];
+};
+
+const scoreBoundsForItems = (bounds, items) => {
+  if (items.length === 0) return Infinity;
+
+  const area = bounds.width * bounds.height;
+  const total = sumValue(items);
+  if (area <= 0 || total <= 0) return Infinity;
+
+  const aspectPenalty = getRectAspectRatio(bounds.width, bounds.height) - 1;
+  const density = total / area;
+  const minShare = Math.min(...items.map((item) => item.value / total));
+  const thinPenalty = Math.max(
+    0,
+    TREEMAP_MIN_RECT_SIDE - Math.min(bounds.width, bounds.height),
+  );
+
+  return (
+    aspectPenalty +
+    density * 0.08 +
+    (minShare < 0.12 ? (0.12 - minShare) * 2.2 : 0) +
+    thinPenalty * 0.12
   );
 };
 
-const layoutTreemapRow = (row, bounds) => {
-  const rowTotal = sumValue(row);
-  if (rowTotal <= 0) return { rectangles: [], bounds };
+const scoreSplitCandidate = ({
+  items,
+  splitIndex,
+  orientation,
+  bounds,
+  total,
+}) => {
+  const primaryItems = items.slice(0, splitIndex);
+  const secondaryItems = items.slice(splitIndex);
+  const primaryTotal = sumValue(primaryItems);
+  const ratio = primaryTotal / total;
+  const [primaryBounds, secondaryBounds] = sliceBounds(
+    bounds,
+    ratio,
+    orientation,
+  );
 
-  const rectangles = [];
-
-  if (bounds.width >= bounds.height) {
-    const rowWidth = rowTotal / bounds.height;
-    let y = bounds.y;
-
-    row.forEach((item) => {
-      const height = item.value / rowWidth;
-      rectangles.push({ ...item, x: bounds.x, y, width: rowWidth, height });
-      y += height;
-    });
-
-    return {
-      rectangles,
-      bounds: {
-        x: bounds.x + rowWidth,
-        y: bounds.y,
-        width: bounds.width - rowWidth,
-        height: bounds.height,
-      },
-    };
-  }
-
-  const rowHeight = rowTotal / bounds.width;
-  let x = bounds.x;
-
-  row.forEach((item) => {
-    const width = item.value / rowHeight;
-    rectangles.push({ ...item, x, y: bounds.y, width, height: rowHeight });
-    x += width;
-  });
+  const orientationPenalty =
+    orientation === getSplitOrientation(bounds) ? 0 : TREEMAP_ORIENTATION_BIAS;
+  const balancePenalty = Math.abs(0.5 - ratio) * TREEMAP_BALANCE_WEIGHT;
+  const childPenalty =
+    scoreBoundsForItems(primaryBounds, primaryItems) +
+    scoreBoundsForItems(secondaryBounds, secondaryItems);
 
   return {
-    rectangles,
-    bounds: {
-      x: bounds.x,
-      y: bounds.y + rowHeight,
-      width: bounds.width,
-      height: bounds.height - rowHeight,
-    },
+    splitIndex,
+    orientation,
+    ratio,
+    score: childPenalty + balancePenalty + orientationPenalty,
   };
 };
 
-const binaryTreemap = (items, bounds) => {
+const chooseBestTreemapSplit = (items, bounds) => {
+  const total = sumValue(items);
+  if (items.length < 2 || total <= 0) return null;
+
+  let bestCandidate = null;
+
+  for (let splitIndex = 1; splitIndex < items.length; splitIndex += 1) {
+    const verticalCandidate = scoreSplitCandidate({
+      items,
+      splitIndex,
+      orientation: "vertical",
+      bounds,
+      total,
+    });
+    const horizontalCandidate = scoreSplitCandidate({
+      items,
+      splitIndex,
+      orientation: "horizontal",
+      bounds,
+      total,
+    });
+
+    const candidate =
+      verticalCandidate.score <= horizontalCandidate.score
+        ? verticalCandidate
+        : horizontalCandidate;
+
+    if (!bestCandidate || candidate.score < bestCandidate.score) {
+      bestCandidate = candidate;
+    }
+  }
+
+  return bestCandidate;
+};
+
+const layoutSingleRect = (item, bounds) => [
+  {
+    ...item,
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+  },
+];
+
+const buildTreemapLayoutRecursive = (items, bounds) => {
+  if (items.length === 0 || bounds.width <= 0 || bounds.height <= 0) return [];
+  if (items.length === 1) return layoutSingleRect(items[0], bounds);
+
+  const split = chooseBestTreemapSplit(items, bounds);
+  if (!split) return layoutSingleRect(items[0], bounds);
+
+  const primaryItems = items.slice(0, split.splitIndex);
+  const secondaryItems = items.slice(split.splitIndex);
+  const [primaryBounds, secondaryBounds] = sliceBounds(
+    bounds,
+    split.ratio,
+    split.orientation,
+  );
+
+  return [
+    ...buildTreemapLayoutRecursive(primaryItems, primaryBounds),
+    ...buildTreemapLayoutRecursive(secondaryItems, secondaryBounds),
+  ];
+};
+
+const buildTreemapLayout = (items, bounds) => {
   const total = sumValue(items);
   if (items.length === 0 || total <= 0) return [];
 
   const scale = (bounds.width * bounds.height) / total;
-  const remainingItems = [...items]
-    .sort((a, b) => b.value - a.value)
-    .map((item) => ({ ...item, value: item.value * scale }));
-  const rectangles = [];
-  let remainingBounds = { ...bounds };
-  let row = [];
+  const normalizedItems = [...items]
+    .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name))
+    .map((item) => ({
+      ...item,
+      value: item.value * scale,
+    }));
 
-  while (remainingItems.length > 0) {
-    const item = remainingItems[0];
-    const sideLength = Math.min(remainingBounds.width, remainingBounds.height);
-    const currentRatio = worstAspectRatio(row, sideLength);
-    const nextRatio = worstAspectRatio([...row, item], sideLength);
-
-    if (row.length === 0 || nextRatio <= currentRatio) {
-      row.push(remainingItems.shift());
-      continue;
-    }
-
-    const layout = layoutTreemapRow(row, remainingBounds);
-    rectangles.push(...layout.rectangles);
-    remainingBounds = layout.bounds;
-    row = [];
-  }
-
-  if (row.length > 0) {
-    rectangles.push(...layoutTreemapRow(row, remainingBounds).rectangles);
-  }
-
-  return rectangles;
+  return buildTreemapLayoutRecursive(normalizedItems, bounds);
 };
 </script>
 
