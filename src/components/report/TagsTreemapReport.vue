@@ -24,9 +24,9 @@
           tag
           placeholder="Select tags..."
           :options="tagOptions"
-          :on-create="handleTagCreate"
+          :input-props="tagInputProps"
           :clear-filter-after-select="true"
-          :max-tag-count="4"
+          :max-tag-count="8"
           :ignore-composition="false"
           :loading="isSearching"
           @search="searchTags"
@@ -83,21 +83,36 @@
         ref="treemapLayoutRef"
         class="treemap-layout"
       >
-        <div
+        <n-tooltip
           v-for="rect in rectangles"
           :key="`${rect.id}-${treemapRenderKey}`"
-          class="treemap-tile"
-          :class="rect.labelMode ? `treemap-tile--${rect.labelMode}` : null"
-          :style="getTileStyle(rect)"
+          trigger="hover"
+          placement="top"
         >
-          <span v-if="rect.showShare" class="tile-share">
-            {{ rect.relativePercentage }}%
-          </span>
-          <span v-if="rect.showLabel" class="tile-label">{{ rect.name }}</span>
-          <span v-if="rect.showMeta" class="tile-meta">
-            {{ rect.photoCount }} photos · {{ rect.percentage }}%
-          </span>
-        </div>
+          <template #trigger>
+            <div
+              class="treemap-tile"
+              :class="rect.labelMode ? `treemap-tile--${rect.labelMode}` : null"
+              :style="getTileStyle(rect)"
+            >
+              <span v-if="rect.showShare" class="tile-share">
+                {{ rect.relativePercentage }}%
+              </span>
+              <span v-if="rect.showLabel" class="tile-label">{{
+                rect.name
+              }}</span>
+              <span v-if="rect.showMeta" class="tile-meta">
+                {{ rect.photoCount }} photos · {{ rect.percentage }}%
+              </span>
+            </div>
+          </template>
+          <div class="treemap-tooltip">
+            <strong>{{ rect.name }}</strong>
+            <span>{{ rect.photoCount }} photos</span>
+            <span>Relative share: {{ rect.relativePercentage }}%</span>
+            <span>Total share: {{ rect.percentage }}%</span>
+          </div>
+        </n-tooltip>
       </div>
 
       <div v-else class="empty-treemap">
@@ -147,6 +162,7 @@ const selectedTags = ref([]);
 const tagDropdownShow = ref(false);
 const includeContained = ref(true);
 const tagOptions = ref([]);
+const tagSearchTerm = ref("");
 const tags = ref([]);
 const totalPhotos = ref(0);
 const isLoading = ref(false);
@@ -313,18 +329,59 @@ const getTileStyle = (rect) => ({
   "--fade-delay": `${Math.min(rect.colorIndex * 12, 120)}ms`,
 });
 
+const normalizeTag = (value) => String(value).trim().toLowerCase();
+
 const normalizeTags = (rawTags) => {
-  return rawTags.map((tag) => String(tag).trim().toLowerCase()).filter(Boolean);
+  return rawTags.map((tag) => normalizeTag(tag)).filter(Boolean);
 };
 
 const handleTagCreate = (label) => {
-  const normalized = String(label).trim().toLowerCase();
+  const normalized = normalizeTag(label);
   if (!normalized) return null;
 
   return {
     label: normalized,
     value: normalized,
   };
+};
+
+const hasExactTagMatch = (label) => {
+  const normalized = normalizeTag(label);
+  return tagOptions.value.some(
+    (option) => normalizeTag(option.value ?? option.label) === normalized,
+  );
+};
+
+const createTagFromSearchTerm = (label) => {
+  const option = handleTagCreate(label);
+  if (!option) return false;
+
+  const normalized = option.value;
+  if (selectedTags.value.includes(normalized) || hasExactTagMatch(normalized)) {
+    return false;
+  }
+
+  selectedTags.value = [...selectedTags.value, normalized];
+  tagSearchTerm.value = "";
+  tagOptions.value = [];
+  tagDropdownShow.value = false;
+  return true;
+};
+
+const handleTagInputKeydown = (event) => {
+  if (event.key !== "Enter" || event.isComposing) return;
+
+  const currentValue = String(event.target?.value ?? "");
+  if (!currentValue.trim()) return;
+
+  if (createTagFromSearchTerm(currentValue)) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+};
+
+const tagInputProps = {
+  onKeydown: handleTagInputKeydown,
 };
 
 const fetchTreemap = async () => {
@@ -364,6 +421,8 @@ const scheduleFetchTreemap = () => {
 };
 
 const searchTags = async (term) => {
+  tagSearchTerm.value = term;
+
   if (!term || term.trim().length < 1) {
     tagOptions.value = [];
     return;
@@ -710,6 +769,7 @@ const buildTreemapLayout = (items, bounds) => {
   color: white;
   text-align: left;
   overflow: hidden;
+  cursor: pointer;
   opacity: 0;
   animation: treemap-tile-fade-in 220ms ease-out forwards;
   animation-delay: var(--fade-delay, 0ms);
@@ -798,6 +858,12 @@ const buildTreemapLayout = (items, bounds) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.treemap-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .treemap-loading,
