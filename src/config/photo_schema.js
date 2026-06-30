@@ -136,7 +136,7 @@ export const VISUAL_ASPECTS_MAP = Object.fromEntries(
 const STYLE_FUNDAMENTALS = [
   {
     key: "aesthetic_quality",
-    label: "Aesthetic Quality",
+    label: "Aesthetic",
     weights: { general: 1, street: 0.6, documentary: 0.4, abstract: 1 },
   },
   {
@@ -204,7 +204,7 @@ const STYLE_GROUPS = [
 const COMMERCIAL_FUNDAMENTALS = [
   {
     key: "aesthetic_quality",
-    label: "Aesthetic Quality",
+    label: "Aesthetic",
     weights: { commercial: 1, general: 1 },
   },
   {
