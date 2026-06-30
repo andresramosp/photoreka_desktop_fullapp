@@ -55,6 +55,45 @@ export default class WeightPresetsController {
     }
   }
 
+  async update({ auth, params, request, response }: HttpContext) {
+    try {
+      const user = await User.findOrFail((auth.use('api').user! as unknown as User).id)
+
+      const presets = user.customWeightPresets ?? []
+      const index = presets.findIndex((p) => p.id === params.id)
+
+      if (index === -1) {
+        return response.notFound({ message: 'Preset not found' })
+      }
+
+      const { name, weights } = request.only(['name', 'weights'])
+
+      if (name !== undefined) {
+        if (typeof name !== 'string' || name.trim().length === 0) {
+          return response.badRequest({ message: 'Preset name cannot be empty' })
+        }
+        presets[index] = { ...presets[index], name: name.trim().slice(0, 80) }
+      }
+
+      if (weights !== undefined) {
+        if (typeof weights !== 'object' || Array.isArray(weights)) {
+          return response.badRequest({ message: 'Weights must be an object' })
+        }
+        presets[index] = { ...presets[index], weights: weights as Record<string, number> }
+      }
+
+      user.customWeightPresets = [...presets]
+      await user.save()
+
+      return response.ok({ preset: presets[index] })
+    } catch (error: any) {
+      return response.internalServerError({
+        message: 'Failed to update preset',
+        error: error?.message,
+      })
+    }
+  }
+
   async destroy({ auth, params, response }: HttpContext) {
     try {
       const user = await User.findOrFail((auth.use('api').user! as unknown as User).id)

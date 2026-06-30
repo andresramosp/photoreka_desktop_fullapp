@@ -43,6 +43,7 @@ router
     // Custom weight presets
     router.get('/api/user/weight-presets', [WeightPresetsController, 'index'])
     router.post('/api/user/weight-presets', [WeightPresetsController, 'store'])
+    router.patch('/api/user/weight-presets/:id', [WeightPresetsController, 'update'])
     router.delete('/api/user/weight-presets/:id', [WeightPresetsController, 'destroy'])
   })
   .use(middleware.auth())
