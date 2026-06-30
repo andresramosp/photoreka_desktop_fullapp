@@ -12,6 +12,13 @@ export type InsightsState = {
   shownPhotoIds: number[]
 }
 
+export type WeightPreset = {
+  id: string
+  name: string
+  weights: Record<string, number>
+  createdAt: string
+}
+
 export type ContentViolation = {
   date: string
   reasons: string[]
@@ -88,6 +95,16 @@ export default class User extends compose(BaseModel, AuthFinder) {
 
   @column()
   declare insightsState: InsightsState | null
+
+  @column({
+    prepare: (value: WeightPreset[] | null) => (value != null ? JSON.stringify(value) : null),
+    consume: (value: string | WeightPreset[] | null) => {
+      if (value == null) return null
+      if (typeof value === 'string') return JSON.parse(value) as WeightPreset[]
+      return value
+    },
+  })
+  declare customWeightPresets: WeightPreset[] | null
 
   @column({
     prepare: (value: ContentViolation[] | null) => (value != null ? JSON.stringify(value) : null),

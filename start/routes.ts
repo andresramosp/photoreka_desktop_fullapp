@@ -19,6 +19,7 @@ import AuthLrController from '#controllers/auth_lr_controller'
 
 // Auth routes (no middleware needed)
 const AuthController = () => import('#controllers/auth_controller')
+const WeightPresetsController = () => import('#controllers/weight_presets_controller')
 router.post('/api/auth/register', [AuthController, 'register'])
 router.post('/api/auth/login', [AuthController, 'login'])
 router.post('/api/auth/demo-login', [AuthController, 'demoLogin']) // Demo login endpoint
@@ -39,6 +40,10 @@ router
     router.put('/api/auth/profile', [AuthController, 'updateProfile'])
     router.post('/api/auth/change-password', [AuthController, 'changePassword'])
     router.delete('/api/account', [AuthController, 'deleteAccount'])
+    // Custom weight presets
+    router.get('/api/user/weight-presets', [WeightPresetsController, 'index'])
+    router.post('/api/user/weight-presets', [WeightPresetsController, 'store'])
+    router.delete('/api/user/weight-presets/:id', [WeightPresetsController, 'destroy'])
   })
   .use(middleware.auth())
 
