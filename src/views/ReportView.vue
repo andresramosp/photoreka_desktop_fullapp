@@ -54,6 +54,16 @@
         <VisualAspectsReportNew :photos="photosStore.photos" />
       </section>
 
+      <!-- Nueva seccion TreeMap de tags -->
+      <section
+        id="tags"
+        ref="tagsRef"
+        class="report-section-wrapper"
+        data-section="tags"
+      >
+        <TagsTreemapReport />
+      </section>
+
       <!-- Artistic Scores Section -->
       <section
         id="artistic"
@@ -73,7 +83,7 @@ import { usePhotosStore } from "@/stores/photos.js";
 import { useRoute, useRouter } from "vue-router";
 
 defineOptions({
-  name: "PortfolioReportView",
+  name: "ReportView",
 });
 // import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useMessage } from "naive-ui";
@@ -81,6 +91,7 @@ import { useMessage } from "naive-ui";
 // import NarrativeAnalysisReport from "@/components/report/NarrativeAnalysisReport.vue";
 import PatternsAnalysisReport from "@/components/report/PatternsAnalysisReport.vue";
 import ArtisticScoresReport from "@/components/report/ArtisticScoresReport.vue";
+import TagsTreemapReport from "@/components/report/TagsTreemapReport.vue";
 
 // Icons
 import {
@@ -123,6 +134,12 @@ const sections = [
     shortLabel: "Visual",
     icon: EyeIcon,
   },
+  {
+    id: "tags",
+    label: "Tag Proportions",
+    shortLabel: "Tags",
+    icon: GridIcon,
+  },
 
   {
     id: "artistic",
@@ -135,10 +152,11 @@ const sections = [
 // Section refs
 const visualRef = ref(null);
 const patternsRef = ref(null);
+const tagsRef = ref(null);
 const artisticRef = ref(null);
 
 // Active section tracking
-const VALID_SECTION_IDS = ["patterns", "visual", "artistic"];
+const VALID_SECTION_IDS = ["patterns", "visual", "tags", "artistic"];
 const VALID_PATTERN_TYPE_IDS = ["general", "story", "context"];
 
 const normalizeSectionId = (value) => {

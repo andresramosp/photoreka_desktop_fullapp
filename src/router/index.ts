@@ -13,7 +13,7 @@ import SeriesView from "../views/SeriesView.vue";
 import ImportAreaView from "../views/ImportAreaView.vue";
 import WorkspaceView from "../views/WorkspaceView.vue";
 import FramerView from "../views/FramerView.vue";
-import PortfolioReportView from "../views/PortfolioReportView.vue";
+import ReportView from "../views/ReportView.vue";
 import SettingsView from "../views/SettingsView.vue";
 import PlanView from "../views/PlanView.vue";
 import AuthView from "../views/AuthView.vue";
@@ -372,7 +372,7 @@ const router = createRouter({
     {
       path: "/report",
       name: "report",
-      component: PortfolioReportView,
+      component: ReportView,
       meta: {
         requiresAuth: true,
       },

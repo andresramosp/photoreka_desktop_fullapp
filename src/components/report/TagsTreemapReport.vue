@@ -1,0 +1,786 @@
+<template>
+  <div class="report-section">
+    <div class="report-section-header">
+      <h2 class="section-title">
+        <n-icon class="section-icon">
+          <PricetagIcon />
+        </n-icon>
+        Tags Treemap
+      </h2>
+      <p class="section-description">
+        Proportional presence of tags across the selected part of your catalog
+      </p>
+    </div>
+
+    <div class="treemap-card">
+      <div class="treemap-controls">
+        <n-select
+          v-model:value="selectedTags"
+          v-model:show="tagDropdownShow"
+          multiple
+          filterable
+          clearable
+          remote
+          tag
+          placeholder="Select tags..."
+          :options="tagOptions"
+          :on-create="handleTagCreate"
+          :clear-filter-after-select="true"
+          :max-tag-count="4"
+          :ignore-composition="false"
+          :loading="isSearching"
+          @search="searchTags"
+        >
+          <template #empty>
+            <div class="select-empty">Start typing to search tags...</div>
+          </template>
+        </n-select>
+
+        <n-radio-group
+          v-model:value="matchMode"
+          :disabled="selectedTags.length == 0"
+          size="small"
+        >
+          <n-tooltip
+            v-for="option in matchModeOptions"
+            :key="option.value"
+            trigger="hover"
+            placement="top"
+          >
+            <template #trigger>
+              <span class="match-mode-trigger">
+                <n-radio-button :value="option.value">
+                  {{ option.label }}
+                </n-radio-button>
+              </span>
+            </template>
+            {{ option.description }}
+          </n-tooltip>
+        </n-radio-group>
+      </div>
+
+      <!-- <div class="treemap-summary">
+        <span class="summary-item">
+          <span class="summary-label">Photos</span>
+          <span class="summary-value">{{ totalPhotos }}</span>
+        </span>
+        <span class="summary-item">
+          <span class="summary-label">Tags</span>
+          <span class="summary-value">{{ tags.length }}</span>
+        </span>
+        <span class="summary-item">
+          <span class="summary-label">Scope</span>
+          <span class="summary-value">{{ scopeLabel }}</span>
+        </span>
+      </div> -->
+
+      <div v-if="isLoading" class="treemap-loading">
+        <n-spin size="medium" />
+      </div>
+
+      <div
+        v-else-if="rectangles.length > 0"
+        ref="treemapLayoutRef"
+        class="treemap-layout"
+      >
+        <div
+          v-for="rect in rectangles"
+          :key="`${rect.id}-${treemapRenderKey}`"
+          class="treemap-tile"
+          :class="rect.labelMode ? `treemap-tile--${rect.labelMode}` : null"
+          :style="getTileStyle(rect)"
+        >
+          <span v-if="rect.showShare" class="tile-share">
+            {{ rect.relativePercentage }}%
+          </span>
+          <span v-if="rect.showLabel" class="tile-label">{{ rect.name }}</span>
+          <span v-if="rect.showMeta" class="tile-meta">
+            {{ rect.photoCount }} photos · {{ rect.percentage }}%
+          </span>
+        </div>
+      </div>
+
+      <div v-else class="empty-treemap">
+        <n-icon size="48" :component="PricetagIcon" class="empty-icon" />
+        <p class="empty-text">
+          Select tags or use main tags to build the treemap
+        </p>
+      </div>
+
+      <span
+        v-if="showMainTags && selectedTags.length === 0"
+        class="main-tags-preview-label"
+      >
+        This is a preview of your main tags. Select yours to customize the
+        treemap.
+      </span>
+
+      <!-- <div v-if="topTags.length > 0" class="treemap-legend">
+        <button
+          v-for="tag in topTags"
+          :key="tag.id"
+          class="legend-chip"
+          @click="toggleTag(tag.name)"
+        >
+          <span
+            class="legend-color"
+            :style="{ backgroundColor: getColor(tag.colorIndex) }"
+          ></span>
+          <span class="legend-name">{{ tag.name }}</span>
+          <span class="legend-count">{{ tag.photoCount }}</span>
+        </button>
+      </div> -->
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { api } from "@/utils/axios";
+import { useArtisticScores } from "@/composables/useArtisticScores";
+import { NRadioButton, NRadioGroup, NTooltip } from "naive-ui";
+import { PricetagOutline as PricetagIcon } from "@vicons/ionicons5";
+
+const { scoreScale } = useArtisticScores();
+
+const selectedTags = ref([]);
+const tagDropdownShow = ref(false);
+const includeContained = ref(true);
+const tagOptions = ref([]);
+const tags = ref([]);
+const totalPhotos = ref(0);
+const isLoading = ref(false);
+const isSearching = ref(false);
+const showMainTags = ref(false);
+const treemapLayoutRef = ref(null);
+const treemapSize = ref({ width: 0, height: 0 });
+const treemapRenderKey = ref(0);
+let refreshTimer = null;
+let treemapResizeObserver = null;
+
+const observeTreemapLayout = (element) => {
+  treemapResizeObserver?.disconnect();
+  treemapResizeObserver = null;
+
+  if (!element || typeof ResizeObserver === "undefined") return;
+
+  treemapSize.value = {
+    width: element.clientWidth,
+    height: element.clientHeight,
+  };
+
+  treemapResizeObserver = new ResizeObserver(([entry]) => {
+    treemapSize.value = {
+      width: entry.contentRect.width,
+      height: entry.contentRect.height,
+    };
+  });
+  treemapResizeObserver.observe(element);
+};
+
+// Uses the score scale as a continuous gradient instead of a fixed palette.
+const scorePalette = scoreScale.levels.map((level) => level.bgColor);
+
+const hexToRgb = (hex) => {
+  const value = hex.replace("#", "");
+  return {
+    r: parseInt(value.substring(0, 2), 16),
+    g: parseInt(value.substring(2, 4), 16),
+    b: parseInt(value.substring(4, 6), 16),
+  };
+};
+
+const rgbToHex = ({ r, g, b }) =>
+  `#${[r, g, b]
+    .map((v) => Math.round(v).toString(16).padStart(2, "0"))
+    .join("")}`;
+
+const interpolateColor = (from, to, t) => {
+  const a = hexToRgb(from);
+  const b = hexToRgb(to);
+
+  return rgbToHex({
+    r: a.r + (b.r - a.r) * t,
+    g: a.g + (b.g - a.g) * t,
+    b: a.b + (b.b - a.b) * t,
+  });
+};
+
+/**
+ * Returns a color distributed across the entire score scale.
+ * index = position of the tile
+ * total = total number of tiles
+ */
+const getColor = (index, total) => {
+  if (total <= 1) {
+    return scorePalette[Math.floor(scorePalette.length / 2)];
+  }
+
+  const normalized = index / (total - 1);
+
+  const scaled = normalized * (scorePalette.length - 1);
+  const from = Math.floor(scaled);
+  const to = Math.min(from + 1, scorePalette.length - 1);
+  const t = scaled - from;
+
+  return interpolateColor(scorePalette[from], scorePalette[to], t);
+};
+
+const scopeLabel = computed(() => {
+  if (selectedTags.value.length === 0) {
+    return showMainTags.value ? "Main tags" : "No selection";
+  }
+
+  return includeContained.value
+    ? "Contains selected tags"
+    : "Exact selected tags";
+});
+
+const matchMode = computed({
+  get: () => (includeContained.value ? "contains" : "exact"),
+  set: (value) => {
+    includeContained.value = value === "contains";
+  },
+});
+
+const matchModeOptions = [
+  {
+    value: "exact",
+    label: "Exact",
+    description: "Only tags that match the selected tag names exactly.",
+  },
+  {
+    value: "contains",
+    label: "Contains",
+    description:
+      "Tags that include the selected tag names as part of the text.",
+  },
+];
+
+const topTags = computed(() => tags.value.slice(0, 12));
+
+// Only one special case: short horizontal strips where the absolute badge
+// would overflow the tile height. Everything else uses the default column layout
+// (label at bottom-left, badge at top-right absolute) which works for any shape.
+const getTileLabelMode = ({ pixelWidth, pixelHeight }) => {
+  if (pixelWidth < 32 || pixelHeight < 14) return null;
+  if (pixelHeight < 36) return "horizontal";
+  return "normal";
+};
+
+const rectangles = computed(() => {
+  const total = tags.value.reduce((sum, tag) => sum + tag.photoCount, 0);
+  if (total <= 0) return [];
+
+  const items = tags.value.map((tag, index) => ({
+    ...tag,
+    colorIndex: index,
+    value: tag.photoCount,
+    relativePercentage: ((tag.photoCount / total) * 100).toFixed(1),
+  }));
+
+  return binaryTreemap(items, { x: 0, y: 0, width: 100, height: 100 }).map(
+    (rect) => {
+      const pixelWidth = (rect.width / 100) * treemapSize.value.width;
+      const pixelHeight = (rect.height / 100) * treemapSize.value.height;
+      const labelMode = getTileLabelMode({ pixelWidth, pixelHeight });
+
+      return {
+        ...rect,
+        labelMode,
+        showLabel: labelMode !== null,
+        showMeta:
+          labelMode === "normal" && pixelWidth >= 100 && pixelHeight >= 48,
+        // Badge needs ~44px wide; horizontal mode handles it inline so always show
+        showShare:
+          labelMode !== null &&
+          (labelMode === "horizontal" || pixelWidth >= 44),
+      };
+    },
+  );
+});
+
+const getTileStyle = (rect) => ({
+  left: `${rect.x}%`,
+  top: `${rect.y}%`,
+  width: `${rect.width}%`,
+  height: `${rect.height}%`,
+  backgroundColor: getColor(rect.colorIndex, tags.value.length),
+  "--fade-delay": `${Math.min(rect.colorIndex * 12, 120)}ms`,
+});
+
+const normalizeTags = (rawTags) => {
+  return rawTags.map((tag) => String(tag).trim().toLowerCase()).filter(Boolean);
+};
+
+const handleTagCreate = (label) => {
+  const normalized = String(label).trim().toLowerCase();
+  if (!normalized) return null;
+
+  return {
+    label: normalized,
+    value: normalized,
+  };
+};
+
+const fetchTreemap = async () => {
+  if (!showMainTags.value && selectedTags.value.length === 0) {
+    tags.value = [];
+    totalPhotos.value = 0;
+    isLoading.value = false;
+    return;
+  }
+
+  isLoading.value = true;
+  try {
+    const response = await api.get("/api/tags/treemap", {
+      params: {
+        tags: selectedTags.value.join(","),
+        includeContained: includeContained.value,
+        mainTags: showMainTags.value && selectedTags.value.length === 0,
+        limit: showMainTags.value && selectedTags.value.length === 0 ? 24 : 80,
+      },
+    });
+
+    const result = response.data?.result || {};
+    tags.value = (result.tags || []).map((tag, index) => ({
+      ...tag,
+      colorIndex: index,
+    }));
+    totalPhotos.value = result.totalPhotos || 0;
+    treemapRenderKey.value += 1;
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+const scheduleFetchTreemap = () => {
+  window.clearTimeout(refreshTimer);
+  refreshTimer = window.setTimeout(fetchTreemap, 180);
+};
+
+const searchTags = async (term) => {
+  if (!term || term.trim().length < 1) {
+    tagOptions.value = [];
+    return;
+  }
+
+  isSearching.value = true;
+  try {
+    const response = await api.get("/api/tags/search", {
+      params: { term: term.trim() },
+    });
+    const selectedValues = new Set(selectedTags.value);
+    const foundOptions = (response.data?.result || [])
+      .map((tag) => ({
+        label: tag.name,
+        value: tag.name,
+      }))
+      .filter(
+        (option) => !selectedValues.has(String(option.value).toLowerCase()),
+      );
+    const optionsByValue = new Map(
+      foundOptions.map((option) => [option.value, option]),
+    );
+    tagOptions.value = Array.from(optionsByValue.values());
+  } finally {
+    isSearching.value = false;
+  }
+};
+
+const toggleTag = (tagName) => {
+  const normalized = tagName.toLowerCase();
+  showMainTags.value = false;
+  selectedTags.value = selectedTags.value.includes(normalized)
+    ? selectedTags.value.filter((tag) => tag !== normalized)
+    : [...selectedTags.value, normalized];
+};
+
+watch(selectedTags, (value) => {
+  const normalizedTags = normalizeTags(value);
+  if (normalizedTags.join("\u0000") !== value.join("\u0000")) {
+    selectedTags.value = normalizedTags;
+    return;
+  }
+
+  if (selectedTags.value.length > 0) {
+    showMainTags.value = false;
+  } else {
+    showMainTags.value = true;
+  }
+  scheduleFetchTreemap();
+});
+
+watch(includeContained, scheduleFetchTreemap);
+
+watch(
+  () => selectedTags.value.length,
+  () => {
+    tagDropdownShow.value = false;
+  },
+);
+
+watch(treemapLayoutRef, observeTreemapLayout);
+
+onMounted(() => {
+  showMainTags.value = true;
+  fetchTreemap();
+});
+
+onBeforeUnmount(() => {
+  treemapResizeObserver?.disconnect();
+  window.clearTimeout(refreshTimer);
+});
+
+const sumValue = (items) => items.reduce((sum, item) => sum + item.value, 0);
+
+const worstAspectRatio = (row, sideLength) => {
+  if (row.length === 0 || sideLength <= 0) return Infinity;
+
+  const rowTotal = sumValue(row);
+  const minValue = Math.min(...row.map((item) => item.value));
+  const maxValue = Math.max(...row.map((item) => item.value));
+
+  if (rowTotal <= 0 || minValue <= 0) return Infinity;
+
+  return Math.max(
+    (sideLength * sideLength * maxValue) / (rowTotal * rowTotal),
+    (rowTotal * rowTotal) / (sideLength * sideLength * minValue),
+  );
+};
+
+const layoutTreemapRow = (row, bounds) => {
+  const rowTotal = sumValue(row);
+  if (rowTotal <= 0) return { rectangles: [], bounds };
+
+  const rectangles = [];
+
+  if (bounds.width >= bounds.height) {
+    const rowWidth = rowTotal / bounds.height;
+    let y = bounds.y;
+
+    row.forEach((item) => {
+      const height = item.value / rowWidth;
+      rectangles.push({ ...item, x: bounds.x, y, width: rowWidth, height });
+      y += height;
+    });
+
+    return {
+      rectangles,
+      bounds: {
+        x: bounds.x + rowWidth,
+        y: bounds.y,
+        width: bounds.width - rowWidth,
+        height: bounds.height,
+      },
+    };
+  }
+
+  const rowHeight = rowTotal / bounds.width;
+  let x = bounds.x;
+
+  row.forEach((item) => {
+    const width = item.value / rowHeight;
+    rectangles.push({ ...item, x, y: bounds.y, width, height: rowHeight });
+    x += width;
+  });
+
+  return {
+    rectangles,
+    bounds: {
+      x: bounds.x,
+      y: bounds.y + rowHeight,
+      width: bounds.width,
+      height: bounds.height - rowHeight,
+    },
+  };
+};
+
+const binaryTreemap = (items, bounds) => {
+  const total = sumValue(items);
+  if (items.length === 0 || total <= 0) return [];
+
+  const scale = (bounds.width * bounds.height) / total;
+  const remainingItems = [...items]
+    .sort((a, b) => b.value - a.value)
+    .map((item) => ({ ...item, value: item.value * scale }));
+  const rectangles = [];
+  let remainingBounds = { ...bounds };
+  let row = [];
+
+  while (remainingItems.length > 0) {
+    const item = remainingItems[0];
+    const sideLength = Math.min(remainingBounds.width, remainingBounds.height);
+    const currentRatio = worstAspectRatio(row, sideLength);
+    const nextRatio = worstAspectRatio([...row, item], sideLength);
+
+    if (row.length === 0 || nextRatio <= currentRatio) {
+      row.push(remainingItems.shift());
+      continue;
+    }
+
+    const layout = layoutTreemapRow(row, remainingBounds);
+    rectangles.push(...layout.rectangles);
+    remainingBounds = layout.bounds;
+    row = [];
+  }
+
+  if (row.length > 0) {
+    rectangles.push(...layoutTreemapRow(row, remainingBounds).rectangles);
+  }
+
+  return rectangles;
+};
+</script>
+
+<style scoped>
+.treemap-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+}
+
+.treemap-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.treemap-controls .n-select {
+  flex: 1;
+}
+
+.match-mode-trigger {
+  display: inline-flex;
+}
+
+.select-empty {
+  padding: var(--spacing-sm);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.treemap-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.summary-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.summary-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.summary-value {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.treemap-layout {
+  position: relative;
+  width: 100%;
+  height: clamp(460px, 58vh, 560px);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.treemap-tile {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--spacing-sm);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: white;
+  text-align: left;
+  overflow: hidden;
+  opacity: 0;
+  animation: treemap-tile-fade-in 220ms ease-out forwards;
+  animation-delay: var(--fade-delay, 0ms);
+  transition:
+    filter 0.16s ease,
+    transform 0.16s ease;
+}
+
+@keyframes treemap-tile-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .treemap-tile {
+    animation: none;
+    opacity: 1;
+    transition: none;
+  }
+}
+
+.tile-share {
+  position: absolute;
+  top: var(--spacing-sm);
+  right: var(--spacing-sm);
+  padding: 4px 8px;
+  border-radius: 999px;
+  background-color: rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(8px);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.treemap-tile:hover {
+  filter: brightness(1.08);
+  z-index: 1;
+}
+
+/* Horizontal strip: badge can't sit in top-right corner (tile too short),
+   so lay label + badge out in a single row instead. */
+.treemap-tile--horizontal {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--spacing-xs);
+  padding: 3px var(--spacing-sm);
+}
+
+.treemap-tile--horizontal .tile-label {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-xs);
+  line-height: 1;
+}
+
+.treemap-tile--horizontal .tile-share {
+  position: static;
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  font-size: var(--font-size-xs);
+}
+
+.tile-label {
+  max-width: 100%;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.tile-meta {
+  max-width: 100%;
+  font-size: var(--font-size-xs);
+  line-height: 1.1;
+  opacity: 0.9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.treemap-loading,
+.empty-treemap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: clamp(460px, 58vh, 560px);
+  gap: var(--spacing-md);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.main-tags-preview-label {
+  margin-top: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+}
+
+.treemap-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-lg);
+}
+
+.legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.legend-chip:hover {
+  border-color: var(--primary-color);
+  color: var(--text-primary);
+}
+
+.legend-color {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-sm);
+}
+
+.legend-name,
+.legend-count {
+  font-size: var(--font-size-xs);
+}
+
+.legend-count {
+  color: var(--text-tertiary);
+}
+
+@media (max-width: 768px) {
+  .treemap-card {
+    padding: var(--spacing-lg);
+  }
+
+  .treemap-layout,
+  .treemap-loading,
+  .empty-treemap {
+    height: clamp(400px, 54vh, 500px);
+  }
+
+  .tile-meta {
+    display: none;
+  }
+
+  .treemap-tile--normal .tile-share {
+    top: var(--spacing-xs);
+    right: var(--spacing-xs);
+    font-size: var(--font-size-xs);
+  }
+}
+</style>
