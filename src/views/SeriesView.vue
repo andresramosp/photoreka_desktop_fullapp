@@ -1941,9 +1941,12 @@ const updateViewingSeries = () => {
       showSetView.value = false;
       seriesStore.setCurrentSeries(series);
 
-      // Initialize editable state only when loading a different series,
-      // so we don't clobber in-progress edits on unrelated store refreshes.
-      if (String(currentEditingSeriesId.value) !== String(series.id)) {
+      // Re-sync unchanged local state after external updates, but don't clobber
+      // in-progress local edits.
+      if (
+        String(currentEditingSeriesId.value) !== String(series.id) ||
+        !hasChanges.value
+      ) {
         initEditableState(series);
       }
       return;

@@ -585,7 +585,9 @@ export const useSeriesStore = defineStore("series", {
             (s) => String(s.id) === String(seriesId),
           );
           if (index !== -1) {
-            this.series[index] = updatedSeries;
+            this.series = this.series.map((series) =>
+              String(series.id) === String(seriesId) ? updatedSeries : series,
+            );
           }
         }
 
