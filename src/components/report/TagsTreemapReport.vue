@@ -22,7 +22,7 @@
           clearable
           remote
           tag
-          placeholder="Select tags..."
+          placeholder="Select at least two tag..."
           :options="tagOptions"
           :input-props="tagInputProps"
           :clear-filter-after-select="true"
@@ -36,26 +36,37 @@
           </template>
         </n-select>
 
+        <n-button
+          type="primary"
+          :disabled="isGenerateDisabled"
+          :loading="isLoading"
+          @click="handleGenerateTreemap"
+        >
+          <template #icon>
+            <n-icon>
+              <AppsOutline />
+            </n-icon>
+          </template>
+          Generate
+        </n-button>
+
         <n-radio-group
           v-model:value="matchMode"
           :disabled="selectedTags.length == 0"
-          size="small"
+          @update:value="handleGenerateTreemap"
         >
-          <n-tooltip
+          <n-radio-button
             v-for="option in matchModeOptions"
             :key="option.value"
-            trigger="hover"
-            placement="top"
+            :value="option.value"
           >
-            <template #trigger>
-              <span class="match-mode-trigger">
-                <n-radio-button :value="option.value">
-                  {{ option.label }}
-                </n-radio-button>
-              </span>
-            </template>
-            {{ option.description }}
-          </n-tooltip>
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <span class="match-mode-trigger">{{ option.label }}</span>
+              </template>
+              {{ option.description }}
+            </n-tooltip>
+          </n-radio-button>
         </n-radio-group>
       </div>
 
@@ -154,7 +165,10 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { api } from "@/utils/axios";
 import { useArtisticScores } from "@/composables/useArtisticScores";
 import { NRadioButton, NRadioGroup, NTooltip } from "naive-ui";
-import { PricetagOutline as PricetagIcon } from "@vicons/ionicons5";
+import {
+  AppsOutline,
+  PricetagOutline as PricetagIcon,
+} from "@vicons/ionicons5";
 
 const { scoreScale } = useArtisticScores();
 
@@ -171,6 +185,7 @@ const showMainTags = ref(false);
 const treemapLayoutRef = ref(null);
 const treemapSize = ref({ width: 0, height: 0 });
 const treemapRenderKey = ref(0);
+const lastGeneratedSignature = ref(null);
 let refreshTimer = null;
 let treemapResizeObserver = null;
 
@@ -272,6 +287,23 @@ const matchModeOptions = [
       "Tags that include the selected tag names as part of the text.",
   },
 ];
+
+const getTreemapSignature = (rawTags, mode) => {
+  const normalizedTags = normalizeTags(rawTags).sort();
+  if (normalizedTags.length < 2) return null;
+
+  return `${mode}::${normalizedTags.join("\u0001")}`;
+};
+
+const currentTreemapSignature = computed(() =>
+  getTreemapSignature(selectedTags.value, matchMode.value),
+);
+
+const isGenerateDisabled = computed(
+  () =>
+    selectedTags.value.length < 2 ||
+    currentTreemapSignature.value === lastGeneratedSignature.value,
+);
 
 const topTags = computed(() => tags.value.slice(0, 12));
 
@@ -385,6 +417,8 @@ const tagInputProps = {
 };
 
 const fetchTreemap = async () => {
+  const requestSignature = currentTreemapSignature.value;
+
   if (!showMainTags.value && selectedTags.value.length === 0) {
     tags.value = [];
     totalPhotos.value = 0;
@@ -409,13 +443,15 @@ const fetchTreemap = async () => {
       colorIndex: index,
     }));
     totalPhotos.value = result.totalPhotos || 0;
+    lastGeneratedSignature.value = requestSignature;
     treemapRenderKey.value += 1;
   } finally {
     isLoading.value = false;
   }
 };
 
-const scheduleFetchTreemap = () => {
+const handleGenerateTreemap = () => {
+  showMainTags.value = selectedTags.value.length === 0;
   window.clearTimeout(refreshTimer);
   refreshTimer = window.setTimeout(fetchTreemap, 180);
 };
@@ -466,20 +502,21 @@ watch(selectedTags, (value) => {
     return;
   }
 
-  if (selectedTags.value.length > 0) {
-    showMainTags.value = false;
-  } else {
-    showMainTags.value = true;
+  if (normalizedTags.length < 2) {
+    lastGeneratedSignature.value = null;
   }
-  scheduleFetchTreemap();
 });
-
-watch(includeContained, scheduleFetchTreemap);
 
 watch(
   () => selectedTags.value.length,
-  () => {
+  (length) => {
     tagDropdownShow.value = false;
+
+    if (length === 0) {
+      showMainTags.value = true;
+      window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(fetchTreemap, 180);
+    }
   },
 );
 
