@@ -245,42 +245,42 @@
         </n-icon>
       </div>
     </div>
-  </div>
 
-  <!-- Fullscreen Photo Modal -->
-  <n-modal
-    v-model:show="showFullscreenPhoto"
-    :mask-closable="true"
-    :show-icon="false"
-    :closable="false"
-    :style="{ padding: '0' }"
-    transform-origin="center"
-  >
-    <div class="fullscreen-container" @click="closeFullscreen">
-      <div class="fullscreen-content">
-        <img
-          :src="photo.originalUrl || photo.url || photo.thumbnailUrl"
-          :alt="photo.title"
-          class="fullscreen-photo"
-          @click="closeFullscreen"
-        />
-        <n-button
-          class="close-fullscreen-btn"
-          size="large"
-          circle
-          type="primary"
-          @click.stop="closeFullscreen"
-          title="Close fullscreen (Esc)"
-        >
-          <template #icon>
-            <n-icon size="20">
-              <CloseIcon />
-            </n-icon>
-          </template>
-        </n-button>
+    <!-- Fullscreen Photo Modal -->
+    <n-modal
+      v-model:show="showFullscreenPhoto"
+      :mask-closable="true"
+      :show-icon="false"
+      :closable="false"
+      :style="{ padding: '0' }"
+      transform-origin="center"
+    >
+      <div class="fullscreen-container" @click="closeFullscreen">
+        <div class="fullscreen-content">
+          <img
+            :src="photo.originalUrl || photo.url || photo.thumbnailUrl"
+            :alt="photo.title"
+            class="fullscreen-photo"
+            @click="closeFullscreen"
+          />
+          <n-button
+            class="close-fullscreen-btn"
+            size="large"
+            circle
+            type="primary"
+            @click.stop="closeFullscreen"
+            title="Close fullscreen (Esc)"
+          >
+            <template #icon>
+              <n-icon size="20">
+                <CloseIcon />
+              </n-icon>
+            </template>
+          </n-button>
+        </div>
       </div>
-    </div>
-  </n-modal>
+    </n-modal>
+  </div>
 </template>
 
 <script setup lang="ts">
