@@ -136,6 +136,20 @@
             </n-icon>
           </template>
         </n-button>
+        <!-- Fullscreen button (desktop only) -->
+        <n-button
+          v-if="!isMobile && !props.hideFullscreen"
+          :size="photo.reasoning ? 'small' : 'medium'"
+          class="action-button fullscreen-button"
+          title="View fullscreen"
+          @click.stop="openFullscreen"
+        >
+          <template #icon>
+            <n-icon :size="photo.reasoning ? 14 : 20">
+              <FullscreenOutlined />
+            </n-icon>
+          </template>
+        </n-button>
       </div>
 
       <!-- Bottom overlay with matched tags or curation actions -->
@@ -232,11 +246,46 @@
       </div>
     </div>
   </div>
+
+  <!-- Fullscreen Photo Modal -->
+  <n-modal
+    v-model:show="showFullscreenPhoto"
+    :mask-closable="true"
+    :show-icon="false"
+    :closable="false"
+    :style="{ padding: '0' }"
+    transform-origin="center"
+  >
+    <div class="fullscreen-container" @click="closeFullscreen">
+      <div class="fullscreen-content">
+        <img
+          :src="photo.originalUrl || photo.url || photo.thumbnailUrl"
+          :alt="photo.title"
+          class="fullscreen-photo"
+          @click="closeFullscreen"
+        />
+        <n-button
+          class="close-fullscreen-btn"
+          size="large"
+          circle
+          type="primary"
+          @click.stop="closeFullscreen"
+          title="Close fullscreen (Esc)"
+        >
+          <template #icon>
+            <n-icon size="20">
+              <CloseIcon />
+            </n-icon>
+          </template>
+        </n-button>
+      </div>
+    </div>
+  </n-modal>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, onUnmounted } from "vue";
-import { NIcon, NTooltip, NButton } from "naive-ui";
+import { NIcon, NTooltip, NButton, NModal } from "naive-ui";
 import { useMobilePhotoSelection } from "@/composables/useMobilePhotoSelection";
 
 // Import @vicons icons from ionicons5 for reliability
@@ -249,7 +298,9 @@ import {
   TrashOutline as TrashIcon,
   DocumentTextOutline as NotesIcon,
   DiamondOutline as DiamondIcon,
+  CloseOutline as CloseIcon,
 } from "@vicons/ionicons5";
+import { FullscreenOutlined } from "@vicons/material";
 
 import { usePhotoScored } from "@/composables/usePhotoScored.js";
 import { InfoCircleFilled } from "@vicons/antd";
@@ -281,6 +332,7 @@ export interface Photo {
   id: string;
   url: string;
   thumbnailUrl: string;
+  originalUrl?: string;
   title: string;
   rating: number;
   reasoning?: string;
@@ -313,6 +365,7 @@ interface Props {
   showInfoButton?: boolean; // Control visibility of info button
   showDeleteButton?: boolean; // Control visibility of delete button
   requireLongPress?: boolean; // Require long press for mobile selection (default: true)
+  hideFullscreen?: boolean; // Hide the fullscreen button (default: false)
 }
 
 interface Emits {
@@ -332,6 +385,7 @@ const props = withDefaults(defineProps<Props & { isThinking?: boolean }>(), {
   showReturnButton: true,
   isNew: false,
   requireLongPress: true,
+  hideFullscreen: false,
 });
 // Show "Reviewing..." label and blur if isThinking and reasoning is "Reviewing..."
 const showAnalyzing = computed(
@@ -373,6 +427,7 @@ const imageError = ref(false);
 const showTooltip = ref(false);
 const showHoverContent = ref(false);
 const isInfoLoading = ref(false);
+const showFullscreenPhoto = ref(false);
 let infoLoadingTimer: ReturnType<typeof setTimeout> | null = null;
 
 const uniqueMatchingTags = computed(() =>
@@ -515,6 +570,14 @@ const onImageLoad = () => {
 const onImageError = () => {
   imageError.value = true;
   imageLoaded.value = true;
+};
+
+const openFullscreen = () => {
+  showFullscreenPhoto.value = true;
+};
+
+const closeFullscreen = () => {
+  showFullscreenPhoto.value = false;
 };
 
 const moveToSelection = () => {
@@ -730,6 +793,11 @@ onUnmounted(() => {
 }
 
 .info-button {
+  background-color: var(--info-color) !important;
+  color: white !important;
+}
+
+.fullscreen-button {
   background-color: var(--info-color) !important;
   color: white !important;
 }
@@ -990,6 +1058,79 @@ onUnmounted(() => {
       0 0 0 1px #22d3ee60,
       0 0 25px rgba(34, 211, 238, 0.5),
       0 4px 12px rgba(34, 211, 238, 0.25);
+  }
+}
+
+/* Fullscreen Photo Modal */
+.fullscreen-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  cursor: pointer;
+  padding: 40px;
+  box-sizing: border-box;
+}
+
+.fullscreen-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+
+.fullscreen-photo {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  object-position: center;
+  border-radius: var(--radius-md);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
+.close-fullscreen-btn {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: rgba(255, 255, 255, 0.15) !important;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  color: white !important;
+  transition: all 0.3s ease;
+  z-index: 10001;
+  width: 44px;
+  height: 44px;
+}
+
+.close-fullscreen-btn:hover {
+  background: rgba(255, 255, 255, 0.25) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  transform: scale(1.1);
+}
+
+@media (max-width: 768px) {
+  .fullscreen-container {
+    padding: 20px;
+  }
+
+  .close-fullscreen-btn {
+    top: 15px;
+    right: 15px;
+    width: 40px;
+    height: 40px;
   }
 }
 </style>

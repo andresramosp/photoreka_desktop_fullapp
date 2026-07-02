@@ -58,6 +58,20 @@
             </n-icon>
           </template>
         </n-button>
+        <!-- Fullscreen button (desktop only) -->
+        <n-button
+          v-if="!isMobile && !props.hideFullscreen"
+          size="medium"
+          class="action-button fullscreen-button"
+          title="View fullscreen"
+          @click.stop="openFullscreen"
+        >
+          <template #icon>
+            <n-icon>
+              <FullscreenOutlined />
+            </n-icon>
+          </template>
+        </n-button>
         <!-- Swap button for lightbox photos already analyzed in workspace -->
         <n-button
           v-if="photo.isAlreadyAnalyzed && photo.alreadyAnalyzedIds?.length > 0"
@@ -352,11 +366,46 @@
       </n-tooltip>
     </div>
   </div>
+
+  <!-- Fullscreen Photo Modal -->
+  <n-modal
+    v-model:show="showFullscreenPhoto"
+    :mask-closable="true"
+    :show-icon="false"
+    :closable="false"
+    :style="{ padding: '0' }"
+    transform-origin="center"
+  >
+    <div class="fullscreen-container" @click="closeFullscreen">
+      <div class="fullscreen-content">
+        <img
+          :src="photo.originalUrl || photo.url || photo.thumbnailUrl"
+          :alt="photo.name"
+          class="fullscreen-photo"
+          @click="closeFullscreen"
+        />
+        <n-button
+          class="close-fullscreen-btn"
+          size="large"
+          circle
+          type="primary"
+          @click.stop="closeFullscreen"
+          title="Close fullscreen (Esc)"
+        >
+          <template #icon>
+            <n-icon size="20">
+              <CloseIcon />
+            </n-icon>
+          </template>
+        </n-button>
+      </div>
+    </div>
+  </n-modal>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from "vue";
-import { NIcon, NTooltip } from "naive-ui";
+import { NIcon, NTooltip, NModal, NButton } from "naive-ui";
 import { useMobilePhotoSelection } from "@/composables/useMobilePhotoSelection";
 
 // Import @vicons icons from ionicons5 for reliability
@@ -368,7 +417,9 @@ import {
   TrashOutline as DeleteIcon,
   TimeOutline,
   SwapHorizontalOutline,
+  CloseOutline as CloseIcon,
 } from "@vicons/ionicons5";
+import { FullscreenOutlined } from "@vicons/material";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useIsMobile } from "@/composables/useIsMobile";
 import { useBackgroundImageCache } from "@/composables/useBackgroundImageCache.js";
@@ -379,6 +430,7 @@ interface PhotoInfo {
   size: number | string;
   url: string;
   thumbnailUrl: string;
+  originalUrl?: string;
   uploadDate?: Date;
   date?: string;
   isDuplicate?: boolean;
@@ -419,6 +471,7 @@ interface Props {
   showSource?: boolean;
   artisticScore?: number | null;
   matchedTags?: string[];
+  hideFullscreen?: boolean;
 }
 
 interface Emits {
@@ -434,6 +487,7 @@ const props = withDefaults(defineProps<Props>(), {
   focused: false,
   showSource: false,
   matchedTags: () => [],
+  hideFullscreen: false,
 });
 
 const emit = defineEmits<Emits>();
@@ -474,6 +528,7 @@ const imageLoaded = ref(false);
 const imageError = ref(false);
 const showHoverContent = ref(false);
 const isInfoLoading = ref(false);
+const showFullscreenPhoto = ref(false);
 let infoLoadingTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Event handlers for mobile touch
@@ -524,6 +579,14 @@ const showDuplicates = () => {
     const allDuplicates = [props.photo.id, ...props.photo.duplicates];
     emit("show-duplicates", allDuplicates);
   }
+};
+
+const openFullscreen = () => {
+  showFullscreenPhoto.value = true;
+};
+
+const closeFullscreen = () => {
+  showFullscreenPhoto.value = false;
 };
 
 const swapPhoto = () => {
@@ -794,6 +857,11 @@ onUnmounted(() => {
 
 .swap-button {
   background-color: var(--warning-color, #f59e0b) !important;
+  color: white !important;
+}
+
+.fullscreen-button {
+  background-color: var(--info-color) !important;
   color: white !important;
 }
 
@@ -1183,5 +1251,78 @@ onUnmounted(() => {
   font-size: 11px;
   color: #ffffff;
   font-weight: 600;
+}
+
+/* Fullscreen Photo Modal */
+.fullscreen-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  cursor: pointer;
+  padding: 40px;
+  box-sizing: border-box;
+}
+
+.fullscreen-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+
+.fullscreen-photo {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  object-position: center;
+  border-radius: var(--radius-md);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
+.close-fullscreen-btn {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: rgba(255, 255, 255, 0.15) !important;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  color: white !important;
+  transition: all 0.3s ease;
+  z-index: 10001;
+  width: 44px;
+  height: 44px;
+}
+
+.close-fullscreen-btn:hover {
+  background: rgba(255, 255, 255, 0.25) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  transform: scale(1.1);
+}
+
+@media (max-width: 768px) {
+  .fullscreen-container {
+    padding: 20px;
+  }
+
+  .close-fullscreen-btn {
+    top: 15px;
+    right: 15px;
+    width: 40px;
+    height: 40px;
+  }
 }
 </style>

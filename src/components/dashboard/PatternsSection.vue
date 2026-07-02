@@ -82,6 +82,7 @@
               :show-name="false"
               :is-uploading="false"
               :show-duplicate="false"
+              :hide-fullscreen="true"
               @info="showPhotoInfo"
               @select="() => {}"
             />
