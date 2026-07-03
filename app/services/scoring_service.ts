@@ -53,7 +53,12 @@ const MAX_SIMILAR_CHUNKS = 850
 const MAX_SIMILAR_PHOTOS = 5000
 const MAX_PARALLEL_SCORING_PHOTOS = 5000
 const MAX_CACHEABLE_SCORING_PHOTOS = 5000
-const SCORING_CACHE_VERSION = 'v2'
+const SCORING_CACHE_VERSION = 'v3'
+
+// gateThenRank: tiny floor given to photos that qualified via a text (entailment) match but scored
+// no CLIP similarity, so they still surface — ranked below every CLIP-scored photo — instead of
+// vanishing. Small enough to never perturb the CLIP-driven order among photos that CLIP did score.
+const TEXT_GATE_FLOOR = 0.0001
 
 // Input normalizado y preparado para scoring
 interface PreparedQuery {
@@ -738,7 +743,27 @@ export default class ScoringService {
     const searchComposition = this.analyzeSearchComposition(query, config, searchMode)
     const thresholds = this.getAbsoluteThresholds(searchComposition)
 
-    return scores
+    // gateThenRank: text channels only gate admission; CLIP alone drives the order.
+    // Rebuild totalScore as imageScore-only (+ a floor for text-only matches) so that a weakly
+    // visible object matched via a strong tag can't outrank a prominently visible one.
+    const rankedScores =
+      config.imageRanking === 'gateThenRank'
+        ? scores.map((score) => {
+            const hasTextMatch = (score.tagScore || 0) > 0 || (score.descScore || 0) > 0
+            const imageContribution = (score.imageScore || 0) * config.scoreWeights.image
+            return {
+              ...score,
+              totalScore:
+                imageContribution > 0
+                  ? imageContribution
+                  : hasTextMatch
+                    ? TEXT_GATE_FLOOR
+                    : 0,
+            }
+          })
+        : scores
+
+    return rankedScores
       .filter((score) => score.totalScore > 0)
       .sort((a, b) => b.totalScore - a.totalScore)
       .map((score) => ({

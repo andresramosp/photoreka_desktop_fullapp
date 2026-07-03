@@ -59,6 +59,18 @@ export interface SearchThresholds {
   nuances: number | null
 }
 
+/**
+ * How the final ranking is computed from the per-channel scores:
+ * - 'blend': totalScore is the weighted sum of every channel (tags/desc/notes/nuances + image).
+ *   Text and image both shape the order. Used by broad/adaptive.
+ * - 'gateThenRank': the text channels (entailment) only decide *admission* — a photo qualifies if
+ *   any text channel matched OR CLIP cleared its threshold — but they contribute nothing to the
+ *   order. Ranking is driven purely by imageScore (CLIP). This keeps precise strict about what
+ *   counts as a match while letting CLIP decide how prominently the object appears, so a moto on a
+ *   distant t-shirt sinks below a moto that fills the frame instead of riding a strong tag match up.
+ */
+export type ImageRankingStrategy = 'blend' | 'gateThenRank'
+
 export interface SearchModeConfig {
   thresholds: SearchThresholds
   refineMode: RefineMode
@@ -66,6 +78,7 @@ export interface SearchModeConfig {
   forceVisualAspects: boolean
   scoreWeights: SearchScoreWeights
   thresholdWeights: SearchScoreWeights
+  imageRanking: ImageRankingStrategy
 }
 
 export const SEARCH_MODE_CONFIGURATION: Record<SearchMode, SearchModeConfig> = {
@@ -81,6 +94,7 @@ export const SEARCH_MODE_CONFIGURATION: Record<SearchMode, SearchModeConfig> = {
     refineMode: 'none',
     queryStructurePrompt: 'standard',
     forceVisualAspects: false,
+    imageRanking: 'blend',
     // scoreWeights: contribution added to totalScore when a channel matches.
     // In broad, tags are only a small corroboration bonus; CLIP remains the main scorer.
     scoreWeights: {
@@ -115,6 +129,7 @@ export const SEARCH_MODE_CONFIGURATION: Record<SearchMode, SearchModeConfig> = {
     refineMode: 'none',
     queryStructurePrompt: 'implicit_only',
     forceVisualAspects: true,
+    imageRanking: 'blend',
     // scoreWeights: adaptive channel contributions. Text channels add full score; CLIP uses x1.5.
     scoreWeights: {
       tag: 1,
@@ -147,21 +162,21 @@ export const SEARCH_MODE_CONFIGURATION: Record<SearchMode, SearchModeConfig> = {
     refineMode: 'entailment',
     queryStructurePrompt: 'standard',
     forceVisualAspects: false,
-    // scoreWeights: entailment still gates which photos qualify (via thresholds + AND-across-segments
-    // filtering), but only contributes a small corroboration bonus to the score. CLIP (image) drives
-    // ranking, so an object that's only anecdotally present (e.g. matched via a loosely-entailed tag)
-    // doesn't outrank a photo where it's clearly visible. Kept > 0 so text-only matches (entailment
-    // caught something CLIP's threshold missed) still surface instead of disappearing.
+    // imageRanking: 'gateThenRank' — entailment on tags/desc decides ONLY whether a photo qualifies;
+    // the final order is CLIP-only. See finalizeScores. Because of this, the text scoreWeights below
+    // are not summed into the ranking (they're overridden), so they stay at 0. imageScore keeps its
+    // x1.5 because finalizeScores multiplies imageScore by scoreWeights.image when it rebuilds the
+    // totalScore in gateThenRank mode.
+    imageRanking: 'gateThenRank',
     scoreWeights: {
-      tag: 0.15,
-      desc: 0.15,
-      fullQueryDesc: 0.15,
-      notes: 0.1,
+      tag: 0,
+      desc: 0,
+      fullQueryDesc: 0,
+      notes: 0,
       image: 1.5,
       nuances: 0,
     },
-    // thresholdWeights: label baseline is image-led, mirroring `broad`, since totalScore is now
-    // image-dominant too.
+    // thresholdWeights: label baseline is image-led, mirroring `broad`, since ranking is CLIP-only.
     thresholdWeights: {
       tag: 0,
       desc: 0,
