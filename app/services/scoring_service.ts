@@ -8,7 +8,13 @@ import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
 import { createRequire } from 'module'
 import VectorService from './vector_service.js'
 import { withCache } from '../decorators/withCache.js'
-import type { SearchMode, SearchType, RefineMode, SearchModeConfig } from './search_text_service.js'
+import type {
+  SearchMode,
+  SearchType,
+  RefineMode,
+  SearchModeConfig,
+  ImageRankingStrategy,
+} from './search_text_service.js'
 import { SEARCH_MODE_CONFIGURATION } from './search_text_service.js'
 import TagPhotoManager from '../managers/tag_photo_manager.js'
 import TagManager from '../managers/tag_manager.js'
@@ -46,6 +52,7 @@ export interface SearchComposition {
   segmentCount: number
   searchMode?: SearchMode
   maxScore?: number
+  imageRanking?: ImageRankingStrategy
 }
 
 const MAX_SIMILAR_TAGS = 1250
@@ -53,12 +60,29 @@ const MAX_SIMILAR_CHUNKS = 850
 const MAX_SIMILAR_PHOTOS = 5000
 const MAX_PARALLEL_SCORING_PHOTOS = 5000
 const MAX_CACHEABLE_SCORING_PHOTOS = 5000
-const SCORING_CACHE_VERSION = 'v3'
+const SCORING_CACHE_VERSION = 'v5'
+
+// CLIP cosine proximities live in roughly this band; mapClipProximityToScore normalizes them to 0..1.
+const CLIP_SCORE_MIN = 0.15
+const CLIP_SCORE_MAX = 0.35
+
+// gateThenRank: CLIP must SCORE every admitted photo over its full range so it can actually rank
+// them, so we score from this low floor regardless of the mode's (much higher) image threshold.
+// The mode's image threshold is instead applied to the *mapped* score to decide CLIP-only admission.
+const CLIP_RANK_FLOOR = CLIP_SCORE_MIN
 
 // gateThenRank: tiny floor given to photos that qualified via a text (entailment) match but scored
 // no CLIP similarity, so they still surface — ranked below every CLIP-scored photo — instead of
 // vanishing. Small enough to never perturb the CLIP-driven order among photos that CLIP did score.
 const TEXT_GATE_FLOOR = 0.0001
+
+// Normalizes a raw CLIP cosine proximity into a 0..1 score. Shared by the image scorer and the
+// gateThenRank admission cutoff so both speak the same units.
+function mapClipProximityToScore(proximity: number): number {
+  if (proximity <= CLIP_SCORE_MIN) return 0
+  if (proximity >= CLIP_SCORE_MAX) return 1
+  return (proximity - CLIP_SCORE_MIN) / (CLIP_SCORE_MAX - CLIP_SCORE_MIN)
+}
 
 // Input normalizado y preparado para scoring
 interface PreparedQuery {
@@ -239,6 +263,7 @@ export default class ScoringService {
           : 1,
       searchMode,
       maxScore: Math.max(1, maxScore),
+      imageRanking: config.imageRanking,
     }
   }
 
@@ -253,9 +278,13 @@ export default class ScoringService {
       segmentCount += 0.25
     }
 
-    // Modificador para searchMode distinto de 'precise'
-    const thresholdModifier =
-      composition.searchMode !== 'precise' ? THRESHOLD_MODIFIER_NON_PRECISE : 1
+    // Escala de labels. El modificador estricto (1.0) solo tenía sentido cuando 'precise' sumaba un
+    // score aditivo multi-canal que podía subir alto. En gateThenRank el score es CLIP puro, igual
+    // que broad, así que usa la MISMA escala indulgente calibrada a CLIP (0.7) — por eso las estrellas
+    // de precise ahora coinciden con las de broad en vez de mandarlo todo a 'poor'.
+    const usesClipLabelScale =
+      composition.imageRanking === 'gateThenRank' || composition.searchMode !== 'precise'
+    const thresholdModifier = usesClipLabelScale ? THRESHOLD_MODIFIER_NON_PRECISE : 1
 
     // Cada umbral es un porcentaje del máximo posible (segmentCount)
     // El rango total será de 0 a segmentCount
@@ -299,6 +328,11 @@ export default class ScoringService {
     // 1. Obtener configuración
     const config = this.getEffectiveConfig(searchMode, 'full')
 
+    // gateThenRank scores CLIP from a low floor (so ranking has full range); admission strictness is
+    // reapplied later in finalizeScores. blend modes score at the mode's own image threshold.
+    const imageScoringThreshold =
+      config.imageRanking === 'gateThenRank' ? CLIP_RANK_FLOOR : undefined
+
     // 2. Preparar query (normalizar términos)
     const query = this.prepareQuery(structuredQuery, config)
 
@@ -336,7 +370,8 @@ export default class ScoringService {
         photoIds,
         query.clipQuery,
         config,
-        userId
+        userId,
+        imageScoringThreshold
       )
       finalScores = this.mergeImageScores(finalScores, imageScores, config)
 
@@ -351,7 +386,7 @@ export default class ScoringService {
         this.processFullQuery(photoIds, query, config),
         this.processNotes(photoIds, query, config),
         this.processNuances(photoIds, query, config, userId),
-        this.processImageSimilarity(photoIds, query.clipQuery, config, userId),
+        this.processImageSimilarity(photoIds, query.clipQuery, config, userId, imageScoringThreshold),
       ])
 
     // 6. Merge todos los resultados
@@ -471,10 +506,14 @@ export default class ScoringService {
       totalScore: 0.0001,
     }))
 
+    // gateThenRank scores CLIP from a low floor so ranking has full range (see getScoredPhotosByTagsAndDesc)
+    const imageScoringThreshold =
+      config.imageRanking === 'gateThenRank' ? CLIP_RANK_FLOOR : undefined
+
     // 6. Ejecutar en paralelo: tags e image
     const [tagScores, imageScores] = await Promise.all([
       this.processPositiveSegments(initialScores, query, config, userId),
-      this.processImageSimilarity(filteredIds, query.clipQuery, config),
+      this.processImageSimilarity(filteredIds, query.clipQuery, config, userId, imageScoringThreshold),
     ])
 
     // 7. Merge image scores
@@ -725,13 +764,18 @@ export default class ScoringService {
     photoIds: number[],
     fullQuery: string,
     config: EffectiveConfig,
-    userId: string
+    userId: string,
+    thresholdOverride?: number
   ): Promise<{ id: number; imageScore: number }[]> {
     if (config.thresholds.image === null || !fullQuery) {
       return []
     }
 
-    return this.getScoredPhotoImageByFullQuery(photoIds, fullQuery, config.thresholds.image, userId)
+    // gateThenRank scores CLIP from a low floor so the mapped score spans its full range and can
+    // rank; blend modes keep scoring at the mode's own image threshold.
+    const scoringThreshold = thresholdOverride ?? config.thresholds.image
+
+    return this.getScoredPhotoImageByFullQuery(photoIds, fullQuery, scoringThreshold, userId)
   }
 
   private finalizeScores(
@@ -743,22 +787,30 @@ export default class ScoringService {
     const searchComposition = this.analyzeSearchComposition(query, config, searchMode)
     const thresholds = this.getAbsoluteThresholds(searchComposition)
 
-    // gateThenRank: text channels only gate admission; CLIP alone drives the order.
-    // Rebuild totalScore as imageScore-only (+ a floor for text-only matches) so that a weakly
-    // visible object matched via a strong tag can't outrank a prominently visible one.
+    // gateThenRank: admission is decided by text (entailment) OR strong CLIP; the order is then
+    // driven purely by the full-range CLIP score. CLIP was scored from a low floor (CLIP_RANK_FLOOR)
+    // so imageScore has real dynamic range even for photos below the mode's image threshold — that
+    // threshold is reapplied here, in mapped-score units, only to gate CLIP-*only* admissions.
+    // This is what stops a distant/anecdotal moto (weak CLIP, strong tag) from outranking a moto that
+    // fills the frame (strong CLIP): the tag no longer contributes to the score at all.
     const rankedScores =
       config.imageRanking === 'gateThenRank'
         ? scores.map((score) => {
+            const imageScore = score.imageScore || 0
             const hasTextMatch = (score.tagScore || 0) > 0 || (score.descScore || 0) > 0
-            const imageContribution = (score.imageScore || 0) * config.scoreWeights.image
+            const strongClipAdmit =
+              config.thresholds.image !== null &&
+              imageScore >= mapClipProximityToScore(config.thresholds.image)
+            const admitted = hasTextMatch || strongClipAdmit
+
+            const imageContribution = imageScore * config.scoreWeights.image
             return {
               ...score,
-              totalScore:
-                imageContribution > 0
+              totalScore: !admitted
+                ? 0
+                : imageContribution > 0
                   ? imageContribution
-                  : hasTextMatch
-                    ? TEXT_GATE_FLOOR
-                    : 0,
+                  : TEXT_GATE_FLOOR,
             }
           })
         : scores
@@ -938,18 +990,9 @@ export default class ScoringService {
       photoIds
     )
 
-    // Map scores from 0.15-0.35 to 0-1
-    const mapScore = (score: number) => {
-      const min = 0.15
-      const max = 0.35
-      if (score <= min) return 0
-      if (score >= max) return 1
-      return (score - min) / (max - min)
-    }
-
     const scoredPhotos = matchingPhotos.map((match) => ({
       id: match.id,
-      imageScore: mapScore(match.proximity),
+      imageScore: mapClipProximityToScore(match.proximity),
     }))
 
     return scoredPhotos
