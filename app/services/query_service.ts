@@ -16,8 +16,14 @@ import {
 import AnalyzerService from './analyzer_service.js'
 import VectorService from './vector_service.js'
 import ModelsService from './models_service.js'
+import type { ModelName } from './models_service.js'
 import type { SearchMode } from './search_text_service.js'
 import type { SearchModeConfig } from './search_text_service.js'
+
+const LLM_MAX_RETRIES = 2
+const LLM_RETRY_BASE_DELAY_MS = 1000
+/** Bumped to on failure of the primary (cheaper) model, e.g. gemini-2.5-flash-lite. */
+const GEMINI_FALLBACK_MODEL: ModelName = 'gemini-2.5-flash'
 
 export default class QueryService {
   public modelsService: ModelsService = null
@@ -30,16 +36,75 @@ export default class QueryService {
     this.analyzerService = new AnalyzerService()
   }
 
+  /**
+   * Calls Gemini with retries on the primary model, then falls back to a
+   * different, more reliable model if the primary keeps failing.
+   */
+  private async callLLMWithRetry(opts: {
+    systemPrompt: string
+    userContent: any
+    model: ModelName
+    fallbackModel?: ModelName
+    temperature?: number
+    useCache?: boolean
+  }): Promise<any> {
+    const {
+      systemPrompt,
+      userContent,
+      model,
+      fallbackModel = GEMINI_FALLBACK_MODEL,
+      temperature = 0.1,
+      useCache = true,
+    } = opts
+
+    const modelsToTry = fallbackModel && fallbackModel !== model ? [model, fallbackModel] : [model]
+    let lastError: Error | null = null
+
+    for (const currentModel of modelsToTry) {
+      for (let attempt = 1; attempt <= LLM_MAX_RETRIES; attempt++) {
+        try {
+          const result = await this.modelsService.getGeminiResponse(
+            systemPrompt,
+            userContent,
+            currentModel,
+            { temperature },
+            useCache,
+            true // throwOnError: retries/fallback are handled here
+          )
+          if (!result?.result) {
+            throw new Error(`LLM returned empty/undefined response (model: ${currentModel})`)
+          }
+          return result
+        } catch (error: any) {
+          lastError = error
+          if (attempt < LLM_MAX_RETRIES) {
+            const delay = LLM_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1)
+            console.warn(
+              `[QueryService] Gemini call failed (attempt ${attempt}/${LLM_MAX_RETRIES}, model: ${currentModel}): ${error.message}. Retrying in ${delay}ms…`
+            )
+            await new Promise((resolve) => setTimeout(resolve, delay))
+          } else if (currentModel !== modelsToTry[modelsToTry.length - 1]) {
+            console.warn(
+              `[QueryService] Gemini call exhausted retries on model ${currentModel}, falling back to ${fallbackModel}: ${error.message}`
+            )
+          }
+        }
+      }
+    }
+
+    throw lastError ?? new Error('Gemini call failed after retries and fallback')
+  }
+
   public async classifyQuery(
     query: string
   ): Promise<{ has_photo_intent: boolean; needs_artistic_evaluation: boolean }> {
     const fallback = { has_photo_intent: false, needs_artistic_evaluation: false }
     try {
-      const { result } = await this.modelsService.getGeminiResponse(
-        MESSAGE_QUERY_CLASSIFICATION,
-        JSON.stringify({ query }),
-        'gemini-2.5-flash-lite'
-      )
+      const { result } = await this.callLLMWithRetry({
+        systemPrompt: MESSAGE_QUERY_CLASSIFICATION,
+        userContent: JSON.stringify({ query }),
+        model: 'gemini-2.5-flash-lite',
+      })
       return {
         has_photo_intent: result?.has_photo_intent === true,
         needs_artistic_evaluation: result?.needs_artistic_evaluation === true,
@@ -85,13 +150,13 @@ export default class QueryService {
     }
 
     try {
-      const { result, cost } = await this.modelsService.getGeminiResponse(
-        MESSAGE_QUERY_COMPACT(QueryService.CLIP_MAX_WORDS),
-        JSON.stringify({ query }),
-        'gemini-2.5-flash-lite',
-        { temperature: 0.1 },
-        true
-      )
+      const { result, cost } = await this.callLLMWithRetry({
+        systemPrompt: MESSAGE_QUERY_COMPACT(QueryService.CLIP_MAX_WORDS),
+        userContent: JSON.stringify({ query }),
+        model: 'gemini-2.5-flash-lite',
+        temperature: 0.1,
+        useCache: true,
+      })
       return { compact_query: result?.compact_query ?? null, cost: cost ?? 0 }
     } catch (error) {
       console.error('[QueryService] compactQuery error:', error)
@@ -148,14 +213,13 @@ export default class QueryService {
     let expansionCost = 0
 
     // Lanzar ambas promesas en paralelo
-    const modelOnePromise = this.modelsService.getGeminiResponse(
-      MESSAGE_QUERY_NO_PREFIX_AND_TRANSLATION,
-      JSON.stringify({ query }),
-      'gemini-2.5-flash-lite',
-      { temperature: 0.1 },
-      true,
-      true // throwOnError: retries will exhaust, then throw to caller
-    )
+    const modelOnePromise = this.callLLMWithRetry({
+      systemPrompt: MESSAGE_QUERY_NO_PREFIX_AND_TRANSLATION,
+      userContent: JSON.stringify({ query }),
+      model: 'gemini-2.5-flash-lite',
+      temperature: 0.1,
+      useCache: true,
+    })
 
     const { result: modelOneResult, cost: modelOneCost } = await modelOnePromise
     // Fallback: si no_prefix vino vacío/undefined, usar la query original
@@ -169,27 +233,25 @@ export default class QueryService {
         : MESSAGE_QUERY_STRUCTURE
 
     // Nueva llamada para metadatos
-    const metadataPromise = this.modelsService.getGeminiResponse(
-      MESSAGE_QUERY_METADATA,
-      JSON.stringify({ query }),
-      'gemini-2.5-flash-lite',
-      { temperature: 0.1 },
-      true,
-      true
-    )
+    const metadataPromise = this.callLLMWithRetry({
+      systemPrompt: MESSAGE_QUERY_METADATA,
+      userContent: JSON.stringify({ query }),
+      model: 'gemini-2.5-flash-lite',
+      temperature: 0.1,
+      useCache: true,
+    })
 
     const metadataResponse = await metadataPromise
     const metadataResult = metadataResponse?.result
 
     // Segunda llamada, depende de modelOneResult
-    const { result: modelResult, cost: modelTwoCost } = await this.modelsService.getGeminiResponse(
-      queryStuctureMessage,
-      JSON.stringify({ query: modelOneResult.no_prefix }),
-      'gemini-2.5-flash-lite',
-      { temperature: 0.1 },
-      true,
-      true
-    )
+    const { result: modelResult, cost: modelTwoCost } = await this.callLLMWithRetry({
+      systemPrompt: queryStuctureMessage,
+      userContent: JSON.stringify({ query: modelOneResult.no_prefix }),
+      model: 'gemini-2.5-flash-lite',
+      temperature: 0.1,
+      useCache: true,
+    })
 
     modelResult.original = query
     try {

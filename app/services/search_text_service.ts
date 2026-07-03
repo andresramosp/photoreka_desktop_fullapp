@@ -147,21 +147,25 @@ export const SEARCH_MODE_CONFIGURATION: Record<SearchMode, SearchModeConfig> = {
     refineMode: 'entailment',
     queryStructurePrompt: 'standard',
     forceVisualAspects: false,
-    // scoreWeights: precise channel contributions. Entailment controls match strictness.
+    // scoreWeights: entailment still gates which photos qualify (via thresholds + AND-across-segments
+    // filtering), but only contributes a small corroboration bonus to the score. CLIP (image) drives
+    // ranking, so an object that's only anecdotally present (e.g. matched via a loosely-entailed tag)
+    // doesn't outrank a photo where it's clearly visible. Kept > 0 so text-only matches (entailment
+    // caught something CLIP's threshold missed) still surface instead of disappearing.
     scoreWeights: {
-      tag: 1,
-      desc: 1,
-      fullQueryDesc: 1,
-      notes: 1,
+      tag: 0.15,
+      desc: 0.15,
+      fullQueryDesc: 0.15,
+      notes: 0.1,
       image: 1.5,
       nuances: 0,
     },
-    // thresholdWeights: label baseline. fullQueryDesc: 0.25 preserves the old +0.25 threshold bump.
-    // notes do not raise labels today, so they stay at 0 here.
+    // thresholdWeights: label baseline is image-led, mirroring `broad`, since totalScore is now
+    // image-dominant too.
     thresholdWeights: {
-      tag: 1,
-      desc: 1,
-      fullQueryDesc: 0.25,
+      tag: 0,
+      desc: 0,
+      fullQueryDesc: 0,
       notes: 0,
       image: 1,
       nuances: 0,
