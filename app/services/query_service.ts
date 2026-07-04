@@ -23,7 +23,7 @@ import type { SearchModeConfig } from './search_text_service.js'
 const LLM_MAX_RETRIES = 2
 const LLM_RETRY_BASE_DELAY_MS = 1000
 /** Bumped to on failure of the primary (cheaper) model, e.g. gemini-2.5-flash-lite. */
-const GEMINI_FALLBACK_MODEL: ModelName = 'gemini-2.5-flash'
+const GEMINI_FALLBACK_MODEL: ModelName = 'gemini-3.1-flash-lite'
 
 export default class QueryService {
   public modelsService: ModelsService = null
