@@ -169,9 +169,8 @@ export default class QueryService {
       config.thresholds.tag !== null ||
       config.thresholds.descSegment !== null ||
       config.thresholds.descFullQuery !== null
-    const numberOfWords = query.split(' ').length
 
-    if (needsStructuring && numberOfWords > 2) {
+    if (needsStructuring) {
       return this.structureQueryLLM(query, config)
     }
 
