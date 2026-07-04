@@ -37,7 +37,7 @@ export type CostCategory =
 export const COST_MULTIPLIERS: Record<CostCategory, number> = {
   GEO_INFERENCE: 2, //2.5,
   SEARCH: 2,
-  SEARCH_PRECISE: 2,
+  SEARCH_PRECISE: 1.75,
   SEARCH_INSIGHTS: 2,
   SEARCH_BY_PHOTO: 2,
   PORTFOLIO_BUILD: 2.25, //2.5,
@@ -47,8 +47,20 @@ export const COST_MULTIPLIERS: Record<CostCategory, number> = {
 
 // ─── Fixed credit costs ─────────────────────────────────
 
-/** Pessimistic fixed credit cost for RunPod GPU in precise mode */
+/**
+ * @deprecated Legacy fixed credit cost for the RunPod GPU precise mode.
+ * Precise search now runs LLM micro-batched NLI (LogicInferenceService) and is
+ * billed from its real per-token cost via the CostTracker under the SEARCH_PRECISE
+ * margin — see SEARCH_PRECISE_MIN_CREDITS for the affordability gate.
+ */
 export const PRECISE_GPU_CREDITS = 5
+
+/**
+ * Affordability gate for precise search. The real cost is charged post-search
+ * from the cost tracker (SEARCH_PRECISE margin); this is only the minimum balance
+ * required to start one, so users can't run a precise search with an empty wallet.
+ */
+export const SEARCH_PRECISE_MIN_CREDITS = 50
 
 /** Fixed credit cost for on-the-fly CLIP embedding from a cropped region */
 export const CLIP_CROP_CREDITS = 5

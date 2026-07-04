@@ -1,0 +1,425 @@
+import axios from 'axios'
+import pLimit from 'p-limit'
+import type ModelsService from './models_service.js'
+import type { ModelName } from './models_service.js'
+
+/**
+ * Logical inference (NLI) for search scoring — centralized, engine-agnostic.
+ *
+ * Exposes two interchangeable engines with the SAME contract. Both take the
+ * candidates and return every input `text` augmented with `embeddingsProximity`
+ * (its original CLIP/text proximity) and a scalar `logicProximity` in [0, 2],
+ * consumed unchanged by `ScoringService.adjustProximities` (LOGIC_THRESHOLD = 1):
+ *   contradiction → [0, 1)   neutral → 1   entailment → (1, 2]
+ *
+ *   • adjustProximitiesByContextInferenceByBert — RunPod BERT cross-encoder
+ *     (GPU). Exact, calibrated scalar per pair, but suffers serverless cold
+ *     starts.
+ *   • adjustProximitiesByContextInferenceByLLM  — gemini-3.1-flash-lite at
+ *     MINIMAL thinking (retries fall back to gemini-2.5-flash-lite), micro-batched
+ *     with bounded concurrency and structured JSON output. No cold start; cost
+ *     billed per-token via the caller's tracked ModelsService.
+ *
+ * Both take the `ModelsService` to use so the caller can pass a cost-tracked
+ * instance — for the LLM engine, getGeminiResponse prices each call from its
+ * input/output tokens and the CostTracker proxy records it, so the real cost
+ * flows into the search cost tracker and is charged under the SEARCH_PRECISE
+ * margin (no fixed GPU credit). The BERT engine reuses ModelsService's endpoint
+ * configuration via buildRequestConfig.
+ */
+
+// ─── LLM engine config ───────────────────────────────────
+
+/** Primary model for logic inference. */
+const PRIMARY_MODEL: ModelName = 'gemini-3.1-flash-lite'
+
+/** Escalation model used on retries (more capable, pricier) when the primary fails. */
+const RETRY_MODEL: ModelName = 'gemini-2.5-flash-lite'
+
+/**
+ * Items per LLM call. Kept small to avoid the model drifting / misaligning the
+ * numbered ids across many items. Description fragments are long free text and
+ * much harder than short tags, so they use a smaller batch.
+ */
+const TAG_BATCH_SIZE = 20
+const DESC_BATCH_SIZE = 10
+
+/** Concurrent in-flight calls. Bounded to respect Gemini rate limits. */
+const CONCURRENCY = 6
+
+/** Hard cap on candidates processed per term to bound worst-case cost/latency. */
+const MAX_CANDIDATES = 1500
+
+/** Per-batch retry attempts on transient failures / empty responses. */
+const MAX_RETRIES = 3
+
+/** Base backoff between retries (exponential: base * 2^(attempt-1)). */
+const RETRY_BASE_DELAY_MS = 800
+
+/** Thinking-token budget for gemini-2.5 NLI calls (0 = off, which is the model default). */
+const THINKING_BUDGET = 1024
+
+/** Print one line per inference (term ⇐ candidate: label/confidence → logicProximity). */
+const LOG_INFERENCES = false
+
+type NLILabel = 'entailment' | 'neutral' | 'contradiction'
+
+interface NLIVerdict {
+  id: number
+  label: NLILabel
+  confidence: number
+}
+
+const PROMPT_CORE = `You are a strict Natural Language Inference (NLI) classifier for a photo search engine.
+
+The user searched for a TERM. You receive candidate phrases known to be present in a photo. For each candidate decide, by directional entailment:
+
+  PREMISE:    "the photo contains: <CANDIDATE>"
+  HYPOTHESIS: "the photo features: <TERM>"
+
+The question is ALWAYS one-directional: does the PREMISE guarantee the HYPOTHESIS?
+
+Labels:
+- "entailment": IF the candidate is present, the term is NECESSARILY present. This holds only when the candidate is a synonym of, or MORE SPECIFIC than (a hyponym / subtype / instance of), the term.
+    term "dog" + candidate "golden retriever" → entailment (a golden retriever IS a dog)
+    term "cat" + candidate "tabby" → entailment (a tabby IS a cat)
+- "neutral": the candidate is compatible with the term but does NOT guarantee it. This is the correct label when the candidate is BROADER than the term (a hypernym / category), a sibling, or merely co-occurring.
+    term "cat" + candidate "domestic animals" → neutral (a domestic animal need NOT be a cat — could be a dog, a rooster, etc.)
+    term "cat" + candidate "pet" → neutral (a pet need not be a cat)
+    term "dog" + candidate "grass field" → neutral
+- "contradiction": IF the candidate is present, the term CANNOT be present. Reserve this for genuine MUTUAL EXCLUSIVITY only.
+    term "indoor scene" + candidate "open desert" → contradiction
+    term "cat" + candidate "empty landscape, no animals" → contradiction
+
+CRITICAL RULE — the hypernym trap: a candidate that is a BROADER category than the term is NEVER entailment. "domestic animals", "pet", "mammal", "wildlife" do NOT entail "cat". Only equal-or-narrower candidates entail. When unsure whether the candidate is narrower or broader, choose "neutral".
+
+CRITICAL RULE — unrelated ≠ contradiction: two concepts that are simply UNRELATED and can freely coexist are "neutral", NOT "contradiction". Contradiction requires that the candidate makes the term impossible.`
+
+// Tags: short atomic labels. The main risk is the hypernym trap.
+const PROMPT_TAG_GUIDANCE = `
+
+INPUT TYPE — TAGS: each candidate is a short label (a tag) attached to the photo. Decide purely from the tag's meaning as a category. A tag entails the term only if the tag IS the term or a subtype of it; a broader-category tag is neutral.`
+
+// Descriptions: long free-text fragments; the term may be a full multi-concept query.
+const PROMPT_DESC_GUIDANCE = `
+
+INPUT TYPE — DESCRIPTION FRAGMENTS: each candidate is a free-text sentence describing the photo, and the TERM may combine SEVERAL concepts (e.g. "cats and kids in an African country").
+
+- Conjunction rule: when the term names multiple things, entailment requires the fragment to explicitly support EVERY one of them. If even one concept is absent, unstated, or only plausible, the label is "neutral" — not entailment.
+- Judge ONLY what the fragment explicitly states or logically guarantees. Do NOT infer plausible-but-unmentioned details: a "vibrant market scene" does NOT entail children or animals just because they could be there.
+- A fragment that satisfies part of the term (e.g. mentions an African country) but is silent on the rest (cats, kids) is "neutral", never "entailment".`
+
+const PROMPT_JSON_FORMAT = `
+
+Judge each candidate independently. Do not let one candidate influence another. Base the decision on meaning, never on string overlap.
+
+Return STRICT JSON, no prose, with this exact shape:
+{"results":[{"id":<number>,"label":"entailment|neutral|contradiction","confidence":<0..1>}]}
+
+- "id" must echo the candidate id given in the input.
+- "confidence" is how sure you are of the label (0..1).
+- Return exactly one object per input candidate.`
+
+function buildSystemPrompt(termsType: 'tag' | 'desc'): string {
+  const guidance = termsType === 'tag' ? PROMPT_TAG_GUIDANCE : PROMPT_DESC_GUIDANCE
+  return PROMPT_CORE + guidance + PROMPT_JSON_FORMAT
+}
+
+export default class LogicInferenceService {
+  // ═══════════════════════════════════════════════════════
+  //  BERT engine (RunPod GPU cross-encoder)
+  // ═══════════════════════════════════════════════════════
+
+  /**
+   * NLI via the RunPod BERT cross-encoder. Moved here from ModelsService so both
+   * engines live in one place; it still relies on ModelsService for endpoint
+   * configuration (buildRequestConfig).
+   *
+   * @param modelsService  ModelsService providing buildRequestConfig / endpoints
+   * @param term           the user's search term
+   * @param texts          candidates, each with at least { name, group?, proximity }
+   * @param termsType      'tag' | 'desc' — selects the RunPod operation
+   * @param forceCPU       route to the CPU logic endpoint instead of GPU
+   */
+  public async adjustProximitiesByContextInferenceByBert(
+    modelsService: ModelsService,
+    term: string,
+    texts: any[],
+    termsType: 'tag' | 'desc' = 'tag',
+    forceCPU: boolean = false
+  ): Promise<any[]> {
+    const isGPU = !forceCPU
+    try {
+      // Unique by name + group
+      const uniqueTexts = Object.values(
+        texts.reduce((acc: Record<string, any>, item: any) => {
+          const key = `${item.name}::${item.group}`
+          if (!acc[key]) acc[key] = item
+          return acc
+        }, {})
+      )
+
+      const payload = {
+        term,
+        tag_list: uniqueTexts.map((tag: any) => ({ name: tag.name, group: tag.group })),
+        premise_wrapper: 'the photo has the following fragment in its description: {term}',
+        hypothesis_wrapper: 'the photo features {term}',
+      }
+
+      const operation =
+        termsType === 'tag'
+          ? 'adjust_tags_proximities_by_context_inference'
+          : 'adjust_descs_proximities_by_context_inference'
+
+      const { url, requestPayload, headers } = modelsService.buildRequestConfig(
+        operation,
+        payload,
+        isGPU ? 'logic_gpu' : 'logic_cpu'
+      )
+
+      let { data } = await axios.post(url, requestPayload, { headers })
+      data = data.output ? data.output : data
+
+      return texts.map((text) => ({
+        ...text,
+        embeddingsProximity: text.proximity,
+        logicProximity: data[text.name]?.adjusted_proximity,
+      }))
+    } catch (error: any) {
+      console.error(
+        'Error en LogicInferenceService.adjustProximitiesByContextInferenceByBert:',
+        error?.message
+      )
+      return []
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  LLM engine (gemini-2.5-flash-lite, micro-batched)
+  // ═══════════════════════════════════════════════════════
+
+  /**
+   * NLI via micro-batched gemini-2.5-flash-lite. Same signature/return as the
+   * BERT engine. Hundreds of candidates are split into small independent batches
+   * fired with bounded concurrency, keeping each batch's context clean so the
+   * model treats each pair as unique (no drift / neighbour anchoring).
+   *
+   * @param modelsService  tracked or plain ModelsService providing getGeminiResponse
+   * @param term           the user's search term (hypothesis subject)
+   * @param texts          candidates, each with at least { name, proximity }
+   * @param termsType      'tag' | 'desc' — surfaced to the model as context
+   */
+  public async adjustProximitiesByContextInferenceByLLM(
+    modelsService: ModelsService,
+    term: string,
+    texts: any[],
+    termsType: 'tag' | 'desc' = 'tag'
+  ): Promise<any[]> {
+    if (!Array.isArray(texts) || texts.length === 0) return []
+
+    try {
+      // Dedupe by name (the return is keyed by name, matching the BERT engine).
+      const uniqueByName = new Map<string, any>()
+      for (const item of texts) {
+        if (item?.name == null) continue
+        if (!uniqueByName.has(item.name)) uniqueByName.set(item.name, item)
+      }
+
+      const uniqueNames = Array.from(uniqueByName.keys()).slice(0, MAX_CANDIDATES)
+
+      // logicProximity per candidate name.
+      const logicByName = new Map<string, number>()
+
+      const batchSize = termsType === 'tag' ? TAG_BATCH_SIZE : DESC_BATCH_SIZE
+      const batches = this.chunk(uniqueNames, batchSize)
+      const limit = pLimit(CONCURRENCY)
+
+      if (LOG_INFERENCES) {
+        console.log(
+          `[LogicInference] term="${term}" (${termsType}) | inputs=${texts.length} unique=${uniqueNames.length} batches=${batches.length} (size=${batchSize}, concurrency=${CONCURRENCY}). Note: cached batches cost €0 and are not counted in cost_logs.`
+        )
+      }
+
+      await Promise.all(
+        batches.map((batchNames) =>
+          limit(async () => {
+            const verdicts = await this.classifyBatch(modelsService, term, batchNames, termsType)
+            for (const v of verdicts) {
+              const name = batchNames[v.id]
+              if (name === undefined) continue
+              const logicProximity = this.labelToLogicProximity(v.label, v.confidence)
+              logicByName.set(name, logicProximity)
+              if (LOG_INFERENCES) {
+                const surfaces = logicProximity > 1 ? '✓ surfaces' : '· filtered'
+                console.log(
+                  `[LogicInference] "${term}" ⇐ "${name}": ${v.label} (${v.confidence.toFixed(2)}) → logicProx=${logicProximity.toFixed(2)} ${surfaces}`
+                )
+              }
+            }
+          })
+        )
+      )
+
+      // Map ALL original texts, preserving order and every field (contract parity).
+      return texts.map((text) => {
+        const embeddingsProximity = text.proximity
+        // Missing verdict (model dropped it, or beyond MAX_CANDIDATES) → conservative
+        // fallback that never counts as entailment: clamp embeddings proximity to <= 1.
+        const logicProximity = logicByName.has(text.name)
+          ? logicByName.get(text.name)!
+          : Math.min(1, Math.max(0, embeddingsProximity ?? 0))
+
+        return {
+          ...text,
+          embeddingsProximity,
+          logicProximity,
+        }
+      })
+    } catch (error: any) {
+      console.error(
+        'Error en LogicInferenceService.adjustProximitiesByContextInferenceByLLM:',
+        error?.message
+      )
+      return []
+    }
+  }
+
+  /**
+   * Classify a single micro-batch. Returns the parsed verdicts (may be fewer than
+   * requested if the model dropped items — the caller fills gaps with a fallback).
+   */
+  private async classifyBatch(
+    modelsService: ModelsService,
+    term: string,
+    batchNames: string[],
+    termsType: 'tag' | 'desc'
+  ): Promise<NLIVerdict[]> {
+    const candidateKind = termsType === 'tag' ? 'tags' : 'description fragments'
+    const candidateList = batchNames.map((name, id) => `${id}: ${name}`).join('\n')
+    const userPrompt = `TERM: "${term}"\n\nCandidates (photo ${candidateKind}):\n${candidateList}`
+    const systemPrompt = buildSystemPrompt(termsType)
+
+    try {
+      const response = await this.callLLMWithRetry(modelsService, systemPrompt, userPrompt)
+      return this.normalizeVerdicts(response?.result, batchNames.length)
+    } catch (error: any) {
+      // Exhausted retries — degrade this batch to the embeddings-only fallback.
+      console.warn('[LogicInference] batch failed after retries:', error?.message)
+      return []
+    }
+  }
+
+  /**
+   * Call the LLM with retry + exponential backoff, mirroring the callLLMWithRetry
+   * pattern used elsewhere (ai_location_inference_service). The first attempt uses
+   * the primary model (gemini-2.5-flash-lite); retries escalate to the more capable
+   * RETRY_MODEL (gemini-3.1-flash-lite). getGeminiResponse is invoked with
+   * throwOnError=true so transient errors propagate here to be retried; an
+   * empty/unparseable result is also retried. Caching stays on: identical
+   * (term, candidates) batches are served from Redis at zero cost, so repeated
+   * searches don't re-bill.
+   */
+  private async callLLMWithRetry(
+    modelsService: ModelsService,
+    systemPrompt: string,
+    userPrompt: string
+  ): Promise<any> {
+    let lastError: Error | null = null
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      const model = attempt === 1 ? PRIMARY_MODEL : RETRY_MODEL
+      // gemini-3 runs at MINIMAL thinking (its floor — light, adaptive reasoning,
+      // low latency). The gemini-2.5 fallback defaults to thinkingBudget:0 (OFF),
+      // so give it an explicit budget since it needs reasoning to do NLI.
+      const thinkingConfig = model.startsWith('gemini-3')
+        ? { thinkingLevel: 'MINIMAL' }
+        : { thinkingBudget: THINKING_BUDGET }
+      try {
+        const result = await modelsService.getGeminiResponse(
+          systemPrompt,
+          [userPrompt],
+          model,
+          { temperature: 0, responseMimeType: 'application/json' },
+          true, // useCache — deterministic NLI, safe & cheap to cache
+          true, // throwOnError — surface transient errors so we can retry here
+          thinkingConfig
+        )
+
+        if (!result?.result) throw new Error(`LLM returned an empty response (${model})`)
+        return result
+      } catch (error: any) {
+        lastError = error
+        if (attempt === MAX_RETRIES) break
+
+        const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1)
+        console.warn(
+          `[LogicInference] attempt ${attempt}/${MAX_RETRIES} (${model}) failed: ${error?.message}. Retrying in ${delay}ms.`
+        )
+        await new Promise((resolve) => setTimeout(resolve, delay))
+      }
+    }
+
+    throw lastError ?? new Error('LLM logic inference failed')
+  }
+
+  /**
+   * Coerce the model output into clean, in-range verdicts. getGeminiResponse
+   * unwraps `{ results: [...] }` to the array on `.result`.
+   */
+  private normalizeVerdicts(raw: any, batchLength: number): NLIVerdict[] {
+    const arr = Array.isArray(raw) ? raw : Array.isArray(raw?.results) ? raw.results : []
+    const verdicts: NLIVerdict[] = []
+
+    for (const item of arr) {
+      const id = Number(item?.id)
+      if (!Number.isInteger(id) || id < 0 || id >= batchLength) continue
+
+      const label = this.coerceLabel(item?.label)
+      if (!label) continue
+
+      let confidence = Number(item?.confidence)
+      if (!Number.isFinite(confidence)) confidence = 0.5
+      confidence = Math.min(1, Math.max(0, confidence))
+
+      verdicts.push({ id, label, confidence })
+    }
+
+    return verdicts
+  }
+
+  private coerceLabel(value: any): NLILabel | null {
+    const v = String(value ?? '')
+      .toLowerCase()
+      .trim()
+    if (v.startsWith('entail')) return 'entailment'
+    if (v.startsWith('contra')) return 'contradiction'
+    if (v.startsWith('neutral')) return 'neutral'
+    return null
+  }
+
+  /**
+   * Map (label, confidence) → logicProximity in [0, 2], aligned with
+   * ScoringService.adjustProximities' LOGIC_THRESHOLD = 1:
+   *   contradiction → 1 - confidence  ∈ [0, 1)
+   *   neutral       → 1               (boundary: filtered out in entailment mode)
+   *   entailment    → 1 + confidence  ∈ (1, 2]
+   * Confidence preserves ranking gradation within each class.
+   */
+  private labelToLogicProximity(label: NLILabel, confidence: number): number {
+    switch (label) {
+      case 'entailment':
+        return 1 + confidence
+      case 'contradiction':
+        return 1 - confidence
+      case 'neutral':
+      default:
+        return 1
+    }
+  }
+
+  private chunk<T>(arr: T[], size: number): T[][] {
+    const out: T[][] = []
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+    return out
+  }
+}

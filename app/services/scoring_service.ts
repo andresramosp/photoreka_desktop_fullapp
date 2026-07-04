@@ -21,6 +21,7 @@ import TagManager from '../managers/tag_manager.js'
 import TagPhoto from '#models/tag_photo'
 import { EmbeddingStoreService } from './embeddings_store_service.js'
 import NLPService from './nlp_service.js'
+import LogicInferenceService from './logic_inference_service.js'
 import { hashNumberIds } from '../utils/cache_key.js'
 const require = createRequire(import.meta.url)
 const pluralize = require('pluralize')
@@ -60,7 +61,7 @@ const MAX_SIMILAR_CHUNKS = 850
 const MAX_SIMILAR_PHOTOS = 5000
 const MAX_PARALLEL_SCORING_PHOTOS = 5000
 const MAX_CACHEABLE_SCORING_PHOTOS = 5000
-const SCORING_CACHE_VERSION = 'v5'
+const SCORING_CACHE_VERSION = 'v6'
 
 // CLIP cosine proximities live in roughly this band; mapClipProximityToScore normalizes them to 0..1.
 const CLIP_SCORE_MIN = 0.15
@@ -104,6 +105,7 @@ export default class ScoringService {
   public tagManager: TagManager = null
   public tagPhotoManager: TagPhotoManager = null
   public nlpService: NLPService = null
+  public logicInferenceService: LogicInferenceService = null
 
   constructor() {
     this.modelsService = new ModelsService()
@@ -111,6 +113,7 @@ export default class ScoringService {
     this.tagManager = new TagManager()
     this.tagPhotoManager = new TagPhotoManager()
     this.nlpService = new NLPService()
+    this.logicInferenceService = new LogicInferenceService()
   }
 
   // ==================== HELPERS DE CONFIGURACIÓN ====================
@@ -386,7 +389,13 @@ export default class ScoringService {
         this.processFullQuery(photoIds, query, config),
         this.processNotes(photoIds, query, config),
         this.processNuances(photoIds, query, config, userId),
-        this.processImageSimilarity(photoIds, query.clipQuery, config, userId, imageScoringThreshold),
+        this.processImageSimilarity(
+          photoIds,
+          query.clipQuery,
+          config,
+          userId,
+          imageScoringThreshold
+        ),
       ])
 
     // 6. Merge todos los resultados
@@ -513,7 +522,13 @@ export default class ScoringService {
     // 6. Ejecutar en paralelo: tags e image
     const [tagScores, imageScores] = await Promise.all([
       this.processPositiveSegments(initialScores, query, config, userId),
-      this.processImageSimilarity(filteredIds, query.clipQuery, config, userId, imageScoringThreshold),
+      this.processImageSimilarity(
+        filteredIds,
+        query.clipQuery,
+        config,
+        userId,
+        imageScoringThreshold
+      ),
     ])
 
     // 7. Merge image scores
@@ -1152,8 +1167,16 @@ export default class ScoringService {
       return tags.filter((tag) => tag.proximity > 0)
     }
 
+    // LLM micro-batched NLI (gemini-2.5-flash-lite) replaces the RunPod BERT endpoint.
+    // Passing this.modelsService lets its Gemini token cost be captured by the caller's
+    // CostTracker (when a tracked ModelsService is injected in search_text_service).
     const adjustedProximitiesByContext =
-      await this.modelsService.adjustProximitiesByContextInference(term, tags, termsType, false)
+      await this.logicInferenceService.adjustProximitiesByContextInferenceByLLM(
+        this.modelsService,
+        term,
+        tags,
+        termsType
+      )
 
     // Entailment: filtro estricto basado en logicProximity
     if (refineMode === 'entailment') {

@@ -152,11 +152,11 @@ export const SEARCH_MODE_CONFIGURATION: Record<SearchMode, SearchModeConfig> = {
   },
   precise: {
     thresholds: {
-      tag: 0.17,
-      descSegment: 0.17,
-      descFullQuery: 0.3,
+      tag: 0.2,
+      descSegment: 0.25,
+      descFullQuery: 0.4,
       notes: 0.55,
-      image: 0.3,
+      image: 0.4,
       nuances: null,
     },
     refineMode: 'entailment',
@@ -229,6 +229,10 @@ export default class SearchTextService {
     this.queryService = new QueryService()
     this.queryService.modelsService = this.modelsService
     this.scoringService = new ScoringService()
+    // Use the cost-tracked ModelsService inside scoring so the LLM logic-inference
+    // (LogicInferenceService via getGeminiResponse) token cost is recorded on this
+    // search's CostTracker and later charged under the SEARCH_PRECISE margin.
+    this.scoringService.modelsService = this.modelsService
     this.vectorService = new VectorService()
   }
 

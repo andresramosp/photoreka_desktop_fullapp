@@ -4,7 +4,7 @@ import SearchTextService from '#services/search_text_service'
 import SearchPhotoService from '#services/search_photo_service'
 import UserCostService from '#services/user_cost_service'
 import CreditService, {
-  PRECISE_GPU_CREDITS,
+  SEARCH_PRECISE_MIN_CREDITS,
   CLIP_CROP_CREDITS,
   PHOTO_SIMILARITY_RESULT_CREDITS,
   PHOTO_SIMILARITY_MIN_CREDITS,
@@ -21,7 +21,7 @@ export default class SearchController {
   }
 
   private getSearchMinCredits(withInsights: boolean, isPrecise: boolean): number {
-    return withInsights ? SEARCH_INSIGHTS_MIN_CREDITS : isPrecise ? PRECISE_GPU_CREDITS : 1
+    return withInsights ? SEARCH_INSIGHTS_MIN_CREDITS : isPrecise ? SEARCH_PRECISE_MIN_CREDITS : 1
   }
 
   /**
@@ -71,29 +71,11 @@ export default class SearchController {
           }
         }
 
-        // Charge GPU credits upfront for modes that use entailment refinement
-        if (isPrecise) {
-          if (!freeShot) {
-            const charged = await CreditService.tryChargeFixed(user.id, PRECISE_GPU_CREDITS)
-            if (!charged) {
-              return response.status(402).json({
-                message: 'No credits remaining. Please purchase more credits to continue.',
-                code: 'INSUFFICIENT_CREDITS',
-              })
-            }
-          }
-          UserCostService.record(
-            user.id,
-            'search',
-            CreditService.creditsToEstimatedEur(PRECISE_GPU_CREDITS),
-            1,
-            {
-              task: 'gpu_precise_search',
-              free: freeShot,
-              metadata: { fixedCharge: true, credits: PRECISE_GPU_CREDITS },
-            }
-          ).catch(() => {})
-        }
+        // Precise mode no longer charges a fixed GPU credit upfront. Its real cost —
+        // the LLM micro-batched NLI (LogicInferenceService via gemini-2.5-flash-lite) —
+        // is tracked on searchService.costTracker and charged post-search below under
+        // the SEARCH_PRECISE margin (COST_MULTIPLIERS = 2). The canAfford gate above
+        // (SEARCH_PRECISE_MIN_CREDITS) already ensures the user has a non-empty wallet.
       } else if (withInsights) {
         // Insights pagination keeps running an LLM on every page, so it stays billable
         // even when a cursor is present. The free bag is always 0 for insights, so we
@@ -126,12 +108,10 @@ export default class SearchController {
 
       // Insights searches compute an LLM per page, so their pagination must be billed too.
       if (!isPagination || withInsights) {
-        UserCostService.recordFromTracker(
-          user.id,
-          searchService.costTracker,
-          undefined,
-          freeShot
-        ).catch(() => {})
+        UserCostService.recordFromTracker(user.id, searchService.costTracker, undefined, {
+          free: freeShot === true,
+          billingCategory: searchCategory,
+        }).catch(() => {})
 
         const summary = searchService.costTracker.getSummary()
         if (!freeShot && summary.totalCostInEur > 0) {
@@ -191,29 +171,11 @@ export default class SearchController {
           }
         }
 
-        // Charge GPU credits upfront for modes that use entailment refinement
-        if (isPrecise) {
-          if (!freeShot) {
-            const charged = await CreditService.tryChargeFixed(user.id, PRECISE_GPU_CREDITS)
-            if (!charged) {
-              return response.status(402).json({
-                message: 'No credits remaining. Please purchase more credits to continue.',
-                code: 'INSUFFICIENT_CREDITS',
-              })
-            }
-          }
-          UserCostService.record(
-            user.id,
-            'search',
-            CreditService.creditsToEstimatedEur(PRECISE_GPU_CREDITS),
-            1,
-            {
-              task: 'gpu_precise_search',
-              free: freeShot,
-              metadata: { fixedCharge: true, credits: PRECISE_GPU_CREDITS },
-            }
-          ).catch(() => {})
-        }
+        // Precise mode no longer charges a fixed GPU credit upfront. Its real cost —
+        // the LLM micro-batched NLI (LogicInferenceService via gemini-2.5-flash-lite) —
+        // is tracked on searchService.costTracker and charged post-search below under
+        // the SEARCH_PRECISE margin (COST_MULTIPLIERS = 2). The canAfford gate above
+        // (SEARCH_PRECISE_MIN_CREDITS) already ensures the user has a non-empty wallet.
       } else if (withInsights) {
         // Insights pagination keeps running an LLM on every page, so it stays billable
         // even when a cursor is present. The free bag is always 0 for insights, so we
@@ -246,12 +208,10 @@ export default class SearchController {
 
       // Insights searches compute an LLM per page, so their pagination must be billed too.
       if (!isPagination || withInsights) {
-        UserCostService.recordFromTracker(
-          user.id,
-          searchService.costTracker,
-          undefined,
-          freeShot
-        ).catch(() => {})
+        UserCostService.recordFromTracker(user.id, searchService.costTracker, undefined, {
+          free: freeShot === true,
+          billingCategory: searchCategory,
+        }).catch(() => {})
 
         const summary = searchService.costTracker.getSummary()
         if (!freeShot && summary.totalCostInEur > 0) {

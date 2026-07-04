@@ -500,56 +500,10 @@ export default class ModelsService {
     }
   }
 
-  @MeasureExecutionTime
-  async adjustProximitiesByContextInference(
-    term,
-    texts,
-    termsType = 'tag',
-    forceCPU: boolean = false
-  ) {
-    const isGPU = !forceCPU
-    try {
-      // Filtrado único por name + group
-      const uniqueTexts = Object.values(
-        texts.reduce((acc, item) => {
-          const key = `${item.name}::${item.group}`
-          if (!acc[key]) acc[key] = item
-          return acc
-        }, {})
-      )
-
-      let payload = {
-        term,
-        tag_list: uniqueTexts.map((tag) => ({ name: tag.name, group: tag.group })), //.slice(0, 5),
-        premise_wrapper: 'the photo has the following fragment in its description: {term}',
-        hypothesis_wrapper: 'the photo features {term}',
-      }
-
-      const operation =
-        termsType === 'tag'
-          ? 'adjust_tags_proximities_by_context_inference'
-          : 'adjust_descs_proximities_by_context_inference'
-
-      const { url, requestPayload, headers } = this.buildRequestConfig(
-        operation,
-        payload,
-        isGPU ? 'logic_gpu' : 'logic_cpu' // 'logic_gpu_lb'
-      )
-
-      let { data } = await axios.post(url, requestPayload, { headers })
-
-      data = data.output ? data.output : data
-
-      return texts.map((text) => ({
-        ...text,
-        embeddingsProximity: text.proximity,
-        logicProximity: data[text.name]?.adjusted_proximity,
-      }))
-    } catch (error) {
-      console.error('Error en adjustProximitiesByContextInference:', error.message)
-      return []
-    }
-  }
+  // NLI (premise/hypothesis → entailment|neutral|contradiction) moved to
+  // LogicInferenceService, which encapsulates both the BERT (RunPod) engine
+  // (adjustProximitiesByContextInferenceByBert — reuses this.buildRequestConfig)
+  // and the gemini-2.5-flash-lite engine (adjustProximitiesByContextInferenceByLLM).
 
   async getEmbeddingsGPU(tags) {
     const isRemoteGPU = this.apiMode === 'REMOTE'

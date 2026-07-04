@@ -27,6 +27,16 @@ export interface CostLogOptions {
   metadata?: Record<string, any>
 }
 
+export interface RecordFromTrackerOptions {
+  free?: boolean
+  /**
+   * Optional credit billing category override used to compute credits/margin in logs.
+   * Useful when tracker category is coarse (e.g. "search") but billing is finer
+   * (e.g. SEARCH_PRECISE / SEARCH_INSIGHTS).
+   */
+  billingCategory?: CreditCategory
+}
+
 // ─── Service ─────────────────────────────────────────────
 
 export default class UserCostService {
@@ -49,16 +59,21 @@ export default class UserCostService {
   }
 
   /**
-   * Compute credits charged and margin multiplier for a given cost category and EUR amount.
-   * Returns null for categories that don't charge credits (photo_analysis, other).
+   * Compute credits and margin for a cost entry.
+   *
+   * If `billingCategoryOverride` is provided, it takes precedence over the
+   * tracker category mapping and is used for margin/credits computation.
+   * Returns null for categories that don't bill credits.
    */
   private static computeCredits(
     category: CostCategory,
-    costInEur: number
+    costInEur: number,
+    billingCategoryOverride?: CreditCategory
   ): { creditsCharged: number; marginMultiplier: number } | null {
-    const creditCat = this.CREDIT_CATEGORY_MAP[category]
-    if (!creditCat) return null
-    const multiplier = CreditService.getCostMultiplier(creditCat)
+    const billingCategory = billingCategoryOverride ?? this.CREDIT_CATEGORY_MAP[category]
+    if (!billingCategory) return null
+
+    const multiplier = CreditService.getCostMultiplier(billingCategory)
     const credits = CreditService.eurToCredits(costInEur * multiplier)
     return { creditsCharged: credits, marginMultiplier: multiplier }
   }
@@ -120,9 +135,13 @@ export default class UserCostService {
     userId: number,
     tracker: CostTracker,
     referenceId?: string,
-    free: boolean = false
+    freeOrOptions: boolean | RecordFromTrackerOptions = false
   ): Promise<void> {
-    return this.recordSummary(userId, tracker.getSummary(), referenceId, free)
+    const free = typeof freeOrOptions === 'boolean' ? freeOrOptions : freeOrOptions?.free === true
+    const billingCategory =
+      typeof freeOrOptions === 'boolean' ? undefined : freeOrOptions?.billingCategory
+
+    return this.recordSummary(userId, tracker.getSummary(), referenceId, free, billingCategory)
   }
 
   /**
@@ -134,7 +153,8 @@ export default class UserCostService {
     userId: number,
     summary: CostSummary,
     referenceId?: string,
-    free: boolean = false
+    free: boolean = false,
+    billingCategory?: CreditCategory
   ): Promise<void> {
     if (!userId || summary.totalCostInEur <= 0) return
 
@@ -153,7 +173,7 @@ export default class UserCostService {
     }
 
     for (const data of groupedEntries) {
-      const creditInfo = this.computeCredits(summary.category, data.costInEur)
+      const creditInfo = this.computeCredits(summary.category, data.costInEur, billingCategory)
 
       await CostLog.create({
         userId,
