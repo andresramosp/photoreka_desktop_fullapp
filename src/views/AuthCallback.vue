@@ -13,6 +13,7 @@ import { useRouter, useRoute } from "vue-router";
 import { useUserStore } from "../stores/userStore";
 import { useMessage } from "naive-ui";
 import SpiralGridLoader from "../components/SpiralGridLoader.vue";
+import { trackAuth, trackSignupConversion } from "../utils/analytics";
 
 const router = useRouter();
 const route = useRoute();
@@ -42,6 +43,11 @@ onMounted(async () => {
   const result = await userStore.processOAuthCallback(token);
 
   if (result.success) {
+    if (isNewUser) {
+      trackAuth("signup", "google");
+      trackSignupConversion("google");
+    }
+
     displayMessage.value = "Success! Redirecting...";
     message.success("Welcome to Photoreka!");
 

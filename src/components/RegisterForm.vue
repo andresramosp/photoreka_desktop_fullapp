@@ -138,6 +138,7 @@ import { useMessage } from "naive-ui";
 import type { FormInst, FormRules } from "naive-ui";
 import AuthProviders from "./AuthProviders.vue";
 import { h } from "vue";
+import { trackAuth, trackSignupConversion } from "../utils/analytics";
 
 // Icons
 const UserIcon = () =>
@@ -307,6 +308,8 @@ const handleSubmit = async () => {
     );
 
     if (result.success) {
+      trackAuth("signup", "email");
+      trackSignupConversion("email");
       // message.success(
       //   "Account created successfully! Let's set up your profile.",
       // );

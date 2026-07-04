@@ -10,6 +10,9 @@ declare global {
 // Get GA4 Measurement ID from environment variable
 const GA_MEASUREMENT_ID =
   import.meta.env.VITE_GA_MEASUREMENT_ID || "G-WK7N5SVNVD";
+const GOOGLE_ADS_ID = import.meta.env.VITE_GOOGLE_ADS_ID || "";
+const GOOGLE_ADS_SIGNUP_LABEL =
+  import.meta.env.VITE_GOOGLE_ADS_SIGNUP_LABEL || "";
 
 const ADMIN_PATH_PREFIX = "/admin";
 
@@ -72,6 +75,11 @@ export function initGA(): void {
     // Add environment context
     environment: isDevelopment ? "development" : "production",
   });
+
+  // Optional destination for Google Ads conversions.
+  if (GOOGLE_ADS_ID) {
+    window.gtag("config", GOOGLE_ADS_ID);
+  }
 
   // Send a test event to verify GA is working
   setTimeout(() => {
@@ -142,6 +150,26 @@ export function trackAuth(action: string, method: string | null = null): void {
     action: action, // 'login', 'signup', 'logout'
     method: method, // 'email', 'google', etc.
   });
+}
+
+export function trackSignupConversion(method: string): void {
+  if (!shouldTrackAnalytics()) {
+    return;
+  }
+
+  if (typeof window.gtag !== "undefined") {
+    const params: Record<string, any> = {
+      signup_method: method,
+      environment: isDevelopment ? "development" : "production",
+    };
+
+    if (GOOGLE_ADS_ID && GOOGLE_ADS_SIGNUP_LABEL) {
+      params.send_to = `${GOOGLE_ADS_ID}/${GOOGLE_ADS_SIGNUP_LABEL}`;
+    }
+
+    window.gtag("event", "conversion_event_signup", params);
+    console.log("🎯 Signup conversion tracked", params);
+  }
 }
 
 // Track photo operations
