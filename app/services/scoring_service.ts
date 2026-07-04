@@ -61,7 +61,7 @@ const MAX_SIMILAR_CHUNKS = 850
 const MAX_SIMILAR_PHOTOS = 5000
 const MAX_PARALLEL_SCORING_PHOTOS = 5000
 const MAX_CACHEABLE_SCORING_PHOTOS = 5000
-const SCORING_CACHE_VERSION = 'v6'
+const SCORING_CACHE_VERSION = 'v7'
 
 // CLIP cosine proximities live in roughly this band; mapClipProximityToScore normalizes them to 0..1.
 const CLIP_SCORE_MIN = 0.15
@@ -315,13 +315,13 @@ export default class ScoringService {
 
   // ==================== MÉTODOS PRINCIPALES DE SCORING ====================
 
-  @withCache({
-    provider: 'redis',
-    key: (photoIds: number[], structuredQuery: any, searchMode: SearchMode, userId: string) =>
-      `${SCORING_CACHE_VERSION}:getScoredPhotosByTagsAndDesc:${userId}:${searchMode}:${JSON.stringify(structuredQuery)}:${hashNumberIds(photoIds)}`,
-    ttl: 60 * 60 * 12,
-    shouldCache: (_result, [photoIds]) => photoIds.length <= MAX_CACHEABLE_SCORING_PHOTOS,
-  })
+  // @withCache({
+  //   provider: 'redis',
+  //   key: (photoIds: number[], structuredQuery: any, searchMode: SearchMode, userId: string) =>
+  //     `${SCORING_CACHE_VERSION}:getScoredPhotosByTagsAndDesc:${userId}:${searchMode}:${JSON.stringify(structuredQuery)}:${hashNumberIds(photoIds)}`,
+  //   ttl: 60 * 60 * 12,
+  //   shouldCache: (_result, [photoIds]) => photoIds.length <= MAX_CACHEABLE_SCORING_PHOTOS,
+  // })
   public async getScoredPhotosByTagsAndDesc(
     photoIds: number[],
     structuredQuery: any,

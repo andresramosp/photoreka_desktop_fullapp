@@ -153,7 +153,7 @@ export const SEARCH_MODE_CONFIGURATION: Record<SearchMode, SearchModeConfig> = {
   precise: {
     thresholds: {
       tag: 0.2,
-      descSegment: 0.25,
+      descSegment: 0.35,
       descFullQuery: 0.4,
       notes: 0.55,
       image: 0.4,

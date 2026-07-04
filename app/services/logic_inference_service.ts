@@ -30,34 +30,61 @@ import type { ModelName } from './models_service.js'
 
 // ─── LLM engine config ───────────────────────────────────
 
-/** Primary model for logic inference. */
-const PRIMARY_MODEL: ModelName = 'gemini-3.1-flash-lite'
+type TermsType = 'tag' | 'desc'
 
-/** Escalation model used on retries (more capable, pricier) when the primary fails. */
-const RETRY_MODEL: ModelName = 'gemini-2.5-flash-lite'
+interface LLMModelStepConfig {
+  model: ModelName
+  thinkingConfig?: Record<string, any>
+}
+
+interface LLMTermsTypeConfig {
+  batchSize: number
+  concurrency: number
+  maxRetries: number
+  model1: LLMModelStepConfig
+  model2: LLMModelStepConfig
+}
 
 /**
- * Items per LLM call. Kept small to avoid the model drifting / misaligning the
- * numbered ids across many items. Description fragments are long free text and
- * much harder than short tags, so they use a smaller batch.
+ * Declarative per-request-type strategy:
+ * - model1 is used on the first attempt
+ * - model2 is used on retries
+ * - thinkingConfig is passed verbatim to getGeminiResponse
  */
-const TAG_BATCH_SIZE = 20
-const DESC_BATCH_SIZE = 10
-
-/** Concurrent in-flight calls. Bounded to respect Gemini rate limits. */
-const CONCURRENCY = 6
+const LLM_CONFIG_BY_TERMS_TYPE: Record<TermsType, LLMTermsTypeConfig> = {
+  tag: {
+    batchSize: 10,
+    concurrency: 10,
+    maxRetries: 2,
+    model1: {
+      model: 'gemini-2.5-flash-lite',
+      thinkingConfig: { thinkingBudget: 512 },
+    },
+    model2: {
+      model: 'gemini-3.1-flash-lite',
+      thinkingConfig: { thinkingLevel: 'MINIMAL' },
+    },
+  },
+  desc: {
+    batchSize: 10,
+    concurrency: 10,
+    maxRetries: 2,
+    model1: {
+      model: 'gemini-3.1-flash-lite',
+      thinkingConfig: { thinkingLevel: 'MINIMAL' },
+    },
+    model2: {
+      model: 'gemini-2.5-flash-lite',
+      thinkingConfig: { thinkingBudget: 1024 },
+    },
+  },
+}
 
 /** Hard cap on candidates processed per term to bound worst-case cost/latency. */
 const MAX_CANDIDATES = 1500
 
-/** Per-batch retry attempts on transient failures / empty responses. */
-const MAX_RETRIES = 3
-
 /** Base backoff between retries (exponential: base * 2^(attempt-1)). */
 const RETRY_BASE_DELAY_MS = 800
-
-/** Thinking-token budget for gemini-2.5 NLI calls (0 = off, which is the model default). */
-const THINKING_BUDGET = 1024
 
 /** Print one line per inference (term ⇐ candidate: label/confidence → logicProximity). */
 const LOG_INFERENCES = false
@@ -120,7 +147,7 @@ Return STRICT JSON, no prose, with this exact shape:
 - "confidence" is how sure you are of the label (0..1).
 - Return exactly one object per input candidate.`
 
-function buildSystemPrompt(termsType: 'tag' | 'desc'): string {
+function buildSystemPrompt(termsType: TermsType): string {
   const guidance = termsType === 'tag' ? PROMPT_TAG_GUIDANCE : PROMPT_DESC_GUIDANCE
   return PROMPT_CORE + guidance + PROMPT_JSON_FORMAT
 }
@@ -145,7 +172,7 @@ export default class LogicInferenceService {
     modelsService: ModelsService,
     term: string,
     texts: any[],
-    termsType: 'tag' | 'desc' = 'tag',
+    termsType: TermsType = 'tag',
     forceCPU: boolean = false
   ): Promise<any[]> {
     const isGPU = !forceCPU
@@ -213,7 +240,7 @@ export default class LogicInferenceService {
     modelsService: ModelsService,
     term: string,
     texts: any[],
-    termsType: 'tag' | 'desc' = 'tag'
+    termsType: TermsType = 'tag'
   ): Promise<any[]> {
     if (!Array.isArray(texts) || texts.length === 0) return []
 
@@ -230,13 +257,14 @@ export default class LogicInferenceService {
       // logicProximity per candidate name.
       const logicByName = new Map<string, number>()
 
-      const batchSize = termsType === 'tag' ? TAG_BATCH_SIZE : DESC_BATCH_SIZE
+      const termsConfig = this.getTermsTypeConfig(termsType)
+      const batchSize = termsConfig.batchSize
       const batches = this.chunk(uniqueNames, batchSize)
-      const limit = pLimit(CONCURRENCY)
+      const limit = pLimit(termsConfig.concurrency)
 
       if (LOG_INFERENCES) {
         console.log(
-          `[LogicInference] term="${term}" (${termsType}) | inputs=${texts.length} unique=${uniqueNames.length} batches=${batches.length} (size=${batchSize}, concurrency=${CONCURRENCY}). Note: cached batches cost €0 and are not counted in cost_logs.`
+          `[LogicInference] term="${term}" (${termsType}) | inputs=${texts.length} unique=${uniqueNames.length} batches=${batches.length} (size=${batchSize}, concurrency=${termsConfig.concurrency}). Note: cached batches cost €0 and are not counted in cost_logs.`
         )
       }
 
@@ -292,7 +320,7 @@ export default class LogicInferenceService {
     modelsService: ModelsService,
     term: string,
     batchNames: string[],
-    termsType: 'tag' | 'desc'
+    termsType: TermsType
   ): Promise<NLIVerdict[]> {
     const candidateKind = termsType === 'tag' ? 'tags' : 'description fragments'
     const candidateList = batchNames.map((name, id) => `${id}: ${name}`).join('\n')
@@ -300,7 +328,12 @@ export default class LogicInferenceService {
     const systemPrompt = buildSystemPrompt(termsType)
 
     try {
-      const response = await this.callLLMWithRetry(modelsService, systemPrompt, userPrompt)
+      const response = await this.callLLMWithRetry(
+        modelsService,
+        systemPrompt,
+        userPrompt,
+        termsType
+      )
       return this.normalizeVerdicts(response?.result, batchNames.length)
     } catch (error: any) {
       // Exhausted retries — degrade this batch to the embeddings-only fallback.
@@ -311,29 +344,25 @@ export default class LogicInferenceService {
 
   /**
    * Call the LLM with retry + exponential backoff, mirroring the callLLMWithRetry
-   * pattern used elsewhere (ai_location_inference_service). The first attempt uses
-   * the primary model (gemini-2.5-flash-lite); retries escalate to the more capable
-   * RETRY_MODEL (gemini-3.1-flash-lite). getGeminiResponse is invoked with
-   * throwOnError=true so transient errors propagate here to be retried; an
-   * empty/unparseable result is also retried. Caching stays on: identical
-   * (term, candidates) batches are served from Redis at zero cost, so repeated
-   * searches don't re-bill.
+   * pattern used elsewhere (ai_location_inference_service). Model choice,
+   * retries, and thinking are selected declaratively from LLM_CONFIG_BY_TERMS_TYPE.
+   * getGeminiResponse is invoked with throwOnError=true so transient errors
+   * propagate here to be retried; an empty/unparseable result is also retried.
+   * Caching stays on: identical (term, candidates) batches are served from
+   * Redis at zero cost, so repeated searches don't re-bill.
    */
   private async callLLMWithRetry(
     modelsService: ModelsService,
     systemPrompt: string,
-    userPrompt: string
+    userPrompt: string,
+    termsType: TermsType
   ): Promise<any> {
     let lastError: Error | null = null
+    const termsConfig = this.getTermsTypeConfig(termsType)
 
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      const model = attempt === 1 ? PRIMARY_MODEL : RETRY_MODEL
-      // gemini-3 runs at MINIMAL thinking (its floor — light, adaptive reasoning,
-      // low latency). The gemini-2.5 fallback defaults to thinkingBudget:0 (OFF),
-      // so give it an explicit budget since it needs reasoning to do NLI.
-      const thinkingConfig = model.startsWith('gemini-3')
-        ? { thinkingLevel: 'MINIMAL' }
-        : { thinkingBudget: THINKING_BUDGET }
+    for (let attempt = 1; attempt <= termsConfig.maxRetries; attempt++) {
+      const stepConfig = attempt === 1 ? termsConfig.model1 : termsConfig.model2
+      const { model, thinkingConfig } = stepConfig
       try {
         const result = await modelsService.getGeminiResponse(
           systemPrompt,
@@ -349,11 +378,11 @@ export default class LogicInferenceService {
         return result
       } catch (error: any) {
         lastError = error
-        if (attempt === MAX_RETRIES) break
+        if (attempt === termsConfig.maxRetries) break
 
         const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1)
         console.warn(
-          `[LogicInference] attempt ${attempt}/${MAX_RETRIES} (${model}) failed: ${error?.message}. Retrying in ${delay}ms.`
+          `[LogicInference] attempt ${attempt}/${termsConfig.maxRetries} (${model}) failed: ${error?.message}. Retrying in ${delay}ms.`
         )
         await new Promise((resolve) => setTimeout(resolve, delay))
       }
@@ -415,6 +444,10 @@ export default class LogicInferenceService {
       default:
         return 1
     }
+  }
+
+  private getTermsTypeConfig(termsType: TermsType): LLMTermsTypeConfig {
+    return LLM_CONFIG_BY_TERMS_TYPE[termsType]
   }
 
   private chunk<T>(arr: T[], size: number): T[][] {

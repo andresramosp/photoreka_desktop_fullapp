@@ -37,7 +37,7 @@ export type CostCategory =
 export const COST_MULTIPLIERS: Record<CostCategory, number> = {
   GEO_INFERENCE: 2, //2.5,
   SEARCH: 2,
-  SEARCH_PRECISE: 1.5,
+  SEARCH_PRECISE: 1.75,
   SEARCH_INSIGHTS: 2,
   SEARCH_BY_PHOTO: 2,
   PORTFOLIO_BUILD: 2.25, //2.5,
