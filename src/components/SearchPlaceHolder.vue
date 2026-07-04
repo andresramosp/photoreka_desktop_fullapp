@@ -110,7 +110,7 @@ const searchModeConfig = {
   precise: {
     title: "Precise Mode",
     description:
-      "A focused and analytical search designed for accuracy. Returns results closely aligned with your exact intent.",
+      "An exhaustive and logical search designed for accuracy. Returns results closely aligned with your exact intent.",
     instructions: [
       // {
       //   icon: "LocateOutline",
@@ -118,7 +118,7 @@ const searchModeConfig = {
       // },
       {
         icon: "ListOutline",
-        text: "Best for <strong> concrete objects </strong> and <strong> more precise taxonomic distinctions </strong>.",
+        text: "Best for <strong> concrete objects</strong>,<strong> small details</strong>, and <strong> more precise taxonomic distinctions </strong>.",
       },
     ],
   },

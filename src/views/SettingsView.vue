@@ -590,7 +590,7 @@
           <li>
             <strong>Precise</strong> — high-accuracy; best for specific objects
             and taxonomic distinctions.
-            <em>Standard cost + additional GPU credits (≈ 5 cr).</em>
+            <em>Standard cost + additional refinement processing.</em>
           </li>
           <li>
             <strong>Search Insights</strong> — AI-generated commentary that

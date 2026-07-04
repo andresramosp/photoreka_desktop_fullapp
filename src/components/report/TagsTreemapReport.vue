@@ -40,7 +40,7 @@
           type="primary"
           :disabled="isGenerateDisabled"
           :loading="isLoading"
-          @click="handleGenerateTreemap"
+          @click="handleGenerateButtonClick"
         >
           <template #icon>
             <n-icon>
@@ -169,6 +169,7 @@ import {
   AppsOutline,
   PricetagOutline as PricetagIcon,
 } from "@vicons/ionicons5";
+import { trackEvent, trackUserAction } from "@/utils/analytics";
 
 const { scoreScale } = useArtisticScores();
 
@@ -271,6 +272,7 @@ const matchMode = computed({
   get: () => (includeContained.value ? "contains" : "exact"),
   set: (value) => {
     includeContained.value = value === "contains";
+    trackEvent("tags_treemap_match_mode_change", { match_mode: value });
   },
 });
 
@@ -445,6 +447,13 @@ const fetchTreemap = async () => {
     totalPhotos.value = result.totalPhotos || 0;
     lastGeneratedSignature.value = requestSignature;
     treemapRenderKey.value += 1;
+
+    trackEvent("tags_treemap_loaded", {
+      tag_count: tags.value.length,
+      total_photos: totalPhotos.value,
+      match_mode: matchMode.value,
+      is_main_tags: showMainTags.value && selectedTags.value.length === 0,
+    });
   } finally {
     isLoading.value = false;
   }
@@ -454,6 +463,14 @@ const handleGenerateTreemap = () => {
   showMainTags.value = selectedTags.value.length === 0;
   window.clearTimeout(refreshTimer);
   refreshTimer = window.setTimeout(fetchTreemap, 180);
+};
+
+const handleGenerateButtonClick = () => {
+  trackEvent("tags_treemap_generate", {
+    tag_count: selectedTags.value.length,
+    match_mode: matchMode.value,
+  });
+  handleGenerateTreemap();
 };
 
 const searchTags = async (term) => {
@@ -489,17 +506,32 @@ const searchTags = async (term) => {
 
 const toggleTag = (tagName) => {
   const normalized = tagName.toLowerCase();
+  const isRemoving = selectedTags.value.includes(normalized);
   showMainTags.value = false;
-  selectedTags.value = selectedTags.value.includes(normalized)
+  selectedTags.value = isRemoving
     ? selectedTags.value.filter((tag) => tag !== normalized)
     : [...selectedTags.value, normalized];
+
+  trackUserAction(
+    isRemoving ? "remove_tag" : "add_tag",
+    "tags_treemap_legend",
+    normalized,
+  );
 };
 
-watch(selectedTags, (value) => {
+watch(selectedTags, (value, oldValue) => {
   const normalizedTags = normalizeTags(value);
   if (normalizedTags.join("\u0000") !== value.join("\u0000")) {
     selectedTags.value = normalizedTags;
     return;
+  }
+
+  const previousLength = oldValue?.length ?? 0;
+  if (normalizedTags.length !== previousLength) {
+    trackEvent("tags_treemap_selection_change", {
+      tag_count: normalizedTags.length,
+      action: normalizedTags.length > previousLength ? "add" : "remove",
+    });
   }
 
   if (normalizedTags.length < 2) {
