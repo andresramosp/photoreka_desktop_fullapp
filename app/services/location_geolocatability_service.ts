@@ -17,6 +17,7 @@ import Photo from '#models/photo'
 const GENRE_SCORES: Record<string, number> = {
   documentary: 30,
   landscape: 30,
+  architecture: 30,
   street: 25,
   abstract: -30,
   fashion: -25,
@@ -24,6 +25,7 @@ const GENRE_SCORES: Record<string, number> = {
   advertising: -20,
   food: -20,
   lifestyle: -15,
+  wedding: -10,
   portrait: -10,
 }
 

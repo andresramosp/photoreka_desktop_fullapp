@@ -169,7 +169,7 @@ Users must choose how they prefer to manage photo imports. This decision affects
 **Commercial Photography**
 - Optimized for advertising, product, fashion, lifestyle, and editorial work
 - Biased toward: Professional visual polish and brand-appropriate aesthetics / Clear, unambiguous subject presentation / Commercial storytelling (lifestyle aspirations, brand values, use-case context) / Originality that stands out from generic stock imagery
-- **Note:** This profile uses a completely different set of scoring criteria than all other profiles (see Artistic Scores section below). It also uses a dedicated set of genre values: advertising, product, fashion, portrait, lifestyle, food.
+- **Note:** This profile uses a completely different set of scoring criteria than all other profiles (see Artistic Scores section below). It also uses a dedicated set of genre values: advertising, product, fashion, portrait, lifestyle, food, wedding, architecture.
 
 #### Dual Profiles (Combination Mode)
 
