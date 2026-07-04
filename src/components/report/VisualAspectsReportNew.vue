@@ -63,6 +63,16 @@ const visualAspectsData = computed(() => {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: var(--spacing-xl);
+  align-items: stretch;
+}
+
+.aspect-group {
+  display: flex;
+  align-items: stretch;
+}
+
+.aspect-group :deep(.aspect-card) {
+  flex: 1;
 }
 
 /* Empty State */

@@ -91,6 +91,9 @@ const maxCount = computed(() => {
   border-radius: var(--radius-lg);
   padding: var(--spacing-xl);
   transition: var(--transition-normal);
+  width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .aspect-card:not(.compact):hover {
