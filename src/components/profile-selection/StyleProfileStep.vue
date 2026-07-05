@@ -43,8 +43,8 @@
           </div>
           <h4 class="category-title">Commercial Photography</h4>
           <p class="category-description">
-            Optimized for advertising, stock, fashion, editorial, product, and
-            lifestyle work. The engine prioritizes visual polish, subject
+            Optimized for advertising, stock, fashion, wedding, architecture,
+            and lifestyle work. The engine prioritizes visual polish, subject
             clarity, and commercial intent.
           </p>
           <div class="mode-badge commercial">Commercial</div>
