@@ -14,7 +14,10 @@ export type TreemapTag = {
   name: string
   group: string | null
   photoCount: number
+  /** Share of the whole catalog (photoCount / totalPhotos). */
   percentage: number
+  /** Share among the returned/compared tags only (photoCount / sum of all returned photoCounts) — use this for "X% vs Y%" statements between the requested tags. */
+  relativePercentage: number
 }
 
 export type TreemapResult = {
@@ -42,6 +45,29 @@ export default class TagManager {
 
   public async getTagByNameAndGroup(name: string, group: TagGroups): Promise<Tag | null> {
     return Tag.query().where('name', name.trim().toLowerCase()).andWhere('group', group).first()
+  }
+
+  // Busca tags reales del usuario que contengan `term` (autocomplete / verificación de existencia)
+  public async searchTagNamesForUser(
+    userId: string,
+    term: string,
+    limit?: number
+  ): Promise<{ id: number; name: string; group: string | null }[]> {
+    const rawResult = await db.rawQuery(
+      `
+      SELECT DISTINCT ON (t.name) t.id, t.name, t."group"
+      FROM photos p
+      JOIN tags_photos tp ON tp.photo_id = p.id
+      JOIN tags t ON t.id = tp.tag_id
+      WHERE p.user_id = ?
+        AND LOWER(t.name) LIKE ?
+        AND p.deleted_at IS NULL
+      ORDER BY t.name, t.id DESC
+      `,
+      [userId, `%${term.trim().toLowerCase()}%`]
+    )
+    const rows = rawResult.rows.sort((a: any, b: any) => a.name.length - b.name.length)
+    return limit ? rows.slice(0, limit) : rows
   }
 
   // Obtiene todos los Tags
@@ -150,22 +176,32 @@ export default class TagManager {
 
   @withCache({
     provider: 'redis',
-    key: (userId, mainTags, selectedTags: string[], includeContained, limit) =>
-      `getTreemap:${userId}:${mainTags}:${(selectedTags ?? []).join(',')}:${includeContained}:${limit}`,
+    key: (userId, mainTags, selectedTags: (string | string[])[], includeContained, limit) =>
+      `getTreemap:${userId}:${mainTags}:${JSON.stringify(selectedTags ?? [])}:${includeContained}:${limit}`,
     ttl: 60 * 60 * 12, // 12h — cheap query, invalidated on photo changes
   })
   public async getTreemap(
     userId: string,
     mainTags: boolean,
-    selectedTags: string[],
+    // Each entry is one compared category: a single tag name, or an array of
+    // synonyms to merge into a single combined category (e.g. ["motorcycle", "motorbike"]).
+    selectedTags: (string | string[])[],
     includeContained: boolean,
     limit: number
   ): Promise<TreemapResult> {
     if (!mainTags) {
-      const valuesSql = selectedTags.map(() => '(?)').join(', ')
+      // label = display name for the category (first synonym); pattern = all synonyms
+      // joined for the SQL match, so photos tagged with ANY of them count once (DISTINCT).
+      const groups = selectedTags.map((entry) => {
+        const synonyms = (Array.isArray(entry) ? entry : [entry]).map((s) =>
+          s.trim().toLowerCase()
+        )
+        return { label: synonyms[0], pattern: synonyms.join('|') }
+      })
+      const valuesSql = groups.map(() => '(?, ?)').join(', ')
       const rawResult = await db.rawQuery(
         `
-          WITH selected_terms(name) AS (
+          WITH selected_terms(name, pattern) AS (
             VALUES ${valuesSql}
           ),
           user_photos AS (
@@ -187,30 +223,39 @@ export default class TagManager {
           FROM selected_terms
           LEFT JOIN tags t ON ${
             includeContained
-              ? `LOWER(t.name) ~ ('\\m' || selected_terms.name || '\\M')`
-              : `LOWER(t.name) = selected_terms.name`
+              ? // Plain capturing group, NOT (?:...) — knex's raw-query binding scanner
+                // regex-matches literal "?" chars anywhere in the SQL text, including inside
+                // string literals, so a non-capturing group's "?" would be miscounted as an
+                // extra bind placeholder.
+                `LOWER(t.name) ~ ('\\m(' || selected_terms.pattern || ')\\M')`
+              : `LOWER(t.name) = ANY(string_to_array(selected_terms.pattern, '|'))`
           }
           LEFT JOIN tags_photos tp ON tp.tag_id = t.id
           LEFT JOIN user_photos p ON p.id = tp.photo_id
           GROUP BY selected_terms.name
           ORDER BY photo_count DESC, selected_terms.name ASC
           `,
-        [...selectedTags, userId]
+        [...groups.flatMap((g) => [g.label, g.pattern]), userId]
       )
 
       const totalPhotos = Number(rawResult.rows[0]?.total_photos || 0)
-      const tags: TreemapTag[] = rawResult.rows
-        .filter((row: any) => Number(row.photo_count) > 0)
-        .map((row: any) => ({
-          id: row.id || row.name,
-          name: row.name,
-          group: row.group,
-          photoCount: Number(row.photo_count),
-          percentage:
-            totalPhotos > 0
-              ? Number(((Number(row.photo_count) / totalPhotos) * 100).toFixed(2))
-              : 0,
-        }))
+      const matchedRows = rawResult.rows.filter((row: any) => Number(row.photo_count) > 0)
+      const sumPhotoCount = matchedRows.reduce(
+        (acc: number, row: any) => acc + Number(row.photo_count),
+        0
+      )
+      const tags: TreemapTag[] = matchedRows.map((row: any) => ({
+        id: row.id || row.name,
+        name: row.name,
+        group: row.group,
+        photoCount: Number(row.photo_count),
+        percentage:
+          totalPhotos > 0 ? Number(((Number(row.photo_count) / totalPhotos) * 100).toFixed(2)) : 0,
+        relativePercentage:
+          sumPhotoCount > 0
+            ? Number(((Number(row.photo_count) / sumPhotoCount) * 100).toFixed(2))
+            : 0,
+      }))
 
       return { tags, totalPhotos }
     }
@@ -245,6 +290,10 @@ export default class TagManager {
     )
 
     const totalPhotos = Number(rawResult.rows[0]?.total_photos || 0)
+    const sumPhotoCount = rawResult.rows.reduce(
+      (acc: number, row: any) => acc + Number(row.photo_count),
+      0
+    )
     const tags: TreemapTag[] = rawResult.rows.map((row: any) => ({
       id: row.id,
       name: row.name,
@@ -252,6 +301,10 @@ export default class TagManager {
       photoCount: Number(row.photo_count),
       percentage:
         totalPhotos > 0 ? Number(((Number(row.photo_count) / totalPhotos) * 100).toFixed(2)) : 0,
+      relativePercentage:
+        sumPhotoCount > 0
+          ? Number(((Number(row.photo_count) / sumPhotoCount) * 100).toFixed(2))
+          : 0,
     }))
 
     return { tags, totalPhotos }

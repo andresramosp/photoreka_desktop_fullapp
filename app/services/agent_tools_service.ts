@@ -2,6 +2,7 @@
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
 import PhotoManager from '../managers/photo_manager.js'
+import TagManager from '../managers/tag_manager.js'
 import SearchTextService from './search_text_service.js'
 import { APP_KNOWLEDGE_SECTIONS, AppKnowledgeSection } from '../utils/app_knowledge_content.js'
 import ScoringService from './scoring_service.js'
@@ -260,6 +261,34 @@ function buildCatalogSampleSchema(variant: PromptVariant) {
   })
 }
 
+export const TagDistributionSchema = z.object({
+  tags: z
+    .array(z.array(z.string()).min(1).max(4))
+    .min(1)
+    .max(8)
+    .optional()
+    .describe(
+      'Categories to compare proportions for, as an array of arrays. Each inner array is ONE category: ' +
+        'a single tag, e.g. ["car"], or 2+ near-synonyms merged into one combined category, e.g. ' +
+        '["motorcycle", "motorbike"], for concepts that might be tagged under more than one name in the ' +
+        'catalog. Compares 2 or more categories at once, e.g. [["motorcycle", "motorbike"], ["car"]]. ' +
+        '**MUST ALWAYS BE IN ENGLISH ONLY.** Each category is automatically verified against the tags that ' +
+        "actually exist in the user's catalog — categories with no match come back in `unresolvedTags` " +
+        'instead of being silently shown as 0%. If omitted, returns the most frequent content tags across ' +
+        'the whole catalog instead of comparing specific categories.'
+    ),
+  limit: z
+    .number()
+    .min(1)
+    .max(30)
+    .optional()
+    .default(15)
+    .describe(
+      'Max number of distinct tags to return when `tags` is omitted (top most frequent content tags). ' +
+        'Ignored when `tags` is provided — all requested (and resolved) tags are returned.'
+    ),
+})
+
 export const WebSearchSchema = z.object({
   query: z
     .string()
@@ -465,6 +494,9 @@ export const TOOL_DESCRIPTIONS = {
 
   web_search:
     '[EXTERNAL_INFO] Search the internet for factual, current, or external information not present in the photo catalog. Use ONLY for: photography techniques and tutorials, camera/lens gear specs and reviews, photographer biographies and references, photographic movements and history, software tools, or any external context the user explicitly asks about. Do NOT use for questions that can be answered from the catalog or app knowledge. Use max_results=1-2 for simple factual lookups (e.g. "what is the hyperfocal distance formula"), 3-5 for comparative or research questions. **Sequencing:** call this tool FIRST whenever the results of this search are needed to determine the parameters of a subsequent tool call. Only call it in parallel with other tools when those tools\u2019 parameters are already fully defined without the web results.',
+
+  tag_distribution:
+    '[CATALOG_INSIGHT] Get the proportional distribution (counts + percentages) of specific CONTENT tags across the catalog \u2014 concrete subjects, people, animals, objects, or place names (e.g. "dogs" vs "cats", "men" vs "women", or 3+ way comparisons like "cars" vs "motorcycles" vs "bicycles"). `tags` is an array of arrays \u2014 each inner array is ONE category, either a single term or 2+ near-synonyms merged into one combined category (e.g. ["motorcycle", "motorbike"]) for concepts that could plausibly be tagged under more than one name; the merge is done server-side with proper deduplication, so photos tagged with more than one synonym are never double-counted. Use this ONLY for content/subject "what predominates" or "what proportion" questions. Do NOT use it for genre, photographic style, lighting, palette, composition, or mood questions (e.g. "portraits vs landscapes", "which style predominates") \u2014 those are visual_aspects and are answered far better by `overall_catalog_view`\'s visual_aspects_stats. Each returned tag includes both `percentage` (share of the ENTIRE catalog) and `relativePercentage` (share AMONG the compared/returned tags only) \u2014 **use `relativePercentage` when answering "what predominates" / "X vs Y" questions** (e.g. "55% hombres, 45% mujeres"), since `percentage` alone does not reflect the proportion between the compared terms. Each requested tag is automatically checked against the tags that actually exist in the user\'s catalog (loose, whole-word matching) \u2014 terms with no real match are returned in `unresolvedTags` rather than silently shown as 0%; treat those as "no data for this term", NOT as "confirmed zero photos". **Always call in parallel with `overall_catalog_view`** to give complementary context (content proportion + overall catalog profile), unless the question is narrowly about counting concrete tags with no stylistic dimension at all. Pass `tags` (English keywords, 2 or more) to compare specific terms; omit `tags` to get the most frequent content tags overall (top `limit`).',
 } as const
 
 // ─────────────────────────────────────────────────────────────
@@ -1110,6 +1142,48 @@ export default class AgentToolsService {
       }
     )
 
+    // ── Tool: tag_distribution ─────────────────────────────
+    const tagDistribution = tool(
+      async ({ tags, limit = 15 }): Promise<string> => {
+        try {
+          const tagManager = new TagManager()
+          const mainTags = !tags || tags.length === 0
+          // Each entry is a category — one or more synonyms to merge, normalized/deduped.
+          const groups = mainTags
+            ? []
+            : tags!.map((synonyms) => [...new Set(synonyms.map((t) => t.trim().toLowerCase()))])
+          const labels = groups.map((g) => g[0])
+
+          const result = await tagManager.getTreemap(
+            userId.toString(),
+            mainTags,
+            groups,
+            true, // includeContained — always loose/whole-word match, tolerates multi-word tag variants
+            limit
+          )
+
+          // getTreemap drops zero-count rows, so any requested category missing from
+          // result.tags had no real match — surface it instead of letting it vanish silently.
+          if (!mainTags) {
+            const foundNames = new Set(result.tags.map((t) => t.name))
+            const unresolvedTags = labels.filter((label) => !foundNames.has(label))
+            if (unresolvedTags.length > 0) {
+              return JSON.stringify({ ...result, unresolvedTags })
+            }
+          }
+
+          return JSON.stringify(result)
+        } catch (error: any) {
+          return JSON.stringify({ error: `Tag distribution failed: ${error.message}` })
+        }
+      },
+      {
+        name: 'tag_distribution',
+        description: TOOL_DESCRIPTIONS.tag_distribution,
+        schema: TagDistributionSchema,
+      }
+    )
+
     return [
       getPhotoInfo,
       appKnowledge,
@@ -1118,6 +1192,7 @@ export default class AgentToolsService {
       fetchPortfolios,
       overallCatalogView,
       catalogSample,
+      tagDistribution,
       webSearch,
     ]
   }

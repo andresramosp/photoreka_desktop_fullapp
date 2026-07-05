@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import Tag from '#models/tag'
-import db from '@adonisjs/lucid/services/db'
 import TagManager from '../managers/tag_manager.js'
 
 export default class TagsController {
@@ -26,22 +25,7 @@ export default class TagsController {
 
     const term = request.input('term', '').toLowerCase()
 
-    // Consulta: obtener los tags de las fotos del usuario
-    const rawResult = await db.rawQuery(
-      `
-      SELECT DISTINCT ON (t.name) t.id, t.name, t."group"
-      FROM photos p
-      JOIN tags_photos tp ON tp.photo_id = p.id
-      JOIN tags t ON t.id = tp.tag_id
-      WHERE p.user_id = ?
-        AND LOWER(t.name) LIKE ?
-        AND p.deleted_at IS NULL
-      ORDER BY t.name, t.id DESC
-      `,
-      [user.id, `%${term}%`]
-    )
-
-    const result = rawResult.rows.sort((a: any, b: any) => a.name.length - b.name.length)
+    const result = await this.tagManager.searchTagNamesForUser(String(user.id), term)
     return response.ok({ result })
   }
 
