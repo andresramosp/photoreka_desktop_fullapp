@@ -391,6 +391,7 @@ import pLimit from "p-limit";
 import pica from "pica";
 import googlePhotosIconUrl from "@/assets/logos/google_photos.png";
 import dropboxIconUrl from "@/assets/logos/dropbox.svg";
+import lightroomIconUrl from "@/assets/logos/lightroom_logo.png";
 
 import PhotosGrid from "../PhotosGrid.vue";
 import DuplicatePhotosDialog from "../DuplicatePhotosDialog.vue";
@@ -598,7 +599,7 @@ const sourceDefinitions = computed(() => ({
     tagType: "success",
     tagText: "See instructions",
     iconType: "img",
-    iconSrc: "/src/assets/logos/lightroom_logo.png",
+    iconSrc: lightroomIconUrl,
     iconAlt: "Adobe Lightroom",
     iconClass: "lightroom-logo",
     draggable: false,
