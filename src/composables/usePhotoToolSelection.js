@@ -4,6 +4,9 @@ import { useMessage } from "naive-ui";
 import { useCanvasStore } from "@/stores/canvas.js";
 import { usePhotosStore } from "@/stores/photos.js";
 
+// Single source of truth for how many photos can be sent/attached to ChatLab
+export const MAX_PHOTOS_TO_CHAT = 10;
+
 export function usePhotoToolSelection() {
   const router = useRouter();
   const message = useMessage();
@@ -247,17 +250,21 @@ export function usePhotoToolSelection() {
         return;
       }
 
-      if (photoIds.length > 5) {
-        message.warning("Only the first 5 photos will be sent to ChatLab");
+      if (photoIds.length > MAX_PHOTOS_TO_CHAT) {
+        message.warning(
+          `Only the first ${MAX_PHOTOS_TO_CHAT} photos will be sent to ChatLab`,
+        );
       }
 
       // Build minimal photo payloads now, while the store is populated
       await Promise.all(
-        photoIds.slice(0, 5).map((id) => photosStore.fetchPhoto(id)),
+        photoIds
+          .slice(0, MAX_PHOTOS_TO_CHAT)
+          .map((id) => photosStore.fetchPhoto(id)),
       );
 
       const photosData = photoIds
-        .slice(0, 5)
+        .slice(0, MAX_PHOTOS_TO_CHAT)
         .map((id) =>
           photosStore.photos.find((p) => String(p.id) === String(id)),
         )

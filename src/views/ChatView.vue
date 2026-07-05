@@ -677,7 +677,6 @@
       :show-add-to-collection="true"
       :show-move-to-tool="true"
       :show-attach-to-chat="true"
-      :max-attach-to-chat="5"
       :is-deleting="isDeletingPhotos"
       :is-downloading="isDownloading"
       @clear-selection="clearAllSelectionsAndScopes"
@@ -715,7 +714,10 @@ import { useChatStore } from "@/stores/chat.js";
 import { useUserStore } from "@/stores/userStore";
 import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection.js";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
-import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
+import {
+  usePhotoToolSelection,
+  MAX_PHOTOS_TO_CHAT,
+} from "@/composables/usePhotoToolSelection.js";
 import { marked } from "marked";
 import {
   ImagesOutline as ImagesIcon,
@@ -1358,7 +1360,7 @@ const handleKeyDown = (e: KeyboardEvent) => {
 // Context photos management — PhotosDialog emits an array of photo IDs
 const onPhotosSelected = (photoIds: string[]) => {
   const existingIds = new Set(contextPhotos.value.map((p) => p.id));
-  const remaining = 5 - contextPhotos.value.length;
+  const remaining = MAX_PHOTOS_TO_CHAT - contextPhotos.value.length;
 
   const newPhotos: ContextPhoto[] = [];
   let attemptedCount = 0;
@@ -1403,10 +1405,12 @@ const onPhotosSelected = (photoIds: string[]) => {
   // Show message if tried to add more photos
   if (attemptedCount > newPhotos.length) {
     if (newPhotos.length === 0) {
-      message.warning("Can't add more photos. 5 photo limit reached.");
+      message.warning(
+        `Can't add more photos. ${MAX_PHOTOS_TO_CHAT} photo limit reached.`,
+      );
     } else {
       message.warning(
-        `Only ${newPhotos.length} photo(s) added. 5 photo limit reached.`,
+        `Only ${newPhotos.length} photo(s) added. ${MAX_PHOTOS_TO_CHAT} photo limit reached.`,
       );
     }
   }
@@ -1511,7 +1515,7 @@ const handleToolSelected = async (
 
 const handleAttachToChat = () => {
   const existingIds = new Set(contextPhotos.value.map((p) => p.id));
-  const remaining = 5 - contextPhotos.value.length;
+  const remaining = MAX_PHOTOS_TO_CHAT - contextPhotos.value.length;
   const newPhotos: ContextPhoto[] = [];
   let attemptedCount = 0;
 
@@ -1556,10 +1560,12 @@ const handleAttachToChat = () => {
   // Show message if tried to add more photos
   if (attemptedCount > newPhotos.length) {
     if (newPhotos.length === 0) {
-      message.warning("Can't add more photos. 5 photo limit reached.");
+      message.warning(
+        `Can't add more photos. ${MAX_PHOTOS_TO_CHAT} photo limit reached.`,
+      );
     } else {
       message.warning(
-        `Only ${newPhotos.length} photo(s) added. 5 photo limit reached.`,
+        `Only ${newPhotos.length} photo(s) added. ${MAX_PHOTOS_TO_CHAT} photo limit reached.`,
       );
     }
   }

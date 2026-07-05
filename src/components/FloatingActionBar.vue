@@ -145,8 +145,7 @@
                 size="medium"
                 @click="$emit('send-to-chat')"
                 :disabled="
-                  selectedCount === 0 ||
-                  (maxSendToChat !== null && selectedCount > maxSendToChat)
+                  selectedCount === 0 || selectedCount > MAX_PHOTOS_TO_CHAT
                 "
               >
                 <template #icon>
@@ -156,8 +155,9 @@
                 </template>
               </n-button>
             </template>
-            <span v-if="maxSendToChat !== null && selectedCount > maxSendToChat"
-              >Maximum {{ maxSendToChat }} photos can be sent to ChatLab</span
+            <span v-if="selectedCount > MAX_PHOTOS_TO_CHAT"
+              >Maximum {{ MAX_PHOTOS_TO_CHAT }} photos can be sent to
+              ChatLab</span
             >
             <span v-else>Send selected photos to ChatLab</span>
           </n-tooltip>
@@ -169,8 +169,7 @@
                 size="medium"
                 @click="$emit('attach-to-chat')"
                 :disabled="
-                  selectedCount === 0 ||
-                  (maxAttachToChat !== null && selectedCount > maxAttachToChat)
+                  selectedCount === 0 || selectedCount > MAX_PHOTOS_TO_CHAT
                 "
               >
                 <template #icon>
@@ -180,9 +179,8 @@
                 </template>
               </n-button>
             </template>
-            <span
-              v-if="maxAttachToChat !== null && selectedCount > maxAttachToChat"
-              >Maximum {{ maxAttachToChat }} photos can be attached</span
+            <span v-if="selectedCount > MAX_PHOTOS_TO_CHAT"
+              >Maximum {{ MAX_PHOTOS_TO_CHAT }} photos can be attached</span
             >
             <span v-else>Attach selected photos to your message</span>
           </n-tooltip>
@@ -265,6 +263,7 @@ import { computed } from "vue";
 import { usePhotosStore } from "@/stores/photos";
 import { useMobilePhotoSelection } from "@/composables/useMobilePhotoSelection";
 import { useIsMobile } from "@/composables/useIsMobile";
+import { MAX_PHOTOS_TO_CHAT } from "@/composables/usePhotoToolSelection";
 
 // Get mobile selection composable to reset mode
 const { exitSelectionMode } = useMobilePhotoSelection();
@@ -294,17 +293,9 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
-  maxSendToChat: {
-    type: Number,
-    default: 5,
-  },
   showAttachToChat: {
     type: Boolean,
     default: false,
-  },
-  maxAttachToChat: {
-    type: Number,
-    default: 5,
   },
   isDeleting: {
     type: Boolean,

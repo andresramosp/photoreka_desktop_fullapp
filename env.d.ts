@@ -37,6 +37,7 @@ declare module "@/composables/usePhotoDownload.js" {
 }
 
 declare module "@/composables/usePhotoToolSelection.js" {
+  export const MAX_PHOTOS_TO_CHAT: number;
   export function usePhotoToolSelection(): {
     isProcessing: any;
     showToolSelector: any;
