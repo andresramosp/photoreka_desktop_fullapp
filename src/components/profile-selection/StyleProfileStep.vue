@@ -24,9 +24,9 @@
           </div>
           <h4 class="category-title">General Photography</h4>
           <p class="category-description">
-            Perfect for everyday photos, family moments, travel, and mixed
-            collections. Our engine adapts to any type of photography without
-            requiring specific categorization.
+            For everyday photos, travel, and mixed collections. Our engine
+            adapts to any type of photography without requiring specific
+            categorization.
           </p>
           <div class="mode-badge recommended">Recommended</div>
         </div>
