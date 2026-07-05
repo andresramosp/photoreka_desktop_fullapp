@@ -237,211 +237,46 @@
         </template>
       </div>
 
-      <!-- Web-first workflow cards -->
-      <div v-if="preferredSource === 'web'" class="import-cards-grid">
+      <!-- Upload source cards: single source of truth (see `emptyStateSources`
+           in the script). Handles web-first, lightroom-first-first-time
+           (Lightroom only) and lightroom-first-returning-user cases. -->
+      <div
+        class="import-cards-grid"
+        :class="{ single: emptyStateSources.length === 1 }"
+      >
         <div
+          v-for="source in emptyStateSources"
+          :key="source.key"
           class="import-card"
           :class="{
-            'drag-over': isDragOver && !isUploadDisabled,
-            'import-card--disabled': isUploadDisabled,
+            'lightroom-card': source.key === 'lightroom',
+            'drag-over': source.draggable && isDragOver && !source.disabled,
+            'import-card--disabled': source.disabled,
           }"
-          @click="triggerFileInput"
-          @dragover.prevent="!isUploadDisabled && handleDragOver"
-          @dragenter.prevent="!isUploadDisabled && handleDragEnter"
-          @dragleave.prevent="!isUploadDisabled && handleDragLeave"
-          @drop.prevent="handleDrop"
-        >
-          <div class="import-card-icon">
-            <n-icon size="48" color="var(--primary-color)">
-              <FolderOpen />
-            </n-icon>
-          </div>
-          <h4 class="import-card-title">Local Files</h4>
-          <p class="import-card-description">
-            Import photos by browsing your local files
-          </p>
-          <n-tag type="primary" size="large" round>Recommended</n-tag>
-        </div>
-
-        <div
-          class="import-card"
-          :class="{ 'import-card--disabled': isUploadDisabled }"
-          @click="importFromGooglePhotos"
-        >
-          <div class="import-card-icon">
-            <img
-              :src="googlePhotosIconUrl"
-              alt="Google Photos"
-              class="google-photos-logo"
-            />
-          </div>
-          <h4 class="import-card-title">Google Photos</h4>
-          <div class="import-card-description">
-            {{
-              googlePhotos.isAuthorized.value
-                ? "Import from your Google Photos library"
-                : "Connect and import your photos from Google Photos"
-            }}
-          </div>
-          <n-tag
-            v-if="!googlePhotos.isAuthorized.value"
-            type="warning"
-            size="large"
-            round
-          >
-            Disconnected
-          </n-tag>
-          <n-tag v-else type="success" size="large" round> Connected </n-tag>
-        </div>
-
-        <div
-          class="import-card"
-          :class="{ 'import-card--disabled': isUploadDisabled }"
-          @click="importFromDropbox"
-        >
-          <div class="import-card-icon">
-            <img :src="dropboxIconUrl" alt="Dropbox" class="dropbox-logo" />
-          </div>
-          <h4 class="import-card-title">Dropbox</h4>
-          <p class="import-card-description">
-            Import photos directly from your Dropbox
-          </p>
-          <n-tag type="info" size="large" round>Select files</n-tag>
-        </div>
-
-        <div
-          class="import-card lightroom-card"
-          :class="{ 'import-card--disabled': isUploadDisabled }"
-          @click="showLightroomModal = true"
-        >
-          <div class="import-card-icon">
-            <img
-              src="/src/assets/logos/lightroom_logo.png"
-              alt="Adobe Lightroom"
-              class="lightroom-logo"
-            />
-          </div>
-          <h4 class="import-card-title">Official Plugin</h4>
-          <p class="import-card-description">
-            Export from LrC and work in the web version
-          </p>
-          <n-tag type="info" size="large" round> See instructions</n-tag>
-        </div>
-      </div>
-
-      <!-- Lightroom-first, first time: show only the lightroom card -->
-      <div v-else-if="isFirstImportState" class="import-cards-grid single">
-        <div
-          class="import-card lightroom-card"
-          @click="showLightroomModal = true"
-        >
-          <div class="import-card-icon">
-            <img
-              src="/src/assets/logos/lightroom_logo.png"
-              alt="Adobe Lightroom"
-              class="lightroom-logo"
-            />
-          </div>
-          <h4 class="import-card-title">Official Plugin</h4>
-          <p class="import-card-description">
-            Export photos directly Lightroom Classic
-          </p>
-          <n-tag type="success" size="large" round> See instructions</n-tag>
-        </div>
-      </div>
-
-      <!-- Lightroom-first, returning user: show all cards (lightroom first) with source warning for others -->
-      <div v-else class="import-cards-grid">
-        <div
-          class="import-card lightroom-card"
-          @click="
-            handleSourceSelection('lightroom', () => {
-              showLightroomModal = true;
-            })
+          @click="handleSourceSelection(source.key, source.action)"
+          @dragover.prevent="
+            source.draggable && !source.disabled && handleDragOver($event)
           "
+          @dragenter.prevent="
+            source.draggable && !source.disabled && handleDragEnter($event)
+          "
+          @dragleave.prevent="
+            source.draggable && !source.disabled && handleDragLeave($event)
+          "
+          @drop.prevent="source.draggable && handleDrop($event)"
         >
           <div class="import-card-icon">
-            <img
-              src="/src/assets/logos/lightroom_logo.png"
-              alt="Adobe Lightroom"
-              class="lightroom-logo"
+            <UploadSourceIcon
+              :source="source"
+              size="48"
+              :img-class="source.iconClass"
             />
           </div>
-          <h4 class="import-card-title">Official Plugin</h4>
-          <p class="import-card-description">
-            Export from LrC and work in the web version
-          </p>
-          <n-tag type="success" size="large" round> See instructions</n-tag>
-        </div>
-
-        <div
-          class="import-card"
-          :class="{
-            'drag-over': isDragOver && !isUploadDisabled,
-            'import-card--disabled': isUploadDisabled,
-          }"
-          @click="handleSourceSelection('local', triggerFileInput)"
-          @dragover.prevent="!isUploadDisabled && handleDragOver"
-          @dragenter.prevent="!isUploadDisabled && handleDragEnter"
-          @dragleave.prevent="!isUploadDisabled && handleDragLeave"
-          @drop.prevent="handleDrop"
-        >
-          <div class="import-card-icon">
-            <n-icon size="48" color="var(--primary-color)">
-              <FolderOpen />
-            </n-icon>
-          </div>
-          <h4 class="import-card-title">Local Files</h4>
-          <p class="import-card-description">
-            Import photos by browsing your local files
-          </p>
-          <n-tag type="primary" size="large" round>Select files</n-tag>
-        </div>
-
-        <div
-          class="import-card"
-          :class="{ 'import-card--disabled': isUploadDisabled }"
-          @click="handleSourceSelection('google', importFromGooglePhotos)"
-        >
-          <div class="import-card-icon">
-            <img
-              :src="googlePhotosIconUrl"
-              alt="Google Photos"
-              class="google-photos-logo"
-            />
-          </div>
-          <h4 class="import-card-title">Google Photos</h4>
-          <div class="import-card-description">
-            {{
-              googlePhotos.isAuthorized.value
-                ? "Import from your Google Photos library"
-                : "Connect and import your photos from Google Photos"
-            }}
-          </div>
-          <n-tag
-            v-if="!googlePhotos.isAuthorized.value"
-            type="warning"
-            size="large"
-            round
-          >
-            Disconnected
+          <h4 class="import-card-title">{{ source.cardTitle }}</h4>
+          <p class="import-card-description">{{ source.cardDescription }}</p>
+          <n-tag :type="source.tagType" size="large" round>
+            {{ source.tagText }}
           </n-tag>
-          <n-tag v-else type="success" size="large" round> Connected </n-tag>
-        </div>
-
-        <div
-          class="import-card"
-          :class="{ 'import-card--disabled': isUploadDisabled }"
-          @click="handleSourceSelection('dropbox', importFromDropbox)"
-        >
-          <div class="import-card-icon">
-            <img :src="dropboxIconUrl" alt="Dropbox" class="dropbox-logo" />
-          </div>
-          <h4 class="import-card-title">Dropbox</h4>
-          <p class="import-card-description">
-            Import photos directly from your Dropbox
-          </p>
-          <n-tag type="info" size="large" round>Select files</n-tag>
         </div>
       </div>
     </div>
@@ -452,36 +287,20 @@
       class="mobile-upload-buttons"
     >
       <n-button
-        v-for="button in uploadButtons"
-        :key="button.key"
-        :type="button.type"
+        v-for="source in orderedSources"
+        :key="source.key"
+        type="default"
         size="small"
-        :disabled="isUploadDisabled && button.key === 'local'"
-        @click.stop="button.action"
+        :disabled="source.disabled"
+        @click.stop="handleSourceSelection(source.key, source.action)"
       >
         <template #icon>
-          <n-icon
-            v-if="button.icon === 'FolderOpen'"
-            color="var(--primary-color)"
-          >
-            <FolderOpen />
-          </n-icon>
-          <n-icon v-else-if="button.icon === 'lightroom'">
-            <img
-              src="/src/assets/logos/lightroom_logo.png"
-              alt="Lr"
-              style="width: 1.1em; height: 1.1em"
-            />
-          </n-icon>
-          <n-icon v-else-if="button.icon === 'dropbox'">
-            <img
-              :src="dropboxIconUrl"
-              alt="Dropbox"
-              style="width: 1em; height: 1em"
-            />
-          </n-icon>
+          <UploadSourceIcon
+            :source="source"
+            :img-style="{ width: '1.1em', height: '1.1em' }"
+          />
         </template>
-        {{ button.compactLabel }}
+        {{ source.compactLabel }}
       </n-button>
     </div>
 
@@ -503,65 +322,34 @@
         <template v-if="!isMaintenanceMode" #row1-extra>
           <div class="compact-upload-buttons">
             <n-tooltip
-              v-for="button in uploadButtons"
-              :key="button.key"
+              v-for="source in orderedSources"
+              :key="source.key"
               trigger="hover"
               placement="bottom"
             >
               <template #trigger>
                 <n-button
-                  :type="button.type"
+                  type="default"
                   size="small"
-                  :disabled="isUploadDisabled && button.key === 'local'"
-                  @click.stop="button.action"
+                  :disabled="source.disabled"
+                  @click.stop="handleSourceSelection(source.key, source.action)"
                 >
                   <template #icon>
-                    <n-icon
-                      v-if="button.icon === 'FolderOpen'"
-                      color="var(--primary-color)"
-                    >
-                      <FolderOpen />
-                    </n-icon>
-                    <n-icon v-else-if="button.icon === 'lightroom'">
-                      <img
-                        src="/src/assets/logos/lightroom_logo.png"
-                        alt="Lr"
-                        style="width: 1.1em; height: 1.1em"
-                      />
-                    </n-icon>
-                    <n-icon v-else-if="button.icon === 'google'">
-                      <img
-                        :src="googlePhotosIconUrl"
-                        alt="Google Photos"
-                        style="width: 1em; height: 1em"
-                      />
-                    </n-icon>
-                    <n-icon v-else-if="button.icon === 'google-locked'">
-                      <svg viewBox="0 0 24 24" width="1em" height="1em">
-                        <path
-                          fill="currentColor"
-                          d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h2c0-1.66 1.34-3 3-3s3 1.34 3 3v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"
-                        />
-                      </svg>
-                    </n-icon>
-                    <n-icon v-else-if="button.icon === 'dropbox'">
-                      <img
-                        :src="dropboxIconUrl"
-                        alt="Dropbox"
-                        style="width: 1em; height: 1em"
-                      />
-                    </n-icon>
+                    <UploadSourceIcon
+                      :source="source"
+                      :img-style="{ width: '1em', height: '1em' }"
+                    />
                   </template>
                   <span class="button-label">{{
-                    isUploadDisabled &&
+                    source.disabled &&
                     photosRemaining <= 0 &&
-                    button.key === "local"
+                    source.key === "local"
                       ? "Upload Limit Reached"
-                      : button.compactLabel
+                      : source.compactLabel
                   }}</span>
                 </n-button>
               </template>
-              {{ button.compactLabel }}
+              {{ source.compactLabel }}
             </n-tooltip>
           </div>
         </template>
@@ -609,6 +397,7 @@ import DuplicatePhotosDialog from "../DuplicatePhotosDialog.vue";
 import LightroomModal from "../LightroomModal.vue";
 import SafeSearchViolationModal from "../SafeSearchViolationModal.vue";
 import EstimatedTimeModal from "./EstimatedTimeModal.vue";
+import UploadSourceIcon from "./UploadSourceIcon.vue";
 
 import { NModal, NCheckbox, NTooltip } from "naive-ui";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
@@ -763,57 +552,117 @@ const sourceWarningConfig = computed(() => {
   return null;
 });
 
-// Button configurations based on preferredSource
-const uploadButtons = computed(() => {
-  const preferredSource = userStore.user?.preferredSource || "web";
+// ---------------------------------------------------------------------------
+// Single source of truth for every upload source (Local, Lightroom, Google
+// Photos, Dropbox). This one definition drives:
+//  - the empty-state cards (first import / returning user)
+//  - the mobile button strip
+//  - the compact buttons inside PhotosGrid
+// To add/remove a source or change its order, edit `sourceDefinitions` /
+// `SOURCE_ORDER` below — nothing else in the template hardcodes sources.
+// ---------------------------------------------------------------------------
 
-  const buttons = {
-    local: {
-      key: "local",
-      label: "Import from local files",
-      compactLabel: "Local Files",
-      icon: "FolderOpen",
-      type: "default",
-      action: () => handleSourceSelection("local", () => triggerFileInput()),
-    },
-    lightroom: {
-      key: "lightroom",
-      label: "Lightroom Plugin",
-      compactLabel: "Plugin",
-      icon: "lightroom",
-      type: "default",
-      action: () =>
-        handleSourceSelection("lightroom", () => {
-          showLightroomModal.value = true;
-        }),
-    },
-    // google: {
-    //   key: "google",
-    //   label: "Google Photos",
-    //   compactLabel: "Google Photos",
-    //   icon: googlePhotos.isAuthorized.value ? "google" : "google-locked",
-    //   type: "default",
-    //   action: () => handleSourceSelection("google", importFromGooglePhotos),
-    // },
-    dropbox: {
-      key: "dropbox",
-      label: "Dropbox",
-      compactLabel: "Dropbox",
-      icon: "dropbox",
-      type: "default",
-      action: () => handleSourceSelection("dropbox", importFromDropbox),
-    },
-  };
+// Order in which sources appear, keyed by the user's preferred export source.
+const SOURCE_ORDER = {
+  lightroom: ["lightroom", "local", "google", "dropbox"],
+  web: ["local", "google", "dropbox", "lightroom"],
+};
 
-  // Order buttons based on preferredSource
-  if (preferredSource === "lightroom") {
-    // return [buttons.lightroom, buttons.local, buttons.google, buttons.dropbox];
-    return [buttons.lightroom, buttons.local, buttons.dropbox];
+const sourceDefinitions = computed(() => ({
+  local: {
+    key: "local",
+    enabled: true,
+    // Uploading counts against the plan limit / is blocked during
+    // maintenance or while another upload is in progress.
+    disabled: isUploadDisabled.value,
+    compactLabel: "Local Files",
+    cardTitle: "Local Files",
+    cardDescription: "Import photos by browsing your local files",
+    tagType: "primary",
+    tagText: isFirstImportState.value ? "Recommended" : "Select files",
+    iconType: "component",
+    iconComponent: FolderOpen,
+    iconColor: "var(--primary-color)",
+    draggable: true,
+    action: triggerFileInput,
+  },
+  lightroom: {
+    key: "lightroom",
+    enabled: true,
+    // Opening the Lightroom instructions modal isn't an upload, so it's
+    // never blocked by maintenance mode or the upload limit.
+    disabled: false,
+    compactLabel: "Plugin",
+    cardTitle: "Official Plugin",
+    cardDescription: "Export from LrC and work in the web version",
+    tagType: "success",
+    tagText: "See instructions",
+    iconType: "img",
+    iconSrc: "/src/assets/logos/lightroom_logo.png",
+    iconAlt: "Adobe Lightroom",
+    iconClass: "lightroom-logo",
+    draggable: false,
+    action: () => {
+      showLightroomModal.value = true;
+    },
+  },
+  google: {
+    key: "google",
+    // Disabled: Google Photos import is turned off for now. Set to `true`
+    // to re-enable it everywhere (cards + buttons) — no template changes needed.
+    enabled: false,
+    disabled: isUploadDisabled.value,
+    compactLabel: "Google Photos",
+    cardTitle: "Google Photos",
+    cardDescription: googlePhotos.isAuthorized.value
+      ? "Import from your Google Photos library"
+      : "Connect and import your photos from Google Photos",
+    tagType: googlePhotos.isAuthorized.value ? "success" : "warning",
+    tagText: googlePhotos.isAuthorized.value ? "Connected" : "Disconnected",
+    // Always show the actual Google Photos logo — connection state is
+    // already conveyed by the tag above, not by swapping the icon.
+    iconType: "img",
+    iconSrc: googlePhotosIconUrl,
+    iconAlt: "Google Photos",
+    iconClass: "google-photos-logo",
+    draggable: false,
+    action: importFromGooglePhotos,
+  },
+  dropbox: {
+    key: "dropbox",
+    enabled: true,
+    disabled: isUploadDisabled.value,
+    compactLabel: "Dropbox",
+    cardTitle: "Dropbox",
+    cardDescription: "Import photos directly from your Dropbox",
+    tagType: "info",
+    tagText: "Select files",
+    iconType: "img",
+    iconSrc: dropboxIconUrl,
+    iconAlt: "Dropbox",
+    iconClass: "dropbox-logo",
+    draggable: false,
+    action: importFromDropbox,
+  },
+}));
+
+// Ordered + enabled sources, shared by the empty-state cards and the
+// mobile/compact buttons.
+const orderedSources = computed(() => {
+  const order = SOURCE_ORDER[preferredSource.value] || SOURCE_ORDER.web;
+  return order
+    .map((key) => sourceDefinitions.value[key])
+    .filter((source) => source && source.enabled);
+});
+
+// The empty-state grid has one extra rule: first-time users whose preferred
+// source is Lightroom only ever see the Lightroom card (onboarding
+// continuation), everyone else sees the full ordered list.
+const emptyStateSources = computed(() => {
+  if (isFirstImportState.value && preferredSource.value === "lightroom") {
+    return orderedSources.value.filter((source) => source.key === "lightroom");
   }
-
-  // Default order for "web"
-  // return [buttons.local, buttons.google, buttons.lightroom, buttons.dropbox];
-  return [buttons.local, buttons.lightroom, buttons.dropbox];
+  return orderedSources.value;
 });
 
 // Check for lrPlugin query parameter on mount
@@ -1680,19 +1529,19 @@ defineExpose({
   justify-content: center;
 }
 
-.import-card-icon .google-photos-logo {
+.import-card-icon :deep(.google-photos-logo) {
   height: 56px;
   width: auto;
   object-fit: contain;
 }
 
-.import-card-icon .lightroom-logo {
+.import-card-icon :deep(.lightroom-logo) {
   height: 60px;
   width: auto;
   object-fit: contain;
 }
 
-.import-card-icon .dropbox-logo {
+.import-card-icon :deep(.dropbox-logo) {
   height: 48px;
   width: auto;
   object-fit: contain;
@@ -1730,20 +1579,29 @@ defineExpose({
     align-items: center;
     justify-content: flex-start;
     overflow-x: visible;
+    overflow-y: visible;
     gap: 16px;
+    padding-left: 12px;
+    padding-right: 12px;
+    box-sizing: border-box;
   }
 
   .import-card {
     flex: 0 0 auto;
-    width: 100%;
-    max-width: 460px;
-    padding: 24px 20px;
+    width: 96%;
+    max-width: 420px;
+    padding: 22px 18px;
   }
 }
 
 @media (max-width: 480px) {
   .first-import-title {
     font-size: 22px;
+  }
+
+  .import-card {
+    width: 94%;
+    padding: 20px 16px;
   }
 
   .import-card-title {

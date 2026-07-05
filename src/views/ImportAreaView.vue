@@ -64,6 +64,10 @@
 <script setup>
 import { ref, onMounted, watch, computed } from "vue";
 
+import { useIsMobile } from "@/composables/useIsMobile.js";
+
+const { isMobile } = useIsMobile();
+
 defineOptions({
   name: "ImportAreaView",
 });
