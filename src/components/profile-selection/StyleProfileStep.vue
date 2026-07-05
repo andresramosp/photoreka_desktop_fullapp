@@ -601,7 +601,7 @@ const handleComplete = () => {
 
 .category-description {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-primary);
   line-height: 1.4;
 }
@@ -762,7 +762,7 @@ const handleComplete = () => {
   }
 
   .category-description {
-    font-size: 12px;
+    font-size: 11px;
   }
 }
 </style>
