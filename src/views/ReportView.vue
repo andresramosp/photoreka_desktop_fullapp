@@ -137,7 +137,7 @@ const sections = [
   },
   {
     id: "tags",
-    label: "Tags Analysis",
+    label: "Tags Distribution",
     shortLabel: "Tags",
     icon: PricetagsOutline,
   },

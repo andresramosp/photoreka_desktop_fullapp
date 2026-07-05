@@ -783,6 +783,7 @@ interface ContextPhoto {
   name: string;
   url: string;
   thumbnailUrl: string;
+  originalUrl?: string;
   rating: number;
   isUploading: boolean;
   file: any;
@@ -1386,6 +1387,7 @@ const onPhotosSelected = (photoIds: string[]) => {
       name: photo.name || photo.title || "Photo",
       url: photo.url,
       thumbnailUrl: photo.thumbnailUrl || photo.url,
+      originalUrl: photo.originalUrl,
       rating: photo.rating ?? 0,
       isUploading: false,
       file: null,
@@ -1433,6 +1435,7 @@ const getPhotosForMessage = (photoIds: number[]): ContextPhoto[] => {
         name: photo.name || photo.title || "Photo",
         url: photo.url,
         thumbnailUrl: photo.thumbnailUrl || photo.url,
+        originalUrl: photo.originalUrl,
         rating: photo.rating ?? 0,
         isUploading: false,
         file: null,
@@ -1541,6 +1544,7 @@ const handleAttachToChat = () => {
       name: photo.name || photo.title || "Photo",
       url: photo.url,
       thumbnailUrl: photo.thumbnailUrl || photo.url,
+      originalUrl: photo.originalUrl,
       rating: photo.rating ?? 0,
       isUploading: false,
       file: null,
