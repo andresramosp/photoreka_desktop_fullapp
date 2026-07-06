@@ -131,7 +131,7 @@ const selectOption = (value: string) => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 10px 2px 7px;
+  padding: 5px 10px 5px 7px;
   /* border: 1px solid var(--chip-color, var(--accent-color)); */
   border: none;
   background: color-mix(
