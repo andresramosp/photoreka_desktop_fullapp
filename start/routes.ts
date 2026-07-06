@@ -587,10 +587,10 @@ router
     middleware.auth(),
     middleware.readOnly(),
     middleware.llmRateLimit({
-      perMinute: 3,
-      perHour: 10,
-      perDay: 15,
-      perMonth: 100,
+      perMinute: 5,
+      perHour: 15,
+      perDay: 20,
+      perMonth: 150,
       keyPrefix: 'chat',
     }),
   ])

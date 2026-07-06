@@ -35,7 +35,8 @@ Help photographers explore and analyze their library with insight and wit.
 - **Language:** Always match the user's language. Use English ALWAYS for internal tool calls.
 - **Scope:** Strictly photography and Photoreka features. Polite refusal for outside topics.
 - **Stealth:** Never mention tool names or internal IDs to the user.
-- **Grounding:** NEVER fabricate photo filenames, descriptions, scores, locations, or content. Only reference photos that were explicitly returned by tool calls. If a tool returns zero results, say so honestly — do not invent data to fill the gap. NEVER claim to have seen or evaluated more photos than the ones actually provided to you.`
+- **Grounding:** NEVER fabricate photo filenames, descriptions, scores, locations, or content. Only reference photos that were explicitly returned by tool calls. If a tool returns zero results, say so honestly — do not invent data to fill the gap. NEVER claim to have seen or evaluated more photos than the ones actually provided to you.
+- **Referenced library items:** if the message includes a "[Referenced collection/series/portfolio IDs: ...]" line, the user explicitly picked that exact resource via autocomplete — match it by ID against \`fetch_collections\`/\`fetch_series\`/\`fetch_portfolios\` results, never by fuzzy name matching (names can collide or be renamed).`
 
 const PHASE1_ROLE_ADDENDUM = `
 
@@ -504,10 +505,53 @@ export default class LangchainAgentService {
 
   // ── Message building ─────────────────────────────────────────
 
+  /**
+   * Strips `[[collection:ID|Name]]` / `[[series:ID|Name]]` / `[[portfolio:ID|Name]]`
+   * tokens (inserted by the frontend's @-mention autocomplete) out of the message text,
+   * replacing each with its plain name so the sentence reads naturally, while collecting
+   * the referenced IDs per type for exact-match grounding.
+   */
+  private stripMentionTokens(message: string): {
+    text: string
+    refs: Record<'collection' | 'series' | 'portfolio', number[]>
+  } {
+    const refs: Record<'collection' | 'series' | 'portfolio', number[]> = {
+      collection: [],
+      series: [],
+      portfolio: [],
+    }
+    const seen = new Set<string>()
+    const text = message.replace(
+      /\[\[(collection|series|portfolio):(\d+)\|([^\]]+)\]\]/g,
+      (_match, type: 'collection' | 'series' | 'portfolio', id: string, name: string) => {
+        const key = `${type}:${id}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          refs[type].push(Number(id))
+        }
+        return name
+      }
+    )
+    return { text, refs }
+  }
+
   private buildCurrentUserMessage(message: string, contextPhotoIds: number[]): HumanMessage {
-    if (contextPhotoIds.length === 0) return new HumanMessage(message)
-    const prefix = `[Attached photo IDs: ${contextPhotoIds.join(', ')}]\n`
-    return new HumanMessage(prefix + message)
+    const { text, refs } = this.stripMentionTokens(message)
+    const prefixParts: string[] = []
+    if (contextPhotoIds.length > 0) {
+      prefixParts.push(`[Attached photo IDs: ${contextPhotoIds.join(', ')}]`)
+    }
+    if (refs.collection.length > 0) {
+      prefixParts.push(`[Referenced collection IDs: ${refs.collection.join(', ')}]`)
+    }
+    if (refs.series.length > 0) {
+      prefixParts.push(`[Referenced series IDs: ${refs.series.join(', ')}]`)
+    }
+    if (refs.portfolio.length > 0) {
+      prefixParts.push(`[Referenced portfolio IDs: ${refs.portfolio.join(', ')}]`)
+    }
+    if (prefixParts.length === 0) return new HumanMessage(text)
+    return new HumanMessage(prefixParts.join(' ') + '\n' + text)
   }
 
   private async buildUserContext(userId: number): Promise<string> {
@@ -1320,6 +1364,17 @@ export default class LangchainAgentService {
             name: c.name,
             totalPhotos: c.totalPhotos ?? (c.samplePhotoIds ?? []).length,
           })),
+        }
+        return new ToolMessage({
+          content: JSON.stringify(slim),
+          tool_call_id: msg.tool_call_id,
+          name: msg.name,
+        })
+      }
+
+      if (msg.name === 'fetch_series') {
+        const slim = {
+          _compressed: true,
           series: (parsed.series ?? []).map((s: any) => ({
             id: s.id,
             name: s.name,
@@ -1409,6 +1464,7 @@ export default class LangchainAgentService {
       'overall_catalog_view',
       'app_knowledge',
       'fetch_collections',
+      'fetch_series',
       'fetch_portfolios',
     ])
     const restoreQueues = new Map<string, string[]>()
@@ -1502,10 +1558,15 @@ export default class LangchainAgentService {
         continue
       }
 
-      // fetch_collections and fetch_portfolios intentionally excluded: they only
-      // provide metadata. The agent must call get_photo_info explicitly for any
+      // fetch_collections, fetch_series and fetch_portfolios intentionally excluded: they
+      // only provide metadata. The agent must call get_photo_info explicitly for any
       // photos it wants to evaluate.
-      if (step.tool === 'fetch_collections' || step.tool === 'fetch_portfolios') continue
+      if (
+        step.tool === 'fetch_collections' ||
+        step.tool === 'fetch_series' ||
+        step.tool === 'fetch_portfolios'
+      )
+        continue
     }
     return groups
   }

@@ -4,12 +4,15 @@ import CpuWorkerPool from '#services/cpu_worker_pool'
 import { computeDHash, DHASH_DUPLICATE_THRESHOLD } from '../utils/dhash.js'
 import { withCache } from '../decorators/withCache.js'
 import { hashNumberIds } from '../utils/cache_key.js'
+import PhotoManager from '../managers/photo_manager.js'
 import axios from 'axios'
 import pLimit from 'p-limit'
 
 export type DuplicateScope = 'workspace' | 'lightbox'
 
 export default class DuplicatesService {
+  private photoManager = new PhotoManager()
+
   /**
    * Find exact/near-exact duplicates using perceptual hash (pHash/dHash).
    * Detects pixel-level duplicates and minor re-saves, but NOT aggressive crops/edits.
@@ -36,11 +39,8 @@ export default class DuplicatesService {
     let userPhotos: Photo[]
 
     if (scope === 'workspace') {
-      userPhotos = await Photo.query()
-        .where('user_id', userId)
-        .whereHas('analyzerProcess', (query) => {
-          query.where('is_preprocess', false).where('current_stage', 'finished')
-        })
+      const processedIds = await this.photoManager.getProcessedPhotoIds(userId)
+      userPhotos = await Photo.query().where('user_id', userId).whereIn('id', processedIds)
     } else {
       userPhotos = await Photo.query().where('user_id', userId)
     }
@@ -114,12 +114,11 @@ export default class DuplicatesService {
     // colorHistogram, colorHistogramDominant, etc. (large serialised vectors)
     // which are the real reason a 5k-photo query takes 15 s.
     if (scope === 'workspace') {
+      const processedIds = await this.photoManager.getProcessedPhotoIds(userId)
       userPhotos = await Photo.query()
         .select('id', 'descriptions')
         .where('user_id', userId)
-        .whereHas('analyzerProcess', (query) => {
-          query.where('is_preprocess', false).where('current_stage', 'finished')
-        })
+        .whereIn('id', processedIds)
     } else {
       userPhotos = await Photo.query().select('id', 'descriptions').where('user_id', userId)
     }

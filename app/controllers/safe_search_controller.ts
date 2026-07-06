@@ -6,6 +6,14 @@ import User from '#models/user'
 import type { ContentViolation } from '#models/user'
 import MailService from '#services/mail_service'
 import { contentViolationAdminTemplate } from '../utils/email_templates.js'
+import PhotoManager from '../managers/photo_manager.js'
+
+/**
+ * Users with at least this many processed photos are considered trusted
+ * enough to not be auto-deactivated on a safe-search violation — they only
+ * get the upload-blocked notice, admin is still alerted.
+ */
+const TRUSTED_USER_PROCESSED_PHOTO_THRESHOLD = 200
 
 /** Google Vision Safe Search Detection price: $1.50 per 1,000 images. */
 const SAFE_SEARCH_COST_USD_PER_IMAGE = 0.0015
@@ -136,6 +144,7 @@ export default class SafeSearchController {
       }
 
       const passed = violations.length === 0 && batchViolations.length === 0
+      let userDeactivated = false
 
       // Record violation and deactivate user if content policy was violated
       if (!passed) {
@@ -157,9 +166,18 @@ export default class SafeSearchController {
         try {
           fullUser = await User.find(user.id)
           if (fullUser) {
+            const processedPhotoCount = await new PhotoManager().getProcessedPhotoCount(
+              String(user.id)
+            )
             const existing = fullUser.contentViolations ?? []
             fullUser.contentViolations = [...existing, violation]
-            fullUser.isActive = false
+            // Only deactivate trusted-enough-yet-still-under-threshold users.
+            // Users with enough processed photos keep their account active —
+            // the offending batch is simply rejected and admin is notified.
+            if (processedPhotoCount < TRUSTED_USER_PROCESSED_PHOTO_THRESHOLD) {
+              fullUser.isActive = false
+              userDeactivated = true
+            }
             await fullUser.save()
           }
         } catch (recordingError) {
@@ -182,6 +200,7 @@ export default class SafeSearchController {
               ip: violation.ip,
               date: violation.date,
               totalImages: imagesToCheck.length,
+              userDeactivated,
             }),
           })
         } catch (notifyError) {
@@ -193,6 +212,7 @@ export default class SafeSearchController {
         passed,
         violations,
         batchViolations,
+        userDeactivated,
         stats: {
           total: imagesToCheck.length,
           counts: batchCounters,

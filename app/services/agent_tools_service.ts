@@ -15,12 +15,14 @@ import Photo from '#models/photo'
 import Collection from '#models/collection'
 import Series from '#models/series'
 import PortfolioBuild from '#models/portfolio_build'
+import db from '@adonisjs/lucid/services/db'
 import {
   VISUAL_ASPECTS_SCHEMA,
   ALL_ARTISTIC_SCORE_EXTERNAL_KEYS,
   resolveInternalScoreKeyAnyVariant,
   getPromptVariant,
   getArtisticExternalKeys,
+  getArtisticCriteria,
   getAspectValuesForVariant,
   type PromptVariant,
 } from '#config/photo_schema'
@@ -98,9 +100,32 @@ export const AppKnowledgeSchema = z.object({
 
 export const OverallCatalogViewSchema = z.object({})
 
-export const FetchCollectionsSchema = z.object({})
+export const FetchCollectionsSchema = z.object({
+  collectionId: z
+    .number()
+    .optional()
+    .describe(
+      'If set, return only this specific collection (by ID) with up to 50 sample photo IDs, instead of every collection with a 15-photo sample each. Use when the user referenced one exact collection (by name or ID).'
+    ),
+})
 
-export const FetchPortfoliosSchema = z.object({})
+export const FetchSeriesSchema = z.object({
+  seriesId: z
+    .number()
+    .optional()
+    .describe(
+      'If set, return only this specific series (by ID) with up to 50 sample photo IDs, instead of every series with a 15-photo sample each. Use when the user referenced one exact series (by name or ID).'
+    ),
+})
+
+export const FetchPortfoliosSchema = z.object({
+  portfolioId: z
+    .number()
+    .optional()
+    .describe(
+      'If set, return only this specific portfolio build (by ID), instead of every recent completed build. Use when the user referenced one exact portfolio (by name or ID).'
+    ),
+})
 
 /**
  * Builds a Zod object schema for the visualAspects filter from the central
@@ -201,6 +226,19 @@ function buildSearchAdvancedSchema(variant: PromptVariant) {
       })
       .optional()
       .describe('Find photos similar to reference photos. Triggers similarity search.'),
+    scopes: z
+      .array(
+        z.object({
+          type: z.enum(['collection', 'series', 'portfolio']),
+          id: z.number(),
+        })
+      )
+      .min(1)
+      .max(3)
+      .optional()
+      .describe(
+        'Restrict results to only the photos inside specific collection(s)/series/portfolio(s) the user referenced (by ID) — e.g. from a "[Referenced collection/series/portfolio IDs: ...]" line. Pass 2-3 entries when the user named multiple items (their photos are combined with OR before filtering — e.g. "in my Romania collection or my Alps series"); pass 1 for a single item. Applied as a hard filter AFTER the normal intersect/union combination of the other sub-searches, so it does not need to be combined manually. Does not by itself trigger a sub-search — pair it with at least one of style_query/content_tags/filter/similar_to.'
+      ),
   })
 }
 
@@ -467,21 +505,139 @@ function reciprocalRankFusion(rankedLists: number[][], k = 60): number[] {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Item-level score aggregation (fetch_collections/series/portfolios)
+// ─────────────────────────────────────────────────────────────
+
+type PhotoScoreRow = { id: number; artisticScores: Record<string, number> | null }
+
+type ScoreAgg = {
+  mean: number
+  scoredCount: number
+  best: { id: number; value: number }
+  worst: { id: number; value: number }
+}
+
+/**
+ * Aggregates artistic scores across a set of photos into a per-criterion
+ * mean/best/worst breakdown, so the agent can compare items (collections,
+ * series, portfolios) against each other without fetching each one
+ * individually. Criteria with zero scored photos are omitted entirely.
+ */
+function computeItemScores(
+  photos: PhotoScoreRow[],
+  variant: PromptVariant
+): Record<string, ScoreAgg> {
+  const criteria = getArtisticCriteria(variant)
+  const result: Record<string, ScoreAgg> = {}
+
+  for (const criterion of criteria) {
+    const externalKey = criterion.externalKey ?? criterion.key
+    let sum = 0
+    let count = 0
+    let best: { id: number; value: number } | null = null
+    let worst: { id: number; value: number } | null = null
+
+    for (const photo of photos) {
+      const raw = photo.artisticScores?.[criterion.key]
+      const value = raw !== undefined && raw !== null ? Number(raw) : NaN
+      if (!Number.isFinite(value) || value <= 0) continue
+
+      sum += value
+      count += 1
+      if (!best || value > best.value) best = { id: photo.id, value }
+      if (!worst || value < worst.value) worst = { id: photo.id, value }
+    }
+
+    if (count === 0 || !best || !worst) continue
+    result[externalKey] = {
+      mean: Math.round((sum / count) * 10) / 10,
+      scoredCount: count,
+      best: { id: best.id, value: Math.round(best.value * 10) / 10 },
+      worst: { id: worst.id, value: Math.round(worst.value * 10) / 10 },
+    }
+  }
+
+  return result
+}
+
+/**
+ * Fetches { id, artistic_scores } for every photo linked to the given
+ * collection/series IDs via their pivot table, grouped by group ID.
+ * Selects only the artistic_scores sub-object (not the full `descriptions`
+ * blob) to keep this cheap even across hundreds of items.
+ */
+async function fetchPivotPhotoScores(
+  pivotTable: 'collection_photos' | 'series_photos',
+  pivotFk: 'collection_id' | 'series_id',
+  userId: number,
+  groupIds: number[]
+): Promise<Map<number, PhotoScoreRow[]>> {
+  const map = new Map<number, PhotoScoreRow[]>()
+  if (groupIds.length === 0) return map
+
+  const rows = await db
+    .from(`${pivotTable} as piv`)
+    .join('photos as p', 'p.id', 'piv.photo_id')
+    .where('p.user_id', userId)
+    .whereIn(`piv.${pivotFk}`, groupIds)
+    .orderBy('p.id', 'asc')
+    .select(
+      `piv.${pivotFk} as group_id`,
+      'p.id as photo_id',
+      db.raw("p.descriptions->'artistic_scores' as artistic_scores")
+    )
+
+  for (const row of rows as any[]) {
+    const arr = map.get(row.group_id) ?? []
+    arr.push({ id: row.photo_id, artisticScores: row.artistic_scores ?? null })
+    map.set(row.group_id, arr)
+  }
+  return map
+}
+
+/**
+ * Fetches artistic_scores for an arbitrary set of photo IDs (used by
+ * fetch_portfolios, whose photo IDs already live on the build's `result`
+ * JSON — no pivot join needed).
+ */
+async function fetchPhotoScoresByIds(
+  userId: number,
+  photoIds: number[]
+): Promise<Map<number, Record<string, number> | null>> {
+  const map = new Map<number, Record<string, number> | null>()
+  if (photoIds.length === 0) return map
+
+  const rows = await db
+    .from('photos')
+    .where('user_id', userId)
+    .whereIn('id', photoIds)
+    .select('id', db.raw("descriptions->'artistic_scores' as artistic_scores"))
+
+  for (const row of rows as any[]) {
+    map.set(row.id, row.artistic_scores ?? null)
+  }
+  return map
+}
+
+// ─────────────────────────────────────────────────────────────
 // Tool descriptions (centralised)
 // ─────────────────────────────────────────────────────────────
 
 export const TOOL_DESCRIPTIONS = {
   get_photo_info:
-    '[BASIC_TOOLS] Get detailed info for one or more photos by their IDs. Call this ONLY for: (1) photo IDs attached by the user in the current message (these are auto-prefetched), (2) photo IDs referenced from conversation history that you need to discuss again. Do NOT call this on photos returned by search_advanced — a later phase automatically injects full descriptions and thumbnails. Pass multiple IDs in a single call to batch-fetch. Returns: story (scene narrative), context, genre, date taken, and optional inferredLocation string (geocode_cache.query_normalized via inferredLocationId) when available. Full visual metadata and thumbnail images are provided automatically in the final evaluation step.',
+    '[BASIC_TOOLS] Get detailed info for one or more photos by their IDs. Call this ONLY for: (1) photo IDs attached by the user in the current message (these are auto-prefetched), (2) photo IDs referenced from conversation history that you need to discuss again, (3) sample/photo IDs returned by `fetch_collections`/`fetch_series`/`fetch_portfolios` for a collection/series/portfolio the user specifically referenced (e.g. by name or via a "[Referenced collection/series/portfolio IDs: ...]" line) and wants evaluated or discussed directly. Do NOT call this on photos returned by search_advanced — a later phase automatically injects full descriptions and thumbnails. Pass multiple IDs in a single call to batch-fetch. Returns: story (scene narrative), context, genre, date taken, and optional inferredLocation string (geocode_cache.query_normalized via inferredLocationId) when available. Full visual metadata and thumbnail images are provided automatically in the final evaluation step.',
 
   fetch_collections:
-    "[BASIC_TOOLS] Get all the user's collections and series, each with their name, description, and sample photo IDs. Use this when the user asks about their collections, series, albums, or organized groups of photos — for example 'what collections do I have?', 'show me my series', 'which albums exist?'. Returns two separate arrays: 'collections' (manually curated groups) and 'series' (ordered sequences/stories). **Important:** this tool only returns metadata and a small sample of IDs per collection — it does NOT provide full photo descriptions or visual thumbnails. Once you identify the collection(s) the user cares about, call `get_photo_info` with those photo IDs to retrieve full descriptions and visuals for evaluation. Exception: if the user only wants a high-level overview of their collections (names, counts, structure), you do NOT need to call `get_photo_info`.",
+    "[BASIC_TOOLS] Get the user's collections (manually curated groups of photos), each with their name, description, sample photo IDs, and a `scores` breakdown. Use this when the user asks about their collections or albums — for example 'what collections do I have?', 'which albums exist?'. For series (ordered sequences/stories), use `fetch_series` instead — collections and series are distinct library item types. Pass `collectionId` when the user references ONE specific collection by name or by an exact ID (e.g. a \"[Referenced collection IDs: ...]\" line) — this returns only that item with up to 50 sample photo IDs instead of dumping every collection with a 15-photo sample each. **`scores`:** each collection includes `scores.<criterion>` (e.g. `storytelling`, `aesthetic_quality`, `composition`, `originality`) with `mean` (average across ALL photos in the collection, not just the sample), `scoredCount`, and `best`/`worst` (`{id, value}` of the single strongest/weakest photo on that criterion) — computed over every photo in the collection regardless of `totalPhotos` size. Use this directly to answer cross-collection comparison/ranking questions (e.g. 'which collection has the best composition?', 'rank my collections by storytelling') WITHOUT calling this tool again per collection or running search_advanced per item — this is a single call. Map qualitative asks to the closest criterion (e.g. 'narrative'/'story' → `storytelling`). **Important:** in the no-ID (list-all) mode, `samplePhotoIds` is only populated for the 30 most recently created collections (older ones get `[]`, but their `scores` are always complete) — `totalPhotos` and `scores` are always present for every collection returned. This tool still does NOT provide full photo descriptions or visual thumbnails. Once you identify the collection(s) the user cares about (e.g. via `scores` or by name), call `get_photo_info` with those photo IDs (for direct evaluation/description) or `search_advanced` with a matching `scopes` entry (to filter within it) — see those tools' descriptions. Exception: if the user only wants a high-level overview of their collections (names, counts, structure), no follow-up call is needed.",
+
+  fetch_series:
+    "[BASIC_TOOLS] Get the user's series (ordered photo sequences/stories), each with their name, description, sample photo IDs, and a `scores` breakdown. Use this when the user asks about their series, ordered sequences, or photo stories — for example 'show me my series', 'what series have I made?'. For collections (manually curated but unordered groups), use `fetch_collections` instead — collections and series are distinct library item types. Pass `seriesId` when the user references ONE specific series by name or by an exact ID (e.g. a \"[Referenced series IDs: ...]\" line) — this returns only that item with up to 50 sample photo IDs instead of dumping every series with a 15-photo sample each. **`scores`:** each series includes `scores.<criterion>` (e.g. `storytelling`, `aesthetic_quality`, `composition`, `originality`) with `mean` (average across ALL photos in the series, not just the sample), `scoredCount`, and `best`/`worst` (`{id, value}` of the single strongest/weakest photo on that criterion) — computed over every photo in the series regardless of `totalPhotos` size. Use this directly to answer cross-series comparison/ranking questions (e.g. 'which of my series is strongest narratively?', 'rank my series by storytelling') WITHOUT calling this tool again per series or running search_advanced per item — this is a single call. Map qualitative asks to the closest criterion (e.g. 'narrative'/'story' → `storytelling`). **Important:** in the no-ID (list-all) mode, `samplePhotoIds` is only populated for the 30 most recently created series (older ones get `[]`, but their `scores` are always complete) — `totalPhotos` and `scores` are always present for every series returned. This tool still does NOT provide full photo descriptions or visual thumbnails. Once you identify the series the user cares about (e.g. via `scores` or by name), call `get_photo_info` with those photo IDs (for direct evaluation/description) or `search_advanced` with a matching `scopes` entry (to filter within it) — see those tools' descriptions. Exception: if the user only wants a high-level overview of their series (names, counts, structure), no follow-up call is needed.",
 
   fetch_portfolios:
-    "[BASIC_TOOLS] Get all the user's portfolio builds (AI-generated curated portfolios produced by the Portfolio Builder tool). Returns only COMPLETED builds, most recent first, each with its id, name, creation date, target size, coherence mode (free/visual/chromatic/narrative/heterogeneous), whether sequencing was enabled, the user's theme and sequencing preferences, the final ordered photo IDs of the portfolio, and a sample of the builder pool (approved-but-not-selected alternatives). Use this whenever the user asks about their portfolios, generated portfolios, portfolio builds, curated selections, or references an earlier build — for example 'show me my last portfolio', 'what portfolios have I built?', 'open the street portfolio I made'. **Important:** this tool only returns metadata and photo IDs — it does NOT provide full photo descriptions or visual thumbnails. Once you identify the portfolio(s) the user cares about, call `get_photo_info` on a subset of the relevant photo IDs to retrieve descriptions and visuals for evaluation. Exception: if the user only wants a high-level overview of their portfolios (names, counts, config), no `get_photo_info` call is needed.",
+    "[BASIC_TOOLS] Get the user's portfolio builds (AI-generated curated portfolios produced by the Portfolio Builder tool). Returns only COMPLETED builds, most recent first, each with its id, name, creation date, target size, coherence mode (free/visual/chromatic/narrative/heterogeneous), whether sequencing was enabled, the user's theme and sequencing preferences, the final ordered photo IDs of the portfolio, a `scores` breakdown, and a sample of the builder pool (approved-but-not-selected alternatives). Use this whenever the user asks about their portfolios, generated portfolios, portfolio builds, curated selections, or references an earlier build — for example 'show me my last portfolio', 'what portfolios have I built?', 'open the street portfolio I made'. Pass `portfolioId` when the user references ONE specific portfolio by name or by an exact ID (e.g. a \"[Referenced portfolio IDs: ...]\" line) — this returns only that build (with a larger builder-pool sample) instead of every recent build. **`scores`:** each build includes `scores.<criterion>` (e.g. `storytelling`, `aesthetic_quality`, `composition`, `originality`) with `mean` (average across all photos in the final `photoIds`), `scoredCount`, and `best`/`worst` (`{id, value}`). Use this directly to answer cross-portfolio comparison/ranking questions in a single call — map qualitative asks to the closest criterion (e.g. 'narrative'/'story' → `storytelling`). **Important:** this tool still does NOT provide full photo descriptions or visual thumbnails. Once you identify the portfolio(s) the user cares about, call `get_photo_info` on a subset of the relevant photo IDs (for direct evaluation/description) or `search_advanced` with a matching `scopes` entry (to filter within it). Exception: if the user only wants a high-level overview of their portfolios (names, counts, config), no follow-up call is needed.",
 
   search_advanced:
-    '[PHOTO_SEARCH] **The primary search tool.** Combine multiple search strategies in a single call and merge their results with intersect (AND) or union (OR). You can specify any combination of: (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) filter — metadata/score/visual-aspect filtering, (4) similar_to — similarity to reference photos. **ALL parameters MUST ALWAYS BE SPECIFIED IN ENGLISH ONLY** — style descriptions, keywords, and filter values must be in English. All specified sub-searches run in parallel; their full ID sets are combined via the chosen operation; only the final result is sampled and returned with photo ID, filename, genre, and optional inferredLocation string (query_normalized). Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) with intersect. "moody portraits or landscapes" → style_query("dark moody") + filter(genre=[portrait,landscape]) with union.',
+    '[PHOTO_SEARCH] **The primary search tool.** Combine multiple search strategies in a single call and merge their results with intersect (AND) or union (OR). You can specify any combination of: (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) filter — metadata/score/visual-aspect filtering, (4) similar_to — similarity to reference photos. Optionally add `scopes` to restrict the search to only the photos inside specific collection(s)/series/portfolio(s) the user referenced (by ID) — use this whenever the user asks a filtered/qualitative question about one or more specific library items (e.g. "which vertical photos are in my Romania 2025 collection?", or "where\'s the photo of the girl in the snow — in my Romania collection or my Alps series?") instead of the whole catalog. Pass 1 entry for a single item, or 2-3 when the user named multiple — their photos are always combined with OR (union) first, then that combined pool is applied as a hard boundary AFTER the normal intersect/union combination of the other sub-searches; `scopes` never needs to be one of the sub-searches itself, and never requires picking intersect vs union for the scopes themselves. **ALL parameters MUST ALWAYS BE SPECIFIED IN ENGLISH ONLY** — style descriptions, keywords, and filter values must be in English. All specified sub-searches run in parallel; their full ID sets are combined via the chosen operation; only the final result is sampled and returned with photo ID, filename, genre, and optional inferredLocation string (query_normalized). Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) with intersect. "moody portraits or landscapes" → style_query("dark moody") + filter(genre=[portrait,landscape]) with union. "vertical photos in my Romania 2025 collection" → filter(orientation=vertical) + scopes([{type:"collection", id:155}]). "photo of the girl in the snow, in my Romania collection or my Alps series" → content_tags(["girl","snow"]) + scopes([{type:"collection", id:155}, {type:"series", id:88}]).',
 
   catalog_sample:
     '[CATALOG_INSIGHT] **Temporal catalog sampling for broad exploration.** Divides the catalog timeline into equal time buckets and samples representative photos from each period. Returns structured data: an array of buckets, each with its date range and sampled photos (id, filename, genre, and optional inferredLocation string/query_normalized). Use this for evolution questions, progress over time, or getting a representative cross-section of the catalog. Always pair with `overall_catalog_view` in parallel for holistic context. NEVER use this for targeted searches — use `search_advanced` instead. Optional filters: **genre values MUST ALWAYS BE IN ENGLISH ONLY** (e.g. ["street"] for street photography evolution), date_from/date_to, sort_within (pick best-scored photos per period instead of random), scan_mode (technical for compositional/visual analysis, semantic for subject/theme analysis). Examples: "How has my photography evolved?" → catalog_sample(buckets=6, scan_mode=technical) + overall_catalog_view in parallel. "What subjects appear most in my street work?" → catalog_sample(buckets=5, genre=["street"], scan_mode=semantic) + overall_catalog_view in parallel.',
@@ -697,11 +853,55 @@ export default class AgentToolsService {
       return results.map((p: any) => p.id as number)
     }
 
+    /**
+     * Resolves a { type, id } scope reference into the set of photo IDs it contains,
+     * scoped to this user. Returns null when the referenced item doesn't exist (or
+     * belongs to someone else), so callers can surface a clear error instead of
+     * silently behaving like an empty scope.
+     */
+    const _resolveScopePhotoIds = async (scope: {
+      type: 'collection' | 'series' | 'portfolio'
+      id: number
+    }): Promise<number[] | null> => {
+      if (scope.type === 'collection') {
+        const collection = await Collection.query()
+          .where('id', scope.id)
+          .where('user_id', userId)
+          .preload('photos', (q) => q.select('id'))
+          .first()
+        if (!collection) return null
+        return collection.photos.map((p) => p.id)
+      }
+      if (scope.type === 'series') {
+        const series = await Series.query()
+          .where('id', scope.id)
+          .where('user_id', userId)
+          .preload('photos', (q) => q.select('id'))
+          .first()
+        if (!series) return null
+        return series.photos.map((p) => p.id)
+      }
+      const build = await PortfolioBuild.query()
+        .where('id', scope.id)
+        .where('user_id', userId)
+        .first()
+      if (!build) return null
+      const photoIds = build.result?.photoIds
+      return Array.isArray(photoIds) ? photoIds : []
+    }
+
     // (catalog_sample is now a standalone tool — see below)
 
     // ── Tool: search_advanced ───────────────────────────────
     const searchAdvanced = tool(
-      async ({ operation, style_query, content_tags, filter, similar_to }): Promise<string> => {
+      async ({
+        operation,
+        style_query,
+        content_tags,
+        filter,
+        similar_to,
+        scopes,
+      }): Promise<string> => {
         // Limit is intentionally not exposed to the model — Phase 1 always returns
         // the maximum so Phase 2 (the curator) can make the final selection.
         // Keep in sync with PHASE2_TOTAL_IMAGE_LIMIT in langchain_agent_service.ts.
@@ -760,6 +960,25 @@ export default class AgentToolsService {
           console.log(
             `[Agent]   🔎 search_advanced combined: ${combinedIds.length} IDs after ${operation}`
           )
+
+          // Scopes are a hard boundary applied after the normal combination — never part
+          // of the intersect/union logic above, regardless of what `operation` was chosen.
+          // Multiple scopes are always OR'd together (their photo sets are unioned) before
+          // being applied as a single combined filter — there's no agent-facing choice here.
+          if (scopes && scopes.length > 0) {
+            const scopeSet = new Set<number>()
+            for (const s of scopes) {
+              const scopeIds = await _resolveScopePhotoIds(s)
+              if (scopeIds === null) {
+                return JSON.stringify({ error: `Scope ${s.type} ${s.id} not found.` })
+              }
+              for (const id of scopeIds) scopeSet.add(id)
+            }
+            combinedIds = combinedIds.filter((id) => scopeSet.has(id))
+            console.log(
+              `[Agent]   🔎 search_advanced scoped to [${scopes.map((s) => `${s.type}:${s.id}`).join(', ')}]: ${combinedIds.length} IDs remain`
+            )
+          }
 
           if (combinedIds.length === 0) {
             return JSON.stringify({
@@ -859,34 +1078,82 @@ export default class AgentToolsService {
       }
     )
 
-    // ── Tool: fetch_collections ────────────────────────────
+    // ── Tools: fetch_collections / fetch_series ─────────────
+    // In list-all mode, samplePhotoIds is only populated for the N most
+    // recently created items — scores/totalPhotos are always complete
+    // regardless, since they're cheap to compute for every item at once.
+    const RECENT_SAMPLE_CUTOFF = 30
+    const LIST_ALL_SAFETY_LIMIT = 300
+
+    const formatCollectionOrSeries = (
+      item: { id: number; name: string; description: string | null },
+      photoIds: number[],
+      sampleLimit: number,
+      includeSample: boolean,
+      scores: Record<string, ScoreAgg>
+    ) => ({
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      totalPhotos: photoIds.length,
+      samplePhotoIds: includeSample ? photoIds.slice(0, sampleLimit) : [],
+      scores,
+    })
+
     const fetchCollections = tool(
-      async (): Promise<string> => {
+      async ({ collectionId }): Promise<string> => {
         try {
-          const [collections, series] = await Promise.all([
-            Collection.query()
+          if (collectionId) {
+            const collection = await Collection.query()
+              .where('id', collectionId)
               .where('user_id', userId)
-              .preload('photos', (q) => q.select('id')),
-            Series.query()
-              .where('user_id', userId)
-              .preload('photos', (q) => q.select('id')),
-          ])
+              .first()
+            if (!collection) {
+              return JSON.stringify({ error: `Collection ${collectionId} not found` })
+            }
+            const photoMap = await fetchPivotPhotoScores(
+              'collection_photos',
+              'collection_id',
+              userId,
+              [collection.id]
+            )
+            const photos = photoMap.get(collection.id) ?? []
+            return JSON.stringify({
+              collections: [
+                formatCollectionOrSeries(
+                  collection,
+                  photos.map((p) => p.id),
+                  50,
+                  true,
+                  computeItemScores(photos, variant)
+                ),
+              ],
+            })
+          }
+
+          const collections = await Collection.query()
+            .where('user_id', userId)
+            .orderBy('created_at', 'desc')
+            .limit(LIST_ALL_SAFETY_LIMIT)
+
+          const photoMap = await fetchPivotPhotoScores(
+            'collection_photos',
+            'collection_id',
+            userId,
+            collections.map((c) => c.id)
+          )
 
           return JSON.stringify({
-            collections: collections.map((c) => ({
-              id: c.id,
-              name: c.name,
-              description: c.description,
-              totalPhotos: c.photos.length,
-              samplePhotoIds: c.photos.slice(0, 15).map((p) => p.id),
-            })),
-            series: series.map((s) => ({
-              id: s.id,
-              name: s.name,
-              description: s.description,
-              totalPhotos: s.photos.length,
-              samplePhotoIds: s.photos.slice(0, 15).map((p) => p.id),
-            })),
+            collections: collections.map((c, idx) => {
+              const photos = photoMap.get(c.id) ?? []
+              return formatCollectionOrSeries(
+                c,
+                photos.map((p) => p.id),
+                15,
+                idx < RECENT_SAMPLE_CUTOFF,
+                computeItemScores(photos, variant)
+              )
+            }),
           })
         } catch (error) {
           return JSON.stringify({ error: `Failed to fetch collections: ${error.message}` })
@@ -899,41 +1166,144 @@ export default class AgentToolsService {
       }
     )
 
-    // ── Tool: fetch_portfolios ─────────────────────────────
-    const fetchPortfolios = tool(
-      async (): Promise<string> => {
+    const fetchSeries = tool(
+      async ({ seriesId }): Promise<string> => {
         try {
+          if (seriesId) {
+            const series = await Series.query()
+              .where('id', seriesId)
+              .where('user_id', userId)
+              .first()
+            if (!series) {
+              return JSON.stringify({ error: `Series ${seriesId} not found` })
+            }
+            const photoMap = await fetchPivotPhotoScores(
+              'series_photos',
+              'series_id',
+              userId,
+              [series.id]
+            )
+            const photos = photoMap.get(series.id) ?? []
+            return JSON.stringify({
+              series: [
+                formatCollectionOrSeries(
+                  series,
+                  photos.map((p) => p.id),
+                  50,
+                  true,
+                  computeItemScores(photos, variant)
+                ),
+              ],
+            })
+          }
+
+          const series = await Series.query()
+            .where('user_id', userId)
+            .orderBy('created_at', 'desc')
+            .limit(LIST_ALL_SAFETY_LIMIT)
+
+          const photoMap = await fetchPivotPhotoScores(
+            'series_photos',
+            'series_id',
+            userId,
+            series.map((s) => s.id)
+          )
+
+          return JSON.stringify({
+            series: series.map((s, idx) => {
+              const photos = photoMap.get(s.id) ?? []
+              return formatCollectionOrSeries(
+                s,
+                photos.map((p) => p.id),
+                15,
+                idx < RECENT_SAMPLE_CUTOFF,
+                computeItemScores(photos, variant)
+              )
+            }),
+          })
+        } catch (error) {
+          return JSON.stringify({ error: `Failed to fetch series: ${error.message}` })
+        }
+      },
+      {
+        name: 'fetch_series',
+        description: TOOL_DESCRIPTIONS.fetch_series,
+        schema: FetchSeriesSchema,
+      }
+    )
+
+    // ── Tool: fetch_portfolios ─────────────────────────────
+    const formatPortfolioBuild = (
+      b: any,
+      builderPoolSampleLimit: number,
+      scoresByPhotoId: Map<number, Record<string, number> | null>
+    ) => {
+      const cfg = b.config || ({} as any)
+      const result = b.result || ({} as any)
+      const photoIds: number[] = Array.isArray(result.photoIds) ? result.photoIds : []
+      const builderPoolIds: number[] = Array.isArray(result.builderPool)
+        ? result.builderPool
+            .map((p: any) => Number(p?.id))
+            .filter((n: number) => Number.isFinite(n))
+        : []
+      const scorePhotos: PhotoScoreRow[] = photoIds.map((id) => ({
+        id,
+        artisticScores: scoresByPhotoId.get(id) ?? null,
+      }))
+      return {
+        id: b.id,
+        name: cfg.name ?? null,
+        createdAt: b.createdAt?.toISO?.() ?? null,
+        targetSize: cfg.targetSize ?? null,
+        coherenceMode: cfg.coherenceMode ?? null,
+        sequencing: Boolean(cfg.sequencing),
+        themePreferences: cfg.themePreferences ?? null,
+        sequencingPreferences: cfg.sequencingPreferences ?? null,
+        totalPhotos: photoIds.length,
+        photoIds,
+        scores: computeItemScores(scorePhotos, variant),
+        builderPoolSample: builderPoolIds.slice(0, builderPoolSampleLimit),
+        builderPoolTotal: builderPoolIds.length,
+      }
+    }
+
+    const fetchPortfolios = tool(
+      async ({ portfolioId }): Promise<string> => {
+        try {
+          if (portfolioId) {
+            const build = await PortfolioBuild.query()
+              .where('id', portfolioId)
+              .where('user_id', userId)
+              .first()
+            if (!build) {
+              return JSON.stringify({ error: `Portfolio ${portfolioId} not found` })
+            }
+            const photoIds: number[] = Array.isArray(build.result?.photoIds)
+              ? build.result.photoIds
+              : []
+            const scoresByPhotoId = await fetchPhotoScoresByIds(userId, photoIds)
+            return JSON.stringify({
+              portfolios: [formatPortfolioBuild(build, 50, scoresByPhotoId)],
+            })
+          }
+
           const builds = await PortfolioBuild.query()
             .where('user_id', userId)
             .where('status', 'completed')
             .orderBy('created_at', 'desc')
             .limit(20)
 
+          const allPhotoIds = [
+            ...new Set(
+              builds.flatMap((b) =>
+                Array.isArray(b.result?.photoIds) ? (b.result.photoIds as number[]) : []
+              )
+            ),
+          ]
+          const scoresByPhotoId = await fetchPhotoScoresByIds(userId, allPhotoIds)
+
           return JSON.stringify({
-            portfolios: builds.map((b) => {
-              const cfg = b.config || ({} as any)
-              const result = b.result || ({} as any)
-              const photoIds: number[] = Array.isArray(result.photoIds) ? result.photoIds : []
-              const builderPoolIds: number[] = Array.isArray(result.builderPool)
-                ? result.builderPool
-                    .map((p: any) => Number(p?.id))
-                    .filter((n: number) => Number.isFinite(n))
-                : []
-              return {
-                id: b.id,
-                name: cfg.name ?? null,
-                createdAt: b.createdAt?.toISO?.() ?? null,
-                targetSize: cfg.targetSize ?? null,
-                coherenceMode: cfg.coherenceMode ?? null,
-                sequencing: Boolean(cfg.sequencing),
-                themePreferences: cfg.themePreferences ?? null,
-                sequencingPreferences: cfg.sequencingPreferences ?? null,
-                totalPhotos: photoIds.length,
-                photoIds,
-                builderPoolSample: builderPoolIds.slice(0, 15),
-                builderPoolTotal: builderPoolIds.length,
-              }
-            }),
+            portfolios: builds.map((b) => formatPortfolioBuild(b, 15, scoresByPhotoId)),
           })
         } catch (error: any) {
           return JSON.stringify({ error: `Failed to fetch portfolios: ${error.message}` })
@@ -1189,6 +1559,7 @@ export default class AgentToolsService {
       appKnowledge,
       searchAdvanced,
       fetchCollections,
+      fetchSeries,
       fetchPortfolios,
       overallCatalogView,
       catalogSample,

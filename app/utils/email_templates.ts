@@ -998,9 +998,20 @@ export function contentViolationAdminTemplate(params: {
   ip: string
   date: string
   totalImages: number
+  userDeactivated: boolean
 }): string {
-  const { userId, userName, userEmail, reasons, batchViolations, photoIds, ip, date, totalImages } =
-    params
+  const {
+    userId,
+    userName,
+    userEmail,
+    reasons,
+    batchViolations,
+    photoIds,
+    ip,
+    date,
+    totalImages,
+    userDeactivated,
+  } = params
 
   const WARNING_COLOR = '#ef4444'
   const allViolations = [...new Set([...reasons, ...batchViolations])]
@@ -1021,7 +1032,11 @@ export function contentViolationAdminTemplate(params: {
       ⚠ Content Policy Violation Detected
     </h1>
     <p style="margin: 0 0 28px; font-size: 14px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
-      A user's account has been automatically suspended pending review.
+      ${
+        userDeactivated
+          ? "A user's account has been automatically suspended pending review."
+          : 'The upload batch was rejected. The account was NOT deactivated (user has enough processed photos).'
+      }
     </p>
 
     <!-- User details -->
@@ -1082,7 +1097,11 @@ export function contentViolationAdminTemplate(params: {
 
     <hr style="border: none; border-top: 1px solid rgba(148, 163, 184, 0.2); margin: 28px 0;" />
     <p style="margin: 0; font-size: 12px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
-      The account has been automatically deactivated. Review in the admin panel.
+      ${
+        userDeactivated
+          ? 'The account has been automatically deactivated. Review in the admin panel.'
+          : 'The account remains active. Review in the admin panel if further action is needed.'
+      }
     </p>
   `
 

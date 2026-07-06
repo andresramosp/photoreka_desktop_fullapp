@@ -3,6 +3,7 @@ import Photo, { PhotoDescriptions, DescriptionType } from '#models/photo'
 import TagPhoto from '#models/tag_photo'
 import ModelsService from '#services/models_service'
 import NLPService from '#services/nlp_service'
+import type { ModelQueryBuilderContract } from '@adonisjs/lucid/types/model'
 
 import { withCache } from '../decorators/withCache.js'
 import { CacheInvalidationService } from '../services/cache_invalidation_service.js'
@@ -158,7 +159,7 @@ export default class PhotoManager {
     artisticScores?: Record<string, { value: number; operator: string }>,
     source?: string
   ): Promise<number[]> {
-    let query = Photo.query().where('user_id', userId)
+    let query = this.onlyProcessed(Photo.query().where('user_id', userId))
     if (collections && collections.length > 0) {
       query = query.whereHas('collections', (collectionQuery) => {
         collectionQuery.whereIn('collections.id', collections)
@@ -231,6 +232,50 @@ export default class PhotoManager {
         return visualOk && artisticOk && sourceOk
       })
       .map((p) => p.id)
+  }
+
+  /**
+   * Restringe una query de Photo a las totalmente procesadas (listas para
+   * search/duplicates/scoring), replicando en SQL la misma regla que
+   * Photo.status === 'processed': admin_retry/overwrite_metadata cuentan como
+   * processed sin importar el stage; el resto necesita is_preprocess=false y
+   * current_stage='finished'.
+   */
+  private onlyProcessed(
+    query: ModelQueryBuilderContract<typeof Photo>
+  ): ModelQueryBuilderContract<typeof Photo> {
+    return query.whereHas('analyzerProcess', (aq) => {
+      aq.where((inner) => {
+        inner.whereIn('mode', ['admin_retry', 'overwrite_metadata']).orWhere((inner2) => {
+          inner2.where('is_preprocess', false).where('current_stage', 'finished')
+        })
+      })
+    })
+  }
+
+  @withCache({
+    provider: 'redis',
+    key: (userId: string) => `getProcessedPhotoIds:${userId}`,
+    ttl: 60 * 60 * 12,
+  })
+  public async getProcessedPhotoIds(userId: string): Promise<number[]> {
+    const photos = await this.onlyProcessed(Photo.query().where('user_id', userId)).select('id')
+    return photos.map((p) => p.id)
+  }
+
+  /**
+   * Igual que getProcessedPhotoIds pero devuelve solo el conteo, sin traer las filas.
+   */
+  @withCache({
+    provider: 'redis',
+    key: (userId: string) => `getProcessedPhotoCount:${userId}`,
+    ttl: 60 * 60 * 12,
+  })
+  public async getProcessedPhotoCount(userId: string): Promise<number> {
+    const result = await this.onlyProcessed(Photo.query().where('user_id', userId)).count(
+      '* as total'
+    )
+    return Number(result[0].$extras.total)
   }
 
   /**
