@@ -35,6 +35,7 @@ export function usePhotoUpload() {
   const totalFiles = ref(0);
   const pendingPhotos = ref([]); // Array temporal para fotos subidas pero no mostradas
   const showSafeSearchViolationModal = ref(false);
+  const safeSearchUserDeactivated = ref(false);
 
   const overallProgress = computed(() => {
     if (totalFiles.value === 0) return 0;
@@ -274,6 +275,9 @@ export function usePhotoUpload() {
     try {
       const safeSearchResult = await runSafeSearchCheck(sources, srcType);
       if (!safeSearchResult.passed) {
+        safeSearchUserDeactivated.value = Boolean(
+          safeSearchResult.userDeactivated,
+        );
         showSafeSearchViolationModal.value = true;
         isUploading.value = false;
         return;
@@ -355,6 +359,7 @@ export function usePhotoUpload() {
     totalFiles,
     overallProgress,
     showSafeSearchViolationModal,
+    safeSearchUserDeactivated,
 
     // Funciones
     handleUploadFlow,

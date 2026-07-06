@@ -799,7 +799,8 @@
                 <div
                   v-if="
                     photoLibrary.collections.length > 0 ||
-                    photoLibrary.series.length > 0
+                    photoLibrary.series.length > 0 ||
+                    photoLibrary.portfolios.length > 0
                   "
                   class="grouped-tags"
                 >
@@ -848,13 +849,36 @@
                       </div>
                     </div>
                   </div>
+
+                  <!-- Portfolios -->
+                  <div
+                    v-if="photoLibrary.portfolios.length > 0"
+                    class="tag-group-item"
+                  >
+                    <h5 class="tag-group-label">Portfolios</h5>
+                    <div class="tag-group-content">
+                      <div class="tags-list">
+                        <n-tag
+                          v-for="portfolio in photoLibrary.portfolios"
+                          :key="'port-' + portfolio.id"
+                          type="info"
+                          :bordered="false"
+                          class="photo-tag library-tag"
+                          @click="navigateTo('portfolio-detail', portfolio.id)"
+                        >
+                          {{ portfolio.name }}
+                        </n-tag>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div v-else class="library-empty-state">
                   <n-icon size="48" color="var(--text-tertiary)">
                     <LibraryIcon />
                   </n-icon>
                   <p class="empty-text">
-                    This photo is not in any collection or series yet.
+                    This photo is not in any collection, series or portfolio
+                    yet.
                   </p>
                 </div>
               </div>

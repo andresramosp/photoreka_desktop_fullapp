@@ -23,17 +23,27 @@
 
       <div class="ssv-body">
         <p class="ssv-description">
-          One or more photos in this batch appear to contain content that
-          violates our policies&nbsp;— including nudity, explicit material, or
-          violent imagery. The upload has been cancelled and
-          <strong>your account has been temporarily suspended</strong> pending
-          review by our team.
+          <template v-if="deactivated">
+            One or more photos in this batch appear to contain content that
+            violates our policies&nbsp;— including nudity, explicit material, or
+            violent imagery. The upload has been cancelled and
+            <strong>your account has been temporarily suspended</strong>
+            pending review by our team.
+          </template>
+          <template v-else>
+            One or more photos in this batch appear to contain content that
+            violates our policies&nbsp;— including nudity, explicit material, or
+            violent imagery. The upload has been cancelled, but
+            <strong>your account remains active</strong>. Please review your
+            photos before trying again.
+          </template>
         </p>
 
         <div class="ssv-info-box">
           <p class="ssv-info-text">
-            If you believe this is a mistake and need your account reactivated
-            immediately, please contact us at
+            If you believe this is a mistake<template v-if="deactivated">
+              and need your account reactivated immediately</template
+            >, please contact us at
             <a href="mailto:hello@photoreka.com" class="ssv-link"
               >hello@photoreka.com</a
             >
@@ -64,13 +74,19 @@
 import { NModal, NCard, NButton, NIcon } from "naive-ui";
 import { ShieldCheckmarkOutline, CloseOutline } from "@vicons/ionicons5";
 
-defineProps({ show: Boolean });
+const props = defineProps({
+  show: Boolean,
+  deactivated: {
+    type: Boolean,
+    default: true,
+  },
+});
 const emit = defineEmits(["update:show"]);
 
 function handleShowUpdate(nextShow) {
   emit("update:show", nextShow);
 
-  if (!nextShow) {
+  if (!nextShow && props.deactivated) {
     window.location.assign("/auth");
   }
 }

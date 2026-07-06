@@ -600,6 +600,29 @@
                     </div>
                   </div>
                   -->
+
+                  <!-- Portfolios (hidden on mobile) -->
+                  <!--
+                  <div
+                    v-if="photoLibrary.portfolios.length > 0"
+                    class="mobile-tag-group"
+                  >
+                    <h6 class="mobile-group-title">Portfolios</h6>
+                    <div class="mobile-tags-row">
+                      <n-tag
+                        v-for="portfolio in photoLibrary.portfolios"
+                        :key="'port-' + portfolio.id"
+                        size="small"
+                        type="info"
+                        :bordered="false"
+                        class="library-tag"
+                        @click="navigateTo('portfolio-detail', portfolio.id)"
+                      >
+                        {{ portfolio.name }}
+                      </n-tag>
+                    </div>
+                  </div>
+                  -->
                 </div>
                 <div v-else class="mobile-empty-state">
                   <n-icon size="32" color="var(--text-tertiary)">

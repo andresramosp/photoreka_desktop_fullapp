@@ -311,7 +311,17 @@
                   </div>
                 </div>
               </div>
-              <p class="message-text">{{ message.content }}</p>
+              <p class="message-text">
+                <template
+                  v-for="(seg, segIdx) in messageMentionSegments(message.content)"
+                  :key="segIdx"
+                ><span
+                  v-if="seg.mention"
+                  class="mention-chip-sent"
+                  @click="navigateToMention(seg)"
+                  >{{ seg.text }}</span
+                ><template v-else>{{ seg.text }}</template></template>
+              </p>
             </template>
             <!-- eslint-disable-next-line vue/no-v-html -->
             <div
@@ -446,6 +456,7 @@
             v-for="photo in contextPhotos"
             :key="photo.id"
             class="context-photo-wrapper"
+            :class="{ 'flash-highlight': flashingPhotoIds.has(String(photo.id)) }"
           >
             <PhotoCardHub
               :photo="photo"
@@ -491,13 +502,17 @@
         </n-button>
 
         <div class="chat-input-wrap">
-          <n-input
-            v-model:value="inputText"
-            type="textarea"
-            :autosize="{ minRows: 1, maxRows: 4 }"
+          <ChatMentionInput
+            ref="mentionInputRef"
+            v-model="inputText"
+            :attached-photo-ids="contextPhotos.map((p) => p.id)"
+            :photo-limit-reached="contextPhotos.length >= MAX_PHOTOS_TO_CHAT"
+            :reserve-right-px="115"
             placeholder="Type a message..."
-            @keydown="handleKeyDown"
             class="chat-input"
+            @submit="sendMessage"
+            @attach-photo="handleMentionAttachPhoto"
+            @flash-photo="handleFlashPhoto"
           />
           <div
             v-if="chatStore.chatModes.length > 0 || chatStore.isLoadingModes"
@@ -712,6 +727,7 @@ import FloatingActionBar from "@/components/FloatingActionBar.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import ModePopoverSelector from "@/components/ModePopoverSelector.vue";
+import ChatMentionInput from "@/components/ChatMentionInput.vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useChatStore } from "@/stores/chat.js";
 import { useUserStore } from "@/stores/userStore";
@@ -914,6 +930,7 @@ const stopLoadingPhraseCycle = () => {
 };
 const photosDialogVisible = ref(false);
 const contextPhotos = ref<ContextPhoto[]>([]);
+const mentionInputRef = ref<{ focus: () => void } | null>(null);
 const chatMainRef = ref<HTMLElement | null>(null);
 const messagesRef = ref<HTMLElement | null>(null);
 const isMobile = ref(window.innerWidth < 768);
@@ -1262,7 +1279,53 @@ const sendMessage = async () => {
     isSending.value = false;
     stopLoadingPhraseCycle();
     scrollToBottom();
+    mentionInputRef.value?.focus();
   }
+};
+
+// Matches @-mention tokens (collection/series/portfolio) embedded in a sent user message.
+// Name capture is lazy over any character (not just "non-]") so resource names that
+// themselves contain brackets (e.g. "[Pattern] Marketplace Narratives") still match —
+// it stops at the first "]]" it finds rather than the first stray "]".
+const MENTION_TOKEN = /\[\[(collection|series|portfolio):(\d+)\|([\s\S]+?)\]\]/g;
+
+const MENTION_ROUTE_NAME: Record<string, string> = {
+  collection: "collection-detail",
+  series: "series-detail",
+  portfolio: "portfolio-detail",
+};
+
+interface MentionSegment {
+  text: string;
+  mention: boolean;
+  type?: string;
+  id?: number;
+}
+
+/** Splits a user message into plain-text/mention segments for highlighted, clickable rendering. */
+const messageMentionSegments = (content: string): MentionSegment[] => {
+  const segs: MentionSegment[] = [];
+  let lastIndex = 0;
+  MENTION_TOKEN.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = MENTION_TOKEN.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      segs.push({ text: content.slice(lastIndex, match.index), mention: false });
+    }
+    segs.push({ text: match[3], mention: true, type: match[1], id: Number(match[2]) });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < content.length) {
+    segs.push({ text: content.slice(lastIndex), mention: false });
+  }
+  return segs;
+};
+
+const navigateToMention = (seg: MentionSegment) => {
+  if (!seg.type || seg.id == null) return;
+  const routeName = MENTION_ROUTE_NAME[seg.type];
+  if (!routeName) return;
+  router.push({ name: routeName, params: { id: seg.id } });
 };
 
 const PHOTO_TOKEN = /\[\[photo:(\d+)\|([^\]]+)\]\]/g;
@@ -1394,12 +1457,24 @@ const handleSubQueryClick = (sq: SubQuery) => {
   }
 };
 
-const handleKeyDown = (e: KeyboardEvent) => {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
-};
+// Builds a ContextPhoto display entry from a photosStore photo — shared by every
+// path that can attach a photo to the chat (dialog picker, floating action bar, @-mentions).
+const buildContextPhotoEntry = (photo: any): ContextPhoto => ({
+  id: String(photo.id),
+  title: photo.title || photo.name || "Photo",
+  name: photo.name || photo.title || "Photo",
+  url: photo.url,
+  thumbnailUrl: photo.thumbnailUrl || photo.url,
+  originalUrl: photo.originalUrl,
+  rating: photo.rating ?? 0,
+  isUploading: false,
+  file: null,
+  needProcess: false,
+  isDuplicate: false,
+  originalFileName: photo.originalFileName || photo.name || photo.title || "photo",
+  isCheckingDuplicates: false,
+  status: "processed",
+});
 
 // Context photos management — PhotosDialog emits an array of photo IDs
 const onPhotosSelected = (photoIds: string[]) => {
@@ -1424,23 +1499,7 @@ const onPhotosSelected = (photoIds: string[]) => {
     const photo = photosStore.photos.find((p: any) => p.id === id);
     if (!photo) continue;
 
-    newPhotos.push({
-      id: photo.id,
-      title: photo.title || photo.name || "Photo",
-      name: photo.name || photo.title || "Photo",
-      url: photo.url,
-      thumbnailUrl: photo.thumbnailUrl || photo.url,
-      originalUrl: photo.originalUrl,
-      rating: photo.rating ?? 0,
-      isUploading: false,
-      file: null,
-      needProcess: false,
-      isDuplicate: false,
-      originalFileName:
-        photo.originalFileName || photo.name || photo.title || "photo",
-      isCheckingDuplicates: false,
-      status: "processed",
-    });
+    newPhotos.push(buildContextPhotoEntry(photo));
     existingIds.add(id);
   }
 
@@ -1472,23 +1531,7 @@ const getPhotosForMessage = (photoIds: number[]): ContextPhoto[] => {
         (p: any) => String(p.id) === String(id),
       );
       if (!photo) return null;
-      return {
-        id: String(photo.id),
-        title: photo.title || photo.name || "Photo",
-        name: photo.name || photo.title || "Photo",
-        url: photo.url,
-        thumbnailUrl: photo.thumbnailUrl || photo.url,
-        originalUrl: photo.originalUrl,
-        rating: photo.rating ?? 0,
-        isUploading: false,
-        file: null,
-        needProcess: false,
-        isDuplicate: false,
-        originalFileName:
-          photo.originalFileName || photo.name || photo.title || "photo",
-        isCheckingDuplicates: false,
-        status: "processed",
-      } as ContextPhoto;
+      return buildContextPhotoEntry(photo);
     })
     .filter(Boolean) as ContextPhoto[];
 };
@@ -1581,23 +1624,7 @@ const handleAttachToChat = () => {
     const photo = photosStore.photos.find((p: any) => String(p.id) === strId);
     if (!photo) continue;
 
-    newPhotos.push({
-      id: strId,
-      title: photo.title || photo.name || "Photo",
-      name: photo.name || photo.title || "Photo",
-      url: photo.url,
-      thumbnailUrl: photo.thumbnailUrl || photo.url,
-      originalUrl: photo.originalUrl,
-      rating: photo.rating ?? 0,
-      isUploading: false,
-      file: null,
-      needProcess: false,
-      isDuplicate: false,
-      originalFileName:
-        photo.originalFileName || photo.name || photo.title || "photo",
-      isCheckingDuplicates: false,
-      status: "processed",
-    });
+    newPhotos.push(buildContextPhotoEntry(photo));
     existingIds.add(strId);
   }
 
@@ -1616,6 +1643,33 @@ const handleAttachToChat = () => {
       );
     }
   }
+};
+
+// Called when a photo is selected from the @-mention dropdown inside the composer.
+const handleMentionAttachPhoto = async (result: { id: string | number }) => {
+  const strId = String(result.id);
+  if (contextPhotos.value.some((p) => p.id === strId)) return; // already attached — dropdown already routes this to flash-photo
+  if (contextPhotos.value.length >= MAX_PHOTOS_TO_CHAT) {
+    message.warning(`Can't add more photos. ${MAX_PHOTOS_TO_CHAT} photo limit reached.`);
+    return;
+  }
+  const photo =
+    photosStore.photos.find((p: any) => String(p.id) === strId) ||
+    (await photosStore.fetchPhoto(result.id));
+  if (!photo) return;
+  contextPhotos.value.push(buildContextPhotoEntry(photo));
+};
+
+// Briefly pulses an already-attached photo's card in primary when re-mentioned via @.
+const flashingPhotoIds = ref<Set<string>>(new Set());
+const handleFlashPhoto = (photoId: string | number) => {
+  const id = String(photoId);
+  flashingPhotoIds.value = new Set(flashingPhotoIds.value).add(id);
+  setTimeout(() => {
+    const next = new Set(flashingPhotoIds.value);
+    next.delete(id);
+    flashingPhotoIds.value = next;
+  }, 900);
 };
 
 const showPhotoInfo = async (
@@ -1971,6 +2025,41 @@ const formatRelativeDate = (dateStr: string) => {
   width: 120px;
   height: 120px;
   border-radius: 12px;
+}
+
+.context-photo-wrapper.flash-highlight {
+  animation: contextPhotoFlash 0.9s ease;
+}
+
+@keyframes contextPhotoFlash {
+  0% {
+    box-shadow: 0 0 0 3px var(--primary-color);
+  }
+  70% {
+    box-shadow: 0 0 0 3px var(--primary-color);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.mention-chip-sent {
+  color: var(--primary-color);
+  background: var(--primary-15);
+  border-radius: 3px;
+  padding: 0 2px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.mention-chip-sent:hover {
+  background: color-mix(in srgb, var(--primary-color) 20%, transparent);
+  text-decoration-style: solid;
 }
 
 .remove-photo-btn {
@@ -2516,14 +2605,11 @@ const formatRelativeDate = (dateStr: string) => {
   width: 100%;
 }
 
-.chat-input-wrap .chat-input :deep(textarea) {
-  padding-right: 100px !important;
-}
-
 .chat-mode-selector {
   position: absolute;
-  bottom: 6px;
-  right: 8px;
+  top: 50%;
+  right: 18px;
+  transform: translateY(-50%);
   z-index: 1;
 }
 

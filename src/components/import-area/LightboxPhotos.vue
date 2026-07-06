@@ -7,7 +7,10 @@
 
     <LightroomModal v-model="showLightroomModal" />
 
-    <SafeSearchViolationModal v-model:show="showSafeSearchViolationModal" />
+    <SafeSearchViolationModal
+      v-model:show="showSafeSearchViolationModal"
+      :deactivated="safeSearchUserDeactivated"
+    />
 
     <!-- Source Warning Modal -->
     <n-modal
@@ -439,6 +442,7 @@ const {
   handleUploadFlow,
   validateUploadLimits,
   showSafeSearchViolationModal,
+  safeSearchUserDeactivated,
 } = usePhotoUpload();
 
 // Variables locales del componente

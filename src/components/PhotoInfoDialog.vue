@@ -265,6 +265,7 @@ import { useActivityLogger } from "@/composables/useActivityLogger";
 import { useUserStore } from "@/stores/userStore.ts";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useSeriesStore } from "@/stores/series.js";
+import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds.js";
 import { usePhotosStore } from "@/stores/photos.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 
@@ -309,6 +310,7 @@ const { logActivity } = useActivityLogger();
 const userStore = useUserStore();
 const collectionsStore = useCollectionsStore();
 const seriesStore = useSeriesStore();
+const portfolioBuildsStore = usePortfolioBuildsStore();
 const photosStore = usePhotosStore();
 const {
   takeToTool,
@@ -451,10 +453,10 @@ const photoCounter = computed(() => {
   return `${props.currentPhotoIndex + 1} / ${props.allPhotos.length}`;
 });
 
-// Computed: collections and series that contain this photo
+// Computed: collections, series and portfolios that contain this photo
 const photoLibrary = computed(() => {
   const photoId = props.selectedPhoto?.id;
-  if (!photoId) return { collections: [], series: [] };
+  if (!photoId) return { collections: [], series: [], portfolios: [] };
 
   const collections = collectionsStore.allCollections
     .filter((c) => c.photos?.some((p) => String(p.id) === String(photoId)))
@@ -464,7 +466,11 @@ const photoLibrary = computed(() => {
     .filter((s) => s.photos?.some((p) => String(p.id) === String(photoId)))
     .map((s) => ({ id: s.id, name: s.name || s.title }));
 
-  return { collections, series };
+  const portfolios = portfolioBuildsStore.allBuilds
+    .filter((b) => b.photoItems?.some((p) => String(p.id) === String(photoId)))
+    .map((b) => ({ id: b.id, name: b.config?.name || `Portfolio #${b.id}` }));
+
+  return { collections, series, portfolios };
 });
 
 // Generic photo credit info for any user

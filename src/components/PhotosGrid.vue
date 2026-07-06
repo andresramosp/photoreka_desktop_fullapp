@@ -123,8 +123,8 @@
           </template>
         </div>
 
-        <!-- Extra controls slot (hidden during duplicate review to avoid layout overflow) -->
-        <slot v-if="!duplicatesReviewed" name="row1-extra" />
+        <!-- Extra controls slot (hidden only when duplicates were found and are being reviewed, to avoid layout overflow) -->
+        <slot v-if="!duplicatesReviewed || !hasDuplicates" name="row1-extra" />
       </div>
 
       <!-- Row 2: Columns + Sort (Desktop) -->
