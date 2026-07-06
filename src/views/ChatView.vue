@@ -426,9 +426,12 @@
             <AppLogo layout="icon" :height="42" />
           </div>
           <div class="message-bubble typing-bubble">
-            <div class="typing-dots">
-              <span></span><span></span><span></span>
-            </div>
+            <SpiralGridLoader variant="primary" :size="20" :duration="1300" />
+            <transition name="phrase-fade" mode="out-in">
+              <span :key="loadingPhraseIndex" class="typing-phrase">{{
+                loadingPhrases[loadingPhraseIndex]
+              }}</span>
+            </transition>
           </div>
         </div>
       </div>
@@ -743,6 +746,7 @@ import {
 } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
 import { PlusCircleFilled, RobotOutlined } from "@vicons/antd";
+import { loadingPhrases } from "@/utils/chatLoadingPhrases";
 
 defineOptions({ name: "ChatView" });
 
@@ -882,6 +886,32 @@ const isDeletingPhotos = ref(false);
 const inputText = ref("");
 const isTyping = ref(false);
 const isSending = ref(false);
+const loadingPhraseIndex = ref(0);
+let loadingPhraseTimer: ReturnType<typeof setTimeout> | null = null;
+
+// Randomized delay so the rotation doesn't feel mechanical/looping.
+// Wide spread (0.9s–3.3s) so the variability is actually perceptible.
+const nextLoadingPhraseDelay = () => 1200 + Math.random() * 3500;
+
+const scheduleNextLoadingPhrase = () => {
+  loadingPhraseTimer = setTimeout(() => {
+    loadingPhraseIndex.value =
+      (loadingPhraseIndex.value + 1) % loadingPhrases.length;
+    scheduleNextLoadingPhrase();
+  }, nextLoadingPhraseDelay());
+};
+
+const startLoadingPhraseCycle = () => {
+  loadingPhraseIndex.value = Math.floor(Math.random() * loadingPhrases.length);
+  scheduleNextLoadingPhrase();
+};
+
+const stopLoadingPhraseCycle = () => {
+  if (loadingPhraseTimer) {
+    clearTimeout(loadingPhraseTimer);
+    loadingPhraseTimer = null;
+  }
+};
 const photosDialogVisible = ref(false);
 const contextPhotos = ref<ContextPhoto[]>([]);
 const chatMainRef = ref<HTMLElement | null>(null);
@@ -1171,6 +1201,7 @@ onActivated(() => {
 
 onUnmounted(() => {
   window.removeEventListener("resize", checkMobile);
+  stopLoadingPhraseCycle();
 });
 
 const formatTime = (date: Date) => {
@@ -1199,7 +1230,9 @@ const sendMessage = async () => {
 
   isTyping.value = true;
   isSending.value = true;
+  startLoadingPhraseCycle();
   scrollToBottom();
+  const requestStartedAt = performance.now();
 
   try {
     await chatStore.sendMessage(text, contextPhotoIds, attachedPhotos);
@@ -1216,8 +1249,18 @@ const sendMessage = async () => {
       "Something went wrong. Please try again.";
     chatStore.addErrorMessage(errMsg);
   } finally {
+    // Guarantee the loader stays up long enough to actually see a couple of
+    // phrases rotate, even when the backend answers almost instantly.
+    const MIN_TYPING_MS = 2600;
+    const elapsed = performance.now() - requestStartedAt;
+    if (elapsed < MIN_TYPING_MS) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, MIN_TYPING_MS - elapsed),
+      );
+    }
     isTyping.value = false;
     isSending.value = false;
+    stopLoadingPhraseCycle();
     scrollToBottom();
   }
 };
@@ -2404,6 +2447,16 @@ const formatRelativeDate = (dateStr: string) => {
 
   line-height: var(--line-height-relaxed);
   word-break: break-word;
+  animation: messageTextFadeIn 0.45s ease;
+}
+
+@keyframes messageTextFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .message-user .message-time {
@@ -2412,42 +2465,25 @@ const formatRelativeDate = (dateStr: string) => {
 
 /* ── Typing Indicator ── */
 .typing-bubble {
-  padding: var(--spacing-md) var(--spacing-lg);
-}
-
-.typing-dots {
+  padding: var(--spacing-sm) var(--spacing-lg);
   display: flex;
-  gap: 4px;
   align-items: center;
+  gap: var(--spacing-md);
 }
 
-.typing-dots span {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-round);
-  background: var(--text-tertiary);
-  animation: typingBounce 1.4s infinite ease-in-out;
+.typing-phrase {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
 }
 
-.typing-dots span:nth-child(2) {
-  animation-delay: 0.2s;
+.phrase-fade-enter-active,
+.phrase-fade-leave-active {
+  transition: opacity 0.3s ease;
 }
-
-.typing-dots span:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-@keyframes typingBounce {
-  0%,
-  80%,
-  100% {
-    transform: scale(0.6);
-    opacity: 0.4;
-  }
-  40% {
-    transform: scale(1);
-    opacity: 1;
-  }
+.phrase-fade-enter-from,
+.phrase-fade-leave-to {
+  opacity: 0;
 }
 
 /* ── Input Area ── */
