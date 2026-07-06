@@ -5,13 +5,23 @@
 // 2. Si falla por protección de fingerprinting, usa step-down nativo de alta calidad
 // 3. Maneja automáticamente la compresión para controlar el tamaño de archivo
 //
-// NOTE: pica is intentionally created WITHOUT 'ww' (WebWorkers) and 'cib' (createImageBitmap).
-// Chromium 131+ (Nov 2024) introduced a bug where createImageBitmap no longer respects
-// EXIF Orientation when tiling inside WebWorkers, producing a scrambled puzzle artifact.
-// Confirmed fix: https://github.com/nodeca/pica/issues/217
-// Using only ['js', 'wasm'] keeps WASM acceleration while avoiding the buggy code path.
+// NOTE on the Chromium tile-scrambling bug (nodeca/pica#217):
+// Excluding the 'cib' feature only disables pica's whole-image
+// createImageBitmap() resize path. It does NOT disable pica's separate,
+// unconditional use of createImageBitmap(img, x, y, w, h) to extract each
+// tile when resizing an <img> with WebWorkers ('ww') + OffscreenCanvas
+// (see __extractTileData in pica/index.js). That per-tile crop is exactly
+// where Chromium 131+ mis-applies EXIF Orientation, producing the scrambled
+// "puzzle" artifact — and only for images that actually carry a non-default
+// Orientation tag (i.e. vertical mobile photos), regardless of OS/device.
+// Fix: when the source file has a rotation-needing Orientation tag, we
+// pre-draw it onto a canvas (see toPicaSafeSource below) before handing it
+// to pica. Canvases are read via getImageData instead of createImageBitmap,
+// which sidesteps the bug entirely. Images without a rotation tag (the vast
+// majority) keep going through the original <img> path unchanged.
 import { ref } from "vue";
 import pica from "pica";
+import exifr from "exifr";
 import {
   UPLOAD_MIME,
   UPLOAD_QUALITY_INITIAL,
@@ -35,12 +45,29 @@ function probeWebpEncoding() {
 }
 
 export function useImageProcessing() {
-  // Exclude 'cib' (createImageBitmap) to avoid the Chromium 131+ tile-scrambling bug.
-  // The bug is triggered by cib + WebWorkers: Chrome 131+ no longer respects EXIF Orientation
-  // in createImageBitmap when used inside workers, causing a tiled/puzzle artifact.
-  // Removing only 'cib' fixes all platforms while keeping 'ww' (WebWorker parallelism) intact.
-  // Confirmed root cause: https://github.com/nodeca/pica/issues/217
+  // Exclude 'cib' (createImageBitmap) to avoid pica's whole-image resize-via-cib
+  // path (see NOTE above for why this alone doesn't fix the tile-scrambling bug).
   const picaInstance = pica({ features: ["js", "wasm", "ww"] });
+
+  // Solo las imágenes con un tag de Orientation que implique rotación (2-8)
+  // disparan el bug de recorte por tile de Chromium. Si no hay tag o es 1
+  // (normal), devolvemos la <img> tal cual y pica sigue su camino habitual.
+  async function toPicaSafeSource(file, img) {
+    let orientation;
+    try {
+      orientation = await exifr.orientation(file);
+    } catch {
+      orientation = undefined;
+    }
+
+    if (!orientation || orientation === 1) return img;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    canvas.getContext("2d").drawImage(img, 0, 0);
+    return canvas;
+  }
 
   async function resizeImage(file, targetWidth, maxSizeBytes = 512000) {
     try {
@@ -72,7 +99,8 @@ export function useImageProcessing() {
     canvas.width = targetWidth;
     canvas.height = img.height * scale;
 
-    await picaInstance.resize(img, canvas);
+    const resizeSource = await toPicaSafeSource(file, img);
+    await picaInstance.resize(resizeSource, canvas);
 
     // Si maxSizeBytes es null, usar calidad fija como antes
     if (!maxSizeBytes) {
