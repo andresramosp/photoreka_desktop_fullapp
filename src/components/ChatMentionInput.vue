@@ -32,7 +32,7 @@
       class="mention-text-metrics mention-textarea"
       :style="reservedPaddingStyle"
       :value="rawText"
-      :placeholder="placeholder"
+      :placeholder="effectivePlaceholder"
       rows="1"
       @input="onInput"
       @keydown="onKeydown"
@@ -301,6 +301,12 @@ const mirrorRef = ref<HTMLElement | null>(null);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 
 const endsWithNewline = computed(() => rawText.value.endsWith("\n"));
+
+const effectivePlaceholder = computed(
+  () =>
+    props.placeholder?.trim() ||
+    "Type @ to mention collections, series, portfolios, or photos...",
+);
 
 const reservedPaddingStyle = computed(() => ({
   paddingRight: `${props.reserveRightPx || 14}px`,
@@ -699,7 +705,9 @@ function selectSuggestion(item: SearchResult) {
     const newText = `${before}${insertText}${after}`;
     const delta = insertText.length - (caret - start);
     mentions.value = mentions.value.map((m) =>
-      m.start >= caret ? { ...m, start: m.start + delta, end: m.end + delta } : m,
+      m.start >= caret
+        ? { ...m, start: m.start + delta, end: m.end + delta }
+        : m,
     );
     rawText.value = newText;
     prevValue = newText;
@@ -807,7 +815,7 @@ defineExpose({
   border-radius: 0;
   border: 1px solid var(--border-color);
   resize: none;
-  overflow-y: auto;
+  overflow-y: hidden;
   outline: none;
   transition: border-color 0.15s ease;
 }

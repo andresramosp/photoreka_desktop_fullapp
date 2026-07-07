@@ -313,14 +313,17 @@
               </div>
               <p class="message-text">
                 <template
-                  v-for="(seg, segIdx) in messageMentionSegments(message.content)"
+                  v-for="(seg, segIdx) in messageMentionSegments(
+                    message.content,
+                  )"
                   :key="segIdx"
-                ><span
-                  v-if="seg.mention"
-                  class="mention-chip-sent"
-                  @click="navigateToMention(seg)"
-                  >{{ seg.text }}</span
-                ><template v-else>{{ seg.text }}</template></template>
+                  ><span
+                    v-if="seg.mention"
+                    class="mention-chip-sent"
+                    @click="navigateToMention(seg)"
+                    >{{ seg.text }}</span
+                  ><template v-else>{{ seg.text }}</template></template
+                >
               </p>
             </template>
             <!-- eslint-disable-next-line vue/no-v-html -->
@@ -456,7 +459,9 @@
             v-for="photo in contextPhotos"
             :key="photo.id"
             class="context-photo-wrapper"
-            :class="{ 'flash-highlight': flashingPhotoIds.has(String(photo.id)) }"
+            :class="{
+              'flash-highlight': flashingPhotoIds.has(String(photo.id)),
+            }"
           >
             <PhotoCardHub
               :photo="photo"
@@ -508,7 +513,7 @@
             :attached-photo-ids="contextPhotos.map((p) => p.id)"
             :photo-limit-reached="contextPhotos.length >= MAX_PHOTOS_TO_CHAT"
             :reserve-right-px="115"
-            placeholder="Type a message..."
+            placeholder="Type a message... Use @ to mention collections, series, portfolios, or photos"
             class="chat-input"
             @submit="sendMessage"
             @attach-photo="handleMentionAttachPhoto"
@@ -1287,7 +1292,8 @@ const sendMessage = async () => {
 // Name capture is lazy over any character (not just "non-]") so resource names that
 // themselves contain brackets (e.g. "[Pattern] Marketplace Narratives") still match —
 // it stops at the first "]]" it finds rather than the first stray "]".
-const MENTION_TOKEN = /\[\[(collection|series|portfolio):(\d+)\|([\s\S]+?)\]\]/g;
+const MENTION_TOKEN =
+  /\[\[(collection|series|portfolio):(\d+)\|([\s\S]+?)\]\]/g;
 
 const MENTION_ROUTE_NAME: Record<string, string> = {
   collection: "collection-detail",
@@ -1310,9 +1316,17 @@ const messageMentionSegments = (content: string): MentionSegment[] => {
   let match: RegExpExecArray | null;
   while ((match = MENTION_TOKEN.exec(content)) !== null) {
     if (match.index > lastIndex) {
-      segs.push({ text: content.slice(lastIndex, match.index), mention: false });
+      segs.push({
+        text: content.slice(lastIndex, match.index),
+        mention: false,
+      });
     }
-    segs.push({ text: match[3], mention: true, type: match[1], id: Number(match[2]) });
+    segs.push({
+      text: match[3],
+      mention: true,
+      type: match[1],
+      id: Number(match[2]),
+    });
     lastIndex = match.index + match[0].length;
   }
   if (lastIndex < content.length) {
@@ -1471,7 +1485,8 @@ const buildContextPhotoEntry = (photo: any): ContextPhoto => ({
   file: null,
   needProcess: false,
   isDuplicate: false,
-  originalFileName: photo.originalFileName || photo.name || photo.title || "photo",
+  originalFileName:
+    photo.originalFileName || photo.name || photo.title || "photo",
   isCheckingDuplicates: false,
   status: "processed",
 });
@@ -1650,7 +1665,9 @@ const handleMentionAttachPhoto = async (result: { id: string | number }) => {
   const strId = String(result.id);
   if (contextPhotos.value.some((p) => p.id === strId)) return; // already attached — dropdown already routes this to flash-photo
   if (contextPhotos.value.length >= MAX_PHOTOS_TO_CHAT) {
-    message.warning(`Can't add more photos. ${MAX_PHOTOS_TO_CHAT} photo limit reached.`);
+    message.warning(
+      `Can't add more photos. ${MAX_PHOTOS_TO_CHAT} photo limit reached.`,
+    );
     return;
   }
   const photo =
@@ -2590,7 +2607,7 @@ const formatRelativeDate = (dateStr: string) => {
 
 .chat-input-row {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: var(--spacing-sm);
 }
 
@@ -2608,13 +2625,14 @@ const formatRelativeDate = (dateStr: string) => {
 .chat-mode-selector {
   position: absolute;
   top: 50%;
-  right: 18px;
+  right: 10px;
   transform: translateY(-50%);
   z-index: 1;
 }
 
 .attach-btn {
   flex-shrink: 0;
+  align-self: center;
   color: var(--text-tertiary) !important;
 }
 
@@ -2624,6 +2642,7 @@ const formatRelativeDate = (dateStr: string) => {
 
 .send-button {
   flex-shrink: 0;
+  align-self: center;
 }
 
 /* ── Responsive ── */
