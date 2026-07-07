@@ -179,7 +179,7 @@
               </svg>
             </n-icon>
           </template>
-          {{ shouldShowTryAdaptive ? "Try Adaptive" : "Load More Photos" }}
+          {{ shouldShowTryAdaptive ? "Try Broad Mode" : "Load More Photos" }}
         </n-button>
       </div>
     </div>
@@ -263,7 +263,7 @@
                   </svg>
                 </n-icon>
               </template>
-              {{ shouldShowTryAdaptive ? "Try Adaptive" : "Load More Photos" }}
+              {{ shouldShowTryAdaptive ? "Try Broad Mode" : "Load More Photos" }}
             </n-button>
           </div>
         </div>

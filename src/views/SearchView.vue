@@ -699,8 +699,8 @@ async function handleBeAdaptiveClick() {
   isBeAdaptiveLoading.value = true;
 
   try {
-    // Cambiar a modo adaptive
-    searchStore.setSearchMode("adaptive");
+    // Cambiar a modo broad
+    searchStore.setSearchMode("broad");
 
     // Resetear la búsqueda y ejecutar desde 0
     clearSelection();
@@ -710,7 +710,7 @@ async function handleBeAdaptiveClick() {
     await searchPhotos();
     searchStore.setSearching(false);
   } catch (error) {
-    console.error("Error al cambiar a modo adaptive:", error);
+    console.error("Error al cambiar a modo broad:", error);
     searchStore.setSearching(false);
   } finally {
     isBeAdaptiveLoading.value = false;
