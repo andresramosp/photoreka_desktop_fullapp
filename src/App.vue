@@ -219,6 +219,7 @@ import {
   keepAliveComponents,
   getKeepAliveComponent,
 } from "@/composables/useRouteTabs";
+import { useScrollRestoration } from "@/composables/useScrollRestoration";
 
 const { ensureWarmUp } = useWarmUp();
 
@@ -361,6 +362,10 @@ const getRouteViewKey = (currentRoute) => {
   }
   return String(currentRoute.name || currentRoute.fullPath);
 };
+
+// Preserve per-view scroll position across <KeepAlive> deactivation, keyed by
+// the same view key used for KeepAlive caching. See the composable for the why.
+useScrollRestoration(getRouteViewKey);
 
 const mobileMenuOpen = ref(false);
 const isMobile = ref(false);
