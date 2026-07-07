@@ -10,7 +10,7 @@
           <n-icon size="20" color="var(--primary-color)">
             <LayersOutline />
           </n-icon>
-          <span>Expand your catalog</span>
+          <span>Expand your photo analysis quota</span>
         </div>
       </template>
       <template #header-extra>
@@ -22,7 +22,7 @@
       </template>
 
       <p class="ppm-subtitle">
-        Add photos to your library quota. One-time purchase — photos and bonus
+        Add photos to your analysis quota. One-time purchase — photos and bonus
         credits are added to your account instantly and never expire.
       </p>
 

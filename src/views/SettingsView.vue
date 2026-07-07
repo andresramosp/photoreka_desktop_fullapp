@@ -145,10 +145,10 @@
             <div class="storage-usage-container">
               <div class="storage-header">
                 <div class="storage-title-row">
-                  <n-icon size="20" color="var(--primary-color)">
+                  <n-icon size="18" color="var(--primary-color)">
                     <LayersOutline />
                   </n-icon>
-                  <span class="storage-title">Analyzed Photos</span>
+                  <span class="storage-title">Photo Analysis Quota</span>
                   <n-tooltip trigger="hover" placement="top">
                     <template #trigger>
                       <n-icon
@@ -159,8 +159,9 @@
                         <InfoCircleFilled />
                       </n-icon>
                     </template>
-                    Total number of photos that have been analyzed by Photoreka
-                    since your account was created.
+                    Your usage of photo analysis slots, which are consumed when
+                    you upload and analyze new photos. Each analyzed photo
+                    occupies one slot permanently.
                   </n-tooltip>
                 </div>
                 <span class="storage-count"
@@ -205,10 +206,10 @@
             <div class="storage-usage-container">
               <div class="storage-header">
                 <div class="storage-title-row">
-                  <n-icon size="20" color="var(--accent-color)">
-                    <SparklesOutline />
+                  <n-icon size="18" color="var(--primary-color)">
+                    <ConstructOutline />
                   </n-icon>
-                  <span class="storage-title">Consumed Credits</span>
+                  <span class="storage-title">Tools Credits</span>
                   <n-tooltip trigger="hover" placement="top">
                     <template #trigger>
                       <n-icon
@@ -517,8 +518,8 @@
       <div class="chatlab-info-body">
         <p>
           Photoreka uses <strong>two separate systems</strong> to meter usage:
-          <strong>Analyzed Photo slots</strong> for AI processing of new photos,
-          and <strong>AI Credits</strong> for on-demand intelligent features
+          <strong>Photo Analysis Quota</strong> for AI processing of new photos,
+          and <strong>Tools Credits</strong> for on-demand intelligent features
           once photos are already in your catalog.
         </p>
 
@@ -531,7 +532,7 @@
           >
             <ImagesOutline />
           </n-icon>
-          Analyzed Photos (photo slots)
+          Photo Analysis Quota
         </h4>
         <p>
           Each time you upload a new photo and run AI analysis on it, it
@@ -540,7 +541,7 @@
           embeddings, artistic scores, EXIF extraction, and object detections.
         </p>
         <ul>
-          <li>Does <strong>not</strong> consume AI credits.</li>
+          <li>Does <strong>not</strong> consume Tools Credits.</li>
           <li>
             Slots do not replenish — they expand when you purchase a Photo
             Analysis Package.
@@ -560,7 +561,7 @@
           >
             <FlashOutline />
           </n-icon>
-          AI Credits — cost breakdown by tool
+          Tools Credits — cost breakdown by tool
         </h4>
         <p>
           Credits are consumed by AI-powered operations on already-processed
@@ -714,21 +715,21 @@
           <n-icon :size="14" class="chatlab-h4-icon chatlab-h4-icon--can">
             <CheckmarkCircleOutline />
           </n-icon>
-          Getting more photo slots or credits
+          Getting more photo quota or credits
         </h4>
         <ul>
           <li>
-            <strong>Photo Analysis Packages</strong> expand your analyzed photo
-            limit (slots do not expire). Some packages include bonus credits.
+            <strong>Photo Analysis Packages</strong> expand your photo analysis
+            quota (slots do not expire). Some packages include bonus credits.
           </li>
           <li>
-            <strong>Credit Packages</strong> top up your AI credit balance
+            <strong>Credit Packages</strong> top up your Tools Credit balance
             (credits do not expire).
           </li>
           <li>
             Inviting a friend who creates an account earns you
-            <strong>200 photo slots</strong> and
-            <strong>500 bonus credits</strong>.
+            <strong>200 photo analysis slots</strong> and
+            <strong>500 tools credits</strong>.
           </li>
         </ul>
 
@@ -1080,6 +1081,7 @@ import {
   MailOutline,
   SendOutline,
   StarOutline,
+  ConstructOutline,
   TrashOutline,
   WarningOutline,
   CloseOutline,

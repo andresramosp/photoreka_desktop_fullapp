@@ -36,6 +36,82 @@
     </n-modal>
 
     <n-modal
+      v-model:show="showAnalysisQuotaWarningModal"
+      :style="{ width: '550px', maxWidth: '95vw' }"
+      @update:show="handleAnalysisQuotaModalUpdate"
+    >
+      <n-card
+        :bordered="false"
+        role="dialog"
+        aria-modal="true"
+        class="analyze-quota-warning-card"
+      >
+        <template #header>
+          <div class="analyze-quota-warning-header">
+            <n-icon size="20" color="var(--warning-color)">
+              <InformationCircleOutline />
+            </n-icon>
+            <span>Analysis Quota Notice</span>
+          </div>
+        </template>
+        <template #header-extra>
+          <n-button text @click="cancelAnalysisQuotaWarning" aria-label="Close">
+            <n-icon size="18" color="var(--text-secondary)">
+              <CloseOutline />
+            </n-icon>
+          </n-button>
+        </template>
+
+        <div class="analyze-quota-warning-body">
+          <p class="analyze-quota-warning-description">
+            <!-- You're about to import
+            <strong
+              >{{ analysisQuotaWarningContext.attemptedCount }} image{{
+                analysisQuotaWarningContext.attemptedCount !== 1 ? "s" : ""
+              }}</strong
+            >. After this import, you'll have -->
+            After this import, you'll have
+            <strong
+              >{{ analysisQuotaWarningContext.projectedPendingCount }} images in
+              Lightbox</strong
+            >, but your current analysis quota only covers
+            <strong
+              >{{ analysisQuotaWarningContext.remaining }} image{{
+                analysisQuotaWarningContext.remaining !== 1 ? "s" : ""
+              }}</strong
+            >.
+          </p>
+          <p class="analyze-quota-warning-description">
+            You can continue with the import to
+            <strong>check duplicates</strong> and prepare future batches, or you
+            can go to Settings to <strong>upgrade your plan</strong> and
+            increase your analysis quota.
+          </p>
+
+          <div class="analyze-quota-warning-dismiss">
+            <n-checkbox v-model:checked="dontShowAnalysisQuotaWarningAgain">
+              Don't show this again
+            </n-checkbox>
+          </div>
+        </div>
+
+        <template #footer>
+          <div class="analyze-quota-warning-footer">
+            <n-button tertiary @click="goToSettingsFromQuotaWarning"
+              >Go to Settings</n-button
+            >
+            <div class="analyze-quota-warning-footer-actions">
+              <n-button @click="cancelAnalysisQuotaWarning">Cancel</n-button>
+              <n-button type="primary" @click="confirmAnalysisQuotaWarning"
+                >Import anyway</n-button
+              >
+            </div>
+          </div>
+        </template>
+      </n-card>
+    </n-modal>
+
+    <n-modal
       v-model:show="showAnalyzeDialog"
       :style="{ width: '500px', maxWidth: '95vw' }"
     >
@@ -390,8 +466,6 @@ import {
 } from "@vicons/ionicons5";
 import { RocketLaunchOutlined } from "@vicons/material";
 import { BookInformation20Regular } from "@vicons/fluent";
-import pLimit from "p-limit";
-import pica from "pica";
 import googlePhotosIconUrl from "@/assets/logos/google_photos.png";
 import dropboxIconUrl from "@/assets/logos/dropbox.svg";
 import lightroomIconUrl from "@/assets/logos/lightroom_logo.png";
@@ -430,8 +504,6 @@ const googlePhotos = useGooglePhotos();
 // Dropbox composable
 const dropbox = useDropbox();
 const { isMobile } = useIsMobile();
-const picaInstance = pica();
-const limit = pLimit(10);
 
 // Composables
 const {
@@ -453,6 +525,18 @@ const isDragOver = ref(false);
 const showLightroomModal = ref(false);
 const showSourceWarningModal = ref(false);
 const pendingSourceAction = ref(null);
+const showAnalysisQuotaWarningModal = ref(false);
+const dontShowAnalysisQuotaWarningAgain = ref(false);
+const pendingQuotaWarningResolver = ref(null);
+const analysisQuotaWarningContext = ref({
+  attemptedCount: 0,
+  projectedPendingCount: 0,
+  overQuotaCount: 0,
+  remaining: 0,
+});
+
+const ANALYSIS_QUOTA_WARNING_DISMISS_KEY =
+  "import_analysis_quota_warning_dismissed";
 
 // Variable para controlar si ya se activó el warm-up al 75%
 const warmUpTriggeredAt75 = ref(false);
@@ -825,6 +909,9 @@ const handleDrop = async (event) => {
     return;
   }
 
+  const canContinue = await maybeShowAnalysisQuotaWarning(files.length);
+  if (!canContinue) return;
+
   try {
     await handleUploadFlow(files, "local");
   } catch (error) {
@@ -841,6 +928,14 @@ async function uploadLocalFiles(event) {
   if (!validation.isValid) {
     message.error(validation.message);
     event.target.value = ""; // Clear the input
+    return;
+  }
+
+  const canContinue = await maybeShowAnalysisQuotaWarning(
+    selectedLocalFiles.length,
+  );
+  if (!canContinue) {
+    event.target.value = "";
     return;
   }
 
@@ -881,6 +976,13 @@ async function importFromGooglePhotos() {
     const finalValidation = validateUploadLimits(successfulDownloads.length);
     if (!finalValidation.isValid) {
       message.error(finalValidation.message);
+      return;
+    }
+
+    const canContinue = await maybeShowAnalysisQuotaWarning(
+      successfulDownloads.length,
+    );
+    if (!canContinue) {
       return;
     }
 
@@ -925,6 +1027,13 @@ async function importFromDropbox() {
     const finalValidation = validateUploadLimits(successfulDownloads.length);
     if (!finalValidation.isValid) {
       message.error(finalValidation.message);
+      return;
+    }
+
+    const canContinue = await maybeShowAnalysisQuotaWarning(
+      successfulDownloads.length,
+    );
+    if (!canContinue) {
       return;
     }
 
@@ -983,6 +1092,81 @@ const confirmSourceWarning = () => {
 const cancelSourceWarning = () => {
   showSourceWarningModal.value = false;
   pendingSourceAction.value = null;
+};
+
+const isAnalysisQuotaWarningDismissed = () => {
+  return localStorage.getItem(ANALYSIS_QUOTA_WARNING_DISMISS_KEY) === "true";
+};
+
+const maybeShowAnalysisQuotaWarning = async (attemptedCount) => {
+  const remaining = userStore.user?.usage?.analyzedPhotosRemaining;
+
+  if (typeof remaining !== "number") {
+    return true;
+  }
+
+  const normalizedRemaining = Math.max(0, remaining);
+  const currentLightboxCount = Array.isArray(lightboxPhotos.value)
+    ? lightboxPhotos.value.length
+    : 0;
+  const projectedPendingCount = currentLightboxCount + attemptedCount;
+
+  if (projectedPendingCount <= normalizedRemaining) {
+    return true;
+  }
+
+  if (isAnalysisQuotaWarningDismissed()) {
+    return true;
+  }
+
+  analysisQuotaWarningContext.value = {
+    attemptedCount,
+    projectedPendingCount,
+    overQuotaCount: Math.max(0, projectedPendingCount - normalizedRemaining),
+    remaining: normalizedRemaining,
+  };
+  dontShowAnalysisQuotaWarningAgain.value = false;
+  showAnalysisQuotaWarningModal.value = true;
+
+  return await new Promise((resolve) => {
+    pendingQuotaWarningResolver.value = resolve;
+  });
+};
+
+const resolveAnalysisQuotaWarning = (accepted) => {
+  if (
+    accepted &&
+    dontShowAnalysisQuotaWarningAgain.value &&
+    !isAnalysisQuotaWarningDismissed()
+  ) {
+    localStorage.setItem(ANALYSIS_QUOTA_WARNING_DISMISS_KEY, "true");
+  }
+
+  if (pendingQuotaWarningResolver.value) {
+    pendingQuotaWarningResolver.value(accepted);
+    pendingQuotaWarningResolver.value = null;
+  }
+
+  showAnalysisQuotaWarningModal.value = false;
+};
+
+const confirmAnalysisQuotaWarning = () => {
+  resolveAnalysisQuotaWarning(true);
+};
+
+const cancelAnalysisQuotaWarning = () => {
+  resolveAnalysisQuotaWarning(false);
+};
+
+const handleAnalysisQuotaModalUpdate = (val) => {
+  if (!val && showAnalysisQuotaWarningModal.value) {
+    cancelAnalysisQuotaWarning();
+  }
+};
+
+const goToSettingsFromQuotaWarning = () => {
+  resolveAnalysisQuotaWarning(false);
+  router.push("/settings");
 };
 
 // Con Picker API, la subida se puede hacer directamente tras triggerGooglePhotos si es necesario
@@ -1407,6 +1591,51 @@ defineExpose({
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+/* Analysis Quota Warning Modal */
+.analyze-quota-warning-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+}
+
+.analyze-quota-warning-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.analyze-quota-warning-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.analyze-quota-warning-description {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.analyze-quota-warning-dismiss {
+  padding-top: 4px;
+}
+
+.analyze-quota-warning-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.analyze-quota-warning-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Time estimate trigger button */

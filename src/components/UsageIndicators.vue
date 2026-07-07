@@ -47,7 +47,7 @@
           <n-icon size="16" color="var(--primary-color)">
             <InProgress />
           </n-icon>
-          Analyzed Photos
+          Analysis Quota
         </div>
         <span class="usage-count"
           >{{ analyzedPhotosUsed }} / {{ analyzedPhotosLimit }}</span

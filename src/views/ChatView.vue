@@ -513,7 +513,7 @@
             :attached-photo-ids="contextPhotos.map((p) => p.id)"
             :photo-limit-reached="contextPhotos.length >= MAX_PHOTOS_TO_CHAT"
             :reserve-right-px="115"
-            placeholder="Type a message... Use @ to mention collections, series, portfolios, or photos"
+            :placeholder="chatInputPlaceholder"
             class="chat-input"
             @submit="sendMessage"
             @attach-photo="handleMentionAttachPhoto"
@@ -1124,6 +1124,12 @@ const activeSuggestion = ref<Suggestion | null>(null);
 const checkMobile = () => {
   isMobile.value = window.innerWidth < 768;
 };
+
+const chatInputPlaceholder = computed(() =>
+  isMobile.value
+    ? "Type a message..."
+    : "Type a message... Use @ to mention collections, series, portfolios, or photos",
+);
 
 const loadPendingChatPhotos = async () => {
   const pending = sessionStorage.getItem("chat_context_photos");

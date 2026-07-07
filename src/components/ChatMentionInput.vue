@@ -302,11 +302,7 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null);
 
 const endsWithNewline = computed(() => rawText.value.endsWith("\n"));
 
-const effectivePlaceholder = computed(
-  () =>
-    props.placeholder?.trim() ||
-    "Type @ to mention collections, series, portfolios, or photos...",
-);
+const effectivePlaceholder = computed(() => props.placeholder?.trim());
 
 const reservedPaddingStyle = computed(() => ({
   paddingRight: `${props.reserveRightPx || 14}px`,

@@ -10,7 +10,7 @@
           <n-icon size="20" color="var(--accent-color)">
             <SparklesOutline />
           </n-icon>
-          <span>Purchase Credits</span>
+          <span>Purchase Tools Credits</span>
         </div>
       </template>
       <template #header-extra>
@@ -22,8 +22,8 @@
       </template>
 
       <p class="cpm-subtitle">
-        Buy credits to power AI analysis features. One-time purchase &mdash;
-        credits are added to your balance instantly and never expire.
+        Buy credits to expand your Tools Credit balance. One-time purchase
+        &mdash; credits are added to your balance instantly and never expire.
       </p>
 
       <div v-if="isLoading" class="cpm-loading">

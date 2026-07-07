@@ -210,7 +210,7 @@ async function analyze(ev) {
   } catch (error) {
     if (error?.response?.status === 403) {
       notification.warning({
-        title: "Insufficient Credits",
+        title: "Insufficient Analysis Quota",
         content:
           "You have reached your photo analysis limit. Please upgrade your plan to analyze more photos.",
         action: () =>
