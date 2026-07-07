@@ -258,6 +258,47 @@
   grid-template-columns: repeat(6, 1fr);
 }
 
+/* ========================================================================
+   SHARED CONFIG PANEL LAYOUT
+   ======================================================================== */
+
+.shared-config-panel {
+  --config-panel-padding: 14px;
+  --config-section-spacing: 12px;
+  --config-section-divider: 1px solid rgba(255, 255, 255, 0.08);
+  --config-toggle-padding-y: 2px;
+  --config-toggle-margin-bottom: 4px;
+  --config-toggle-label-size: 12px;
+  --config-toggle-label-weight: 600;
+  --config-section-content-gap: 8px;
+}
+
+.shared-config-panel .control-section {
+  margin-bottom: var(--config-section-spacing);
+  padding-bottom: var(--config-section-spacing);
+  border-bottom: var(--config-section-divider);
+}
+
+.shared-config-panel .control-section:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.shared-config-panel .section-toggle {
+  padding: var(--config-toggle-padding-y) 0;
+  margin-bottom: var(--config-toggle-margin-bottom);
+}
+
+.shared-config-panel .section-toggle-label {
+  font-size: var(--config-toggle-label-size);
+  font-weight: var(--config-toggle-label-weight);
+}
+
+.shared-config-panel .section-content {
+  gap: var(--config-section-content-gap);
+}
+
 .photo-grid-base.grid-cols-8 {
   grid-template-columns: repeat(8, 1fr);
 }

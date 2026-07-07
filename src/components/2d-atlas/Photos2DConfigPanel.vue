@@ -13,7 +13,12 @@
     </div>
 
     <!-- Expanded Panel Content -->
-    <div v-if="isExpanded" class="control-panel" @click.stop @wheel.stop>
+    <div
+      v-if="isExpanded"
+      class="control-panel shared-config-panel"
+      @click.stop
+      @wheel.stop
+    >
       <!-- Close Button (Top Right Corner) -->
       <button class="close-panel-btn-corner" @click="isExpanded = false">
         <n-icon>
@@ -846,7 +851,7 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
   max-height: calc(100vh - 32px);
   background: var(--bg-card);
   border-radius: 12px;
-  padding: 16px;
+  padding: var(--config-panel-padding, 16px);
   z-index: 200;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -875,9 +880,12 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
 
 /* Section styles */
 .control-section {
-  margin-bottom: 16px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: var(--config-section-spacing, 16px);
+  padding-bottom: var(--config-section-spacing, 16px);
+  border-bottom: var(
+    --config-section-divider,
+    1px solid rgba(255, 255, 255, 0.08)
+  );
 }
 
 .control-section:last-child {
@@ -900,9 +908,9 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
-  padding: 4px 0;
+  padding: var(--config-toggle-padding-y, 4px) 0;
   transition: opacity 0.2s;
-  margin-bottom: 7px;
+  margin-bottom: var(--config-toggle-margin-bottom, 7px);
 }
 
 .section-toggle:hover {
@@ -911,8 +919,8 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
 
 .section-toggle-label {
   color: #e5e5e5;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--config-toggle-label-size, 13px);
+  font-weight: var(--config-toggle-label-weight, 600);
 }
 
 .section-toggle-indicators {
@@ -1068,7 +1076,7 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
 .section-content {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--config-section-content-gap, 10px);
   padding: 5px;
 }
 

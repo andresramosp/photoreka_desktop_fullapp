@@ -17,7 +17,7 @@
     <!-- Expanded Panel Content -->
     <div
       v-if="isExpanded"
-      class="control-panel"
+      class="control-panel shared-config-panel"
       @click.stop
       @pointerdown.stop
       @wheel.stop
@@ -1286,6 +1286,16 @@ const emitPhotoLimit = () => {
 </script>
 
 <style scoped>
+.control-panel.shared-config-panel {
+  --config-panel-padding: 10px;
+  --config-section-spacing: 10px;
+  --config-toggle-padding-y: 1px;
+  --config-toggle-margin-bottom: 2px;
+  --config-toggle-label-size: 12px;
+  --config-toggle-label-weight: 600;
+  --config-section-content-gap: 6px;
+}
+
 .control-panel {
   background: var(--bg-container);
   backdrop-filter: blur(12px);
@@ -1332,11 +1342,14 @@ const emitPhotoLimit = () => {
 }
 
 .control-section {
-  padding: var(--spacing-md);
+  padding: var(--config-section-spacing, 10px);
 }
 
 .control-section:not(:last-child) {
-  border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+  border-bottom: var(
+    --config-section-divider,
+    1px solid var(--border-color, rgba(255, 255, 255, 0.1))
+  );
 }
 
 .section-title {
@@ -1373,12 +1386,14 @@ const emitPhotoLimit = () => {
 }
 
 .section-toggle {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
   cursor: pointer;
-  padding: 8px 0;
+  padding: var(--config-toggle-padding-y, 1px) 0;
+  margin-bottom: var(--config-toggle-margin-bottom, 2px);
+  min-height: 24px;
   border-radius: 4px;
   transition: all 0.2s ease;
 }
@@ -1388,9 +1403,19 @@ const emitPhotoLimit = () => {
 }
 
 .section-toggle-label {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--config-toggle-label-size, 12px);
+  font-weight: var(--config-toggle-label-weight, 600);
   color: var(--text-primary);
+  line-height: 1.15;
+  display: inline-flex;
+  align-items: center;
+}
+
+.section-toggle :deep(.n-icon),
+.section-title :deep(.n-icon) {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
 }
 
 .section-toggle-indicators {
