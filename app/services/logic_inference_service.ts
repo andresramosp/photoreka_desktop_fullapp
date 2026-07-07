@@ -2,6 +2,9 @@ import axios from 'axios'
 import pLimit from 'p-limit'
 import type ModelsService from './models_service.js'
 import type { ModelName } from './models_service.js'
+import CreditService, { LOGIC_GPU_CREDITS } from '#services/credit_service'
+import UserCostService from '#services/user_cost_service'
+import FreeShotsService from '#services/free_shots_service'
 
 /**
  * Logical inference (NLI) for search scoring — centralized, engine-agnostic.
@@ -14,7 +17,8 @@ import type { ModelName } from './models_service.js'
  *
  *   • adjustProximitiesByContextInferenceByBert — RunPod BERT cross-encoder
  *     (GPU). Exact, calibrated scalar per pair, but suffers serverless cold
- *     starts.
+ *     starts. Bills a flat LOGIC_GPU_CREDITS per call, fully self-contained
+ *     (free-bag → credits, same "credits-first" priority as everywhere else).
  *   • adjustProximitiesByContextInferenceByLLM  — gemini-3.1-flash-lite at
  *     MINIMAL thinking (retries fall back to gemini-2.5-flash-lite), micro-batched
  *     with bounded concurrency and structured JSON output. No cold start; cost
@@ -24,9 +28,29 @@ import type { ModelName } from './models_service.js'
  * instance — for the LLM engine, getGeminiResponse prices each call from its
  * input/output tokens and the CostTracker proxy records it, so the real cost
  * flows into the search cost tracker and is charged under the SEARCH_PRECISE
- * margin (no fixed GPU credit). The BERT engine reuses ModelsService's endpoint
- * configuration via buildRequestConfig.
+ * margin. The BERT engine reuses ModelsService's endpoint configuration via
+ * buildRequestConfig, but its cost is a flat fixed price rather than a
+ * per-token one, so it is charged directly (see chargeGpuInference) instead of
+ * going through the tracker/margin pipeline.
  */
+
+/**
+ * Thrown by the GPU (BERT) engine when the caller can't be billed for the
+ * call — 'QUOTA_EXHAUSTED' (no credits left and the daily free bag is spent)
+ * or 'INSUFFICIENT_CREDITS' (no free bag left either). Callers should catch
+ * this and map it to the same 402 shape used by the rest of the app.
+ */
+export class LogicInferenceBillingError extends Error {
+  constructor(public code: 'QUOTA_EXHAUSTED' | 'INSUFFICIENT_CREDITS') {
+    super(code)
+  }
+}
+
+/** Selects which NLI engine adjustProximitiesByContextInference dispatches to. */
+export enum LogicInferenceEngine {
+  LLM = 'LLM',
+  BERT = 'BERT',
+}
 
 // ─── LLM engine config ───────────────────────────────────
 
@@ -153,6 +177,26 @@ function buildSystemPrompt(termsType: TermsType): string {
 }
 
 export default class LogicInferenceService {
+  /**
+   * Single entry point for both NLI engines — same signature regardless of
+   * `engine`, so callers (ScoringService.adjustProximities) don't need to
+   * branch. `userId` is required by both for signature parity, but only the
+   * BERT engine actually bills from it (the LLM engine's real cost is tracked
+   * on `modelsService`'s CostTracker by the caller instead).
+   */
+  public async adjustProximitiesByContextInference(
+    modelsService: ModelsService,
+    term: string,
+    texts: any[],
+    userId: number,
+    termsType: TermsType = 'tag',
+    engine: LogicInferenceEngine = LogicInferenceEngine.LLM
+  ): Promise<any[]> {
+    return engine === LogicInferenceEngine.BERT
+      ? this.adjustProximitiesByContextInferenceByBert(modelsService, term, texts, userId, termsType)
+      : this.adjustProximitiesByContextInferenceByLLM(modelsService, term, texts, userId, termsType)
+  }
+
   // ═══════════════════════════════════════════════════════
   //  BERT engine (RunPod GPU cross-encoder)
   // ═══════════════════════════════════════════════════════
@@ -162,20 +206,27 @@ export default class LogicInferenceService {
    * engines live in one place; it still relies on ModelsService for endpoint
    * configuration (buildRequestConfig).
    *
+   * Billing is fully self-contained: charges a flat LOGIC_GPU_CREDITS per call —
+   * free daily bag first (SEARCH_PRECISE), falling back to real credits — before
+   * ever hitting RunPod. Throws LogicInferenceBillingError if the user can't be
+   * billed; the caller should catch it and respond the same way it does for
+   * other 402 paths.
+   *
    * @param modelsService  ModelsService providing buildRequestConfig / endpoints
    * @param term           the user's search term
    * @param texts          candidates, each with at least { name, group?, proximity }
+   * @param userId         billed for the GPU call
    * @param termsType      'tag' | 'desc' — selects the RunPod operation
-   * @param forceCPU       route to the CPU logic endpoint instead of GPU
    */
   public async adjustProximitiesByContextInferenceByBert(
     modelsService: ModelsService,
     term: string,
     texts: any[],
-    termsType: TermsType = 'tag',
-    forceCPU: boolean = false
+    userId: number,
+    termsType: TermsType = 'tag'
   ): Promise<any[]> {
-    const isGPU = !forceCPU
+    await this.chargeGpuInference(userId)
+
     try {
       // Unique by name + group
       const uniqueTexts = Object.values(
@@ -201,7 +252,7 @@ export default class LogicInferenceService {
       const { url, requestPayload, headers } = modelsService.buildRequestConfig(
         operation,
         payload,
-        isGPU ? 'logic_gpu' : 'logic_cpu'
+        'logic_gpu'
       )
 
       let { data } = await axios.post(url, requestPayload, { headers })
@@ -221,6 +272,44 @@ export default class LogicInferenceService {
     }
   }
 
+  /**
+   * Bill one LOGIC_GPU_CREDITS charge for a GPU NLI call, credits-first with the
+   * daily free bag as fallback — same priority order as every other billed
+   * search path (FreeShotsService.tryConsumeFreeBag: real credits are spent
+   * before the free bag kicks in). Throws LogicInferenceBillingError when the
+   * user can't be billed at all, so the caller never reaches RunPod for free.
+   */
+  private async chargeGpuInference(userId: number): Promise<void> {
+    const freeShot = await FreeShotsService.tryConsumeFreeBag(
+      userId,
+      'SEARCH_PRECISE',
+      LOGIC_GPU_CREDITS
+    )
+
+    if (freeShot === 'exhausted') {
+      throw new LogicInferenceBillingError('QUOTA_EXHAUSTED')
+    }
+
+    if (!freeShot) {
+      const charged = await CreditService.tryChargeFixed(userId, LOGIC_GPU_CREDITS)
+      if (!charged) {
+        throw new LogicInferenceBillingError('INSUFFICIENT_CREDITS')
+      }
+    }
+
+    UserCostService.record(
+      userId,
+      'search',
+      CreditService.creditsToEstimatedEur(LOGIC_GPU_CREDITS),
+      1,
+      {
+        task: 'gpu_precise_search',
+        free: freeShot === true,
+        metadata: { fixedCharge: true, credits: LOGIC_GPU_CREDITS },
+      }
+    ).catch(() => {})
+  }
+
   // ═══════════════════════════════════════════════════════
   //  LLM engine (gemini-2.5-flash-lite, micro-batched)
   // ═══════════════════════════════════════════════════════
@@ -234,12 +323,16 @@ export default class LogicInferenceService {
    * @param modelsService  tracked or plain ModelsService providing getGeminiResponse
    * @param term           the user's search term (hypothesis subject)
    * @param texts          candidates, each with at least { name, proximity }
+   * @param userId         unused here — kept for signature parity with the BERT
+   *                        engine; this engine's real cost is billed by the
+   *                        caller from modelsService's CostTracker instead
    * @param termsType      'tag' | 'desc' — surfaced to the model as context
    */
   public async adjustProximitiesByContextInferenceByLLM(
     modelsService: ModelsService,
     term: string,
     texts: any[],
+    userId: number,
     termsType: TermsType = 'tag'
   ): Promise<any[]> {
     if (!Array.isArray(texts) || texts.length === 0) return []

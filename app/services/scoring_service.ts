@@ -21,7 +21,7 @@ import TagManager from '../managers/tag_manager.js'
 import TagPhoto from '#models/tag_photo'
 import { EmbeddingStoreService } from './embeddings_store_service.js'
 import NLPService from './nlp_service.js'
-import LogicInferenceService from './logic_inference_service.js'
+import LogicInferenceService, { LogicInferenceEngine } from './logic_inference_service.js'
 import { hashNumberIds } from '../utils/cache_key.js'
 const require = createRequire(import.meta.url)
 const pluralize = require('pluralize')
@@ -315,13 +315,13 @@ export default class ScoringService {
 
   // ==================== MÉTODOS PRINCIPALES DE SCORING ====================
 
-  // @withCache({
-  //   provider: 'redis',
-  //   key: (photoIds: number[], structuredQuery: any, searchMode: SearchMode, userId: string) =>
-  //     `${SCORING_CACHE_VERSION}:getScoredPhotosByTagsAndDesc:${userId}:${searchMode}:${JSON.stringify(structuredQuery)}:${hashNumberIds(photoIds)}`,
-  //   ttl: 60 * 60 * 12,
-  //   shouldCache: (_result, [photoIds]) => photoIds.length <= MAX_CACHEABLE_SCORING_PHOTOS,
-  // })
+  @withCache({
+    provider: 'redis',
+    key: (photoIds: number[], structuredQuery: any, searchMode: SearchMode, userId: string) =>
+      `${SCORING_CACHE_VERSION}:getScoredPhotosByTagsAndDesc:${userId}:${searchMode}:${JSON.stringify(structuredQuery)}:${hashNumberIds(photoIds)}`,
+    ttl: 60 * 60 * 12,
+    shouldCache: (_result, [photoIds]) => photoIds.length <= MAX_CACHEABLE_SCORING_PHOTOS,
+  })
   public async getScoredPhotosByTagsAndDesc(
     photoIds: number[],
     structuredQuery: any,
@@ -352,7 +352,7 @@ export default class ScoringService {
 
       let finalScores = await this.processPositiveSegments(initialScores, query, config, userId)
 
-      const fullQueryScores = await this.processFullQuery(photoIds, query, config)
+      const fullQueryScores = await this.processFullQuery(photoIds, query, config, userId)
       finalScores = this.mergeTagDescScoredPhotos(finalScores, [], fullQueryScores, {
         desc: config.scoreWeights.fullQueryDesc,
       })
@@ -386,7 +386,7 @@ export default class ScoringService {
     const [segmentScores, fullQueryScores, notesScores, nuanceScores, imageScores] =
       await Promise.all([
         this.processPositiveSegments(initialScores, query, config, userId),
-        this.processFullQuery(photoIds, query, config),
+        this.processFullQuery(photoIds, query, config, userId),
         this.processNotes(photoIds, query, config),
         this.processNuances(photoIds, query, config, userId),
         this.processImageSimilarity(
@@ -690,7 +690,8 @@ export default class ScoringService {
   private async processFullQuery(
     photoIds: number[],
     query: PreparedQuery,
-    config: EffectiveConfig
+    config: EffectiveConfig,
+    userId: string
   ): Promise<{ id: number; descScore: number; matchingChunks: any[] }[]> {
     // Solo procesar si hay más de 1 segmento y fullQuery está habilitado
     if (
@@ -707,7 +708,9 @@ export default class ScoringService {
       config.thresholds.descFullQuery,
       config.refineMode,
       true,
-      ['context', 'story', 'visual_accents']
+      ['context', 'story', 'visual_accents'],
+      [],
+      userId
     )
   }
 
@@ -876,7 +879,9 @@ export default class ScoringService {
             config.descThreshold,
             config.refineMode,
             false,
-            descCategories
+            descCategories,
+            [],
+            userId
           )
         : Promise.resolve([])
 
@@ -907,7 +912,8 @@ export default class ScoringService {
     refineMode: RefineMode,
     isFullQuery: boolean = false,
     categories: string[],
-    areas: string[] = []
+    areas: string[] = [],
+    userId: string = ''
   ): Promise<{ id: number; descScore: number; matchingChunks: any[] }[]> {
     const embedding = (await EmbeddingStoreService.getTextEmbeddings([segment.name]))[0]
     if (!embedding || embedding.length === 0) {
@@ -937,7 +943,8 @@ export default class ScoringService {
         category: mc.category,
       })),
       'desc',
-      refineMode
+      refineMode,
+      userId
     )
 
     const photoChunkMap = new Map<number, any[]>()
@@ -1033,7 +1040,8 @@ export default class ScoringService {
       refineMode,
       photoIds,
       categories,
-      areas
+      areas,
+      userId
     )
 
     const photoTagMap = new Map<number, any[]>()
@@ -1073,7 +1081,8 @@ export default class ScoringService {
     refineMode: RefineMode,
     photoIds: number[],
     categories: string[],
-    areas: string[]
+    areas: string[],
+    userId: string = ''
   ) {
     // Comparación y ajuste semántico/lógico
     const semanticMatches = await this.getSemanticMatches(
@@ -1083,7 +1092,8 @@ export default class ScoringService {
       photoIds,
       categories,
       areas,
-      refineMode
+      refineMode,
+      userId
     )
 
     return { matchingPhotoTags: semanticMatches }
@@ -1127,7 +1137,8 @@ export default class ScoringService {
     photoIds: number[],
     categories: string[],
     areas: string[],
-    refineMode: RefineMode
+    refineMode: RefineMode,
+    userId: string
   ) {
     const embedding = (await EmbeddingStoreService.getTextEmbeddings([term]))[0]
 
@@ -1149,7 +1160,13 @@ export default class ScoringService {
     )
 
     // Ajustar proximidades según inferencia lógica
-    const adjustedSimilarTags = await this.adjustProximities(term, similarTags, 'tag', refineMode)
+    const adjustedSimilarTags = await this.adjustProximities(
+      term,
+      similarTags,
+      'tag',
+      refineMode,
+      userId
+    )
 
     return adjustedSimilarTags
   }
@@ -1158,7 +1175,8 @@ export default class ScoringService {
     term: string,
     tags: any[],
     termsType: 'tag' | 'desc' = 'tag',
-    refineMode: RefineMode
+    refineMode: RefineMode,
+    userId: string
   ) {
     const LOGIC_THRESHOLD = 1
 
@@ -1167,15 +1185,17 @@ export default class ScoringService {
       return tags.filter((tag) => tag.proximity > 0)
     }
 
-    // LLM micro-batched NLI (gemini-2.5-flash-lite) replaces the RunPod BERT endpoint.
-    // Passing this.modelsService lets its Gemini token cost be captured by the caller's
-    // CostTracker (when a tracked ModelsService is injected in search_text_service).
+    // LLM engine: real per-token cost is captured by the caller's CostTracker
+    // (this.modelsService, when tracked). BERT engine: bills a flat fixed
+    // charge on its own — see LogicInferenceService.chargeGpuInference.
     const adjustedProximitiesByContext =
-      await this.logicInferenceService.adjustProximitiesByContextInferenceByLLM(
+      await this.logicInferenceService.adjustProximitiesByContextInference(
         this.modelsService,
         term,
         tags,
-        termsType
+        Number(userId),
+        termsType,
+        LogicInferenceEngine.LLM
       )
 
     // Entailment: filtro estricto basado en logicProximity

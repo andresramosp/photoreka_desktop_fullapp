@@ -48,12 +48,13 @@ export const COST_MULTIPLIERS: Record<CostCategory, number> = {
 // ─── Fixed credit costs ─────────────────────────────────
 
 /**
- * @deprecated Legacy fixed credit cost for the RunPod GPU precise mode.
- * Precise search now runs LLM micro-batched NLI (LogicInferenceService) and is
- * billed from its real per-token cost via the CostTracker under the SEARCH_PRECISE
- * margin — see SEARCH_PRECISE_MIN_CREDITS for the affordability gate.
+ * Fixed credit cost for one RunPod BERT cross-encoder NLI call (the GPU engine
+ * in LogicInferenceService). Charged directly by the service itself — see
+ * LogicInferenceService.adjustProximitiesByContextInferenceByBert — since it's a
+ * flat retail price (margin already baked in), not a raw cost to run through
+ * CreditService.charge's margin multiplier.
  */
-export const PRECISE_GPU_CREDITS = 5
+export const LOGIC_GPU_CREDITS = 20
 
 /**
  * Affordability gate for precise search. The real cost is charged post-search
