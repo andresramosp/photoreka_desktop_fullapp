@@ -28,6 +28,20 @@ export default class ReportReviewController {
       // Marcar inicio del build
       const userModelStart = await User.findOrFail(user.id)
       const existingPatterns = (userModelStart.catalogPatterns as any) || {}
+
+      // Guard: si ya hay un build fresco en marcha, no lanzar otro (evita builds solapados
+      // cuando varias peticiones a should-build pasan la evaluación casi a la vez)
+      const existingStartedAt = existingPatterns.metadata?.buildStartedAt
+      if (
+        existingStartedAt &&
+        Date.now() - new Date(existingStartedAt).getTime() < BUILD_TIMEOUT_MS
+      ) {
+        return response.ok({
+          message: 'Build ya en progreso, no se lanza otro',
+          buildStartedAt: existingStartedAt,
+        })
+      }
+
       userModelStart.catalogPatterns = {
         ...existingPatterns,
         metadata: {
@@ -36,6 +50,28 @@ export default class ReportReviewController {
         },
       }
       await userModelStart.save()
+
+      // Aviso interno de inicio de build (fire-and-forget, no bloquea el build)
+      try {
+        const mailService = new MailService()
+        mailService
+          .sendEmail({
+            from: 'Photoreka <hello@photoreka.com>',
+            to: 'andreschennai@gmail.com',
+            subject: `[Photoreka] Build de patterns iniciado - user ${user.id} (${userModelStart.email})`,
+            body: `<p>Se ha iniciado un build de catalog patterns.</p>
+<ul>
+  <li><strong>User ID:</strong> ${user.id}</li>
+  <li><strong>Email:</strong> ${userModelStart.email}</li>
+  <li><strong>Inicio:</strong> ${new Date().toISOString()}</li>
+  <li><strong>Último build OK:</strong> ${existingPatterns.metadata?.buildDate || 'nunca'}</li>
+  <li><strong>Fotos del último build:</strong> ${existingPatterns.metadata?.photosCount ?? 'N/A'}</li>
+</ul>`,
+          })
+          .catch((err: any) => console.error('Error enviando aviso de inicio de build:', err))
+      } catch (notifyError) {
+        console.error('Error enviando aviso de inicio de build:', notifyError)
+      }
 
       const reportReviewManager = new ReportReviewManager()
       const catalogPatterns: Record<string, any> = {}

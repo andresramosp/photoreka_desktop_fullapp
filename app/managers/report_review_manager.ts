@@ -597,19 +597,29 @@ export default class PortfolioReviewManager {
           ? JSON.parse(photoInfo.embedding as string)
           : null
 
+        // Tras calcular combinedEmbedding, los embeddings de cada chunk ya no se usan
+        // (prompts solo leen chunk/category). Se descartan para no retenerlos en memoria
+        // ni serializarlos a Redis (con catálogos grandes provocaba OOM en JSON.stringify).
+        const lightChunks = photoChunks.map((c: any) => ({
+          chunk_id: c.chunk_id,
+          photo_id: c.photo_id,
+          chunk: c.chunk,
+          category: c.category,
+        }))
+
         photoMapObject[photoId] = {
           id: photoId,
           name: photoInfo?.name,
           thumbnailName: photoInfo?.thumbnail_name,
           originalFileName: photoInfo?.original_file_name,
           embedding: clipEmbedding,
-          chunks: photoChunks,
+          chunks: lightChunks,
         }
 
         vectors.push({
           id: photoId,
           embedding: combinedEmbedding,
-          chunks: photoChunks,
+          chunks: lightChunks,
         })
       }
     }
