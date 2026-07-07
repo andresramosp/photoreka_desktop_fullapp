@@ -8,9 +8,16 @@ const configProviderProps = computed(() => ({
 }));
 
 // Crear una API discreta con el tema de la app
+// messageProviderProps.containerStyle pushes top-placed messages down so they
+// don't overlap the app header (e.g. GlobalSearchAutocomplete bar).
 const { message, notification } = createDiscreteApi(
   ["message", "notification"],
-  { configProviderProps },
+  {
+    configProviderProps,
+    messageProviderProps: {
+      containerStyle: { top: "76px" },
+    },
+  },
 );
 
 export { message, notification };

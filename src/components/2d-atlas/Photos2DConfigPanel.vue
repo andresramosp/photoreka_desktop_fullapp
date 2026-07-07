@@ -100,9 +100,9 @@
               :value="getPhotoLimitSliderIndex(localPhotoLimit)"
               @update:value="onPhotoLimitChange"
               :min="0"
-              :max="2"
+              :max="3"
               :step="1"
-              :marks="{ 0: '5k', 1: '10k', 2: '20k' }"
+              :marks="{ 0: '5k', 1: '10k', 2: '20k', 3: '50k' }"
               class="limit-slider"
               @click.stop
             />
@@ -655,7 +655,7 @@ const showTagBeacons = ref(false);
 // ---------------------------------------------------------------------------
 // Viewport limit (max photos slider)
 // ---------------------------------------------------------------------------
-const PHOTO_LIMIT_VALUES = [5000, 10000, 20000];
+const PHOTO_LIMIT_VALUES = [5000, 10000, 20000, 50000];
 const PHOTO_LIMIT_STORAGE_KEY = "photoreka:atlas2d:photoLimit";
 
 const isValidPhotoLimit = (value) => PHOTO_LIMIT_VALUES.includes(value);

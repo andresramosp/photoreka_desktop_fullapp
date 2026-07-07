@@ -170,7 +170,9 @@
     <div v-show="showDiscreteLoader && !isPreview" class="discrete-loader">
       <div class="loader-spinner"></div>
       <span class="loader-text">{{ loaderTitle }}</span>
-      <span v-if="loadingProgress > 0" class="loader-percentage"
+      <span
+        v-if="isLoadingTextures && loadingProgress > 0"
+        class="loader-percentage"
         >{{ loadingProgress }}%</span
       >
     </div>
@@ -244,6 +246,7 @@ import {
   nextTick,
 } from "vue";
 import { NIcon, useMessage } from "naive-ui";
+import { message as topMessage } from "@/utils/notifications";
 import {
   CloseOutlined,
   ZoomInOutlined,
@@ -375,6 +378,42 @@ const photoLimit = ref(
 );
 // Track whether the limit-info message has been shown this session
 const limitMessageShown = ref(false);
+
+// First-visit "caching images" banner (discreet dismissible top message).
+// Shown once per session when the vast majority of images are not yet cached
+// in IndexedDB, so the user understands the initial load can take a while.
+const cachingMessageShown = ref(false);
+let cachingMessageInstance = null;
+const CACHING_BANNER_MIN_PHOTOS = 100; // don't warn for tiny catalogs
+const CACHING_BANNER_UNCACHED_RATIO = 0.9; // >=90% missing from cache => first visit
+
+const maybeShowCachingBanner = (total) => {
+  if (props.isPreview || props.isPlayground) return;
+  if (cachingMessageShown.value || cachingMessageInstance) return;
+  if (!total || total < CACHING_BANNER_MIN_PHOTOS) return;
+
+  const cachedCount = textureManager.cachedPhotoIds.value?.size || 0;
+  const uncachedRatio = (total - cachedCount) / total;
+  if (uncachedRatio < CACHING_BANNER_UNCACHED_RATIO) return;
+
+  cachingMessageShown.value = true;
+  // Use the app-wide discrete message API (top placement) instead of the
+  // local `message` instance: this view's <n-message-provider> is configured
+  // with placement="bottom" (see 2DView.vue), which sits right on top of the
+  // bottom discrete loader. This banner needs to be at the top, undisturbed.
+  cachingMessageInstance = topMessage.info(
+    "Caching your images on this device for faster loading next time. The first visit may take a few minutes — please keep this screen open while it finishes.",
+    { duration: 0, closable: true, placement: "bottom-left" },
+  );
+};
+
+const dismissCachingBanner = () => {
+  if (!cachingMessageInstance) return;
+  try {
+    cachingMessageInstance.destroy();
+  } catch (_) {}
+  cachingMessageInstance = null;
+};
 
 const reapplyLayoutForCurrentView = () => {
   if (!photos2D.value.length) return;
@@ -549,8 +588,15 @@ watch(
   },
   { immediate: true },
 );
-const loaderTitle = ref("Loading photos");
 const loadingProgress = ref(0);
+// Loader title reflects the phase that is actually running:
+//  - Fetching positions / building the layout from the API → "Building stage"
+//    (indeterminate: no percentage, since the backend gives no progress)
+//  - Downloading & decoding photo textures → "Loading photos" (with %)
+// Positions always resolve before textures start, so there is no overlap.
+const loaderTitle = computed(() =>
+  isLoadingPositions.value ? "Building stage" : "Loading photos",
+);
 
 // Animation state for cluster transitions
 const isTransitioning = ref(false);
@@ -1734,7 +1780,6 @@ const loadPhotosToPixi = async () => {
   photoContainer.value.visible = false;
   isLoadingTextures.value = true;
   loadingProgress.value = 0;
-  loaderTitle.value = "Loading photos";
 
   try {
     // Clear any existing selection (selection Graphics are wiped by removeChildren below)
@@ -1768,6 +1813,12 @@ const loadPhotosToPixi = async () => {
     } catch (_) {
       // Non-fatal: proceed with network loading
     }
+
+    // First-visit detection: loadImagesFromCache() populates
+    // textureManager.cachedPhotoIds with the ids already present in IndexedDB.
+    // If the vast majority still need to be downloaded, warn the user that this
+    // initial caching pass can take a while (so they don't close the screen).
+    maybeShowCachingBanner(total);
 
     // Create placeholder texture ONCE and reuse (GPU memory optimization)
     if (!placeholderTexture.value || placeholderTexture.value.destroyed) {
@@ -1961,6 +2012,8 @@ const loadPhotosToPixi = async () => {
       photoContainer.value.visible = true;
     }
     isLoadingTextures.value = false;
+    // Images are cached by now; drop the first-visit "caching" banner.
+    dismissCachingBanner();
   }
 };
 
@@ -2562,10 +2615,9 @@ const onChunkChange = async (newChunk) => {
       "♻️ Existing photos detected: maintaining sprites, only updating positions",
     );
 
-    // Show loader while repositioning
-    loaderTitle.value = "Building stage";
-
-    // Change chunk (will reuse existing photos and update coordinates)
+    // Change chunk (will reuse existing photos and update coordinates).
+    // changeChunk() flips isLoadingPositions, which drives the "Building stage"
+    // loader title automatically — no manual title assignment needed.
     await changeChunk(newChunk);
 
     // Reposition sprites with smooth animation
@@ -3069,6 +3121,7 @@ onUnmounted(() => {
   tagBeaconsSystem.reset();
   cleanupPatternTags();
   cleanup();
+  dismissCachingBanner();
 });
 
 let filterSnapReflowTimer = null;

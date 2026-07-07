@@ -194,6 +194,7 @@ import {
   NSwitch,
   useMessage,
 } from "naive-ui";
+import { message as topMessage } from "@/utils/notifications";
 import {
   CloseOutlined,
   SettingOutlined,
@@ -325,6 +326,41 @@ const photoLimit = ref(
 );
 // Track whether the limit-info message has been shown this session
 const limitMessageShown = ref(false);
+
+// First-visit "caching images" banner (discreet dismissible top message).
+// Shown once per session when the vast majority of images are not yet cached
+// in IndexedDB, so the user understands the initial load can take a while.
+const cachingMessageShown = ref(false);
+let cachingMessageInstance = null;
+const CACHING_BANNER_MIN_PHOTOS = 100; // don't warn for tiny catalogs
+const CACHING_BANNER_UNCACHED_RATIO = 0.9; // >=90% missing from cache => first visit
+
+const maybeShowCachingBanner = (total, cachedCount) => {
+  if (props.isPlayground) return;
+  if (cachingMessageShown.value || cachingMessageInstance) return;
+  if (!total || total < CACHING_BANNER_MIN_PHOTOS) return;
+
+  const uncachedRatio = (total - cachedCount) / total;
+  if (uncachedRatio < CACHING_BANNER_UNCACHED_RATIO) return;
+
+  cachingMessageShown.value = true;
+  // Use the app-wide discrete message API (top placement) instead of the
+  // local `message` instance: this view's <n-message-provider> is configured
+  // with placement="bottom" (see 3DView.vue), which would sit right on top of
+  // the bottom discrete loader. This banner needs to be at the top, undisturbed.
+  cachingMessageInstance = topMessage.info(
+    "Caching your images on this device for faster loading next time. The first visit may take a few minutes — please keep this screen open while it finishes.",
+    { duration: 0, closable: true, placement: "bottom-left" },
+  );
+};
+
+const dismissCachingBanner = () => {
+  if (!cachingMessageInstance) return;
+  try {
+    cachingMessageInstance.destroy();
+  } catch (_) {}
+  cachingMessageInstance = null;
+};
 
 watch(
   gridRelaxationEnabled,
@@ -1432,6 +1468,8 @@ const setupLoaderForPhotos = async (photos) => {
 const hideLoader = () => {
   showDiscreteLoader.value = false;
   console.log("✅ Loader ocultado - Carga completada");
+  // Images are cached by now; drop the first-visit "caching" banner.
+  dismissCachingBanner();
 
   // Mostrar mensaje de activación de cámara cuando todo esté listo (solo desktop, solo modo FPS)
   if (
@@ -1525,6 +1563,10 @@ const registerNewPhotos = async (newPhotos) => {
   // ===== PASO 1: Buscar en cache y cargar en bulk =====
   const cachedBlobs = await textureManager.loadImagesFromCache(newPhotos);
   console.log(`✅ Cargadas ${cachedBlobs.size} imágenes desde cache`);
+
+  // First-visit detection: if the vast majority of these photos are not yet
+  // in IndexedDB, warn the user that the initial caching pass can take a while.
+  maybeShowCachingBanner(newPhotos.length, cachedBlobs.size);
 
   // Convertir blobs a HTMLImageElements y guardar en downloadedImagesCache
   for (const [photoId, blob] of cachedBlobs.entries()) {
@@ -3299,10 +3341,13 @@ onMounted(async () => {
   } catch (error) {
     console.error("Error initializing 3D photos:", error);
     showDiscreteLoader.value = false;
+    dismissCachingBanner();
   }
 });
 
 onUnmounted(() => {
+  dismissCachingBanner();
+
   // Clean up atlas event listener
   if (window._atlasEventCleanup) {
     window._atlasEventCleanup();

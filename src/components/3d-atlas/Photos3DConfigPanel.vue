@@ -72,32 +72,23 @@
       <div class="control-section">
         <div class="section-toggle" style="cursor: default; margin-bottom: 7px">
           <div style="display: flex; align-items: center; gap: 6px">
-            <n-icon size="16">
+            <n-icon size="16" color="var(--text-on-primary)">
               <DatabaseOutlined />
             </n-icon>
             <span class="section-toggle-label">Viewport</span>
           </div>
         </div>
-        <div class="options-container" style="margin-top: 0">
+        <div class="section-content">
           <div class="control-item-full" @pointerup="emitPhotoLimit">
-            <div
-              style="
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                margin-bottom: 6px;
-              "
-            >
-              <div style="display: flex; align-items: center; gap: 4px">
-                <label class="control-label" style="margin: 0"
-                  >Max photos</label
-                >
+            <div class="slider-header">
+              <div class="control-item-label">
+                <span>Max photos</span>
                 <n-tooltip trigger="hover" placement="top">
                   <template #trigger>
                     <n-icon
                       size="12"
                       color="var(--text-secondary)"
-                      style="cursor: help"
+                      class="info-icon-small"
                     >
                       <InfoCircleFilled />
                     </n-icon>
@@ -106,22 +97,20 @@
                   Lower values improve performance.
                 </n-tooltip>
               </div>
-              <span class="control-label" style="margin: 0">{{
+              <span class="slider-value">{{
                 localPhotoLimit.toLocaleString()
               }}</span>
             </div>
-            <div class="slider-container">
-              <n-slider
-                :value="getPhotoLimitSliderIndex(localPhotoLimit)"
-                @update:value="onPhotoLimitChange"
-                :min="0"
-                :max="2"
-                :step="1"
-                :marks="{ 0: '5k', 1: '10k', 2: '20k' }"
-                class="radial-slider"
-                @click.stop
-              />
-            </div>
+            <n-slider
+              :value="getPhotoLimitSliderIndex(localPhotoLimit)"
+              @update:value="onPhotoLimitChange"
+              :min="0"
+              :max="2"
+              :step="1"
+              :marks="{ 0: '5k', 1: '10k', 2: '20k' }"
+              class="limit-slider"
+              @click.stop
+            />
           </div>
         </div>
       </div>
@@ -1379,6 +1368,36 @@ const emitPhotoLimit = () => {
   width: 100%;
 }
 
+.section-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--config-section-content-gap, 6px);
+  padding: 5px;
+}
+
+.slider-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.control-item-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary, #9ca3af);
+}
+
+.slider-value {
+  font-size: 12px;
+  color: var(--text-secondary, #9ca3af);
+}
+
+.info-icon-small {
+  cursor: help;
+}
+
 .control-label {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
@@ -1612,6 +1631,17 @@ const emitPhotoLimit = () => {
 .radial-slider :deep(.n-slider-mark:last-child .n-slider-mark-text) {
   transform: translateX(-100%);
   text-align: right;
+}
+
+.limit-slider {
+  --n-rail-color: rgba(255, 255, 255, 0.12);
+  --n-rail-color-hover: rgba(255, 255, 255, 0.2);
+  --n-fill-color: var(--primary-color, #3b82f6);
+  --n-fill-color-hover: var(--primary-color-hover, #2563eb);
+  --n-handle-color: var(--primary-color, #3b82f6);
+  --n-dot-color: rgba(255, 255, 255, 0.25);
+  --n-mark-font-size: 10px;
+  --n-mark-color: #6b7280;
 }
 
 .controls-info {
