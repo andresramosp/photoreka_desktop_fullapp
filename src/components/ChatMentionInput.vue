@@ -690,10 +690,33 @@ function selectSuggestion(item: SearchResult) {
 
   if (item.type === "photo") {
     const already = isAttached(item.id);
-    removeRange(start, caret);
+    // Photos are attached out-of-band (not sent as [[photo:id|name]] tokens like the
+    // other mention types), so we insert the name as plain text — visible to the user
+    // but not treated as a mention chip or serialized into the API payload.
+    const insertText = `${item.name} `;
+    const before = rawText.value.slice(0, start);
+    const after = rawText.value.slice(caret);
+    const newText = `${before}${insertText}${after}`;
+    const delta = insertText.length - (caret - start);
+    mentions.value = mentions.value.map((m) =>
+      m.start >= caret ? { ...m, start: m.start + delta, end: m.end + delta } : m,
+    );
+    rawText.value = newText;
+    prevValue = newText;
+    emitValue();
+    closeDropdown();
+
     if (already) emit("flash-photo", item.id);
     else emit("attach-photo", item);
-    closeDropdown();
+
+    const newCaret = start + insertText.length;
+    nextTick(() => {
+      autosize();
+      if (ta) {
+        ta.focus();
+        ta.setSelectionRange(newCaret, newCaret);
+      }
+    });
     return;
   }
 
