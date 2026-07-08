@@ -15,8 +15,7 @@
 
     <div class="values-list">
       <div
-        v-for="(item, index) in aspect.breakdown"
-        v-if="!hideZeroCountFor.includes(aspect.key) || item.count > 0"
+        v-for="{ item, index } in visibleBreakdown"
         :key="item.value"
         class="value-row"
       >
@@ -82,6 +81,14 @@ const aspectCardStyle = computed(() => {
   }
 
   return { minHeight: props.minHeight };
+});
+
+const visibleBreakdown = computed(() => {
+  const shouldHideZero = hideZeroCountFor.includes(props.aspect.key);
+
+  return props.aspect.breakdown
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => !shouldHideZero || item.count > 0);
 });
 
 const maxCount = computed(() => {
