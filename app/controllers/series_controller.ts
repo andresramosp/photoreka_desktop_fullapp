@@ -19,7 +19,9 @@ export default class SeriesController {
       const seriesList = await Series.query()
         .where('userId', user.id)
         .preload('photos', (query) => {
-          query.orderBy('series_photos.order', 'asc')
+          query
+            .select('id', 'name', 'originalFileName', 'thumbnailName', 'descriptions')
+            .orderBy('series_photos.order', 'asc')
         })
         .orderBy('updatedAt', 'desc')
 

@@ -65,7 +65,9 @@ export default class CollectionsController {
       const collection = await Collection.query()
         .where('id', collectionId)
         .where('userId', user.id)
-        .preload('photos')
+        .preload('photos', (photosQuery) =>
+          photosQuery.select('id', 'name', 'originalFileName', 'thumbnailName', 'title', 'descriptions')
+        )
         .first()
 
       if (!collection) {
