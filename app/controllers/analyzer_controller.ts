@@ -48,6 +48,25 @@ export default class AnalyzerController {
       }
       const isPreprocess = selectedPackage.isPreprocess || false
 
+      // Impedir que un usuario lance dos procesos a la vez en modo 'adding'.
+      // Si ya tiene uno en curso (currentStage distinto de finished), se rechaza.
+      if (mode === 'adding') {
+        const runningProcess = await AnalyzerProcess.query()
+          .where('user_id', targetUserId)
+          .whereNotIn('current_stage', ['finished'])
+          .first()
+
+        if (runningProcess) {
+          logger.info(
+            `Usuario ${targetUserId} ya tiene un proceso en curso (${runningProcess.id}, stage: ${runningProcess.currentStage}). Se rechaza el nuevo análisis.`
+          )
+          return response.conflict({
+            message: 'You already have an analysis in progress.',
+            processId: runningProcess.id,
+          })
+        }
+      }
+
       logger.info(
         `Iniciando análisis - Paquete: ${packageId} - Modo: ${mode} - Inmediato: ${inmediate}` +
           (mode == 'retry_process' ? ` Process ID: ${processId}` : '')
@@ -64,6 +83,13 @@ export default class AnalyzerController {
           targetUserId,
           isPreprocess
         )
+      }
+
+      // En modo 'adding' no reprocesamos fotos que ya están procesadas.
+      // Misma regla que PhotoManager.onlyProcessed / Photo.status === 'processed'
+      // (analyzerProcess viene precargado en ambos caminos de obtención de fotos).
+      if (mode === 'adding') {
+        photos = photos.filter((p) => p.status !== 'processed')
       }
 
       // Verificar si el usuario tiene capacidad suficiente para analizar estas fotos
