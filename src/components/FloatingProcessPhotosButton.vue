@@ -28,26 +28,34 @@
       </div>
     </div>
 
-    <!-- Processing state - disabled without progress -->
-    <div
+    <!-- Processing state - normal disabled button with spinner + tooltip -->
+    <n-tooltip
       v-else-if="buttonState === 'processing'"
-      class="floating-process-button processing-state"
+      placement="top"
+      trigger="hover"
     >
-      <div class="button-content">
-        <n-icon size="18" class="button-icon spinning">
-          <svg viewBox="0 0 24 24">
-            <path
-              fill="currentColor"
-              d="M12,4V2A10,10 0 0,0 2,12H4A8,8 0 0,1 12,4Z"
-            />
-          </svg>
-        </n-icon>
-        <div class="button-text">
-          <div class="main-text">Analysis in progress...</div>
-          <div class="processing-text">Please wait</div>
-        </div>
-      </div>
-    </div>
+      <template #trigger>
+        <n-button
+          type="info"
+          size="large"
+          class="floating-process-button enabled"
+          disabled
+        >
+          <template #icon>
+            <n-icon size="18" class="button-icon spinning">
+              <svg viewBox="0 0 24 24">
+                <path
+                  fill="currentColor"
+                  d="M12,4V2A10,10 0 0,0 2,12H4A8,8 0 0,1 12,4Z"
+                />
+              </svg>
+            </n-icon>
+          </template>
+          Analyze Photos
+        </n-button>
+      </template>
+      <span>Please wait until the current analysis finishes</span>
+    </n-tooltip>
 
     <!-- Enabled state - normal button -->
     <n-button
@@ -149,17 +157,6 @@ const handleClick = () => {
   height: 56px;
 }
 
-/* Processing state - disabled without progress */
-.processing-state {
-  position: relative;
-  background: var(--card-color);
-  border: 2px solid var(--border-color);
-  cursor: not-allowed;
-  min-width: 200px;
-  height: 56px;
-  opacity: 0.8;
-}
-
 .progress-background {
   position: absolute;
   top: 0;
@@ -230,13 +227,6 @@ const handleClick = () => {
   line-height: 1;
 }
 
-.processing-text {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  line-height: 1;
-}
-
 /* Transiciones */
 .fab-enter-active,
 .fab-leave-active {
@@ -266,11 +256,6 @@ const handleClick = () => {
   }
 
   .disabled-with-progress {
-    min-width: 180px;
-    height: 52px;
-  }
-
-  .processing-state {
     min-width: 180px;
     height: 52px;
   }
