@@ -504,6 +504,7 @@ router
     ])
     router.get('/api/admin/activities', [UsersAdminController, 'globalActivities'])
     router.post('/api/admin/users/:id/impersonate', [UsersAdminController, 'impersonate'])
+    router.post('/api/admin/users/:id/revoke-sessions', [UsersAdminController, 'revokeSessions'])
 
     // Admin Processes management
     router.get('/api/admin/processes', [ProcessesAdminController, 'index'])

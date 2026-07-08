@@ -311,4 +311,34 @@ export default class UsersAdminController {
       })
     }
   }
+
+  /**
+   * Revoke all access tokens for a user, forcing them to log in again (admin only)
+   */
+  async revokeSessions({ params, response }: HttpContext) {
+    try {
+      const User = (await import('#models/user')).default
+
+      const user = await User.find(params.id)
+      if (!user) {
+        return response.notFound({ message: 'User not found' })
+      }
+
+      const tokens = await User.accessTokens.all(user)
+      for (const token of tokens) {
+        await User.accessTokens.delete(user, token.identifier)
+        console.log(`Revoked token ${token.identifier} for user ${user.id}`)
+      }
+
+      return response.ok({
+        message: 'Sessions revoked',
+        revokedCount: tokens.length,
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to revoke sessions',
+        error: error.message,
+      })
+    }
+  }
 }
