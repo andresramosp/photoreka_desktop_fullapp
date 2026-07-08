@@ -16,7 +16,15 @@ export default class CollectionsController {
 
       const collections = await Collection.query()
         .where('userId', user.id)
-        .preload('photos')
+        .preload('photos', (photosQuery) => {
+          photosQuery.select(
+            'id',
+            'name',
+            'originalFileName',
+            'thumbnailName',
+            'descriptions'
+          )
+        })
         .orderBy('updatedAt', 'desc')
 
       // Formatear la respuesta para incluir información básica de las fotos

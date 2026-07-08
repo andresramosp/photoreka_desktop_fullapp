@@ -46,7 +46,9 @@ export default class SeriesSetsController {
       const sets = await SeriesSet.query()
         .where('userId', user.id)
         .preload('childSets')
-        .preload('series', (query) => query.preload('photos'))
+        .preload('series', (query) =>
+          query.preload('photos', (photosQuery) => photosQuery.select('id', 'thumbnailName'))
+        )
         .orderBy('name', 'asc')
 
       return response.ok(sets.map((set) => this.formatSet(set, true)))
@@ -64,7 +66,9 @@ export default class SeriesSetsController {
         .where('id', params.id)
         .where('userId', user.id)
         .preload('childSets', (query) => query.preload('series'))
-        .preload('series', (query) => query.preload('photos'))
+        .preload('series', (query) =>
+          query.preload('photos', (photosQuery) => photosQuery.select('id', 'thumbnailName'))
+        )
         .first()
 
       if (!set) {

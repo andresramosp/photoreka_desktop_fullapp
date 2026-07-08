@@ -29,7 +29,7 @@ export default class CollectionSetsController {
         setId: col.setId,
         createdAt: col.createdAt,
         updatedAt: col.updatedAt,
-        photosCount: (col as any).photosCount ?? 0,
+        photosCount: (col as any).photos?.length ?? 0,
         photos:
           (col as any).photos?.slice(0, 3).map((p: any) => ({
             id: p.id,
@@ -52,7 +52,9 @@ export default class CollectionSetsController {
       const sets = await CollectionSet.query()
         .where('userId', user.id)
         .preload('childSets')
-        .preload('collections', (q) => q.preload('photos'))
+        .preload('collections', (q) =>
+          q.preload('photos', (photosQuery) => photosQuery.select('id', 'thumbnailName'))
+        )
         .orderBy('name', 'asc')
 
       return response.ok(sets.map((s) => this.formatSet(s, true)))
@@ -73,7 +75,9 @@ export default class CollectionSetsController {
         .where('id', params.id)
         .where('userId', user.id)
         .preload('childSets', (q) => q.preload('collections'))
-        .preload('collections', (q) => q.preload('photos'))
+        .preload('collections', (q) =>
+          q.preload('photos', (photosQuery) => photosQuery.select('id', 'thumbnailName'))
+        )
         .first()
 
       if (!set) {
