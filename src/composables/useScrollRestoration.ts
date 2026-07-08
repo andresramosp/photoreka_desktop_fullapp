@@ -75,11 +75,18 @@ export function useScrollRestoration(
   };
 
   let removeGuard: (() => void) | null = null;
+  let lastKey = getViewKey(route);
 
   onMounted(() => {
     // Runs before the DOM swaps, while the outgoing view still holds its scroll.
-    removeGuard = router.beforeEach((_to, from) => {
-      save(getViewKey(from));
+    removeGuard = router.beforeEach((to, from) => {
+      // Only snapshot when the actual keep-alive view is changing. Same-view
+      // navigations (e.g. a query-param change like ?section=... that a view
+      // makes to sync its own in-page scroll position) must NOT be saved and
+      // later restored, or the restore fights the view's own scrollIntoView.
+      if (getViewKey(from) !== getViewKey(to)) {
+        save(getViewKey(from));
+      }
       return true;
     });
   });
@@ -88,11 +95,16 @@ export function useScrollRestoration(
     removeGuard?.();
   });
 
-  // Restore the incoming view's scroll once its route becomes active.
+  // Restore the incoming view's scroll once its route becomes active — but only
+  // when the view key actually changed, so same-view query navigations are left
+  // alone and the view keeps whatever scroll position it set for itself.
   watch(
     () => route.fullPath,
     () => {
-      restore(getViewKey(route));
+      const key = getViewKey(route);
+      if (key === lastKey) return;
+      lastKey = key;
+      restore(key);
     },
   );
 }
