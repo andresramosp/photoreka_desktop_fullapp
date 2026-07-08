@@ -67,11 +67,10 @@ const handleApiError = (error: AxiosError) => {
         localStorage.removeItem("auth_token");
         sessionStorage.removeItem("auth_token");
         message.warning("Your session has expired. Please log in again.");
-        router
-          .replace({ path: "/auth", query: { redirect: router.currentRoute.value.fullPath } })
-          .finally(() => {
-            isHandlingSessionExpiry = false;
-          });
+        // Hard redirect (not router.replace) so the whole app remounts fresh —
+        // a SPA navigation left stale Pinia state (isAuthenticated still true)
+        // and App.vue kept showing the authenticated layout instead of /auth.
+        window.location.replace("/auth");
       }
       return Promise.reject(error);
     }
