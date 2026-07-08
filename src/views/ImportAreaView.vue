@@ -202,7 +202,9 @@ async function analyze(ev) {
       `The analysis of your photos has begun! You can close this window in the meantime.`,
       { duration: 5000 },
     );
-    photosStore.clearAllSelections();
+    // Clear the real selection that fed this analysis (owned by the Lightbox's
+    // PhotosGrid), so the same batch can't be re-submitted while it processes.
+    lightboxRef.value?.clearSelection?.();
     photosStore.getOrFetch(true);
 
     // Update usage after starting analysis

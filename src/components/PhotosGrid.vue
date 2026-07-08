@@ -2140,6 +2140,13 @@ const handleSwapComplete = () => {
   // Reset duplicate state after swap
   resetDuplicateState();
 };
+
+// Expose the grid's own (local) selection clearing so parents can reset the
+// real selection after acting on it (e.g. after launching an analysis). This
+// is the selection that actually feeds the analyze dialog — not the store's.
+defineExpose({
+  clearSelection: clearAllSelections,
+});
 </script>
 
 <style scoped>

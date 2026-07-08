@@ -27,19 +27,11 @@ export const usePhotosStore = defineStore("photos", {
     photos: null,
     isLoading: false,
     isInitialized: false, // Indica si la carga inicial del catálogo está completa
-    selectedPhotosRecord: {},
     showUploadProgress: false, // Controla si se muestra el progreso de subida especial
     duplicatesChecked: false, // Indica si ya se han verificado duplicados
   }),
 
   getters: {
-    // Getter para selección global - solo para PhotoHub (PhotosCatalog y PhotosUpload)
-
-    selectedPhotoIds: (state) =>
-      Object.keys(state.selectedPhotosRecord)
-        .filter((photoId) => !!state.selectedPhotosRecord[photoId])
-        .map(Number),
-
     lightboxPhotos: (state) =>
       Array.isArray(state.photos)
         ? state.photos.filter(
@@ -190,7 +182,6 @@ export const usePhotosStore = defineStore("photos", {
       this.photos = null;
       this.isLoading = false;
       this.isInitialized = false;
-      this.selectedPhotosRecord = {};
       this.showUploadProgress = false;
       this.duplicatesChecked = false;
     },
@@ -267,9 +258,6 @@ export const usePhotosStore = defineStore("photos", {
     async deletePhotos(photoIds) {
       try {
         await api.post(`/api/catalog/delete`, { ids: photoIds });
-        photoIds.forEach((id) => {
-          delete this.selectedPhotosRecord[id];
-        });
         this.photos = this.photos.filter(
           (photo) => !photoIds.includes(photo.id),
         );
@@ -431,27 +419,6 @@ export const usePhotosStore = defineStore("photos", {
         );
         return {};
       }
-    },
-
-    // Acciones de selección global - solo para PhotoHub (PhotosCatalog y PhotosUpload)
-    togglePhotoSelection(photoId) {
-      this.selectedPhotosRecord[photoId] = !this.selectedPhotosRecord[photoId];
-    },
-
-    selectAllPhotos(photoIds) {
-      photoIds.forEach((photoId) => {
-        this.selectedPhotosRecord[photoId] = true;
-      });
-    },
-
-    deselectAllPhotos(photoIds) {
-      photoIds.forEach((photoId) => {
-        this.selectedPhotosRecord[photoId] = false;
-      });
-    },
-
-    clearAllSelections() {
-      this.selectedPhotosRecord = {};
     },
   },
 });

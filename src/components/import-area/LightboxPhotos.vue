@@ -387,6 +387,7 @@
     <div v-if="lightboxPhotos.length > 0" class="uploaded-photos-section">
       <!-- Photos Grid Component -->
       <PhotosGrid
+        ref="photosGridRef"
         :photos="filteredPhotos"
         :displaySendToChat="false"
         :displayAddToCollection="false"
@@ -812,6 +813,10 @@ const fastMode = computed({
 const showAnalyzeDialog = ref(false);
 const showTimeEstimateDialog = ref(false);
 
+// Ref to the underlying PhotosGrid, so we can clear its (local) selection after
+// an analysis is launched. That grid owns the real selection state.
+const photosGridRef = ref(null);
+
 // En el check 'preprocessed' queremos ver todas las usables en las tools, por lo que entran
 // las que están en proceso y por tanto preprocessed
 const lightboxPhotos = computed(() => photosStore.lightboxPhotos);
@@ -1204,9 +1209,20 @@ const confirmAnalyze = () => {
   });
 };
 
+// Clear the real selection (lives in PhotosGrid's local selection composable).
+// Also reset our locally tracked selection mirrors so the analyze dialog and
+// floating button count go back to zero immediately.
+const clearSelection = () => {
+  photosGridRef.value?.clearSelection?.();
+  localSelectedCount.value = 0;
+  localSelectedIds.value = [];
+  emit("selection-change", { selectedCount: 0, selectedIds: [] });
+};
+
 // Exponer openAnalyzeDialog para uso del componente padre
 defineExpose({
   openAnalyzeDialog,
+  clearSelection,
 });
 </script>
 
