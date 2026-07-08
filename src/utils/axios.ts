@@ -35,10 +35,46 @@ api_analyzer.interceptors.request.use((config) => {
   return config;
 });
 
+// Evita disparar múltiples redirecciones/mensajes cuando varias requests
+// fallan a la vez tras caducar/revocarse la sesión.
+let isHandlingSessionExpiry = false;
+
 // Manejador de errores común
 const handleApiError = (error: AxiosError) => {
   if (error.response) {
     const { status, data } = error.response;
+
+    // Sesión caducada o revocada (401).
+    //
+    // Distinguimos el 401 del guard de AdonisJS (token inválido/expirado/revocado
+    // o cuenta inactiva desde auth_middleware) de los 401 "de negocio" que lanzan
+    // los controllers con response.unauthorized({ message }) — p.ej. credenciales
+    // inválidas en el login o un token de sesión de geo-recovery caducado.
+    //
+    // El guard/middleware serializa como { errors: [{ message }] }; los controllers
+    // como { message }. Sólo el primero significa "tu sesión ya no vale", y sólo
+    // actuamos si además había un token (así el login sin token nunca redirige).
+    const hasToken =
+      !!localStorage.getItem("auth_token") ||
+      !!sessionStorage.getItem("auth_token");
+    const isGuardUnauthorized =
+      !!data &&
+      typeof data === "object" &&
+      Array.isArray((data as any).errors);
+    if (status === 401 && hasToken && isGuardUnauthorized) {
+      if (!isHandlingSessionExpiry) {
+        isHandlingSessionExpiry = true;
+        localStorage.removeItem("auth_token");
+        sessionStorage.removeItem("auth_token");
+        message.warning("Your session has expired. Please log in again.");
+        router
+          .replace({ path: "/auth", query: { redirect: router.currentRoute.value.fullPath } })
+          .finally(() => {
+            isHandlingSessionExpiry = false;
+          });
+      }
+      return Promise.reject(error);
+    }
 
     // No mostrar mensaje para errores 404 ni 500+ (errores internos del servidor)
     if (status === 404 || status >= 500) {
