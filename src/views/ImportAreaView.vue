@@ -45,7 +45,7 @@
             Analyses
           </span>
         </template>
-        <ProcessingPhotos @navigate-to-tab="setActiveTab" />
+        <ProcessingPhotos ref="processingPhotosRef" @navigate-to-tab="setActiveTab" />
       </n-tab-pane>
     </n-tabs>
 
@@ -96,6 +96,7 @@ const emailConfirmationMessageId = ref(null);
 // Reactive state
 const activeTab = ref("upload");
 const lightboxRef = ref(null);
+const processingPhotosRef = ref(null);
 const lightboxSelectedCount = ref(0);
 const isDuplicateFilterActive = ref("all");
 
@@ -196,6 +197,10 @@ async function analyze(ev) {
       fastMode: ev.fastMode,
       photoIds: toProcess,
     });
+
+    // Load the freshly created process(es) before switching tabs, instead of
+    // trusting ProcessingPhotos' own 5s poll to pick them up on its own timing.
+    await processingPhotosRef.value?.loadProcesses?.();
 
     setActiveTab("processing");
     message.success(

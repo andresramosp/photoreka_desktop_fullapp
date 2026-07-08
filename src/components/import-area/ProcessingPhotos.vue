@@ -618,6 +618,13 @@ const navigateToTab = (tabName) => {
   emit("navigate-to-tab", tabName);
 };
 
+// Exponer loadProcesses para que ImportAreaView pueda forzar una carga
+// inmediata tras lanzar un análisis, en vez de depender del próximo tick
+// del polling de 5s.
+defineExpose({
+  loadProcesses,
+});
+
 // Solo mostrar el botón en el último proceso terminado
 function isLastFinishedJob(job) {
   const finishedJobs = processingJobs.value.filter(
