@@ -58,6 +58,19 @@
               </n-button>
               <n-button
                 size="small"
+                type="warning"
+                quaternary
+                :loading="revokingSessions"
+                title="Kill current session — forces re-login next time"
+                @click="revokeSessions"
+              >
+                <template #icon>
+                  <n-icon size="16"><LogOutIcon /></n-icon>
+                </template>
+                Kill session
+              </n-button>
+              <n-button
+                size="small"
                 type="error"
                 quaternary
                 :disabled="user.role === 'admin'"
@@ -781,6 +794,7 @@ import {
   RefreshOutline as RefreshIcon,
   PersonOutline as ImpersonateIcon,
   ChevronDownOutline as ChevronDownIcon,
+  LogOutOutline as LogOutIcon,
 } from "@vicons/ionicons5";
 import { api } from "../../utils/axios";
 
@@ -869,6 +883,7 @@ const runSchedulerNow = ref(false);
 const deleting = ref(false);
 const savingUsage = ref(false);
 const impersonating = ref(false);
+const revokingSessions = ref(false);
 
 const editUsage = ref({
   analyzedPhotosLimit: 0,
@@ -1078,6 +1093,24 @@ async function impersonateUser() {
     message.error(msg);
   } finally {
     impersonating.value = false;
+  }
+}
+
+async function revokeSessions() {
+  if (!user.value) return;
+  revokingSessions.value = true;
+  try {
+    const { data } = await api.post(
+      `/api/admin/users/${user.value.id}/revoke-sessions`,
+    );
+    message.success(
+      `Session killed (${data.revokedCount} token(s) revoked). User must log in again.`,
+    );
+  } catch (err: any) {
+    const msg = err?.response?.data?.message || "Failed to revoke sessions";
+    message.error(msg);
+  } finally {
+    revokingSessions.value = false;
   }
 }
 
