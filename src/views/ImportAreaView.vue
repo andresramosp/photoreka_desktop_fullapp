@@ -31,6 +31,7 @@
         </template>
         <LightboxPhotos
           ref="lightboxRef"
+          :is-analyzing="isAnalyzing"
           @on-analyze="analyze"
           @selection-change="handleLightboxSelectionChange"
           @duplicates-filter-change="handleDuplicatesFilterChange"
@@ -99,6 +100,7 @@ const lightboxRef = ref(null);
 const processingPhotosRef = ref(null);
 const lightboxSelectedCount = ref(0);
 const isDuplicateFilterActive = ref("all");
+const isAnalyzing = ref(false);
 
 // Handle selection changes from LightboxPhotos
 const handleLightboxSelectionChange = (selectionData) => {
@@ -190,6 +192,7 @@ async function analyze(ev) {
 
   if (toProcess.length === 0) return;
 
+  isAnalyzing.value = true;
   try {
     await api_analyzer.post(`/api/analyzer`, {
       packageId: "process",
@@ -239,6 +242,8 @@ async function analyze(ev) {
     } else {
       console.error("❌ Error iniciando análisis:", error);
     }
+  } finally {
+    isAnalyzing.value = false;
   }
 }
 

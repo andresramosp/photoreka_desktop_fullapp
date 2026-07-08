@@ -168,7 +168,10 @@
         <template #footer>
           <div class="analyze-confirm-footer">
             <n-button tertiary @click="closeAnalyzeDialog">Cancel</n-button>
-            <n-button type="info" @click="confirmAnalyze"
+            <n-button
+              type="info"
+              :loading="isAnalyzing"
+              @click="confirmAnalyze"
               >Start Analysis</n-button
             >
           </div>
@@ -490,6 +493,13 @@ const router = useRouter();
 const isMaintenanceMode = computed(
   () => import.meta.env.VITE_MAINTENANCE_MODE === "true",
 );
+
+const props = defineProps({
+  isAnalyzing: {
+    type: Boolean,
+    default: false,
+  },
+});
 
 const emit = defineEmits([
   "on-analyze",
@@ -1194,7 +1204,9 @@ const openAnalyzeDialog = () => {
 };
 
 const confirmAnalyze = () => {
-  showAnalyzeDialog.value = false;
+  // Dialog stays open with a spinner on "Start Analysis" until the parent
+  // finishes awaiting the analyzer call (see the isAnalyzing watcher below,
+  // which closes it once that settles).
   let selectedIds = localSelectedCount.value > 0 ? localSelectedIds.value : [];
   // When unique filter is active and no manual selection, analyze only unique photos
   if (
@@ -1208,6 +1220,15 @@ const confirmAnalyze = () => {
     selectedIds,
   });
 };
+
+watch(
+  () => props.isAnalyzing,
+  (analyzing, wasAnalyzing) => {
+    if (wasAnalyzing && !analyzing) {
+      showAnalyzeDialog.value = false;
+    }
+  },
+);
 
 // Clear the real selection (lives in PhotosGrid's local selection composable).
 // Also reset our locally tracked selection mirrors so the analyze dialog and
