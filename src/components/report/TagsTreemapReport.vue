@@ -188,6 +188,7 @@ const treemapSize = ref({ width: 0, height: 0 });
 const treemapRenderKey = ref(0);
 const lastGeneratedSignature = ref(null);
 let refreshTimer = null;
+let tagSearchTimer = null;
 let treemapResizeObserver = null;
 
 const observeTreemapLayout = (element) => {
@@ -473,35 +474,40 @@ const handleGenerateButtonClick = () => {
   handleGenerateTreemap();
 };
 
-const searchTags = async (term) => {
+const searchTags = (term) => {
   tagSearchTerm.value = term;
+  window.clearTimeout(tagSearchTimer);
 
   if (!term || term.trim().length < 1) {
     tagOptions.value = [];
     return;
   }
 
-  isSearching.value = true;
-  try {
-    const response = await api.get("/api/tags/search", {
-      params: { term: term.trim() },
-    });
-    const selectedValues = new Set(selectedTags.value);
-    const foundOptions = (response.data?.result || [])
-      .map((tag) => ({
-        label: tag.name,
-        value: tag.name,
-      }))
-      .filter(
-        (option) => !selectedValues.has(String(option.value).toLowerCase()),
+  tagSearchTimer = window.setTimeout(async () => {
+    isSearching.value = true;
+    try {
+      const response = await api.get("/api/tags/search", {
+        params: { term: term.trim() },
+      });
+      // Ignore stale responses if the user kept typing
+      if (tagSearchTerm.value !== term) return;
+      const selectedValues = new Set(selectedTags.value);
+      const foundOptions = (response.data?.result || [])
+        .map((tag) => ({
+          label: tag.name,
+          value: tag.name,
+        }))
+        .filter(
+          (option) => !selectedValues.has(String(option.value).toLowerCase()),
+        );
+      const optionsByValue = new Map(
+        foundOptions.map((option) => [option.value, option]),
       );
-    const optionsByValue = new Map(
-      foundOptions.map((option) => [option.value, option]),
-    );
-    tagOptions.value = Array.from(optionsByValue.values());
-  } finally {
-    isSearching.value = false;
-  }
+      tagOptions.value = Array.from(optionsByValue.values());
+    } finally {
+      isSearching.value = false;
+    }
+  }, 300);
 };
 
 const toggleTag = (tagName) => {
@@ -562,6 +568,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   treemapResizeObserver?.disconnect();
   window.clearTimeout(refreshTimer);
+  window.clearTimeout(tagSearchTimer);
 });
 
 const sumValue = (items) => items.reduce((sum, item) => sum + item.value, 0);

@@ -20,7 +20,7 @@
         </div>
 
         <div class="auth-footer">
-          <p class="footer-text">© 2024 Photoreka. All rights reserved.</p>
+          <p class="footer-text">© 2026 Photoreka. All rights reserved.</p>
         </div>
       </div>
     </div>

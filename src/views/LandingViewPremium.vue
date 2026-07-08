@@ -542,7 +542,7 @@
         <footer class="premium-footer">
           <div class="footer-container">
             <p class="footer-copyright">
-              © 2024 Photoreka. All rights reserved.
+              © 2026 Photoreka. All rights reserved.
             </p>
             <a
               href="https://www.photoreka.com/terms"
