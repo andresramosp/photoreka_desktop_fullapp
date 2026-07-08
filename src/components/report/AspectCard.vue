@@ -16,6 +16,7 @@
     <div class="values-list">
       <div
         v-for="(item, index) in aspect.breakdown"
+        v-if="!hideZeroCountFor.includes(aspect.key) || item.count > 0"
         :key="item.value"
         class="value-row"
       >
@@ -50,6 +51,10 @@
 <script setup>
 import { computed } from "vue";
 import { getAspectSliceColor } from "@/components/report/visualAspectsUtils.js";
+
+// Aspect keys (see aspect.key, e.g. "genre" from photo_schema.js) whose
+// zero-count values should be hidden instead of shown as empty bars.
+const hideZeroCountFor = ["genre"];
 
 const props = defineProps({
   aspect: {
