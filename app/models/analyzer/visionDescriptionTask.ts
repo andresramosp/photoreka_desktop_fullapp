@@ -131,6 +131,21 @@ export class VisionDescriptionTask extends AnalyzerTask {
 
       // Manejar el caso donde response puede tener menos resultados debido a errores
       if (response && response.result && response.result.length > 0) {
+        // Fotos de referencia para este batch (Gemini usa validPhotos, el resto el batch original)
+        const referencePhotos = response.validPhotos || batch
+
+        // DETECCIÓN DE DROP SILENCIOSO: el modelo devolvió menos resultados que imágenes.
+        // Las fotos sin resultado NO se guardan (se saltan en commit) y quedan pendientes
+        // sin que se registre ningún error explícito.
+        if (response.result.length < referencePhotos.length) {
+          const droppedPhotos = referencePhotos.slice(response.result.length)
+          const droppedIds = droppedPhotos.map((p: Photo) => p.id)
+          logger.error(
+            `[SILENT_DROP] ${this.name} (${this.modelName}): respuesta parcial ${response.result.length}/${referencePhotos.length}. ` +
+              `${droppedIds.length} foto(s) sin resultado quedarán pendientes: [${droppedIds.join(', ')}]`
+          )
+        }
+
         if (response.validPhotos) {
           // Para Gemini, usamos las fotos válidas identificadas
           response.result.forEach((res: any, photoIndex: number) => {
@@ -150,7 +165,12 @@ export class VisionDescriptionTask extends AnalyzerTask {
         }
         logger.debug(`Datos salvados ${this.model} para ${response.result.length} imágenes`)
       } else {
-        logger.warn(`No se obtuvieron resultados válidos para el batch de ${batch.length} imágenes`)
+        // Batch completo sin resultado: todas estas fotos quedan pendientes.
+        const droppedIds = batch.map((p) => p.id)
+        logger.error(
+          `[SILENT_DROP] ${this.name} (${this.modelName}): sin resultados válidos para el batch. ` +
+            `${droppedIds.length} foto(s) quedarán pendientes: [${droppedIds.join(', ')}]`
+        )
       }
     }
 
