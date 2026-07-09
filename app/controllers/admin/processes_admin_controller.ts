@@ -85,9 +85,10 @@ export default class ProcessesAdminController {
   /**
    * Manual retry of a process (admin_retry mode)
    */
-  async retry({ params, response }: HttpContext) {
+  async retry({ params, request, response }: HttpContext) {
     try {
-      const result = await AdminProcessesService.adminRetry(params.id)
+      const notifyUser = !!request.input('notifyUser')
+      const result = await AdminProcessesService.adminRetry(params.id, notifyUser)
       if (!result) {
         return response.notFound({ message: 'Process not found' })
       }

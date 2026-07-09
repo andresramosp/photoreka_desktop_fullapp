@@ -41,6 +41,7 @@ export default class AnalyzerProcessRunner {
   private originalMode: AnalyzerMode = 'adding'
   private measurementStartIso: string | null = null
   private measurementCommandsPrinted: boolean = false
+  private forceNotify: boolean = false
 
   constructor() {
     this.process = new AnalyzerProcess()
@@ -120,6 +121,15 @@ export default class AnalyzerProcessRunner {
    */
   public getProcessId(): string | number | undefined {
     return this.process?.id
+  }
+
+  /**
+   * Fuerza el envío del email de finalización aunque el modo del proceso
+   * (p.ej. admin_retry) no lo haría por defecto. Usado por el retry manual
+   * de Admin cuando el admin marca "notificar al usuario".
+   */
+  public setForceNotify(value: boolean) {
+    this.forceNotify = value
   }
 
   /**
@@ -516,7 +526,8 @@ export default class AnalyzerProcessRunner {
 
   // NUEVO: Función privada para manejar el autoRetry
   private async handleAutoRetry() {
-    const shouldNotify = this.originalMode === 'adding' && !this.process.isPreprocess
+    const shouldNotify =
+      (this.originalMode === 'adding' || this.forceNotify) && !this.process.isPreprocess
 
     if (this.process.autoRetry) {
       // Verificar si hay fotos pendientes en alguna tarea

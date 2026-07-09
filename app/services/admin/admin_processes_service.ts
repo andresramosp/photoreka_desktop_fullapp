@@ -257,7 +257,8 @@ export default class AdminProcessesService {
    * Launch an admin_retry for a process (no cost to user, no autoRetry)
    */
   static async adminRetry(
-    processId: string
+    processId: string,
+    notifyUser: boolean = false
   ): Promise<{ processId: string; error?: string } | null> {
     const p = await AnalyzerProcess.find(processId)
     if (!p) return null
@@ -280,6 +281,7 @@ export default class AdminProcessesService {
     }
 
     const runner = new AnalyzerProcessRunner()
+    runner.setForceNotify(notifyUser)
     await runner.initProcess(
       photos,
       p.packageId,
