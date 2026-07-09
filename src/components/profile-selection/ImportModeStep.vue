@@ -1,11 +1,7 @@
 <template>
   <div class="step-content">
     <div class="profile-header">
-      <AppLogo
-        layout="icon"
-        :height="isMobile ? 36 : 48"
-        class="header-logo"
-      />
+      <AppLogo layout="icon" class="header-logo" />
       <div class="header-text">
         <h1 class="profile-title">How will you import your photos?</h1>
         <p class="profile-subtitle">
@@ -154,9 +150,6 @@
 <script setup lang="ts">
 import { InformationCircleOutline } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
-import { useIsMobile } from "@/composables/useIsMobile.js";
-
-const { isMobile } = useIsMobile();
 
 interface Props {
   selectedMode: "web" | "lightroom" | null;
@@ -197,7 +190,7 @@ const handleNext = () => {
 
 .profile-header {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
   gap: 16px;
   margin-bottom: 32px;
@@ -207,12 +200,20 @@ const handleNext = () => {
   flex-shrink: 0;
 }
 
+.header-logo :deep(.logo-image) {
+  height: 100% !important;
+  width: auto !important;
+}
+
 .header-text {
   text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .profile-title {
-  margin: 0 0 8px 0;
+  margin: 0 0 2px 0;
   font-size: 32px;
   font-weight: 700;
   color: var(--text-secondary);
