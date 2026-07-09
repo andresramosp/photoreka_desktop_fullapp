@@ -6,8 +6,8 @@
           <div class="logo-wrapper" aria-label="Inicio">
             <AppLogo
               layout="horizontal"
-              :with-claim="true"
-              :height="85"
+              :with-claim="false"
+              :height="55"
               :click-to-home="true"
             />
           </div>
