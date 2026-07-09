@@ -1128,6 +1128,19 @@
 }
 
 /* ==========================================================================
+   NAIVE UI TOOLTIP OVERRIDES
+   By default NTooltip does not constrain its width, so long text renders as
+   a single very long line instead of wrapping. Force a sensible max-width
+   and allow natural line breaks for every tooltip in the app.
+   ========================================================================== */
+.n-tooltip {
+  max-width: 280px;
+  white-space: normal !important;
+  word-break: break-word;
+  text-align: left;
+}
+
+/* ==========================================================================
    AI REASONING OVERLAY - Shared across PhotoCard components
    ========================================================================== */
 
