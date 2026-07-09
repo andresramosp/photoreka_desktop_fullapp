@@ -64,6 +64,7 @@ export type ModelName =
   | 'gpt-5.4-mini'
   | 'gpt-5.4-nano'
   | 'gpt-5.4-pro'
+  | 'gpt-5.5'
   | 'gpt-5-mini'
   | 'gpt-5-nano'
   | 'gpt-5-chat-latest'
@@ -138,6 +139,11 @@ export const PRICES = {
     input_cache_miss: 30 / 1_000_000,
     input_cache_hit: 0,
     output: 180 / 1_000_000,
+  },
+  'gpt-5.5': {
+    input_cache_miss: 5 / 1_000_000,
+    input_cache_hit: 0.5 / 1_000_000,
+    output: 30 / 1_000_000,
   },
   'gpt-5-mini': {
     input_cache_miss: 0.25 / 1_000_000,
@@ -265,6 +271,104 @@ export default class ModelsService {
 
   static lastPingTimestamps: Record<string, number> = {}
   static pendingWarmups: Record<string, Promise<void>> = {}
+
+  // Short-lived cache of the last /health verdict per endpoint, so a single
+  // search firing many batches doesn't hammer RunPod's health endpoint.
+  static warmStatusCache: Record<string, { warm: boolean; at: number }> = {}
+  warmStatusCacheTtlMs = 5000
+  // How long to wait on /health before giving up and treating the endpoint as
+  // cold. /health is served by RunPod's control-plane (not the worker) and
+  // answers in ~300ms even with zero workers, so 1s is generous.
+  runpodHealthTimeoutMs = 1000
+
+  static lastWarmTriggerAt: Record<string, number> = {}
+  warmTriggerCooldownMs = 15000
+
+  /** Base URL configured for a REMOTE RunPod endpoint, or null if not set. */
+  private getRunPodBaseUrl(endpointType: EndpointType): string | null {
+    const map: Partial<Record<EndpointType, string>> = {
+      embeddings_gpu: this.remoteBaseUrlEmbeddingsGPU,
+      embeddings_cpu: this.remoteBaseUrlEmbeddingsCPU,
+      logic_gpu: this.remoteBaseUrlLogicGPU,
+      logic_cpu: this.remoteBaseUrlLogicCPU,
+      image: this.remoteBaseUrlImage,
+    }
+    return map[endpointType] || null
+  }
+
+  /** Extract the `.../v2/<id>` root of a RunPod serverless URL (drops /runsync). */
+  private runpodEndpointRoot(endpointType: EndpointType): string | null {
+    const base = (this.getRunPodBaseUrl(endpointType) || '').trim()
+    const match = base.match(/^(https:\/\/api\.runpod\.ai\/v2\/[^/]+)/)
+    return match ? match[1] : null
+  }
+
+  /**
+   * True if the RunPod serverless endpoint has at least one worker able to serve
+   * a request WITHOUT a cold start. Uses RunPod's /health control-plane endpoint,
+   * which never wakes or scales the endpoint and responds fast even with zero
+   * workers. The verdict is cached for warmStatusCacheTtlMs. Fails safe to
+   * `false` (cold) on any timeout/error.
+   *
+   * Only meaningful in REMOTE mode; in LOCAL mode the model runs locally and is
+   * always treated as warm.
+   */
+  public async isRunPodEndpointWarm(endpointType: EndpointType): Promise<boolean> {
+    if (this.apiMode !== 'REMOTE') return true
+
+    const cached = ModelsService.warmStatusCache[endpointType]
+    if (cached && Date.now() - cached.at < this.warmStatusCacheTtlMs) {
+      return cached.warm
+    }
+
+    const root = this.runpodEndpointRoot(endpointType)
+    // Not a standard serverless URL (e.g. the LB endpoint) — don't gate on it.
+    if (!root) return true
+
+    try {
+      const { data } = await axios.get(`${root}/health`, {
+        headers: this.runpodApiKey ? { Authorization: `Bearer ${this.runpodApiKey}` } : {},
+        timeout: this.runpodHealthTimeoutMs,
+      })
+      const w = data?.workers || {}
+      const warm = (Number(w.idle) || 0) + (Number(w.ready) || 0) + (Number(w.running) || 0) > 0
+      ModelsService.warmStatusCache[endpointType] = { warm, at: Date.now() }
+      return warm
+    } catch (error) {
+      console.warn('[RunPod] Health check failed, treating endpoint as cold:', error.message)
+      ModelsService.warmStatusCache[endpointType] = { warm: false, at: Date.now() }
+      return false
+    }
+  }
+
+  /**
+   * Fire-and-forget wake-up for a RunPod serverless endpoint: enqueues a cheap
+   * `ping` job on the ASYNC /run endpoint so RunPod scales a worker up in the
+   * background, and returns immediately without waiting out the cold start.
+   * Guarded by warmTriggerCooldownMs so we don't enqueue a burst of ping jobs
+   * while the worker boots. No-op in LOCAL mode.
+   */
+  public triggerRunPodWarm(endpointType: EndpointType): void {
+    if (this.apiMode !== 'REMOTE') return
+
+    const now = Date.now()
+    const last = ModelsService.lastWarmTriggerAt[endpointType] || 0
+    if (now - last < this.warmTriggerCooldownMs) return
+    ModelsService.lastWarmTriggerAt[endpointType] = now
+
+    const root = this.runpodEndpointRoot(endpointType)
+    if (!root) return
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (this.runpodApiKey) headers['Authorization'] = `Bearer ${this.runpodApiKey}`
+
+    // /run is async: RunPod returns a job id immediately and boots a worker in
+    // the background. We deliberately don't await the job's result.
+    axios
+      .post(`${root}/run`, { input: { operation: 'ping', data: {} } }, { headers, timeout: 5000 })
+      .then(() => console.log(`[RunPod] Warm-up job enqueued for ${endpointType}`))
+      .catch((error) => console.warn('[RunPod] Warm-up trigger failed:', error.message))
+  }
 
   public async ensureRunPodWarm(endpointType: EndpointType) {
     const now = Date.now()
@@ -995,7 +1099,14 @@ export default class ModelsService {
 
       return result
     } catch (error) {
-      console.error('Error fetching GPT response:', error)
+      const status = error?.response?.status
+      const apiData = error?.response?.data
+      console.error(
+        `[GPT_ERROR] getGPTResponse failed | model=${model}` +
+          (status ? ` | httpStatus=${status}` : '') +
+          ` | message=${error instanceof Error ? error.message : String(error)}` +
+          (apiData ? ` | apiResponse=${JSON.stringify(apiData).slice(0, 500)}` : '')
+      )
     }
   }
 
