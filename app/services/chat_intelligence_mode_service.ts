@@ -56,7 +56,7 @@ const CHAT_INTELLIGENCE_MODES: ReadonlyArray<ChatIntelligenceModeDefinition> = [
     // modelPhase2Expensive: 'gemini-3-pro-preview',
     // modelPhase2Lite: 'gemini-3.1-flash-lite',
     modelPhase1: 'gemini-3-flash-preview',
-    modelPhase2Cheap: 'gpt-5.4',
+    modelPhase2Cheap: 'gpt-5.5',
     modelPhase2Expensive: 'gpt-5.5',
     modelPhase2Lite: 'gemini-3.1-flash-lite',
     costFactor: 2,
