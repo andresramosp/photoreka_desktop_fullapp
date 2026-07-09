@@ -1,7 +1,11 @@
 <template>
   <div class="step-content">
     <div class="profile-header">
-      <AppLogo layout="icon" class="header-logo" />
+      <AppLogo
+        layout="icon"
+        :height="isMobile ? 52 : 64"
+        class="header-logo"
+      />
       <div class="header-text">
         <h1 class="profile-title">What is your preferred style?</h1>
         <p class="profile-subtitle">
@@ -219,6 +223,9 @@ import { BookOpen16Regular } from "@vicons/fluent";
 import { PaletteOutlined } from "@vicons/material";
 import { InfoCircleFilled } from "@vicons/antd";
 import AppLogo from "@/components/AppLogo.vue";
+import { useIsMobile } from "@/composables/useIsMobile.js";
+
+const { isMobile } = useIsMobile();
 
 interface Props {
   selectedProfiles: string[];
@@ -406,7 +413,7 @@ const handleComplete = () => {
 
 .profile-header {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   justify-content: center;
   gap: 16px;
   margin-bottom: 32px;
@@ -416,16 +423,8 @@ const handleComplete = () => {
   flex-shrink: 0;
 }
 
-.header-logo :deep(.logo-image) {
-  height: 100% !important;
-  width: auto !important;
-}
-
 .header-text {
   text-align: left;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
 }
 
 .profile-title {
