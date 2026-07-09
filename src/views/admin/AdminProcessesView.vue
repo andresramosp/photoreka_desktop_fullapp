@@ -408,6 +408,7 @@ import {
   NSpin,
   NPagination,
   NModal,
+  NCheckbox,
   useMessage,
   useDialog,
 } from "naive-ui";
@@ -753,13 +754,32 @@ async function runHealthCheck() {
 
 // Manual retry
 const retryLoading = ref(false);
+const retryNotifyUser = ref(false);
 
 function confirmRetry() {
   if (!selectedProcess.value) return;
   const p = selectedProcess.value;
+  retryNotifyUser.value = false;
   dialog.warning({
     title: "Confirm Manual Retry",
-    content: `Launch admin_retry for Process #${p.id}? This will re-run pending tasks without charging the user.`,
+    content: () =>
+      h("div", [
+        h(
+          "p",
+          { style: "margin: 0 0 12px;" },
+          `Launch admin_retry for Process #${p.id}? This will re-run pending tasks without charging the user.`,
+        ),
+        h(
+          NCheckbox,
+          {
+            checked: retryNotifyUser.value,
+            "onUpdate:checked": (v: boolean) => {
+              retryNotifyUser.value = v;
+            },
+          },
+          { default: () => "Notify user by email when finished" },
+        ),
+      ]),
     positiveText: "Retry",
     negativeText: "Cancel",
     onPositiveClick: () => launchRetry(),
@@ -772,6 +792,7 @@ async function launchRetry() {
   try {
     const { data } = await api_analyzer.post(
       `/api/admin/processes/${selectedProcess.value.id}/retry`,
+      { notifyUser: retryNotifyUser.value },
     );
     message.success(`Retry launched for Process #${data.processId}`);
   } catch (err: any) {
