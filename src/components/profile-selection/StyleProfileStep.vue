@@ -1,10 +1,27 @@
 <template>
   <div class="step-content">
     <div class="profile-header">
-      <h1 class="profile-title">What is your preferred style?</h1>
-      <p class="profile-subtitle">
-        Help us customize your Photoreka experience
-      </p>
+      <AppLogo
+        layout="icon"
+        :height="isMobile ? 36 : 48"
+        class="header-logo"
+      />
+      <div class="header-text">
+        <h1 class="profile-title">What is your preferred style?</h1>
+        <p class="profile-subtitle">
+          Help us customize your Photoreka experience
+          <n-tooltip trigger="hover" placement="top">
+            <template #trigger>
+              <n-icon size="14" class="subtitle-info-icon">
+                <InfoCircleFilled />
+              </n-icon>
+            </template>
+            Choosing a style doesn't limit your uploads. You can still upload
+            photos of any type - this only creates a slight preference in how
+            our engine evaluates and organizes your work.
+          </n-tooltip>
+        </p>
+      </div>
     </div>
 
     <!-- General Purpose Block -->
@@ -47,7 +64,7 @@
             and lifestyle work. The engine prioritizes visual polish, subject
             clarity, and commercial intent.
           </p>
-          <div class="mode-badge commercial">Commercial</div>
+          <div class="mode-badge commercial">Professional</div>
         </div>
       </div>
     </div>
@@ -152,12 +169,6 @@
                   ✓ {{ point }}
                 </li>
               </ul>
-              <p class="info-note">
-                <strong>Note:</strong> Choosing this style doesn't limit your
-                uploads. You can still upload photos of any type - this only
-                creates a slight preference in how our engine evaluates and
-                organizes your work.
-              </p>
             </div>
           </div>
         </div>
@@ -210,6 +221,11 @@ import {
 } from "@vicons/ionicons5";
 import { BookOpen16Regular } from "@vicons/fluent";
 import { PaletteOutlined } from "@vicons/material";
+import { InfoCircleFilled } from "@vicons/antd";
+import AppLogo from "@/components/AppLogo.vue";
+import { useIsMobile } from "@/composables/useIsMobile.js";
+
+const { isMobile } = useIsMobile();
 
 interface Props {
   selectedProfiles: string[];
@@ -396,12 +412,23 @@ const handleComplete = () => {
 }
 
 .profile-header {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
   margin-bottom: 32px;
 }
 
+.header-logo {
+  flex-shrink: 0;
+}
+
+.header-text {
+  text-align: left;
+}
+
 .profile-title {
-  margin: 16px 0 8px 0;
+  margin: 0 0 8px 0;
   font-size: 32px;
   font-weight: 700;
   color: var(--text-secondary);
@@ -409,10 +436,24 @@ const handleComplete = () => {
 }
 
 .profile-subtitle {
-  margin: 0 0 24px 0;
+  margin: 0;
   font-size: 16px;
   color: var(--text-primary);
   font-weight: 400;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.subtitle-info-icon {
+  color: var(--text-primary);
+  opacity: 0.6;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.subtitle-info-icon:hover {
+  opacity: 1;
 }
 
 /* Style Blocks */
@@ -628,14 +669,14 @@ const handleComplete = () => {
 
 .explanation-content h5 {
   margin: 0 0 12px 0;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-secondary);
 }
 
 .explanation-content p {
   margin: 0 0 16px 0;
-  font-size: 14px;
+  font-size: 12px;
   color: var(--text-primary);
   line-height: 1.6;
 }
@@ -647,19 +688,10 @@ const handleComplete = () => {
 }
 
 .explanation-list li {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--text-primary);
   margin-bottom: 8px;
   padding-left: 4px;
-}
-
-.info-note {
-  background-color: rgba(37, 99, 235, 0.1);
-  border-radius: 8px;
-  padding: 12px;
-  font-size: 13px;
-  color: #60a5fa;
-  margin: 0;
 }
 
 /* Fade transition */
@@ -709,6 +741,10 @@ const handleComplete = () => {
 
 /* Responsive design */
 @media (max-width: 768px) {
+  .profile-header {
+    gap: 12px;
+  }
+
   .profile-title {
     font-size: 24px;
   }

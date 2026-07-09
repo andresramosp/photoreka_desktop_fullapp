@@ -1,10 +1,17 @@
 <template>
   <div class="step-content">
     <div class="profile-header">
-      <h1 class="profile-title">How will you import your photos?</h1>
-      <p class="profile-subtitle">
-        Choose your primary workflow for importing photos into Photoreka
-      </p>
+      <AppLogo
+        layout="icon"
+        :height="isMobile ? 36 : 48"
+        class="header-logo"
+      />
+      <div class="header-text">
+        <h1 class="profile-title">How will you import your photos?</h1>
+        <p class="profile-subtitle">
+          Choose your primary workflow for importing photos into Photoreka
+        </p>
+      </div>
     </div>
 
     <div class="mode-selection">
@@ -147,6 +154,9 @@
 <script setup lang="ts">
 import { InformationCircleOutline } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
+import { useIsMobile } from "@/composables/useIsMobile.js";
+
+const { isMobile } = useIsMobile();
 
 interface Props {
   selectedMode: "web" | "lightroom" | null;
@@ -186,12 +196,23 @@ const handleNext = () => {
 }
 
 .profile-header {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
   margin-bottom: 32px;
 }
 
+.header-logo {
+  flex-shrink: 0;
+}
+
+.header-text {
+  text-align: left;
+}
+
 .profile-title {
-  margin: 16px 0 8px 0;
+  margin: 0 0 8px 0;
   font-size: 32px;
   font-weight: 700;
   color: var(--text-secondary);
@@ -199,7 +220,7 @@ const handleNext = () => {
 }
 
 .profile-subtitle {
-  margin: 0 0 24px 0;
+  margin: 0;
   font-size: 16px;
   color: var(--text-primary);
   font-weight: 400;
@@ -352,14 +373,14 @@ const handleNext = () => {
 
 .explanation-content h5 {
   margin: 0 0 12px 0;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-secondary);
 }
 
 .explanation-content p {
   margin: 0 0 16px 0;
-  font-size: 14px;
+  font-size: 12px;
   color: var(--text-primary);
   line-height: 1.6;
 }
@@ -371,7 +392,7 @@ const handleNext = () => {
 }
 
 .explanation-list li {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--text-primary);
   margin-bottom: 8px;
   padding-left: 4px;
@@ -385,7 +406,7 @@ const handleNext = () => {
   background-color: rgba(245, 158, 11, 0.1);
   border-radius: 8px;
   padding: 12px;
-  font-size: 13px;
+  font-size: 11px;
   color: #f59e0b;
   margin: 0;
 }
@@ -423,6 +444,10 @@ const handleNext = () => {
 
 /* Responsive design */
 @media (max-width: 768px) {
+  .profile-header {
+    gap: 12px;
+  }
+
   .profile-title {
     font-size: 24px;
   }

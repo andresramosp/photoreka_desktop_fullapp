@@ -2,14 +2,6 @@
   <div class="profile-layout">
     <div class="profile-container">
       <div class="profile-content">
-        <div class="profile-header">
-          <AppLogo
-            layout="horizontal"
-            :with-claim="false"
-            :height="isMobile ? 45 : 70"
-          />
-        </div>
-
         <div class="profile-form-container">
           <slot />
         </div>
@@ -28,12 +20,7 @@
   </div>
 </template>
 
-<script setup lang="ts">
-import { useIsMobile } from "@/composables/useIsMobile.js";
-
-import AppLogo from "./AppLogo.vue";
-const { isMobile } = useIsMobile();
-</script>
+<script setup lang="ts"></script>
 
 <style scoped>
 .profile-layout {
@@ -69,11 +56,6 @@ const { isMobile } = useIsMobile();
   width: 100%;
   /* max-height: calc(100vh - 40px);
   overflow-y: auto; */
-}
-
-.profile-header {
-  text-align: center;
-  margin-bottom: 32px;
 }
 
 .profile-subtitle {
@@ -165,10 +147,6 @@ const { isMobile } = useIsMobile();
     border-radius: 12px;
     max-height: calc(100vh - 32px);
   }
-
-  .profile-header {
-    margin-bottom: 32px;
-  }
 }
 
 @media (max-width: 480px) {
@@ -194,10 +172,6 @@ const { isMobile } = useIsMobile();
     width: 100%;
     min-height: 100vh;
     box-sizing: border-box;
-  }
-
-  .profile-header {
-    margin-bottom: 32px;
   }
 }
 
