@@ -237,7 +237,7 @@ function buildSearchAdvancedSchema(variant: PromptVariant) {
       .max(3)
       .optional()
       .describe(
-        'Restrict results to only the photos inside specific collection(s)/series/portfolio(s) the user referenced (by ID) — e.g. from a "[Referenced collection/series/portfolio IDs: ...]" line. Pass 2-3 entries when the user named multiple items (their photos are combined with OR before filtering — e.g. "in my Romania collection or my Alps series"); pass 1 for a single item. Applied as a hard filter AFTER the normal intersect/union combination of the other sub-searches, so it does not need to be combined manually. Does not by itself trigger a sub-search — pair it with at least one of style_query/content_tags/filter/similar_to.'
+        'Restrict every sub-search to only the photos inside specific collection(s)/series/portfolio(s) the user referenced (by ID) — e.g. from a "[Referenced collection/series/portfolio IDs: ...]" line. Pass 2-3 entries when the user named multiple items (their photos are combined with OR before retrieval — e.g. "in my Romania collection or my Alps series"); pass 1 for a single item. This is a hard candidate-pool boundary and does not affect the intersect/union choice. Does not by itself trigger a sub-search — pair it with at least one of style_query/content_tags/filter/similar_to.'
       ),
   })
 }
@@ -637,7 +637,7 @@ export const TOOL_DESCRIPTIONS = {
     "[BASIC_TOOLS] Get the user's portfolio builds (AI-generated curated portfolios produced by the Portfolio Builder tool). Returns only COMPLETED builds, most recent first, each with its id, name, creation date, target size, coherence mode (free/visual/chromatic/narrative/heterogeneous), whether sequencing was enabled, the user's theme and sequencing preferences, the final ordered photo IDs of the portfolio, a `scores` breakdown, and a sample of the builder pool (approved-but-not-selected alternatives). Use this whenever the user asks about their portfolios, generated portfolios, portfolio builds, curated selections, or references an earlier build — for example 'show me my last portfolio', 'what portfolios have I built?', 'open the street portfolio I made'. Pass `portfolioId` when the user references ONE specific portfolio by name or by an exact ID (e.g. a \"[Referenced portfolio IDs: ...]\" line) — this returns only that build (with a larger builder-pool sample) instead of every recent build. **`scores`:** each build includes `scores.<criterion>` (e.g. `storytelling`, `aesthetic_quality`, `composition`, `originality`) with `mean` (average across all photos in the final `photoIds`), `scoredCount`, and `best`/`worst` (`{id, value}`). Use this directly to answer cross-portfolio comparison/ranking questions in a single call — map qualitative asks to the closest criterion (e.g. 'narrative'/'story' → `storytelling`). **Important:** this tool still does NOT provide full photo descriptions or visual thumbnails. Once you identify the portfolio(s) the user cares about, call `get_photo_info` on a subset of the relevant photo IDs (for direct evaluation/description) or `search_advanced` with a matching `scopes` entry (to filter within it). Exception: if the user only wants a high-level overview of their portfolios (names, counts, config), no follow-up call is needed.",
 
   search_advanced:
-    '[PHOTO_SEARCH] **The primary search tool.** Combine multiple search strategies in a single call and merge their results with intersect (AND) or union (OR). You can specify any combination of: (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) filter — metadata/score/visual-aspect filtering, (4) similar_to — similarity to reference photos. Optionally add `scopes` to restrict the search to only the photos inside specific collection(s)/series/portfolio(s) the user referenced (by ID) — use this whenever the user asks a filtered/qualitative question about one or more specific library items (e.g. "which vertical photos are in my Romania 2025 collection?", or "where\'s the photo of the girl in the snow — in my Romania collection or my Alps series?") instead of the whole catalog. Pass 1 entry for a single item, or 2-3 when the user named multiple — their photos are always combined with OR (union) first, then that combined pool is applied as a hard boundary AFTER the normal intersect/union combination of the other sub-searches; `scopes` never needs to be one of the sub-searches itself, and never requires picking intersect vs union for the scopes themselves. **ALL parameters MUST ALWAYS BE SPECIFIED IN ENGLISH ONLY** — style descriptions, keywords, and filter values must be in English. All specified sub-searches run in parallel; their full ID sets are combined via the chosen operation; only the final result is sampled and returned with photo ID, filename, genre, and optional inferredLocation string (query_normalized). Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) with intersect. "moody portraits or landscapes" → style_query("dark moody") + filter(genre=[portrait,landscape]) with union. "vertical photos in my Romania 2025 collection" → filter(orientation=vertical) + scopes([{type:"collection", id:155}]). "photo of the girl in the snow, in my Romania collection or my Alps series" → content_tags(["girl","snow"]) + scopes([{type:"collection", id:155}, {type:"series", id:88}]).',
+    '[PHOTO_SEARCH] **The primary search tool.** Combine multiple search strategies in a single call and merge their results with intersect (AND) or union (OR). You can specify any combination of: (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) filter — metadata/score/visual-aspect filtering, (4) similar_to — similarity to reference photos. Optionally add `scopes` to restrict the search to only the photos inside specific collection(s)/series/portfolio(s) the user referenced (by ID) — use this whenever the user asks a filtered/qualitative question about one or more specific library items (e.g. "which vertical photos are in my Romania 2025 collection?", or "where\'s the photo of the girl in the snow — in my Romania collection or my Alps series?") instead of the whole catalog. Pass 1 entry for a single item, or 2-3 when the user named multiple — their photos are always combined with OR (union) first and used as the candidate pool for every sub-search; `scopes` never needs to be one of the sub-searches itself, and never requires picking intersect vs union for the scopes themselves. **ALL parameters MUST ALWAYS BE SPECIFIED IN ENGLISH ONLY** — style descriptions, keywords, and filter values must be in English. All specified sub-searches run in parallel; their full ID sets are combined via the chosen operation; only the final result is sampled and returned with photo ID, filename, genre, optional inferredLocation string (query_normalized), source evidence, and coverage metadata. Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) with intersect. "moody portraits or landscapes" → style_query("dark moody") + filter(genre=[portrait,landscape]) with union. "vertical photos in my Romania 2025 collection" → filter(orientation=vertical) + scopes([{type:"collection", id:155}]). "photo of the girl in the snow, in my Romania collection or my Alps series" → content_tags(["girl","snow"]) + scopes([{type:"collection", id:155}, {type:"series", id:88}]).',
 
   catalog_sample:
     '[CATALOG_INSIGHT] **Temporal catalog sampling for broad exploration.** Divides the catalog timeline into equal time buckets and samples representative photos from each period. Returns structured data: an array of buckets, each with its date range and sampled photos (id, filename, genre, and optional inferredLocation string/query_normalized). Use this for evolution questions, progress over time, or getting a representative cross-section of the catalog. Always pair with `overall_catalog_view` in parallel for holistic context. NEVER use this for targeted searches — use `search_advanced` instead. Optional filters: **genre values MUST ALWAYS BE IN ENGLISH ONLY** (e.g. ["street"] for street photography evolution), date_from/date_to, sort_within (pick best-scored photos per period instead of random), scan_mode (technical for compositional/visual analysis, semantic for subject/theme analysis). Examples: "How has my photography evolved?" → catalog_sample(buckets=6, scan_mode=technical) + overall_catalog_view in parallel. "What subjects appear most in my street work?" → catalog_sample(buckets=5, genre=["street"], scan_mode=semantic) + overall_catalog_view in parallel.',
@@ -685,7 +685,10 @@ export default class AgentToolsService {
     // buildPhase2VisualContext — no need to include them here.
     const getPhotoInfo = tool(
       async ({ photoIds: ids }): Promise<string> => {
-        const photos = await Photo.query().whereIn('id', ids).preload('inferredLocation')
+        const photos = await Photo.query()
+          .whereIn('id', ids)
+          .where('user_id', userId)
+          .preload('inferredLocation')
         const photoMap = new Map(photos.map((p) => [p.id, p]))
 
         const results = ids.map((photoId: number) => {
@@ -709,11 +712,15 @@ export default class AgentToolsService {
     // ─────────────────────────────────────────────────────────
 
     /** Semantic style search → direct CLIP vector search, returns IDs ordered by cosine similarity. */
-    const _getIdsByStyle = async (query: string): Promise<number[]> => {
+    const _getIdsByStyle = async (
+      query: string,
+      candidatePoolIds?: number[]
+    ): Promise<number[]> => {
       const [embedding] = await EmbeddingStoreService.getCLIPEmbeddings([query])
       if (!embedding) return []
 
-      const allPhotoIds = await photoManager.getPhotosIdsForSearch(userId.toString())
+      const allPhotoIds =
+        candidatePoolIds ?? (await photoManager.getPhotosIdsForSearch(userId.toString()))
       const vectorService = new VectorService()
       const results = await vectorService.findSimilarPhotoToEmbedding(
         embedding,
@@ -726,9 +733,13 @@ export default class AgentToolsService {
     }
 
     /** Content/tag search → returns all matching photo IDs (no limit). */
-    const _getIdsByContent = async (tags: string[]): Promise<number[]> => {
+    const _getIdsByContent = async (
+      tags: string[],
+      candidatePoolIds?: number[]
+    ): Promise<number[]> => {
       const scoringService = new ScoringService()
-      const allPhotoIds = await photoManager.getPhotosIdsForSearch(userId.toString())
+      const allPhotoIds =
+        candidatePoolIds ?? (await photoManager.getPhotosIdsForSearch(userId.toString()))
       const scored = await scoringService.getScoredPhotosByTags(
         allPhotoIds,
         tags,
@@ -741,15 +752,18 @@ export default class AgentToolsService {
     }
 
     /** Metadata/attribute filter → returns all matching photo IDs (no limit). */
-    const _getIdsByFilter = async (args: {
-      scoreFilters?: { field: string; min?: number; max?: number }[]
-      sortByScore?: string
-      sortOrder?: 'asc' | 'desc'
-      visualAspects?: Record<string, string[]>
-      filenameLike?: string
-      dateFrom?: string
-      dateTo?: string
-    }): Promise<number[]> => {
+    const _getIdsByFilter = async (
+      args: {
+        scoreFilters?: { field: string; min?: number; max?: number }[]
+        sortByScore?: string
+        sortOrder?: 'asc' | 'desc'
+        visualAspects?: Record<string, string[]>
+        filenameLike?: string
+        dateFrom?: string
+        dateTo?: string
+      },
+      candidatePoolIds?: number[]
+    ): Promise<number[]> => {
       const {
         scoreFilters,
         visualAspects,
@@ -759,10 +773,12 @@ export default class AgentToolsService {
         sortByScore,
         sortOrder = 'desc',
       } = args
-      const photos = await Photo.query()
+      const query = Photo.query()
         .where('user_id', userId)
         .select('id', 'original_file_name', 'descriptions', 'created_at')
         .orderBy('created_at', 'desc')
+      if (candidatePoolIds) query.whereIn('id', candidatePoolIds)
+      const photos = await query
 
       const dateFromMs = dateFrom ? new Date(dateFrom).getTime() : null
       const dateToMs = dateTo ? new Date(dateTo + 'T23:59:59').getTime() : null
@@ -830,11 +846,14 @@ export default class AgentToolsService {
     }
 
     /** Similarity search → returns all matching photo IDs (no limit). */
-    const _getIdsBySimilarity = async (args: {
-      anchor_photo_ids: number[]
-      criteria: string
-      opposite?: boolean
-    }): Promise<number[]> => {
+    const _getIdsBySimilarity = async (
+      args: {
+        anchor_photo_ids: number[]
+        criteria: string
+        opposite?: boolean
+      },
+      candidatePoolIds?: number[]
+    ): Promise<number[]> => {
       const searchPhotoService = new SearchPhotoService()
       const results = await searchPhotoService.searchByPhotos(
         {
@@ -847,6 +866,7 @@ export default class AgentToolsService {
           opposite: args.opposite ?? false,
           inverted: false,
           resultLength: 250,
+          candidatePoolIds,
         },
         userId
       )
@@ -907,24 +927,60 @@ export default class AgentToolsService {
         // Keep in sync with PHASE2_TOTAL_IMAGE_LIMIT in langchain_agent_service.ts.
         const limit = 20
         try {
+          let scopedCandidateIds: number[] | undefined
+          if (scopes && scopes.length > 0) {
+            const scopeSet = new Set<number>()
+            for (const scope of scopes) {
+              const scopeIds = await _resolveScopePhotoIds(scope)
+              if (scopeIds === null) {
+                return JSON.stringify({ error: `Scope ${scope.type} ${scope.id} not found.` })
+              }
+              for (const id of scopeIds) scopeSet.add(id)
+            }
+            scopedCandidateIds = [...scopeSet]
+            console.log(
+              `[Agent]   🔎 search_advanced pre-scoped to [${scopes.map((scope) => `${scope.type}:${scope.id}`).join(', ')}]: ${scopedCandidateIds.length} candidate IDs`
+            )
+          }
+
+          const scopeSummary = (scopes ?? []).map((scope) => ({
+            type: scope.type,
+            id: scope.id,
+          }))
+
+          if (scopedCandidateIds?.length === 0) {
+            return JSON.stringify({
+              querySummary: {
+                operation,
+                scopes: scopeSummary,
+                scopePhotoCount: 0,
+                candidateCount: 0,
+                returnedCount: 0,
+                truncated: false,
+                sourceCandidateCounts: {},
+              },
+              photos: [],
+            })
+          }
+
           // Dispatch all sub-searches in parallel
           const subSearches: Promise<number[]>[] = []
           const subLabels: string[] = []
 
           if (style_query) {
-            subSearches.push(_getIdsByStyle(style_query))
+            subSearches.push(_getIdsByStyle(style_query, scopedCandidateIds))
             subLabels.push('style')
           }
           if (content_tags && content_tags.length > 0) {
-            subSearches.push(_getIdsByContent(content_tags))
+            subSearches.push(_getIdsByContent(content_tags, scopedCandidateIds))
             subLabels.push('content')
           }
           if (filter) {
-            subSearches.push(_getIdsByFilter(filter))
+            subSearches.push(_getIdsByFilter(filter, scopedCandidateIds))
             subLabels.push('filter')
           }
           if (similar_to) {
-            subSearches.push(_getIdsBySimilarity(similar_to))
+            subSearches.push(_getIdsBySimilarity(similar_to, scopedCandidateIds))
             subLabels.push('similar')
           }
 
@@ -936,6 +992,9 @@ export default class AgentToolsService {
           }
 
           const results = await Promise.all(subSearches)
+          const sourceCandidateCounts = Object.fromEntries(
+            subLabels.map((label, index) => [label, results[index].length])
+          )
 
           // Log sub-search sizes
           const logParts = subLabels.map((label, i) => `${label}=${results[i].length}`)
@@ -961,31 +1020,17 @@ export default class AgentToolsService {
             `[Agent]   🔎 search_advanced combined: ${combinedIds.length} IDs after ${operation}`
           )
 
-          // Scopes are a hard boundary applied after the normal combination — never part
-          // of the intersect/union logic above, regardless of what `operation` was chosen.
-          // Multiple scopes are always OR'd together (their photo sets are unioned) before
-          // being applied as a single combined filter — there's no agent-facing choice here.
-          if (scopes && scopes.length > 0) {
-            const scopeSet = new Set<number>()
-            for (const s of scopes) {
-              const scopeIds = await _resolveScopePhotoIds(s)
-              if (scopeIds === null) {
-                return JSON.stringify({ error: `Scope ${s.type} ${s.id} not found.` })
-              }
-              for (const id of scopeIds) scopeSet.add(id)
-            }
-            combinedIds = combinedIds.filter((id) => scopeSet.has(id))
-            console.log(
-              `[Agent]   🔎 search_advanced scoped to [${scopes.map((s) => `${s.type}:${s.id}`).join(', ')}]: ${combinedIds.length} IDs remain`
-            )
-          }
-
           if (combinedIds.length === 0) {
             return JSON.stringify({
-              returned: 0,
-              // hasMore: false,
-              operation,
-              subSearches: subLabels,
+              querySummary: {
+                operation,
+                scopes: scopeSummary,
+                scopePhotoCount: scopedCandidateIds?.length ?? null,
+                candidateCount: 0,
+                returnedCount: 0,
+                truncated: false,
+                sourceCandidateCounts,
+              },
               photos: [],
             })
           }
@@ -998,19 +1043,31 @@ export default class AgentToolsService {
           // provided exclusively in Phase 2 via buildPhase2VisualContext.
           const photos = await Photo.query().whereIn('id', sampledIds).preload('inferredLocation')
           const photoMap = new Map(photos.map((p) => [p.id, p]))
+          const sourceRanks = results.map((ids) => new Map(ids.map((id, index) => [id, index + 1])))
           const formatted = sampledIds
             .map((id) => {
               const p = photoMap.get(id)
               if (!p) return null
-              return photoDataForAgentSlim(p)
+              const evidence = Object.fromEntries(
+                subLabels.flatMap((label, index) => {
+                  const rank = sourceRanks[index].get(id)
+                  return rank === undefined ? [] : [[label, { rank }]]
+                })
+              )
+              return { ...photoDataForAgentSlim(p), evidence }
             })
             .filter(Boolean)
 
           return JSON.stringify({
-            returned: formatted.length,
-            // hasMore: combinedIds.length > formatted.length,
-            operation,
-            subSearches: subLabels,
+            querySummary: {
+              operation,
+              scopes: scopeSummary,
+              scopePhotoCount: scopedCandidateIds?.length ?? null,
+              candidateCount: combinedIds.length,
+              returnedCount: formatted.length,
+              truncated: combinedIds.length > formatted.length,
+              sourceCandidateCounts,
+            },
             photos: formatted,
           })
         } catch (error) {
@@ -1177,12 +1234,9 @@ export default class AgentToolsService {
             if (!series) {
               return JSON.stringify({ error: `Series ${seriesId} not found` })
             }
-            const photoMap = await fetchPivotPhotoScores(
-              'series_photos',
-              'series_id',
-              userId,
-              [series.id]
-            )
+            const photoMap = await fetchPivotPhotoScores('series_photos', 'series_id', userId, [
+              series.id,
+            ])
             const photos = photoMap.get(series.id) ?? []
             return JSON.stringify({
               series: [

@@ -145,6 +145,8 @@ Photos may arrive with thumbnails (for visual evaluation) or text-only descripti
 ## Curatorial judgment
 - **Selectivity:** Only include photos that genuinely match the user's request. Discard tangential or low-relevance results — even if returned by a search tool.
 - **Grounding:** Your response MUST be based EXCLUSIVELY on data returned by tools. If no photos were found or all tools returned empty results, state this clearly — NEVER invent filenames, descriptions, or photo content to fill the gap. An empty \`photo_groups\` array is correct when there are no real results.
+- **Search coverage:** \`search_advanced.querySummary\` describes the evidence boundary: scoped pool size, candidates matching the combined query, returned count, truncation, and per-source candidate counts. Use it to qualify broad claims. When results are truncated, describe the photos as a prioritized selection rather than the exhaustive or definitive best set.
+- **Search evidence:** Each \`search_advanced\` photo can include source ranks under \`evidence\`. Use these internally to distinguish multi-source support from a match produced only by a broad filter. Do not expose raw ranks or internal source names unless the user explicitly asks for methodology.
 - **\`tag_distribution\` unresolved terms:** if a \`tag_distribution\` result includes \`unresolvedTags\`, those terms have no matching tag in the catalog at all — say so plainly (e.g. "no tengo datos de X"). Never report an unresolved term as "0%" or "not present in any photo", since that implies a confirmed absence rather than a missing tag.
 - **\`tag_distribution\` percentages:** when stating a proportion between the compared tags (e.g. "55% hombres, 45% mujeres"), use each tag's \`relativePercentage\` (share among the compared tags), NOT \`percentage\` (share of the whole catalog) — the latter does not sum to 100% across the compared terms and will misstate the split.
 - **Scoring (1-10):** Use for internal ranking. Surface scores only if the user asks or it adds clear value.
@@ -1462,6 +1464,7 @@ export default class LangchainAgentService {
     // Build a queue of full outputs per restorable tool so we can replace
     // the compressed ToolMessages inline instead of duplicating data.
     const RESTORABLE_TOOLS = new Set([
+      'search_advanced',
       'overall_catalog_view',
       'app_knowledge',
       'fetch_collections',
