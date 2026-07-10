@@ -20,6 +20,7 @@ import {
   VISUAL_ASPECTS_SCHEMA,
   ALL_ARTISTIC_SCORE_EXTERNAL_KEYS,
   resolveInternalScoreKeyAnyVariant,
+  resolveExternalScoreKeyAnyVariant,
   getPromptVariant,
   getArtisticExternalKeys,
   getArtisticCriteria,
@@ -163,9 +164,12 @@ function buildSearchAdvancedSchema(variant: PromptVariant) {
     operation: z
       .enum(['intersect', 'union'])
       .describe(
-        'How to combine results from the sub-searches declared below.\n' +
-          '- intersect: return only photos that appear in ALL sub-search results (AND logic). Use when the user wants photos matching every criterion simultaneously (e.g. "black and white portraits of dogs").\n' +
-          '- union: return photos that appear in ANY sub-search result (OR logic). Use when the user wants photos matching at least one criterion (e.g. "photos of cats or dogs").'
+        'How to combine the RANKING sub-searches only (style_query / content_tags / similar_to). ' +
+          '`filter` and `scopes` are hard constraints and are NOT affected by this choice. Ignored when ' +
+          'fewer than two ranking sub-searches are present (a single one, or a filter-only query, needs no ' +
+          'combination — still pass a value, it will simply be a no-op).\n' +
+          '- intersect: keep only photos present in ALL ranking sub-searches (AND). Use for "black and white portraits of dogs".\n' +
+          '- union: keep photos present in ANY ranking sub-search (OR). Use for "moody photos or anything with dogs".'
       ),
     style_query: z
       .string()
@@ -193,8 +197,6 @@ function buildSearchAdvancedSchema(variant: PromptVariant) {
           )
           .optional()
           .describe('Filter by numeric artistic scores. Multiple entries are ANDed.'),
-        sortByScore: scoreField.optional().describe('Sort results by this artistic score.'),
-        sortOrder: z.enum(['asc', 'desc']).optional().default('desc').describe('Sort direction.'),
         visualAspects: buildVisualAspectsZodSchema(variant),
         filenameLike: z
           .string()
@@ -205,7 +207,39 @@ function buildSearchAdvancedSchema(variant: PromptVariant) {
       })
       .optional()
       .describe(
-        'Structured metadata/attribute filter. Triggers filter_photos logic. Do NOT place artistic score names in visualAspects — those belong in scoreFilters.'
+        'Structured metadata/attribute filter, applied as a HARD CONSTRAINT (a dynamic candidate-pool boundary) — ' +
+          'NOT a ranking source, NOT an ordering, and NOT part of the intersect/union choice. It restricts which photos ' +
+          'the ranking sub-searches (style_query/content_tags/similar_to) may return. To order results by a score use ' +
+          'the top-level `order_by`, never a filter. When `filter` is the ONLY parameter provided and no `order_by` is ' +
+          'given, results are ordered by the first scoreFilter field (best-first), else aesthetic_quality (best-first). ' +
+          'Do NOT place artistic score names in visualAspects — those belong in scoreFilters.'
+      ),
+    order_by: z
+      .object({
+        fields: z
+          .array(scoreField)
+          .min(1)
+          .max(3)
+          .describe(
+            'One to three artistic scores to order by. With two or more, photos are ranked by the ' +
+              'AVERAGE of those scores — that is how you express a blended criterion like ' +
+              '"originality/aesthetics". Do NOT issue several searches that differ only in this field.'
+          ),
+        direction: z
+          .enum(['asc', 'desc'])
+          .optional()
+          .default('desc')
+          .describe('desc = best first (default), asc = worst first.'),
+      })
+      .optional()
+      .describe(
+        'Explicit ordering of the FINAL combined result set by artistic score. Applied last — after scopes, ' +
+          'filter and the ranking sub-searches — and it OVERRIDES relevance ordering. Use it whenever the user asks ' +
+          'for an order or a superlative ("ordered by humor", "my funniest cold photos", "worst composed portraits"). ' +
+          'This is how you rank by a score: never approximate a ranking with a scoreFilter threshold. A photo missing ' +
+          'ANY of the requested scores cannot be ranked and goes last, in both directions. Omit it to keep the natural ' +
+          'order (relevance when a ranking sub-search ran, otherwise the filter tiered order). Not a selector on its ' +
+          'own — pair it with at least one of style_query/content_tags/filter/similar_to.'
       ),
     similar_to: z
       .object({
@@ -357,12 +391,29 @@ export const WebSearchSchema = z.object({
  * injected automatically in Phase 2 via buildPhase2VisualContext with full
  * data + thumbnail images.
  */
-export function photoDataForAgentPreview(photo: any): Record<string, any> {
+/**
+ * Renames stored score keys to the external names the agent uses in `order_by`
+ * and `scoreFilters` (e.g. `strangeness` → `originality`), so a score it reads
+ * is a score it can ask for. Returns null when the photo has no scores.
+ */
+function externalArtisticScores(scores: any): Record<string, number> | null {
+  if (!scores || typeof scores !== 'object') return null
+  const result: Record<string, number> = {}
+  for (const [key, value] of Object.entries(scores as Record<string, unknown>)) {
+    if (typeof value === 'number') result[resolveExternalScoreKeyAnyVariant(key)] = value
+  }
+  return Object.keys(result).length > 0 ? result : null
+}
+
+export function photoDataForAgentPreview(
+  photo: any,
+  options: { includeScores?: boolean } = {}
+): Record<string, any> {
   const descriptions = photo.descriptions || {}
   const exif = descriptions.EXIF || {}
   const visualAspects = descriptions.visual_aspects || {}
   const inferredLocation = photo.inferredLocation
-  return {
+  const data: Record<string, any> = {
     id: photo.id,
     originalFileName: photo.originalFileName,
     story: descriptions.story || null,
@@ -371,6 +422,11 @@ export function photoDataForAgentPreview(photo: any): Record<string, any> {
     dateTaken: exif.dateTaken ?? null,
     inferredLocation: inferredLocation?.queryNormalized ?? null,
   }
+  // Phase 2 only: the curator needs the numbers to honour an explicit `order_by` and to
+  // ground any score claim. Phase 1 tools omit them — they must not evaluate results.
+  if (options.includeScores)
+    data.artistic_scores = externalArtisticScores(descriptions.artistic_scores)
+  return data
 }
 
 /**
@@ -502,6 +558,224 @@ function reciprocalRankFusion(rankedLists: number[][], k = 60): number[] {
   }
 
   return [...scores.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id)
+}
+
+// ─────────────────────────────────────────────────────────────
+// search_advanced pipeline
+//
+// One stage per step, in the order the tool runs them:
+//   selector check → pools (scopes → filter) → ranking → combine → order → format
+// Stages needing `userId` live as closures in createTools; the rest are here.
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * A bad-input condition the model can act on (unknown scope, no selector).
+ * Surfaced verbatim as `{ error }` instead of the generic failure message.
+ */
+class SearchInputError extends Error {}
+
+/**
+ * Result cap for the ranking sources that impose one (`style`, `similar`). A source
+ * returning exactly this many IDs is SATURATED: its candidate count is a floor, not a
+ * total, and anything ranked below the cap never reached the combine stage.
+ */
+const RANKING_SOURCE_LIMIT = 250
+
+/** Ranking sources bounded by RANKING_SOURCE_LIMIT. `content` is unbounded. */
+const CAPPED_RANKING_SOURCES = new Set(['style', 'similar'])
+
+/**
+ * How the returned photos are ordered, and — crucially — WHO decided it.
+ *
+ * `explicit` is the only kind the user asked for; Phase 2 must honour it. `fallback` is a
+ * default the retrieval layer picked because a filter-only query has no ordering signal at
+ * all, and Phase 2 stays free to re-curate. A bare `"aesthetic_quality desc"` string could
+ * not tell the two apart, which silently froze the curator on ordinary filter queries.
+ */
+type Ordering =
+  | { kind: 'relevance' }
+  | { kind: 'explicit'; fields: string[]; direction: 'asc' | 'desc' }
+  | { kind: 'fallback'; fields: string[]; direction: 'asc' | 'desc' }
+
+/** Compact `ordering` rendering for the server logs. */
+function formatOrdering(ordering: Ordering): string {
+  return ordering.kind === 'relevance'
+    ? 'relevance'
+    : `${ordering.fields.join('+')} ${ordering.direction} (${ordering.kind})`
+}
+
+/** Candidate-pool boundaries resolved from `scopes` + `filter`, before any ranking runs. */
+interface SearchPools {
+  scopeSummary: Array<{ type: string; id: number }>
+  scopedCandidateIds?: number[]
+  hasFilter: boolean
+  filterPoolIds?: number[]
+  /** Tiered order the filter fell back to; only used when it is the sole selector. */
+  filterOrdering?: Ordering
+  /** Pool the ranking sub-searches run within: filter → scope → whole catalog. */
+  rankingPoolIds?: number[]
+  /** A scope resolved to nothing, or the filter matched nothing — no result is possible. */
+  isEmpty: boolean
+}
+
+/** Outcome of the ranking sub-searches, `labels[i]` describing `idLists[i]`. */
+interface RankingOutcome {
+  labels: string[]
+  idLists: number[][]
+}
+
+/**
+ * Fuses the ranking sub-searches into one relevance-ordered list. `operation`
+ * governs ONLY these sources (a no-op with a single one); the filter constraint
+ * was already applied upstream via `rankingPoolIds`.
+ *
+ * `unionCount` (photos matching ANY source) falls out of the RRF for free. Under
+ * `intersect` it is the near-miss signal: a query can return 0 while 52 photos
+ * matched something, which is a very different answer from "nothing matched".
+ */
+function combineRankingResults(
+  ranking: RankingOutcome,
+  operation: 'intersect' | 'union'
+): { ids: number[]; unionCount: number } {
+  const rrfRanked = reciprocalRankFusion(ranking.idLists)
+  if (operation !== 'intersect') return { ids: rrfRanked, unionCount: rrfRanked.length }
+  const sets = ranking.idLists.map((ids) => new Set(ids))
+  return {
+    ids: rrfRanked.filter((id) => sets.every((s) => s.has(id))),
+    unionCount: rrfRanked.length,
+  }
+}
+
+/**
+ * Per-source candidate counts. Reported on EVERY path, including the empty ones — an
+ * empty result whose sources each matched dozens of photos is a failed intersection,
+ * not an empty catalog, and only these counts let Phase 2 tell them apart.
+ */
+function buildSourceCandidateCounts(
+  pools: SearchPools,
+  ranking?: RankingOutcome
+): Record<string, number> {
+  const counts: Record<string, number> = {}
+  ranking?.labels.forEach((label, index) => {
+    counts[label] = ranking.idLists[index].length
+  })
+  if (pools.hasFilter) counts.filter = pools.filterPoolIds?.length ?? 0
+  return counts
+}
+
+/** Ranking sources that hit their result cap, so their candidate count is a floor. */
+function saturatedRankingSources(ranking: RankingOutcome): string[] {
+  return ranking.labels.filter(
+    (label, index) =>
+      CAPPED_RANKING_SOURCES.has(label) && ranking.idLists[index].length >= RANKING_SOURCE_LIMIT
+  )
+}
+
+/**
+ * The value a photo is ranked on: the mean of the requested scores, so several criteria
+ * blend ("originality/aesthetics") instead of one merely breaking the other's ties.
+ *
+ * Returns null unless the photo has EVERY requested score. Averaging over whichever
+ * scores happen to exist would let a photo with only `originality: 9` outrank one scoring
+ * 9 and 6 — the composite has to compare like with like. A missing score is absent data,
+ * not a zero.
+ */
+function meanScore(
+  scores: Record<string, number> | null | undefined,
+  internalFields: string[]
+): number | null {
+  let total = 0
+  for (const field of internalFields) {
+    const value = scores?.[field]
+    if (typeof value !== 'number') return null
+    total += value
+  }
+  return total / internalFields.length
+}
+
+/**
+ * Orders IDs by the mean of one or more artistic scores. Photos that cannot be ranked
+ * (see `meanScore`) go last in BOTH directions. The sort is stable, so ties preserve the
+ * incoming order — relevance, or the filter's order — which is the right tiebreak.
+ */
+function sortIdsByScore(
+  ids: number[],
+  scoreMap: Map<number, Record<string, number> | null>,
+  internalFields: string[],
+  direction: 'asc' | 'desc'
+): number[] {
+  const sign = direction === 'asc' ? 1 : -1
+  return [...ids].sort((a, b) => {
+    const aScore = meanScore(scoreMap.get(a), internalFields)
+    const bScore = meanScore(scoreMap.get(b), internalFields)
+    if (aScore === null || bScore === null) {
+      if (aScore === bScore) return 0
+      return aScore === null ? 1 : -1
+    }
+    return (aScore - bScore) * sign
+  })
+}
+
+/**
+ * Coverage metadata: the evidence boundary Phase 2 uses to qualify its claims — and,
+ * when the result is empty, to explain WHY rather than just reporting nothing.
+ * The optional fields are omitted when they carry no information.
+ */
+function buildQuerySummary(args: {
+  operation: string
+  pools: SearchPools
+  candidateCount: number
+  returnedCount: number
+  ordering: Ordering | null
+  sourceCandidateCounts: Record<string, number>
+  /** Photos matching ANY ranking source. Only meaningful with 2+ sources. */
+  unionCount?: number
+  /** Sources that hit RANKING_SOURCE_LIMIT — their counts are floors, not totals. */
+  saturatedSources?: string[]
+  /** Returned photos with no value for the `order_by` score (they rank last). */
+  unscoredCount?: number
+}): Record<string, any> {
+  const { operation, pools, candidateCount, returnedCount, ordering, sourceCandidateCounts } = args
+  const summary: Record<string, any> = {
+    operation,
+    scopes: pools.scopeSummary,
+    scopePhotoCount: pools.scopedCandidateIds?.length ?? null,
+    filterPhotoCount: pools.hasFilter ? (pools.filterPoolIds?.length ?? 0) : null,
+    candidateCount,
+    returnedCount,
+    truncated: candidateCount > returnedCount,
+    ordering,
+    sourceCandidateCounts,
+  }
+  if (args.unionCount !== undefined) summary.unionCount = args.unionCount
+  if (args.saturatedSources?.length) summary.saturatedSources = args.saturatedSources
+  if (args.unscoredCount) summary.unscoredCount = args.unscoredCount
+  return summary
+}
+
+/**
+ * Slim Phase 1 payload per photo, annotated with the 1-based rank it held in each
+ * ranking source. Full data + thumbnails arrive later via buildPhase2VisualContext.
+ */
+async function formatSearchResultPhotos(
+  sampledIds: number[],
+  ranking: RankingOutcome
+): Promise<Record<string, any>[]> {
+  const photos = await Photo.query().whereIn('id', sampledIds).preload('inferredLocation')
+  const photoMap = new Map(photos.map((p) => [p.id, p]))
+  const sourceRanks = ranking.idLists.map((ids) => new Map(ids.map((id, index) => [id, index + 1])))
+
+  return sampledIds.flatMap((id) => {
+    const photo = photoMap.get(id)
+    if (!photo) return []
+    const evidence = Object.fromEntries(
+      ranking.labels.flatMap((label, index) => {
+        const rank = sourceRanks[index].get(id)
+        return rank === undefined ? [] : [[label, { rank }]]
+      })
+    )
+    return [{ ...photoDataForAgentSlim(photo), evidence }]
+  })
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -637,7 +911,7 @@ export const TOOL_DESCRIPTIONS = {
     "[BASIC_TOOLS] Get the user's portfolio builds (AI-generated curated portfolios produced by the Portfolio Builder tool). Returns only COMPLETED builds, most recent first, each with its id, name, creation date, target size, coherence mode (free/visual/chromatic/narrative/heterogeneous), whether sequencing was enabled, the user's theme and sequencing preferences, the final ordered photo IDs of the portfolio, a `scores` breakdown, and a sample of the builder pool (approved-but-not-selected alternatives). Use this whenever the user asks about their portfolios, generated portfolios, portfolio builds, curated selections, or references an earlier build — for example 'show me my last portfolio', 'what portfolios have I built?', 'open the street portfolio I made'. Pass `portfolioId` when the user references ONE specific portfolio by name or by an exact ID (e.g. a \"[Referenced portfolio IDs: ...]\" line) — this returns only that build (with a larger builder-pool sample) instead of every recent build. **`scores`:** each build includes `scores.<criterion>` (e.g. `storytelling`, `aesthetic_quality`, `composition`, `originality`) with `mean` (average across all photos in the final `photoIds`), `scoredCount`, and `best`/`worst` (`{id, value}`). Use this directly to answer cross-portfolio comparison/ranking questions in a single call — map qualitative asks to the closest criterion (e.g. 'narrative'/'story' → `storytelling`). **Important:** this tool still does NOT provide full photo descriptions or visual thumbnails. Once you identify the portfolio(s) the user cares about, call `get_photo_info` on a subset of the relevant photo IDs (for direct evaluation/description) or `search_advanced` with a matching `scopes` entry (to filter within it). Exception: if the user only wants a high-level overview of their portfolios (names, counts, config), no follow-up call is needed.",
 
   search_advanced:
-    '[PHOTO_SEARCH] **The primary search tool.** Combine multiple search strategies in a single call and merge their results with intersect (AND) or union (OR). You can specify any combination of: (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) filter — metadata/score/visual-aspect filtering, (4) similar_to — similarity to reference photos. Optionally add `scopes` to restrict the search to only the photos inside specific collection(s)/series/portfolio(s) the user referenced (by ID) — use this whenever the user asks a filtered/qualitative question about one or more specific library items (e.g. "which vertical photos are in my Romania 2025 collection?", or "where\'s the photo of the girl in the snow — in my Romania collection or my Alps series?") instead of the whole catalog. Pass 1 entry for a single item, or 2-3 when the user named multiple — their photos are always combined with OR (union) first and used as the candidate pool for every sub-search; `scopes` never needs to be one of the sub-searches itself, and never requires picking intersect vs union for the scopes themselves. **ALL parameters MUST ALWAYS BE SPECIFIED IN ENGLISH ONLY** — style descriptions, keywords, and filter values must be in English. All specified sub-searches run in parallel; their full ID sets are combined via the chosen operation; only the final result is sampled and returned with photo ID, filename, genre, optional inferredLocation string (query_normalized), source evidence, and coverage metadata. Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) with intersect. "moody portraits or landscapes" → style_query("dark moody") + filter(genre=[portrait,landscape]) with union. "vertical photos in my Romania 2025 collection" → filter(orientation=vertical) + scopes([{type:"collection", id:155}]). "photo of the girl in the snow, in my Romania collection or my Alps series" → content_tags(["girl","snow"]) + scopes([{type:"collection", id:155}, {type:"series", id:88}]).',
+    '[PHOTO_SEARCH] **The primary search tool.** Combine ranking strategies and hard constraints in a single call. RANKING sources (relevance-ordered): (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) similar_to — similarity to reference photos. These are fused by relevance and combined via `operation` (intersect = AND, union = OR); `operation` is a no-op with fewer than two ranking sources. HARD CONSTRAINTS (candidate-pool boundaries — NOT ranking, NOT part of intersect/union): (4) filter — metadata/score/visual-aspect/date filtering, and (5) scopes — restrict to specific collection(s)/series/portfolio(s) the user referenced by ID. Constraints only narrow which photos the ranking sources may return; they never contribute relevance. ORDERING: (6) order_by — orders the final combined set by the average of 1-3 artistic scores and OVERRIDES relevance. Use it for every "ordered by X" / "my best/worst X" request; never fake a ranking with a scoreFilter threshold, and never issue two searches that differ only in the score they sort by — pass both scores to one order_by instead. **A `filter`-only (or scope+filter) call is valid:** with no ranking source and no order_by, results fall back to the filter\'s tiered order (first scoreFilter field best-first, else aesthetic_quality best-first). The effective order is always reported in querySummary.ordering as `{kind, field, direction}` — `explicit` when it came from order_by, `relevance` from the ranking fusion, `fallback` when the search picked a default nobody asked for. **ALL parameters MUST ALWAYS BE SPECIFIED IN ENGLISH ONLY.** Only the final result is sampled and returned with photo ID, filename, genre, optional inferredLocation string (query_normalized), source evidence (per ranking source), and coverage metadata (candidateCount, truncated, ordering, per-source counts, plus unionCount / saturatedSources / unscoredCount when they apply). An EMPTY result still reports its per-source counts and unionCount, so a failed intersection can be told apart from an empty catalog — read them instead of retrying blindly. Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) (filter constrains, content ranks). "moody photos or anything with dogs" → style_query("dark moody") + content_tags(["dog"]) with union (two ranking sources OR-combined). "my best-composed vertical photos" → filter(orientation=vertical) + order_by(fields=["composition"], direction=desc). "moody vertical photos" → style_query("dark moody") + filter(orientation=vertical) (filter constrains, style ranks). "the funniest of my cold-toned photos" → filter(temperature=cold) + order_by(fields=["humor"], direction=desc) (order_by ranks, filter constrains). "chromatically similar to photo 4657, street only, ranked by originality/aesthetics" → similar_to(anchor=[4657], criteria=chromatic) + filter(genre=street) + order_by(fields=["originality","aesthetic_quality"], direction=desc) — ONE call, both scores averaged. "vertical photos in my Romania 2025 collection" → filter(orientation=vertical) + scopes([{type:"collection", id:155}]). "photo of the girl in the snow, in my Romania collection or my Alps series" → content_tags(["girl","snow"]) + scopes([{type:"collection", id:155}, {type:"series", id:88}]).',
 
   catalog_sample:
     '[CATALOG_INSIGHT] **Temporal catalog sampling for broad exploration.** Divides the catalog timeline into equal time buckets and samples representative photos from each period. Returns structured data: an array of buckets, each with its date range and sampled photos (id, filename, genre, and optional inferredLocation string/query_normalized). Use this for evolution questions, progress over time, or getting a representative cross-section of the catalog. Always pair with `overall_catalog_view` in parallel for holistic context. NEVER use this for targeted searches — use `search_advanced` instead. Optional filters: **genre values MUST ALWAYS BE IN ENGLISH ONLY** (e.g. ["street"] for street photography evolution), date_from/date_to, sort_within (pick best-scored photos per period instead of random), scan_mode (technical for compositional/visual analysis, semantic for subject/theme analysis). Examples: "How has my photography evolved?" → catalog_sample(buckets=6, scan_mode=technical) + overall_catalog_view in parallel. "What subjects appear most in my street work?" → catalog_sample(buckets=5, genre=["street"], scan_mode=semantic) + overall_catalog_view in parallel.',
@@ -725,7 +999,7 @@ export default class AgentToolsService {
       const results = await vectorService.findSimilarPhotoToEmbedding(
         embedding,
         0.15,
-        250,
+        RANKING_SOURCE_LIMIT,
         'cosine_similarity',
         allPhotoIds
       )
@@ -755,24 +1029,14 @@ export default class AgentToolsService {
     const _getIdsByFilter = async (
       args: {
         scoreFilters?: { field: string; min?: number; max?: number }[]
-        sortByScore?: string
-        sortOrder?: 'asc' | 'desc'
         visualAspects?: Record<string, string[]>
         filenameLike?: string
         dateFrom?: string
         dateTo?: string
       },
       candidatePoolIds?: number[]
-    ): Promise<number[]> => {
-      const {
-        scoreFilters,
-        visualAspects,
-        filenameLike,
-        dateFrom,
-        dateTo,
-        sortByScore,
-        sortOrder = 'desc',
-      } = args
+    ): Promise<{ ids: number[]; ordering: Ordering }> => {
+      const { scoreFilters, visualAspects, filenameLike, dateFrom, dateTo } = args
       const query = Photo.query()
         .where('user_id', userId)
         .select('id', 'original_file_name', 'descriptions', 'created_at')
@@ -824,25 +1088,29 @@ export default class AgentToolsService {
         return true
       })
 
-      // Sort if requested
-      if (sortByScore) {
-        const internalSortField = toInternalField(sortByScore)
-        filtered.sort((a, b) => {
-          const aScore =
-            ((a.descriptions?.artistic_scores as Record<string, number>) ?? {})[
-              internalSortField
-            ] ?? -1
-          const bScore =
-            ((b.descriptions?.artistic_scores as Record<string, number>) ?? {})[
-              internalSortField
-            ] ?? -1
-          return sortOrder === 'asc' ? aScore - bScore : bScore - aScore
-        })
-      } else if (sortOrder === 'asc') {
-        filtered.reverse()
-      }
+      // Tiered fallback ordering — only surfaces when `filter` is the sole selector AND no
+      // top-level `order_by` was given. Whenever a ranking source runs, or `order_by` is
+      // present, this order is overwritten downstream. It is reported as `kind: 'fallback'`
+      // so Phase 2 knows the user never asked for it.
+      //   tier 1: first scoreFilter field (best-first)
+      //   tier 2: default quality score (aesthetic_quality, best-first)
+      const orderExternal =
+        scoreFilters && scoreFilters.length > 0 ? scoreFilters[0].field : 'aesthetic_quality'
+      const internalOrderField = toInternalField(orderExternal)
+      filtered.sort((a, b) => {
+        const aScore =
+          ((a.descriptions?.artistic_scores as Record<string, number>) ?? {})[internalOrderField] ??
+          -1
+        const bScore =
+          ((b.descriptions?.artistic_scores as Record<string, number>) ?? {})[internalOrderField] ??
+          -1
+        return bScore - aScore
+      })
 
-      return filtered.map((p) => p.id)
+      return {
+        ids: filtered.map((p) => p.id),
+        ordering: { kind: 'fallback', fields: [orderExternal], direction: 'desc' },
+      }
     }
 
     /** Similarity search → returns all matching photo IDs (no limit). */
@@ -865,7 +1133,7 @@ export default class AgentToolsService {
           descriptionCategories: [],
           opposite: args.opposite ?? false,
           inverted: false,
-          resultLength: 250,
+          resultLength: RANKING_SOURCE_LIMIT,
           candidatePoolIds,
         },
         userId
@@ -910,6 +1178,126 @@ export default class AgentToolsService {
       return Array.isArray(photoIds) ? photoIds : []
     }
 
+    // ── search_advanced stages ──────────────────────────────
+
+    /** Stage 1 — a search needs something to search on. `order_by` alone is not a selector. */
+    const _assertHasSelector = (args: {
+      style_query?: string
+      content_tags?: string[]
+      filter?: unknown
+      similar_to?: unknown
+    }): void => {
+      const hasSelector =
+        Boolean(args.filter) ||
+        Boolean(args.style_query) ||
+        (args.content_tags?.length ?? 0) > 0 ||
+        Boolean(args.similar_to)
+      if (!hasSelector) {
+        throw new SearchInputError(
+          'No search criteria specified. Provide at least one of: style_query, content_tags, filter, similar_to.'
+        )
+      }
+    }
+
+    /**
+     * Stage 2 — resolve the HARD CONSTRAINTS, each narrowing the pool for the next:
+     * scopes → filter. Neither is a ranking source; neither enters RRF.
+     */
+    const _resolveSearchPools = async (
+      scopes: Array<{ type: 'collection' | 'series' | 'portfolio'; id: number }> | undefined,
+      filter: Parameters<typeof _getIdsByFilter>[0] | undefined
+    ): Promise<SearchPools> => {
+      let scopedCandidateIds: number[] | undefined
+      if (scopes && scopes.length > 0) {
+        const scopeSet = new Set<number>()
+        for (const scope of scopes) {
+          const scopeIds = await _resolveScopePhotoIds(scope)
+          if (scopeIds === null) {
+            throw new SearchInputError(`Scope ${scope.type} ${scope.id} not found.`)
+          }
+          for (const id of scopeIds) scopeSet.add(id)
+        }
+        scopedCandidateIds = [...scopeSet]
+        console.log(
+          `[Agent]   🔎 search_advanced pre-scoped to [${scopes.map((scope) => `${scope.type}:${scope.id}`).join(', ')}]: ${scopedCandidateIds.length} candidate IDs`
+        )
+      }
+
+      let filterPoolIds: number[] | undefined
+      let filterOrdering: Ordering | undefined
+      if (filter) {
+        const filterResult = await _getIdsByFilter(filter, scopedCandidateIds)
+        filterPoolIds = filterResult.ids
+        filterOrdering = filterResult.ordering
+        console.log(
+          `[Agent]   🔎 search_advanced filter constraint: ${filterPoolIds.length} IDs (order: ${formatOrdering(filterOrdering)})`
+        )
+      }
+
+      return {
+        scopeSummary: (scopes ?? []).map((scope) => ({ type: scope.type, id: scope.id })),
+        scopedCandidateIds,
+        hasFilter: Boolean(filter),
+        filterPoolIds,
+        filterOrdering,
+        rankingPoolIds: filter ? filterPoolIds : scopedCandidateIds,
+        isEmpty:
+          (scopes !== undefined && scopes.length > 0 && scopedCandidateIds!.length === 0) ||
+          (Boolean(filter) && filterPoolIds!.length === 0),
+      }
+    }
+
+    /** Stage 3 — dispatch the ranking sub-searches in parallel, within the candidate pool. */
+    const _runRankingSearches = async (
+      args: {
+        style_query?: string
+        content_tags?: string[]
+        similar_to?: Parameters<typeof _getIdsBySimilarity>[0]
+      },
+      rankingPoolIds?: number[]
+    ): Promise<RankingOutcome> => {
+      const labels: string[] = []
+      const searches: Promise<number[]>[] = []
+      if (args.style_query) {
+        labels.push('style')
+        searches.push(_getIdsByStyle(args.style_query, rankingPoolIds))
+      }
+      if (args.content_tags && args.content_tags.length > 0) {
+        labels.push('content')
+        searches.push(_getIdsByContent(args.content_tags, rankingPoolIds))
+      }
+      if (args.similar_to) {
+        labels.push('similar')
+        searches.push(_getIdsBySimilarity(args.similar_to, rankingPoolIds))
+      }
+      return { labels, idLists: await Promise.all(searches) }
+    }
+
+    /**
+     * Stage 5 — explicit ordering, applied to the full combined set BEFORE sampling, so the
+     * returned page really is the top-N on that score rather than the top-N by relevance
+     * re-sorted. Overrides both relevance and the filter's tiered order.
+     */
+    const _applyExplicitOrder = async (
+      combinedIds: number[],
+      order_by: { fields: string[]; direction?: 'asc' | 'desc' }
+    ): Promise<{ ids: number[]; ordering: Ordering; unscoredIds: Set<number> }> => {
+      // `direction` has a zod default, but not every provider echoes defaults back.
+      const direction = order_by.direction === 'asc' ? 'asc' : 'desc'
+      const internalFields = order_by.fields.map(toInternalField)
+      const scoreMap = await fetchPhotoScoresByIds(userId, combinedIds)
+      const ids = sortIdsByScore(combinedIds, scoreMap, internalFields, direction)
+      const unscoredIds = new Set(
+        combinedIds.filter((id) => meanScore(scoreMap.get(id), internalFields) === null)
+      )
+      const ordering: Ordering = { kind: 'explicit', fields: order_by.fields, direction }
+      console.log(
+        `[Agent]   🔎 search_advanced explicit order_by: ${ids.length} IDs (order: ${formatOrdering(ordering)})` +
+          (unscoredIds.size > 0 ? ` | ${unscoredIds.size} unscored → last` : '')
+      )
+      return { ids, ordering, unscoredIds }
+    }
+
     // (catalog_sample is now a standalone tool — see below)
 
     // ── Tool: search_advanced ───────────────────────────────
@@ -921,156 +1309,99 @@ export default class AgentToolsService {
         filter,
         similar_to,
         scopes,
+        order_by,
       }): Promise<string> => {
         // Limit is intentionally not exposed to the model — Phase 1 always returns
         // the maximum so Phase 2 (the curator) can make the final selection.
         // Keep in sync with PHASE2_TOTAL_IMAGE_LIMIT in langchain_agent_service.ts.
         const limit = 20
         try {
-          let scopedCandidateIds: number[] | undefined
-          if (scopes && scopes.length > 0) {
-            const scopeSet = new Set<number>()
-            for (const scope of scopes) {
-              const scopeIds = await _resolveScopePhotoIds(scope)
-              if (scopeIds === null) {
-                return JSON.stringify({ error: `Scope ${scope.type} ${scope.id} not found.` })
-              }
-              for (const id of scopeIds) scopeSet.add(id)
-            }
-            scopedCandidateIds = [...scopeSet]
-            console.log(
-              `[Agent]   🔎 search_advanced pre-scoped to [${scopes.map((scope) => `${scope.type}:${scope.id}`).join(', ')}]: ${scopedCandidateIds.length} candidate IDs`
-            )
-          }
+          // ── 1. Selector check ──
+          _assertHasSelector({ style_query, content_tags, filter, similar_to })
 
-          const scopeSummary = (scopes ?? []).map((scope) => ({
-            type: scope.type,
-            id: scope.id,
-          }))
+          // ── 2. Hard constraints → candidate pools ──
+          const pools = await _resolveSearchPools(scopes, filter)
 
-          if (scopedCandidateIds?.length === 0) {
-            return JSON.stringify({
-              querySummary: {
+          // An empty result still carries its full coverage story: which sources matched what,
+          // and how close an `intersect` came. "Nothing matched" and "nothing matched BOTH" are
+          // different answers, and only the counts distinguish them.
+          const emptyResult = (ranking?: RankingOutcome, unionCount?: number) =>
+            JSON.stringify({
+              querySummary: buildQuerySummary({
                 operation,
-                scopes: scopeSummary,
-                scopePhotoCount: 0,
+                pools,
                 candidateCount: 0,
                 returnedCount: 0,
-                truncated: false,
-                sourceCandidateCounts: {},
-              },
+                ordering: null,
+                sourceCandidateCounts: buildSourceCandidateCounts(pools, ranking),
+                unionCount,
+                saturatedSources: ranking ? saturatedRankingSources(ranking) : undefined,
+              }),
               photos: [],
             })
-          }
 
-          // Dispatch all sub-searches in parallel
-          const subSearches: Promise<number[]>[] = []
-          const subLabels: string[] = []
+          // Scope resolved to nothing, or the filter matched nothing → no ranking source can help.
+          if (pools.isEmpty) return emptyResult()
 
-          if (style_query) {
-            subSearches.push(_getIdsByStyle(style_query, scopedCandidateIds))
-            subLabels.push('style')
-          }
-          if (content_tags && content_tags.length > 0) {
-            subSearches.push(_getIdsByContent(content_tags, scopedCandidateIds))
-            subLabels.push('content')
-          }
-          if (filter) {
-            subSearches.push(_getIdsByFilter(filter, scopedCandidateIds))
-            subLabels.push('filter')
-          }
-          if (similar_to) {
-            subSearches.push(_getIdsBySimilarity(similar_to, scopedCandidateIds))
-            subLabels.push('similar')
-          }
-
-          if (subSearches.length === 0) {
-            return JSON.stringify({
-              error:
-                'No sub-searches specified. Provide at least one of: style_query, content_tags, filter, similar_to.',
-            })
-          }
-
-          const results = await Promise.all(subSearches)
-          const sourceCandidateCounts = Object.fromEntries(
-            subLabels.map((label, index) => [label, results[index].length])
+          // ── 3. Ranking sub-searches, within the pool ──
+          const ranking = await _runRankingSearches(
+            { style_query, content_tags, similar_to },
+            pools.rankingPoolIds
           )
-
-          // Log sub-search sizes
-          const logParts = subLabels.map((label, i) => `${label}=${results[i].length}`)
+          const hasRanking = ranking.labels.length > 0
+          const subResultLog =
+            ranking.labels.map((l, i) => `${l}=${ranking.idLists[i].length}`).join(', ') || '(none)'
           console.log(
-            `[Agent]   🔎 search_advanced sub-results: ${logParts.join(', ')} | operation=${operation}`
+            `[Agent]   🔎 search_advanced ranking sub-results: ${subResultLog} | operation=${operation}`
           )
 
-          // Combine using RRF to preserve ranking signal from all sub-searches,
-          // then apply intersect/union as the set operation.
-          const rrfRanked = reciprocalRankFusion(results)
+          // ── 4. Combine. With ranking sources, relevance decides; without them this is a
+          //       filter-only query and the filter pool's tiered order is the only signal. ──
+          const combined = hasRanking
+            ? combineRankingResults(ranking, operation)
+            : { ids: pools.filterPoolIds!, unionCount: undefined }
+          // Only informative as a near-miss signal, i.e. when 2+ sources could disagree.
+          const unionCount = ranking.labels.length >= 2 ? combined.unionCount : undefined
 
-          let combinedIds: number[]
-          if (operation === 'intersect') {
-            // Keep only IDs present in every sub-search result, ordered by RRF score
-            const sets = results.map((ids) => new Set(ids))
-            combinedIds = rrfRanked.filter((id) => sets.every((s) => s.has(id)))
-          } else {
-            // Union — all IDs already deduplicated and ranked by RRF
-            combinedIds = rrfRanked
-          }
-
+          let combinedIds = combined.ids
+          let ordering: Ordering = hasRanking ? { kind: 'relevance' } : pools.filterOrdering!
           console.log(
-            `[Agent]   🔎 search_advanced combined: ${combinedIds.length} IDs after ${operation}`
+            `[Agent]   🔎 search_advanced combined: ${combinedIds.length} IDs (order: ${formatOrdering(ordering)})` +
+              (unionCount !== undefined ? ` | union would be ${unionCount}` : '')
           )
+          if (combinedIds.length === 0) return emptyResult(ranking, unionCount)
 
-          if (combinedIds.length === 0) {
-            return JSON.stringify({
-              querySummary: {
-                operation,
-                scopes: scopeSummary,
-                scopePhotoCount: scopedCandidateIds?.length ?? null,
-                candidateCount: 0,
-                returnedCount: 0,
-                truncated: false,
-                sourceCandidateCounts,
-              },
-              photos: [],
-            })
+          // ── 5. Explicit ordering overrides whatever order stage 4 produced ──
+          let unscoredIds = new Set<number>()
+          if (order_by) {
+            ;({
+              ids: combinedIds,
+              ordering,
+              unscoredIds,
+            } = await _applyExplicitOrder(combinedIds, order_by))
           }
 
-          // Sample to limit
-          const clampedLimit = Math.min(Math.max(limit, 1), 50)
-          const sampledIds = combinedIds.slice(0, clampedLimit)
-
-          // Fetch slim photo data for Phase 1 — full data + images are
-          // provided exclusively in Phase 2 via buildPhase2VisualContext.
-          const photos = await Photo.query().whereIn('id', sampledIds).preload('inferredLocation')
-          const photoMap = new Map(photos.map((p) => [p.id, p]))
-          const sourceRanks = results.map((ids) => new Map(ids.map((id, index) => [id, index + 1])))
-          const formatted = sampledIds
-            .map((id) => {
-              const p = photoMap.get(id)
-              if (!p) return null
-              const evidence = Object.fromEntries(
-                subLabels.flatMap((label, index) => {
-                  const rank = sourceRanks[index].get(id)
-                  return rank === undefined ? [] : [[label, { rank }]]
-                })
-              )
-              return { ...photoDataForAgentSlim(p), evidence }
-            })
-            .filter(Boolean)
+          // ── 6. Sample + format ──
+          const sampledIds = combinedIds.slice(0, Math.min(Math.max(limit, 1), 50))
+          const photos = await formatSearchResultPhotos(sampledIds, ranking)
 
           return JSON.stringify({
-            querySummary: {
+            querySummary: buildQuerySummary({
               operation,
-              scopes: scopeSummary,
-              scopePhotoCount: scopedCandidateIds?.length ?? null,
+              pools,
               candidateCount: combinedIds.length,
-              returnedCount: formatted.length,
-              truncated: combinedIds.length > formatted.length,
-              sourceCandidateCounts,
-            },
-            photos: formatted,
+              returnedCount: photos.length,
+              ordering,
+              sourceCandidateCounts: buildSourceCandidateCounts(pools, ranking),
+              unionCount,
+              saturatedSources: saturatedRankingSources(ranking),
+              unscoredCount: sampledIds.filter((id) => unscoredIds.has(id)).length,
+            }),
+            photos,
           })
         } catch (error) {
+          // Bad input the model can correct (unknown scope, no selector) keeps its own message.
+          if (error instanceof SearchInputError) return JSON.stringify({ error: error.message })
           return JSON.stringify({ error: `Advanced search failed: ${error.message}` })
         }
       },

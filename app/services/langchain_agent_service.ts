@@ -48,25 +48,18 @@ Your ONLY job is to call the right tools to gather data. A later phase with visu
 - When you have all the data, call \`done\`. You MUST always end by calling \`done\`.
 
 ## Search & Tool Strategy
+Each tool's own description and schema specify its parameters exhaustively — read them there.
+Below is only WHICH tool to reach for, plus the rules that sit above any single tool.
 
-**\`search_advanced\`** — the primary search tool. Each parameter targets a different search dimension:
-- \`content_tags\`: what appears in the photo — subjects, people, animals, objects, actions (e.g. ["woman"], ["dog", "park"]).
-- \`style_query\`: how the photo looks — mood, atmosphere, visual style (e.g. "dark moody portraits").
-- \`filter\`: structured metadata — scores, visual aspects (genre, lighting, palette…), dates.
-- \`similar_to\`: photos similar to a reference photo.
-- Combine dimensions in a single call with \`intersect\` (AND) or \`union\` (OR). Prefer one \`search_advanced\` per step.
+- **\`search_advanced\`** — every targeted photo lookup. Prefer ONE call per step: its parameters are designed to combine (ranking sources + hard constraints + ordering) instead of being split across searches.
+- **\`catalog_sample\`** — evolution, progress-over-time, broad cross-sections. Never for targeted lookups.
+- **\`tag_distribution\`** — proportions of CONTENT tags (people, animals, objects, toponyms). Merge every plausible synonym of a concept into one category rather than betting on a single term. Never for genre/style/lighting/palette/mood — that's \`overall_catalog_view\`.
+- **\`overall_catalog_view\`** — holistic profile: patterns, visual-aspect distribution, score stats. Pair it in parallel with \`catalog_sample\` and with \`tag_distribution\`.
+- **\`get_photo_info\`** — ONLY user-attached photo IDs, or IDs from conversation history. NEVER on IDs returned by \`search_advanced\` or \`catalog_sample\`.
+- **\`fetch_collections\` / \`fetch_series\` / \`fetch_portfolios\`** — the user's library items. Three distinct types; never substitute one for another.
+- **\`web_search\`** — external facts only (gear, techniques, awards, photographer bios). For time-sensitive topics, include the current date in the query.
 
-**\`catalog_sample\`** — for evolution, progress-over-time, or broad catalog cross-sections.
-- Always pair with \`overall_catalog_view\` in parallel.
-- \`scan_mode="technical"\` (default) for style/quality analysis; \`scan_mode="semantic"\` for subject/theme analysis.
-
-**\`tag_distribution\`** — proportions (counts + %) of specific CONTENT tags (people, animals, objects, toponyms). \`tags\` is an array of arrays — each inner array is one category, optionally 2+ synonyms merged into it (e.g. \`[["motorcycle","motorbike"], ["car"]]\`) for concepts that could be tagged under more than one name; the merge is exact server-side (no double-counting), so pass every plausible synonym you can think of rather than guessing a single term. Supports 2+ way comparisons, not just pairs. Requested categories are auto-verified against the user's real tag vocabulary; ones with no match come back in \`unresolvedTags\` — treat those as no-data, never as 0%. NEVER use it for genre/style/lighting/mood proportions ("portraits vs landscapes") — that's \`overall_catalog_view\`. Always pair with \`overall_catalog_view\` in parallel for complementary context.
-
-**\`get_photo_info\`** — ONLY for user-attached photo IDs or IDs from conversation history. NEVER call it on IDs returned by \`search_advanced\` or \`catalog_sample\` — those are fully populated with descriptions, scores, and thumbnails automatically in a later phase.
-
-**\`web_search\`** — only for external facts (gear, techniques, awards, photographer bios). For time-sensitive topics, include current date in the query. Call before any tool whose inputs depend on the web results.
-
-**Parallelism:** call independent tools simultaneously. If one tool's output feeds another's input, call them sequentially.
+**Parallelism:** call independent tools simultaneously. If one tool's output feeds another's input — including \`web_search\` feeding a later call — call them sequentially.
 
 ## Thinking patterns
 The examples below show HOW TO THINK about tool orchestration. Extrapolate the underlying logic to new situations — adapt parameters, combine strategies, and invent new patterns as needed.
@@ -146,7 +139,16 @@ Photos may arrive with thumbnails (for visual evaluation) or text-only descripti
 - **Selectivity:** Only include photos that genuinely match the user's request. Discard tangential or low-relevance results — even if returned by a search tool.
 - **Grounding:** Your response MUST be based EXCLUSIVELY on data returned by tools. If no photos were found or all tools returned empty results, state this clearly — NEVER invent filenames, descriptions, or photo content to fill the gap. An empty \`photo_groups\` array is correct when there are no real results.
 - **Search coverage:** \`search_advanced.querySummary\` describes the evidence boundary: scoped pool size, candidates matching the combined query, returned count, truncation, and per-source candidate counts. Use it to qualify broad claims. When results are truncated, describe the photos as a prioritized selection rather than the exhaustive or definitive best set.
+    - \`saturatedSources\`: those sources hit their internal cap, so their \`sourceCandidateCounts\` are floors, not totals, and the ranking only saw that top slice. Never claim exhaustiveness ("these are ALL your…") over a saturated source.
+    - \`unscoredCount\`: that many returned photos are missing at least one \`ordering.fields\` score — they sit at the end and are NOT ranked. Do not present them as the worst or the best; if they dominate the result, say the score is missing for most of the set.
+- **Empty results — diagnose, never just report nothing:** an empty \`photos\` array still carries \`sourceCandidateCounts\` and, when two or more ranking sources ran, \`unionCount\` (photos matching AT LEAST ONE source). Read them before answering:
+    - Every source count is 0 → nothing in the catalog matches; say so plainly.
+    - Sources matched but \`operation\` was \`intersect\` and \`unionCount\` > 0 → the *combination* failed, not the catalog. Tell the user what each side found ("tienes 40 melancólicas y 12 con perros, pero ninguna es ambas") and offer the broader search as the next step.
+    - \`filterPhotoCount\` is 0 while \`scopePhotoCount\` is not → the filter, not the scope, emptied the result. Name the constraint that did it so the user can relax it.
 - **Search evidence:** Each \`search_advanced\` photo can include source ranks under \`evidence\`. Use these internally to distinguish multi-source support from a match produced only by a broad filter. Do not expose raw ranks or internal source names unless the user explicitly asks for methodology.
+- **Ordering — branch on \`search_advanced.querySummary.ordering.kind\`, never on the field name:**
+    - \`explicit\` (carries \`fields\` + \`direction\`): the user asked for exactly this ranking. It is a result, not a suggestion. Keep the photos in the order returned and never bury or drop the top-ranked one. Each photo carries its \`artistic_scores\`: rank from those numbers, not from your visual impression. With two or more \`fields\` the order is their AVERAGE — so a photo may lead without topping any single score; explain it that way if you cite the scores. You may demote the top-ranked photo if it genuinely fails the request — but say so explicitly.
+    - \`relevance\` or \`fallback\`: nobody asked for an order. \`fallback\` is merely the default the search picked to break ties on a filter-only query, so its \`fields\` carry no user intent. Curate and reorder freely.
 - **\`tag_distribution\` unresolved terms:** if a \`tag_distribution\` result includes \`unresolvedTags\`, those terms have no matching tag in the catalog at all — say so plainly (e.g. "no tengo datos de X"). Never report an unresolved term as "0%" or "not present in any photo", since that implies a confirmed absence rather than a missing tag.
 - **\`tag_distribution\` percentages:** when stating a proportion between the compared tags (e.g. "55% hombres, 45% mujeres"), use each tag's \`relativePercentage\` (share among the compared tags), NOT \`percentage\` (share of the whole catalog) — the latter does not sum to 100% across the compared terms and will misstate the split.
 - **Scoring (1-10):** Use for internal ranking. Surface scores only if the user asks or it adds clear value.
@@ -184,7 +186,7 @@ If the user is dissatisfied or frustrated:
 - **Prefer MULTIPLE groups** over a single flat list. Whenever there is a natural way to subdivide results — by quality tier, theme, genre, time period, or any other meaningful axis — use separate groups. A single \`"result"\` group is only acceptable when the results are genuinely homogeneous and no useful subdivision exists.
 - Example groupings to favour: \`"Top picks"\` / \`"Honorable mentions"\`, \`"Portraits"\` / \`"Landscapes"\`, \`"Best of 2024"\` / \`"Best of 2023"\`, \`"Strong"\` / \`"Promising"\`, \`"Candidates"\` / \`"Discarded"\`.
 - Group labels: in the user's language, concise.
-- Order within each group IS your editorial statement (index 0 = most prominent).
+- Order within each group IS your editorial statement (index 0 = most prominent) — except when \`querySummary.ordering.kind\` is \`explicit\`, where the returned order is binding.
 - No cost or limit to including photo IDs — include every pertinent photo. Be generous.
 - Leave empty only when no specific photos are relevant.`
 
@@ -323,6 +325,14 @@ const PHASE2_MAX_THUMBNAILS = 20 // how many of those can carry a thumbnail imag
 /** Tools whose Phase 2 photo results are eligible for thumbnail images. */
 const IMAGE_ELIGIBLE_TOOLS = new Set(['search_advanced', 'get_photo_info'])
 
+/**
+ * An already-injected `[[photo:ID|filename]]` token. Every pass of injectPhotoTokens
+ * alternates on this FIRST so a token is consumed whole and its innards — the numeric
+ * ID, and the filename, both of which the passes below would otherwise match — can
+ * never be rewritten into a second token nested inside the first.
+ */
+const PHOTO_TOKEN_SOURCE = String.raw`\[\[photo:\d+\|[^\]]*\]\]`
+
 // ══════════════════════════════════════════════════════════════
 // SERVICE
 // ══════════════════════════════════════════════════════════════
@@ -422,7 +432,6 @@ export default class LangchainAgentService {
     )
     const doneTool = this.createDoneTool()
     const allTools = [...tools, doneTool]
-    // 'any' = Gemini, 'required' = OpenAI/xAI (forces tool call, prevents phantom text), 'auto' = DeepSeek
     // 'any' = Gemini, 'required' = OpenAI/xAI (forces tool call, prevents phantom text), 'auto' = DeepSeek/Qwen
     const toolChoice =
       provider === 'deepseek' || provider === 'qwen'
@@ -858,7 +867,7 @@ export default class LangchainAgentService {
 
         parts.push({
           type: 'text',
-          text: `[${photo.originalFileName} — id:${photo.id}]\n${JSON.stringify(photoDataForAgentPreview(photo))}`, // compact: no whitespace to save tokens
+          text: `[${photo.originalFileName} — id:${photo.id}]\n${JSON.stringify(photoDataForAgentPreview(photo, { includeScores: true }))}`, // compact: no whitespace to save tokens
         })
 
         // DeepSeek and Qwen Phase 1 models do not support vision — skip image parts entirely
@@ -893,7 +902,8 @@ export default class LangchainAgentService {
     // ── Helper: fetch photos as text-only (no thumbnail) ──
     const fetchTextOnly = async (
       photoIds: number[],
-      formatter: (photo: any) => Record<string, any> = photoDataForAgentPreview
+      formatter: (photo: any) => Record<string, any> = (photo) =>
+        photoDataForAgentPreview(photo, { includeScores: true })
     ): Promise<any[]> => {
       if (photoIds.length === 0) return []
       const photos = await this.photoManager.getPhotosByIds(photoIds)
@@ -967,7 +977,9 @@ export default class LangchainAgentService {
             withImageIds,
             remainingThumbnails
           )
-          const textParts = await fetchTextOnly(cappedTextOnlyIds, photoDataForAgentPreview)
+          const textParts = await fetchTextOnly(cappedTextOnlyIds, (photo) =>
+            photoDataForAgentPreview(photo, { includeScores: true })
+          )
           const allParts = [...imageParts, ...textParts]
 
           if (allParts.length > 0) {
@@ -1001,7 +1013,7 @@ export default class LangchainAgentService {
               'technical') as 'technical' | 'semantic'
             formatter = (photo) => photoDataForAgentScan(photo, scanMode)
           } else {
-            formatter = photoDataForAgentPreview
+            formatter = (photo) => photoDataForAgentPreview(photo, { includeScores: true })
           }
 
           const textParts = await fetchTextOnly(cappedIds, formatter)
@@ -1101,6 +1113,13 @@ export default class LangchainAgentService {
    *   surrounding ** bold markers so the token becomes the sole formatting.
    * Fallback path — scan for bare numeric IDs in case any leaked through.
    *
+   * The fallback only considers IDs present in photo_groups. A bare number in the prose
+   * is far more often a year or a count ("tus mejores fotos de 2024") than a photo
+   * reference, and matching it against the whole catalog made every such number a
+   * candidate. photo_groups is the intent signal — the prompt already requires every
+   * photo named in the text to appear there. This narrows the collision to a year that
+   * equals an ID the model actually grouped; it does not close it.
+   *
    * @param knownPhotoIds  IDs already present in photo_groups (pre-fetched, cheap).
    */
   private async injectPhotoTokens(
@@ -1108,18 +1127,10 @@ export default class LangchainAgentService {
     userId: number,
     knownPhotoIds: number[]
   ): Promise<string> {
-    // Collect any additional numeric IDs that may have leaked into the text.
-    // Filter to PostgreSQL integer range (max 2^31-1) to avoid "out of range" DB errors
-    // from timestamps or other large numbers the LLM may include.
-    const MAX_PG_INT = 2_147_483_647
-    const numericIds = [...text.matchAll(/\b(\d{3,})\b/g)]
-      .map((m) => Number(m[1]))
-      .filter((n) => Number.isFinite(n) && n <= MAX_PG_INT)
-    const candidateIds = [...new Set([...knownPhotoIds, ...numericIds])]
-    if (candidateIds.length === 0) return text
+    if (knownPhotoIds.length === 0) return text
 
     const photos = await Photo.query()
-      .whereIn('id', candidateIds)
+      .whereIn('id', knownPhotoIds)
       .where('user_id', userId)
       .select(['id', 'original_file_name'])
 
@@ -1137,7 +1148,7 @@ export default class LangchainAgentService {
       const id = filenameToId.get(filename)!
       const escaped = filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       // Match the filename with 0–2 surrounding asterisks on each side
-      const pattern = new RegExp(`\\*{0,2}${escaped}\\*{0,2}`, 'g')
+      const pattern = new RegExp(`${PHOTO_TOKEN_SOURCE}|\\*{0,2}${escaped}\\*{0,2}`, 'g')
       result = result.replace(pattern, (match) => {
         if (match.startsWith('[[photo:')) return match // already tokenised
         console.log(`[Agent] 🔁 Post-process: "${filename}" (id:${id}) → token`)
@@ -1146,12 +1157,13 @@ export default class LangchainAgentService {
     }
 
     // ── 2. Fallback: replace any remaining bare numeric IDs ──
-    result = result.replace(/\b(\d{3,})\b/g, (match) => {
-      const id = Number(match)
-      const filename = idToFilename.get(id)
+    const bareIdPattern = new RegExp(`${PHOTO_TOKEN_SOURCE}|\\b(\\d{3,})\\b`, 'g')
+    result = result.replace(bareIdPattern, (match, bareId?: string) => {
+      if (bareId === undefined) return match // matched a token from step 1, leave it whole
+      const filename = idToFilename.get(Number(bareId))
       if (filename) {
-        console.log(`[Agent] 🔁 Post-process: bare ID ${id} → token`)
-        return `[[photo:${id}|${filename}]]`
+        console.log(`[Agent] 🔁 Post-process: bare ID ${bareId} → token`)
+        return `[[photo:${bareId}|${filename}]]`
       }
       return match
     })
