@@ -95,7 +95,15 @@ export const VISUAL_ASPECTS_SCHEMA: VisualAspectDef[] = [
       'architecture',
     ],
     valuesByVariant: {
-      general: ['abstract', 'documentary', 'street', 'landscape', 'portrait', 'product', 'lifestyle'],
+      general: [
+        'abstract',
+        'documentary',
+        'street',
+        'landscape',
+        'portrait',
+        'product',
+        'lifestyle',
+      ],
       style: ['abstract', 'documentary', 'street', 'landscape', 'portrait'],
       commercial: [
         'advertising',
@@ -252,9 +260,9 @@ const STYLE_FUNDAMENTALS: ArtisticScoreCriterionDef[] = [
     label: 'Originality',
     descriptions: {
       style:
-        "Does the photo have a mysterious element that makes it special? Whether it's an everyday situation where something out of place raises an eyebrow, or a scene bathed in strange, dreamlike, surreal light, evaluate how unique or unusual the photo is.",
+        "Does the photo have any unique qualities that set it apart from the rest? Whether it's an everyday situation with something out of place, a striking detail, a surreal atmosphere, or a novel composition, evaluate how original, memorable or unusual the photo is.",
       general:
-        'Does anything slightly unusual, curious, or unexpected stand out? This can be subtle: an odd coincidence, a contrast, a visual tension, or something mildly out of place—not necessarily surreal or artistic.',
+        "Does the photo have any unique qualities that set it apart from the rest? Whether it's an everyday situation with something out of place, a striking detail, a surreal atmosphere, or a novel composition, evaluate how original, memorable or unusual the photo is.",
     },
     weights: { general: 0.25, street: 0.9, documentary: 0.5, abstract: 0.6 },
   },
@@ -596,6 +604,20 @@ export function resolveInternalScoreKeyAnyVariant(field: string): string {
     if (mapped) return mapped
   }
   return field
+}
+
+/**
+ * Inverse of `resolveInternalScoreKeyAnyVariant`: maps a stored key back to the
+ * external name the tool API and the model speak (e.g. `strangeness` →
+ * `originality`). Used when surfacing raw `artistic_scores` to the agent, so the
+ * score names match the ones it can pass back in `order_by` / `scoreFilters`.
+ */
+export function resolveExternalScoreKeyAnyVariant(key: string): string {
+  for (const v of ['style', 'commercial'] as const) {
+    const mapped = getScoreInternalToExternal(v)[key]
+    if (mapped) return mapped
+  }
+  return key
 }
 
 // ─────────────────────────────────────────────────────────────
