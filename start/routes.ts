@@ -571,6 +571,10 @@ router
     router.get('/api/chat/reset', [ChatController, 'reset'])
     router.get('/api/chat/modes', [ChatController, 'listModes'])
 
+    // Phase 3 — grounded action suggestions for the latest assistant turn
+    router.post('/api/chat/actions', [ChatController, 'chatActions'])
+    router.post('/api/chat/actions/used', [ChatController, 'markChatActionUsed'])
+
     // Conversation management endpoints
     router.get('/api/conversations', [ChatController, 'listConversations'])
     router.get('/api/conversations/:id', [ChatController, 'getConversation'])

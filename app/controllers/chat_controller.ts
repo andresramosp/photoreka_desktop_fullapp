@@ -17,6 +17,28 @@ import {
 export default class ChatController {
   private conversationService = new ConversationService()
 
+  private sortDeep(value: any): any {
+    if (Array.isArray(value)) return value.map((v) => this.sortDeep(v))
+    if (!value || typeof value !== 'object') return value
+    return Object.keys(value)
+      .sort()
+      .reduce(
+        (acc, key) => {
+          acc[key] = this.sortDeep(value[key])
+          return acc
+        },
+        {} as Record<string, any>
+      )
+  }
+
+  private actionSignature(action: any): string {
+    const normalized = {
+      type: String(action?.type ?? ''),
+      params: action?.params && typeof action.params === 'object' ? action.params : {},
+    }
+    return JSON.stringify(this.sortDeep(normalized))
+  }
+
   /**
    * Agentic chat endpoint
    *
@@ -281,7 +303,7 @@ export default class ChatController {
       const result = await new ChatActionsService().generateForLatestTurn(user.id, convId)
 
       if (!result) {
-        return response.ok({ actions: [] })
+        return response.ok({ actions: [], messageId: null })
       }
 
       // Record cost (analytics) — suggestions are cheap; not credit-gated.
@@ -293,11 +315,87 @@ export default class ChatController {
         CreditService.charge(user.id, result.costEur, 'CHAT').catch(() => {})
       }
 
-      return response.ok({ actions: result.actions })
+      return response.ok({ actions: result.actions, messageId: result.messageId })
     } catch (error: any) {
       console.error('[ChatController] ❌ Error generating actions:', error)
       // Non-fatal for the UX — the chat message already rendered.
-      return response.ok({ actions: [] })
+      return response.ok({ actions: [], messageId: null })
+    }
+  }
+
+  /**
+   * Mark one suggested action as used for a specific assistant message.
+   *
+   * POST /api/chat/actions/used
+   * Body: { conversationId: number, messageId: number, action: { type, params } }
+   */
+  public async markChatActionUsed({ request, response, auth }: HttpContext) {
+    try {
+      const user = auth.use('api').user!
+      const { conversationId, messageId, action } = request.only([
+        'conversationId',
+        'messageId',
+        'action',
+      ])
+
+      const convId = Number(conversationId)
+      const msgId = Number(messageId)
+
+      if (!convId || Number.isNaN(convId) || !msgId || Number.isNaN(msgId)) {
+        return response.badRequest({
+          message: 'Valid "conversationId" and "messageId" are required.',
+        })
+      }
+      if (!action || typeof action !== 'object' || typeof action.type !== 'string') {
+        return response.badRequest({
+          message: 'A valid "action" payload is required.',
+        })
+      }
+
+      const conv = await this.conversationService.verifyOwnership(convId, user.id)
+      if (!conv) {
+        return response.notFound({ message: 'Conversation not found.' })
+      }
+
+      const ConversationMessage = (await import('#models/conversation_message')).default
+      const targetMessage = await ConversationMessage.query()
+        .where('id', msgId)
+        .where('conversation_id', convId)
+        .where('role', 'assistant')
+        .first()
+
+      if (!targetMessage) {
+        return response.notFound({ message: 'Assistant message not found.' })
+      }
+
+      const metadata = (targetMessage.metadata as any) ?? {}
+      const actions = Array.isArray(metadata.actions) ? metadata.actions : []
+      if (actions.length === 0) {
+        return response.ok({ actions: [], updated: false })
+      }
+
+      const requestedSignature = this.actionSignature(action)
+      let updated = false
+      const nextActions = actions.map((candidate: any) => {
+        if (this.actionSignature(candidate) !== requestedSignature) return candidate
+        updated = true
+        return { ...candidate, used: true }
+      })
+
+      if (updated) {
+        targetMessage.metadata = {
+          ...metadata,
+          actions: nextActions,
+        }
+        await targetMessage.save()
+      }
+
+      return response.ok({ actions: nextActions, updated })
+    } catch (error: any) {
+      console.error('[ChatController] ❌ Error marking action as used:', error)
+      return response.internalServerError({
+        message: 'Failed to mark action as used.',
+      })
     }
   }
 

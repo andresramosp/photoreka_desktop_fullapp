@@ -91,6 +91,7 @@ export default class ConversationService {
       'You are a conversation title generator for a photography app.' +
       " Given the user's first message, produce a short, descriptive title (3–6 words)." +
       ' Match the language of the message.' +
+      ' Do not include references to IDs (collections, photos, etc.).' +
       ' Respond ONLY with valid JSON: {"result": "<title>"}'
 
     const { result, cost } = await modelsService.getGeminiResponse(
