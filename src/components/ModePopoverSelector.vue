@@ -20,6 +20,11 @@
         <span v-if="!singleMode">{{
           selectedOption?.label || placeholder
         }}</span>
+        <span
+          v-if="selectedOption?.costFactor != null"
+          class="mode-selector-chip-badge"
+          >x{{ selectedOption.costFactor }}</span
+        >
       </button>
     </template>
 
@@ -128,6 +133,7 @@ const selectOption = (value: string) => {
 
 <style scoped>
 .mode-selector-chip {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -162,6 +168,21 @@ const selectOption = (value: string) => {
 .mode-selector-chip--single:hover {
   background: transparent;
   border-color: transparent;
+}
+
+.mode-selector-chip-badge {
+  display: none;
+  position: absolute;
+  bottom: -3px;
+  right: -3px;
+  font-size: 8px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  padding: 1px 3px;
+  border-radius: 6px;
+  background: var(--chip-color, var(--accent-color));
+  color: var(--bg-surface);
+  pointer-events: none;
 }
 
 .mode-selector-panel {

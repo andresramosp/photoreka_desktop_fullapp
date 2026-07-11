@@ -463,7 +463,7 @@
             <SpiralGridLoader variant="primary" :size="20" :duration="1300" />
             <transition name="phrase-fade" mode="out-in">
               <span :key="loadingPhraseIndex" class="typing-phrase">{{
-                loadingPhrases[loadingPhraseIndex]
+                shuffledLoadingPhrases[loadingPhraseIndex]
               }}</span>
             </transition>
           </div>
@@ -790,7 +790,7 @@ import {
 } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
 import { PlusCircleFilled, RobotOutlined } from "@vicons/antd";
-import { loadingPhrases } from "@/utils/chatLoadingPhrases";
+import { getShuffledLoadingPhrases } from "@/utils/chatLoadingPhrases";
 
 defineOptions({ name: "ChatView" });
 
@@ -950,6 +950,7 @@ const inputText = ref("");
 const isTyping = ref(false);
 const isSending = ref(false);
 const loadingPhraseIndex = ref(0);
+const shuffledLoadingPhrases = ref<string[]>(getShuffledLoadingPhrases());
 let loadingPhraseTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Randomized delay so the rotation doesn't feel mechanical/looping.
@@ -958,14 +959,20 @@ const nextLoadingPhraseDelay = () => 1200 + Math.random() * 3500;
 
 const scheduleNextLoadingPhrase = () => {
   loadingPhraseTimer = setTimeout(() => {
-    loadingPhraseIndex.value =
-      (loadingPhraseIndex.value + 1) % loadingPhrases.length;
+    if (loadingPhraseIndex.value >= shuffledLoadingPhrases.value.length - 1) {
+      shuffledLoadingPhrases.value = getShuffledLoadingPhrases();
+      loadingPhraseIndex.value = 0;
+    } else {
+      loadingPhraseIndex.value += 1;
+    }
+
     scheduleNextLoadingPhrase();
   }, nextLoadingPhraseDelay());
 };
 
 const startLoadingPhraseCycle = () => {
-  loadingPhraseIndex.value = Math.floor(Math.random() * loadingPhrases.length);
+  shuffledLoadingPhrases.value = getShuffledLoadingPhrases();
+  loadingPhraseIndex.value = 0;
   scheduleNextLoadingPhrase();
 };
 
@@ -2666,6 +2673,7 @@ const formatRelativeDate = (dateStr: string) => {
   padding: 15px;
   border-radius: var(--radius-lg);
   max-width: 90%;
+  overflow: hidden;
   position: relative;
   color: var(--text-primary);
 }
@@ -2686,7 +2694,7 @@ const formatRelativeDate = (dateStr: string) => {
 
 .message-text {
   margin: 0;
-  font-size: 14px;
+  font-size: 13.5px;
 
   line-height: var(--line-height-relaxed);
   word-break: break-word;
@@ -2813,9 +2821,29 @@ const formatRelativeDate = (dateStr: string) => {
     gap: var(--spacing-xs);
   }
 
+  .chat-mode-selector {
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+  }
+
   .chat-mode-selector :deep(.mode-selector-chip) {
-    font-size: 10px;
-    padding: 2px 8px 2px 5px;
+    padding: 5px;
+    border-radius: 50%;
+    gap: 0;
+  }
+
+  .chat-mode-selector
+    :deep(.mode-selector-chip > span:not(.mode-selector-chip-badge)) {
+    display: none;
+  }
+
+  .chat-mode-selector :deep(.mode-selector-chip .n-icon) {
+    font-size: 16px !important;
+  }
+
+  .chat-mode-selector :deep(.mode-selector-chip-badge) {
+    display: inline-flex;
   }
 
   .context-photo-wrapper {
@@ -2945,7 +2973,7 @@ const formatRelativeDate = (dateStr: string) => {
 
 /* ── Markdown content (assistant messages) ── */
 .message-assistant .message-bubble :deep(.markdown-content) {
-  font-size: 14px;
+  font-size: 13.5px;
 
   line-height: var(--line-height-relaxed);
   word-break: break-word;

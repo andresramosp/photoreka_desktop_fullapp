@@ -74,3 +74,14 @@ export const loadingPhrases = [
   "Running on hopes and floating-point numbers…",
   "Locating the good stuff…",
 ];
+
+export const getShuffledLoadingPhrases = () => {
+  const phrases = [...loadingPhrases];
+
+  for (let i = phrases.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [phrases[i], phrases[j]] = [phrases[j], phrases[i]];
+  }
+
+  return phrases;
+};
