@@ -105,6 +105,7 @@ export const useChatStore = defineStore("chat", {
         const { data } = await api.get(`/api/conversations/${conversationId}`);
         this.activeConversationId = data.id;
         this.messages = (data.messages || []).map((m) => ({
+          messageId: m.id,
           role: m.role,
           content: m.content,
           timestamp: new Date(m.createdAt),
@@ -112,6 +113,8 @@ export const useChatStore = defineStore("chat", {
           photoLists: m.photoGroups || undefined,
           attachedPhotos: undefined, // Not persisted — context photos are ephemeral display
           contextPhotoIds: m.contextPhotoIds || undefined,
+          // Phase 3 suggested actions are persisted on the message metadata
+          actions: m.metadata?.actions || undefined,
         }));
       } catch (error) {
         console.error("[ChatStore] Failed to load conversation:", error);
@@ -170,9 +173,64 @@ export const useChatStore = defineStore("chat", {
         content: data.output,
         timestamp: new Date(),
         photoLists: data.photoGroups,
+        actionsPending: true,
       });
 
       return data;
+    },
+
+    /**
+     * Fetch Phase 3 action suggestions for the latest assistant turn and attach
+     * them to that message. Async & non-fatal: the message is already rendered.
+     */
+    async fetchActionsForActiveConversation() {
+      if (!this.activeConversationId) return;
+      const pendingMsg = [...this.messages]
+        .reverse()
+        .find((m) => m.role === "assistant" && !m.isError);
+      try {
+        const { data } = await api.post("/api/chat/actions", {
+          conversationId: this.activeConversationId,
+        });
+        const actions = data.actions || [];
+        const messageId = data.messageId ?? null;
+        for (let i = this.messages.length - 1; i >= 0; i--) {
+          const msg = this.messages[i];
+          if (msg.role === "assistant" && !msg.isError) {
+            if (messageId != null) msg.messageId = messageId;
+            if (actions.length > 0) msg.actions = actions;
+            msg.actionsPending = false;
+            break;
+          }
+        }
+      } catch (error) {
+        // Non-fatal — suggestions are a progressive enhancement.
+        console.warn("[ChatStore] Failed to fetch actions:", error?.message);
+        if (pendingMsg) pendingMsg.actionsPending = false;
+      }
+    },
+
+    /**
+     * Persist that a suggested action was used and sync updated action state
+     * back into the target assistant message.
+     */
+    async markActionUsed(messageId, action) {
+      if (!this.activeConversationId || !messageId || !action) return [];
+      const { data } = await api.post("/api/chat/actions/used", {
+        conversationId: this.activeConversationId,
+        messageId,
+        action,
+      });
+
+      const actions = data.actions || [];
+      if (actions.length === 0) return actions;
+
+      const msg = this.messages.find(
+        (m) => Number(m.messageId) === Number(messageId),
+      );
+      if (msg) msg.actions = actions;
+
+      return actions;
     },
 
     /**

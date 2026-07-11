@@ -435,6 +435,7 @@ import { useIsMobile } from "@/composables/useIsMobile.js";
 import { useUserStore } from "@/stores/userStore";
 import { getGenrePresetKeys, getProfileVariant } from "@/config/photo_schema";
 import { useSearchTags } from "@/composables/useSearchTags.js";
+import { isScoreCriterion } from "@/utils/photosGridQuery.js";
 import CustomArtisticWeights from "./CustomArtisticWeights.vue";
 import TimeRangeFilter from "./TimeRangeFilter.vue";
 import VisualFiltersPanel from "@/components/photos-grid/VisualFiltersPanel.vue";
@@ -508,6 +509,13 @@ const props = defineProps({
   scrollCollapsed: {
     type: Boolean,
     default: false,
+  },
+  // Deep-link seed (parsed from route.query by the parent view). When present,
+  // the controls hydrate their state so filters/sorting are reflected here — not
+  // just applied to the grid. See utils/photosGridQuery.js.
+  initialState: {
+    type: Object,
+    default: null,
   },
 });
 
@@ -1034,6 +1042,36 @@ watch(
     }
   },
 );
+
+// ── Deep-link hydration ──────────────────────────────────────
+// Seed the controls from a parsed query descriptor so filters/sorting are
+// reflected in the UI (not only applied to the grid). Basic date/name sort is
+// owned by PhotosGrid, so it is intentionally ignored here.
+onMounted(() => {
+  const init = props.initialState;
+  if (!init) return;
+
+  if (init.sort && isScoreCriterion(init.sort.field)) {
+    sortingType.value = "criteria";
+    selectedCriteria.value = [init.sort.field];
+    sortOrder.value = init.sort.dir === "asc" ? "asc" : "desc";
+    isSortingExpanded.value = true;
+  } else if (init.genrePreset) {
+    sortingType.value = "genre";
+    selectedGenre.value = init.genrePreset;
+    isSortingExpanded.value = true;
+  }
+
+  if (Array.isArray(init.scoreFilters) && init.scoreFilters.length > 0) {
+    const map = {};
+    for (const f of init.scoreFilters) {
+      map[f.field] = { value: f.value, operator: f.op === "lte" ? "<=" : ">=" };
+    }
+    artisticScoreFilters.value = map;
+    emit("artistic-scores-change", { ...map });
+    isFiltersExpanded.value = true;
+  }
+});
 </script>
 
 <style scoped>

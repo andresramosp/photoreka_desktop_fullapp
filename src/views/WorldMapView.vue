@@ -962,8 +962,19 @@ function getLeafletMap(): L.Map | null {
 function getRouteFocusCoordinates(): GpsCoordinates | null {
   const focusLat = parseFloat(route.query.lat as string);
   const focusLng = parseFloat(route.query.lng as string);
-  if (isNaN(focusLat) || isNaN(focusLng)) return null;
-  return [focusLat, focusLng];
+  if (!isNaN(focusLat) && !isNaN(focusLng)) return [focusLat, focusLng];
+
+  // Focus by photo id (e.g. deep-linked from ChatLab "view on map"): resolve the
+  // photo's coordinates from the already-computed GPS list. Silently no-ops when
+  // the photo has no resolvable location.
+  const focusPhotoId = route.query.photoId as string | undefined;
+  if (focusPhotoId) {
+    const match = photosWithGps.value.find(
+      (p) => String(p.id) === String(focusPhotoId),
+    );
+    if (match) return match.coordinates;
+  }
+  return null;
 }
 
 function applyRouteFocusIfPresent() {

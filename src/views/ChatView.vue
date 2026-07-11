@@ -262,6 +262,7 @@
           v-for="(message, index) in chatStore.messages"
           :key="index"
           class="message-row"
+          :data-message-index="index"
           :class="{
             'message-user': message.role === 'user',
             'message-assistant': message.role === 'assistant',
@@ -413,7 +414,7 @@
               <span class="message-time">{{
                 formatTime(message.timestamp)
               }}</span>
-              <n-button
+              <!-- <n-button
                 v-if="
                   message.role === 'assistant' &&
                   message.photoLists &&
@@ -428,8 +429,28 @@
                   <n-icon :size="11"><BookmarksOutline /></n-icon>
                 </template>
                 Add to collection
-              </n-button>
+              </n-button> -->
             </div>
+            <!-- Phase 3 recommended actions -->
+            <div
+              v-if="message.role === 'assistant' && message.actionsPending"
+              class="action-suggestions-skeleton"
+            >
+              <div class="action-chip-skeleton" />
+              <div class="action-chip-skeleton" />
+              <div class="action-chip-skeleton" />
+            </div>
+            <ChatActionSuggestions
+              v-else-if="
+                message.role === 'assistant' &&
+                message.actions &&
+                message.actions.length > 0
+              "
+              :actions="message.actions"
+              @execute="handleActionExecute($event, message)"
+              @hover-photos="handleActionHoverPhotos($event, index)"
+              @clear-hover-photos="clearActionHoverPhotos(index)"
+            />
           </div>
         </div>
 
@@ -733,6 +754,8 @@ import CollectionModal from "@/components/CollectionModal.vue";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import ModePopoverSelector from "@/components/ModePopoverSelector.vue";
 import ChatMentionInput from "@/components/ChatMentionInput.vue";
+import ChatActionSuggestions from "@/components/ChatActionSuggestions.vue";
+import { useChatActions } from "@/composables/useChatActions.js";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useChatStore } from "@/stores/chat.js";
 import { useUserStore } from "@/stores/userStore";
@@ -794,12 +817,14 @@ interface PhotoList {
 }
 
 interface ChatMessage {
+  messageId?: number;
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
   isError?: boolean;
   photoLists?: PhotoList[];
   attachedPhotos?: ContextPhoto[];
+  actions?: any[];
 }
 
 interface ContextPhoto {
@@ -903,6 +928,23 @@ const {
 const showCollectionModal = ref(false);
 const collectionModalPhotoIds = ref<(string | number)[]>([]);
 const isDeletingPhotos = ref(false);
+
+// Phase 3 — grounded action suggestions rendered under each assistant reply
+const { executeAction, isWriteAction } = useChatActions();
+const handleActionExecute = async (action: any, chatMessage: ChatMessage) => {
+  const executed = await executeAction(action);
+  if (!executed) return;
+
+  if (!isWriteAction(action)) return;
+
+  // Persist "used" state so this suggestion is disabled across reloads.
+  if (!chatMessage?.messageId) return;
+  try {
+    await chatStore.markActionUsed(chatMessage.messageId, action);
+  } catch (err) {
+    console.warn("[ChatView] Failed to persist used action:", err);
+  }
+};
 
 const inputText = ref("");
 const isTyping = ref(false);
@@ -1268,6 +1310,9 @@ const sendMessage = async () => {
     if (chatStore.activeConversationId && !route.params.id) {
       router.replace(`/chat-lab/${chatStore.activeConversationId}`);
     }
+    // Fire-and-forget: fetch Phase 3 action suggestions; they pop in under the
+    // reply a moment later without blocking the message from rendering.
+    chatStore.fetchActionsForActiveConversation();
   } catch (error: any) {
     // 402 responses (INSUFFICIENT_CREDITS / QUOTA_EXHAUSTED) are handled by
     // the axios interceptor which shows a notification — no in-chat bubble needed.
@@ -1439,6 +1484,54 @@ const handleMarkdownMouseOut = (e: MouseEvent) => {
   bubble
     .querySelectorAll<HTMLElement>(".photo-token-hover")
     .forEach((el) => el.classList.remove("photo-token-hover"));
+};
+
+const getActionPhotoIds = (action: any): string[] => {
+  const ids = action?.params?.photoIds;
+  if (!Array.isArray(ids)) return [];
+  return ids.map((id: string | number) => String(id));
+};
+
+const handleActionHoverPhotos = (action: any, messageIndex: number) => {
+  const photoIds = getActionPhotoIds(action);
+  const row = messagesRef.value?.querySelector<HTMLElement>(
+    `.message-row[data-message-index="${messageIndex}"]`,
+  );
+  const bubble = row?.querySelector<HTMLElement>(".message-bubble");
+  if (!bubble) return;
+
+  // Clear previous action-driven highlights in this same bubble.
+  bubble
+    .querySelectorAll<HTMLElement>(".message-photo-item.photo-action-hover")
+    .forEach((el) => {
+      el.classList.remove("photo-action-hover", "photo-token-hover");
+    });
+
+  if (photoIds.length === 0) return;
+
+  for (const photoId of photoIds) {
+    bubble
+      .querySelectorAll<HTMLElement>(
+        `.message-photo-item[data-photo-id="${photoId}"]`,
+      )
+      .forEach((el) => {
+        // Reuse the existing token hover visual style.
+        el.classList.add("photo-action-hover", "photo-token-hover");
+      });
+  }
+};
+
+const clearActionHoverPhotos = (messageIndex: number) => {
+  const row = messagesRef.value?.querySelector<HTMLElement>(
+    `.message-row[data-message-index="${messageIndex}"]`,
+  );
+  const bubble = row?.querySelector<HTMLElement>(".message-bubble");
+  if (!bubble) return;
+  bubble
+    .querySelectorAll<HTMLElement>(".message-photo-item.photo-action-hover")
+    .forEach((el) => {
+      el.classList.remove("photo-action-hover", "photo-token-hover");
+    });
 };
 
 const handleSuggestionClick = (suggestion: Suggestion) => {
@@ -2052,6 +2145,44 @@ const formatRelativeDate = (dateStr: string) => {
 
 .context-photo-wrapper.flash-highlight {
   animation: contextPhotoFlash 0.9s ease;
+}
+
+.action-suggestions-skeleton {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.action-chip-skeleton {
+  width: 96px;
+  height: 28px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--border-color) 0%,
+    var(--bg-hover) 50%,
+    var(--border-color) 100%
+  );
+  background-size: 200% 100%;
+  animation: actionChipShimmer 1.4s ease-in-out infinite;
+}
+
+.action-chip-skeleton:nth-child(2) {
+  width: 120px;
+}
+
+.action-chip-skeleton:nth-child(3) {
+  width: 80px;
+}
+
+@keyframes actionChipShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 @keyframes contextPhotoFlash {
@@ -2787,9 +2918,8 @@ const formatRelativeDate = (dateStr: string) => {
 }
 
 .message-photo-item.photo-token-hover {
-  outline: 2px solid var(--accent-color);
-  outline-offset: 2px;
-  transform: scale(1.04);
+  outline: 1px solid var(--accent-color);
+  outline-offset: 1px;
 }
 
 @media (max-width: 768px) {

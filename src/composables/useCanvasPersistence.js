@@ -316,6 +316,20 @@ export function useCanvasPersistence() {
     }
   };
 
+  /**
+   * Refresca solo la lista de canvases (sin tocar el canvas activo).
+   * Usado cuando otro flujo (p.ej. el chat) crea/renombra/borra un canvas.
+   */
+  const refreshCanvasList = async () => {
+    if (!useBackend()) return;
+    try {
+      const listRes = await api.get("/api/canvas");
+      canvasList.value = listRes.data || [];
+    } catch (err) {
+      console.error("Error refreshing canvas list:", err);
+    }
+  };
+
   // ─── Create ───────────────────────────────────────────────────────────────────
 
   /**
@@ -519,6 +533,7 @@ export function useCanvasPersistence() {
     // Acciones
     saveCanvas,
     loadCanvas,
+    refreshCanvasList,
     clearSavedCanvas,
     createCanvas,
     switchCanvas,

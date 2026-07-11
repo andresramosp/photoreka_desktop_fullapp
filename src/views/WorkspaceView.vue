@@ -64,9 +64,11 @@
         <div class="catalog-photos">
           <!-- Photos Grid Component -->
           <PhotosGrid
+            :key="gridQueryKey"
             :photos="processedPhotos"
             context="workspace"
             :scrollable="true"
+            :initial-filters="initialGridFilters"
             @scroll-direction="onScrollDirection"
           />
         </div>
@@ -77,9 +79,11 @@
       <div class="catalog-photos">
         <!-- Photos Grid Component -->
         <PhotosGrid
+          :key="gridQueryKey"
           :photos="processedPhotos"
           context="workspace"
           :scrollable="true"
+          :initial-filters="initialGridFilters"
           @scroll-direction="onScrollDirection"
         />
       </div>
@@ -89,8 +93,9 @@
 
 <script setup>
 import { computed } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { usePhotosStore } from "@/stores/photos.js";
+import { parseGridFiltersFromQuery } from "@/utils/photosGridQuery.js";
 import { NIcon, NBadge } from "naive-ui";
 import {
   LayersOutline,
@@ -107,8 +112,16 @@ defineOptions({
 });
 
 const router = useRouter();
+const route = useRoute();
 const photosStore = usePhotosStore();
 const { isMobile } = useIsMobile();
+
+// Deep-link filters/sorting (e.g. from a ChatLab "open workspace" action).
+// Reactive to the query: PhotosGrid/Controls hydrate on mount, and the grid is
+// re-keyed on query change so arriving via a deep link re-seeds even when this
+// view is kept-alive (no natural remount).
+const initialGridFilters = computed(() => parseGridFiltersFromQuery(route.query));
+const gridQueryKey = computed(() => JSON.stringify(initialGridFilters.value || {}));
 
 const { headerHidden, headerEntering, onScrollDirection } =
   useHeaderHideOnScroll();

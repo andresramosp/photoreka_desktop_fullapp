@@ -185,11 +185,13 @@
       <!-- Collection Photos Grid -->
       <div class="collection-photos">
         <PhotosGrid
+          :key="`${route.params.id}:${gridQueryKey}`"
           :collectionId="route.params.id"
           :photos="viewingCollection.photos || []"
           :showSuggestButton="(viewingCollection.photos || []).length > 0"
           :findDuplicatesEnabled="false"
           :scrollable="true"
+          :initial-filters="initialGridFilters"
           @refreshCollection="refreshCollection"
           @suggest-photos="suggestPhotosForCollection"
           @scroll-direction="onCollectionHeaderScroll"
@@ -287,6 +289,7 @@ import {
 import PhotosDialog from "@/components/PhotosDialog.vue";
 import PhotosGrid from "@/components/PhotosGrid.vue";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
+import { parseGridFiltersFromQuery } from "@/utils/photosGridQuery.js";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useHeaderHideOnScroll } from "@/composables/useHeaderHideOnScroll.js";
@@ -299,6 +302,11 @@ const router = useRouter();
 const message = useMessage();
 const photosStore = usePhotosStore();
 const collectionsStore = useCollectionsStore();
+
+// Deep-link filters/sorting (e.g. from a ChatLab "open collection filtered" action).
+// Reactive + re-keyed so it re-seeds on query change even under keep-alive.
+const initialGridFilters = computed(() => parseGridFiltersFromQuery(route.query));
+const gridQueryKey = computed(() => JSON.stringify(initialGridFilters.value || {}));
 
 const {
   headerHidden: collectionHeaderHidden,

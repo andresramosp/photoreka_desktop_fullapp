@@ -166,6 +166,7 @@ import {
   watch,
   nextTick,
 } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { api } from "@/utils/axios";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 
@@ -197,6 +198,8 @@ import DemoSearchWarningModal from "@/components/DemoSearchWarningModal.vue";
 const photoStore = usePhotosStore();
 const searchStore = useSearchStore();
 const collectionsStore = useCollectionsStore();
+const route = useRoute();
+const router = useRouter();
 
 // Demo safe-search guard
 const {
@@ -717,10 +720,41 @@ async function handleBeAdaptiveClick() {
   }
 }
 
+// Deep-link entry: arriving with `?q=...` (e.g. from a ChatLab "search_photos"
+// action) auto-runs a broad semantic search. Kept simple by contract — always
+// broad + semantic, no filters.
+function maybeRunQuerySearch(rawQuery) {
+  const query = (rawQuery ?? "").toString().trim();
+  if (!query) return;
+
+  searchStore.setSearchType("semantic");
+  searchStore.setSearchMode("broad");
+  searchStore.updateSemanticQuery(query);
+
+  // One-shot deep link: strip `q` immediately so the URL stops dictating the
+  // search from here on (manual re-searches, back/forward, and repeat clicks of
+  // the same action all behave). The query already lives in the store, so the
+  // search we kick off below is unaffected. Stripping flips route.query.q to
+  // undefined, which re-triggers the watch — harmless, the guard above bails.
+  const { q, ...rest } = route.query;
+  router.replace({ query: rest });
+
+  performSearch();
+}
+
+// React to query changes even when the view is kept-alive (no natural remount).
+watch(
+  () => route.query.q,
+  (q) => maybeRunQuerySearch(q),
+);
+
 // Manejo de respuestas en tiempo real
 onMounted(() => {
   // Fetch collections when component mounts
   collectionsStore.getOrFetch();
+
+  // Auto-run a deep-linked search if we arrived with ?q=...
+  maybeRunQuerySearch(route.query.q);
 
   // Scroll listener removido - ahora los scrolls son internos en PhotosSearchGrid
 });

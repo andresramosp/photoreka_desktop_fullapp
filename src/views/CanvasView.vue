@@ -757,6 +757,7 @@ const {
   currentCanvasName,
   saveCanvas,
   loadCanvas,
+  refreshCanvasList,
   clearSavedCanvas,
   createCanvas,
   switchCanvas,
@@ -1941,6 +1942,7 @@ onMounted(async () => {
   window.addEventListener("resize", handleResize);
   document.addEventListener("click", handleClickOutside);
   document.addEventListener("keydown", handleKeyDown);
+  window.addEventListener("canvas:list-updated", refreshCanvasList);
   const stage = stageRef.value.getStage();
   stage.on("dragmove", updateStageOffset);
 
@@ -2151,6 +2153,7 @@ onUnmounted(() => {
   window.removeEventListener("resize", handleResize);
   document.removeEventListener("click", handleClickOutside);
   document.removeEventListener("keydown", handleKeyDown);
+  window.removeEventListener("canvas:list-updated", refreshCanvasList);
 
   // Clean up touch drop listener
   const canvasContainerEl = canvasContainer.value;

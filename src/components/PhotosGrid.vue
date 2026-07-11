@@ -6,6 +6,7 @@
       :basic-sort-active="basicSortActive"
       :photos="props.photos"
       :scroll-collapsed="controlsScrollCollapsed"
+      :initial-state="props.initialFilters"
       @filters-change="handleFiltersChange"
       @sorting-change="handleSortingChange"
       @sort-order-change="handleSortOrderChange"
@@ -717,6 +718,12 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // Deep-link filters/sorting descriptor (parsed from route.query by the parent
+  // view). Forwarded to PhotosGridControls; basic date/name sort is applied here.
+  initialFilters: {
+    type: Object,
+    default: null,
+  },
 });
 
 const scrollAreaRef = ref(null);
@@ -1140,6 +1147,18 @@ const handleTagSearch = (results) => {
 const handleArtisticScoresChange = (filters) => {
   artisticScoreFilters.value = filters;
 };
+
+// Deep-link seed for BASIC sort (date/name), which lives here rather than in
+// PhotosGridControls. Score/genre sorting + score filters are seeded by the
+// controls themselves (see PhotosGridControls initialState hydration).
+onMounted(() => {
+  const sort = props.initialFilters?.sort;
+  if (sort && (sort.field === "date" || sort.field === "name")) {
+    basicSortType.value = sort.field;
+    basicSortActive.value = true;
+    basicSortOrder.value = sort.dir === "asc" ? "asc" : "desc";
+  }
+});
 
 // Dropdown options for duplicate check methods
 const duplicateCheckOptions = computed(() => [
