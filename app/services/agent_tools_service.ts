@@ -262,16 +262,28 @@ function buildSearchAdvancedSchema(variant: PromptVariant) {
       .describe('Find photos similar to reference photos. Triggers similarity search.'),
     scopes: z
       .array(
-        z.object({
-          type: z.enum(['collection', 'series', 'portfolio']),
-          id: z.number(),
-        })
+        z
+          .object({
+            type: z.enum(['collection', 'series', 'portfolio', 'photo_ids']),
+            id: z
+              .number()
+              .optional()
+              .describe('Required when type is collection/series/portfolio.'),
+            ids: z
+              .array(z.number())
+              .min(1)
+              .optional()
+              .describe('Required when type is photo_ids: the explicit photo IDs to restrict to.'),
+          })
+          .refine((scope) => (scope.type === 'photo_ids' ? (scope.ids?.length ?? 0) > 0 : scope.id !== undefined), {
+            message: '`id` is required unless type is "photo_ids", in which case `ids` (non-empty) is required.',
+          })
       )
       .min(1)
       .max(3)
       .optional()
       .describe(
-        'Restrict every sub-search to only the photos inside specific collection(s)/series/portfolio(s) the user referenced (by ID) — e.g. from a "[Referenced collection/series/portfolio IDs: ...]" line. Pass 2-3 entries when the user named multiple items (their photos are combined with OR before retrieval — e.g. "in my Romania collection or my Alps series"); pass 1 for a single item. This is a hard candidate-pool boundary and does not affect the intersect/union choice. Does not by itself trigger a sub-search — pair it with at least one of style_query/content_tags/filter/similar_to.'
+        'Restrict every sub-search to only the photos inside specific collection(s)/series/portfolio(s) the user referenced (by ID) — e.g. from a "[Referenced collection/series/portfolio IDs: ...]" line — OR to an explicit, already-known list of photo IDs via type: "photo_ids" (e.g. "de estas fotos que me mostraste, cuáles..." / "from the photos you just showed me" / any photo IDs already surfaced earlier in the conversation, such as INTERNAL_CONTEXT shown_photo_ids). Never invent a collection/series/portfolio id to hold a set of loose photo IDs — use the photo_ids type instead. Pass 2-3 entries when the user named multiple items (their photos are combined with OR before retrieval — e.g. "in my Romania collection or my Alps series"); a single photo_ids entry already covers an arbitrary-size list on its own. This is a hard candidate-pool boundary and does not affect the intersect/union choice. Does not by itself trigger a sub-search — pair it with at least one of style_query/content_tags/filter/similar_to.'
       ),
   })
 }
@@ -606,7 +618,7 @@ function formatOrdering(ordering: Ordering): string {
 
 /** Candidate-pool boundaries resolved from `scopes` + `filter`, before any ranking runs. */
 interface SearchPools {
-  scopeSummary: Array<{ type: string; id: number }>
+  scopeSummary: Array<{ type: string; id?: number; photoIdCount?: number }>
   scopedCandidateIds?: number[]
   hasFilter: boolean
   filterPoolIds?: number[]
@@ -911,7 +923,7 @@ export const TOOL_DESCRIPTIONS = {
     "[BASIC_TOOLS] Get the user's portfolio builds (AI-generated curated portfolios produced by the Portfolio Builder tool). Returns only COMPLETED builds, most recent first, each with its id, name, creation date, target size, coherence mode (free/visual/chromatic/narrative/heterogeneous), whether sequencing was enabled, the user's theme and sequencing preferences, the final ordered photo IDs of the portfolio, a `scores` breakdown, and a sample of the builder pool (approved-but-not-selected alternatives). Use this whenever the user asks about their portfolios, generated portfolios, portfolio builds, curated selections, or references an earlier build — for example 'show me my last portfolio', 'what portfolios have I built?', 'open the street portfolio I made'. Pass `portfolioId` when the user references ONE specific portfolio by name or by an exact ID (e.g. a \"[Referenced portfolio IDs: ...]\" line) — this returns only that build (with a larger builder-pool sample) instead of every recent build. **`scores`:** each build includes `scores.<criterion>` (e.g. `storytelling`, `aesthetic_quality`, `composition`, `originality`) with `mean` (average across all photos in the final `photoIds`), `scoredCount`, and `best`/`worst` (`{id, value}`). Use this directly to answer cross-portfolio comparison/ranking questions in a single call — map qualitative asks to the closest criterion (e.g. 'narrative'/'story' → `storytelling`). **Important:** this tool still does NOT provide full photo descriptions or visual thumbnails. Once you identify the portfolio(s) the user cares about, call `get_photo_info` on a subset of the relevant photo IDs (for direct evaluation/description) or `search_advanced` with a matching `scopes` entry (to filter within it). Exception: if the user only wants a high-level overview of their portfolios (names, counts, config), no follow-up call is needed.",
 
   search_advanced:
-    '[PHOTO_SEARCH] **The primary search tool.** Combine ranking strategies and hard constraints in a single call. RANKING sources (relevance-ordered): (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) similar_to — similarity to reference photos. These are fused by relevance and combined via `operation` (intersect = AND, union = OR); `operation` is a no-op with fewer than two ranking sources. HARD CONSTRAINTS (candidate-pool boundaries — NOT ranking, NOT part of intersect/union): (4) filter — metadata/score/visual-aspect/date filtering, and (5) scopes — restrict to specific collection(s)/series/portfolio(s) the user referenced by ID. Constraints only narrow which photos the ranking sources may return; they never contribute relevance. ORDERING: (6) order_by — orders the final combined set by the average of 1-3 artistic scores and OVERRIDES relevance. Use it for every "ordered by X" / "my best/worst X" request; never fake a ranking with a scoreFilter threshold, and never issue two searches that differ only in the score they sort by — pass both scores to one order_by instead. **A `filter`-only (or scope+filter) call is valid:** with no ranking source and no order_by, results fall back to the filter\'s tiered order (first scoreFilter field best-first, else aesthetic_quality best-first). The effective order is always reported in querySummary.ordering as `{kind, field, direction}` — `explicit` when it came from order_by, `relevance` from the ranking fusion, `fallback` when the search picked a default nobody asked for. **ALL parameters MUST ALWAYS BE SPECIFIED IN ENGLISH ONLY.** Only the final result is sampled and returned with photo ID, filename, genre, optional inferredLocation string (query_normalized), source evidence (per ranking source), and coverage metadata (candidateCount, truncated, ordering, per-source counts, plus unionCount / saturatedSources / unscoredCount when they apply). An EMPTY result still reports its per-source counts and unionCount, so a failed intersection can be told apart from an empty catalog — read them instead of retrying blindly. Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) (filter constrains, content ranks). "moody photos or anything with dogs" → style_query("dark moody") + content_tags(["dog"]) with union (two ranking sources OR-combined). "my best-composed vertical photos" → filter(orientation=vertical) + order_by(fields=["composition"], direction=desc). "moody vertical photos" → style_query("dark moody") + filter(orientation=vertical) (filter constrains, style ranks). "the funniest of my cold-toned photos" → filter(temperature=cold) + order_by(fields=["humor"], direction=desc) (order_by ranks, filter constrains). "chromatically similar to photo 4657, street only, ranked by originality/aesthetics" → similar_to(anchor=[4657], criteria=chromatic) + filter(genre=street) + order_by(fields=["originality","aesthetic_quality"], direction=desc) — ONE call, both scores averaged. "vertical photos in my Romania 2025 collection" → filter(orientation=vertical) + scopes([{type:"collection", id:155}]). "photo of the girl in the snow, in my Romania collection or my Alps series" → content_tags(["girl","snow"]) + scopes([{type:"collection", id:155}, {type:"series", id:88}]).',
+    '[PHOTO_SEARCH] **The primary search tool.** Combine ranking strategies and hard constraints in a single call. RANKING sources (relevance-ordered): (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) similar_to — similarity to reference photos. These are fused by relevance and combined via `operation` (intersect = AND, union = OR); `operation` is a no-op with fewer than two ranking sources. HARD CONSTRAINTS (candidate-pool boundaries — NOT ranking, NOT part of intersect/union): (4) filter — metadata/score/visual-aspect/date filtering, and (5) scopes — restrict to specific collection(s)/series/portfolio(s) the user referenced by ID, OR to an explicit list of already-known photo IDs via `scopes([{type:"photo_ids", ids:[...]}])` (e.g. "from these photos", "of the ones you just showed me", any IDs already surfaced earlier in the conversation — NEVER invent a collection/series/portfolio id to hold loose photo IDs, use photo_ids instead). Constraints only narrow which photos the ranking sources may return; they never contribute relevance. ORDERING: (6) order_by — orders the final combined set by the average of 1-3 artistic scores and OVERRIDES relevance. Use it for every "ordered by X" / "my best/worst X" request; never fake a ranking with a scoreFilter threshold, and never issue two searches that differ only in the score they sort by — pass both scores to one order_by instead. **A `filter`-only (or scope+filter) call is valid:** with no ranking source and no order_by, results fall back to the filter\'s tiered order (first scoreFilter field best-first, else aesthetic_quality best-first). The effective order is always reported in querySummary.ordering as `{kind, field, direction}` — `explicit` when it came from order_by, `relevance` from the ranking fusion, `fallback` when the search picked a default nobody asked for. **ALL parameters MUST ALWAYS BE SPECIFIED IN ENGLISH ONLY.** Only the final result is sampled and returned with photo ID, filename, genre, optional inferredLocation string (query_normalized), source evidence (per ranking source), and coverage metadata (candidateCount, truncated, ordering, per-source counts, plus unionCount / saturatedSources / unscoredCount when they apply). An EMPTY result still reports its per-source counts and unionCount, so a failed intersection can be told apart from an empty catalog — read them instead of retrying blindly. Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) (filter constrains, content ranks). "moody photos or anything with dogs" → style_query("dark moody") + content_tags(["dog"]) with union (two ranking sources OR-combined). "my best-composed vertical photos" → filter(orientation=vertical) + order_by(fields=["composition"], direction=desc). "moody vertical photos" → style_query("dark moody") + filter(orientation=vertical) (filter constrains, style ranks). "the funniest of my cold-toned photos" → filter(temperature=cold) + order_by(fields=["humor"], direction=desc) (order_by ranks, filter constrains). "chromatically similar to photo 4657, street only, ranked by originality/aesthetics" → similar_to(anchor=[4657], criteria=chromatic) + filter(genre=street) + order_by(fields=["originality","aesthetic_quality"], direction=desc) — ONE call, both scores averaged. "vertical photos in my Romania 2025 collection" → filter(orientation=vertical) + scopes([{type:"collection", id:155}]). "photo of the girl in the snow, in my Romania collection or my Alps series" → content_tags(["girl","snow"]) + scopes([{type:"collection", id:155}, {type:"series", id:88}]). "of these photos you just showed me, which have humor above 5" (referring to specific IDs already surfaced earlier in the conversation, e.g. INTERNAL_CONTEXT shown_photo_ids=[12,34,56]) → filter(scoreFilters=[{field:"humor", min:5.1}]) + scopes([{type:"photo_ids", ids:[12,34,56]}]) — ONE call, no need for get_photo_info first.',
 
   catalog_sample:
     '[CATALOG_INSIGHT] **Temporal catalog sampling for broad exploration.** Divides the catalog timeline into equal time buckets and samples representative photos from each period. Returns structured data: an array of buckets, each with its date range and sampled photos (id, filename, genre, and optional inferredLocation string/query_normalized). Use this for evolution questions, progress over time, or getting a representative cross-section of the catalog. Always pair with `overall_catalog_view` in parallel for holistic context. NEVER use this for targeted searches — use `search_advanced` instead. Optional filters: **genre values MUST ALWAYS BE IN ENGLISH ONLY** (e.g. ["street"] for street photography evolution), date_from/date_to, sort_within (pick best-scored photos per period instead of random), scan_mode (technical for compositional/visual analysis, semantic for subject/theme analysis). Examples: "How has my photography evolved?" → catalog_sample(buckets=6, scan_mode=technical) + overall_catalog_view in parallel. "What subjects appear most in my street work?" → catalog_sample(buckets=5, genre=["street"], scan_mode=semantic) + overall_catalog_view in parallel.',
@@ -1148,9 +1160,20 @@ export default class AgentToolsService {
      * silently behaving like an empty scope.
      */
     const _resolveScopePhotoIds = async (scope: {
-      type: 'collection' | 'series' | 'portfolio'
-      id: number
+      type: 'collection' | 'series' | 'portfolio' | 'photo_ids'
+      id?: number
+      ids?: number[]
     }): Promise<number[] | null> => {
+      if (scope.type === 'photo_ids') {
+        // Not a named-resource lookup — silently drop IDs that don't belong to this
+        // user rather than erroring, same as a resolved collection with 0 photos.
+        const photos = await Photo.query()
+          .whereIn('id', scope.ids ?? [])
+          .where('user_id', userId)
+          .select('id')
+        return photos.map((p) => p.id)
+      }
+      if (scope.id === undefined) return null // malformed input guard; also narrows the type below
       if (scope.type === 'collection') {
         const collection = await Collection.query()
           .where('id', scope.id)
@@ -1204,7 +1227,9 @@ export default class AgentToolsService {
      * scopes → filter. Neither is a ranking source; neither enters RRF.
      */
     const _resolveSearchPools = async (
-      scopes: Array<{ type: 'collection' | 'series' | 'portfolio'; id: number }> | undefined,
+      scopes:
+        | Array<{ type: 'collection' | 'series' | 'portfolio' | 'photo_ids'; id?: number; ids?: number[] }>
+        | undefined,
       filter: Parameters<typeof _getIdsByFilter>[0] | undefined
     ): Promise<SearchPools> => {
       let scopedCandidateIds: number[] | undefined
@@ -1219,7 +1244,7 @@ export default class AgentToolsService {
         }
         scopedCandidateIds = [...scopeSet]
         console.log(
-          `[Agent]   🔎 search_advanced pre-scoped to [${scopes.map((scope) => `${scope.type}:${scope.id}`).join(', ')}]: ${scopedCandidateIds.length} candidate IDs`
+          `[Agent]   🔎 search_advanced pre-scoped to [${scopes.map((scope) => (scope.type === 'photo_ids' ? `photo_ids:[${(scope.ids ?? []).length} ids]` : `${scope.type}:${scope.id}`)).join(', ')}]: ${scopedCandidateIds.length} candidate IDs`
         )
       }
 
@@ -1235,7 +1260,11 @@ export default class AgentToolsService {
       }
 
       return {
-        scopeSummary: (scopes ?? []).map((scope) => ({ type: scope.type, id: scope.id })),
+        scopeSummary: (scopes ?? []).map((scope) =>
+          scope.type === 'photo_ids'
+            ? { type: scope.type, photoIdCount: (scope.ids ?? []).length }
+            : { type: scope.type, id: scope.id }
+        ),
         scopedCandidateIds,
         hasFilter: Boolean(filter),
         filterPoolIds,

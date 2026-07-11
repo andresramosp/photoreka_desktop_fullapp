@@ -253,6 +253,55 @@ export default class ChatController {
   }
 
   /**
+   * Phase 3 — grounded action suggestions for the latest assistant turn.
+   *
+   * POST /api/chat/actions
+   * Body: { conversationId: number }
+   *
+   * Returns typed, clickable actions the frontend renders under the message.
+   * Idempotent: once generated they are persisted on the message metadata and
+   * returned as-is on subsequent calls (no extra LLM cost).
+   */
+  public async chatActions({ request, response, auth }: HttpContext) {
+    try {
+      const user = auth.use('api').user!
+      const { conversationId } = request.only(['conversationId'])
+      const convId = Number(conversationId)
+
+      if (!convId || Number.isNaN(convId)) {
+        return response.badRequest({ message: 'A valid "conversationId" is required.' })
+      }
+
+      const conv = await this.conversationService.verifyOwnership(convId, user.id)
+      if (!conv) {
+        return response.notFound({ message: 'Conversation not found.' })
+      }
+
+      const ChatActionsService = (await import('#services/chat_actions_service')).default
+      const result = await new ChatActionsService().generateForLatestTurn(user.id, convId)
+
+      if (!result) {
+        return response.ok({ actions: [] })
+      }
+
+      // Record cost (analytics) — suggestions are cheap; not credit-gated.
+      if (result.costEur > 0) {
+        UserCostService.record(user.id, 'chat', result.costEur, 1, {
+          referenceId: String(convId),
+          task: 'chat_actions',
+        }).catch(() => {})
+        CreditService.charge(user.id, result.costEur, 'CHAT').catch(() => {})
+      }
+
+      return response.ok({ actions: result.actions })
+    } catch (error: any) {
+      console.error('[ChatController] ❌ Error generating actions:', error)
+      // Non-fatal for the UX — the chat message already rendered.
+      return response.ok({ actions: [] })
+    }
+  }
+
+  /**
    * List available chat intelligence modes
    *
    * GET /api/chat/modes
