@@ -7,7 +7,7 @@
         class="tool-item"
         :class="{ 'tool-item--disabled': appAccessMode === 'blocked' }"
         :disabled="appAccessMode === 'blocked'"
-        @click="goToTool(tool.dashboardRoute)"
+        @click="goToTool(tool)"
       >
         <n-icon size="18" color="var(--primary-color)">
           <component :is="getIconComponent(tool.icon)" />
@@ -47,24 +47,44 @@ const userStore = useUserStore();
 const canvasCount = ref(0);
 const activeCanvasName = ref("");
 
+const chatConversationCount = ref(0);
+const recentConversation = ref<{ id: number; title: string | null } | null>(
+  null,
+);
+
 const smartTools = computed(() =>
   getDashboardSmartTools(props.isMobileLimitedMode ? "mobile" : "desktop"),
 );
 
 const getToolSubtitle = (tool: any) => {
-  if (tool.id !== "canvas") {
+  if (tool.id === "canvas") {
+    if (canvasCount.value > 0) {
+      return activeCanvasName.value || tool.dashboardSubtitle;
+    }
     return tool.dashboardSubtitle;
   }
 
-  if (canvasCount.value > 0) {
-    return activeCanvasName.value || tool.dashboardSubtitle;
+  if (tool.id === "chat") {
+    if (chatConversationCount.value > 0 && recentConversation.value) {
+      return recentConversation.value.title || "Untitled";
+    }
+    return tool.dashboardSubtitle;
   }
 
   return tool.dashboardSubtitle;
 };
 
-const goToTool = (route: string) => {
-  router.push(route);
+const goToTool = (tool: any) => {
+  if (
+    tool.id === "chat" &&
+    chatConversationCount.value > 0 &&
+    recentConversation.value
+  ) {
+    router.push(`/chat-lab/${recentConversation.value.id}`);
+    return;
+  }
+
+  router.push(tool.dashboardRoute);
 };
 
 const loadCanvasInfo = async () => {
@@ -91,8 +111,21 @@ const loadCanvasInfo = async () => {
   }
 };
 
+const loadChatInfo = async () => {
+  try {
+    if (!userStore.isAuthenticated) return;
+    const res = await api.get("/api/conversations");
+    const list = res.data?.conversations || [];
+    chatConversationCount.value = list.length;
+    recentConversation.value = list.length > 0 ? list[0] : null;
+  } catch (error) {
+    console.error("Error loading chat info:", error);
+  }
+};
+
 onMounted(() => {
   loadCanvasInfo();
+  loadChatInfo();
 });
 </script>
 
