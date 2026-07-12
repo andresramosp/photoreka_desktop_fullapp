@@ -661,13 +661,20 @@ export function useMainMenu(closeMobileMenu?: () => void) {
         type: "divider",
         key: "group1-divider",
       } as MenuOption,
+
+      chatOption.value,
+
+      {
+        type: "divider",
+        key: "group1-divider",
+      } as MenuOption,
+
       searchOption.value,
       tagcloudOption.value,
       atlasOption.value,
 
       canvasOption.value,
 
-      chatOption.value,
       reportOption.value,
 
       {
