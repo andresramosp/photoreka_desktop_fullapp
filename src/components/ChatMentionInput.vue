@@ -30,6 +30,7 @@
     <textarea
       ref="textareaRef"
       class="mention-text-metrics mention-textarea"
+      :class="{ 'mention-textarea--borderless': props.borderless }"
       :style="reservedPaddingStyle"
       :value="rawText"
       :placeholder="effectivePlaceholder"
@@ -225,6 +226,9 @@ const props = defineProps<{
    *  selector chip docked in the input's bottom-right corner). Applied identically to
    *  the textarea and the highlight overlay so their text wraps in lockstep. */
   reserveRightPx?: number;
+  /** Renders without its own border/background, for use inside a container that
+   *  already provides them (e.g. a composer box with controls docked below). */
+  borderless?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -232,6 +236,7 @@ const emit = defineEmits<{
   (e: "submit"): void;
   (e: "attach-photo", photo: SearchResult): void;
   (e: "flash-photo", photoId: string | number): void;
+  (e: "multiline-change", value: boolean): void;
 }>();
 
 interface Mention {
@@ -349,6 +354,8 @@ watch(
 );
 
 // ── Autosize (min 1 row, max 4 rows) ─────────────────────────
+let lastMultiline = false;
+
 function autosize() {
   const ta = textareaRef.value;
   if (!ta) return;
@@ -358,9 +365,25 @@ function autosize() {
     parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
   const borderV =
     parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+  const singleLineHeight = lineHeight + paddingV + borderV;
   const maxHeight = lineHeight * 4 + paddingV + borderV;
   ta.style.height = "auto";
   ta.style.height = Math.min(ta.scrollHeight, maxHeight) + "px";
+  ta.style.overflowY = ta.scrollHeight > maxHeight ? "auto" : "hidden";
+
+  // One-way switch: once the composer grows past one line, keep the stacked
+  // layout even if a later width change (from that very switch) would make
+  // the text fit on one line again — otherwise the two states feed back into
+  // each other and the layout oscillates on every keystroke near the wrap
+  // point. Only drop back to the single-row layout once the field is empty.
+  const multiline =
+    rawText.value.length === 0
+      ? false
+      : ta.scrollHeight > singleLineHeight + 1 || lastMultiline;
+  if (multiline !== lastMultiline) {
+    lastMultiline = multiline;
+    emit("multiline-change", multiline);
+  }
 }
 
 function syncScroll() {
@@ -790,7 +813,7 @@ defineExpose({
   font-weight: 400;
   line-height: 1.5;
   letter-spacing: normal;
-  padding: 10px 14px;
+  padding: 10px 14px 6px;
   border: 1px solid transparent;
   white-space: pre-wrap;
   word-wrap: break-word;
@@ -818,6 +841,11 @@ defineExpose({
 
 .mention-textarea:focus {
   border-color: var(--primary-color);
+}
+
+.mention-textarea--borderless,
+.mention-textarea--borderless:focus {
+  border-color: transparent;
 }
 
 .mention-textarea::placeholder {

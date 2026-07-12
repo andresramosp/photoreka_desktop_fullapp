@@ -20,11 +20,9 @@
         <span v-if="!singleMode">{{
           selectedOption?.label || placeholder
         }}</span>
-        <span
-          v-if="selectedOption?.costFactor != null"
-          class="mode-selector-chip-badge"
-          >x{{ selectedOption.costFactor }}</span
-        >
+        <span v-if="selectedOption" class="mode-selector-chip-badge">{{
+          selectedOption.label.charAt(0).toUpperCase()
+        }}</span>
       </button>
     </template>
 
@@ -173,8 +171,8 @@ const selectOption = (value: string) => {
 .mode-selector-chip-badge {
   display: none;
   position: absolute;
-  bottom: -3px;
-  right: -3px;
+  bottom: 2px;
+  right: 1px;
   font-size: 8px;
   font-weight: var(--font-weight-semibold);
   line-height: 1;

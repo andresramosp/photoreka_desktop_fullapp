@@ -512,8 +512,11 @@
         </n-button> -->
       </div>
 
-      <div class="chat-input-row">
-        <!-- Add photos button (left of input) -->
+      <div
+        class="chat-input-box"
+        :class="{ 'chat-input-box--multiline': isComposerMultiline }"
+      >
+        <!-- Add photos button -->
         <n-button
           quaternary
           circle
@@ -527,19 +530,22 @@
           </template>
         </n-button>
 
-        <div class="chat-input-wrap">
-          <ChatMentionInput
-            ref="mentionInputRef"
-            v-model="inputText"
-            :attached-photo-ids="contextPhotos.map((p) => p.id)"
-            :photo-limit-reached="contextPhotos.length >= MAX_PHOTOS_TO_CHAT"
-            :reserve-right-px="115"
-            :placeholder="chatInputPlaceholder"
-            class="chat-input"
-            @submit="sendMessage"
-            @attach-photo="handleMentionAttachPhoto"
-            @flash-photo="handleFlashPhoto"
-          />
+        <ChatMentionInput
+          ref="mentionInputRef"
+          v-model="inputText"
+          :attached-photo-ids="contextPhotos.map((p) => p.id)"
+          :photo-limit-reached="contextPhotos.length >= MAX_PHOTOS_TO_CHAT"
+          :reserve-right-px="0"
+          :borderless="true"
+          :placeholder="chatInputPlaceholder"
+          class="chat-input"
+          @submit="sendMessage"
+          @attach-photo="handleMentionAttachPhoto"
+          @flash-photo="handleFlashPhoto"
+          @multiline-change="isComposerMultiline = $event"
+        />
+
+        <div class="chat-input-controls">
           <div
             v-if="chatStore.chatModes.length > 0 || chatStore.isLoadingModes"
             class="chat-mode-selector"
@@ -552,19 +558,20 @@
               aria-label="Change intelligence mode"
             />
           </div>
+
+          <n-button
+            circle
+            type="primary"
+            :disabled="!inputText.trim() || isSending"
+            :loading="isSending"
+            @click="sendMessage"
+            class="send-button"
+          >
+            <template #icon>
+              <n-icon><SendIcon /></n-icon>
+            </template>
+          </n-button>
         </div>
-        <n-button
-          circle
-          type="primary"
-          :disabled="!inputText.trim() || isSending"
-          :loading="isSending"
-          @click="sendMessage"
-          class="send-button"
-        >
-          <template #icon>
-            <n-icon><SendIcon /></n-icon>
-          </template>
-        </n-button>
       </div>
     </div>
 
@@ -988,6 +995,7 @@ const mentionInputRef = ref<{ focus: () => void } | null>(null);
 const chatMainRef = ref<HTMLElement | null>(null);
 const messagesRef = ref<HTMLElement | null>(null);
 const isMobile = ref(window.innerWidth < 768);
+const isComposerMultiline = ref(false);
 const showPhotoInfoDialog = ref(false);
 const selectedDialogPhoto = ref<any>(null);
 const dialogNavigablePhotos = ref<ContextPhoto[]>([]);
@@ -2750,44 +2758,76 @@ const formatRelativeDate = (dateStr: string) => {
   margin-right: auto;
 }
 
-.chat-input-row {
+/* ── Input box ──
+   Flexbox with wrap + order, not grid: each wrapped line sizes itself
+   independently, so the text row never inherits reserved width from the
+   controls row below it (grid's shared column tracks did exactly that and
+   left an awkward gap at the end of the text).
+   Single line: attach | text | controls, all on one row.
+   Multiline: text takes the full row on top; attach + controls drop to
+   their own row below (forced by flex-basis: 100% on the text item, which
+   pushes everything after it onto the next wrapped line). */
+.chat-input-box {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--spacing-sm);
+  /* column-gap: var(--spacing-sm);
+  row-gap: var(--spacing-xs); */
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  background: var(--bg-surface);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  transition: border-color 0.15s ease;
 }
 
-/* ── Mode selector (embedded in input) ── */
-.chat-input-wrap {
-  flex: 1;
-  position: relative;
-  min-width: 0;
+.chat-input-box--multiline {
+  padding: var(--spacing-sm) var(--spacing-sm) var(--spacing-xs);
 }
 
-.chat-input-wrap .chat-input {
-  width: 100%;
-}
-
-.chat-mode-selector {
-  position: absolute;
-  top: 50%;
-  right: 10px;
-  transform: translateY(-50%);
-  z-index: 1;
+.chat-input-box:focus-within {
+  border-color: var(--primary-color);
 }
 
 .attach-btn {
+  order: 1;
   flex-shrink: 0;
-  align-self: center;
   color: var(--text-tertiary) !important;
 }
 
 .chat-input {
-  flex: 1;
+  order: 2;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.chat-input-controls {
+  order: 3;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-shrink: 0;
+}
+
+.chat-input-box--multiline .chat-input {
+  order: 1;
+  flex-basis: 100%;
+}
+
+.chat-input-box--multiline .attach-btn {
+  order: 2;
+}
+
+.chat-input-box--multiline .chat-input-controls {
+  order: 3;
+  margin-left: auto;
+}
+
+.chat-mode-selector {
+  flex-shrink: 0;
 }
 
 .send-button {
   flex-shrink: 0;
-  align-self: center;
 }
 
 /* ── Responsive ── */
@@ -2817,18 +2857,34 @@ const formatRelativeDate = (dateStr: string) => {
     padding: var(--spacing-sm) var(--spacing-md) var(--spacing-md);
   }
 
-  .chat-input-row {
+  /* Always stacked on mobile — a single row is too cramped to be worth it,
+     and switching layouts on the first line-wrap would cause a visible jump. */
+  .chat-input-box {
+    padding: var(--spacing-sm) var(--spacing-sm) var(--spacing-xs);
+  }
+
+  .chat-input-box .chat-input {
+    order: 1;
+    flex-basis: 100%;
+  }
+
+  .chat-input-box .attach-btn {
+    order: 2;
+  }
+
+  .chat-input-box .chat-input-controls {
+    order: 3;
+    margin-left: auto;
     gap: var(--spacing-xs);
   }
 
-  .chat-mode-selector {
-    top: 50%;
-    right: 8px;
-    transform: translateY(-50%);
-  }
-
   .chat-mode-selector :deep(.mode-selector-chip) {
-    padding: 5px;
+    width: 35px;
+    height: 35px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border-radius: 50%;
     gap: 0;
   }
