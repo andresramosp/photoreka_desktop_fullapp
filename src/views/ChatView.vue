@@ -1508,6 +1508,15 @@ const loadConversationById = async (conversationId: number) => {
   }
 };
 
+const resetChat = async () => {
+  chatStore.startNewConversation();
+  contextPhotos.value = [];
+  photosEverAttached.value = false;
+  inputText.value = "";
+  perMessageSelections.value = {};
+  activeSuggestion.value = null;
+};
+
 // Keep state in sync with the route param
 watch(
   () => route.params.id,
@@ -2149,15 +2158,6 @@ const handlePhotoNavigate = async (newIndex: number) => {
 
 const clearContextPhotos = () => {
   contextPhotos.value = [];
-};
-
-const resetChat = async () => {
-  chatStore.startNewConversation();
-  contextPhotos.value = [];
-  photosEverAttached.value = false;
-  inputText.value = "";
-  perMessageSelections.value = {};
-  activeSuggestion.value = null;
 };
 
 const handleNewChat = async () => {
