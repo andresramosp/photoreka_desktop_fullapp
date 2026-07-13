@@ -41,7 +41,7 @@ export const COST_MULTIPLIERS: Record<CostCategory, number> = {
   SEARCH_INSIGHTS: 2,
   SEARCH_BY_PHOTO: 2,
   PORTFOLIO_BUILD: 2.25, //2.5,
-  CHAT: 2.25,
+  CHAT: 2, //2.25,
   CHAT_KNOWLEDGE_ASSISTANT: 1,
 }
 

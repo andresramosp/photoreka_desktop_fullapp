@@ -230,20 +230,43 @@ export default class ChatController {
         )
       }
 
-      // Record chat cost to user history (analytics)
-      if (result.cost?.total?.costEur) {
-        const recordCategory = isKnowledgeAssistant === true ? 'chat_knowledge_assistant' : 'chat'
-        UserCostService.record(user.id, recordCategory, result.cost.total.costEur, 1, {
-          referenceId: isEphemeral ? undefined : String(resolvedConversationId),
+      // Record chat cost to user history (analytics).
+      // The pre-flight query classifier is logged apart, as `chat_routing`: it runs on a
+      // different (cheap) model and is worth watching on its own. Its cost is subtracted
+      // from the `chat_message` row so the two rows still sum to the real turn cost —
+      // credits below are charged once, on the total.
+      const recordCategory = isKnowledgeAssistant === true ? 'chat_knowledge_assistant' : 'chat'
+      const costReferenceId = isEphemeral ? undefined : String(resolvedConversationId)
+      const routingUsage = result.cost?.classifier
+      const turnCostEur = result.cost?.total?.costEur ?? 0
+      const agentCostEur = Math.max(0, turnCostEur - (routingUsage?.costEur ?? 0))
+
+      if (agentCostEur > 0) {
+        UserCostService.record(user.id, recordCategory, agentCostEur, 1, {
+          referenceId: costReferenceId,
           task: 'chat_message',
           free: freeShot,
           metadata: result.cost?.total
             ? {
-                inputTokens: result.cost.total.inputTokens,
-                cachedTokens: result.cost.total.cachedTokens,
-                outputTokens: result.cost.total.outputTokens,
+                inputTokens: result.cost.total.inputTokens - (routingUsage?.inputTokens ?? 0),
+                cachedTokens: result.cost.total.cachedTokens - (routingUsage?.cachedTokens ?? 0),
+                outputTokens: result.cost.total.outputTokens - (routingUsage?.outputTokens ?? 0),
               }
             : undefined,
+        }).catch(() => {})
+      }
+
+      if (routingUsage?.costEur) {
+        UserCostService.record(user.id, recordCategory, routingUsage.costEur, 1, {
+          model: routingUsage.model,
+          referenceId: costReferenceId,
+          task: 'chat_routing',
+          free: freeShot,
+          metadata: {
+            inputTokens: routingUsage.inputTokens,
+            cachedTokens: routingUsage.cachedTokens,
+            outputTokens: routingUsage.outputTokens,
+          },
         }).catch(() => {})
       }
 

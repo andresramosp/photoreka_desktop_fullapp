@@ -1,5 +1,12 @@
 import { PRICES } from './models_service.js'
 
+/**
+ * Phase 2 reasoning budget (Gemini 3 `thinkingLevel`). Left undefined, the model
+ * keeps its own default — which is what every mode did before this field existed,
+ * so `undefined` is the behaviour-preserving value, not a neutral placeholder.
+ */
+export type ThinkingLevel = 'low' | 'medium' | 'high'
+
 export type ChatIntelligenceModeDefinition = {
   id: string
   name: string
@@ -8,12 +15,28 @@ export type ChatIntelligenceModeDefinition = {
   modelPhase2Cheap: string
   modelPhase2Expensive: string
   modelPhase2Lite: string
+  /**
+   * Reasoning budget for the Phase 2 curator call. This is the ONLY axis on
+   * which `curator_plus` differs from `default` — same model, more thinking —
+   * so the two can be A/B'd without confounding the model swap with the budget.
+   */
+  thinkingLevelPhase2?: ThinkingLevel
   costFactor?: number
+  /**
+   * Hidden modes resolve by id but are never offered in the UI. Lets a mode be
+   * exercised end-to-end (pass its id explicitly) before it is billed to users.
+   */
+  hidden?: boolean
 }
 
 export type ChatIntelligenceModeWithCost = Omit<
   ChatIntelligenceModeDefinition,
-  'modelPhase1' | 'modelPhase2Cheap' | 'modelPhase2Expensive' | 'modelPhase2Lite'
+  | 'modelPhase1'
+  | 'modelPhase2Cheap'
+  | 'modelPhase2Expensive'
+  | 'modelPhase2Lite'
+  | 'thinkingLevelPhase2'
+  | 'hidden'
 > & {
   costFactor: number
 }
@@ -47,20 +70,28 @@ const CHAT_INTELLIGENCE_MODES: ReadonlyArray<ChatIntelligenceModeDefinition> = [
     // modelPhase2Lite: 'gemini-2.5-flash',
     costFactor: 1,
   },
-  // {
-  //   id: 'curator_plus',
-  //   name: 'Curator High', // Para casos que demandan inteligencia estética profunda
-  //   description: 'Optimized for tasks that require a deeper aesthetic intelligence.',
-  //   // modelPhase1: 'gemini-3-flash-preview',
-  //   // modelPhase2Cheap: 'gemini-3-pro-preview',
-  //   // modelPhase2Expensive: 'gemini-3-pro-preview',
-  //   // modelPhase2Lite: 'gemini-3.1-flash-lite',
-  //   modelPhase1: 'gemini-3-flash-preview',
-  //   modelPhase2Cheap: 'gpt-5.5',
-  //   modelPhase2Expensive: 'gpt-5.5',
-  //   modelPhase2Lite: 'gemini-3.1-flash-lite',
-  //   costFactor: 3,
-  // },
+  {
+    id: 'curator_plus',
+    name: 'Curator High', // Para casos que demandan inteligencia estética profunda
+    description: 'Optimized for tasks that require a deeper aesthetic intelligence.',
+    // Deliberately the SAME Phase 2 model as `default`. The hypothesis under test is
+    // that Gemini 3 already reads a photograph well and it is the thin reasoning
+    // budget that flattens the verdict into convention — so the only variable moved
+    // here is `thinkingLevelPhase2`. Swapping the model too (gemini-3-pro / gpt-5.5,
+    // below) would confound the two and tell us nothing about which one paid off.
+    modelPhase1: 'gemini-3-flash-preview',
+    modelPhase2Cheap: 'gemini-3-flash-preview',
+    modelPhase2Expensive: 'gemini-3-flash-preview',
+    modelPhase2Lite: 'gemini-3.1-flash-lite',
+    thinkingLevelPhase2: 'high',
+    // Thinking tokens bill as output. 2x is a placeholder — measure real turns with
+    // the agent's cost log before charging users for it.
+    costFactor: 2,
+    hidden: true, // flip to false (or delete) to offer it in the UI
+    // ── Next rung, once the thinking-only variant has been measured: ──
+    // modelPhase2Cheap: 'gemini-3-pro-preview',
+    // modelPhase2Expensive: 'gemini-3-pro-preview',
+  },
   // {
   //   id: 'detail',
   //   name: 'Detail',
@@ -91,10 +122,12 @@ function getModeCostScore(mode: ChatIntelligenceModeDefinition): number {
 }
 
 export function listChatIntelligenceModes(): ChatIntelligenceModeWithCost[] {
-  const hasManualOverrides = CHAT_INTELLIGENCE_MODES.some((mode) => mode.costFactor !== undefined)
+  // Hidden modes stay resolvable by id but are never advertised to the client.
+  const visibleModes = CHAT_INTELLIGENCE_MODES.filter((mode) => !mode.hidden)
+  const hasManualOverrides = visibleModes.some((mode) => mode.costFactor !== undefined)
 
   if (hasManualOverrides) {
-    return CHAT_INTELLIGENCE_MODES.map((mode) => ({
+    return visibleModes.map((mode) => ({
       id: mode.id,
       name: mode.name,
       description: mode.description,
@@ -102,7 +135,7 @@ export function listChatIntelligenceModes(): ChatIntelligenceModeWithCost[] {
     }))
   }
 
-  const scores = CHAT_INTELLIGENCE_MODES.map((mode) => ({
+  const scores = visibleModes.map((mode) => ({
     mode,
     score: getModeCostScore(mode),
   }))

@@ -275,9 +275,14 @@ function buildSearchAdvancedSchema(variant: PromptVariant) {
               .optional()
               .describe('Required when type is photo_ids: the explicit photo IDs to restrict to.'),
           })
-          .refine((scope) => (scope.type === 'photo_ids' ? (scope.ids?.length ?? 0) > 0 : scope.id !== undefined), {
-            message: '`id` is required unless type is "photo_ids", in which case `ids` (non-empty) is required.',
-          })
+          .refine(
+            (scope) =>
+              scope.type === 'photo_ids' ? (scope.ids?.length ?? 0) > 0 : scope.id !== undefined,
+            {
+              message:
+                '`id` is required unless type is "photo_ids", in which case `ids` (non-empty) is required.',
+            }
+          )
       )
       .min(1)
       .max(3)
@@ -929,7 +934,7 @@ export const TOOL_DESCRIPTIONS = {
     '[CATALOG_INSIGHT] **Temporal catalog sampling for broad exploration.** Divides the catalog timeline into equal time buckets and samples representative photos from each period. Returns structured data: an array of buckets, each with its date range and sampled photos (id, filename, genre, and optional inferredLocation string/query_normalized). Use this for evolution questions, progress over time, or getting a representative cross-section of the catalog. Always pair with `overall_catalog_view` in parallel for holistic context. NEVER use this for targeted searches — use `search_advanced` instead. Optional filters: **genre values MUST ALWAYS BE IN ENGLISH ONLY** (e.g. ["street"] for street photography evolution), date_from/date_to, sort_within (pick best-scored photos per period instead of random), scan_mode (technical for compositional/visual analysis, semantic for subject/theme analysis). Examples: "How has my photography evolved?" → catalog_sample(buckets=6, scan_mode=technical) + overall_catalog_view in parallel. "What subjects appear most in my street work?" → catalog_sample(buckets=5, genre=["street"], scan_mode=semantic) + overall_catalog_view in parallel.',
 
   overall_catalog_view:
-    '[CATALOG_INSIGHT] Get a single combined report of the entire catalog: catalog patterns (recurring themes, subjects, narrative motifs), visual aspects distribution, and artistic scores statistics. Use this as the FIRST tool whenever the user asks for advice on improving their photography, critique of their catalog, identification of weak points or strengths, general feedback on their style, or any holistic question about their photographic practice. This tool replaces calling get_catalog_patterns + stats_visual_aspects + stats_artistic_scores individually — it returns all of that data in one shot.',
+    '[CATALOG_INSIGHT] Get a single combined report of the entire catalog: catalog patterns (recurring themes, subjects, narrative motifs), visual aspects distribution, and artistic scores statistics. Use this as the FIRST tool whenever the user asks for advice on improving their body of work, critique of their catalog, identification of weak points or strengths, general feedback on their style, or any holistic question about their photographic practice. This tool replaces calling get_catalog_patterns + stats_visual_aspects + stats_artistic_scores individually — it returns all of that data in one shot.',
 
   app_knowledge:
     "[BASIC_TOOLS] Get useful information about the Photoreka application itself. Use this whenever the user asks about how the app works, what features are available, how to use a specific feature, pricing, data limits, privacy policy, terms of use, data handling, account management, or any general help question unrelated to their photo catalog. Returns one or both sections: 'terms_and_privacy' (legal terms and privacy policy) and 'usage_and_help' (feature overview, FAQ, tips).",
@@ -1228,7 +1233,11 @@ export default class AgentToolsService {
      */
     const _resolveSearchPools = async (
       scopes:
-        | Array<{ type: 'collection' | 'series' | 'portfolio' | 'photo_ids'; id?: number; ids?: number[] }>
+        | Array<{
+            type: 'collection' | 'series' | 'portfolio' | 'photo_ids'
+            id?: number
+            ids?: number[]
+          }>
         | undefined,
       filter: Parameters<typeof _getIdsByFilter>[0] | undefined
     ): Promise<SearchPools> => {

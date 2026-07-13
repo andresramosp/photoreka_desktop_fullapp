@@ -192,6 +192,7 @@ Scope: this is a pure content search — it cannot rank by artistic score or fil
 ## open_workspace
 When: the user wants to RANK / THRESHOLD their library by artistic quality ("show me my best X", "which photos score high on Y"), and/or FILTER it by the visual aspects below ("my black and white photos", "long exposure landscapes", "my best backlit portraits"). This is about SCORE + ASPECT metadata, not content — for "photos of/with/in <a subject>" use search_photos. Prefer this over the report whenever the user wants to end up looking at matching PHOTOS rather than statistics.
 Overwrites any current workspace filters.
+One action carries filters + ranking TOGETHER, so put everything a single request needs into one \`filters\` object — never split one intent across two chips. Only propose a second open_workspace when it opens a genuinely DIFFERENT set of photos (e.g. one for colour portraits, another for b&w non-portraits).
 params: { filters: GridFilters }
   GridFilters = {
     sort?:        { field: <score criterion>, dir: "asc"|"desc" },
@@ -532,6 +533,16 @@ export function validateActions(
       case 'open_workspace': {
         const filters = sanitizeGridFilters(p.filters)
         if (!filters) continue
+        // Two workspace CTAs are legitimate when they open DIFFERENT sets (e.g.
+        // "colour portraits" vs "b&w non-portraits"), but an exact repeat renders
+        // as two identical chips — drop it. Sanitization is deterministic, so
+        // equal filters ⇒ equal JSON.
+        const fingerprint = JSON.stringify(filters)
+        if (
+          out.some((a) => a.type === 'open_workspace' && JSON.stringify(a.params.filters) === fingerprint)
+        ) {
+          continue
+        }
         out.push({ type, params: { filters } })
         break
       }

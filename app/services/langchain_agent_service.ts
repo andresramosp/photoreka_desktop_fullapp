@@ -16,6 +16,9 @@ import Photo from '#models/photo'
 import PhotoImageService from './photo_image_service.js'
 import ConversationService from './conversation_service.js'
 import QueryService from './query_service.js'
+import type { QueryCallUsage } from './query_service.js'
+import { buildLensMessage } from './curatorial_lens_service.js'
+import { dumpPhase2Input, type Phase2DumpMeta } from '../utils/chat_debug_dump.js'
 import { getPromptVariant } from '#config/photo_schema'
 import {
   _debug,
@@ -153,6 +156,11 @@ Photos may arrive with thumbnails (for visual evaluation) or text-only descripti
 - **\`tag_distribution\` percentages:** when stating a proportion between the compared tags (e.g. "55% hombres, 45% mujeres"), use each tag's \`relativePercentage\` (share among the compared tags), NOT \`percentage\` (share of the whole catalog) — the latter does not sum to 100% across the compared terms and will misstate the split.
 - **Scoring (1-10):** Use for internal ranking. Surface scores only if the user asks or it adds clear value.
     - *Scale:* 1 (Disastrous), 5 (Acceptable), 7.5 (Remarkable), 10 (Unique).
+- **Stored scores are a prior, not a verdict.** Treat \`artistic_scores\` as a baseline you argue with, not a ruling you enforce or ignore.
+    - Don't contradict a score for free: if you disagree, name what the number missed.
+    - Don't hide behind one either: a high score on one criterion never settles the picture.
+    - When your reading diverges, say so and say on which criterion — a split verdict is more accurate than a softened average.
+    - Each photo was scored ALONE. You are the only one seeing them side by side; that comparison is what you add.
 - **Genre-specific priorities** — weight criteria by the photographer's style:
     - *Documentary:* \`message\`, \`storytelling\`, \`candidness\`.
     - *Street:* \`candidness\`, \`visual_games\`, \`originality\`.
@@ -228,6 +236,8 @@ const FINAL_ANSWER_SCHEMA = {
 
 export type TokenUsageEntry = {
   label: string
+  /** Model that produced this spend. Used as the `model` column of its cost_logs row. */
+  model?: string
   inputTokens: number
   cachedTokens: number
   outputTokens: number
@@ -237,8 +247,16 @@ export type TokenUsageEntry = {
 }
 
 export type AgentCostBreakdown = {
+  /**
+   * The pre-flight query classifier (QueryService.classifyQuery) that picks the Phase 2
+   * model and decides whether Phase 1 runs. Billed apart from the agent turn itself —
+   * ChatController logs it as the "chat_routing" task. Absent on the knowledge agent,
+   * which has no classifier.
+   */
+  classifier?: TokenUsageEntry
   iterations: TokenUsageEntry[]
   phase2: TokenUsageEntry
+  /** Everything above, classifier included — this is what the user is charged for. */
   total: TokenUsageEntry
 }
 
@@ -275,18 +293,31 @@ export type AgentChatResult = {
 type ModelName = string
 type ModelProvider = 'openai' | 'gemini' | 'deepseek' | 'xai' | 'qwen'
 
+type ThinkingLevel = 'low' | 'medium' | 'high'
+
 type ChatIntelligenceMode = {
   id: string
   modelPhase1: string
   modelPhase2Cheap: string
   modelPhase2Expensive: string
   modelPhase2Lite: string
+  /** Phase 2 reasoning budget. Undefined = the model's own default (today's behaviour). */
+  thinkingLevelPhase2?: ThinkingLevel
 }
 
 type PhotoIdGroup = {
   tool: string
   ids: number[]
   stepIndex: number
+}
+
+/**
+ * Phase 2's visual payload, plus the one fact the curatorial manual's gate needs:
+ * how many photos the curator can actually SEE. Ignored when the manual is disabled.
+ */
+type Phase2VisualContext = {
+  messages: HumanMessage[]
+  thumbnailCount: number
 }
 
 type ChatSession = {
@@ -298,6 +329,17 @@ type ChatSession = {
   provider: ModelProvider
   modelNamePhase2: ModelName
   providerPhase2: ModelProvider
+  /** Phase 2 reasoning budget, from the selected intelligence mode. */
+  thinkingLevelPhase2?: ThinkingLevel
+  /** Gates the Phase 2 curatorial lens (see CuratorialLensService). */
+  needsArtisticEvaluation: boolean
+  /**
+   * True → the query targets ONLY the attached photo(s), so the prefetched
+   * get_photo_info is all the data needed and Phase 1 is skipped entirely.
+   */
+  skipPhase1: boolean
+  /** Stored UserProfile — lens fallback when photos carry no usable genre. */
+  userProfile: string | null
   userContext: string
   messages: any[]
   toolMap: Record<string, any>
@@ -305,6 +347,8 @@ type ChatSession = {
   foundPhotoIds: number[]
   toolsUsed: string[]
   intermediateSteps: IntermediateStep[]
+  /** Spend of the pre-flight classifier call. Zero-valued on cache hit or failure. */
+  classifierUsage: TokenUsageEntry
   iterationUsages: TokenUsageEntry[]
   totalIter: number
 }
@@ -368,7 +412,13 @@ export default class LangchainAgentService {
       forceCheapModel
     )
     await this.prefetchAttachedPhotos(session, contextPhotoIds)
-    await this.runPhase1Loop(session)
+    if (session.skipPhase1) {
+      console.log(
+        '[Agent] ⚡ Phase 1 skipped — query targets only the attached photo(s); prefetched data is sufficient.'
+      )
+    } else {
+      await this.runPhase1Loop(session)
+    }
 
     const structured = await this.runPhase2(session, contextPhotoIds)
 
@@ -386,11 +436,26 @@ export default class LangchainAgentService {
     forceCheapModel: boolean
   ): Promise<ChatSession> {
     const convService = new ConversationService()
-    const [history, classification] = await Promise.all([
-      convService.getLLMContext(conversationId),
-      this.queryService.classifyQuery(message),
-    ])
-    const { has_photo_intent, needs_artistic_evaluation } = classification
+    // Sequential on purpose: the classifier condenses elliptical follow-ups
+    // ("ahora con esta") against the recent turns, so it needs the history first.
+    const history = await convService.getLLMContext(conversationId)
+    const classification = await this.queryService.classifyQuery(
+      message,
+      contextPhotoIds.length,
+      LangchainAgentService.buildClassifierTurns(history)
+    )
+    if (classification.self_contained_query !== message) {
+      console.log(`[Agent] 🧭 Condensed query: "${classification.self_contained_query}"`)
+    }
+    const classifierUsage = LangchainAgentService.usageEntryFromQueryCall(
+      'classifier',
+      classification.usage
+    )
+    const { has_photo_intent, needs_artistic_evaluation, attached_photos_only } = classification
+    // Short-circuit: the query is exclusively about the photo(s) attached to THIS
+    // message. prefetchAttachedPhotos already runs get_photo_info on them, and Phase 2
+    // builds their thumbnails from contextPhotoIds directly — Phase 1 has nothing to add.
+    const skipPhase1 = attached_photos_only && contextPhotoIds.length > 0
     const modelName = selectedMode.modelPhase1 as ModelName
     let modelNamePhase2: ModelName
     if (forceCheapModel) {
@@ -404,7 +469,8 @@ export default class LangchainAgentService {
     }
     console.log(
       `[Agent] 🧠 Mode: ${selectedMode.id} | ` +
-        `Query classification: photo=${has_photo_intent} artistic=${needs_artistic_evaluation}` +
+        `Query classification: photo=${has_photo_intent} artistic=${needs_artistic_evaluation} attachedOnly=${attached_photos_only}` +
+        (skipPhase1 ? ' (Phase 1 will be skipped)' : '') +
         (forceCheapModel ? ' (overridden → lite)' : '') +
         ` → Phase1=${modelName} | Phase2=${modelNamePhase2}`
     )
@@ -419,9 +485,10 @@ export default class LangchainAgentService {
           : ' (same for Phase 2)')
     )
 
+    const userProfile = (await User.find(userId))?.profiles ?? null
     const tools = this.toolsService.createTools(
       userId,
-      getPromptVariant((await User.find(userId))?.profiles ?? null),
+      getPromptVariant(userProfile),
       foundPhotoIds,
       provider
     )
@@ -465,6 +532,10 @@ export default class LangchainAgentService {
       provider,
       modelNamePhase2,
       providerPhase2,
+      thinkingLevelPhase2: selectedMode.thinkingLevelPhase2,
+      needsArtisticEvaluation: needs_artistic_evaluation,
+      skipPhase1,
+      userProfile,
       userContext,
       messages,
       toolMap,
@@ -472,6 +543,7 @@ export default class LangchainAgentService {
       foundPhotoIds,
       toolsUsed: [],
       intermediateSteps: [],
+      classifierUsage,
       iterationUsages: [],
       totalIter: 0,
     }
@@ -511,6 +583,27 @@ export default class LangchainAgentService {
   }
 
   // ── Message building ─────────────────────────────────────────
+
+  /**
+   * Compact "role: text" lines for the classifier's ellipsis resolution.
+   * Only the last few turns matter — a follow-up like "ahora con esta" refers
+   * to the immediately preceding request, not deep history. Assistant turns
+   * carry a photo count so the classifier knows photos were shown (comparing
+   * against them means the request is NOT attached-only).
+   */
+  private static buildClassifierTurns(history: ChatMessage[], maxTurns = 4): string[] {
+    const turns: string[] = []
+    for (const m of history.slice(-maxTurns)) {
+      if (typeof m.content !== 'string' || m.content.trim().length === 0) continue
+      let text = m.content.slice(0, 300)
+      if (m.role === 'assistant') {
+        const shownCount = m.photoGroups?.reduce((sum, g) => sum + g.photoIds.length, 0) ?? 0
+        if (shownCount > 0) text += ` [showed ${shownCount} photos]`
+      }
+      turns.push(`${m.role}: ${text}`)
+    }
+    return turns
+  }
 
   /**
    * Strips `[[collection:ID|Name]]` / `[[series:ID|Name]]` / `[[portfolio:ID|Name]]`
@@ -826,24 +919,57 @@ export default class LangchainAgentService {
       session.userContext,
       session.intermediateSteps
     )
-    const phase2VisualContext = await this.buildPhase2VisualContext(
+    const visual = await this.buildPhase2VisualContext(
       contextPhotoIds,
       session.intermediateSteps,
       session.providerPhase2
     )
-    return LangchainAgentService.invokeStructuredFinalAnswer(session.modelNamePhase2, [
-      ...phase2Messages,
-      ...phase2VisualContext,
-    ])
+
+    // Curatorial lens — disabled unless CURATORIAL_LENS_ENABLED=true, in which case
+    // it lands last, immediately before PHASE2_TRIGGER, so the critique frame is the
+    // final thing read before judgment. Returns null when the gate is closed.
+    //
+    // The gate needs no prediction: the visual context is already built, so we know
+    // whether the curator ended up with photographs in front of it — including the ones
+    // its own search surfaced, not just the ones the user attached.
+    const lensMessage = buildLensMessage({
+      needsArtisticEvaluation: session.needsArtisticEvaluation,
+      thumbnailCount: visual.thumbnailCount,
+      profile: session.userProfile,
+    })
+    if (lensMessage) {
+      console.log(
+        `[Agent] 🔎 Curatorial manual injected | profile=${session.userProfile ?? 'none'} | thumbs=${visual.thumbnailCount}`
+      )
+    }
+
+    return LangchainAgentService.invokeStructuredFinalAnswer(
+      session.modelNamePhase2,
+      [...phase2Messages, ...visual.messages, ...(lensMessage ? [lensMessage] : [])],
+      session.thinkingLevelPhase2,
+      {
+        userId: session.userId,
+        modeId: session.modeId,
+        model: session.modelNamePhase2,
+        thinkingLevel: session.thinkingLevelPhase2,
+        message: session.message,
+        lensInjected: lensMessage !== null,
+      }
+    )
   }
 
   private async buildPhase2VisualContext(
     contextPhotoIds: number[],
     intermediateSteps: IntermediateStep[],
     provider: ModelProvider
-  ): Promise<HumanMessage[]> {
+  ): Promise<Phase2VisualContext> {
     const result: HumanMessage[] = []
     const photoImageService = PhotoImageService.getInstance()
+    // How many photos the curator can actually SEE. Gates the curatorial manual, and
+    // stays unused when it is disabled. Text-only photos are deliberately not counted:
+    // the manual exists to read concrete frames, and a description cannot settle
+    // whether an occlusion was a device.
+    let thumbnailCount = 0
 
     // ── Helper: fetch photos with interleaved text + thumbnail ──
     const fetchWithImages = async (
@@ -891,6 +1017,7 @@ export default class LangchainAgentService {
           // Image fetch failed — text description is still included
         }
       }
+      thumbnailCount += count
       return { parts, count }
     }
 
@@ -1034,7 +1161,7 @@ export default class LangchainAgentService {
       }
     }
 
-    return result
+    return { messages: result, thumbnailCount }
   }
 
   // ── Result finalisation ──────────────────────────────────────
@@ -1070,8 +1197,10 @@ export default class LangchainAgentService {
       session.modelNamePhase2,
       structured.usage
     )
-    const costEntries = [...session.iterationUsages, phase2Usage]
+    const classifierUsage = session.classifierUsage
+    const costEntries = [classifierUsage, ...session.iterationUsages, phase2Usage]
     const cost: AgentCostBreakdown = {
+      classifier: classifierUsage,
       iterations: session.iterationUsages,
       phase2: phase2Usage,
     } as AgentCostBreakdown
@@ -1083,7 +1212,7 @@ export default class LangchainAgentService {
       `[Agent] ✅ Done. Tools used: [${session.toolsUsed.join(', ') || 'none'}] | Photo groups: ${photoGroups.length} (${allPhotoIds.length} total IDs)`
     )
     console.log(
-      `[Agent] 💰 Cost: €${total.costEur.toFixed(6)} | Tokens in=${total.inputTokens} (cached=${total.cachedTokens}) out=${total.outputTokens} thinking=${total.thinkingTokens}`
+      `[Agent] 💰 Cost: €${total.costEur.toFixed(6)} (routing €${classifierUsage.costEur.toFixed(6)}) | Tokens in=${total.inputTokens} (cached=${total.cachedTokens}) out=${total.outputTokens} thinking=${total.thinkingTokens}`
     )
     console.log(
       `[Agent] 📤 Output preview: "${output.slice(0, 200)}${output.length > 200 ? '…' : ''}"`
@@ -1219,19 +1348,27 @@ export default class LangchainAgentService {
     model: ModelName = 'gpt-5.1',
     maxTokensOverride?: number,
     effortOverride?: 'low' | 'medium' | 'high',
-    disableThinking = false
+    disableThinking = false,
+    thinkingLevel?: ThinkingLevel
   ) {
     const provider = LangchainAgentService.getProviderFromModel(model)
     if (provider === 'gemini') {
       // Gemini 2.5 disables thinking via thinkingBudget:0; Gemini 3+ uses thinkingLevel.
       // When thinking is enabled, includeThoughts surfaces the reasoning in the response
       // for cost-tracking verification (total_tokens still includes thinking either way).
+      //
+      // `thinkingLevel` raises the reasoning budget explicitly (curator_plus). It only
+      // applies to Gemini 3+; on 2.5 the level has no equivalent and we keep the default.
+      // Left undefined, every branch below is exactly what it was before this parameter
+      // existed — so existing modes are untouched.
       const isGemini3 = model.startsWith('gemini-3')
       const thinkingConfig = disableThinking
         ? isGemini3
           ? { thinkingLevel: 'LOW' as any } // LangChain types lag; Google API accepts MINIMAL (lowest level)
           : { thinkingBudget: 0 }
-        : { includeThoughts: true }
+        : isGemini3 && thinkingLevel
+          ? { includeThoughts: true, thinkingLevel: thinkingLevel.toUpperCase() as any }
+          : { includeThoughts: true }
       return new ChatGoogleGenerativeAI({
         apiKey: process.env.GEMINI_API_KEY,
         model,
@@ -1584,6 +1721,23 @@ export default class LangchainAgentService {
 
   // ── Cost tracking ─────────────────────────────────────────────
 
+  /**
+   * QueryService calls go through ModelsService (not LangChain), so they arrive with the
+   * cost already priced instead of raw usage_metadata — no computeCallCost needed here.
+   */
+  private static usageEntryFromQueryCall(label: string, usage: QueryCallUsage): TokenUsageEntry {
+    return {
+      label,
+      model: usage.model ?? undefined,
+      inputTokens: usage.inputTokens,
+      cachedTokens: usage.cachedTokens,
+      outputTokens: usage.outputTokens,
+      thinkingTokens: usage.thinkingTokens,
+      totalTokens: usage.totalTokens,
+      costEur: usage.costEur,
+    }
+  }
+
   private static computeCallCost(label: string, model: ModelName, usageMeta: any): TokenUsageEntry {
     const inputTokens = usageMeta?.input_tokens ?? 0
     const outputTokens = usageMeta?.output_tokens ?? 0
@@ -1614,7 +1768,16 @@ export default class LangchainAgentService {
         USD_TO_EUR
     }
 
-    return { label, inputTokens, cachedTokens, outputTokens, thinkingTokens, totalTokens, costEur }
+    return {
+      label,
+      model,
+      inputTokens,
+      cachedTokens,
+      outputTokens,
+      thinkingTokens,
+      totalTokens,
+      costEur,
+    }
   }
 
   private static sumUsageEntries(entries: TokenUsageEntry[]): TokenUsageEntry {
@@ -1644,20 +1807,41 @@ export default class LangchainAgentService {
 
   private static async invokeStructuredFinalAnswer(
     modelName: ModelName,
-    messages: any[]
+    messages: any[],
+    thinkingLevel?: ThinkingLevel,
+    debugMeta?: Phase2DumpMeta
   ): Promise<{
     text: string
     photo_groups: Array<{ label: string; photo_ids: number[] }>
     usage?: any
   }> {
     const MAX_ATTEMPTS = 3
-    const TOKEN_BUDGET = 6000
+    // Gemini bills thinking tokens against maxOutputTokens (the same trap Phase 1
+    // documents), so a raised reasoning budget MUST come with room for the answer
+    // itself — otherwise the model thinks until the budget is gone and the
+    // structured output comes back empty.
+    const TOKEN_BUDGET_BY_THINKING: Record<ThinkingLevel, number> = {
+      low: 6000,
+      medium: 10000,
+      high: 16000,
+    }
+    const tokenBudget = thinkingLevel ? TOKEN_BUDGET_BY_THINKING[thinkingLevel] : 6000
     const model = LangchainAgentService.createChatModel(
       modelName,
-      TOKEN_BUDGET,
-      'medium'
+      tokenBudget,
+      'medium',
+      false,
+      thinkingLevel
     ).withStructuredOutput(FINAL_ANSWER_SCHEMA)
     const phase2Messages = [...messages, new HumanMessage(PHASE2_TRIGGER)]
+    if (thinkingLevel) {
+      console.log(`[Agent] 🧠 Phase 2 thinking=${thinkingLevel} | maxOutputTokens=${tokenBudget}`)
+    }
+
+    // Dumped here, not at the call site: `phase2Messages` is the array actually handed
+    // to the model, PHASE2_TRIGGER included. Anything reconstructed earlier would be a
+    // near-miss, which is the exact thing this is meant to stop.
+    if (debugMeta) await dumpPhase2Input(phase2Messages, debugMeta)
 
     let lastError: any
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
