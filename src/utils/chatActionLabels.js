@@ -9,6 +9,8 @@
 // Templates are English to match the app chrome; only content names (collection
 // titles, filenames) carry the conversation's language.
 
+import { VISUAL_ASPECTS_MAP } from "@/config/photo_schema";
+
 // "strangeness" is the real DB key behind the criterion displayed as
 // "Originality" — see photosGridQuery.js for why the key differs from the name.
 const CRITERION_LABELS = {
@@ -46,62 +48,156 @@ const OPEN_VIEW_STATIC = {
   tagcloud: "Open Tag Cloud",
 };
 
-const criterionLabel = (field) =>
-  CRITERION_LABELS[field] ||
-  (field === "date" ? "date" : field === "name" ? "name" : field);
+const criterionLabel = (field) => CRITERION_LABELS[field] || field;
+
+const aspectLabel = (key) => VISUAL_ASPECTS_MAP[key]?.label?.toLowerCase() || key;
 
 const titleCase = (str) => str.replace(/\b\w/g, (c) => c.toUpperCase());
 
-/** Friendly, non-technical chip label — no operators, numbers, or raw values. */
+const scoreFiltersOf = (filters) =>
+  Array.isArray(filters?.scoreFilters) ? filters.scoreFilters : [];
+
+/** Visual aspects as emitted by the backend: [{ aspect, values }]. */
+const visualAspectsOf = (filters) =>
+  Array.isArray(filters?.visualAspects)
+    ? filters.visualAspects.filter((a) => a?.aspect && a.values?.length > 0)
+    : [];
+
+// The chip names the SET of photos an action opens, so two workspace CTAs that
+// differ only in their aspects ("colour portraits" vs "b&w landscapes") never
+// read the same. Genre values become the head noun; the other aspects qualify it.
+const GENRE_NOUNS = {
+  abstract: "Abstracts",
+  documentary: "Documentary Shots",
+  street: "Street Shots",
+  landscape: "Landscapes",
+  portrait: "Portraits",
+  advertising: "Ad Shots",
+  product: "Product Shots",
+  fashion: "Fashion Shots",
+  lifestyle: "Lifestyle Shots",
+  food: "Food Shots",
+  wedding: "Wedding Shots",
+  architecture: "Architecture Shots",
+};
+
+const PALETTE_QUALIFIERS = {
+  "black and white": "B&W",
+  monochrome: "Monochrome",
+  color: "Colour",
+};
+
+/**
+ * Noun phrase for the photos an aspect filter selects, e.g. "B&W Portraits",
+ * "Backlit Photos", "B&W / Grain Landscapes". Returns null when there are no
+ * aspects.
+ *
+ * Wording is kept compact (abbreviations, plural nouns) but nothing is hidden:
+ * every aspect value appears, since dropping any of them is what made two
+ * different suggestions read alike. Long phrases are fine — the chip row scrolls.
+ */
+function aspectPhrase(aspects) {
+  if (aspects.length === 0) return null;
+
+  const valuesOf = (key) => aspects.find((a) => a.aspect === key)?.values ?? [];
+  const genre = valuesOf("genre");
+  const palette = valuesOf("palette");
+  const lighting = valuesOf("lighting");
+  const stylistic = valuesOf("stylistic");
+
+  // Head noun: the genres if present, otherwise a neutral "Photos" that the
+  // qualifiers below turn into "Backlit Photos" / "Long Exposure Photos".
+  const head =
+    genre.length > 0
+      ? genre.map((v) => GENRE_NOUNS[v] || titleCase(v)).join(" / ")
+      : "Photos";
+
+  // Qualifiers, most identifying first.
+  const qualifiers = [
+    ...palette.map((v) => PALETTE_QUALIFIERS[v] || titleCase(v)),
+    ...lighting.map((v) => titleCase(v)),
+    ...stylistic.map((v) => titleCase(v)),
+  ];
+
+  return [qualifiers.join(" / "), head].filter(Boolean).join(" ");
+}
+
+/**
+ * One-word ranking qualifier folded into the noun phrase, so two actions over the
+ * SAME aspects but different rankings ("best portraits" vs "most original ones")
+ * don't read alike. Deliberately criterion-agnostic — which criterion it ranks by
+ * is the tooltip's job; the chip only signals the direction.
+ */
+function rankingQualifier(filters) {
+  if (filters.genrePreset) {
+    return `${titleCase(GENRE_LABELS[filters.genrePreset] || filters.genrePreset)}-Ranked`;
+  }
+  if (filters.sort) return filters.sort.dir === "asc" ? "Lowest-Ranked" : "Top";
+  return "";
+}
+
+/**
+ * Chip label. Named after WHAT the action opens rather than what it does to the
+ * grid: the aspect values are the part a user actually distinguishes two
+ * suggestions by, while the exact criteria and thresholds are tooltip detail.
+ */
 function workspaceCTA(filters) {
   if (!filters) return "Open My Library";
 
+  const phrase = aspectPhrase(visualAspectsOf(filters));
+  if (phrase) {
+    return ["Show", rankingQualifier(filters), phrase].filter(Boolean).join(" ");
+  }
+
+  const scoreFilters = scoreFiltersOf(filters);
+  if (scoreFilters.length > 0) {
+    const criteria = scoreFilters
+      .map((f) => titleCase(criterionLabel(f.field)))
+      .join(" / ");
+    return `Filter Library by ${criteria}`;
+  }
   if (filters.genrePreset) {
     return `Rank Library for ${titleCase(GENRE_LABELS[filters.genrePreset] || filters.genrePreset)}`;
   }
-
-  if (Array.isArray(filters.scoreFilters) && filters.scoreFilters.length > 0) {
-    return `Filter Workspace by ${titleCase(criterionLabel(filters.scoreFilters[0].field))}`;
-  }
-
   if (filters.sort) {
-    return `Sort Library by ${titleCase(criterionLabel(filters.sort.field))}`;
+    return `Rank Library by ${titleCase(criterionLabel(filters.sort.field))}`;
   }
-
   return "Open My Library";
 }
 
+/** Full, explicit rundown of what the chip will apply — this is the tooltip's job. */
 function workspaceLabel(filters) {
   if (!filters) return "Open my library";
 
+  const clauses = [];
+
+  const aspects = visualAspectsOf(filters);
+  if (aspects.length > 0) {
+    const shown = aspects
+      .map((a) => `${aspectLabel(a.aspect)}: ${a.values.join(" or ")}`)
+      .join("; ");
+    clauses.push(`showing only ${shown}`);
+  }
+
+  const scoreFilters = scoreFiltersOf(filters);
+  if (scoreFilters.length > 0) {
+    const shown = scoreFilters
+      .map((f) => `${criterionLabel(f.field)} ${f.op === "lte" ? "≤" : "≥"} ${f.value}`)
+      .join(", ");
+    clauses.push(`with ${shown}`);
+  }
+
   if (filters.genrePreset) {
-    return `Open library ranked for ${GENRE_LABELS[filters.genrePreset] || filters.genrePreset}`;
+    clauses.push(
+      `ranked for ${GENRE_LABELS[filters.genrePreset] || filters.genrePreset}`,
+    );
+  } else if (filters.sort) {
+    const dir = filters.sort.dir === "asc" ? "lowest first" : "best first";
+    clauses.push(`ranked by ${criterionLabel(filters.sort.field)} (${dir})`);
   }
 
-  const parts = [];
-  if (filters.sort) {
-    const dir =
-      filters.sort.field === "date"
-        ? filters.sort.dir === "asc"
-          ? "oldest first"
-          : "newest first"
-        : filters.sort.dir === "asc"
-          ? "lowest first"
-          : "best first";
-    parts.push(`by ${criterionLabel(filters.sort.field)} (${dir})`);
-  }
-  if (Array.isArray(filters.scoreFilters) && filters.scoreFilters.length > 0) {
-    const f = filters.scoreFilters[0];
-    const op = f.op === "lte" ? "≤" : "≥";
-    const extra =
-      filters.scoreFilters.length > 1
-        ? ` +${filters.scoreFilters.length - 1}`
-        : "";
-    parts.push(`${criterionLabel(f.field)} ${op} ${f.value}${extra}`);
-  }
-
-  return parts.length > 0
-    ? `Open library: ${parts.join(", ")}`
+  return clauses.length > 0
+    ? `Open my library ${clauses.join(", ")}`
     : "Open my library";
 }
 
