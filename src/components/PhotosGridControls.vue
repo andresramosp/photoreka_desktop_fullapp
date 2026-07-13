@@ -1071,6 +1071,20 @@ onMounted(() => {
     emit("artistic-scores-change", { ...map });
     isFiltersExpanded.value = true;
   }
+
+  // Visual aspects ({ [aspectKey]: string[] }) — unlike the score filters above,
+  // the grid owns this state, so the seed must be emitted for it to take effect.
+  if (init.visualAspects && Object.keys(init.visualAspects).length > 0) {
+    const seeded = { ...selectedFilters.value };
+    for (const [key, values] of Object.entries(init.visualAspects)) {
+      if (!Array.isArray(values) || values.length === 0) continue;
+      if (!(key in seeded)) continue; // aspect not offered for this user's profile
+      seeded[key] = [...values];
+    }
+    selectedFilters.value = seeded;
+    handleFilterChange();
+    isFiltersExpanded.value = true;
+  }
 });
 </script>
 
