@@ -90,11 +90,13 @@
       </div>
     </transition>
 
-    <!-- Persistent Top Bar (always visible) -->
-    <div class="chat-topbar">
+    <!-- Top bar — only inside a conversation. On the welcome screen it would be
+         an empty strip holding nothing but the conversations toggle, so that
+         toggle floats over the content instead (see below). -->
+    <div v-if="hasMessages" class="chat-topbar">
       <div class="chat-topbar-left">
         <n-button
-          v-if="!isDemoUser"
+          v-if="showHistory"
           quaternary
           size="small"
           class="sidebar-toggle-btn"
@@ -106,23 +108,71 @@
             <n-icon :size="17"><LayersIcon /></n-icon>
           </template>
         </n-button>
-        <span v-if="chatStore.messages.length > 0" class="chat-topbar-title"
-          >CHATLAB</span
-        >
+        <span class="chat-topbar-title">{{ activeConversationTitle }}</span>
       </div>
+      <div class="chat-topbar-right">
+        <n-button
+          quaternary
+          size="small"
+          class="new-chat-btn"
+          @click="handleNewChat"
+        >
+          <template #icon>
+            <n-icon :size="17"><CreateIcon /></n-icon>
+          </template>
+          <span class="new-chat-label">New chat</span>
+        </n-button>
+        <n-button
+          v-if="allowFullscreen"
+          quaternary
+          size="small"
+          class="fullscreen-btn"
+          :class="{ active: isFullscreen }"
+          :title="isFullscreen ? 'Exit fullscreen' : 'Expand chat'"
+          @click="toggleFullscreen"
+        >
+          <template #icon>
+            <n-icon :size="15">
+              <FullscreenExitOutlined v-if="isFullscreen" />
+              <FullscreenOutlined v-else />
+            </n-icon>
+          </template>
+        </n-button>
+      </div>
+    </div>
+
+    <template v-else>
       <n-button
-        v-if="chatStore.messages.length > 0"
+        v-if="showHistory"
         quaternary
         size="small"
-        class="new-chat-btn"
-        @click="handleNewChat"
+        class="sidebar-toggle-btn sidebar-toggle-btn--floating"
+        :class="{ active: showSidebar }"
+        title="Conversations"
+        @click="showSidebar = !showSidebar"
       >
         <template #icon>
-          <n-icon :size="15"><CreateIcon /></n-icon>
+          <n-icon :size="17"><LayersIcon /></n-icon>
         </template>
-        New chat
       </n-button>
-    </div>
+
+      <n-button
+        v-if="allowFullscreen"
+        quaternary
+        size="small"
+        class="fullscreen-btn fullscreen-btn--floating"
+        :class="{ active: isFullscreen }"
+        :title="isFullscreen ? 'Exit fullscreen' : 'Expand chat'"
+        @click="toggleFullscreen"
+      >
+        <template #icon>
+          <n-icon :size="16">
+            <FullscreenExitOutlined v-if="isFullscreen" />
+            <FullscreenOutlined v-else />
+          </n-icon>
+        </template>
+      </n-button>
+    </template>
 
     <!-- Main Chat Area -->
     <div class="chat-main" ref="chatMainRef">
@@ -133,18 +183,33 @@
             <RobotOutlined />
           </n-icon>
 
-          <h2 class="welcome-title">Talk to your photos</h2>
+          <h2 class="welcome-title">
+            {{
+              hasPhotos
+                ? "Chat with your photo library"
+                : "Welcome to Photoreka"
+            }}
+          </h2>
           <p class="welcome-description">
-            Ask questions about your library, get curation advice, or explore
-            your catalog with Photoreka's ChatLab assistance.
+            {{
+              hasPhotos
+                ? "Ask questions about your library, get curation advice, or explore your catalog with Photoreka's AI assistance."
+                : "Your library is empty for now. Ask me anything about how Photoreka works, and import your photos whenever you're ready."
+            }}
           </p>
 
           <!-- Sub-queries panel (shown after clicking a card with subQueries) -->
           <div v-if="activeSuggestion" class="subquery-panel">
-            <button class="subquery-back-btn" @click="activeSuggestion = null">
-              <n-icon :size="14"><ArrowBackIcon /></n-icon>
-              <span>Back</span>
-            </button>
+            <n-button
+              text
+              class="subquery-back-btn"
+              @click="activeSuggestion = null"
+            >
+              <template #icon>
+                <n-icon :size="14"><ArrowBackIcon /></n-icon>
+              </template>
+              Back
+            </n-button>
             <div class="subquery-panel-header">
               <n-icon :size="18" class="subquery-panel-icon">
                 <component :is="activeSuggestion.icon" />
@@ -154,35 +219,40 @@
               }}</span>
             </div>
             <div class="subquery-list">
-              <button
+              <n-button
                 v-for="(sq, sqIdx) in activeSuggestion.subQueries"
                 :key="sqIdx"
+                block
                 class="subquery-item"
                 @click="handleSubQueryClick(sq)"
               >
-                <n-icon :size="14" class="subquery-item-icon"
-                  ><ChevronForwardIcon
-                /></n-icon>
-                <span>{{ sq.title }}</span>
-              </button>
+                <template #icon>
+                  <n-icon :size="14" class="subquery-item-icon"
+                    ><ChevronForwardIcon
+                  /></n-icon>
+                </template>
+                {{ sq.title }}
+              </n-button>
             </div>
           </div>
 
           <!-- Main suggestion cards -->
           <div v-else class="suggestion-cards">
             <div
-              v-for="(suggestion, index) in suggestions"
+              v-for="(suggestion, index) in visibleSuggestions"
               :key="index"
               class="suggestion-card"
               @click="handleSuggestionClick(suggestion)"
             >
-              <div class="suggestion-icon">
-                <n-icon :size="20">
-                  <component :is="suggestion.icon" />
-                </n-icon>
-              </div>
               <div class="suggestion-content">
-                <span class="suggestion-title">{{ suggestion.title }}</span>
+                <div class="suggestion-title-row">
+                  <div class="suggestion-icon">
+                    <n-icon :size="18">
+                      <component :is="suggestion.icon" />
+                    </n-icon>
+                  </div>
+                  <span class="suggestion-title">{{ suggestion.title }}</span>
+                </div>
                 <span class="suggestion-desc">{{
                   suggestion.description
                 }}</span>
@@ -197,56 +267,79 @@
             </div>
           </div>
 
-          <!-- Recent conversations (welcome screen) -->
-          <div
-            v-if="
-              !isDemoUser &&
-              !activeSuggestion &&
-              chatStore.conversations.length > 0
-            "
-            class="recent-convs"
-          >
-            <div class="recent-convs-header">
-              <n-icon :size="13" class="recent-convs-icon"
-                ><LayersIcon
-              /></n-icon>
-              <span class="recent-convs-title">Recent conversations</span>
-            </div>
-            <div class="recent-convs-list">
-              <button
-                v-for="conv in chatStore.conversations.slice(0, 5)"
-                :key="conv.id"
-                class="recent-conv-item"
-                @click="handleLoadConversation(conv.id)"
+          <!-- Recent conversations + hint: hidden once photos are attached -->
+          <Transition name="welcome-footer">
+            <div v-if="!photosEverAttached" class="welcome-footer">
+              <!-- Recent conversations (welcome screen) -->
+              <div
+                v-if="
+                  showHistory &&
+                  !activeSuggestion &&
+                  chatStore.conversations.length > 0
+                "
+                class="recent-convs"
               >
-                <span class="recent-conv-title">{{
-                  conv.title || "Untitled"
-                }}</span>
-                <span class="recent-conv-date">{{
-                  formatRelativeDate(conv.updatedAt)
-                }}</span>
-              </button>
-              <button
-                v-if="chatStore.conversations.length > 5"
-                class="recent-conv-more"
-                @click="showSidebar = true"
-              >
-                <span
-                  >View all
-                  {{ chatStore.conversations.length }} conversations</span
-                >
-                <n-icon :size="13"><ChevronForwardIcon /></n-icon>
-              </button>
-            </div>
-          </div>
+                <div class="recent-convs-header">
+                  <n-icon :size="13" class="recent-convs-icon"
+                    ><LayersIcon
+                  /></n-icon>
+                  <span class="recent-convs-title">Recent conversations</span>
+                </div>
+                <div class="recent-convs-list">
+                  <n-button
+                    v-for="conv in chatStore.conversations.slice(0, 3)"
+                    :key="conv.id"
+                    block
+                    class="recent-conv-item"
+                    @click="handleLoadConversation(conv.id)"
+                  >
+                    <span class="recent-conv-title">{{
+                      conv.title || "Untitled"
+                    }}</span>
+                    <span class="recent-conv-date">{{
+                      formatRelativeDate(conv.updatedAt)
+                    }}</span>
+                  </n-button>
+                  <button
+                    v-if="chatStore.conversations.length > 5"
+                    class="recent-conv-more"
+                    @click="showSidebar = true"
+                  >
+                    <span
+                      >View all
+                      {{ chatStore.conversations.length }} conversations</span
+                    >
+                    <n-icon :size="13"><ChevronForwardIcon /></n-icon>
+                  </button>
+                </div>
+              </div>
 
-          <p class="welcome-hint">
-            ChatLab is a complementary tool. For best results, use it alongside
-            Photoreka's other tools.
-            <button class="welcome-hint-link" @click="showChatLabInfo = true">
-              Read more
-            </button>
-          </p>
+              <p class="welcome-hint">
+                ChatLab is a complementary tool. For best results, use it
+                alongside Photoreka's other tools.
+                <n-button
+                  text
+                  class="welcome-hint-link"
+                  @click="showChatLabInfo = true"
+                >
+                  Read more
+                </n-button>
+              </p>
+            </div>
+          </Transition>
+
+          <!-- With an empty library the chat is all there is to do here, so the
+               way out of that state stays one click away. -->
+          <router-link
+            v-if="!hasPhotos"
+            to="/import-area#upload"
+            class="welcome-import-btn"
+          >
+            <n-icon :size="16">
+              <CloudUploadIcon />
+            </n-icon>
+            <span>Import Photos</span>
+          </router-link>
         </div>
       </div>
 
@@ -493,12 +586,16 @@
               :isUploading="photo.isUploading"
               @info="(p) => showPhotoInfo(p, contextPhotos)"
             />
-            <button
+            <n-button
+              circle
+              size="tiny"
               class="remove-photo-btn"
               @click="removeContextPhoto(photo.id)"
             >
-              <n-icon :size="10"><CloseIcon /></n-icon>
-            </button>
+              <template #icon>
+                <n-icon :size="10"><CloseIcon /></n-icon>
+              </template>
+            </n-button>
           </div>
         </div>
         <!-- <n-button
@@ -794,12 +891,43 @@ import {
   CheckmarkCircleOutline as CheckmarkCircleIcon,
   CloseCircleOutline as CloseCircleIcon,
   EyeOutline as EyeIcon,
+  CloudUploadOutline as CloudUploadIcon,
 } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
-import { PlusCircleFilled, RobotOutlined } from "@vicons/antd";
+import {
+  PlusCircleFilled,
+  RobotOutlined,
+  FullscreenOutlined,
+  FullscreenExitOutlined,
+} from "@vicons/antd";
 import { getShuffledLoadingPhrases } from "@/utils/chatLoadingPhrases";
 
 defineOptions({ name: "ChatView" });
+
+const props = defineProps<{
+  /**
+   * Conversation to open on mount. Used by the dashboard, which hosts the chat
+   * outside of the /chat-lab routes and so can't pass it through the URL.
+   * Falls back to the most recent conversation when omitted.
+   */
+  conversationId?: string | number | null;
+  /**
+   * Offers the fullscreen toggle. Only the dashboard host has surroundings to
+   * collapse, so it's the only caller that turns this on — the routed view is
+   * already fullscreen.
+   */
+  allowFullscreen?: boolean;
+  /** Fullscreen state, owned by the host (the chat only requests the toggle). */
+  isFullscreen?: boolean;
+}>();
+
+const emit = defineEmits<{
+  (e: "update:isFullscreen", value: boolean): void;
+}>();
+
+const toggleFullscreen = () => {
+  emit("update:isFullscreen", !props.isFullscreen);
+};
 
 interface SubQuery {
   title: string;
@@ -861,6 +989,32 @@ const router = useRouter();
 const isDemoUser = computed(
   () => userStore.user?.email === "demo@photorekatest.com",
 );
+
+const showHistory = computed(() => !isDemoUser.value);
+
+const hasMessages = computed(() => chatStore.messages.length > 0);
+
+const activeConversationTitle = computed(() => {
+  // A brand-new conversation has messages but no id yet (assigned once the
+  // first reply comes back), so there's nothing in the store to title it with.
+  if (!chatStore.activeConversationId) return "New chat";
+  return chatStore.activeConversation?.title || "Untitled";
+});
+
+/**
+ * True when this instance *is* the routed view (mobile). On desktop the chat is
+ * hosted inside the dashboard, where writing to the URL would navigate the user
+ * away from it — so every router write below is gated on this.
+ */
+const isRoutedView = computed(
+  () => route.name === "chat-lab" || route.name === "chat-lab-conversation",
+);
+
+const mostRecentConversation = () =>
+  [...chatStore.conversations].sort(
+    (a: any, b: any) =>
+      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  )[0] ?? null;
 
 const selectedChatModeBinding = computed({
   get: () => chatStore.selectedModeId,
@@ -991,6 +1145,14 @@ const stopLoadingPhraseCycle = () => {
 };
 const photosDialogVisible = ref(false);
 const contextPhotos = ref<ContextPhoto[]>([]);
+/** Sticky: once photos are attached, the welcome footer stays hidden until a new conversation. */
+const photosEverAttached = ref(false);
+watch(
+  () => contextPhotos.value.length,
+  (count) => {
+    if (count > 0) photosEverAttached.value = true;
+  },
+);
 const mentionInputRef = ref<{ focus: () => void } | null>(null);
 const chatMainRef = ref<HTMLElement | null>(null);
 const messagesRef = ref<HTMLElement | null>(null);
@@ -1010,6 +1172,52 @@ const currentPhotoIndex = computed(() => {
 const showSidebar = ref(false);
 const pendingDeleteId = ref<number | null>(null);
 const showChatLabInfo = ref(false);
+
+/** The only suggestion that stands on its own without a library behind it. */
+const appHelpSuggestion: Suggestion = {
+  title: "Help with the app",
+  description: "Ask me anything about how to use Photoreka",
+  icon: BulbIcon,
+  prompt: "Please explain how to use Photoreka to ",
+  needsPhotos: false,
+  autoSend: false,
+  subQueries: [
+    {
+      title: "How does the search feature work?",
+      prompt:
+        "Explain how the search feature works in Photoreka, including filters and different search modes.",
+      needsPhotos: false,
+      autoSend: true,
+    },
+    {
+      title: "How do I create and manage collections?",
+      prompt:
+        "How do I create collections in Photoreka and add photos to them?",
+      needsPhotos: false,
+      autoSend: true,
+    },
+    {
+      title: "How do I organize my photos into series?",
+      prompt:
+        "How do I create photo series in Photoreka and what are they used for?",
+      needsPhotos: false,
+      autoSend: true,
+    },
+    {
+      title: "How do I share my work from Photoreka?",
+      prompt: "What are the ways to share my photos or series from Photoreka?",
+      needsPhotos: false,
+      autoSend: true,
+    },
+    {
+      title: "How does photo analysis work?",
+      prompt:
+        "How does Photoreka analyze my photos, how is the data stored, and how is my privacy protected?",
+      needsPhotos: false,
+      autoSend: true,
+    },
+  ],
+};
 
 const suggestions: Suggestion[] = [
   {
@@ -1110,7 +1318,7 @@ const suggestions: Suggestion[] = [
     ],
   },
   {
-    title: "Find similar photos to these",
+    title: "Find similar photos",
     description:
       "Find photos in my library with similar storytelling to these ones",
     icon: ImagesIcon,
@@ -1129,52 +1337,52 @@ const suggestions: Suggestion[] = [
     needsPhotos: true,
     autoSend: true,
   },
-  {
-    title: "Help with the app",
-    description: "Ask me anything about how to use Photoreka",
-    icon: BulbIcon,
-    prompt: "Please explain how to use Photoreka to ",
-    needsPhotos: false,
-    autoSend: false,
-    subQueries: [
-      {
-        title: "How does the search feature work?",
-        prompt:
-          "Explain how the search feature works in Photoreka, including filters and different search modes.",
-        needsPhotos: false,
-        autoSend: true,
-      },
-      {
-        title: "How do I create and manage collections?",
-        prompt:
-          "How do I create collections in Photoreka and add photos to them?",
-        needsPhotos: false,
-        autoSend: true,
-      },
-      {
-        title: "How do I organize my photos into series?",
-        prompt:
-          "How do I create photo series in Photoreka and what are they used for?",
-        needsPhotos: false,
-        autoSend: true,
-      },
-      {
-        title: "How do I share my work from Photoreka?",
-        prompt:
-          "What are the ways to share my photos or series from Photoreka?",
-        needsPhotos: false,
-        autoSend: true,
-      },
-      {
-        title: "How does photo analysis work?",
-        prompt:
-          "How does Photoreka analyze my photos, how is the data stored, and how is my privacy protected?",
-        needsPhotos: false,
-        autoSend: true,
-      },
-    ],
-  },
+  appHelpSuggestion,
 ];
+
+/**
+ * With an empty library every suggestion above is a dead end — they all search,
+ * compare or analyze photos the user doesn't have yet. These take their place
+ * until there's a catalog to talk about.
+ */
+const onboardingSuggestions: Suggestion[] = [
+  {
+    title: "What is Photoreka?",
+    description: "Get an overview of what you can do here",
+    icon: SparklesIcon,
+    prompt:
+      "What is Photoreka and how can it help me as a photographer? Give me a short overview.",
+    needsPhotos: false,
+    autoSend: true,
+  },
+  {
+    title: "How do I import my photos?",
+    description: "Walk me through getting my catalog in",
+    icon: CloudUploadIcon,
+    prompt:
+      "How do I import my photos into Photoreka? Walk me through the process step by step.",
+    needsPhotos: false,
+    autoSend: true,
+  },
+  {
+    title: "What happens after import?",
+    description: "See what unlocks after your first import",
+    icon: LayersIcon,
+    prompt:
+      "Once my photos are imported and analyzed, what can I do with them in Photoreka? What tools will I have?",
+    needsPhotos: false,
+    autoSend: true,
+  },
+  // appHelpSuggestion,
+];
+
+const hasPhotos = computed(
+  () => (photosStore.processedPhotos?.length ?? 0) > 0,
+);
+
+const visibleSuggestions = computed(() =>
+  hasPhotos.value ? suggestions : onboardingSuggestions,
+);
 
 const activeSuggestion = ref<Suggestion | null>(null);
 
@@ -1198,13 +1406,14 @@ const loadPendingChatPhotos = async () => {
   sessionStorage.removeItem("chat_pending_message");
 
   // Navigate away from any conversation route so a fresh one is created
-  if (route.params.id) {
+  if (isRoutedView.value && route.params.id) {
     await router.replace("/chat-lab");
   }
 
   // Start a fresh conversation
   chatStore.startNewConversation();
   contextPhotos.value = [];
+  photosEverAttached.value = false;
   inputText.value = "";
   perMessageSelections.value = {};
   activeSuggestion.value = null;
@@ -1237,13 +1446,14 @@ const loadConversationById = async (conversationId: number) => {
       }
     }
     contextPhotos.value = [];
+    photosEverAttached.value = false;
     inputText.value = "";
     perMessageSelections.value = {};
     activeSuggestion.value = null;
     scrollToBottom();
   } catch {
     message.error("Failed to load conversation");
-    router.replace("/chat-lab");
+    if (isRoutedView.value) router.replace("/chat-lab");
   }
 };
 
@@ -1251,9 +1461,10 @@ const loadConversationById = async (conversationId: number) => {
 watch(
   () => route.params.id,
   async (id) => {
-    // Guard: only react when actually on a chat-lab route (ChatView is kept alive
-    // and route.params.id would otherwise fire for any route that uses :id, e.g. /collections/:id)
-    if (route.name !== "chat-lab-conversation" && route.name !== "chat-lab") {
+    // Only react when actually on a chat-lab route. ChatView is kept alive and
+    // also hosted by the dashboard, so route.params.id would otherwise fire for
+    // any route that uses :id (e.g. /collections/:id).
+    if (!isRoutedView.value) {
       return;
     }
 
@@ -1272,11 +1483,45 @@ watch(
   { immediate: true },
 );
 
-onMounted(() => {
+// A second redirect can land while this instance is already mounted (the
+// dashboard is kept alive), so the requested conversation has to be watched,
+// not just read once on mount.
+watch(
+  () => props.conversationId,
+  async (id) => {
+    if (isRoutedView.value || !id) return;
+    if (String(id) === String(chatStore.activeConversationId)) return;
+
+    const numericId = Number(id);
+    if (!Number.isNaN(numericId)) await loadConversationById(numericId);
+  },
+);
+
+onMounted(async () => {
   chatStore.fetchModes();
-  if (!isDemoUser.value) chatStore.fetchConversations();
-  loadPendingChatPhotos();
   window.addEventListener("resize", checkMobile);
+
+  // Photos handed off from another tool always win: they open a fresh
+  // conversation, so they must never land inside an older one.
+  const hadPendingHandoff = !!sessionStorage.getItem("chat_context_photos");
+  loadPendingChatPhotos();
+
+  if (isDemoUser.value) return;
+  await chatStore.fetchConversations();
+
+  // Outside the chat routes (the dashboard) there is no URL to read the
+  // conversation from, so open the requested one — or the most recent, falling
+  // back to the welcome screen. An already-active conversation is left alone.
+  if (isRoutedView.value || hadPendingHandoff) return;
+  if (chatStore.activeConversationId) return;
+
+  const target = props.conversationId
+    ? chatStore.conversations.find(
+        (c: any) => String(c.id) === String(props.conversationId),
+      )
+    : mostRecentConversation();
+
+  if (target) await loadConversationById(target.id);
 });
 
 // Also fires on keep-alive re-activation (e.g. navigating back to /chat)
@@ -1322,7 +1567,11 @@ const sendMessage = async () => {
   try {
     await chatStore.sendMessage(text, contextPhotoIds, attachedPhotos);
     // After the first message the store assigns a conversationId — reflect it in the URL
-    if (chatStore.activeConversationId && !route.params.id) {
+    if (
+      isRoutedView.value &&
+      chatStore.activeConversationId &&
+      !route.params.id
+    ) {
       router.replace(`/chat-lab/${chatStore.activeConversationId}`);
     }
     // Fire-and-forget: fetch Phase 3 action suggestions; they pop in under the
@@ -1420,6 +1669,17 @@ const normalizePhotoTokens = (text: string): string =>
     (_, id, filename) => `[[photo:${id}|${filename}]]`,
   );
 
+const PHOTO_TOKEN_NAME_MAX_LENGTH = 18;
+
+const truncatePhotoName = (filename: string): string => {
+  if (filename.length <= PHOTO_TOKEN_NAME_MAX_LENGTH) return filename;
+  const dotIndex = filename.lastIndexOf(".");
+  const ext = dotIndex > 0 ? filename.slice(dotIndex) : "";
+  const base = dotIndex > 0 ? filename.slice(0, dotIndex) : filename;
+  const keep = Math.max(PHOTO_TOKEN_NAME_MAX_LENGTH - ext.length - 1, 3);
+  return `${base.slice(0, keep)}…${ext}`;
+};
+
 const renderMarkdown = (content: string): string => {
   const unescaped = content.replace(/\\n/g, "\n");
   const normalized = normalizePhotoTokens(unescaped);
@@ -1428,7 +1688,7 @@ const renderMarkdown = (content: string): string => {
     .replace(
       PHOTO_TOKEN,
       (_, id, filename) =>
-        `<span class="photo-inline-link" data-photo-id="${id}" data-photo-name="${filename}" title="${filename}">${filename}</span>`,
+        `<span class="photo-inline-link" data-photo-id="${id}" data-photo-name="${filename}" title="${filename}">${truncatePhotoName(filename)}</span>`,
     )
     .replace(
       URL_TOKEN,
@@ -1841,6 +2101,7 @@ const clearContextPhotos = () => {
 const resetChat = async () => {
   chatStore.startNewConversation();
   contextPhotos.value = [];
+  photosEverAttached.value = false;
   inputText.value = "";
   perMessageSelections.value = {};
   activeSuggestion.value = null;
@@ -1848,17 +2109,26 @@ const resetChat = async () => {
 
 const handleNewChat = async () => {
   showSidebar.value = false;
-  if (route.params.id) {
+  if (isRoutedView.value && route.params.id) {
     // Navigate to base route; watcher will call resetChat()
     await router.push("/chat-lab");
   } else {
-    // Already on /chat-lab, just reset in-place
+    // Already on /chat-lab, or hosted by the dashboard: reset in-place
     resetChat();
   }
 };
 
 const handleLoadConversation = async (conversationId: number) => {
   showSidebar.value = false;
+
+  // Hosted by the dashboard: load in-place, the URL isn't ours to drive.
+  if (!isRoutedView.value) {
+    if (conversationId !== chatStore.activeConversationId) {
+      await loadConversationById(conversationId);
+    }
+    return;
+  }
+
   // Navigate to the conversation route; the watcher handles loading
   if (String(conversationId) !== String(route.params.id)) {
     await router.push(`/chat-lab/${conversationId}`);
@@ -2004,7 +2274,7 @@ const formatRelativeDate = (dateStr: string) => {
 .sidebar-item {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  /* gap: var(--spacing-xs); */
   padding: var(--spacing-sm) var(--spacing-sm) var(--spacing-sm)
     var(--spacing-lg);
   cursor: pointer;
@@ -2012,7 +2282,7 @@ const formatRelativeDate = (dateStr: string) => {
   transition:
     background 0.15s,
     border-color 0.15s;
-  min-height: 52px;
+  /* min-height: 52px; */
 }
 
 .sidebar-item:hover {
@@ -2075,10 +2345,10 @@ const formatRelativeDate = (dateStr: string) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-xs) var(--spacing-md);
+  padding: var(--spacing-xs) var(--spacing-xs);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
-  min-height: 44px;
+  min-height: 35px;
 }
 
 .chat-topbar-left {
@@ -2092,6 +2362,15 @@ const formatRelativeDate = (dateStr: string) => {
   font-weight: var(--font-weight-semibold);
   color: var(--text-tertiary);
   letter-spacing: 0.03em;
+}
+
+/* Flex centra la caja de línea, no los glifos: la fuente reserva mucho más
+   hueco sobre las mayúsculas que bajo la baseline. Recortamos la caja a la
+   tinta real para que centrarla sea centrar lo que se ve. */
+.chat-topbar-title,
+.new-chat-label {
+  line-height: 1;
+  text-box: trim-both cap alphabetic;
 }
 
 .sidebar-toggle-btn {
@@ -2110,9 +2389,44 @@ const formatRelativeDate = (dateStr: string) => {
   ) !important;
 }
 
+/* On the welcome screen there is no top bar to sit in, so the toggle floats
+   over the content rather than reserving a strip of its own. */
+.sidebar-toggle-btn--floating {
+  position: absolute;
+  top: 7px;
+  left: 3px;
+  z-index: 50;
+}
+
+.chat-topbar-right {
+  display: flex;
+  align-items: center;
+  /* gap: var(--spacing-xs); */
+}
+
 .new-chat-btn {
   color: var(--text-secondary) !important;
   font-size: var(--font-size-xs) !important;
+}
+
+/* ── Fullscreen toggle (dashboard host only) ── */
+.fullscreen-btn {
+  color: var(--text-tertiary) !important;
+  transition:
+    color 0.15s,
+    background 0.15s !important;
+}
+
+/* .fullscreen-btn.active,
+.fullscreen-btn:hover {
+  color: var(--accent-color) !important;
+} */
+
+.fullscreen-btn--floating {
+  position: absolute;
+  top: 7px;
+  right: 6px;
+  z-index: 50;
 }
 
 /* ── Context Photos Strip (inside input area) ── */
@@ -2237,16 +2551,10 @@ const formatRelativeDate = (dateStr: string) => {
   right: 4px;
   width: 18px;
   height: 18px;
-  border-radius: var(--radius-round);
   background: var(--bg-container);
-  border: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
+  border-color: var(--border-color);
   color: var(--text-tertiary);
   transition: all 0.15s;
-  padding: 0;
   z-index: 10;
 }
 
@@ -2288,7 +2596,6 @@ const formatRelativeDate = (dateStr: string) => {
 
 .welcome-icon {
   color: var(--text-tertiary);
-  margin-bottom: var(--spacing-lg);
 }
 
 .welcome-title {
@@ -2315,11 +2622,9 @@ const formatRelativeDate = (dateStr: string) => {
 }
 
 .welcome-hint-link {
-  background: none;
-  border: none;
+  height: auto;
   padding: 0;
   color: var(--accent-color);
-  cursor: pointer;
   font-size: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -2329,6 +2634,39 @@ const formatRelativeDate = (dateStr: string) => {
 
 .welcome-hint-link:hover {
   opacity: 1;
+}
+
+.welcome-import-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: var(--spacing-xl) auto 0;
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent-color) 42%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 82%, transparent);
+  color: color-mix(in srgb, var(--text-primary) 80%, var(--accent-color) 20%);
+  text-decoration: none;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.welcome-import-btn:hover {
+  background: color-mix(
+    in srgb,
+    var(--bg-surface-hover) 90%,
+    var(--accent-color) 10%
+  );
+  border-color: color-mix(in srgb, var(--accent-color) 60%, transparent);
+  color: var(--text-primary);
+}
+
+.welcome-import-btn:active {
+  transform: scale(0.97);
 }
 
 /* ── ChatLab Info Dialog ── */
@@ -2478,7 +2816,7 @@ const formatRelativeDate = (dateStr: string) => {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: var(--spacing-md);
-  max-width: 640px;
+  /* max-width: 670px; */
   margin: 0 auto;
 }
 
@@ -2486,7 +2824,6 @@ const formatRelativeDate = (dateStr: string) => {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--spacing-sm);
   padding: var(--spacing-lg);
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
@@ -2503,7 +2840,14 @@ const formatRelativeDate = (dateStr: string) => {
   box-shadow: var(--shadow-md);
 }
 
+.suggestion-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
 .suggestion-icon {
+  display: flex;
   color: var(--accent-color);
   opacity: 0.8;
 }
@@ -2561,15 +2905,11 @@ const formatRelativeDate = (dateStr: string) => {
 }
 
 .subquery-back-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  background: none;
-  border: none;
-  cursor: pointer;
+  height: auto;
+  padding: 0;
+  margin-bottom: var(--spacing-sm);
   color: var(--text-tertiary);
   font-size: var(--font-size-xs);
-  padding: 0 0 var(--spacing-sm) 0;
   transition: color 0.15s;
 }
 
@@ -2603,15 +2943,12 @@ const formatRelativeDate = (dateStr: string) => {
 }
 
 .subquery-item {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  width: 100%;
+  justify-content: flex-start;
+  height: auto;
   padding: var(--spacing-sm) var(--spacing-md);
   background: var(--bg-surface);
-  border: 1px solid var(--border-color);
+  border-color: var(--border-color);
   border-radius: var(--radius-md);
-  cursor: pointer;
   text-align: left;
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
@@ -2823,6 +3160,8 @@ const formatRelativeDate = (dateStr: string) => {
 }
 
 .chat-mode-selector {
+  display: flex;
+  align-items: center;
   flex-shrink: 0;
 }
 
@@ -2914,8 +3253,6 @@ const formatRelativeDate = (dateStr: string) => {
   }
 
   .suggestion-card {
-    flex-direction: row;
-    align-items: center;
     padding: var(--spacing-md);
   }
 
@@ -3194,6 +3531,29 @@ const formatRelativeDate = (dateStr: string) => {
 }
 
 /* ── Recent Conversations (welcome screen) ── */
+/* Collapses out (and back in) when photos are attached to the composer */
+.welcome-footer-enter-active,
+.welcome-footer-leave-active {
+  overflow: hidden;
+  transition:
+    opacity 0.28s ease,
+    max-height 0.4s ease,
+    transform 0.4s ease;
+}
+
+.welcome-footer-enter-from,
+.welcome-footer-leave-to {
+  opacity: 0;
+  max-height: 0;
+  transform: translateY(-8px);
+}
+
+.welcome-footer-enter-to,
+.welcome-footer-leave-from {
+  opacity: 1;
+  max-height: 480px;
+}
+
 .recent-convs {
   margin-top: var(--spacing-2xl);
   max-width: 480px;
@@ -3230,20 +3590,20 @@ const formatRelativeDate = (dateStr: string) => {
 }
 
 .recent-conv-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-md);
-  width: 100%;
+  height: auto;
   padding: var(--spacing-sm) var(--spacing-md);
   background: var(--bg-surface);
-  border: 1px solid var(--border-color);
+  border-color: var(--border-color);
   border-radius: var(--radius-md);
-  cursor: pointer;
-  text-align: left;
   transition:
     background 0.15s,
     border-color 0.15s;
+}
+
+.recent-conv-item :deep(.n-button__content) {
+  width: 100%;
+  justify-content: space-between;
+  gap: var(--spacing-md);
 }
 
 .recent-conv-item:hover {

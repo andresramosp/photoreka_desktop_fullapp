@@ -26,7 +26,7 @@
     </div>
 
     <!-- Empty state -->
-    <div v-else-if="activePatterns.length === 0" class="ps-empty">
+    <div v-else-if="activePatterns.length === 0" class="panel-empty-state">
       <n-icon size="28" color="var(--text-tertiary)">
         <BookIcon />
       </n-icon>
@@ -446,7 +446,8 @@ const createCollectionFromPattern = async () => {
 .patterns-section {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1 0 auto;
+  gap: var(--dashboard-label-gap, 8px);
   min-height: 0;
 }
 
@@ -500,24 +501,8 @@ const createCollectionFromPattern = async () => {
   }
 }
 
-/* ── Empty ─────────────────────────────────────────────────────────────── */
-.ps-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex: 1 1 auto;
-  min-height: 180px;
-  gap: 6px;
-  padding: 8px;
-  text-align: center;
-}
-
-.ps-empty p {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  margin: 0;
-}
+/* Empty state lives in global.scss (.panel-empty-state), shared with the
+   dashboard's other panel placeholders so they line up. */
 
 /* ── Cards list ────────────────────────────────────────────────────────── */
 .ps-cards-list {

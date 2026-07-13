@@ -20,6 +20,7 @@ import {
   Image,
   DesktopOutline,
   EarthOutline,
+  HomeOutline,
 } from "@vicons/ionicons5";
 import { RobotOutlined } from "@vicons/antd";
 
@@ -52,6 +53,7 @@ export const TOOL_ICONS = {
   EarthOutline,
   WordCloud,
   RobotOutlined,
+  HomeOutline,
 };
 
 export const TOOLS_CONFIG = [
@@ -306,10 +308,12 @@ export function isDesktopOnly(toolId) {
  * @returns {Array} Ordered tools for the dashboard smart tools section
  */
 export function getDashboardSmartTools(platform) {
+  // Desktop has no chat entry: the chat lives in the dashboard's center panel,
+  // so a tile pointing back at this same view would be a no-op.
   const orderedToolIds =
     platform === "mobile"
       ? ["chat", "world-map", "search", "report"]
-      : ["chat", "canvas", "world-map", "portfolios"];
+      : ["canvas", "world-map", "portfolios"];
 
   return orderedToolIds
     .map((toolId) => getToolById(toolId))

@@ -11,7 +11,8 @@ export type TitleResolver =
 
 export interface TabRouteConfig {
   key: string;
-  toolId: string;
+  /** null for tabs that aren't a tool (Home) — drives the tab icon and purges */
+  toolId: string | null;
   routeName: string;
   mode: TabMode;
   title: string;
@@ -21,6 +22,12 @@ export interface TabRouteConfig {
   instanceKey?: string;
   instanceSource?: InstanceSource;
   allowWithoutInstance?: boolean;
+  /** TOOL_ICONS key, for tabs with no toolId to borrow an icon from */
+  icon?: string;
+  /** Render the app's imagotype instead of an icon */
+  logo?: boolean;
+  /** Always open, always first, no close button */
+  pinned?: boolean;
 }
 
 export interface TabRouteMatch {
@@ -37,17 +44,17 @@ export type RouteTabsPurgeDetail = {
 };
 
 export const ROUTE_TABS_CONFIG: TabRouteConfig[] = [
-  // Chat instance tabs (one tab per conversation)
+  // Home — the dashboard is the app's control center (and hosts the chat), so
+  // its tab is always open and can't be closed.
   {
-    key: "chat-lab",
-    toolId: "chat",
-    routeName: "chat-lab-conversation",
+    key: "home",
+    toolId: null,
+    routeName: "dashboard",
     mode: "singleton",
-    title: "ChatLab",
-    componentName: "ChatView",
-    titleResolver: "conversation",
-    instanceKey: "id",
-    instanceSource: "params",
+    title: "Home",
+    componentName: "DashboardView",
+    logo: true,
+    pinned: true,
   },
 
   // Singleton tabs (one tab per route)
@@ -98,12 +105,13 @@ export const ROUTE_TABS_CONFIG: TabRouteConfig[] = [
     title: "Tag Cloud",
     componentName: "TagCloudView",
   },
-  //   {
-  //     key: "workspace",
-  //     routeName: "workspace",
-  //     mode: "singleton",
-  //     title: "Workspace",
-  //   },
+  {
+    key: "workspace",
+    toolId: "workspace",
+    routeName: "workspace",
+    mode: "singleton",
+    title: "Workspace",
+  },
   //   {
   //     key: "settings",
   //     routeName: "settings",
@@ -267,3 +275,13 @@ export const getTabToolIdByRouteName = (routeName: string): string | null => {
   );
   return config?.toolId || null;
 };
+
+export const getTabConfigByRouteName = (
+  routeName: string,
+): TabRouteConfig | null =>
+  ROUTE_TABS_CONFIG.find((entry) => entry.routeName === routeName) ?? null;
+
+/** Tabs that are seeded on load and never closed. */
+export const PINNED_TAB_CONFIGS = ROUTE_TABS_CONFIG.filter(
+  (entry) => entry.pinned,
+);

@@ -61,44 +61,64 @@
                   :closable="tab.closable"
                 >
                   <template #tab>
-                    <span
-                      class="route-tab-label"
-                      :class="{
-                        'is-dragging': draggedTabKey === tab.key,
-                        'drag-over-before':
-                          dragOverTabKey === tab.key &&
-                          dragOverPosition === 'before',
-                        'drag-over-after':
-                          dragOverTabKey === tab.key &&
-                          dragOverPosition === 'after',
-                      }"
-                      draggable="true"
-                      @dragstart="onTabDragStart($event, tab.key)"
-                      @dragover="onTabDragOver($event, tab.key)"
-                      @drop="onTabDrop($event, tab.key)"
-                      @dragend="onTabDragEnd"
+                    <n-tooltip
+                      trigger="hover"
+                      placement="bottom"
+                      :delay="500"
+                      :disabled="draggedTabKey !== null"
                     >
-                      <n-icon
-                        v-if="tab.toolId"
-                        size="14"
-                        class="route-tab-icon"
-                      >
-                        <component
-                          :is="getIconComponent(getToolById(tab.toolId)?.icon)"
-                        />
-                      </n-icon>
-                      <span
-                        class="route-tab-text"
-                        :data-route-tab-key="tab.key"
-                      >
-                        {{ tab.title }}
-                      </span>
-                      <span
-                        v-if="tabDirtyStore.dirtyTabKeys.has(tab.key)"
-                        class="route-tab-dirty-dot"
-                        title="Unsaved changes"
-                      />
-                    </span>
+                      <template #trigger>
+                        <span
+                          class="route-tab-label"
+                          :class="{
+                            'is-dragging': draggedTabKey === tab.key,
+                            'drag-over-before':
+                              dragOverTabKey === tab.key &&
+                              dragOverPosition === 'before',
+                            'drag-over-after':
+                              dragOverTabKey === tab.key &&
+                              dragOverPosition === 'after',
+                          }"
+                          draggable="true"
+                          @dragstart="onTabDragStart($event, tab.key)"
+                          @dragover="onTabDragOver($event, tab.key)"
+                          @drop="onTabDrop($event, tab.key)"
+                          @dragend="onTabDragEnd"
+                        >
+                          <AppLogo
+                            v-if="tab.logo"
+                            layout="icon"
+                            :height="16"
+                            class="route-tab-logo"
+                          />
+                          <n-icon
+                            v-else-if="tab.icon || tab.toolId"
+                            size="14"
+                            class="route-tab-icon"
+                          >
+                            <component
+                              :is="
+                                getIconComponent(
+                                  tab.icon ?? getToolById(tab.toolId)?.icon,
+                                )
+                              "
+                            />
+                          </n-icon>
+                          <span
+                            class="route-tab-text"
+                            :data-route-tab-key="tab.key"
+                          >
+                            {{ tab.title }}
+                          </span>
+                          <span
+                            v-if="tabDirtyStore.dirtyTabKeys.has(tab.key)"
+                            class="route-tab-dirty-dot"
+                            title="Unsaved changes"
+                          />
+                        </span>
+                      </template>
+                      {{ tab.title }}
+                    </n-tooltip>
                   </template>
                 </n-tab-pane>
                 <template v-if="canScrollRight" #suffix>
@@ -691,6 +711,23 @@ onUnmounted(() => {
   --n-tab-gap: 8px;
 }
 
+/* naive-ui makes .n-tabs-wrapper inline-flex, so it shrink-wraps its tabs and
+   leaves no free space for them to grow into. Stretch it across the bar. */
+.route-tabs :deep(.n-tabs-nav-scroll-content) {
+  display: flex;
+  min-width: 100%;
+}
+
+.route-tabs :deep(.n-tabs-wrapper) {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.route-tabs :deep(.n-tabs-pad) {
+  flex: 0 0 auto;
+}
+
 .route-tabs :deep(.n-tabs-nav__prefix) {
   padding-right: 6px;
 }
@@ -699,22 +736,50 @@ onUnmounted(() => {
   padding-left: 6px;
 }
 
+/* Browser-style tabs: every tab takes the same width, shrinking as more open
+   until they hit their minimum and the bar starts scrolling. */
+.route-tabs :deep(.n-tabs-tab-wrapper) {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 96px;
+  max-width: 150px;
+}
+
+/* The pinned logo tab keeps its natural width so the logo + label never shrink,
+   and it doesn't compete for the space the other tabs share. */
+.route-tabs :deep(.n-tabs-tab-wrapper:has(.route-tab-logo)) {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: none;
+}
+
+.route-tabs :deep(.n-tabs-tab-pad) {
+  flex-shrink: 0;
+}
+
 .route-tabs :deep(.n-tabs-tab) {
-  max-width: 220px;
-  /* background: color-mix(in srgb, var(--bg-surface) 85%, transparent);
-  border-color: var(--border-color); */
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .route-tabs :deep(.n-tabs-tab__label) {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.route-tabs :deep(.n-tabs-tab__close) {
+  flex-shrink: 0;
+}
+
 .route-tab-label {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
   min-width: 0;
   user-select: none;
   -webkit-user-select: none;
@@ -753,7 +818,13 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+.route-tab-logo {
+  flex-shrink: 0;
+}
+
 .route-tab-text {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

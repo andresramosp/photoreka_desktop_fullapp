@@ -9,21 +9,22 @@
     class="mode-selector-popover"
   >
     <template #trigger>
-      <button
-        class="mode-selector-chip"
-        :class="{ 'mode-selector-chip--single': singleMode }"
-        :style="{ '--chip-color': colorVar }"
+      <n-button
+        secondary
+        size="small"
+        :type="buttonType"
+        :circle="singleMode"
+        class="mode-selector-trigger"
         :title="triggerTitle"
         :aria-label="ariaLabel"
       >
-        <n-icon :size="13"><component :is="selectedIcon" /></n-icon>
-        <span v-if="!singleMode">{{
+        <template #icon>
+          <n-icon :size="13"><component :is="selectedIcon" /></n-icon>
+        </template>
+        <span v-if="!singleMode" class="mode-selector-trigger-label">{{
           selectedOption?.label || placeholder
         }}</span>
-        <span v-if="selectedOption" class="mode-selector-chip-badge">{{
-          selectedOption.label.charAt(0).toUpperCase()
-        }}</span>
-      </button>
+      </n-button>
     </template>
 
     <div
@@ -58,7 +59,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { NIcon, NPopover } from "naive-ui";
+import { NButton, NIcon, NPopover } from "naive-ui";
 import { SettingsOutline, SparklesOutline } from "@vicons/ionicons5";
 
 interface ModeSelectorOption {
@@ -107,6 +108,8 @@ const colorVar = computed(() =>
   props.accent ? "var(--accent-color)" : "var(--text-secondary)",
 );
 
+const buttonType = computed(() => (props.accent ? "info" : "default"));
+
 const currentValue = computed(
   () => props.modelValue ?? props.options[0]?.value ?? null,
 );
@@ -130,57 +133,13 @@ const selectOption = (value: string) => {
 </script>
 
 <style scoped>
-.mode-selector-chip {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 10px 5px 7px;
-  /* border: 1px solid var(--chip-color, var(--accent-color)); */
-  border: none;
-  background: color-mix(
-    in srgb,
-    var(--chip-color, var(--accent-color)) 6%,
-    var(--bg-surface)
-  );
-  color: var(--chip-color, var(--accent-color));
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.15s;
-  line-height: 1.4;
-  z-index: 1;
+.mode-selector-trigger {
+  min-width: 0;
+}
+
+.mode-selector-trigger-label {
   white-space: nowrap;
-}
-
-.mode-selector-chip:hover {
-  border-color: var(--chip-color, var(--accent-color));
-  color: var(--chip-color, var(--accent-color));
-  background: color-mix(
-    in srgb,
-    var(--chip-color, var(--accent-color)) 6%,
-    var(--bg-surface)
-  );
-}
-
-.mode-selector-chip--single,
-.mode-selector-chip--single:hover {
-  background: transparent;
-  border-color: transparent;
-}
-
-.mode-selector-chip-badge {
-  display: none;
-  position: absolute;
-  bottom: 2px;
-  right: 1px;
-  font-size: 8px;
-  font-weight: var(--font-weight-semibold);
-  line-height: 1;
-  padding: 1px 3px;
-  border-radius: 6px;
-  background: var(--chip-color, var(--accent-color));
-  color: var(--bg-surface);
-  pointer-events: none;
+  font-size: var(--font-size-sm);
 }
 
 .mode-selector-panel {

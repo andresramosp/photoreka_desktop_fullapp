@@ -604,7 +604,8 @@ watch(
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  min-height: 300px;
+  height: 100%;
+  min-height: calc(100vh - var(--total-header-offset) - var(--spacing-lg) * 2);
   gap: var(--spacing-md);
 }
 

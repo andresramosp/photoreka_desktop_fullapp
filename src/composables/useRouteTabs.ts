@@ -17,8 +17,10 @@ import { useChatStore } from "@/stores/chat";
 import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds";
 import {
   getFallbackTabTitle,
+  getTabConfigByRouteName,
   getTabToolIdByRouteName,
   matchRouteToTab,
+  PINNED_TAB_CONFIGS,
   ROUTE_TABS_CONFIG,
   ROUTE_TABS_PURGE_INSTANCES_EVENT,
   type RouteTabsPurgeDetail,
@@ -33,6 +35,11 @@ export type OpenRouteTab = {
   routeName: string;
   toolId: string | null;
   closable: boolean;
+  /** TOOL_ICONS key for tabs with no toolId to draw an icon from */
+  icon?: string;
+  /** Render the app's imagotype instead of an icon */
+  logo?: boolean;
+  pinned?: boolean;
 };
 
 type PersistedRouteTab = {
@@ -179,6 +186,27 @@ export const useRouteTabs = () => {
   const portfolioBuildsStore = usePortfolioBuildsStore();
   const tabDirtyStore = useTabDirtyStore();
 
+  /** Pinned tabs are seeded from config on every load, never from storage. */
+  const ensurePinnedTabs = () => {
+    PINNED_TAB_CONFIGS.forEach((config, index) => {
+      if (tabs.value.some((tab) => tab.key === config.key)) {
+        return;
+      }
+
+      tabs.value.splice(index, 0, {
+        key: config.key,
+        title: config.title,
+        href: router.resolve({ name: config.routeName }).fullPath,
+        routeName: config.routeName,
+        toolId: config.toolId,
+        closable: false,
+        icon: config.icon,
+        logo: config.logo,
+        pinned: true,
+      });
+    });
+  };
+
   const loadPersistedTabs = () => {
     const storage = safeGetStorage();
     if (!storage) {
@@ -198,6 +226,10 @@ export const useRouteTabs = () => {
 
       tabs.value = parsed
         .filter((entry) => entry && typeof entry.key === "string")
+        // Drop tabs whose route no longer exists in the config (e.g. the chat
+        // tabs that predate the dashboard-hosted chat), so they can't linger
+        // as dead entries pointing at routes we no longer open.
+        .filter((entry) => !!getTabConfigByRouteName(entry.routeName))
         .map((entry) => ({
           key: entry.key,
           title: entry.title,
@@ -209,7 +241,6 @@ export const useRouteTabs = () => {
     } catch (error) {
       console.error("Failed to restore route tabs:", error);
     }
-    _tabsLoaded = true;
   };
 
   const persistTabs = () => {
@@ -218,13 +249,16 @@ export const useRouteTabs = () => {
       return;
     }
 
-    const payload: PersistedRouteTab[] = tabs.value.map((tab) => ({
-      key: tab.key,
-      title: tab.title,
-      href: tab.href,
-      routeName: tab.routeName,
-      toolId: tab.toolId,
-    }));
+    const payload: PersistedRouteTab[] = tabs.value
+      // Pinned tabs are re-seeded from config on load, so they never persist.
+      .filter((tab) => !tab.pinned)
+      .map((tab) => ({
+        key: tab.key,
+        title: tab.title,
+        href: tab.href,
+        routeName: tab.routeName,
+        toolId: tab.toolId,
+      }));
     storage.setItem(STORAGE_KEY, JSON.stringify(payload));
   };
 
@@ -352,7 +386,10 @@ export const useRouteTabs = () => {
         href,
         routeName,
         toolId: match.config.toolId,
-        closable: true,
+        closable: !match.config.pinned,
+        icon: match.config.icon,
+        logo: match.config.logo,
+        pinned: match.config.pinned,
       });
     } else {
       tabs.value[existingIndex].href = href;
@@ -379,7 +416,13 @@ export const useRouteTabs = () => {
     await router.push(tab.href);
   };
 
+  const isPinned = (key: string) =>
+    tabs.value.some((tab) => tab.key === key && tab.pinned);
+
   const closeTab = async (key: string) => {
+    if (isPinned(key)) {
+      return;
+    }
     if (tabDirtyStore.isDirty(key)) {
       tabDirtyStore.requestClose(key);
       return;
@@ -396,6 +439,12 @@ export const useRouteTabs = () => {
       return false;
     }
 
+    // Pinned tabs hold the front of the bar: they can't be dragged, and nothing
+    // can be dropped ahead of them.
+    if (isPinned(fromKey)) {
+      return false;
+    }
+
     const fromIndex = tabs.value.findIndex((entry) => entry.key === fromKey);
     const toIndex = tabs.value.findIndex((entry) => entry.key === toKey);
     if (fromIndex === -1 || toIndex === -1) {
@@ -407,14 +456,15 @@ export const useRouteTabs = () => {
       fromIndex < toIndex ? Math.max(toIndex - 1, 0) : toIndex;
     const insertIndex =
       position === "after" ? adjustedToIndex + 1 : adjustedToIndex;
-    tabs.value.splice(insertIndex, 0, moved);
+    const firstUnpinnedIndex = tabs.value.filter((tab) => tab.pinned).length;
+    tabs.value.splice(Math.max(insertIndex, firstUnpinnedIndex), 0, moved);
     persistTabs();
     return true;
   };
 
   const _doCloseTab = async (key: string) => {
     const index = tabs.value.findIndex((entry) => entry.key === key);
-    if (index === -1) {
+    if (index === -1 || tabs.value[index].pinned) {
       return;
     }
 
@@ -532,6 +582,8 @@ export const useRouteTabs = () => {
 
   if (!_tabsLoaded) {
     loadPersistedTabs();
+    ensurePinnedTabs();
+    _tabsLoaded = true;
   }
 
   onMounted(() => {

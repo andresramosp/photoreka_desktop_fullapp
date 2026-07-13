@@ -1,4 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
+import type { NavigationGuard } from "vue-router";
+import { isMobileDevice } from "../utils/utils";
 import AppInitLoader from "../components/AppInitLoader.vue";
 import { useUserStore } from "../stores/userStore";
 import { useMaintenanceMode } from "../composables/useMaintenanceMode";
@@ -49,6 +51,31 @@ import AdminHealthView from "../views/admin/AdminHealthView.vue";
 import AdminSystemView from "../views/admin/AdminSystemView.vue";
 import AdminUserDetailView from "../views/admin/AdminUserDetailView.vue";
 import AdminGeoRecoveryView from "../views/admin/AdminGeoRecoveryView.vue";
+
+/**
+ * On desktop the chat has no route of its own — it lives in the dashboard's
+ * center panel. The /chat-lab URLs stay registered so every existing entry
+ * point keeps working (deep links, photo hand-offs, the assistant widget,
+ * global search); they just land on the dashboard with the chat open.
+ * On mobile there is no dashboard center panel, so ChatView stays a real route.
+ */
+const redirectChatToDashboardOnDesktop: NavigationGuard = (to) => {
+  if (isMobileDevice()) {
+    return true;
+  }
+
+  const conversationId = Array.isArray(to.params.id)
+    ? to.params.id[0]
+    : to.params.id;
+
+  return {
+    name: "dashboard",
+    query: {
+      view: "chat",
+      ...(conversationId ? { conversation: String(conversationId) } : {}),
+    },
+  };
+};
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -382,6 +409,7 @@ const router = createRouter({
       path: "/chat-lab",
       name: "chat-lab",
       component: ChatView,
+      beforeEnter: redirectChatToDashboardOnDesktop,
       meta: {
         requiresAuth: true,
       },
@@ -390,6 +418,7 @@ const router = createRouter({
       path: "/chat-lab/:id",
       name: "chat-lab-conversation",
       component: ChatView,
+      beforeEnter: redirectChatToDashboardOnDesktop,
       meta: {
         requiresAuth: true,
       },

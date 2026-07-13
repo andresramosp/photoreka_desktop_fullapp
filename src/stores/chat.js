@@ -2,6 +2,7 @@
 
 import { defineStore } from "pinia";
 import { api } from "@/utils/axios";
+import { useUserStore } from "@/stores/userStore";
 
 export const useChatStore = defineStore("chat", {
   state: () => ({
@@ -61,11 +62,15 @@ export const useChatStore = defineStore("chat", {
         this.defaultModeId =
           data.defaultModeId || this.chatModes[0]?.id || null;
 
-        // Always pick the 'default' mode if it exists, otherwise fall back to server default
-        const defaultMode = this.chatModes.find(
-          (mode) => mode.id === "default",
+        // Demo users are steered to the cheaper "scout" mode; everyone else
+        // always gets 'default' if it exists, otherwise the server default.
+        const userStore = useUserStore();
+        const isDemoUser = userStore.user?.email === "demo@photorekatest.com";
+        const preferredModeId = isDemoUser ? "scout" : "default";
+        const preferredMode = this.chatModes.find(
+          (mode) => mode.id === preferredModeId,
         );
-        this.selectedModeId = defaultMode?.id || this.defaultModeId;
+        this.selectedModeId = preferredMode?.id || this.defaultModeId;
       } catch (error) {
         console.error("[ChatStore] Failed to fetch chat modes:", error);
       } finally {

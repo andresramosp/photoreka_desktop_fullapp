@@ -977,6 +977,46 @@
   margin: 0;
 }
 
+/* ===== PANEL EMPTY STATES =====
+   Placeholder for the dashboard side panels. It grows to fill whatever vertical
+   space its section has left, so adjacent panels center their placeholders on
+   the same visual line instead of each hugging the top of its own box. Requires
+   the ancestor chain up to the scroll area to be a stretching flex column. */
+.panel-empty-state {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 180px;
+  padding: 16px 8px;
+  text-align: center;
+}
+
+.panel-empty-state p {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.panel-empty-state-link {
+  font-size: 11px;
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.panel-empty-state-link:hover {
+  text-decoration: underline;
+}
+
+/* For placeholders that stand in for a card and must keep its frame. */
+.panel-empty-state--boxed {
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-container);
+}
+
 /* ===== RESPONSIVE UTILITIES ===== */
 @media (max-width: 768px) {
   .view-container {

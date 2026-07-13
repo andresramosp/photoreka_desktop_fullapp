@@ -1,6 +1,9 @@
 ﻿<template>
   <div class="dashboard-container view-container">
-    <div class="dashboard-grid">
+    <div
+      class="dashboard-grid"
+      :class="{ 'is-chat-fullscreen': isChatFullscreen }"
+    >
       <!-- ══════════════════════════════════════════ -->
       <!-- LEFT PANEL — Insights & Analytics          -->
       <!-- ══════════════════════════════════════════ -->
@@ -28,7 +31,7 @@
               />
             </div>
             <!-- Recent Collections & Series -->
-            <div class="panel-section">
+            <div class="panel-section panel-section--grow">
               <div class="section-label">RECENT LIBRARY</div>
 
               <div class="collections-scroll-area">
@@ -41,7 +44,7 @@
                   v-else-if="
                     appAccessMode === 'blocked' || collections.length === 0
                   "
-                  class="mini-empty collections-empty-state"
+                  class="panel-empty-state"
                 >
                   <n-icon size="32" color="var(--text-tertiary)">
                     <CollectionsIcon />
@@ -50,7 +53,7 @@
                   <router-link
                     v-if="appAccessMode !== 'blocked'"
                     to="/collections"
-                    class="mini-empty-link"
+                    class="panel-empty-state-link"
                     >Manage collections</router-link
                   >
                 </div>
@@ -88,7 +91,13 @@
       <!-- ══════════════════════════════════════════ -->
       <!-- CENTER — Photo Universe (quantum void)     -->
       <!-- ══════════════════════════════════════════ -->
-      <PhotoUniverse v-if="!isMobileLimitedMode" :photo-count="photos.length" />
+      <PhotoUniverse
+        v-if="!isMobileLimitedMode"
+        :photo-count="photos.length"
+        :forced-mode="forcedUniverseMode"
+        :conversation-id="requestedConversationId"
+        @update:is-chat-fullscreen="isChatFullscreen = $event"
+      />
 
       <!-- ══════════════════════════════════════════ -->
       <!-- RIGHT PANEL — Catalog Control Panel        -->
@@ -100,7 +109,7 @@
             <div class="section-label">DAILY ARTISTIC CURATION</div>
             <div class="daily-eureka-card">
               <DailyEurekaCard v-if="!isDashboardEmpty" />
-              <div v-else class="mini-empty daily-eureka-empty">
+              <div v-else class="panel-empty-state panel-empty-state--boxed">
                 <n-icon size="32" color="var(--text-tertiary)">
                   <CollectionsIcon />
                 </n-icon>
@@ -133,7 +142,7 @@
             </div>
 
             <!-- Main Patterns -->
-            <div class="panel-section">
+            <div class="panel-section panel-section--grow">
               <PatternsSection />
             </div>
           </div>
@@ -145,7 +154,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 
 defineOptions({
   name: "DashboardView",
@@ -183,8 +192,42 @@ import {
 import { BookOpen16Regular, Camera20Regular } from "@vicons/fluent";
 import { PaletteOutlined } from "@vicons/material";
 
+const route = useRoute();
 const router = useRouter();
 const photosStore = usePhotosStore();
+
+// The /chat-lab routes redirect here on desktop (see router/index.ts), carrying
+// the chat request in the query. We capture it once and strip it from the URL:
+// it's a one-shot instruction, not state the dashboard should keep replaying on
+// reload or when the user switches to another panel.
+const forcedUniverseMode = ref<string | null>(null);
+const requestedConversationId = ref<string | null>(null);
+
+// The chat panel can take over the dashboard: the side panels fold away and the
+// universe keeps the full width to itself.
+const isChatFullscreen = ref(false);
+
+const readFirst = (value: unknown): string | null => {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return typeof raw === "string" && raw.length > 0 ? raw : null;
+};
+
+watch(
+  () => route.query,
+  (query) => {
+    if (route.name !== "dashboard") return;
+    if (readFirst(query.view) !== "chat") return;
+
+    forcedUniverseMode.value = "chat";
+    requestedConversationId.value = readFirst(query.conversation);
+
+    const rest = { ...query };
+    delete rest.view;
+    delete rest.conversation;
+    router.replace({ name: "dashboard", query: rest });
+  },
+  { immediate: true },
+);
 const collectionsStore = useCollectionsStore();
 const seriesStore = useSeriesStore();
 const portfolioBuildsStore = usePortfolioBuildsStore();
@@ -498,12 +541,37 @@ const navigateToCollections = () => {
   flex: 1;
   min-height: 0;
   display: grid;
+  /* Side widths live in variables so the chat's fullscreen mode can collapse
+     them to zero and let the grid animate the columns closed. */
+  --panel-left-width: clamp(260px, 23vw, 450px);
+  --panel-right-width: clamp(260px, 23vw, 450px);
   grid-template-columns:
-    clamp(260px, 23vw, 450px)
+    var(--panel-left-width)
     minmax(0, 1fr)
-    clamp(260px, 23vw, 450px);
+    var(--panel-right-width);
   grid-template-rows: 1fr;
   overflow: hidden;
+  transition: grid-template-columns 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dashboard-grid.is-chat-fullscreen {
+  --panel-left-width: 0px;
+  --panel-right-width: 0px;
+}
+
+.dashboard-grid.is-chat-fullscreen .panel-left,
+.dashboard-grid.is-chat-fullscreen .panel-right {
+  opacity: 0;
+  pointer-events: none;
+  border-color: transparent;
+}
+
+.dashboard-grid .panel-left,
+.dashboard-grid .panel-right {
+  min-width: 0;
+  transition:
+    opacity 0.28s ease,
+    border-color 0.4s ease;
 }
 
 /* ─────────────────────────────────────────────
@@ -640,8 +708,10 @@ const navigateToCollections = () => {
   flex-shrink: 0;
 }
 
+/* Takes the leftover height of the scroll area so an empty section can center
+   its placeholder, but never shrinks below its content once it has cards. */
 .panel-section--grow {
-  flex: 1;
+  flex: 1 0 auto;
   min-height: 0;
 }
 
@@ -838,14 +908,6 @@ const navigateToCollections = () => {
   margin: 0;
 }
 
-.daily-eureka-empty {
-  min-height: 180px;
-  border: 1px solid var(--border-color);
-  border-radius: 14px;
-  background: var(--bg-container);
-  justify-content: center;
-}
-
 /* ─────────────────────────────────────────────
    Collections stack (right panel)
 ───────────────────────────────────────────── */
@@ -879,7 +941,10 @@ const navigateToCollections = () => {
 }
 
 .collections-scroll-area {
-  min-height: auto;
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 auto;
+  min-height: 0;
   overflow: visible;
   padding-right: 0;
 }
@@ -912,50 +977,20 @@ const navigateToCollections = () => {
   }
 }
 
-.mini-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 24px 8px;
-  text-align: center;
-}
-
-.collections-empty-state {
-  min-height: 100%;
-  justify-content: center;
-}
-
-.mini-empty p {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  margin: 0;
-}
-
-.mini-empty-link {
-  font-size: 11px;
-  color: var(--primary-color);
-  text-decoration: none;
-}
-.mini-empty-link:hover {
-  text-decoration: underline;
-}
-
 /* ─────────────────────────────────────────────
    Responsive
 ───────────────────────────────────────────── */
 @media (max-width: 1200px) {
   .dashboard-grid {
-    grid-template-columns:
-      clamp(230px, 24vw, 300px)
-      minmax(0, 1fr)
-      clamp(240px, 28vw, 320px);
+    --panel-left-width: clamp(230px, 24vw, 300px);
+    --panel-right-width: clamp(240px, 28vw, 320px);
   }
 }
 
 @media (max-width: 1024px) {
   .dashboard-grid {
-    grid-template-columns: 1fr clamp(250px, 34vw, 350px);
+    --panel-right-width: clamp(250px, 34vw, 350px);
+    grid-template-columns: minmax(0, 1fr) var(--panel-right-width);
   }
 
   .panel-left {

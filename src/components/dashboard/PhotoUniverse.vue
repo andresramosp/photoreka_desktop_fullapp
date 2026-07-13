@@ -1,51 +1,30 @@
 <template>
   <main class="panel panel-center">
-    <!-- State: Empty Portfolio / Quantum Void -->
-    <div v-if="isQuantumVoid" class="quantum-void">
-      <div class="void-rings-layer">
-        <div class="void-ring" style="--rs: 120px; --rd: 0s; --rdur: 6s" />
-        <div class="void-ring" style="--rs: 240px; --rd: 1.2s; --rdur: 7.2s" />
-        <div class="void-ring" style="--rs: 380px; --rd: 0.6s; --rdur: 8.5s" />
-        <div class="void-ring" style="--rs: 540px; --rd: 1.8s; --rdur: 9.8s" />
-        <div class="void-ring" style="--rs: 720px; --rd: 1s; --rdur: 11s" />
-      </div>
-
-      <div class="void-core" />
-
-      <div class="void-caption">
-        <p class="void-caption-main">· · · QUANTUM VOID · · ·</p>
-        <p class="void-caption-sub">Awaiting for the Light</p>
-      </div>
-
-      <div class="floating-btn-container void-floating-btn-container">
-        <router-link
-          to="/import-area#upload"
-          class="universe-btn void-import-btn"
-        >
-          Import Photos
-        </router-link>
-      </div>
-    </div>
-
-    <div v-else class="photo-universe-filled">
-      <header class="universe-header" aria-label="Universe view header">
+    <div class="photo-universe-filled">
+      <header
+        class="universe-header"
+        :class="{ 'is-hidden': isChatFullscreen }"
+        aria-label="Universe view header"
+      >
         <h2 class="universe-title">
           {{ messageHeader }}
         </h2>
-        <div class="universe-selector-container">
-          <ModePopoverSelector
-            v-model="visualizationMode"
-            :accent="false"
-            icon="settings"
-            :singleMode="true"
-            :width="200"
-            :options="visualizationOptions"
-            header="Preview Preferences"
-            placement="bottom-end"
-            aria-label="Change universe visualization mode"
-            class="universe-mode-selector"
-            @update:modelValue="handleModeChange"
-          />
+        <div class="universe-header-actions">
+          <div class="universe-selector-container">
+            <ModePopoverSelector
+              v-model="visualizationMode"
+              :accent="false"
+              icon="settings"
+              :singleMode="true"
+              :width="200"
+              :options="visualizationOptions"
+              header="Preview Preferences"
+              placement="bottom-end"
+              aria-label="Change universe visualization mode"
+              class="universe-mode-selector"
+              @update:modelValue="handleModeChange"
+            />
+          </div>
         </div>
       </header>
 
@@ -54,6 +33,7 @@
           :is="currentUniverseComponent"
           v-bind="currentUniverseProps"
           @loading-state-change="handlePhotos2DLoadingState"
+          @update:is-fullscreen="setChatFullscreen"
         />
       </div>
 
@@ -69,27 +49,12 @@
       </Transition>
 
       <!-- Discrete Hover Floating Button -->
-      <div class="floating-btn-container">
-        <router-link
-          :to="
-            visualizationMode === 'tagcloud'
-              ? '/tagcloud'
-              : visualizationMode === 'worldmap'
-                ? '/world-map'
-                : '/2d-atlas'
-          "
-          class="universe-btn"
-        >
+      <div v-if="fullViewLink" class="floating-btn-container">
+        <router-link :to="fullViewLink.to" class="universe-btn">
           <n-icon size="16">
             <FullscreenOutlined />
           </n-icon>
-          <span>{{
-            visualizationMode === "tagcloud"
-              ? "Open Full Cloud"
-              : visualizationMode === "worldmap"
-                ? "Open Full World Map"
-                : "Open Full Atlas"
-          }}</span>
+          <span>{{ fullViewLink.label }}</span>
         </router-link>
       </div>
     </div>
@@ -97,7 +62,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, onBeforeUnmount } from "vue";
+import {
+  ref,
+  computed,
+  onMounted,
+  watch,
+  onBeforeUnmount,
+  defineAsyncComponent,
+} from "vue";
 // @ts-ignore
 import { useTagCloudStore } from "@/stores/tagCloudStore.js";
 // @ts-ignore
@@ -111,16 +83,39 @@ import ModePopoverSelector from "@/components/ModePopoverSelector.vue";
 import { NIcon } from "naive-ui";
 import { FullscreenOutlined } from "@vicons/antd";
 
+// Kept out of the dashboard chunk: the chat pulls in a heavy dependency tree
+// (photo dialogs, markdown) that most dashboard visits never render.
+const ChatView = defineAsyncComponent(() => import("@/views/ChatView.vue"));
+
 const props = defineProps<{
   excludedGroups?: string[];
+  /** Forces the panel into a mode, overriding the stored preference. */
+  forcedMode?: string | null;
+  /** Conversation the chat should open on (deep links into /chat-lab/:id). */
+  conversationId?: string | null;
 }>();
 
-type VisualizationMode = "tagcloud" | "photos2d" | "worldmap";
+const emit = defineEmits<{
+  (e: "update:isChatFullscreen", value: boolean): void;
+}>();
 
-const VISUALIZATION_MODE_STORAGE_KEY = "photoreka:universe:mode";
+type VisualizationMode = "tagcloud" | "photos2d" | "worldmap" | "chat";
+
+const DEFAULT_VISUALIZATION_MODE: VisualizationMode = "chat";
+
+// v2: the default moved to "chat", and the old key holds pre-chat preferences
+// that would otherwise keep every existing user on their old panel forever.
+const VISUALIZATION_MODE_STORAGE_KEY = "photoreka:universe:mode:v2";
+
+const VISUALIZATION_MODES: VisualizationMode[] = [
+  "tagcloud",
+  "photos2d",
+  "worldmap",
+  "chat",
+];
 
 function isVisualizationMode(value: unknown): value is VisualizationMode {
-  return value === "tagcloud" || value === "photos2d" || value === "worldmap";
+  return VISUALIZATION_MODES.includes(value as VisualizationMode);
 }
 
 function getStoredVisualizationMode(): VisualizationMode | null {
@@ -158,10 +153,35 @@ const hasPhotosWithGps = computed(() =>
 );
 
 const storedVisualizationMode = getStoredVisualizationMode();
-const hasExplicitVisualizationMode = ref(storedVisualizationMode !== null);
 const visualizationMode = ref<VisualizationMode>(
-  storedVisualizationMode ?? (hasPhotosWithGps.value ? "worldmap" : "tagcloud"),
+  (isVisualizationMode(props.forcedMode) ? props.forcedMode : null) ??
+    storedVisualizationMode ??
+    DEFAULT_VISUALIZATION_MODE,
 );
+
+// A /chat-lab URL redirected here (photo hand-off, deep link, global search)
+// lands as a forced mode, and can arrive after mount.
+watch(
+  () => props.forcedMode,
+  (mode) => {
+    if (isVisualizationMode(mode)) visualizationMode.value = mode;
+  },
+);
+
+// The chat can ask to take over the whole dashboard: our header steps aside and
+// the host collapses the side panels around us.
+const isChatFullscreen = ref(false);
+
+const setChatFullscreen = (value: boolean) => {
+  isChatFullscreen.value = Boolean(value);
+  emit("update:isChatFullscreen", isChatFullscreen.value);
+};
+
+// Nothing but the chat can be fullscreen, so switching panels has to give the
+// dashboard its sides back.
+watch(visualizationMode, (mode) => {
+  if (mode !== "chat" && isChatFullscreen.value) setChatFullscreen(false);
+});
 
 const isPhotos2DLoading = ref(true);
 
@@ -188,6 +208,7 @@ const loadingOverlaySubtitle = computed(() =>
 );
 const universeContentClasses = computed(() => ({
   "is-soft-loading": showLoadingOverlay.value,
+  "is-fullscreen": isChatFullscreen.value,
 }));
 
 let showOverlayTimer: ReturnType<typeof setTimeout> | null = null;
@@ -238,40 +259,59 @@ watch(
   { immediate: true },
 );
 
+// The worldmap option is only offered when there are geolocalized photos, so a
+// stored preference for it has to fall back once that stops being true.
 watch(
   hasPhotosWithGps,
   (hasGps) => {
-    if (hasGps) {
-      if (!hasExplicitVisualizationMode.value) {
-        visualizationMode.value = "worldmap";
-      }
-      return;
-    }
-
-    if (visualizationMode.value === "worldmap") {
-      visualizationMode.value = "tagcloud";
+    if (!hasGps && visualizationMode.value === "worldmap") {
+      visualizationMode.value = DEFAULT_VISUALIZATION_MODE;
     }
   },
   { immediate: true },
 );
 
+// An empty library leaves the chat as the only usable panel — it's what replaced
+// the old "quantum void" placeholder. Snap to it without persisting, so the
+// user's stored preference comes back once they have photos.
+watch(
+  isQuantumVoid,
+  (isEmpty) => {
+    if (isEmpty) visualizationMode.value = "chat";
+  },
+  { immediate: true },
+);
+
+// Every panel but the chat needs a library to draw from. With none, they'd all
+// render empty, so the chat is the only thing on offer.
 const visualizationOptions = computed(() => [
-  { label: "Semantic Highlights", value: "tagcloud" },
+  { label: "ChatLab", value: "chat" },
+  {
+    label: "Semantic Highlights",
+    value: "tagcloud",
+    disabled: isQuantumVoid.value,
+    description: isQuantumVoid.value ? "No photos yet" : undefined,
+  },
   {
     label: "Geographic View",
     value: "worldmap",
-    disabled: !hasPhotosWithGps.value,
-    description: hasPhotosWithGps.value
-      ? undefined
-      : "No geolocalized photos yet",
+    disabled: isQuantumVoid.value || !hasPhotosWithGps.value,
+    description: isQuantumVoid.value
+      ? "No photos yet"
+      : hasPhotosWithGps.value
+        ? undefined
+        : "No geolocalized photos yet",
   },
-  { label: "Visual Preview", value: "photos2d" },
+  {
+    label: "Visual Preview",
+    value: "photos2d",
+    disabled: isQuantumVoid.value,
+    description: isQuantumVoid.value ? "No photos yet" : undefined,
+  },
 ]);
 
 const handleModeChange = (val: string) => {
   if (!isVisualizationMode(val)) return;
-
-  hasExplicitVisualizationMode.value = true;
 
   if (typeof window !== "undefined") {
     window.localStorage.setItem(VISUALIZATION_MODE_STORAGE_KEY, val);
@@ -283,10 +323,25 @@ const messageHeader = computed(() => {
     return `Previewing your most relevant tags`;
   } else if (visualizationMode.value === "photos2d") {
     return `Previewing your 500 most recent photos`;
+  } else if (visualizationMode.value === "chat") {
+    return `Chatting with your photo library`;
   }
 
   return `Previewing your photo locations on the world map`;
 });
+
+// Chat has no entry: its composer owns the bottom of the panel, where the
+// floating button would land.
+const FULL_VIEW_LINKS: Partial<
+  Record<VisualizationMode, { to: string; label: string }>
+> = {
+  tagcloud: { to: "/tagcloud", label: "Open Full Cloud" },
+  worldmap: { to: "/world-map", label: "Open Full World Map" },
+  photos2d: { to: "/2d-atlas", label: "Open Full Atlas" },
+};
+
+const fullViewLink = computed(() => FULL_VIEW_LINKS[visualizationMode.value]);
+
 const PREVIEW_MIN_PHOTO_COUNT = 2;
 const excludedGroupSet = computed(() => {
   const list = props.excludedGroups?.length
@@ -324,30 +379,39 @@ const previewTags = computed(() =>
   ),
 );
 
-const currentUniverseComponent = computed(() =>
-  visualizationMode.value === "tagcloud"
-    ? PixiTagCloud
-    : visualizationMode.value === "worldmap"
-      ? WorldMapView
-      : Photos2D,
-);
+const currentUniverseComponent = computed(() => {
+  switch (visualizationMode.value) {
+    case "tagcloud":
+      return PixiTagCloud;
+    case "worldmap":
+      return WorldMapView;
+    case "chat":
+      return ChatView;
+    default:
+      return Photos2D;
+  }
+});
 
-const currentUniverseProps = computed(() =>
-  visualizationMode.value === "tagcloud"
-    ? {
+const currentUniverseProps = computed(() => {
+  switch (visualizationMode.value) {
+    case "tagcloud":
+      return {
         tags: previewTags.value,
         isPreview: true,
         showZoomControls: true,
-      }
-    : visualizationMode.value === "worldmap"
-      ? {
-          isPreview: true,
-        }
-      : {
-          isPreview: true,
-          photosLimit: 500,
-        },
-);
+      };
+    case "worldmap":
+      return { isPreview: true };
+    case "chat":
+      return {
+        conversationId: props.conversationId ?? null,
+        allowFullscreen: true,
+        isFullscreen: isChatFullscreen.value,
+      };
+    default:
+      return { isPreview: true, photosLimit: 500 };
+  }
+});
 
 const handlePhotos2DLoadingState = (isLoading: boolean) => {
   isPhotos2DLoading.value = Boolean(isLoading);
@@ -382,164 +446,6 @@ onBeforeUnmount(() => {
     color-mix(in srgb, var(--accent-color) 18%, transparent);
 }
 
-.quantum-void {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-  background: radial-gradient(
-    ellipse at 50% 48%,
-    color-mix(in srgb, var(--bg-surface-hover) 80%, var(--accent-color) 20%) 0%,
-    color-mix(in srgb, var(--bg-card) 88%, var(--primary-color) 12%) 28%,
-    color-mix(in srgb, var(--bg-container) 94%, var(--accent-color) 6%) 56%,
-    var(--bg-deep-surface) 100%
-  );
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.quantum-void::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 3px,
-    color-mix(in srgb, var(--bg-overlay) 18%, transparent) 3px,
-    color-mix(in srgb, var(--bg-overlay) 18%, transparent) 4px
-  );
-  pointer-events: none;
-  z-index: 2;
-}
-
-.void-rings-layer {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-  transform: scale(0.9);
-  transform-origin: center;
-}
-
-.void-ring {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: min(calc(var(--rs, 200px) * 0.8), calc(100% - 88px));
-  height: min(calc(var(--rs, 200px) * 0.8), calc(100% - 88px));
-  border-radius: 50%;
-  border: 1px solid color-mix(in srgb, var(--accent-color) 42%, transparent);
-  transform: translate(-50%, -50%) scale(0.96);
-  animation: ringPulse var(--rdur, 8s) ease-in-out infinite;
-  animation-delay: var(--rd, 0s);
-}
-
-@keyframes ringPulse {
-  0% {
-    transform: translate(-50%, -50%) scale(0.94);
-    opacity: 0.15;
-  }
-  45% {
-    opacity: 0.45;
-  }
-  50% {
-    transform: translate(-50%, -50%) scale(1.05);
-    opacity: 0.5;
-  }
-  100% {
-    transform: translate(-50%, -50%) scale(0.94);
-    opacity: 0.15;
-  }
-}
-
-.void-core {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 256px;
-  height: 192px;
-  border-radius: 50%;
-  background:
-    radial-gradient(
-      ellipse at 42% 48%,
-      color-mix(in srgb, var(--accent-color) 45%, transparent) 0%,
-      transparent 65%
-    ),
-    radial-gradient(
-      ellipse at 58% 52%,
-      color-mix(in srgb, var(--primary-color) 35%, transparent) 0%,
-      transparent 60%
-    );
-  filter: blur(22.4px);
-  transform: translate(-50%, -50%);
-  animation: corePulse 5.5s ease-in-out infinite;
-  pointer-events: none;
-  z-index: 1;
-}
-
-@keyframes corePulse {
-  0%,
-  100% {
-    opacity: 0.55;
-    transform: translate(-50%, -50%) scale(0.95);
-  }
-  50% {
-    opacity: 0.9;
-    transform: translate(-50%, -50%) scale(1.15);
-  }
-}
-
-.void-caption {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  text-align: center;
-  pointer-events: none;
-  z-index: 3;
-  animation: captionBreathe 6s ease-in-out infinite;
-}
-
-.void-caption-main {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.4em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--text-primary) 82%, var(--accent-color) 18%);
-  margin: 0 0 6px;
-  text-shadow: 0 0 12px color-mix(in srgb, var(--accent-color) 40%, transparent);
-}
-
-.void-caption-sub {
-  font-size: 9.5px;
-  letter-spacing: 0.25em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--text-secondary) 75%, var(--accent-color) 25%);
-  margin: 0;
-}
-
-.void-import-btn {
-  pointer-events: auto;
-  opacity: 0.96;
-}
-
-.quantum-void:hover .void-floating-btn-container {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateX(-50%) translateY(0);
-}
-
-@keyframes captionBreathe {
-  0%,
-  100% {
-    opacity: 0.55;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
 .photo-universe-filled {
   flex: 1;
   display: flex;
@@ -547,7 +453,7 @@ onBeforeUnmount(() => {
   justify-content: stretch;
   background: radial-gradient(
     ellipse at 50% 45%,
-    color-mix(in srgb, var(--bg-surface-hover) 72%, var(--accent-color) 28%) 0%,
+    color-mix(in srgb, var(--bg-surface-hover) 82%, var(--accent-color) 18%) 0%,
     color-mix(in srgb, var(--bg-deep-surface) 94%, var(--bg-card) 6%) 72%
   );
   overflow: hidden;
@@ -564,7 +470,12 @@ onBeforeUnmount(() => {
   transition:
     opacity 0.22s ease,
     transform 0.24s ease,
-    filter 0.24s ease;
+    filter 0.24s ease,
+    padding-top 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.universe-content.is-fullscreen {
+  padding-top: 0;
 }
 
 .universe-content.is-soft-loading {
@@ -614,6 +525,18 @@ onBeforeUnmount(() => {
   box-shadow: 0 6px 14px color-mix(in srgb, var(--bg-overlay) 38%, transparent);
   z-index: 30;
   pointer-events: none;
+  transition:
+    opacity 0.28s ease,
+    transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.universe-header.is-hidden {
+  opacity: 0;
+  transform: translateY(-100%);
+}
+
+.universe-header.is-hidden * {
+  pointer-events: none;
 }
 
 .universe-title {
@@ -626,6 +549,15 @@ onBeforeUnmount(() => {
   font-size: 11px;
 }
 
+.universe-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* The header is pointer-events: none so the panel below stays interactive —
+   anything clickable in it has to opt back in. */
 .universe-selector-container {
   pointer-events: auto;
 }
@@ -688,10 +620,6 @@ onBeforeUnmount(() => {
 
 @media (max-width: 680px) {
   .panel-center {
-    min-height: 300px;
-  }
-
-  .quantum-void {
     min-height: 300px;
   }
 

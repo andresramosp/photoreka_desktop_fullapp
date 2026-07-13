@@ -638,17 +638,22 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     icon: renderIcon(toolIcon("tagcloud")),
   }));
 
-  // Chat option (global, like Import Area)
-  const chatOption = computed<MenuOption>(() => ({
-    label: "ChatLab",
-    key: "chat-lab",
-    icon: renderIcon(toolIcon("chat")),
-    disabled: false,
-  }));
+  // Chat option — mobile only. On desktop the chat has no route of its own:
+  // it lives in the dashboard's center panel.
+  const chatOption = computed<MenuOption | null>(() =>
+    isMobileDevice()
+      ? {
+          label: "ChatLab",
+          key: "chat-lab",
+          icon: renderIcon(toolIcon("chat")),
+          disabled: false,
+        }
+      : null,
+  );
 
   // Complete menu structure
   const menuOptions = computed<MenuOption[]>(() => {
-    return [
+    const options: Array<MenuOption | null> = [
       syncAreaOption.value,
       {
         type: "divider",
@@ -659,15 +664,17 @@ export function useMainMenu(closeMobileMenu?: () => void) {
       librarySection.value,
       {
         type: "divider",
-        key: "group1-divider",
+        key: "library-divider",
       } as MenuOption,
 
+      // Chat and its trailing divider only exist on mobile.
       chatOption.value,
-
-      {
-        type: "divider",
-        key: "group1-divider",
-      } as MenuOption,
+      chatOption.value
+        ? ({
+            type: "divider",
+            key: "chat-divider",
+          } as MenuOption)
+        : null,
 
       searchOption.value,
       tagcloudOption.value,
@@ -684,11 +691,13 @@ export function useMainMenu(closeMobileMenu?: () => void) {
       framerOption.value,
       {
         type: "divider",
-        key: "chat-divider",
+        key: "settings-divider",
       } as MenuOption,
       settingsOption.value,
       // helpOption.value,
     ];
+
+    return options.filter((option): option is MenuOption => option !== null);
   });
 
   // Default expanded keys (Library section expanded by default)
