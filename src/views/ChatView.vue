@@ -276,7 +276,7 @@
           <Transition name="welcome-footer">
             <div v-if="!photosEverAttached" class="welcome-footer">
               <!-- Recent conversations (welcome screen) -->
-              <!-- <div
+              <div
                 v-if="
                   showHistory &&
                   !activeSuggestion &&
@@ -292,7 +292,7 @@
                 </div>
                 <div class="recent-convs-list">
                   <n-button
-                    v-for="conv in chatStore.conversations.slice(0, 3)"
+                    v-for="conv in chatStore.conversations.slice(0, 2)"
                     :key="conv.id"
                     block
                     class="recent-conv-item"
@@ -317,7 +317,7 @@
                     <n-icon :size="13"><ChevronForwardIcon /></n-icon>
                   </button>
                 </div>
-              </div> -->
+              </div>
 
               <p class="welcome-hint">
                 ChatLab is a complementary tool. For best results, use it
@@ -922,7 +922,7 @@ const props = defineProps<{
   /**
    * Conversation to open on mount. Used by the dashboard, which hosts the chat
    * outside of the /chat-lab routes and so can't pass it through the URL.
-   * Falls back to the most recent conversation when omitted.
+   * When omitted the chat opens on the welcome screen.
    */
   conversationId?: string | number | null;
   /**
@@ -1038,12 +1038,6 @@ const activeConversationTitle = computed(() => {
 const isRoutedView = computed(
   () => route.name === "chat-lab" || route.name === "chat-lab-conversation",
 );
-
-const mostRecentConversation = () =>
-  [...chatStore.conversations].sort(
-    (a: any, b: any) =>
-      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-  )[0] ?? null;
 
 const selectedChatModeBinding = computed({
   get: () => chatStore.selectedModeId,
@@ -1567,16 +1561,14 @@ onMounted(async () => {
   await chatStore.fetchConversations();
 
   // Outside the chat routes (the dashboard) there is no URL to read the
-  // conversation from, so open the requested one — or the most recent, falling
-  // back to the welcome screen. An already-active conversation is left alone.
+  // conversation from, so open the requested one. With nothing requested we stay
+  // on the welcome screen. An already-active conversation is left alone.
   if (isRoutedView.value || hadPendingHandoff) return;
-  if (chatStore.activeConversationId) return;
+  if (chatStore.activeConversationId || !props.conversationId) return;
 
-  const target = props.conversationId
-    ? chatStore.conversations.find(
-        (c: any) => String(c.id) === String(props.conversationId),
-      )
-    : mostRecentConversation();
+  const target = chatStore.conversations.find(
+    (c: any) => String(c.id) === String(props.conversationId),
+  );
 
   if (target) await loadConversationById(target.id);
 });
