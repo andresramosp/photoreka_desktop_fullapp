@@ -305,15 +305,22 @@ export function isDesktopOnly(toolId) {
 /**
  * Dashboard Smart Tools are intentionally curated and ordered.
  * @param {string} platform - 'mobile' or 'desktop'
+ * @param {Object} [options]
+ * @param {boolean} [options.includeChat] - Desktop only: surface the chat entry.
  * @returns {Array} Ordered tools for the dashboard smart tools section
  */
-export function getDashboardSmartTools(platform) {
-  // Desktop has no chat entry: the chat lives in the dashboard's center panel,
-  // so a tile pointing back at this same view would be a no-op.
+export function getDashboardSmartTools(platform, options = {}) {
+  // On desktop the chat usually lives in the dashboard's center panel, where a
+  // tile pointing back at this same view would be a no-op. It only earns a spot
+  // when the center panel is showing something else.
+  const desktopToolIds = options.includeChat
+    ? ["chat", "canvas", "world-map", "portfolios"]
+    : ["canvas", "world-map", "portfolios"];
+
   const orderedToolIds =
     platform === "mobile"
       ? ["chat", "world-map", "search", "report"]
-      : ["canvas", "world-map", "portfolios"];
+      : desktopToolIds;
 
   return orderedToolIds
     .map((toolId) => getToolById(toolId))

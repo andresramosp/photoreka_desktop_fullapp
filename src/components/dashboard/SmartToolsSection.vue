@@ -39,6 +39,8 @@ defineOptions({
 const props = defineProps<{
   appAccessMode: string;
   isMobileLimitedMode: boolean;
+  /** Desktop only: the chat tile is a way back to a panel we are not showing. */
+  showChatTool?: boolean;
 }>();
 
 const router = useRouter();
@@ -53,7 +55,9 @@ const recentConversation = ref<{ id: number; title: string | null } | null>(
 );
 
 const smartTools = computed(() =>
-  getDashboardSmartTools(props.isMobileLimitedMode ? "mobile" : "desktop"),
+  getDashboardSmartTools(props.isMobileLimitedMode ? "mobile" : "desktop", {
+    includeChat: props.showChatTool,
+  }),
 );
 
 const getToolSubtitle = (tool: any) => {

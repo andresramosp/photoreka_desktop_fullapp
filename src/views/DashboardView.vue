@@ -28,6 +28,7 @@
               <SmartToolsSection
                 :app-access-mode="appAccessMode"
                 :is-mobile-limited-mode="isMobileLimitedMode"
+                :show-chat-tool="universeMode !== 'chat'"
               />
             </div>
             <!-- Recent Collections & Series -->
@@ -97,6 +98,7 @@
         :forced-mode="forcedUniverseMode"
         :conversation-id="requestedConversationId"
         @update:is-chat-fullscreen="isChatFullscreen = $event"
+        @update:mode="universeMode = $event"
       />
 
       <!-- ══════════════════════════════════════════ -->
@@ -206,6 +208,12 @@ const requestedConversationId = ref<string | null>(null);
 // The chat panel can take over the dashboard: the side panels fold away and the
 // universe keeps the full width to itself.
 const isChatFullscreen = ref(false);
+
+// Which panel the universe is showing (its own stored preference, unless a
+// forced mode or an empty library overrides it). The left panel offers a chat
+// quick access tile only while the center is on something else — the tile is a
+// way back to the chat, not a link to the view we are already in.
+const universeMode = ref<string>("chat");
 
 const readFirst = (value: unknown): string | null => {
   const raw = Array.isArray(value) ? value[0] : value;

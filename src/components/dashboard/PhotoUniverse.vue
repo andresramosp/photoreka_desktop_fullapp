@@ -97,6 +97,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "update:isChatFullscreen", value: boolean): void;
+  (e: "update:mode", value: VisualizationMode): void;
 }>();
 
 type VisualizationMode = "tagcloud" | "photos2d" | "worldmap" | "chat";
@@ -281,6 +282,12 @@ watch(
   },
   { immediate: true },
 );
+
+// The dashboard mirrors our mode in its side panels: the chat only gets a quick
+// access tile there while it is *not* the panel the user is looking at.
+watch(visualizationMode, (mode) => emit("update:mode", mode), {
+  immediate: true,
+});
 
 // Every panel but the chat needs a library to draw from. With none, they'd all
 // render empty, so the chat is the only thing on offer.
