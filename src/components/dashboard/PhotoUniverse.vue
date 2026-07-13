@@ -331,7 +331,7 @@ const messageHeader = computed(() => {
   } else if (visualizationMode.value === "photos2d") {
     return `Previewing your 500 most recent photos`;
   } else if (visualizationMode.value === "chat") {
-    return `Chatting with your photo library`;
+    return `Talking with your photos`;
   }
 
   return `Previewing your photo locations on the world map`;
@@ -460,8 +460,8 @@ onBeforeUnmount(() => {
   justify-content: stretch;
   background: radial-gradient(
     ellipse at 50% 45%,
-    color-mix(in srgb, var(--bg-surface-hover) 82%, var(--accent-color) 18%) 0%,
-    color-mix(in srgb, var(--bg-deep-surface) 94%, var(--bg-card) 6%) 72%
+    color-mix(in srgb, var(--bg-surface-hover) 83%, var(--accent-color) 17%) 0%,
+    color-mix(in srgb, var(--bg-deep-surface) 90%, var(--bg-card) 10%) 72%
   );
   overflow: hidden;
   position: relative;
@@ -524,7 +524,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 11px;
   background: var(--bg-container);
   border-top: 1px solid color-mix(in srgb, var(--border-color) 56%, transparent);
   border-bottom: 1px solid

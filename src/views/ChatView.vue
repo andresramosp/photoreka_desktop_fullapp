@@ -179,9 +179,14 @@
       <!-- Welcome / Suggestions (visible before chatting) -->
       <div v-if="chatStore.messages.length === 0" class="chat-welcome">
         <div class="welcome-content">
-          <n-icon :size="isMobile ? 48 : 64" class="welcome-icon">
+          <!-- <n-icon :size="isMobile ? 48 : 64" class="welcome-icon">
             <RobotOutlined />
-          </n-icon>
+          </n-icon> -->
+          <AppLogo
+            layout="icon"
+            :height="isMobile ? 48 : 64"
+            class="welcome-icon"
+          />
 
           <h2 class="welcome-title">
             {{
@@ -239,8 +244,8 @@
           <!-- Main suggestion cards -->
           <div v-else class="suggestion-cards">
             <div
-              v-for="(suggestion, index) in visibleSuggestions"
-              :key="index"
+              v-for="suggestion in visibleSuggestions"
+              :key="suggestion.title"
               class="suggestion-card"
               @click="handleSuggestionClick(suggestion)"
             >
@@ -271,7 +276,7 @@
           <Transition name="welcome-footer">
             <div v-if="!photosEverAttached" class="welcome-footer">
               <!-- Recent conversations (welcome screen) -->
-              <div
+              <!-- <div
                 v-if="
                   showHistory &&
                   !activeSuggestion &&
@@ -312,7 +317,7 @@
                     <n-icon :size="13"><ChevronForwardIcon /></n-icon>
                   </button>
                 </div>
-              </div>
+              </div> -->
 
               <p class="welcome-hint">
                 ChatLab is a complementary tool. For best results, use it
@@ -934,8 +939,23 @@ const emit = defineEmits<{
   (e: "update:isFullscreen", value: boolean): void;
 }>();
 
+/**
+ * Sending the first prompt of a new conversation expands the chat. Flip to
+ * false to keep the host layout as-is.
+ */
+const autoFullscreenOnSend = false;
+
 const toggleFullscreen = () => {
   emit("update:isFullscreen", !props.isFullscreen);
+};
+
+const enterFullscreenOnSend = () => {
+  if (!autoFullscreenOnSend || !props.allowFullscreen || props.isFullscreen)
+    return;
+  // The store only assigns an id once the first message lands, so a null id
+  // here means we're opening a brand-new conversation.
+  if (chatStore.activeConversationId) return;
+  emit("update:isFullscreen", true);
 };
 
 interface SubQuery {
@@ -1255,9 +1275,9 @@ const suggestions: Suggestion[] = [
       },
 
       {
-        title: "Street Photography Gems",
+        title: "Find Hidden Gems",
         prompt:
-          "Look for photos that clearly capture a decisive moment, or funny situations that may not stand out as much in terms of aesthetics or composition and have gone unnoticed by me.",
+          "Look for photos that are hidden gems in my library, which may not be immediately obvious but have unique qualities.",
         needsPhotos: false,
         autoSend: true,
       },
@@ -1297,13 +1317,6 @@ const suggestions: Suggestion[] = [
     needsPhotos: false,
     autoSend: true,
     subQueries: [
-      {
-        title: "Editing Style & Consistency",
-        prompt:
-          "Evaluate the consistency of my visual character across my catalog. Look at color grading, tonal contrast, and exposure patterns. Am I developing a unique 'signature style' or is it still evolving?",
-        needsPhotos: false,
-        autoSend: true,
-      },
       {
         title: "Identifying Portfolio Gaps",
         prompt:
@@ -1397,9 +1410,36 @@ const hasPhotos = computed(
   () => (photosStore.processedPhotos?.length ?? 0) > 0,
 );
 
-const visibleSuggestions = computed(() =>
-  hasPhotos.value ? suggestions : onboardingSuggestions,
-);
+const SUGGESTION_WINDOW = 4;
+const SUGGESTION_ROTATION_KEY = "chat_suggestion_rotation";
+
+/**
+ * Advances once per page load so the welcome screen doesn't always greet the
+ * user with the same four cards. Read once at setup: the window must stay put
+ * while the view is alive.
+ */
+const rotationOffset = (() => {
+  const stored = Number(localStorage.getItem(SUGGESTION_ROTATION_KEY));
+  const next = (Number.isFinite(stored) ? stored : 0) + 1;
+  try {
+    localStorage.setItem(SUGGESTION_ROTATION_KEY, String(next));
+  } catch {
+    // Private mode / storage full: rotation just won't persist.
+  }
+  return next;
+})();
+
+const visibleSuggestions = computed(() => {
+  const pool = hasPhotos.value ? suggestions : onboardingSuggestions;
+  if (pool.length <= SUGGESTION_WINDOW) return pool;
+  // The window slides backwards through the pool, so each refresh pulls a fresh
+  // card in at the front and drops the last one off the back.
+  const start = ((-rotationOffset % pool.length) + pool.length) % pool.length;
+  return Array.from(
+    { length: SUGGESTION_WINDOW },
+    (_, i) => pool[(start + i) % pool.length],
+  );
+});
 
 const activeSuggestion = ref<Suggestion | null>(null);
 
@@ -1567,6 +1607,8 @@ const sendMessage = async () => {
   if (!text || isSending.value) return;
 
   if (demoCheckQuery(text)) return; // blocked – modal will open
+
+  enterFullscreenOnSend();
 
   // Snapshot and clear attached photos before sending
   const attachedPhotos = [...contextPhotos.value];
@@ -2158,7 +2200,6 @@ const handleDeleteConversation = async (conversationId: number) => {
   pendingDeleteId.value = null;
   try {
     await chatStore.deleteConversation(conversationId);
-    message.success("Conversation deleted");
   } catch {
     message.error("Failed to delete conversation");
   }
@@ -2420,7 +2461,7 @@ const formatRelativeDate = (dateStr: string) => {
 .chat-topbar-right {
   display: flex;
   align-items: center;
-  /* gap: var(--spacing-xs); */
+  gap: var(--spacing-xs);
 }
 
 .new-chat-btn {
@@ -2604,7 +2645,7 @@ const formatRelativeDate = (dateStr: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* padding: var(--spacing-2xl); */
+  padding: var(--spacing-xl) var(--spacing-2xl);
 }
 
 .welcome-content {
@@ -2833,9 +2874,16 @@ const formatRelativeDate = (dateStr: string) => {
 /* ── Suggestion Cards Grid ── */
 .suggestion-cards {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* Column count follows the panel's own width, not the viewport's: the chat
+     column narrows when the app sidebar opens while the viewport stays wide,
+     and a media query can't see that. Two up while there's room, one when not. */
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  /* Rows hug their content — never absorb the free space in the welcome column.
+     Items within a row still stretch to match each other's height. */
+  align-content: start;
   gap: var(--spacing-md);
-  /* max-width: 670px; */
+  width: 100%;
+  max-width: 600px;
   margin: 0 auto;
 }
 
@@ -2843,7 +2891,10 @@ const formatRelativeDate = (dateStr: string) => {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  gap: var(--spacing-xs);
   padding: var(--spacing-lg);
+  /* Room for the absolutely-positioned expand chevron. */
+  padding-right: calc(var(--spacing-lg) + var(--spacing-md));
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
@@ -2963,7 +3014,6 @@ const formatRelativeDate = (dateStr: string) => {
 
 .subquery-item {
   justify-content: flex-start;
-  height: auto;
   padding: var(--spacing-sm) var(--spacing-md);
   background: var(--bg-surface);
   border-color: var(--border-color);
@@ -3008,6 +3058,14 @@ const formatRelativeDate = (dateStr: string) => {
   width: 100%;
   margin: 0 auto;
   align-items: flex-start;
+
+  /* El hueco que la burbuja debe dejar libre: avatar (32px) + gap (8px). */
+  --bubble-gutter: 40px;
+  /* Medida de lectura. Al topar aquí, toda columna más ancha que la medida
+     produce exactamente los mismos saltos de línea. */
+  --bubble-measure: 680px;
+  /* Por debajo de la medida la burbuja sigue a la columna, pero a saltos. */
+  --bubble-step: 48px;
 }
 
 .message-user {
@@ -3033,10 +3091,30 @@ const formatRelativeDate = (dateStr: string) => {
   color: white;
 }
 
+/* La columna del chat anima su ancho (fullscreen del dashboard, plegado de
+   paneles, resize de ventana). Con un ancho en % la burbuja re-envolvía el
+   texto en cada frame de esa animación. Ahora el ancho se topa en una medida
+   de lectura fija —así todo ancho de columna por encima de ella da los mismos
+   saltos de línea y las burbujas solo se deslizan— y, por debajo, se cuantiza
+   en escalones, de modo que el texto se recoloca en 2-3 saltos discretos en
+   vez de continuamente. El gutter se descuenta del 100% para que la burbuja
+   nunca desborde la fila y flexbox no active el shrink (que volvería a hacer
+   el ajuste continuo); el shrink queda solo como red de seguridad. */
 .message-bubble {
+  flex: 0 1 auto;
+  min-width: 0;
+  /* Fallback para navegadores sin round(): continuo, como antes. */
+  width: min(100% - var(--bubble-gutter), var(--bubble-measure));
+  width: max(
+    240px,
+    round(
+      down,
+      min(100% - var(--bubble-gutter), var(--bubble-measure)),
+      var(--bubble-step)
+    )
+  );
   padding: 15px;
   border-radius: var(--radius-lg);
-  max-width: 90%;
   overflow: hidden;
   position: relative;
   color: var(--text-primary);
@@ -3046,14 +3124,12 @@ const formatRelativeDate = (dateStr: string) => {
   background: var(--bg-container);
   border: 1px solid var(--border-color);
   border-top-left-radius: var(--radius-xs);
-  width: 80%;
 }
 
 .message-user .message-bubble {
   background: var(--bg-container);
   color: var(--text-primary);
   border-top-right-radius: var(--radius-xs);
-  width: 80%;
 }
 
 .message-text {
@@ -3190,8 +3266,8 @@ const formatRelativeDate = (dateStr: string) => {
 
 /* ── Responsive ── */
 @media (max-width: 768px) {
+  /* Columns are handled by auto-fit above; only the breathing room shrinks. */
   .suggestion-cards {
-    grid-template-columns: repeat(2, 1fr);
     gap: var(--spacing-sm);
   }
 
@@ -3267,12 +3343,9 @@ const formatRelativeDate = (dateStr: string) => {
 }
 
 @media (max-width: 480px) {
-  .suggestion-cards {
-    grid-template-columns: 1fr;
-  }
-
   .suggestion-card {
     padding: var(--spacing-md);
+    padding-right: calc(var(--spacing-md) + var(--spacing-md));
   }
 
   .suggestion-desc {
@@ -3385,12 +3458,12 @@ const formatRelativeDate = (dateStr: string) => {
 
 /* ── Markdown content (assistant messages) ── */
 .message-assistant .message-bubble :deep(.markdown-content) {
-  font-size: 13.5px;
-
+  font-size: 14px;
+  font-weight: 300;
   line-height: var(--line-height-relaxed);
   word-break: break-word;
   margin: 0;
-  text-align: justify;
+  /* text-align: justify; */
 }
 
 .message-assistant .message-bubble :deep(.markdown-content p) {
