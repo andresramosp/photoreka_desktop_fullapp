@@ -38,6 +38,7 @@ const BLOCKED_KEYWORDS = [
   "cock",
   "pussy",
   "fuck",
+  "fucked",
   "fucking",
   "blowjob",
   "cumshot",

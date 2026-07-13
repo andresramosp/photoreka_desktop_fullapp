@@ -702,6 +702,13 @@
       @cancel="showCollectionModal = false"
     />
 
+    <!-- Demo Safe-Search Warning Modal -->
+    <DemoSearchWarningModal
+      :show="showDemoWarningModal"
+      :type="demoWarningType"
+      @close="closeDemoWarningModal"
+    />
+
     <!-- Photo Tool Selector -->
     <PhotoToolSelector
       :show="showToolSelector"
@@ -859,6 +866,8 @@ import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import ModePopoverSelector from "@/components/ModePopoverSelector.vue";
 import ChatMentionInput from "@/components/ChatMentionInput.vue";
 import ChatActionSuggestions from "@/components/ChatActionSuggestions.vue";
+import DemoSearchWarningModal from "@/components/DemoSearchWarningModal.vue";
+import { useDemoSafeSearch } from "@/composables/useDemoSafeSearch";
 import { useChatActions } from "@/composables/useChatActions.js";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useChatStore } from "@/stores/chat.js";
@@ -1106,6 +1115,14 @@ const handleActionExecute = async (action: any, chatMessage: ChatMessage) => {
     console.warn("[ChatView] Failed to persist used action:", err);
   }
 };
+
+// Demo safe-search guard
+const {
+  checkQuery: demoCheckQuery,
+  showWarningModal: showDemoWarningModal,
+  warningType: demoWarningType,
+  closeWarningModal: closeDemoWarningModal,
+} = useDemoSafeSearch();
 
 const inputText = ref("");
 const isTyping = ref(false);
@@ -1548,6 +1565,8 @@ const scrollToBottom = async () => {
 const sendMessage = async () => {
   const text = inputText.value.trim();
   if (!text || isSending.value) return;
+
+  if (demoCheckQuery(text)) return; // blocked – modal will open
 
   // Snapshot and clear attached photos before sending
   const attachedPhotos = [...contextPhotos.value];
