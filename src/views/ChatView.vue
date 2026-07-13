@@ -320,14 +320,12 @@
               </div>
 
               <p class="welcome-hint">
-                ChatLab is a complementary tool. For best results, use it
-                alongside Photoreka's other tools.
                 <n-button
                   text
                   class="welcome-hint-link"
                   @click="showChatLabInfo = true"
                 >
-                  Read more
+                  Learn more about ChatLab
                 </n-button>
               </p>
             </div>
