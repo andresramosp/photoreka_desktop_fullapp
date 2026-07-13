@@ -17,7 +17,7 @@
  * -----------------------------------------------------------------
  */
 
-import { resolveInternalScoreKeyAnyVariant } from '#config/photo_schema'
+import { resolveInternalScoreKeyAnyVariant, VISUAL_ASPECTS_MAP } from '#config/photo_schema'
 
 // ══════════════════════════════════════════════════════════════
 // ENUMS (kept in sync with api/config/photo_schema.ts)
@@ -44,8 +44,26 @@ export const SCORE_CRITERIA = [
 /** Genre presets available for score-weighted sorting. */
 export const GENRE_PRESETS = ['general', 'street', 'documentary', 'abstract', 'commercial'] as const
 
-/** Basic (non-score) sort fields. */
-export const BASIC_SORT_FIELDS = ['date', 'name'] as const
+/**
+ * Visual-aspect facets the suggester may filter the workspace by. A deliberate
+ * SUBSET of VISUAL_ASPECTS_SCHEMA: exposing all ten selectors (framing, perspective,
+ * temperature, depth of field…) would bloat the Phase-3 prompt for facets users
+ * rarely ask for in chat. These four cover the common asks.
+ */
+export const FILTERABLE_ASPECT_KEYS = ['genre', 'palette', 'lighting', 'stylistic'] as const
+export type FilterableAspectKey = (typeof FILTERABLE_ASPECT_KEYS)[number]
+
+/** aspect key → allowed values. The full union across profiles is used, not the
+ *  per-variant narrowing: a value the user's profile never produces simply matches
+ *  no photos, which is a harmless empty grid rather than a dropped action. */
+export const ASPECT_VALUES = Object.fromEntries(
+  FILTERABLE_ASPECT_KEYS.map((key) => [key, VISUAL_ASPECTS_MAP[key].values])
+) as Record<FilterableAspectKey, string[]>
+
+/** Flat enum for the structured-output schema (Gemini can't express a value enum
+ *  that depends on a sibling field — the aspect/value pairing is enforced in
+ *  sanitizeGridFilters instead). */
+export const ALL_ASPECT_VALUES = [...new Set(Object.values(ASPECT_VALUES).flat())]
 
 /** Plain redirect targets for `open_view` (no photo payload). */
 export const VIEW_TARGETS = [
@@ -62,7 +80,6 @@ export const VIEW_TARGETS = [
 
 export type ScoreCriterion = (typeof SCORE_CRITERIA)[number]
 export type GenrePreset = (typeof GENRE_PRESETS)[number]
-export type BasicSortField = (typeof BASIC_SORT_FIELDS)[number]
 export type ViewTarget = (typeof VIEW_TARGETS)[number]
 
 // ══════════════════════════════════════════════════════════════
@@ -83,9 +100,9 @@ export type SuggestedActionType =
 /** Filters/sort payload shared by `open_workspace` and (optionally) `open_view`
  *  when the target is a collection — both render photos through PhotosGrid. */
 export type GridFilters = {
-  /** Score-weighted ranking (criteria averaged) OR a basic date/name sort. */
+  /** Score-weighted ranking (criteria averaged). */
   sort?: {
-    field: ScoreCriterion | BasicSortField
+    field: ScoreCriterion
     dir: 'asc' | 'desc'
   }
   /** Genre-preset weighted ranking (mutually exclusive with `sort`). */
@@ -95,6 +112,12 @@ export type GridFilters = {
     field: ScoreCriterion
     op: 'gte' | 'lte'
     value: number
+  }>
+  /** Visual-aspect facets: AND across aspects, OR within one aspect's values
+   *  (same semantics as the workspace's own visual-aspect selects). */
+  visualAspects?: Array<{
+    aspect: FilterableAspectKey
+    values: string[]
   }>
 }
 
@@ -130,8 +153,8 @@ IMPORTANT — the chat only shows a CURATED HANDFUL, never the full result set. 
 Match the action to the user's intent:
 - To FIND PHOTOS BY CONTENT — a concrete subject, object, scene, style, mood, place-as-content ("photos of/with X", "my street shots", "shots in the rain", "anything with red") → search_photos. This runs a semantic search over what the photos actually DEPICT. Derive the query from what the user was looking for (translate their request into a short search phrase in their language).
 - To ORGANIZE the surfaced photos → create_collection / create_series / create_canvas / add_to_collection / add_to_series.
-- To FIND PHOTOS BY ARTISTIC QUALITY — rank/threshold by the artistic scores, or sort by date/name ("my best X", "which score high on composition", "sort by date") → open_workspace. This ranks the library by SCORE, it does not search by content.
-  Rule of thumb: "photos OF/WITH/IN something" → search_photos. "my BEST/WORST, or SORTED BY something" → open_workspace.
+- To FIND PHOTOS BY ARTISTIC QUALITY OR VISUAL ASPECT — rank/threshold by the artistic scores and/or filter by the closed visual-aspect facets ("my best X", "which score high on composition", "my black and white street shots", "backlit photos with bokeh") → open_workspace. This ranks/filters the library by SCORE and by ASPECT metadata; it does not search by content.
+  Rule of thumb: "photos OF/WITH/IN <a subject>" → search_photos. "my BEST/WORST, or filtered by an aspect below" → open_workspace.
 - To ANSWER AN AGGREGATE question about the catalog as a whole (statistics, distributions, recurring patterns, "how does my work compare", how common/rare something is across everything) → open_view (report / tagcloud / world-map). This is for numbers and patterns, NOT for pulling up a set of matching photos.
 - To inspect how ONE specific photo fits → view_photo. Do NOT default to archiving a photo when the user only asked to understand it.
 
@@ -164,19 +187,24 @@ params: { seriesId: number, photoIds?: number[], groupLabels?: string[] }       
 When: the user wants to pull up photos that DEPICT something concrete — a subject, object, scene, style, mood, or place-as-content. Runs a broad semantic search over the WHOLE library on the query text. Use this, NOT open_workspace, whenever the need is about WHAT IS IN the photo rather than its score.
 Strong trigger: the user's own message this turn asked to find/see photos of a subject. Propose it even when the assistant already showed a few — the assistant curates 2-3, this opens EVERYTHING matching. In that case it's the top action.
 params: { query: string }   // query = a short search phrase in the USER'S LANGUAGE capturing the subject the user wants. Distill it to the core content, dropping meta-words like "encontrar/fotos de". e.g. user "necesito encontrar fotos de temperatura fría donde hay perros" → query "perros en la nieve"; "muéstrame retratos en blanco y negro" → query "retratos en blanco y negro"; "brutalist architecture" → query "brutalist architecture". No filters, no scores — just the thing to look for.
-Scope: this is a pure content search — it cannot rank by artistic score or sort by date. If the user only wants their "best/worst" or a date/name ordering with no subject, use open_workspace instead.
+Scope: this is a pure content search — it cannot rank by artistic score or filter by visual aspect. If the user only wants their "best/worst", or a visual-aspect filter with no subject, use open_workspace instead.
 
 ## open_workspace
-When: the user wants to RANK / THRESHOLD / SORT their library by artistic quality or by date/name ("show me my best X", "which photos score high on Y", "sort by date"). This is about SCORE, not content — for "photos of/with/in something" use search_photos. Prefer this over the report whenever the user wants to end up looking at matching PHOTOS rather than statistics.
+When: the user wants to RANK / THRESHOLD their library by artistic quality ("show me my best X", "which photos score high on Y"), and/or FILTER it by the visual aspects below ("my black and white photos", "long exposure landscapes", "my best backlit portraits"). This is about SCORE + ASPECT metadata, not content — for "photos of/with/in <a subject>" use search_photos. Prefer this over the report whenever the user wants to end up looking at matching PHOTOS rather than statistics.
 Overwrites any current workspace filters.
 params: { filters: GridFilters }
   GridFilters = {
-    sort?:        { field: <score criterion | "date" | "name">, dir: "asc"|"desc" },
+    sort?:        { field: <score criterion>, dir: "asc"|"desc" },
     genrePreset?: <"general"|"street"|"documentary"|"abstract"|"commercial">,   // don't combine with sort
-    scoreFilters?: [ { field: <score criterion>, op: "gte"|"lte", value: 1-10 } ]
+    scoreFilters?: [ { field: <score criterion>, op: "gte"|"lte", value: 1-10 } ],
+    visualAspects?: [ { aspect: <aspect>, values: [<value of that aspect>, …] } ]
   }
   score criteria: aesthetic_quality, composition, storytelling, originality, message, humor, visual_games, candidness (commercial profiles also: commercial_intent, subject_clarity)
-  Capability scope: this action ranks/thresholds by the artistic scores above or sorts by date/name — that is its ENTIRE expressivity. If the user's need is about color/palette, mood, subject, tags, or location, this action cannot serve it; pick a different action or none.
+  visual aspects (a photo must match EVERY listed aspect; within one aspect its values are alternatives — OR):
+${FILTERABLE_ASPECT_KEYS.map((k) => `    - ${k}: ${ASPECT_VALUES[k].join(', ')}`).join('\n')}
+  Use the EXACT value strings above — anything else is dropped. Only these four aspects exist here; there is no filter for framing, perspective, temperature, orientation or depth of field.
+  Note "genre" the aspect (a per-photo label you FILTER by) is not the same as "genrePreset" (a score-weighting recipe you RANK by). "show me my street photos" → visualAspects genre:[street]. "rank my street photos the way a street photographer would" → genrePreset street.
+  Capability scope: ranking/thresholding by the artistic scores and filtering by the four aspects above — that is its ENTIRE expressivity. If the user's need is about subject matter, tags, location, dates or a mood outside those values, this action cannot serve it; pick a different action or none. Aspect filters combine freely with sorting/score thresholds: "my best black and white portraits" → visualAspects genre:[portrait] + palette:[black and white], sorted by aesthetic_quality desc.
 
 ## view_photo
 When: inspect ONE specific photo in context.
@@ -269,7 +297,7 @@ export const SUGGESTED_ACTIONS_SCHEMA = {
                   sort: {
                     type: 'OBJECT',
                     properties: {
-                      field: strEnum([...SCORE_CRITERIA, ...BASIC_SORT_FIELDS]),
+                      field: strEnum(SCORE_CRITERIA),
                       dir: strEnum(['asc', 'desc']),
                     },
                   },
@@ -282,6 +310,18 @@ export const SUGGESTED_ACTIONS_SCHEMA = {
                         field: strEnum(SCORE_CRITERIA),
                         op: strEnum(['gte', 'lte']),
                         value: { type: 'INTEGER', description: '1-10' },
+                      },
+                    },
+                  },
+                  visualAspects: {
+                    type: 'ARRAY',
+                    description:
+                      'Visual-aspect facets. `values` must belong to the chosen `aspect` (see catalog) — mismatched pairs are dropped.',
+                    items: {
+                      type: 'OBJECT',
+                      properties: {
+                        aspect: strEnum(FILTERABLE_ASPECT_KEYS),
+                        values: { type: 'ARRAY', items: strEnum(ALL_ASPECT_VALUES) },
                       },
                     },
                   },
@@ -321,7 +361,6 @@ export type ActionsGroundingContext = {
 
 const SCORE_SET = new Set<string>(SCORE_CRITERIA)
 const GENRE_SET = new Set<string>(GENRE_PRESETS)
-const BASIC_SORT_SET = new Set<string>(BASIC_SORT_FIELDS)
 const VIEW_SET = new Set<string>(VIEW_TARGETS)
 
 const asIntArray = (v: any): number[] =>
@@ -340,8 +379,6 @@ function sanitizeGridFilters(raw: any): GridFilters | undefined {
       // every consumer downstream (querystring, PhotosGridControls) gets the
       // key that actually exists on `descriptions.artistic_scores`.
       out.sort = { field: resolveInternalScoreKeyAnyVariant(field) as ScoreCriterion, dir }
-    } else if (BASIC_SORT_SET.has(field)) {
-      out.sort = { field: field as BasicSortField, dir }
     }
   }
   if (raw.genrePreset && GENRE_SET.has(String(raw.genrePreset))) {
@@ -359,6 +396,26 @@ function sanitizeGridFilters(raw: any): GridFilters | undefined {
       }))
       .filter((f: any) => f.value > 0)
     if (filters.length > 0) out.scoreFilters = filters
+  }
+  if (Array.isArray(raw.visualAspects)) {
+    const aspects = raw.visualAspects
+      .map((a: any) => {
+        const aspect = String(a?.aspect ?? '') as FilterableAspectKey
+        const allowed = ASPECT_VALUES[aspect]
+        if (!allowed) return null
+        // Drop values that don't belong to THIS aspect — the schema enum is a flat
+        // union across all four, so the model can pair e.g. genre with "bokeh".
+        const values = [
+          ...new Set(
+            (Array.isArray(a.values) ? a.values : [])
+              .map((v: any) => String(v).trim().toLowerCase())
+              .filter((v: string) => allowed.includes(v))
+          ),
+        ] as string[]
+        return values.length > 0 ? { aspect, values } : null
+      })
+      .filter(Boolean) as GridFilters['visualAspects']
+    if (aspects && aspects.length > 0) out.visualAspects = aspects
   }
 
   return Object.keys(out).length > 0 ? out : undefined
