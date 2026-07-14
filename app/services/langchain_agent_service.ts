@@ -186,9 +186,11 @@ If the user is dissatisfied or frustrated:
 ## Visual Output — photo_groups
 - Populate \`photo_groups\` when the user expects visual results (rankings, selections, or sets).
 - **Consistency rule (mandatory):** Every photo you mention or reference by filename in the \`text\` field MUST also appear in \`photo_groups\`. No exceptions — if you write about a photo, include its ID.
-- **Prefer MULTIPLE groups** over a single flat list. Whenever there is a natural way to subdivide results — by quality tier, theme, genre, time period, or any other meaningful axis — use separate groups. A single \`"result"\` group is only acceptable when the results are genuinely homogeneous and no useful subdivision exists.
+- **Prefer MULTIPLE groups** over a single flat list. Whenever there is a natural way to subdivide results — by quality tier, theme, genre, time period, or any other meaningful axis — use separate groups. A single group is only acceptable when the results are genuinely homogeneous and no useful subdivision exists.
 - Example groupings to favour: \`"Top picks"\` / \`"Honorable mentions"\`, \`"Portraits"\` / \`"Landscapes"\`, \`"Best of 2024"\` / \`"Best of 2023"\`, \`"Strong"\` / \`"Promising"\`, \`"Candidates"\` / \`"Discarded"\`.
-- Group labels: in the user's language, concise.
+- **Labels are names, not captions.** Each label is both the heading the user reads above the photos AND the real name of the collection or series they can create from that group in ONE CLICK. Write it as a name you'd be happy to see in their library: in the user's language, concise, evocative. Never a placeholder like \`"result"\`, \`"group 1"\` or \`"photos"\`.
+- **\`selection_title\` (mandatory):** one short umbrella name for the WHOLE set you are showing this turn — the name of the board the user can build from everything at once. Same standard as the labels. Empty string when you show no photos.
+- **\`rejected\` (mandatory on every group):** set it to \`true\` ONLY for a group you are presenting as discarded / not recommended / "these don't quite work" (e.g. \`"Descartadas"\`, \`"Fuera de la selección"\`), and \`false\` for every group you recommend or merely show. It is not decoration: a rejected group is machine-excluded from the follow-up actions offered to the user (creating a collection, adding to a series…), so the label alone is not enough — the flag is what makes the exclusion happen. Never flag a group whose photos you would be happy to see filed away.
 - Order within each group IS your editorial statement (index 0 = most prominent) — except when \`querySummary.ordering.kind\` is \`explicit\`, where the returned order is binding.
 - No cost or limit to including photo IDs — include every pertinent photo. Be generous.
 - Leave empty only when no specific photos are relevant.`
@@ -205,6 +207,14 @@ const FINAL_ANSWER_SCHEMA = {
       type: 'string',
       description: 'The complete response text to show to the user.',
     },
+    selection_title: {
+      type: 'string',
+      description:
+        'A short, evocative umbrella name for the WHOLE set of photos you are showing this ' +
+        'turn, in the user\'s language, no quotes (e.g. "Ritmos urbanos"). It becomes the real ' +
+        'name of a board the user can create from this selection in one click. Empty string ' +
+        'when photo_groups is empty.',
+    },
     photo_groups: {
       type: 'array',
       description:
@@ -215,19 +225,33 @@ const FINAL_ANSWER_SCHEMA = {
         properties: {
           label: {
             type: 'string',
-            description: 'Short group name (e.g. "result", "Portraits", "Landscapes").',
+            description:
+              'Short, evocative group name in the user\'s language (e.g. "Digital Solitude", ' +
+              '"Portraits", "Top picks"). It is shown as the heading above the photos AND ' +
+              'becomes the real name of the collection/series the user can create from the ' +
+              'group in one click — so never a generic placeholder like "result" or "group 1".',
           },
           photo_ids: {
             type: 'array',
             items: { type: 'integer' },
             description: 'Ordered photo IDs for this group.',
           },
+          rejected: {
+            type: 'boolean',
+            description:
+              'TRUE only for a group you are presenting as discarded / not recommended / ' +
+              'the ones that do NOT work (e.g. "Descartadas", "Fuera de la selección"). ' +
+              'FALSE for every group you are recommending or simply showing. This is a ' +
+              'machine flag: a rejected group is excluded from the follow-up actions ' +
+              'offered to the user, so never mark a group you would be happy to see filed ' +
+              'into a collection.',
+          },
         },
-        required: ['label', 'photo_ids'],
+        required: ['label', 'photo_ids', 'rejected'],
       },
     },
   },
-  required: ['text', 'photo_groups'],
+  required: ['text', 'selection_title', 'photo_groups'],
 } as const
 
 // ══════════════════════════════════════════════════════════════
@@ -261,8 +285,12 @@ export type AgentCostBreakdown = {
 }
 
 export type PhotoGroup = {
+  /** Stable 1-based id, unique within the message — see PhotoGroup in #models/conversation_message. */
+  id?: number
   label: string
   photoIds: number[]
+  /** The assistant presented this group as discarded / not recommended — see #models/conversation_message. */
+  rejected?: boolean
   /** id (as string) → "filename — context". Stored in DB for LLM recall; stripped before sending to frontend. */
   photoDescriptions?: Record<string, string>
 }
@@ -284,6 +312,12 @@ export type IntermediateStep = {
 export type AgentChatResult = {
   output: string
   photoGroups: PhotoGroup[]
+  /**
+   * The curator's umbrella name for the whole set of photos shown this turn. The action
+   * suggester never writes a resource name — a collection/series takes its group's label,
+   * and anything spanning the full selection takes this. Empty when no photos were shown.
+   */
+  selectionTitle: string
   toolsUsed: string[]
   intermediateSteps: IntermediateStep[]
   totalIterations: number
@@ -911,7 +945,8 @@ export default class LangchainAgentService {
     contextPhotoIds: number[]
   ): Promise<{
     text: string
-    photo_groups: Array<{ label: string; photo_ids: number[] }>
+    selection_title?: string
+    photo_groups: Array<{ label: string; photo_ids: number[]; rejected?: boolean }>
     usage?: any
   }> {
     const phase2Messages = LangchainAgentService.buildPhase2Messages(
@@ -1170,7 +1205,8 @@ export default class LangchainAgentService {
     session: ChatSession,
     structured: {
       text: string
-      photo_groups: Array<{ label: string; photo_ids: number[] }>
+      selection_title?: string
+      photo_groups: Array<{ label: string; photo_ids: number[]; rejected?: boolean }>
       usage?: any
     },
     _contextPhotoIds: number[]
@@ -1182,9 +1218,16 @@ export default class LangchainAgentService {
     // Filter out IDs that exceed PostgreSQL integer range — the LLM may hallucinate
     // numeric filenames (e.g. "18385876675018230") as photo_ids in structured output.
     const MAX_PG_INT = 2_147_483_647
-    const photoGroups: PhotoGroup[] = (structured.photo_groups ?? []).map((g) => ({
+    const photoGroups: PhotoGroup[] = (structured.photo_groups ?? []).map((g, i) => ({
+      // 1-based id, stable for the lifetime of the message: it's what Phase 3 uses to
+      // scope an action to specific groups without having to echo their labels.
+      id: i + 1,
       label: g.label,
       photoIds: (g.photo_ids ?? []).filter((id) => Number.isFinite(id) && id <= MAX_PG_INT),
+      // The curator's own verdict on the group, carried as a flag instead of being
+      // re-derived from the label downstream: it's what lets the action suggester
+      // exclude a discard pile without having to interpret the words "Descartadas".
+      rejected: g.rejected === true,
     }))
     await this.enrichPhotoGroupsWithDescriptions(photoGroups)
     const allPhotoIds = photoGroups.flatMap((g) => g.photoIds)
@@ -1222,6 +1265,7 @@ export default class LangchainAgentService {
     return {
       output,
       photoGroups,
+      selectionTitle: (structured.selection_title ?? '').trim().slice(0, 100),
       toolsUsed: session.toolsUsed,
       intermediateSteps: session.intermediateSteps,
       totalIterations: session.totalIter,
@@ -1812,7 +1856,8 @@ export default class LangchainAgentService {
     debugMeta?: Phase2DumpMeta
   ): Promise<{
     text: string
-    photo_groups: Array<{ label: string; photo_ids: number[] }>
+    selection_title?: string
+    photo_groups: Array<{ label: string; photo_ids: number[]; rejected?: boolean }>
     usage?: any
   }> {
     const MAX_ATTEMPTS = 3

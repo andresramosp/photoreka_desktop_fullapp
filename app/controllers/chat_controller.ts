@@ -216,6 +216,9 @@ export default class ChatController {
           false,
           result.cost?.total?.costEur,
           {
+            // The curator's name for this turn's whole selection. Phase 3 reads it back to
+            // title anything that spans the full set (it never writes a name itself).
+            selectionTitle: result.selectionTitle,
             toolsUsed: result.toolsUsed,
             totalIterations: result.totalIterations,
             costEur: result.cost?.total?.costEur,

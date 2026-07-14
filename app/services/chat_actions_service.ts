@@ -27,29 +27,52 @@ import {
   validateActions,
   type SuggestedAction,
   type ActionsGroundingContext,
+  type GroundedPhotoGroup,
 } from '../utils/chat_actions_catalog.js'
 
 const PHASE3_MODEL = 'gemini-3.1-flash-lite'
 
-/** Max photos we describe to the suggester (grounding pool). */
-const MAX_SHOWN_PHOTOS = 30
+/**
+ * How many shown photos an action may COVER (bounds the ownership query). Spent at
+ * WHOLE-GROUP granularity: a partially-grounded group would let the suggester pick
+ * "group #2" and silently get fewer photos than the user saw under that heading.
+ *
+ * Deliberately decoupled from the prompt-size guards below. The suggester scopes a
+ * grouped turn by group NUMBER, so it doesn't need to see every photo of a big group
+ * to include it — which means a big group costs tokens, not correctness.
+ */
+const MAX_GROUNDED_PHOTOS = 200
+/** How many photos get an id+filename line in the prompt (across the whole turn). */
+const MAX_LISTED_PHOTOS = 40
+/** Of those, how many also carry a description snippet. */
+const MAX_DESCRIBED_PHOTOS = 24
 /** Max library items of each type injected as inventory. */
 const MAX_INVENTORY_ITEMS = 20
+/** Label of the synthetic group holding photos the user attached to their message. */
+const ATTACHED_GROUP_LABEL = 'Photos you attached'
+/**
+ * Below this, a board isn't worth offering: a canvas is for arranging a set against
+ * itself, and two or three photos are not a set — they're just photos.
+ */
+const MIN_CANVAS_PHOTOS = 4
 
 const SYSTEM_PROMPT = `You suggest concrete next actions for a photography app (Photoreka) after the assistant replied.
 
 ## Your job
-From the conversation and the concrete items provided, pick 2-4 useful, specific actions from the ACTION CATALOG. Fewer is better than forced. Return an empty array if nothing genuinely helps.
+From the conversation and the concrete items provided, pick up to 3 useful, specific actions from the ACTION CATALOG. Fewer is better than forced. Return an empty array if nothing genuinely helps — the user is separately offered a canvas board of the whole selection, so a weak suggestion adds noise rather than value.
 
 ## Hard rules
 - Choose ONLY action types from the catalog. Fill every param slot ONLY with IDs/values from the provided inventory (shown photos, the user's collections/series/portfolios, the listed enums). NEVER invent a photo ID, collection/series/portfolio ID, filename, tag, or filter value.
 - Photo actions must reference photos from "SHOWN PHOTOS" (the ones the assistant just displayed or the user attached). If no photos were shown, don't propose photo-based actions — you may still propose a redirect (open_workspace / open_view) when relevant.
-- **Selecting which photos go into a create/add-to action:** the photos are shown to you as GROUPS (as the user actually saw them), not a flat pool.
-  - When groups exist: set \`groupLabels\` to the label(s) of the group(s) to include (copy the label text exactly) — do NOT set \`photoIds\`, the app resolves labels to photo IDs for you. By default include every group. The one exception is a group that the assistant clearly presented as rejected/discarded/not recommended (judge this from the group's label AND from the assistant's reply text — e.g. a group titled "Descartadas" / "No funcionan del todo" / "Fuera de la selección", or reply text like "these don't quite work" about that set) — omit that group's label. When it's ambiguous whether a group is a rejection, include it. This is group-level in/out — you never cherry-pick individual photos.
+- **Selecting which photos go into a create/add-to action — ONE GROUP PER ACTION:** the photos are shown to you as numbered GROUPS (as the user actually saw them), not a flat pool.
+  - When groups exist: set \`groupId\` to the NUMBER of the ONE group the action is about (the N in \`Group #N\`). Do NOT set \`photoIds\` — it is ignored on a grouped turn.
+    - You cannot merge groups. A collection/series is built from exactly one group and takes that group's name. If two groups each deserve an action, that is two actions.
+    - You cannot cherry-pick photos out of a group: it goes in whole or not at all.
+    - A group marked REJECTED is the assistant's discard pile: never name it. The app refuses it anyway.
   - When there are no groups (flat list, or only user-attached photos): set \`photoIds\` directly.
 - Prefer variety: don't propose three near-identical actions. A create + an explore + a redirect is better than three "create" variants.
-- Do NOT write any button text/label — the app renders the visible title from a fixed template. You only choose the action type and fill its typed params. Pick an action ONLY if its params can fully express the intent; if they can't, choose a different action or none.
-- For create_collection / create_series / create_canvas you MUST propose a good \`title\` (short, evocative, no quotes) in the USER'S LANGUAGE — this is the real resource name.
+- **You never write text.** No button labels, no resource names: the app composes every visible word from a fixed template plus the group's own name. There is no \`title\` slot. The single exception is \`query\` for search_photos, which is a search phrase, not a name. Pick an action ONLY if its params can fully express the intent; if they can't, choose a different action or none.
+- Never propose a canvas, and never propose opening a single photo — a board over the whole selection, and the atlas view of a lone attached photo, are offered to the user automatically.
 
 ## Output
 Respond ONLY with valid JSON: { "actions": [ { "type": ..., "params": { ... } } ] }
@@ -75,20 +98,32 @@ export default class ChatActionsService {
   public async generateActions(params: {
     userId: number
     assistantText: string
-    /** photo groups as actually shown to the user this turn (label + ordered photoIds). */
-    shownPhotoGroups: Array<{ label: string; photoIds: number[] }>
+    /** photo groups as actually shown to the user this turn (stable id + label + ordered photoIds). */
+    shownPhotoGroups: Array<{ id?: number; label: string; photoIds: number[]; rejected?: boolean }>
     /** photos the user attached to their message this turn (not part of any group). */
     attachedPhotoIds: number[]
+    /** the curator's name for this turn's whole selection — the suggester writes no names. */
+    selectionTitle: string
     /** compact prior-turns context (already thinned). */
     historyText: string
   }): Promise<{ actions: SuggestedAction[]; costEur: number }> {
-    const { userId, assistantText, shownPhotoGroups, attachedPhotoIds, historyText } = params
+    const {
+      userId,
+      assistantText,
+      shownPhotoGroups,
+      attachedPhotoIds,
+      selectionTitle,
+      historyText,
+    } = params
 
-    const shownPhotoIds = shownPhotoGroups.flatMap((g) => g.photoIds)
-    const availablePhotoIds = [...new Set([...shownPhotoIds, ...attachedPhotoIds])].slice(
-      0,
-      MAX_SHOWN_PHOTOS
-    )
+    // The turn is EITHER grouped or flat, and the two are resolved by different slots
+    // (groupId vs photoIds). Deciding that here, once, is what keeps the suggester from
+    // silently widening an action's scope to every photo on screen.
+    const photoGroups = this.buildGroundedGroups(shownPhotoGroups, attachedPhotoIds)
+    const availablePhotoIds =
+      photoGroups.length > 0
+        ? [...new Set(photoGroups.flatMap((g) => g.photoIds))]
+        : [...new Set(attachedPhotoIds)].slice(0, MAX_GROUNDED_PHOTOS)
 
     // ── Gather real inventory in parallel ──
     const [photos, collections, series, portfolios] = await Promise.all([
@@ -125,7 +160,8 @@ export default class ChatActionsService {
 
     const ctx: ActionsGroundingContext = {
       photos: photos.map((p: any) => ({ id: p.id, filename: p.originalFileName ?? 'photo' })),
-      photoGroups: shownPhotoGroups,
+      photoGroups,
+      selectionTitle,
       collections: collections.map((c: any) => ({ id: c.id, name: c.name })),
       series: series.map((s: any) => ({ id: s.id, name: s.name })),
       portfolios: portfolios.map((p: any) => ({
@@ -154,8 +190,7 @@ export default class ChatActionsService {
       assistantText,
       historyText,
       photos,
-      shownPhotoGroups,
-      attachedPhotoIds,
+      photoGroups,
       collections,
       series,
       portfolios,
@@ -185,16 +220,164 @@ export default class ChatActionsService {
     }
 
     const rawActions = Array.isArray(raw) ? raw : (raw?.actions ?? [])
-    const actions = this.withUsageState(validateActions(rawActions, ctx))
+    const { actions: grounded, trace } = validateActions(rawActions, ctx)
+    const withPhotoView = this.appendSinglePhotoViewAction(grounded, ctx, attachedPhotoIds, trace)
+    const withCanvas = this.appendCanvasAction(withPhotoView, ctx, trace)
+    const actions = this.withUsageState(withCanvas)
 
-    const rawTypes = Array.isArray(rawActions) ? rawActions.map((a: any) => a?.type).join(',') : ''
-    const keptTypes = actions.map((a) => a.type).join(',')
     console.log(
       `[ChatActions] ✅ ${actions.length} action(s) after grounding ` +
         `(from ${Array.isArray(rawActions) ? rawActions.length : 0} raw) | €${costEur.toFixed(6)}` +
-        ` | raw=[${rawTypes}] kept=[${keptTypes}]`
+        ` | groups=[${photoGroups
+          .map((g) => `#${g.id} "${g.label}"(${g.photoIds.length}${g.rejected ? ',rejected' : ''})`)
+          .join(' ')}]`
     )
+    // Per-action outcome: which slot resolved its photo scope, or why it was dropped.
+    // Without this, an action that quietly widened to every shown photo looks identical
+    // to one the model scoped on purpose.
+    for (const line of trace) console.log(`[ChatActions]    ${line}`)
+
     return { actions, costEur }
+  }
+
+  /**
+   * Appends "place this photo on the atlas" whenever the user attached exactly ONE photo.
+   *
+   * Same reasoning as the canvas board: the scope isn't a judgment call. A turn built around
+   * a single attached photo is a question about THAT photo, and there is exactly one photo the
+   * action could be about — nothing for the suggester to decide, only to forget, which it
+   * regularly did. So `view_photo` is off the suggester's menu entirely (like create_canvas)
+   * and offered here instead, unconditionally.
+   *
+   * A single attached photo is below MIN_CANVAS_PHOTOS, so in practice this rides in the slot
+   * the board would otherwise have taken rather than adding a fifth chip.
+   */
+  private appendSinglePhotoViewAction(
+    actions: SuggestedAction[],
+    ctx: ActionsGroundingContext,
+    attachedPhotoIds: number[],
+    trace: string[]
+  ): SuggestedAction[] {
+    const attached = [...new Set(attachedPhotoIds)]
+    if (attached.length !== 1) return actions
+
+    // Grounded = the photo survived the ownership query, so it really is the user's.
+    const photo = ctx.photos.find((p) => p.id === attached[0])
+    if (!photo) return actions
+
+    trace.push(`✓ view_photo — photo ${photo.id} [programmatic]`)
+    return [
+      ...actions,
+      { type: 'view_photo', params: { photoId: photo.id, filename: photo.filename, view: '2d' } },
+    ]
+  }
+
+  /**
+   * Appends the "arrange these on a board" action — the one organizing action the LLM
+   * does NOT choose.
+   *
+   * A canvas is the only create whose scope isn't a judgment call: a board over everything
+   * the assistant just showed is always coherent, so there was nothing for the suggester to
+   * decide and plenty for it to get wrong (it merged four groups into a series named after
+   * one of them). Here the scope is "the whole non-rejected selection" by construction and
+   * the name is the curator's own title for it.
+   *
+   * Always appended when the selection is big enough to be worth arranging — it rides
+   * ALONGSIDE the suggester's picks rather than competing for one of their slots. That's
+   * why MAX_ACTIONS caps the suggester, not this.
+   */
+  private appendCanvasAction(
+    actions: SuggestedAction[],
+    ctx: ActionsGroundingContext,
+    trace: string[]
+  ): SuggestedAction[] {
+    const title = ctx.selectionTitle?.trim().slice(0, 100)
+    if (!title) {
+      trace.push('· create_canvas — skipped: the curator gave no name for the selection')
+      return actions
+    }
+
+    const shown = new Set(ctx.photos.map((p) => p.id))
+    const photoIds =
+      ctx.photoGroups.length > 0
+        ? [
+            ...new Set(
+              ctx.photoGroups.filter((g) => !g.rejected).flatMap((g) => g.photoIds)
+            ),
+          ].filter((id) => shown.has(id))
+        : ctx.photos.map((p) => p.id)
+
+    if (photoIds.length < MIN_CANVAS_PHOTOS) {
+      if (photoIds.length > 0) {
+        trace.push(
+          `· create_canvas — skipped: only ${photoIds.length} photo(s), a board needs ${MIN_CANVAS_PHOTOS}`
+        )
+      }
+      return actions
+    }
+
+    trace.push(`✓ create_canvas — "${title}" · ${photoIds.length} photo(s) [programmatic]`)
+    return [...actions, { type: 'create_canvas', params: { title, photoIds } }]
+  }
+
+  /**
+   * Normalizes the turn's photo groups into the stable, integer-addressed groups that
+   * Phase 3 selects with (`groupId`).
+   *
+   * - Legacy messages persisted before groups had ids get `index + 1`, which is exactly
+   *   the id they would have been assigned at creation.
+   * - Photos the user attached that belong to no assistant group are folded in as a
+   *   synthetic trailing group, so a grouped turn has ONE selection mechanism and the
+   *   attached photos remain includable/excludable like any other set.
+   * - The photo budget is spent on WHOLE groups: a group that doesn't fit is dropped
+   *   with a warning rather than truncated, because a half-listed group would make
+   *   "include group #2" mean something different to the model than it did to the user.
+   *
+   * Returns [] when the assistant showed no groups — that's a flat turn, resolved by
+   * `photoIds` instead.
+   */
+  private buildGroundedGroups(
+    shownPhotoGroups: Array<{ id?: number; label: string; photoIds: number[]; rejected?: boolean }>,
+    attachedPhotoIds: number[]
+  ): GroundedPhotoGroup[] {
+    const normalized = shownPhotoGroups
+      .map((g, i) => ({
+        id: g.id ?? i + 1,
+        label: (g.label ?? '').trim() || `Group ${i + 1}`,
+        photoIds: [...new Set(g.photoIds ?? [])],
+        rejected: g.rejected === true,
+      }))
+      .filter((g) => g.photoIds.length > 0)
+
+    if (normalized.length === 0) return []
+
+    const groupedIds = new Set(normalized.flatMap((g) => g.photoIds))
+    const attached = [...new Set(attachedPhotoIds)].filter((id) => !groupedIds.has(id))
+
+    let budget = MAX_GROUNDED_PHOTOS - attached.length
+    const kept: GroundedPhotoGroup[] = []
+    for (const g of normalized) {
+      if (g.photoIds.length > budget) {
+        console.warn(
+          `[ChatActions] ⚠️  group #${g.id} "${g.label}" (${g.photoIds.length} photos) left out — ` +
+            `over the ${MAX_GROUNDED_PHOTOS}-photo grounding budget`
+        )
+        continue
+      }
+      kept.push(g)
+      budget -= g.photoIds.length
+    }
+
+    if (attached.length > 0) {
+      kept.push({
+        id: Math.max(0, ...normalized.map((g) => g.id)) + 1,
+        label: ATTACHED_GROUP_LABEL,
+        photoIds: attached.slice(0, MAX_GROUNDED_PHOTOS),
+        rejected: false,
+      })
+    }
+
+    return kept
   }
 
   /**
@@ -254,22 +437,12 @@ export default class ChatActionsService {
     assistantText: string
     historyText: string
     photos: any[]
-    shownPhotoGroups: Array<{ label: string; photoIds: number[] }>
-    attachedPhotoIds: number[]
+    photoGroups: GroundedPhotoGroup[]
     collections: any[]
     series: any[]
     portfolios: any[]
   }): string {
-    const {
-      assistantText,
-      historyText,
-      photos,
-      shownPhotoGroups,
-      attachedPhotoIds,
-      collections,
-      series,
-      portfolios,
-    } = args
+    const { assistantText, historyText, photos, photoGroups, collections, series, portfolios } = args
     const lines: string[] = []
 
     if (historyText.trim()) {
@@ -282,32 +455,56 @@ export default class ChatActionsService {
     lines.push(assistantText.trim().slice(0, 2000))
     lines.push('')
 
+    // Two independent budgets: how many photos we LIST (prompt size) and how many of
+    // those carry a description (tokens). Neither limits what an action can cover — on a
+    // grouped turn the suggester includes whole groups BY NUMBER, so the photos we never
+    // listed still travel with their group. A big group costs tokens, not correctness.
+    let listed = 0
+    let described = 0
     const photoLine = (id: number): string => {
       const p = photos.find((x) => x.id === id)
-      if (!p) return `- id ${id}: photo`
-      const ctxSnippet = this.firstSentence(p.descriptions?.context ?? '')
-      return `- id ${id}: ${p.originalFileName ?? 'photo'}${ctxSnippet ? ` — ${ctxSnippet}` : ''}`
+      const snippet =
+        described++ < MAX_DESCRIBED_PHOTOS ? this.firstSentence(p?.descriptions?.context ?? '') : ''
+      return `- id ${id}: ${p?.originalFileName ?? 'photo'}${snippet ? ` — ${snippet}` : ''}`
+    }
+    /** Lists what fits in the remaining budget and states plainly what it left out. */
+    const listPhotos = (ids: number[], omittedNote: (n: number) => string) => {
+      const room = Math.max(0, MAX_LISTED_PHOTOS - listed)
+      for (const id of ids.slice(0, room)) lines.push(photoLine(id))
+      listed += Math.min(room, ids.length)
+      if (ids.length > room) lines.push(`- (${omittedNote(ids.length - room)})`)
     }
 
-    lines.push('## SHOWN PHOTOS, AS GROUPED FOR THE USER (the only photo IDs you may reference)')
     if (photos.length === 0) {
+      lines.push('## SHOWN PHOTOS')
       lines.push('(none — do not propose photo-based actions)')
-    } else if (shownPhotoGroups.length === 0) {
-      lines.push('(no groups — flat list)')
-      for (const p of photos.filter((x) => !attachedPhotoIds.includes(x.id))) {
-        lines.push(photoLine(p.id))
-      }
+    } else if (photoGroups.length === 0) {
+      lines.push('## SHOWN PHOTOS — flat list, no groups (the only photo IDs you may reference)')
+      lines.push(
+        'Scope create/add actions with `photoIds`; `groupIds` does not apply this turn. ' +
+          `To cover ALL ${photos.length} of them, leave \`photoIds\` empty.`
+      )
+      listPhotos(
+        photos.map((p: any) => p.id),
+        (n) => `+${n} more photos, ids not listed — leave \`photoIds\` empty to include them too`
+      )
     } else {
-      for (const g of shownPhotoGroups) {
-        lines.push(`Group "${g.label}":`)
-        for (const id of g.photoIds) lines.push(photoLine(id))
+      lines.push('## SHOWN PHOTOS, AS GROUPED FOR THE USER')
+      lines.push(
+        'Scope every create/add action with `groupIds` — the numbers below. Listing individual ' +
+          'photo IDs is ignored this turn. Pick the group(s) the action is actually about.'
+      )
+      for (const g of photoGroups) {
+        const rejected = g.rejected
+          ? ' — REJECTED by the assistant: never put this group in a create/add action'
+          : ''
+        lines.push(`Group #${g.id} "${g.label}" (${g.photoIds.length} photos)${rejected}:`)
+        listPhotos(
+          g.photoIds,
+          (n) =>
+            `+${n} more photos in this group, ids not listed — including group #${g.id} covers all ${g.photoIds.length}`
+        )
       }
-    }
-    const groupedIds = new Set(shownPhotoGroups.flatMap((g) => g.photoIds))
-    const ungroupedAttached = attachedPhotoIds.filter((id) => !groupedIds.has(id))
-    if (ungroupedAttached.length > 0) {
-      lines.push('Attached by the user (not part of any group):')
-      for (const id of ungroupedAttached) lines.push(photoLine(id))
     }
     lines.push('')
 
@@ -372,9 +569,15 @@ export default class ChatActionsService {
       .orderBy('id', 'desc')
       .first()
 
-    const shownPhotoGroups = (lastAssistant.photoGroups ?? []).map((g: any) => ({
+    // `id` is absent on messages persisted before groups carried one — index+1 reproduces
+    // the id they would have been given, and it's the same order the user saw.
+    const shownPhotoGroups = (lastAssistant.photoGroups ?? []).map((g: any, i: number) => ({
+      id: typeof g.id === 'number' ? g.id : i + 1,
       label: g.label ?? '',
       photoIds: g.photoIds ?? [],
+      // Absent on messages persisted before the curator flagged its discard piles —
+      // those turns simply have no rejected group, which is the pre-existing behaviour.
+      rejected: g.rejected === true,
     }))
     const attachedPhotoIds = precedingUser?.contextPhotoIds ?? []
 
@@ -394,6 +597,9 @@ export default class ChatActionsService {
       assistantText: lastAssistant.content,
       shownPhotoGroups,
       attachedPhotoIds,
+      // Absent on messages persisted before the curator named its selections; the
+      // suggester then simply has no name to give a canvas, and skips it.
+      selectionTitle: String((lastAssistant.metadata as any)?.selectionTitle ?? ''),
       historyText,
     })
 

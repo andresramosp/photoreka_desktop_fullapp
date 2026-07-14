@@ -214,6 +214,11 @@ export const PRICES = {
     input_cache_hit: 1.0 / 1_000_000, // USD per cached input token (estimate, not official)
     output: 12.0 / 1_000_000, // USD per output token
   },
+  'gemini-3.5-flash': {
+    input_cache_miss: 1.5 / 1_000_000, // USD per input token
+    input_cache_hit: 0.15 / 1_000_000, // USD per cached input token
+    output: 9.0 / 1_000_000, // USD per output token (including thinking tokens)
+  },
   // grok-4-fast: $0.20 input · $0.50 output per million tokens
   'grok-4-fast-reasoning': {
     input_cache_miss: 0.2 / 1_000_000,

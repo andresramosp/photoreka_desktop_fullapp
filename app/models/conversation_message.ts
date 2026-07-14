@@ -6,8 +6,23 @@ import Conversation from './conversation.js'
 export type MessageRole = 'user' | 'assistant'
 
 export interface PhotoGroup {
+  /**
+   * Stable 1-based id, unique within the message. This is the handle the action
+   * suggester (Phase 3) uses to say WHICH groups an action applies to — an integer
+   * instead of the group's free-text label, which the LLM would have to copy
+   * verbatim and could drift on. Optional because rows persisted before it existed
+   * lack it; normalize with `id ?? index + 1` when reading.
+   */
+  id?: number
   label: string
   photoIds: number[]
+  /**
+   * The assistant presented this group as discarded / not recommended (a "Descartadas"
+   * pile). Set by the curator itself in Phase 2, NOT inferred from the label: the action
+   * suggester excludes these photos from every create/add action, and an exclusion that
+   * depends on reading a free-text label back is exactly the fragility this replaces.
+   */
+  rejected?: boolean
   /** id (as string) → "filename — context". Only populated for LLM history; stripped before sending to frontend. */
   photoDescriptions?: Record<string, string>
 }

@@ -79,14 +79,14 @@ const CHAT_INTELLIGENCE_MODES: ReadonlyArray<ChatIntelligenceModeDefinition> = [
     // budget that flattens the verdict into convention — so the only variable moved
     // here is `thinkingLevelPhase2`. Swapping the model too (gemini-3-pro / gpt-5.5,
     // below) would confound the two and tell us nothing about which one paid off.
-    modelPhase1: 'gemini-3-flash-preview',
-    modelPhase2Cheap: 'gemini-3-flash-preview',
-    modelPhase2Expensive: 'gemini-3-flash-preview',
-    modelPhase2Lite: 'gemini-3.1-flash-lite',
+    modelPhase1: 'gemini-3.5-flash',
+    modelPhase2Cheap: 'gemini-3.5-flash',
+    modelPhase2Expensive: 'gemini-3.5-flash',
+    modelPhase2Lite: 'gemini-3.5-flash',
     thinkingLevelPhase2: 'high',
     // Thinking tokens bill as output. 2x is a placeholder — measure real turns with
     // the agent's cost log before charging users for it.
-    costFactor: 2,
+    costFactor: 3,
     hidden: true, // flip to false (or delete) to offer it in the UI
     // ── Next rung, once the thinking-only variant has been measured: ──
     // modelPhase2Cheap: 'gemini-3-pro-preview',

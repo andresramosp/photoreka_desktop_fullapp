@@ -162,6 +162,7 @@ export default class LangchainAgentKnowledgeService {
     return {
       output: text,
       photoGroups: [],
+      selectionTitle: '',
       toolsUsed: [],
       intermediateSteps: [],
       totalIterations: 1,

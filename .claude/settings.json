@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/andre/Desktop/Photoreka/App/web/src/views/admin/**)",
+      "Bash(awk 'NR>=148 && NR<=228' app/utils/chat_actions_catalog.ts)",
+      "Bash(awk 'NR>=39 && NR<=57' app/services/chat_actions_service.ts)",
+      "Read(//tmp/**)",
+      "Read(//c/Users/andre/Desktop/Photoreka/App/web/src/utils/**)",
+      "Read(//c/Users/andre/Desktop/Photoreka/App/web/src/composables/**)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"exit: $? \\(1 = sin errores en chat_actions\\)\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.imports,null,1\\)\\); console.log\\('tsx:', !!\\(p.devDependencies&&p.devDependencies.tsx\\)\\)\")",
+      "Bash(npx tsx *)",
+      "Read(//c/Users/andre/Desktop/Photoreka/App/web/**)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('vitest:',!!\\(p.devDependencies||{}\\).vitest, '| vite:',!!\\(p.devDependencies||{}\\).vite\\); console.log\\('scripts:', Object.keys\\(p.scripts||{}\\).join\\(', '\\)\\)\")",
+      "Bash(node -e ' *)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\andre\\Desktop\\Photoreka\\App\\web\\src\\utils"
+    ]
+  }
+}

@@ -46,10 +46,15 @@ export class LogicInferenceBillingError extends Error {
   }
 }
 
-/** Selects which NLI engine adjustProximitiesByContextInference dispatches to. */
+/**
+ * Selects which NLI engine adjustProximitiesByContextInference dispatches to.
+ * AUTO picks BERT when the RunPod GPU already has a warm worker (no cold start),
+ * otherwise triggers a background wake-up and serves this call with the LLM.
+ */
 export enum LogicInferenceEngine {
   LLM = 'LLM',
   BERT = 'BERT',
+  AUTO = 'AUTO',
 }
 
 // ─── LLM engine config ───────────────────────────────────
@@ -192,9 +197,32 @@ export default class LogicInferenceService {
     termsType: TermsType = 'tag',
     engine: LogicInferenceEngine = LogicInferenceEngine.LLM
   ): Promise<any[]> {
-    return engine === LogicInferenceEngine.BERT
+    const resolved =
+      engine === LogicInferenceEngine.AUTO ? await this.resolveEngine(modelsService) : engine
+
+    return resolved === LogicInferenceEngine.BERT
       ? this.adjustProximitiesByContextInferenceByBert(modelsService, term, texts, userId, termsType)
       : this.adjustProximitiesByContextInferenceByLLM(modelsService, term, texts, userId, termsType)
+  }
+
+  /**
+   * Resolve LogicInferenceEngine.AUTO to a concrete engine based on RunPod GPU
+   * warmth: if BERT already has a warm worker we use it (fast, calibrated);
+   * otherwise we kick off a non-blocking wake-up and fall back to the LLM for
+   * this request so the user never waits out a cold start. Subsequent searches
+   * route back to BERT once RunPod reports warm.
+   */
+  private async resolveEngine(modelsService: ModelsService): Promise<LogicInferenceEngine> {
+    const warm = await modelsService.isRunPodEndpointWarm('logic_gpu')
+
+    if (warm) {
+      console.log('[LogicInference] engine=BERT (RunPod GPU warm, no cold start)')
+      return LogicInferenceEngine.BERT
+    }
+
+    console.log('[LogicInference] engine=LLM (RunPod GPU cold → triggering warm-up, serving via LLM)')
+    modelsService.triggerRunPodWarm('logic_gpu')
+    return LogicInferenceEngine.LLM
   }
 
   // ═══════════════════════════════════════════════════════
