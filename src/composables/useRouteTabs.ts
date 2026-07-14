@@ -15,6 +15,7 @@ import { useCollectionsStore } from "@/stores/collections";
 import { useSeriesStore } from "@/stores/series";
 import { useChatStore } from "@/stores/chat";
 import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds";
+import { useSearchStore } from "@/stores/searchStore";
 import {
   getFallbackTabTitle,
   getTabConfigByRouteName,
@@ -184,6 +185,7 @@ export const useRouteTabs = () => {
   const seriesStore = useSeriesStore();
   const chatStore = useChatStore();
   const portfolioBuildsStore = usePortfolioBuildsStore();
+  const searchStore = useSearchStore();
   const tabDirtyStore = useTabDirtyStore();
 
   /** Pinned tabs are seeded from config on every load, never from storage. */
@@ -299,7 +301,19 @@ export const useRouteTabs = () => {
   const resolveTabTitle = async (match: TabRouteMatch): Promise<string> => {
     const fallbackTitle = getFallbackTabTitle(match);
 
-    if (!match.instanceId || !match.config.titleResolver) {
+    if (!match.config.titleResolver) {
+      return fallbackTitle;
+    }
+
+    if (match.config.titleResolver === "search") {
+      const query = (searchStore.currentSearchState?.query || "").trim();
+      if (!query) {
+        return match.config.title;
+      }
+      return query.charAt(0).toUpperCase() + query.slice(1);
+    }
+
+    if (!match.instanceId) {
       return fallbackTitle;
     }
 
@@ -609,6 +623,18 @@ export const useRouteTabs = () => {
       upsertTabFromCurrentRoute();
     },
     { immediate: true },
+  );
+
+  // The search tab's title tracks the live query text, which changes without
+  // a route navigation (it lives in the search store, not the URL) — so it
+  // needs its own watcher rather than piggybacking on route.fullPath above.
+  watch(
+    () => searchStore.currentSearchState?.query,
+    () => {
+      if (activeTabKey.value === "search") {
+        upsertTabFromCurrentRoute();
+      }
+    },
   );
 
   watch(

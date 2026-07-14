@@ -7,7 +7,8 @@ export type TitleResolver =
   | "series"
   | "canvas"
   | "portfolios"
-  | "conversation";
+  | "conversation"
+  | "search";
 
 export interface TabRouteConfig {
   key: string;
@@ -65,6 +66,7 @@ export const ROUTE_TABS_CONFIG: TabRouteConfig[] = [
     mode: "singleton",
     title: "Search",
     componentName: "SearchView",
+    titleResolver: "search",
   },
   {
     key: "report",
