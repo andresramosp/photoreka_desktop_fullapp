@@ -1343,14 +1343,14 @@ const suggestions: Suggestion[] = [
     autoSend: true,
     subQueries: [
       {
-        title: "Identifying Portfolio Gaps",
+        title: "Identifying Gaps",
         prompt:
           "Based on my current patterns, what subjects or aesthetic styles are underrepresented? Suggest specific steps to enrich my catalogue with new styles or themes.",
         needsPhotos: false,
         autoSend: true,
       },
       {
-        title: "Overall Portfolio Assessment",
+        title: "Overall Work Assessment",
         prompt:
           "Review my entire photo library and provide an honest assessment. Give me an internal ranking of my usage patterns and identify which pieces reach that 'Unique' (10/10) level of impact.",
         needsPhotos: false,
