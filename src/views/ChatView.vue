@@ -182,23 +182,29 @@
           <!-- <n-icon :size="isMobile ? 48 : 64" class="welcome-icon">
             <RobotOutlined />
           </n-icon> -->
-          <AppLogo
-            layout="icon"
-            :height="isMobile ? 48 : 64"
-            class="welcome-icon"
-          />
+          <div class="welcome-icon-wrap">
+            <AppLogo
+              layout="icon"
+              :height="isMobile ? 48 : 64"
+              class="welcome-icon"
+            />
+          </div>
 
-          <h2 class="welcome-title">
-            {{
-              hasPhotos
-                ? "Chat with your photo library"
-                : "Welcome to Photoreka"
-            }}
+          <!-- The hidden copy reserves the final size, so typing the title out
+               never reflows the content below it. -->
+          <h2 class="welcome-title" :aria-label="welcomeTitle">
+            <span class="welcome-title-ghost" aria-hidden="true">{{
+              welcomeTitle
+            }}</span>
+            <span class="welcome-title-typed" aria-hidden="true"
+              >{{ typedTitle
+              }}<span v-if="isTypingTitle" class="welcome-title-caret"></span
+            ></span>
           </h2>
           <p class="welcome-description">
             {{
               hasPhotos
-                ? "Ask questions about your library, get curation advice, or explore your catalog with Photoreka's AI assistance."
+                ? "Ask questions about your photos, get curation advice, or explore your catalog with Photoreka's AI assistance."
                 : "Your library is empty for now. Ask me anything about how Photoreka works, and import your photos whenever you're ready."
             }}
           </p>
@@ -748,10 +754,9 @@
         <div class="chatlab-info-body">
           <p>
             ChatLab is an advisory companion that helps you reflect on your
-            work, discover hidden gems, and plan your next creative move. It is
-            <strong>not</strong> an action engine — think of it as a thoughtful
-            critic sitting beside you, offering perspective while you stay in
-            control.
+            work, discover hidden gems, and plan your next creative move. It
+            never changes your library on its own — any change is proposed as an
+            action you choose to confirm, so you stay in control.
           </p>
 
           <h4 class="chatlab-info-h4">
@@ -774,6 +779,10 @@
             <li>
               Give you personalized feedback and suggestions based on your work.
             </li>
+            <li>
+              Offer actions you can confirm — like adding the suggested photos
+              to a collection or series, or sending them to another tool.
+            </li>
           </ul>
 
           <h4 class="chatlab-info-h4">
@@ -783,9 +792,8 @@
             What ChatLab cannot do
           </h4>
           <ul>
-            <li>Create, edit, or delete collections, series or canvases.</li>
-            <li>Delete, move, or modify your photos in any way.</li>
-            <li>Perform any write operation on your library.</li>
+            <li>Delete photos, collections, series or canvases.</li>
+            <li>Change anything on its own — every action needs your confirmation.</li>
           </ul>
 
           <h4 class="chatlab-info-h4">
@@ -1402,6 +1410,65 @@ const hasPhotos = computed(
   () => (photosStore.processedPhotos?.length ?? 0) > 0,
 );
 
+const welcomeTitle = computed(() =>
+  hasPhotos.value ? "Chat with your library" : "Welcome to Photoreka",
+);
+
+// Typewriter for the welcome title, paired with the logo's scale-in.
+const TITLE_TYPING_DELAY_MS = 220; // lets the logo start growing first
+const TITLE_TYPING_SPEED_MS = 38;
+
+const prefersReducedMotion =
+  window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+
+const typedTitle = ref("");
+const isTypingTitle = ref(false);
+let titleTypingTimer: ReturnType<typeof setInterval> | null = null;
+let titleTypingDelay: ReturnType<typeof setTimeout> | null = null;
+
+const stopTitleTyping = () => {
+  if (titleTypingTimer) clearInterval(titleTypingTimer);
+  if (titleTypingDelay) clearTimeout(titleTypingDelay);
+  titleTypingTimer = null;
+  titleTypingDelay = null;
+  isTypingTitle.value = false;
+};
+
+const startTitleTyping = () => {
+  stopTitleTyping();
+
+  const full = welcomeTitle.value;
+  if (prefersReducedMotion) {
+    typedTitle.value = full;
+    return;
+  }
+
+  typedTitle.value = "";
+  isTypingTitle.value = true;
+  titleTypingDelay = setTimeout(() => {
+    let typed = 0;
+    titleTypingTimer = setInterval(() => {
+      typedTitle.value = full.slice(0, ++typed);
+      if (typed >= full.length) stopTitleTyping();
+    }, TITLE_TYPING_SPEED_MS);
+  }, TITLE_TYPING_DELAY_MS);
+};
+
+// Retypes whenever the welcome screen comes back, and also if the title itself
+// changes — the photo library can still be loading when the view first renders.
+watch(
+  () => [chatStore.messages.length === 0, welcomeTitle.value] as const,
+  ([isWelcomeVisible]) => {
+    if (!isWelcomeVisible) {
+      stopTitleTyping();
+      typedTitle.value = "";
+      return;
+    }
+    startTitleTyping();
+  },
+  { immediate: true },
+);
+
 const SUGGESTION_WINDOW = 4;
 const SUGGESTION_ROTATION_KEY = "chat_suggestion_rotation";
 
@@ -1588,6 +1655,7 @@ onActivated(() => {
 onUnmounted(() => {
   window.removeEventListener("resize", checkMobile);
   stopLoadingPhraseCycle();
+  stopTitleTyping();
 });
 
 const formatTime = (date: Date) => {
@@ -2648,11 +2716,71 @@ const formatRelativeDate = (dateStr: string) => {
   color: var(--text-tertiary);
 }
 
+/* Wrapper, not the logo itself: AppLogo owns its own opacity, and nesting keeps
+   the animation from overwriting it. */
+.welcome-icon-wrap {
+  animation: welcome-icon-in 3000ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+@keyframes welcome-icon-in {
+  from {
+    opacity: 0.1;
+    /* transform: scale(0.4) translateY(10px); */
+  }
+  to {
+    opacity: 1;
+    /* transform: scale(1) translateY(0); */
+  }
+}
+
 .welcome-title {
+  position: relative;
   font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-semibold);
   color: var(--text-secondary);
-  margin: 0 0 var(--spacing-sm) 0;
+  margin: 0 0 var(--spacing-xs) 0;
+}
+
+.welcome-title-ghost {
+  visibility: hidden;
+}
+
+.welcome-title-typed {
+  position: absolute;
+  inset: 0;
+}
+
+.welcome-title-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 3px;
+  vertical-align: -0.12em;
+  background: currentColor;
+  opacity: 0.7;
+  animation: welcome-caret-blink 900ms steps(1, end) infinite;
+}
+
+@keyframes welcome-caret-blink {
+  0%,
+  50% {
+    opacity: 0.7;
+  }
+  50.1%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-icon-wrap {
+    animation: none;
+  }
+
+  .welcome-title-caret {
+    display: none;
+  }
 }
 
 .welcome-description {
