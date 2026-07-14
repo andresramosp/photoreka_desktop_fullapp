@@ -483,9 +483,30 @@
                 v-for="(list, listIdx) in message.photoLists"
                 :key="listIdx"
                 class="message-photo-list"
+                :class="{
+                  'message-photo-list--with-divider': photoListNeedsLeftDivider(
+                    message.photoLists,
+                    listIdx,
+                    index,
+                  ),
+                }"
+                :style="photoGroupStyle(list.photoIds.length)"
               >
-                <div class="message-photo-list-label">{{ list.label }}</div>
-                <div class="message-photos-grid">
+                <div
+                  class="message-photo-list-label"
+                  :class="{
+                    'message-photo-list-label--narrow': isNarrowPhotoGroup(
+                      list.photoIds.length,
+                    ),
+                  }"
+                  :title="list.label"
+                >
+                  {{ list.label }}
+                </div>
+                <div
+                  class="message-photos-grid"
+                  :style="photoGroupGridStyle(list.photoIds.length)"
+                >
                   <div
                     v-for="photo in getPhotosForMessage(list.photoIds)"
                     :key="photo.id"
@@ -793,7 +814,9 @@
           </h4>
           <ul>
             <li>Delete photos, collections, series or canvases.</li>
-            <li>Change anything on its own — every action needs your confirmation.</li>
+            <li>
+              Change anything on its own — every action needs your confirmation.
+            </li>
           </ul>
 
           <h4 class="chatlab-info-h4">
@@ -1504,6 +1527,7 @@ const activeSuggestion = ref<Suggestion | null>(null);
 
 const checkMobile = () => {
   isMobile.value = window.innerWidth < 768;
+  void recomputePhotoListDividers();
 };
 
 const chatInputPlaceholder = computed(() =>
@@ -2052,6 +2076,125 @@ const getPhotosForMessage = (photoIds: number[]): ContextPhoto[] => {
     })
     .filter(Boolean) as ContextPhoto[];
 };
+
+// Labeled photo groups size themselves to their own photo count instead of
+// always spanning the full bubble width. This lets the flex-wrap container flow
+// small groups side by side (columns) and only stack them (rows) once they no
+// longer fit — so three single-photo groups become three columns rather than
+// three rows, while a group of five still fills its own row. Photo size stays
+// constant (~one cell); only the group's width and column count change.
+const PHOTO_CELL_PX = 118;
+const PHOTO_GRID_GAP_PX = 8; // must match .message-photos-grid gap (--spacing-sm)
+
+const photoGroupCols = (count: number): number =>
+  Math.max(1, Math.min(count || 1, isMobile.value ? 3 : 5));
+
+const photoGroupStyle = (count: number): Record<string, string> => {
+  const cols = photoGroupCols(count);
+  return {
+    width: `${cols * PHOTO_CELL_PX + (cols - 1) * PHOTO_GRID_GAP_PX}px`,
+    maxWidth: "100%",
+  };
+};
+
+const photoGroupGridStyle = (count: number): Record<string, string> => ({
+  gridTemplateColumns: `repeat(${photoGroupCols(count)}, 1fr)`,
+});
+
+// Mobile wrapping is pixel-based, so logical column math alone can be wrong.
+// We measure rendered list tops per message and only add a divider when the
+// current item is on the same visual row as its previous sibling.
+const measuredPhotoListDividers = ref<Record<number, Record<number, boolean>>>(
+  {},
+);
+
+const recomputePhotoListDividers = async () => {
+  await nextTick();
+  const root = messagesRef.value;
+  if (!root) return;
+
+  const nextMap: Record<number, Record<number, boolean>> = {};
+  const rows = root.querySelectorAll<HTMLElement>(
+    ".message-row[data-message-index]",
+  );
+
+  rows.forEach((row) => {
+    const messageIndex = Number(row.dataset.messageIndex);
+    if (!Number.isFinite(messageIndex)) return;
+
+    const listsWrap = row.querySelector<HTMLElement>(".message-photo-lists");
+    if (!listsWrap) return;
+
+    const lists = Array.from(
+      listsWrap.querySelectorAll<HTMLElement>(".message-photo-list"),
+    );
+    if (lists.length < 2) return;
+
+    const dividerByIndex: Record<number, boolean> = {};
+    let prevTop = Math.round(lists[0].getBoundingClientRect().top);
+
+    for (let i = 1; i < lists.length; i += 1) {
+      const top = Math.round(lists[i].getBoundingClientRect().top);
+      const sameRowAsPrevious = Math.abs(top - prevTop) <= 1;
+      dividerByIndex[i] = sameRowAsPrevious;
+      prevTop = top;
+    }
+
+    nextMap[messageIndex] = dividerByIndex;
+  });
+
+  measuredPhotoListDividers.value = nextMap;
+};
+
+// Narrow groups (fewer photos than the row can hold) sit side by side in a
+// tight column, where a wrapping two-line label reads as misaligned clutter —
+// so those get a smaller, single-line, ellipsized label instead.
+const isNarrowPhotoGroup = (count: number): boolean =>
+  photoGroupCols(count) < (isMobile.value ? 3 : 5);
+
+// Adds a divider only when a group is not the first element of its own wrapped
+// row. This keeps separators between side-by-side groups without drawing one
+// before groups that start a new row.
+const photoListNeedsLeftDivider = (
+  lists: PhotoList[],
+  index: number,
+  messageIndex?: number,
+): boolean => {
+  if (!lists || index <= 0 || index >= lists.length) return false;
+
+  if (isMobile.value) {
+    if (messageIndex == null) return false;
+    return !!measuredPhotoListDividers.value[messageIndex]?.[index];
+  }
+
+  const maxCols = isMobile.value ? 3 : 5;
+  let rowUsedCols = 0;
+
+  for (let i = 0; i <= index; i += 1) {
+    const cols = photoGroupCols(lists[i].photoIds.length);
+
+    // Overflow means this item starts a new wrapped row.
+    if (rowUsedCols > 0 && rowUsedCols + cols > maxCols) {
+      rowUsedCols = 0;
+    }
+
+    if (i === index) {
+      return rowUsedCols > 0;
+    }
+
+    rowUsedCols += cols;
+  }
+
+  return false;
+};
+
+watch(
+  () => chatStore.messages,
+  () => {
+    void recomputePhotoListDividers();
+  },
+  { deep: true, flush: "post" },
+);
 
 const removeContextPhoto = (id: string) => {
   contextPhotos.value = contextPhotos.value.filter((p) => p.id !== id);
@@ -3508,14 +3651,33 @@ const formatRelativeDate = (dateStr: string) => {
 
 .message-photo-lists {
   margin-top: var(--spacing-sm);
+  border-top: 1px solid var(--border-color);
+  padding-top: var(--spacing-sm);
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  /* Groups keep their content-based width; when several share a row they
+     spread out edge to edge instead of packing to the left, so a columnar
+     layout fills the whole width. A group that owns its row stays flush left. */
+  /* justify-content: space-between; */
   gap: var(--spacing-md);
 }
 
 .message-photo-list {
-  border-top: 1px solid var(--border-color);
-  padding-top: var(--spacing-sm);
+  flex: 0 1 auto;
+  min-width: 0;
+  /* content-box so the columnar divider's border-left + padding-left add
+     *outside* the fixed group width — otherwise they'd eat into it and shrink
+     that group's photos relative to the first (which has no divider). */
+  box-sizing: content-box;
+}
+
+/* Row-local separator: shown only for groups that have another group to their
+  left in the same wrapped row. */
+.message-photo-list--with-divider {
+  border-left: 1px solid var(--border-color);
+  padding-left: var(--spacing-md);
 }
 
 .message-photo-list-label {
@@ -3524,7 +3686,21 @@ const formatRelativeDate = (dateStr: string) => {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-muted);
+  line-height: 1.3;
+  /* Reserves room for a 2-line label (e.g. "Honorable Mention") so every
+     group's label block is the same height and the photos below start
+     perfectly aligned across columns, whether their own label wraps or not. */
   margin-bottom: var(--spacing-xs);
+}
+
+/* Narrow (column-packed) groups: a wrapped 2-line label reads as a misaligned
+   jumble next to its neighbors, so it collapses to one truncated line instead. */
+.message-photo-list-label--narrow {
+  font-size: 10px;
+  min-height: 1.3em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .message-photos--user {
@@ -3554,6 +3730,11 @@ const formatRelativeDate = (dateStr: string) => {
 }
 
 @media (max-width: 768px) {
+  .message-avatar {
+    width: 28px;
+    height: 28px;
+  }
+
   .message-user .message-bubble,
   .message-assistant .message-bubble {
     width: 92%;
