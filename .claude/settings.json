@@ -4,7 +4,17 @@
       "Bash(git stash *)",
       "Bash(npx vue-tsc *)",
       "Read(//tmp/**)",
-      "Bash(npx prettier *)"
+      "Bash(npx prettier *)",
+      "Bash(timeout 30 bash -c 'until curl -sf http://localhost:5173 >/dev/null 2>&1; do sleep 1; done')",
+      "Bash(npm run *)",
+      "Bash(timeout 40 bash -c 'until curl -sf http://localhost:5173 >/dev/null 2>&1; do sleep 1; done')",
+      "Bash(node -e \"try{require.resolve\\('playwright'\\)}catch\\(e\\){console.log\\('no playwright'\\)}; try{require.resolve\\('puppeteer'\\)}catch\\(e\\){console.log\\('no puppeteer'\\)}\")",
+      "Bash(npm init *)",
+      "Bash(npm install *)",
+      "Bash(node shots.mjs)",
+      "Bash(node -e \"const t = require\\('naive-ui'\\).tabsDark ?? null; const s = require\\('naive-ui/lib/tabs/styles'\\); console.log\\(Object.keys\\(s.tabsLight.self\\({Common: {}} \\) ?? {}\\)\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(node tabs.mjs)"
     ]
   }
 }

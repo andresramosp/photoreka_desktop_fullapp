@@ -839,7 +839,7 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
 }
 
 .info-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-surface-hover);
 }
 
 /* Control panel */
@@ -857,7 +857,7 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
   overscroll-behavior: contain;
   touch-action: pan-y;
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-color);
 }
 
 .close-panel-btn-corner {
@@ -866,7 +866,7 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
   right: 8px;
   background: transparent;
   border: none;
-  color: #888;
+  color: var(--icon-secondary);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -874,7 +874,7 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
 }
 
 .close-panel-btn-corner:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-surface-hover);
   color: var(--text-primary);
 }
 
@@ -882,10 +882,7 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
 .control-section {
   margin-bottom: var(--config-section-spacing, 16px);
   padding-bottom: var(--config-section-spacing, 16px);
-  border-bottom: var(
-    --config-section-divider,
-    1px solid rgba(255, 255, 255, 0.08)
-  );
+  border-bottom: var(--config-section-divider, 1px solid var(--border-color));
 }
 
 .control-section:last-child {
@@ -918,7 +915,7 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
 }
 
 .section-toggle-label {
-  color: #e5e5e5;
+  color: var(--text-primary);
   font-size: var(--config-toggle-label-size, 13px);
   font-weight: var(--config-toggle-label-weight, 600);
 }
@@ -941,7 +938,7 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
 }
 
 .toggle-icon {
-  color: #888;
+  color: var(--icon-secondary);
   transition: transform 0.2s;
 }
 
@@ -975,12 +972,12 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
 }
 
 .control-panel::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--border-color-hover);
   border-radius: 3px;
 }
 
 .control-panel::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--icon-tertiary);
 }
 
 /* Navigation controls styles */
@@ -1032,14 +1029,10 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
   min-width: 13px;
   height: 13px;
   padding: 2px 5px;
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.12),
-    rgba(255, 255, 255, 0.04)
-  );
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: var(--bg-surface-hover);
+  border: 1px solid var(--border-color-hover);
   border-radius: 3px;
-  color: var(--text-primary, #ffffff);
+  color: var(--text-primary);
   font-size: 10px;
   font-weight: 600;
   font-family: "Segoe UI", system-ui, sans-serif;
@@ -1110,13 +1103,13 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
 }
 
 .limit-slider {
-  --n-rail-color: rgba(255, 255, 255, 0.12);
-  --n-rail-color-hover: rgba(255, 255, 255, 0.2);
+  --n-rail-color: var(--border-color);
+  --n-rail-color-hover: var(--border-color-hover);
   --n-fill-color: var(--primary-color, #3b82f6);
   --n-fill-color-hover: var(--primary-color-hover, #2563eb);
   --n-handle-color: var(--primary-color, #3b82f6);
-  --n-dot-color: rgba(255, 255, 255, 0.25);
+  --n-dot-color: var(--border-color-hover);
   --n-mark-font-size: 10px;
-  --n-mark-color: #6b7280;
+  --n-mark-color: var(--text-tertiary);
 }
 </style>

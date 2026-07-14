@@ -25,7 +25,7 @@ const colors = {
     500: "#3b82f6",
     600: "#2563eb",
     700: "#1d4ed8",
-    800: "#0000ff",
+    800: "#1e40af",
     900: "#1e3a8a",
   },
   // Secondary (Purple)
@@ -99,7 +99,7 @@ const colors = {
     100: "#cffafe",
     200: "#a5f3fc",
     300: "#67e8f9",
-    400: "#00ffff",
+    400: "#22d3ee",
     500: "#06b6d4",
     600: "#0891b2",
     700: "#0e7490",
@@ -163,7 +163,7 @@ export const darkTheme = {
   bgDeepSurface: "black",
   bgOverlay: "rgba(0, 0, 0, 0.6)",
   bgTagPill: "rgba(103, 102, 102, 0.7)",
-  // bgTag: "rgba(37, 99, 235, 0.7)",
+  bgTag: "rgba(37, 99, 235, 0.7)",
 
   // Borders
   border: "#2c2c32",
@@ -186,6 +186,8 @@ export const darkTheme = {
 
   // Acento
   accent: colors.cyan[400],
+  accentHover: colors.cyan[300],
+  accentPressed: colors.cyan[500],
 
   // Premium Landing específico
   premium: {
@@ -201,6 +203,7 @@ export const darkTheme = {
     accent: colors.purple[600],
     gold: colors.amber[500],
     goldText: "#1f1400",
+    gradient1: colors.blue[600],
     gradient2: colors.blue[800],
     gradient3: colors.cyan[400],
   },
@@ -235,23 +238,30 @@ export const lightTheme = {
   errorHover: colors.red[700],
   errorPressed: colors.red[800],
 
-  info: colors.cyan[500],
-  infoHover: colors.cyan[700],
+  // cyan[700]: cyan[500] solo da 2.4:1 sobre blanco (texto y botones info ilegibles)
+  info: colors.cyan[700],
+  infoHover: colors.cyan[600],
   infoPressed: colors.cyan[800],
 
   // Acento
-  accent: colors.cyan[400],
+  // cyan[700]: única variante de cyan que pasa AA (4.5:1) como texto sobre blanco
+  accent: colors.cyan[700],
+  accentHover: colors.cyan[800],
+  accentPressed: colors.cyan[900],
 
   // Backgrounds
-  bgBody: "#F7F8FA",
-  bgContainer: "#f8f8f8",
-  bgDeepSurface: "whitesmoke",
+  // Escalera de elevación monotónica: recessed más oscuro → elevado más blanco
+  bgBody: "#F1F3F7",
+  bgContainer: "#F9FAFB",
+  bgDeepSurface: "#E8EBF0",
   bgSurface: "#FFFFFF",
   bgSurfaceHover: "#F1F5F9",
   bgCard: "#FFFFFF",
 
   bgOverlay: "rgba(0, 0, 0, 0.4)",
   bgTag: "rgba(37, 99, 235, 0.12)",
+  // Pill oscura también en light: el texto encima es textOnPrimary (blanco)
+  bgTagPill: "rgba(55, 60, 70, 0.75)",
 
   // Borders
   border: "rgba(0, 0, 0, 0.1)",
@@ -264,8 +274,8 @@ export const lightTheme = {
   textTertiary: "#64748b",
   textPlaceholder: "#94a3b8",
   textDisabled: "#cbd5e1",
-  textOnPrimary: "#000000",
-  textOnAccent: "#000000",
+  textOnPrimary: "#ffffff",
+  textOnAccent: "#ffffff",
 
   // Icons
   iconPrimary: "#0f172a",
@@ -286,6 +296,7 @@ export const lightTheme = {
     accent: colors.purple[700],
     gold: colors.amber[600],
     goldText: "#1f1400",
+    gradient1: colors.blue[600],
     gradient2: colors.blue[800],
     gradient3: colors.cyan[400],
   },
@@ -368,6 +379,15 @@ export function getNaiveThemeOverrides(isDark = true) {
       itemIconColor: theme.iconSecondary,
     },
 
+    Tabs: {
+      // En light, el fondo por defecto de las pestañas card es casi idéntico
+      // al bg del header: se oscurece la inactiva para separar superficie/fondo
+      tabColor: isDark ? theme.bgSurface : "#E7EAF0",
+      tabBorderColor: isDark ? theme.border : "rgba(0, 0, 0, 0.14)",
+      tabTextColorCard: theme.textSecondary,
+      tabTextColorActiveCard: theme.textPrimary,
+    },
+
     // Los tags dentro del Select múltiple se personalizan con el componente Tag
     Tag: {
       // Tags con borde (default en Select múltiple)
@@ -395,12 +415,16 @@ export function getNaiveThemeOverrides(isDark = true) {
     },
 
     Checkbox: {
-      // Borde visible en fondos oscuros
-      border: "1px solid rgba(255, 255, 255, 0.35)",
+      // Borde visible sobre el fondo de cada tema
+      border: isDark
+        ? "1px solid rgba(255, 255, 255, 0.35)"
+        : "1px solid rgba(0, 0, 0, 0.3)",
       borderHover: `1px solid ${theme.primaryHover}`,
       borderFocus: `1px solid ${theme.primary}`,
       borderChecked: `1px solid ${theme.primary}`,
-      borderDisabled: "1px solid rgba(255, 255, 255, 0.12)",
+      borderDisabled: isDark
+        ? "1px solid rgba(255, 255, 255, 0.12)"
+        : "1px solid rgba(0, 0, 0, 0.12)",
     },
   };
 }
@@ -433,12 +457,14 @@ export function getThemeCSSVariables(isDark = true) {
     "--primary-50": "rgba(37, 99, 235, 0.5)",
 
     // Secondary
-    "--accent-color": theme.secondary,
-    "--accent-color-hover": theme.secondaryHover,
-    "--accent-color-pressed": theme.secondaryPressed,
+    "--secondary-color": theme.secondary,
+    "--secondary-color-hover": theme.secondaryHover,
+    "--secondary-color-pressed": theme.secondaryPressed,
 
     // Accent
     "--accent-color": theme.accent,
+    "--accent-color-hover": theme.accentHover,
+    "--accent-color-pressed": theme.accentPressed,
 
     // Status
     "--success-color": theme.success,
@@ -467,9 +493,6 @@ export function getThemeCSSVariables(isDark = true) {
     "--bg-tag": theme.bgTag,
     "--bg-deep-surface": theme.bgDeepSurface,
     "--bg-tag-pill": theme.bgTagPill,
-
-    // Canvas
-    "--canvas-dot-color": theme.canvasDotColor,
 
     // Borders
     "--border-color": theme.border,

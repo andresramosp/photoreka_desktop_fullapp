@@ -133,7 +133,13 @@
               @click.stop
             >
               <template #empty>
-                <div style="padding: 8px; color: #888; font-size: 12px">
+                <div
+                  style="
+                    padding: 8px;
+                    color: var(--text-secondary);
+                    font-size: 12px;
+                  "
+                >
                   No tags found
                 </div>
               </template>
@@ -702,11 +708,11 @@ const clearGroupFilter = () => {
   --collapsed-panel-z-index: 5;
   --collapsed-panel-background: var(--bg-card, rgba(20, 20, 28, 0.78));
   --collapsed-panel-backdrop: blur(8px);
-  --collapsed-panel-background-hover: rgba(255, 255, 255, 0.08);
+  --collapsed-panel-background-hover: var(--bg-surface-hover);
   --collapsed-panel-hover-transform: none;
   --collapsed-panel-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
   --collapsed-panel-shadow-hover: 0 4px 20px rgba(0, 0, 0, 0.5);
-  --collapsed-panel-icon-color: #e5e5e5;
+  --collapsed-panel-icon-color: var(--icon-primary);
   /* --collapsed-panel-icon-size: 18px; */
 }
 
@@ -724,7 +730,7 @@ const clearGroupFilter = () => {
   overscroll-behavior: contain;
   touch-action: pan-y;
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-color);
 }
 
 .close-panel-btn-corner {
@@ -733,7 +739,7 @@ const clearGroupFilter = () => {
   right: 8px;
   background: transparent;
   border: none;
-  color: #888;
+  color: var(--icon-secondary);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -741,17 +747,14 @@ const clearGroupFilter = () => {
 }
 
 .close-panel-btn-corner:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #e5e5e5;
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
 }
 
 .control-section {
   margin-bottom: var(--config-section-spacing, 16px);
   padding-bottom: var(--config-section-spacing, 16px);
-  border-bottom: var(
-    --config-section-divider,
-    1px solid rgba(255, 255, 255, 0.08)
-  );
+  border-bottom: var(--config-section-divider, 1px solid var(--border-color));
 }
 
 .control-section:last-child {
@@ -762,13 +765,13 @@ const clearGroupFilter = () => {
 
 .stats-row {
   font-size: 13px;
-  color: #e5e7eb;
+  color: var(--text-primary);
   text-align: right;
   padding-right: 24px;
 }
 
 .stats-sub {
-  color: #9ca3af;
+  color: var(--text-secondary);
   margin-left: 4px;
 }
 
@@ -787,13 +790,13 @@ const clearGroupFilter = () => {
 }
 
 .section-toggle-label {
-  color: #e5e5e5;
+  color: var(--text-primary);
   font-size: var(--config-toggle-label-size, 13px);
   font-weight: var(--config-toggle-label-weight, 600);
 }
 
 .toggle-icon {
-  color: #888;
+  color: var(--icon-secondary);
   transition: transform 0.2s;
 }
 
@@ -860,14 +863,14 @@ const clearGroupFilter = () => {
 }
 
 .tag-slider {
-  --n-rail-color: rgba(255, 255, 255, 0.12);
-  --n-rail-color-hover: rgba(255, 255, 255, 0.2);
+  --n-rail-color: var(--border-color);
+  --n-rail-color-hover: var(--border-color-hover);
   --n-fill-color: var(--primary-color, #3b82f6);
   --n-fill-color-hover: var(--primary-color-hover, #2563eb);
   --n-handle-color: var(--primary-color, #3b82f6);
-  --n-dot-color: rgba(255, 255, 255, 0.25);
+  --n-dot-color: var(--border-color-hover);
   --n-mark-font-size: 10px;
-  --n-mark-color: #6b7280;
+  --n-mark-color: var(--text-tertiary);
 }
 
 .reset-btn {
@@ -900,12 +903,12 @@ const clearGroupFilter = () => {
 }
 
 .control-panel::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--border-color-hover);
   border-radius: 3px;
 }
 
 .control-panel::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--icon-tertiary);
 }
 
 .controls-info {
@@ -947,14 +950,10 @@ const clearGroupFilter = () => {
   min-width: 13px;
   height: 13px;
   padding: 2px 5px;
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.12),
-    rgba(255, 255, 255, 0.04)
-  );
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: var(--bg-surface-hover);
+  border: 1px solid var(--border-color-hover);
   border-radius: 3px;
-  color: var(--text-primary, #ffffff);
+  color: var(--text-primary);
   font-size: 10px;
   font-weight: 600;
   font-family: "Segoe UI", system-ui, sans-serif;
@@ -996,7 +995,7 @@ const clearGroupFilter = () => {
 }
 
 .group-filter-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--border-color-hover);
   border-radius: 2px;
 }
 
@@ -1005,17 +1004,17 @@ const clearGroupFilter = () => {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-surface-hover);
   border-radius: 6px;
   cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-color);
   transition: all 0.2s;
   user-select: none;
 }
 
 .group-filter-option:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.15);
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  border-color: var(--border-color-hover);
 }
 
 .group-filter-option.active {
@@ -1054,13 +1053,13 @@ const clearGroupFilter = () => {
 }
 
 .tag-finder-select {
-  --n-color: rgba(255, 255, 255, 0.04);
-  --n-color-active: rgba(255, 255, 255, 0.08);
-  --n-border: 1px solid rgba(255, 255, 255, 0.12);
-  --n-border-active: 1px solid rgba(255, 255, 255, 0.25);
+  --n-color: var(--bg-surface-hover);
+  --n-color-active: var(--bg-surface-hover);
+  --n-border: 1px solid var(--border-color);
+  --n-border-active: 1px solid var(--border-color-hover);
   --n-border-focus: 1px solid var(--primary-color, #3b82f6);
-  --n-text-color: #e5e7eb;
-  --n-placeholder-color: #6b7280;
+  --n-text-color: var(--text-primary);
+  --n-placeholder-color: var(--text-placeholder);
   font-size: 12px;
 }
 

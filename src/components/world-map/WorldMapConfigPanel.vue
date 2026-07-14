@@ -213,7 +213,13 @@
               @keyup.stop
             >
               <template #empty>
-                <div style="padding: 8px; color: #888; font-size: 12px">
+                <div
+                  style="
+                    padding: 8px;
+                    color: var(--text-secondary);
+                    font-size: 12px;
+                  "
+                >
                   No visual aspects found
                 </div>
               </template>
@@ -241,7 +247,7 @@
                 <n-icon
                   size="12"
                   class="toggle-icon"
-                  color="#888"
+                  color="var(--icon-secondary)"
                   :class="{ rotated: showArtisticScores }"
                 >
                   <svg viewBox="0 0 24 24">
@@ -300,7 +306,7 @@
                 <n-icon
                   size="12"
                   class="toggle-icon"
-                  color="#888"
+                  color="var(--icon-secondary)"
                   :class="{ rotated: showTimeRange }"
                 >
                   <svg viewBox="0 0 24 24">
@@ -585,7 +591,13 @@
                   @keyup.stop
                 >
                   <template #empty>
-                    <div style="padding: 8px; color: #888; font-size: 12px">
+                    <div
+                  style="
+                    padding: 8px;
+                    color: var(--text-secondary);
+                    font-size: 12px;
+                  "
+                >
                       No visual aspects found
                     </div>
                   </template>
@@ -613,7 +625,7 @@
                     <n-icon
                       size="12"
                       class="toggle-icon"
-                      color="#888"
+                      color="var(--icon-secondary)"
                       :class="{ rotated: showArtisticScores }"
                     >
                       <svg viewBox="0 0 24 24">
@@ -673,7 +685,7 @@
                     <n-icon
                       size="12"
                       class="toggle-icon"
-                      color="#888"
+                      color="var(--icon-secondary)"
                       :class="{ rotated: showTimeRange }"
                     >
                       <svg viewBox="0 0 24 24">
@@ -936,14 +948,14 @@ const treeSelectOptions = computed(() =>
   --collapsed-panel-right: 15px;
   --collapsed-panel-size: 48px;
   --collapsed-panel-z-index: 1000;
-  --collapsed-panel-background: rgba(30, 30, 30, 0.85);
+  --collapsed-panel-background: var(--bg-card);
   --collapsed-panel-backdrop: blur(8px);
-  --collapsed-panel-border: 1px solid rgba(255, 255, 255, 0.12);
+  --collapsed-panel-border: 1px solid var(--border-color);
   --collapsed-panel-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
-  --collapsed-panel-background-hover: rgba(50, 50, 50, 0.9);
+  --collapsed-panel-background-hover: var(--bg-surface-hover);
   --collapsed-panel-hover-transform: none;
   --collapsed-panel-shadow-hover: 0 2px 12px rgba(0, 0, 0, 0.3);
-  --collapsed-panel-icon-color: #e5e5e5;
+  --collapsed-panel-icon-color: var(--icon-primary);
   --collapsed-panel-icon-size: 20px;
 }
 
@@ -963,7 +975,7 @@ const treeSelectOptions = computed(() =>
   overscroll-behavior: contain;
   touch-action: pan-y;
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-color);
   box-shadow: 0 4px 16px rgba(18, 24, 38, 0.24);
 }
 
@@ -973,7 +985,7 @@ const treeSelectOptions = computed(() =>
   right: 8px;
   background: transparent;
   border: none;
-  color: #888;
+  color: var(--icon-secondary);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -981,12 +993,12 @@ const treeSelectOptions = computed(() =>
 }
 
 .close-panel-btn-corner:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-surface-hover);
   color: var(--text-primary);
 }
 
 .panel-title {
-  color: #e5e5e5;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 600;
   display: flex;
@@ -1022,7 +1034,7 @@ const treeSelectOptions = computed(() =>
 }
 
 .info-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-surface-hover);
 }
 
 .control-panel::-webkit-scrollbar {
@@ -1032,11 +1044,11 @@ const treeSelectOptions = computed(() =>
   background: transparent;
 }
 .control-panel::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--border-color-hover);
   border-radius: 3px;
 }
 .control-panel::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--icon-tertiary);
 }
 
 /* ── Mobile: floating bar ───────────────────────────────────────────────── */
@@ -1066,7 +1078,7 @@ const treeSelectOptions = computed(() =>
   gap: 3px;
   padding: 7px 14px;
   background: var(--bg-card);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   color: var(--text-secondary);
   cursor: pointer;
@@ -1127,7 +1139,7 @@ const treeSelectOptions = computed(() =>
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .mobile-modal-title {
@@ -1152,7 +1164,7 @@ const treeSelectOptions = computed(() =>
 }
 
 .mobile-modal-close:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-surface-hover);
   color: var(--text-primary);
 }
 
@@ -1169,7 +1181,7 @@ const treeSelectOptions = computed(() =>
 .filter-group.last {
   margin-bottom: 16px;
   padding-bottom: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .filter-label {
@@ -1193,8 +1205,8 @@ const treeSelectOptions = computed(() =>
   flex: 1;
   min-width: 0;
   padding: 5px 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-surface-hover);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
@@ -1211,7 +1223,7 @@ const treeSelectOptions = computed(() =>
 }
 
 .filter-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
   color: var(--text-primary);
 }
 
@@ -1275,6 +1287,20 @@ const treeSelectOptions = computed(() =>
   color: #c084fc;
 }
 
+/* Los tonos 400 de los chips no llegan a 3:1 sobre fondo claro */
+:global([data-theme="light"]) .filter-btn--place.active {
+  color: #15803d;
+}
+:global([data-theme="light"]) .filter-btn--city.active {
+  color: #1d4ed8;
+}
+:global([data-theme="light"]) .filter-btn--region.active {
+  color: #b45309;
+}
+:global([data-theme="light"]) .filter-btn--country.active {
+  color: #7e22ce;
+}
+
 .filter-group-disabled {
   opacity: 0.38;
   pointer-events: none;
@@ -1289,10 +1315,7 @@ const treeSelectOptions = computed(() =>
 .control-section {
   margin-bottom: var(--config-section-spacing, 16px);
   padding-bottom: var(--config-section-spacing, 16px);
-  border-bottom: var(
-    --config-section-divider,
-    1px solid rgba(255, 255, 255, 0.08)
-  );
+  border-bottom: var(--config-section-divider, 1px solid var(--border-color));
 }
 
 .control-section:last-child {
@@ -1316,13 +1339,13 @@ const treeSelectOptions = computed(() =>
 }
 
 .section-toggle-label {
-  color: #e5e5e5;
+  color: var(--text-primary);
   font-size: var(--config-toggle-label-size, 13px);
   font-weight: var(--config-toggle-label-weight, 600);
 }
 
 .toggle-icon {
-  color: #888;
+  color: var(--icon-secondary);
   transition: transform 0.2s;
 }
 
@@ -1381,14 +1404,10 @@ const treeSelectOptions = computed(() =>
   min-width: 13px;
   height: 13px;
   padding: 2px 5px;
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.12),
-    rgba(255, 255, 255, 0.04)
-  );
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: var(--bg-surface-hover);
+  border: 1px solid var(--border-color-hover);
   border-radius: 3px;
-  color: var(--text-primary, #ffffff);
+  color: var(--text-primary);
   font-size: 10px;
   font-weight: 600;
   font-family: "Segoe UI", system-ui, sans-serif;
@@ -1432,7 +1451,7 @@ const treeSelectOptions = computed(() =>
 }
 
 .filter-item-label {
-  color: #aaa;
+  color: var(--text-secondary);
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.5px;
@@ -1464,7 +1483,7 @@ const treeSelectOptions = computed(() =>
 }
 
 .clear-filter-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-surface-hover);
 }
 
 .artistic-scores-sliders {

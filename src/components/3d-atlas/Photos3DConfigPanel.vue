@@ -166,7 +166,13 @@
                 @click.stop
               >
                 <template #empty>
-                  <div style="padding: 8px; color: #888; font-size: 12px">
+                  <div
+                    style="
+                      padding: 8px;
+                      color: var(--text-secondary);
+                      font-size: 12px;
+                    "
+                  >
                     No visual aspects found
                   </div>
                 </template>
@@ -663,7 +669,7 @@
             style="
               margin-bottom: 12px;
               padding-bottom: 12px;
-              border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+              border-bottom: 1px solid var(--border-color);
             "
           >
             <span class="control-label">
@@ -818,7 +824,7 @@
             style="
               margin-top: 16px;
               padding-top: 16px;
-              border-top: 1px solid rgba(255, 255, 255, 0.1);
+              border-top: 1px solid var(--border-color);
             "
           >
             <span class="control-label">
@@ -1289,7 +1295,7 @@ const emitPhotoLimit = () => {
   background: var(--bg-container);
   backdrop-filter: blur(12px);
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-color);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
   width: 350px;
   max-height: 85vh;
@@ -1418,7 +1424,7 @@ const emitPhotoLimit = () => {
 }
 
 .section-toggle:hover {
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--bg-surface-hover);
 }
 
 .section-toggle-label {
@@ -1444,7 +1450,7 @@ const emitPhotoLimit = () => {
 }
 
 .toggle-icon {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--icon-secondary);
   transition: transform 0.3s ease;
 }
 
@@ -1520,7 +1526,7 @@ const emitPhotoLimit = () => {
 
 .score-group-header {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   font-weight: 600;
@@ -1584,8 +1590,8 @@ const emitPhotoLimit = () => {
 }
 
 .close-panel-btn-corner:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
 }
 
 .embedding-select,
@@ -1612,7 +1618,7 @@ const emitPhotoLimit = () => {
   font-size: 9px !important;
   white-space: nowrap;
   overflow: visible;
-  color: rgba(255, 255, 255, 0.8) !important;
+  color: var(--text-secondary) !important;
 }
 
 .radial-slider :deep(.n-slider-mark-text) {
@@ -1620,7 +1626,7 @@ const emitPhotoLimit = () => {
   transform: translateX(-50%);
   max-width: 60px;
   text-align: center;
-  color: rgba(255, 255, 255, 0.8) !important;
+  color: var(--text-secondary) !important;
 }
 
 .radial-slider :deep(.n-slider-mark:first-child .n-slider-mark-text) {
@@ -1634,14 +1640,14 @@ const emitPhotoLimit = () => {
 }
 
 .limit-slider {
-  --n-rail-color: rgba(255, 255, 255, 0.12);
-  --n-rail-color-hover: rgba(255, 255, 255, 0.2);
+  --n-rail-color: var(--border-color);
+  --n-rail-color-hover: var(--border-color-hover);
   --n-fill-color: var(--primary-color, #3b82f6);
   --n-fill-color-hover: var(--primary-color-hover, #2563eb);
   --n-handle-color: var(--primary-color, #3b82f6);
-  --n-dot-color: rgba(255, 255, 255, 0.25);
+  --n-dot-color: var(--border-color-hover);
   --n-mark-font-size: 10px;
-  --n-mark-color: #6b7280;
+  --n-mark-color: var(--text-tertiary);
 }
 
 .controls-info {
@@ -1692,12 +1698,8 @@ const emitPhotoLimit = () => {
   min-width: 13px;
   height: 13px;
   padding: 2px 5px;
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.12),
-    rgba(255, 255, 255, 0.04)
-  );
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: var(--bg-surface-hover);
+  border: 1px solid var(--border-color-hover);
   border-radius: 3px;
   color: var(--text-primary);
   font-size: 10px;
