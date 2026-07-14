@@ -941,7 +941,7 @@ const emit = defineEmits<{
  * Sending the first prompt of a new conversation expands the chat. Flip to
  * false to keep the host layout as-is.
  */
-const autoFullscreenOnSend = false;
+const autoFullscreenOnSend = true;
 
 const toggleFullscreen = () => {
   emit("update:isFullscreen", !props.isFullscreen);

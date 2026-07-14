@@ -113,10 +113,12 @@ import {
 import AppLogo from "./AppLogo.vue";
 import UsageIndicators from "./UsageIndicators.vue";
 import { useUserStore } from "@/stores/userStore";
+import { useChatFullscreenStore } from "@/stores/chatFullscreen";
 
 const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
+const chatFullscreenStore = useChatFullscreenStore();
 const isDemoUser = computed(
   () => userStore.user?.email === "demo@photorekatest.com",
 );
@@ -294,6 +296,10 @@ const handleExpandedKeysChange = (keys: string[]) => {
 };
 
 const goToDashboard = () => {
+  // The logo means "take me to a clean home", so it gives the dashboard its side
+  // panels back. Reaching the same route through its header tab is plain
+  // navigation and leaves an expanded chat as the user left it.
+  chatFullscreenStore.exit();
   router.push({ name: "dashboard" });
   // On mobile, close menu after selection
   if (isMobile.value) {

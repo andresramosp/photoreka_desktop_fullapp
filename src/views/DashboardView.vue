@@ -97,7 +97,6 @@
         :photo-count="photos.length"
         :forced-mode="forcedUniverseMode"
         :conversation-id="requestedConversationId"
-        @update:is-chat-fullscreen="isChatFullscreen = $event"
         @update:mode="universeMode = $event"
       />
 
@@ -157,6 +156,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { storeToRefs } from "pinia";
+import { useChatFullscreenStore } from "@/stores/chatFullscreen";
 
 defineOptions({
   name: "DashboardView",
@@ -206,8 +207,9 @@ const forcedUniverseMode = ref<string | null>(null);
 const requestedConversationId = ref<string | null>(null);
 
 // The chat panel can take over the dashboard: the side panels fold away and the
-// universe keeps the full width to itself.
-const isChatFullscreen = ref(false);
+// universe keeps the full width to itself. The state is shared (see the store)
+// because the sidebar logo collapses it on its way home.
+const { isFullscreen: isChatFullscreen } = storeToRefs(useChatFullscreenStore());
 
 // Which panel the universe is showing (its own stored preference, unless a
 // forced mode or an empty library overrides it). The left panel offers a chat

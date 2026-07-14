@@ -70,6 +70,8 @@ import {
   onBeforeUnmount,
   defineAsyncComponent,
 } from "vue";
+import { storeToRefs } from "pinia";
+import { useChatFullscreenStore } from "@/stores/chatFullscreen";
 // @ts-ignore
 import { useTagCloudStore } from "@/stores/tagCloudStore.js";
 // @ts-ignore
@@ -96,7 +98,6 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: "update:isChatFullscreen", value: boolean): void;
   (e: "update:mode", value: VisualizationMode): void;
 }>();
 
@@ -131,6 +132,8 @@ function getStoredVisualizationMode(): VisualizationMode | null {
 const photosStore = usePhotosStore();
 
 const tagCloudStore = useTagCloudStore();
+
+const chatFullscreenStore = useChatFullscreenStore();
 
 // Mirror the GPS-extraction logic from WorldMapView so we can disable the
 // worldmap option when the user has no geolocalized photos.
@@ -171,17 +174,16 @@ watch(
 
 // The chat can ask to take over the whole dashboard: our header steps aside and
 // the host collapses the side panels around us.
-const isChatFullscreen = ref(false);
+const { isFullscreen: isChatFullscreen } = storeToRefs(chatFullscreenStore);
 
 const setChatFullscreen = (value: boolean) => {
-  isChatFullscreen.value = Boolean(value);
-  emit("update:isChatFullscreen", isChatFullscreen.value);
+  chatFullscreenStore.set(value);
 };
 
 // Nothing but the chat can be fullscreen, so switching panels has to give the
 // dashboard its sides back.
 watch(visualizationMode, (mode) => {
-  if (mode !== "chat" && isChatFullscreen.value) setChatFullscreen(false);
+  if (mode !== "chat") chatFullscreenStore.exit();
 });
 
 const isPhotos2DLoading = ref(true);
