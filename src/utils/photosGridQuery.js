@@ -57,6 +57,9 @@ const ASPECT_VALUES = new Map(
   ]),
 );
 
+/** Every query param this contract owns — the set a view strips once it has consumed the deep link. */
+export const GRID_QUERY_PARAMS = ["sort", "dir", "genre", "score", "aspects"];
+
 /** Serialize a GridFilters object into a plain query-params object. */
 export function gridFiltersToQuery(filters) {
   const q = {};

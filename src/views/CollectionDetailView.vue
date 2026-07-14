@@ -185,8 +185,8 @@
       <!-- Collection Photos Grid -->
       <div class="collection-photos">
         <PhotosGrid
-          :key="`${route.params.id}:${gridQueryKey}`"
-          :collectionId="route.params.id"
+          :key="gridSeedKey"
+          :collectionId="collectionId"
           :photos="viewingCollection.photos || []"
           :showSuggestButton="(viewingCollection.photos || []).length > 0"
           :findDuplicatesEnabled="false"
@@ -289,7 +289,7 @@ import {
 import PhotosDialog from "@/components/PhotosDialog.vue";
 import PhotosGrid from "@/components/PhotosGrid.vue";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
-import { parseGridFiltersFromQuery } from "@/utils/photosGridQuery.js";
+import { usePhotosGridDeepLink } from "@/composables/usePhotosGridDeepLink.js";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useHeaderHideOnScroll } from "@/composables/useHeaderHideOnScroll.js";
@@ -303,10 +303,17 @@ const message = useMessage();
 const photosStore = usePhotosStore();
 const collectionsStore = useCollectionsStore();
 
+// The collection this instance shows, captured once. App.vue keys the view (and its
+// KeepAlive slot) by tab key — `collection:<id>` — so every collection gets its own
+// instance and this can't go stale. Reading `route.params.id` reactively instead
+// would break the cached tab: it goes undefined the moment you switch tabs, and
+// points at another collection while that one is open.
+const collectionId = String(route.params.id ?? "");
+
 // Deep-link filters/sorting (e.g. from a ChatLab "open collection filtered" action).
-// Reactive + re-keyed so it re-seeds on query change even under keep-alive.
-const initialGridFilters = computed(() => parseGridFiltersFromQuery(route.query));
-const gridQueryKey = computed(() => JSON.stringify(initialGridFilters.value || {}));
+const { initialGridFilters, gridSeedKey } = usePhotosGridDeepLink(
+  (r) => r.name === "collection-detail" && String(r.params.id) === collectionId,
+);
 
 const {
   headerHidden: collectionHeaderHidden,
@@ -398,10 +405,9 @@ const backFromCollection = () => {
 // ── State update ──────────────────────────────────────────────────────────────
 
 const updateViewState = () => {
-  const id = route.params.id;
-  if (!id) return;
+  if (!collectionId) return;
   const collection = collectionsStore.getCollectionWithFullPhotos(
-    id,
+    collectionId,
     photosStore,
   );
   if (collection) {
@@ -584,11 +590,7 @@ onMounted(async () => {
 });
 
 watch(
-  [
-    () => route.params.id,
-    () => collectionsStore.allCollections,
-    () => photosStore.allPhotos,
-  ],
+  [() => collectionsStore.allCollections, () => photosStore.allPhotos],
   updateViewState,
 );
 </script>
