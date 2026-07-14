@@ -1334,7 +1334,7 @@ const suggestions: Suggestion[] = [
     autoSend: true,
   },
   {
-    title: "Portfolio insights",
+    title: "Library Analysis",
     description: "Understand trends and strengths in your catalog",
     icon: SparklesIcon,
     prompt:
