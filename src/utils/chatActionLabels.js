@@ -209,20 +209,46 @@ const photoCountPhrase = (params) => {
   return count > 0 ? ` with ${count} photo${count === 1 ? "" : "s"}` : "";
 };
 
+/**
+ * Names the group an action's photos came from, e.g. ` from “Digital Solitude”`.
+ * An organizing action covers exactly one shown group; the backend resolves it to photo
+ * ids but keeps the group reference in params, so the tooltip can state the action's
+ * SCOPE — the thing a user needs to see before clicking a chip that files some, not all,
+ * of the photos above. Empty on a flat (group-less) turn.
+ */
+const groupScopePhrase = (params) =>
+  params.groupLabel ? ` from “${params.groupLabel}”` : "";
+
+/** " with 4 photos from “Group”" — the full scope clause used in tooltips. */
+const photoScopePhrase = (params) =>
+  `${photoCountPhrase(params)}${groupScopePhrase(params)}`;
+
+// Content names are user/DB-sourced and can be arbitrarily long ("Sony World
+// Photography Awards (Street)"), which blows out the chip and pushes the rest of
+// the row out of sight. Ellipsize inside the quotes so the template words stay
+// readable and the closing quote survives; the tooltip keeps the full name.
+const NAME_MAX_LENGTH = 24;
+
+const truncateName = (name) => {
+  const str = String(name ?? "");
+  if (str.length <= NAME_MAX_LENGTH) return str;
+  return `${str.slice(0, NAME_MAX_LENGTH).trimEnd()}…`;
+};
+
 /** Compose the visible chip label for a suggested action. */
 export function buildActionLabel(action) {
   const p = action?.params || {};
   switch (action?.type) {
     case "create_collection":
-      return `Create “${p.title}”`;
+      return `Create “${truncateName(p.title)}”`;
     case "create_series":
-      return `Create “${p.title}”`;
+      return `Create “${truncateName(p.title)}”`;
     case "create_canvas":
-      return `Create “${p.title}”`;
+      return `Create “${truncateName(p.title)}”`;
     case "add_to_collection":
-      return `Add to “${p.collectionName}”`;
+      return `Add to “${truncateName(p.collectionName)}”`;
     case "add_to_series":
-      return `Add to “${p.seriesName}”`;
+      return `Add to “${truncateName(p.seriesName)}”`;
     case "search_photos":
       return p.query ? `Search “${p.query}”` : "Search Photos";
     case "open_workspace":
@@ -230,9 +256,9 @@ export function buildActionLabel(action) {
     case "view_photo":
       return `View Photo in ${VIEW_PHOTO_LABELS[p.view] || "2D Atlas"}`;
     case "open_view":
-      if (p.view === "portfolio") return `Open “${p.name}”`;
-      if (p.view === "collection") return `Open “${p.name}”`;
-      if (p.view === "series") return `Open “${p.name}”`;
+      if (p.view === "portfolio") return `Open “${truncateName(p.name)}”`;
+      if (p.view === "collection") return `Open “${truncateName(p.name)}”`;
+      if (p.view === "series") return `Open “${truncateName(p.name)}”`;
       return OPEN_VIEW_STATIC[p.view] || "Open";
     default:
       return "Open";
@@ -244,15 +270,15 @@ export function buildActionTooltip(action) {
   const p = action?.params || {};
   switch (action?.type) {
     case "create_collection":
-      return `Click to create a collection named “${p.title}”${photoCountPhrase(p)}.`;
+      return `Click to create a collection named “${p.title}”${photoScopePhrase(p)}.`;
     case "create_series":
-      return `Click to create a series named “${p.title}”${photoCountPhrase(p)}.`;
+      return `Click to create a series named “${p.title}”${photoScopePhrase(p)}.`;
     case "create_canvas":
-      return `Click to create a canvas named “${p.title}”${photoCountPhrase(p)}.`;
+      return `Click to create a canvas named “${p.title}”${photoScopePhrase(p)}.`;
     case "add_to_collection":
-      return `Click to add${photoCountPhrase(p)} to collection “${p.collectionName}”.`;
+      return `Click to add${photoScopePhrase(p)} to collection “${p.collectionName}”.`;
     case "add_to_series":
-      return `Click to add${photoCountPhrase(p)} to series “${p.seriesName}”.`;
+      return `Click to add${photoScopePhrase(p)} to series “${p.seriesName}”.`;
     case "search_photos":
       return `Click to search your library for “${p.query}”.`;
     case "open_workspace":

@@ -8,6 +8,13 @@
 // Design note: create/add actions run "de golpe" (no pre-filled modal), matching
 // how the canvas quick-create works, so the three creation flows feel homogeneous.
 // A success toast offers "View" and, for creations, "Undo".
+//
+// Photo scope: the backend already resolved WHICH photos an action covers — it emits
+// `params.photoIds` (what we operate on) plus, when the turn showed photo groups, the
+// single `params.groupId`/`groupLabel` those ids came from. Handlers act on photoIds; the
+// group reference is what the chip tooltip and the hover highlight use to show the user
+// the action's scope before they click it. `params.title` is a real resource name, but no
+// LLM wrote it: it's the group's own label (or the assistant's name for the selection).
 
 import { h } from "vue";
 import { useRouter } from "vue-router";

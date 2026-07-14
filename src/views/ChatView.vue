@@ -925,6 +925,8 @@ import {
   StarOutline as StarIcon,
   BulbOutline as BulbIcon,
   LayersOutline as LayersIcon,
+  ShareSocialOutline as SocialIcon,
+  BriefcaseOutline as PortfolioIcon,
   TrendingUpOutline as TrendingIcon,
   CreateOutline as CreateIcon,
   BookmarksOutline,
@@ -1389,6 +1391,84 @@ const suggestions: Suggestion[] = [
       "I have multiple versions of the same shot and I can't decide which to keep. Please compare these photos technically and artistically and recommend the strongest one with a clear reason.",
     needsPhotos: true,
     autoSend: true,
+  },
+  {
+    title: "Social media ideas",
+    description: "Turn photos from your library into posts worth publishing",
+    icon: SocialIcon,
+    prompt:
+      "Help me come up with social media ideas using photos from my library. Suggest concepts, which photos to use, and how to present them.",
+    needsPhotos: false,
+    autoSend: true,
+    subQueries: [
+      {
+        title: "Post for Today's World Day",
+        prompt:
+          "Find out which international day or observance is being celebrated today, then design an Instagram post inspired by it using photos from my library. Pick the images that fit best, propose a layout or carousel order, and write a caption with hashtags.",
+        needsPhotos: false,
+        autoSend: true,
+      },
+      {
+        title: "Weekly Instagram Carousel",
+        prompt:
+          "Build a 5-10 image Instagram carousel from my library around a single visual theme. Suggest the exact order, explain the narrative arc, and write a caption plus hashtags that match the mood.",
+        needsPhotos: false,
+        autoSend: true,
+      },
+      {
+        title: "This Week's Posts",
+        prompt:
+          "Pick 3 photos from my library that would work as standalone posts this week. For each one, explain why it stands out, suggest the best day to publish it, and write a caption with hashtags.",
+        needsPhotos: false,
+        autoSend: true,
+      },
+      {
+        title: "Behind the Photo Story",
+        prompt:
+          "Pick one of my strongest photos and turn it into a storytelling post. Explain what makes the image work technically and emotionally, and write a caption that shares the story behind it in my voice.",
+        needsPhotos: false,
+        autoSend: true,
+      },
+    ],
+  },
+  {
+    title: "Portfolio ideas",
+    description: "Discover portfolio themes hiding in your catalog",
+    icon: PortfolioIcon,
+    prompt:
+      "Analyze my photo library and propose portfolio themes I could build from what I already have. For each idea, explain the concept and which photos would anchor it.",
+    needsPhotos: false,
+    autoSend: true,
+    subQueries: [
+      {
+        title: "Discover My Portfolio Themes",
+        prompt:
+          "Scan my entire library and propose 3-5 portfolio themes that already exist in my work without me realizing it. For each one, give it a title, describe the concept in a few sentences, and list the photos that would anchor it.",
+        needsPhotos: false,
+        autoSend: true,
+      },
+      {
+        title: "Build a Cohesive 20-Photo Portfolio",
+        prompt:
+          "Curate a cohesive 20-photo portfolio from my library. Choose a unifying theme, select and sequence the images, and explain why each one earns its place and how the set holds together.",
+        needsPhotos: false,
+        autoSend: true,
+      },
+      {
+        title: "Portfolio for a Specific Audience",
+        prompt:
+          "Help me tailor a portfolio for a specific audience, such as galleries, editorial clients, or commercial brands. Ask me which one I'm targeting if needed, then suggest which photos from my library fit that audience and how to frame the selection.",
+        needsPhotos: false,
+        autoSend: true,
+      },
+      {
+        title: "Long-Term Project Potential",
+        prompt:
+          "Look for an unfinished thread in my library that could grow into a long-term photo project or photobook. Explain the concept, show me the photos that already support it, and tell me what I still need to shoot to complete it.",
+        needsPhotos: false,
+        autoSend: true,
+      },
+    ],
   },
   appHelpSuggestion,
 ];
@@ -3393,12 +3473,16 @@ const formatRelativeDate = (dateStr: string) => {
   border-top-right-radius: var(--radius-xs);
 }
 
-.message-text {
-  margin: 0;
-  font-size: 13.5px;
-
+.message-text,
+.message-assistant .message-bubble :deep(.markdown-content) {
+  font-size: 14px;
+  font-weight: 300;
   line-height: var(--line-height-relaxed);
   word-break: break-word;
+  margin: 0;
+}
+
+.message-text {
   animation: messageTextFadeIn 0.45s ease;
 }
 
@@ -3755,16 +3839,6 @@ const formatRelativeDate = (dateStr: string) => {
   ) !important;
 }
 
-/* ── Markdown content (assistant messages) ── */
-.message-assistant .message-bubble :deep(.markdown-content) {
-  font-size: 14px;
-  font-weight: 300;
-  line-height: var(--line-height-relaxed);
-  word-break: break-word;
-  margin: 0;
-  /* text-align: justify; */
-}
-
 .message-assistant .message-bubble :deep(.markdown-content p) {
   margin: 0 0 var(--spacing-sm) 0;
 }
@@ -3983,7 +4057,6 @@ const formatRelativeDate = (dateStr: string) => {
 .recent-conv-item {
   height: auto;
   padding: var(--spacing-sm) var(--spacing-md);
-  background: var(--bg-surface);
   border-color: var(--border-color);
   border-radius: var(--radius-md);
   transition:
@@ -3998,7 +4071,7 @@ const formatRelativeDate = (dateStr: string) => {
 }
 
 .recent-conv-item:hover {
-  background: color-mix(in srgb, var(--accent-color) 6%, var(--bg-surface));
+  /* background: color-mix(in srgb, var(--accent-color) 6%, var(--bg-surface)); */
   border-color: var(--accent-color);
 }
 
@@ -4012,9 +4085,9 @@ const formatRelativeDate = (dateStr: string) => {
   min-width: 0;
 }
 
-.recent-conv-item:hover .recent-conv-title {
+/* .recent-conv-item:hover .recent-conv-title {
   color: var(--text-primary);
-}
+} */
 
 .recent-conv-date {
   font-size: 10px;
