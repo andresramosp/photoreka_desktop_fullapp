@@ -364,6 +364,15 @@
                 class="tag-slider"
               />
             </div>
+
+            <!-- Background -->
+            <div class="control-item-row">
+              <span class="control-item-text">Background</span>
+              <ColorPickerPills
+                :model-value="atlasBackground"
+                @update:model-value="(v) => emit('update:atlasBackground', v)"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -474,6 +483,7 @@ import {
   EyeOutlined,
   CompassOutlined,
 } from "@vicons/antd";
+import ColorPickerPills from "@/components/ColorPickerPills.vue";
 
 const props = defineProps({
   tagCount: {
@@ -508,6 +518,10 @@ const props = defineProps({
     type: Number,
     default: 0.2,
   },
+  atlasBackground: {
+    type: [String, Object],
+    default: null,
+  },
   selectedGroups: {
     type: Array,
     default: () => [],
@@ -529,6 +543,7 @@ const emit = defineEmits([
   "update:dynamicSearch",
   "update:maxSearchTags",
   "update:balloonExpansion",
+  "update:atlasBackground",
   "update:selectedGroups",
   "reset-view",
   "filters-changed",
@@ -837,6 +852,11 @@ const clearGroupFilter = () => {
   display: flex;
   align-items: center;
   gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary, #9ca3af);
+}
+
+.control-item-text {
   font-size: 12px;
   color: var(--text-secondary, #9ca3af);
 }

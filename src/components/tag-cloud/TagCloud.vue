@@ -33,6 +33,7 @@
       :tags="tags"
       :show-dots="showDots"
       :balloon-expansion="balloonExpansion"
+      :background="atlasBackground"
       :dynamic-search="dynamicSearch"
       :max-search-tags="maxSearchTags"
       :read-only="false"
@@ -48,6 +49,7 @@
       v-model:dynamicSearch="dynamicSearch"
       v-model:maxSearchTags="maxSearchTags"
       v-model:balloonExpansion="balloonExpansion"
+      v-model:atlasBackground="atlasBackground"
       v-model:selectedGroups="selectedGroups"
       :tagCount="tags.length"
       :totalCandidates="metadata?.totalCandidates ?? null"
@@ -70,6 +72,7 @@ import {
   watch,
 } from "vue";
 import { api } from "@/utils/axios";
+import { useTheme } from "@/composables/useTheme.js";
 import TagCloudConfigPanel from "./TagCloudConfigPanel.vue";
 import PixiTagCloud from "./PixiTagCloud.vue";
 import {
@@ -102,6 +105,18 @@ const dynamicSearch = ref(false);
 const maxSearchTags = ref(20);
 const balloonExpansion = ref(0.2);
 const selectedGroups = ref([]); // empty = all groups
+
+// Theme-aware stage background (same color ids as the other atlases).
+// Starts from a string id; ColorPickerPills swaps it for the full object on use.
+const { isDarkMode } = useTheme();
+const atlasBackground = ref(isDarkMode.value ? "default" : "gray");
+
+// Follow the app theme until the user picks a color explicitly (object value).
+watch(isDarkMode, (newIsDarkMode) => {
+  if (!atlasBackground.value || typeof atlasBackground.value === "string") {
+    atlasBackground.value = newIsDarkMode ? "default" : "gray";
+  }
+});
 
 // Group color palette
 const GROUP_COLORS = {

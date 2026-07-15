@@ -14,7 +14,9 @@
       "Bash(node shots.mjs)",
       "Bash(node -e \"const t = require\\('naive-ui'\\).tabsDark ?? null; const s = require\\('naive-ui/lib/tabs/styles'\\); console.log\\(Object.keys\\(s.tabsLight.self\\({Common: {}} \\) ?? {}\\)\\)\")",
       "Bash(node -e ' *)",
-      "Bash(node tabs.mjs)"
+      "Bash(node tabs.mjs)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")",
+      "Bash(npx vite *)"
     ]
   }
 }

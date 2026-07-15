@@ -156,10 +156,95 @@ const props = defineProps({
     type: Number,
     default: 20,
   },
+  // Theme-aware stage background: color id string ("default"/"white"/"gray")
+  // or the full object emitted by ColorPickerPills ({ id, color, ... }).
+  background: {
+    type: [String, Object],
+    default: null,
+  },
 });
 
 const emit = defineEmits(["tags-selected"]);
 const photosStore = usePhotosStore();
+
+// ---------------------------------------------------------------------------
+// Stage background (theme-aware, same color ids as the other atlases)
+// ---------------------------------------------------------------------------
+// HEX per id, kept in sync with ColorPickerPills' palette, so the theme default
+// renders correctly before the user ever opens the picker.
+const BACKGROUND_ID_COLORS = {
+  default: "#000000",
+  white: "#f5f5f5",
+  gray: "#e0e0e0",
+};
+
+const currentBackgroundColor = computed(() => {
+  const bg = props.background;
+  if (!bg) return "#000000";
+  if (typeof bg === "object" && bg.color) return bg.color;
+  return BACKGROUND_ID_COLORS[bg] ?? "#000000";
+});
+
+const toPixiColorNumber = (colorSource) => {
+  try {
+    if (PIXI?.Color) {
+      return new PIXI.Color(colorSource).toNumber();
+    }
+  } catch (_) {}
+  const s = String(colorSource || "").trim();
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(s);
+  return m ? parseInt(m[1], 16) : 0x000000;
+};
+
+// Whether the current background is light enough to need dark labels.
+const isLightBackground = computed(() => {
+  const n = toPixiColorNumber(currentBackgroundColor.value);
+  const r = (n >> 16) & 0xff;
+  const g = (n >> 8) & 0xff;
+  const b = n & 0xff;
+  // Perceived luminance (ITU-R BT.601)
+  return 0.299 * r + 0.587 * g + 0.114 * b > 140;
+});
+
+// Label base tint (multiplies the near-white fill). On light backgrounds we tint
+// it dark so tags stay readable; the cyan highlight tint still works on both.
+const LABEL_BASE_TINT_ON_LIGHT = 0x1f2933;
+const baseLabelTint = computed(() =>
+  isLightBackground.value ? LABEL_BASE_TINT_ON_LIGHT : 0xffffff,
+);
+
+const applyPixiBackground = () => {
+  if (!app?.renderer) return;
+  const colorSource = currentBackgroundColor.value;
+  const bg = app.renderer.background;
+
+  // Pixi v8: renderer.background.color is usually a Color instance.
+  if (bg?.color) {
+    const c = bg.color;
+    if (typeof c === "object" && typeof c.setValue === "function") {
+      try {
+        c.setValue(colorSource);
+        return;
+      } catch (_) {}
+    }
+    try {
+      bg.color = colorSource;
+      return;
+    } catch (_) {}
+  }
+  if ("backgroundColor" in app.renderer) {
+    try {
+      app.renderer.backgroundColor = toPixiColorNumber(colorSource);
+    } catch (_) {}
+  }
+};
+
+// Re-apply whenever the selection (or theme-driven default) changes.
+// Also re-tint the labels so their contrast tracks the background luminance.
+watch(currentBackgroundColor, () => {
+  applyPixiBackground();
+  syncLabelInteractionStates();
+});
 
 // ---------------------------------------------------------------------------
 // Reactive state
@@ -492,7 +577,7 @@ const initPixi = async () => {
   app = new PIXI.Application();
   await app.init({
     resizeTo: pixiContainer.value,
-    background: 0x000000,
+    background: currentBackgroundColor.value,
     antialias: true,
     autoDensity: true,
     resolution: Math.min(2, window.devicePixelRatio || 1),
@@ -947,9 +1032,9 @@ const getOrCreateLabel = (index) => {
   label.alpha = 0;
   label.visible = false;
   label.targetAlpha = 0;
-  label.tint = 0xffffff;
+  label.tint = baseLabelTint.value;
   label.targetScale = 1;
-  label.targetTint = 0xffffff;
+  label.targetTint = baseLabelTint.value;
   labelsContainer.addChild(label);
   labelsByIndex.set(index, label);
   return label;
@@ -976,7 +1061,7 @@ const syncLabelInteractionStates = () => {
 
     // Set target values for smooth animation
     label.targetTint =
-      isHovered || isSelected ? LABEL_HIGHLIGHT_TINT : 0xffffff;
+      isHovered || isSelected ? LABEL_HIGHLIGHT_TINT : baseLabelTint.value;
     label.targetScale = isHovered ? 1.04 : 1;
   }
 };
@@ -1047,7 +1132,7 @@ const updateLabelAlphas = () => {
     }
 
     // Smooth tint animation
-    const targetTint = label.targetTint ?? 0xffffff;
+    const targetTint = label.targetTint ?? baseLabelTint.value;
     if (label.tint !== targetTint) {
       label.tint = lerpTint(label.tint, targetTint, HOVER_TINT_LERP);
     }
