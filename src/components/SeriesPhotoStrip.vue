@@ -795,8 +795,8 @@ const handleSelectAllToggle = () => {
   justify-content: center;
   align-items: center;
   min-height: 300px;
-  background: #18181c;
-  border: 2px dashed #2c2c32;
+  background: var(--bg-surface);
+  border: 2px dashed var(--border-color);
   border-radius: 12px;
 }
 

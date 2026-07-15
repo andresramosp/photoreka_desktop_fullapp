@@ -164,7 +164,7 @@ onUnmounted(() => {
   width: 100%;
   height: 44px;
   background: var(--bg-body);
-  border: 1px solid #2c2c32;
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   position: relative;
   cursor: pointer;
@@ -190,7 +190,7 @@ onUnmounted(() => {
 }
 
 .slider-track.readonly:hover {
-  border-color: #2c2c32;
+  border-color: var(--border-color);
   transform: none;
 }
 
@@ -249,7 +249,7 @@ onUnmounted(() => {
 @media (prefers-color-scheme: dark) {
   .slider-track {
     background: var(--bg-body);
-    border-color: #2c2c32;
+    border-color: var(--border-color);
   }
 }
 

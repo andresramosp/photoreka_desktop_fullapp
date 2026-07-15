@@ -181,7 +181,7 @@ const handleSuggest = (criteria) => {
   gap: 6px;
   flex-shrink: 0;
   padding-bottom: 4px;
-  border-bottom: 1px solid #2c2c32;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .submenu-title {
@@ -236,8 +236,8 @@ const handleSuggest = (criteria) => {
   display: flex;
   font-size: 15px;
   border-radius: 8px;
-  background: #1f1f23;
-  border: 1px solid #2c2c32;
+  background: var(--bg-container);
+  border: 1px solid var(--border-color);
 }
 
 .compact .menu-option {
@@ -250,7 +250,7 @@ const handleSuggest = (criteria) => {
   width: 100%;
   justify-content: center;
   border-radius: 6px;
-  background: #1f1f23;
+  background: var(--bg-container);
 }
 
 /* Responsive adjustments */

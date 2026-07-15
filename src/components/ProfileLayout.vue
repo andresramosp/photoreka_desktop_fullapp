@@ -50,7 +50,7 @@
 .profile-content {
   background-color: var(--bg-container);
   border-radius: 16px;
-  border: 1px solid #2c2c32;
+  border: 1px solid var(--border-color);
   padding: 30px;
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
   width: 100%;
@@ -72,7 +72,7 @@
 .profile-footer {
   text-align: center;
   padding-top: 16px;
-  border-top: 1px solid #2c2c32;
+  border-top: 1px solid var(--border-color);
 }
 
 .footer-text {

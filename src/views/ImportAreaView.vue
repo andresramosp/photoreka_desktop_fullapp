@@ -454,7 +454,7 @@ onMounted(() => {
   border-radius: 12px;
   overflow: hidden;
   transition: all 0.2s ease;
-  border: 1px solid #2c2c32;
+  border: 1px solid var(--border-color);
 }
 
 .photo-card:hover {

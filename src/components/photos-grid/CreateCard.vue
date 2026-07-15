@@ -31,7 +31,7 @@ defineEmits(["click"]);
 <style scoped>
 .create-card {
   color: var(--text-primary);
-  border: 2px dashed #2c2c32;
+  border: 2px dashed var(--border-color);
   border-radius: 16px;
   padding: 20px;
   cursor: pointer;

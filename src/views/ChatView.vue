@@ -1497,15 +1497,15 @@ const onboardingSuggestions: Suggestion[] = [
     needsPhotos: false,
     autoSend: true,
   },
-  {
-    title: "What happens after import?",
-    description: "See what unlocks after your first import",
-    icon: LayersIcon,
-    prompt:
-      "Once my photos are imported and analyzed, what can I do with them in Photoreka? What tools will I have?",
-    needsPhotos: false,
-    autoSend: true,
-  },
+  // {
+  //   title: "What happens after import?",
+  //   description: "See what unlocks after your first import",
+  //   icon: LayersIcon,
+  //   prompt:
+  //     "Once my photos are imported and analyzed, what can I do with them in Photoreka? What tools will I have?",
+  //   needsPhotos: false,
+  //   autoSend: true,
+  // },
   // appHelpSuggestion,
 ];
 

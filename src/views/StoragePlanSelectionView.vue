@@ -565,7 +565,7 @@ const goBack = () => {
 }
 
 .storage-option-card {
-  background-color: #2c2c32;
+  background-color: var(--bg-surface);
   border: 2px solid #3c3c42;
   border-radius: 12px;
   padding: 24px;
@@ -771,7 +771,7 @@ const goBack = () => {
 }
 
 .plan-card {
-  background-color: #2c2c32;
+  background-color: var(--bg-surface);
   border: 2px solid #3c3c42;
   border-radius: 12px;
   padding: 24px;

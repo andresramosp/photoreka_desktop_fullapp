@@ -149,7 +149,7 @@ const handleClick = () => {
 /* Disabled state with progress */
 .disabled-with-progress {
   position: relative;
-  background: var(--card-color);
+  background: var(--bg-card);
   border: 2px solid var(--border-color);
   cursor: not-allowed;
   overflow: hidden;

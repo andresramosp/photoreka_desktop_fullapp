@@ -159,8 +159,8 @@ watch(
   transform: translate(-50%, -50%);
   z-index: 100;
   min-width: 180px;
-  background: #1f1f23;
-  border: 1px solid #2c2c32;
+  background: var(--bg-container);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   padding: 8px;
@@ -189,7 +189,7 @@ watch(
   right: -10px;
   z-index: 101;
   background: var(--bg-surface, #1f1f23);
-  border: 1px solid #2c2c32;
+  border: 1px solid var(--border-color);
   transition: all 0.2s ease;
 }
 

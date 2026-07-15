@@ -110,7 +110,7 @@
             class="clear-scores-btn"
             title="Clear all scores"
           >
-            <n-icon size="12" color="var(--text-on-primary)">
+            <n-icon size="12" color="currentColor">
               <CloseOutlined />
             </n-icon>
           </button>
@@ -169,7 +169,7 @@
             class="clear-scores-btn"
             title="Clear time range"
           >
-            <n-icon size="12" color="var(--text-on-primary)">
+            <n-icon size="12" color="currentColor">
               <CloseOutlined />
             </n-icon>
           </button>
@@ -610,18 +610,18 @@ const clearTags = () => {
 }
 
 .clear-scores-btn {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-surface-hover);
   border: none;
   border-radius: 4px;
   padding: 2px 4px;
   cursor: pointer;
-  color: #888;
+  color: var(--text-tertiary);
   transition: all 0.2s;
 }
 
 .clear-scores-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  color: #e5e5e5;
+  background: var(--border-color-hover);
+  color: var(--text-secondary);
 }
 
 .artistic-scores-sliders {

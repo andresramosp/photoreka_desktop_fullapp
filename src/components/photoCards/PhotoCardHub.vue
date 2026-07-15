@@ -1106,7 +1106,7 @@ onUnmounted(() => {
   padding: 9px;
   background-color: var(--bg-body);
   display: flex;
-  border-top: 1px solid #2c2c32;
+  border-top: 1px solid var(--border-color);
   align-items: center;
   align-content: center;
   justify-content: space-between;

@@ -728,14 +728,14 @@ const handleCancel = () => {
   min-height: 300px;
   max-height: 300px;
   overflow-y: auto;
-  border: 1px solid #2c2c32;
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   background-color: var(--bg-body);
 }
 
 .collection-item {
   padding: 16px;
-  border-bottom: 1px solid #2c2c32;
+  border-bottom: 1px solid var(--border-color);
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -754,7 +754,7 @@ const handleCancel = () => {
 }
 
 .collection-item.create-new-collection {
-  border: 2px dashed #2c2c32;
+  border: 2px dashed var(--border-color);
   background-color: rgba(139, 92, 246, 0.05);
 }
 

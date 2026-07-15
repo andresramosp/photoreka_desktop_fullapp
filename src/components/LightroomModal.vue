@@ -10,7 +10,7 @@
       size="huge"
       role="dialog"
       aria-modal="true"
-      style="background-color: var(--bg-body); border: 1px solid #2c2c32"
+      style="background-color: var(--bg-body); border: 1px solid var(--border-color)"
     >
       <template #header-extra>
         <n-button text @click="handleClose">
@@ -385,7 +385,7 @@ const downloadPlugin = () => {
   display: flex;
   justify-content: center;
   padding-top: 16px;
-  border-top: 1px solid #2c2c32;
+  border-top: 1px solid var(--border-color);
 }
 
 .download-plugin-btn {

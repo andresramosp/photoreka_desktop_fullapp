@@ -27,7 +27,7 @@
       <div class="panel-title">
         <n-icon
           size="14"
-          color="var(--text-on-primary)"
+          color="var(--text-primary)"
           style="margin-right: 6px; vertical-align: middle"
         >
           <FilterOutlined />
@@ -164,7 +164,7 @@
           @click="showSearchFilters = !showSearchFilters"
         >
           <div style="display: flex; align-items: center; gap: 6px">
-            <n-icon size="16" color="var(--text-on-primary)">
+            <n-icon size="16" color="var(--text-primary)">
               <FilterOutlined />
             </n-icon>
             <span class="section-toggle-label">Search Filters</span>
@@ -338,7 +338,7 @@
           @click="showNavigationControls = !showNavigationControls"
         >
           <div style="display: flex; align-items: center; gap: 6px">
-            <n-icon size="16" color="var(--text-on-primary)">
+            <n-icon size="16" color="var(--text-primary)">
               <CompassOutlined />
             </n-icon>
             <span class="section-toggle-label">Navigation Controls</span>
@@ -542,7 +542,7 @@
               @click="showSearchFilters = !showSearchFilters"
             >
               <div style="display: flex; align-items: center; gap: 6px">
-                <n-icon size="16" color="var(--text-on-primary)">
+                <n-icon size="16" color="var(--text-primary)">
                   <FilterOutlined />
                 </n-icon>
                 <span class="section-toggle-label">Search Filters</span>
@@ -717,7 +717,7 @@
               @click="showNavigationControls = !showNavigationControls"
             >
               <div style="display: flex; align-items: center; gap: 6px">
-                <n-icon size="16" color="var(--text-on-primary)">
+                <n-icon size="16" color="var(--text-primary)">
                   <CompassOutlined />
                 </n-icon>
                 <span class="section-toggle-label">Navigation Controls</span>

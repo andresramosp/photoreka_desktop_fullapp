@@ -336,7 +336,8 @@ const showPhotoInfo = async () => {
 }
 
 .insight-text-slide p {
-  color: var(--text-primary);
+  /* Siempre sobre foto + scrim oscuro (rgba(0,0,0,0.6)): blanco fijo en ambos temas */
+  color: #ffffff;
   font-size: 13px;
   line-height: var(--line-height-relaxed);
   margin: 0;

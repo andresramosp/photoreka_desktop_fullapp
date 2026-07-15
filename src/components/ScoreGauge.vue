@@ -28,7 +28,7 @@
       <path
         d="M 30 95 A 70 70 0 0 1 170 95"
         fill="none"
-        stroke="rgba(255,255,255,0.07)"
+        class="score-gauge__track"
         stroke-width="12"
         stroke-linecap="round"
       />
@@ -48,7 +48,7 @@
         text-anchor="middle"
         font-size="38"
         font-weight="700"
-        fill="white"
+        class="score-gauge__value"
         font-family="system-ui,sans-serif"
       >
         {{ value != null ? Number(value).toFixed(1) : "·" }}
@@ -59,7 +59,7 @@
         y="100"
         text-anchor="middle"
         font-size="11"
-        fill="rgba(255,255,255,0.28)"
+        class="score-gauge__max"
         font-family="system-ui,sans-serif"
       >
         / 10
@@ -148,6 +148,18 @@ const arcPath = computed((): string => {
   max-width: 200px;
   height: auto;
   display: block;
+}
+
+.score-gauge__track {
+  stroke: var(--border-color);
+}
+
+.score-gauge__value {
+  fill: var(--text-primary);
+}
+
+.score-gauge__max {
+  fill: var(--text-tertiary);
 }
 
 .score-gauge__label {

@@ -1102,7 +1102,7 @@ watch(
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  border: 2px dashed #2c2c32;
+  border: 2px dashed var(--border-color);
   border-radius: 16px;
   padding: 20px;
   background-color: transparent;

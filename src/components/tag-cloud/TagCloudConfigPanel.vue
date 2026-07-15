@@ -43,7 +43,7 @@
       <div class="control-section">
         <div class="section-toggle" style="cursor: default; margin-bottom: 7px">
           <div style="display: flex; align-items: center; gap: 6px">
-            <n-icon size="16" color="var(--text-on-primary)">
+            <n-icon size="16" color="var(--text-primary)">
               <FilterOutlined />
             </n-icon>
             <span class="section-toggle-label">Filters</span>
@@ -285,7 +285,7 @@
       <div class="control-section">
         <div class="section-toggle" @click="toggleDisplay">
           <div style="display: flex; align-items: center; gap: 6px">
-            <n-icon size="16" color="var(--text-on-primary)">
+            <n-icon size="16" color="var(--text-primary)">
               <EyeOutlined />
             </n-icon>
             <span class="section-toggle-label">Display</span>
@@ -372,7 +372,7 @@
       <div class="control-section">
         <div class="section-toggle" @click="toggleNavigationControls">
           <div style="display: flex; align-items: center; gap: 6px">
-            <n-icon size="16" color="var(--text-on-primary)">
+            <n-icon size="16" color="var(--text-primary)">
               <CompassOutlined />
             </n-icon>
             <span class="section-toggle-label">Navigation Controls</span>

@@ -240,7 +240,7 @@ const handleNext = () => {
 }
 
 .mode-card {
-  background-color: #2c2c32;
+  background-color: var(--bg-surface);
   border: 2px solid #3c3c42;
   border-radius: 16px;
   padding: 20px 24px;

@@ -499,7 +499,7 @@ const handleComplete = () => {
 }
 
 .general-card {
-  background-color: #2c2c32;
+  background-color: var(--bg-surface);
   border: 2px solid rgba(34, 197, 94, 0.35);
   border-radius: 16px;
   padding: 28px 32px;
@@ -589,7 +589,7 @@ const handleComplete = () => {
 }
 
 .category-card {
-  background-color: #2c2c32;
+  background-color: var(--bg-surface);
   border: 2px solid rgba(37, 99, 235, 0.35);
   border-radius: 12px;
   padding: 24px;

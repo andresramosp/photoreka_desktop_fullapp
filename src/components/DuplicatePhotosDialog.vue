@@ -558,7 +558,7 @@ watch(
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: 2px solid transparent;
-  background-color: #2c2c32;
+  background-color: var(--bg-surface);
 }
 
 .duplicate-photo-card:hover {
@@ -577,7 +577,7 @@ watch(
   position: relative;
   width: 100%;
   aspect-ratio: 1;
-  background-color: #2c2c32;
+  background-color: var(--bg-surface);
 }
 
 .photo-image {
@@ -660,7 +660,7 @@ watch(
 .photo-info {
   padding: var(--spacing-md);
   background-color: var(--bg-body);
-  border-top: 1px solid #2c2c32;
+  border-top: 1px solid var(--border-color);
 }
 
 .photo-name {

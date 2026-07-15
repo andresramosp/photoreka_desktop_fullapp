@@ -72,7 +72,7 @@
       <div class="control-section">
         <div class="section-toggle" style="cursor: default; margin-bottom: 7px">
           <div style="display: flex; align-items: center; gap: 6px">
-            <n-icon size="16" color="var(--text-on-primary)">
+            <n-icon size="16" color="var(--text-primary)">
               <DatabaseOutlined />
             </n-icon>
             <span class="section-toggle-label">Viewport</span>

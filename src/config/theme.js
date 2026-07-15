@@ -426,6 +426,27 @@ export function getNaiveThemeOverrides(isDark = true) {
         ? "1px solid rgba(255, 255, 255, 0.12)"
         : "1px solid rgba(0, 0, 0, 0.12)",
     },
+
+    // Tooltips: por defecto Naive los pinta negros en ambos temas.
+    // Los hacemos theme-aware (superficie + texto primario del tema actual).
+    Tooltip: {
+      color: theme.bgSurface,
+      textColor: theme.textPrimary,
+      borderRadius: "8px",
+      boxShadow: isDark
+        ? "0 4px 16px rgba(0, 0, 0, 0.45)"
+        : "0 4px 16px rgba(0, 0, 0, 0.16)",
+      peers: {
+        Popover: {
+          color: theme.bgSurface,
+          textColor: theme.textPrimary,
+          borderRadius: "8px",
+          boxShadow: isDark
+            ? "0 4px 16px rgba(0, 0, 0, 0.45)"
+            : "0 4px 16px rgba(0, 0, 0, 0.16)",
+        },
+      },
+    },
   };
 }
 

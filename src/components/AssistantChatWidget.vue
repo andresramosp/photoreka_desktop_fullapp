@@ -538,8 +538,8 @@ const navigateTo = (path: string) => {
   bottom: 0;
   width: 450px;
   z-index: 1500;
-  background: var(--card-color, #18181c);
-  border-left: 1px solid var(--divider-color, rgba(255, 255, 255, 0.07));
+  background: var(--bg-card);
+  border-left: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
   box-shadow: -8px 0 40px rgba(0, 0, 0, 0.4);
@@ -573,7 +573,7 @@ const navigateTo = (path: string) => {
   align-items: center;
   justify-content: space-between;
   padding: 10px 10px 10px 14px;
-  border-bottom: 1px solid var(--divider-color, rgba(255, 255, 255, 0.07));
+  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 
@@ -586,7 +586,7 @@ const navigateTo = (path: string) => {
 .assistant-header-title {
   font-size: 13.5px;
   font-weight: 600;
-  color: var(--text-color-1, #e8e8e8);
+  color: var(--text-primary);
   letter-spacing: 0.4px;
   text-transform: uppercase;
 }
@@ -639,13 +639,13 @@ const navigateTo = (path: string) => {
 
 .assistant-welcome-text {
   font-size: 14px;
-  color: var(--text-color-1, #e8e8e8);
+  color: var(--text-primary);
   margin: 0;
 }
 
 .assistant-welcome-subtitle {
   font-size: 12px;
-  color: var(--text-color-3, rgba(255, 255, 255, 0.4));
+  color: var(--text-tertiary);
   margin: 0;
   line-height: 1.5;
 }
@@ -687,8 +687,8 @@ const navigateTo = (path: string) => {
 }
 
 .is-assistant .assistant-bubble {
-  background: var(--action-color, rgba(255, 255, 255, 0.06));
-  color: var(--text-color-1, #e8e8e8);
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
   border-bottom-left-radius: 4px;
 }
 
@@ -717,7 +717,7 @@ const navigateTo = (path: string) => {
   font-weight: 600;
   margin: 10px 0 5px;
   font-size: 0.9em;
-  color: var(--text-color-1, #e8e8e8);
+  color: var(--text-primary);
 }
 .is-assistant .assistant-bubble :deep(.markdown-content ul),
 .is-assistant .assistant-bubble :deep(.markdown-content ol) {
@@ -766,7 +766,7 @@ const navigateTo = (path: string) => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--text-color-3, rgba(255, 255, 255, 0.4));
+  background: var(--text-tertiary);
   animation: assistant-bounce 1.4s infinite both;
 }
 .typing-dots span:nth-child(2) {
@@ -800,7 +800,7 @@ const navigateTo = (path: string) => {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--text-color-3, rgba(255, 255, 255, 0.4));
+  color: var(--text-tertiary);
   margin: 0 0 5px;
 }
 .assistant-photo-grid {
@@ -821,9 +821,9 @@ const navigateTo = (path: string) => {
 .assistant-contact-bar {
   flex-shrink: 0;
   padding: 7px 14px;
-  border-top: 1px solid var(--divider-color, rgba(255, 255, 255, 0.07));
+  border-top: 1px solid var(--border-color);
   font-size: 11.5px;
-  color: var(--text-color-3, rgba(255, 255, 255, 0.3));
+  color: var(--text-tertiary);
   text-align: center;
 }
 
@@ -842,7 +842,7 @@ const navigateTo = (path: string) => {
    ══════════════════════════════════════════════ */
 
 .assistant-pills-container {
-  border-top: 1px solid var(--divider-color, rgba(255, 255, 255, 0.07));
+  border-top: 1px solid var(--border-color);
   flex-shrink: 0;
   display: flex;
   min-height: 35px;
@@ -887,7 +887,7 @@ const navigateTo = (path: string) => {
   padding: 8px;
   border: none;
   background: transparent;
-  color: var(--text-color-3, rgba(255, 255, 255, 0.4));
+  color: var(--text-tertiary);
   cursor: pointer;
   transition:
     color 0.15s,
@@ -897,7 +897,7 @@ const navigateTo = (path: string) => {
   font-weight: 500;
 }
 .assistant-pills-toggle:hover {
-  color: var(--text-color-1, #e8e8e8);
+  color: var(--text-primary);
   background: rgba(255, 255, 255, 0.03);
 }
 
@@ -931,7 +931,7 @@ const navigateTo = (path: string) => {
   align-items: flex-end;
   gap: 8px;
   padding: 10px 12px 12px;
-  border-top: 1px solid var(--divider-color, rgba(255, 255, 255, 0.07));
+  border-top: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 

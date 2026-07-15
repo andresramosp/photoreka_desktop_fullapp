@@ -11,7 +11,7 @@
       aria-modal="true"
       style="
         background-color: var(--bg-body);
-        border: 1px solid #2c2c32;
+        border: 1px solid var(--border-color);
         height: 72vh;
         overflow: hidden;
       "
@@ -71,8 +71,8 @@
                 border-radius: 16px;
                 box-shadow: 0 4px 24px rgba(0, 0, 0, 0.13);
                 object-fit: contain;
-                background: #18181c;
-                border: 1px solid #23232a;
+                background: var(--bg-surface);
+                border: 1px solid var(--border-color);
               "
             />
           </div>

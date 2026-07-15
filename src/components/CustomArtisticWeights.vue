@@ -406,7 +406,7 @@ const deletePreset = async (id) => {
 
 .group-header {
   padding-bottom: 4px;
-  border-bottom: 1px solid #2c2c32;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .group-title {
@@ -440,7 +440,7 @@ const deletePreset = async (id) => {
 }
 
 .weights-container::-webkit-scrollbar-thumb {
-  background: #2c2c32;
+  background: var(--border-color-hover);
   border-radius: 3px;
 }
 

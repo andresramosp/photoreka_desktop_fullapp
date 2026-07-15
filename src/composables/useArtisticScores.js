@@ -448,7 +448,7 @@ export function useArtisticScores(options = {}) {
     if (!preset) return "";
 
     let tooltip = `<div style="font-size: 12px; line-height: 1.4;">`;
-    tooltip += `<div style="font-weight: 600; margin-bottom: 8px; color: #ffffff;">${
+    tooltip += `<div style="font-weight: 600; margin-bottom: 8px; color: var(--text-primary);">${
       genre.charAt(0).toUpperCase() + genre.slice(1)
     } Preset Weights:</div>`;
 
@@ -460,7 +460,7 @@ export function useArtisticScores(options = {}) {
       group.criteria.forEach((criterion) => {
         const weight = preset[criterion.value];
         const percentage = Math.round(weight * 100);
-        tooltip += `<div style="margin-left: 8px; font-size: 11px; color: #ffffffcc;">`;
+        tooltip += `<div style="margin-left: 8px; font-size: 11px; color: var(--text-secondary);">`;
         tooltip += `${formatCriterionName(criterion.value)}: <span style="font-weight: 500; color: ${
           percentage === 0
             ? "#ef4444"

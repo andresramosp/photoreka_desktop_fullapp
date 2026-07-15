@@ -55,7 +55,7 @@
                       :progress-color="
                         job.status === 'finished' ? '#10b981' : '#f59e0b'
                       "
-                      background-color="#2c2c32"
+                      background-color="var(--bg-surface)"
                       stroke-color="var(--bg-body)"
                       :stroke-width="1"
                       class="progress-compact"
@@ -724,14 +724,14 @@ function isLastFinishedJob(job) {
 
 .processing-row {
   background-color: var(--bg-card);
-  border: 1px solid #2c2c32;
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .processing-row:last-child {
-  border-bottom: 1px solid #2c2c32;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .processing-row:hover {
@@ -1012,7 +1012,7 @@ function isLastFinishedJob(job) {
   .actions-cell:has(.add-to-collection-btn) {
     margin-top: 12px;
     padding-top: 12px;
-    border-top: 1px solid #2c2c32;
+    border-top: 1px solid var(--border-color);
   }
 
   .row-actions {
@@ -1027,7 +1027,7 @@ function isLastFinishedJob(job) {
 
   /* Expanded content */
   .row-expanded {
-    border-top: 1px solid #2c2c32;
+    border-top: 1px solid var(--border-color);
   }
 
   .expanded-content {

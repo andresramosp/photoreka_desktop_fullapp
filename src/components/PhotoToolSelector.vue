@@ -286,7 +286,7 @@ const handleCanvasSelect = (canvasId) => {
   border-radius: var(--border-radius);
   cursor: pointer;
   transition: all 0.2s ease;
-  background: var(--card-color);
+  background: var(--bg-card);
   position: relative;
 }
 
@@ -302,7 +302,7 @@ const handleCanvasSelect = (canvasId) => {
 
 .tool-option.processing:hover {
   border-color: var(--border-color);
-  background: var(--card-color);
+  background: var(--bg-card);
 }
 
 .tool-option.disabled {
@@ -312,7 +312,7 @@ const handleCanvasSelect = (canvasId) => {
 
 .tool-option.disabled:hover {
   border-color: var(--border-color);
-  background: var(--card-color);
+  background: var(--bg-card);
 }
 
 .single-photo-warning {

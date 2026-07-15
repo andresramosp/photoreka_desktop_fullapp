@@ -30,7 +30,7 @@
       <div class="control-section">
         <h4 class="section-title">
           <n-icon
-            color="var(--text-on-primary)"
+            color="var(--text-primary)"
             size="16"
             style="margin-right: 6px; vertical-align: middle"
           >
@@ -67,7 +67,7 @@
       <div class="control-section">
         <div class="section-toggle" style="cursor: default; margin-bottom: 7px">
           <div style="display: flex; align-items: center; gap: 6px">
-            <n-icon size="16" color="var(--text-on-primary)">
+            <n-icon size="16" color="var(--text-primary)">
               <DatabaseOutlined />
             </n-icon>
             <span class="section-toggle-label">Viewport</span>
@@ -114,7 +114,7 @@
       <div class="control-section">
         <div class="section-toggle" @click="togglePatternsSection">
           <div style="display: flex; align-items: center; gap: 6px">
-            <n-icon size="16" color="var(--text-on-primary)">
+            <n-icon size="16" color="var(--text-primary)">
               <TagOutlined />
             </n-icon>
             <span class="section-toggle-label">Patterns for cluster</span>
@@ -151,7 +151,7 @@
       <div class="control-section">
         <div class="section-toggle" @click="toggleDisplayOptionsSection">
           <div style="display: flex; align-items: center; gap: 6px">
-            <n-icon size="16" color="var(--text-on-primary)">
+            <n-icon size="16" color="var(--text-primary)">
               <EyeOutlined />
             </n-icon>
             <span class="section-toggle-label">Display options</span>
@@ -198,7 +198,7 @@
       <div class="control-section">
         <div class="section-toggle" @click="toggleFiltersSection">
           <div style="display: flex; align-items: center; gap: 6px">
-            <n-icon size="16" color="var(--text-on-primary)">
+            <n-icon size="16" color="var(--text-primary)">
               <FilterOutlined />
             </n-icon>
             <span class="section-toggle-label">Search filters</span>
@@ -254,7 +254,7 @@
       <div class="control-section">
         <div class="section-toggle" @click="toggleTagBeacons">
           <div style="display: flex; align-items: center; gap: 6px">
-            <n-icon size="16" color="var(--text-on-primary)">
+            <n-icon size="16" color="var(--text-primary)">
               <TagsOutlined />
             </n-icon>
             <span class="section-toggle-label">Tag Beacons</span>
@@ -391,7 +391,7 @@
       <div class="control-section">
         <div class="section-toggle" @click="toggleNavigationControls">
           <div style="display: flex; align-items: center; gap: 6px">
-            <n-icon size="16" color="var(--text-on-primary)">
+            <n-icon size="16" color="var(--text-primary)">
               <CompassOutlined />
             </n-icon>
             <span class="section-toggle-label">Navigation Controls</span>

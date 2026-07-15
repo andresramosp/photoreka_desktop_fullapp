@@ -978,7 +978,12 @@ onUnmounted(() => {
 
 /* Loading states */
 .photo-card.loading .photo-image {
-  background: linear-gradient(90deg, #18181c 25%, #2c2c32 50%, #18181c 75%);
+  background: linear-gradient(
+    90deg,
+    var(--bg-card) 25%,
+    var(--bg-surface-hover) 50%,
+    var(--bg-card) 75%
+  );
   background-size: 200% 100%;
   animation: loading 1.5s infinite;
 }

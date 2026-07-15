@@ -1338,7 +1338,7 @@ defineExpose({
   padding: 8px 12px;
   background-color: rgba(255, 255, 255, 0.05);
   border-radius: 6px;
-  border: 1px solid #2c2c32;
+  border: 1px solid var(--border-color);
 }
 
 /* Upload Progress Section */
@@ -1347,7 +1347,7 @@ defineExpose({
   border-radius: 12px;
   padding: 24px;
   margin-bottom: 24px;
-  border: 1px solid #2c2c32;
+  border: 1px solid var(--border-color);
 }
 
 .progress-header {
