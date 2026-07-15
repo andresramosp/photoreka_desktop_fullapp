@@ -726,6 +726,7 @@ onUnmounted(() => {
 
 .route-tabs :deep(.n-tabs-pad) {
   flex: 0 0 auto;
+  border-bottom: none !important;
 }
 
 .route-tabs :deep(.n-tabs-nav__prefix) {
