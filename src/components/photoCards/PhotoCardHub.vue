@@ -667,7 +667,7 @@ onUnmounted(() => {
   container-name: photo-card;
 
   box-sizing: border-box;
-  border: 2px solid transparent;
+  border: 2px solid color-mix(in srgb, var(--border-color) 90%, transparent);
   transition: border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
