@@ -3,6 +3,7 @@ import { useRouter } from "vue-router";
 import { useMessage } from "naive-ui";
 import { useCanvasStore } from "@/stores/canvas.js";
 import { usePhotosStore } from "@/stores/photos.js";
+import { useChatStore } from "@/stores/chat.js";
 
 // Single source of truth for how many photos can be sent/attached to ChatLab
 export const MAX_PHOTOS_TO_CHAT = 10;
@@ -12,6 +13,7 @@ export function usePhotoToolSelection() {
   const message = useMessage();
   const canvasStore = useCanvasStore();
   const photosStore = usePhotosStore();
+  const chatStore = useChatStore();
 
   const isProcessing = ref(false);
   const showToolSelector = ref(false);
@@ -293,6 +295,9 @@ export function usePhotoToolSelection() {
 
       // Store full photo data so ChatView doesn't need the store to be loaded
       sessionStorage.setItem("chat_context_photos", JSON.stringify(photosData));
+      // Wakes an already-mounted ChatView (e.g. dashboard chat panel already
+      // open), which won't remount from the navigation below.
+      chatStore.notifyPendingHandoff();
 
       // Clear selections before navigating
       clearSelections();

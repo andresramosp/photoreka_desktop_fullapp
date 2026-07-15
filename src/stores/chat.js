@@ -31,6 +31,15 @@ export const useChatStore = defineStore("chat", {
 
     /** Total conversations count (from server pagination) */
     totalConversations: 0,
+
+    /**
+     * Bumped whenever a photo/message hand-off is written to sessionStorage
+     * (see usePhotoToolSelection.takeToChat / ProcessingSummaryModal). The
+     * dashboard keeps ChatView mounted across the /chat-lab redirect, so a
+     * hand-off while it's already active wouldn't otherwise be noticed —
+     * ChatView watches this to know when to re-check sessionStorage.
+     */
+    pendingHandoffTick: 0,
   }),
 
   getters: {
@@ -135,6 +144,13 @@ export const useChatStore = defineStore("chat", {
     startNewConversation() {
       this.activeConversationId = null;
       this.messages = [];
+    },
+
+    /**
+     * Signal that a photo/message hand-off just landed in sessionStorage.
+     */
+    notifyPendingHandoff() {
+      this.pendingHandoffTick++;
     },
 
     /**

@@ -1756,6 +1756,14 @@ onActivated(() => {
   loadPendingChatPhotos();
 });
 
+// Covers the case neither onMounted nor onActivated catches: the dashboard
+// keeps this instance mounted and active across the /chat-lab redirect, so a
+// hand-off while the chat panel is already open wouldn't otherwise be noticed.
+watch(
+  () => chatStore.pendingHandoffTick,
+  () => loadPendingChatPhotos(),
+);
+
 onUnmounted(() => {
   window.removeEventListener("resize", checkMobile);
   stopLoadingPhraseCycle();
