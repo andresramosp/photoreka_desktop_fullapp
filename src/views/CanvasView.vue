@@ -826,7 +826,7 @@ const getSavedConfig = () => {
     if (!saved) return defaults;
 
     const parsed = JSON.parse(saved);
-    return {
+    const merged = {
       ...defaults,
       ...parsed,
       expansion: {
@@ -838,6 +838,13 @@ const getSavedConfig = () => {
         ...(parsed.photoOptions || {}),
       },
     };
+
+    // Background always follows the theme on load, matching the 2D/3D/tag-cloud
+    // atlases (which don't persist their background). A color the user picks with
+    // the selector applies for the session but is not restored on reload.
+    merged.canvasBackground = defaults.canvasBackground;
+
+    return merged;
   } catch {
     return getDefaultConfig();
   }
@@ -854,12 +861,22 @@ const toolbarState = ref({
   photoOptions: savedConfig.photoOptions,
 });
 
-// Persist user preferences (not session state) to localStorage, except for demo users
+// Follow the app theme until the user picks a color explicitly (object value).
+// While canvasBackground is a string id ("default"/"gray"/…) it tracks the theme.
+watch(isDarkMode, (newIsDarkMode) => {
+  const bg = toolbarState.value.canvasBackground;
+  if (!bg || typeof bg === "string") {
+    toolbarState.value.canvasBackground = newIsDarkMode ? "default" : "gray";
+  }
+});
+
+// Persist user preferences (not session state) to localStorage, except for demo users.
+// canvasBackground is intentionally omitted: it follows the app theme on each load,
+// consistent with the other atlases (which don't persist their background).
 watch(
   () => ({
     expansion: toolbarState.value.expansion,
     showDots: toolbarState.value.showDots,
-    canvasBackground: toolbarState.value.canvasBackground,
     photoOptions: toolbarState.value.photoOptions,
   }),
   (config) => {
