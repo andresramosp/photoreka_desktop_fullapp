@@ -341,6 +341,24 @@
 
         <!-- Display Options Content -->
         <div v-if="showDisplayOptions" class="options-container">
+          <!-- Background color -->
+          <div
+            class="control-item"
+            style="
+              margin-top: 12px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            "
+          >
+            <label class="control-label" style="margin: 0">Background</label>
+            <ColorPickerPills
+              :model-value="atlasBackground"
+              :disabled="showDiscreteLoader"
+              @update:model-value="(v) => emit('update:atlasBackground', v)"
+            />
+          </div>
+
           <!-- 2D View Toggle -->
           <!-- <div
             class="control-item"
@@ -878,6 +896,7 @@ import {
 import { AppsOutline } from "@vicons/ionicons5";
 import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
 import ScoreOperatorSlider from "@/components/controls/ScoreOperatorSlider.vue";
+import ColorPickerPills from "@/components/ColorPickerPills.vue";
 import { useSearchStore } from "@/stores/searchStore.js";
 import { useUserStore } from "@/stores/userStore";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
@@ -936,6 +955,10 @@ const props = defineProps({
   gridRelaxationEnabled: {
     type: Boolean,
     default: true,
+  },
+  atlasBackground: {
+    type: [String, Object],
+    default: null,
   },
   floatingTagsEnabled: {
     type: Boolean,
@@ -1016,6 +1039,7 @@ const emit = defineEmits([
   "update:outputDims",
   "update:inflateFactor",
   "update:gridRelaxationEnabled",
+  "update:atlasBackground",
   "update:floatingTagsEnabled",
   "update:floatingTagsDetectionRadius",
   "update:floatingTagsMaxTags",

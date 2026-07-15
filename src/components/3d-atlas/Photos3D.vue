@@ -10,7 +10,12 @@
     </div>
 
     <!-- 3D Canvas -->
-    <TresCanvas v-else v-bind="gl" ref="canvasRef">
+    <TresCanvas
+      v-else
+      v-bind="gl"
+      :clear-color="currentBackgroundColor"
+      ref="canvasRef"
+    >
       <TresPerspectiveCamera
         ref="cameraRef"
         :position="[0, 0, 250]"
@@ -41,6 +46,7 @@
       v-model:outputDims="outputDims"
       v-model:inflateFactor="inflateFactor"
       v-model:gridRelaxationEnabled="gridRelaxationEnabled"
+      v-model:atlasBackground="atlasBackground"
       v-model:floatingTagsEnabled="floatingTagsSystem.config.enabled"
       v-model:floatingTagsDetectionRadius="
         floatingTagsSystem.config.detectionRadius
@@ -225,6 +231,7 @@ import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useUserStore } from "@/stores/userStore";
 import { useHasTouch } from "@/composables/useHasTouch.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
+import { useTheme } from "@/composables/useTheme.js";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { usePhotoQueryParams } from "@/composables/usePhotoQueryParams.js";
@@ -422,6 +429,34 @@ const currentPosition = ref({ x: 0, y: 0, z: 80 });
 // Panel state (managed by Photos3DConfigPanel component)
 const selectByClick = ref(true);
 const timeRangeFilter = ref(null);
+
+// =============================
+// Theme-aware stage background
+// =============================
+// Same color ids as the 2D atlas. Starts as a string id (resolved to hex below);
+// ColorPickerPills swaps it for the full object once the user picks a color.
+const { isDarkMode } = useTheme();
+const atlasBackground = ref(isDarkMode.value ? "default" : "gray");
+
+const BACKGROUND_ID_COLORS = {
+  default: "#000000",
+  white: "#f5f5f5",
+  gray: "#e0e0e0",
+};
+
+const currentBackgroundColor = computed(() => {
+  const bg = atlasBackground.value;
+  if (!bg) return "#000000";
+  if (typeof bg === "object" && bg.color) return bg.color;
+  return BACKGROUND_ID_COLORS[bg] ?? "#000000";
+});
+
+// Follow the app theme until the user picks a color explicitly (object value).
+watch(isDarkMode, (newIsDarkMode) => {
+  if (!atlasBackground.value || typeof atlasBackground.value === "string") {
+    atlasBackground.value = newIsDarkMode ? "default" : "gray";
+  }
+});
 
 // =============================
 // Beacon flight (click-to-fly)
@@ -826,7 +861,7 @@ const updateCameraAspect = () => {
 // Canvas configuration - Optimized for memory efficiency and context stability
 // IMPORTANTE: NO usar ref() aquí para evitar reactividad que cause re-cargas de fotos
 const gl = {
-  clearColor: "#000000",
+  // clearColor is bound reactively on <TresCanvas :clear-color> (theme-aware).
   antialias: false, // Disabled for better performance with many textures
   powerPreference: "high-performance", // Prioriza GPU dedicada para máximo rendimiento
   forceWebGL: true, // Force WebGL over Canvas 2D
