@@ -245,7 +245,7 @@ export const lightTheme = {
 
   // Acento
   // cyan[700]: única variante de cyan que pasa AA (4.5:1) como texto sobre blanco
-  accent: colors.cyan[700],
+  accent: colors.cyan[500],
   accentHover: colors.cyan[800],
   accentPressed: colors.cyan[900],
 
@@ -517,7 +517,9 @@ export function getThemeCSSVariables(isDark = true) {
 
     // Sombra para toolbars/paneles flotantes: fuerte en dark, suave en light
     // (evita el "manchón negro" al proyectar sombra sobre canvas claro)
-    "--toolbar-shadow-color": isDark ? "rgba(0, 0, 0, 0.4)" : "rgba(0, 0, 0, 0.1)",
+    "--toolbar-shadow-color": isDark
+      ? "rgba(0, 0, 0, 0.4)"
+      : "rgba(0, 0, 0, 0.1)",
 
     // Borders
     "--border-color": theme.border,
