@@ -4059,12 +4059,13 @@ const formatRelativeDate = (dateStr: string) => {
 .recent-convs-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--spacing-sm);
 }
 
 .recent-conv-item {
   height: auto;
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: var(--spacing-xs) var(--spacing-xs);
+  background: color-mix(in srgb, var(--bg-container) 40%, transparent);
   border-color: var(--border-color);
   border-radius: var(--radius-md);
   transition:
@@ -4085,6 +4086,7 @@ const formatRelativeDate = (dateStr: string) => {
 
 .recent-conv-title {
   font-size: var(--font-size-sm);
+  line-height: 1.5;
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
