@@ -162,6 +162,7 @@ import {
   reactive,
   computed,
   onMounted,
+  onActivated,
   onUnmounted,
   watch,
   nextTick,
@@ -757,6 +758,17 @@ onMounted(() => {
   maybeRunQuerySearch(route.query.q);
 
   // Scroll listener removido - ahora los scrolls son internos en PhotosSearchGrid
+});
+
+// The Search view is kept alive across tab close/reopen, so onMounted doesn't
+// re-run — onActivated fires on every reactivation. When the tab is reopened
+// after a close, the store has been cleared (hasSearched === false), so expand
+// the toolbar out of the collapsed mini bar. When simply switching back to a
+// tab that still has results, leave the collapsed state untouched.
+onActivated(() => {
+  if (!searchStore.hasSearched) {
+    isToolbarCollapsed.value = false;
+  }
 });
 
 // Watch for Insights toggle to disable High Matches filter if needed

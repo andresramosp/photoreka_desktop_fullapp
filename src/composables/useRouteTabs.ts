@@ -486,6 +486,18 @@ export const useRouteTabs = () => {
     tabs.value.splice(index, 1);
     persistTabs();
 
+    // Closing the Search tab discards the user's query/filters so reopening
+    // Search starts from a clean slate. Unlike component-local state (which
+    // KeepAlive evicts on close via keepAliveComponents), the query lives in
+    // the search store and would otherwise survive the unmount.
+    //
+    // Clear AFTER removing the tab: clearAllSearches() mutates the query, which
+    // wakes the query watcher below. With the tab already spliced out, that
+    // watcher's existence guard bails instead of recreating a stray "Search" tab.
+    if (key === "search") {
+      searchStore.clearAllSearches();
+    }
+
     if (!wasActive) {
       return;
     }
@@ -631,7 +643,13 @@ export const useRouteTabs = () => {
   watch(
     () => searchStore.currentSearchState?.query,
     () => {
-      if (activeTabKey.value === "search") {
+      // Only refresh the title of an already-open Search tab. The existence
+      // check keeps this from re-adding the tab when the query is cleared as
+      // part of closing it (clearAllSearches fires this watcher).
+      if (
+        activeTabKey.value === "search" &&
+        tabs.value.some((tab) => tab.key === "search")
+      ) {
         upsertTabFromCurrentRoute();
       }
     },
