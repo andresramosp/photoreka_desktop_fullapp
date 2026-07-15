@@ -76,7 +76,7 @@ watch(isDarkMode, (newIsDarkMode) => {
   // Only auto-set if no color is currently selected
   if (!currentColorId.value) {
     const defaultOption = BACKGROUND_COLOR_OPTIONS.find(
-      (opt) => opt.id === (newIsDarkMode ? "default" : "white"),
+      (opt) => opt.id === (newIsDarkMode ? "default" : "gray"),
     );
     emit("update:modelValue", defaultOption);
   }

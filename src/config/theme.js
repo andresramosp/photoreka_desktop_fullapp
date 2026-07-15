@@ -515,6 +515,10 @@ export function getThemeCSSVariables(isDark = true) {
     "--bg-deep-surface": theme.bgDeepSurface,
     "--bg-tag-pill": theme.bgTagPill,
 
+    // Sombra para toolbars/paneles flotantes: fuerte en dark, suave en light
+    // (evita el "manchón negro" al proyectar sombra sobre canvas claro)
+    "--toolbar-shadow-color": isDark ? "rgba(0, 0, 0, 0.4)" : "rgba(0, 0, 0, 0.1)",
+
     // Borders
     "--border-color": theme.border,
     "--border-color-hover": theme.borderHover,

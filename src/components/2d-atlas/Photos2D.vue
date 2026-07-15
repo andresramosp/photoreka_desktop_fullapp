@@ -451,7 +451,15 @@ const placeholderTexture = shallowRef(null); // Reused placeholder (GPU memory o
 const { isDarkMode } = useTheme();
 
 // Initialize with default color ID based on theme
-const atlasBackground = ref(isDarkMode.value ? "default" : "white");
+const atlasBackground = ref(isDarkMode.value ? "default" : "gray");
+
+// HEX per background id (kept in sync with ColorPickerPills' palette) so the
+// theme-based default renders correctly before the user ever opens the picker.
+const BACKGROUND_ID_COLORS = {
+  default: "#000000",
+  white: "#f5f5f5",
+  gray: "#e0e0e0",
+};
 
 // Get the HEX color from atlasBackground (supports both object and string ID)
 const getCurrentBackgroundColor = computed(() => {
@@ -465,9 +473,8 @@ const getCurrentBackgroundColor = computed(() => {
     return atlasBackground.value.color;
   }
 
-  // If it's a string ID (legacy/initial), return black as fallback
-  // ColorPickerPills will replace this with proper object on first interaction
-  return "#000000";
+  // If it's a string ID (initial/theme default), resolve it against the palette.
+  return BACKGROUND_ID_COLORS[atlasBackground.value] ?? "#000000";
 });
 
 const toPixiColorNumber = (colorSource) => {
@@ -524,7 +531,7 @@ const applyPixiBackground = () => {
 watch(isDarkMode, (newIsDarkMode) => {
   // Reset to ID if no object is set yet
   if (!atlasBackground.value || typeof atlasBackground.value === "string") {
-    atlasBackground.value = newIsDarkMode ? "default" : "white";
+    atlasBackground.value = newIsDarkMode ? "default" : "gray";
   }
 });
 

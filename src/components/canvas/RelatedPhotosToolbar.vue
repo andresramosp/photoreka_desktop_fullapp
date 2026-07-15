@@ -823,7 +823,7 @@ function simulateDropEvent(x: number, y: number) {
   z-index: 100;
   transform: translateY(100%);
   transition: none;
-  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 -8px 32px var(--toolbar-shadow-color, rgba(0, 0, 0, 0.3));
 }
 
 .related-photos-toolbar.toolbar-visible {
@@ -894,22 +894,22 @@ function simulateDropEvent(x: number, y: number) {
   overflow-y: hidden;
   padding-bottom: var(--spacing-xs);
   scrollbar-width: thin; /* Firefox */
-  scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1);
+  scrollbar-color: var(--border-color-hover) transparent;
 }
 
 .related-photos-scroll::-webkit-scrollbar {
   height: 12px;
-  background: rgba(255, 255, 255, 0.1);
+  background: transparent;
 }
 
 .related-photos-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--border-color-hover);
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-color);
 }
 
 .related-photos-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.5);
+  background: var(--text-tertiary);
 }
 
 .related-photos-grid {

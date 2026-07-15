@@ -812,7 +812,7 @@ const getDefaultConfig = () => ({
     enabled: true,
   },
   showDots: true,
-  canvasBackground: isDarkMode.value ? "default" : "white",
+  canvasBackground: isDarkMode.value ? "default" : "gray",
   photoOptions: {
     count: 3,
     spreadMode: "perpendicular",

@@ -431,18 +431,13 @@ watch(
   left: 0;
   right: 0;
   height: 240px;
-  background: linear-gradient(
-    180deg,
-    rgba(13, 13, 18, 0.85) 0%,
-    rgba(13, 13, 18, 0.95) 60%,
-    rgba(13, 13, 18, 1) 100%
-  );
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-container);
+  border-top: 1px solid var(--border-color);
   backdrop-filter: blur(12px);
   z-index: 10;
   transform: translateY(100%);
   transition: none;
-  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 -8px 32px var(--toolbar-shadow-color, rgba(0, 0, 0, 0.4));
 }
 
 .tag-search-toolbar.toolbar-visible {
@@ -475,19 +470,19 @@ watch(
 }
 
 .section-title {
-  color: #e5e5e5;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
 }
 
 .match-count {
-  color: #9ca3af;
+  color: var(--text-secondary);
   font-weight: 400;
 }
 
 .showing-count {
-  color: #6b7280;
+  color: var(--text-tertiary);
   font-size: 11px;
 }
 
@@ -505,7 +500,7 @@ watch(
   align-items: center;
   padding: 2px 8px;
   background: rgba(6, 182, 212, 0.15);
-  color: #67e8f9;
+  color: var(--accent-color);
   border: 1px solid rgba(6, 182, 212, 0.4);
   border-radius: 10px;
   font-size: 11px;
@@ -519,17 +514,17 @@ watch(
 
 .overflow-count-chip {
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.06);
-  color: #9ca3af;
-  border-color: rgba(255, 255, 255, 0.15);
+  background: var(--bg-surface-hover);
+  color: var(--text-secondary);
+  border-color: var(--border-color);
   max-width: none;
   cursor: default;
 }
 
 .toolbar-close {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #9ca3af;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
   border-radius: 6px;
   width: 28px;
   height: 28px;
@@ -542,8 +537,8 @@ watch(
 }
 
 .toolbar-close:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #e5e5e5;
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
 }
 
 .related-photos-scroll {
@@ -552,21 +547,21 @@ watch(
   overflow-y: hidden;
   padding-bottom: 4px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.05);
+  scrollbar-color: var(--border-color-hover) transparent;
 }
 
 .related-photos-scroll::-webkit-scrollbar {
   height: 10px;
-  background: rgba(255, 255, 255, 0.05);
+  background: transparent;
 }
 
 .related-photos-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--border-color-hover);
   border-radius: 6px;
 }
 
 .related-photos-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.45);
+  background: var(--text-tertiary);
 }
 
 .related-photos-grid {
@@ -588,7 +583,7 @@ watch(
   height: 160px;
   border-radius: 8px;
   overflow: hidden;
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: var(--bg-surface);
 }
 
 .empty-state {
@@ -597,7 +592,7 @@ watch(
   justify-content: center;
   width: 100%;
   height: 160px;
-  color: #9ca3af;
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
