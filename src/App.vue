@@ -165,6 +165,10 @@
               :count="120"
             />
 
+            <!-- Processing Summary Modal: single check on app entry,
+                 regardless of route -->
+            <ProcessingSummaryEntryCheck />
+
             <!-- Mobile Welcome Banner -->
             <MobileWelcomeBanner />
 
@@ -210,6 +214,7 @@ import MobileWelcomeBanner from "./components/MobileWelcomeBanner.vue";
 import WelcomeBatchModal from "./components/WelcomeBatchModal.vue";
 import AssistantChatWidget from "./components/AssistantChatWidget.vue";
 import LightroomModal from "./components/LightroomModal.vue";
+import ProcessingSummaryEntryCheck from "./components/ProcessingSummaryEntryCheck.vue";
 import { useAssistantChatStore } from "@/stores/assistantChat.js";
 import { useWarmUp } from "@/composables/useWarmUp";
 import { useProactiveCacheSync } from "@/composables/useProactiveCacheSync.js";
