@@ -3025,7 +3025,6 @@ const formatRelativeDate = (dateStr: string) => {
   margin: var(--spacing-xl) auto 0;
   font-size: var(--font-size-sm);
   color: var(--text-primary);
-  opacity: 0.55;
   line-height: var(--line-height-relaxed);
   text-align: center;
 }

@@ -470,6 +470,17 @@ onBeforeUnmount(() => {
   isolation: isolate;
 }
 
+/* En light el accent (cyan700) es muy saturado y el manchón azul canta
+   sobre el fondo casi blanco: bajamos el aporte de accent y aclaramos el
+   borde para que el halo sea solo una insinuación de profundidad. */
+html[data-theme="light"] .photo-universe-filled {
+  background: radial-gradient(
+    ellipse at 50% 45%,
+    color-mix(in srgb, var(--bg-surface) 95%, var(--accent-color) 5%) 0%,
+    var(--bg-deep-surface) 78%
+  );
+}
+
 .universe-content {
   flex: 1;
   min-width: 0;

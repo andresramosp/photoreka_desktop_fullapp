@@ -64,7 +64,7 @@
         <!-- Action section: Col 3 -->
         <div class="stat-action-section" v-show="statBlockWidth >= 290">
           <n-button
-            type="info"
+            type="primary"
             @click="runPrimaryAction"
             :aria-label="primaryActionLabel"
           >
