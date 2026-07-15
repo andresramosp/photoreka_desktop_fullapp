@@ -29,6 +29,7 @@
                 :app-access-mode="appAccessMode"
                 :is-mobile-limited-mode="isMobileLimitedMode"
                 :show-chat-tool="universeMode !== 'chat'"
+                :show-2d-atlas-tool="universeMode !== 'photos2d'"
               />
             </div>
             <!-- Recent Collections & Series -->
@@ -154,7 +155,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { storeToRefs } from "pinia";
 import { useChatFullscreenStore } from "@/stores/chatFullscreen";
@@ -213,8 +214,8 @@ const { isFullscreen: isChatFullscreen } = storeToRefs(useChatFullscreenStore())
 
 // Which panel the universe is showing (its own stored preference, unless a
 // forced mode or an empty library overrides it). The left panel offers a chat
-// quick access tile only while the center is on something else — the tile is a
-// way back to the chat, not a link to the view we are already in.
+// or 2D Atlas quick access tile only while the center is on something else —
+// each tile is a way back to that panel, not a link to the view we are already in.
 const universeMode = ref<string>("chat");
 
 const readFirst = (value: unknown): string | null => {
@@ -224,17 +225,25 @@ const readFirst = (value: unknown): string | null => {
 
 watch(
   () => route.query,
-  (query) => {
+  async (query) => {
     if (route.name !== "dashboard") return;
     if (readFirst(query.view) !== "chat") return;
 
-    forcedUniverseMode.value = "chat";
     requestedConversationId.value = readFirst(query.conversation);
+    forcedUniverseMode.value = "chat";
 
     const rest = { ...query };
     delete rest.view;
     delete rest.conversation;
     router.replace({ name: "dashboard", query: rest });
+
+    // forcedMode is a one-shot command, not persistent state. The dashboard is
+    // kept alive, so if we leave it set to "chat", a later request to reopen the
+    // chat (after the user switched the center panel to another view) sets it to
+    // "chat" again — an unchanged value PhotoUniverse's watcher never sees, and
+    // the click does nothing. Clear it once consumed so it can fire again.
+    await nextTick();
+    forcedUniverseMode.value = null;
   },
   { immediate: true },
 );

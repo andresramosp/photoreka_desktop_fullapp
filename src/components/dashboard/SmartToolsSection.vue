@@ -36,12 +36,19 @@ defineOptions({
   name: "SmartToolsSection",
 });
 
-const props = defineProps<{
-  appAccessMode: string;
-  isMobileLimitedMode: boolean;
-  /** Desktop only: the chat tile is a way back to a panel we are not showing. */
-  showChatTool?: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    appAccessMode: string;
+    isMobileLimitedMode: boolean;
+    /** Desktop only: the chat tile is a way back to a panel we are not showing. */
+    showChatTool?: boolean;
+    /** Desktop only: hidden while the 2D Atlas is already the panel on screen. */
+    show2dAtlasTool?: boolean;
+  }>(),
+  {
+    show2dAtlasTool: true,
+  },
+);
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -57,6 +64,7 @@ const recentConversation = ref<{ id: number; title: string | null } | null>(
 const smartTools = computed(() =>
   getDashboardSmartTools(props.isMobileLimitedMode ? "mobile" : "desktop", {
     includeChat: props.showChatTool,
+    include2dAtlas: props.show2dAtlasTool,
   }),
 );
 

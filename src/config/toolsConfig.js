@@ -186,7 +186,7 @@ export const TOOLS_CONFIG = [
   },
   {
     id: "chat",
-    name: "ChatLab",
+    name: "Chat Lab",
     description: "Chat with AI about your photos",
     icon: "RobotOutlined",
     route: "/chat-lab",
@@ -307,15 +307,21 @@ export function isDesktopOnly(toolId) {
  * @param {string} platform - 'mobile' or 'desktop'
  * @param {Object} [options]
  * @param {boolean} [options.includeChat] - Desktop only: surface the chat entry.
+ * @param {boolean} [options.include2dAtlas] - Desktop only: surface the 2D Atlas entry. Defaults to true.
  * @returns {Array} Ordered tools for the dashboard smart tools section
  */
 export function getDashboardSmartTools(platform, options = {}) {
-  // On desktop the chat usually lives in the dashboard's center panel, where a
-  // tile pointing back at this same view would be a no-op. It only earns a spot
-  // when the center panel is showing something else.
-  const desktopToolIds = options.includeChat
-    ? ["chat", "canvas", "world-map", "portfolios"]
-    : ["canvas", "world-map", "portfolios"];
+  // On desktop, the chat and 2D Atlas tiles double as a way back to whatever
+  // the center panel isn't currently showing — pointing at the panel already
+  // on screen would be a no-op, so each one steps aside while it's visible there.
+  const include2dAtlas = options.include2dAtlas !== false;
+  const desktopToolIds = [
+    ...(options.includeChat ? ["chat"] : []),
+    ...(include2dAtlas ? ["2d-atlas"] : []),
+    "canvas",
+    "world-map",
+    "portfolios",
+  ];
 
   const orderedToolIds =
     platform === "mobile"
