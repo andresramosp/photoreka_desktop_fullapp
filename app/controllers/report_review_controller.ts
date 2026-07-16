@@ -11,8 +11,22 @@ import { reportReviewBuildTemplate } from '../utils/email_templates.js'
 
 const REVIEW_TYPES: ReviewType[] = ['general', 'story', 'context']
 const BUILD_THRESHOLD_PHOTOS = 150
-const REBUILD_THRESHOLD_CHANGES = 250 // Número absoluto de fotos añadidas/borradas para rebuild
 const BUILD_TIMEOUT_MS = 60 * 60 * 1000 // 60 minutos - tiempo máximo esperado para un build
+
+// Escalones de threshold de cambios (fotos añadidas/borradas) según el tamaño del catálogo previo.
+// Cada escalón define el número absoluto de cambios necesarios para disparar un rebuild
+// cuando el catálogo previo tiene, como máximo, `maxPhotos` fotos.
+const REBUILD_THRESHOLD_STEPS: { maxPhotos: number; threshold: number }[] = [
+  { maxPhotos: 1_000, threshold: 250 },
+  { maxPhotos: 5_000, threshold: 500 },
+  { maxPhotos: 20_000, threshold: 750 },
+  { maxPhotos: Infinity, threshold: 2_000 },
+]
+
+function getRebuildThreshold(previousPhotosCount: number): number {
+  const step = REBUILD_THRESHOLD_STEPS.find(({ maxPhotos }) => previousPhotosCount <= maxPhotos)
+  return step!.threshold
+}
 
 export default class ReportReviewController {
   /**
@@ -330,6 +344,7 @@ export default class ReportReviewController {
       const totalChanges = photosAdded + photosRemoved
       const changePercentage =
         metadata.photosCount > 0 ? (totalChanges / metadata.photosCount) * 100 : 0
+      const rebuildThreshold = getRebuildThreshold(metadata.photosCount)
 
       const stats = {
         currentPhotos: currentPhotosCount,
@@ -341,7 +356,7 @@ export default class ReportReviewController {
         lastBuildDate: metadata.buildDate,
       }
 
-      if (totalChanges >= REBUILD_THRESHOLD_CHANGES) {
+      if (totalChanges >= rebuildThreshold) {
         // Lanzar rebuild de forma asíncrona
         this.buildPatterns({ response, auth } as HttpContext).catch((error) => {
           console.error('Error en rebuild asíncrono:', error)
@@ -349,13 +364,13 @@ export default class ReportReviewController {
 
         return response.ok({
           action: 'RE-BUILDING',
-          reason: `Cambio significativo detectado: ${totalChanges} fotos diferentes (threshold: ${REBUILD_THRESHOLD_CHANGES})`,
+          reason: `Cambio significativo detectado: ${totalChanges} fotos diferentes (threshold: ${rebuildThreshold})`,
           stats,
         })
       } else {
         return response.ok({
           action: 'NONE',
-          reason: `Cambios insuficientes para rebuild: ${totalChanges} fotos diferentes (threshold: ${REBUILD_THRESHOLD_CHANGES})`,
+          reason: `Cambios insuficientes para rebuild: ${totalChanges} fotos diferentes (threshold: ${rebuildThreshold})`,
           stats,
         })
       }
