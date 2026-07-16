@@ -17,7 +17,8 @@
       "Bash(node tabs.mjs)",
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")",
       "Bash(npx vite *)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "PowerShell(npx vue-tsc --noEmit -p tsconfig.json 2>&1)"
     ]
   }
 }

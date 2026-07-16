@@ -1012,9 +1012,8 @@
 
 /* For placeholders that stand in for a card and must keep its frame. */
 .panel-empty-state--boxed {
-  border: 1px solid var(--border-color);
-  border-radius: 14px;
-  background: var(--bg-container);
+  border: none;
+  background: transparent;
 }
 
 /* ===== RESPONSIVE UTILITIES ===== */

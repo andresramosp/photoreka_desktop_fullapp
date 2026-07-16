@@ -25,8 +25,13 @@ const ROUTE_TO_SECTION = {
 /**
  * Full UI context descriptions sent verbatim to the backend.
  * Keeps backend free of screen-to-description mapping.
+ *
+ * Exported because ChatLab reuses `empty_dashboard` when the library has no
+ * processed photos — see chat.js.
  */
-const SECTION_UI_CONTEXT = {
+export const SECTION_UI_CONTEXT = {
+  empty_dashboard:
+    "The user is currently on the **ChatLab** screen — the conversational assistant for exploring and curating their library — but their library is still empty, so no photo has been imported or analysed yet. Nothing can be searched, curated, or suggested from their own work. Focus on explaining how Photoreka works and on guiding them to the **Import Area** to upload their first photos.",
   search:
     "The user is currently on the **Search / Explorer** screen — the main tool to semantically search, filter, and browse their photo library.",
   workspace:

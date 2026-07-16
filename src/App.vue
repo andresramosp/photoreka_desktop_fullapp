@@ -335,10 +335,14 @@ const portfolioBuildsStore = usePortfolioBuildsStore();
 const tagCloudStore = useTagCloudStore();
 const userStore = useUserStore();
 
-// Punto único de decisión de destino post-autenticación
+// Punto único de decisión de destino post-autenticación.
+// Un catálogo vacío ya no desvía al área de importación, sino al chat: recibe
+// mejor que la pantalla de subida en frío y lleva el import a un clic. Se pide
+// por /chat-lab y no por /dashboard porque el chat solo vive en el panel
+// central en desktop — la ruta ya sabe llevarlo a un lado o al otro.
 const resolvePostAuthTarget = () => {
   if (!userStore.user?.profiles) return "/profile-setup";
-  if (photosStore.appAccessMode === "blocked") return "/import-area#upload";
+  if (photosStore.processedPhotos.length === 0) return "/chat-lab";
   return "/dashboard";
   // return isMobile.value ? "/workspace" : "/dashboard";
 };
@@ -376,12 +380,15 @@ const mobileMenuOpen = ref(false);
 const isMobile = ref(false);
 const showConfetti = ref(false);
 
-// Welcome Batch Modal — shown when user has 0 processed photos
+// Welcome Batch Modal — shown when user has 0 processed photos. Its feature
+// table needs room to be read at all, so it stays out of mobile; there the chat
+// welcome already greets an empty library.
 const welcomeBatchDismissed = ref(
   localStorage.getItem("welcome-batch-modal-dismissed") === "true",
 );
 const showWelcomeBatchModal = computed(() => {
   return (
+    !isMobile.value &&
     isAppReady.value &&
     userStore.isAuthenticated &&
     photosStore.processedPhotos.length === 0 &&

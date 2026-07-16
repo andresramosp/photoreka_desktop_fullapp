@@ -40,7 +40,7 @@
                 <DailyEurekaCard v-if="!isDashboardEmpty" />
                 <div v-else class="panel-empty-state panel-empty-state--boxed">
                   <n-icon size="32" color="var(--text-tertiary)">
-                    <CollectionsIcon />
+                    <EurekaIcon />
                   </n-icon>
                   <p>Nothing here yet</p>
                 </div>
@@ -128,7 +128,7 @@
               <DailyEurekaCard v-if="!isDashboardEmpty" />
               <div v-else class="panel-empty-state panel-empty-state--boxed">
                 <n-icon size="32" color="var(--text-tertiary)">
-                  <CollectionsIcon />
+                  <EurekaIcon />
                 </n-icon>
                 <p>Nothing here yet</p>
               </div>
@@ -197,6 +197,7 @@ import { isMobileDevice } from "@/utils/utils.js";
 // Import @vicons icons from ionicons5 for reliability
 import {
   FolderOpenOutline as CollectionsIcon,
+  BulbOutline as EurekaIcon,
   WalkOutline,
   BriefcaseOutline,
   CameraOutline,
@@ -225,9 +226,8 @@ const requestedConversationId = ref<string | null>(null);
 // The chat panel can take over the dashboard: the side panels fold away and the
 // universe keeps the full width to itself. The state is shared (see the store)
 // because the sidebar logo collapses it on its way home.
-const { isFullscreen: isChatFullscreen } = storeToRefs(
-  useChatFullscreenStore(),
-);
+const chatFullscreenStore = useChatFullscreenStore();
+const { isFullscreen: isChatFullscreen } = storeToRefs(chatFullscreenStore);
 
 // Which panel the universe is showing (its own stored preference, unless a
 // forced mode or an empty library overrides it). The left panel offers a chat
@@ -355,9 +355,35 @@ const photos = computed(() => {
 });
 
 const appAccessMode = computed(() => photosStore.appAccessMode);
-const isDashboardEmpty = computed(
-  () => appAccessMode.value === "blocked" || photos.value.length === 0,
+const isDashboardEmpty = computed(() => photos.value.length === 0);
+
+/* An empty library has nothing to put in the side panels — every section would
+   be a placeholder — so the chat takes over the whole dashboard and the import
+   CTA it carries becomes the only thing on screen. The panels come back once
+   photos land, and fold away again if the library is emptied. Stays out of
+   mobile-limited mode, where there is no chat to expand. */
+watch(
+  // The catalog starts out empty-looking until it has been fetched, so hold off
+  // on judging it — a stocked library must never flash fullscreen on the way in.
+  () => (photosStore.isInitialized ? isDashboardEmpty.value : null),
+  (isEmpty) => {
+    if (isEmpty === null || isMobileLimitedMode.value) return;
+    if (!isEmpty) {
+      chatFullscreenStore.unlock();
+      chatFullscreenStore.exit();
+      return;
+    }
+    // Only the chat is ever fullscreen: PhotoUniverse collapses it back as soon
+    // as the center is showing anything else, so ask for chat first.
+    forcedUniverseMode.value = "chat";
+    nextTick(() => {
+      forcedUniverseMode.value = null;
+      chatFullscreenStore.lock();
+    });
+  },
+  { immediate: true },
 );
+
 
 type DashboardGaugesMode = "main" | "genre";
 const DASHBOARD_GAUGES_MODE_KEY = "photoreka:dashboard:gauges:mode";

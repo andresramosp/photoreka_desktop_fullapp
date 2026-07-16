@@ -174,7 +174,8 @@ watch(
 
 // The chat can ask to take over the whole dashboard: our header steps aside and
 // the host collapses the side panels around us.
-const { isFullscreen: isChatFullscreen } = storeToRefs(chatFullscreenStore);
+const { isFullscreen: isChatFullscreen, isLocked: isChatFullscreenLocked } =
+  storeToRefs(chatFullscreenStore);
 
 const setChatFullscreen = (value: boolean) => {
   chatFullscreenStore.set(value);
@@ -414,7 +415,9 @@ const currentUniverseProps = computed(() => {
     case "chat":
       return {
         conversationId: props.conversationId ?? null,
-        allowFullscreen: true,
+        // Locked fullscreen (an empty library) leaves the toggle nothing to do,
+        // so the chat drops it rather than offering a button that won't answer.
+        allowFullscreen: !isChatFullscreenLocked.value,
         isFullscreen: isChatFullscreen.value,
       };
     default:

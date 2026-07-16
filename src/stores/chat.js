@@ -3,6 +3,8 @@
 import { defineStore } from "pinia";
 import { api } from "@/utils/axios";
 import { useUserStore } from "@/stores/userStore";
+import { usePhotosStore } from "@/stores/photos.js";
+import { SECTION_UI_CONTEXT } from "@/stores/assistantChat.js";
 
 export const useChatStore = defineStore("chat", {
   state: () => ({
@@ -44,6 +46,14 @@ export const useChatStore = defineStore("chat", {
 
   getters: {
     hasActiveConversation: (state) => state.activeConversationId !== null,
+
+    /**
+     * With no photos analysed there is nothing to curate, so the chat drops to
+     * the lightweight help assistant: cheaper models on the backend, and no
+     * grounded actions to suggest (they'd all point at an empty library).
+     */
+    isKnowledgeAssistant: () =>
+      (usePhotosStore().processedPhotos?.length ?? 0) === 0,
 
     activeConversation: (state) => {
       if (!state.activeConversationId) return null;
@@ -170,9 +180,18 @@ export const useChatStore = defineStore("chat", {
         attachedPhotos: attachedPhotos.length > 0 ? attachedPhotos : undefined,
       });
 
+      const knowledgeMode = this.isKnowledgeAssistant;
+
       const payload = {
         message: text,
-        ...(this.selectedModeId && { modeId: this.selectedModeId }),
+        // The intelligence mode picks curation models, which the help assistant
+        // never reaches — sending it would only misreport the cost factor.
+        ...(!knowledgeMode &&
+          this.selectedModeId && { modeId: this.selectedModeId }),
+        ...(knowledgeMode && {
+          isKnowledgeAssistant: true,
+          uiContext: SECTION_UI_CONTEXT.empty_dashboard,
+        }),
         ...(this.activeConversationId && {
           conversationId: this.activeConversationId,
         }),
@@ -194,7 +213,7 @@ export const useChatStore = defineStore("chat", {
         content: data.output,
         timestamp: new Date(),
         photoLists: data.photoGroups,
-        actionsPending: true,
+        actionsPending: !knowledgeMode,
       });
 
       return data;

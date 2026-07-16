@@ -97,9 +97,9 @@
               </router-link>
             </div>
             <div class="wbm-card wbm-card-upload">
-              <p class="wbm-upload-hint">Ready to get started?</p>
-              <button class="wbm-btn-primary" @click="goUpload">
-                Upload Your First Batch
+              <p class="wbm-upload-hint">Ready when you are.</p>
+              <button class="wbm-btn-primary" @click="goToChat">
+                Get Started
               </button>
               <!-- <button class="wbm-btn-maybe" @click="dismiss">
                 Maybe later
@@ -267,13 +267,16 @@ const dismiss = () => {
   emit("close");
 };
 
-const goUpload = () => {
+// The chat is where an empty library starts now: it explains the app and keeps
+// the import one click away. /chat-lab lands on the dashboard's center panel on
+// desktop and on the routed view on mobile, so both cases share this one exit.
+const goToChat = () => {
   if (dontShowAgain.value) {
     localStorage.setItem(STORAGE_KEY, "true");
   }
   visible.value = false;
   emit("close");
-  router.push({ name: "import-area", hash: "#upload" });
+  router.push({ name: "chat-lab" });
 };
 </script>
 

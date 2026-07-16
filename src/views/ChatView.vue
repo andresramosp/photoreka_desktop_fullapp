@@ -325,7 +325,9 @@
                 </div>
               </div>
 
-              <p class="welcome-hint">
+              <!-- An empty library gets a single call to action: importing is
+                   the only thing worth doing, so nothing competes with it. -->
+              <p v-if="hasPhotos" class="welcome-hint">
                 <n-button
                   text
                   class="welcome-hint-link"
@@ -674,7 +676,10 @@
 
         <div class="chat-input-controls">
           <div
-            v-if="chatStore.chatModes.length > 0 || chatStore.isLoadingModes"
+            v-if="
+              !chatStore.isKnowledgeAssistant &&
+              (chatStore.chatModes.length > 0 || chatStore.isLoadingModes)
+            "
             class="chat-mode-selector"
           >
             <ModePopoverSelector
@@ -1480,6 +1485,15 @@ const suggestions: Suggestion[] = [
  */
 const onboardingSuggestions: Suggestion[] = [
   {
+    title: "How do I import my photos?",
+    description: "Walk me through getting my catalog in",
+    icon: CloudUploadIcon,
+    prompt:
+      "How do I import and analyze my photos into Photoreka? Walk me through the two processes step by step.",
+    needsPhotos: false,
+    autoSend: true,
+  },
+  {
     title: "What is Photoreka?",
     description: "Get an overview of what you can do here",
     icon: SparklesIcon,
@@ -1488,15 +1502,7 @@ const onboardingSuggestions: Suggestion[] = [
     needsPhotos: false,
     autoSend: true,
   },
-  {
-    title: "How do I import my photos?",
-    description: "Walk me through getting my catalog in",
-    icon: CloudUploadIcon,
-    prompt:
-      "How do I import my photos into Photoreka? Walk me through the process step by step.",
-    needsPhotos: false,
-    autoSend: true,
-  },
+
   // {
   //   title: "What happens after import?",
   //   description: "See what unlocks after your first import",
@@ -1816,7 +1822,9 @@ const sendMessage = async () => {
     }
     // Fire-and-forget: fetch Phase 3 action suggestions; they pop in under the
     // reply a moment later without blocking the message from rendering.
-    chatStore.fetchActionsForActiveConversation();
+    if (!chatStore.isKnowledgeAssistant) {
+      chatStore.fetchActionsForActiveConversation();
+    }
   } catch (error: any) {
     // 402 responses (INSUFFICIENT_CREDITS / QUOTA_EXHAUSTED) are handled by
     // the axios interceptor which shows a notification — no in-chat bubble needed.

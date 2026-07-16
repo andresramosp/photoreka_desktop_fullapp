@@ -30,7 +30,12 @@
               :compact="true"
             />
           </div>
-          <div v-else class="genre-empty">No genre stats available</div>
+          <div v-else class="genre-empty">
+            <n-icon size="28" color="var(--text-tertiary)">
+              <StatsIcon />
+            </n-icon>
+            <p>No genre stats available</p>
+          </div>
         </div>
       </Transition>
     </div>
@@ -40,6 +45,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRouter } from "vue-router";
+import { NIcon } from "naive-ui";
+import { StatsChartOutline as StatsIcon } from "@vicons/ionicons5";
 import ScoreGauge from "@/components/ScoreGauge.vue";
 import AspectCard from "@/components/report/AspectCard.vue";
 import { usePhotosStore } from "@/stores/photos.js";
@@ -199,13 +206,17 @@ const navigateToReportSection = (section: "artistic" | "visual") => {
 
 .genre-empty {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   min-height: 140px;
-  border: 1px dashed var(--border-color);
-  border-radius: var(--radius-lg);
   color: var(--text-tertiary);
   font-size: var(--font-size-sm);
+}
+
+.genre-empty p {
+  margin: 0;
 }
 
 .genre-card-button {

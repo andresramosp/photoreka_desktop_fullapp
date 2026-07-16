@@ -97,7 +97,10 @@ const completeProfile = async () => {
     const result = await userStore.updateProfile(profilePayload.value);
 
     if (result.success) {
-      router.push({ name: "import-area", hash: "#upload" });
+      // A fresh profile means an empty library: the chat welcomes it. On desktop
+      // this route lands on the dashboard with the chat open; on mobile it is
+      // the chat view itself.
+      router.push({ name: "chat-lab" });
     } else {
       message.error(result.error || "Error saving profile preferences.");
     }
