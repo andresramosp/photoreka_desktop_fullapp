@@ -39,6 +39,13 @@ function buildDescription(folderPath: string[]): string {
   return folderPath.join(' / ')
 }
 
+export interface MaterializeSummary {
+  collectionsCreated: number
+  collectionsReused: number
+  photosAttached: number
+  foldersFound: number
+}
+
 export default class LightroomFolderMirrorService {
   /**
    * Materializes Photoreka collections from the Lightroom folder hierarchy
@@ -48,8 +55,17 @@ export default class LightroomFolderMirrorService {
    * - Reuses existing collection when `sourceFolderPath` matches
    * - Attaches photos to their corresponding collection (idempotent)
    */
-  public static async materializeForPhotos(userId: number, photoIds: number[]): Promise<void> {
-    if (!userId || !photoIds || photoIds.length === 0) return
+  public static async materializeForPhotos(
+    userId: number,
+    photoIds: number[]
+  ): Promise<MaterializeSummary> {
+    const summary: MaterializeSummary = {
+      collectionsCreated: 0,
+      collectionsReused: 0,
+      photosAttached: 0,
+      foldersFound: 0,
+    }
+    if (!userId || !photoIds || photoIds.length === 0) return summary
 
     try {
       const photos = await Photo.query().whereIn('id', photoIds).where('user_id', userId)
@@ -73,8 +89,10 @@ export default class LightroomFolderMirrorService {
 
       if (groups.size === 0) {
         logger.info(`No photos with mirrorFolders flag found for user ${userId}`)
-        return
+        return summary
       }
+
+      summary.foldersFound = groups.size
 
       logger.info(
         `Materializing ${groups.size} folder collection(s) for user ${userId} (photos: ${photos.length})`
@@ -105,9 +123,12 @@ export default class LightroomFolderMirrorService {
             sourceFolderPath: group.folderPath,
           })
           collectionByKey.set(key, collection)
+          summary.collectionsCreated++
           logger.info(
             `Created mirrored collection "${collection.name}" (id=${collection.id}) for path "${buildDescription(descPath)}"`
           )
+        } else {
+          summary.collectionsReused++
         }
 
         // Attach only photos that are not yet linked (avoid duplicate pivot rows)
@@ -117,6 +138,7 @@ export default class LightroomFolderMirrorService {
 
         if (newPhotoIds.length > 0) {
           await collection.related('photos').attach(newPhotoIds)
+          summary.photosAttached += newPhotoIds.length
           logger.info(
             `Attached ${newPhotoIds.length} photo(s) to collection ${collection.id} ("${collection.name}")`
           )
@@ -126,19 +148,30 @@ export default class LightroomFolderMirrorService {
       const msg = error instanceof Error ? error.message : String(error)
       logger.error(`Error materializing folder mirror for user ${userId}: ${msg}`)
     }
+
+    return summary
   }
 
   /**
    * Materializes folder mirrors for every photo associated with an analyzer process.
    */
-  public static async materializeForProcess(processId: number, userId: number): Promise<void> {
-    if (!processId || !userId) return
+  public static async materializeForProcess(
+    processId: number,
+    userId: number
+  ): Promise<MaterializeSummary> {
+    const empty: MaterializeSummary = {
+      collectionsCreated: 0,
+      collectionsReused: 0,
+      photosAttached: 0,
+      foldersFound: 0,
+    }
+    if (!processId || !userId) return empty
     const photos = await Photo.query()
       .where('analyzer_process_id', processId)
       .where('user_id', userId)
       .select('id')
-    if (photos.length === 0) return
-    await this.materializeForPhotos(
+    if (photos.length === 0) return empty
+    return this.materializeForPhotos(
       userId,
       photos.map((p) => p.id)
     )

@@ -711,4 +711,29 @@ export default class AnalyzerProcessRunner {
         )
       })
   }
+
+  /**
+   * En modo 'adding', impide que un usuario lance dos procesos a la vez.
+   * Devuelve el AnalyzerProcess en curso (currentStage distinto de finished) o null.
+   */
+  public static async findRunningAddingProcess(mode: AnalyzerMode, targetUserId: number) {
+    if (mode !== 'adding') {
+      return null
+    }
+
+    const runningProcess = await AnalyzerProcess.query()
+      .where('user_id', targetUserId)
+      .whereNotIn('current_stage', ['finished'])
+      .first()
+
+    if (!runningProcess) {
+      return null
+    }
+
+    logger.info(
+      `Usuario ${targetUserId} ya tiene un proceso en curso (${runningProcess.id}, stage: ${runningProcess.currentStage}). Se rechaza el nuevo análisis.`
+    )
+
+    return runningProcess
+  }
 }

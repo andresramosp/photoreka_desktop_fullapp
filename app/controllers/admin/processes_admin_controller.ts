@@ -105,6 +105,31 @@ export default class ProcessesAdminController {
   }
 
   /**
+   * Manually run post-analysis side-effects (Lightroom folder mirror) for a process
+   */
+  async materialize({ params, response }: HttpContext) {
+    try {
+      const result = await AdminProcessesService.materializeSideEffects(params.id)
+      if (!result) {
+        return response.notFound({ message: 'Process not found' })
+      }
+      if (result.error) {
+        return response.badRequest({ message: result.error })
+      }
+      return response.ok({
+        message: 'Side-effects materialized',
+        processId: result.processId,
+        summary: result.summary,
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to materialize side-effects',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
    * Manually launch a queued process (bypasses the analyzer pool)
    */
   async launch({ params, response }: HttpContext) {

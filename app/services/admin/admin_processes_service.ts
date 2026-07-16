@@ -7,6 +7,7 @@ import HealthPhotoService from '#services/health_photo_service'
 import AnalyzerProcessRunner from '#services/analyzer_service'
 import AnalyzerPoolService from '#services/analyzer_pool_service'
 import Photo from '#models/photo'
+import LightroomFolderMirrorService from '#services/lightroom_folder_mirror_service'
 
 export interface ProcessListItem {
   id: string
@@ -251,6 +252,32 @@ export default class AdminProcessesService {
       unhealthyPhotos: photos.length - healthyPhotos,
       photos,
     }
+  }
+
+  /**
+   * Manually run the post-analysis side-effects for a process (currently the
+   * Lightroom folder-mirror materialization). Idempotent: reuses existing
+   * collections by sourceFolderPath and only attaches photos not yet linked,
+   * so it is safe to run even if the side-effect already ran.
+   */
+  static async materializeSideEffects(
+    processId: string
+  ): Promise<{ processId: string; error?: string; summary?: any } | null> {
+    const p = await AnalyzerProcess.find(processId)
+    if (!p) return null
+
+    if (p.isPreprocess) {
+      return { processId: p.id, error: 'Preprocess processes have no folder side-effects' }
+    }
+    if (!p.userId) {
+      return { processId: p.id, error: 'Process has no userId' }
+    }
+
+    const summary = await LightroomFolderMirrorService.materializeForProcess(
+      Number(p.id),
+      Number(p.userId)
+    )
+    return { processId: p.id, summary }
   }
 
   /**

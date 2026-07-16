@@ -154,6 +154,16 @@ export default class UsageService {
   }
 
   /**
+   * Verifica si el usuario tiene capacidad suficiente para analizar `photoCount` fotos
+   */
+  static async hasCapacityToAnalyze(userId: number, photoCount: number): Promise<boolean> {
+    const usage = await this.getUsage(userId)
+    if (!usage || !usage.analyzedPhotosRemaining) return false
+
+    return photoCount <= usage.analyzedPhotosRemaining
+  }
+
+  /**
    * Verifica si el usuario tiene créditos suficientes
    */
   static async hasEnoughCredits(userId: number, requiredCredits: number): Promise<boolean> {

@@ -48,24 +48,16 @@ export default class AnalyzerController {
       }
       const isPreprocess = selectedPackage.isPreprocess || false
 
-      // Impedir que un usuario lance dos procesos a la vez en modo 'adding'.
-      // Si ya tiene uno en curso (currentStage distinto de finished), se rechaza.
-      if (mode === 'adding') {
-        const runningProcess = await AnalyzerProcess.query()
-          .where('user_id', targetUserId)
-          .whereNotIn('current_stage', ['finished'])
-          .first()
+      // TODO: decidir si en Lr lo permitimos o bloqueamos como en web
 
-        if (runningProcess) {
-          logger.info(
-            `Usuario ${targetUserId} ya tiene un proceso en curso (${runningProcess.id}, stage: ${runningProcess.currentStage}). Se rechaza el nuevo análisis.`
-          )
-          return response.conflict({
-            message: 'You already have an analysis in progress.',
-            processId: runningProcess.id,
-          })
-        }
-      }
+      // const runningProcess = await AnalyzerService.findRunningAddingProcess(mode, targetUserId)
+
+      // if (runningProcess) {
+      //   return response.conflict({
+      //     message: 'You already have an analysis in progress.',
+      //     processId: runningProcess.id,
+      //   })
+      // }
 
       logger.info(
         `Iniciando análisis - Paquete: ${packageId} - Modo: ${mode} - Inmediato: ${inmediate}` +
@@ -94,14 +86,8 @@ export default class AnalyzerController {
 
       // Verificar si el usuario tiene capacidad suficiente para analizar estas fotos
       if (photos.length > 0) {
-        const usage = await UsageService.getUsage(targetUserId)
-        if (!usage || !usage.analyzedPhotosRemaining) {
-          return response.forbidden({
-            message: 'You have reached your analysis limit.',
-          })
-        }
-
-        if (photos.length > usage.analyzedPhotosRemaining) {
+        const hasCapacity = await UsageService.hasCapacityToAnalyze(targetUserId, photos.length)
+        if (!hasCapacity) {
           return response.forbidden({
             message: 'You have reached your analysis limit.',
           })

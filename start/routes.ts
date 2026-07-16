@@ -513,6 +513,7 @@ router
     router.get('/api/admin/processes/:id/photos', [ProcessesAdminController, 'photos'])
     router.post('/api/admin/processes/:id/health', [ProcessesAdminController, 'healthCheck'])
     router.post('/api/admin/processes/:id/retry', [ProcessesAdminController, 'retry'])
+    router.post('/api/admin/processes/:id/materialize', [ProcessesAdminController, 'materialize'])
     router.post('/api/admin/processes/:id/launch', [ProcessesAdminController, 'launch'])
 
     // Admin Health dashboard
