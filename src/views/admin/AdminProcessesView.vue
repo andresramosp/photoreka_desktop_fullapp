@@ -334,6 +334,17 @@
                 Manual Retry
               </n-button>
               <n-button
+                size="small"
+                type="info"
+                secondary
+                :disabled="materializeLoading"
+                :loading="materializeLoading"
+                title="Re-run folder-mirror side-effects (idempotent)"
+                @click="confirmMaterialize"
+              >
+                Materialize Folders
+              </n-button>
+              <n-button
                 v-if="selectedProcess.currentStage === 'queued'"
                 size="small"
                 type="success"
@@ -800,6 +811,45 @@ async function launchRetry() {
     message.error(msg);
   } finally {
     retryLoading.value = false;
+  }
+}
+
+// Manual materialize of folder-mirror side-effects
+const materializeLoading = ref(false);
+
+function confirmMaterialize() {
+  if (!selectedProcess.value) return;
+  const p = selectedProcess.value;
+  dialog.info({
+    title: "Materialize Folder Collections",
+    content: `Re-run the Lightroom folder-mirror side-effects for Process #${p.id}? This is idempotent — existing collections are reused and only missing photos are attached.`,
+    positiveText: "Materialize",
+    negativeText: "Cancel",
+    onPositiveClick: () => runMaterialize(),
+  });
+}
+
+async function runMaterialize() {
+  if (!selectedProcess.value) return;
+  materializeLoading.value = true;
+  try {
+    const { data } = await api_analyzer.post(
+      `/api/admin/processes/${selectedProcess.value.id}/materialize`,
+    );
+    const s = data.summary;
+    if (s) {
+      message.success(
+        `Done — ${s.collectionsCreated} created, ${s.collectionsReused} reused, ${s.photosAttached} photo(s) attached (${s.foldersFound} folder(s))`,
+      );
+    } else {
+      message.success("Side-effects materialized");
+    }
+  } catch (err: any) {
+    const msg =
+      err?.response?.data?.message || "Failed to materialize side-effects";
+    message.error(msg);
+  } finally {
+    materializeLoading.value = false;
   }
 }
 
