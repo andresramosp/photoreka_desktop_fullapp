@@ -32,6 +32,21 @@
                 :show-2d-atlas-tool="universeMode !== 'photos2d'"
               />
             </div>
+            <!-- Daily artistic curation — relocated here while the right
+                 panel is collapsed on narrow desktop/tablet widths -->
+            <div v-if="isDailyCurationInLeftPanel" class="panel-section">
+              <div class="section-label">DAILY EUREKA</div>
+              <div class="daily-eureka-card">
+                <DailyEurekaCard v-if="!isDashboardEmpty" />
+                <div v-else class="panel-empty-state panel-empty-state--boxed">
+                  <n-icon size="32" color="var(--text-tertiary)">
+                    <CollectionsIcon />
+                  </n-icon>
+                  <p>Nothing here yet</p>
+                </div>
+              </div>
+            </div>
+
             <!-- Recent Collections & Series -->
             <div class="panel-section panel-section--grow">
               <div class="section-label">RECENT LIBRARY</div>
@@ -107,8 +122,8 @@
       <aside class="panel panel-right">
         <div class="panel-body">
           <!-- Daily artistic curation (fixed, non-scrollable) -->
-          <div class="panel-section">
-            <div class="section-label">DAILY ARTISTIC CURATION</div>
+          <div v-if="!isDailyCurationInLeftPanel" class="panel-section">
+            <div class="section-label">DAILY EUREKA</div>
             <div class="daily-eureka-card">
               <DailyEurekaCard v-if="!isDashboardEmpty" />
               <div v-else class="panel-empty-state panel-empty-state--boxed">
@@ -155,7 +170,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { storeToRefs } from "pinia";
 import { useChatFullscreenStore } from "@/stores/chatFullscreen";
@@ -210,7 +225,9 @@ const requestedConversationId = ref<string | null>(null);
 // The chat panel can take over the dashboard: the side panels fold away and the
 // universe keeps the full width to itself. The state is shared (see the store)
 // because the sidebar logo collapses it on its way home.
-const { isFullscreen: isChatFullscreen } = storeToRefs(useChatFullscreenStore());
+const { isFullscreen: isChatFullscreen } = storeToRefs(
+  useChatFullscreenStore(),
+);
 
 // Which panel the universe is showing (its own stored preference, unless a
 // forced mode or an empty library overrides it). The left panel offers a chat
@@ -254,6 +271,21 @@ const userStore = useUserStore();
 
 // Check if in mobile limited mode
 const isMobileLimitedMode = computed(() => isMobileDevice());
+
+/* Narrow desktop / tablet: the right panel is hidden by CSS, so its daily
+   curation card is rendered inside the left panel instead. Must stay in sync
+   with the matching media query in the styles below. */
+const narrowLayoutQuery = window.matchMedia(
+  "(min-width: 681px) and (max-width: 1324px)",
+);
+const isDailyCurationInLeftPanel = ref(narrowLayoutQuery.matches);
+const onNarrowLayoutChange = (e: MediaQueryListEvent) => {
+  isDailyCurationInLeftPanel.value = e.matches;
+};
+narrowLayoutQuery.addEventListener("change", onNarrowLayoutChange);
+onBeforeUnmount(() => {
+  narrowLayoutQuery.removeEventListener("change", onNarrowLayoutChange);
+});
 
 const avgAestheticScore = computed(() => {
   const photos = (photosStore.photos || []) as any[];
@@ -1006,13 +1038,15 @@ const navigateToCollections = () => {
   }
 }
 
-@media (max-width: 1024px) {
+/* Narrow desktop / tablet: drop the right panel and keep only the left one,
+   which takes over the daily curation card (see isDailyCurationInLeftPanel). */
+@media (min-width: 681px) and (max-width: 1324px) {
   .dashboard-grid {
-    --panel-right-width: clamp(250px, 34vw, 350px);
-    grid-template-columns: minmax(0, 1fr) var(--panel-right-width);
+    --panel-left-width: clamp(250px, 34vw, 350px);
+    grid-template-columns: var(--panel-left-width) minmax(0, 1fr);
   }
 
-  .panel-left {
+  .panel-right {
     display: none;
   }
 }
