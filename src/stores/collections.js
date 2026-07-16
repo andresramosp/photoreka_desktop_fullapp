@@ -469,8 +469,36 @@ export const useCollectionsStore = defineStore("collections", {
           data: { photoIds },
         });
 
-        // Refresh the specific collection data
-        await this.refreshCollection(collectionId);
+        // Drop the photos from local state instead of refetching, so open views
+        // keep their filters/scroll/selection.
+        const removed = new Set(photoIds.map(String));
+        const withoutRemoved = (collection) => {
+          const photos = (collection.photos || []).filter(
+            (photo) => !removed.has(String(photo.id)),
+          );
+          return {
+            ...collection,
+            photos,
+            photoCount: photos.length,
+            updatedAt: new Date(),
+          };
+        };
+
+        if (Array.isArray(this.collections)) {
+          const index = this.collections.findIndex(
+            (collection) => String(collection.id) === String(collectionId),
+          );
+          if (index !== -1) {
+            this.collections[index] = withoutRemoved(this.collections[index]);
+          }
+        }
+
+        if (
+          this.currentCollection &&
+          String(this.currentCollection.id) === String(collectionId)
+        ) {
+          this.currentCollection = withoutRemoved(this.currentCollection);
+        }
 
         return true;
       } catch (error) {

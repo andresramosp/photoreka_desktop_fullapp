@@ -671,6 +671,7 @@ import { TheaterComedyOutlined } from "@vicons/material";
 
 const emit = defineEmits([
   "refreshCollection",
+  "photos-removed",
   "selection-change",
   "suggest-photos",
   "duplicates-filter-change",
@@ -1913,11 +1914,12 @@ watch(
   { deep: true },
 );
 
-// Watch for props.photos changes to reset pagination and range anchor
+// Watch for props.photos changes to reset pagination and range anchor.
+// Photos being removed keeps the loaded pages, so the view stays where it was.
 watch(
   () => props.photos.length,
   (newLength, oldLength) => {
-    resetPagination();
+    if (newLength > (oldLength || 0)) resetPagination();
     resetRangeState();
   },
 );
@@ -2062,12 +2064,13 @@ const handleDeleteMultiple = async () => {
 
 const handleRemoveFromCollection = async () => {
   if (!props.collectionId) return;
+  const removedIds = [...selectedPhotoIds.value];
   try {
     await collectionsStore.removePhotosFromCollection(
       props.collectionId,
-      selectedPhotoIds.value,
+      removedIds,
     );
-    emit("refreshCollection");
+    emit("photos-removed", removedIds);
   } catch (e) {}
   clearAllSelections();
 };

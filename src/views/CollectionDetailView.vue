@@ -193,6 +193,7 @@
           :scrollable="true"
           :initial-filters="initialGridFilters"
           @refreshCollection="refreshCollection"
+          @photos-removed="onPhotosRemoved"
           @suggest-photos="suggestPhotosForCollection"
           @scroll-direction="onCollectionHeaderScroll"
         />
@@ -552,6 +553,16 @@ const onPhotosSelected = async (photoIds) => {
 const refreshCollection = async () => {
   await collectionsStore.getOrFetch(true);
   updateViewState();
+};
+
+// The store already dropped the photos once the backend confirmed, so just mirror
+// that here — refetching would tear down the grid and lose filters/scroll.
+const onPhotosRemoved = (photoIds) => {
+  if (!viewingCollection.value) return;
+  const removed = new Set((photoIds || []).map(String));
+  viewingCollection.value.photos = (viewingCollection.value.photos || []).filter(
+    (photo) => !removed.has(String(photo.id)),
+  );
 };
 
 // ── Delete collection ─────────────────────────────────────────────────────────
