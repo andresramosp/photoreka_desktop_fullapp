@@ -16,7 +16,8 @@
       "Bash(node -e ' *)",
       "Bash(node tabs.mjs)",
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(npx eslint *)"
     ]
   }
 }

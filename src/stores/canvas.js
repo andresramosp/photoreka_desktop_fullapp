@@ -1,10 +1,12 @@
 import { defineStore } from "pinia";
 import { api } from "@/utils/axios";
+import {
+  HORIZONTAL_PHOTO_WIDTH,
+  HORIZONTAL_PHOTO_HEIGHT,
+  getImageDimensions,
+  fitPhotoToBaseBox,
+} from "@/utils/canvasPhotoSizing";
 
-const HORIZONTAL_PHOTO_WIDTH = 150 * 1.5;
-const HORIZONTAL_PHOTO_HEIGHT = 100 * 1.5;
-const VERTICAL_PHOTO_WIDTH = 100 * 1.5;
-const VERTICAL_PHOTO_HEIGHT = 150 * 1.5;
 const MIN_GAP = 35; // Same gap as auto-align snap
 
 /**
@@ -115,18 +117,6 @@ function arrangeInGrid(newPhotos, existingPhotos) {
   }
 }
 
-// Devuelve una promesa con las dimensiones de la imagen
-function getImageDimensions(url) {
-  return new Promise((resolve, reject) => {
-    const img = new window.Image();
-    img.onload = function () {
-      resolve({ width: img.width, height: img.height });
-    };
-    img.onerror = reject;
-    img.src = url;
-  });
-}
-
 // Esta función ahora es async y ajusta el aspect ratio según orientación
 async function createPhoto(
   backendPhoto,
@@ -141,54 +131,11 @@ async function createPhoto(
   let width = HORIZONTAL_PHOTO_WIDTH;
   let height = HORIZONTAL_PHOTO_HEIGHT;
   try {
-    let dims;
     // Use pre-calculated dimensions if available (from playground), otherwise fetch them
-    if (backendPhoto.preCalculatedDimensions) {
-      dims = backendPhoto.preCalculatedDimensions;
-    } else {
-      dims = await getImageDimensions(backendPhoto.thumbnailUrl);
-    }
-
-    const dimsAreValid =
-      Number.isFinite(dims?.width) &&
-      Number.isFinite(dims?.height) &&
-      dims.width > 0 &&
-      dims.height > 0;
-    if (!dimsAreValid) {
-      throw new Error("Invalid image dimensions");
-    }
-
-    // Escalado adaptive: ajusta el tamaño máximo a los valores base, manteniendo el aspect ratio
-    const maxW = HORIZONTAL_PHOTO_WIDTH;
-    const maxH = VERTICAL_PHOTO_HEIGHT;
-    const aspectRatio = dims.width / dims.height;
-    if (dims.width > dims.height) {
-      // Horizontal: limitar por ancho
-      width = Math.min(dims.width, maxW);
-      height = width / aspectRatio;
-      if (height > maxH) {
-        height = maxH;
-        width = height * aspectRatio;
-      }
-    } else {
-      // Vertical: limitar por alto
-      height = Math.min(dims.height, maxH);
-      width = height * aspectRatio;
-      if (width > maxW) {
-        width = maxW;
-        height = width / aspectRatio;
-      }
-    }
-
-    if (
-      !Number.isFinite(width) ||
-      !Number.isFinite(height) ||
-      width <= 0 ||
-      height <= 0
-    ) {
-      width = HORIZONTAL_PHOTO_WIDTH;
-      height = HORIZONTAL_PHOTO_HEIGHT;
-    }
+    const dims = backendPhoto.preCalculatedDimensions
+      ? backendPhoto.preCalculatedDimensions
+      : await getImageDimensions(backendPhoto.thumbnailUrl);
+    ({ width, height } = fitPhotoToBaseBox(dims));
   } catch (e) {
     // Si falla, usar horizontal por defecto
     width = HORIZONTAL_PHOTO_WIDTH;

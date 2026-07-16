@@ -50,7 +50,8 @@ const OPEN_VIEW_STATIC = {
 
 const criterionLabel = (field) => CRITERION_LABELS[field] || field;
 
-const aspectLabel = (key) => VISUAL_ASPECTS_MAP[key]?.label?.toLowerCase() || key;
+const aspectLabel = (key) =>
+  VISUAL_ASPECTS_MAP[key]?.label?.toLowerCase() || key;
 
 const titleCase = (str) => str.replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -146,7 +147,9 @@ function workspaceCTA(filters) {
 
   const phrase = aspectPhrase(visualAspectsOf(filters));
   if (phrase) {
-    return ["Show", rankingQualifier(filters), phrase].filter(Boolean).join(" ");
+    return ["Show", rankingQualifier(filters), phrase]
+      .filter(Boolean)
+      .join(" ");
   }
 
   const scoreFilters = scoreFiltersOf(filters);
@@ -182,7 +185,10 @@ function workspaceLabel(filters) {
   const scoreFilters = scoreFiltersOf(filters);
   if (scoreFilters.length > 0) {
     const shown = scoreFilters
-      .map((f) => `${criterionLabel(f.field)} ${f.op === "lte" ? "≤" : "≥"} ${f.value}`)
+      .map(
+        (f) =>
+          `${criterionLabel(f.field)} ${f.op === "lte" ? "≤" : "≥"} ${f.value}`,
+      )
       .join(", ");
     clauses.push(`with ${shown}`);
   }
@@ -220,8 +226,7 @@ const groupScopePhrase = (params) =>
   params.groupLabel ? ` from “${params.groupLabel}”` : "";
 
 /** " with 4 photos from “Group”" — the full scope clause used in tooltips. */
-const photoScopePhrase = (params) =>
-  `${photoCountPhrase(params)}${groupScopePhrase(params)}`;
+const photoScopePhrase = (params) => `${photoCountPhrase(params)}`; //${groupScopePhrase(params)}`;
 
 // Content names are user/DB-sourced and can be arbitrarily long ("Sony World
 // Photography Awards (Street)"), which blows out the chip and pushes the rest of
