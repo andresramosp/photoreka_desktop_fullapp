@@ -17,6 +17,7 @@ import * as PIXI from "pixi.js";
  * @param {import('vue').Ref<Map>} params.photoSprites - Map of photoId -> PIXI.Sprite
  * @param {string} params.displayMode - Display mode: 'floating' (tags on map) or 'list' (menu list)
  * @param {import('vue').Ref} params.selectedPatternId - Currently selected pattern ID (from parent component)
+ * @param {import('vue').Ref<Array>} params.extraPatterns - Additional pattern-shaped items (e.g. collections) that can be selected
  */
 export function use2DPatternTags({
   userStore,
@@ -30,6 +31,7 @@ export function use2DPatternTags({
   photoSprites,
   displayMode = "list", // Default to list mode
   selectedPatternId, // Optional: pattern ID selected in parent component
+  extraPatterns, // Optional: pattern-shaped items outside the chunk (collections)
 }) {
   // Scale factor from backend coordinates to canvas coordinates
   const SCALE_FACTOR = 50;
@@ -588,9 +590,10 @@ export function use2DPatternTags({
 
     // If no active heatmap IDs but there's a selected pattern, get IDs from pattern
     if ((!ids || ids.length === 0) && selectedPatternId?.value) {
-      const currentPattern = patternsForCurrentChunk.value.find(
-        (p) => (p.patternId ?? p.title) === selectedPatternId.value,
-      );
+      const currentPattern = [
+        ...patternsForCurrentChunk.value,
+        ...(extraPatterns?.value || []),
+      ].find((p) => (p.patternId ?? p.title) === selectedPatternId.value);
       if (currentPattern) {
         ids = currentPattern.clusterPhotos || [];
       }

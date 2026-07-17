@@ -110,14 +110,14 @@
         </div>
       </div>
 
-      <!-- Patterns Section -->
+      <!-- Cluster Projections Section (patterns + collections) -->
       <div class="control-section">
         <div class="section-toggle" @click="togglePatternsSection">
           <div style="display: flex; align-items: center; gap: 6px">
             <n-icon size="16" color="var(--text-primary)">
-              <TagOutlined />
+              <RadarChartOutlined />
             </n-icon>
-            <span class="section-toggle-label">Patterns for cluster</span>
+            <span class="section-toggle-label">Cluster Projections</span>
           </div>
           <n-icon
             size="12"
@@ -137,13 +137,36 @@
           class="expandable-content"
           :class="{ expanded: expandedSection === 'patterns' }"
         >
-          <PatternsSection
-            :patternsForCurrentChunk="patternsForCurrentChunk"
-            :selectedPatternId="selectedPatternId"
-            displayMode="list"
-            @select-pattern="handlePatternClick"
-            @fly-to-pattern="(p) => emit('fly-to-pattern', p)"
-          />
+          <n-tabs
+            v-model:value="projectionTab"
+            type="segment"
+            size="small"
+            class="projection-tabs"
+            @click.stop
+          >
+            <n-tab-pane name="patterns" tab="Patterns">
+              <PatternsSection
+                :patternsForCurrentChunk="patternsForCurrentChunk"
+                :selectedPatternId="selectedPatternId"
+                displayMode="list"
+                @select-pattern="handlePatternClick"
+                @fly-to-pattern="(p) => emit('fly-to-pattern', p)"
+              />
+            </n-tab-pane>
+            <n-tab-pane name="collections" tab="Collections">
+              <PatternsSection
+                :patternsForCurrentChunk="collectionProjections"
+                :selectedPatternId="selectedPatternId"
+                displayMode="list"
+                :showStrengthIcon="false"
+                emptyMessage="No collections yet"
+                searchable
+                searchPlaceholder="Search collections"
+                @select-pattern="handlePatternClick"
+                @fly-to-pattern="(p) => emit('fly-to-pattern', p)"
+              />
+            </n-tab-pane>
+          </n-tabs>
         </div>
       </div>
 
@@ -464,14 +487,14 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from "vue";
-import { NTooltip, NIcon, NSwitch, NSlider } from "naive-ui";
+import { NTooltip, NIcon, NSwitch, NSlider, NTabs, NTabPane } from "naive-ui";
 import {
   CloseOutlined,
   SettingOutlined,
   FilterOutlined,
   EyeOutlined,
   InfoCircleOutlined,
-  TagOutlined,
+  RadarChartOutlined,
   TagsOutlined,
   CompassOutlined,
   DatabaseOutlined,
@@ -564,6 +587,11 @@ const props = defineProps({
     type: [String, Number],
     default: null,
   },
+  // User collections, shaped like patterns so they share the same list UI
+  collectionProjections: {
+    type: Array,
+    default: () => [],
+  },
   // Viewport limit
   photoLimit: {
     type: Number,
@@ -648,6 +676,7 @@ const isMac = computed(() => {
 
 // Control which section is expanded (null, 'patterns', 'displayOptions', 'filters', 'navigation')
 const expandedSection = ref(null);
+const projectionTab = ref("patterns");
 const clusteringSectionRef = ref(null);
 const showNavigationControls = ref(false);
 const showTagBeacons = ref(false);
@@ -718,11 +747,16 @@ watch(
   { deep: true },
 );
 
-// Watch for chunk changes to clear selected pattern
+// Watch for chunk changes to clear selected pattern.
+// Collections are not chunk-scoped, so their selection survives a chunk change.
 watch(
   () => props.selectedChunk,
   () => {
-    if (props.selectedPatternId !== null) {
+    if (props.selectedPatternId === null) return;
+    const isCollection = props.collectionProjections.some(
+      (c) => c.patternId === props.selectedPatternId,
+    );
+    if (!isCollection) {
       emit("update:selectedPatternId", null);
     }
   },
@@ -944,6 +978,19 @@ const handleTagBeaconsMergeRadiusChange = (value) => {
 
 .toggle-icon.rotated {
   transform: rotate(180deg);
+}
+
+/* Cluster projections tabs */
+.projection-tabs {
+  --n-tab-font-size: 12px;
+}
+
+.projection-tabs :deep(.n-tabs-tab) {
+  font-size: 12px;
+}
+
+.projection-tabs :deep(.n-tab-pane) {
+  padding: 10px 0 0 0;
 }
 
 /* Expandable content with smooth animation */

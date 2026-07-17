@@ -202,6 +202,17 @@
         </n-button>
 
         <n-button
+          v-if="isNoLibraryDebugUser"
+          size="small"
+          :type="showNoLibraryOnly ? 'primary' : 'default'"
+          @click="showNoLibraryOnly = !showNoLibraryOnly"
+          class="no-library-toggle-btn"
+          title="Show only photos not in any collection"
+        >
+          <span>No Library</span>
+        </n-button>
+
+        <n-button
           size="small"
           :type="allSelected ? 'primary' : 'default'"
           @click="handleSelectAllToggle"
@@ -991,6 +1002,19 @@ const setGridColumns = (columns) => {
 // Source indicator toggle
 const showSource = ref(false);
 
+// Temporary debug filter: show only photos not in any collection
+const isNoLibraryDebugUser = computed(
+  () => userStore.user?.email === "andreschennai@gmail.com",
+);
+const showNoLibraryOnly = ref(false);
+const photoIdsInAnyCollection = computed(() => {
+  const ids = new Set();
+  collectionsStore.allCollections.forEach((collection) => {
+    (collection.photos || []).forEach((photo) => ids.add(String(photo.id)));
+  });
+  return ids;
+});
+
 // Basic sort order toggle
 const toggleBasicSortOrder = () => {
   basicSortOrder.value = basicSortOrder.value === "desc" ? "asc" : "desc";
@@ -1657,6 +1681,13 @@ const filteredAndSortedPhotos = computed(() => {
     });
   }
 
+  // Temporary debug filter: only photos not in any collection
+  if (isNoLibraryDebugUser.value && showNoLibraryOnly.value) {
+    filtered = filtered.filter(
+      (photo) => !photoIdsInAnyCollection.value.has(String(photo.id)),
+    );
+  }
+
   // Apply duplicates filter
   if (filterDuplicates.value === "duplicates") {
     if (props.context === "workspace") {
@@ -1934,6 +1965,10 @@ watch(focusedPhotoId, (id) => {
 });
 
 onMounted(() => {
+  if (isNoLibraryDebugUser.value) {
+    collectionsStore.getOrFetch();
+  }
+
   nextTick(() => {
     if (props.scrollable) {
       updateScrollAreaHeight();

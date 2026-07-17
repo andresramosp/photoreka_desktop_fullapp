@@ -62,6 +62,7 @@
       :chunkOptions="chunkOptions"
       :patternOptions="patternOptions"
       :patternsForCurrentChunk="patternsForCurrentChunk"
+      :collectionProjections="collectionProjections"
       :showDiscreteLoader="showDiscreteLoader"
       :searchResults="searchResults"
       :processedPhotos="processedPhotos"
@@ -262,6 +263,7 @@ import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import Photos2DConfigPanel from "@/components/2d-atlas/Photos2DConfigPanel.vue";
 import Photos2DConfigPanelMobile from "@/components/2d-atlas/Photos2DConfigPanelMobile.vue";
 import { usePhotosStore } from "@/stores/photos.js";
+import { useCollectionsStore } from "@/stores/collections.js";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useUserStore } from "@/stores/userStore";
 
@@ -315,6 +317,7 @@ const {
 
 const photosStore = usePhotosStore();
 const userStore = useUserStore();
+const collectionsStore = useCollectionsStore();
 
 // Resolve originalUrl from the catalog store (same approach as 3D).
 // The 2D clustering endpoints may omit originalUrl for performance/security.
@@ -663,6 +666,18 @@ const showCollectionModal = ref(false);
 // Pattern selection state
 const selectedPatternId = ref(null);
 
+// Collections shaped like patterns, so highlighting/fly-to work unchanged.
+// Not shown for other users' catalogs, where the ids wouldn't match.
+const collectionProjections = computed(() => {
+  if (props.catalogUserId) return [];
+  return collectionsStore.allCollections.map((collection) => ({
+    patternId: `collection:${collection.id}`,
+    title: collection.title || collection.name || "Collection",
+    description: collection.description || "",
+    clusterPhotos: (collection.photos || []).map((photo) => photo.id),
+  }));
+});
+
 // Pattern tags overlay
 const {
   viewPatternsEnabled,
@@ -688,7 +703,14 @@ const {
   photoSprites,
   displayMode: "list", // Use list mode (change to 'floating' for old behavior)
   selectedPatternId, // Pass selected pattern ID so heatmap can refresh properly
+  extraPatterns: collectionProjections,
 });
+
+// A selection can be a pattern of the current chunk or a collection projection
+const findProjectionById = (id) =>
+  [...patternsForCurrentChunk.value, ...collectionProjections.value].find(
+    (p) => (p.patternId ?? p.title) === id,
+  );
 
 // Scale coordinates from API to canvas
 const SCALE_FACTOR = 50;
@@ -2836,9 +2858,7 @@ const handleSelectPattern = (pattern) => {
   if (!pattern) {
     // Clear pattern selection
     if (selectedPatternId.value !== null) {
-      const prevPattern = patternsForCurrentChunk.value.find(
-        (p) => (p.patternId ?? p.title) === selectedPatternId.value,
-      );
+      const prevPattern = findProjectionById(selectedPatternId.value);
       if (prevPattern) {
         unhighlightPatternPhotos(prevPattern.clusterPhotos || []);
       }
@@ -2863,9 +2883,7 @@ const handleSelectPattern = (pattern) => {
     // Select new pattern
     // First unhighlight previous if any
     if (selectedPatternId.value !== null) {
-      const prevPattern = patternsForCurrentChunk.value.find(
-        (p) => (p.patternId ?? p.title) === selectedPatternId.value,
-      );
+      const prevPattern = findProjectionById(selectedPatternId.value);
       if (prevPattern) {
         unhighlightPatternPhotos(prevPattern.clusterPhotos || []);
       }
@@ -3090,6 +3108,11 @@ onMounted(async () => {
   // Start fetching catalog photos in background so originalUrl becomes available.
   // If it fails, we still render thumbnails.
   const storePromise = photosStore.getOrFetch(false).catch(() => null);
+
+  // Collections feed the "Cluster Projections" panel; failure just leaves it empty.
+  if (!props.catalogUserId && !props.isPreview) {
+    collectionsStore.getOrFetch(false).catch(() => null);
+  }
 
   window.addEventListener("resize", handleResize);
   observePixiContainerResize();

@@ -2,15 +2,29 @@
   <div class="section-content">
     <!-- Display mode: list or select -->
     <div v-if="displayMode === 'list'" class="patterns-list-container">
-      <div
-        v-if="sortedPatternsForCurrentChunk.length === 0"
-        class="no-patterns-message"
+      <n-input
+        v-if="searchable && sortedPatternsForCurrentChunk.length > 0"
+        v-model:value="searchQuery"
+        :placeholder="searchPlaceholder"
+        size="small"
+        clearable
+        class="patterns-search"
+        @click.stop
       >
-        No patterns found for this clustering type
+        <template #prefix>
+          <n-icon size="14" :component="SearchOutlined" />
+        </template>
+      </n-input>
+      <div v-if="visiblePatterns.length === 0" class="no-patterns-message">
+        {{
+          sortedPatternsForCurrentChunk.length === 0
+            ? emptyMessage
+            : "No matches"
+        }}
       </div>
       <div v-else class="patterns-list">
         <div
-          v-for="pattern in sortedPatternsForCurrentChunk"
+          v-for="pattern in visiblePatterns"
           :key="pattern.patternId ?? pattern.title"
           :class="[
             'pattern-item',
@@ -23,7 +37,11 @@
         >
           <div class="pattern-info">
             <div style="display: flex; align-items: center; gap: 8px">
-              <n-tooltip trigger="hover" placement="top">
+              <n-tooltip
+                v-if="showStrengthIcon"
+                trigger="hover"
+                placement="top"
+              >
                 <template #trigger>
                   <n-icon
                     :size="14"
@@ -106,9 +124,13 @@
 </template>
 
 <script setup>
-import { computed, h } from "vue";
-import { NIcon, NTooltip, NSelect } from "naive-ui";
-import { InfoCircleFilled, CompressOutlined } from "@vicons/antd";
+import { computed, h, ref } from "vue";
+import { NIcon, NTooltip, NSelect, NInput } from "naive-ui";
+import {
+  InfoCircleFilled,
+  CompressOutlined,
+  SearchOutlined,
+} from "@vicons/antd";
 import {
   Star,
   EllipseOutline,
@@ -132,6 +154,23 @@ const props = defineProps({
     default: "list", // 'list' or 'select'
     validator: (value) => ["list", "select"].includes(value),
   },
+  // Collections have no strength, so the icon is hidden for them
+  showStrengthIcon: {
+    type: Boolean,
+    default: true,
+  },
+  emptyMessage: {
+    type: String,
+    default: "No patterns found for this clustering type",
+  },
+  searchable: {
+    type: Boolean,
+    default: false,
+  },
+  searchPlaceholder: {
+    type: String,
+    default: "Search",
+  },
 });
 
 const emit = defineEmits(["select-pattern", "fly-to-pattern"]);
@@ -150,6 +189,18 @@ const sortedPatternsForCurrentChunk = computed(() => {
     const bCount = (b.clusterPhotos || []).length;
     return bCount - aCount;
   });
+});
+
+const searchQuery = ref("");
+
+const visiblePatterns = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase();
+  if (!props.searchable || !query) return sortedPatternsForCurrentChunk.value;
+  return sortedPatternsForCurrentChunk.value.filter((pattern) =>
+    `${pattern.title || ""} ${pattern.description || ""}`
+      .toLowerCase()
+      .includes(query),
+  );
 });
 
 // Options for n-select in mobile mode
@@ -288,6 +339,11 @@ const getStrengthIcon = (strength) => {
 .patterns-list-container {
   display: flex;
   flex-direction: column;
+}
+
+.patterns-search {
+  margin-bottom: 8px;
+  --n-font-size: 12px;
 }
 
 .no-patterns-message {
