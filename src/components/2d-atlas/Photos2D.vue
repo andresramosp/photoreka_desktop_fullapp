@@ -364,7 +364,10 @@ const {
 // Viewport limit: how many photos to load from the backend (most recent first).
 // Pre-read from the same localStorage key used by Photos2DConfigPanel so that the
 // panel's onMounted finds props.photoLimit === persisted and won't emit a second load.
-const _PHOTO_LIMIT_VALID_2D = [5000, 10000, 20000];
+// Must stay in sync with PHOTO_LIMIT_VALUES in Photos2DConfigPanel.vue: if a
+// persisted value is valid there but not here, the panel's onMounted sees a
+// mismatch and fires viewport-limit-change, kicking off a second concurrent load.
+const _PHOTO_LIMIT_VALID_2D = [5000, 10000, 20000, 50000];
 const _storedPhotoLimit2D =
   typeof window !== "undefined"
     ? Number(window.localStorage.getItem("photoreka:atlas2d:photoLimit"))
@@ -1781,8 +1784,22 @@ const updateTransitionPositions = (currentTime) => {
 };
 
 // Load photos into PixiJS with retry logic for 403/429 errors
+//
+// Re-entrancy: this function awaits many times, so a second call (chunk change,
+// viewport-limit change, retry) can start while an earlier one is still resolving
+// batches. Every run takes a generation token and bails at each resume point;
+// without this, a superseded run keeps creating sprites after the newer run has
+// cleared the container, orphaning them there as ghosts at the old positions.
+let loadGeneration = 0;
+
 const loadPhotosToPixi = async () => {
   if (!photoContainer.value || !pixiApp.value) return;
+
+  const generation = ++loadGeneration;
+  const isStale = () =>
+    generation !== loadGeneration ||
+    !photoContainer.value ||
+    photoContainer.value.destroyed;
 
   photoContainer.value.visible = false;
   isLoadingTextures.value = true;
@@ -1821,6 +1838,8 @@ const loadPhotosToPixi = async () => {
       // Non-fatal: proceed with network loading
     }
 
+    if (isStale()) return;
+
     // First-visit detection: loadImagesFromCache() populates
     // textureManager.cachedPhotoIds with the ids already present in IndexedDB.
     // If the vast majority still need to be downloaded, warn the user that this
@@ -1852,8 +1871,14 @@ const loadPhotosToPixi = async () => {
     for (let i = 0; i < photosToLoad.length; i += batchSize) {
       const batch = photosToLoad.slice(i, i + batchSize);
 
+      if (isStale()) return;
+
       await Promise.all(
         batch.map(async (photo) => {
+          // A newer run already cleared the container: creating this sprite now
+          // would leak it (the newer run's map entry would overwrite ours).
+          if (isStale()) return;
+
           const [x, y] = photo.position || [0, 0];
           const canvasX = x * SCALE_FACTOR;
           const canvasY = y * SCALE_FACTOR;
@@ -1931,6 +1956,11 @@ const loadPhotosToPixi = async () => {
             quality: "thumb",
             maxSide: getMaxSideForQuality("low"),
           });
+
+          // Superseded while the texture resolved: the newer run's clear pass
+          // already destroyed this sprite, so stop touching it.
+          if (isStale() || sprite.destroyed) return;
+
           if (texture) {
             sprite.texture = texture;
 
@@ -1974,6 +2004,8 @@ const loadPhotosToPixi = async () => {
       }
     }
 
+    if (isStale()) return;
+
     console.log(`✅ Loaded ${loaded} photo textures`);
 
     // Persist newly downloaded images (so future visits don't re-download)
@@ -2015,12 +2047,16 @@ const loadPhotosToPixi = async () => {
     scheduleLodUpdate();
     scheduleHiResUpdate();
   } finally {
-    if (photoContainer.value) {
-      photoContainer.value.visible = true;
+    // A superseded run must not reveal the stage or clear the loading flag —
+    // the run that replaced it is still filling the container.
+    if (generation === loadGeneration) {
+      if (photoContainer.value && !photoContainer.value.destroyed) {
+        photoContainer.value.visible = true;
+      }
+      isLoadingTextures.value = false;
+      // Images are cached by now; drop the first-visit "caching" banner.
+      dismissCachingBanner();
     }
-    isLoadingTextures.value = false;
-    // Images are cached by now; drop the first-visit "caching" banner.
-    dismissCachingBanner();
   }
 };
 
@@ -3117,6 +3153,10 @@ onUnmounted(() => {
     window._2dAtlasEventCleanup();
     delete window._2dAtlasEventCleanup;
   }
+
+  // Invalidate any in-flight loadPhotosToPixi run so it can't touch the
+  // container/app that cleanup() is about to destroy.
+  loadGeneration++;
 
   window.removeEventListener("resize", handleResize);
   disconnectPixiContainerResize();
