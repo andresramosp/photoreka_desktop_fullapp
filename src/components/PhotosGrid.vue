@@ -202,7 +202,6 @@
         </n-button>
 
         <n-button
-          v-if="isNoLibraryDebugUser"
           size="small"
           :type="showNoLibraryOnly ? 'primary' : 'default'"
           @click="showNoLibraryOnly = !showNoLibraryOnly"
@@ -1002,10 +1001,7 @@ const setGridColumns = (columns) => {
 // Source indicator toggle
 const showSource = ref(false);
 
-// Temporary debug filter: show only photos not in any collection
-const isNoLibraryDebugUser = computed(
-  () => userStore.user?.email === "andreschennai@gmail.com",
-);
+// Filter: show only photos not in any collection
 const showNoLibraryOnly = ref(false);
 const photoIdsInAnyCollection = computed(() => {
   const ids = new Set();
@@ -1681,8 +1677,8 @@ const filteredAndSortedPhotos = computed(() => {
     });
   }
 
-  // Temporary debug filter: only photos not in any collection
-  if (isNoLibraryDebugUser.value && showNoLibraryOnly.value) {
+  // Only photos not in any collection
+  if (showNoLibraryOnly.value) {
     filtered = filtered.filter(
       (photo) => !photoIdsInAnyCollection.value.has(String(photo.id)),
     );
@@ -1965,9 +1961,7 @@ watch(focusedPhotoId, (id) => {
 });
 
 onMounted(() => {
-  if (isNoLibraryDebugUser.value) {
-    collectionsStore.getOrFetch();
-  }
+  collectionsStore.getOrFetch();
 
   nextTick(() => {
     if (props.scrollable) {
