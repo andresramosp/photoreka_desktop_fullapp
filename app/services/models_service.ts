@@ -1099,8 +1099,9 @@ export default class ModelsService {
 
       if (containsImages(userContent)) {
         const imageCount = Array.isArray(userContent) ? userContent.length : 1
+        // JSON.stringify -> una sola línea: el agregador de logs reordena las multilínea.
         console.log(
-          `[GPT_RAW] model=${model} | images=${imageCount} | raw=${String(rawResult).slice(0, 8000)}`
+          `[GPT_RAW] model=${model} | blocks=${imageCount} | raw=${JSON.stringify(String(rawResult).slice(0, 8000))}`
         )
       }
 

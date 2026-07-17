@@ -111,11 +111,21 @@ export class VisionDescriptionTask extends AnalyzerTask {
         )
       }
 
+      const diagUrls = batch.map((p) => this.getPhotoImageUrl(p))
+      const diagUniqueUrls = new Set(diagUrls).size
       logger.debug(
         `[DIAG_SEND] ${this.name} | model=${this.modelName} | photos=${batch.length} | ` +
           `ids=[${batch.map((p) => p.id).join(',')}] | resolution=${this.resolution} | ` +
-          `source=${this.imageUrlSource ?? 'original'}`
+          `source=${this.imageUrlSource ?? 'original'} | uniqueUrls=${diagUniqueUrls}/${diagUrls.length} | ` +
+          `emptyUrls=${diagUrls.filter((u) => !u).length}`
       )
+      if (diagUniqueUrls !== diagUrls.length || diagUrls.some((u) => !u)) {
+        logger.error(
+          `[DIAG_URLS] ${this.name} | URLs no distintas o vacías | ${JSON.stringify(
+            batch.map((p) => ({ id: p.id, url: this.getPhotoImageUrl(p) }))
+          )}`
+        )
+      }
 
       const maxAttempts = this.retryModel ? 2 : 1
 
