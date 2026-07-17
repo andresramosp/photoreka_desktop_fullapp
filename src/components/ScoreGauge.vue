@@ -114,12 +114,12 @@ const arcPath = computed((): string => {
 .score-gauge {
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  padding: 7px 10px 7px;
+  padding: 4px 8px 6px;
   background: var(--bg-card);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   overflow: hidden;
 }
 
@@ -145,7 +145,7 @@ const arcPath = computed((): string => {
 
 .score-gauge__svg {
   width: 100%;
-  max-width: 200px;
+  max-width: 136px;
   height: auto;
   display: block;
 }

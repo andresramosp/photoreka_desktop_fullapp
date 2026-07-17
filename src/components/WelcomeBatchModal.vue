@@ -11,10 +11,9 @@
             <h2 class="wbm-title">Welcome to Photoreka!</h2>
             <p class="wbm-subtitle">
               Photoreka is designed to work with
-              <strong>large photo collections</strong>. The more photos you
-              upload, the more powerful the experience becomes. Import a
-              significant portion of your archive to unlock the full potential
-              of every tool.
+              <strong>photo libraries</strong>. The more photos you upload, the
+              more powerful the experience becomes. Import a significant portion
+              of your archive to unlock the full potential of every tool.
             </p>
           </div>
 

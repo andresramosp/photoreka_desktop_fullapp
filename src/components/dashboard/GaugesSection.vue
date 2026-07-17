@@ -118,17 +118,18 @@ const getAvgScore = (key: string) => {
 
 /** Returns the 2 bottom-row keys based on profile */
 function getBottomRowKeys(profile: UserProfile): [string, string] {
+  // hybrid profiles (two genres combined)
+  if (profile.includes("|")) {
+    return ["composition", "storytelling"];
+  }
   if (profile === "commercial") {
-    return ["commercial_intent", "subject_clarity"];
+    return ["commercial_intent", "composition"];
   }
-  if (profile.includes("street")) {
-    return ["humor", "visual_games"];
+  if (profile === "street-photography" || profile === "artistic") {
+    return ["visual_games", "storytelling"];
   }
-  if (profile.includes("documentary")) {
+  if (profile === "documentary") {
     return ["message", "storytelling"];
-  }
-  if (profile === "artistic") {
-    return ["visual_games", "composition"];
   }
   // general (default)
   return ["composition", "storytelling"];
