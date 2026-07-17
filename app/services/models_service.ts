@@ -1096,6 +1096,14 @@ export default class ModelsService {
       }
 
       const rawResult = data.choices[0].message.content
+
+      if (containsImages(userContent)) {
+        const imageCount = Array.isArray(userContent) ? userContent.length : 1
+        console.log(
+          `[GPT_RAW] model=${model} | images=${imageCount} | raw=${String(rawResult).slice(0, 8000)}`
+        )
+      }
+
       const parsedResult = robustJsonParse(rawResult)
 
       if (finishReason === 'stop' && Object.keys(parsedResult).length === 0) {

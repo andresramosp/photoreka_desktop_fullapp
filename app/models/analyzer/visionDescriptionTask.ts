@@ -12,6 +12,9 @@ import { ModelName } from '#services/models_service'
 const logger = Logger.getInstance('AnalyzerProcess', 'VisionDescriptionTask')
 logger.setLevel(LogLevel.DEBUG)
 
+// Diagnóstico temporal: el prompt es idéntico en todos los lotes, basta verlo una vez por task.
+const diagLoggedPrompts = new Set<string>()
+
 type PromptFunction = (photos: Photo[], userProfile?: string) => string
 type Prompt = string | PromptFunction
 
@@ -100,6 +103,20 @@ export class VisionDescriptionTask extends AnalyzerTask {
         `Llamando a ${this.model} para ${batch.length} imágenes con perfil ${userProfile}...`
       )
 
+      if (!diagLoggedPrompts.has(this.name)) {
+        diagLoggedPrompts.add(this.name)
+        logger.debug(
+          `[DIAG_PROMPT] ${this.name} | profile=${userProfile} | chars=${injectedPrompts[0]?.length}\n` +
+            `----- PROMPT START -----\n${injectedPrompts[0]}\n----- PROMPT END -----`
+        )
+      }
+
+      logger.debug(
+        `[DIAG_SEND] ${this.name} | model=${this.modelName} | photos=${batch.length} | ` +
+          `ids=[${batch.map((p) => p.id).join(',')}] | resolution=${this.resolution} | ` +
+          `source=${this.imageUrlSource ?? 'original'}`
+      )
+
       const maxAttempts = this.retryModel ? 2 : 1
 
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -127,6 +144,26 @@ export class VisionDescriptionTask extends AnalyzerTask {
           `No se pudo completar ${this.name} para ${batch.length} imágenes con ${this.modelName}${this.retryModel ? ` ni con ${this.retryModel}` : ''}: ${this.formatError(lastError)}`
         )
         return
+      }
+
+      // DIAGNÓSTICO: forma de lo parseado antes de mapear result[i] -> batch[i].
+      const diagExpected: Photo[] = response.validPhotos || batch
+      const diagPayload = response.result
+      const diagItems = Array.isArray(diagPayload) ? diagPayload.length : null
+      logger.debug(
+        `[DIAG_RECV] ${this.name} | ids=[${diagExpected.map((p: Photo) => p.id).join(',')}] | ` +
+          `expected=${diagExpected.length} | isArray=${Array.isArray(diagPayload)} | ` +
+          `items=${diagItems ?? 'n/a'} | topKeys=${
+            diagPayload && typeof diagPayload === 'object' && !Array.isArray(diagPayload)
+              ? Object.keys(diagPayload).join(',')
+              : 'n/a'
+          }`
+      )
+      if (diagItems !== diagExpected.length) {
+        logger.error(
+          `[DIAG_MISMATCH] ${this.name} | expected=${diagExpected.length} | items=${diagItems ?? 'n/a'} | ` +
+            `payload=${JSON.stringify(diagPayload)?.slice(0, 8000)}`
+        )
       }
 
       // Manejar el caso donde response puede tener menos resultados debido a errores
