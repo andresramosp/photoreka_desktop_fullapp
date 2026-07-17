@@ -40,6 +40,27 @@ function containsImages(content: any): boolean {
   })
 }
 
+/**
+ * Modelos de razonamiento GPT-5: rechazan `temperature`/`max_tokens` y usan
+ * `max_completion_tokens`/`reasoning_effort`. Fuente única — estaba duplicada en
+ * visionDescriptionTask, donde faltaba gpt-5.2 y el batch API mandaba params inválidos.
+ */
+export const GPT5_REASONING_MODELS = [
+  'gpt-5',
+  'gpt-5-mini',
+  'gpt-5-nano',
+  'gpt-5.1',
+  'gpt-5.2',
+  'gpt-5.4',
+  'gpt-5.4-mini',
+  'gpt-5.4-nano',
+  'gpt-5.4-pro',
+]
+
+export function isGpt5ReasoningModel(model: string): boolean {
+  return GPT5_REASONING_MODELS.includes(model)
+}
+
 /** SHA-256 hash of the serialized parts, used as a compact Redis key. */
 function llmCacheKey(parts: object): string {
   return 'llm:' + crypto.createHash('sha256').update(JSON.stringify(parts)).digest('hex')
@@ -994,17 +1015,7 @@ export default class ModelsService {
   ): Promise<any> {
     try {
       // Si el modelo es un GPT-5 base/non-chat, no pasar temperature y usar max_completion_tokens
-      const isGpt5NonChat = [
-        'gpt-5',
-        'gpt-5-mini',
-        'gpt-5-nano',
-        'gpt-5.1',
-        'gpt-5.2',
-        'gpt-5.4',
-        'gpt-5.4-mini',
-        'gpt-5.4-nano',
-        'gpt-5.4-pro',
-      ].includes(model)
+      const isGpt5NonChat = isGpt5ReasoningModel(model)
 
       let payload: any = {
         model,
@@ -1032,7 +1043,7 @@ export default class ModelsService {
       if (isGpt5NonChat) {
         // Presupuesto compartido entre tokens de razonamiento y salida visible:
         // si el razonamiento lo agota, la respuesta llega truncada (finish_reason 'length').
-        payload.max_completion_tokens = 30000
+        payload.max_completion_tokens = 15000
         payload.reasoning_effort = 'low'
         payload.verbosity = 'low'
       } else {
@@ -1498,7 +1509,17 @@ export default class ModelsService {
         if (Array.isArray(root)) items = root
         else if (root?.results && Array.isArray(root.results)) items = root.results
         else if (root?.result && Array.isArray(root.result)) items = root.result
-        else if (root && typeof root === 'object') {
+        else if (
+          root &&
+          typeof root === 'object' &&
+          Object.keys(root).some((k) => /^image_\d+$/.test(k))
+        ) {
+          // Respuesta con json_schema: { image_1: {...}, image_2: {...} } -> array ordenado.
+          items = Object.keys(root)
+            .filter((k) => /^image_\d+$/.test(k))
+            .sort((a, b) => Number(a.slice(6)) - Number(b.slice(6)))
+            .map((k) => root[k])
+        } else if (root && typeof root === 'object') {
           // Caso: objeto con claves numéricas ("0", "1", ...) representando índices
           const numericKeys = Object.keys(root).filter((k) => /^\d+$/.test(k))
           if (numericKeys.length) {

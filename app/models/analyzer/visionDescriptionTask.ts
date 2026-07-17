@@ -7,19 +7,26 @@ import AnalyzerProcess from './analyzerProcess.js'
 import pLimit from 'p-limit'
 import { MediaResolution } from '@google/genai'
 import PhotoImageService from '../../services/photo_image_service.js'
-import { ModelName } from '#services/models_service'
+import { isGpt5ReasoningModel, ModelName } from '#services/models_service'
 
 const logger = Logger.getInstance('AnalyzerProcess', 'VisionDescriptionTask')
 logger.setLevel(LogLevel.DEBUG)
 
-// Diagnóstico temporal: el prompt es idéntico en todos los lotes, basta verlo una vez por task.
-const diagLoggedPrompts = new Set<string>()
-
 type PromptFunction = (photos: Photo[], userProfile?: string) => string
 type Prompt = string | PromptFunction
+type ResponseSchemaFunction = (photos: Photo[], userProfile?: string) => Record<string, any>
+
+/** Clave que ocupa la imagen `index` (0-based) en la respuesta con schema. */
+const schemaKeyFor = (index: number) => `image_${index + 1}`
 
 export class VisionDescriptionTask extends AnalyzerTask {
   declare prompts: Prompt[]
+  /**
+   * Opt-in por task: cuando está presente, la respuesta se fuerza a un objeto con
+   * una clave por imagen y se mapea por clave en vez de por posición. Las tasks que
+   * no lo declaran mantienen el camino de array intacto.
+   */
+  declare responseSchema?: ResponseSchemaFunction
   declare resolution: 'low' | 'high' | 'medium'
   declare sequential: boolean
   declare imagesPerRequest: number
@@ -69,7 +76,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
 
     // const threshold =
     // analyzerProcess.mode === 'retry_process' ? this.imagesPerRequest * 2 : this.imagesPerRequest
-    const threshold = 1500
+    const threshold = 1000
     if (this.batchAPI && pendingPhotos.length > threshold) {
       await this.processWithBatchAPI(pendingPhotos)
     } else {
@@ -103,23 +110,15 @@ export class VisionDescriptionTask extends AnalyzerTask {
         `Llamando a ${this.model} para ${batch.length} imágenes con perfil ${userProfile}...`
       )
 
-      if (!diagLoggedPrompts.has(this.name)) {
-        diagLoggedPrompts.add(this.name)
-        logger.debug(
-          `[DIAG_PROMPT] ${this.name} | profile=${userProfile} | chars=${injectedPrompts[0]?.length}\n` +
-            `----- PROMPT START -----\n${injectedPrompts[0]}\n----- PROMPT END -----`
-        )
-      }
-
-      const diagUrls = batch.map((p) => this.getPhotoImageUrl(p))
-      const diagUniqueUrls = new Set(diagUrls).size
+      const urls = batch.map((p) => this.getPhotoImageUrl(p))
+      const uniqueUrls = new Set(urls).size
       logger.debug(
         `[DIAG_SEND] ${this.name} | model=${this.modelName} | photos=${batch.length} | ` +
           `ids=[${batch.map((p) => p.id).join(',')}] | resolution=${this.resolution} | ` +
-          `source=${this.imageUrlSource ?? 'original'} | uniqueUrls=${diagUniqueUrls}/${diagUrls.length} | ` +
-          `emptyUrls=${diagUrls.filter((u) => !u).length}`
+          `source=${this.imageUrlSource ?? 'original'} | uniqueUrls=${uniqueUrls}/${urls.length} | ` +
+          `emptyUrls=${urls.filter((u) => !u).length}`
       )
-      if (diagUniqueUrls !== diagUrls.length || diagUrls.some((u) => !u)) {
+      if (uniqueUrls !== urls.length || urls.some((u) => !u)) {
         logger.error(
           `[DIAG_URLS] ${this.name} | URLs no distintas o vacías | ${JSON.stringify(
             batch.map((p) => ({ id: p.id, url: this.getPhotoImageUrl(p) }))
@@ -156,79 +155,49 @@ export class VisionDescriptionTask extends AnalyzerTask {
         return
       }
 
-      // DIAGNÓSTICO: forma de lo parseado antes de mapear result[i] -> batch[i].
-      const diagExpected: Photo[] = response.validPhotos || batch
-      const diagPayload = response.result
-      const diagItems = Array.isArray(diagPayload) ? diagPayload.length : null
-      logger.debug(
-        `[DIAG_RECV] ${this.name} | ids=[${diagExpected.map((p: Photo) => p.id).join(',')}] | ` +
-          `expected=${diagExpected.length} | isArray=${Array.isArray(diagPayload)} | ` +
-          `items=${diagItems ?? 'n/a'} | topKeys=${
-            diagPayload && typeof diagPayload === 'object' && !Array.isArray(diagPayload)
-              ? Object.keys(diagPayload).join(',')
-              : 'n/a'
-          }`
-      )
-      if (diagItems !== diagExpected.length) {
-        logger.error(
-          `[DIAG_MISMATCH] ${this.name} | expected=${diagExpected.length} | items=${diagItems ?? 'n/a'} | ` +
-            `payload=${JSON.stringify(diagPayload)?.slice(0, 8000)}`
-        )
+      // Fotos de referencia para este batch (Gemini usa validPhotos, el resto el batch original)
+      const referencePhotos: Photo[] = response.validPhotos || batch
+      const payload = response.result
+
+      const savedPhotos = this.responseSchema
+        ? this.mapByKey(payload, referencePhotos)
+        : this.mapByPosition(payload, referencePhotos)
+
+      if (savedPhotos.length) {
+        await this.commit(savedPhotos)
+        logger.debug(`Datos salvados ${this.model} para ${savedPhotos.length} imágenes`)
       }
 
-      // Manejar el caso donde response puede tener menos resultados debido a errores
-      if (response && response.result && response.result.length > 0) {
-        // Fotos de referencia para este batch (Gemini usa validPhotos, el resto el batch original)
-        const referencePhotos = response.validPhotos || batch
-
-        // DETECCIÓN DE DROP SILENCIOSO: el modelo devolvió menos resultados que imágenes.
-        // Las fotos sin resultado NO se guardan (se saltan en commit) y quedan pendientes
-        // sin que se registre ningún error explícito.
-        if (response.result.length < referencePhotos.length) {
-          const droppedPhotos = referencePhotos.slice(response.result.length)
-          const droppedIds = droppedPhotos.map((p: Photo) => p.id)
-          logger.error(
-            `[SILENT_DROP] ${this.name} (${this.modelName}): respuesta parcial ${response.result.length}/${referencePhotos.length}. ` +
-              `${droppedIds.length} foto(s) sin resultado quedarán pendientes: [${droppedIds.join(', ')}]`
-          )
-        }
-
-        if (response.validPhotos) {
-          // Para Gemini, usamos las fotos válidas identificadas
-          response.result.forEach((res: any, photoIndex: number) => {
-            const { ...results } = res
-            const photoId = response.validPhotos[photoIndex].id
-            this.data[photoId] = { ...this.data[photoId], ...results }
-          })
-          await this.commit(response.validPhotos)
-        } else {
-          // Para otros modelos o cuando no hay validPhotos, usar la lógica original
-          response.result.forEach((res: any, photoIndex: number) => {
-            const { ...results } = res
-            const photoId = batch[photoIndex].id
-            this.data[photoId] = { ...this.data[photoId], ...results }
-          })
-          await this.commit(batch)
-        }
-        logger.debug(`Datos salvados ${this.model} para ${response.result.length} imágenes`)
-      } else {
-        // Batch completo sin resultado: todas estas fotos quedan pendientes.
-        const droppedIds = batch.map((p) => p.id)
+      const pendingIds = referencePhotos.filter((p) => !savedPhotos.includes(p)).map((p) => p.id)
+      if (pendingIds.length) {
         logger.error(
-          `[SILENT_DROP] ${this.name} (${this.modelName}): sin resultados válidos para el batch. ` +
-            `${droppedIds.length} foto(s) quedarán pendientes: [${droppedIds.join(', ')}]`
+          `[UNSAVED] ${this.name} (${this.modelName}): ${pendingIds.length}/${referencePhotos.length} ` +
+            `foto(s) sin resultado utilizable, quedan pendientes para el retry: [${pendingIds.join(', ')}]`
+        )
+      }
+    }
+
+    // Un lote no puede tumbar la task: cualquier fallo inesperado deja SOLO sus fotos
+    // pendientes para el retry, sin abortar los demás lotes ni descartar sus commits.
+    const runBatchSafely = async (batch: Photo[]) => {
+      try {
+        await processBatch(batch)
+      } catch (err) {
+        logger.error(
+          `[BATCH_FAILED] ${this.name} (${this.modelName}): fallo inesperado procesando ` +
+            `[${batch.map((p) => p.id).join(', ')}], quedan pendientes: ${this.formatError(err)}`
         )
       }
     }
 
     if (this.sequential) {
       for (let i = 0; i < batches.length; i++) {
-        await processBatch(batches[i])
+        await runBatchSafely(batches[i])
         // Limpiar la referencia del batch procesado
         batches[i] = []
       }
     } else {
-      await Promise.all(batches.map((batch) => limit(() => processBatch(batch))))
+      await Promise.all(batches.map((batch) => limit(() => runBatchSafely(batch))))
     }
 
     // Limpiar array de batches
@@ -267,6 +236,75 @@ export class VisionDescriptionTask extends AnalyzerTask {
     }
   }
 
+  /**
+   * Respuesta con schema: objeto { image_1: {...}, ... }. La clave identifica la
+   * imagen, así que un descuadre nunca desalinea: solo deja fotos sin guardar.
+   */
+  private mapByKey(payload: any, referencePhotos: Photo[]): Photo[] {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      logger.error(
+        `[SCHEMA_SHAPE] ${this.name} (${this.modelName}): se esperaba un objeto con claves ` +
+          `image_N y llegó ${Array.isArray(payload) ? 'un array' : typeof payload}. Batch sin guardar.`
+      )
+      return []
+    }
+
+    const saved: Photo[] = []
+    const missingKeys: string[] = []
+
+    referencePhotos.forEach((photo, index) => {
+      const key = schemaKeyFor(index)
+      const item = payload[key]
+      if (!item || typeof item !== 'object') {
+        missingKeys.push(key)
+        return
+      }
+      this.data[photo.id] = { ...this.data[photo.id], ...item }
+      saved.push(photo)
+    })
+
+    const extraKeys = Object.keys(payload).filter(
+      (k) => !referencePhotos.some((_, i) => schemaKeyFor(i) === k)
+    )
+    if (missingKeys.length || extraKeys.length) {
+      logger.error(
+        `[SCHEMA_KEYS] ${this.name} (${this.modelName}): claves inesperadas | ` +
+          `faltan=[${missingKeys.join(',')}] | sobran=[${extraKeys.join(',')}]`
+      )
+    }
+
+    return saved
+  }
+
+  /**
+   * Respuesta clásica en array, mapeada por posición. Un descuadre en el número de
+   * items hace ambigua la correspondencia item->foto, así que no se guarda nada y el
+   * batch entero se deja pendiente: preferimos reintentar a escribir scores cruzados.
+   */
+  private mapByPosition(payload: any, referencePhotos: Photo[]): Photo[] {
+    if (!Array.isArray(payload) || payload.length === 0) {
+      logger.error(
+        `[NO_RESULT] ${this.name} (${this.modelName}): sin resultados válidos para el batch ` +
+          `(${referencePhotos.length} foto(s)).`
+      )
+      return []
+    }
+
+    if (payload.length !== referencePhotos.length) {
+      logger.error(
+        `[COUNT_MISMATCH] ${this.name} (${this.modelName}): ${payload.length} items para ` +
+          `${referencePhotos.length} imágenes. La correspondencia item->foto es ambigua; ` +
+          `no se guarda nada y el batch se deja pendiente.`
+      )
+      return []
+    }
+
+    referencePhotos.forEach((photo, index) => {
+      this.data[photo.id] = { ...this.data[photo.id], ...payload[index] }
+    })
+    return [...referencePhotos]
+  }
+
   async commit(batch: Photo[]): Promise<void> {
     try {
       const photoManager = new PhotoManager()
@@ -297,9 +335,6 @@ export class VisionDescriptionTask extends AnalyzerTask {
 
   private async processSingleBatch(batchPhotos: Photo[]): Promise<void> {
     const userProfile = this.analyzerProcess.userProfile || 'general'
-    const prompts = this.prompts.map((p) =>
-      typeof p === 'function' ? p(batchPhotos, userProfile) : p
-    )
     const imagesPerRequest = this.imagesPerRequest
     const maxRetries = 1
     let attempt = 0
@@ -308,16 +343,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
     let status = 'in_progress'
     let requests: any[] = []
 
-    const isGpt5NonChat = [
-      'gpt-5',
-      'gpt-5-mini',
-      'gpt-5-nano',
-      'gpt-5.1',
-      'gpt-5.4',
-      'gpt-5.4-mini',
-      'gpt-5.4-nano',
-      'gpt-5.4-pro',
-    ].includes(this.modelName)
+    const isGpt5NonChat = isGpt5ReasoningModel(this.modelName)
 
     while (attempt < maxRetries && !completed) {
       // Generar requests en cada intento para evitar side effects
@@ -325,6 +351,12 @@ export class VisionDescriptionTask extends AnalyzerTask {
       for (let j = 0; j < batchPhotos.length; j += imagesPerRequest) {
         const batch = batchPhotos.slice(j, j + imagesPerRequest)
         const customId = batch.map((p) => p.id).join('-')
+        // Prompt y schema por request: ambos dependen del nº de imágenes de ESTE
+        // request (el último puede ser más corto), no del lote de 200.
+        const prompts = this.prompts.map((p) =>
+          typeof p === 'function' ? p(batch, userProfile) : p
+        )
+        const schema = this.buildSchema(batch)
         const userContent = batch.map((photo) => ({
           type: 'image_url',
           image_url: {
@@ -338,6 +370,12 @@ export class VisionDescriptionTask extends AnalyzerTask {
             { role: 'system', content: prompts[0] },
             { role: 'user', content: userContent },
           ],
+        }
+        if (schema) {
+          body.response_format = {
+            type: 'json_schema',
+            json_schema: { name: 'batch_result', strict: true, schema },
+          }
         }
         if (!isGpt5NonChat) {
           body.temperature = 0.1
@@ -435,6 +473,12 @@ export class VisionDescriptionTask extends AnalyzerTask {
     return this.model
   }
 
+  /** JSON Schema neutro para este batch, o null si la task no declara schema. */
+  private buildSchema(batch: Photo[]): Record<string, any> | null {
+    if (!this.responseSchema) return null
+    return this.responseSchema(batch, this.analyzerProcess?.userProfile || 'general')
+  }
+
   private async executeModelTask(
     prompts: string[],
     batch: Photo[],
@@ -442,6 +486,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
   ): Promise<any> {
     const prompt = prompts[0]
     const modelType = this.getModelTypeForModel(modelName)
+    const schema = this.buildSchema(batch)
 
     try {
       if (modelType === 'GPT') {
@@ -452,11 +497,17 @@ export class VisionDescriptionTask extends AnalyzerTask {
             detail: this.resolution,
           },
         }))
+        const responseFormat = schema
+          ? {
+              type: 'json_schema',
+              json_schema: { name: 'batch_result', strict: true, schema },
+            }
+          : null
         const response = await this.modelsService.getGPTResponse(
           prompt,
           images,
           modelName,
-          null,
+          responseFormat,
           0,
           false
         )

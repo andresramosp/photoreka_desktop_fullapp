@@ -17,7 +17,8 @@
       "Read(//c/Users/andre/.claude/projects/c--Users-andre-Desktop-Photoreka-App-api/memory/**)",
       "Read(//c/Users/andre/.railway/**)",
       "Bash(unset RAILWAY_TOKEN RAILWAY_API_TOKEN)",
-      "Bash(railway status *)"
+      "Bash(railway status *)",
+      "WebSearch"
     ],
     "additionalDirectories": [
       "c:\\Users\\andre\\Desktop\\Photoreka\\App\\web\\src\\utils",

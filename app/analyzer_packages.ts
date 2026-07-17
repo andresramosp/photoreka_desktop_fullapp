@@ -12,7 +12,10 @@ import { GlobalEmbeddingsTagsTask } from '#models/analyzer/globalEmbeddingsTagsT
 import { MESSAGE_ANALYZER_GEMINI_CONTEXT_STORY_ACCENTS } from './utils/prompts/descriptions.js'
 import { MESSAGE_TAGS_TEXT_EXTRACTION } from './utils/prompts/tags.js'
 import { MESSAGE_ANALYZER_VISUAL_ASPECTS } from './utils/prompts/visual_aspects.js'
-import { MESSAGE_ANALYZER_CONTEXT_ARTISTIC_SCORES } from './utils/prompts/visual_scores.js'
+import {
+  ARTISTIC_SCORES_SCHEMA,
+  MESSAGE_ANALYZER_CONTEXT_ARTISTIC_SCORES,
+} from './utils/prompts/visual_scores.js'
 
 /**
  * ESTRUCTURA DE PACKAGES CON STAGES
@@ -208,6 +211,9 @@ export const packages = [
                 imageUrlSource: 'thumbnail',
                 sequential: false,
                 prompts: [MESSAGE_ANALYZER_CONTEXT_ARTISTIC_SCORES],
+                // Fija la cardinalidad de la respuesta (una clave por imagen). Sin esto,
+                // los lotes de fotos casi idénticas hacen que el modelo emita items de más.
+                responseSchema: ARTISTIC_SCORES_SCHEMA,
                 resolution: 'high',
                 imagesPerRequest: 8,
                 batchAPI: true,
