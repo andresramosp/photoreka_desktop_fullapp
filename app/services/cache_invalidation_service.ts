@@ -298,7 +298,10 @@ export class CacheInvalidationService {
         `[CacheInvalidation] Warm-up skipped for user ${userId} due to invalidation options`
       )
     } else {
-      await this.warmExpensiveDashboardCaches(userId)
+      // Not awaited: the warm-up must not delay the request that triggered the invalidation.
+      void this.warmExpensiveDashboardCaches(userId).catch((err) =>
+        console.warn(`[CacheInvalidation] Background warm-up failed for user ${userId}:`, err)
+      )
     }
 
     console.log(

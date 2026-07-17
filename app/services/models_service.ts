@@ -1030,7 +1030,9 @@ export default class ModelsService {
       }
 
       if (isGpt5NonChat) {
-        payload.max_completion_tokens = 15000
+        // Presupuesto compartido entre tokens de razonamiento y salida visible:
+        // si el razonamiento lo agota, la respuesta llega truncada (finish_reason 'length').
+        payload.max_completion_tokens = 30000
         payload.reasoning_effort = 'low'
         payload.verbosity = 'low'
       } else {
@@ -1080,8 +1082,25 @@ export default class ModelsService {
       const outputCost = completionTokens * PRICES[model].output * USD_TO_EUR
       const totalCostInEur = inputCost + outputCost
 
+      const finishReason = data.choices[0].finish_reason
+      const reasoningTokens = data.usage.completion_tokens_details?.reasoning_tokens ?? 0
+      const budget = payload.max_completion_tokens ?? payload.max_tokens
+      const diagnostics =
+        `model=${model} | finish_reason=${finishReason} | reasoning_tokens=${reasoningTokens} | ` +
+        `completion_tokens=${completionTokens}/${budget}`
+
+      if (finishReason !== 'stop') {
+        console.warn(`[GPT_BUDGET] Respuesta no terminada | ${diagnostics}`)
+      } else {
+        console.log(`[GPT_BUDGET] ${diagnostics}`)
+      }
+
       const rawResult = data.choices[0].message.content
       const parsedResult = robustJsonParse(rawResult)
+
+      if (finishReason === 'stop' && Object.keys(parsedResult).length === 0) {
+        console.warn(`[GPT_BUDGET] Respuesta completa pero no parseable | ${diagnostics}`)
+      }
 
       const result = {
         result: parsedResult.result
