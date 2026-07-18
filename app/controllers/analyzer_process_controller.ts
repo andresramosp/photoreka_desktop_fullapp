@@ -18,12 +18,20 @@ export default class AnalyzerProcessController {
       })
       .orderBy('created_at', 'desc')
 
-    // Excluir processSheet de la respuesta
-    const processesWithoutSheet = processes.map((p) => {
-      const { processSheet, ...rest } = p.toJSON()
-      return rest
-    })
-    return response.ok(processesWithoutSheet)
+    const slimProcesses = processes.map((process) => ({
+      id: process.id,
+      createdAt: process.createdAt,
+      currentStage: process.currentStage,
+      mode: process.mode,
+      isPreprocess: process.isPreprocess,
+      photos: process.photos.map((photo) => ({
+        id: photo.id,
+        name: photo.name,
+        thumbnailUrl: photo.thumbnailUrl,
+      })),
+    }))
+
+    return response.ok(slimProcesses)
   }
 
   public async getById({ params, response, auth }: HttpContext) {
