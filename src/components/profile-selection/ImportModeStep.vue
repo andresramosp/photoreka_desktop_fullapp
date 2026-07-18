@@ -1,11 +1,7 @@
 <template>
   <div class="step-content">
     <div class="profile-header">
-      <AppLogo
-        layout="icon"
-        :height="isMobile ? 52 : 64"
-        class="header-logo"
-      />
+      <AppLogo layout="icon" :height="isMobile ? 44 : 52" class="header-logo" />
       <div class="header-text">
         <h1 class="profile-title">How will you import your photos?</h1>
         <p class="profile-subtitle">
@@ -18,54 +14,63 @@
       <div class="modes-grid">
         <!-- Web Mode Card -->
         <div
-          class="mode-card"
+          class="opt-card mode-card"
           :class="{ selected: selectedMode === 'web' }"
+          :style="{ '--accent': '#2563eb' }"
           @click="selectMode('web')"
         >
-          <div class="mode-icon app-icon">
-            <AppLogo layout="icon" :height="60" />
+          <span class="opt-check">
+            <n-icon size="14"><CheckmarkOutline /></n-icon>
+          </span>
+          <div class="mode-logo">
+            <AppLogo layout="icon" :height="42" />
           </div>
-          <h4 class="mode-title">Photoreka Web</h4>
-          <p class="mode-description">
-            Import photos through the web interface
-          </p>
-          <div class="mode-badge recommended">For most users</div>
+          <div class="mode-text">
+            <div class="mode-title-row">
+              <h4 class="opt-title">Photoreka Web</h4>
+              <span class="opt-badge recommended">For most users</span>
+            </div>
+            <p class="opt-desc">Import photos through the web interface</p>
+          </div>
         </div>
 
         <!-- Lightroom Mode Card -->
         <div
-          class="mode-card"
+          class="opt-card mode-card"
           :class="{ selected: selectedMode === 'lightroom' }"
+          :style="{ '--accent': '#f59e0b' }"
           @click="selectMode('lightroom')"
         >
-          <div class="mode-icon lightroom-icon">
+          <span class="opt-check">
+            <n-icon size="14"><CheckmarkOutline /></n-icon>
+          </span>
+          <div class="mode-logo">
             <img
               src="/src/assets/logos/lightroom_logo.png"
               alt="Adobe Lightroom"
               class="lightroom-logo"
             />
           </div>
-          <h4 class="mode-title">Photoreka + Lightroom</h4>
-          <p class="mode-description">
-            Sync photos from Adobe Lightroom Classic
-          </p>
-          <div class="mode-badge advanced">For Lightroom-first users</div>
+          <div class="mode-text">
+            <div class="mode-title-row">
+              <h4 class="opt-title">Photoreka + Lightroom</h4>
+              <span class="opt-badge advanced">Lightroom-first</span>
+            </div>
+            <p class="opt-desc">Sync photos from Adobe Lightroom Classic</p>
+          </div>
         </div>
       </div>
 
       <!-- Explanatory text based on selection -->
       <transition name="fade" mode="out-in">
         <div v-if="selectedMode" class="mode-explanation">
-          <div v-if="selectedMode === 'web'" class="explanation-box web">
+          <div
+            v-if="selectedMode === 'web'"
+            class="explanation-box"
+            :style="{ '--accent': '#22c55e' }"
+          >
             <div class="explanation-icon">
-              <n-icon size="24" color="#22c55e">
-                <svg viewBox="0 0 24 24">
-                  <path
-                    fill="currentColor"
-                    d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10s10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5l1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
-                  />
-                </svg>
-              </n-icon>
+              <n-icon size="18"><CheckmarkCircleOutline /></n-icon>
             </div>
             <div class="explanation-content">
               <h5>Web-first Workflow</h5>
@@ -75,25 +80,22 @@
                 multiple sources with ease.
               </p>
               <ul class="explanation-list">
-                <li>✓ Import from your computer (drag & drop or browse)</li>
-                <li>✓ Connect Google Photos and sync automatically</li>
-                <li>✓ Import directly from Dropbox</li>
-                <li>✓ Works from any device with a browser</li>
-                <li>
-                  ✓ Lightroom plugin available as optional secondary source
-                </li>
+                <li>Import from your computer (drag &amp; drop or browse)</li>
+                <li>Connect Google Photos and sync automatically</li>
+                <li>Import directly from Dropbox</li>
+                <li>Works from any device with a browser</li>
+                <li>Lightroom plugin available as optional secondary source</li>
               </ul>
             </div>
           </div>
 
           <div
             v-if="selectedMode === 'lightroom'"
-            class="explanation-box lightroom"
+            class="explanation-box"
+            :style="{ '--accent': '#f59e0b' }"
           >
             <div class="explanation-icon">
-              <n-icon size="24" color="#f59e0b">
-                <InformationCircleOutline />
-              </n-icon>
+              <n-icon size="18"><InformationCircleOutline /></n-icon>
             </div>
             <div class="explanation-content">
               <h5>Lightroom-first Workflow</h5>
@@ -102,24 +104,18 @@
                 <strong>always be done from our Lightroom Plugin</strong> to
                 maintain synchronization between your catalog and Photoreka.
               </p>
-              <ul class="explanation-list warning">
-                <!-- <li>
-                  ⚠️ All imports must come from Lightroom to avoid
-                  inconsistencies
-                </li> -->
-
-                <li>✓ Full access to all Photoreka web tools and features</li>
-                <li>✓ Search tool integrated directly into Lightroom</li>
+              <ul class="explanation-list">
+                <li>Full access to all Photoreka web tools and features</li>
+                <li>Search tool integrated directly into Lightroom</li>
                 <li>
-                  ✓ Perfect for photographers who organize everything in
-                  Lightroom
+                  Perfect for photographers who organize everything in Lightroom
                 </li>
               </ul>
-              <p class="warning-note">
+              <!-- <p class="warning-note">
                 <strong>Note:</strong> If you upload photos directly through the
                 web, they will be analyzed but won't appear in your Lightroom
                 catalog, which may cause workflow inconsistencies.
-              </p>
+              </p> -->
             </div>
           </div>
         </div>
@@ -152,7 +148,11 @@
 </template>
 
 <script setup lang="ts">
-import { InformationCircleOutline } from "@vicons/ionicons5";
+import {
+  InformationCircleOutline,
+  CheckmarkOutline,
+  CheckmarkCircleOutline,
+} from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 
@@ -182,6 +182,8 @@ const handleNext = () => {
 <style scoped>
 .step-content {
   animation: fadeIn 0.3s ease;
+  max-width: 720px;
+  margin: 0 auto;
 }
 
 @keyframes fadeIn {
@@ -195,12 +197,13 @@ const handleNext = () => {
   }
 }
 
+/* Header */
 .profile-header {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  margin-bottom: 32px;
+  gap: 14px;
+  margin-bottom: 28px;
 }
 
 .header-logo {
@@ -213,275 +216,300 @@ const handleNext = () => {
 
 .profile-title {
   margin: 0 0 2px 0;
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
-  color: var(--text-secondary);
-  letter-spacing: -0.025em;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
 }
 
 .profile-subtitle {
   margin: 0;
-  font-size: 16px;
-  color: var(--text-primary);
+  font-size: 15px;
+  color: var(--text-secondary);
   font-weight: 400;
 }
 
 /* Mode Selection */
-.mode-selection {
-  margin-bottom: 32px;
-}
-
 .modes-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 24px;
-  max-width: 700px;
-  margin: 0 auto 32px;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 18px;
 }
 
-.mode-card {
-  background-color: var(--bg-surface);
-  border: 2px solid #3c3c42;
-  border-radius: 16px;
-  padding: 20px 24px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+/* ===== Shared option card ===== */
+.opt-card {
+  --accent: var(--primary-color);
   position: relative;
+  background-color: var(--bg-card);
+  border: 1.5px solid var(--border-color);
+  border-radius: 14px;
+  cursor: pointer;
+  transition:
+    border-color 0.25s ease,
+    box-shadow 0.25s ease,
+    background-color 0.25s ease;
+}
+
+.opt-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border-color));
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.14);
+}
+
+.opt-card.selected {
+  border-color: var(--accent);
+  background-color: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
+  box-shadow:
+    inset 0 0 0 1px var(--accent),
+    0 8px 26px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+.opt-check {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background-color: var(--accent);
+  color: #fff;
   display: flex;
-  flex-direction: column;
   align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: scale(0.5);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.mode-card:hover {
-  border-color: #4c4c52;
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+.opt-card.selected .opt-check {
+  opacity: 1;
+  transform: scale(1);
 }
 
-.mode-card.selected {
-  border-color: #2563eb;
-  background-color: rgba(37, 99, 235, 0.1);
-  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.3);
+.opt-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.25;
 }
 
-.mode-icon {
-  margin-bottom: 8px;
+.opt-desc {
+  margin: 0;
+  font-size: 12.5px;
   color: var(--text-secondary);
-  height: 64px;
+  line-height: 1.5;
+}
+
+/* Mode card layout */
+.mode-card {
+  padding: 16px 18px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 10px;
+}
+
+.mode-logo {
+  grid-row: 1;
+  grid-column: 1;
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  border-radius: 11px;
+  background-color: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  border: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.mode-card.selected .mode-icon {
-  color: #2563eb;
-}
-
-.app-icon {
-  padding: 8px;
-}
-
-.app-logo {
-  height: 80px;
-  width: auto;
-  object-fit: contain;
-  filter: brightness(0.9);
-  transition: filter 0.3s ease;
-}
-
-.mode-card.selected .app-logo {
-  filter: brightness(1.2);
-}
-
-.lightroom-icon {
-  padding: 8px;
-}
-
 .lightroom-logo {
-  height: 65px;
+  height: 30px;
   width: auto;
   object-fit: contain;
-  filter: brightness(0.9);
-  transition: filter 0.3s ease;
 }
 
-.mode-card.selected .lightroom-logo {
-  filter: brightness(1.1);
+/* Children participate directly in the card grid so the description spans full width */
+.mode-text {
+  display: contents;
 }
 
-.mode-title {
-  margin: 0 0 8px 0;
-  font-size: 18px;
+.mode-title-row {
+  grid-row: 1;
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mode-text .opt-desc {
+  grid-column: 1 / -1;
+}
+
+.opt-badge {
+  font-size: 9.5px;
   font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.mode-description {
-  margin: 0 0 16px 0;
-  font-size: 13px;
-  color: var(--text-primary);
-  line-height: 1.5;
-}
-
-.mode-badge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 4px 12px;
-  border-radius: 12px;
+  padding: 2px 8px;
+  border-radius: 20px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
 }
 
-.mode-badge.recommended {
-  background-color: rgba(34, 197, 94, 0.2);
+.opt-badge.recommended {
+  background-color: rgba(34, 197, 94, 0.16);
   color: #22c55e;
 }
 
-.mode-badge.advanced {
-  background-color: rgba(245, 158, 11, 0.2);
+.opt-badge.advanced {
+  background-color: rgba(245, 158, 11, 0.16);
   color: #f59e0b;
 }
 
 /* Mode Explanation */
 .mode-explanation {
-  max-width: 700px;
-  margin: 0 auto;
+  margin-top: 4px;
 }
 
 .explanation-box {
-  background-color: rgba(44, 44, 50, 0.5);
+  --accent: var(--primary-color);
+  background-color: color-mix(in srgb, var(--accent) 6%, var(--bg-card));
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--accent);
   border-radius: 12px;
-  padding: 24px;
+  padding: 16px 18px;
   display: flex;
-  gap: 16px;
-  border-left: 4px solid;
-}
-
-.explanation-box.web {
-  border-left-color: #22c55e;
-}
-
-.explanation-box.lightroom {
-  border-left-color: #f59e0b;
+  gap: 14px;
 }
 
 .explanation-icon {
   flex-shrink: 0;
-  margin-top: 2px;
+  color: var(--accent);
+  margin-top: 1px;
 }
 
 .explanation-content h5 {
-  margin: 0 0 12px 0;
-  font-size: 14px;
+  margin: 0 0 6px 0;
+  font-size: 13.5px;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .explanation-content p {
-  margin: 0 0 16px 0;
-  font-size: 12px;
-  color: var(--text-primary);
-  line-height: 1.6;
+  margin: 0 0 10px 0;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
 }
 
 .explanation-list {
   list-style: none;
   padding: 0;
-  margin: 0 0 16px 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 18px;
 }
 
 .explanation-list li {
+  position: relative;
   font-size: 12px;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-  padding-left: 4px;
+  color: var(--text-secondary);
+  padding-left: 18px;
+  line-height: 1.4;
 }
 
-.explanation-list.warning li {
-  color: var(--text-primary);
+.explanation-list li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--accent);
 }
 
 .warning-note {
-  background-color: rgba(245, 158, 11, 0.1);
+  margin: 12px 0 0 0 !important;
+  background-color: color-mix(in srgb, var(--accent) 10%, transparent);
   border-radius: 8px;
-  padding: 12px;
-  font-size: 11px;
-  color: #f59e0b;
-  margin: 0;
+  padding: 10px 12px;
+  font-size: 11.5px;
+  color: var(--text-secondary) !important;
+  line-height: 1.5;
+}
+
+.warning-note strong {
+  color: var(--accent);
 }
 
 /* Fade transition */
 .fade-enter-active,
 .fade-leave-active {
   transition:
-    opacity 0.3s ease,
-    transform 0.3s ease;
+    opacity 0.25s ease,
+    transform 0.25s ease;
 }
 
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
-  transform: translateY(10px);
+  transform: translateY(-6px);
 }
 
 /* Actions */
 .profile-actions {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  margin-top: 32px;
+  justify-content: flex-end;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
 }
 
 .next-button {
   min-width: 180px;
-  height: 44px;
-  border-radius: 8px;
+  height: 42px;
+  border-radius: 10px;
   font-weight: 600;
   font-size: 14px;
 }
 
-/* Responsive design */
+/* Responsive */
 @media (max-width: 768px) {
   .profile-header {
     gap: 12px;
+    margin-bottom: 24px;
   }
 
-  .profile-title {
-    font-size: 24px;
-  }
-
-  .modes-grid {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-
-  .mode-card {
-    padding: 24px 20px;
-  }
-
-  .explanation-box {
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .next-button {
-    width: 100%;
-  }
-}
-
-@media (max-width: 480px) {
   .profile-title {
     font-size: 22px;
   }
 
-  .mode-title {
-    font-size: 16px;
+  .profile-subtitle {
+    font-size: 14px;
   }
 
-  .lightroom-logo {
-    height: 40px;
+  .modes-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .explanation-list {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-actions {
+    justify-content: stretch;
+  }
+
+  .next-button {
+    width: 100%;
   }
 }
 </style>

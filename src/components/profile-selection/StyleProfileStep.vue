@@ -1,11 +1,7 @@
 <template>
   <div class="step-content">
     <div class="profile-header">
-      <AppLogo
-        layout="icon"
-        :height="isMobile ? 52 : 64"
-        class="header-logo"
-      />
+      <AppLogo layout="icon" :height="isMobile ? 44 : 52" class="header-logo" />
       <div class="header-text">
         <h1 class="profile-title">What is your preferred style?</h1>
         <p class="profile-subtitle">
@@ -26,58 +22,66 @@
 
     <!-- General Purpose Block -->
     <div class="style-block">
-      <!-- <h3 class="section-title">Most Popular</h3>
-      <p class="section-subtitle">Recommended for most users</p> -->
-      <div class="general-grid general-grid-dual">
+      <div class="primary-grid">
         <div
-          class="category-card general-card"
+          class="opt-card primary-card"
           :class="{ selected: selectedProfiles.includes('general') }"
+          :style="{ '--accent': '#22c55e' }"
           @click="toggleGeneral()"
         >
-          <div class="category-icon">
-            <n-icon size="32">
-              <CameraOutline />
-            </n-icon>
+          <span class="opt-check">
+            <n-icon size="14"><CheckmarkOutline /></n-icon>
+          </span>
+          <div class="opt-icon">
+            <n-icon size="24"><CameraOutline /></n-icon>
           </div>
-          <h4 class="category-title">General Photography</h4>
-          <p class="category-description">
+          <div class="opt-head">
+            <h4 class="opt-title">General Photography</h4>
+            <span class="opt-badge">Recommended</span>
+          </div>
+          <p class="opt-desc">
             For everyday photos, travel, and mixed collections. Our engine
             adapts to any type of photography without requiring specific
             categorization.
           </p>
-          <div class="mode-badge recommended">Recommended</div>
         </div>
 
         <div
-          class="category-card general-card commercial-card"
+          class="opt-card primary-card"
           :class="{ selected: selectedProfiles.includes('commercial') }"
+          :style="{ '--accent': '#a855f7' }"
           @click="toggleCommercial()"
         >
-          <div class="category-icon">
-            <n-icon size="32">
-              <BriefcaseOutline />
-            </n-icon>
+          <span class="opt-check">
+            <n-icon size="14"><CheckmarkOutline /></n-icon>
+          </span>
+          <div class="opt-icon">
+            <n-icon size="24"><BriefcaseOutline /></n-icon>
           </div>
-          <h4 class="category-title">Commercial Photography</h4>
-          <p class="category-description">
+          <div class="opt-head">
+            <h4 class="opt-title">Commercial Photography</h4>
+            <span class="opt-badge">Professional</span>
+          </div>
+          <p class="opt-desc">
             Optimized for advertising, stock, fashion, wedding, architecture,
-            and lifestyle work. The engine prioritizes visual polish, subject
-            clarity, and commercial intent.
+            and lifestyle work. Prioritizes visual polish, subject clarity, and
+            commercial intent.
           </p>
-          <div class="mode-badge commercial">Professional</div>
         </div>
       </div>
     </div>
 
     <!-- Professional Profiles Block -->
     <div class="style-block">
-      <h3 class="section-title">Advanced Profiles</h3>
-      <p class="section-subtitle">
-        For professional or dedicated photographers with a clear style focus
-      </p>
-      <div class="categories-grid">
+      <div class="section-head">
+        <h3 class="section-title">Advanced Profiles</h3>
+        <p class="section-subtitle">
+          For dedicated photographers with a clear style focus
+        </p>
+      </div>
+      <div class="advanced-grid">
         <div
-          class="category-card pro-card"
+          class="opt-card advanced-card"
           :class="{
             selected: selectedProfiles.includes('street-photography'),
             disabled:
@@ -85,23 +89,25 @@
               (selectedProfiles.length >= 2 &&
                 !selectedProfiles.includes('street-photography') &&
                 !selectedProfiles.includes('general')),
-            expanded: expandedProfile === 'street-photography',
           }"
+          :style="{ '--accent': '#2563eb' }"
           @click="toggleProfile('street-photography')"
         >
-          <div class="category-icon">
-            <n-icon size="32">
-              <WalkOutline />
-            </n-icon>
+          <span class="opt-check">
+            <n-icon size="12"><CheckmarkOutline /></n-icon>
+          </span>
+          <div class="opt-icon">
+            <n-icon size="20"><WalkOutline /></n-icon>
           </div>
-          <h4 class="category-title">Street Photography</h4>
-          <p class="category-description">
-            Capture life as it happens in urban environments
+          <h4 class="opt-title">Street Photography</h4>
+          <p class="opt-desc">
+            Candid moments and decisive timing — the unscripted poetry of
+            everyday life as it unfolds in the streets.
           </p>
         </div>
 
         <div
-          class="category-card pro-card"
+          class="opt-card advanced-card"
           :class="{
             selected: selectedProfiles.includes('documentary'),
             disabled:
@@ -109,23 +115,25 @@
               (selectedProfiles.length >= 2 &&
                 !selectedProfiles.includes('documentary') &&
                 !selectedProfiles.includes('general')),
-            expanded: expandedProfile === 'documentary',
           }"
+          :style="{ '--accent': '#06b6d4' }"
           @click="toggleProfile('documentary')"
         >
-          <div class="category-icon">
-            <n-icon size="32">
-              <BookOpen16Regular />
-            </n-icon>
+          <span class="opt-check">
+            <n-icon size="12"><CheckmarkOutline /></n-icon>
+          </span>
+          <div class="opt-icon">
+            <n-icon size="20"><BookOpen16Regular /></n-icon>
           </div>
-          <h4 class="category-title">Documentary Photography</h4>
-          <p class="category-description">
-            Tell stories and document real-world events
+          <h4 class="opt-title">Documentary Photography</h4>
+          <p class="opt-desc">
+            Narrative-driven images that document real people, places and events
+            with honesty and lasting context.
           </p>
         </div>
 
         <div
-          class="category-card pro-card"
+          class="opt-card advanced-card"
           :class="{
             selected: selectedProfiles.includes('artistic'),
             disabled:
@@ -133,43 +141,41 @@
               (selectedProfiles.length >= 2 &&
                 !selectedProfiles.includes('artistic') &&
                 !selectedProfiles.includes('general')),
-            expanded: expandedProfile === 'artistic',
           }"
+          :style="{ '--accent': '#ec4899' }"
           @click="toggleProfile('artistic')"
         >
-          <div class="category-icon">
-            <n-icon size="32">
-              <PaletteOutlined />
-            </n-icon>
+          <span class="opt-check">
+            <n-icon size="12"><CheckmarkOutline /></n-icon>
+          </span>
+          <div class="opt-icon">
+            <n-icon size="20"><PaletteOutlined /></n-icon>
           </div>
-          <h4 class="category-title">Artistic Photography</h4>
-          <p class="category-description">
-            Create expressive and creative visual art
+          <h4 class="opt-title">Artistic Photography</h4>
+          <p class="opt-desc">
+            Expressive, experimental work where concept, light and composition
+            come together as visual fine art.
           </p>
         </div>
       </div>
 
       <!-- Explanatory text based on selection -->
       <transition name="fade" mode="out-in">
-        <div v-if="currentExplanation" class="profile-explanation">
-          <div class="explanation-box">
-            <div class="explanation-icon">
-              <n-icon size="24" color="#2563eb">
-                <CheckmarkCircleOutline />
-              </n-icon>
-            </div>
-            <div class="explanation-content">
-              <h5>{{ currentExplanation.title }}</h5>
-              <p>{{ currentExplanation.description }}</p>
-              <ul class="explanation-list">
-                <li
-                  v-for="(point, index) in currentExplanation.points"
-                  :key="index"
-                >
-                  ✓ {{ point }}
-                </li>
-              </ul>
-            </div>
+        <div v-if="currentExplanation" class="explanation-box">
+          <div class="explanation-icon">
+            <n-icon size="18"><CheckmarkCircleOutline /></n-icon>
+          </div>
+          <div class="explanation-content">
+            <h5>{{ currentExplanation.title }}</h5>
+            <p>{{ currentExplanation.description }}</p>
+            <ul class="explanation-list">
+              <li
+                v-for="(point, index) in currentExplanation.points"
+                :key="index"
+              >
+                {{ point }}
+              </li>
+            </ul>
           </div>
         </div>
       </transition>
@@ -187,25 +193,21 @@
 
     <!-- Step 2 Actions -->
     <div class="profile-actions">
-      <div class="action-buttons">
-        <n-button size="large" @click="handleBack" class="back-button">
-          <template #icon>
-            <n-icon>
-              <ArrowBackOutline />
-            </n-icon>
-          </template>
-          Back
-        </n-button>
-        <n-button
-          type="primary"
-          size="large"
-          :disabled="selectedProfiles.length === 0"
-          @click="handleComplete"
-          class="complete-button"
-        >
-          Complete Setup
-        </n-button>
-      </div>
+      <n-button size="large" @click="handleBack" class="back-button" quaternary>
+        <template #icon>
+          <n-icon><ArrowBackOutline /></n-icon>
+        </template>
+        Back
+      </n-button>
+      <n-button
+        type="primary"
+        size="large"
+        :disabled="selectedProfiles.length === 0"
+        @click="handleComplete"
+        class="complete-button"
+      >
+        Complete Setup
+      </n-button>
     </div>
   </div>
 </template>
@@ -215,6 +217,7 @@ import { ref, watch, computed } from "vue";
 import {
   CameraOutline,
   CheckmarkCircleOutline,
+  CheckmarkOutline,
   ArrowBackOutline,
   WalkOutline,
   BriefcaseOutline,
@@ -398,6 +401,8 @@ const handleComplete = () => {
 <style scoped>
 .step-content {
   animation: fadeIn 0.3s ease;
+  max-width: 860px;
+  margin: 0 auto;
 }
 
 @keyframes fadeIn {
@@ -411,12 +416,13 @@ const handleComplete = () => {
   }
 }
 
+/* Header */
 .profile-header {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  margin-bottom: 32px;
+  gap: 14px;
+  margin-bottom: 28px;
 }
 
 .header-logo {
@@ -429,16 +435,16 @@ const handleComplete = () => {
 
 .profile-title {
   margin: 0 0 2px 0;
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
-  color: var(--text-secondary);
-  letter-spacing: -0.025em;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
 }
 
 .profile-subtitle {
   margin: 0;
-  font-size: 16px;
-  color: var(--text-primary);
+  font-size: 15px;
+  color: var(--text-secondary);
   font-weight: 400;
   display: inline-flex;
   align-items: center;
@@ -446,359 +452,379 @@ const handleComplete = () => {
 }
 
 .subtitle-info-icon {
-  color: var(--text-primary);
-  opacity: 0.6;
+  color: var(--text-secondary);
   cursor: pointer;
-  transition: opacity 0.2s ease;
+  transition: color 0.2s ease;
 }
 
 .subtitle-info-icon:hover {
-  opacity: 1;
+  color: var(--primary-color);
 }
 
-/* Style Blocks */
+/* Blocks */
 .style-block {
-  margin-bottom: 48px;
+  margin-bottom: 24px;
+}
+
+.style-block:last-of-type {
+  margin-bottom: 0;
+}
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.section-head::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-color);
 }
 
 .section-title {
-  margin: 0 0 4px 0;
-  font-size: 20px;
+  margin: 0;
+  font-size: 14px;
   font-weight: 600;
-  color: var(--text-secondary);
-  text-align: center;
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .section-subtitle {
-  margin: 0 0 20px 0;
-  font-size: 14px;
-  color: var(--text-primary);
-  text-align: center;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-secondary);
   font-weight: 400;
+  white-space: nowrap;
 }
 
 .selection-hint {
-  margin: 20px 0 0 0;
-  font-size: 13px;
-  color: var(--text-primary);
+  margin: 16px 0 0 0;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
   text-align: center;
-  font-style: italic;
 }
 
-/* General Grid */
-.general-grid {
-  max-width: 500px;
-  margin: 0 auto;
-}
-
-.general-grid-dual {
-  max-width: 760px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 16px;
-}
-
-.general-card {
-  background-color: var(--bg-surface);
-  border: 2px solid rgba(34, 197, 94, 0.35);
-  border-radius: 16px;
-  padding: 28px 32px;
-  text-align: center;
-  cursor: pointer;
+/* ===== Shared option card ===== */
+.opt-card {
+  --accent: var(--primary-color);
   position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.general-card:hover {
-  border-color: rgba(34, 197, 94, 0.6);
-}
-
-.general-card.selected {
-  border-color: #22c55e;
-  background-color: rgba(34, 197, 94, 0.1);
-  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.3);
-}
-
-.general-card .category-icon {
-  margin-bottom: 12px;
-  color: #22c55e;
-  background-color: rgba(34, 197, 94, 0.12);
-  border-radius: 12px;
-  padding: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.general-card.selected .category-icon {
-  background-color: rgba(34, 197, 94, 0.2);
-}
-
-.mode-badge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 4px 12px;
-  border-radius: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-top: 12px;
-}
-
-.mode-badge.recommended {
-  background-color: rgba(34, 197, 94, 0.2);
-  color: #22c55e;
-}
-
-.mode-badge.commercial {
-  background-color: rgba(168, 85, 247, 0.2);
-  color: #a855f7;
-}
-
-.commercial-card {
-  border-color: rgba(168, 85, 247, 0.35);
-}
-
-.commercial-card:hover {
-  border-color: rgba(168, 85, 247, 0.6) !important;
-}
-
-.commercial-card .category-icon {
-  color: #a855f7 !important;
-  background-color: rgba(168, 85, 247, 0.12) !important;
-}
-
-.commercial-card.selected {
-  border-color: #a855f7;
-  background-color: rgba(168, 85, 247, 0.1);
-  box-shadow: 0 4px 16px rgba(168, 85, 247, 0.3);
-}
-
-.commercial-card.selected .category-icon {
-  color: #a855f7 !important;
-  background-color: rgba(168, 85, 247, 0.2) !important;
-}
-
-/* Professional Categories Grid */
-.categories-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.category-card {
-  background-color: var(--bg-surface);
-  border: 2px solid rgba(37, 99, 235, 0.35);
-  border-radius: 12px;
-  padding: 24px;
-  text-align: center;
+  background-color: var(--bg-card);
+  border: 1.5px solid var(--border-color);
+  border-radius: 14px;
   cursor: pointer;
-  min-height: 140px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  transition:
+    border-color 0.25s ease,
+    box-shadow 0.25s ease,
+    background-color 0.25s ease;
 }
 
-.pro-card:hover:not(.disabled) {
-  border-color: rgba(37, 99, 235, 0.6);
+.opt-card:hover:not(.disabled) {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border-color));
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.14);
 }
 
-.pro-card.selected {
-  border-color: #2563eb;
-  background-color: rgba(37, 99, 235, 0.1);
-  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.3);
+.opt-card.selected {
+  border-color: var(--accent);
+  background-color: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
+  box-shadow:
+    inset 0 0 0 1px var(--accent),
+    0 8px 26px color-mix(in srgb, var(--accent) 26%, transparent);
 }
 
-.pro-card.disabled {
-  opacity: 0.5;
+.opt-card.disabled {
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
-.category-icon {
-  margin-bottom: 12px;
-  color: #2563eb;
-  background-color: rgba(37, 99, 235, 0.12);
-  border-radius: 10px;
-  padding: 8px;
+.opt-icon {
+  color: var(--accent);
+  background-color: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-radius: 11px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  transition: background-color 0.25s ease;
 }
 
-.pro-card.selected .category-icon {
-  color: #2563eb;
-  background-color: rgba(37, 99, 235, 0.22);
+.opt-card.selected .opt-icon {
+  background-color: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
-.category-title {
-  margin: 0 0 8px 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.category-description {
-  margin: 0;
-  font-size: 12px;
-  color: var(--text-primary);
-  line-height: 1.4;
-}
-
-/* Profile Explanation */
-.profile-explanation {
-  max-width: 700px;
-  margin: 24px auto 0;
-}
-
-.explanation-box {
-  background-color: rgba(44, 44, 50, 0.5);
-  border-radius: 12px;
-  padding: 24px;
+.opt-check {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background-color: var(--accent);
+  color: #fff;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: scale(0.5);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.opt-card.selected .opt-check {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.opt-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.25;
+}
+
+.opt-desc {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* ===== Primary cards ===== */
+.primary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 16px;
-  border-left: 4px solid #2563eb;
+}
+
+.primary-card {
+  padding: 18px 20px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 12px;
+}
+
+.primary-card .opt-icon {
+  grid-row: 1;
+  grid-column: 1;
+}
+
+.primary-card .opt-head {
+  grid-row: 1;
+  grid-column: 2;
+}
+
+.primary-card .opt-desc {
+  grid-column: 1 / -1;
+}
+
+.opt-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.opt-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--accent);
+  background-color: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+/* ===== Advanced cards ===== */
+.advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.advanced-card {
+  padding: 15px 16px 16px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 9px;
+}
+
+.advanced-card .opt-icon {
+  width: 40px;
+  height: 40px;
+  grid-row: 1;
+  grid-column: 1;
+}
+
+.advanced-card .opt-title {
+  grid-row: 1;
+  grid-column: 2;
+  font-size: 14.5px;
+  white-space: nowrap;
+}
+
+.advanced-card .opt-desc {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+/* ===== Explanation ===== */
+.explanation-box {
+  margin-top: 16px;
+  background-color: color-mix(in srgb, var(--primary-color) 6%, var(--bg-card));
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--primary-color);
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  gap: 14px;
 }
 
 .explanation-icon {
   flex-shrink: 0;
-  margin-top: 2px;
+  color: var(--primary-color);
+  margin-top: 1px;
 }
 
 .explanation-content h5 {
-  margin: 0 0 12px 0;
-  font-size: 14px;
+  margin: 0 0 6px 0;
+  font-size: 13.5px;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .explanation-content p {
-  margin: 0 0 16px 0;
-  font-size: 12px;
-  color: var(--text-primary);
-  line-height: 1.6;
+  margin: 0 0 10px 0;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
 }
 
 .explanation-list {
   list-style: none;
   padding: 0;
-  margin: 0 0 16px 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 18px;
 }
 
 .explanation-list li {
+  position: relative;
   font-size: 12px;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-  padding-left: 4px;
+  color: var(--text-secondary);
+  padding-left: 18px;
+  line-height: 1.4;
+}
+
+.explanation-list li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
 }
 
 /* Fade transition */
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.2s ease;
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
 }
 
-.fade-enter-from {
-  opacity: 0;
-}
-
+.fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+  transform: translateY(-6px);
 }
 
 /* Actions */
 .profile-actions {
   display: flex;
-  flex-direction: column;
+  justify-content: flex-end;
   align-items: center;
   gap: 12px;
-  margin-top: 40px;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 16px;
-  align-items: center;
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
 }
 
 .back-button {
-  height: 44px;
-  border-radius: 8px;
+  height: 42px;
+  border-radius: 10px;
   font-weight: 600;
   font-size: 14px;
-  padding: 0 24px;
+  padding: 0 20px;
 }
 
 .complete-button {
   min-width: 180px;
-  height: 44px;
-  border-radius: 8px;
+  height: 42px;
+  border-radius: 10px;
   font-weight: 600;
   font-size: 14px;
 }
 
-/* Responsive design */
+/* Responsive */
+@media (max-width: 880px) {
+  .advanced-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 @media (max-width: 768px) {
   .profile-header {
     gap: 12px;
+    margin-bottom: 24px;
   }
 
   .profile-title {
-    font-size: 24px;
+    font-size: 22px;
   }
 
-  .categories-grid {
+  .profile-subtitle {
+    font-size: 14px;
+  }
+
+  .primary-grid {
     grid-template-columns: 1fr;
-    gap: 12px;
   }
 
-  .category-card {
-    min-height: 120px;
-    padding: 20px;
+  .advanced-grid {
+    grid-template-columns: 1fr;
   }
 
-  .general-card {
-    padding: 24px 28px;
+  .section-subtitle {
+    display: none;
   }
 
-  .action-buttons {
-    flex-direction: column;
-    width: 100%;
+  .explanation-list {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-actions {
+    flex-direction: column-reverse;
   }
 
   .back-button,
   .complete-button {
     width: 100%;
-  }
-
-  .explanation-box {
-    flex-direction: column;
-    gap: 12px;
-  }
-}
-
-@media (max-width: 480px) {
-  .profile-title {
-    font-size: 22px;
-  }
-
-  .category-card {
-    min-height: 100px;
-    padding: 16px;
-  }
-
-  .general-card {
-    padding: 20px 24px;
-  }
-
-  .category-title {
-    font-size: 14px;
-  }
-
-  .category-description {
-    font-size: 11px;
   }
 }
 </style>

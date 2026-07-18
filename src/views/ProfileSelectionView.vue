@@ -52,7 +52,7 @@ const userStore = useUserStore();
 const currentStep = ref(1);
 
 // Step 1: App mode selection
-const selectedMode = ref<"web" | "lightroom" | null>(null);
+const selectedMode = ref<"web" | "lightroom" | null>("web");
 
 // Step 2: Profile selection
 const selectedProfiles = ref<string[]>([]);

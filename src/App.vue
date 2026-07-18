@@ -382,12 +382,16 @@ const showConfetti = ref(false);
 
 // Welcome Batch Modal — shown when user has 0 processed photos. Its feature
 // table needs room to be read at all, so it stays out of mobile; there the chat
-// welcome already greets an empty library.
+// welcome already greets an empty library. Disabled on desktop too for now
+// (kept in place, not removed): resolvePostAuthTarget already routes
+// empty-catalog users to /chat-lab directly, so this was just an extra overlay
+// on top of that, not the only path there.
 const welcomeBatchDismissed = ref(
   localStorage.getItem("welcome-batch-modal-dismissed") === "true",
 );
 const showWelcomeBatchModal = computed(() => {
   return (
+    false &&
     !isMobile.value &&
     isAppReady.value &&
     userStore.isAuthenticated &&
