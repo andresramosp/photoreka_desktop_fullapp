@@ -94,7 +94,7 @@ export default class PhotoManager {
           }
         : null,
       descriptions: {
-        context: p.descriptions?.context || '',
+        // context: p.descriptions?.context || '',
         visual_aspects: p.descriptions?.visual_aspects || {},
         artistic_scores: p.descriptions?.artistic_scores || {},
         EXIF: p.descriptions?.EXIF || {},
