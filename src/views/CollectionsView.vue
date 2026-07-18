@@ -83,6 +83,30 @@
 
           <!-- Sort controls (set view) -->
           <div class="sort-controls">
+            <div class="view-toggle">
+              <n-button
+                text
+                class="view-toggle-btn"
+                :class="{ 'is-active': viewMode === 'grid' }"
+                @click="setViewMode('grid')"
+                title="Grid view"
+              >
+                <template #icon
+                  ><n-icon size="18"><GridOutline /></n-icon
+                ></template>
+              </n-button>
+              <n-button
+                text
+                class="view-toggle-btn"
+                :class="{ 'is-active': viewMode === 'list' }"
+                @click="setViewMode('list')"
+                title="List view"
+              >
+                <template #icon
+                  ><n-icon size="18"><ReorderFourOutline /></n-icon
+                ></template>
+              </n-button>
+            </div>
             <n-select
               v-model:value="sortType"
               :options="sortOptions"
@@ -224,43 +248,89 @@
         </div>
       </div>
 
-      <div v-else class="card-grid">
-        <!-- <CreateCard
-          title="New Collection"
-          subtitle="Add a collection here"
-          @click="showCreateCollectionInSet"
-        /> -->
+      <div v-else :class="viewMode === 'list' ? 'card-list' : 'card-grid'">
+        <!-- List (tree) view -->
+        <template v-if="viewMode === 'list'">
+          <div class="list-header">
+            <span></span>
+            <span></span>
+            <span>Name</span>
+            <span class="list-col-items">Contents</span>
+            <span class="list-col-updated">Updated</span>
+          </div>
+          <template v-for="row in flatListRows" :key="row.key">
+            <CollectionSetCard
+              v-if="row.type === 'set'"
+              :item="row.item"
+              layout="list"
+              :depth="row.depth"
+              :has-children="row.hasChildren"
+              :expanded="row.expanded"
+              :photo-count="recursivePhotoCount(row.item.id)"
+              @toggle-expand="toggleExpand(row.item.id)"
+              @click="navigateToSet(row.item.id)"
+              @drop-collections="onDropCollectionsIntoSet"
+            />
+            <CollectionCard
+              v-else
+              :item="row.item"
+              type="collection"
+              layout="list"
+              :depth="row.depth"
+              :is-selected="collectionSelection.isSelected(row.item.id)"
+              :is-selection-mode="collectionSelection.isSelectionMode.value"
+              :selected-ids="collectionSelection.selectedCollectionIds.value"
+              @click="
+                (_, ev) =>
+                  onCollectionCardClick(row.item, ev, flatListCollections)
+              "
+              @select-toggle="
+                () =>
+                  collectionSelection.toggleSelectItem(
+                    row.item.id,
+                    flatListCollections.map((c) => c.id),
+                  )
+              "
+            />
+          </template>
+        </template>
 
-        <!-- Child sets -->
-        <CollectionSetCard
-          v-for="childSet in currentChildSets"
-          :key="`set-${childSet.id}`"
-          :item="childSet"
-          @click="navigateToSet(childSet.id)"
-          @drop-collections="onDropCollectionsIntoSet"
-        />
+        <!-- Grid view -->
+        <template v-else>
+          <!-- Child sets -->
+          <CollectionSetCard
+            v-for="childSet in currentChildSets"
+            :key="`set-${childSet.id}`"
+            :item="childSet"
+            layout="grid"
+            :photo-count="recursivePhotoCount(childSet.id)"
+            @click="navigateToSet(childSet.id)"
+            @drop-collections="onDropCollectionsIntoSet"
+          />
 
-        <!-- Collections in this set -->
-        <CollectionCard
-          v-for="collection in currentSetCollections"
-          :key="`col-${collection.id}`"
-          :item="collection"
-          type="collection"
-          :is-selected="collectionSelection.isSelected(collection.id)"
-          :is-selection-mode="collectionSelection.isSelectionMode.value"
-          :selected-ids="collectionSelection.selectedCollectionIds.value"
-          @click="
-            (_, ev) =>
-              onCollectionCardClick(collection, ev, currentSetCollections)
-          "
-          @select-toggle="
-            () =>
-              collectionSelection.toggleSelectItem(
-                collection.id,
-                currentSetCollections.map((c) => c.id),
-              )
-          "
-        />
+          <!-- Collections in this set -->
+          <CollectionCard
+            v-for="collection in currentSetCollections"
+            :key="`col-${collection.id}`"
+            :item="collection"
+            type="collection"
+            layout="grid"
+            :is-selected="collectionSelection.isSelected(collection.id)"
+            :is-selection-mode="collectionSelection.isSelectionMode.value"
+            :selected-ids="collectionSelection.selectedCollectionIds.value"
+            @click="
+              (_, ev) =>
+                onCollectionCardClick(collection, ev, currentSetCollections)
+            "
+            @select-toggle="
+              () =>
+                collectionSelection.toggleSelectItem(
+                  collection.id,
+                  currentSetCollections.map((c) => c.id),
+                )
+            "
+          />
+        </template>
       </div>
     </div>
 
@@ -295,6 +365,30 @@
               collectionSelection.selectedCollectionIds.value.length
             }})
           </n-button>
+          <div class="view-toggle">
+            <n-button
+              text
+              class="view-toggle-btn"
+              :class="{ 'is-active': viewMode === 'grid' }"
+              @click="setViewMode('grid')"
+              title="Grid view"
+            >
+              <template #icon
+                ><n-icon size="18"><GridOutline /></n-icon
+              ></template>
+            </n-button>
+            <n-button
+              text
+              class="view-toggle-btn"
+              :class="{ 'is-active': viewMode === 'list' }"
+              @click="setViewMode('list')"
+              title="List view"
+            >
+              <template #icon
+                ><n-icon size="18"><ReorderFourOutline /></n-icon
+              ></template>
+            </n-button>
+          </div>
           <n-select
             v-model:value="sortType"
             :options="sortOptions"
@@ -341,43 +435,98 @@
         />
       </div>
 
-      <div v-else-if="hasRootContent" class="card-grid">
-        <!-- Create New Collection card -->
-        <CreateCard
-          title="New Collection"
-          subtitle="Start organizing your photos"
-          @click="showCreateDialog"
-        />
+      <div
+        v-else-if="hasRootContent"
+        :class="viewMode === 'list' ? 'card-list' : 'card-grid'"
+      >
+        <!-- List (tree) view -->
+        <template v-if="viewMode === 'list'">
+          <div class="list-header">
+            <span></span>
+            <span></span>
+            <span>Name</span>
+            <span class="list-col-items">Contents</span>
+            <span class="list-col-updated">Updated</span>
+          </div>
+          <template v-for="row in flatListRows" :key="row.key">
+            <CollectionSetCard
+              v-if="row.type === 'set'"
+              :item="row.item"
+              layout="list"
+              :depth="row.depth"
+              :has-children="row.hasChildren"
+              :expanded="row.expanded"
+              :photo-count="recursivePhotoCount(row.item.id)"
+              @toggle-expand="toggleExpand(row.item.id)"
+              @click="navigateToSet(row.item.id)"
+              @drop-collections="onDropCollectionsIntoSet"
+            />
+            <CollectionCard
+              v-else
+              :item="row.item"
+              type="collection"
+              layout="list"
+              :depth="row.depth"
+              :is-selected="collectionSelection.isSelected(row.item.id)"
+              :is-selection-mode="collectionSelection.isSelectionMode.value"
+              :selected-ids="collectionSelection.selectedCollectionIds.value"
+              @click="
+                (_, ev) =>
+                  onCollectionCardClick(row.item, ev, flatListCollections)
+              "
+              @select-toggle="
+                () =>
+                  collectionSelection.toggleSelectItem(
+                    row.item.id,
+                    flatListCollections.map((c) => c.id),
+                  )
+              "
+            />
+          </template>
+        </template>
 
-        <!-- Root-level sets -->
-        <CollectionSetCard
-          v-for="set in rootSets"
-          :key="`set-${set.id}`"
-          :item="set"
-          @click="navigateToSet(set.id)"
-          @drop-collections="onDropCollectionsIntoSet"
-        />
+        <!-- Grid view -->
+        <template v-else>
+          <!-- Create New Collection card -->
+          <CreateCard
+            title="New Collection"
+            subtitle="Start organizing your photos"
+            @click="showCreateDialog"
+          />
 
-        <!-- Root-level collections (not inside any set) -->
-        <CollectionCard
-          v-for="collection in rootCollections"
-          :key="`col-${collection.id}`"
-          :item="collection"
-          type="collection"
-          :is-selected="collectionSelection.isSelected(collection.id)"
-          :is-selection-mode="collectionSelection.isSelectionMode.value"
-          :selected-ids="collectionSelection.selectedCollectionIds.value"
-          @click="
-            (_, ev) => onCollectionCardClick(collection, ev, rootCollections)
-          "
-          @select-toggle="
-            () =>
-              collectionSelection.toggleSelectItem(
-                collection.id,
-                rootCollections.map((c) => c.id),
-              )
-          "
-        />
+          <!-- Root-level sets -->
+          <CollectionSetCard
+            v-for="set in rootSets"
+            :key="`set-${set.id}`"
+            :item="set"
+            layout="grid"
+            :photo-count="recursivePhotoCount(set.id)"
+            @click="navigateToSet(set.id)"
+            @drop-collections="onDropCollectionsIntoSet"
+          />
+
+          <!-- Root-level collections (not inside any set) -->
+          <CollectionCard
+            v-for="collection in rootCollections"
+            :key="`col-${collection.id}`"
+            :item="collection"
+            type="collection"
+            layout="grid"
+            :is-selected="collectionSelection.isSelected(collection.id)"
+            :is-selection-mode="collectionSelection.isSelectionMode.value"
+            :selected-ids="collectionSelection.selectedCollectionIds.value"
+            @click="
+              (_, ev) => onCollectionCardClick(collection, ev, rootCollections)
+            "
+            @select-toggle="
+              () =>
+                collectionSelection.toggleSelectItem(
+                  collection.id,
+                  rootCollections.map((c) => c.id),
+                )
+            "
+          />
+        </template>
       </div>
 
       <div v-if="!hasRootContent" class="empty-collections-state">
@@ -585,6 +734,7 @@ import {
   CloseOutline,
   EllipsisVertical,
   GridOutline,
+  ReorderFourOutline,
   FolderOutline,
   FolderOpenOutline,
   ChevronForwardOutline,
@@ -623,6 +773,15 @@ const createSetDialogVisible = ref(false);
 const deleteSetConfirmationVisible = ref(false);
 const bulkDeleteConfirmationVisible = ref(false);
 const createSetParentId = ref(null);
+
+// View mode: grid (cards) | list
+const viewMode = ref(
+  localStorage.getItem("collectionsViewMode") === "list" ? "list" : "grid",
+);
+const setViewMode = (mode) => {
+  viewMode.value = mode;
+  localStorage.setItem("collectionsViewMode", mode);
+};
 
 // Sorting
 const sortType = ref(null); // null | 'name' | 'date'
@@ -740,6 +899,62 @@ const breadcrumb = computed(() =>
   viewingSet.value
     ? collectionsStore.getBreadcrumbFor(viewingSet.value.id)
     : [],
+);
+
+// Total photos in a set, counting collections in it and all descendant sets
+const recursivePhotoCount = (setId) =>
+  collectionsStore.recursivePhotoCountOf(setId);
+
+// ── Expandable tree (list view only) ────────────────────────────────────────
+const expandedSets = ref(new Set());
+const toggleExpand = (setId) => {
+  const key = String(setId);
+  const next = new Set(expandedSets.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  expandedSets.value = next;
+};
+
+// Flatten sets + collections into ordered rows honoring the expanded state
+const _buildRows = (sets, collections, depth) => {
+  const rows = [];
+  for (const s of sets) {
+    const childSets = _sortList(collectionsStore.childSetsOf(s.id), "name");
+    const childCols = _sortList(
+      collectionsStore.collectionsInSet(s.id),
+      "title",
+    );
+    const hasChildren = childSets.length + childCols.length > 0;
+    const expanded = expandedSets.value.has(String(s.id));
+    rows.push({
+      key: `set-${s.id}`,
+      type: "set",
+      item: s,
+      depth,
+      hasChildren,
+      expanded,
+    });
+    if (expanded && hasChildren) {
+      rows.push(..._buildRows(childSets, childCols, depth + 1));
+    }
+  }
+  for (const c of collections) {
+    rows.push({ key: `col-${c.id}`, type: "collection", item: c, depth });
+  }
+  return rows;
+};
+
+const flatListRows = computed(() =>
+  showSetView.value
+    ? _buildRows(currentChildSets.value, currentSetCollections.value, 0)
+    : _buildRows(rootSets.value, rootCollections.value, 0),
+);
+
+// Ordered collection items for range-select in the flattened list
+const flatListCollections = computed(() =>
+  flatListRows.value
+    .filter((r) => r.type === "collection")
+    .map((r) => r.item),
 );
 
 // Navigation
@@ -1133,6 +1348,72 @@ watch(
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
+}
+
+/* View mode toggle (grid / list) */
+.view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--border-radius-md, 8px);
+  background: var(--bg-container);
+  border: 1px solid var(--border-color);
+}
+
+.view-toggle-btn {
+  color: var(--text-tertiary);
+  border-radius: 6px;
+  padding: 4px 8px;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.view-toggle-btn:hover {
+  color: var(--text-secondary);
+}
+
+.view-toggle-btn.is-active {
+  color: var(--primary-color);
+  background: color-mix(
+    in srgb,
+    var(--primary-color, #6366f1) 14%,
+    transparent
+  );
+}
+
+/* List container for collections/sets (details view) */
+.card-list {
+  /* Shared column template — inherited by row cards via var(--list-cols) */
+  --list-cols: 24px 28px minmax(0, 1fr) 250px 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.list-header {
+  display: grid;
+  grid-template-columns: var(--list-cols);
+  align-items: center;
+  gap: 12px;
+  padding: 4px 12px 8px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+@media (max-width: 768px) {
+  .card-list {
+    --list-cols: 24px 28px minmax(0, 1fr) auto;
+  }
+  .list-header .list-col-updated {
+    display: none;
+  }
 }
 
 .sort-label {

@@ -81,6 +81,29 @@ export const useCollectionsStore = defineStore("collections", {
       );
     },
 
+    // Total photos in a set, counting collections in it and all descendant sets
+    recursivePhotoCountOf: (state) => {
+      const countFor = (setId) => {
+        let total = 0;
+        if (Array.isArray(state.collections)) {
+          for (const c of state.collections) {
+            if (String(c.setId) === String(setId)) {
+              total += (c.photos || []).length;
+            }
+          }
+        }
+        if (Array.isArray(state.collectionSets)) {
+          for (const s of state.collectionSets) {
+            if (String(s.parentSetId) === String(setId)) {
+              total += countFor(s.id);
+            }
+          }
+        }
+        return total;
+      };
+      return countFor;
+    },
+
     // Stats
     totalCollections: (state) =>
       Array.isArray(state.collections) ? state.collections.length : 0,

@@ -6,8 +6,12 @@
       'is-selected': isSelected,
       'is-selection-mode': isSelectionMode,
       'is-compact': compact,
+      'is-list': layout === 'list',
       'not-selectable': !selectable,
     }"
+    :style="
+      layout === 'list' ? { paddingLeft: 12 + depth * 20 + 'px' } : undefined
+    "
     :draggable="selectable ? 'true' : 'false'"
     @click="handleClick"
     @dragstart="onDragStart"
@@ -29,7 +33,37 @@
         />
       </svg>
     </button>
-    <div class="card-preview">
+
+    <!-- List (details) row -->
+    <template v-if="layout === 'list'">
+      <div class="list-icon">
+        <img
+          v-if="firstPhoto"
+          :src="firstPhoto.thumbnailUrl || firstPhoto.url"
+          :alt="item.title || item.name || 'Photo'"
+          class="photo-thumbnail"
+          loading="lazy"
+        />
+        <n-icon v-else size="20" color="var(--text-tertiary)">
+          <ListOutline v-if="type === 'series'" />
+          <ImagesOutline v-else />
+        </n-icon>
+      </div>
+      <div class="list-name" :title="item.name || item.title">
+        {{ item.name || item.title }}
+        <span v-if="type === 'portfolio'" class="list-tag">Portfolio</span>
+      </div>
+      <div class="list-col list-col-items">
+        {{ (item.photos || []).length }} photo{{
+          (item.photos || []).length !== 1 ? "s" : ""
+        }}
+      </div>
+      <div class="list-col list-col-updated">
+        {{ formatDate(item.updatedAt) }}
+      </div>
+    </template>
+
+    <div v-else class="card-preview">
       <span v-if="type === 'portfolio'" class="portfolio-badge">Portfolio</span>
       <!-- Series Preview: Sequential photos with numbers -->
       <div
@@ -89,7 +123,7 @@
         </n-icon>
       </div>
     </div>
-    <div class="card-info">
+    <div v-if="layout !== 'list'" class="card-info">
       <h3 class="card-title">
         {{ item.name || item.title }}
       </h3>
@@ -134,6 +168,8 @@ interface Props {
   selectable?: boolean;
   dragType?: string;
   itemLabel?: string;
+  layout?: "grid" | "list";
+  depth?: number;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -145,7 +181,11 @@ const props = withDefaults(defineProps<Props>(), {
   selectable: true,
   dragType: "collection",
   itemLabel: "collection",
+  layout: "grid",
+  depth: 0,
 });
+
+const firstPhoto = computed(() => (props.item.photos || [])[0] || null);
 
 const emit = defineEmits<{
   click: [item: Item, event: MouseEvent];
@@ -160,7 +200,7 @@ const handleCircleClick = () => {
   emit("select-toggle", props.item);
 };
 
-import { ref } from "vue";
+import { ref, computed } from "vue";
 const isDragging = ref(false);
 
 const onDragStart = (e: DragEvent) => {
@@ -207,6 +247,104 @@ const formatDate = (date: Date | string) => {
 .action-card {
   position: relative;
   transition: opacity 0.15s;
+}
+
+/* ── List (details) row ────────────────────────────────────── */
+.action-card.is-list {
+  display: grid;
+  grid-template-columns: var(--list-cols, 24px 28px minmax(0, 1fr) 250px 120px);
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  min-height: 40px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  text-align: left;
+}
+
+.action-card.is-list:hover {
+  background: color-mix(
+    in srgb,
+    var(--primary-color, #6366f1) 7%,
+    transparent
+  );
+}
+
+.action-card.is-list.is-selected {
+  outline: none;
+  background: color-mix(
+    in srgb,
+    var(--primary-color, #6366f1) 12%,
+    transparent
+  );
+}
+
+.action-card.is-list .list-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-container);
+}
+
+.action-card.is-list .list-icon .photo-thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.action-card.is-list .list-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-card.is-list .list-tag {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary-color);
+  border: 1px solid color-mix(in srgb, var(--primary-color) 40%, transparent);
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+
+.action-card.is-list .list-col {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Selection circle occupies its own leading column in list mode */
+.action-card.is-list .selection-circle {
+  position: static;
+  top: auto;
+  left: auto;
+  transform: none;
+  justify-self: center;
+}
+
+@media (max-width: 768px) {
+  .action-card.is-list {
+    grid-template-columns: 24px 28px minmax(0, 1fr) auto;
+  }
+  .action-card.is-list .list-col-updated {
+    display: none;
+  }
 }
 
 /* Selection circle */
