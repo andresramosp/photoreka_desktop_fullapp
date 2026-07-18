@@ -6,6 +6,13 @@ import { DateTime } from 'luxon'
 
 @inject()
 export default class CollectionsController {
+  private formatPhotoPreview(photo: Photo) {
+    return {
+      id: photo.id,
+      thumbnailUrl: photo.thumbnailUrl,
+    }
+  }
+
   /**
    * Obtener todas las colecciones del usuario autenticado
    */
@@ -17,13 +24,7 @@ export default class CollectionsController {
       const collections = await Collection.query()
         .where('userId', user.id)
         .preload('photos', (photosQuery) => {
-          photosQuery.select(
-            'id',
-            'name',
-            'originalFileName',
-            'thumbnailName',
-            'descriptions'
-          )
+          photosQuery.select('id', 'thumbnailName')
         })
         .orderBy('updatedAt', 'desc')
 
@@ -36,17 +37,7 @@ export default class CollectionsController {
         createdAt: collection.createdAt,
         updatedAt: collection.updatedAt,
         photosCount: collection.photos.length,
-        photos: collection.photos.map((photo) => ({
-          id: photo.id,
-          name: photo.name,
-          originalFileName: photo.originalFileName,
-          thumbnailUrl: photo.thumbnailUrl,
-          originalUrl: photo.originalUrl,
-          descriptions: {
-            visual_aspects: photo.descriptions?.visual_aspects || [],
-            artistic_scores: photo.descriptions?.artistic_scores || [],
-          },
-        })),
+        photos: collection.photos.map((photo) => this.formatPhotoPreview(photo)),
       }))
 
       return response.ok(formattedCollections)
@@ -65,9 +56,7 @@ export default class CollectionsController {
       const collection = await Collection.query()
         .where('id', collectionId)
         .where('userId', user.id)
-        .preload('photos', (photosQuery) =>
-          photosQuery.select('id', 'name', 'originalFileName', 'thumbnailName', 'title', 'descriptions')
-        )
+        .preload('photos', (photosQuery) => photosQuery.select('id', 'thumbnailName'))
         .first()
 
       if (!collection) {
@@ -81,15 +70,7 @@ export default class CollectionsController {
         setId: collection.setId,
         createdAt: collection.createdAt,
         updatedAt: collection.updatedAt,
-        photos: collection.photos.map((photo) => ({
-          id: photo.id,
-          name: photo.name,
-          originalFileName: photo.originalFileName,
-          thumbnailUrl: photo.thumbnailUrl,
-          originalUrl: photo.originalUrl,
-          title: photo.title,
-          descriptions: photo.descriptions,
-        })),
+        photos: collection.photos.map((photo) => this.formatPhotoPreview(photo)),
       }
 
       return response.ok(formattedCollection)
@@ -146,7 +127,9 @@ export default class CollectionsController {
       }
 
       // Cargar la colección con sus fotos para devolverla
-      await collection.load('photos')
+      await collection.load('photos', (photosQuery) => {
+        photosQuery.select('id', 'thumbnailName')
+      })
 
       const formattedCollection = {
         id: collection.id,
@@ -155,13 +138,7 @@ export default class CollectionsController {
         setId: collection.setId,
         createdAt: collection.createdAt,
         updatedAt: collection.updatedAt,
-        photos: collection.photos.map((photo) => ({
-          id: photo.id,
-          name: photo.name,
-          originalFileName: photo.originalFileName,
-          thumbnailUrl: photo.thumbnailUrl,
-          originalUrl: photo.originalUrl,
-        })),
+        photos: collection.photos.map((photo) => this.formatPhotoPreview(photo)),
       }
 
       return response.created(formattedCollection)
