@@ -328,6 +328,48 @@
               />
             </div>
           </div>
+
+          <!-- Timeline -->
+          <div class="filter-item">
+            <div
+              class="filter-sub-toggle"
+              @click="showTimeline = !showTimeline"
+            >
+              <span class="filter-item-label">Timeline</span>
+              <div style="display: flex; align-items: center; gap: 6px">
+                <button
+                  v-if="timelinePlayhead !== null"
+                  class="clear-filter-btn"
+                  title="Clear timeline"
+                  @click.stop="clearTimeline"
+                >
+                  <n-icon size="11" color="var(--text-secondary)">
+                    <CloseOutlined />
+                  </n-icon>
+                </button>
+                <n-icon
+                  size="12"
+                  class="toggle-icon"
+                  color="var(--icon-secondary)"
+                  :class="{ rotated: showTimeline }"
+                >
+                  <svg viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+                    />
+                  </svg>
+                </n-icon>
+              </div>
+            </div>
+            <div v-if="showTimeline" class="timeline-container">
+              <WorldMapTimelineFilter
+                :photos="timelinePhotos"
+                :model-value="timelinePlayhead"
+                @update:model-value="handleTimelinePlayheadChange"
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -592,12 +634,12 @@
                 >
                   <template #empty>
                     <div
-                  style="
-                    padding: 8px;
-                    color: var(--text-secondary);
-                    font-size: 12px;
-                  "
-                >
+                      style="
+                        padding: 8px;
+                        color: var(--text-secondary);
+                        font-size: 12px;
+                      "
+                    >
                       No visual aspects found
                     </div>
                   </template>
@@ -707,6 +749,48 @@
                   />
                 </div>
               </div>
+
+              <!-- Timeline -->
+              <div class="filter-item">
+                <div
+                  class="filter-sub-toggle"
+                  @click="showTimeline = !showTimeline"
+                >
+                  <span class="filter-item-label">Timeline</span>
+                  <div style="display: flex; align-items: center; gap: 6px">
+                    <button
+                      v-if="timelinePlayhead !== null"
+                      class="clear-filter-btn"
+                      title="Clear timeline"
+                      @click.stop="clearTimeline"
+                    >
+                      <n-icon size="11" color="var(--text-secondary)">
+                        <CloseOutlined />
+                      </n-icon>
+                    </button>
+                    <n-icon
+                      size="12"
+                      class="toggle-icon"
+                      color="var(--icon-secondary)"
+                      :class="{ rotated: showTimeline }"
+                    >
+                      <svg viewBox="0 0 24 24">
+                        <path
+                          fill="currentColor"
+                          d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+                        />
+                      </svg>
+                    </n-icon>
+                  </div>
+                </div>
+                <div v-if="showTimeline" class="timeline-container">
+                  <WorldMapTimelineFilter
+                    :photos="timelinePhotos"
+                    :model-value="timelinePlayhead"
+                    @update:model-value="handleTimelinePlayheadChange"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -781,6 +865,7 @@ import {
 } from "@vicons/antd";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
+import WorldMapTimelineFilter from "@/components/world-map/WorldMapTimelineFilter.vue";
 import ScoreOperatorSlider from "@/components/controls/ScoreOperatorSlider.vue";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useSearchStore } from "@/stores/searchStore.js";
@@ -800,7 +885,9 @@ const props = defineProps<{
   selectedVisualAspects: string[];
   artisticScoreFilters: Record<string, any>;
   timeRangeFilter: [number, number] | null;
+  timelinePlayhead: number | null;
   processedPhotos: any[];
+  timelinePhotos: any[];
 }>();
 
 const emit = defineEmits<{
@@ -809,6 +896,7 @@ const emit = defineEmits<{
   "update:selectedVisualAspects": [value: string[]];
   "update:artisticScoreFilters": [value: Record<string, any>];
   "update:timeRangeFilter": [value: [number, number] | null];
+  "update:timelinePlayhead": [value: number | null];
 }>();
 
 // ── Internal UI state ────────────────────────────────────────────────────────
@@ -820,6 +908,7 @@ const showNavigationControls = ref(false);
 const showSearchFilters = ref(false);
 const showArtisticScores = ref(false);
 const showTimeRange = ref(false);
+const showTimeline = ref(false);
 const visualAspectsDropdownShow = ref(false);
 const localArtisticScoreFilters = ref<Record<string, any>>({
   ...props.artisticScoreFilters,
@@ -897,6 +986,14 @@ function clearTimeRange() {
   emit("update:timeRangeFilter", null);
 }
 
+function handleTimelinePlayheadChange(timestamp: number | null) {
+  emit("update:timelinePlayhead", timestamp);
+}
+
+function clearTimeline() {
+  emit("update:timelinePlayhead", null);
+}
+
 // ── Computed ─────────────────────────────────────────────────────────────────
 
 const granularityEnabled = computed(() =>
@@ -908,6 +1005,7 @@ const searchFiltersActiveCount = computed(() => {
   if (props.selectedVisualAspects.length > 0) count++;
   if (Object.keys(localArtisticScoreFilters.value).length > 0) count++;
   if (props.timeRangeFilter !== null) count++;
+  if (props.timelinePlayhead !== null) count++;
   return count;
 });
 
@@ -1511,7 +1609,8 @@ const treeSelectOptions = computed(() =>
   margin-bottom: 4px;
 }
 
-.time-range-container {
+.time-range-container,
+.timeline-container {
   animation: slideDown 0.2s ease-out;
 }
 </style>

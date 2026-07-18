@@ -138,7 +138,9 @@
       v-model:selected-visual-aspects="selectedVisualAspects"
       v-model:artistic-score-filters="artisticScoreFilters"
       v-model:time-range-filter="timeRangeFilter"
+      v-model:timeline-playhead="timelinePlayhead"
       :processed-photos="photosWithGps"
+      :timeline-photos="timelineCandidatePhotos"
     />
 
     <!-- Photo Info Dialog -->
@@ -561,6 +563,7 @@ const granularityFilter = ref<GranularityFilter>([
 const selectedVisualAspects = ref<string[]>([]);
 const artisticScoreFilters = ref<Record<string, any>>({});
 const timeRangeFilter = ref<[number, number] | null>(null);
+const timelinePlayhead = ref<number | null>(null);
 
 // Visual aspects category map for fast lookup during filtering
 const visualAspectCategoryMap = (() => {
@@ -665,104 +668,162 @@ const photosWithoutGps = computed(() => {
   return allPhotos.filter((photo) => !extractGpsCoordinates(photo));
 });
 
-// Filtered view of photosWithGps based on confidence + granularity filters
-const filteredPhotosWithGps = computed<PhotoWithGps[]>(() => {
-  return photosWithGps.value.filter((photo) => {
-    const exif = (photo.descriptions?.EXIF ?? {}) as Record<string, any>;
-    const aiInference = exif.aiLocationInference ?? null;
-    const isRealGps = !aiInference;
-    const reliability: string | null = aiInference?.reliability ?? null;
-    // Granularity: FK row is source of truth for new AI photos; fall back to legacy EXIF
-    const granularity: string | null =
-      (photo as any).inferredLocation?.granularity ??
-      aiInference?.geocodeGranularity ??
-      null;
+function getPhotoTakenTimestamp(photo: PhotoWithGps): number | null {
+  const dateTaken =
+    photo.descriptions?.EXIF?.dateTaken ?? (photo as any).dateTaken;
+  if (!dateTaken) return null;
 
-    // --- Confidence filter (multi-select: photo passes if it matches any selected tier) ---
-    if (isRealGps) {
-      if (!confidenceFilter.value.includes("gps")) return false;
-    } else {
-      const matchesConfidence =
-        (reliability === "very_likely" &&
-          confidenceFilter.value.includes("very_likely")) ||
-        (reliability === "likely" &&
-          confidenceFilter.value.includes("likely")) ||
-        (reliability === "uncertain" &&
-          confidenceFilter.value.includes("uncertain"));
-      if (!matchesConfidence) return false;
-    }
+  const timestamp = new Date(dateTaken).getTime();
+  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
+}
 
-    // --- Granularity filter (real GPS and proximity-located photos always pass) ---
-    if (!isRealGps && granularity !== null) {
-      const matchesGranularity = granularityFilter.value.includes(
-        granularity as GranularityLevel,
-      );
-      if (!matchesGranularity) return false;
-    }
+function getDayTimestampRange(timestamp: number): [number, number] {
+  const date = new Date(timestamp);
+  const start = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+  ).getTime();
+  return [start, start + 24 * 60 * 60 * 1000 - 1];
+}
 
-    // --- Visual aspects filter ---
-    if (selectedVisualAspects.value.length > 0) {
-      const visualAspects = photo.descriptions?.visual_aspects;
-      if (!visualAspects) return false;
-      if (Array.isArray(visualAspects)) {
-        if (!selectedVisualAspects.value.some((a) => visualAspects.includes(a)))
-          return false;
-      } else if (typeof visualAspects === "object") {
-        const selectedByCategory = new Map<string, string[]>();
-        selectedVisualAspects.value.forEach((aspect) => {
-          const category = visualAspectCategoryMap.get(aspect);
-          if (!category) return;
-          if (!selectedByCategory.has(category))
-            selectedByCategory.set(category, []);
-          selectedByCategory.get(category)!.push(aspect);
-        });
-        if (selectedByCategory.size === 0) return false;
-        const passes = Array.from(selectedByCategory.entries()).every(
-          ([category, aspects]) => {
-            const photoAspects = (visualAspects as any)[category];
-            return (
-              Array.isArray(photoAspects) &&
-              aspects.some((a) => photoAspects.includes(a))
-            );
-          },
-        );
-        if (!passes) return false;
-      } else {
+const timelineActiveDayRange = computed<[number, number] | null>(() => {
+  if (timelinePlayhead.value === null) return null;
+  return getDayTimestampRange(timelinePlayhead.value);
+});
+
+function photoPassesActiveMapFilters(
+  photo: PhotoWithGps,
+  options: { includeTimeline?: boolean } = {},
+): boolean {
+  const includeTimeline = options.includeTimeline ?? true;
+  const exif = (photo.descriptions?.EXIF ?? {}) as Record<string, any>;
+  const aiInference = exif.aiLocationInference ?? null;
+  const isRealGps = !aiInference;
+  const reliability: string | null = aiInference?.reliability ?? null;
+  // Granularity: FK row is source of truth for new AI photos; fall back to legacy EXIF
+  const granularity: string | null =
+    (photo as any).inferredLocation?.granularity ??
+    aiInference?.geocodeGranularity ??
+    null;
+
+  // --- Confidence filter (multi-select: photo passes if it matches any selected tier) ---
+  if (isRealGps) {
+    if (!confidenceFilter.value.includes("gps")) return false;
+  } else {
+    const matchesConfidence =
+      (reliability === "very_likely" &&
+        confidenceFilter.value.includes("very_likely")) ||
+      (reliability === "likely" && confidenceFilter.value.includes("likely")) ||
+      (reliability === "uncertain" &&
+        confidenceFilter.value.includes("uncertain"));
+    if (!matchesConfidence) return false;
+  }
+
+  // --- Granularity filter (real GPS and proximity-located photos always pass) ---
+  if (!isRealGps && granularity !== null) {
+    const matchesGranularity = granularityFilter.value.includes(
+      granularity as GranularityLevel,
+    );
+    if (!matchesGranularity) return false;
+  }
+
+  // --- Visual aspects filter ---
+  if (selectedVisualAspects.value.length > 0) {
+    const visualAspects = photo.descriptions?.visual_aspects;
+    if (!visualAspects) return false;
+    if (Array.isArray(visualAspects)) {
+      if (!selectedVisualAspects.value.some((a) => visualAspects.includes(a)))
         return false;
-      }
-    }
-
-    // --- Artistic score filters ---
-    if (Object.keys(artisticScoreFilters.value).length > 0) {
-      const scores = (photo.descriptions?.artistic_scores ?? {}) as Record<
-        string,
-        number
-      >;
-      const passes = Object.entries(artisticScoreFilters.value).every(
-        ([key, filterVal]: [string, any]) => {
-          const score = scores[key];
-          if (score === undefined) return false;
-          const value =
-            typeof filterVal === "object" ? filterVal.value : filterVal;
-          const operator =
-            typeof filterVal === "object" ? (filterVal.operator ?? ">=") : ">=";
-          return operator === ">=" ? score >= value : score <= value;
+    } else if (typeof visualAspects === "object") {
+      const selectedByCategory = new Map<string, string[]>();
+      selectedVisualAspects.value.forEach((aspect) => {
+        const category = visualAspectCategoryMap.get(aspect);
+        if (!category) return;
+        if (!selectedByCategory.has(category))
+          selectedByCategory.set(category, []);
+        selectedByCategory.get(category)!.push(aspect);
+      });
+      if (selectedByCategory.size === 0) return false;
+      const passes = Array.from(selectedByCategory.entries()).every(
+        ([category, aspects]) => {
+          const photoAspects = (visualAspects as any)[category];
+          return (
+            Array.isArray(photoAspects) &&
+            aspects.some((a) => photoAspects.includes(a))
+          );
         },
       );
       if (!passes) return false;
+    } else {
+      return false;
     }
+  }
 
-    // --- Time range filter ---
-    if (timeRangeFilter.value !== null) {
-      const [minDate, maxDate] = timeRangeFilter.value;
-      const ts = new Date(
-        photo.descriptions?.EXIF?.dateTaken ?? (photo as any).dateTaken,
-      ).getTime();
-      if (isNaN(ts) || ts < minDate || ts > maxDate) return false;
+  // --- Artistic score filters ---
+  if (Object.keys(artisticScoreFilters.value).length > 0) {
+    const scores = (photo.descriptions?.artistic_scores ?? {}) as Record<
+      string,
+      number
+    >;
+    const passes = Object.entries(artisticScoreFilters.value).every(
+      ([key, filterVal]: [string, any]) => {
+        const score = scores[key];
+        if (score === undefined) return false;
+        const value =
+          typeof filterVal === "object" ? filterVal.value : filterVal;
+        const operator =
+          typeof filterVal === "object" ? (filterVal.operator ?? ">=") : ">=";
+        return operator === ">=" ? score >= value : score <= value;
+      },
+    );
+    if (!passes) return false;
+  }
+
+  // --- Time range filter ---
+  if (timeRangeFilter.value !== null) {
+    const [minDate, maxDate] = timeRangeFilter.value;
+    const timestamp = getPhotoTakenTimestamp(photo);
+    if (timestamp === null || timestamp < minDate || timestamp > maxDate) {
+      return false;
     }
+  }
 
-    return true;
-  });
+  // --- Timeline playhead filter ---
+  if (includeTimeline && timelineActiveDayRange.value !== null) {
+    const [dayStart, dayEnd] = timelineActiveDayRange.value;
+    const timestamp = getPhotoTakenTimestamp(photo);
+    if (timestamp === null || timestamp < dayStart || timestamp > dayEnd) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// Filtered view of photosWithGps based on active map filters
+const filteredPhotosWithGps = computed<PhotoWithGps[]>(() => {
+  return photosWithGps.value.filter((photo) =>
+    photoPassesActiveMapFilters(photo),
+  );
+});
+
+const timelineCandidatePhotos = computed<PhotoWithGps[]>(() => {
+  return photosWithGps.value.filter((photo) =>
+    photoPassesActiveMapFilters(photo, { includeTimeline: false }),
+  );
+});
+
+const currentTimelinePhotoIds = computed<Set<string | number>>(() => {
+  if (timelinePlayhead.value === null) return new Set();
+
+  return new Set(
+    timelineCandidatePhotos.value
+      .filter(
+        (photo) => getPhotoTakenTimestamp(photo) === timelinePlayhead.value,
+      )
+      .map((photo) => photo.id),
+  );
 });
 
 const activeFiltersCount = computed(
@@ -1169,12 +1230,14 @@ function getGranularityMarkerClass(photo: PhotoWithGps): string {
 function createPhotoMarkerIcon(photo: PhotoWithGps): L.DivIcon {
   const isNew = newlyLocatedPhotoIds.value.has(photo.id);
   const isCorrected = correctedPhotoIds.value.has(photo.id);
+  const isTimelineCurrent = currentTimelinePhotoIds.value.has(photo.id);
   const granularityClass = getGranularityMarkerClass(photo);
   const classes = [
     "photo-single-marker",
     granularityClass,
     isNew ? "photo-single-marker--new" : "",
     isCorrected ? "photo-single-marker--corrected" : "",
+    isTimelineCurrent ? "photo-single-marker--timeline-current" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -1233,6 +1296,12 @@ function isSelectedMarker(marker: MapPhotoMarker): boolean {
   return marker.photos.some((photo) => selectedIds.has(photo.id));
 }
 
+function isTimelineCurrentMarker(marker: MapPhotoMarker): boolean {
+  const currentIds = currentTimelinePhotoIds.value;
+  if ("photo" in marker) return currentIds.has(marker.photo.id);
+  return marker.photos.some((photo) => currentIds.has(photo.id));
+}
+
 function createClusterTileMarkup(markers: MapPhotoMarker[]): string {
   const photos = markers
     .slice(0, 4)
@@ -1259,10 +1328,12 @@ function createPhotoClusterIcon(cluster: L.MarkerCluster): L.DivIcon {
   const size = getClusterIconSize(count);
   const hasNew = markers.some(isNewMarker);
   const hasSelected = markers.some(isSelectedMarker);
+  const hasTimelineCurrent = markers.some(isTimelineCurrentMarker);
   const badgeClass = [
     "photo-cluster-count",
     hasNew ? "photo-cluster-count--new" : "",
     hasSelected ? "photo-cluster-count--selected" : "",
+    hasTimelineCurrent ? "photo-cluster-count--timeline-current" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -1270,6 +1341,7 @@ function createPhotoClusterIcon(cluster: L.MarkerCluster): L.DivIcon {
     "photo-cluster-mosaic",
     hasNew ? "photo-cluster-mosaic--new" : "",
     hasSelected ? "photo-cluster-mosaic--selected" : "",
+    hasTimelineCurrent ? "photo-cluster-mosaic--timeline-current" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -1410,9 +1482,18 @@ function updateExistingMarkerIcons() {
     if (!iconEl) return;
     const isNew = newlyLocatedPhotoIds.value.has(id);
     const isCorrected = correctedPhotoIds.value.has(id);
+    const isTimelineCurrent = currentTimelinePhotoIds.value.has(id);
     iconEl.classList.toggle("photo-single-marker--new", isNew);
     iconEl.classList.toggle("photo-single-marker--corrected", isCorrected);
+    iconEl.classList.toggle(
+      "photo-single-marker--timeline-current",
+      isTimelineCurrent,
+    );
   });
+
+  if (markerClusterLayer.value) {
+    (markerClusterLayer.value as any).refreshClusters?.();
+  }
 }
 
 function refreshPhotoMarkers(fullReset = false) {
@@ -1963,6 +2044,7 @@ watch(
     selectedVisualAspects,
     artisticScoreFilters,
     timeRangeFilter,
+    timelinePlayhead,
   ],
   () => {
     if (!hasLoadedInitialPhotos.value) return;
@@ -2273,6 +2355,19 @@ onUnmounted(() => {
     0 0 0 1px var(--accent-color);
 }
 
+:deep(.photo-single-marker--timeline-current) {
+  border-color: #f97316 !important;
+  transform: scale(1.16);
+  box-shadow:
+    0 8px 24px rgba(18, 24, 38, 0.38),
+    0 0 0 4px rgba(249, 115, 22, 0.9),
+    0 0 0 10px rgba(249, 115, 22, 0.22) !important;
+}
+
+:deep(.photo-single-marker--timeline-current:hover) {
+  transform: scale(1.24);
+}
+
 /* Granularity-based border colors for individual photo markers */
 /* place → green (precise) | city → blue (medium) | region/country → amber (approximate) */
 :deep(.photo-single-marker--place) {
@@ -2459,6 +2554,19 @@ onUnmounted(() => {
   box-shadow:
     0 7px 22px rgba(18, 24, 38, 0.32),
     0 0 0 1px var(--accent-color);
+}
+
+:deep(.photo-cluster-mosaic--timeline-current) {
+  border-color: #f97316;
+  box-shadow:
+    0 7px 22px rgba(18, 24, 38, 0.32),
+    0 0 0 4px rgba(249, 115, 22, 0.9),
+    0 0 0 10px rgba(249, 115, 22, 0.22);
+}
+
+:deep(.photo-cluster-count--timeline-current) {
+  background: #f97316;
+  color: #fff;
 }
 
 /* Hide the center cluster icon while spiderfied (opacity is set via JS on the
