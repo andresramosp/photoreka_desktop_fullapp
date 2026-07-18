@@ -43,11 +43,7 @@ export function usePhotoUpload() {
   });
 
   // Función principal para procesar cualquier tipo de fuente de foto
-  async function processPhotoSource(
-    source,
-    srcType = "local",
-    originalName = null,
-  ) {
+  async function processPhotoSource(source, srcType = "local", options = {}) {
     let file;
     let fileName;
 
@@ -88,17 +84,33 @@ export function usePhotoUpload() {
       resizeImage(file, UPLOAD_THUMB_MAX_WIDTH, UPLOAD_THUMB_MAX_SIZE_BYTES),
     ]);
 
+    // Construir el objeto `source` que el backend guarda tal cual en
+    // descriptions.source. Para fuentes locales, si se pide replicar la
+    // estructura de carpetas, adjuntamos folderPath (segmentos de
+    // webkitRelativePath sin el nombre de archivo). LightroomFolderMirrorService
+    // lo lee luego para materializar una colección por carpeta.
+    let sourcePayload;
+    if (srcType === "google") {
+      sourcePayload = { type: "google" };
+    } else if (srcType === "dropbox") {
+      sourcePayload = { type: "dropbox" };
+    } else {
+      sourcePayload = { type: "local" };
+      if (options.mirrorFolders && file?.webkitRelativePath) {
+        const folderPath = file.webkitRelativePath
+          .split("/")
+          .filter(Boolean)
+          .slice(0, -1); // drop the filename, keep the folder hierarchy
+        if (folderPath.length > 0) sourcePayload.folderPath = folderPath;
+      }
+    }
+
     // Llamar al endpoint unificado
     const endpoint = "/api/catalog/uploadPhoto";
     const payload = {
       fileType: resizedBlob.type,
       originalName: fileName,
-      source:
-        srcType === "google"
-          ? { type: "google" }
-          : srcType === "dropbox"
-            ? { type: "dropbox" }
-            : { type: "local" },
+      source: sourcePayload,
       exifData: exifData, // Incluir datos EXIF básicos
     };
 
@@ -259,7 +271,7 @@ export function usePhotoUpload() {
   }
 
   // Función principal para manejar el upload con progreso y errores
-  async function handleUploadFlow(sources, srcType = "local") {
+  async function handleUploadFlow(sources, srcType = "local", options = {}) {
     if (sources.length === 0) return;
 
     // Validar límites antes de iniciar la subida
@@ -300,7 +312,7 @@ export function usePhotoUpload() {
       // Ambos tipos usan el mismo flujo individual con pLimit
       const uploadPromises = sources.map((source) =>
         limit(() =>
-          processPhotoSource(source, srcType)
+          processPhotoSource(source, srcType, options)
             .then((photo) => {
               if (photo) photosToUpload.push(photo);
             })

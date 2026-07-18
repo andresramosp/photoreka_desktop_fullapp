@@ -18,7 +18,9 @@
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")",
       "Bash(npx vite *)",
       "Bash(npx eslint *)",
-      "PowerShell(npx vue-tsc --noEmit -p tsconfig.json 2>&1)"
+      "PowerShell(npx vue-tsc --noEmit -p tsconfig.json 2>&1)",
+      "Bash(cd \"c:/Users/andre/Desktop/Photoreka/App\" && ls -d */ && echo \"---\" && find . -maxdepth 3 -name \"lightroom_folder_mirror_service.ts\" 2>/dev/null)",
+      "Read(//c/Users/andre/Desktop/Photoreka/App/**)"
     ]
   }
 }

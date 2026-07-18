@@ -35,6 +35,123 @@
       </template>
     </n-modal>
 
+    <!-- Multi-folder review modal -->
+    <n-modal
+      v-model:show="showFolderReviewModal"
+      :style="{ width: '520px', maxWidth: '95vw' }"
+    >
+      <n-card
+        :bordered="false"
+        role="dialog"
+        aria-modal="true"
+        class="folder-review-card"
+      >
+        <template #header>
+          <div class="folder-review-header">
+            <n-icon size="20" color="var(--primary-color)">
+              <FolderOutline />
+            </n-icon>
+            <span>Review folders to import</span>
+          </div>
+        </template>
+        <template #header-extra>
+          <n-button text @click="cancelFolderReview" aria-label="Close">
+            <n-icon size="18" color="var(--text-secondary)">
+              <CloseOutline />
+            </n-icon>
+          </n-button>
+        </template>
+
+        <div class="folder-review-body">
+          <p class="folder-review-summary">
+            <strong>{{ stagedTotalCount }}</strong> photo{{
+              stagedTotalCount !== 1 ? "s" : ""
+            }}
+            across
+            <strong>{{ stagedFolderGroups.length }}</strong> folder{{
+              stagedFolderGroups.length !== 1 ? "s" : ""
+            }}
+          </p>
+
+          <div class="folder-review-list">
+            <div
+              v-for="group in stagedFolderGroups"
+              :key="group.id"
+              class="folder-review-item"
+            >
+              <div class="folder-review-item-info">
+                <n-icon size="16" color="var(--primary-color)">
+                  <FolderOutline />
+                </n-icon>
+                <span class="folder-review-item-name">{{ group.name }}</span>
+                <span class="folder-review-item-count"
+                  >{{ group.files.length }} photo{{
+                    group.files.length !== 1 ? "s" : ""
+                  }}</span
+                >
+              </div>
+              <n-button
+                text
+                @click="removeStagedFolder(group.id)"
+                aria-label="Remove folder"
+              >
+                <n-icon size="16" color="var(--text-secondary)">
+                  <CloseOutline />
+                </n-icon>
+              </n-button>
+            </div>
+          </div>
+
+          <n-button
+            dashed
+            block
+            class="folder-review-add"
+            @click="triggerFolderInput"
+          >
+            <template #icon>
+              <n-icon><FolderOutline /></n-icon>
+            </template>
+            Add another folder
+          </n-button>
+
+          <div class="folder-review-mirror">
+            <n-checkbox v-model:checked="mirrorFolderStructure">
+              Mirror folder structure
+            </n-checkbox>
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <button
+                  class="info-icon-btn"
+                  type="button"
+                  aria-label="About mirror folder structure"
+                >
+                  <n-icon size="14" color="var(--text-secondary)">
+                    <InformationCircleOutline />
+                  </n-icon>
+                </button>
+              </template>
+              Transform your local folders into Photoreka collections
+            </n-tooltip>
+          </div>
+        </div>
+
+        <template #footer>
+          <div class="folder-review-footer">
+            <n-button tertiary @click="cancelFolderReview">Cancel</n-button>
+            <n-button
+              type="primary"
+              :disabled="stagedTotalCount === 0"
+              @click="importStagedFolders"
+            >
+              Import {{ stagedTotalCount }} photo{{
+                stagedTotalCount !== 1 ? "s" : ""
+              }}
+            </n-button>
+          </div>
+        </template>
+      </n-card>
+    </n-modal>
+
     <n-modal
       v-model:show="showAnalysisQuotaWarningModal"
       :style="{ width: '550px', maxWidth: '95vw' }"
@@ -168,10 +285,7 @@
         <template #footer>
           <div class="analyze-confirm-footer">
             <n-button tertiary @click="closeAnalyzeDialog">Cancel</n-button>
-            <n-button
-              type="info"
-              :loading="isAnalyzing"
-              @click="confirmAnalyze"
+            <n-button type="info" :loading="isAnalyzing" @click="confirmAnalyze"
               >Start Analysis</n-button
             >
           </div>
@@ -356,7 +470,24 @@
           </div>
           <h4 class="import-card-title">{{ source.cardTitle }}</h4>
           <p class="import-card-description">{{ source.cardDescription }}</p>
-          <n-tag :type="source.tagType" size="large" round>
+          <div v-if="source.subActions" class="import-card-actions">
+            <n-button
+              v-for="sub in source.subActions"
+              :key="sub.key"
+              :type="source.tagType"
+              size="small"
+              round
+              secondary
+              class="import-card-action-tag"
+              @click.stop="handleSourceSelection(source.key, sub.action)"
+            >
+              <template v-if="sub.icon" #icon>
+                <n-icon :component="sub.icon" />
+              </template>
+              {{ sub.label }}
+            </n-button>
+          </div>
+          <n-tag v-else :type="source.tagType" size="large" round>
             {{ source.tagText }}
           </n-tag>
         </div>
@@ -368,22 +499,39 @@
       v-if="!isMaintenanceMode && lightboxPhotos.length > 0"
       class="mobile-upload-buttons"
     >
-      <n-button
-        v-for="source in orderedSources"
-        :key="source.key"
-        type="default"
-        size="small"
-        :disabled="source.disabled"
-        @click.stop="handleSourceSelection(source.key, source.action)"
-      >
-        <template #icon>
-          <UploadSourceIcon
-            :source="source"
-            :img-style="{ width: '1.1em', height: '1.1em' }"
-          />
-        </template>
-        {{ source.compactLabel }}
-      </n-button>
+      <template v-for="source in orderedSources" :key="source.key">
+        <n-dropdown
+          v-if="source.subActions"
+          trigger="click"
+          :options="subActionOptions(source)"
+          @select="(key) => handleSubActionSelect(source, key)"
+        >
+          <n-button type="default" size="small" :disabled="source.disabled">
+            <template #icon>
+              <UploadSourceIcon
+                :source="source"
+                :img-style="{ width: '1.1em', height: '1.1em' }"
+              />
+            </template>
+            {{ source.compactLabel }}
+          </n-button>
+        </n-dropdown>
+        <n-button
+          v-else
+          type="default"
+          size="small"
+          :disabled="source.disabled"
+          @click.stop="handleSourceSelection(source.key, source.action)"
+        >
+          <template #icon>
+            <UploadSourceIcon
+              :source="source"
+              :img-style="{ width: '1.1em', height: '1.1em' }"
+            />
+          </template>
+          {{ source.compactLabel }}
+        </n-button>
+      </template>
     </div>
 
     <!-- Uploaded Photos -->
@@ -404,18 +552,17 @@
       >
         <template v-if="!isMaintenanceMode" #row1-extra>
           <div class="compact-upload-buttons">
-            <n-tooltip
-              v-for="source in orderedSources"
-              :key="source.key"
-              trigger="hover"
-              placement="bottom"
-            >
-              <template #trigger>
+            <template v-for="source in orderedSources" :key="source.key">
+              <n-dropdown
+                v-if="source.subActions"
+                trigger="click"
+                :options="subActionOptions(source)"
+                @select="(key) => handleSubActionSelect(source, key)"
+              >
                 <n-button
                   type="default"
                   size="small"
                   :disabled="source.disabled"
-                  @click.stop="handleSourceSelection(source.key, source.action)"
                 >
                   <template #icon>
                     <UploadSourceIcon
@@ -431,28 +578,62 @@
                       : source.compactLabel
                   }}</span>
                 </n-button>
-              </template>
-              {{ source.compactLabel }}
-            </n-tooltip>
+              </n-dropdown>
+              <n-tooltip v-else trigger="hover" placement="bottom">
+                <template #trigger>
+                  <n-button
+                    type="default"
+                    size="small"
+                    :disabled="source.disabled"
+                    @click.stop="
+                      handleSourceSelection(source.key, source.action)
+                    "
+                  >
+                    <template #icon>
+                      <UploadSourceIcon
+                        :source="source"
+                        :img-style="{ width: '1em', height: '1em' }"
+                      />
+                    </template>
+                    <span class="button-label">{{
+                      source.disabled &&
+                      photosRemaining <= 0 &&
+                      source.key === "local"
+                        ? "Upload Limit Reached"
+                        : source.compactLabel
+                    }}</span>
+                  </n-button>
+                </template>
+                {{ source.compactLabel }}
+              </n-tooltip>
+            </template>
           </div>
         </template>
       </PhotosGrid>
     </div>
 
-    <!-- Hidden Input -->
+    <!-- Hidden Inputs: individual files vs whole folder (webkitdirectory) -->
     <input
       ref="fileInput"
       type="file"
       multiple
-      accept="image/*"
+      accept="image/jpeg,image/png,image/webp"
       style="display: none"
       @change="uploadLocalFiles"
+    />
+    <input
+      ref="folderInput"
+      type="file"
+      webkitdirectory
+      multiple
+      style="display: none"
+      @change="stageFolderSelection"
     />
   </div>
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, h, nextTick, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useUserStore } from "@/stores/userStore.ts";
@@ -462,8 +643,9 @@ import { useGooglePhotos } from "@/composables/useGooglePhotos.js";
 import { useDropbox } from "@/composables/useDropbox.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import {
-  FolderOpen,
+  FolderOutline,
   CloudUploadOutline,
+  ImagesOutline,
   CloseOutline,
   InformationCircleOutline,
   TimeOutline,
@@ -481,7 +663,7 @@ import SafeSearchViolationModal from "../SafeSearchViolationModal.vue";
 import EstimatedTimeModal from "./EstimatedTimeModal.vue";
 import UploadSourceIcon from "./UploadSourceIcon.vue";
 
-import { NModal, NCheckbox, NTooltip } from "naive-ui";
+import { NModal, NCheckbox, NTooltip, NDropdown, NIcon } from "naive-ui";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 
 import { useMessage } from "naive-ui";
@@ -530,12 +712,22 @@ const {
 
 // Variables locales del componente
 const fileInput = ref(null);
+const folderInput = ref(null);
+// Multi-folder staging: folder picks accumulate here (webkitdirectory can only
+// return one folder per dialog) so the user can add several folders, review the
+// total and deselect before the actual upload. Each group is one picked folder.
+const showFolderReviewModal = ref(false);
+const stagedFolderGroups = ref([]); // [{ id, name, files: File[] }]
+// When on, each imported photo stores its folder hierarchy so the analyzer can
+// materialize a Photoreka collection per folder (see LightroomFolderMirrorService).
+const mirrorFolderStructure = ref(true);
 const showDuplicatesDialog = ref(false);
 const selectedDuplicates = ref([]);
 const isDragOver = ref(false);
 const showLightroomModal = ref(false);
 const showSourceWarningModal = ref(false);
 const pendingSourceAction = ref(null);
+const pendingSourceCallback = ref(null);
 const showAnalysisQuotaWarningModal = ref(false);
 const dontShowAnalysisQuotaWarningAgain = ref(false);
 const pendingQuotaWarningResolver = ref(null);
@@ -677,14 +869,33 @@ const sourceDefinitions = computed(() => ({
     disabled: isUploadDisabled.value,
     compactLabel: "Local Files",
     cardTitle: "Local Files",
-    cardDescription: "Import photos by browsing your local files",
+    cardDescription:
+      "Import individual photos or a whole folder from your computer",
     tagType: "primary",
     tagText: isFirstImportState.value ? "Recommended" : "Select files",
     iconType: "component",
-    iconComponent: FolderOpen,
+    iconComponent: CloudUploadOutline,
     iconColor: "var(--primary-color)",
     draggable: true,
+    // Default action (whole-card click / drag & drop target): pick files.
     action: triggerFileInput,
+    // Local import offers two flavours picking the same upload flow: individual
+    // files (accept=image/*) or a whole folder (webkitdirectory, recursive).
+    // `key` + `label` double as naive-ui n-dropdown options.
+    subActions: [
+      {
+        key: "files",
+        label: "Photos",
+        action: triggerFileInput,
+        icon: ImagesOutline,
+      },
+      {
+        key: "folder",
+        label: "Folders",
+        action: triggerFolderInput,
+        icon: FolderOutline,
+      },
+    ],
   },
   lightroom: {
     key: "lightroom",
@@ -882,6 +1093,33 @@ const triggerFileInput = () => {
   fileInput.value?.click();
 };
 
+const triggerFolderInput = () => {
+  if (isUploadDisabled.value) {
+    if (uploadDisabledMessage.value) {
+      message.warning(uploadDisabledMessage.value);
+    }
+    return;
+  }
+  folderInput.value?.click();
+};
+
+// Map a source's subActions to naive-ui n-dropdown options (icon needs to be a
+// render function, not a raw component).
+const subActionOptions = (source) =>
+  (source.subActions || []).map((sub) => ({
+    key: sub.key,
+    label: sub.label,
+    icon: sub.icon
+      ? () => h(NIcon, null, { default: () => h(sub.icon) })
+      : undefined,
+  }));
+
+// n-dropdown (compact / mobile local button) emits the selected option key.
+const handleSubActionSelect = (source, key) => {
+  const sub = source.subActions?.find((s) => s.key === key);
+  if (sub) handleSourceSelection(source.key, sub.action);
+};
+
 // Drag & Drop functionality
 const handleDragOver = (event) => {
   event.preventDefault();
@@ -908,8 +1146,8 @@ const handleDrop = async (event) => {
     return;
   }
 
-  const files = Array.from(event.dataTransfer.files).filter((file) =>
-    file.type.startsWith("image/"),
+  const files = Array.from(event.dataTransfer.files).filter(
+    isSupportedImageFile,
   );
 
   if (files.length === 0) {
@@ -934,9 +1172,30 @@ const handleDrop = async (event) => {
   }
 };
 
+// The only formats the backend accepts (see ALLOWED_MIME_TYPES in
+// catalog_controller). Filtering by extension (not file.type.startsWith("image/"))
+// is deliberate: the folder picker (webkitdirectory) ignores the input's `accept`
+// filter, and Windows tags RAW files as image/x-sony-arw, image/x-fuji-raf, etc.,
+// which would slip past a MIME prefix check. This keeps folder imports in sync
+// with the "Files" option and drops RAW (.arw, .raf, .cr2, .nef, ...) and the like.
+const SUPPORTED_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
+
+const isSupportedImageFile = (file) => {
+  const ext = file.name.split(".").pop()?.toLowerCase();
+  return Boolean(ext) && SUPPORTED_IMAGE_EXTENSIONS.has(ext);
+};
+
 async function uploadLocalFiles(event) {
-  const selectedLocalFiles = Array.from(event.target.files);
-  if (selectedLocalFiles.length === 0) return;
+  // Shared by both the file picker (accept=image/*) and the folder picker
+  // (webkitdirectory, which ignores `accept` and returns every file in the
+  // tree). Filter to supported images so folders don't drag in RAW/.xmp/.txt/etc.
+  const selectedLocalFiles = Array.from(event.target.files).filter(
+    isSupportedImageFile,
+  );
+  if (selectedLocalFiles.length === 0) {
+    event.target.value = "";
+    return;
+  }
 
   // Validar límites antes de proceder
   const validation = validateUploadLimits(selectedLocalFiles.length);
@@ -958,6 +1217,108 @@ async function uploadLocalFiles(event) {
     await handleUploadFlow(selectedLocalFiles, "local");
   } finally {
     event.target.value = "";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Multi-folder staging
+// A webkitdirectory <input> only returns one folder per dialog, so instead of
+// uploading immediately we stage each folder pick and let the user accumulate
+// several folders, see the total and remove any before importing.
+// ---------------------------------------------------------------------------
+
+// Stable-ish key to dedupe the same file across folder picks (e.g. the user
+// adds the same folder twice).
+const fileKey = (file) =>
+  `${file.webkitRelativePath || file.name}__${file.size}__${file.lastModified}`;
+
+// Flattened, deduped list of every staged image across all folders.
+const stagedFiles = computed(() => {
+  const seen = new Set();
+  const result = [];
+  for (const group of stagedFolderGroups.value) {
+    for (const file of group.files) {
+      const key = fileKey(file);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(file);
+    }
+  }
+  return result;
+});
+
+const stagedTotalCount = computed(() => stagedFiles.value.length);
+
+// Folder picker <input> change handler: stage instead of uploading directly.
+function stageFolderSelection(event) {
+  const images = Array.from(event.target.files).filter(isSupportedImageFile);
+  event.target.value = ""; // reset so the same folder can be re-picked
+  if (images.length === 0) {
+    message.warning("No image files were found in that folder");
+    return;
+  }
+
+  const rootName =
+    (images[0].webkitRelativePath || images[0].name).split("/")[0] || "Folder";
+  const group = {
+    id: `${rootName}-${Date.now()}`,
+    name: rootName,
+    files: images,
+  };
+
+  // Re-picking a folder with the same root name refreshes that group in place.
+  const existingIdx = stagedFolderGroups.value.findIndex(
+    (g) => g.name === rootName,
+  );
+  if (existingIdx >= 0) {
+    stagedFolderGroups.value.splice(existingIdx, 1, group);
+  } else {
+    stagedFolderGroups.value.push(group);
+  }
+
+  showFolderReviewModal.value = true;
+}
+
+const removeStagedFolder = (id) => {
+  stagedFolderGroups.value = stagedFolderGroups.value.filter(
+    (g) => g.id !== id,
+  );
+  if (stagedFolderGroups.value.length === 0) {
+    showFolderReviewModal.value = false;
+  }
+};
+
+const cancelFolderReview = () => {
+  showFolderReviewModal.value = false;
+  stagedFolderGroups.value = [];
+};
+
+async function importStagedFolders() {
+  const files = stagedFiles.value;
+  if (files.length === 0) return;
+
+  const validation = validateUploadLimits(files.length);
+  if (!validation.isValid) {
+    message.error(validation.message);
+    return;
+  }
+
+  // Hide the review modal while the quota warning (its own modal) may show,
+  // but keep the staged folders so the user can reconsider if they cancel it.
+  showFolderReviewModal.value = false;
+  const canContinue = await maybeShowAnalysisQuotaWarning(files.length);
+  if (!canContinue) {
+    showFolderReviewModal.value = true;
+    return;
+  }
+
+  const toUpload = files.slice();
+  const mirrorFolders = mirrorFolderStructure.value;
+  stagedFolderGroups.value = [];
+  try {
+    await handleUploadFlow(toUpload, "local", { mirrorFolders });
+  } catch (error) {
+    console.error("Error uploading files:", error);
   }
 }
 
@@ -1078,6 +1439,7 @@ const handleSourceSelection = (source, callback) => {
     (preferredSource === "web" && source === "lightroom")
   ) {
     pendingSourceAction.value = source;
+    pendingSourceCallback.value = callback;
     showSourceWarningModal.value = true;
   } else {
     // No warning needed, execute directly
@@ -1085,28 +1447,21 @@ const handleSourceSelection = (source, callback) => {
   }
 };
 
-// Confirm source warning and proceed with action
+// Confirm source warning and replay the exact action that was pending (so the
+// Files vs Folder choice for local imports is preserved).
 const confirmSourceWarning = () => {
   showSourceWarningModal.value = false;
-  const source = pendingSourceAction.value;
-
-  if (source === "local") {
-    fileInput.value?.click();
-  } else if (source === "lightroom") {
-    showLightroomModal.value = true;
-  } else if (source === "google") {
-    importFromGooglePhotos();
-  } else if (source === "dropbox") {
-    importFromDropbox();
-  }
-
+  const callback = pendingSourceCallback.value;
   pendingSourceAction.value = null;
+  pendingSourceCallback.value = null;
+  callback?.();
 };
 
 // Cancel source warning
 const cancelSourceWarning = () => {
   showSourceWarningModal.value = false;
   pendingSourceAction.value = null;
+  pendingSourceCallback.value = null;
 };
 
 const isAnalysisQuotaWarningDismissed = () => {
@@ -1675,6 +2030,122 @@ defineExpose({
   gap: 8px;
 }
 
+/* Multi-folder review modal */
+.folder-review-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+}
+
+.folder-review-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.folder-review-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.folder-review-summary {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.folder-review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.folder-review-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background-color: color-mix(in srgb, var(--primary-color) 6%, transparent);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.folder-review-item-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.folder-review-item-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-review-item-count {
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.folder-review-add {
+  margin-top: 4px;
+  border: 1px dashed var(--text-secondary);
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  opacity: 0.75;
+  transition:
+    border-color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.folder-review-add:hover {
+  border-color: var(--accent-color);
+  opacity: 1;
+}
+
+.folder-review-mirror {
+  display: flex;
+  align-items: center;
+}
+
+.folder-review-mirror :deep(.n-checkbox__label) {
+  padding-right: 0;
+}
+
+.info-icon-btn {
+  margin-left: 3px;
+  background: transparent;
+  border: none;
+  padding: 2px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.info-icon-btn:hover {
+  background: var(--bg-surface-hover);
+}
+
+.folder-review-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 /* Time estimate trigger button */
 .time-estimate-trigger {
   display: inline-flex;
@@ -1830,6 +2301,25 @@ defineExpose({
   font-size: 14px;
   color: var(--text-primary);
   line-height: 1.5;
+}
+
+.import-card-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.import-card-action-tag {
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.import-card-action-tag:hover {
+  opacity: 0.85;
+  transform: translateY(-1px);
 }
 
 .first-import-footer {
