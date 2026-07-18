@@ -390,6 +390,12 @@ export default class AuthController {
 
       // Importar UsageService para obtener el usage completo
       const usage = await UsageService.getUsage(user.id)
+      const catalogPatternsResult = user.catalogPatternsResult
+        ? { ...user.catalogPatternsResult }
+        : null
+      if (catalogPatternsResult) {
+        delete catalogPatternsResult.metadata
+      }
 
       return response.ok({
         user: {
@@ -402,7 +408,7 @@ export default class AuthController {
           usage,
           preferredSource: user.preferredSource,
           profiles: user.profiles,
-          catalogPatternsResult: user.catalogPatternsResult,
+          catalogPatternsResult,
           createdAt: user.createdAt,
           updatedAt: user.updatedAt,
         },
