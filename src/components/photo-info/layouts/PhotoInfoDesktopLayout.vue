@@ -173,7 +173,21 @@
                     <!-- Overall Rating -->
                     <div class="overall-rating-container">
                       <div class="overall-rating">
-                        <span class="overall-label">Overall Rating:</span>
+                        <!-- Genre Presets -->
+                        <div class="genre-presets-container">
+                          <n-select
+                            class="genre-select"
+                            size="small"
+                            :value="selectedGenre"
+                            :options="genrePresetOptions"
+                            :render-label="renderGenreOptionLabel"
+                            :fallback-option="false"
+                            @update:value="
+                              (value) => emit('apply-genre-preset', value)
+                            "
+                          />
+                        </div>
+
                         <div class="overall-score">
                           <span class="overall-value"
                             >{{ overallRating.average }}/{{
@@ -192,42 +206,6 @@
                           >
                             {{ overallRating.rating }}
                           </span>
-                        </div>
-                      </div>
-
-                      <!-- Genre Presets -->
-                      <div class="genre-presets-container">
-                        <div class="genre-pills">
-                          <n-tooltip
-                            v-for="preset in availableGenrePresets"
-                            :key="preset.key"
-                            trigger="hover"
-                            placement="bottom"
-                            :show-arrow="true"
-                            delay="1200"
-                          >
-                            <template #trigger>
-                              <n-button
-                                class="preset-button"
-                                :type="
-                                  selectedGenre === preset.key
-                                    ? 'primary'
-                                    : 'default'
-                                "
-                                :ghost="selectedGenre !== preset.key"
-                                size="small"
-                                @click="emit('apply-genre-preset', preset.key)"
-                              >
-                                <template #icon>
-                                  <n-icon>
-                                    <component :is="preset.icon" />
-                                  </n-icon>
-                                </template>
-                                {{ preset.label }}
-                              </n-button>
-                            </template>
-                            <div v-html="formatGenreTooltip(preset.key)"></div>
-                          </n-tooltip>
                         </div>
                       </div>
 
@@ -1007,7 +985,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from "vue";
+import { computed, h, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useActivityLogger } from "@/composables/useActivityLogger";
 import {
@@ -1017,6 +995,7 @@ import {
   NTag,
   NInput,
   NTooltip,
+  NSelect,
   NTabs,
   NTabPane,
 } from "naive-ui";
@@ -1146,6 +1125,39 @@ const hasNextPhoto = computed(() => {
 const canNavigate = computed(() => {
   return props.allPhotos?.length > 1;
 });
+
+const genrePresetOptions = computed(() => {
+  return props.availableGenrePresets.map((preset) => ({
+    label: preset.label,
+    value: preset.key,
+    icon: preset.icon,
+  }));
+});
+
+const renderGenreOptionLabel = (option) => {
+  return h(
+    "div",
+    {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+      },
+    },
+    [
+      option.icon
+        ? h(
+            NIcon,
+            { size: 16 },
+            {
+              default: () => h(option.icon),
+            },
+          )
+        : null,
+      h("span", option.label),
+    ],
+  );
+};
 
 const visibleModel = computed({
   get: () => props.visible,
@@ -1340,7 +1352,7 @@ watch(activeTab, (tab) => {
 
 .photo-display-centered {
   width: 100%;
-  height: 330px;
+  height: 320px;
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -1349,7 +1361,7 @@ watch(activeTab, (tab) => {
   align-items: center;
   justify-content: center;
   position: relative;
-  margin-bottom: var(--spacing-lg);
+  margin-bottom: var(--spacing-xs);
   flex-shrink: 0;
 }
 
@@ -1635,7 +1647,7 @@ watch(activeTab, (tab) => {
 }
 
 .overall-rating-container {
-  padding: var(--spacing-lg);
+  padding: var(--spacing-md);
   background: var(--bg-container);
   border-radius: var(--radius-md);
   border-left: 4px solid var(--primary-color);
@@ -1646,8 +1658,9 @@ watch(activeTab, (tab) => {
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-md);
-  padding-left: 22px;
-  padding-right: 22px;
+  padding-left: 17px;
+  padding-right: 17px;
+  padding-bottom: var(--spacing-md);
 }
 
 .overall-label {
@@ -1722,8 +1735,12 @@ watch(activeTab, (tab) => {
 
 /* Genre presets */
 .genre-presets-container {
-  margin-bottom: var(--spacing-xs);
-  margin-top: var(--spacing-sm);
+  display: flex;
+  align-items: center;
+}
+
+.genre-select {
+  width: 160px;
 }
 
 .genre-header {
@@ -1778,7 +1795,7 @@ watch(activeTab, (tab) => {
 .artistic-scores-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: var(--spacing-sm);
+  gap: 5px;
   padding: var(--spacing-lg);
   padding-top: 0;
   max-height: 400px;
@@ -1790,7 +1807,7 @@ watch(activeTab, (tab) => {
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-md);
-  padding: 5px;
+  padding: 4px;
   transition: all 0.3s ease;
   position: relative;
 }
