@@ -71,6 +71,19 @@
               </n-button>
               <n-button
                 size="small"
+                type="primary"
+                quaternary
+                :loading="materializingFolders"
+                title="Create mirrored collections from analyzed photos with Lightroom folder metadata"
+                @click="confirmMaterializeFolders"
+              >
+                <template #icon>
+                  <n-icon size="16"><FolderOpenIcon /></n-icon>
+                </template>
+                Materialize folders
+              </n-button>
+              <n-button
+                size="small"
                 type="error"
                 quaternary
                 :disabled="user.role === 'admin'"
@@ -785,6 +798,7 @@ import {
   NPagination,
   NCheckbox,
   useMessage,
+  useDialog,
 } from "naive-ui";
 import {
   ArrowBackOutline as ArrowBackIcon,
@@ -795,6 +809,7 @@ import {
   PersonOutline as ImpersonateIcon,
   ChevronDownOutline as ChevronDownIcon,
   LogOutOutline as LogOutIcon,
+  FolderOpenOutline as FolderOpenIcon,
 } from "@vicons/ionicons5";
 import { api } from "../../utils/axios";
 
@@ -874,6 +889,7 @@ interface CreditLedgerRow {
 const route = useRoute();
 const router = useRouter();
 const message = useMessage();
+const dialog = useDialog();
 
 const user = ref<UserDetail | null>(null);
 const loading = ref(true);
@@ -884,6 +900,7 @@ const deleting = ref(false);
 const savingUsage = ref(false);
 const impersonating = ref(false);
 const revokingSessions = ref(false);
+const materializingFolders = ref(false);
 
 const editUsage = ref({
   analyzedPhotosLimit: 0,
@@ -1111,6 +1128,45 @@ async function revokeSessions() {
     message.error(msg);
   } finally {
     revokingSessions.value = false;
+  }
+}
+
+function confirmMaterializeFolders() {
+  if (!user.value) return;
+  dialog.warning({
+    title: "Materialize folders",
+    content:
+      "Create or reuse mirrored collections for all analyzed photos that have Lightroom folder metadata.",
+    positiveText: "Materialize",
+    negativeText: "Cancel",
+    onPositiveClick: () => materializeFolders(),
+  });
+}
+
+async function materializeFolders() {
+  if (!user.value) return;
+  materializingFolders.value = true;
+  try {
+    const { data } = await api.post(
+      `/api/admin/users/${user.value.id}/materialize-folders`,
+    );
+    const summary = data.summary || {};
+    const photoIdsFound = Number(data.photoIdsFound || 0);
+
+    if (photoIdsFound === 0) {
+      message.info("No analyzed photos with Lightroom folder metadata found.");
+      return;
+    }
+
+    message.success(
+      `Materialized ${summary.foldersFound || 0} folder(s): ${summary.collectionsCreated || 0} created, ${summary.collectionsReused || 0} reused, ${summary.photosAttached || 0} photo(s) attached.`,
+      { duration: 7000 },
+    );
+  } catch (err: any) {
+    const msg = err?.response?.data?.message || "Failed to materialize folders";
+    message.error(msg);
+  } finally {
+    materializingFolders.value = false;
   }
 }
 

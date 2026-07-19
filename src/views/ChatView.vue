@@ -485,14 +485,6 @@
                 v-for="(list, listIdx) in message.photoLists"
                 :key="listIdx"
                 class="message-photo-list"
-                :class="{
-                  'message-photo-list--with-divider': photoListNeedsLeftDivider(
-                    message.photoLists,
-                    listIdx,
-                    index,
-                  ),
-                }"
-                :style="photoGroupStyle(list.photoIds.length)"
               >
                 <div
                   class="message-photo-list-label"
@@ -1613,7 +1605,6 @@ const activeSuggestion = ref<Suggestion | null>(null);
 
 const checkMobile = () => {
   isMobile.value = window.innerWidth < 768;
-  void recomputePhotoListDividers();
 };
 
 const chatInputPlaceholder = computed(() =>
@@ -2185,61 +2176,15 @@ const PHOTO_GRID_GAP_PX = 8; // must match .message-photos-grid gap (--spacing-s
 const photoGroupCols = (count: number): number =>
   Math.max(1, Math.min(count || 1, isMobile.value ? 3 : 5));
 
-const photoGroupStyle = (count: number): Record<string, string> => {
+// Fixes the grid's own width to its column count so the surrounding surface
+// (background/border/padding) hugs it naturally, with no extra math needed.
+const photoGroupGridStyle = (count: number): Record<string, string> => {
   const cols = photoGroupCols(count);
   return {
+    gridTemplateColumns: `repeat(${cols}, 1fr)`,
     width: `${cols * PHOTO_CELL_PX + (cols - 1) * PHOTO_GRID_GAP_PX}px`,
     maxWidth: "100%",
   };
-};
-
-const photoGroupGridStyle = (count: number): Record<string, string> => ({
-  gridTemplateColumns: `repeat(${photoGroupCols(count)}, 1fr)`,
-});
-
-// Mobile wrapping is pixel-based, so logical column math alone can be wrong.
-// We measure rendered list tops per message and only add a divider when the
-// current item is on the same visual row as its previous sibling.
-const measuredPhotoListDividers = ref<Record<number, Record<number, boolean>>>(
-  {},
-);
-
-const recomputePhotoListDividers = async () => {
-  await nextTick();
-  const root = messagesRef.value;
-  if (!root) return;
-
-  const nextMap: Record<number, Record<number, boolean>> = {};
-  const rows = root.querySelectorAll<HTMLElement>(
-    ".message-row[data-message-index]",
-  );
-
-  rows.forEach((row) => {
-    const messageIndex = Number(row.dataset.messageIndex);
-    if (!Number.isFinite(messageIndex)) return;
-
-    const listsWrap = row.querySelector<HTMLElement>(".message-photo-lists");
-    if (!listsWrap) return;
-
-    const lists = Array.from(
-      listsWrap.querySelectorAll<HTMLElement>(".message-photo-list"),
-    );
-    if (lists.length < 2) return;
-
-    const dividerByIndex: Record<number, boolean> = {};
-    let prevTop = Math.round(lists[0].getBoundingClientRect().top);
-
-    for (let i = 1; i < lists.length; i += 1) {
-      const top = Math.round(lists[i].getBoundingClientRect().top);
-      const sameRowAsPrevious = Math.abs(top - prevTop) <= 1;
-      dividerByIndex[i] = sameRowAsPrevious;
-      prevTop = top;
-    }
-
-    nextMap[messageIndex] = dividerByIndex;
-  });
-
-  measuredPhotoListDividers.value = nextMap;
 };
 
 // Narrow groups (fewer photos than the row can hold) sit side by side in a
@@ -2247,50 +2192,6 @@ const recomputePhotoListDividers = async () => {
 // so those get a smaller, single-line, ellipsized label instead.
 const isNarrowPhotoGroup = (count: number): boolean =>
   photoGroupCols(count) < (isMobile.value ? 3 : 5);
-
-// Adds a divider only when a group is not the first element of its own wrapped
-// row. This keeps separators between side-by-side groups without drawing one
-// before groups that start a new row.
-const photoListNeedsLeftDivider = (
-  lists: PhotoList[],
-  index: number,
-  messageIndex?: number,
-): boolean => {
-  if (!lists || index <= 0 || index >= lists.length) return false;
-
-  if (isMobile.value) {
-    if (messageIndex == null) return false;
-    return !!measuredPhotoListDividers.value[messageIndex]?.[index];
-  }
-
-  const maxCols = isMobile.value ? 3 : 5;
-  let rowUsedCols = 0;
-
-  for (let i = 0; i <= index; i += 1) {
-    const cols = photoGroupCols(lists[i].photoIds.length);
-
-    // Overflow means this item starts a new wrapped row.
-    if (rowUsedCols > 0 && rowUsedCols + cols > maxCols) {
-      rowUsedCols = 0;
-    }
-
-    if (i === index) {
-      return rowUsedCols > 0;
-    }
-
-    rowUsedCols += cols;
-  }
-
-  return false;
-};
-
-watch(
-  () => chatStore.messages,
-  () => {
-    void recomputePhotoListDividers();
-  },
-  { deep: true, flush: "post" },
-);
 
 const removeContextPhoto = (id: string) => {
   contextPhotos.value = contextPhotos.value.filter((p) => p.id !== id);
@@ -3750,8 +3651,6 @@ const formatRelativeDate = (dateStr: string) => {
 
 .message-photo-lists {
   margin-top: var(--spacing-sm);
-  border-top: 1px solid var(--border-color);
-  padding-top: var(--spacing-sm);
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
@@ -3766,17 +3665,10 @@ const formatRelativeDate = (dateStr: string) => {
 .message-photo-list {
   flex: 0 1 auto;
   min-width: 0;
-  /* content-box so the columnar divider's border-left + padding-left add
-     *outside* the fixed group width — otherwise they'd eat into it and shrink
-     that group's photos relative to the first (which has no divider). */
-  box-sizing: content-box;
-}
-
-/* Row-local separator: shown only for groups that have another group to their
-  left in the same wrapped row. */
-.message-photo-list--with-divider {
-  border-left: 1px solid var(--border-color);
-  padding-left: var(--spacing-md);
+  padding: var(--spacing-sm);
+  background: var(--primary-08);
+  /* border: 1px solid var(--border-color); */
+  border-radius: var(--radius-md);
 }
 
 .message-photo-list-label {
@@ -3789,7 +3681,7 @@ const formatRelativeDate = (dateStr: string) => {
   /* Reserves room for a 2-line label (e.g. "Honorable Mention") so every
      group's label block is the same height and the photos below start
      perfectly aligned across columns, whether their own label wraps or not. */
-  margin-bottom: var(--spacing-xs);
+  margin-bottom: var(--spacing-sm);
 }
 
 /* Narrow (column-packed) groups: a wrapped 2-line label reads as a misaligned
