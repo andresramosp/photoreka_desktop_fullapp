@@ -61,6 +61,10 @@ export function usePhotoUpload() {
       // Para Dropbox, source es { dropboxBlob, dropboxFile }
       file = source.dropboxBlob;
       fileName = source.dropboxFile?.name || `dropbox-photo-${Date.now()}.jpg`;
+    } else if (srcType === "drive") {
+      // Para Google Drive, source es { driveBlob, driveFile }
+      file = source.driveBlob;
+      fileName = source.driveFile?.name || `drive-photo-${Date.now()}.jpg`;
     } else {
       // Para archivos locales, source es un File object
       file = source;
@@ -94,6 +98,8 @@ export function usePhotoUpload() {
       sourcePayload = { type: "google" };
     } else if (srcType === "dropbox") {
       sourcePayload = { type: "dropbox" };
+    } else if (srcType === "drive") {
+      sourcePayload = { type: "drive" };
     } else {
       sourcePayload = { type: "local" };
       if (options.mirrorFolders && file?.webkitRelativePath) {
@@ -242,6 +248,7 @@ export function usePhotoUpload() {
     const files = sample.map((source) => {
       if (srcType === "google") return source.googlePhotoBlob;
       if (srcType === "dropbox") return source.dropboxBlob;
+      if (srcType === "drive") return source.driveBlob;
       return source;
     });
 
@@ -322,7 +329,11 @@ export function usePhotoUpload() {
                   ? source.googlePhotoMediaItem?.filename ||
                     source.googlePhotoMediaItem?.name ||
                     "unknown"
-                  : source.name;
+                  : srcType === "dropbox"
+                    ? source.dropboxFile?.name || "unknown"
+                    : srcType === "drive"
+                      ? source.driveFile?.name || "unknown"
+                      : source.name;
               console.error(`❌ Failed to upload ${fileName}:`, error);
               failedUploads.push({ file: fileName, error: error.message });
               uploadedCount.value++;
@@ -348,7 +359,9 @@ export function usePhotoUpload() {
             ? "google"
             : srcType === "dropbox"
               ? "dropbox"
-              : "local";
+              : srcType === "drive"
+                ? "drive"
+                : "local";
         api
           .post("/api/catalog/uploadFinished", {
             count: photosToUpload.length,

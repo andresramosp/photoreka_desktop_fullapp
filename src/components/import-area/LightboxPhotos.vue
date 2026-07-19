@@ -748,6 +748,7 @@ import { useUserStore } from "@/stores/userStore.ts";
 import { usePhotoUpload } from "@/composables/usePhotoUpload.js";
 import { useWarmUp } from "@/composables/useWarmUp.js";
 import { useGooglePhotos } from "@/composables/useGooglePhotos.js";
+import { useGoogleDrive } from "@/composables/useGoogleDrive.js";
 import { useDropbox } from "@/composables/useDropbox.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import {
@@ -764,6 +765,7 @@ import {
 import { RocketLaunchOutlined } from "@vicons/material";
 import { BookInformation20Regular } from "@vicons/fluent";
 import googlePhotosIconUrl from "@/assets/logos/google_photos.png";
+import googleDriveIconUrl from "@/assets/logos/google_drive.svg";
 import dropboxIconUrl from "@/assets/logos/dropbox.svg";
 import lightroomIconUrl from "@/assets/logos/lightroom_logo.png";
 
@@ -805,6 +807,15 @@ const message = useMessage();
 
 // Google Photos composable
 const googlePhotos = useGooglePhotos();
+// Google Drive composable
+const googleDrive = useGoogleDrive();
+// Beta cerrada: Google Drive import solo visible para estos emails mientras
+// se valida la integración (drive.file requiere su propia verificación OAuth
+// con Google antes de salir a todos los usuarios).
+const GOOGLE_DRIVE_IMPORT_BETA_EMAILS = ["andreschennai@gmail.com"];
+const canImportFromGoogleDrive = computed(() =>
+  GOOGLE_DRIVE_IMPORT_BETA_EMAILS.includes(userStore.user?.email ?? ""),
+);
 // Dropbox composable
 const dropbox = useDropbox();
 const { isMobile } = useIsMobile();
@@ -968,8 +979,8 @@ const sourceWarningConfig = computed(() => {
 
 // Order in which sources appear, keyed by the user's preferred export source.
 const SOURCE_ORDER = {
-  lightroom: ["lightroom", "local", "google", "dropbox"],
-  web: ["local", "google", "dropbox", "lightroom"],
+  lightroom: ["lightroom", "local", "google", "drive", "dropbox"],
+  web: ["local", "google", "drive", "dropbox", "lightroom"],
 };
 
 const sourceDefinitions = computed(() => ({
@@ -1050,6 +1061,22 @@ const sourceDefinitions = computed(() => ({
     iconClass: "google-photos-logo",
     draggable: false,
     action: importFromGooglePhotos,
+  },
+  drive: {
+    key: "drive",
+    enabled: canImportFromGoogleDrive.value,
+    disabled: isUploadDisabled.value,
+    compactLabel: "Google Drive",
+    cardTitle: "Google Drive",
+    cardDescription: "Import photos directly from your Google Drive",
+    tagType: "info",
+    tagText: "Select files",
+    iconType: "img",
+    iconSrc: googleDriveIconUrl,
+    iconAlt: "Google Drive",
+    iconClass: "google-drive-logo",
+    draggable: false,
+    action: importFromDrive,
   },
   dropbox: {
     key: "dropbox",
@@ -1538,6 +1565,61 @@ async function importFromDropbox() {
     );
   } catch (error) {
     console.error("❌ Error importing from Dropbox:", error);
+  }
+}
+
+/**
+ * Importa fotos desde Google Drive (Picker + drive.file)
+ */
+async function importFromDrive() {
+  try {
+    const validation = validateUploadLimits(100);
+    if (!validation.isValid) {
+      message.error(validation.message);
+      return;
+    }
+
+    const downloadResults = await googleDrive.importPhotos(5);
+
+    if (!downloadResults || downloadResults.length === 0) {
+      return;
+    }
+
+    const successfulDownloads = downloadResults.filter((r) => r.success);
+
+    if (successfulDownloads.length === 0) {
+      message.warning(
+        "No photos were successfully downloaded from Google Drive",
+      );
+      return;
+    }
+
+    const finalValidation = validateUploadLimits(successfulDownloads.length);
+    if (!finalValidation.isValid) {
+      message.error(finalValidation.message);
+      return;
+    }
+
+    const canContinue = await maybeShowAnalysisQuotaWarning(
+      successfulDownloads.length,
+    );
+    if (!canContinue) {
+      return;
+    }
+
+    await handleUploadFlow(
+      successfulDownloads.map((result) => ({
+        driveBlob: result.blob,
+        driveFile: result.file,
+      })),
+      "drive",
+    );
+
+    message.success(
+      `Successfully imported ${successfulDownloads.length} photos from Google Drive`,
+    );
+  } catch (error) {
+    console.error("❌ Error importing from Google Drive:", error);
   }
 }
 
@@ -2396,6 +2478,12 @@ defineExpose({
 }
 
 .import-card-icon :deep(.dropbox-logo) {
+  height: 48px;
+  width: auto;
+  object-fit: contain;
+}
+
+.import-card-icon :deep(.google-drive-logo) {
   height: 48px;
   width: auto;
   object-fit: contain;
