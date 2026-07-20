@@ -46,7 +46,10 @@
             Analyses
           </span>
         </template>
-        <ProcessingPhotos ref="processingPhotosRef" @navigate-to-tab="setActiveTab" />
+        <ProcessingPhotos
+          ref="processingPhotosRef"
+          @navigate-to-tab="setActiveTab"
+        />
       </n-tab-pane>
     </n-tabs>
 
@@ -64,6 +67,7 @@
 
 <script setup>
 import { ref, onMounted, watch, computed } from "vue";
+import { useRoute } from "vue-router";
 
 import { useIsMobile } from "@/composables/useIsMobile.js";
 
@@ -90,6 +94,7 @@ const userStore = useUserStore();
 const notification = useNotification();
 const message = useMessage();
 const router = useRouter();
+const route = useRoute();
 
 // Control para el mensaje de confirmación de email
 const emailConfirmationMessageId = ref(null);
@@ -175,8 +180,8 @@ const setActiveTab = (tab) => {
   }
 };
 
-const updateTabFromHash = () => {
-  const hash = window.location.hash.replace("#", "");
+const updateTabFromHash = (hashValue = route.hash) => {
+  const hash = hashValue.replace("#", "");
   if (["upload", "processing"].includes(hash) && activeTab.value !== hash) {
     activeTab.value = hash;
   }
@@ -249,8 +254,13 @@ async function analyze(ev) {
 
 onMounted(() => {
   updateTabFromHash();
-
-  window.addEventListener("hashchange", updateTabFromHash);
+  watch(
+    () => route.hash,
+    (hash) => {
+      updateTabFromHash(hash);
+    },
+    { immediate: true },
+  );
 
   // Watcher para mostrar/ocultar mensaje de confirmación de email
   watch(
