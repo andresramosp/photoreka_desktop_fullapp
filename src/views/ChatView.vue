@@ -324,18 +324,6 @@
                   </button>
                 </div>
               </div>
-
-              <!-- An empty library gets a single call to action: importing is
-                   the only thing worth doing, so nothing competes with it. -->
-              <p v-if="hasPhotos" class="welcome-hint">
-                <n-button
-                  text
-                  class="welcome-hint-link"
-                  @click="showChatLabInfo = true"
-                >
-                  Learn more about ChatLab
-                </n-button>
-              </p>
             </div>
           </Transition>
 
@@ -351,6 +339,19 @@
             </n-icon>
             <span>Import Photos</span>
           </router-link>
+
+          <p
+            v-if="hasPhotos && !photosEverAttached"
+            class="welcome-hint welcome-hint--bottom"
+          >
+            <n-button
+              text
+              class="welcome-hint-link"
+              @click="showChatLabInfo = true"
+            >
+              Learn more about ChatLab
+            </n-button>
+          </p>
         </div>
       </div>
 
@@ -2852,6 +2853,7 @@ const formatRelativeDate = (dateStr: string) => {
   align-items: center;
   justify-content: center;
   padding: var(--spacing-xl) var(--spacing-2xl);
+  position: relative;
 }
 
 .welcome-content {
@@ -2944,6 +2946,15 @@ const formatRelativeDate = (dateStr: string) => {
   color: var(--text-primary);
   line-height: var(--line-height-relaxed);
   text-align: center;
+}
+
+.welcome-hint--bottom {
+  position: absolute;
+  left: 50%;
+  bottom: var(--spacing-lg);
+  transform: translateX(-50%);
+  margin: 0;
+  z-index: 2;
 }
 
 .welcome-hint-link {
