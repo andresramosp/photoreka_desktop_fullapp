@@ -1613,4 +1613,10 @@ const treeSelectOptions = computed(() =>
 .timeline-container {
   animation: slideDown 0.2s ease-out;
 }
+
+/* El slider de Time Range desborda sus marcas de fecha ~14px por debajo de su
+   caja; reservamos ese espacio para que Timeline no quede pegado a la fila. */
+.time-range-container {
+  padding-bottom: 14px;
+}
 </style>

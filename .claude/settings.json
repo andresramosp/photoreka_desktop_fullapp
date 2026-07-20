@@ -20,7 +20,8 @@
       "Bash(npx eslint *)",
       "PowerShell(npx vue-tsc --noEmit -p tsconfig.json 2>&1)",
       "Bash(cd \"c:/Users/andre/Desktop/Photoreka/App\" && ls -d */ && echo \"---\" && find . -maxdepth 3 -name \"lightroom_folder_mirror_service.ts\" 2>/dev/null)",
-      "Read(//c/Users/andre/Desktop/Photoreka/App/**)"
+      "Read(//c/Users/andre/Desktop/Photoreka/App/**)",
+      "Bash(git log *)"
     ]
   }
 }

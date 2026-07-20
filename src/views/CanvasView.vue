@@ -215,7 +215,8 @@
                     expansionMode !== 'canvas' &&
                     expansionMode !== null &&
                     !photo.inTrash &&
-                    photo.hovered
+                    (photo.hovered ||
+                      (photo.selected && anySelectedPhotoHovered))
                   "
                   :photo="photo"
                   :fill="accentColor"
@@ -561,7 +562,7 @@
 
     <!-- Floating Action Bar -->
     <FloatingActionBar
-      :top-position="16"
+      :top-position="70"
       :selected-ids="selectedPhotoIds"
       :show-delete="false"
       :show-add-to-collection="true"
@@ -999,6 +1000,10 @@ const {
 } = useCanvasPhoto(stageRef, photos, photoRefs, stageConfig);
 
 const { animatePhotoGroup, animatePhotoGroupExplosion } = usePhotoAnimations();
+
+const anySelectedPhotoHovered = computed(() =>
+  photos.value.some((p) => p.hovered && p.selected),
+);
 
 const dynamicSizeFactor = computed(() => {
   const baseSize = 1.25;
@@ -1728,9 +1733,6 @@ const handleTouchEnd = (event) => {
 };
 
 const handlePhotoClick = (photo, event) => {
-  // Always toggle hover state
-  photo.hovered = !photo.hovered;
-
   // Ignore click selection when it was a drag operation
   if (photo._wasDragged) {
     photo._wasDragged = false;

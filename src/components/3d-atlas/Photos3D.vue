@@ -139,7 +139,7 @@
       :show-move-to-tool="true"
       :show-send-to-chat="true"
       :is-downloading="isDownloading"
-      :top-position="20"
+      :top-position="70"
       @clear-selection="clearSelection"
       @download="handleDownloadPhotos"
       @add-to-collection="handleAddToCollection"
