@@ -454,8 +454,55 @@
                 </n-button>
               </div>
             </div>
+            <!-- Google Drive -->
+            <div class="connection-item">
+              <div class="connection-info">
+                <img
+                  :src="googleDriveIconUrl"
+                  alt="Google Drive"
+                  class="connection-icon"
+                />
+                <div class="connection-details">
+                  <span class="connection-name">Google Drive</span>
+                  <span class="connection-description"
+                    >Import photos directly from your Google Drive</span
+                  >
+                </div>
+              </div>
+              <div class="connection-actions">
+                <n-tag
+                  v-if="isGoogleDriveConnected"
+                  type="success"
+                  size="small"
+                  round
+                >
+                  Connected
+                </n-tag>
+                <n-tag v-else type="warning" size="small" round>
+                  Not connected
+                </n-tag>
+                <n-button
+                  v-if="isGoogleDriveConnected"
+                  text
+                  type="error"
+                  size="small"
+                  @click="disconnectGoogleDrive"
+                >
+                  Disconnect
+                </n-button>
+                <n-button
+                  v-else
+                  type="primary"
+                  size="small"
+                  @click="connectGoogleDrive"
+                >
+                  Connect
+                </n-button>
+              </div>
+            </div>
+
             <!-- Instagram -->
-            <div class="connection-item coming-soon">
+            <!-- <div class="connection-item coming-soon">
               <div class="connection-info">
                 <div class="connection-icon-wrapper instagram">
                   <n-icon size="24" color="#fff">
@@ -472,7 +519,7 @@
               <div class="connection-actions">
                 <n-tag type="info" size="small" round> Coming soon </n-tag>
               </div>
-            </div>
+            </div> -->
           </div>
         </section>
 
@@ -1098,10 +1145,12 @@ import { SparklesOutline } from "@vicons/ionicons5";
 import { LayersOutline } from "@vicons/ionicons5";
 import { InfoCircleFilled } from "@vicons/antd";
 import googlePhotosIconUrl from "@/assets/logos/google_photos.png";
+import googleDriveIconUrl from "@/assets/logos/google_drive.svg";
 import dropboxIconUrl from "@/assets/logos/dropbox.svg";
 import { useUserStore } from "@/stores/userStore";
 import { useTheme } from "@/composables/useTheme.js";
 import { useGooglePhotos } from "@/composables/useGooglePhotos.js";
+import { useGoogleDrive } from "@/composables/useGoogleDrive.js";
 import { useDropbox } from "@/composables/useDropbox.js";
 import { api } from "@/utils/axios";
 import PhotoPackagesModal from "@/components/PhotoPackagesModal.vue";
@@ -1130,6 +1179,7 @@ const route = useRoute();
 const router = useRouter();
 const { isDarkMode, setTheme } = useTheme();
 const googlePhotos = useGooglePhotos();
+const googleDrive = useGoogleDrive();
 const dropbox = useDropbox();
 const message = useMessage();
 
@@ -1278,6 +1328,24 @@ const connectGooglePhotos = async () => {
 const disconnectGooglePhotos = () => {
   googlePhotos.signOut();
   message.info("Google Photos disconnected");
+};
+
+// Google Drive connection
+const isGoogleDriveConnected = computed(() => googleDrive.isAuthorized.value);
+
+const connectGoogleDrive = async () => {
+  try {
+    await googleDrive.authorize();
+    message.success("Google Drive connected successfully!");
+  } catch (error: any) {
+    message.error(error?.message || "Failed to connect Google Drive");
+    console.error("Error connecting Google Drive:", error);
+  }
+};
+
+const disconnectGoogleDrive = () => {
+  googleDrive.signOut();
+  message.info("Google Drive disconnected");
 };
 
 // Dropbox connection

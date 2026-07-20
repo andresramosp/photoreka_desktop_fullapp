@@ -1068,9 +1068,13 @@ const sourceDefinitions = computed(() => ({
     disabled: isUploadDisabled.value,
     compactLabel: "Google Drive",
     cardTitle: "Google Drive",
-    cardDescription: "Import photos directly from your Google Drive",
-    tagType: "info",
-    tagText: "Select files",
+    cardDescription: googleDrive.isAuthorized.value
+      ? "Import photos directly from your Google Drive"
+      : "Connect and import your photos from Google Drive",
+    tagType: googleDrive.isAuthorized.value ? "success" : "warning",
+    tagText: googleDrive.isAuthorized.value ? "Connected" : "Disconnected",
+    // Always show the actual Google Drive logo — connection state is
+    // already conveyed by the tag above, not by swapping the icon.
     iconType: "img",
     iconSrc: googleDriveIconUrl,
     iconAlt: "Google Drive",
@@ -1152,6 +1156,16 @@ watch(
   (newValue, oldValue) => {
     if (newValue && !oldValue) {
       message.success("Google Photos connected successfully!");
+    }
+  },
+);
+
+// Watcher para mostrar un aviso de éxito cuando se autoriza Google Drive
+watch(
+  () => googleDrive.isAuthorized.value,
+  (newValue, oldValue) => {
+    if (newValue && !oldValue) {
+      message.success("Google Drive connected successfully!");
     }
   },
 );
@@ -2405,27 +2419,29 @@ defineExpose({
 
 .import-cards-grid {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 24px;
   width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: 8px;
   margin: 0 auto 32px;
 }
 
 .import-cards-grid.single {
   justify-content: center;
-  overflow-x: visible;
 }
 
 .import-card {
-  flex: 0 0 260px;
+  /* Cards grow/shrink to share the row proportionally as sources are
+     enabled/disabled (e.g. re-enabling Google Photos), instead of a fixed
+     width that would force horizontal scrolling. min/max keep them from
+     getting too cramped or too wide when there are few of them. */
+  flex: 1 1 200px;
+  min-width: 200px;
+  max-width: 240px;
   background-color: var(--bg-surface);
   border: 2px solid var(--border-color);
   border-radius: 16px;
-  padding: 32px 24px;
+  padding: 24px 20px;
   text-align: center;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
