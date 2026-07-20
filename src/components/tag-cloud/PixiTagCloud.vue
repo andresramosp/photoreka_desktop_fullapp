@@ -2268,7 +2268,7 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 8px;
-  z-index: 100;
+  z-index: 5;
   backdrop-filter: blur(10px);
   flex-direction: column;
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15));
