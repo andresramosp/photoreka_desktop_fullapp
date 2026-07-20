@@ -18,8 +18,25 @@ export const tagCategoryNameMap = {
 };
 
 import { defineStore } from "pinia";
+import { markRaw } from "vue";
 import { api } from "@/utils/axios";
 import { useUserStore } from "@/stores/userStore.ts";
+
+// Congela los subárboles pesados y de solo-lectura de cada foto (`descriptions`
+// con EXIF/visual_aspects/artistic_scores, e `inferredLocation`) con markRaw para
+// que Vue NO genere proxies reactivos profundos por cada una de las ~30k fotos.
+// El objeto foto en sí queda reactivo, así que `status`, los flags de duplicados
+// y la reasignación completa de `inferredLocation` (vía updatePhoto) siguen
+// funcionando. Nada en el front muta el interior de estos subárboles: solo se leen.
+function rawifyPhoto(photo) {
+  if (photo.descriptions) {
+    photo.descriptions = markRaw(photo.descriptions);
+  }
+  if (photo.inferredLocation) {
+    photo.inferredLocation = markRaw(photo.inferredLocation);
+  }
+  return photo;
+}
 
 export const usePhotosStore = defineStore("photos", {
   // Exponer el umbral como propiedad estática
@@ -192,12 +209,9 @@ export const usePhotosStore = defineStore("photos", {
         try {
           const response = await api.get(`/api/catalog`);
 
-          const photos = response.data.photos.map((photo) => ({
-            ...photo,
-            isDuplicate: false,
-          }));
-
-          this.photos = photos.map((photo) => ({ ...photo }));
+          this.photos = response.data.photos.map((photo) =>
+            rawifyPhoto({ ...photo, isDuplicate: false }),
+          );
           // Reset duplicates check when photos are loaded/reloaded
           this.duplicatesChecked = false;
         } catch (error) {
@@ -214,7 +228,7 @@ export const usePhotosStore = defineStore("photos", {
       const newPhotoIds = newPhotos.map((p) => p.id);
       this.photos = [
         ...this.photos.filter((p) => !newPhotoIds.includes(p.id)),
-        ...newPhotos.map((photo) => ({ ...photo })),
+        ...newPhotos.map((photo) => rawifyPhoto({ ...photo })),
       ];
       // Reset duplicates check when new photos are added
       this.duplicatesChecked = false;

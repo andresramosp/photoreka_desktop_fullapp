@@ -558,7 +558,7 @@
               v-for="sub in source.subActions"
               :key="sub.key"
               size="small"
-              secondary
+              round
               type="primary"
               class="import-card-action-button"
               @click.stop="handleSourceSelection(source.key, sub.action)"

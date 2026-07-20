@@ -45,7 +45,7 @@
             @select="handleDuplicateCheckSelect"
           >
             <n-button
-              type="info"
+              type="primary"
               size="small"
               secondary
               :disabled="isDemoUser"

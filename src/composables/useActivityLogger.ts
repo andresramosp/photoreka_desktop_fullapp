@@ -2,6 +2,8 @@ import { api } from "@/utils/axios";
 
 export type FrontendActivityType = "photo_rank" | "filter_apply" | "ui_action";
 
+const LOCALHOST_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
 /**
  * Log a front-end user activity.
  *
@@ -18,6 +20,13 @@ export function useActivityLogger() {
     type: FrontendActivityType,
     metadata?: Record<string, unknown>,
   ): void {
+    if (
+      typeof window !== "undefined" &&
+      LOCALHOST_HOSTNAMES.has(window.location.hostname)
+    ) {
+      return;
+    }
+
     api.post("/api/activity/log", { type, metadata }).catch(() => {
       // Intentionally silent — activity logging must never affect UX
     });
