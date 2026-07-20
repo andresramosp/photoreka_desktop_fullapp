@@ -6,6 +6,10 @@ import { ref, computed } from "vue";
 // y añadir el scope drive.file al consent screen.
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || "";
+// Project number (no el Project ID de texto): requerido por el Picker para
+// que el scope drive.file conceda acceso real al archivo elegido. Sin esto,
+// la descarga posterior vía Drive API devuelve 404 aunque el archivo exista.
+const GOOGLE_APP_ID = import.meta.env.VITE_GOOGLE_APP_ID || "";
 
 // drive.file: acceso únicamente a los archivos que el usuario elige
 // explícitamente en el Picker (no a todo su Drive). Scope básico, no
@@ -267,6 +271,7 @@ export function useGoogleDrive() {
         const picker = new window.google.picker.PickerBuilder()
           .setOAuthToken(accessToken.value)
           .setDeveloperKey(GOOGLE_API_KEY)
+          .setAppId(GOOGLE_APP_ID)
           .addView(view)
           .enableFeature(window.google.picker.Feature.MULTISELECT_ENABLED)
           .setCallback((data) => {
