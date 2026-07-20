@@ -557,11 +557,10 @@
             <n-button
               v-for="sub in source.subActions"
               :key="sub.key"
-              :type="source.tagType"
               size="small"
-              round
               secondary
-              class="import-card-action-tag"
+              type="primary"
+              class="import-card-action-button"
               @click.stop="handleSourceSelection(source.key, sub.action)"
             >
               <template v-if="sub.icon" #icon>
@@ -2510,16 +2509,11 @@ defineExpose({
   flex-wrap: wrap;
 }
 
-.import-card-action-tag {
+.import-card-action-button {
   cursor: pointer;
   transition:
     transform 0.15s ease,
     opacity 0.15s ease;
-}
-
-.import-card-action-tag:hover {
-  opacity: 0.85;
-  transform: translateY(-1px);
 }
 
 .first-import-footer {
