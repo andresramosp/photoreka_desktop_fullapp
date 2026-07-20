@@ -209,6 +209,21 @@ export default class UsersAdminController {
   }
 
   /**
+   * Materialize Lightroom folder collections for analyzed user photos.
+   */
+  async materializeFolders({ params, response }: HttpContext) {
+    try {
+      const result = await AdminUsersService.materializeLightroomFolders(Number(params.id))
+      return response.ok({ message: 'Folder mirror materialized', ...result })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to materialize folders',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
    * Get all soft-deleted photos for a user
    */
   async deletedPhotos({ params, response }: HttpContext) {

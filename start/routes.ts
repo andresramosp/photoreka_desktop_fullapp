@@ -492,6 +492,10 @@ router
     router.put('/api/admin/users/:id/usage', [UsersAdminController, 'updateUsage'])
     router.get('/api/admin/users/:id/activities', [UsersAdminController, 'activities'])
     router.get('/api/admin/users/:id/photos', [UsersAdminController, 'photos'])
+    router.post('/api/admin/users/:id/materialize-folders', [
+      UsersAdminController,
+      'materializeFolders',
+    ])
     router.get('/api/admin/users/:id/deleted-photos', [UsersAdminController, 'deletedPhotos'])
     router.get('/api/admin/users/:id/credit-ledger', [UsersAdminController, 'creditLedger'])
     router.post('/api/admin/users/:id/mark-photos-reviewed', [
