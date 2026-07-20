@@ -812,8 +812,9 @@ const googleDrive = useGoogleDrive();
 // se valida la integración (drive.file requiere su propia verificación OAuth
 // con Google antes de salir a todos los usuarios).
 const GOOGLE_DRIVE_IMPORT_BETA_EMAILS = ["andreschennai@gmail.com"];
-const canImportFromGoogleDrive = computed(() =>
-  GOOGLE_DRIVE_IMPORT_BETA_EMAILS.includes(userStore.user?.email ?? ""),
+const canImportFromGoogleDrive = computed(
+  () => true,
+  // GOOGLE_DRIVE_IMPORT_BETA_EMAILS.includes(userStore.user?.email ?? ""),
 );
 // Dropbox composable
 const dropbox = useDropbox();
