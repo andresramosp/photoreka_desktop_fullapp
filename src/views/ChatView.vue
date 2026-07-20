@@ -1570,8 +1570,15 @@ watch(
   { immediate: true },
 );
 
-const SUGGESTION_WINDOW = 4;
+const SUGGESTION_WINDOW_DEFAULT = 4;
+const SUGGESTION_WINDOW_WITH_RECENTS = 2;
 const SUGGESTION_ROTATION_KEY = "chat_suggestion_rotation";
+
+const suggestionWindowSize = computed(() =>
+  showHistory.value && chatStore.conversations.length > 0
+    ? SUGGESTION_WINDOW_WITH_RECENTS
+    : SUGGESTION_WINDOW_DEFAULT,
+);
 
 /**
  * Advances once per page load so the welcome screen doesn't always greet the
@@ -1590,13 +1597,14 @@ const rotationOffset = (() => {
 })();
 
 const visibleSuggestions = computed(() => {
+  const windowSize = suggestionWindowSize.value;
   const pool = hasPhotos.value ? suggestions : onboardingSuggestions;
-  if (pool.length <= SUGGESTION_WINDOW) return pool;
+  if (pool.length <= windowSize) return pool;
   // The window slides backwards through the pool, so each refresh pulls a fresh
   // card in at the front and drops the last one off the back.
   const start = ((-rotationOffset % pool.length) + pool.length) % pool.length;
   return Array.from(
-    { length: SUGGESTION_WINDOW },
+    { length: windowSize },
     (_, i) => pool[(start + i) % pool.length],
   );
 });
