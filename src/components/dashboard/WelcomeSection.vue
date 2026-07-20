@@ -20,7 +20,7 @@
         <div class="stat-group">
           <!-- Col 1: Total photos -->
           <div
-            class="stat-col stat-col--clickable"
+            class="stat-col stat-col--clickable_"
             role="button"
             tabindex="0"
             aria-label="Go to workspace"
@@ -39,7 +39,8 @@
 
           <div class="stat-divider" />
 
-          <!-- Col 2: Analyses remaining -->
+          <!--
+          Col 2 (old): Analyses remaining
           <div
             class="stat-col stat-col--clickable stat-col--analysis-clickable"
             role="button"
@@ -59,17 +60,38 @@
               <span class="stat-label">Analyses left</span>
             </div>
           </div>
+          -->
+          <div class="stat-col stat-col--workspace-button">
+            <n-button
+              secondary
+              type="primary"
+              strong
+              size="medium"
+              aria-label="Go to workspace"
+              @click="emit('go-workspace')"
+            >
+              <template #icon>
+                <n-icon size="16">
+                  <ArrowForwardOutline />
+                </n-icon>
+              </template>
+              <span class="workspace-button-label">Workspace</span>
+            </n-button>
+          </div>
         </div>
 
         <!-- Action section: Col 3 -->
-        <div class="stat-action-section" v-show="statBlockWidth >= 290">
+        <div class="stat-action-section" v-show="showUploadAction">
           <n-button
+            secondary
             type="primary"
+            strong
+            size="medium"
             @click="runPrimaryAction"
             :aria-label="primaryActionLabel"
           >
             <template #icon>
-              <n-icon size="22">
+              <n-icon size="20">
                 <component :is="primaryActionIcon" />
               </n-icon>
             </template>
@@ -82,12 +104,11 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onBeforeUnmount } from "vue";
-import { useRouter } from "vue-router";
-import { LayersOutline, ShareOutline } from "@vicons/ionicons5";
-import { InProgress } from "@vicons/carbon";
-
-const router = useRouter();
-const goSettings = () => router.push("/settings");
+import {
+  ArrowForwardOutline,
+  LayersOutline,
+  ShareOutline,
+} from "@vicons/ionicons5";
 
 const props = defineProps<{
   userShortName?: string | null;
@@ -104,6 +125,15 @@ const emit = defineEmits<{
 const statBlockRef = ref<HTMLElement | null>(null);
 const statBlockWidth = ref(9999);
 let resizeObserver: ResizeObserver | null = null;
+
+// The upload action button must fold away before the "Workspace" button's
+// label runs out of room, otherwise the label overflows its own button for a
+// range of widths. Raised (from the old 290) to give the group enough space
+// before it gets cramped.
+const UPLOAD_ACTION_MIN_WIDTH = 340;
+const showUploadAction = computed(
+  () => statBlockWidth.value >= UPLOAD_ACTION_MIN_WIDTH,
+);
 
 onMounted(() => {
   if (statBlockRef.value) {
@@ -127,7 +157,7 @@ const primaryActionIcon = ShareOutline;
 
 const countFormatter = new Intl.NumberFormat("es-ES", {
   maximumFractionDigits: 0,
-  useGrouping: "always",
+  useGrouping: true,
 });
 
 const formatCount = (value: number | string | null | undefined) => {
@@ -144,10 +174,6 @@ const formatCount = (value: number | string | null | undefined) => {
 };
 
 const photosCountFormatted = computed(() => formatCount(props.photosCount));
-
-const analysisRemaining = computed(() =>
-  formatCount(props.analyzedPhotosRemaining),
-);
 
 const runPrimaryAction = () => emit("go-upload");
 </script>
@@ -230,18 +256,15 @@ const runPrimaryAction = () => emit("go-upload");
 /* ── Action section (col3) ── */
 .stat-action-section {
   display: flex;
-  align-items: stretch;
-  justify-content: stretch;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  /* border-left: 2px solid var(--border-color); */
+  padding: 10px 14px;
+  border-left: 1px solid var(--border-color);
 }
 
 .stat-action-section :deep(.n-button) {
-  height: 100%;
-  width: 100%;
-  min-width: 52px;
-  border-radius: 0;
-  padding: 0 18px;
+  justify-content: center;
 }
 
 .stat-divider {
@@ -260,8 +283,31 @@ const runPrimaryAction = () => emit("go-upload");
   gap: 9px;
   padding: 10px 14px;
   min-width: 0;
-  flex: 1;
+  flex-shrink: 0;
   transition: background 0.18s ease;
+}
+
+.stat-col--workspace-button {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.stat-col--workspace-button :deep(.n-button) {
+  width: 100%;
+  justify-content: center;
+  min-width: 0;
+}
+
+.stat-col--workspace-button :deep(.n-button__content) {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.workspace-button-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .stat-col--clickable {
@@ -317,7 +363,7 @@ const runPrimaryAction = () => emit("go-upload");
 }
 
 .stat-value {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 800;
   color: var(--accent-color);
   line-height: 1;
@@ -337,5 +383,23 @@ const runPrimaryAction = () => emit("go-upload");
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+}
+
+@media (max-width: 680px) {
+  .stat-action-section {
+    display: none !important;
+  }
+
+  .stat-col {
+    flex: 1 1 0;
+  }
+
+  .stat-group .stat-col:not(.stat-col--workspace-button) {
+    flex: 0 1 40%;
+  }
+
+  .stat-col--workspace-button {
+    flex: 1 1 60%;
+  }
 }
 </style>

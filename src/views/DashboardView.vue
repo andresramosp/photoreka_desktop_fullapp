@@ -11,6 +11,7 @@
         <div class="panel-body">
           <!-- Welcome + Stats -->
           <WelcomeSection
+            class="welcome-fixed"
             :user-short-name="userStore.userShortName"
             :avg-aesthetic-score="avgAestheticScore"
             :photos-count="photos.length"
@@ -723,9 +724,25 @@ const navigateToCollections = () => {
   /* Extend to the panel edge so the scrollbar is not inset by panel-body padding */
   margin-right: -16px;
   padding-right: 12px;
+  /* Always reserve the scrollbar gutter so the cards keep a fixed right edge
+     whether or not the scrollbar is present — and so the fixed WelcomeSection
+     above (which reserves the same gutter) lines up with them. */
+  scrollbar-gutter: stable;
   box-sizing: border-box;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
+}
+
+/* The WelcomeSection sits outside the scroll area (it stays fixed while the
+   sections below scroll), so it does not naturally share the scrollbar gutter.
+   Mirror the scroll area's horizontal geometry — same negative margin, padding
+   and reserved gutter — so its right edge aligns with the cards below. */
+.welcome-fixed {
+  margin-right: -16px;
+  padding-right: 12px;
+  overflow: hidden;
+  scrollbar-gutter: stable;
+  box-sizing: border-box;
 }
 
 .panel-sections-scroll-area::-webkit-scrollbar {
