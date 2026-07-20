@@ -1024,7 +1024,7 @@ const clearGroupFilter = () => {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  background: var(--bg-surface-hover);
+  background: var(--bg-surface, rgba(255, 255, 255, 0.04));
   border-radius: 6px;
   cursor: pointer;
   border: 1px solid var(--border-color);
@@ -1033,24 +1033,38 @@ const clearGroupFilter = () => {
 }
 
 .group-filter-option:hover {
-  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--bg-surface, rgba(255, 255, 255, 0.04)) 88%,
+    white 12%
+  );
   border-color: var(--border-color-hover);
 }
 
 .group-filter-option.active {
-  background: color-mix(in srgb, var(--primary-color) 15%, transparent);
-  border-color: color-mix(in srgb, var(--primary-color) 40%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--bg-surface, rgba(255, 255, 255, 0.04)) 84%,
+    white 16%
+  );
+  border-color: var(--border-color-hover);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, white 12%, transparent);
 }
 
 .group-filter-option.active:hover {
-  background: color-mix(in srgb, var(--primary-color) 20%, transparent);
-  border-color: color-mix(in srgb, var(--primary-color) 50%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--bg-surface, rgba(255, 255, 255, 0.04)) 80%,
+    white 20%
+  );
+  border-color: var(--border-color-hover);
 }
 
 .group-color-dot {
   width: 9px;
   height: 9px;
   border-radius: 50%;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, white 12%, transparent);
   flex-shrink: 0;
 }
 

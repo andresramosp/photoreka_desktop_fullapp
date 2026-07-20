@@ -377,26 +377,39 @@ const getStrengthIcon = (strength) => {
 
 .pattern-item {
   padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-surface, rgba(255, 255, 255, 0.04));
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-color);
 }
 
 .pattern-item:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.15);
+  background: color-mix(
+    in srgb,
+    var(--bg-surface, rgba(255, 255, 255, 0.04)) 88%,
+    white 12%
+  );
+  border-color: var(--border-color-hover);
 }
 
 .pattern-item.selected {
-  background: color-mix(in srgb, var(--primary-color) 15%, transparent);
-  border-color: color-mix(in srgb, var(--primary-color) 40%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--bg-surface, rgba(255, 255, 255, 0.04)) 84%,
+    white 16%
+  );
+  border-color: var(--border-color-hover);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, white 12%, transparent);
 }
 
 .pattern-item.selected:hover {
-  background: color-mix(in srgb, var(--primary-color) 20%, transparent);
-  border-color: color-mix(in srgb, var(--primary-color) 50%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--bg-surface, rgba(255, 255, 255, 0.04)) 80%,
+    white 20%
+  );
+  border-color: var(--border-color-hover);
 }
 
 .pattern-info {
