@@ -2,7 +2,7 @@ import Stripe from 'stripe'
 import stripeConfig from '#config/stripe'
 import Payment from '#models/payment'
 import User from '#models/user'
-import UsageService from '#services/usage_service'
+import UsageService, { getDefaultUsageByTier, UsageTier } from '#services/usage_service'
 import GeoRecoveryPaymentService from '#services/geo_recovery_payment_service'
 import {
   type PhotoPackage,
@@ -325,15 +325,8 @@ export default class PaymentService {
 
   private static async provisionPayment(payment: Payment): Promise<void> {
     const user = await User.findOrFail(payment.userId)
-    const usage = user.usage || {
-      photosLimit: 0,
-      analyzedPhotosLimit: 0,
-      creditsAvailable: 0,
-      creditsUsed: 0,
-      analyzedPhotosUsed: 0,
-    }
+    const usage = user.usage || getDefaultUsageByTier(UsageTier.BASIC)
 
-    usage.photosLimit += payment.analyzedPhotosGranted
     usage.analyzedPhotosLimit += payment.analyzedPhotosGranted
     usage.creditsAvailable += payment.creditsGranted
 
@@ -345,7 +338,6 @@ export default class PaymentService {
     const usage = user.usage
     if (!usage) return
 
-    usage.photosLimit = Math.max(0, usage.photosLimit - payment.analyzedPhotosGranted)
     usage.analyzedPhotosLimit = Math.max(
       0,
       usage.analyzedPhotosLimit - payment.analyzedPhotosGranted
