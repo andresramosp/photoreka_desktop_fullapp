@@ -607,7 +607,10 @@ const handleTouchMove = (event: TouchEvent) => {
 };
 
 const handleTouchEnd = (event: TouchEvent) => {
-  baseTouchEnd(event, props.photo.id, (id) => emit("select", id), showInfo);
+  // Only allow tap-to-open info when the photo is processed (has data to show),
+  // matching desktop where the info button is only rendered for processed photos.
+  const onShowInfo = props.photo.status === "processed" ? showInfo : undefined;
+  baseTouchEnd(event, props.photo.id, (id) => emit("select", id), onShowInfo);
 };
 
 const handleTouchCancel = () => {

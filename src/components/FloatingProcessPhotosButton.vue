@@ -246,7 +246,7 @@ const handleClick = () => {
 /* Responsive */
 @media (max-width: 768px) {
   .floating-process-container {
-    bottom: 16px;
+    bottom: 60px;
   }
 
   .floating-process-button.enabled {

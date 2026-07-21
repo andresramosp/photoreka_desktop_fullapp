@@ -3,7 +3,11 @@
     <!-- ── Floating trigger button (visible when panel is closed) ── -->
     <transition name="assistant-fab-anim">
       <button
-        v-if="!store.isOpen && store.activeSection"
+        v-if="
+          !store.isOpen &&
+          store.activeSection &&
+          !(isMobile && isSelectionModeActive)
+        "
         class="assistant-fab"
         title="Open Assistant"
         @click="store.open()"
@@ -233,6 +237,7 @@ import PhotoCardHub from "@/components/photoCards/PhotoCardHub.vue";
 import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
 import { useAssistantChatStore } from "@/stores/assistantChat.js";
 import { usePhotosStore } from "@/stores/photos.js";
+import { useMobilePhotoSelection } from "@/composables/useMobilePhotoSelection";
 import { marked } from "marked";
 import {
   CloseOutline as CloseIcon,
@@ -258,6 +263,10 @@ interface Pill {
 const store = useAssistantChatStore();
 const photosStore = usePhotosStore();
 const router = useRouter();
+
+// Mobile photo-selection mode drives the bottom FloatingActionBar, which would
+// overlap the assistant FAB. Hide the FAB while it's active on mobile.
+const { isSelectionModeActive } = useMobilePhotoSelection();
 
 // ── Local state ──────────────────────────────────────────────────────────────
 
