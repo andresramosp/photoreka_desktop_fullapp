@@ -257,12 +257,55 @@
     >
       <div class="fullscreen-container" @click="closeFullscreen">
         <div class="fullscreen-content">
+          <n-button
+            v-if="canNavigate && hasPrevious"
+            class="nav-arrow nav-arrow-left"
+            size="large"
+            circle
+            type="primary"
+            @click.stop="goToPrevious"
+            title="Previous photo (←)"
+          >
+            <template #icon>
+              <n-icon size="24">
+                <ChevronBack />
+              </n-icon>
+            </template>
+          </n-button>
+
+          <div v-if="isImageLoading" class="fullscreen-loading-overlay">
+            <SpiralGridLoader variant="white" :size="48" />
+          </div>
+
           <img
-            :src="photo.originalUrl || photo.url || photo.thumbnailUrl"
-            :alt="photo.title"
+            :src="
+              fullscreenPhoto?.originalUrl ||
+              fullscreenPhoto?.url ||
+              fullscreenPhoto?.thumbnailUrl
+            "
+            :alt="fullscreenPhoto?.title"
             class="fullscreen-photo"
             @click="closeFullscreen"
+            @load="onFullscreenImageLoad"
+            @error="onFullscreenImageError"
           />
+
+          <n-button
+            v-if="canNavigate && hasNext"
+            class="nav-arrow nav-arrow-right"
+            size="large"
+            circle
+            type="primary"
+            @click.stop="goToNext"
+            title="Next photo (→)"
+          >
+            <template #icon>
+              <n-icon size="24">
+                <ChevronForward />
+              </n-icon>
+            </template>
+          </n-button>
+
           <n-button
             class="close-fullscreen-btn"
             size="large"
@@ -299,12 +342,16 @@ import {
   DocumentTextOutline as NotesIcon,
   DiamondOutline as DiamondIcon,
   CloseOutline as CloseIcon,
+  ChevronBackOutline as ChevronBack,
+  ChevronForwardOutline as ChevronForward,
 } from "@vicons/ionicons5";
 import { FullscreenOutlined } from "@vicons/material";
 
 import { usePhotoScored } from "@/composables/usePhotoScored.js";
 import { InfoCircleFilled } from "@vicons/antd";
 import { useBackgroundImageCache } from "@/composables/useBackgroundImageCache.js";
+import { useFullscreenPhotoNavigation } from "@/composables/useFullscreenPhotoNavigation.js";
+import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 
 // Photo scoring composable
 const { computePhotoStars, shouldShowLowRelevanceIcon } = usePhotoScored();
@@ -366,6 +413,7 @@ interface Props {
   showDeleteButton?: boolean; // Control visibility of delete button
   requireLongPress?: boolean; // Require long press for mobile selection (default: true)
   hideFullscreen?: boolean; // Hide the fullscreen button (default: false)
+  allPhotos?: Photo[]; // Full photo list for prev/next navigation in fullscreen
 }
 
 interface Emits {
@@ -386,6 +434,7 @@ const props = withDefaults(defineProps<Props & { isThinking?: boolean }>(), {
   isNew: false,
   requireLongPress: true,
   hideFullscreen: false,
+  allPhotos: () => [],
 });
 // Show "Reviewing..." label and blur if isThinking and reasoning is "Reviewing..."
 const showAnalyzing = computed(
@@ -427,8 +476,25 @@ const imageError = ref(false);
 const showTooltip = ref(false);
 const showHoverContent = ref(false);
 const isInfoLoading = ref(false);
-const showFullscreenPhoto = ref(false);
 let infoLoadingTimer: ReturnType<typeof setTimeout> | null = null;
+
+const {
+  showFullscreenPhoto,
+  fullscreenPhoto,
+  isImageLoading,
+  canNavigate,
+  hasPrevious,
+  hasNext,
+  openFullscreen,
+  closeFullscreen,
+  goToPrevious,
+  goToNext,
+  onFullscreenImageLoad,
+  onFullscreenImageError,
+} = useFullscreenPhotoNavigation({
+  photo: () => props.photo,
+  allPhotos: () => props.allPhotos,
+});
 
 const uniqueMatchingTags = computed(() =>
   Array.from(new Set(props.photo.matchingTags)),
@@ -570,14 +636,6 @@ const onImageLoad = () => {
 const onImageError = () => {
   imageError.value = true;
   imageLoaded.value = true;
-};
-
-const openFullscreen = () => {
-  showFullscreenPhoto.value = true;
-};
-
-const closeFullscreen = () => {
-  showFullscreenPhoto.value = false;
 };
 
 const moveToSelection = () => {
@@ -1106,6 +1164,15 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
+.fullscreen-loading-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  pointer-events: none;
+}
+
 .close-fullscreen-btn {
   position: fixed;
   top: 20px;
@@ -1126,6 +1193,41 @@ onUnmounted(() => {
   transform: scale(1.1);
 }
 
+/* Fullscreen navigation arrows */
+.nav-arrow {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10001;
+  background: rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(8px);
+  border: 2px solid rgba(255, 255, 255, 0.2) !important;
+  width: 56px;
+  height: 56px;
+  transition: all 0.3s ease;
+  opacity: 0.7;
+  color: white !important;
+}
+
+.nav-arrow:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.8) !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+  transform: translateY(-50%) scale(1.1);
+}
+
+.nav-arrow:active {
+  transform: translateY(-50%) scale(0.95);
+}
+
+.nav-arrow-left {
+  left: 24px;
+}
+
+.nav-arrow-right {
+  right: 24px;
+}
+
 @media (max-width: 768px) {
   .fullscreen-container {
     padding: 20px;
@@ -1136,6 +1238,19 @@ onUnmounted(() => {
     right: 15px;
     width: 40px;
     height: 40px;
+  }
+
+  .nav-arrow {
+    width: 48px;
+    height: 48px;
+  }
+
+  .nav-arrow-left {
+    left: 12px;
+  }
+
+  .nav-arrow-right {
+    right: 12px;
   }
 }
 </style>

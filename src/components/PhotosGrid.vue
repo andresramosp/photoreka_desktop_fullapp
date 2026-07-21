@@ -365,6 +365,7 @@
               :key="photo.id"
               :data-photo-id="photo.id"
               :photo="photo"
+              :all-photos="chunk.photos"
               :selected="selectedPhotosRecord[photo.id]"
               :focused="
                 focusedByKeyboard && String(photo.id) === String(focusedPhotoId)
@@ -409,6 +410,7 @@
             :key="photo.id"
             :data-photo-id="photo.id"
             :photo="photo"
+            :all-photos="displayedPhotos"
             :selected="selectedPhotosRecord[photo.id]"
             :focused="
               focusedByKeyboard && String(photo.id) === String(focusedPhotoId)

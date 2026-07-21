@@ -176,7 +176,6 @@
           circle
           type="primary"
           @click.stop="goToPreviousPhoto"
-          :disabled="isTransitioning"
           title="Previous photo (←)"
         >
           <template #icon>
@@ -186,24 +185,27 @@
           </template>
         </n-button>
 
-        <!-- Photo with transition -->
-        <transition
-          :name="slideDirection === 'next' ? 'slide-left' : 'slide-right'"
-          mode="out-in"
-        >
-          <img
-            :key="selectedPhoto?.id"
-            :src="
-              selectedPhoto?.originalUrl ||
-              selectedPhoto?.url ||
-              selectedPhoto?.thumbnailUrl
-            "
-            :alt="selectedPhoto?.filename || selectedPhoto?.name || 'Photo'"
-            class="fullscreen-photo"
-            @error="handleImageError"
-            @click="closeFullscreen"
-          />
-        </transition>
+        <div v-if="isImageLoading" class="fullscreen-loading-overlay">
+          <SpiralGridLoader variant="white" :size="56" />
+        </div>
+
+        <img
+          :src="
+            fullscreenPhoto?.originalUrl ||
+            fullscreenPhoto?.url ||
+            fullscreenPhoto?.thumbnailUrl
+          "
+          :alt="fullscreenPhoto?.filename || fullscreenPhoto?.name || 'Photo'"
+          class="fullscreen-photo"
+          @load="onFullscreenImageLoad"
+          @error="
+            (e) => {
+              handleImageError(e);
+              onFullscreenImageError();
+            }
+          "
+          @click="closeFullscreen"
+        />
 
         <!-- Navigation Arrow Right -->
         <n-button
@@ -213,7 +215,6 @@
           circle
           type="primary"
           @click.stop="goToNextPhoto"
-          :disabled="isTransitioning"
           title="Next photo (→)"
         >
           <template #icon>
@@ -249,7 +250,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, nextTick } from "vue";
 import { NModal, NIcon, NButton, useMessage } from "naive-ui";
 import CollectionModal from "./CollectionModal.vue";
 import PhotoToolSelector from "./PhotoToolSelector.vue";
@@ -259,9 +260,12 @@ import CustomArtisticWeights from "./CustomArtisticWeights.vue";
 import PhotoInfoDesktopLayout from "./photo-info/layouts/PhotoInfoDesktopLayout.vue";
 import PhotoInfoMobileLayout from "./photo-info/layouts/PhotoInfoMobileLayout.vue";
 
+import SpiralGridLoader from "./SpiralGridLoader.vue";
+
 // Composables
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { useActivityLogger } from "@/composables/useActivityLogger";
+import { useFullscreenPhotoNavigation } from "@/composables/useFullscreenPhotoNavigation.js";
 import { useUserStore } from "@/stores/userStore.ts";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useSeriesStore } from "@/stores/series.js";
@@ -427,25 +431,33 @@ const isSavingNotes = ref(false);
 const wordCount = ref(0);
 
 const showCustomWeights = ref(false);
-const showFullscreenPhoto = ref(false);
 const showCollectionModal = ref(false);
 const showDeleteConfirm = ref(false);
 const isDeletingPhoto = ref(false);
 
-// Navigation state and logic
-const isTransitioning = ref(false);
-const slideDirection = ref("next"); // 'next' or 'prev'
-
-// Computed properties for navigation
-const hasPreviousPhoto = computed(() => {
-  return props.allPhotos?.length > 0 && props.currentPhotoIndex > 0;
-});
-
-const hasNextPhoto = computed(() => {
-  return (
-    props.allPhotos?.length > 0 &&
-    props.currentPhotoIndex < props.allPhotos.length - 1
-  );
+// Fullscreen viewer: open/close, prev/next navigation, keyboard shortcuts,
+// adjacent-image preloading and the loading spinner are all shared with the
+// photo cards' own fullscreen (PhotoCard.vue / PhotoCardHub.vue) via
+// useFullscreenPhotoNavigation. This dialog runs it in "controlled" mode:
+// the current index lives in the parent (props.currentPhotoIndex), so
+// navigating emits photo-navigate instead of tracking its own photo.
+const {
+  showFullscreenPhoto,
+  fullscreenPhoto,
+  isImageLoading,
+  hasPrevious: hasPreviousPhoto,
+  hasNext: hasNextPhoto,
+  openFullscreen: openPhotoFullscreen,
+  closeFullscreen,
+  goToPrevious: navigateToPreviousPhoto,
+  goToNext: navigateToNextPhoto,
+  onFullscreenImageLoad,
+  onFullscreenImageError,
+} = useFullscreenPhotoNavigation({
+  photo: () => props.selectedPhoto,
+  allPhotos: () => props.allPhotos,
+  currentIndex: () => props.currentPhotoIndex,
+  onNavigate: (index) => emit("photo-navigate", index),
 });
 
 const photoCounter = computed(() => {
@@ -502,105 +514,33 @@ const photoCredit = computed(() => {
   return null;
 });
 
-// Navigation methods
+// Navigation methods (activity logging wraps the shared nav logic)
 const goToPreviousPhoto = () => {
-  if (!hasPreviousPhoto.value || isTransitioning.value) return;
-  isTransitioning.value = true;
-  slideDirection.value = "prev";
+  if (!hasPreviousPhoto.value) return;
   logActivity("ui_action", {
     action: "photo_info_navigate",
     direction: "prev",
     fromIndex: props.currentPhotoIndex,
     photoId: props.selectedPhoto?.id,
   });
-  emit("photo-navigate", props.currentPhotoIndex - 1);
-  setTimeout(() => {
-    isTransitioning.value = false;
-  }, 400);
+  navigateToPreviousPhoto();
 };
 
 const goToNextPhoto = () => {
-  if (!hasNextPhoto.value || isTransitioning.value) return;
-  isTransitioning.value = true;
-  slideDirection.value = "next";
+  if (!hasNextPhoto.value) return;
   logActivity("ui_action", {
     action: "photo_info_navigate",
     direction: "next",
     fromIndex: props.currentPhotoIndex,
     photoId: props.selectedPhoto?.id,
   });
-  emit("photo-navigate", props.currentPhotoIndex + 1);
-  setTimeout(() => {
-    isTransitioning.value = false;
-  }, 400);
+  navigateToNextPhoto();
 };
 
 // Handler for dialog-level navigation (from arrow buttons in desktop layout)
 const handlePhotoNavigate = (index) => {
   emit("photo-navigate", index);
 };
-
-// Keyboard navigation
-const handleKeyDown = (e) => {
-  if (!showFullscreenPhoto.value) return;
-
-  if (e.key === "ArrowLeft") {
-    e.preventDefault();
-    goToPreviousPhoto();
-  } else if (e.key === "ArrowRight") {
-    e.preventDefault();
-    goToNextPhoto();
-  } else if (e.key === "Escape") {
-    closeFullscreen();
-  }
-};
-
-// Preload next/previous images for smooth transitions
-const preloadImage = (photoIndex) => {
-  if (!props.allPhotos?.[photoIndex]) return;
-
-  const photo = props.allPhotos[photoIndex];
-  const img = new Image();
-  img.src = photo.originalUrl || photo.url || photo.thumbnailUrl;
-};
-
-// Watch for fullscreen changes to preload adjacent images
-watch(showFullscreenPhoto, (isFullscreen) => {
-  if (isFullscreen && props.currentPhotoIndex >= 0) {
-    // Preload next and previous images
-    if (hasNextPhoto.value) {
-      preloadImage(props.currentPhotoIndex + 1);
-    }
-    if (hasPreviousPhoto.value) {
-      preloadImage(props.currentPhotoIndex - 1);
-    }
-  }
-});
-
-// Watch for photo index changes to preload adjacent images
-watch(
-  () => props.currentPhotoIndex,
-  (newIndex) => {
-    if (showFullscreenPhoto.value && newIndex >= 0) {
-      // Preload next and previous images
-      if (hasNextPhoto.value) {
-        preloadImage(newIndex + 1);
-      }
-      if (hasPreviousPhoto.value) {
-        preloadImage(newIndex - 1);
-      }
-    }
-  },
-);
-
-// Lifecycle hooks for keyboard listeners
-onMounted(() => {
-  window.addEventListener("keydown", handleKeyDown);
-});
-
-onUnmounted(() => {
-  window.removeEventListener("keydown", handleKeyDown);
-});
 
 // Function to show custom weight controls
 const showCustomControls = () => {
@@ -684,15 +624,11 @@ const formatExposureTime = (exposureTime) => {
 };
 
 const openFullscreen = () => {
-  showFullscreenPhoto.value = true;
+  openPhotoFullscreen();
   logActivity("ui_action", {
     action: "photo_info_fullscreen_open",
     photoId: props.selectedPhoto?.id,
   });
-};
-
-const closeFullscreen = () => {
-  showFullscreenPhoto.value = false;
 };
 
 const formatCategoryName = (category) => {
@@ -1335,6 +1271,15 @@ if (typeof window !== "undefined") {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
 
+.fullscreen-loading-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  pointer-events: none;
+}
+
 .close-fullscreen-btn {
   position: fixed;
   top: 20px;
@@ -1373,41 +1318,6 @@ if (typeof window !== "undefined") {
   .fullscreen-container {
     padding: 20px;
   }
-}
-
-/* Photo transition animations - Slide effect */
-.slide-left-enter-active,
-.slide-left-leave-active {
-  transition:
-    transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.4s ease;
-}
-
-.slide-left-enter-from {
-  transform: translateX(100%);
-  opacity: 0;
-}
-
-.slide-left-leave-to {
-  transform: translateX(-100%);
-  opacity: 0;
-}
-
-.slide-right-enter-active,
-.slide-right-leave-active {
-  transition:
-    transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.4s ease;
-}
-
-.slide-right-enter-from {
-  transform: translateX(-100%);
-  opacity: 0;
-}
-
-.slide-right-leave-to {
-  transform: translateX(100%);
-  opacity: 0;
 }
 
 /* Navigation Arrows */

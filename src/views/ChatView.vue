@@ -403,6 +403,7 @@
                   >
                     <PhotoCardHub
                       :photo="photo"
+                      :all-photos="message.attachedPhotos"
                       :showName="true"
                       :showFooter="false"
                       :showDelete="false"
@@ -457,6 +458,9 @@
                 >
                   <PhotoCardHub
                     :photo="photo"
+                    :all-photos="
+                      getPhotosForMessage(message.photoLists[0].photoIds)
+                    "
                     :showName="true"
                     :showFooter="false"
                     :showDelete="false"
@@ -510,6 +514,7 @@
                   >
                     <PhotoCardHub
                       :photo="photo"
+                      :all-photos="getPhotosForMessage(list.photoIds)"
                       :showName="true"
                       :showFooter="false"
                       :showDelete="false"
@@ -604,6 +609,7 @@
           >
             <PhotoCardHub
               :photo="photo"
+              :all-photos="contextPhotos"
               :showName="true"
               :showFooter="false"
               :showDelete="false"

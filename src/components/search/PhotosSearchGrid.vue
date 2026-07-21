@@ -136,6 +136,7 @@
           v-for="photo in filteredPhotos"
           :key="photo.id"
           :photo="photo"
+          :all-photos="filteredPhotos"
           :computed-stars="photo.computedStars"
           :show-low-relevance-icon="photo.showLowRelevanceIcon"
           :high-match="photo.highMatch"
@@ -205,6 +206,7 @@
             >
               <PhotoCard
                 :photo="photo"
+                :all-photos="leftPanelPhotos"
                 :computed-stars="photo.computedStars"
                 :show-low-relevance-icon="photo.showLowRelevanceIcon"
                 :high-match="photo.highMatch"
@@ -289,6 +291,7 @@
             >
               <PhotoCard
                 :photo="photo"
+                :all-photos="curatedPhotos"
                 :computed-stars="photo.computedStars"
                 :show-low-relevance-icon="photo.showLowRelevanceIcon"
                 :high-match="photo.highMatch"

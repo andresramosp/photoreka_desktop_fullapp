@@ -960,7 +960,7 @@ const sourceWarningConfig = computed(() => {
     return {
       title: "Different Export Source",
       message:
-        "Your export source is web. If you add photos from Lightroom, the photos you've uploaded from web until now won't be visible in Lightroom.",
+        "Your import source is web. If you add photos from Lightroom, the photos you've uploaded from web until now won't be visible in Lightroom.",
     };
   }
 
