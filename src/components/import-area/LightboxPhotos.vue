@@ -1044,7 +1044,7 @@ const sourceDefinitions = computed(() => ({
     key: "google",
     // Disabled: Google Photos import is turned off for now. Set to `true`
     // to re-enable it everywhere (cards + buttons) — no template changes needed.
-    enabled: false,
+    enabled: true,
     disabled: isUploadDisabled.value,
     compactLabel: "Google Photos",
     cardTitle: "Google Photos",
