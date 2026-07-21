@@ -201,7 +201,7 @@
           <span>Source</span>
         </n-button>
 
-        <n-button
+        <!-- <n-button
           size="small"
           :type="showNoLibraryOnly ? 'primary' : 'default'"
           @click="showNoLibraryOnly = !showNoLibraryOnly"
@@ -209,7 +209,7 @@
           title="Show only photos not in any collection"
         >
           <span>No Library</span>
-        </n-button>
+        </n-button> -->
 
         <n-button
           size="small"
