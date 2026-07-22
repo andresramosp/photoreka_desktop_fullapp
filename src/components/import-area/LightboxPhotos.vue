@@ -568,7 +568,7 @@
                   ? 'primary'
                   : sub.connected
                     ? 'success'
-                    : 'warning'
+                    : 'default'
               "
               :secondary="sub.connected !== undefined"
               class="import-card-action-button"
