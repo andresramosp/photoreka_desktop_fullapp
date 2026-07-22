@@ -531,8 +531,12 @@
             'lightroom-card': source.key === 'lightroom',
             'drag-over': source.draggable && isDragOver && !source.disabled,
             'import-card--disabled': source.disabled,
+            'import-card--static': source.cardClickable === false,
           }"
-          @click="handleSourceSelection(source.key, source.action)"
+          @click="
+            source.cardClickable !== false &&
+            handleSourceSelection(source.key, source.action)
+          "
           @dragover.prevent="
             source.draggable && !source.disabled && handleDragOver($event)
           "
@@ -559,12 +563,25 @@
               :key="sub.key"
               size="small"
               round
-              type="primary"
+              :type="
+                sub.connected === undefined
+                  ? 'primary'
+                  : sub.connected
+                    ? 'success'
+                    : 'warning'
+              "
+              :secondary="sub.connected !== undefined"
               class="import-card-action-button"
               @click.stop="handleSourceSelection(source.key, sub.action)"
             >
-              <template v-if="sub.icon" #icon>
-                <n-icon :component="sub.icon" />
+              <template v-if="sub.icon || sub.iconSrc" #icon>
+                <img
+                  v-if="sub.iconSrc"
+                  :src="sub.iconSrc"
+                  :alt="sub.label"
+                  class="sub-action-icon"
+                />
+                <n-icon v-else :component="sub.icon" />
               </template>
               {{ sub.label }}
             </n-button>
@@ -763,6 +780,7 @@ import {
 } from "@vicons/ionicons5";
 import { RocketLaunchOutlined } from "@vicons/material";
 import { BookInformation20Regular } from "@vicons/fluent";
+import googleLogoIconUrl from "@/assets/logos/google_logo.svg";
 import googlePhotosIconUrl from "@/assets/logos/google_photos.png";
 import googleDriveIconUrl from "@/assets/logos/google_drive.svg";
 import dropboxIconUrl from "@/assets/logos/dropbox.svg";
@@ -979,8 +997,8 @@ const sourceWarningConfig = computed(() => {
 
 // Order in which sources appear, keyed by the user's preferred export source.
 const SOURCE_ORDER = {
-  lightroom: ["lightroom", "local", "google", "drive", "dropbox"],
-  web: ["local", "google", "drive", "dropbox", "lightroom"],
+  lightroom: ["lightroom", "local", "google", "dropbox"],
+  web: ["local", "google", "dropbox", "lightroom"],
 };
 
 const sourceDefinitions = computed(() => ({
@@ -1042,45 +1060,41 @@ const sourceDefinitions = computed(() => ({
   },
   google: {
     key: "google",
-    // Disabled: Google Photos import is turned off for now. Set to `true`
-    // to re-enable it everywhere (cards + buttons) — no template changes needed.
     enabled: true,
     disabled: isUploadDisabled.value,
-    compactLabel: "Google Photos",
-    cardTitle: "Google Photos",
-    cardDescription: googlePhotos.isAuthorized.value
-      ? "Import from your Google Photos library"
-      : "Connect and import your photos from Google Photos",
-    tagType: googlePhotos.isAuthorized.value ? "success" : "warning",
-    tagText: googlePhotos.isAuthorized.value ? "Connected" : "Disconnected",
-    // Always show the actual Google Photos logo — connection state is
-    // already conveyed by the tag above, not by swapping the icon.
+    compactLabel: "Google",
+    cardTitle: "Google",
+    cardDescription: "Import your photos from Google Photos or Google Drive",
     iconType: "img",
-    iconSrc: googlePhotosIconUrl,
-    iconAlt: "Google Photos",
-    iconClass: "google-photos-logo",
+    iconSrc: googleLogoIconUrl,
+    iconAlt: "Google",
+    iconClass: "google-logo",
     draggable: false,
+    // The card only merges Google Photos and Drive visually; clicking the
+    // card itself does nothing, only the sub-actions below are clickable.
+    cardClickable: false,
     action: importFromGooglePhotos,
-  },
-  drive: {
-    key: "drive",
-    enabled: canImportFromGoogleDrive.value,
-    disabled: isUploadDisabled.value,
-    compactLabel: "Google Drive",
-    cardTitle: "Google Drive",
-    cardDescription: googleDrive.isAuthorized.value
-      ? "Import photos directly from your Google Drive"
-      : "Connect and import your photos from Google Drive",
-    tagType: googleDrive.isAuthorized.value ? "success" : "warning",
-    tagText: googleDrive.isAuthorized.value ? "Connected" : "Disconnected",
-    // Always show the actual Google Drive logo — connection state is
-    // already conveyed by the tag above, not by swapping the icon.
-    iconType: "img",
-    iconSrc: googleDriveIconUrl,
-    iconAlt: "Google Drive",
-    iconClass: "google-drive-logo",
-    draggable: false,
-    action: importFromDrive,
+    // Google Photos and Google Drive share the same card, offered as
+    // sub-pills (see Local's Photos/Folders above). Each pill shows its own
+    // icon (Photos/Drive), with the connected/disconnected state reflected
+    // only through the pill's color.
+    subActions: [
+      {
+        key: "photos",
+        label: "Photos",
+        action: importFromGooglePhotos,
+        iconSrc: googlePhotosIconUrl,
+        connected: googlePhotos.isAuthorized.value,
+      },
+      {
+        key: "drive",
+        label: "Drive",
+        action: importFromDrive,
+        iconSrc: googleDriveIconUrl,
+        connected: googleDrive.isAuthorized.value,
+        enabled: canImportFromGoogleDrive.value,
+      },
+    ].filter((sub) => sub.enabled !== false),
   },
   dropbox: {
     key: "dropbox",
@@ -1259,13 +1273,27 @@ const triggerFolderInput = () => {
 // Map a source's subActions to naive-ui n-dropdown options (icon needs to be a
 // render function, not a raw component).
 const subActionOptions = (source) =>
-  (source.subActions || []).map((sub) => ({
-    key: sub.key,
-    label: sub.label,
-    icon: sub.icon
-      ? () => h(NIcon, null, { default: () => h(sub.icon) })
-      : undefined,
-  }));
+  (source.subActions || []).map((sub) => {
+    let icon;
+    if (sub.iconSrc) {
+      icon = () =>
+        h(NIcon, null, {
+          default: () =>
+            h("img", {
+              src: sub.iconSrc,
+              alt: sub.label,
+              style: { width: "1em", height: "1em" },
+            }),
+        });
+    } else if (sub.icon) {
+      icon = () => h(NIcon, null, { default: () => h(sub.icon) });
+    }
+    return {
+      key: sub.key,
+      label: sub.label,
+      icon,
+    };
+  });
 
 // n-dropdown (compact / mobile local button) emits the selected option key.
 const handleSubActionSelect = (source, key) => {
@@ -2462,6 +2490,15 @@ defineExpose({
   pointer-events: none;
 }
 
+.import-card--static {
+  cursor: default;
+}
+
+.import-card--static:hover {
+  border-color: var(--border-color);
+  box-shadow: none;
+}
+
 .import-card:hover:not(.drag-over) {
   border-color: var(--accent-color);
   background-color: var(--bg-surface);
@@ -2481,7 +2518,7 @@ defineExpose({
   justify-content: center;
 }
 
-.import-card-icon :deep(.google-photos-logo) {
+.import-card-icon :deep(.google-logo) {
   height: 56px;
   width: auto;
   object-fit: contain;
@@ -2494,12 +2531,6 @@ defineExpose({
 }
 
 .import-card-icon :deep(.dropbox-logo) {
-  height: 48px;
-  width: auto;
-  object-fit: contain;
-}
-
-.import-card-icon :deep(.google-drive-logo) {
   height: 48px;
   width: auto;
   object-fit: contain;
@@ -2531,6 +2562,12 @@ defineExpose({
   transition:
     transform 0.15s ease,
     opacity 0.15s ease;
+}
+
+.sub-action-icon {
+  width: 1em;
+  height: 1em;
+  object-fit: contain;
 }
 
 .first-import-footer {
