@@ -37,7 +37,8 @@ const MAX_BASE64_LENGTH = 200_000
 const MODERATION_RULES = {
   adult: {
     threshold: new Set(['VERY_LIKELY']),
-    perImage: true,
+    // perImage: true,
+    batchThreshold: 0.75, // ← configurable (ej: 30% del lote)
   },
   violence: {
     threshold: new Set(['VERY_LIKELY']),
