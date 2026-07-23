@@ -146,8 +146,19 @@
                   v-if="selectedPhoto?.descriptions?.artistic_scores"
                   class="mobile-scores"
                 >
-                  <!-- Overall Rating Compact -->
+                  <!-- Overall Rating: Genre select left, score right -->
                   <div class="mobile-overall-rating">
+                    <n-select
+                      class="mobile-genre-select"
+                      size="small"
+                      :value="selectedGenre"
+                      :options="genrePresetOptions"
+                      :render-label="renderGenreOptionLabel"
+                      :fallback-option="false"
+                      @update:value="
+                        (value) => emit('apply-genre-preset', value)
+                      "
+                    />
                     <div class="mobile-rating-main">
                       <span class="mobile-rating-value">
                         {{ overallRating.average }}/{{ scoreScale.max }}
@@ -165,26 +176,6 @@
                         {{ overallRating.rating }}
                       </span>
                     </div>
-                  </div>
-
-                  <!-- Genre Pills (Horizontal scroll) -->
-                  <div class="mobile-genre-scroll">
-                    <n-button
-                      v-for="preset in availableGenrePresets"
-                      :key="preset.key"
-                      class="mobile-preset-button"
-                      :type="
-                        selectedGenre === preset.key ? 'primary' : 'default'
-                      "
-                      :ghost="selectedGenre !== preset.key"
-                      size="small"
-                      @click="emit('apply-genre-preset', preset.key)"
-                    >
-                      <template #icon>
-                        <n-icon><component :is="preset.icon" /></n-icon>
-                      </template>
-                      {{ preset.label }}
-                    </n-button>
                   </div>
 
                   <!-- Scores List (Compact) -->
@@ -230,8 +221,7 @@
               </div>
             </n-tab-pane>
 
-            <n-tab-pane name="tags" display-directive="show:lazy"
-              >>
+            <n-tab-pane name="tags" display-directive="show:lazy">
               <template #tab>
                 <div class="mobile-tab">
                   <n-icon size="16">
@@ -736,7 +726,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, h } from "vue";
 import { useRouter } from "vue-router";
 import { useActivityLogger } from "@/composables/useActivityLogger";
 import {
@@ -748,6 +738,7 @@ import {
   NTabs,
   NTabPane,
   NInput,
+  NSelect,
 } from "naive-ui";
 import SpiralGridLoader from "../../SpiralGridLoader.vue";
 
@@ -858,6 +849,39 @@ const emit = defineEmits([
 
 const activeTab = ref("scores");
 const { logActivity } = useActivityLogger();
+
+const genrePresetOptions = computed(() => {
+  return props.availableGenrePresets.map((preset) => ({
+    label: preset.label,
+    value: preset.key,
+    icon: preset.icon,
+  }));
+});
+
+const renderGenreOptionLabel = (option) => {
+  return h(
+    "div",
+    {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+      },
+    },
+    [
+      option.icon
+        ? h(
+            NIcon,
+            { size: 16 },
+            {
+              default: () => h(option.icon),
+            },
+          )
+        : null,
+      h("span", option.label),
+    ],
+  );
+};
 
 watch(
   () => props.selectedPhoto,
@@ -1168,16 +1192,24 @@ const formatFlashValue = (flash) => {
 
 .mobile-overall-rating {
   display: flex;
-  justify-content: center;
-  padding: var(--spacing-md);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
   background: var(--bg-surface);
   border-radius: var(--radius-md);
+}
+
+.mobile-genre-select {
+  width: 130px;
+  flex-shrink: 0;
 }
 
 .mobile-rating-main {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
+  flex-shrink: 0;
 }
 
 .mobile-rating-value {
@@ -1235,23 +1267,6 @@ const formatFlashValue = (flash) => {
 .rating-outstanding {
   background: #7c3aed;
   color: white;
-}
-
-.mobile-genre-scroll {
-  display: flex;
-  gap: var(--spacing-sm);
-  overflow-x: auto;
-  padding: var(--spacing-xs) var(--spacing-sm);
-  -webkit-overflow-scrolling: touch;
-  justify-content: flex-start;
-  scroll-padding-left: var(--spacing-sm);
-}
-
-.mobile-genre-scroll :deep(.mobile-preset-button) {
-  border-radius: 6px !important;
-  font-size: 12px !important;
-  flex-shrink: 0;
-  white-space: nowrap;
 }
 
 .mobile-scores-list {

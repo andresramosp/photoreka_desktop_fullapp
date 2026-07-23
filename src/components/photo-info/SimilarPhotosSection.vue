@@ -286,4 +286,10 @@ watch(
   width: 100%;
   aspect-ratio: 1;
 }
+
+@media (max-width: 768px) {
+  .similar-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
 </style>
