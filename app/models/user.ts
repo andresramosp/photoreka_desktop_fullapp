@@ -216,4 +216,19 @@ export default class User extends compose(BaseModel, AuthFinder) {
     type: 'auth_token',
     tokenSecretLength: 40,
   })
+
+  // Same table/prefix/type but with no default expiry, so the resulting token
+  // never expires (the auth guard treats a NULL expires_at as "never expires").
+  //
+  // Reserved for tokens that end up living inside the Lightroom plugin, which
+  // runs unattended and has no way to silently re-authenticate once a token
+  // expires. Eligibility is decided by WHO the request comes from (the plugin
+  // identifies itself), never by the user's preferredSource — a Lightroom user
+  // logging in from the web browser must still get a normal expiring token.
+  static accessTokensEternal = DbAccessTokensProvider.forModel(User, {
+    prefix: 'oat_',
+    table: 'auth_access_tokens',
+    type: 'auth_token',
+    tokenSecretLength: 40,
+  })
 }

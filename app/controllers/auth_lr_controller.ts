@@ -76,6 +76,8 @@ export default class AuthLrController {
       return response.unauthorized({ message: 'Invalid user' })
     }
 
+    // Handoff goes plugin → web browser: the browser is what ends up holding
+    // this token, so it gets a normal expiring one.
     const accessToken = await User.accessTokens.create(user, ['*'])
 
     return response.ok({
@@ -147,7 +149,11 @@ export default class AuthLrController {
       return response.badRequest({ message: 'Session already completed' })
     }
 
-    const accessToken = await User.accessTokens.create(user, ['*'])
+    // The token row lives in Postgres (auth_access_tokens); its plaintext value
+    // is then parked briefly in Redis below so the Lightroom plugin can poll and
+    // pick it up (browser-based Google login flow). The plugin runs unattended
+    // and can't silently re-authenticate, so this token must never expire.
+    const accessToken = await User.accessTokensEternal.create(user, ['*'])
     const tokenValue = accessToken.value!.release()
 
     await redis.set(

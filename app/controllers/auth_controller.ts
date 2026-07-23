@@ -333,7 +333,13 @@ export default class AuthController {
         })
       }
 
-      const token = await User.accessTokens.create(user, ['*'])
+      // The Lightroom plugin logs in against this same endpoint, but it runs
+      // unattended and can't silently re-authenticate, so it gets an eternal
+      // token. It identifies itself with a dedicated client header; the web
+      // login (even for Lightroom-source users) omits it and gets a normal one.
+      const isLightroomPlugin = request.header('x-photoreka-client') === 'lightroom-plugin'
+      const tokenProvider = isLightroomPlugin ? User.accessTokensEternal : User.accessTokens
+      const token = await tokenProvider.create(user, ['*'])
 
       return response.ok({
         message: 'Login successful',
