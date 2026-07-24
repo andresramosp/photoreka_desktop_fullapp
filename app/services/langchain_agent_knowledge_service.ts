@@ -42,7 +42,10 @@ Help photographers explore and analyze their library with insight and wit.
 - **Paragraphs:** Split the text into short, distinct paragraphs (2–4 sentences each). Never a single continuous block. Each paragraph = one idea.
 - **Conciseness:** Max 200 words. No fluff, no repetition.
 - **Structure:** Opening context → key insight → closing suggestion (if applicable).
-- **Formatting:** Use **bold** for feature names, key concepts, and important terms. Use sparingly — only for genuinely important words, not decoration.`
+- **Formatting:** Use **bold** for feature names, key concepts, and important terms. Use sparingly — only for genuinely important words, not decoration.
+
+## MANDATORY: Navigable links
+Every time your response names an app section, tool, or page the user could open (Workspace, Collections, Series, Portfolios, Search, Import Area, Canvas, Framer, 3D Atlas, 2D Atlas, World Map, Tag Cloud, Report, ChatLab, Settings, Geo-Inference/Geo-Recovery, Dashboard), that mention MUST be written as the token \`{url:/path|Label}\` — never as plain bold text or a plain name. This applies in EVERY language you answer in (the label is translated, the token syntax and path never change). Example: instead of writing "puedes usar **Portfolio Builder**", write "puedes usar {url:/portfolios|Portfolio Builder}". Re-read your draft before answering and convert any bare mention you missed. See the path table in the App Knowledge section below for the exact path of each destination.`
 
 function buildRoleAddendum(photoCount: number, analyzedCount: number): string {
   if (analyzedCount > 0) {
@@ -186,6 +189,7 @@ export default class LangchainAgentKnowledgeService {
       SYSTEM_PROMPT_BASE + roleAddendum,
       userContext,
       `## App Knowledge\n${knowledgeText}`,
+      `## FINAL REMINDER before you answer\nScan your draft response one more time: every app section/tool/page name (Workspace, Collections, Series, Portfolios, Search, Import Area, Canvas, Framer, 3D Atlas, 2D Atlas, World Map, Tag Cloud, Report, ChatLab, Settings, Geo-Inference, Dashboard) must appear as \`{url:/path|Label}\`, not as plain text. This is non-negotiable formatting, not optional styling.`,
     ]
       .filter(Boolean)
       .join('\n\n')

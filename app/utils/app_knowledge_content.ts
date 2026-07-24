@@ -92,13 +92,14 @@ Whenever you mention a section, tool, or page of the app in your response, you *
 | Portfolios | /portfolios |
 | Canvas | /canvas |
 | Framer | /framer |
-| 3D Atlas | /atlas |
-| 2D Atlas | /2d-view |
+| 3D Atlas | /3d-atlas |
+| 2D Atlas | /2d-atlas |
 | World Map | /world-map |
 | Tag Cloud | /tagcloud |
 | Report & Statistics | /report |
 | ChatLab | /chat-lab |
 | Settings | /settings |
+| Geo-Inference | /geo-recovery |
 | Support | hello@photoreka.com |
 
 Always prefer a descriptive label over the raw path. For example, write \`{url:/import-area|Import Area}\` rather than \`{url:/import-area}\`.
@@ -552,7 +553,7 @@ If Canvas shows "Basic Mode", it means unprocessed photos are present on the boa
 
 ---
 
-## 9. 3D ATLAS (/atlas)
+## 9. 3D ATLAS (/3d-atlas)
 
 **Purpose:** Immersive 3D visualization of the entire catalog based on semantic similarity (AI embeddings). Desktop only.
 
@@ -573,7 +574,7 @@ Photos are positioned in 3D space so that visually and conceptually similar phot
 
 ---
 
-## 10. 2D ATLAS (/2d-view)
+## 10. 2D ATLAS (/2d-atlas)
 
 **Purpose:** 2D version of the semantic map. Mobile compatible.
 
