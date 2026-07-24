@@ -896,6 +896,7 @@ import UploadSourceIcon from "./UploadSourceIcon.vue";
 
 import { NModal, NCheckbox, NTooltip, NDropdown, NIcon } from "naive-ui";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
+import { useActivityLogger } from "@/composables/useActivityLogger";
 
 import { useMessage } from "naive-ui";
 
@@ -931,6 +932,7 @@ const emit = defineEmits([
 const photosStore = usePhotosStore();
 const userStore = useUserStore();
 const message = useMessage();
+const { logActivity } = useActivityLogger();
 
 // Google Photos composable
 const googlePhotos = useGooglePhotos();
@@ -1943,6 +1945,11 @@ const openAnalyzeDialog = () => {
     selectedCount.value < MIN_PHOTOS_FIRST_ANALYSIS
   ) {
     showFirstAnalysisMinimumModal.value = true;
+    logActivity("ui_action", {
+      action: "analysis_failed_enough_photos",
+      selectedCount: selectedCount.value,
+      minRequired: MIN_PHOTOS_FIRST_ANALYSIS,
+    });
     return;
   }
 
