@@ -241,6 +241,29 @@ export const usePhotosStore = defineStore("photos", {
       }
     },
 
+    // Flag de curación estilo Lightroom (null | 'picked' | 'rejected').
+    // Optimista: actualiza local y persiste; revierte si el backend falla.
+    async setPhotoFlag(photoId, flag) {
+      const photo = this.photos?.find((p) => p.id === photoId);
+      const prev = photo?.flag ?? null;
+      this.updatePhoto(photoId, { flag });
+      try {
+        await api.post(`/api/catalog/${photoId}/flag`, { flag });
+      } catch (error) {
+        this.updatePhoto(photoId, { flag: prev });
+        console.warn("No se pudo guardar el flag de la foto:", error.message);
+      }
+    },
+
+    // Cicla los 3 estados: sin marcar → picked → rejected → sin marcar.
+    cyclePhotoFlag(photoId) {
+      const photo = this.photos?.find((p) => p.id === photoId);
+      const order = [null, "picked", "rejected"];
+      const idx = order.indexOf(photo?.flag ?? null);
+      const nextFlag = order[(idx + 1) % order.length];
+      return this.setPhotoFlag(photoId, nextFlag);
+    },
+
     clearDuplicateFlags(photoIds = null) {
       if (!Array.isArray(this.photos)) return;
       for (const photo of this.photos) {

@@ -1,5 +1,5 @@
 import { computed, h, onMounted, onUnmounted, ref, watch } from "vue";
-import { NIcon } from "naive-ui";
+import { NEllipsis, NIcon } from "naive-ui";
 import type { MenuOption } from "naive-ui";
 import { usePhotosStore } from "@/stores/photos";
 import { useCollectionsStore } from "@/stores/collections";
@@ -105,8 +105,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     const childSets: MenuOption[] = collectionsStore
       .childSetsOf(setId)
       .map((s: { id: string | number; name?: string }) => ({
-        label: () =>
-          h("span", { class: "collection-menu-item" }, s.name || `Set ${s.id}`),
+        label: () => renderTruncatedLabel(s.name || `Set ${s.id}`),
         key: `collection-set-${s.id}`,
         icon: renderIcon(FolderIcon),
         children: buildSetChildren(s.id),
@@ -116,11 +115,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
       .collectionsInSet(setId)
       .map((col: { id: string | number; title?: string; name?: string }) => ({
         label: () =>
-          h(
-            "span",
-            { class: "collection-menu-item" },
-            col.title || col.name || `Collection ${col.id}`,
-          ),
+          renderTruncatedLabel(col.title || col.name || `Collection ${col.id}`),
         key: `collection-${col.id}`,
       }));
 
@@ -131,8 +126,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
   const collectionsTreeChildren = computed<MenuOption[]>(() => {
     const rootSetNodes: MenuOption[] = collectionsStore.rootSets.map(
       (s: { id: string | number; name?: string }) => ({
-        label: () =>
-          h("span", { class: "collection-menu-item" }, s.name || `Set ${s.id}`),
+        label: () => renderTruncatedLabel(s.name || `Set ${s.id}`),
         key: `collection-set-${s.id}`,
         icon: renderIcon(FolderIcon),
         children: buildSetChildren(s.id),
@@ -142,11 +136,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     const rootColNodes: MenuOption[] = collectionsStore.rootCollections.map(
       (col: { id: string | number; title?: string; name?: string }) => ({
         label: () =>
-          h(
-            "span",
-            { class: "collection-menu-item" },
-            col.title || col.name || `Collection ${col.id}`,
-          ),
+          renderTruncatedLabel(col.title || col.name || `Collection ${col.id}`),
         key: `collection-${col.id}`,
       }),
     );
@@ -167,8 +157,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     const childSets: MenuOption[] = seriesStore
       .childSetsOf(setId)
       .map((s: { id: string | number; name?: string }) => ({
-        label: () =>
-          h("span", { class: "collection-menu-item" }, s.name || `Set ${s.id}`),
+        label: () => renderTruncatedLabel(s.name || `Set ${s.id}`),
         key: `series-set-${s.id}`,
         icon: renderIcon(FolderIcon),
         children: buildSeriesSetChildren(s.id),
@@ -178,11 +167,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
       .seriesInSet(setId)
       .map((ser: { id: string | number; title?: string; name?: string }) => ({
         label: () =>
-          h(
-            "span",
-            { class: "collection-menu-item" },
-            ser.title || ser.name || `Series ${ser.id}`,
-          ),
+          renderTruncatedLabel(ser.title || ser.name || `Series ${ser.id}`),
         key: `series-${ser.id}`,
       }));
 
@@ -192,8 +177,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
   const seriesTreeChildren = computed<MenuOption[]>(() => {
     const rootSetNodes: MenuOption[] = seriesStore.rootSets.map(
       (s: { id: string | number; name?: string }) => ({
-        label: () =>
-          h("span", { class: "collection-menu-item" }, s.name || `Set ${s.id}`),
+        label: () => renderTruncatedLabel(s.name || `Set ${s.id}`),
         key: `series-set-${s.id}`,
         icon: renderIcon(FolderIcon),
         children: buildSeriesSetChildren(s.id),
@@ -203,11 +187,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     const rootSeriesNodes: MenuOption[] = seriesStore.rootSeries.map(
       (ser: { id: string | number; title?: string; name?: string }) => ({
         label: () =>
-          h(
-            "span",
-            { class: "collection-menu-item" },
-            ser.title || ser.name || `Series ${ser.id}`,
-          ),
+          renderTruncatedLabel(ser.title || ser.name || `Series ${ser.id}`),
         key: `series-${ser.id}`,
       }),
     );
@@ -219,8 +199,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     const childSets: MenuOption[] = portfolioBuildsStore
       .childSetsOf(setId)
       .map((s: { id: string | number; name?: string }) => ({
-        label: () =>
-          h("span", { class: "collection-menu-item" }, s.name || `Set ${s.id}`),
+        label: () => renderTruncatedLabel(s.name || `Set ${s.id}`),
         key: `portfolio-set-${s.id}`,
         icon: renderIcon(FolderIcon),
         children: buildPortfolioSetChildren(s.id),
@@ -230,11 +209,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
       .buildsInSet(setId)
       .map((build: { id: string | number; config?: { name?: string } }) => ({
         label: () =>
-          h(
-            "span",
-            { class: "collection-menu-item" },
-            build.config?.name || `Portfolio #${build.id}`,
-          ),
+          renderTruncatedLabel(build.config?.name || `Portfolio #${build.id}`),
         key: `portfolio-${build.id}`,
       }));
 
@@ -244,8 +219,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
   const portfolioTreeChildren = computed<MenuOption[]>(() => {
     const rootSetNodes: MenuOption[] = portfolioBuildsStore.rootSets.map(
       (s: { id: string | number; name?: string }) => ({
-        label: () =>
-          h("span", { class: "collection-menu-item" }, s.name || `Set ${s.id}`),
+        label: () => renderTruncatedLabel(s.name || `Set ${s.id}`),
         key: `portfolio-set-${s.id}`,
         icon: renderIcon(FolderIcon),
         children: buildPortfolioSetChildren(s.id),
@@ -256,11 +230,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
       portfolioBuildsStore.rootBuilds.map(
         (build: { id: string | number; config?: { name?: string } }) => ({
           label: () =>
-            h(
-              "span",
-              { class: "collection-menu-item" },
-              build.config?.name || `Portfolio #${build.id}`,
-            ),
+            renderTruncatedLabel(build.config?.name || `Portfolio #${build.id}`),
           key: `portfolio-${build.id}`,
         }),
       );
@@ -272,19 +242,13 @@ export function useMainMenu(closeMobileMenu?: () => void) {
     if (canvasList.value.length === 0) {
       return [
         {
-          label: () =>
-            h("span", { class: "collection-menu-item" }, "My Canvas"),
+          label: () => renderTruncatedLabel("My Canvas"),
           key: "canvas-placeholder",
         },
       ];
     }
     return canvasList.value.map((canvas) => ({
-      label: () =>
-        h(
-          "span",
-          { class: "collection-menu-item" },
-          canvas.name || `Canvas ${canvas.id}`,
-        ),
+      label: () => renderTruncatedLabel(canvas.name || `Canvas ${canvas.id}`),
       key: `canvas-${canvas.id}`,
     }));
   });
@@ -296,6 +260,14 @@ export function useMainMenu(closeMobileMenu?: () => void) {
   const renderIcon = (icon: any) => {
     return () => h(NIcon, null, { default: () => h(icon) });
   };
+
+  // Render a menu label that shows a tooltip with the full name when truncated
+  const renderTruncatedLabel = (text: string) =>
+    h(
+      "span",
+      { class: "collection-menu-item" },
+      h(NEllipsis, { style: { maxWidth: "100%" } }, { default: () => text }),
+    );
 
   // Helper to render laptop icon suffix for desktop-only features
   const renderLaptopSuffix = () => {

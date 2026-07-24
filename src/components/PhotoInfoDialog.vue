@@ -55,6 +55,7 @@
     @send-to-chat="handleSendToChat"
     @navigate-to-photo="handleNavigateToPhoto"
     @photo-navigate="handlePhotoNavigate"
+    @set-flag="handleCycleFlag"
   />
 
   <!-- Mobile Layout -->
@@ -110,6 +111,7 @@
     @move-to-tool="handleMoveToTool"
     @send-to-chat="handleSendToChat"
     @navigate-to-photo="handleNavigateToPhoto"
+    @set-flag="handleCycleFlag"
   />
 
   <!-- Collection Modal -->
@@ -1153,6 +1155,18 @@ const saveNotes = async () => {
   } finally {
     isSavingNotes.value = false;
   }
+};
+
+// Cicla el flag de curación de la foto abierta (null → picked → rejected → null).
+// Actualiza la copia abierta en el diálogo y persiste/propaga vía el store (grid).
+const handleCycleFlag = () => {
+  const photo = props.selectedPhoto;
+  if (!photo?.id) return;
+  const order = [null, "picked", "rejected"];
+  const idx = order.indexOf(photo.flag ?? null);
+  const nextFlag = order[(idx + 1) % order.length];
+  photo.flag = nextFlag;
+  photosStore.setPhotoFlag(photo.id, nextFlag);
 };
 
 // ─── Action Bar Handlers ───────────────────────────────────────────

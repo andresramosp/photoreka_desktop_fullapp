@@ -110,10 +110,25 @@
         </n-icon>
       </div> -->
 
+      <!-- Curation flag (Lightroom-style, 3 states: none / picked / rejected) -->
+      <div
+        v-if="showFlag"
+        class="flag-indicator"
+        :class="`flag-${photo.flag || 'none'}`"
+        :style="{ opacity: flagChipOpacity }"
+        :title="flagTitle"
+        @click.stop="cycleFlag"
+      >
+        <n-icon size="16">
+          <FlagOutlineIcon />
+        </n-icon>
+      </div>
+
       <!-- Artistic Score indicator -->
       <div
         v-if="artisticScore && artisticScore > 0"
         class="artistic-score-indicator"
+        :class="{ 'score-shifted': showFlag && flagChipOpacity > 0 }"
         :style="{ backgroundColor: scoreBackgroundColor }"
       >
         {{ artisticScore.toFixed(1) }}
@@ -463,6 +478,7 @@ import {
   CloseOutline as CloseIcon,
   ChevronBackOutline as ChevronBack,
   ChevronForwardOutline as ChevronForward,
+  FlagOutline as FlagOutlineIcon,
 } from "@vicons/ionicons5";
 import { FullscreenOutlined } from "@vicons/material";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
@@ -496,6 +512,7 @@ interface PhotoInfo {
   height?: number;
   originalFileName: string;
   isCheckingDuplicates: boolean;
+  flag?: "picked" | "rejected" | null;
   descriptions?: {
     artistic_scores?: Record<string, number>;
     source?: {
@@ -528,6 +545,7 @@ interface Emits {
   (e: "delete", photoId: string): void;
   (e: "show-duplicates", duplicates: string[]): void;
   (e: "swap-photo", newPhotoId: string, targetIds: string[]): void;
+  (e: "set-flag", photoId: string): void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -571,6 +589,33 @@ const scoreBackgroundColor = computed(() => {
   }
   return getScoreBgColor(props.artisticScore);
 });
+
+// Curation flag: solo en fotos usables (workspace/lightbox), no mientras se procesan
+const showFlag = computed(
+  () =>
+    props.photo.status === "processed" ||
+    props.photo.status === "preprocessed",
+);
+
+// Visibilidad del chip: siempre visible si tiene flag. Si no, en desktop solo
+// aparece al hacer hover; en mobile (sin hover) queda siempre visible pero
+// tenue, para no molestar visualmente mientras sigue siendo accesible al tap.
+const flagChipVisible = computed(
+  () => !!props.photo.flag || showHoverContent.value,
+);
+
+const flagChipOpacity = computed(() => {
+  if (flagChipVisible.value) return 1;
+  return isMobile.value ? 0.45 : 0;
+});
+
+const flagTitle = computed(() => {
+  if (props.photo.flag === "picked") return "Picked (click to reject)";
+  if (props.photo.flag === "rejected") return "Rejected (click to clear)";
+  return "Unflagged (click to pick)";
+});
+
+const cycleFlag = () => emit("set-flag", props.photo.id);
 
 const isSelected = computed(() => props.selected);
 const imageLoaded = ref(false);
@@ -971,6 +1016,62 @@ onUnmounted(() => {
   text-align: center;
 }
 
+/* Curation flag indicator (bottom-left) */
+.flag-indicator {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  cursor: pointer;
+  color: #fff;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition:
+    opacity 0.2s ease,
+    transform 0.15s ease,
+    background-color 0.2s ease;
+}
+
+.flag-indicator:hover {
+  transform: scale(1.12);
+}
+
+.flag-indicator.flag-picked {
+  background-color: var(--success-color);
+}
+
+.flag-indicator.flag-rejected {
+  background-color: var(--error-color);
+}
+
+/* Tachado tipo "reject" de Lightroom sobre la bandera descartada */
+.flag-indicator.flag-rejected .n-icon {
+  position: relative;
+}
+
+.flag-indicator.flag-rejected .n-icon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 120%;
+  height: 2px;
+  background: #fff;
+  transform: rotate(-45deg);
+}
+
+/* Desplaza el score cuando el chip de flag está visible para que no se solapen */
+.artistic-score-indicator.score-shifted {
+  left: 42px;
+}
+
 /* Shared source indicator (Lightroom, Google Photos, Dropbox, web upload) */
 .source-indicator {
   position: absolute;
@@ -1044,6 +1145,21 @@ onUnmounted(() => {
     left: 6px;
   }
 
+  .artistic-score-indicator.score-shifted {
+    left: 36px;
+  }
+
+  .flag-indicator {
+    width: 22px;
+    height: 22px;
+    bottom: 6px;
+    left: 6px;
+  }
+
+  .flag-indicator .n-icon {
+    font-size: 14px !important;
+  }
+
   .source-indicator {
     bottom: 6px;
     right: 6px;
@@ -1073,6 +1189,21 @@ onUnmounted(() => {
     padding: 2px 5px;
     bottom: 4px;
     left: 4px;
+  }
+
+  .artistic-score-indicator.score-shifted {
+    left: 30px;
+  }
+
+  .flag-indicator {
+    width: 20px;
+    height: 20px;
+    bottom: 4px;
+    left: 4px;
+  }
+
+  .flag-indicator .n-icon {
+    font-size: 12px !important;
   }
 
   .source-indicator {

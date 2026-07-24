@@ -98,20 +98,39 @@
 
         <!-- Photo Overlay with Actions Only -->
         <div class="photo-overlay">
-          <!-- Bottom left: Photo credit badge (if available) -->
-          <a
-            v-if="photoCredit"
-            :href="photoCredit.url"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="photo-credit-badge"
-            :title="`Photo by ${photoCredit.username}`"
-          >
-            <n-icon size="16">
-              <LogoInstagram />
-            </n-icon>
-            <span>{{ photoCredit.username }}</span>
-          </a>
+          <!-- Bottom left: Curation flag + photo credit badge (if available) -->
+          <div class="bottom-left-actions">
+            <div
+              class="flag-control"
+              :class="`flag-${selectedPhoto?.flag || 'none'}`"
+              @click="emit('set-flag')"
+              :title="
+                selectedPhoto?.flag === 'picked'
+                  ? 'Picked (click to reject)'
+                  : selectedPhoto?.flag === 'rejected'
+                    ? 'Rejected (click to clear)'
+                    : 'Unflagged (click to pick)'
+              "
+            >
+              <n-icon size="16">
+                <FlagOutlineIcon />
+              </n-icon>
+            </div>
+
+            <a
+              v-if="photoCredit"
+              :href="photoCredit.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="photo-credit-badge"
+              :title="`Photo by ${photoCredit.username}`"
+            >
+              <n-icon size="16">
+                <LogoInstagram />
+              </n-icon>
+              <span>{{ photoCredit.username }}</span>
+            </a>
+          </div>
 
           <!-- Bottom right: Download + Fullscreen -->
           <div class="bottom-right-actions">
@@ -1024,6 +1043,7 @@ import {
   GitCompareOutline as SimilarIcon,
   ChevronBackOutline as ChevronBack,
   ChevronForwardOutline as ChevronForward,
+  FlagOutline as FlagOutlineIcon,
 } from "@vicons/ionicons5";
 import { FullscreenOutlined } from "@vicons/material";
 import { Trophy20Regular as ScoresIcon } from "@vicons/fluent";
@@ -1108,6 +1128,7 @@ const emit = defineEmits([
   "send-to-chat",
   "navigate-to-photo",
   "photo-navigate",
+  "set-flag",
 ]);
 
 // Navigation computed
@@ -1407,6 +1428,60 @@ watch(activeTab, (tab) => {
   right: 8px;
 }
 
+.bottom-left-actions {
+  position: absolute;
+  bottom: var(--spacing-sm);
+  left: var(--spacing-sm);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.flag-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  transition:
+    background-color 0.2s ease,
+    transform 0.15s ease;
+}
+
+.flag-control:hover {
+  transform: scale(1.08);
+}
+
+.flag-control.flag-picked {
+  background: var(--success-color);
+}
+
+.flag-control.flag-rejected {
+  background: var(--error-color);
+}
+
+/* Tachado tipo "reject" de Lightroom, igual que el indicador de la card */
+.flag-control.flag-rejected .n-icon {
+  position: relative;
+}
+
+.flag-control.flag-rejected .n-icon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 120%;
+  height: 2px;
+  background: currentColor;
+  transform: rotate(-45deg);
+}
+
 .centered-photo {
   max-width: 100%;
   max-height: 100%;
@@ -1481,9 +1556,6 @@ watch(activeTab, (tab) => {
 
 /* Photo credit badge - generic for any user */
 .photo-credit-badge {
-  position: absolute;
-  bottom: var(--spacing-sm);
-  left: var(--spacing-sm);
   display: flex;
   align-items: center;
   gap: 6px;

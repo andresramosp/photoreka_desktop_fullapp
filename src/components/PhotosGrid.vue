@@ -56,7 +56,7 @@
                   <TheaterComedyOutlined />
                 </n-icon>
               </template>
-              Check duplicates
+              Duplicates
             </n-button>
           </n-dropdown>
 
@@ -138,6 +138,7 @@
               :key="size"
               :type="gridColumns === size ? 'primary' : 'default'"
               size="small"
+              :focusable="false"
               @click="setGridColumns(size)"
             >
               {{ size }}
@@ -188,9 +189,36 @@
           </n-button>
         </div>
 
+        <div class="flag-filter-controls">
+          <n-dropdown
+            :options="flagFilterOptions"
+            size="small"
+            trigger="click"
+            placement="bottom-start"
+            @select="handleFlagFilterSelect"
+          >
+            <n-button
+              size="small"
+              :focusable="false"
+              class="flag-filter-btn"
+              :class="{
+                'flag-filter-picked': flagFilter === 'picked',
+                'flag-filter-rejected': flagFilter === 'rejected',
+                'flag-filter-unflagged': flagFilter === 'unflagged',
+              }"
+              :title="flagFilterTitle"
+            >
+              <template #icon>
+                <n-icon><FlagOutline /></n-icon>
+              </template>
+            </n-button>
+          </n-dropdown>
+        </div>
+
         <n-button
           size="small"
           :type="showSource ? 'primary' : 'default'"
+          :focusable="false"
           @click="showSource = !showSource"
           class="source-toggle-btn"
           title="Toggle source icons (Lightroom, Google Photos)"
@@ -198,7 +226,6 @@
           <template #icon>
             <n-icon><CloudOutline /></n-icon>
           </template>
-          <span>Source</span>
         </n-button>
 
         <!-- <n-button
@@ -214,20 +241,16 @@
         <n-button
           size="small"
           :type="allSelected ? 'primary' : 'default'"
+          :focusable="false"
           @click="handleSelectAllToggle"
           class="select-all-btn"
+          :title="allSelected ? 'Deselect All' : 'Select All'"
         >
           <template #icon>
             <n-icon>
-              <template v-if="allSelected">
-                <SelectAllOn24Regular />
-              </template>
-              <template v-else>
-                <SelectAllOn24Regular />
-              </template>
+              <SelectAllOn24Regular />
             </n-icon>
           </template>
-          <span>{{ allSelected ? "Deselect All" : "Select All" }}</span>
         </n-button>
       </div>
 
@@ -280,6 +303,7 @@
               :key="size"
               :type="gridColumns === size ? 'primary' : 'default'"
               size="small"
+              :focusable="false"
               @click="setGridColumns(size)"
               style="flex: 1"
             >
@@ -289,11 +313,39 @@
         </div>
 
         <div class="mobile-control">
+          <n-dropdown
+            :options="flagFilterOptions"
+            size="small"
+            trigger="click"
+            placement="bottom-start"
+            @select="handleFlagFilterSelect"
+          >
+            <n-button
+              size="small"
+              :focusable="false"
+              class="mobile-icon-btn flag-filter-btn"
+              :class="{
+                'flag-filter-picked': flagFilter === 'picked',
+                'flag-filter-rejected': flagFilter === 'rejected',
+                'flag-filter-unflagged': flagFilter === 'unflagged',
+              }"
+              :title="flagFilterTitle"
+            >
+              <template #icon>
+                <n-icon><FlagOutline /></n-icon>
+              </template>
+            </n-button>
+          </n-dropdown>
+        </div>
+
+        <div class="mobile-control">
           <n-button
             size="small"
             :type="allSelected ? 'primary' : 'default'"
+            :focusable="false"
+            class="mobile-icon-btn"
             @click="handleSelectAllToggle"
-            style="width: 100%"
+            :title="allSelected ? 'Deselect All' : 'Select All'"
           >
             <template #icon>
               <n-icon>
@@ -380,6 +432,7 @@
                   )
               "
               @swap-photo="handleSwapPhoto"
+              @set-flag="photosStore.cyclePhotoFlag"
               :show-delete="true"
               :show-name="true"
               :show-footer="false"
@@ -425,6 +478,7 @@
                 )
             "
             @swap-photo="handleSwapPhoto"
+            @set-flag="photosStore.cyclePhotoFlag"
             :show-delete="true"
             :show-name="true"
             :show-footer="false"
@@ -654,6 +708,7 @@ import {
   EyeOutline,
   CloudOutline,
   ArrowUndoCircleOutline,
+  FlagOutline,
 } from "@vicons/ionicons5";
 import { SquareOutline } from "@vicons/ionicons5";
 import { useRouter } from "vue-router";
@@ -1002,6 +1057,46 @@ const setGridColumns = (columns) => {
 
 // Source indicator toggle
 const showSource = ref(false);
+
+// Curation flag filter: desplegable con 4 estados (all, picked, rejected, unflagged)
+const flagFilter = ref("all");
+
+// Icono de bandera coloreado para las opciones del desplegable
+const renderFlagIcon = (color) =>
+  h(NIcon, color ? { color } : null, { default: () => h(FlagOutline) });
+
+const flagFilterOptions = computed(() => [
+  { label: "All photos", key: "all", icon: () => renderFlagIcon() },
+  {
+    label: "Picked only",
+    key: "picked",
+    icon: () => renderFlagIcon("var(--success-color)"),
+  },
+  {
+    label: "Rejected only",
+    key: "rejected",
+    icon: () => renderFlagIcon("var(--error-color)"),
+  },
+  {
+    label: "Unflagged only",
+    key: "unflagged",
+    icon: () => renderFlagIcon("var(--text-color-3)"),
+  },
+]);
+
+const handleFlagFilterSelect = (key) => {
+  flagFilter.value = key;
+};
+
+const flagFilterTitle = computed(
+  () =>
+    ({
+      all: "Flag filter: all photos",
+      picked: "Flag filter: picked only",
+      rejected: "Flag filter: rejected only",
+      unflagged: "Flag filter: unflagged only",
+    })[flagFilter.value],
+);
 
 // Filter: show only photos not in any collection
 const showNoLibraryOnly = ref(false);
@@ -1686,6 +1781,17 @@ const filteredAndSortedPhotos = computed(() => {
     );
   }
 
+  // Apply curation flag filter (picked / rejected / unflagged)
+  if (flagFilter.value === "picked") {
+    filtered = filtered.filter((photo) => photo.flag === "picked");
+  } else if (flagFilter.value === "rejected") {
+    filtered = filtered.filter((photo) => photo.flag === "rejected");
+  } else if (flagFilter.value === "unflagged") {
+    filtered = filtered.filter(
+      (photo) => photo.flag === null || photo.flag === undefined,
+    );
+  }
+
   // Apply duplicates filter
   if (filterDuplicates.value === "duplicates") {
     if (props.context === "workspace") {
@@ -2242,8 +2348,7 @@ defineExpose({
 /* Row 2: Mobile Version */
 .controls-row-2-mobile {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr; /* Photo count | Columns | Sort | Select */
-  /* CAMBIAR PROPORCIONES: Por ejemplo 1fr 0.6fr 1.4fr 1fr */
+  grid-template-columns: 2fr 1.1fr auto auto; /* Sort | Columns | Flag | Select */
   gap: 8px;
   width: 100%;
   align-items: center;
@@ -2254,6 +2359,13 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Botones icon-only de la fila mobile (flag / select-all): cuadrados y
+   compactos en vez de estirados a todo el ancho de su columna. */
+.mobile-icon-btn {
+  width: 36px !important;
+  padding: 0 !important;
 }
 
 .mobile-photo-count {
@@ -2291,6 +2403,49 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.flag-filter-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Mismos tokens de tema que el indicador de flag de la card/diálogo
+   (--success-color / --error-color de config/theme.js), en vez de los
+   "primary"/"error" de naive-ui, para que el filtro sea coherente. */
+.flag-filter-picked {
+  background-color: var(--success-color) !important;
+  border-color: var(--success-color) !important;
+  color: var(--text-on-primary) !important;
+}
+
+.flag-filter-rejected {
+  background-color: var(--error-color) !important;
+  border-color: var(--error-color) !important;
+  color: var(--text-on-primary) !important;
+}
+
+.flag-filter-unflagged {
+  background-color: var(--text-color-3) !important;
+  border-color: var(--text-color-3) !important;
+  color: var(--text-on-primary) !important;
+}
+
+/* Tachado tipo "reject" de Lightroom, igual que el indicador de la card */
+.flag-filter-rejected :deep(.n-icon) {
+  position: relative;
+}
+
+.flag-filter-rejected :deep(.n-icon)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 120%;
+  height: 2px;
+  background: currentColor;
+  transform: rotate(-45deg);
 }
 
 .sort-label {

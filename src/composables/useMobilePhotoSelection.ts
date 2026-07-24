@@ -209,7 +209,9 @@ export function useMobilePhotoSelection() {
 
     // Check if the touch target is a button or interactive element
     const target = event.target as HTMLElement;
-    const isButton = target.closest("button, a, .action-button, .n-button");
+    const isButton = target.closest(
+      "button, a, .action-button, .n-button, .flag-indicator",
+    );
 
     // If long press is NOT required, allow simple tap selection
     if (!requireLongPress) {

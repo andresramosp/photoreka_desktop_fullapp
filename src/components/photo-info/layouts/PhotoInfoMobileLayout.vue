@@ -76,20 +76,39 @@
             @error="emit('image-error', $event)"
             @click="emit('open-fullscreen')"
           />
-          <!-- Photo credit badge (if available) -->
-          <a
-            v-if="photoCredit"
-            :href="photoCredit.url"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="photo-credit-badge mobile"
-            :title="`Photo by ${photoCredit.username}`"
-          >
-            <n-icon size="14">
-              <LogoInstagram />
-            </n-icon>
-            <span>{{ photoCredit.username }}</span>
-          </a>
+          <!-- Curation flag + photo credit badge (if available) -->
+          <div class="mobile-bottom-left-actions">
+            <div
+              class="flag-control mobile"
+              :class="`flag-${selectedPhoto?.flag || 'none'}`"
+              @click="emit('set-flag')"
+              :title="
+                selectedPhoto?.flag === 'picked'
+                  ? 'Picked (tap to reject)'
+                  : selectedPhoto?.flag === 'rejected'
+                    ? 'Rejected (tap to clear)'
+                    : 'Unflagged (tap to pick)'
+              "
+            >
+              <n-icon size="14">
+                <FlagOutlineIcon />
+              </n-icon>
+            </div>
+
+            <a
+              v-if="photoCredit"
+              :href="photoCredit.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="photo-credit-badge mobile"
+              :title="`Photo by ${photoCredit.username}`"
+            >
+              <n-icon size="14">
+                <LogoInstagram />
+              </n-icon>
+              <span>{{ photoCredit.username }}</span>
+            </a>
+          </div>
 
           <!-- Quick Actions Overlay -->
           <div class="mobile-photo-actions">
@@ -760,6 +779,7 @@ import {
   LogoInstagram,
   LibraryOutline as LibraryIcon,
   GitCompareOutline as SimilarIcon,
+  FlagOutline as FlagOutlineIcon,
 } from "@vicons/ionicons5";
 import { FullscreenOutlined, PaletteOutlined } from "@vicons/material";
 import {
@@ -845,6 +865,7 @@ const emit = defineEmits([
   "move-to-tool",
   "send-to-chat",
   "navigate-to-photo",
+  "set-flag",
 ]);
 
 const activeTab = ref("scores");
@@ -1019,11 +1040,61 @@ const formatFlashValue = (flash) => {
   background: rgba(0, 0, 0, 0.8) !important;
 }
 
-/* Photo credit badge mobile */
-.photo-credit-badge.mobile {
+.mobile-bottom-left-actions {
   position: absolute;
   bottom: var(--spacing-sm);
   left: var(--spacing-sm);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.flag-control.mobile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.2s ease;
+}
+
+.flag-control.mobile:active {
+  transform: scale(0.92);
+}
+
+.flag-control.mobile.flag-picked {
+  background: var(--success-color);
+}
+
+.flag-control.mobile.flag-rejected {
+  background: var(--error-color);
+}
+
+/* Tachado tipo "reject" de Lightroom, igual que el resto del feature */
+.flag-control.mobile.flag-rejected .n-icon {
+  position: relative;
+}
+
+.flag-control.mobile.flag-rejected .n-icon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 120%;
+  height: 2px;
+  background: currentColor;
+  transform: rotate(-45deg);
+}
+
+/* Photo credit badge mobile */
+.photo-credit-badge.mobile {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -1038,7 +1109,6 @@ const formatFlashValue = (flash) => {
   opacity: 0.85;
   transition: all 0.3s ease;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  z-index: 10;
 }
 
 .photo-credit-badge.mobile:hover,
