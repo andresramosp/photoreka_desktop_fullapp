@@ -1,5 +1,5 @@
 // composables/2d-viewer/use2DPhotos.js
-import { ref, computed } from "vue";
+import { ref, shallowRef, computed } from "vue";
 import { api } from "@/utils/axios";
 import gridRelaxation from "@/utils/gridRelaxation";
 
@@ -16,8 +16,15 @@ const GRID_SNAP_TO_GRID_DEFAULT = true;
  * @param {boolean} lowPerformanceMode - If true, limits photos to 750
  */
 export function use2DPhotos(userId = null, lowPerformanceMode = false) {
-  // Reactive state
-  const photos2D = ref([]);
+  // Reactive state.
+  //
+  // shallowRef (not ref) on purpose: the list is always replaced wholesale
+  // (applyLayout returns fresh objects), never mutated in place, so deep
+  // reactivity buys nothing — but it would wrap every photo in a Proxy.
+  // The Pixi loader touches each photo dozens of times (position reads,
+  // __imageElement / __imageDownloaded writes, id lookups); at 30k photos
+  // those Proxy traps cost tens of seconds of pure overhead.
+  const photos2D = shallowRef([]);
   const isLoadingPositions = ref(false);
   const currentChunk = ref("general");
   const error = ref(null);
@@ -35,6 +42,7 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
   const gridRelaxationExpandStrength = ref(
     GRID_RELAXATION_EXPAND_STRENGTH_DEFAULT,
   );
+  let lastAutoExpandStrength = GRID_RELAXATION_EXPAND_STRENGTH_DEFAULT;
 
   // Always 2D output
   const outputDims = 2;
@@ -49,11 +57,13 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
   // initial "Balloon expansion" so users don't start with a pile of overlapping photos.
   // This never overrides a non-default user value.
   const AUTO_EXPAND_ENABLED = true;
-  const AUTO_EXPAND_TARGET_STRENGTH = 0.2;
   const AUTO_EXPAND_SAMPLE_MAX = 4000;
   const AUTO_EXPAND_VERY_HIGH_COLLISION_RATIO = 0.75;
   const AUTO_EXPAND_VERY_HIGH_MAX_OCC = 12;
   const AUTO_EXPAND_EASE_K = 6.5;
+  const AUTO_EXPAND_LARGE_CATALOG_START = 20000;
+  const AUTO_EXPAND_FULL_STRENGTH_COUNT = 30000;
+  const AUTO_EXPAND_SLIDER_MAX = 0.5;
 
   const clamp01 = (v) => Math.max(0, Math.min(1, Number(v) || 0));
 
@@ -139,18 +149,26 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
 
     const photoCount = photos.length;
 
-    // 2k fotos -> 0.2
-    // 10k fotos -> ~0.45
-    // 20k fotos -> ~0.60
-    // 50k fotos -> ~0.80
     const dynamicMaxStrength = Math.min(
       0.8,
       0.2 + Math.log10(Math.max(2000, photoCount) / 2000) * 0.15,
     );
 
     const eased = easeInExp01(crowdingScore);
+    const densityStrength = eased * dynamicMaxStrength;
 
-    return clamp01(eased * dynamicMaxStrength);
+    // Preserve the density-based tuning through 20k. Above that, photo count becomes
+    // increasingly decisive: the observed 30k case needs the slider's full 50%,
+    // which remains the target for catalogs up to the supported 50k limit.
+    const largeCatalogProgress = clamp01(
+      (photoCount - AUTO_EXPAND_LARGE_CATALOG_START) /
+        (AUTO_EXPAND_FULL_STRENGTH_COUNT - AUTO_EXPAND_LARGE_CATALOG_START),
+    );
+    const strength =
+      densityStrength +
+      (AUTO_EXPAND_SLIDER_MAX - densityStrength) * largeCatalogProgress;
+
+    return clamp01(strength);
   };
 
   const applyLayout = (photos) => {
@@ -340,16 +358,17 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
       //   );
       // }
 
-      // Auto-tune initial expansion only on the very first load and only if the user
-      // hasn't changed the slider from its default.
-      if (
-        photos2D.value.length === 0 &&
-        gridRelaxationExpandStrength.value ===
-          GRID_RELAXATION_EXPAND_STRENGTH_DEFAULT
-      ) {
+      // Re-tune after full viewport reloads while the slider still has the last
+      // automatic value. Once the user changes it manually, leave it untouched.
+      const canAutoTune =
+        !reuseExisting &&
+        Math.abs(gridRelaxationExpandStrength.value - lastAutoExpandStrength) <
+          1e-6;
+      if (canAutoTune) {
         const autoStrength = computeAutoExpandStrength(workingPhotos);
+        lastAutoExpandStrength = autoStrength;
+        gridRelaxationExpandStrength.value = autoStrength;
         if (autoStrength > 1e-6) {
-          gridRelaxationExpandStrength.value = autoStrength;
           console.log(
             `🫧 Auto balloon expansion: ${(autoStrength * 100).toFixed(1)}% (gradual from overlap)`,
           );

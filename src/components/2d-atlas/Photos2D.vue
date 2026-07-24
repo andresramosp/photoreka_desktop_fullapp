@@ -1805,6 +1805,73 @@ const updateTransitionPositions = (currentTime) => {
   }
 };
 
+// ── Sprite pointer interaction (event delegation) ─────────────────────────
+// Selection is handled by three listeners on photoContainer instead of three
+// per sprite. Pixi bubbles pointer events up the display tree, so `event.target`
+// still identifies the sprite that was hit — but we allocate 3 handlers total
+// rather than ~90k, which is a large slice of load time at 30k photos.
+let interactionDelegationTarget = null;
+
+const setupSpriteInteractionDelegation = (container) => {
+  if (!container || container.destroyed) return;
+  if (interactionDelegationTarget === container) return;
+  interactionDelegationTarget = container;
+
+  // Must be "static": Pixi only invokes listeners on a node whose eventMode is
+  // static/dynamic, including while an event bubbles up from a child ("passive"
+  // containers silently emit nothing). A plain Container has no `containsPoint`
+  // and no hitArea, so this does NOT make it a hit target itself — clicks on
+  // empty space still resolve to nothing.
+  container.eventMode = "static";
+
+  let pointerDownPos = null;
+  let pointerDownTime = 0;
+  let pointerDownSprite = null;
+
+  container.on("pointerdown", (event) => {
+    pointerDownSprite = event.target;
+    pointerDownPos = { x: event.global.x, y: event.global.y };
+    pointerDownTime = performance.now();
+  });
+
+  container.on("pointerup", (event) => {
+    const sprite = pointerDownSprite;
+    const startPos = pointerDownPos;
+    pointerDownSprite = null;
+    pointerDownPos = null;
+
+    if (props.isPreview || isPinching.value) return;
+    // Must go down and up on the same sprite (a drag across sprites is a pan).
+    if (!startPos || !sprite || sprite !== event.target) return;
+
+    const photoId = sprite.__photoId;
+    if (photoId === undefined || photoId === null) return;
+
+    const dx = Math.abs(event.global.x - startPos.x);
+    const dy = Math.abs(event.global.y - startPos.y);
+    const totalMovement = Math.sqrt(dx * dx + dy * dy);
+    const duration = performance.now() - pointerDownTime;
+
+    // Only select on a quick tap (<300ms) with minimal drift (<10px).
+    if (duration >= 300 || totalMovement >= 10) return;
+
+    event.stopPropagation();
+
+    const index = selectedPhotoIds.value.indexOf(photoId);
+    if (index === -1) {
+      selectedPhotoIds.value.push(photoId);
+    } else {
+      selectedPhotoIds.value.splice(index, 1);
+    }
+    updateSpriteSelection(photoId);
+  });
+
+  container.on("pointerupoutside", () => {
+    pointerDownSprite = null;
+    pointerDownPos = null;
+  });
+};
+
 // Load photos into PixiJS with retry logic for 403/429 errors
 //
 // Re-entrancy: this function awaits many times, so a second call (chunk change,
@@ -1841,6 +1908,9 @@ const loadPhotosToPixi = async () => {
     photoContainer.value.removeChildren();
     photoSprites.value.clear();
     resetLodState();
+
+    // Attach the shared pointer handlers (no-op if already bound to this container)
+    setupSpriteInteractionDelegation(photoContainer.value);
 
     // Recreate the tag layer, since removeChildren() wipes it.
     ensurePatternTagsLayer();
@@ -1895,6 +1965,8 @@ const loadPhotosToPixi = async () => {
 
       if (isStale()) return;
 
+      const batchSprites = [];
+
       await Promise.all(
         batch.map(async (photo) => {
           // A newer run already cleared the container: creating this sprite now
@@ -1912,66 +1984,16 @@ const loadPhotosToPixi = async () => {
           sprite.y = canvasY;
           sprite.width = photoSize.value;
           sprite.height = photoSize.value * 0.75;
-          // Enable interaction for precise touch/click detection
+          // Hit-testable, but the pointer handlers live on photoContainer
+          // (see setupSpriteInteractionDelegation). Attaching listeners per
+          // sprite costs 3 emitters + 2 closures × 30k sprites at load time.
+          // `cursor` is intentionally not set: the canvas CSS already does it.
           sprite.eventMode = "static";
-          sprite.cursor = props.isPreview ? "default" : "pointer";
+          sprite.__photoId = photo.id;
 
-          // Track pointer position to detect panning vs tap
-          let pointerDownPos = null;
-          let pointerDownTime = 0;
-
-          sprite.on("pointerdown", (event) => {
-            // Store initial position and time for movement detection
-            pointerDownPos = { x: event.global.x, y: event.global.y };
-            pointerDownTime = performance.now();
-          });
-
-          // Handle selection on pointerup (after validating it wasn't a pan)
-          sprite.on("pointerup", (event) => {
-            if (props.isPreview) {
-              pointerDownPos = null;
-              return;
-            }
-            if (!pointerDownPos || isPinching.value) {
-              pointerDownPos = null;
-              return;
-            }
-
-            // Calculate movement since pointerdown
-            const dx = Math.abs(event.global.x - pointerDownPos.x);
-            const dy = Math.abs(event.global.y - pointerDownPos.y);
-            const totalMovement = Math.sqrt(dx * dx + dy * dy);
-            const duration = performance.now() - pointerDownTime;
-
-            // Reset tracking
-            pointerDownPos = null;
-
-            // Only select if:
-            // - Duration < 300ms (quick tap)
-            // - Movement < 10px (minimal drift - stricter than touch threshold)
-            // - Not currently pinching
-            if (duration < 300 && totalMovement < 10) {
-              event.stopPropagation();
-
-              const photoId = photo.id;
-              const index = selectedPhotoIds.value.indexOf(photoId);
-              if (index === -1) {
-                selectedPhotoIds.value.push(photoId);
-              } else {
-                selectedPhotoIds.value.splice(index, 1);
-              }
-              updateSpriteSelection(photoId);
-            }
-          });
-
-          // Clean up tracking if pointer leaves sprite
-          sprite.on("pointerupoutside", () => {
-            pointerDownPos = null;
-          });
-
-          // Store reference
+          // Store reference (added to the container in one batched call below)
           photoSprites.value.set(photo.id, sprite);
-          photoContainer.value.addChild(sprite);
+          batchSprites.push(sprite);
 
           // Load actual texture (cached via IndexedDB + in-memory)
           const texture = await textureManager.getOrCreateTexture(photo, {
@@ -1997,9 +2019,19 @@ const loadPhotosToPixi = async () => {
           lodCurrentLevel.set(photo.id, "low");
 
           loaded++;
-          loadingProgress.value = Math.round((loaded / total) * 100);
         }),
       );
+
+      if (isStale()) return;
+
+      // One addChild call per batch instead of one per sprite.
+      if (batchSprites.length) {
+        photoContainer.value.addChild(...batchSprites);
+      }
+
+      // Progress is a reactive ref driving the loader UI: update it once per
+      // batch, not once per photo (30k writes = 30k scheduler flushes).
+      loadingProgress.value = Math.round((loaded / total) * 100);
 
       // Free source images from this batch immediately (low performance only).
       // On high-performance/desktop, we avoid intermediate freeing within this loop

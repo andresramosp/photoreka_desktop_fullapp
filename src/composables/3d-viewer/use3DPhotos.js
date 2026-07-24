@@ -146,7 +146,7 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
   const chunkOptions = [
     { value: "general", label: "General" },
     { value: "story", label: "Narrative" },
-    { value: "context", label: "Cultural context" },
+    { value: "context", label: "Context" },
     { value: "visual_accents", label: "Visual accents" },
     { value: "color_histogram", label: "Chromatic" },
     // { value: "color_histogram_dominant", label: "Dominant color" },

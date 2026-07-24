@@ -163,48 +163,41 @@ const isCached = async (photoId) => {
 };
 
 /**
+ * Read every key currently in the store with a single request.
+ * Far cheaper than issuing one getKey() per photo id: with 30k photos that is
+ * 30k separate IDB round-trips (seconds of pure overhead) vs. one bulk read.
+ * @returns {Promise<Set<string>>}
+ */
+const getAllCachedKeys = async () => {
+  const db = await initDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORE_NAME], "readonly");
+    const objectStore = transaction.objectStore(STORE_NAME);
+    const request = objectStore.getAllKeys();
+
+    request.onsuccess = () => resolve(new Set(request.result || []));
+    request.onerror = () => {
+      console.error("❌ Error reading cache keys:", request.error);
+      reject(request.error);
+    };
+  });
+};
+
+/**
  * Bulk check which photos are cached
  * @param {Array<string>} photoIds - Array of photo IDs
  * @returns {Promise<Set<string>>} - Set of cached photo IDs
  */
 const bulkCheckCache = async (photoIds) => {
-  const db = await initDB();
   const cachedIds = new Set();
+  if (!photoIds?.length) return cachedIds;
 
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([STORE_NAME], "readonly");
-    const objectStore = transaction.objectStore(STORE_NAME);
-
-    let completed = 0;
-    const total = photoIds.length;
-
-    if (total === 0) {
-      resolve(cachedIds);
-      return;
-    }
-
-    photoIds.forEach((id) => {
-      const request = objectStore.getKey(id);
-
-      request.onsuccess = () => {
-        if (request.result !== undefined) {
-          cachedIds.add(id);
-        }
-        completed++;
-        if (completed === total) {
-          resolve(cachedIds);
-        }
-      };
-
-      request.onerror = () => {
-        console.error(`❌ Error checking cache for ${id}:`, request.error);
-        completed++;
-        if (completed === total) {
-          resolve(cachedIds);
-        }
-      };
-    });
-  });
+  const allKeys = await getAllCachedKeys();
+  for (const id of photoIds) {
+    if (allKeys.has(id)) cachedIds.add(id);
+  }
+  return cachedIds;
 };
 
 /**
@@ -272,18 +265,75 @@ const bulkCacheImages = async (images) => {
  * @param {Array<string>} photoIds
  * @returns {Promise<Map<string, Blob>>} - Map of photoId -> Blob
  */
-const bulkLoadFromCache = async (photoIds) => {
+const BULK_GET_ALL_THRESHOLD = 500;
+
+/**
+ * Read every record in one getAll() and keep only the requested ids.
+ * One IDB round-trip instead of N.
+ */
+const getAllRecordsFiltered = async (wantedIds) => {
   const db = await initDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORE_NAME], "readonly");
+    const objectStore = transaction.objectStore(STORE_NAME);
+    const request = objectStore.getAll();
+
+    request.onsuccess = () => {
+      const imageMap = new Map();
+      for (const record of request.result || []) {
+        if (!record?.id || !wantedIds.has(record.id)) continue;
+        imageMap.set(record.id, record.blob);
+      }
+      resolve(imageMap);
+    };
+    request.onerror = () => {
+      console.error("❌ Error bulk-reading cache:", request.error);
+      reject(request.error);
+    };
+  });
+};
+
+const bulkLoadFromCache = async (photoIds) => {
   const imageMap = new Map();
+  const total = photoIds?.length || 0;
+  if (total === 0) return imageMap;
+
+  // For large catalogs, a single getAll() beats N individual get() requests by
+  // an order of magnitude — the per-request round-trip is what dominates.
+  // Only worth it when we actually want most of what is stored, so check the
+  // key set (one cheap request) before pulling every record's blob handle.
+  if (total >= BULK_GET_ALL_THRESHOLD) {
+    try {
+      const wanted = new Set(photoIds);
+      const allKeys = await getAllCachedKeys();
+      let hits = 0;
+      for (const key of allKeys) {
+        if (wanted.has(key)) hits++;
+      }
+      if (hits === 0) return imageMap;
+      // Most of the store is relevant → one bulk read.
+      if (hits >= allKeys.size * 0.5) {
+        return await getAllRecordsFiltered(wanted);
+      }
+      // Otherwise only fetch the ids we know exist, individually.
+      photoIds = photoIds.filter((id) => allKeys.has(id));
+      if (photoIds.length === 0) return imageMap;
+    } catch (_) {
+      // Fall through to the per-id path below.
+    }
+  }
+
+  const db = await initDB();
 
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_NAME], "readonly");
     const objectStore = transaction.objectStore(STORE_NAME);
 
     let completed = 0;
-    const total = photoIds.length;
+    const pending = photoIds.length;
 
-    if (total === 0) {
+    if (pending === 0) {
       resolve(imageMap);
       return;
     }
@@ -296,7 +346,7 @@ const bulkLoadFromCache = async (photoIds) => {
           imageMap.set(id, request.result.blob);
         }
         completed++;
-        if (completed === total) {
+        if (completed === pending) {
           resolve(imageMap);
         }
       };
@@ -304,7 +354,7 @@ const bulkLoadFromCache = async (photoIds) => {
       request.onerror = () => {
         console.error(`❌ Error loading cached image ${id}:`, request.error);
         completed++;
-        if (completed === total) {
+        if (completed === pending) {
           resolve(imageMap);
         }
       };
@@ -377,6 +427,7 @@ export const useIndexedDBCache = () => {
     getCachedImage,
     isCached,
     bulkCheckCache,
+    getAllCachedKeys,
     bulkCacheImages,
     bulkLoadFromCache,
     clearCache,

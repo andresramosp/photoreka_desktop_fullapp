@@ -394,15 +394,25 @@ export function use2DTextureManager(
           cachedPhotoIds.value = new Set(cachedBlobs.keys());
 
           const maxSide = useLowPerformance ? 96 : 128;
-          const blobEntries = Array.from(cachedBlobs.entries());
+          const ids = Array.from(cachedBlobs.keys());
+
+          // Index photos by id ONCE. Doing `photos.find(...)` per blob is O(N²):
+          // at 30k photos that is ~500M comparisons, and it was by far the
+          // largest single cost of the whole load.
+          const photoIndex = new Map();
+          for (const p of photos) {
+            if (p?.id != null) photoIndex.set(p.id, p);
+          }
 
           // ImageBitmap decoding is native, asynchronous and performed on background browser threads.
           // This allows us to scale options.resizeWidth directly on load and avoid overhead.
           const decodeLimit = 250;
-          for (let i = 0; i < blobEntries.length; i += decodeLimit) {
-            const chunk = blobEntries.slice(i, i + decodeLimit);
+          for (let i = 0; i < ids.length; i += decodeLimit) {
+            const chunkIds = ids.slice(i, i + decodeLimit);
             await Promise.all(
-              chunk.map(async ([photoId, blob]) => {
+              chunkIds.map(async (photoId) => {
+                const blob = cachedBlobs.get(photoId);
+                if (!blob) return;
                 try {
                   const options = {};
                   if (typeof createImageBitmap !== "undefined") {
@@ -418,14 +428,17 @@ export function use2DTextureManager(
                   const thumbKey = cacheKey(photoId, "low");
                   downloadedImagesCache.set(thumbKey, img);
 
-                  const photo = photos.find((p) => p.id === photoId);
+                  const photo = photoIndex.get(photoId);
                   if (photo) {
                     photo.__imageDownloaded = true;
                     photo.__downloadError = false;
                     photo.__canCreateTexture = true;
                     photo.__fromCache = true;
                     photo.__imageElement = img;
-                    photo.__imageBlob = blob;
+                    // NOTE: deliberately not storing __imageBlob here.
+                    // The blob already lives in IndexedDB, and
+                    // bulkCacheDownloadedImages() skips __fromCache photos —
+                    // keeping it would pin ~30k blobs in the heap for nothing.
                   }
                 } catch (error) {
                   console.warn(
@@ -435,10 +448,15 @@ export function use2DTextureManager(
                 }
               }),
             );
+            // Drop each chunk's blobs as soon as they are decoded, so peak heap
+            // holds one chunk of blobs instead of the whole catalog's worth.
+            for (const photoId of chunkIds) cachedBlobs.delete(photoId);
           }
         }
 
         cacheStats.value = await getCacheStats();
+        // Blobs were released chunk-by-chunk above; the decoded bitmaps live in
+        // downloadedImagesCache. The caller does not use this return value.
         return cachedBlobs;
       }
     } catch (error) {

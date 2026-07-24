@@ -290,12 +290,12 @@
                 "
                 class="recent-convs"
               >
-                <div class="recent-convs-header">
+                <!-- <div class="recent-convs-header">
                   <n-icon :size="13" class="recent-convs-icon"
                     ><LayersIcon
                   /></n-icon>
                   <span class="recent-convs-title">Recent conversations</span>
-                </div>
+                </div> -->
                 <div class="recent-convs-list">
                   <n-button
                     v-for="conv in chatStore.conversations.slice(0, 2)"
