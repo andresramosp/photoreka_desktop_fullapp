@@ -170,6 +170,7 @@ router
     router.post('/api/catalog/deleteDuplicates', [CatalogController, 'deleteDuplicates'])
 
     router.post('/api/catalog/:id/note', [CatalogController, 'savePhotoNote'])
+    router.post('/api/catalog/:id/flag', [CatalogController, 'setPhotoFlag'])
     router.post('/api/catalog/swapPhotos', [CatalogController, 'swapPhotos'])
 
     router.get('/api/analyzer-process', [AnalyzerProcessController, 'getAll'])

@@ -18,11 +18,16 @@
       "Read(//c/Users/andre/.railway/**)",
       "Bash(unset RAILWAY_TOKEN RAILWAY_API_TOKEN)",
       "Bash(railway status *)",
-      "WebSearch"
+      "WebSearch",
+      "Read(//c/Users/andre/Desktop/Photoreka/Python Apis/python_cpu/**)",
+      "WebFetch(domain:docs.railway.com)",
+      "WebFetch(domain:station.railway.com)",
+      "Bash(python -m py_compile main.py)"
     ],
     "additionalDirectories": [
       "c:\\Users\\andre\\Desktop\\Photoreka\\App\\web\\src\\utils",
-      "c:\\Users\\andre\\Desktop\\Photoreka\\App\\web\\src\\views\\admin"
+      "c:\\Users\\andre\\Desktop\\Photoreka\\App\\web\\src\\views\\admin",
+      "C:\\Users\\andre\\Desktop\\Photoreka\\Python Apis\\python_cpu"
     ]
   }
 }

@@ -33,6 +33,7 @@ export type DescriptionType =
   | 'notes'
 export type PhotoDescriptions = Partial<Record<DescriptionType, string | Record<string, any> | any>>
 export type PhotoStatus = 'uploaded' | 'preprocessing' | 'preprocessed' | 'processing' | 'processed'
+export type PhotoFlag = 'picked' | 'rejected'
 
 export default class Photo extends BaseModel {
   @column({ isPrimary: true })
@@ -147,6 +148,15 @@ export default class Photo extends BaseModel {
 
   @column()
   declare uploadIp: string | null
+
+  /**
+   * Flag de curación al estilo Lightroom (banderita de 3 estados):
+   * - `null`       → sin marcar
+   * - `'picked'`   → marcada / seleccionada
+   * - `'rejected'` → descartada
+   */
+  @column()
+  declare flag: PhotoFlag | null
 
   /**
    * Upload confirmation flag.

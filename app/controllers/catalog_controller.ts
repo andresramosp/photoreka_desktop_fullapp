@@ -519,6 +519,39 @@ export default class CatalogController {
   }
 
   /**
+   * Marca/actualiza el flag de curación de una foto (estilo Lightroom, 3 estados).
+   * POST /catalog/:id/flag
+   * Body: { flag: 'picked' | 'rejected' | null }
+   */
+  public async setPhotoFlag({ request, response, auth, params }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as any
+      const userId = user.id.toString()
+
+      const { flag } = request.only(['flag'])
+      if (flag !== null && flag !== 'picked' && flag !== 'rejected') {
+        return response.badRequest({ message: "flag debe ser 'picked', 'rejected' o null" })
+      }
+
+      const photo = await Photo.query().where('id', params.id).where('user_id', userId).first()
+      if (!photo) {
+        return response.notFound({ message: 'Foto no encontrada' })
+      }
+
+      photo.flag = flag
+      await photo.save()
+
+      await CacheInvalidationService.onPhotoListChanged(userId)
+
+      return response.ok({ id: photo.id, flag })
+    } catch (error) {
+      console.error('Error guardando flag de foto:', error)
+      return response.internalServerError({ message: 'Error guardando el flag de la foto' })
+    }
+  }
+
+  /**
    * Reemplaza fotos analizadas en workspace con una nueva foto de lightbox.
    * La nueva foto física (R2 keys) reemplaza a las analizadas, que conservan sus datos de análisis.
    * POST /catalog/swapPhotos

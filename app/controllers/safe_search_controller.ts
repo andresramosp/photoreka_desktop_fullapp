@@ -38,7 +38,7 @@ const MODERATION_RULES = {
   adult: {
     threshold: new Set(['VERY_LIKELY']),
     // perImage: true,
-    batchThreshold: 0.75, // ← configurable (ej: 30% del lote)
+    batchThreshold: 0.5, // ← configurable (ej: 30% del lote)
   },
   violence: {
     threshold: new Set(['VERY_LIKELY']),

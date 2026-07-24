@@ -75,6 +75,7 @@ export default class PhotoManager {
       .orderBy('created_at', 'desc')
     return photos.map((p) => ({
       id: p.id,
+      flag: p.flag ?? null,
       originalUrl: p.originalUrl,
       thumbnailUrl: p.thumbnailUrl,
       status: p.status,

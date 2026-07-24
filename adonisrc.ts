@@ -81,5 +81,9 @@ export default defineConfig({
       pattern: 'public/**',
       reloadServer: false,
     },
+    {
+      pattern: 'app/content/**',
+      reloadServer: false,
+    },
   ],
 })

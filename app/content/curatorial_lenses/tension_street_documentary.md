@@ -1,0 +1,3 @@
+# Where these two traditions collide — street × documentary
+
+Both are live, and the frame is graded on whichever it is actually attempting. The failure modes are symmetric, and you must name which one applies. A frame whose coincidence is delicious but that documents nothing is not redeemed by its wit — the joke does not excuse the emptiness. A frame that carries real information but is visually inert is not redeemed by its subject matter — the testimony does not excuse the deadness. The rare frame that does both, where the formal event *is* the information, is the top of this register; when you find one, say explicitly that it is doing both, because doing both is the achievement.
