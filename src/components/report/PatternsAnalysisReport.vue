@@ -149,6 +149,7 @@
                     :show-name="false"
                     :is-uploading="false"
                     :show-duplicate="false"
+                    :show-flag="false"
                     @info="showPhotoInfo"
                     @select="() => {}"
                   />

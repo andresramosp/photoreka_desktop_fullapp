@@ -533,6 +533,7 @@ interface Props {
   isUploading: boolean;
   showDuplicate: boolean;
   showSource?: boolean;
+  showFlag?: boolean;
   artisticScore?: number | null;
   matchedTags?: string[];
   hideFullscreen?: boolean;
@@ -552,6 +553,7 @@ const props = withDefaults(defineProps<Props>(), {
   selected: false,
   focused: false,
   showSource: false,
+  showFlag: true,
   matchedTags: () => [],
   hideFullscreen: false,
   allPhotos: () => [],
@@ -593,8 +595,9 @@ const scoreBackgroundColor = computed(() => {
 // Curation flag: solo en fotos usables (workspace/lightbox), no mientras se procesan
 const showFlag = computed(
   () =>
-    props.photo.status === "processed" ||
-    props.photo.status === "preprocessed",
+    props.showFlag &&
+    (props.photo.status === "processed" ||
+      props.photo.status === "preprocessed"),
 );
 
 // Visibilidad del chip: siempre visible si tiene flag. Si no, en desktop solo
