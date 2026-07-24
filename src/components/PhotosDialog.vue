@@ -17,12 +17,12 @@
     </template>
 
     <div class="dialog-content">
-      <!-- Suggested Photos Mode (no search, no tabs) -->
-      <div
-        v-if="suggestedPhotos !== null || loadingSuggestions"
-        class="suggested-container"
-      >
-        <!-- Loading state -->
+      <!-- Una sola grilla para los cuatro modos (sugerencias / catálogo
+           desktop / catálogo mobile / papelera). Lo que cambia entre modos
+           está resuelto en computeds: containerClass, showSearch,
+           displayedPhotos, photosCountLabel y emptyState. -->
+      <div :class="containerClass">
+        <!-- Loading state (sólo aplica al modo sugerencias) -->
         <div v-if="loadingSuggestions" class="suggestions-loading">
           <SpiralGridLoader
             variant="primary"
@@ -32,21 +32,46 @@
         </div>
 
         <template v-else>
+          <!-- Search and Stats Bar -->
           <div class="stats-bar">
+            <div v-if="showSearch" class="search-section">
+              <n-input
+                v-model:value="searchQuery"
+                placeholder="Search photos..."
+                size="small"
+                :clearable="!isSearching"
+                class="text-search"
+                @input="onSearchChange"
+                @clear="clearSearch"
+              >
+                <template #prefix>
+                  <n-icon size="16">
+                    <svg viewBox="0 0 24 24">
+                      <path
+                        fill="currentColor"
+                        d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14z"
+                      />
+                    </svg>
+                  </n-icon>
+                </template>
+                <template #suffix>
+                  <n-spin
+                    size="small"
+                    class="spinner-search spinner-medium spinner-centered"
+                    v-if="isSearching"
+                  />
+                </template>
+              </n-input>
+            </div>
             <div class="stats-section">
               <div class="stats-info">
                 <span class="stats-text">
-                  {{ processedPhotos.length }}
-                  {{
-                    processedPhotos.length === 1
-                      ? suggestedPhotosSingularLabel
-                      : suggestedPhotosPluralLabel
-                  }}
+                  {{ photosCountLabel }}
                   <span
                     v-if="!readOnly && selectedIds.length > 0"
                     class="selected-count"
                   >
-                    &bull; {{ selectedIds.length }} selected
+                    • {{ selectedIds.length }} selected
                   </span>
                 </span>
               </div>
@@ -71,349 +96,40 @@
             </div>
           </div>
 
+          <!-- Photos Grid -->
           <div
-            v-if="processedPhotos.length > 0"
-            class="photos-grid photo-grid-base"
-            :class="`grid-cols-${6}`"
+            v-if="displayedPhotos.length > 0"
+            class="photos-grid photo-grid-base grid-cols-6"
           >
             <PhotoCard
-              v-for="photo in processedPhotos"
+              v-for="photo in displayedPhotos"
               :key="photo.id"
               :photo="photo"
-              :selected="!readOnly && selectedIds.includes(photo.id)"
+              :selected="!readOnly && selectedSet.has(photo.id)"
               mode="default"
               @select="toggleSelection"
               @info="showPhotoInfo"
-              :show-stars="false"
-              :show-tags="false"
-              :show-info-button="showInfoButton"
+              :show-stars="showCardMeta"
+              :show-tags="showCardMeta"
+              :show-info-button="false"
+              hide-fullscreen
               :require-long-press="false"
             />
           </div>
 
+          <!-- Empty State -->
           <div v-else class="empty-state">
             <div class="empty-state-content">
               <n-icon size="64" class="empty-state-icon">
-                <ImageIcon />
+                <component :is="emptyState.icon" />
               </n-icon>
-              <h3 class="empty-state-title">No suggestions found</h3>
+              <h3 class="empty-state-title">{{ emptyState.title }}</h3>
               <p class="empty-state-description">
-                Could not find similar photos to suggest for this collection.
+                {{ emptyState.description }}
               </p>
             </div>
           </div>
         </template>
-      </div>
-
-      <!-- Catalog (desktop only) -->
-      <div v-else-if="!isTrash && !isMobile" class="catalog-container">
-        <!-- Search and Stats Bar -->
-        <div class="stats-bar">
-          <div v-if="displaySearch" class="search-section">
-            <n-input
-              v-model:value="searchQuery"
-              placeholder="Search photos..."
-              size="small"
-              :clearable="!isSearching"
-              class="text-search"
-              @input="onSearchChange"
-              @clear="clearSearch"
-            >
-              <template #prefix>
-                <n-icon size="16">
-                  <svg viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14z"
-                    />
-                  </svg>
-                </n-icon>
-              </template>
-              <template #suffix>
-                <n-spin
-                  size="small"
-                  class="spinner-search spinner-medium spinner-centered"
-                  v-if="isSearching"
-                />
-              </template>
-            </n-input>
-          </div>
-          <div class="stats-section">
-            <div class="stats-info">
-              <span class="stats-text">
-                {{ processedPhotos.length }}
-                {{ processedPhotos.length === 1 ? "photo" : "photos" }}
-                available
-                <span
-                  v-if="!readOnly && selectedIds.length > 0"
-                  class="selected-count"
-                >
-                  • {{ selectedIds.length }} selected
-                </span>
-              </span>
-            </div>
-            <div class="stats-actions">
-              <n-button
-                v-if="!readOnly && selectedIds.length > 0"
-                text
-                type="primary"
-                @click="selectAll"
-              >
-                Select All
-              </n-button>
-              <n-button
-                v-if="!readOnly && selectedIds.length > 0"
-                text
-                type="warning"
-                @click="clearSelection"
-              >
-                Clear Selection
-              </n-button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Photos Grid -->
-        <div
-          v-if="processedPhotos.length > 0"
-          class="photos-grid photo-grid-base"
-          :class="`grid-cols-${6}`"
-        >
-          <PhotoCard
-            v-for="photo in processedPhotos"
-            :key="photo.id"
-            :photo="photo"
-            :selected="!readOnly && selectedIds.includes(photo.id)"
-            mode="default"
-            @select="toggleSelection"
-            @info="showPhotoInfo"
-            :show-stars="false"
-            :show-tags="false"
-            :show-info-button="showInfoButton"
-            :require-long-press="false"
-          />
-        </div>
-
-        <!-- Empty State -->
-        <div v-else class="empty-state">
-          <div class="empty-state-content">
-            <n-icon size="64" class="empty-state-icon">
-              <ImageIcon />
-            </n-icon>
-            <h3 class="empty-state-title">No photos available</h3>
-            <p class="empty-state-description">
-              You don't have any photos here. Import them to Lightbox and click
-              Analyze Photos to start building your Workspace.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Mobile catalog (no tabs) -->
-      <div v-else-if="!isTrash" class="mobile-catalog-container">
-        <div class="stats-bar">
-          <div v-if="displaySearch" class="search-section">
-            <n-input
-              v-model:value="searchQuery"
-              placeholder="Search photos..."
-              size="small"
-              :clearable="!isSearching"
-              class="text-search"
-              @input="onSearchChange"
-              @clear="clearSearch"
-            >
-              <template #prefix>
-                <n-icon size="16">
-                  <svg viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14z"
-                    />
-                  </svg>
-                </n-icon>
-              </template>
-              <template #suffix>
-                <n-spin
-                  size="small"
-                  class="spinner-search spinner-medium spinner-centered"
-                  v-if="isSearching"
-                />
-              </template>
-            </n-input>
-          </div>
-          <div class="stats-section">
-            <div class="stats-info">
-              <span class="stats-text">
-                {{ processedPhotos.length }}
-                {{ processedPhotos.length === 1 ? "photo" : "photos" }}
-                available
-                <span
-                  v-if="!readOnly && selectedIds.length > 0"
-                  class="selected-count"
-                >
-                  • {{ selectedIds.length }} selected
-                </span>
-              </span>
-            </div>
-            <div class="stats-actions">
-              <n-button
-                v-if="!readOnly && selectedIds.length > 0"
-                text
-                type="primary"
-                @click="selectAll"
-              >
-                Select All
-              </n-button>
-              <n-button
-                v-if="!readOnly && selectedIds.length > 0"
-                text
-                type="warning"
-                @click="clearSelection"
-              >
-                Clear Selection
-              </n-button>
-            </div>
-          </div>
-        </div>
-
-        <div
-          v-if="processedPhotos.length > 0"
-          class="photos-grid photo-grid-base"
-          :class="`grid-cols-${6}`"
-        >
-          <PhotoCard
-            v-for="photo in processedPhotos"
-            :key="photo.id"
-            :photo="photo"
-            :selected="!readOnly && selectedIds.includes(photo.id)"
-            mode="default"
-            @select="toggleSelection"
-            @info="showPhotoInfo"
-            :show-stars="false"
-            :show-tags="false"
-            :show-info-button="showInfoButton"
-            :require-long-press="false"
-          />
-        </div>
-
-        <div v-else class="empty-state">
-          <div class="empty-state-content">
-            <n-icon size="64" class="empty-state-icon">
-              <ImageIcon />
-            </n-icon>
-            <h3 class="empty-state-title">No photos available</h3>
-            <p class="empty-state-description">
-              You don't have any photos here. Import them to Lightbox and click
-              Analyze Photos to start building your Workspace.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Trash mode (no tabs) -->
-      <div v-else class="trash-container">
-        <!-- <p class="trash-info-note">
-          Photos in this trash are excluded from this canvas and will not appear
-          again as similar-photo candidates. Empty the trash if you want them to
-          become candidates again.
-        </p> -->
-        <!-- Search and Stats Bar -->
-        <div class="stats-bar">
-          <div class="search-section">
-            <n-input
-              v-model:value="searchQuery"
-              placeholder="Search photos..."
-              size="small"
-              :clearable="!isSearching"
-              class="text-search"
-              @input="onSearchChange"
-              @clear="clearSearch"
-            >
-              <template #prefix>
-                <n-icon size="16">
-                  <svg viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14z"
-                    />
-                  </svg>
-                </n-icon>
-              </template>
-              <template #suffix>
-                <n-spin
-                  size="small"
-                  class="spinner-search spinner-medium spinner-centered"
-                  v-if="isSearching"
-                />
-              </template>
-            </n-input>
-          </div>
-          <div class="stats-section">
-            <div class="stats-info">
-              <span class="stats-text">
-                {{ trashPhotos.length }}
-                {{ trashPhotos.length === 1 ? "photo" : "photos" }}
-                available
-                <span
-                  v-if="!readOnly && selectedIds.length > 0"
-                  class="selected-count"
-                >
-                  • {{ selectedIds.length }} selected
-                </span>
-              </span>
-            </div>
-            <div class="stats-actions">
-              <n-button
-                v-if="!readOnly && selectedIds.length > 0"
-                text
-                type="primary"
-                @click="selectAll"
-              >
-                Select All
-              </n-button>
-              <n-button
-                v-if="!readOnly && selectedIds.length > 0"
-                text
-                type="warning"
-                @click="clearSelection"
-              >
-                Clear Selection
-              </n-button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Photos Grid -->
-        <div
-          v-if="trashPhotos.length > 0"
-          class="photos-grid photo-grid-base"
-          :class="`grid-cols-${6}`"
-        >
-          <PhotoCard
-            v-for="photo in trashPhotos"
-            :key="photo.id"
-            :photo="photo"
-            :selected="!readOnly && selectedIds.includes(photo.id)"
-            mode="default"
-            @select="toggleSelection"
-            @info="showPhotoInfo"
-            :show-info-button="showInfoButton"
-            :require-long-press="false"
-          />
-        </div>
-
-        <!-- Empty State -->
-        <div v-else class="empty-state">
-          <div class="empty-state-content">
-            <n-icon size="64" class="empty-state-icon">
-              <DeleteIcon />
-            </n-icon>
-            <h3 class="empty-state-title">No deleted photos</h3>
-            <p class="empty-state-description">
-              All photos are currently on the canvas or in your collection.
-            </p>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -474,7 +190,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { ref, computed, markRaw, onMounted, watch } from "vue";
 import { usePhotosStore } from "@/stores/photos";
 import { useCanvasStore } from "@/stores/canvas";
 import { useIsMobile } from "@/composables/useIsMobile";
@@ -543,6 +259,7 @@ const emit = defineEmits([
   "update:modelValue",
   "add-photos",
   "selection-change",
+  "photo-info",
 ]);
 
 // Reactive dialog state
@@ -579,23 +296,30 @@ const isSearching = ref(false);
 const searchResults = ref([]);
 const allCatalogPhotos = ref([]);
 
-// Computed photos for different contexts
-const processedPhotos = computed(() => {
-  // If suggestedPhotos are provided, use them directly
-  if (props.suggestedPhotos && props.suggestedPhotos.length > 0) {
-    return props.suggestedPhotos;
-  }
+// El diálogo muestra sugerencias cuando el padre pasa `suggestedPhotos`
+// (aunque venga vacío) o mientras las está buscando.
+const isSuggestedMode = computed(
+  () => props.suggestedPhotos !== null || props.loadingSuggestions,
+);
 
+// IDs ya presentes en el canvas o descartados. Como Set: el filtrado del
+// catálogo era O(n·m) con .find() anidado dentro de un .filter().
+const excludedPhotoIds = computed(() => {
+  const ids = new Set();
+  for (const photo of canvasStore.photos) ids.add(photo.id);
+  for (const photo of canvasStore.discardedPhotos) ids.add(photo.id);
+  return ids;
+});
+
+// Catálogo, filtrado por la búsqueda si hay resultados
+const catalogPhotos = computed(() => {
   const hasSearch = searchQuery.value.trim();
-  const hasResults = searchResults.value && searchResults.value.length > 0;
+  const results = searchResults.value;
 
   // Si hay búsqueda Y resultados, muestra solo los resultados (filtrados)
-  if (hasSearch && hasResults) {
-    return searchResults.value.filter(
-      (p) =>
-        !canvasStore.photos.find((photo) => photo.id === p.id) &&
-        !canvasStore.discardedPhotos.find((photo) => photo.id === p.id),
-    );
+  if (hasSearch && results && results.length > 0) {
+    const excluded = excludedPhotoIds.value;
+    return results.filter((p) => !excluded.has(p.id));
   }
 
   // Si no hay búsqueda o la búsqueda no tiene resultados, muestra todo el catálogo
@@ -604,31 +328,90 @@ const processedPhotos = computed(() => {
 
 const trashPhotos = computed(() => {
   // Return discarded photos that can be restored
+  const byId = new Map(photosStore.processedPhotos.map((p) => [p.id, p]));
   return canvasStore.discardedPhotos
-    .map((dp) => photosStore.processedPhotos.find((p) => p.id === dp.id))
+    .map((dp) => byId.get(dp.id))
     .filter(Boolean);
 });
 
-// For compatibility with existing code
-const photos = computed(() => {
-  if (props.isTrash) {
-    return trashPhotos.value;
-  } else {
-    return processedPhotos.value;
-  }
+// Única fuente de verdad para la grilla
+const displayedPhotos = computed(() => {
+  if (isSuggestedMode.value) return props.suggestedPhotos ?? [];
+  if (props.isTrash) return trashPhotos.value;
+  return catalogPhotos.value;
 });
+
+// Set para el test de pertenencia del template: con `selectedIds.includes()`
+// cada render de la grilla costaba O(fotos × seleccionadas).
+const selectedSet = computed(() => new Set(selectedIds.value));
 
 // Total selected count
 const totalSelectedCount = computed(() => selectedIds.value.length);
 
+// ─── Configuración por modo ──────────────────────────────────────────────────
+
+const containerClass = computed(() => {
+  if (isSuggestedMode.value) return "suggested-container";
+  if (props.isTrash) return "trash-container";
+  return isMobile.value ? "mobile-catalog-container" : "catalog-container";
+});
+
+const showSearch = computed(() => {
+  if (isSuggestedMode.value) return false;
+  if (props.isTrash) return true;
+  return props.displaySearch;
+});
+
+// Estrellas y tags sólo en la papelera (el resto de los modos los ocultaba)
+const showCardMeta = computed(() => props.isTrash && !isSuggestedMode.value);
+
+const photosCountLabel = computed(() => {
+  const count = displayedPhotos.value.length;
+
+  if (isSuggestedMode.value) {
+    return `${count} ${
+      count === 1
+        ? props.suggestedPhotosSingularLabel
+        : props.suggestedPhotosPluralLabel
+    }`;
+  }
+
+  return `${count} ${count === 1 ? "photo" : "photos"} available`;
+});
+
+const emptyState = computed(() => {
+  if (isSuggestedMode.value) {
+    return {
+      icon: markRaw(ImageIcon),
+      title: "No suggestions found",
+      description:
+        "Could not find similar photos to suggest for this collection.",
+    };
+  }
+
+  if (props.isTrash) {
+    return {
+      icon: markRaw(DeleteIcon),
+      title: "No deleted photos",
+      description:
+        "All photos are currently on the canvas or in your collection.",
+    };
+  }
+
+  return {
+    icon: markRaw(ImageIcon),
+    title: "No photos available",
+    description:
+      "You don't have any photos here. Import them to Lightbox and click Analyze Photos to start building your Workspace.",
+  };
+});
+
 // Emit selection changes in real-time for parent components that don't use the Add button
-watch(
-  selectedIds,
-  (newIds) => {
-    emit("selection-change", [...newIds]);
-  },
-  { deep: true },
-);
+// Sin `deep`: `selectedIds` siempre se reasigna, y recorrer en profundidad un
+// array de miles de ids en cada cambio era carísimo.
+watch(selectedIds, (newIds) => {
+  emit("selection-change", [...newIds]);
+});
 
 // Selection methods
 function toggleSelection(photoId) {
@@ -636,21 +419,21 @@ function toggleSelection(photoId) {
 
   if (props.singleSelection) {
     // For single selection mode, directly select or deselect
-    selectedIds.value = selectedIds.value.includes(photoId) ? [] : [photoId];
-  } else {
-    // Multi-selection mode
-    if (selectedIds.value.includes(photoId)) {
-      selectedIds.value = selectedIds.value.filter((id) => id !== photoId);
-    } else {
-      selectedIds.value.push(photoId);
-    }
+    selectedIds.value = selectedSet.value.has(photoId) ? [] : [photoId];
+    return;
   }
+
+  // Multi-selection mode. Siempre reasignamos (en vez de push) para que el
+  // watch de `selectedIds` funcione sin `deep: true`.
+  selectedIds.value = selectedSet.value.has(photoId)
+    ? selectedIds.value.filter((id) => id !== photoId)
+    : [...selectedIds.value, photoId];
 }
 
 function selectAll() {
   if (props.readOnly) return;
 
-  selectedIds.value = photos.value.map((p) => p.id);
+  selectedIds.value = displayedPhotos.value.map((p) => p.id);
 }
 
 function clearSelection() {
@@ -789,6 +572,16 @@ function clearSearch() {
   }
 }
 
+// Ensure photos are loaded and initialize the catalog used for search filtering
+async function loadCatalogPhotos() {
+  await photosStore.getOrFetch();
+
+  const excluded = excludedPhotoIds.value;
+  allCatalogPhotos.value = photosStore.processedPhotos.filter(
+    (p) => !excluded.has(p.id),
+  );
+}
+
 // Watch for dialog open/close to fetch photos
 watch(
   () => props.modelValue,
@@ -800,15 +593,7 @@ watch(
       // Trash mode only needs discardedPhotos which are already in memory
       if (props.isTrash) return;
 
-      // Ensure photos are loaded
-      await photosStore.getOrFetch();
-
-      // Initialize all catalog photos for search filtering
-      allCatalogPhotos.value = photosStore.processedPhotos.filter(
-        (p) =>
-          !canvasStore.photos.find((photo) => photo.id === p.id) &&
-          !canvasStore.discardedPhotos.find((photo) => photo.id === p.id),
-      );
+      await loadCatalogPhotos();
     }
   },
 );
@@ -817,12 +602,7 @@ watch(
 onMounted(async () => {
   // Ensure photos are loaded if dialog is already open (skip for trash mode)
   if (props.modelValue && !props.isTrash) {
-    await photosStore.getOrFetch();
-    allCatalogPhotos.value = photosStore.processedPhotos.filter(
-      (p) =>
-        !canvasStore.photos.find((photo) => photo.id === p.id) &&
-        !canvasStore.discardedPhotos.find((photo) => photo.id === p.id),
-    );
+    await loadCatalogPhotos();
   }
 });
 </script>
@@ -933,6 +713,14 @@ onMounted(async () => {
   grid-auto-rows: min-content;
   padding: var(--spacing-sm);
   max-height: calc(60vh - 80px);
+}
+
+/* Las tarjetas fuera del viewport del grid no pagan layout ni paint.
+   contain-intrinsic-size reserva su alto para que la barra de scroll
+   no salte mientras se recorren miles de fotos. */
+.photos-grid :deep(.photo-card) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 150px;
 }
 
 /* Empty State */

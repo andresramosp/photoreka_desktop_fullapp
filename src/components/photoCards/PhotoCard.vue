@@ -247,7 +247,10 @@
     </div>
 
     <!-- Fullscreen Photo Modal -->
+    <!-- v-if: sin él cada tarjeta de la grilla instancia un n-modal (y todo su
+         árbol interno) aunque el visor no se abra nunca. -->
     <n-modal
+      v-if="showFullscreenPhoto"
       v-model:show="showFullscreenPhoto"
       :mask-closable="true"
       :show-icon="false"

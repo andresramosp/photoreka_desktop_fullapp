@@ -1,4 +1,4 @@
-import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, onUnmounted } from "vue";
 
 const getPhotoSrc = (photo) =>
   photo?.originalUrl || photo?.url || photo?.thumbnailUrl;
@@ -110,12 +110,7 @@ export function useFullscreenPhotoNavigation({
     if (showFullscreenPhoto.value) preloadAdjacent();
   });
 
-  watch(showFullscreenPhoto, (isOpen) => {
-    if (isOpen) preloadAdjacent();
-  });
-
   const handleKeydown = (event) => {
-    if (!showFullscreenPhoto.value) return;
     if (event.key === "ArrowLeft") {
       event.preventDefault();
       goToPrevious();
@@ -127,8 +122,34 @@ export function useFullscreenPhotoNavigation({
     }
   };
 
-  onMounted(() => window.addEventListener("keydown", handleKeydown));
-  onUnmounted(() => window.removeEventListener("keydown", handleKeydown));
+  // El listener global sólo existe mientras el visor está abierto. Registrarlo
+  // en onMounted hacía que una grilla de N fotos dejara N listeners de keydown
+  // en window, de modo que cada tecla (p. ej. escribir en un buscador)
+  // ejecutaba N handlers.
+  let keydownAttached = false;
+
+  const attachKeydown = () => {
+    if (keydownAttached) return;
+    window.addEventListener("keydown", handleKeydown);
+    keydownAttached = true;
+  };
+
+  const detachKeydown = () => {
+    if (!keydownAttached) return;
+    window.removeEventListener("keydown", handleKeydown);
+    keydownAttached = false;
+  };
+
+  watch(showFullscreenPhoto, (isOpen) => {
+    if (isOpen) {
+      attachKeydown();
+      preloadAdjacent();
+    } else {
+      detachKeydown();
+    }
+  });
+
+  onUnmounted(detachKeydown);
 
   return {
     showFullscreenPhoto,

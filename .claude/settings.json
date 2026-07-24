@@ -24,7 +24,8 @@
       "Bash(git log *)",
       "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\('vue',p.dependencies.vue,'pixi',p.dependencies['pixi.js']\\)\")",
       "Bash(node -e \"console.log\\(JSON.stringify\\(require\\('./package.json'\\).scripts,null,1\\)\\)\")",
-      "Bash(echo \"EXIT=$?\")"
+      "Bash(echo \"EXIT=$?\")",
+      "PowerShell(npm run build-only 2>&1)"
     ]
   }
 }
