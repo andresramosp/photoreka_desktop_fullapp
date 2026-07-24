@@ -375,6 +375,106 @@
         </template>
       </n-card>
     </n-modal>
+    <n-modal
+      v-model:show="showFirstAnalysisMinimumModal"
+      :style="{ width: '550px', maxWidth: '95vw' }"
+    >
+      <n-card
+        :bordered="false"
+        role="dialog"
+        aria-modal="true"
+        class="fam-card"
+      >
+        <template #header-extra>
+          <n-button
+            text
+            @click="closeFirstAnalysisMinimumModal"
+            aria-label="Close"
+          >
+            <n-icon size="18" color="var(--text-secondary)">
+              <CloseOutline />
+            </n-icon>
+          </n-button>
+        </template>
+
+        <div class="fam-hero">
+          <div class="fam-icon-badge">
+            <n-icon :size="26"><RocketLaunchOutlined /></n-icon>
+          </div>
+          <h3 class="fam-title">Let's build a useful first workspace</h3>
+          <p class="fam-subtitle">
+            A bigger first batch gives Photoreka's tools something real to work
+            with.
+          </p>
+        </div>
+
+        <div class="fam-progress-card">
+          <div class="fam-progress-stats">
+            <div class="fam-stat">
+              <span class="fam-stat-value">{{ selectedCount }}</span>
+              <span class="fam-stat-label"
+                >selected photo{{ selectedCount !== 1 ? "s" : "" }}</span
+              >
+            </div>
+            <n-icon :size="16" class="fam-stat-arrow">
+              <ArrowForwardOutline />
+            </n-icon>
+            <div class="fam-stat">
+              <span class="fam-stat-value fam-stat-value--target">{{
+                MIN_PHOTOS_FIRST_ANALYSIS
+              }}</span>
+              <span class="fam-stat-label">minimum required</span>
+            </div>
+          </div>
+          <n-progress
+            type="line"
+            :percentage="firstAnalysisProgressPercent"
+            :show-indicator="false"
+            :height="8"
+            color="var(--primary-color)"
+            rail-color="rgba(255, 255, 255, 0.08)"
+            class="fam-progress-bar"
+          />
+          <p class="fam-progress-caption">
+            Add
+            <strong
+              >{{ firstAnalysisPhotosNeeded }} more photo{{
+                firstAnalysisPhotosNeeded !== 1 ? "s" : ""
+              }}</strong
+            >
+            to unlock your first analysis
+          </p>
+        </div>
+
+        <div class="fam-info-box">
+          <n-icon :size="16" color="var(--info-color)" class="fam-info-icon">
+            <InformationCircleOutline />
+          </n-icon>
+          <span>
+            With only a handful of photos, search, patterns and portfolio tools
+            don't have enough material to find real connections. A bigger first
+            batch means better results from day one.
+          </span>
+        </div>
+
+        <template #footer>
+          <div class="fam-footer">
+            <n-button tertiary @click="closeFirstAnalysisMinimumModal"
+              >Maybe later</n-button
+            >
+            <n-button
+              type="primary"
+              @click="handleAddMorePhotosFromFirstAnalysisModal"
+            >
+              <template #icon>
+                <n-icon><CloudUploadOutline /></n-icon>
+              </template>
+              Add more photos
+            </n-button>
+          </div>
+        </template>
+      </n-card>
+    </n-modal>
     <div v-if="isAnyOperationInProgress" class="upload-progress-section">
       <div class="progress-header">
         <div class="progress-title-container">
@@ -777,6 +877,7 @@ import {
   LayersOutline,
   ShieldCheckmarkOutline,
   TrashOutline,
+  ArrowForwardOutline,
 } from "@vicons/ionicons5";
 import { RocketLaunchOutlined } from "@vicons/material";
 import { BookInformation20Regular } from "@vicons/fluent";
@@ -797,6 +898,15 @@ import { NModal, NCheckbox, NTooltip, NDropdown, NIcon } from "naive-ui";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 
 import { useMessage } from "naive-ui";
+
+const configuredMinPhotosFirstAnalysis = Number(
+  import.meta.env.VITE_MIN_PHOTOS_FIRST_ANALYSIS ?? 0,
+);
+const MIN_PHOTOS_FIRST_ANALYSIS =
+  Number.isFinite(configuredMinPhotosFirstAnalysis) &&
+  configuredMinPhotosFirstAnalysis > 0
+    ? Math.ceil(configuredMinPhotosFirstAnalysis)
+    : 0;
 
 const route = useRoute();
 const router = useRouter();
@@ -1199,7 +1309,21 @@ const fastMode = computed({
   },
 });
 const showAnalyzeDialog = ref(false);
+const showFirstAnalysisMinimumModal = ref(false);
 const showTimeEstimateDialog = ref(false);
+
+// Remembers which upload channel (local/google/dropbox/drive) the user last
+// completed an upload with, so contextual "Add more photos" CTAs (e.g. the
+// first-analysis minimum modal) can resume the same flow instead of always
+// assuming local files. Persisted so it also holds across reloads.
+const LAST_UPLOAD_SOURCE_KEY = "import_last_upload_source";
+const lastUploadSourceKey = ref(
+  localStorage.getItem(LAST_UPLOAD_SOURCE_KEY) || "local",
+);
+const recordLastUploadSource = (key) => {
+  lastUploadSourceKey.value = key;
+  localStorage.setItem(LAST_UPLOAD_SOURCE_KEY, key);
+};
 
 // Ref to the underlying PhotosGrid, so we can clear its (local) selection after
 // an analysis is launched. That grid owns the real selection state.
@@ -1248,6 +1372,18 @@ const selectedCount = computed(() => {
   if (isDuplicateFilterActive.value === "non-duplicates")
     return filteredUniqueIds.value.length;
   return filteredPhotos.value.length;
+});
+
+const firstAnalysisPhotosNeeded = computed(() =>
+  Math.max(0, MIN_PHOTOS_FIRST_ANALYSIS - selectedCount.value),
+);
+
+const firstAnalysisProgressPercent = computed(() => {
+  if (MIN_PHOTOS_FIRST_ANALYSIS <= 0) return 100;
+  return Math.min(
+    100,
+    Math.round((selectedCount.value / MIN_PHOTOS_FIRST_ANALYSIS) * 100),
+  );
 });
 
 const triggerFileInput = () => {
@@ -1348,6 +1484,7 @@ const handleDrop = async (event) => {
 
   try {
     await handleUploadFlow(files, "local");
+    recordLastUploadSource("local");
   } catch (error) {
     console.error("Error uploading files:", error);
   }
@@ -1396,6 +1533,7 @@ async function uploadLocalFiles(event) {
 
   try {
     await handleUploadFlow(selectedLocalFiles, "local");
+    recordLastUploadSource("local");
   } finally {
     event.target.value = "";
   }
@@ -1498,6 +1636,7 @@ async function importStagedFolders() {
   stagedFolderGroups.value = [];
   try {
     await handleUploadFlow(toUpload, "local", { mirrorFolders });
+    recordLastUploadSource("local");
   } catch (error) {
     console.error("Error uploading files:", error);
   }
@@ -1551,6 +1690,7 @@ async function importFromGooglePhotos() {
       })),
       "google",
     );
+    recordLastUploadSource("google");
 
     message.success(
       `Successfully imported ${successfulDownloads.length} photos from Google Photos`,
@@ -1601,6 +1741,7 @@ async function importFromDropbox() {
       })),
       "dropbox",
     );
+    recordLastUploadSource("dropbox");
 
     message.success(
       `Successfully imported ${successfulDownloads.length} photos from Dropbox`,
@@ -1656,6 +1797,7 @@ async function importFromDrive() {
       })),
       "drive",
     );
+    recordLastUploadSource("drive");
 
     message.success(
       `Successfully imported ${successfulDownloads.length} photos from Google Drive`,
@@ -1790,8 +1932,33 @@ const closeAnalyzeDialog = () => {
   showAnalyzeDialog.value = false;
 };
 
+const closeFirstAnalysisMinimumModal = () => {
+  showFirstAnalysisMinimumModal.value = false;
+};
+
 const openAnalyzeDialog = () => {
+  if (
+    MIN_PHOTOS_FIRST_ANALYSIS > 0 &&
+    (photosStore.processedPhotos?.length ?? 0) === 0 &&
+    selectedCount.value < MIN_PHOTOS_FIRST_ANALYSIS
+  ) {
+    showFirstAnalysisMinimumModal.value = true;
+    return;
+  }
+
   showAnalyzeDialog.value = true;
+};
+
+const handleAddMorePhotosFromFirstAnalysisModal = () => {
+  showFirstAnalysisMinimumModal.value = false;
+  // Resume whichever upload channel the user last completed an upload with
+  // (local/google/dropbox/drive), instead of assuming local files.
+  const lastSource = sourceDefinitions.value[lastUploadSourceKey.value];
+  if (lastSource?.action) {
+    lastSource.action();
+  } else {
+    triggerFileInput();
+  }
 };
 
 const confirmAnalyze = () => {
@@ -2216,6 +2383,142 @@ defineExpose({
 }
 
 .analyze-confirm-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.fam-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+}
+
+.fam-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding-bottom: var(--spacing-md);
+}
+
+.fam-icon-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(
+    135deg,
+    var(--primary-color) 0%,
+    var(--accent-color, var(--primary-color)) 100%
+  );
+  color: #fff;
+  box-shadow: 0 8px 20px
+    color-mix(in srgb, var(--primary-color) 45%, transparent);
+}
+
+.fam-title {
+  margin: 0;
+  font-size: var(--font-size-xl, 20px);
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--text-primary);
+}
+
+.fam-subtitle {
+  margin: 0;
+  max-width: 500px;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.fam-progress-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: color-mix(in srgb, var(--primary-color) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary-color) 22%, transparent);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+}
+
+.fam-progress-stats {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-lg);
+}
+
+.fam-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 96px;
+}
+
+.fam-stat-value {
+  font-size: 28px;
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.fam-stat-value--target {
+  color: var(--primary-color);
+}
+
+.fam-stat-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.fam-stat-arrow {
+  color: var(--text-secondary);
+  opacity: 0.7;
+  margin-top: -14px;
+}
+
+.fam-progress-bar {
+  margin: 0;
+}
+
+.fam-progress-caption {
+  margin: 0;
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.fam-progress-caption strong {
+  color: var(--primary-color);
+}
+
+.fam-info-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: var(--spacing-md);
+  background-color: color-mix(in srgb, var(--info-color) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--info-color) 25%, transparent);
+  border-left: 3px solid var(--info-color);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.fam-info-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.fam-footer {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
